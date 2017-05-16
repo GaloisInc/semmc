@@ -22,6 +22,7 @@ library
                        SemMC.Formula.Parser
                        SemMC.Classify
                        SemMC.Generalize
+                       SemMC.Statistics
                        SemMC.Strata
   -- other-modules:       
   -- other-extensions:    
@@ -29,7 +30,7 @@ library
                        containers,
                        bytestring,
                        binary,
-                       async >= 2 && < 3,
+                       stm,
                        text >= 1 && < 2,
                        mwc-random >= 0.13 && < 0.14,
                        exceptions >= 0.8 && < 0.9,

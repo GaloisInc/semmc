@@ -8,6 +8,8 @@ module SemMC.Backend (
 import qualified Data.ByteString as BS
 import qualified System.Random.MWC as R
 
+import qualified Dismantle.Instruction as D
+
 data Backend opcode operand =
   forall a .
   Backend { mkTestCase :: R.GenIO -> IO a
@@ -16,4 +18,5 @@ data Backend opcode operand =
           -- ^ Serialize for wire transmission
           , deserializeTestCase :: BS.ByteString -> Maybe a
           -- ^ Read a result state back
+          , allOpcodes :: [D.SomeOpcode opcode operand]
           }
