@@ -6,10 +6,13 @@ module SemMC.Strata (
 import qualified Control.Concurrent as C
 import Control.Monad ( replicateM )
 import Data.Monoid
+import qualified Data.Set as S
 
 import Prelude
 
+import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
+import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Backend ( Backend(..) )
 import qualified SemMC.Statistics as Stats
@@ -24,7 +27,7 @@ data Config = Config { numThreads :: Int
                      , learnedSetDir :: FilePath
                      }
 
-strata :: Config -> Backend opcode operand -> IO [(instr, semantics)]
+strata :: (D.ArbitraryOperands opcode operand) => Config -> Backend opcode operand -> IO [(instr, semantics)]
 strata cfg backend = do
   stats <- Stats.createStatisticsThread
   baseSet <- loadFormulas (baseSetDir cfg)
@@ -35,11 +38,20 @@ strata cfg backend = do
   Stats.terminate stats
   return undefined
 
-processWorklist :: Stats.StatisticsThread
+processWorklist :: (D.ArbitraryOperands opcode operand)
+                => Stats.StatisticsThread
                 -> Backend opcode operand
                 -> WL.Worklist (D.SomeOpcode opcode operand)
                 -> IO ()
-processWorklist = undefined
+processWorklist _stats _backend wl = do
+  mwork <- WL.takeWork wl
+  case mwork of
+    Nothing -> return ()
+    Just someOp -> do
+      -- FIXME: Put this into a state
+      gen <- A.createGen
+      Just target <- D.randomInstruction gen (S.singleton someOp)
+      return ()
 
 data FormulaSet = FormulaSet
 
