@@ -24,6 +24,7 @@ library
                        SemMC.Generalize
                        SemMC.Statistics
                        SemMC.Strata
+                       SemMC.Worklist
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,

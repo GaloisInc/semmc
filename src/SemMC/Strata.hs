@@ -4,7 +4,6 @@ module SemMC.Strata (
   ) where
 
 import qualified Control.Concurrent as C
-import qualified Control.Concurrent.STM as STM
 import Control.Monad ( replicateM )
 import Data.Monoid
 
@@ -14,6 +13,7 @@ import qualified Dismantle.Instruction as D
 
 import SemMC.Backend ( Backend(..) )
 import qualified SemMC.Statistics as Stats
+import qualified SemMC.Worklist as WL
 
 -- Have this process the worklist in a single-threaded way, but for each work
 -- item spawn off an Async thread to process it.  Wait once there are enough
@@ -32,12 +32,12 @@ strata cfg backend = do
   let initialFormulas = baseSet <> learnedSet
   worklist <- buildWorklist (allOpcodes backend) initialFormulas
   threads <- replicateM (numThreads cfg) (C.forkIO (processWorklist stats backend worklist))
-  Stats.logStatistics stats Stats.Terminate
+  Stats.terminate stats
   return undefined
 
 processWorklist :: Stats.StatisticsThread
                 -> Backend opcode operand
-                -> STM.TChan (D.SomeOpcode opcode operand)
+                -> WL.Worklist (D.SomeOpcode opcode operand)
                 -> IO ()
 processWorklist = undefined
 
@@ -50,10 +50,9 @@ instance Monoid FormulaSet where
 loadFormulas :: FilePath -> IO FormulaSet
 loadFormulas = undefined
 
-buildWorklist :: [D.SomeOpcode opcode operand] -> FormulaSet -> IO (STM.TChan (D.SomeOpcode opcode operand))
+buildWorklist :: [D.SomeOpcode opcode operand] -> FormulaSet -> IO (WL.Worklist (D.SomeOpcode opcode operand))
 buildWorklist allOps knownFormulas = do
-  worklist <- STM.newTChanIO
   let workitems :: [D.SomeOpcode opcode operand]
       workitems = undefined allOps knownFormulas
-  STM.atomically $ mapM_ (STM.writeTChan worklist) workitems
-  return worklist
+  WL.newWorklist workitems
+
