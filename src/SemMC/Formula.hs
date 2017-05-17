@@ -16,6 +16,12 @@ import Prelude
 
 import qualified Dismantle.Instruction as I
 
+-- | Formulas with parameters that can be instantiated with concrete operand
+-- values
+data ParameterizedFormula = ParameterizedFormula
+  deriving (Show)
+
+-- | Formulas with only concrete values
 data Formula =
   Formula { inputs :: [String]
           -- ^ The variables that serve as inputs to the formula
@@ -48,7 +54,7 @@ formulaToSBV = undefined svToSBV
 svToSBV :: SV -> SBV.SVal
 svToSBV = undefined
 
-newtype BaseSet opcode operand = BaseSet { unBaseSet :: M.Map (I.SomeOpcode opcode operand) Formula }
+newtype BaseSet opcode operand = BaseSet { unBaseSet :: M.Map (I.SomeOpcode opcode operand) ParameterizedFormula }
   deriving (Show)
 
 data FormulaError opcode operand = NoFormulaForOpcode (I.SomeOpcode opcode operand)
@@ -57,7 +63,7 @@ data FormulaError opcode operand = NoFormulaForOpcode (I.SomeOpcode opcode opera
 instance (I.OpcodeConstraints opcode operand) => C.Exception (FormulaError opcode operand)
 
 -- | Instantiate a parameterized formula for a given instruction
-instantiateFormula :: Formula -> I.GenericInstruction opcode operand -> Formula
+instantiateFormula :: ParameterizedFormula -> I.GenericInstruction opcode operand -> Formula
 instantiateFormula = undefined
 
 lookupSemantics :: (C.MonadThrow m, I.OpcodeConstraints opcode operand)
