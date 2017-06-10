@@ -1,61 +1,65 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 -- | Definitions of formulas
 module SemMC.Formula (
   Formula(..),
-  SV(..),
-  formulaToSBV,
+  Parameter(..),
+  BaseSet(..),
+  loadBaseSet,
   formulaFromProgram
   ) where
 
+import           Control.Monad (foldM)
 import qualified Control.Monad.Catch as C
-import qualified Data.Foldable as F
+import           Control.Monad.IO.Class (MonadIO(..))
+-- import qualified Data.Foldable as F
 import qualified Data.Map as M
-import Data.Monoid
-import qualified Data.SBV.Dynamic as SBV
+-- import           Data.Monoid
+import qualified Data.Text as T
 
-import Prelude
+import           Data.Parameterized.Classes
+import           Data.Parameterized.Some
+import qualified Lang.Crucible.Solver.Interface as S
 
 import qualified Dismantle.Instruction as I
 
--- | Formulas with parameters that can be instantiated with concrete operand
--- values
-data ParameterizedFormula = ParameterizedFormula
-  deriving (Show)
+-- | Input variables in a formula.
+data Parameter = Formal T.Text
+               -- ^ "Templated" part of an instruction, like an operand
+               | Literal T.Text
+               -- ^ A literal value, like a concrete register ("r8")
+               deriving (Show, Eq, Ord)
 
--- | Formulas with only concrete values
-data Formula =
-  Formula { inputs :: [String]
-          -- ^ The variables that serve as inputs to the formula
-          , defs :: [(String, SV)]
-          -- ^ The variables defined by the formula (with definitions in terms
-          -- of the input variables)
+-- | Formulas. Currently no distinction between those with metavariables and
+-- those without.
+data Formula sym =
+  Formula { formOperands :: [(T.Text, T.Text)]
+          , formUses :: [Parameter]
+          , formParamExprs :: [(Parameter, Some (S.SymExpr sym))]
+          , formDefs :: [(Parameter, Some (S.SymExpr sym))]
           }
-  deriving (Show)
 
-emptyFormula :: Formula
-emptyFormula = Formula { inputs = [], defs = [] }
+instance (ShowF (S.SymExpr sym)) => Show (Formula sym) where
+  show (Formula { formOperands = ops
+                , formUses = uses
+                , formParamExprs = paramExprs
+                , formDefs = defs
+                }) = "Formula { formOperands = " ++ show ops ++ ", formUses = " ++ show uses ++ ", formParamExprs = " ++ show paramExprs ++ ", formDefs = " ++ show defs ++ " }"
+
+emptyFormula :: Formula sym
+emptyFormula = Formula { formOperands = [], formUses = [], formParamExprs = [], formDefs = [] }
 
 -- | Combine two formulas in sequential execution
-sequenceFormulas :: Formula -> Formula -> Formula
+sequenceFormulas :: sym -> Formula sym -> Formula sym -> IO (Formula sym)
 sequenceFormulas = undefined
 
-instance Monoid Formula where
-  mempty = emptyFormula
-  mappend = sequenceFormulas
+newtype BaseSet sym opcode operand = BaseSet { unBaseSet :: M.Map (I.SomeOpcode opcode operand) (Formula sym) }
+  -- deriving (Show)
 
-data SV = BV_ADD SV SV
-        | BV_SUB SV SV
-        | BV_LIT Word
-        | VAR String
-  deriving (Eq, Ord, Show)
-
-formulaToSBV :: Formula -> SBV.SVal
-formulaToSBV = undefined svToSBV
-
-svToSBV :: SV -> SBV.SVal
-svToSBV = undefined
-
-newtype BaseSet opcode operand = BaseSet { unBaseSet :: M.Map (I.SomeOpcode opcode operand) ParameterizedFormula }
-  deriving (Show)
+loadBaseSet :: sym -> FilePath -> IO (BaseSet sym opcode operand)
+loadBaseSet = undefined
 
 data FormulaError opcode operand = NoFormulaForOpcode (I.SomeOpcode opcode operand)
   deriving (Show)
@@ -63,26 +67,29 @@ data FormulaError opcode operand = NoFormulaForOpcode (I.SomeOpcode opcode opera
 instance (I.OpcodeConstraints opcode operand) => C.Exception (FormulaError opcode operand)
 
 -- | Instantiate a parameterized formula for a given instruction
-instantiateFormula :: ParameterizedFormula -> I.GenericInstruction opcode operand -> Formula
+instantiateFormula :: sym -> Formula sym -> I.GenericInstruction opcode operand -> IO (Formula sym)
 instantiateFormula = undefined
 
-lookupSemantics :: (C.MonadThrow m, I.OpcodeConstraints opcode operand)
-                => BaseSet opcode operand
+lookupSemantics :: (C.MonadThrow m, MonadIO m, I.OpcodeConstraints opcode operand)
+                => sym
+                -> BaseSet sym opcode operand
                 -> I.GenericInstruction opcode operand
-                -> m Formula
-lookupSemantics (BaseSet m) i =
+                -> m (Formula sym)
+lookupSemantics sym (BaseSet m) i =
   case i of
     I.Instruction op _ ->
       case M.lookup (I.SomeOpcode op) m of
-        Just f -> return (instantiateFormula f i)
+        Just f -> liftIO $ instantiateFormula sym f i
         Nothing -> C.throwM (NoFormulaForOpcode (I.SomeOpcode op))
 
-formulaFromProgram :: (C.MonadThrow m, I.OpcodeConstraints opcode operand)
-                   => BaseSet opcode operand
+formulaFromProgram :: (C.MonadThrow m, MonadIO m, I.OpcodeConstraints opcode operand)
+                   => sym
+                   -- ^ The SymInterface used to build expressions
+                   -> BaseSet sym opcode operand
                    -- ^ The formulas for instructions with known semantics
                    -> [I.GenericInstruction opcode operand]
                    -- ^ The program to create a formula for
-                   -> m Formula
-formulaFromProgram base p = do
-  sems <- mapM (lookupSemantics base) p
-  return (F.foldl' sequenceFormulas emptyFormula sems)
+                   -> m (Formula sym)
+formulaFromProgram sym base p = do
+  sems <- mapM (lookupSemantics sym base) p
+  liftIO $ foldM (sequenceFormulas sym) emptyFormula sems
