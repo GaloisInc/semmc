@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 -- | Definitions of formulas
 module SemMC.Formula (
+  TemplatedFormula(..),
   Formula(..),
   Parameter(..),
   BaseSet(..),
@@ -25,38 +26,60 @@ import qualified Lang.Crucible.Solver.Interface as S
 
 import qualified Dismantle.Instruction as I
 
--- | Input variables in a formula.
-data Parameter = Formal T.Text
+-- | Input variables in a templated formula.
+data Parameter = Operand T.Text
                -- ^ "Templated" part of an instruction, like an operand
                | Literal T.Text
                -- ^ A literal value, like a concrete register ("r8")
                deriving (Show, Eq, Ord)
 
--- | Formulas. Currently no distinction between those with metavariables and
--- those without.
+-- | A "templated" or "parameterized" formula, i.e., a formula that has holes
+-- that need to be filled in before it represents an actual concrete
+-- instruction.
+data TemplatedFormula sym =
+  TemplatedFormula { tfOperands :: [(T.Text, T.Text)]
+                   , tfUses :: [Parameter]
+                   , tfParamExprs :: [(Parameter, Some (S.SymExpr sym))]
+                   , tfDefs :: [(Parameter, Some (S.SymExpr sym))]
+                   }
+
+instance (ShowF (S.SymExpr sym)) => Show (TemplatedFormula sym) where
+  show (TemplatedFormula { tfOperands = ops
+                         , tfUses = uses
+                         , tfParamExprs = paramExprs
+                         , tfDefs = defs
+                         }) = "TemplatedFormula { tfOperands = " ++ show ops ++ ", tfUses = " ++ show uses ++ ", tfParamExprs = " ++ show paramExprs ++ ", tfDefs = " ++ show defs ++ " }"
+
+-- | Represents an input or output of a formula, i.e. a specific register, flag,
+-- or memory. Eventually, this should probably be replaced with an
+-- architecture-specific ADT, but we have this for now.
+newtype FormulaVar = FormulaVar { unFormulaVar :: T.Text }
+  deriving (Show)
+
+-- | A formula representing a concrete instruction.
 data Formula sym =
-  Formula { formOperands :: [(T.Text, T.Text)]
-          , formUses :: [Parameter]
-          , formParamExprs :: [(Parameter, Some (S.SymExpr sym))]
-          , formDefs :: [(Parameter, Some (S.SymExpr sym))]
+  Formula { formUses :: [FormulaVar]
+          , formParamExprs :: [(FormulaVar, Some (S.SymExpr sym))]
+          , formDefs :: [(FormulaVar, Some (S.SymExpr sym))]
           }
 
 instance (ShowF (S.SymExpr sym)) => Show (Formula sym) where
-  show (Formula { formOperands = ops
-                , formUses = uses
+  show (Formula { formUses = uses
                 , formParamExprs = paramExprs
                 , formDefs = defs
-                }) = "Formula { formOperands = " ++ show ops ++ ", formUses = " ++ show uses ++ ", formParamExprs = " ++ show paramExprs ++ ", formDefs = " ++ show defs ++ " }"
+                }) = "Formula { formUses = " ++ show uses ++ ", formParamExprs = " ++ show paramExprs ++ ", formDefs = " ++ show defs ++ " }"
 
 emptyFormula :: Formula sym
-emptyFormula = Formula { formOperands = [], formUses = [], formParamExprs = [], formDefs = [] }
+emptyFormula = Formula { formUses = [], formParamExprs = [], formDefs = [] }
 
 -- | Combine two formulas in sequential execution
 sequenceFormulas :: sym -> Formula sym -> Formula sym -> IO (Formula sym)
 sequenceFormulas = undefined
 
-newtype BaseSet sym opcode operand = BaseSet { unBaseSet :: M.Map (I.SomeOpcode opcode operand) (Formula sym) }
-  -- deriving (Show)
+newtype BaseSet sym opcode operand = BaseSet { unBaseSet :: M.Map (I.SomeOpcode opcode operand) (TemplatedFormula sym) }
+
+instance (ShowF (S.SymExpr sym), Show (I.SomeOpcode opcode operand)) => Show (BaseSet sym opcode operand) where
+  show (BaseSet m) = "BaseSet { unBaseSet = " ++ show m ++ " }"
 
 loadBaseSet :: sym -> FilePath -> IO (BaseSet sym opcode operand)
 loadBaseSet = undefined
@@ -66,8 +89,8 @@ data FormulaError opcode operand = NoFormulaForOpcode (I.SomeOpcode opcode opera
 
 instance (I.OpcodeConstraints opcode operand) => C.Exception (FormulaError opcode operand)
 
--- | Instantiate a parameterized formula for a given instruction
-instantiateFormula :: sym -> Formula sym -> I.GenericInstruction opcode operand -> IO (Formula sym)
+-- | Instantiate a templated formula for a given instruction
+instantiateFormula :: sym -> TemplatedFormula sym -> I.GenericInstruction opcode operand -> IO (Formula sym)
 instantiateFormula = undefined
 
 lookupSemantics :: (C.MonadThrow m, MonadIO m, I.OpcodeConstraints opcode operand)
