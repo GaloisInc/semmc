@@ -24,6 +24,7 @@ library
                        SemMC.Generalize
                        SemMC.Statistics
                        SemMC.Strata
+                       SemMC.ToyExample
                        SemMC.Worklist
   -- other-modules:       
   -- other-extensions:    
