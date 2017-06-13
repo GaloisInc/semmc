@@ -20,13 +20,14 @@ module SemMC.Formula.Parser (
 import           Control.Monad.Except
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
-import           Data.Foldable (asum)
+import           Data.Foldable (asum, foldrM)
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Text.Parsec
 import           Text.Parsec.Text (Parser)
+import qualified Data.Map.Strict as Map
 
 import           Data.Parameterized.NatRepr (NatRepr, someNat, isPosNat, withLeqProof)
 import           Data.Parameterized.Some (Some(..))
@@ -386,13 +387,13 @@ readDefs :: (S.IsExprBuilder sym,
              MonadReader (ParameterInfo sym) m,
              MonadIO m)
          => SC.SExpr Atom
-         -> m [(Parameter, Some (S.SymExpr sym))]
-readDefs SC.SNil = return []
+         -> m (Map.Map Parameter (Some (S.SymExpr sym)))
+readDefs SC.SNil = return Map.empty
 readDefs (SC.SCons (SC.SCons (SC.SAtom p) defRaw) rest) = do
   param <- readParameter p
   def <- readExpr defRaw
   rest' <- readDefs rest
-  return $ (param, def) : rest'
+  return $ Map.insert param def rest'
 readDefs _ = throwError "invalid defs structure"
 
 -- | Parameter where a formal parameter also has what type it must be.
@@ -414,7 +415,8 @@ parameterSymbol _ = error "parameters should only be valid symbols"
 
 -- | Parse the whole definition of a templated formula, inside an appropriate
 -- monad.
-readFormula' :: (S.IsExprBuilder sym,
+readFormula' :: forall sym m .
+                (S.IsExprBuilder sym,
                  S.IsSymInterface sym,
                  MonadError String m,
                  MonadIO m)
@@ -441,8 +443,10 @@ readFormula' sym typer text = do
               Just (Some tp) -> liftIO (Some <$> S.freshConstant sym (parameterSymbol param) tp)
               Nothing -> throwError $ "could not determine the appropriate type of " ++ show param
         | otherwise = throwError $ show param ++ " is listed as an input, but it is not an operand"
-  paramExprs <- mapM (\p -> (p,) <$> makeVar p) inputs
-  defs <- runReaderT (readDefs defsRaw) $ ParameterInfo sym (flip lookup paramExprs)
+      go :: Parameter -> Map.Map Parameter (Some (S.SymExpr sym)) -> m (Map.Map Parameter (Some (S.SymExpr sym)))
+      go p m = (\e -> Map.insert p e m) <$> makeVar p
+  paramExprs <- foldrM go Map.empty inputs
+  defs <- runReaderT (readDefs defsRaw) $ ParameterInfo sym (flip Map.lookup paramExprs)
   return $ TemplatedFormula ops inputs paramExprs defs
 
 -- | Parse the definition of a templated formula.

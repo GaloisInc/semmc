@@ -8,6 +8,7 @@ module SemMC.Formula (
   Formula(..),
   Parameter(..),
   BaseSet(..),
+  FormulaVar,
   loadBaseSet,
   formulaFromProgram
   ) where
@@ -16,7 +17,7 @@ import           Control.Monad (foldM)
 import qualified Control.Monad.Catch as C
 import           Control.Monad.IO.Class (MonadIO(..))
 -- import qualified Data.Foldable as F
-import qualified Data.Map as M
+import qualified Data.Map.Strict as Map
 -- import           Data.Monoid
 import qualified Data.Text as T
 
@@ -39,8 +40,8 @@ data Parameter = Operand T.Text
 data TemplatedFormula sym =
   TemplatedFormula { tfOperands :: [(T.Text, T.Text)]
                    , tfUses :: [Parameter]
-                   , tfParamExprs :: [(Parameter, Some (S.SymExpr sym))]
-                   , tfDefs :: [(Parameter, Some (S.SymExpr sym))]
+                   , tfParamExprs :: Map.Map Parameter (Some (S.SymExpr sym))
+                   , tfDefs :: Map.Map Parameter (Some (S.SymExpr sym))
                    }
 
 instance (ShowF (S.SymExpr sym)) => Show (TemplatedFormula sym) where
@@ -54,13 +55,13 @@ instance (ShowF (S.SymExpr sym)) => Show (TemplatedFormula sym) where
 -- or memory. Eventually, this should probably be replaced with an
 -- architecture-specific ADT, but we have this for now.
 newtype FormulaVar = FormulaVar { unFormulaVar :: T.Text }
-  deriving (Show)
+  deriving (Show, Ord, Eq)
 
 -- | A formula representing a concrete instruction.
 data Formula sym =
   Formula { formUses :: [FormulaVar]
-          , formParamExprs :: [(FormulaVar, Some (S.SymExpr sym))]
-          , formDefs :: [(FormulaVar, Some (S.SymExpr sym))]
+          , formParamExprs :: Map.Map FormulaVar (Some (S.SymExpr sym))
+          , formDefs :: Map.Map FormulaVar (Some (S.SymExpr sym))
           }
 
 instance (ShowF (S.SymExpr sym)) => Show (Formula sym) where
@@ -70,13 +71,13 @@ instance (ShowF (S.SymExpr sym)) => Show (Formula sym) where
                 }) = "Formula { formUses = " ++ show uses ++ ", formParamExprs = " ++ show paramExprs ++ ", formDefs = " ++ show defs ++ " }"
 
 emptyFormula :: Formula sym
-emptyFormula = Formula { formUses = [], formParamExprs = [], formDefs = [] }
+emptyFormula = Formula { formUses = [], formParamExprs = Map.empty, formDefs = Map.empty }
 
 -- | Combine two formulas in sequential execution
 sequenceFormulas :: sym -> Formula sym -> Formula sym -> IO (Formula sym)
 sequenceFormulas = undefined
 
-newtype BaseSet sym opcode operand = BaseSet { unBaseSet :: M.Map (I.SomeOpcode opcode operand) (TemplatedFormula sym) }
+newtype BaseSet sym opcode operand = BaseSet { unBaseSet :: Map.Map (I.SomeOpcode opcode operand) (TemplatedFormula sym) }
 
 instance (ShowF (S.SymExpr sym), Show (I.SomeOpcode opcode operand)) => Show (BaseSet sym opcode operand) where
   show (BaseSet m) = "BaseSet { unBaseSet = " ++ show m ++ " }"
@@ -91,7 +92,7 @@ instance (I.OpcodeConstraints opcode operand) => C.Exception (FormulaError opcod
 
 -- | Instantiate a templated formula for a given instruction
 instantiateFormula :: sym -> TemplatedFormula sym -> I.GenericInstruction opcode operand -> IO (Formula sym)
-instantiateFormula = undefined
+instantiateFormula _ tf _ = undefined
 
 lookupSemantics :: (C.MonadThrow m, MonadIO m, I.OpcodeConstraints opcode operand)
                 => sym
@@ -101,7 +102,7 @@ lookupSemantics :: (C.MonadThrow m, MonadIO m, I.OpcodeConstraints opcode operan
 lookupSemantics sym (BaseSet m) i =
   case i of
     I.Instruction op _ ->
-      case M.lookup (I.SomeOpcode op) m of
+      case Map.lookup (I.SomeOpcode op) m of
         Just f -> liftIO $ instantiateFormula sym f i
         Nothing -> C.throwM (NoFormulaForOpcode (I.SomeOpcode op))
 
