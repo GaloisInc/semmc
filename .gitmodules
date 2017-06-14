@@ -1,0 +1,3 @@
+[submodule "submodules/dismantle"]
+	path = submodules/dismantle
+	url = git@github.com:travitch/dismantle.git
