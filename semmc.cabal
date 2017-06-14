@@ -19,6 +19,7 @@ library
   exposed-modules:     SemMC
                        SemMC.Backend
                        SemMC.Formula
+                       SemMC.Formula.Equivalence
                        SemMC.Formula.Parser
                        SemMC.Classify
                        SemMC.Generalize
