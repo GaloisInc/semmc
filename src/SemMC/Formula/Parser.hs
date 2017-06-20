@@ -87,13 +87,30 @@ parseLL = SC.decodeOne parserLL
 -- * Second pass of parsing: turning the s-expressions into symbolic expressions
 -- and the overall templated formula
 
+-- ** Utility functions
+
 -- | Utility function for contextualizing errors. Prepends the given prefix
 -- whenever an error is thrown.
 prefixError :: (Monoid e, MonadError e m) => e -> m a -> m a
 prefixError prefix act = catchError act (throwError . mappend prefix)
 
-data OpData (arch :: *) (s :: Symbol) = OpData String (BaseTypeRepr (OperandType arch s))
+-- | Utility function for lifting a 'Maybe' into a 'MonadError'
+fromMaybeError :: (MonadError e m) => e -> Maybe a -> m a
+fromMaybeError err = maybe (throwError err) return
 
+-- ** Parsing operands
+
+-- | Data about the operands pertinent after parsing: their name and their type.
+data OpData (arch :: *) (s :: Symbol) where
+  OpData :: String -> BaseTypeRepr (OperandType arch s) -> OpData arch s
+
+-- | How to parse an operand list for a given architecture and shape. The
+-- architecture is necessary in order to know how to map a symbol representing
+-- operand type to a Crucible expression type.
+--
+-- This isn't intended to have any implementers outside the following two, so it
+-- isn't exported. However, it is required on the signature of 'parseFormula',
+-- so GHC has to be able to match the shape to the given instances.
 class BuildOperandList (arch :: *) (tps :: [Symbol]) where
   -- | Parses the operands part of the semantics definition. Each operand has both
   -- a name and a (quoted) type in a dotted pair. For example:
@@ -104,49 +121,39 @@ class BuildOperandList (arch :: *) (tps :: [Symbol]) where
   --
   buildOperandList :: SC.SExpr Atom -> Maybe (OperandList (OpData arch) tps)
 
+-- nil case...
 instance BuildOperandList arch '[] where
   buildOperandList SC.SNil = Just Nil
   buildOperandList       _ = Nothing
 
--- externally defined to work around typeck limitations
-bolCons :: forall arch tp tps.
-           (KnownSymbol tp,
-            KnownRepr BaseTypeRepr (OperandType arch tp),
-            BuildOperandList arch tps)
-        => SC.SExpr Atom
-        -> Maybe (OperandList (OpData arch) (tp ': tps))
-bolCons SC.SNil = Nothing
-bolCons (SC.SAtom _) = Nothing
-bolCons (SC.SCons s rest) = do
-  let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
-  when (symbolVal (Proxy :: Proxy tp) /= ty) Nothing
-  rest' <- buildOperandList rest
-  let repr = knownRepr :: BaseTypeRepr (OperandType arch tp)
-  -- let repr = undefined
-  return $ (OpData operand repr) :> rest'
+-- ...and cons case. Sorry for the type operator screwing up indentation for the
+-- rest of the file.
+instance (KnownSymbol tp,
+          KnownRepr BaseTypeRepr (OperandType arch tp),
+          BuildOperandList arch tps)
+       => BuildOperandList arch (tp ': tps) where
+  buildOperandList SC.SNil = Nothing
+  buildOperandList (SC.SAtom _) = Nothing
+  buildOperandList (SC.SCons s rest) = do
+    -- This is in the Maybe monad.
+    let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
+    when (symbolVal (Proxy :: Proxy tp) /= ty) Nothing
+    rest' <- buildOperandList rest
+    let repr = knownRepr :: BaseTypeRepr (OperandType arch tp)
+    return $ (OpData operand repr) :> rest'
 
-instance (KnownSymbol tp, KnownRepr BaseTypeRepr (OperandType arch tp), BuildOperandList arch tps) => BuildOperandList arch (tp ': tps) where
-  buildOperandList = bolCons
+-- ** Parsing parameters
+--
+-- By which I mean, handling occurrences in expressions of either operands or
+-- literals.
 
--- readOperands' :: SC.SExpr Atom
---               -> Maybe (Some (OperandList (Const T.Text)))
--- readOperands' SC.SNil = 
---   case testEquality p (Proxy :: Proxy '[]) of
---     Just Refl -> Just Nil
---     Nothing -> Nothing
--- readOperands' _ _ = undefined
--- readOperands' size (SC.SCons s rest) = do
---   let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
---   Ctx.IncSize size' <- return $ Ctx.viewSize size
---   rest' <- readOperands' size' rest
---   return $ Ctx.extend rest' (Const operand)
--- readOperands' _ _ = Nothing
-
+-- | Low-level representation of a parameter: no checking done yet on whether
+-- they're valid yet or not.
 data RawParameter = RawOperand String
                   | RawLiteral String
                   deriving (Show, Eq, Ord)
 
--- | Parses a parameter.
+-- | Parses the name of a parameter and whether it's an operand or a literal.
 readRawParameter :: (MonadError String m) => Atom -> m RawParameter
 readRawParameter (AIdent name)
   | Right _ <- userSymbol ("op" ++ name) = return (RawOperand name)
@@ -156,29 +163,38 @@ readRawParameter (AQuoted name)
   | otherwise = throwError $ name ++ " is not a valid parameter name"
 readRawParameter a = throwError $ "expected parameter, found " ++ show a
 
-data IndexWithType arch sh s where
+-- | Short-lived type that just stores an index with its corresponding type
+-- representation, with the type parameter ensuring they correspond to one another.
+data IndexWithType (arch :: *) (sh :: [Symbol]) (s :: Symbol) where
   IndexWithType :: BaseTypeRepr (OperandType arch s) -> Index sh s -> IndexWithType arch sh s
 
+-- | Look up a name in the given operand list, returning its index and type if found.
 findOpListIndex :: String -> OperandList (OpData arch) sh -> Maybe (Some (IndexWithType arch sh))
 findOpListIndex _ Nil = Nothing
 findOpListIndex x ((OpData name tpRepr) :> rest)
   | x == name = Just $ Some (IndexWithType tpRepr IndexHere)
-  | otherwise = mapSome (\(IndexWithType tpRepr' idx) -> IndexWithType tpRepr' (IndexThere idx)) <$> findOpListIndex x rest
+  | otherwise = mapSome incrIndex <$> findOpListIndex x rest
+      where incrIndex (IndexWithType tpRepr' idx) = IndexWithType tpRepr' (IndexThere idx)
 
+-- | Parse a single parameter, given the list of operands to use as a lookup.
 readParameter :: (MonadError String m, Architecture arch) => OperandList (OpData arch) sh -> Atom -> m (Some (Parameter arch sh))
 readParameter oplist atom =
   readRawParameter atom >>= \case
     RawOperand op ->
-      maybe (throwError $ "couldn't find operand " ++ show op)
-            (return . viewSome (\(IndexWithType tpRepr idx) -> Some $ Operand tpRepr idx))
+      maybe (throwError $ "couldn't find operand " ++ op)
+            (viewSome (\(IndexWithType tpRepr idx) -> return $ Some (Operand tpRepr idx)))
             (findOpListIndex op oplist)
     RawLiteral lit ->
-      maybe (throwError $ show lit ++ " is an invalid literal for this arch")
+      maybe (throwError $ lit ++ " is an invalid literal for this arch")
             (\(StateVarDesc repr var) -> return $ Some (Literal repr var))
-            (readStateVar (lit))
+            (readStateVar lit)
 
 -- | Parses the input list, e.g., @(ra rb 'ca)@
-readInputs :: (MonadError String m, Architecture arch) => OperandList (OpData arch) sh -> SC.SExpr Atom -> m [Some (Parameter arch sh)]
+readInputs :: (MonadError String m,
+               Architecture arch)
+           => OperandList (OpData arch) sh
+           -> SC.SExpr Atom
+           -> m [Some (Parameter arch sh)]
 readInputs _ SC.SNil = return []
 readInputs oplist (SC.SCons (SC.SAtom p) rest) = do
   p' <- readParameter oplist p
@@ -186,7 +202,9 @@ readInputs oplist (SC.SCons (SC.SAtom p) rest) = do
   return $ p' : rest'
 readInputs _ _ = throwError "malformed input list"
 
--- | "Global" data stored in the Reader monad throughout most of the parsing.
+-- ** Parsing definitions
+
+-- | "Global" data stored in the Reader monad throughout parsing the definitions.
 data DefsInfo sym arch sh = DefsInfo
                             { getSym :: sym
                             -- ^ SymInterface/ExprBuilder used to build up symbolic
@@ -203,7 +221,8 @@ data DefsInfo sym arch sh = DefsInfo
                             }
 
 -- | Stores a NatRepr along with proof that its type parameter is a bitvector of
--- that length.
+-- that length. Used for easy pattern matching on the LHS of a binding in a
+-- do-expression to extract the proof.
 data BVProof tp where
   BVProof :: forall n. (1 <= n) => NatRepr n -> BVProof (BaseBVType n)
 
@@ -218,6 +237,15 @@ getBVProof expr =
 -- | Type of the various different handlers for building up expressions formed
 -- by applying arguments to some function.
 --
+-- Why is it both in 'MonadError' and return a 'Maybe'? An error is thrown if it
+-- looks like a given handler should be able to handle an expression, but
+-- there's some fault somewhere. 'Nothing' is returned if the handler can't
+-- handle expressions looking like the form given to it.
+--
+-- Unrelated to the type, in many of these functions, there are statements of
+-- the form @Some x <- return y@. Why do a binding from a direct return? Because
+-- GHC cannot do let-destructuring when existentials are involved.
+--
 -- ...yes, it's a lot of type parameters.
 type ExprParser sym arch sh m = (S.IsExprBuilder sym,
                                  MonadError String m,
@@ -230,20 +258,20 @@ type ExprParser sym arch sh m = (S.IsExprBuilder sym,
 -- | Parse an expression of the form @(concat x y)@.
 readConcat :: ExprParser sym arch sh m
 readConcat (SC.SAtom (AIdent "concat")) args =
-  prefixError ("in reading concat expression: ") $ do
+  prefixError "in reading concat expression: " $ do
     when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
     sym <- reader getSym
-    Some arg1 <- return $ head args
-    Some arg2 <- return $ head (tail args)
-    BVProof _ <- prefixError ("in arg 1: ") $ getBVProof arg1
-    BVProof _ <- prefixError ("in arg 2: ") $ getBVProof arg2
+    Some arg1 <- return $ args !! 0
+    Some arg2 <- return $ args !! 1
+    BVProof _ <- prefixError "in arg 1: " $ getBVProof arg1
+    BVProof _ <- prefixError "in arg 2: " $ getBVProof arg2
     liftIO (Just . Some <$> S.bvConcat sym arg1 arg2)
 readConcat _ _ = return Nothing
 
 -- | Try converting an 'Integer' to a 'NatRepr' or throw an error if not
 -- possible.
 intToNatM :: (MonadError String m) => Integer -> m (Some NatRepr)
-intToNatM = maybe (throwError "integer must be non-negative to be a nat") return . someNat
+intToNatM = fromMaybeError "integer must be non-negative to be a nat" . someNat
 
 -- | Parse an expression of the form @((_ extract i j) x)@.
 readExtract :: ExprParser sym arch sh m
@@ -255,18 +283,37 @@ readExtract (SC.SCons (SC.SAtom (AIdent "_"))
             args = prefixError "in reading extract expression: " $ do
   when (length args /= 1) (throwError $ "expecting 1 argument, got " ++ show (length args))
   sym <- reader getSym
+  -- The SMT-LIB spec represents extracts differently than Crucible does. Per
+  -- SMT: "extraction of bits i down to j from a bitvector of size m to yield a
+  -- new bitvector of size n, where n = i - j + 1". Per Crucible:
+  --
+  -- > -- | Select a subsequence from a bitvector.
+  -- > bvSelect :: (1 <= n, idx + n <= w)
+  -- >          => sym
+  -- >          -> NatRepr idx  -- ^ Starting index, from 0 as least significant bit
+  -- >          -> NatRepr n    -- ^ Number of bits to take
+  -- >          -> SymBV sym w  -- ^ Bitvector to select from
+  -- >          -> IO (SymBV sym n)
+  --
+  -- The "starting index" seems to be from the bottom, so that (in slightly
+  -- pseudocode)
+  --
+  -- > > bvSelect sym 0 8 (0x01020304:[32])
+  -- > 0x4:[8]
+  -- > > bvSelect sym 24 8 (0x01020304:[32])
+  -- > 0x1:[8]
+  --
+  -- Thus, n = i - j + 1, and idx = j.
   let nInt = iInt - jInt + 1
       idxInt = jInt
   Some nNat <- prefixError "in calculating extract length: " $ intToNatM nInt
   Some idxNat <- prefixError "in extract lower bound: " $ intToNatM idxInt
-  nPositive <- maybe (throwError "extract length must be positive") return $ isPosNat nNat
-  Some arg <- return $ head args
-  -- ^ required to be bound (rather then let-destructured) so GHC's brain doesn't explode
+  LeqProof <- fromMaybeError "extract length must be positive" $ isPosNat nNat
+  Some arg <- return $ args !! 0
   BVProof lenNat <- getBVProof arg
-  idxCheck <- maybe (throwError "invalid extract for given bitvector") return $
+  LeqProof <- fromMaybeError "invalid extract for given bitvector" $
     testLeq (addNat idxNat nNat) lenNat
-  liftIO $ withLeqProof nPositive $ withLeqProof idxCheck $
-    (Just <$> Some <$> S.bvSelect sym idxNat nNat arg)
+  liftIO (Just <$> Some <$> S.bvSelect sym idxNat nNat arg)
 readExtract _ _ = return Nothing
 
 -- | Parse an expression of the form @((_ zero_extend i) x)@ or @((_ sign_extend i) x)@.
@@ -281,9 +328,8 @@ readExtend (SC.SCons (SC.SAtom (AIdent "_"))
       when (length args /= 1) (throwError $ "expecting 1 argument, got " ++ show (length args))
       sym <- reader getSym
       Some iNat <- intToNatM iInt
-      iPositive <- maybe (throwError "must extend by a positive length") return $ isPosNat iNat
-      Some arg <- return $ head args
-      -- ^ required to be bound (rather then let-destructured) so GHC's brain doesn't explode
+      iPositive <- fromMaybeError "must extend by a positive length" $ isPosNat iNat
+      Some arg <- return $ args !! 0
       BVProof lenNat <- getBVProof arg
       let newLen = addNat lenNat iNat
       liftIO $ withLeqProof (leqAdd2 (leqRefl lenNat) iPositive) $
@@ -305,11 +351,11 @@ bvUnop       _ = Nothing
 -- | Parse an expression of the form @(f x)@, where @f@ operates on bitvectors.
 readBVUnop :: forall sym arch sh m. ExprParser sym arch sh m
 readBVUnop (SC.SAtom (AIdent ident)) args
-  | Just (BVUnop op) :: Maybe (BVUnop sym) <- bvUnop ident =
+  | Just (BVUnop op :: BVUnop sym) <- bvUnop ident =
       prefixError ("in reading " ++ ident ++ " expression: ") $ do
         when (length args /= 1) (throwError $ "expecting 1 argument, got " ++ show (length args))
         sym <- reader getSym
-        Some expr <- return $ head args
+        Some expr <- return $ args !! 0
         BVProof _ <- getBVProof expr
         liftIO (Just . Some <$> op sym expr)
 readBVUnop _ _ = return Nothing
@@ -319,7 +365,6 @@ readBVUnop _ _ = return Nothing
 data BVBinop sym where
   -- | Binop with a bitvector return type, e.g., addition or bitwise operations.
   BinopBV :: (forall w . (1 <= w) => sym -> S.SymBV sym w -> S.SymBV sym w -> IO (S.SymBV sym w)) -> BVBinop sym
-
   -- | Binop with a boolean return type, i.e., comparison operators.
   BinopBool :: (forall w . (1 <= w) => sym -> S.SymBV sym w -> S.SymBV sym w -> IO (S.Pred sym)) -> BVBinop sym
 
@@ -356,12 +401,12 @@ bvBinop        _ = Nothing
 -- on bitvectors.
 readBVBinop :: forall sym arch sh m. ExprParser sym arch sh m
 readBVBinop (SC.SAtom (AIdent ident)) args
-  | Just op :: Maybe (BVBinop sym) <- bvBinop ident =
+  | Just (op :: BVBinop sym) <- bvBinop ident =
       prefixError ("in reading " ++ ident ++ " expression: ") $ do
         when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
         sym <- reader getSym
-        Some arg1 <- return $ head args
-        Some arg2 <- return $ head (tail args)
+        Some arg1 <- return $ args !! 0
+        Some arg2 <- return $ args !! 1
         BVProof m <- prefixError ("in arg 1: ") $ getBVProof arg1
         BVProof n <- prefixError ("in arg 2: ") $ getBVProof arg2
         case testEquality m n of
@@ -369,9 +414,13 @@ readBVBinop (SC.SAtom (AIdent ident)) args
             case op of
               BinopBV op' -> Some <$> op' sym arg1 arg2
               BinopBool op' -> Some <$> op' sym arg1 arg2
-          Nothing -> throwError $ "arguments to " ++ ident ++
-            " must be the same length, but arg 1 has length " ++ show m ++
-            " and arg 2 has length " ++ show n
+          Nothing -> throwError $ unwords
+                       ["arguments to",
+                        ident,
+                        "must be the same length, but arg 1 has length",
+                        show m,
+                        "and arg 2 has length",
+                        show n]
 readBVBinop _ _ = return Nothing
 
 -- | Parse an expression of the form @(= x y)@.
@@ -380,12 +429,15 @@ readEq (SC.SAtom (AIdent "=")) args =
   prefixError ("in reading '=' expression: ") $ do
     when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
     sym <- reader getSym
-    Some arg1 <- return $ head args
-    Some arg2 <- return $ head (tail args)
+    Some arg1 <- return $ args !! 0
+    Some arg2 <- return $ args !! 1
     case testEquality (S.exprType arg1) (S.exprType arg2) of
       Just Refl -> liftIO (Just . Some <$> S.isEq sym arg1 arg2)
-      Nothing -> throwError $ "arguments must have same types; instead, got for arg 1 " ++
-        show (S.exprType arg1) ++ " and for arg 2 " ++ show (S.exprType arg2)
+      Nothing -> throwError $ unwords
+                   ["arguments must have same types; instead, got for arg 1",
+                    show (S.exprType arg1),
+                    "and for arg 2 got",
+                    show (S.exprType arg2)]
 readEq _ _ = return Nothing
 
 -- | Parse an expression of the form @(ite b x y)@
@@ -401,9 +453,13 @@ readIte (SC.SAtom (AIdent "ite")) args =
       BaseBoolRepr ->
         case testEquality (S.exprType then_) (S.exprType else_) of
           Just Refl -> liftIO (Just . Some <$> S.baseTypeIte sym test then_ else_)
-          Nothing -> throwError $ "then and else branches must have same type; got " ++
-            show (S.exprType then_) ++ " for then and " ++ show (S.exprType else_) ++ " for else"
-      _ -> throwError "test expression must be a boolean"
+          Nothing -> throwError $ unwords
+                       ["then and else branches must have same type; got",
+                        show (S.exprType then_),
+                        "for then and",
+                        show (S.exprType else_),
+                        "for else"]
+      tp -> throwError $ "test expression must be a boolean; got " ++ show tp
 readIte _ _ = return Nothing
 
 -- | Parse an arbitrary expression.
@@ -417,8 +473,9 @@ readExpr :: (S.IsExprBuilder sym,
          => SC.SExpr Atom
          -> m (Some (S.SymExpr sym))
 readExpr SC.SNil = throwError "found nil where expected an expression"
-readExpr (SC.SAtom (AInt _)) = throwError "found int where expected an expression"
+readExpr (SC.SAtom (AInt _)) = throwError "found int where expected an expression; perhaps you wanted a bitvector?"
 readExpr (SC.SAtom (ABV len val)) = do
+  -- This is a bitvector literal.
   sym <- reader getSym
   Just (Some lenRepr) <- return $ someNat (toInteger len)
   let Just pf = isPosNat lenRepr
@@ -426,16 +483,18 @@ readExpr (SC.SAtom (ABV len val)) = do
   -- can only construct BVs with positive length.
   liftIO $ withLeqProof pf (Some <$> S.bvLit sym lenRepr val)
 readExpr (SC.SAtom paramRaw) = do
+  -- This is a parameter (i.e., variable).
   DefsInfo { getOpNameList = opNames
-                , getSym = sym
-                , getOpVarList = opVars
-                , getLitLookup = litLookup
-                } <- ask
+           , getSym = sym
+           , getOpVarList = opVars
+           , getLitLookup = litLookup
+           } <- ask
   param <- readParameter opNames paramRaw
   case param of
     Some (Operand _ idx) -> return . Some . S.varExpr sym . unBoundVar $ indexOpList opVars idx
     Some (Literal _ lit) -> maybe (throwError "not declared as input") (return . Some) $ litLookup lit
 readExpr (SC.SCons opRaw argsRaw) = do
+  -- This is a function application.
   args <- readExprs argsRaw
   parseTries <- sequence $ map (\f -> f opRaw args)
     [readConcat, readExtract, readExtend, readBVUnop, readBVBinop, readEq, readIte]
@@ -479,9 +538,8 @@ readDefs (SC.SCons (SC.SCons (SC.SAtom p) defRaw) rest) = do
   oplist <- reader getOpNameList
   Some param <- readParameter oplist p
   Some def <- readExpr defRaw
-  Refl <- case testEquality (paramType param) (S.exprType def) of
-    Just pf -> return pf
-    Nothing -> throwError $ "mismatching types of parameter and expression for " ++ showF param
+  Refl <- fromMaybeError ("mismatching types of parameter and expression for " ++ showF param) $
+            testEquality (paramType param) (S.exprType def)
   rest' <- readDefs rest
   return $ MapF.insert param def rest'
 readDefs _ = throwError "invalid defs structure"
@@ -496,7 +554,6 @@ readFormula' :: forall sym arch sh m.
                  Architecture arch,
                  BuildOperandList arch sh)
              => sym
-             -- -> (TaggedParameter -> Maybe (Some BaseTypeRepr))
              -> T.Text
              -> m (ParameterizedFormula sym arch sh)
 readFormula' sym text = do
@@ -519,7 +576,7 @@ readFormula' sym text = do
   -- Build the operand list from the given s-expression, validating that it
   -- matches the correct shape as we go.
   operands :: OperandList (OpData arch) sh
-    <- maybe (throwError "invalid operand structure") return (buildOperandList opsRaw)
+    <- fromMaybeError "invalid operand structure" (buildOperandList opsRaw)
 
   inputs :: [Some (Parameter arch sh)]
     <- readInputs operands inputsRaw
@@ -559,8 +616,8 @@ readFormula' sym text = do
              , getOpVarList = opVarList
              , getOpNameList = operands
              }
+
   return $
-    -- ParameterizedFormula ops (Set.fromList inputs) paramVars defs
     ParameterizedFormula { pfUses = Set.fromList inputs
                          , pfOperandVars = opVarList
                          , pfLiteralVars = litVars
@@ -573,7 +630,6 @@ readFormula :: (S.IsExprBuilder sym,
                 Architecture arch,
                 BuildOperandList arch sh)
             => sym
-            -- -> (TaggedParameter -> Maybe (Some BaseTypeRepr))
             -> T.Text
             -> IO (Either String (ParameterizedFormula sym arch sh))
 readFormula sym text = runExceptT $ readFormula' sym text
@@ -584,7 +640,6 @@ readFormulaFromFile :: (S.IsExprBuilder sym,
                         Architecture arch,
                         BuildOperandList arch sh)
                     => sym
-                    -- -> (TaggedParameter -> Maybe (Some BaseTypeRepr))
                     -> FilePath
                     -> IO (Either String (ParameterizedFormula sym arch sh))
 readFormulaFromFile sym fp = readFormula sym =<< T.readFile fp
