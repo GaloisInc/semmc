@@ -17,6 +17,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC
+                       SemMC.Architecture
                        SemMC.Backend
                        SemMC.Formula
                        SemMC.Formula.Equivalence
@@ -27,6 +28,7 @@ library
                        SemMC.Strata
                        SemMC.ToyExample
                        SemMC.Worklist
+                       SemMC.Instantiate
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
