@@ -21,6 +21,7 @@ library
                        SemMC.Backend
                        SemMC.Formula
                        SemMC.Formula.Equivalence
+                       SemMC.Formula.Instantiate
                        SemMC.Formula.Parser
                        SemMC.Classify
                        SemMC.Generalize
@@ -28,7 +29,6 @@ library
                        SemMC.Strata
                        SemMC.ToyExample
                        SemMC.Worklist
-                       SemMC.Instantiate
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,

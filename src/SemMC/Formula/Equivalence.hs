@@ -56,8 +56,8 @@ formulasEquiv'
   (Formula {formParamVars = bvars1, formDefs = defs1})
   (Formula {formParamVars = bvars2, formDefs = defs2}) =
   do
-    let matchingPair :: MapF.MapF (StateVar arch) (Elt t)
-                     -> StateVar arch tp
+    let matchingPair :: MapF.MapF (Location arch) (Elt t)
+                     -> Location arch tp
                      -> Elt t tp
                      -> [MapF.Pair (Elt t) (Elt t)]
                      -> [MapF.Pair (Elt t) (Elt t)]

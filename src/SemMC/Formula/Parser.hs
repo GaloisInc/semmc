@@ -186,8 +186,8 @@ readParameter oplist atom =
             (findOpListIndex op oplist)
     RawLiteral lit ->
       maybe (throwError $ lit ++ " is an invalid literal for this arch")
-            (\(StateVarDesc repr var) -> return $ Some (Literal repr var))
-            (readStateVar lit)
+            (return . viewSome (Some . Literal))
+            (readLocation lit)
 
 -- | Parses the input list, e.g., @(ra rb 'ca)@
 readInputs :: (MonadError String m,
@@ -209,7 +209,7 @@ data DefsInfo sym arch sh = DefsInfo
                             { getSym :: sym
                             -- ^ SymInterface/ExprBuilder used to build up symbolic
                             -- expressions while parsing the definitions.
-                            , getLitLookup :: forall tp. StateVar arch tp -> Maybe (S.SymExpr sym tp)
+                            , getLitLookup :: forall tp. Location arch tp -> Maybe (S.SymExpr sym tp)
                             -- ^ Function used to retrieve the expression
                             -- corresponding to a given literal.
                             , getOpVarList :: OperandList (BoundVar sym arch) sh
@@ -492,7 +492,7 @@ readExpr (SC.SAtom paramRaw) = do
   param <- readParameter opNames paramRaw
   case param of
     Some (Operand _ idx) -> return . Some . S.varExpr sym . unBoundVar $ indexOpList opVars idx
-    Some (Literal _ lit) -> maybe (throwError "not declared as input") (return . Some) $ litLookup lit
+    Some (Literal lit) -> maybe (throwError "not declared as input") (return . Some) $ litLookup lit
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
   args <- readExprs argsRaw
@@ -595,24 +595,24 @@ readFormula' sym text = do
   -- for *all* inputs (partially because it is unclear how to treat immediates
   -- -- do they count as inputs?).
 
-  let mkLiteralVar :: forall tp. BaseTypeRepr tp -> StateVar arch tp -> m (S.BoundVar sym tp)
-      mkLiteralVar tpRepr var =
-        case userSymbol (showF var) of
+  let mkLiteralVar :: forall tp. BaseTypeRepr tp -> Location arch tp -> m (S.BoundVar sym tp)
+      mkLiteralVar tpRepr loc =
+        case userSymbol (showF loc) of
           Right symbol -> liftIO $ S.freshBoundVar sym symbol tpRepr
-          Left _ -> throwError $ "invalid var name!! " ++ showF var
+          Left _ -> throwError $ "invalid var name!! " ++ showF loc
 
       buildLitVarMap :: Some (Parameter arch sh)
-                     -> MapF.MapF (StateVar arch) (S.BoundVar sym)
-                     -> m (MapF.MapF (StateVar arch) (S.BoundVar sym))
-      buildLitVarMap (Some (Literal tpRepr var)) m = (\v -> MapF.insert var v m) <$> mkLiteralVar tpRepr var
+                     -> MapF.MapF (Location arch) (S.BoundVar sym)
+                     -> m (MapF.MapF (Location arch) (S.BoundVar sym))
+      buildLitVarMap (Some (Literal loc)) m = (\v -> MapF.insert loc v m) <$> mkLiteralVar (locationType loc) loc
       buildLitVarMap (Some (Operand _ _))        m = return m
 
-  litVars :: MapF.MapF (StateVar arch) (S.BoundVar sym)
+  litVars :: MapF.MapF (Location arch) (S.BoundVar sym)
     <- foldrM buildLitVarMap MapF.empty inputs
 
   defs <- runReaderT (readDefs defsRaw) $
     DefsInfo { getSym = sym
-             , getLitLookup = \var -> S.varExpr sym <$> flip MapF.lookup litVars var
+             , getLitLookup = \loc -> S.varExpr sym <$> flip MapF.lookup litVars loc
              , getOpVarList = opVarList
              , getOpNameList = operands
              }

@@ -12,7 +12,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
--- {-# LANGUAGE TypeFamilyDependencies #-}
 
 module SemMC.Architecture where
 
@@ -30,20 +29,28 @@ import qualified Dismantle.Instruction as I
 
 type Instruction arch = I.GenericInstruction (Opcode arch) (Operand arch)
 
+-- | Type of operands for a given architecture.
 type family Operand (arch :: *) :: Symbol -> *
 
-class IsOperand a where
+-- | Class containing methods we want on operands. (Nothing for now.)
+class IsOperand a
 
-instance IsOperand a where
+instance IsOperand a
 
+-- | Type of opcodes for a given architecture.
 type family Opcode (arch :: *) :: (Symbol -> *) -> [Symbol] -> *
 
-class IsOpcode a where
+-- | Class containing methods we want on opcodes. (Nothing for now.)
+class IsOpcode a
 
-instance IsOpcode a where
+instance IsOpcode a
 
+-- | Mapping from a particular instance of operand (characterized by a symbol)
+-- to a Crucible type that is the type of expression an occurrence of said
+-- operand should generate.
 type family OperandType (arch :: *) (op :: Symbol) :: BaseType
 
+-- XXX: Does this really belong in Architecture?
 newtype BoundVar (sym :: *) (arch :: *) (op :: Symbol) =
   BoundVar { unBoundVar :: S.BoundVar sym (OperandType arch op) }
 deriving instance (Show (S.BoundVar sym (OperandType arch op))) => Show (BoundVar sym arch op)
@@ -56,30 +63,40 @@ instance (ShowF (S.BoundVar sym)) => ShowF (BoundVar sym arch) where
 instance (ShowF (S.BoundVar sym)) => SF.ShowF (BoundVar sym arch) where
   showF = showF
 
--- type family StateVar (arch :: *) = (var :: BaseType -> *) | var -> arch
-type family StateVar (arch :: *) :: BaseType -> *
+-- | Bad name. Represents the different "registers" a given architecture has. I
+-- didn't want to call it registers, though, because it should also account for
+-- memory at some point.
+type family Location (arch :: *) :: BaseType -> *
 
-data StateVarDesc (var :: BaseType -> *) where
-  StateVarDesc :: forall var tp. BaseTypeRepr tp -> var tp -> StateVarDesc var
+-- | Methods we want on state variables.
+class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
+  -- | Try parsing a human representation of a state variable like "r8" into its
+  -- representation (and its type).
+  readLocation :: String -> Maybe (Some a)
+  -- | Given a state variable, return a representation of its type matching its
+  -- parameter.
+  locationType :: a tp -> BaseTypeRepr tp
 
-class (OrdF a, TestEquality a, ShowF a) => IsStateVar a where
-  readStateVar :: String -> Maybe (StateVarDesc a)
-  stateVarType :: a tp -> BaseTypeRepr tp
-  -- | This should probably be done with EnumF, but I'm lazy for now.
-  allStateVars :: [Some a]
-
+-- | An architecture is the top-level interface for specifying a semantics
+-- implementation. It has specific operands, opcodes, and state variables.
 class (IsOperand (Operand arch),
        IsOpcode (Opcode arch),
-       IsStateVar (StateVar arch),
+       IsLocation (Location arch),
        OrdF (Opcode arch (Operand arch)),
        I.OpcodeConstraints (Opcode arch) (Operand arch))
       => Architecture arch where
+  -- | Map an operand to a Crucible expression, given a mapping from each state
+  -- variable to a Crucible variable.
   operandValue :: forall sym s.
                   (S.IsSymInterface sym)
                => arch
                -> sym
-               -> MapF.MapF (StateVar arch) (S.BoundVar sym)
+               -> (forall tp. Location arch tp -> IO (S.BoundVar sym tp))
                -> Operand arch s
                -> IO (S.SymExpr sym (OperandType arch s))
 
-  operandToStateVar :: forall s. arch -> Operand arch s -> Maybe (StateVar arch (OperandType arch s))
+  -- | Map an operand to a specific state variable, if possible.
+  operandToLocation :: forall s.
+                       arch
+                    -> Operand arch s
+                    -> Maybe (Location arch (OperandType arch s))

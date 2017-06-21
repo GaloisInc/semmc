@@ -17,7 +17,6 @@ module SemMC.Formula (
   paramType,
   BaseSet(..),
   Index(..),
-  idxToInt,
   indexOpList,
   -- FormulaVar(..),
   loadBaseSet,
@@ -41,6 +40,9 @@ import qualified Dismantle.Instruction as I
 
 import           SemMC.Architecture
 
+-- | Represents an index into a type-level list. Used in place of integers to
+--   1. ensure that the given index *does* exist in the list
+--   2. guarantee that it has the given kind
 data Index :: [k] -> k -> * where
   IndexHere :: forall x sh. Index (x ': sh) x
   IndexThere :: forall x x' sh. Index sh x -> Index (x' ': sh) x
@@ -52,13 +54,6 @@ instance TestEquality (Index sh) where
   IndexThere idx1 `testEquality` IndexThere idx2 = testEquality idx1 idx2
   _ `testEquality` _ = Nothing
 
-idxToInt :: Index sh x -> Int
-idxToInt IndexHere = 0
-idxToInt (IndexThere th) = 1 + idxToInt th
-
-instance Ord (Index sh x) where
-  x `compare` y = idxToInt x `compare` idxToInt y
-
 instance OrdF (Index sh) where
   IndexHere `compareF` IndexHere = EQF
   IndexHere `compareF` IndexThere _ = LTF
@@ -69,59 +64,54 @@ instance OrdF (Index sh) where
       EQF -> EQF
       GTF -> GTF
 
+instance Ord (Index sh x) where
+  x `compare` y = toOrdering $ x `compareF` y
+
+-- | Evaluate an index for a given operand list.
 indexOpList :: I.OperandList f sh -> Index sh s -> f s
--- Why not destructure @vals@ in the argument position? This way, GHC verifies
--- that the pattern-matching is exhaustive.
+-- Why not destructure @vals@ in the argument position? GHC gives a warning
+-- about not handling the Nil case of vals. This way, GHC verifies that the
+-- pattern-matching is exhaustive.
 indexOpList vals IndexHere = case vals of x I.:> _ -> x
 indexOpList vals (IndexThere th) = case vals of _ I.:> rest -> indexOpList rest th
 
--- | Input variables in a templated formula.
--- data Parameter arch (sh :: [Symbol]) (tp :: BaseType) = Operand (I.Index sh tp)
---                                                       -- TODO: ensure this has the right type (tp)
---                                                       -- ^ "Templated" part of an instruction, like an operand
---                                                       | Literal (StateVar arch tp)
---                                                       -- ^ A literal value, like a concrete register ("r8")
---                                                       deriving (Show, Eq, Ord)
 data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   Operand :: BaseTypeRepr (OperandType arch s) -> Index sh s -> Parameter arch sh (OperandType arch s)
-  Literal :: BaseTypeRepr tp -> StateVar arch tp -> Parameter arch sh tp
+  Literal :: Location arch tp -> Parameter arch sh tp
 
-deriving instance Show (StateVar arch tp) => Show (Parameter arch sh tp)
+deriving instance Show (Location arch tp) => Show (Parameter arch sh tp)
 
-instance ShowF (StateVar arch) => ShowF (Parameter arch sh) where
+instance ShowF (Location arch) => ShowF (Parameter arch sh) where
   showF (Operand repr idx) = unwords ["Operand", "(" ++ show repr ++ ")", show idx]
-  showF (Literal repr var) = unwords ["Literal", "(" ++ show repr ++ ")", showF var]
+  showF (Literal var) = unwords ["Literal", showF var]
 
-instance TestEquality (StateVar arch) => TestEquality (Parameter arch sh) where
+instance TestEquality (Location arch) => TestEquality (Parameter arch sh) where
   Operand _ idx1 `testEquality` Operand _ idx2 = (\Refl -> Refl) <$> testEquality idx1 idx2
-  Literal _ var1 `testEquality` Literal _ var2 = (\Refl -> Refl) <$> testEquality var1 var2
+  Literal   var1 `testEquality` Literal   var2 = (\Refl -> Refl) <$> testEquality var1 var2
   _              `testEquality`              _ = Nothing
 
-instance Eq (StateVar arch tp) => Eq (Parameter arch sh tp) where
+instance Eq (Location arch tp) => Eq (Parameter arch sh tp) where
   Operand _ idx1 == Operand _ idx2 = isJust $ testEquality idx1 idx2
-  Literal _ var1 == Literal _ var2 = var1 == var2
+  Literal   var1 == Literal   var2 = var1 == var2
   _              ==              _ = False
 
-instance OrdF (StateVar arch) => OrdF (Parameter arch sh) where
-  Operand _ _ `compareF` Literal _ _ = LTF
-  Literal _ _ `compareF` Operand _ _ = GTF
+instance OrdF (Location arch) => OrdF (Parameter arch sh) where
+  Operand _ _ `compareF` Literal   _ = LTF
+  Literal   _ `compareF` Operand _ _ = GTF
   Operand _ idx1 `compareF` Operand _ idx2 =
     case idx1 `compareF` idx2 of
       LTF -> LTF
       EQF -> EQF
       GTF -> GTF
-  Literal _ var1 `compareF` Literal _ var2 =
+  Literal var1 `compareF` Literal var2 =
     case var1 `compareF` var2 of
       LTF -> LTF
       EQF -> EQF
       GTF -> GTF
 
-paramType :: Parameter arch sh tp -> BaseTypeRepr tp
+paramType :: (Architecture arch) => Parameter arch sh tp -> BaseTypeRepr tp
 paramType (Operand repr _) = repr
-paramType (Literal repr _) = repr
-
--- instance Ord (StateVar arch tp) => Ord (Parameter arch sh tp) where
---   Operand _ `compare` Literal _ = Lt
+paramType (Literal loc) = locationType loc
 
 -- | A "templated" or "parameterized" formula, i.e., a formula that has holes
 -- that need to be filled in before it represents an actual concrete
@@ -129,27 +119,21 @@ paramType (Literal repr _) = repr
 data ParameterizedFormula sym arch (sh :: [Symbol]) =
   ParameterizedFormula { pfUses :: Set.Set (Some (Parameter arch sh))
                        , pfOperandVars :: I.OperandList (BoundVar sym arch) sh
-                       , pfLiteralVars :: MapF.MapF (StateVar arch) (S.BoundVar sym)
+                       , pfLiteralVars :: MapF.MapF (Location arch) (S.BoundVar sym)
                        , pfDefs :: MapF.MapF (Parameter arch sh) (S.SymExpr sym)
                        }
-deriving instance (SF.ShowF (BoundVar sym arch), ShowF (StateVar arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => Show (ParameterizedFormula sym arch sh)
+deriving instance (SF.ShowF (BoundVar sym arch), ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => Show (ParameterizedFormula sym arch sh)
 
-instance (SF.ShowF (BoundVar sym arch), ShowF (StateVar arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch) where
+instance (SF.ShowF (BoundVar sym arch), ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch) where
   showF = show
-
--- | Represents an input or output of a formula, i.e. a specific register, flag,
--- or memory. Eventually, this should probably be replaced with an
--- architecture-specific ADT, but we have this for now.
--- newtype FormulaVar = FormulaVar { unFormulaVar :: T.Text }
---   deriving (Show, Ord, Eq)
 
 -- | A formula representing a concrete instruction.
 data Formula sym arch =
-  Formula { formUses :: Set.Set (Some (StateVar arch))
-          , formParamVars :: MapF.MapF (StateVar arch) (S.BoundVar sym)
-          , formDefs :: MapF.MapF (StateVar arch) (S.SymExpr sym)
+  Formula { formUses :: Set.Set (Some (Location arch))
+          , formParamVars :: MapF.MapF (Location arch) (S.BoundVar sym)
+          , formDefs :: MapF.MapF (Location arch) (S.SymExpr sym)
           }
-deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (StateVar arch)) => Show (Formula sym arch)
+deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (Formula sym arch)
 
 emptyFormula :: Formula sym arch
 emptyFormula = Formula { formUses = Set.empty, formParamVars = MapF.empty, formDefs = MapF.empty }
@@ -164,7 +148,7 @@ newtype BaseSet sym arch = BaseSet { unBaseSet :: MapF.MapF ((Opcode arch) (Oper
 deriving instance (SF.ShowF (BoundVar sym arch),
                    ShowF (S.SymExpr sym),
                    ShowF (S.BoundVar sym),
-                   ShowF (StateVar arch),
+                   ShowF (Location arch),
                    ShowF ((Opcode arch) (Operand arch)))
                 => Show (BaseSet sym arch)
 
@@ -173,17 +157,6 @@ loadBaseSet = undefined
 
 data FormulaError opcode operand = NoFormulaForOpcode (I.SomeOpcode opcode operand)
   deriving (Show)
-
--- instance (I.OpcodeConstraints opcode operand) => C.Exception (FormulaError opcode operand)
--- instance (I.OpcodeConstraints opcode operand) => C.Exception (FormulaError opcode operand)
-
--- | Instantiate a templated formula for a given instruction
--- this definition is currently bogus
--- instantiateFormula :: sym -> ParameterizedFormula sym arch sh -> I.GenericInstruction (Opcode arch) (Operand arch) -> IO (Formula sym arch)
--- instantiateFormula = undefined
--- instantiateFormula _ pf _ = return $ Formula (Set.map p2FV $ pfUses pf) (Map.mapKeys p2FV $ pfParamVars pf) (Map.mapKeys p2FV $ pfDefs pf)
---   where p2FV (Operand op) = FormulaVar ("op_" <> op)
---         p2FV (Literal lit) = FormulaVar ("lit_" <> lit)
 
 lookupSemantics :: (C.MonadThrow m, MonadIO m, Architecture arch)
                 => sym
