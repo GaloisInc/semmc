@@ -41,6 +41,8 @@ import           SemMC.Formula
 import           SemMC.Formula.Instantiate hiding ( replaceLitVars )
 import           SemMC.Synthesis.Template
 
+evalBoundVars = undefined
+
 foldlMWithKey :: forall k a b m. (Monad m) => (forall s. b -> k s -> a s -> m b) -> b -> MapF.MapF k a -> m b
 foldlMWithKey f z0 m = MapF.foldrWithKey f' return m z0
   where f' :: forall s. k s -> a s -> (b -> m b) -> b -> m b
@@ -72,7 +74,7 @@ replaceLitVars :: forall loc t st tp.
                -> IO (S.Elt t tp)
 replaceLitVars sym newExprs oldVars expr =
   buildLitAssignment sym newExprs oldVars >>=
-    \(MapF.Pair varAssn exprAssn) -> S.evalBoundVars sym expr varAssn exprAssn
+    \(MapF.Pair varAssn exprAssn) -> evalBoundVars sym expr varAssn exprAssn
 
 type MachineState sym loc = MapF.MapF loc (S.SymExpr sym)
 
