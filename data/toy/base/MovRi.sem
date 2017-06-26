@@ -1,0 +1,4 @@
+((operands . ((rT . 'R32)
+              (imm . 'I32)))
+ (in . ())
+ (defs . ((rT . imm))))

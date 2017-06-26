@@ -50,10 +50,11 @@ import qualified Data.Map as M
 import qualified Data.Parameterized.Classes as ParamClasses
 import           Data.Parameterized.Classes hiding ( ShowF, showF )
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.ShowF ( ShowF, showF )
 import           Data.Word ( Word32 )
-import           GHC.TypeLits ( Symbol )
+import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal )
 
 import           Dismantle.Instruction ( OperandList(Nil,(:>)) )
 import qualified Dismantle.Instruction as D
@@ -105,6 +106,10 @@ instance A.IsLocation Reg where
   locationType Reg2 = knownRepr :: BaseTypeRepr (BaseBVType 32)
   locationType Reg3 = knownRepr :: BaseTypeRepr (BaseBVType 32)
 
+  defaultLocationExpr sym Reg1 = S.bvLit sym (knownNat :: NatRepr 32) 0
+  defaultLocationExpr sym Reg2 = S.bvLit sym (knownNat :: NatRepr 32) 0
+  defaultLocationExpr sym Reg3 = S.bvLit sym (knownNat :: NatRepr 32) 0
+
 -- | An operand, indexed so that we can compute the type of its
 -- values, and describe the shape of instructions that can take it as
 -- an argument.
@@ -125,6 +130,9 @@ deriving instance Ord (Operand a)
 instance ShowF Operand where
   showF (R32 reg) = "R32 " ++ show reg
   showF (I32 val) = "R32 " ++ show val
+
+instance ParamClasses.ShowF Operand where
+  showF = showF
 
 instance TestEquality Operand where
   testEquality (R32 r1) (R32 r2)
@@ -149,9 +157,11 @@ instance OrdF Operand where
 -- Q: So, why is 'D.GenericInstruction' expect an indexed first arg?
 data Opcode (o :: Symbol -> *) (sh :: [Symbol]) where
   -- Three instructions for my simplest example.
-  AddRr :: Opcode Operand '["R32","R32"]
-  SubRr :: Opcode Operand '["R32","R32"]
+  AddRr :: Opcode Operand '["R32", "R32"]
+  SubRr :: Opcode Operand '["R32", "R32"]
   NegR  :: Opcode Operand '["R32"]
+
+  MovRi :: Opcode Operand '["R32", "I32"]
 {-
   -- A few more to add once the first example is working.
   AddRi :: Opcode Operand '["R32","I32"]
@@ -165,31 +175,44 @@ deriving instance Ord (Opcode o sh)
 instance ShowF (Opcode o) where
   showF = show
 
+instance ParamClasses.ShowF (Opcode o) where
+  showF = show
+
 instance EnumF (Opcode o) where
   enumF AddRr = 0
   enumF SubRr = 1
   enumF NegR = 2
+  enumF MovRi = 3
 
   congruentF AddRr = Set.fromList [AddRr, SubRr]
   congruentF SubRr = Set.fromList [AddRr, SubRr]
   congruentF NegR = Set.fromList [NegR]
+  congruentF MovRi = Set.fromList [MovRi]
 
 instance TestEquality (Opcode o) where
   testEquality AddRr AddRr = Just Refl
   testEquality SubRr SubRr = Just Refl
   testEquality  NegR  NegR = Just Refl
+  testEquality MovRi MovRi = Just Refl
   testEquality     _     _ = Nothing
 
 instance OrdF (Opcode o) where
   AddRr `compareF` AddRr = EQF
   AddRr `compareF` SubRr = LTF
   AddRr `compareF`  NegR = LTF
+  AddRr `compareF` MovRi = LTF
   SubRr `compareF` AddRr = GTF
   SubRr `compareF` SubRr = EQF
   SubRr `compareF`  NegR = LTF
+  SubRr `compareF` MovRi = LTF
   NegR  `compareF` AddRr = GTF
   NegR  `compareF` SubRr = GTF
   NegR  `compareF`  NegR = EQF
+  NegR  `compareF` MovRi = LTF
+  MovRi `compareF` AddRr = GTF
+  MovRi `compareF` SubRr = GTF
+  MovRi `compareF`  NegR = GTF
+  MovRi `compareF` MovRi = EQF
 
 type Instruction = D.GenericInstruction Opcode Operand
 
@@ -237,11 +260,40 @@ evalInstruction ms (D.Instruction op args) = case (op, args) of
   (NegR, r1 :> Nil) ->
     let x1 = getOperand ms r1
     in putOperand ms r1 (- x1)
+  (MovRi, r1 :> i1 :> Nil) ->
+    let x1 = getOperand ms i1
+    in putOperand ms r1 x1
 
 evalProg :: MachineState -> [Instruction] -> MachineState
 evalProg ms is = foldl evalInstruction ms is
 
 data Toy = Toy
+
+type instance A.IsReg Toy "R32" = 'True
+type instance A.IsReg Toy "I32" = 'False
+
+-- isReg :: forall proxy s. KnownSymbol s => proxy (Operand s) -> Bool
+-- isReg _ = elem (symbolVal (Proxy :: Proxy s)) ["R32"]
+
+-- allPossible :: forall proxy s. KnownSymbol s => proxy (Operand s) -> [Operand s]
+-- allPossible _ =
+--   case symbolVal (Proxy :: Proxy s) of
+--     "R32" -> R32 <$> [Reg1, Reg2, Reg3]
+--     "I32" -> I32 <$> [0..]
+--     _     -> undefined
+
+instance A.IsOperand Operand where
+  -- isReg = isReg
+  -- allPossible = allPossible
+
+instance A.IsSpecificOperand Operand "R32" where
+  allOperandValues = R32 <$> [Reg1, Reg2, Reg3]
+
+instance A.IsSpecificOperand Operand "I32" where
+  allOperandValues = I32 <$> [0..]
+
+-- type instance IsReg Toy "R32" = 'True
+-- type instance IsReg Toy "I32" = 'False
 
 type instance A.Operand Toy = Operand
 type instance A.Opcode Toy = Opcode

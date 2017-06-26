@@ -13,6 +13,8 @@
 module SemMC.Formula (
   ParameterizedFormula(..),
   Formula(..),
+  emptyFormula,
+  coerceFormula,
   Parameter(..),
   paramType,
   BaseSet(..),
@@ -138,9 +140,12 @@ deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Locatio
 emptyFormula :: Formula sym arch
 emptyFormula = Formula { formUses = Set.empty, formParamVars = MapF.empty, formDefs = MapF.empty }
 
--- | Combine two formulas in sequential execution
-sequenceFormulas :: sym -> Formula sym arch -> Formula sym arch -> IO (Formula sym arch)
-sequenceFormulas = undefined
+coerceFormula :: (Location arch1 ~ Location arch2) => Formula sym arch1 -> Formula sym arch2
+coerceFormula f =
+  Formula { formUses = formUses f
+          , formParamVars = formParamVars f
+          , formDefs = formDefs f
+          }
 
 -- replaceVarExpression :: sym -> Formula sym -> FormulaVar -> Some (S.SymExpr sym) -> IO (Formula sym)
 
@@ -170,6 +175,9 @@ lookupSemantics sym (BaseSet m) i =
         Just f -> liftIO $ undefined sym f i
         -- Nothing -> C.throwM (NoFormulaForOpcode (I.SomeOpcode op))
         Nothing -> C.throwM (undefined :: C.SomeException)
+
+sequenceFormulas :: a
+sequenceFormulas = undefined
 
 formulaFromProgram :: (C.MonadThrow m, MonadIO m, Architecture arch)
                    => sym

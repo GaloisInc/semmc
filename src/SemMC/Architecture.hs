@@ -32,10 +32,15 @@ type Instruction arch = I.GenericInstruction (Opcode arch) (Operand arch)
 -- | Type of operands for a given architecture.
 type family Operand (arch :: *) :: Symbol -> *
 
--- | Class containing methods we want on operands. (Nothing for now.)
-class IsOperand a
+type family IsReg (arch :: *) (s :: Symbol) :: Bool
 
-instance IsOperand a
+-- | Class containing methods we want on operands. (Nothing for now.)
+class IsOperand (o :: Symbol -> *) where
+  -- isReg :: forall proxy s. KnownSymbol s => proxy (o s) -> Bool
+  -- allPossible :: forall proxy s. KnownSymbol s => proxy (o s) -> [o s]
+
+class IsSpecificOperand o (s :: Symbol) where
+  allOperandValues :: [o s]
 
 -- | Type of opcodes for a given architecture.
 type family Opcode (arch :: *) :: (Symbol -> *) -> [Symbol] -> *
@@ -76,6 +81,10 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   -- | Given a state variable, return a representation of its type matching its
   -- parameter.
   locationType :: a tp -> BaseTypeRepr tp
+  -- | Default value for this location. Typically something like 0.
+  defaultLocationExpr :: (S.IsExprBuilder sym) => sym -> a tp -> IO (S.SymExpr sym tp)
+
+type ArchState sym arch = MapF.MapF (Location arch) (S.SymExpr sym)
 
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.
@@ -87,16 +96,16 @@ class (IsOperand (Operand arch),
       => Architecture arch where
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
-  operandValue :: forall sym s.
+  operandValue :: forall proxy sym s.
                   (S.IsSymInterface sym)
-               => arch
+               => proxy arch
                -> sym
                -> (forall tp. Location arch tp -> IO (S.BoundVar sym tp))
                -> Operand arch s
                -> IO (S.SymExpr sym (OperandType arch s))
 
   -- | Map an operand to a specific state variable, if possible.
-  operandToLocation :: forall s.
-                       arch
+  operandToLocation :: forall proxy s.
+                       proxy arch
                     -> Operand arch s
                     -> Maybe (Location arch (OperandType arch s))

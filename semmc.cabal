@@ -27,6 +27,9 @@ library
                        SemMC.Generalize
                        SemMC.Statistics
                        SemMC.Strata
+                       SemMC.Synthesis
+                       SemMC.Synthesis.Cegis
+                       SemMC.Synthesis.Template
                        SemMC.ToyExample
                        SemMC.Worklist
   -- other-modules:       
