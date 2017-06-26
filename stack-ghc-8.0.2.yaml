@@ -5,6 +5,19 @@ packages:
 #- submodules/dismantle/dismantle-ppc
 - submodules/dismantle/dismantle-tablegen
 - '.'
+- location:
+    git: https://github.com/GaloisInc/crucible.git
+    commit: d55b449918a3af35ab5730a86108ffaa6d930199
+  subdirs:
+  - crucible
+  - galois-matlab
+  # The 'exra-dep' here means don't actually build this package unless
+  # needed as a dependency, and don't load it into GHCi.
+  extra-dep: true
+- location:
+    git: https://github.com/GaloisInc/parameterized-utils.git
+    commit: 1c44b1f0bb3c958be93a120b2abfa78822daa0eb
+  extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
@@ -12,6 +25,10 @@ extra-deps:
 - located-base-0.1.1.0
 - s-cargot-0.1.2.0
 - sbv-6.1
+
+- crucible-0.3.1
+- parameterized-utils-0.1.9
+- th-abstraction-0.2.2.0
 
 # Override default flag values for local packages and extra-deps
 flags: {}
