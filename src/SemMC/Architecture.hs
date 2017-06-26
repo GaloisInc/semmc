@@ -18,7 +18,7 @@ module SemMC.Architecture where
 import Data.Type.Equality
 import GHC.TypeLits ( KnownSymbol, Symbol )
 
-import qualified Data.ShowF as SF
+import qualified Data.EnumF as SF
 import Data.Parameterized.Classes
 import Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
@@ -66,9 +66,6 @@ deriving instance (Ord (S.BoundVar sym (OperandType arch op))) => Ord (BoundVar 
 instance (ShowF (S.BoundVar sym)) => ShowF (BoundVar sym arch) where
   showF (BoundVar bv) = "BoundVar { unBoundVar = " ++ showF bv ++ "}"
 
-instance (ShowF (S.BoundVar sym)) => SF.ShowF (BoundVar sym arch) where
-  showF = showF
-
 -- | Bad name. Represents the different "registers" a given architecture has. I
 -- didn't want to call it registers, though, because it should also account for
 -- memory at some point.
@@ -93,7 +90,8 @@ class (IsOperand (Operand arch),
        IsOpcode (Opcode arch),
        IsLocation (Location arch),
        OrdF (Opcode arch (Operand arch)),
-       I.OpcodeConstraints (Opcode arch) (Operand arch))
+       ShowF (Opcode arch (Operand arch)),
+       SF.EnumF (Opcode arch (Operand arch)))
       => Architecture arch where
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.

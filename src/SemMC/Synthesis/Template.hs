@@ -29,7 +29,6 @@ import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Proxy ( Proxy(..) )
-import qualified Data.ShowF as SF
 import           Data.Typeable
 import           GHC.TypeLits ( KnownSymbol, sameSymbol, Symbol, symbolVal )
 import           Unsafe.Coerce ( unsafeCoerce )
@@ -60,9 +59,6 @@ instance (ShowF (Operand arch)) => ShowF (TemplatedOperand arch) where
   showF (Concrete op) = "Concrete (" ++ showF op ++ ")"
   showF (Abstract _) = "Abstract"
 
-instance (ShowF (Operand arch)) => SF.ShowF (TemplatedOperand arch) where
-  showF = showF
-
 instance (TestEquality (Operand arch)) => TestEquality (TemplatedOperand arch) where
   Concrete op1 `testEquality` Concrete op2 = (\Refl -> Refl) <$> op1 `testEquality` op2
   (Abstract _ :: TemplatedOperand arch s1) `testEquality` (Abstract _ :: TemplatedOperand arch s2) =
@@ -86,7 +82,7 @@ makeSymbol name = case userSymbol name of
                     Left _ -> error "tried to create symbol with bad name"
 
 instance (OrdF (Opcode arch (TemplatedOperand arch)),
-          SF.ShowF (Opcode arch (TemplatedOperand arch)),
+          ShowF (Opcode arch (TemplatedOperand arch)),
           EnumF (Opcode arch (TemplatedOperand arch)),
           Architecture arch,
           Typeable arch)
@@ -104,9 +100,9 @@ data TemplatedFormula sym arch sh =
                    , tfOperandExprs :: OperandList (WrappedExpr sym (TemplatedArch arch)) sh
                    , tfFormula :: Formula sym (TemplatedArch arch)
                    }
-deriving instance (SF.ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (TemplatedFormula sym arch sh)
+deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (TemplatedFormula sym arch sh)
 
-instance (SF.ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => ShowF (TemplatedFormula sym arch) where
+instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => ShowF (TemplatedFormula sym arch) where
   showF = show
 
 -- class MakeTemplatedOpLists' (isreg :: Bool) arch sh where
@@ -164,7 +160,7 @@ instance (Architecture arch, KnownSymbol s, IsSpecificOperand (Operand arch) s, 
 templatizeFormula :: forall t st arch sh.
                      (Architecture arch,
                       OrdF (Opcode arch (TemplatedOperand arch)),
-                      SF.ShowF (Opcode arch (TemplatedOperand arch)),
+                      ShowF (Opcode arch (TemplatedOperand arch)),
                       EnumF (Opcode arch (TemplatedOperand arch)),
                       Typeable arch,
                       MakeTemplatedOpLists arch sh)
@@ -176,7 +172,7 @@ templatizeFormula sym pf = map (\ol -> uncurry (TemplatedFormula ol) <$> instant
 templatizeFormula' :: forall t st arch sh.
                       (Architecture arch,
                        OrdF (Opcode arch (TemplatedOperand arch)),
-                       SF.ShowF (Opcode arch (TemplatedOperand arch)),
+                       ShowF (Opcode arch (TemplatedOperand arch)),
                        EnumF (Opcode arch (TemplatedOperand arch)),
                        Typeable arch,
                        MakeTemplatedOpLists arch sh)
@@ -239,7 +235,7 @@ foo xs = join [foo' i | i <- [1..]]
 templatedInstructions :: forall t st arch.
                          (Architecture arch,
                           OrdF (Opcode arch (TemplatedOperand arch)),
-                          SF.ShowF (Opcode arch (TemplatedOperand arch)),
+                          ShowF (Opcode arch (TemplatedOperand arch)),
                           EnumF (Opcode arch (TemplatedOperand arch)),
                           Typeable arch)
                       => S.SimpleBuilder t st

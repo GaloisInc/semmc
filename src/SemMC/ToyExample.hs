@@ -48,11 +48,10 @@ import           Data.EnumF ( congruentF, EnumF, enumF )
 import           Data.Map ( Map )
 import qualified Data.Map as M
 import qualified Data.Parameterized.Classes as ParamClasses
-import           Data.Parameterized.Classes hiding ( ShowF, showF )
+import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
-import           Data.ShowF ( ShowF, showF )
 import           Data.Word ( Word32 )
 import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
 
@@ -73,9 +72,6 @@ data Reg :: BaseType -> * where
 deriving instance Show (Reg tp)
 deriving instance Eq (Reg tp)
 deriving instance Ord (Reg tp)
-
-instance ParamClasses.ShowF Reg where
-  showF = show
 
 instance ShowF Reg where
   showF = show
@@ -132,9 +128,6 @@ instance ShowF Operand where
   showF (R32 reg) = "R32 " ++ show reg
   showF (I32 val) = "I32 " ++ show val
 
-instance ParamClasses.ShowF Operand where
-  showF = showF
-
 instance TestEquality Operand where
   testEquality (R32 r1) (R32 r2)
     | r1 == r2 = Just Refl
@@ -174,9 +167,6 @@ deriving instance Eq (Opcode o sh)
 deriving instance Ord (Opcode o sh)
 
 instance ShowF (Opcode o) where
-  showF = show
-
-instance ParamClasses.ShowF (Opcode o) where
   showF = show
 
 instance EnumF (Opcode o) where

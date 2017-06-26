@@ -26,7 +26,6 @@ import           Data.Parameterized.Some
 import           Data.Parameterized.TraversableF
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
-import qualified Data.ShowF as SF
 import           GHC.TypeLits ( Symbol )
 
 import           Lang.Crucible.BaseTypes
@@ -60,9 +59,6 @@ type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
 newtype WrappedExpr sym arch s = WrappedExpr { unWrappedExpr :: S.SymExpr sym (OperandType arch s) }
 
 instance (ShowF (S.SymExpr sym)) => ShowF (WrappedExpr sym arch) where
-  showF (WrappedExpr e) = showF e
-
-instance (ShowF (S.SymExpr sym)) => SF.ShowF (WrappedExpr sym arch) where
   showF (WrappedExpr e) = showF e
 
 buildAssignment :: forall sym arch sh.

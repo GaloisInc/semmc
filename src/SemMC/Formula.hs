@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -30,7 +32,6 @@ import qualified Control.Monad.Catch as C
 import           Control.Monad.IO.Class ( MonadIO(..) )
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
-import qualified Data.ShowF as SF
 
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some
@@ -124,9 +125,21 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
                        , pfLiteralVars :: MapF.MapF (Location arch) (S.BoundVar sym)
                        , pfDefs :: MapF.MapF (Parameter arch sh) (S.SymExpr sym)
                        }
-deriving instance (SF.ShowF (BoundVar sym arch), ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => Show (ParameterizedFormula sym arch sh)
 
-instance (SF.ShowF (BoundVar sym arch), ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch) where
+-- | Copied from 'I', which defines the identical instance for
+-- @dismantle@'s @Data.ShowF@ class.
+instance (ShowF o) => ShowF (I.OperandList o) where
+  showF l =
+    case l of
+      I.Nil -> "Nil"
+      (elt I.:> rest) -> showF elt ++ " :> " ++ showF rest
+
+instance ShowF o => Show (I.OperandList o sh) where
+  show = showF
+
+deriving instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => Show (ParameterizedFormula sym arch sh)
+
+instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch) where
   showF = show
 
 -- | A formula representing a concrete instruction.
@@ -150,7 +163,7 @@ coerceFormula f =
 -- replaceVarExpression :: sym -> Formula sym -> FormulaVar -> Some (S.SymExpr sym) -> IO (Formula sym)
 
 newtype BaseSet sym arch = BaseSet { unBaseSet :: MapF.MapF ((Opcode arch) (Operand arch)) (ParameterizedFormula sym arch) }
-deriving instance (SF.ShowF (BoundVar sym arch),
+deriving instance (ShowF (BoundVar sym arch),
                    ShowF (S.SymExpr sym),
                    ShowF (S.BoundVar sym),
                    ShowF (Location arch),
