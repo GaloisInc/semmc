@@ -21,6 +21,7 @@ module SemMC.Synthesis.Template
   , templatizeFormula
   , templatizeFormula'
   , templatedInstructions
+  , recoverOperands
   ) where
 
 import           Control.Monad ( join )
@@ -35,6 +36,8 @@ import           Unsafe.Coerce ( unsafeCoerce )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Solver.SimpleBackend as S
+import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import           Lang.Crucible.Solver.Symbol ( userSymbol, SolverSymbol )
 
@@ -183,7 +186,7 @@ templatizeFormula' :: forall t st arch sh.
 templatizeFormula' sym = sequence . templatizeFormula sym
 
 data OpcodeGoodShape (opcode :: (Symbol -> *) -> [Symbol] -> *) (operand :: Symbol -> *) (arch :: *) (sh :: [Symbol]) where
-  OpcodeGoodShape :: (MakeTemplatedOpLists arch sh) => opcode operand sh -> OpcodeGoodShape opcode operand arch sh
+  OpcodeGoodShape :: (RecoverOperands arch sh, MakeTemplatedOpLists arch sh) => opcode operand sh -> OpcodeGoodShape opcode operand arch sh
 
 instance (TestEquality (opcode operand)) => TestEquality (OpcodeGoodShape opcode operand arch) where
   OpcodeGoodShape op1 `testEquality` OpcodeGoodShape op2 =
@@ -196,9 +199,28 @@ instance (OrdF (opcode operand)) => OrdF (OpcodeGoodShape opcode operand arch) w
       EQF -> EQF
       GTF -> GTF
 
+class RecoverOperands (arch :: *) (sh :: [Symbol]) where
+  recoverOperands :: GroundEvalFn t
+                  -> OperandList (TemplatedOperand arch) sh
+                  -> OperandList (WrappedExpr (S.SimpleBackend t) (TemplatedArch arch)) sh
+                  -> IO (OperandList (Operand arch) sh)
+
+instance RecoverOperands arch '[] where
+  recoverOperands _ Nil Nil = return Nil
+
+instance (Architecture arch, RecoverOperands arch sh)
+  => RecoverOperands arch (s ': sh) where
+  -- => RecoverOperands arch (Cons s sh) where
+  recoverOperands evalFn (Concrete op :> restOps) (_ :> restExprs) =
+    (op :>) <$> recoverOperands evalFn restOps restExprs
+  recoverOperands evalFn (Abstract _ :> restOps) (WrappedExpr expr :> restExprs) =
+    (:>) <$> (valueToOperand (Proxy :: Proxy arch) <$> evalGroundElt (groundEval evalFn) expr)
+         <*> recoverOperands evalFn restOps restExprs
+
 data InstructionWTFormula sym arch where
   InstructionWTFormula :: forall sym arch sh.
-                          (Opcode arch) (Operand arch) sh
+                          (RecoverOperands arch sh)
+                       => (Opcode arch) (Operand arch) sh
                        -> TemplatedFormula sym arch sh
                        -> InstructionWTFormula sym arch
 

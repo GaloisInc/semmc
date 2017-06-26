@@ -61,8 +61,8 @@ instantiate :: (MonadState (SynthesisState (S.SimpleBackend t) arch) m,
             => S.SimpleBackend t
             -> Formula (S.SimpleBackend t) arch
             -> [InstructionWTFormula (S.SimpleBackend t) arch]
-            -- -> m (Maybe [Instruction arch])
-            -> m (Maybe [InstructionWTFormula (S.SimpleBackend t) arch])
+            -> m (Maybe [Instruction arch])
+            -- -> m (Maybe [InstructionWTFormula (S.SimpleBackend t) arch])
 instantiate sym target trial = do
   trialFormula <- liftIO $ condenseFormula sym trial
   -- liftIO $ print trialFormula
@@ -71,8 +71,7 @@ instantiate sym target trial = do
     True -> do
       -- liftIO $ print trial
       tests <- synthTests <$> get
-      asdf <- liftIO $ cegis sym target tests trialFormula
-      return (const trial <$> asdf)
+      liftIO $ cegis sym target tests trial trialFormula
     False -> return Nothing
 
 -- This works correctly on infinite lists.
@@ -94,8 +93,8 @@ synthesizeFormula :: forall t st arch.
                   -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
                   -> Formula (S.SimpleBackend t) arch
                   -> [(ArchState (S.SimpleBackend t) arch, ArchState (S.SimpleBackend t) arch)]
-                  -- -> IO (Maybe [Instruction arch])
-                  -> IO (Maybe [InstructionWTFormula (S.SimpleBackend t) arch])
+                  -> IO (Maybe [Instruction arch])
+                  -- -> IO (Maybe [InstructionWTFormula (S.SimpleBackend t) arch])
 synthesizeFormula sym m target tests = do
   insns <- templatedInstructions sym m
   -- 'insns' is an infinite list, so we have to be careful with what we do with it.

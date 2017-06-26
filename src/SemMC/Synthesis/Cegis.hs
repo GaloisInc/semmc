@@ -4,6 +4,10 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 module SemMC.Synthesis.Cegis
   ( evalFormula
   , cegis
@@ -15,6 +19,8 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.TraversableF
+import           Data.Proxy ( Proxy(..) )
+import           GHC.TypeLits ( Symbol )
 import           System.IO ( stderr )
 
 import           Lang.Crucible.BaseTypes
@@ -23,12 +29,17 @@ import           Lang.Crucible.Solver.Adapter
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SatResult
 import qualified Lang.Crucible.Solver.SimpleBackend as S
+import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.SimpleBackend.Z3
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import           Lang.Crucible.Utils.MonadVerbosity (withVerbosity)
 
+import           Dismantle.Instruction
+
 import           SemMC.Architecture
 import           SemMC.Formula
+import           SemMC.Formula.Instantiate hiding ( replaceLitVars )
+import           SemMC.Synthesis.Template
 
 foldlMWithKey :: forall k a b m. (Monad m) => (forall s. b -> k s -> a s -> m b) -> b -> MapF.MapF k a -> m b
 foldlMWithKey f z0 m = MapF.foldrWithKey f' return m z0
@@ -97,34 +108,50 @@ buildEquality' sym (input, output) vars outputLoc expr = do
   let shouldBe = maybe (error "outputLoc wasn't in output state") id $ MapF.lookup outputLoc output
   S.isEq sym actuallyIs shouldBe
 
-buildEquality :: (Architecture arch)
+buildEquality :: forall arch t st.
+                 (Architecture arch)
               => S.SimpleBuilder t st
               -> (ArchState (S.SimpleBuilder t st) arch, ArchState (S.SimpleBuilder t st) arch)
               -> Formula (S.SimpleBuilder t st) arch
               -> IO (S.BoolElt t)
 buildEquality sym test (Formula uses vars defs) = foldlMWithKey f (S.truePred sym) defs
-  where f pred loc e = putStrLn (showF loc) >> print e >> (S.andPred sym pred =<< buildEquality' sym test vars loc e)
+  where f :: S.BoolElt t -> Location arch tp -> S.Elt t tp -> IO (S.BoolElt t)
+        f pred loc e = putStrLn (showF loc) >> print e >> (S.andPred sym pred =<< buildEquality' sym test vars loc e)
+
+handleSat :: GroundEvalFn t
+          -> [InstructionWTFormula (S.SimpleBackend t) arch]
+          -> IO [Instruction arch]
+handleSat groundEval = mapM f
+  where f (InstructionWTFormula op tf) = Instruction op <$> recoverOperands groundEval (tfOperandList tf) (tfOperandExprs tf)
+
+handleSatResult :: [InstructionWTFormula (S.SimpleBackend t) arch]
+                -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))
+                -> IO (Maybe [Instruction arch])
+handleSatResult insns (Sat (evalFn, _)) = Just <$> handleSat evalFn insns
+handleSatResult _ Unsat = return Nothing
+handleSatResult _ Unknown = fail "got Unknown when checking sat-ness"
 
 cegis :: (Architecture arch)
       => S.SimpleBackend t
       -> Formula (S.SimpleBackend t) arch
       -> [(ArchState (S.SimpleBackend t) arch, ArchState (S.SimpleBackend t) arch)]
+      -> [InstructionWTFormula (S.SimpleBackend t) arch]
       -> Formula (S.SimpleBackend t) arch
       -> IO (Maybe [Instruction arch])
-cegis sym target tests trial = do
+cegis sym target tests trial trialFormula = do
   -- initial dumb thing: return Just [] if all the tests are satisfiable
-  pred <- foldrM (\test pred -> S.andPred sym pred =<< buildEquality sym test trial) (S.truePred sym) tests
+  pred <- foldrM (\test pred -> S.andPred sym pred =<< buildEquality sym test trialFormula) (S.truePred sym) tests
 
   print pred
 
-  result <- withVerbosity stderr 1 $ do
+  withVerbosity stderr 1 $ do
     cfg <- liftIO $ initialConfig 1 z3Options
     setConfigValue z3Path cfg "/usr/local/bin/z3"
-    liftIO $ solver_adapter_check_sat z3Adapter sym cfg (const . const $ return ()) pred return
+    liftIO $ solver_adapter_check_sat z3Adapter sym cfg (const . const $ return ()) pred (handleSatResult trial)
 
-  putStr "will this be sat? ..."
+  -- putStr "will this be sat? ..."
 
-  case result of
-    Sat _ -> putStrLn "yup!" >> return (Just [])
-    Unsat -> putStrLn "nope." >> return Nothing
-    Unknown -> fail "Got Unknown result when checking sat-ness"
+  -- case result of
+  --   Sat _ -> putStrLn "yup!" >> return (Just [])
+  --   Unsat -> putStrLn "nope." >> return Nothing
+  --   Unknown -> fail "Got Unknown result when checking sat-ness"

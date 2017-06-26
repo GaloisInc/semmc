@@ -16,7 +16,7 @@
 module SemMC.Architecture where
 
 import Data.Type.Equality
-import GHC.TypeLits ( Symbol )
+import GHC.TypeLits ( KnownSymbol, Symbol )
 
 import qualified Data.ShowF as SF
 import Data.Parameterized.Classes
@@ -24,6 +24,7 @@ import Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
 import qualified Lang.Crucible.Solver.Interface as S
 import Lang.Crucible.BaseTypes
+import Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified Dismantle.Instruction as I
 
@@ -109,3 +110,11 @@ class (IsOperand (Operand arch),
                        proxy arch
                     -> Operand arch s
                     -> Maybe (Location arch (OperandType arch s))
+
+  -- | Recover an operand value from a "ground value" of the same type. Unclear
+  -- how we should handle registers here; for now, just do undefined...
+  valueToOperand :: forall proxy s.
+                    (KnownSymbol s)
+                 => proxy arch
+                 -> GroundValue (OperandType arch s)
+                 -> Operand arch s

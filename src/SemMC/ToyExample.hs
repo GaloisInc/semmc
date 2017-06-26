@@ -54,7 +54,7 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.ShowF ( ShowF, showF )
 import           Data.Word ( Word32 )
-import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal )
+import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
 
 import           Dismantle.Instruction ( OperandList(Nil,(:>)) )
 import qualified Dismantle.Instruction as D
@@ -62,6 +62,7 @@ import qualified Dismantle.Instruction as D
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
+import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
 
@@ -129,7 +130,7 @@ deriving instance Ord (Operand a)
 
 instance ShowF Operand where
   showF (R32 reg) = "R32 " ++ show reg
-  showF (I32 val) = "R32 " ++ show val
+  showF (I32 val) = "I32 " ++ show val
 
 instance ParamClasses.ShowF Operand where
   showF = showF
@@ -303,9 +304,19 @@ type instance A.OperandType Toy "I32" = BaseBVType 32
 
 type instance A.Location Toy = Reg
 
+valueToOperand :: forall s. (KnownSymbol s) => GroundValue (A.OperandType Toy s) -> Operand s
+valueToOperand val
+  | Just Refl <- sameSymbol (Proxy :: Proxy s) (Proxy :: Proxy "I32") = I32 (fromInteger val)
+  | Just Refl <- sameSymbol (Proxy :: Proxy s) (Proxy :: Proxy "R32") =
+      error "can't get register operand from value"
+  | otherwise = undefined
+
 instance A.Architecture Toy where
   operandValue _ sym newVars (R32 reg) = S.varExpr sym <$> newVars reg
   operandValue _ sym _       (I32 imm) = S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
 
   operandToLocation _ (R32 reg) = Just reg
   operandToLocation _ (I32 _) = Nothing
+
+  -- TODO: how to handle this?
+  valueToOperand _ = valueToOperand
