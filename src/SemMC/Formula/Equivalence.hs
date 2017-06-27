@@ -1,38 +1,42 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 module SemMC.Formula.Equivalence (
   formulasEquiv
   ) where
 
-import           Control.Monad.IO.Class (liftIO)
-import           Data.Foldable (foldrM)
-import qualified Data.Map.Strict as Map
-import           Data.Maybe (fromJust)
+import           Control.Monad.IO.Class ( liftIO )
+import           Data.Foldable ( foldrM )
+import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Some
 import           Data.Parameterized.Classes
 import           Data.Parameterized.TraversableF
-import qualified Data.Set as Set
 import qualified Data.Parameterized.Map as MapF
-import           Data.Type.Equality (testEquality)
-import           System.IO (stderr)
+import qualified Data.Set as Set
+import           System.IO ( stderr )
 
-import           Lang.Crucible.Config (initialConfig, setConfigValue)
+import           Lang.Crucible.BaseTypes
+import           Lang.Crucible.Config ( initialConfig, setConfigValue )
 import           Lang.Crucible.Solver.Adapter
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SatResult
 import           Lang.Crucible.Solver.SimpleBackend
+import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.SimpleBackend.Z3
 import           Lang.Crucible.Solver.SimpleBuilder
-import           Lang.Crucible.Utils.MonadVerbosity (withVerbosity)
+import           Lang.Crucible.Utils.MonadVerbosity ( withVerbosity )
 
-import           SemMC.Formula
 import           SemMC.Architecture
+import           SemMC.Formula
+import           SemMC.Formula.Instantiate
+import           SemMC.Util
 
-mapFKeys :: MapF.MapF k a -> [Some k]
+mapFKeys :: forall (key :: k -> *) (value :: k -> *). MapF.MapF key value -> [Some key]
 mapFKeys = MapF.foldrWithKey (\k _ l -> Some k : l) []
 
-formulasEquiv :: (Architecture arch) => SimpleBackend t -> Formula (SimpleBackend t) arch -> Formula (SimpleBackend t) arch -> IO Bool
+formulasEquiv :: (Architecture arch) => SimpleBackend t -> Formula (SimpleBackend t) arch -> Formula (SimpleBackend t) arch -> IO (Either (ArchState (SimpleBackend t) arch) ())
 formulasEquiv
   sym
   f1@(Formula {formUses = uses1, formDefs = defs1})
@@ -41,64 +45,60 @@ formulasEquiv
           -- Map.keys returns a list in a unique (increasing) order, so we don't
           -- need to turn it into a list first.
           mapFKeys defs1 == mapFKeys defs2)
-  then return False
+  then return (Left MapF.empty)
   else formulasEquiv' sym f1 f2
 
-varToExpr :: (S.IsSymInterface sym) => sym -> BoundVar sym arch op -> S.SymExpr sym (OperandType arch op)
-varToExpr sym = S.varExpr sym . unBoundVar
-
-data PairF :: (k -> *) -> (k -> *) -> k -> * where
-  PairF :: forall a b t. a t -> b t -> PairF a b t
-
-formulasEquiv' :: forall t arch. (Architecture arch) => SimpleBackend t -> Formula (SimpleBackend t) arch -> Formula (SimpleBackend t) arch -> IO Bool
+formulasEquiv' :: forall t arch. (Architecture arch) => SimpleBackend t -> Formula (SimpleBackend t) arch -> Formula (SimpleBackend t) arch -> IO (Either (ArchState (SimpleBackend t) arch) ())
 formulasEquiv'
   sym
   (Formula {formParamVars = bvars1, formDefs = defs1})
   (Formula {formParamVars = bvars2, formDefs = defs2}) =
   do
+    -- Create constants for each of the bound variables, then replace them in
+    -- each of the definitions. This way, the equations in the different
+    -- formulas refer to the same input variables.
+    let allVars = Set.union (Set.fromList (mapFKeys bvars1)) (Set.fromList (mapFKeys bvars2))
+        mkConstant (Some loc) m =
+          fmap (\e -> MapF.insert loc e m)
+               (S.freshConstant sym (makeSymbol (showF loc)) (locationType loc))
+    varConstants <- foldrM mkConstant MapF.empty allVars
+    let replaceVars vars =
+          traverseF (replaceLitVars sym (return . fromJust . flip MapF.lookup varConstants) vars)
+    defs1' <- replaceVars bvars1 defs1
+    defs2' <- replaceVars bvars2 defs2
+
     let matchingPair :: MapF.MapF (Location arch) (Elt t)
                      -> Location arch tp
                      -> Elt t tp
                      -> [MapF.Pair (Elt t) (Elt t)]
                      -> [MapF.Pair (Elt t) (Elt t)]
-        matchingPair table var e1 accum = (MapF.Pair e1 (fromJust $ MapF.lookup var table)) : accum
-        -- matchingPair table var e1 = (e1, fromJust $ MapF.lookup var table)
-        -- matchingPair table var e1 = [(e1, fromJust $ Map.lookup var table)]
+        matchingPair table var e1 = (:) $ MapF.Pair e1 (fromJust $ MapF.lookup var table)
 
         andPairEquality :: MapF.Pair (Elt t) (Elt t) -> BoolElt t -> IO (BoolElt t)
-        andPairEquality (MapF.Pair e1 e2) b = do
-          -- Some e1' <- return e1
-          -- Some e2' <- return e2
-          -- Just Refl <- return $ testEquality (exprType e1') (exprType e2')
-          -- -- ^ This is partial. It fails when the same 'FormulaVar' in different
-          -- -- formulas have different types of corresponding expressions, which
-          -- -- should never happen. If it does, an IO exception is thrown.
-          eq <- S.isEq sym e1 e2
-          S.andPred sym b eq
+        andPairEquality (MapF.Pair e1 e2) accum = do
+          S.andPred sym accum =<< S.isEq sym e1 e2
 
-    -- First, we form equalities between each of variable expressions in the
-    -- first formula and the corresponding expressions in the second.
-    let varPairs = MapF.foldrWithKey (matchingPair (fmapF (S.varExpr sym) bvars2)) [] (fmapF (S.varExpr sym) bvars1)
-    -- (v1 = v1') /\ (v2 = v2') /\ ... /\ (vn = vn')
-    allPairsEqual <- foldrM andPairEquality (S.truePred sym) varPairs
-
-    -- Next, we build up a similar expression, but for the definitions this
-    -- time.
-    let defsPairs = MapF.foldrWithKey (matchingPair defs2) [] defs1
+    -- Next, we build up equalities between each of the individual definitions
+    -- in both of the formulas.
+    let defsPairs = MapF.foldrWithKey (matchingPair defs2') [] defs1'
     -- (d1 = d1') /\ (d2 = d2') /\ ... /\ (dm = dm')
     allDefsEqual <- foldrM andPairEquality (S.truePred sym) defsPairs
 
     -- Finally, we ask, "Is it possible that all the variables are equal to each
     -- other, but not all the definitions are equal to each other?"
-    -- ((v1 = v1') /\ ... /\ (vn = vn')) /\ ~((d1 = d1') /\ ... /\ (dm = dm'))
-    testExpr <- S.notPred sym allDefsEqual >>= S.andPred sym allPairsEqual
+    -- ~((d1 = d1') /\ ... /\ (dm = dm'))
+    testExpr <- S.notPred sym allDefsEqual
 
-    result <- withVerbosity stderr 1 $ do
+    let handler (Sat (GroundEvalFn evalFn, _)) = do
+          -- Extract the failing test case.
+          let eval :: forall tp. Location arch tp -> Elt t tp -> IO (Elt t tp)
+              eval loc e = groundValToExpr sym (locationType loc) =<< evalFn e
+          Left <$> MapF.traverseWithKey eval varConstants
+        handler Unsat = return (Right ())
+        handler Unknown = fail "Got Unknown result when checking sat-ness"
+
+    withVerbosity stderr 1 $ do
       cfg <- liftIO $ initialConfig 1 z3Options
+      -- TODO: make this configurable
       setConfigValue z3Path cfg "/usr/local/bin/z3"
-      liftIO $ solver_adapter_check_sat z3Adapter sym cfg (const . const $ return ()) testExpr return
-
-    case result of
-      Sat _ -> return False
-      Unsat -> return True
-      Unknown -> fail "Got Unknown result when checking sat-ness"
+      liftIO $ solver_adapter_check_sat z3Adapter sym cfg (\_ _ -> return ()) testExpr handler

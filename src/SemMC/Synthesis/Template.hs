@@ -22,6 +22,7 @@ module SemMC.Synthesis.Template
   , templatizeFormula'
   , templatedInstructions
   , recoverOperands
+  , unTemplate
   ) where
 
 import           Control.Monad ( join )
@@ -94,6 +95,8 @@ instance (OrdF (Opcode arch (TemplatedOperand arch)),
   operandToLocation _ (Concrete op) = operandToLocation (Proxy :: Proxy arch) op
   operandToLocation _ (Abstract _)  = Nothing
 
+  -- valueToOperand?
+
 -- TODO: need to store the variables used for the immediate spots.
 data TemplatedFormula sym arch sh =
   TemplatedFormula { tfOperandList :: OperandList (TemplatedOperand arch) sh
@@ -156,6 +159,10 @@ instance (Architecture arch, KnownSymbol s, IsSpecificOperand (Operand arch) s, 
         True -> map (\op -> Concrete op :> opList) allOperandValues
         False -> return $ Abstract (knownRepr :: BaseTypeRepr (OperandType arch s)) :> opList
 
+unTemplate :: ParameterizedFormula sym (TemplatedArch arch) sh
+           -> ParameterizedFormula sym arch sh
+unTemplate = unsafeCoerce
+
 -- TODO: Can we get rid of these constraints in some nice way?
 templatizeFormula :: forall t st arch sh.
                      (Architecture arch,
@@ -215,7 +222,7 @@ instance (Architecture arch, RecoverOperands arch sh)
 
 data InstructionWTFormula sym arch where
   InstructionWTFormula :: forall sym arch sh.
-                          (RecoverOperands arch sh)
+                          (MakeTemplatedOpLists arch sh, RecoverOperands arch sh)
                        => (Opcode arch) (Operand arch) sh
                        -> TemplatedFormula sym arch sh
                        -> InstructionWTFormula sym arch

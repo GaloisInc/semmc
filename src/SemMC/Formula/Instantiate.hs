@@ -31,20 +31,15 @@ import           GHC.TypeLits ( Symbol )
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
 
 import           Dismantle.Instruction ( OperandList(..) )
 
-import           SemMC.Formula
 import           SemMC.Architecture
+import           SemMC.Formula
+import           SemMC.Util
 
 -- I got tired of typing this.
 type SB t st = S.SimpleBuilder t st
-
-makeSymbol :: String -> SolverSymbol
-makeSymbol name = case userSymbol name of
-                    Right symbol -> symbol
-                    Left _ -> error "tried to create symbol with bad name"
 
 foldlMWithKey :: forall k a b m. (Monad m) => (forall s. b -> k s -> a s -> m b) -> b -> MapF.MapF k a -> m b
 foldlMWithKey f z0 m = MapF.foldrWithKey f' return m z0
@@ -66,7 +61,7 @@ buildAssignment :: forall sym arch sh.
                    S.IsSymInterface sym)
                 => sym
                 -- ^ Symbolic expression builder
-                -> (forall tp'. Location arch tp' -> IO (S.BoundVar sym tp'))
+                -> (forall tp'. Location arch tp' -> IO (S.SymExpr sym tp'))
                 -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
                 -> OperandList (BoundVar sym arch) sh
                 -- ^ List of variables corresponding to each operand
@@ -81,35 +76,63 @@ buildAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) = do
   (valsList, varsRest', valsRest') <- buildAssignment sym newVars varsRest valsRest
   return (WrappedExpr val' :> valsList, Ctx.extend varsRest' var, Ctx.extend valsRest' val')
 
-replaceOpVars :: forall arch t st sh tp.
-                 (Architecture arch)
-              => SB t st
-              -- ^ Symbolic expression builder
-              -> (forall tp'. Location arch tp' -> IO (S.SimpleBoundVar t tp'))
-              -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
-              -> OperandList (BoundVar (SB t st) arch) sh
-              -- ^ List of variables corresponding to each operand
-              -> OperandList (Operand arch) sh
-              -- ^ List of operand values corresponding to each operand
-              -> S.Elt t tp
-              -- ^ Expression to do the replace in
-              -> IO (OperandList (WrappedExpr (SB t st) arch) sh, S.Elt t tp)
-replaceOpVars sym newVars vars vals expr =
-  buildAssignment sym newVars vars vals >>= \(valsList, vars, vals) ->
-    (valsList,) <$> S.evalBoundVars sym expr vars vals
+-- replaceOpVars :: forall arch t st sh tp.
+--                  (Architecture arch)
+--               => SB t st
+--               -- ^ Symbolic expression builder
+--               -> (forall tp'. Location arch tp' -> IO (S.Elt t tp'))
+--               -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
+--               -> OperandList (BoundVar (SB t st) arch) sh
+--               -- ^ List of variables corresponding to each operand
+--               -> OperandList (Operand arch) sh
+--               -- ^ List of operand values corresponding to each operand
+--               -> S.Elt t tp
+--               -- ^ Expression to do the replace in
+--               -> IO (OperandList (WrappedExpr (SB t st) arch) sh, S.Elt t tp)
+-- replaceOpVars sym newVars vars vals expr =
+--   buildAssignment sym newVars vars vals >>= \(valsList, vars, vals) ->
+--     (valsList,) <$> S.evalBoundVars sym expr vars vals
 
-replaceLitVars :: forall (loc :: BaseType -> *) t st tp.
+-- replaceLitVars :: forall (loc :: BaseType -> *) t st tp.
+--                   (OrdF loc)
+--                => SB t st
+--                -> (forall tp'. loc tp' -> IO (S.SimpleBoundVar t tp'))
+--                -> MapF.MapF loc (S.SimpleBoundVar t)
+--                -> S.Elt t tp
+--                -> IO (S.Elt t tp)
+-- replaceLitVars sym newVars oldVars expr0 = foldlMWithKey f expr0 oldVars
+--   where f :: forall tp'. S.Elt t tp -> loc tp' -> S.SimpleBoundVar t tp' -> IO (S.Elt t tp)
+--         f expr k oldVar = do
+--           newExpr <- S.varExpr sym <$> newVars k
+--           S.evalBoundVars sym expr (Ctx.extend Ctx.empty oldVar) (Ctx.extend Ctx.empty newExpr)
+
+buildLitAssignment :: forall sym loc.
+                      sym
+                   -> (forall tp. loc tp -> IO (S.SymExpr sym tp))
+                   -> MapF.MapF loc (S.BoundVar sym)
+                   -> IO (MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym)))
+buildLitAssignment _ exprLookup = foldlMWithKey f (MapF.Pair Ctx.empty Ctx.empty)
+  where f :: forall (tp :: BaseType).
+             MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym))
+          -> loc tp
+          -> S.BoundVar sym tp
+          -> IO (MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym)))
+        f (MapF.Pair varAssn exprAssn) loc var =
+          fmap (\expr -> MapF.Pair (Ctx.extend varAssn var) (Ctx.extend exprAssn expr))
+               (exprLookup loc)
+
+-- TODO: This was mostly ripped from SemMC.Formula.Instantiate, and we should
+-- generalize that rather than copy-and-pasting here.
+replaceLitVars :: forall loc t st tp.
                   (OrdF loc)
-               => SB t st
-               -> (forall tp'. loc tp' -> IO (S.SimpleBoundVar t tp'))
+               => S.SimpleBuilder t st
+               -> (forall tp'. loc tp' -> IO (S.Elt t tp'))
                -> MapF.MapF loc (S.SimpleBoundVar t)
                -> S.Elt t tp
                -> IO (S.Elt t tp)
-replaceLitVars sym newVars oldVars expr0 = foldlMWithKey f expr0 oldVars
-  where f :: forall tp'. S.Elt t tp -> loc tp' -> S.SimpleBoundVar t tp' -> IO (S.Elt t tp)
-        f expr k oldVar = do
-          newExpr <- S.varExpr sym <$> newVars k
-          S.evalBoundVars sym expr (Ctx.extend Ctx.empty oldVar) (Ctx.extend Ctx.empty newExpr)
+replaceLitVars sym newExprs oldVars expr =
+  buildLitAssignment sym newExprs oldVars >>=
+    \(MapF.Pair varAssn exprAssn) -> S.evalBoundVars sym expr varAssn exprAssn
 
 mapFMapMBoth :: forall k1 v1 k2 v2 m. (OrdF k2, Monad m) => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp)) -> MapF.MapF k1 v1 -> m (MapF.MapF k2 v2)
 mapFMapMBoth f = MapF.foldrWithKey f' (return MapF.empty)
@@ -155,14 +178,14 @@ instantiateFormula
     -- We store the new lit vars in an IORef so we can create them as we go.
     -- IORef should be safe, since we don't have any multithreaded code here.
     newLitVarsRef <- newIORef MapF.empty
-    let newLitVarLookup :: forall tp. Location arch tp -> IO (S.SimpleBoundVar t tp)
-        newLitVarLookup = lookupOrCreateVar sym newLitVarsRef
+    let newLitExprLookup :: forall tp. Location arch tp -> IO (S.Elt t tp)
+        newLitExprLookup loc = S.varExpr sym <$> lookupOrCreateVar sym newLitVarsRef loc
 
-    (opValsList, opVarsAssn, opValsAssn) <- buildAssignment sym newLitVarLookup opVars opVals
+    (opValsList, opVarsAssn, opValsAssn) <- buildAssignment sym newLitExprLookup opVars opVals
 
     let mapDef :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
         mapDef p e = case paramToLocation opVals p of
-          Just loc -> (loc,) <$> (replaceLitVars sym newLitVarLookup litVars =<< S.evalBoundVars sym e opVarsAssn opValsAssn)
+          Just loc -> (loc,) <$> (replaceLitVars sym newLitExprLookup litVars =<< S.evalBoundVars sym e opVarsAssn opValsAssn)
           Nothing -> error "XXX: handle this error case more gracefully"
 
     newDefs <- mapFMapMBoth mapDef defs

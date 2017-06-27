@@ -302,7 +302,7 @@ valueToOperand val
   | otherwise = undefined
 
 instance A.Architecture Toy where
-  operandValue _ sym newVars (R32 reg) = S.varExpr sym <$> newVars reg
+  operandValue _ _ newVars (R32 reg) = newVars reg
   operandValue _ sym _       (I32 imm) = S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
 
   operandToLocation _ (R32 reg) = Just reg

@@ -90,8 +90,8 @@ doThing2 = do
   ten <- S.bvLit sym (knownNat :: NatRepr 32) 10
 
   let testInputs = [ MapF.insert Reg1 zero MapF.empty
-                   , MapF.insert Reg1 one MapF.empty
-                   , MapF.insert Reg1 ten MapF.empty
+                   -- , MapF.insert Reg1 one MapF.empty
+                   -- , MapF.insert Reg1 ten MapF.empty
                    ]
   tests <- mapM (\input -> (input,) <$> evalFormula sym target input) testInputs
   print =<< synthesizeFormula sym opcodes target tests
