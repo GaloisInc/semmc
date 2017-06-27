@@ -7,7 +7,7 @@ packages:
 - '.'
 - location:
     git: https://github.com/GaloisInc/crucible.git
-    commit: d55b449918a3af35ab5730a86108ffaa6d930199
+    commit: 4ebcf4feec129e7b5de85e50bd9fc4091c65cb92
   subdirs:
   - crucible
   - galois-matlab
