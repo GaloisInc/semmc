@@ -1,0 +1,8 @@
+packages:
+  ./
+  submodules/dismantle/dismantle-tablegen/
+
+optional-packages:
+  submodules/crucible/crucible
+  submodules/crucible/galois-matlab
+  submodules/parameterized-utils
