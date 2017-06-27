@@ -38,8 +38,6 @@ import           Dismantle.Instruction ( OperandList(..) )
 import           SemMC.Formula
 import           SemMC.Architecture
 
-evalBoundVars = undefined
-
 -- I got tired of typing this.
 type SB t st = S.SimpleBuilder t st
 
@@ -98,7 +96,7 @@ replaceOpVars :: forall arch t st sh tp.
               -> IO (OperandList (WrappedExpr (SB t st) arch) sh, S.Elt t tp)
 replaceOpVars sym newVars vars vals expr =
   buildAssignment sym newVars vars vals >>= \(valsList, vars, vals) ->
-    (valsList,) <$> evalBoundVars sym expr vars vals
+    (valsList,) <$> S.evalBoundVars sym expr vars vals
 
 replaceLitVars :: forall (loc :: BaseType -> *) t st tp.
                   (OrdF loc)
@@ -111,7 +109,7 @@ replaceLitVars sym newVars oldVars expr0 = foldlMWithKey f expr0 oldVars
   where f :: forall tp'. S.Elt t tp -> loc tp' -> S.SimpleBoundVar t tp' -> IO (S.Elt t tp)
         f expr k oldVar = do
           newExpr <- S.varExpr sym <$> newVars k
-          evalBoundVars sym expr (Ctx.extend Ctx.empty oldVar) (Ctx.extend Ctx.empty newExpr)
+          S.evalBoundVars sym expr (Ctx.extend Ctx.empty oldVar) (Ctx.extend Ctx.empty newExpr)
 
 mapFMapMBoth :: forall k1 v1 k2 v2 m. (OrdF k2, Monad m) => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp)) -> MapF.MapF k1 v1 -> m (MapF.MapF k2 v2)
 mapFMapMBoth f = MapF.foldrWithKey f' (return MapF.empty)
@@ -164,7 +162,7 @@ instantiateFormula
 
     let mapDef :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
         mapDef p e = case paramToLocation opVals p of
-          Just loc -> (loc,) <$> (replaceLitVars sym newLitVarLookup litVars =<< evalBoundVars sym e opVarsAssn opValsAssn)
+          Just loc -> (loc,) <$> (replaceLitVars sym newLitVarLookup litVars =<< S.evalBoundVars sym e opVarsAssn opValsAssn)
           Nothing -> error "XXX: handle this error case more gracefully"
 
     newDefs <- mapFMapMBoth mapDef defs
@@ -212,7 +210,7 @@ copyFormula sym (Formula { formUses = uses, formParamVars = vars, formDefs = def
   SomeVarAssignment varAssign exprAssign :: SomeVarAssignment (SB t st)
     <- return $ (changeVariablesAssignment vars lookupNewVar)
   let replaceVars :: forall tp. S.Elt t tp -> IO (S.Elt t tp)
-      replaceVars e = evalBoundVars sym e varAssign exprAssign
+      replaceVars e = S.evalBoundVars sym e varAssign exprAssign
   newDefs <- traverseF replaceVars defs
   return $ Formula { formUses = uses
                    , formParamVars = newVars
@@ -258,7 +256,7 @@ sequenceFormulas sym form1 form2 = do
   SomeVarAssignment varAssign exprAssign :: SomeVarAssignment (SB t st)
     <- return $ changeVariablesAssignment vars2 varReplace
   let replaceVars :: forall tp. S.Elt t tp -> IO (S.Elt t tp)
-      replaceVars e = evalBoundVars sym e varAssign exprAssign
+      replaceVars e = S.evalBoundVars sym e varAssign exprAssign
   newDefs2 <- traverseF replaceVars defs2
 
   let newDefs = MapF.union newDefs2 defs1
