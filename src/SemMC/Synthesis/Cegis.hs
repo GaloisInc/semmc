@@ -15,15 +15,13 @@ module SemMC.Synthesis.Cegis
 
 import           Control.Monad.IO.Class ( MonadIO(..) )
 import           Data.Foldable
+import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.TraversableF
-import           Data.Proxy ( Proxy(..) )
-import           GHC.TypeLits ( Symbol )
+import           GHC.Stack ( HasCallStack )
 import           System.IO ( stderr )
 
-import           Lang.Crucible.BaseTypes
 import           Lang.Crucible.Config (initialConfig, setConfigValue)
 import           Lang.Crucible.Solver.Adapter
 import qualified Lang.Crucible.Solver.Interface as S
@@ -38,41 +36,21 @@ import           Dismantle.Instruction
 
 import           SemMC.Architecture
 import           SemMC.Formula
-import           SemMC.Formula.Instantiate hiding ( replaceLitVars )
+import           SemMC.Formula.Equivalence
+import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
+-- import           SemMC.Util
+
+data GoodInstruction (arch :: *) where
+  GoodInstruction :: forall arch sh. OpcodeGoodShape (Opcode arch) (Operand arch) arch sh -> OperandList (Operand arch) sh -> GoodInstruction arch
+
+ungood :: GoodInstruction arch -> Instruction arch
+ungood (GoodInstruction (OpcodeGoodShape op) oplist) = Instruction op oplist
 
 foldlMWithKey :: forall k a b m. (Monad m) => (forall s. b -> k s -> a s -> m b) -> b -> MapF.MapF k a -> m b
 foldlMWithKey f z0 m = MapF.foldrWithKey f' return m z0
   where f' :: forall s. k s -> a s -> (b -> m b) -> b -> m b
         f' k x c z = f z k x >>= c
-
-buildLitAssignment :: forall sym loc.
-                      sym
-                   -> (forall tp. loc tp -> IO (S.SymExpr sym tp))
-                   -> MapF.MapF loc (S.BoundVar sym)
-                   -> IO (MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym)))
-buildLitAssignment _ exprLookup = foldlMWithKey f (MapF.Pair Ctx.empty Ctx.empty)
-  where f :: forall (tp :: BaseType).
-             MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym))
-          -> loc tp
-          -> S.BoundVar sym tp
-          -> IO (MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym)))
-        f (MapF.Pair varAssn exprAssn) loc var =
-          fmap (\expr -> MapF.Pair (Ctx.extend varAssn var) (Ctx.extend exprAssn expr))
-               (exprLookup loc)
-
--- TODO: This was mostly ripped from SemMC.Formula.Instantiate, and we should
--- generalize that rather than copy-and-pasting here.
-replaceLitVars :: forall loc t st tp.
-                  (OrdF loc)
-               => S.SimpleBuilder t st
-               -> (forall tp'. loc tp' -> IO (S.Elt t tp'))
-               -> MapF.MapF loc (S.SimpleBoundVar t)
-               -> S.Elt t tp
-               -> IO (S.Elt t tp)
-replaceLitVars sym newExprs oldVars expr =
-  buildLitAssignment sym newExprs oldVars >>=
-    \(MapF.Pair varAssn exprAssn) -> S.evalBoundVars sym expr varAssn exprAssn
 
 type MachineState sym loc = MapF.MapF loc (S.SymExpr sym)
 
@@ -114,44 +92,72 @@ buildEquality :: forall arch t st.
               -> (ArchState (S.SimpleBuilder t st) arch, ArchState (S.SimpleBuilder t st) arch)
               -> Formula (S.SimpleBuilder t st) arch
               -> IO (S.BoolElt t)
-buildEquality sym test (Formula uses vars defs) = foldlMWithKey f (S.truePred sym) defs
+buildEquality sym test (Formula _ vars defs) = do
+  res <- foldlMWithKey f (S.truePred sym) defs
+  print res
+  return res
   where f :: S.BoolElt t -> Location arch tp -> S.Elt t tp -> IO (S.BoolElt t)
-        f pred loc e = putStrLn (showF loc) >> print e >> (S.andPred sym pred =<< buildEquality' sym test vars loc e)
+        f b loc e = (S.andPred sym b =<< buildEquality' sym test vars loc e)
 
 handleSat :: GroundEvalFn t
           -> [InstructionWTFormula (S.SimpleBackend t) arch]
-          -> IO [Instruction arch]
-handleSat groundEval = mapM f
-  where f (InstructionWTFormula op tf) = Instruction op <$> recoverOperands groundEval (tfOperandList tf) (tfOperandExprs tf)
+          -> IO [GoodInstruction arch]
+handleSat evalFn = mapM f
+  where f (InstructionWTFormula op tf) = GoodInstruction (OpcodeGoodShape op) <$> recoverOperands evalFn (tfOperandList tf) (tfOperandExprs tf)
 
 handleSatResult :: [InstructionWTFormula (S.SimpleBackend t) arch]
                 -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))
-                -> IO (Maybe [Instruction arch])
+                -> IO (Maybe [GoodInstruction arch])
 handleSatResult insns (Sat (evalFn, _)) = Just <$> handleSat evalFn insns
 handleSatResult _ Unsat = return Nothing
 handleSatResult _ Unknown = fail "got Unknown when checking sat-ness"
 
+instantiateFormula' :: (Architecture arch, HasCallStack)
+                    => S.SimpleBuilder t st
+                    -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch))
+                    -> GoodInstruction arch
+                    -> IO (Formula (S.SimpleBuilder t st) arch)
+instantiateFormula' sym m (GoodInstruction op oplist) =
+  snd <$> instantiateFormula sym (unTemplate . fromJust $ MapF.lookup op m) oplist
+
+condenseFormula :: forall t st arch.
+                   (Architecture arch)
+                => S.SimpleBuilder t st
+                -> [Formula (S.SimpleBuilder t st) arch]
+                -> IO (Formula (S.SimpleBuilder t st) arch)
+condenseFormula sym = foldrM (sequenceFormulas sym) emptyFormula
+
+-- TODO: tidy up this type signature
+-- TODO: return new test cases in the case of failure
 cegis :: (Architecture arch)
       => S.SimpleBackend t
+      -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
       -> Formula (S.SimpleBackend t) arch
       -> [(ArchState (S.SimpleBackend t) arch, ArchState (S.SimpleBackend t) arch)]
       -> [InstructionWTFormula (S.SimpleBackend t) arch]
       -> Formula (S.SimpleBackend t) arch
       -> IO (Maybe [Instruction arch])
-cegis sym target tests trial trialFormula = do
+cegis sym semantics target tests trial trialFormula = do
+  putStr "tests: "
+  print tests
   -- initial dumb thing: return Just [] if all the tests are satisfiable
-  pred <- foldrM (\test pred -> S.andPred sym pred =<< buildEquality sym test trialFormula) (S.truePred sym) tests
+  check <- foldrM (\test b -> S.andPred sym b =<< buildEquality sym test trialFormula) (S.truePred sym) tests
 
-  print pred
+  print check
 
-  withVerbosity stderr 1 $ do
+  insns <- withVerbosity stderr 1 $ do
     cfg <- liftIO $ initialConfig 1 z3Options
     setConfigValue z3Path cfg "/usr/local/bin/z3"
-    liftIO $ solver_adapter_check_sat z3Adapter sym cfg (const . const $ return ()) pred (handleSatResult trial)
+    liftIO $ solver_adapter_check_sat z3Adapter sym cfg (const . const $ return ()) check (handleSatResult trial)
 
-  -- putStr "will this be sat? ..."
-
-  -- case result of
-  --   Sat _ -> putStrLn "yup!" >> return (Just [])
-  --   Unsat -> putStrLn "nope." >> return Nothing
-  --   Unknown -> fail "Got Unknown result when checking sat-ness"
+  case insns of
+    Just insns' -> do
+      filledInFormula <- condenseFormula sym =<< mapM (instantiateFormula' sym semantics) insns'
+      equiv <- formulasEquiv sym target filledInFormula
+      case equiv of
+        Right () -> return . Just $ map ungood insns'
+        Left ex | MapF.null ex -> return Nothing
+        Left ctrExample -> do
+          ctrExampleOut <- evalFormula sym target ctrExample
+          cegis sym semantics target ((ctrExample, ctrExampleOut) : tests) trial trialFormula
+    Nothing -> return Nothing

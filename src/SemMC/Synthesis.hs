@@ -13,7 +13,6 @@ import           Data.Parameterized.Some
 import qualified Data.Set as Set
 import           Data.Typeable
 
-import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 
@@ -59,11 +58,12 @@ instantiate :: (MonadState (SynthesisState (S.SimpleBackend t) arch) m,
                 ShowF ((Opcode arch) (Operand arch)),
                 ShowF (Operand arch))
             => S.SimpleBackend t
+            -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
             -> Formula (S.SimpleBackend t) arch
             -> [InstructionWTFormula (S.SimpleBackend t) arch]
             -> m (Maybe [Instruction arch])
             -- -> m (Maybe [InstructionWTFormula (S.SimpleBackend t) arch])
-instantiate sym target trial = do
+instantiate sym m target trial = do
   trialFormula <- liftIO $ condenseFormula sym trial
   -- liftIO $ print trialFormula
   case footprintFilter target trialFormula of
@@ -71,7 +71,7 @@ instantiate sym target trial = do
     True -> do
       -- liftIO $ print trial
       tests <- synthTests <$> get
-      liftIO $ cegis sym target tests trial trialFormula
+      liftIO $ cegis sym m target tests trial trialFormula
     False -> return Nothing
 
 -- This works correctly on infinite lists.
@@ -79,7 +79,7 @@ sequenceMaybes :: (Monad m) => [m (Maybe a)] -> m (Maybe a)
 sequenceMaybes [] = return Nothing
 sequenceMaybes (x : xs) = x >>= maybe (sequenceMaybes xs) (return . Just)
 
-synthesizeFormula :: forall t st arch.
+synthesizeFormula :: forall t arch.
                      (Architecture arch,
                       -- OrdF (Opcode arch (Operand (TemplatedArch arch))),
                       -- SF.ShowF (Opcode arch (Operand (TemplatedArch arch))),
@@ -98,7 +98,7 @@ synthesizeFormula :: forall t st arch.
 synthesizeFormula sym m target tests = do
   insns <- templatedInstructions sym m
   -- 'insns' is an infinite list, so we have to be careful with what we do with it.
-  evalStateT (sequenceMaybes $ map (instantiate sym target) insns)
+  evalStateT (sequenceMaybes $ map (instantiate sym m target) insns)
     $ SynthesisState { synthTests = tests
                      , synthUselessPrefixes = []
                      }

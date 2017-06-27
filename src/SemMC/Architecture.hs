@@ -101,7 +101,7 @@ class (IsOperand (Operand arch),
                   (S.IsSymInterface sym)
                => proxy arch
                -> sym
-               -> (forall tp. Location arch tp -> IO (S.BoundVar sym tp))
+               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                -> Operand arch s
                -> IO (S.SymExpr sym (OperandType arch s))
 
