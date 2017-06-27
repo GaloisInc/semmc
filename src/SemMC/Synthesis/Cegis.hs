@@ -92,10 +92,7 @@ buildEquality :: forall arch t st.
               -> (ArchState (S.SimpleBuilder t st) arch, ArchState (S.SimpleBuilder t st) arch)
               -> Formula (S.SimpleBuilder t st) arch
               -> IO (S.BoolElt t)
-buildEquality sym test (Formula _ vars defs) = do
-  res <- foldlMWithKey f (S.truePred sym) defs
-  print res
-  return res
+buildEquality sym test (Formula _ vars defs) = foldlMWithKey f (S.truePred sym) defs
   where f :: S.BoolElt t -> Location arch tp -> S.Elt t tp -> IO (S.BoolElt t)
         f b loc e = (S.andPred sym b =<< buildEquality' sym test vars loc e)
 
@@ -138,12 +135,8 @@ cegis :: (Architecture arch)
       -> Formula (S.SimpleBackend t) arch
       -> IO (Maybe [Instruction arch])
 cegis sym semantics target tests trial trialFormula = do
-  putStr "tests: "
-  print tests
   -- initial dumb thing: return Just [] if all the tests are satisfiable
   check <- foldrM (\test b -> S.andPred sym b =<< buildEquality sym test trialFormula) (S.truePred sym) tests
-
-  print check
 
   insns <- withVerbosity stderr 1 $ do
     cfg <- liftIO $ initialConfig 1 z3Options
