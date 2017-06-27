@@ -13,23 +13,17 @@ module SemMC.Synthesis.Cegis
   , cegis
   ) where
 
-import           Control.Monad.IO.Class ( MonadIO(..) )
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.TraversableF
 import           GHC.Stack ( HasCallStack )
-import           System.IO ( stderr )
 
-import           Lang.Crucible.Config (initialConfig, setConfigValue)
-import           Lang.Crucible.Solver.Adapter
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SatResult
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
-import           Lang.Crucible.Solver.SimpleBackend.Z3
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import           Lang.Crucible.Utils.MonadVerbosity (withVerbosity)
 
 import           Dismantle.Instruction
 
@@ -139,10 +133,7 @@ cegis sym semantics target tests trial trialFormula = do
   -- initial dumb thing: return Just [] if all the tests are satisfiable
   check <- foldrM (\test b -> S.andPred sym b =<< buildEquality sym test trialFormula) (S.truePred sym) tests
 
-  insns <- withVerbosity stderr 1 $ do
-    cfg <- liftIO $ initialConfig 1 z3Options
-    setConfigValue z3Path cfg "/usr/local/bin/z3"
-    liftIO $ solver_adapter_check_sat z3Adapter sym cfg (const . const $ return ()) check (handleSatResult trial)
+  insns <- checkSatZ3 sym check (handleSatResult trial)
 
   case insns of
     Just insns' -> do

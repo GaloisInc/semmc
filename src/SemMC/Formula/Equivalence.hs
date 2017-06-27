@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
@@ -7,6 +8,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module SemMC.Formula.Equivalence
   ( EquivalenceResult(..)
+  , checkSatZ3
   , formulasEquiv
   ) where
 
@@ -20,7 +22,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Set as Set
 import           System.IO ( stderr )
 
-import           Lang.Crucible.Config ( initialConfig, setConfigValue )
+import           Lang.Crucible.Config ( initialConfig )
 import           Lang.Crucible.Solver.Adapter
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SatResult
@@ -28,7 +30,7 @@ import           Lang.Crucible.Solver.SimpleBackend
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.SimpleBackend.Z3
 import           Lang.Crucible.Solver.SimpleBuilder
-import           Lang.Crucible.Utils.MonadVerbosity ( withVerbosity )
+import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -110,8 +112,23 @@ formulasEquiv'
         handler Unsat = return Equivalent
         handler Unknown = fail "Got Unknown result when checking sat-ness"
 
-    withVerbosity stderr 1 $ do
-      cfg <- liftIO $ initialConfig 1 z3Options
-      -- TODO: make this configurable
-      setConfigValue z3Path cfg "/usr/local/bin/z3"
+    checkSatZ3 sym testExpr handler
+
+-- | Check satisfiability using Z3.
+--
+-- The @handler@ receives the result of the satisfiability check.
+checkSatZ3 :: forall t a.
+              SimpleBackend t
+           -> BoolElt t
+           -> (SatResult (GroundEvalFn t, Maybe (EltRangeBindings t)) -> IO a)
+           -> IO a
+checkSatZ3 sym testExpr handler = do
+  withVerbosity stderr 1 check
+  where
+    -- Without factoring this out and giving it an explicit type sig
+    -- for use with the explicit type application below I get errors
+    -- related to the monad @m@ here being ambiguous.
+    check :: forall m. MonadVerbosity m => m a
+    check = do
+      cfg <- liftIO $ (initialConfig @ m) 1 z3Options
       liftIO $ solver_adapter_check_sat z3Adapter sym cfg (\_ _ -> return ()) testExpr handler
