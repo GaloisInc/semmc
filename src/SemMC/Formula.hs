@@ -126,14 +126,6 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
                        , pfDefs :: MapF.MapF (Parameter arch sh) (S.SymExpr sym)
                        }
 
--- | Copied from 'I', which defines the identical instance for
--- @dismantle@'s @Data.ShowF@ class.
-instance (ShowF o) => ShowF (I.OperandList o) where
-  showF l =
-    case l of
-      I.Nil -> "Nil"
-      (elt I.:> rest) -> showF elt ++ " :> " ++ showF rest
-
 instance ShowF o => Show (I.OperandList o sh) where
   show = showF
 
