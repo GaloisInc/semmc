@@ -22,6 +22,8 @@ module SemMC.Synthesis.Template
   , templatizeFormula'
   , templatedInstructions
   , recoverOperands
+  , unTemplateUnsafe
+  , unTemplateSafe
   , unTemplate
   ) where
 
@@ -29,7 +31,9 @@ import           Control.Monad ( join )
 import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some
 import           Data.Proxy ( Proxy(..) )
+import qualified Data.Set as Set
 import           Data.Typeable
 import           GHC.TypeLits ( KnownSymbol, sameSymbol, Symbol, symbolVal )
 import           Unsafe.Coerce ( unsafeCoerce )
@@ -40,7 +44,7 @@ import qualified Lang.Crucible.Solver.SimpleBackend as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-import           Dismantle.Instruction ( OperandList(..) )
+import           Dismantle.Instruction ( mapOperandList, OperandList(..) )
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -154,9 +158,52 @@ instance (Architecture arch, KnownSymbol s, IsSpecificOperand (Operand arch) s, 
         True -> map (\op -> Concrete op :> opList) allOperandValues
         False -> return $ Abstract (knownRepr :: BaseTypeRepr (OperandType arch s)) :> opList
 
-unTemplate :: ParameterizedFormula sym (TemplatedArch arch) sh
+-- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
+-- to the base architecture, using 'unsafeCoerce'.
+--
+-- The only difference between 'TemplatedArch arch' and 'arch' is in 'Operand',
+-- which 'ParameterizedFormula' doesn't use, so 'unsafeCoerce' should be safe.
+-- I'm not entirely sure, though.
+unTemplateUnsafe :: ParameterizedFormula sym (TemplatedArch arch) sh
+                 -> ParameterizedFormula sym arch sh
+unTemplateUnsafe = unsafeCoerce
+
+-- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
+-- to the base architecture, using a manual mapping.
+--
+-- This is a safe version, but it's probably a lot slower.
+unTemplateSafe :: forall sym arch sh.
+                  (OrdF (Location arch))
+               => ParameterizedFormula sym (TemplatedArch arch) sh
+               -> ParameterizedFormula sym arch sh
+unTemplateSafe (ParameterizedFormula { pfUses = uses
+                                     , pfOperandVars = opVars
+                                     , pfLiteralVars = litVars
+                                     , pfDefs = defs
+                                     }) =
+  ParameterizedFormula { pfUses = newUses
+                       , pfOperandVars = newOpVars
+                       , pfLiteralVars = litVars
+                       , pfDefs = newDefs
+                       }
+  where newUses = Set.map (mapSome coerceParameter) uses
+        newOpVars = mapOperandList coerceBoundVar opVars
+        newDefs = MapF.foldrWithKey (MapF.insert . coerceParameter) MapF.empty defs
+        coerceParameter :: forall tp. Parameter (TemplatedArch arch) sh tp -> Parameter arch sh tp
+        coerceParameter (Operand tpRepr idx) = Operand tpRepr idx
+        coerceParameter (Literal loc) = Literal loc
+        coerceBoundVar :: forall op. BoundVar sym (TemplatedArch arch) op -> BoundVar sym arch op
+        coerceBoundVar (BoundVar var) = BoundVar var
+
+-- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
+-- to the base architecture, using 'unsafeCoerce'.
+--
+-- This is exactly 'unTemplateUnsafe', but here in case we want to switch the
+-- default to the safe implementation.
+unTemplate :: (OrdF (Location arch))
+           => ParameterizedFormula sym (TemplatedArch arch) sh
            -> ParameterizedFormula sym arch sh
-unTemplate = unsafeCoerce
+unTemplate = unTemplateUnsafe
 
 -- TODO: Can we get rid of these constraints in some nice way?
 templatizeFormula :: forall t st arch sh.
