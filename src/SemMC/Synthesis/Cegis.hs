@@ -16,7 +16,6 @@ module SemMC.Synthesis.Cegis
 import           Control.Monad.IO.Class ( MonadIO(..) )
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
-import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.TraversableF
 import           GHC.Stack ( HasCallStack )
@@ -124,16 +123,18 @@ condenseFormula :: forall t st arch.
                 -> IO (Formula (S.SimpleBuilder t st) arch)
 condenseFormula sym = foldrM (sequenceFormulas sym) emptyFormula
 
+type TestCases sym arch = [(ArchState sym arch, ArchState sym arch)]
+
 -- TODO: tidy up this type signature
 -- TODO: return new test cases in the case of failure
 cegis :: (Architecture arch)
       => S.SimpleBackend t
       -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
       -> Formula (S.SimpleBackend t) arch
-      -> [(ArchState (S.SimpleBackend t) arch, ArchState (S.SimpleBackend t) arch)]
+      -> TestCases (S.SimpleBackend t) arch
       -> [InstructionWTFormula (S.SimpleBackend t) arch]
       -> Formula (S.SimpleBackend t) arch
-      -> IO (Maybe [Instruction arch])
+      -> IO (Either (TestCases (S.SimpleBackend t) arch) [Instruction arch])
 cegis sym semantics target tests trial trialFormula = do
   -- initial dumb thing: return Just [] if all the tests are satisfiable
   check <- foldrM (\test b -> S.andPred sym b =<< buildEquality sym test trialFormula) (S.truePred sym) tests
@@ -148,9 +149,9 @@ cegis sym semantics target tests trial trialFormula = do
       filledInFormula <- condenseFormula sym =<< mapM (instantiateFormula' sym semantics) insns'
       equiv <- formulasEquiv sym target filledInFormula
       case equiv of
-        Right () -> return . Just $ map ungood insns'
-        Left ex | MapF.null ex -> return Nothing
-        Left ctrExample -> do
+        Equivalent -> return . Right $ map ungood insns'
+        Mismatching -> return (Left tests)
+        DifferentBehavior ctrExample -> do
           ctrExampleOut <- evalFormula sym target ctrExample
           cegis sym semantics target ((ctrExample, ctrExampleOut) : tests) trial trialFormula
-    Nothing -> return Nothing
+    Nothing -> return (Left tests)

@@ -1,8 +1,15 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE KindSignatures #-}
 module SemMC.Util
   ( groundValToExpr
   , makeSymbol
+  , mapFKeys
   ) where
+
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
@@ -28,3 +35,6 @@ groundValToExpr sym BaseRealRepr val = S.realLit sym val
 groundValToExpr sym BaseComplexRepr val = S.mkComplexLit sym val
 groundValToExpr _ (BaseArrayRepr _ _) _ = error "groundValToExpr: array type isn't handled yet"
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
+
+mapFKeys :: forall (key :: k -> *) (value :: k -> *). MapF.MapF key value -> [Some key]
+mapFKeys = MapF.foldrWithKey (\k _ l -> Some k : l) []
