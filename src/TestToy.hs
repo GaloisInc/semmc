@@ -58,13 +58,13 @@ doThing = do
 --
 fooFormula :: (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 fooFormula sym = do
-  reg1 <- S.freshBoundVar sym (makeSymbol (showF Reg1)) (locationType Reg1)
+  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (locationType (RegLoc Reg1))
   twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
   reg2Def <- S.bvMul sym twoLit (S.varExpr sym reg1)
-  return $ Formula { formUses = Set.singleton (Some Reg1) -- Do we really need uses? Should just be the keys of vars.
-                   , formParamVars = MapF.insert Reg1 reg1
+  return $ Formula { formUses = Set.singleton (Some (RegLoc Reg1)) -- Do we really need uses? Should just be the keys of vars.
+                   , formParamVars = MapF.insert (RegLoc Reg1) reg1
                                    $ MapF.empty
-                   , formDefs = MapF.insert Reg2 reg2Def
+                   , formDefs = MapF.insert (RegLoc Reg2) reg2Def
                               $ MapF.empty
                    }
 
@@ -85,7 +85,7 @@ doThing2 = do
   one <- S.bvLit sym (knownNat :: NatRepr 32) 1
   ten <- S.bvLit sym (knownNat :: NatRepr 32) 10
 
-  let testInputs = [ MapF.insert Reg1 zero MapF.empty
+  let testInputs = [ MapF.insert (RegLoc Reg1) zero MapF.empty
                    -- , MapF.insert Reg1 one MapF.empty
                    -- , MapF.insert Reg1 ten MapF.empty
                    ]

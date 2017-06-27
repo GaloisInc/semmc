@@ -45,8 +45,8 @@
 module SemMC.ToyExample where
 
 import           Data.EnumF ( congruentF, EnumF, enumF )
-import           Data.Map ( Map )
-import qualified Data.Map as M
+import           Data.Map.Strict ( Map )
+import qualified Data.Map.Strict as M
 import qualified Data.Parameterized.Classes as ParamClasses
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..) )
@@ -65,53 +65,49 @@ import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
 
-data Reg :: BaseType -> * where
-  Reg1 :: Reg (BaseBVType 32)
-  Reg2 :: Reg (BaseBVType 32)
-  Reg3 :: Reg (BaseBVType 32)
-deriving instance Show (Reg tp)
-deriving instance Eq (Reg tp)
-deriving instance Ord (Reg tp)
+data Reg = Reg1 | Reg2 | Reg3
+  deriving (Show, Eq, Ord)
 
-instance ShowF Reg where
+-- A location for storing data, i.e. register or memory.
+data Location :: BaseType -> * where
+  RegLoc :: Reg -> Location (BaseBVType 32)
+  -- MemLoc :: Mem -> Location (BaseBVType 32)
+deriving instance Show (Location tp)
+deriving instance Eq (Location tp)
+deriving instance Ord (Location tp)
+
+instance ShowF Location where
   showF = show
 
-instance OrdF Reg where
-  Reg1 `compareF` Reg1 = EQF
-  Reg1 `compareF` Reg2 = LTF
-  Reg1 `compareF` Reg3 = LTF
-  Reg2 `compareF` Reg1 = GTF
-  Reg2 `compareF` Reg2 = EQF
-  Reg2 `compareF` Reg3 = LTF
-  Reg3 `compareF` Reg1 = GTF
-  Reg3 `compareF` Reg2 = GTF
-  Reg3 `compareF` Reg3 = EQF
+instance OrdF Location where
+  RegLoc r1 `compareF` RegLoc r2 = fromOrdering $ r1 `compare` r2
 
-instance TestEquality Reg where
-  Reg1 `testEquality` Reg1 = Just Refl
-  Reg2 `testEquality` Reg2 = Just Refl
-  Reg3 `testEquality` Reg3 = Just Refl
-  _     `testEquality`     _ = Nothing
+instance TestEquality Location where
+  RegLoc r1 `testEquality` RegLoc r2 | r1 == r2 = Just Refl
+                                     | otherwise = Nothing
 
-instance A.IsLocation Reg where
-  readLocation "r1" = Just (Some Reg1)
-  readLocation "r2" = Just (Some Reg2)
-  readLocation "r3" = Just (Some Reg3)
+instance A.IsLocation Location where
+  readLocation "r1" = Just (Some (RegLoc Reg1))
+  readLocation "r2" = Just (Some (RegLoc Reg2))
+  readLocation "r3" = Just (Some (RegLoc Reg3))
   readLocation    _ = Nothing
 
-  locationType Reg1 = knownRepr :: BaseTypeRepr (BaseBVType 32)
-  locationType Reg2 = knownRepr :: BaseTypeRepr (BaseBVType 32)
-  locationType Reg3 = knownRepr :: BaseTypeRepr (BaseBVType 32)
+  locationType RegLoc{} = knownRepr :: BaseTypeRepr (BaseBVType 32)
 
-  defaultLocationExpr sym Reg1 = S.bvLit sym (knownNat :: NatRepr 32) 0
-  defaultLocationExpr sym Reg2 = S.bvLit sym (knownNat :: NatRepr 32) 0
-  defaultLocationExpr sym Reg3 = S.bvLit sym (knownNat :: NatRepr 32) 0
+  defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
 
 -- | An operand, indexed so that we can compute the type of its
 -- values, and describe the shape of instructions that can take it as
 -- an argument.
 data Operand :: Symbol -> * where
-  R32 :: Reg (BaseBVType 32) -> Operand "R32"
+  -- | A 32-bit register. A 16-bit register would look like
+  --
+  -- > RL16 :: Reg -> Operand "R16"
+  -- > RH16 :: Reg -> Operand "R16"
+  --
+  -- for the low and high 16 bits, respectively, of the underlying
+  -- 32-bit register.
+  R32 :: Reg -> Operand "R32"
   -- | The use of @Value "I32"@ here seems a little inconsistent with
   -- 'Reg' as the argument to 'R32' above: the 'Reg' stands for a
   -- register name, and which bits in that register are being referred
@@ -209,7 +205,7 @@ type Instruction = D.GenericInstruction Opcode Operand
 
 -- | Registers, flags, and memory.
 data MachineState = MachineState
-  { msRegs :: !(Map (Reg (BaseBVType 32)) (Value "R32"))
+  { msRegs :: !(Map Reg (Value "R32"))
 --  , msFlags :: *
 --  , msMem :: *
   }
@@ -292,7 +288,7 @@ type instance A.Opcode Toy = Opcode
 type instance A.OperandType Toy "R32" = BaseBVType 32
 type instance A.OperandType Toy "I32" = BaseBVType 32
 
-type instance A.Location Toy = Reg
+type instance A.Location Toy = Location
 
 valueToOperand :: forall s. (KnownSymbol s) => GroundValue (A.OperandType Toy s) -> Operand s
 valueToOperand val
@@ -302,10 +298,10 @@ valueToOperand val
   | otherwise = undefined
 
 instance A.Architecture Toy where
-  operandValue _ _ newVars (R32 reg) = newVars reg
+  operandValue _ _ newVars (R32 reg) = newVars (RegLoc reg)
   operandValue _ sym _       (I32 imm) = S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
 
-  operandToLocation _ (R32 reg) = Just reg
+  operandToLocation _ (R32 reg) = Just (RegLoc reg)
   operandToLocation _ (I32 _) = Nothing
 
   -- TODO: how to handle this?
