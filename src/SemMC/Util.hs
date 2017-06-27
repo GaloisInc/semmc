@@ -8,6 +8,8 @@ module SemMC.Util
   , mapFKeys
   ) where
 
+import Text.Printf
+
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
 
@@ -17,9 +19,12 @@ import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
 
 makeSymbol :: String -> SolverSymbol
-makeSymbol name = case userSymbol name of
+makeSymbol name = case userSymbol sanitizedName of
                     Right symbol -> symbol
-                    Left _ -> error "tried to create symbol with bad name"
+                    Left _ -> error $ printf "tried to create symbol with bad name: %s (%s)"
+                                             name sanitizedName
+  where
+    sanitizedName = map (\c -> case c of ' ' -> '_'; _ -> c) name
 
 groundValToExpr :: (S.IsExprBuilder sym)
                 => sym

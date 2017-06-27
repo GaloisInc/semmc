@@ -33,7 +33,7 @@ library
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist
-  -- other-modules:       
+  other-modules:       TestToy
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
                        containers,

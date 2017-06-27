@@ -25,6 +25,7 @@ import SemMC.Formula.Instantiate
 import SemMC.Synthesis.Template
 import SemMC.Synthesis.Cegis
 import SemMC.Synthesis
+import SemMC.Util
 
 readBinOp :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "R32"]))
 readBinOp sym fp = readFormulaFromFile sym ("data/toy/base/" <> fp)
@@ -48,11 +49,6 @@ doThing = do
   print $ templated !! 50
   -- (f1 : f2 : _) <- templatizeFormula' sym pf
   -- print =<< sequenceFormulas sym (tfFormula f1) (tfFormula f2)
-
-makeSymbol :: String -> SolverSymbol
-makeSymbol s = case userSymbol s of
-                 Right sym -> sym
-                 Left _ -> error "makeSymbol failed"
 
 -- Formula for moving 2*r1 into r2. The assembly I have in mind:
 --

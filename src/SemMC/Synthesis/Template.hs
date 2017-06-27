@@ -39,13 +39,13 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import           Lang.Crucible.Solver.Symbol ( userSymbol, SolverSymbol )
 
 import           Dismantle.Instruction ( OperandList(..) )
 
 import           SemMC.Architecture
 import           SemMC.Formula
 import           SemMC.Formula.Instantiate
+import           SemMC.Util
 
 -- type family IsReg (arch :: *) (operand :: Symbol) :: Bool
 
@@ -76,11 +76,6 @@ type instance Operand (TemplatedArch arch) = TemplatedOperand arch
 type instance Opcode (TemplatedArch arch) = Opcode arch
 type instance OperandType (TemplatedArch arch) s = OperandType arch s
 type instance Location (TemplatedArch arch) = Location arch
-
-makeSymbol :: String -> SolverSymbol
-makeSymbol name = case userSymbol name of
-                    Right symbol -> symbol
-                    Left _ -> error "tried to create symbol with bad name"
 
 instance (OrdF (Opcode arch (TemplatedOperand arch)),
           ShowF (Opcode arch (TemplatedOperand arch)),
