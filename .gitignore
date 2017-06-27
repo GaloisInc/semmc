@@ -1,3 +1,5 @@
 .stack-work/
 stack.yaml
 TAGS
+cabal.project
+dist-newstyle
