@@ -212,7 +212,7 @@ instance (Architecture arch, RecoverOperands arch sh)
   recoverOperands evalFn (Concrete op :> restOps) (_ :> restExprs) =
     (op :>) <$> recoverOperands evalFn restOps restExprs
   recoverOperands evalFn (Abstract _ :> restOps) (WrappedExpr expr :> restExprs) =
-    (:>) <$> (valueToOperand (Proxy :: Proxy arch) <$> evalGroundElt (groundEval evalFn) expr)
+    (:>) <$> (valueToOperand (Proxy :: Proxy arch) <$> groundEval evalFn expr)
          <*> recoverOperands evalFn restOps restExprs
 
 data InstructionWTFormula sym arch where
