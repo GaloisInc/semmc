@@ -65,36 +65,17 @@ import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
 
+----------------------------------------------------------------
+-- * Instructions
+
+-- | Registers.
+--
+-- Note that this is the underlying register, not the view, on
+-- architectures like x86 where e.g. @eax@ is a "view" into @rax@. The
+-- view part corresponds to the 'Operand' type, e.g. @'R32' 'Reg1'@ is
+-- the full view of the register @Reg1@.
 data Reg = Reg1 | Reg2 | Reg3
   deriving (Show, Eq, Ord)
-
--- A location for storing data, i.e. register or memory.
-data Location :: BaseType -> * where
-  RegLoc :: Reg -> Location (BaseBVType 32)
-  -- MemLoc :: Mem -> Location (BaseBVType 32)
-deriving instance Show (Location tp)
-deriving instance Eq (Location tp)
-deriving instance Ord (Location tp)
-
-instance ShowF Location where
-  showF = show
-
-instance OrdF Location where
-  RegLoc r1 `compareF` RegLoc r2 = fromOrdering $ r1 `compare` r2
-
-instance TestEquality Location where
-  RegLoc r1 `testEquality` RegLoc r2 | r1 == r2 = Just Refl
-                                     | otherwise = Nothing
-
-instance A.IsLocation Location where
-  readLocation "r1" = Just (Some (RegLoc Reg1))
-  readLocation "r2" = Just (Some (RegLoc Reg2))
-  readLocation "r3" = Just (Some (RegLoc Reg3))
-  readLocation    _ = Nothing
-
-  locationType RegLoc{} = knownRepr :: BaseTypeRepr (BaseBVType 32)
-
-  defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
 
 -- | An operand, indexed so that we can compute the type of its
 -- values, and describe the shape of instructions that can take it as
@@ -203,6 +184,9 @@ instance OrdF (Opcode o) where
 
 type Instruction = D.GenericInstruction Opcode Operand
 
+----------------------------------------------------------------
+-- * Virtual Machine / Concrete Evaluation
+
 -- | Registers, flags, and memory.
 data MachineState = MachineState
   { msRegs :: !(Map Reg (Value "R32"))
@@ -253,6 +237,9 @@ evalInstruction ms (D.Instruction op args) = case (op, args) of
 
 evalProg :: MachineState -> [Instruction] -> MachineState
 evalProg ms is = foldl evalInstruction ms is
+
+----------------------------------------------------------------
+-- * Architecture Instantiation
 
 data Toy = Toy
 
@@ -306,3 +293,34 @@ instance A.Architecture Toy where
 
   -- TODO: how to handle this?
   valueToOperand _ = valueToOperand
+
+----------------------------------------------------------------
+-- ** Locations
+
+-- A location for storing data, i.e. register or memory.
+data Location :: BaseType -> * where
+  RegLoc :: Reg -> Location (BaseBVType 32)
+  -- MemLoc :: Mem -> Location (BaseBVType 32)
+deriving instance Show (Location tp)
+deriving instance Eq (Location tp)
+deriving instance Ord (Location tp)
+
+instance ShowF Location where
+  showF = show
+
+instance OrdF Location where
+  RegLoc r1 `compareF` RegLoc r2 = fromOrdering $ r1 `compare` r2
+
+instance TestEquality Location where
+  RegLoc r1 `testEquality` RegLoc r2 | r1 == r2 = Just Refl
+                                     | otherwise = Nothing
+
+instance A.IsLocation Location where
+  readLocation "r1" = Just (Some (RegLoc Reg1))
+  readLocation "r2" = Just (Some (RegLoc Reg2))
+  readLocation "r3" = Just (Some (RegLoc Reg3))
+  readLocation    _ = Nothing
+
+  locationType RegLoc{} = knownRepr :: BaseTypeRepr (BaseBVType 32)
+
+  defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
