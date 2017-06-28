@@ -57,7 +57,8 @@ import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
 
 import           Dismantle.Instruction ( OperandList(Nil,(:>)) )
 import qualified Dismantle.Instruction as D
--- import qualified Dismantle.Instruction.Random as D
+import qualified Dismantle.Instruction.Random as D
+import qualified Dismantle.Arbitrary as D
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
@@ -324,3 +325,34 @@ instance A.IsLocation Location where
   locationType RegLoc{} = knownRepr :: BaseTypeRepr (BaseBVType 32)
 
   defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
+
+----------------------------------------------------------------
+-- * Random Instruction Generation
+
+instance D.Arbitrary (Operand "I32") where
+  arbitrary gen = I32 <$> D.uniform gen
+
+instance D.Arbitrary (Operand "R32") where
+  arbitrary gen = R32 <$> D.choose gen (Set.fromList [Reg1, Reg2, Reg3])
+
+instance D.ArbitraryOperands Opcode Operand where
+  arbitraryOperands gen op = case op of
+    -- ??? Is there a way to avoid the repetition here? We are
+    -- implicitly using the shape of the operand to choose instances
+    -- in 'D.arbitraryOperandList', and so without duplicating here it
+    -- seems we need to a way to universally quantify the existence of
+    -- needed instances ...
+    AddRr -> D.arbitraryOperandList gen
+    SubRr -> D.arbitraryOperandList gen
+    NegR  -> D.arbitraryOperandList gen
+    MovRi -> D.arbitraryOperandList gen
+
+-- | The set of all opcodes, e.g. for use with
+-- 'D.Random.randomInstruction'.
+opcodes :: Set.Set (D.SomeOpcode Opcode Operand)
+opcodes = Set.fromList
+  [ D.SomeOpcode AddRr
+  , D.SomeOpcode SubRr
+  , D.SomeOpcode NegR
+  , D.SomeOpcode MovRi
+  ]
