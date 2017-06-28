@@ -2,21 +2,38 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ConstraintKinds #-}
 module SemMC.Util
   ( groundValToExpr
   , makeSymbol
   , mapFKeys
+  , Witness (..)
   ) where
 
 import Text.Printf
 
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
+import           GHC.Exts ( Constraint )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
+
+data Witness (c :: k -> Constraint) (f :: k -> *) (x :: k) where
+  Witness :: (c x) => f x -> Witness c f x
+
+instance (TestEquality f) => TestEquality (Witness c f) where
+  testEquality (Witness x) (Witness y) = (\Refl -> Refl) <$> testEquality x y
+
+instance (OrdF f) => OrdF (Witness c f) where
+  compareF (Witness x) (Witness y) =
+    case compareF x y of
+      LTF -> LTF
+      EQF -> EQF
+      GTF -> GTF
 
 makeSymbol :: String -> SolverSymbol
 makeSymbol name = case userSymbol sanitizedName of

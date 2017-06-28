@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 module TestToy where
 
 import qualified Data.Set as Set
@@ -40,9 +41,9 @@ doThing = do
   Right add <- readBinOp sym "AddRr.sem"
   Right sub <- readBinOp sym "SubRr.sem"
   Right movi <- readBinOp' sym "MovRi.sem"
-  let opcodes = MapF.insert (OpcodeGoodShape AddRr) add
-              $ MapF.insert (OpcodeGoodShape SubRr) sub
-              $ MapF.insert (OpcodeGoodShape MovRi) movi
+  let opcodes = MapF.insert (Witness AddRr) add
+              $ MapF.insert (Witness SubRr) sub
+              $ MapF.insert (Witness MovRi) movi
               $ MapF.empty
   -- print =<< instantiateFormula sym pf (R32 Reg1 :> R32 Reg3 :> Nil)
   templated <- templatedInstructions sym opcodes
@@ -56,11 +57,12 @@ doThing = do
 -- > AddRr r2, r1
 -- > AddRr r2, r1
 --
-fooFormula :: (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
+fooFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 fooFormula sym = do
   reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (locationType (RegLoc Reg1))
   twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
-  reg2Def <- S.bvMul sym twoLit (S.varExpr sym reg1)
+  reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
+  reg2Def <- S.bvAdd sym reg1TimesTwo twoLit
   return $ Formula { formUses = Set.singleton (Some (RegLoc Reg1)) -- Do we really need uses? Should just be the keys of vars.
                    , formParamVars = MapF.insert (RegLoc Reg1) reg1
                                    $ MapF.empty
@@ -75,9 +77,9 @@ doThing2 = do
   Right add <- readBinOp sym "AddRr.sem"
   Right sub <- readBinOp sym "SubRr.sem"
   Right movi <- readBinOp' sym "MovRi.sem"
-  let opcodes = MapF.insert (OpcodeGoodShape AddRr) add
-              $ MapF.insert (OpcodeGoodShape SubRr) sub
-              $ MapF.insert (OpcodeGoodShape MovRi) movi
+  let opcodes = MapF.insert (Witness AddRr) add
+              $ MapF.insert (Witness SubRr) sub
+              $ MapF.insert (Witness MovRi) movi
               $ MapF.empty
   target <- fooFormula sym
 

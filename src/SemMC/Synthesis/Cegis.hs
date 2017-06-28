@@ -17,7 +17,6 @@ import           Data.Foldable
 import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.TraversableF
-import           GHC.Stack ( HasCallStack )
 
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SatResult
@@ -32,13 +31,13 @@ import           SemMC.Formula
 import           SemMC.Formula.Equivalence
 import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
--- import           SemMC.Util
+import           SemMC.Util
 
-data GoodInstruction (arch :: *) where
-  GoodInstruction :: forall arch sh. OpcodeGoodShape (Opcode arch) (Operand arch) arch sh -> OperandList (Operand arch) sh -> GoodInstruction arch
+data TemplatableInstruction (arch :: *) where
+  TemplatableInstruction :: TemplatableOpcode arch sh -> OperandList (Operand arch) sh -> TemplatableInstruction arch
 
-ungood :: GoodInstruction arch -> Instruction arch
-ungood (GoodInstruction (OpcodeGoodShape op) oplist) = Instruction op oplist
+ungood :: TemplatableInstruction arch -> Instruction arch
+ungood (TemplatableInstruction (Witness op) oplist) = Instruction op oplist
 
 foldlMWithKey :: forall k a b m. (Monad m) => (forall s. b -> k s -> a s -> m b) -> b -> MapF.MapF k a -> m b
 foldlMWithKey f z0 m = MapF.foldrWithKey f' return m z0
@@ -90,24 +89,26 @@ buildEquality sym test (Formula _ vars defs) = foldlMWithKey f (S.truePred sym) 
         f b loc e = (S.andPred sym b =<< buildEquality' sym test vars loc e)
 
 handleSat :: GroundEvalFn t
-          -> [InstructionWTFormula (S.SimpleBackend t) arch]
-          -> IO [GoodInstruction arch]
+          -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
+          -> IO [TemplatableInstruction arch]
 handleSat evalFn = mapM f
-  where f (InstructionWTFormula op tf) = GoodInstruction (OpcodeGoodShape op) <$> recoverOperands evalFn (tfOperandList tf) (tfOperandExprs tf)
+  where f (TemplatedInstructionFormula op tf) = TemplatableInstruction (Witness op) <$> recoverOperands evalFn (tfOperandList tf) (tfOperandExprs tf)
 
-handleSatResult :: [InstructionWTFormula (S.SimpleBackend t) arch]
+handleSatResult :: [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                 -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))
-                -> IO (Maybe [GoodInstruction arch])
+                -> IO (Maybe [TemplatableInstruction arch])
 handleSatResult insns (Sat (evalFn, _)) = Just <$> handleSat evalFn insns
 handleSatResult _ Unsat = return Nothing
 handleSatResult _ Unknown = fail "got Unknown when checking sat-ness"
 
-instantiateFormula' :: (Architecture arch, HasCallStack)
+type BaseSet' sym arch = MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula sym (TemplatedArch arch))
+
+instantiateFormula' :: (Architecture arch)
                     => S.SimpleBuilder t st
-                    -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch))
-                    -> GoodInstruction arch
+                    -> BaseSet' (S.SimpleBuilder t st) arch
+                    -> TemplatableInstruction arch
                     -> IO (Formula (S.SimpleBuilder t st) arch)
-instantiateFormula' sym m (GoodInstruction op oplist) =
+instantiateFormula' sym m (TemplatableInstruction op oplist) =
   snd <$> instantiateFormula sym (unTemplate . fromJust $ MapF.lookup op m) oplist
 
 condenseFormula :: forall t st arch.
@@ -120,13 +121,12 @@ condenseFormula sym = foldrM (sequenceFormulas sym) emptyFormula
 type TestCases sym arch = [(ArchState sym arch, ArchState sym arch)]
 
 -- TODO: tidy up this type signature
--- TODO: return new test cases in the case of failure
 cegis :: (Architecture arch)
       => S.SimpleBackend t
-      -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
+      -> BaseSet' (S.SimpleBackend t) arch
       -> Formula (S.SimpleBackend t) arch
       -> TestCases (S.SimpleBackend t) arch
-      -> [InstructionWTFormula (S.SimpleBackend t) arch]
+      -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
       -> Formula (S.SimpleBackend t) arch
       -> IO (Either (TestCases (S.SimpleBackend t) arch) [Instruction arch])
 cegis sym semantics target tests trial trialFormula = do

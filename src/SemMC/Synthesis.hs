@@ -29,11 +29,11 @@ condenseFormula :: forall t st arch.
                    (Architecture arch,
                     Architecture (TemplatedArch arch))
                 => S.SimpleBuilder t st
-                -> [InstructionWTFormula (S.SimpleBuilder t st) arch]
+                -> [TemplatedInstructionFormula (S.SimpleBuilder t st) arch]
                 -> IO (Formula (S.SimpleBuilder t st) arch)
 condenseFormula sym = fmap (coerceFormula :: Formula sym (TemplatedArch arch) -> Formula sym arch)
                     . foldrM (sequenceFormulas sym) emptyFormula
-                    . map (\(InstructionWTFormula _ tf) -> tfFormula tf)
+                    . map (\(TemplatedInstructionFormula _ tf) -> tfFormula tf)
 
 mapFKeys :: MapF.MapF k v -> [Some k]
 mapFKeys = MapF.foldrWithKey (\k _ l -> Some k : l) []
@@ -48,7 +48,7 @@ footprintFilter target candidate =
 
 data SynthesisState sym arch =
   SynthesisState { synthTests :: [(ArchState sym arch, ArchState sym arch)]
-                 , synthUselessPrefixes :: [[InstructionWTFormula sym arch]]
+                 , synthUselessPrefixes :: [[TemplatedInstructionFormula sym arch]]
                  }
 
 instantiate :: (MonadState (SynthesisState (S.SimpleBackend t) arch) m,
@@ -56,9 +56,9 @@ instantiate :: (MonadState (SynthesisState (S.SimpleBackend t) arch) m,
                 Architecture arch,
                 Architecture (TemplatedArch arch))
             => S.SimpleBackend t
-            -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
+            -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
             -> Formula (S.SimpleBackend t) arch
-            -> [InstructionWTFormula (S.SimpleBackend t) arch]
+            -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
             -> m (Maybe [Instruction arch])
 instantiate sym m target trial = do
   trialFormula <- liftIO $ condenseFormula sym trial
@@ -82,11 +82,10 @@ synthesizeFormula :: forall t arch.
                       Typeable arch
                       )
                   => S.SimpleBackend t
-                  -> MapF.MapF (OpcodeGoodShape (Opcode arch) (Operand arch) arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
+                  -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
                   -> Formula (S.SimpleBackend t) arch
                   -> [(ArchState (S.SimpleBackend t) arch, ArchState (S.SimpleBackend t) arch)]
                   -> IO (Maybe [Instruction arch])
-                  -- -> IO (Maybe [InstructionWTFormula (S.SimpleBackend t) arch])
 synthesizeFormula sym m target tests = do
   insns <- templatedInstructions sym m
   -- 'insns' is an infinite list, so we have to be careful with what we do with it.
