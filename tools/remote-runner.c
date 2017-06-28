@@ -262,6 +262,11 @@ void fixupContext(ucontext_t* ctx, WorkItem* item) {
   ctx->uc_stack.ss_flags = 0;
   ctx->uc_stack.ss_size = pageSize;
   applyMContextMask(&ctx->uc_mcontext, &item->ctxMask, item->mem1, item->mem2);
+  // When we return from executing the program, we are in theory going to return
+  // to restoreCtx (the main thread of execution).  That said, this link might
+  // never need to really be followed because we never really get to the end of
+  // that context (i.e., we always throw a synchronous signal instead of
+  // returning).  It is set for good form...
   ctx->uc_link = &restoreCtx;
 }
 
@@ -386,7 +391,8 @@ void setupSignalHandlers() {
 int main(int argc, char* argv[]) {
   pageSize = sysconf(_SC_PAGESIZE);
   // This is the stack that will be used for executing the programs we get in
-  // work items
+  // work items.  Using mmap to ensure that it is 4k aligned, though that
+  // probably isn't really necessary.
   programStack = mmap(NULL, pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   setupSignalHandlers();
   assert(programStack != MAP_FAILED);
