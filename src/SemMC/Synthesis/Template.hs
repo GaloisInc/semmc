@@ -68,9 +68,11 @@ data TemplatedOperand (arch :: *) (s :: Symbol) where
   -- | A blank operand -- an immediate.
   Abstract :: (KnownSymbol s) => BaseTypeRepr (OperandType arch s) -> TemplatedOperand arch s
 
-instance (ShowF (Operand arch)) => ShowF (TemplatedOperand arch) where
-  showF (Concrete op) = "Concrete (" ++ showF op ++ ")"
-  showF (Abstract _) = "Abstract"
+instance (ShowF (Operand arch)) => Show (TemplatedOperand arch s) where
+  show (Concrete op) = "Concrete (" ++ showF op ++ ")"
+  show (Abstract _) = "Abstract"
+
+instance (ShowF (Operand arch)) => ShowF (TemplatedOperand arch)
 
 instance (TestEquality (Operand arch)) => TestEquality (TemplatedOperand arch) where
   Concrete op1 `testEquality` Concrete op2 = (\Refl -> Refl) <$> op1 `testEquality` op2

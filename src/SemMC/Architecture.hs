@@ -54,12 +54,13 @@ type family OperandType (arch :: *) (op :: Symbol) :: BaseType
 -- XXX: Does this really belong in Architecture?
 newtype BoundVar (sym :: *) (arch :: *) (op :: Symbol) =
   BoundVar { unBoundVar :: S.BoundVar sym (OperandType arch op) }
-deriving instance (Show (S.BoundVar sym (OperandType arch op))) => Show (BoundVar sym arch op)
 deriving instance (Eq (S.BoundVar sym (OperandType arch op))) => Eq (BoundVar sym arch op)
 deriving instance (Ord (S.BoundVar sym (OperandType arch op))) => Ord (BoundVar sym arch op)
 
-instance (ShowF (S.BoundVar sym)) => ShowF (BoundVar sym arch) where
-  showF (BoundVar bv) = "BoundVar { unBoundVar = " ++ showF bv ++ "}"
+instance (ShowF (S.BoundVar sym)) => Show (BoundVar sym arch op) where
+  show (BoundVar var) = showF var
+
+instance (ShowF (S.BoundVar sym)) => ShowF (BoundVar sym arch)
 
 -- | Represents the different registers, flags, and (eventually) memory a given
 -- architecture has.
