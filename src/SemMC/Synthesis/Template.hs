@@ -245,17 +245,10 @@ instance (ShowF ((Opcode arch) (Operand arch)),
   show (TemplatedInstructionFormula op tf) =
     unwords ["TemplatedInstructionFormula", showF op, showF tf]
 
--- XXX: ...what should I name this?
-foo :: forall a. [a] -> [[a]]
-foo xs = join [foo' i | i <- [1..]]
-  where foo' :: Int -> [[a]]
-        foo' 1 = map pure xs
-        foo' n = [x : xs' | x <- xs, xs' <- foo' (n-1)]
-
--- | An infinite stream of templated instruction sequences.
+-- | A list of all possible templated instructions, given some opcodes.
 templatedInstructions :: (TemplateConstraints arch)
                       => S.SimpleBuilder t st
                       -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch))
-                      -> IO [[TemplatedInstructionFormula (S.SimpleBuilder t st) arch]]
-templatedInstructions sym m = foo . join <$> mapM f (MapF.toList m)
+                      -> IO [TemplatedInstructionFormula (S.SimpleBuilder t st) arch]
+templatedInstructions sym m = join <$> mapM f (MapF.toList m)
   where f (MapF.Pair (Witness op) pf) = fmap (map (TemplatedInstructionFormula op)) (templatizeFormula' sym pf)
