@@ -247,28 +247,15 @@ data Toy = Toy
 type instance A.IsReg Toy "R32" = 'True
 type instance A.IsReg Toy "I32" = 'False
 
--- isReg :: forall proxy s. KnownSymbol s => proxy (Operand s) -> Bool
--- isReg _ = elem (symbolVal (Proxy :: Proxy s)) ["R32"]
+instance A.IsOperand Operand
 
--- allPossible :: forall proxy s. KnownSymbol s => proxy (Operand s) -> [Operand s]
--- allPossible _ =
---   case symbolVal (Proxy :: Proxy s) of
---     "R32" -> R32 <$> [Reg1, Reg2, Reg3]
---     "I32" -> I32 <$> [0..]
---     _     -> undefined
-
-instance A.IsOperand Operand where
-  -- isReg = isReg
-  -- allPossible = allPossible
+instance A.IsOpcode Opcode
 
 instance A.IsSpecificOperand Operand "R32" where
   allOperandValues = R32 <$> [Reg1, Reg2, Reg3]
 
 instance A.IsSpecificOperand Operand "I32" where
   allOperandValues = I32 <$> [0..]
-
--- type instance IsReg Toy "R32" = 'True
--- type instance IsReg Toy "I32" = 'False
 
 type instance A.Operand Toy = Operand
 type instance A.Opcode Toy = Opcode

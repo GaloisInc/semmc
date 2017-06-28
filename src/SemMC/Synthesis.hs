@@ -9,7 +9,6 @@ module SemMC.Synthesis
 import           Control.Monad.State
 import           Data.Foldable
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some
 import qualified Data.Set as Set
 import           Data.Typeable
 
@@ -21,6 +20,7 @@ import           SemMC.Formula
 import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
 import           SemMC.Synthesis.Cegis
+import           SemMC.Util
 
 -- NOTE: This initial implementation is not meant to be at all fast; it is just
 -- a proof of concept.
@@ -34,9 +34,6 @@ condenseFormula :: forall t st arch.
 condenseFormula sym = fmap (coerceFormula :: Formula sym (TemplatedArch arch) -> Formula sym arch)
                     . foldrM (sequenceFormulas sym) emptyFormula
                     . map (\(TemplatedInstructionFormula _ tf) -> tfFormula tf)
-
-mapFKeys :: MapF.MapF k v -> [Some k]
-mapFKeys = MapF.foldrWithKey (\k _ l -> Some k : l) []
 
 footprintFilter :: (Architecture arch)
                 => Formula (S.SimpleBuilder t st) arch

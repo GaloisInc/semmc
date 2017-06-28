@@ -12,17 +12,13 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Nonce
 import Data.Parameterized.Some
 
-import Lang.Crucible.Solver.Symbol
 import Lang.Crucible.Solver.SimpleBackend
 import qualified Lang.Crucible.Solver.Interface as S
-
-import Dismantle.Instruction ( OperandList(..) )
 
 import SemMC.Architecture
 import SemMC.Formula
 import SemMC.Formula.Parser
 import SemMC.ToyExample
-import SemMC.Formula.Instantiate
 import SemMC.Synthesis.Template
 import SemMC.Synthesis.Cegis
 import SemMC.Synthesis
@@ -84,8 +80,8 @@ doThing2 = do
   target <- fooFormula sym
 
   zero <- S.bvLit sym (knownNat :: NatRepr 32) 0
-  one <- S.bvLit sym (knownNat :: NatRepr 32) 1
-  ten <- S.bvLit sym (knownNat :: NatRepr 32) 10
+  -- one <- S.bvLit sym (knownNat :: NatRepr 32) 1
+  -- ten <- S.bvLit sym (knownNat :: NatRepr 32) 10
 
   let testInputs = [ MapF.insert (RegLoc Reg1) zero MapF.empty
                    -- , MapF.insert Reg1 one MapF.empty

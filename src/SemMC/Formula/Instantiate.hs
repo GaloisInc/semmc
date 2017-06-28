@@ -51,12 +51,13 @@ type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
   ShapeCtx _    '[] = EmptyCtx
   ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> OperandType arch s
 
+-- | Just a 'S.SymExpr', but indexed by operand symbol rather than 'BaseType'.
 newtype WrappedExpr sym arch s = WrappedExpr { unWrappedExpr :: S.SymExpr sym (OperandType arch s) }
 
 instance (ShowF (S.SymExpr sym)) => ShowF (WrappedExpr sym arch) where
   showF (WrappedExpr e) = showF e
 
-buildAssignment :: forall sym arch sh.
+buildOpAssignment :: forall sym arch sh.
                   (Architecture arch,
                    S.IsSymInterface sym)
                 => sym
@@ -70,41 +71,11 @@ buildAssignment :: forall sym arch sh.
                 -> IO (OperandList (WrappedExpr sym arch) sh,
                        Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh),
                        Ctx.Assignment (S.SymExpr sym) (ShapeCtx arch sh))
-buildAssignment   _       _                         Nil                Nil = return (Nil, Ctx.empty, Ctx.empty)
-buildAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) = do
+buildOpAssignment _ _ Nil Nil = return (Nil, Ctx.empty, Ctx.empty)
+buildOpAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) = do
   val' <- operandValue (Proxy :: Proxy arch) sym newVars val
-  (valsList, varsRest', valsRest') <- buildAssignment sym newVars varsRest valsRest
+  (valsList, varsRest', valsRest') <- buildOpAssignment sym newVars varsRest valsRest
   return (WrappedExpr val' :> valsList, Ctx.extend varsRest' var, Ctx.extend valsRest' val')
-
--- replaceOpVars :: forall arch t st sh tp.
---                  (Architecture arch)
---               => SB t st
---               -- ^ Symbolic expression builder
---               -> (forall tp'. Location arch tp' -> IO (S.Elt t tp'))
---               -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
---               -> OperandList (BoundVar (SB t st) arch) sh
---               -- ^ List of variables corresponding to each operand
---               -> OperandList (Operand arch) sh
---               -- ^ List of operand values corresponding to each operand
---               -> S.Elt t tp
---               -- ^ Expression to do the replace in
---               -> IO (OperandList (WrappedExpr (SB t st) arch) sh, S.Elt t tp)
--- replaceOpVars sym newVars vars vals expr =
---   buildAssignment sym newVars vars vals >>= \(valsList, vars, vals) ->
---     (valsList,) <$> S.evalBoundVars sym expr vars vals
-
--- replaceLitVars :: forall (loc :: BaseType -> *) t st tp.
---                   (OrdF loc)
---                => SB t st
---                -> (forall tp'. loc tp' -> IO (S.SimpleBoundVar t tp'))
---                -> MapF.MapF loc (S.SimpleBoundVar t)
---                -> S.Elt t tp
---                -> IO (S.Elt t tp)
--- replaceLitVars sym newVars oldVars expr0 = foldlMWithKey f expr0 oldVars
---   where f :: forall tp'. S.Elt t tp -> loc tp' -> S.SimpleBoundVar t tp' -> IO (S.Elt t tp)
---         f expr k oldVar = do
---           newExpr <- S.varExpr sym <$> newVars k
---           S.evalBoundVars sym expr (Ctx.extend Ctx.empty oldVar) (Ctx.extend Ctx.empty newExpr)
 
 buildLitAssignment :: forall sym loc.
                       sym
@@ -121,8 +92,6 @@ buildLitAssignment _ exprLookup = foldlMWithKey f (MapF.Pair Ctx.empty Ctx.empty
           fmap (\expr -> MapF.Pair (Ctx.extend varAssn var) (Ctx.extend exprAssn expr))
                (exprLookup loc)
 
--- TODO: This was mostly ripped from SemMC.Formula.Instantiate, and we should
--- generalize that rather than copy-and-pasting here.
 replaceLitVars :: forall loc t st tp.
                   (OrdF loc)
                => S.SimpleBuilder t st
@@ -134,7 +103,11 @@ replaceLitVars sym newExprs oldVars expr =
   buildLitAssignment sym newExprs oldVars >>=
     \(MapF.Pair varAssn exprAssn) -> S.evalBoundVars sym expr varAssn exprAssn
 
-mapFMapMBoth :: forall k1 v1 k2 v2 m. (OrdF k2, Monad m) => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp)) -> MapF.MapF k1 v1 -> m (MapF.MapF k2 v2)
+mapFMapMBoth :: forall k1 v1 k2 v2 m.
+                (OrdF k2, Monad m)
+             => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp))
+             -> MapF.MapF k1 v1
+             -> m (MapF.MapF k2 v2)
 mapFMapMBoth f = MapF.foldrWithKey f' (return MapF.empty)
   where f' :: forall tp. k1 tp -> v1 tp -> m (MapF.MapF k2 v2) -> m (MapF.MapF k2 v2)
         f' k v wrappedM = do
@@ -142,7 +115,11 @@ mapFMapMBoth f = MapF.foldrWithKey f' (return MapF.empty)
           m <- wrappedM
           return $ MapF.insert k' v' m
 
-paramToLocation :: forall arch sh tp. (Architecture arch) => OperandList (Operand arch) sh -> Parameter arch sh tp -> Maybe (Location arch tp)
+paramToLocation :: forall arch sh tp.
+                   (Architecture arch)
+                => OperandList (Operand arch) sh
+                -> Parameter arch sh tp
+                -> Maybe (Location arch tp)
 paramToLocation opVals (Operand _ idx) = operandToLocation (Proxy :: Proxy arch) $ indexOpList opVals idx
 paramToLocation _      (Literal loc) = Just loc
 
@@ -181,7 +158,7 @@ instantiateFormula
     let newLitExprLookup :: forall tp. Location arch tp -> IO (S.Elt t tp)
         newLitExprLookup loc = S.varExpr sym <$> lookupOrCreateVar sym newLitVarsRef loc
 
-    (opValsList, opVarsAssn, opValsAssn) <- buildAssignment sym newLitExprLookup opVars opVals
+    (opValsList, opVarsAssn, opValsAssn) <- buildOpAssignment sym newLitExprLookup opVars opVals
 
     let mapDef :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
         mapDef p e = case paramToLocation opVals p of

@@ -15,16 +15,15 @@
 
 module SemMC.Architecture where
 
-import Data.Type.Equality
-import GHC.TypeLits ( KnownSymbol, Symbol )
-
-import qualified Data.EnumF as SF
-import Data.Parameterized.Classes
-import Data.Parameterized.Some
+import           Data.EnumF
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some
+import           GHC.TypeLits ( KnownSymbol, Symbol )
+
+import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
-import Lang.Crucible.BaseTypes
-import Lang.Crucible.Solver.SimpleBackend.GroundEval
+import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified Dismantle.Instruction as I
 
@@ -37,8 +36,6 @@ type family IsReg (arch :: *) (s :: Symbol) :: Bool
 
 -- | Class containing methods we want on operands. (Nothing for now.)
 class IsOperand (o :: Symbol -> *) where
-  -- isReg :: forall proxy s. KnownSymbol s => proxy (o s) -> Bool
-  -- allPossible :: forall proxy s. KnownSymbol s => proxy (o s) -> [o s]
 
 class IsSpecificOperand o (s :: Symbol) where
   allOperandValues :: [o s]
@@ -47,9 +44,7 @@ class IsSpecificOperand o (s :: Symbol) where
 type family Opcode (arch :: *) :: (Symbol -> *) -> [Symbol] -> *
 
 -- | Class containing methods we want on opcodes. (Nothing for now.)
-class IsOpcode a
-
-instance IsOpcode a
+class IsOpcode (op :: (Symbol -> *) -> [Symbol] -> *)
 
 -- | Mapping from a particular instance of operand (characterized by a symbol)
 -- to a Crucible type that is the type of expression an occurrence of said
@@ -66,9 +61,8 @@ deriving instance (Ord (S.BoundVar sym (OperandType arch op))) => Ord (BoundVar 
 instance (ShowF (S.BoundVar sym)) => ShowF (BoundVar sym arch) where
   showF (BoundVar bv) = "BoundVar { unBoundVar = " ++ showF bv ++ "}"
 
--- | Bad name. Represents the different "registers" a given architecture has. I
--- didn't want to call it registers, though, because it should also account for
--- memory at some point.
+-- | Represents the different registers, flags, and (eventually) memory a given
+-- architecture has.
 type family Location (arch :: *) :: BaseType -> *
 
 -- | Methods we want on state variables.
@@ -91,7 +85,7 @@ class (IsOperand (Operand arch),
        IsLocation (Location arch),
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),
-       SF.EnumF (Opcode arch (Operand arch)))
+       EnumF (Opcode arch (Operand arch)))
       => Architecture arch where
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
