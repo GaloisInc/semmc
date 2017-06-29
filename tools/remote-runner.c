@@ -124,6 +124,12 @@ uint8_t* programStack = NULL;
  */
 #if defined(__x86_64__) || defined(__i386__)
 
+#if defined(__x86_64__)
+#define CAST_PTR(x) ((long long)(x))
+#else
+#define CAST_PTR(x) ((long)(x))
+#endif
+
 // Raise a trap with INT 3
 uint8_t raiseTrap[] = {0xcc};
 
@@ -137,12 +143,14 @@ uint8_t raiseTrap[] = {0xcc};
 void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
   for(int i = 0; i < NGREG; ++i) {
     if(mctxMask->gregs[i] == 1) {
-      mctx->gregs[i] = (long long)mem1;
+      mctx->gregs[i] = CAST_PTR(mem1);
     } else if(mctxMask->gregs[i] == 2) {
-      mctx->gregs[i] = (long long)mem2;
+      mctx->gregs[i] = CAST_PTR(mem2);
     }
   }
 }
+
+#undef CAST_PTR
 
 #elif defined(__arm__)
 
@@ -154,9 +162,9 @@ uint8_t raiseTrap[] = {0xe1, 0x20, 0x00, 0x70};
 void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
   for(int i = 0; i < NGREG; ++i) {
     if(mctxMask->gregs[i] == 1) {
-      mctx->gregs[i] = (long long)mem1;
+      mctx->gregs[i] = (int)mem1;
     } else if(mctxMask->gregs[i] == 2) {
-      mctx->gregs[i] = (long long)mem2;
+      mctx->gregs[i] = (int)mem2;
     }
   }
 }
@@ -170,16 +178,24 @@ void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, ui
 
 #elif defined(__powerpc__)
 
+#if defined(__powerpc64__)
+#define CAST_PTR(x) ((long long)(x))
+#else
+#define CAST_PTR(x) ((long)(x))
+#endif
+
 uint8_t raiseTrap[] = {};
 void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
   for(int i = 0; i < NGREG; ++i) {
     if(mctxMask->gregs[i] == 1) {
-      mctx->gp_regs[i] = (long long)mem1;
+      mctx->gp_regs[i] = CAST_PTR(mem1);
     } else if(mctxMask->gregs[i] == 2) {
-      mctx->gp_regs[i] = (long long)mem2;
+      mctx->gp_regs[i] = CAST_PTR(mem2);
     }
   }
 }
+
+#undef CAST_PTR
 
 #endif
 
