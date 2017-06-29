@@ -5,7 +5,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <arpa/inet.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <ucontext.h>
