@@ -43,6 +43,8 @@ makeSymbol name = case userSymbol sanitizedName of
   where
     sanitizedName = map (\c -> case c of ' ' -> '_'; _ -> c) name
 
+-- | Convert a 'GroundValue' (a primitive type that represents the given
+-- Crucible type) back into a symbolic expression, just as a literal.
 groundValToExpr :: (S.IsExprBuilder sym)
                 => sym
                 -> BaseTypeRepr tp
@@ -58,5 +60,13 @@ groundValToExpr sym BaseComplexRepr val = S.mkComplexLit sym val
 groundValToExpr _ (BaseArrayRepr _ _) _ = error "groundValToExpr: array type isn't handled yet"
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
 
+-- * MapF Utilities
+
+-- | Extract the keys of a 'MapF'.
 mapFKeys :: forall (key :: k -> *) (value :: k -> *). MapF.MapF key value -> [Some key]
 mapFKeys = MapF.foldrWithKey (\k _ l -> Some k : l) []
+
+-- | Reverse a MapF, so that the old keys are the new values and the old values
+-- are the new keys.
+mapFReverse :: (OrdF value) => MapF.MapF key value -> MapF.MapF value key
+mapFReverse = MapF.foldrWithKey (flip MapF.insert) MapF.empty
