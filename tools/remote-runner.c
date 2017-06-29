@@ -39,6 +39,9 @@
     That probably isn't a big deal, though, because those failures can only
     occur if the stream ends early.
 
+  * Test programs plus a trap instruction must fit on a single page (probably
+    4k).  This isn't a major restriction considering the use case.
+
  */
 
 // The number of bytes for our hand-allocated memory regions
