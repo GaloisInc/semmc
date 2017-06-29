@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module TestToy where
 
+import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Monoid
 import qualified Data.Parameterized.Map as MapF
@@ -18,6 +19,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import SemMC.Architecture
 import SemMC.Formula
 import SemMC.Formula.Parser
+import SemMC.Formula.Printer
 import SemMC.ToyExample
 import SemMC.Synthesis.Template
 import SemMC.Synthesis.Cegis
@@ -80,3 +82,10 @@ doThing2 = do
   target <- fooFormula sym
 
   print =<< synthesizeFormula sym opcodes target []
+
+doThing3 :: IO ()
+doThing3 = do
+  Some r <- newIONonceGenerator
+  sym <- newSimpleBackend r
+  Right add <- readBinOp sym "AddRr.sem"
+  putStrLn $ T.unpack $ printFormula add

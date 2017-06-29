@@ -54,8 +54,10 @@ type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
 -- | Just a 'S.SymExpr', but indexed by operand symbol rather than 'BaseType'.
 newtype WrappedExpr sym arch s = WrappedExpr { unWrappedExpr :: S.SymExpr sym (OperandType arch s) }
 
-instance (ShowF (S.SymExpr sym)) => ShowF (WrappedExpr sym arch) where
-  showF (WrappedExpr e) = showF e
+instance (ShowF (S.SymExpr sym)) => Show (WrappedExpr sym arch s) where
+  show (WrappedExpr e) = showF e
+
+instance (ShowF (S.SymExpr sym)) => ShowF (WrappedExpr sym arch)
 
 buildOpAssignment :: forall sym arch sh.
                   (Architecture arch,

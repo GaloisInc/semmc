@@ -82,11 +82,11 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   Operand :: BaseTypeRepr (OperandType arch s) -> Index sh s -> Parameter arch sh (OperandType arch s)
   Literal :: Location arch tp -> Parameter arch sh tp
 
-deriving instance Show (Location arch tp) => Show (Parameter arch sh tp)
+instance ShowF (Location arch) => Show (Parameter arch sh tp) where
+  show (Operand repr idx) = unwords ["Operand", "(" ++ show repr ++ ")", show idx]
+  show (Literal var) = unwords ["Literal", showF var]
 
-instance ShowF (Location arch) => ShowF (Parameter arch sh) where
-  showF (Operand repr idx) = unwords ["Operand", "(" ++ show repr ++ ")", show idx]
-  showF (Literal var) = unwords ["Literal", showF var]
+instance (ShowF (Location arch)) => ShowF (Parameter arch sh)
 
 instance TestEquality (Location arch) => TestEquality (Parameter arch sh) where
   Operand _ idx1 `testEquality` Operand _ idx2 = (\Refl -> Refl) <$> testEquality idx1 idx2
@@ -125,9 +125,6 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
                        , pfLiteralVars :: MapF.MapF (Location arch) (S.BoundVar sym)
                        , pfDefs :: MapF.MapF (Parameter arch sh) (S.SymExpr sym)
                        }
-
-instance ShowF o => Show (I.OperandList o sh) where
-  show = showF
 
 deriving instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => Show (ParameterizedFormula sym arch sh)
 

@@ -14,9 +14,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 -- | A parser for an s-expression representation of formulas
-module SemMC.Formula.Parser (
-  readFormula,
-  readFormulaFromFile
+module SemMC.Formula.Parser
+  ( Atom(..)
+  , operandVarPrefix
+  , literalVarPrefix
+  , readFormula
+  , readFormulaFromFile
   ) where
 
 import           Control.Monad.Except
@@ -41,8 +44,9 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.Symbol ( userSymbol )
 
-import           SemMC.Formula
 import           SemMC.Architecture
+import           SemMC.Formula
+import           SemMC.Util
 
 import           Dismantle.Instruction ( OperandList(..), traverseOperandList )
 
@@ -153,13 +157,19 @@ data RawParameter = RawOperand String
                   | RawLiteral String
                   deriving (Show, Eq, Ord)
 
+operandVarPrefix :: String
+operandVarPrefix = "op_"
+
+literalVarPrefix :: String
+literalVarPrefix = "lit_"
+
 -- | Parses the name of a parameter and whether it's an operand or a literal.
 readRawParameter :: (MonadError String m) => Atom -> m RawParameter
 readRawParameter (AIdent name)
-  | Right _ <- userSymbol ("op" ++ name) = return (RawOperand name)
+  | Right _ <- userSymbol (operandVarPrefix ++ name) = return (RawOperand name)
   | otherwise = throwError $ name ++ " is not a valid parameter name"
 readRawParameter (AQuoted name)
-  | Right _ <- userSymbol ("lit" ++ name) = return (RawLiteral name)
+  | Right _ <- userSymbol (literalVarPrefix ++ name) = return (RawLiteral name)
   | otherwise = throwError $ name ++ " is not a valid parameter name"
 readRawParameter a = throwError $ "expected parameter, found " ++ show a
 
@@ -534,7 +544,7 @@ readDefs :: (S.IsExprBuilder sym,
          => SC.SExpr Atom
          -> m (MapF.MapF (Parameter arch sh) (S.SymExpr sym))
 readDefs SC.SNil = return MapF.empty
-readDefs (SC.SCons (SC.SCons (SC.SAtom p) defRaw) rest) = do
+readDefs (SC.SCons (SC.SCons (SC.SAtom p) (SC.SCons defRaw SC.SNil)) rest) = do
   oplist <- reader getOpNameList
   Some param <- readParameter oplist p
   Some def <- readExpr defRaw
@@ -562,9 +572,9 @@ readFormula' sym text = do
              Right res -> return res
   -- Extract the raw s-expressions for the three components.
   (opsRaw, inputsRaw, defsRaw) <- case sexpr of
-    SC.SCons (SC.SCons (SC.SAtom (AIdent "operands")) ops)
-      (SC.SCons (SC.SCons (SC.SAtom (AIdent "in")) inputs)
-       (SC.SCons (SC.SCons (SC.SAtom (AIdent "defs")) defs)
+    SC.SCons (SC.SCons (SC.SAtom (AIdent "operands")) (SC.SCons ops SC.SNil))
+      (SC.SCons (SC.SCons (SC.SAtom (AIdent "in")) (SC.SCons inputs SC.SNil))
+       (SC.SCons (SC.SCons (SC.SAtom (AIdent "defs")) (SC.SCons defs SC.SNil))
          SC.SNil))
       -> return (ops, inputs, defs)
     _ -> throwError "invalid top-level structure"
@@ -583,9 +593,8 @@ readFormula' sym text = do
 
   let mkOperandVar :: forall s. OpData arch s -> m (BoundVar sym arch s)
       mkOperandVar (OpData name tpRepr) =
-        case userSymbol ("op_" ++ name) of
-          Right symbol -> BoundVar <$> (liftIO $ S.freshBoundVar sym symbol tpRepr)
-          Left _ -> throwError $ "invalid operand name " ++ name
+        let symbol = makeSymbol (operandVarPrefix ++ name)
+        in BoundVar <$> (liftIO $ S.freshBoundVar sym symbol tpRepr)
 
   opVarList :: OperandList (BoundVar sym arch) sh
     <- traverseOperandList mkOperandVar operands
@@ -597,9 +606,8 @@ readFormula' sym text = do
 
   let mkLiteralVar :: forall tp. BaseTypeRepr tp -> Location arch tp -> m (S.BoundVar sym tp)
       mkLiteralVar tpRepr loc =
-        case userSymbol (showF loc) of
-          Right symbol -> liftIO $ S.freshBoundVar sym symbol tpRepr
-          Left _ -> throwError $ "invalid var name!! " ++ showF loc
+        let symbol = makeSymbol (literalVarPrefix ++ showF loc)
+        in liftIO $ S.freshBoundVar sym symbol tpRepr
 
       buildLitVarMap :: Some (Parameter arch sh)
                      -> MapF.MapF (Location arch) (S.BoundVar sym)
