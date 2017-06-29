@@ -122,7 +122,7 @@ uint8_t* programStack = NULL;
 /*
   Architecture configuration
  */
-#if defined(__x86_64__)
+#if defined(__x86_64__) || defined(__i386__)
 
 // Raise a trap with INT 3
 uint8_t raiseTrap[] = {0xcc};
@@ -144,7 +144,6 @@ void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, ui
   }
 }
 
-
 #elif defined(__arm__)
 
 // This byte sequence encodes the `BKPT` instruction
@@ -153,7 +152,33 @@ uint8_t raiseTrap[] = {0xe1, 0x20, 0x00, 0x70};
 // For any register with a value of 1 or 2, overwrite the associated slot with
 // mem1 or mem2, respectively.
 void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
+  for(int i = 0; i < NGREG; ++i) {
+    if(mctxMask->gregs[i] == 1) {
+      mctx->gregs[i] = (long long)mem1;
+    } else if(mctxMask->gregs[i] == 2) {
+      mctx->gregs[i] = (long long)mem2;
+    }
+  }
+}
+
+#elif defined(__aarch64__)
+
+uint8_t raiseTrap[] = {};
+void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
   assert(0);
+}
+
+#elif defined(__powerpc__)
+
+uint8_t raiseTrap[] = {};
+void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
+  for(int i = 0; i < NGREG; ++i) {
+    if(mctxMask->gregs[i] == 1) {
+      mctx->gp_regs[i] = (long long)mem1;
+    } else if(mctxMask->gregs[i] == 2) {
+      mctx->gp_regs[i] = (long long)mem2;
+    }
+  }
 }
 
 #endif
