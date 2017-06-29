@@ -7,7 +7,7 @@ module SemMC.Synthesis
   ) where
 
 import           Control.Monad.State
-import qualified Data.Dequeue as Dequeue
+import qualified Data.Sequence as Seq
 import           Data.Foldable
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Set as Set
@@ -40,7 +40,7 @@ condenseFormula sym = fmap (coerceFormula :: Formula sym (TemplatedArch arch) ->
 
 data SynthesisState sym arch =
   SynthesisState { synthTests :: [(ArchState sym arch, ArchState sym arch)]
-                 , synthPrefixes :: Dequeue.BankersDequeue [TemplatedInstructionFormula sym arch]
+                 , synthPrefixes :: Seq.Seq [TemplatedInstructionFormula sym arch]
                  }
 
 footprintFilter :: (Architecture arch)
@@ -72,12 +72,12 @@ instantiate sym m target trial = do
                Left newTests -> do
                 let oldPrefixes = synthPrefixes st
                 put (st { synthTests = newTests
-                        , synthPrefixes = Dequeue.pushBack oldPrefixes trial
+                        , synthPrefixes = oldPrefixes Seq.|> trial
                         })
                 return Nothing
     False -> return Nothing
 
--- This short-circuits on long (or infinite) lists.
+-- This short-circuits, useful for long (or infinite) lists.
 sequenceMaybes :: (Monad m) => [m (Maybe a)] -> m (Maybe a)
 sequenceMaybes [] = return Nothing
 sequenceMaybes (x : xs) = x >>= maybe (sequenceMaybes xs) (return . Just)
@@ -94,10 +94,9 @@ synthesizeFormula' :: (MonadState (SynthesisState (S.SimpleBackend t) arch) m,
 synthesizeFormula' sym m target possibleInsns = do
   -- I'm still conflicted whether to use MonadState here or not...
   st <- get
-  let front = Dequeue.popFront (synthPrefixes st)
-  case front of
-    Just (prefix, newPrefixes) -> do
-      put $ st { synthPrefixes = newPrefixes }
+  case Seq.viewl (synthPrefixes st) of
+    prefix Seq.:< prefixesTail -> do
+      put $ st { synthPrefixes = prefixesTail }
       -- N.B.: 'instantiate' here will add back to the prefixes if it's worth
       -- saving. I'm not a big fan of MonadState here, but it was the nicest
       -- solution I could come up with.
@@ -106,7 +105,7 @@ synthesizeFormula' sym m target possibleInsns = do
       case result of
         Just insns -> return (Just insns)
         Nothing -> synthesizeFormula' sym m target possibleInsns
-    Nothing -> return Nothing
+    Seq.EmptyL -> return Nothing
 
 synthesizeFormula :: forall t arch.
                      (Architecture arch,
@@ -122,5 +121,5 @@ synthesizeFormula sym m target tests = do
   insns <- templatedInstructions sym m
   evalStateT (synthesizeFormula' sym m target insns)
     $ SynthesisState { synthTests = tests
-                     , synthPrefixes = Dequeue.fromList [[]]
+                     , synthPrefixes = Seq.singleton []
                      }
