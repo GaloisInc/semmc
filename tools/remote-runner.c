@@ -187,9 +187,9 @@ void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, ui
 uint8_t raiseTrap[] = {};
 void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
   for(int i = 0; i < NGREG; ++i) {
-    if(mctxMask->gregs[i] == 1) {
+    if(mctxMask->gp_regs[i] == 1) {
       mctx->gp_regs[i] = CAST_PTR(mem1);
-    } else if(mctxMask->gregs[i] == 2) {
+    } else if(mctxMask->gp_regs[i] == 2) {
       mctx->gp_regs[i] = CAST_PTR(mem2);
     }
   }
