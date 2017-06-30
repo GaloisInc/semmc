@@ -3,6 +3,7 @@ module SemMC.Stochastic.Remote.SSH (
   SSHConfig(..),
   SSHHandle(..),
   ssh,
+  killConnection,
   SSHError(..)
   ) where
 
@@ -22,6 +23,8 @@ data SSHConfig =
             , sshExecutablePath :: Maybe FilePath
             -- ^ An absolute path to the @ssh@ executable to run; default is to
             -- search PATH.
+            , sshQuiet :: Bool
+            -- ^ Suppress all SSH output; defaults to True to keep the handles clear
             }
   deriving (Eq, Ord, Show)
 
@@ -33,6 +36,7 @@ defaultSSHConfig =
             , sshUsername = Nothing
             , sshPort = Nothing
             , sshExecutablePath = Nothing
+            , sshQuiet = True
             }
 
 data SSHHandle = SSHHandle { sshStdout :: IO.Handle
@@ -72,7 +76,11 @@ ssh cfg host command = do
 
 makeCommandLine :: SSHConfig -> String -> [String] -> [String]
 makeCommandLine cfg host args =
-  (host' : params) ++ args
+  concat [ params
+         , [host']
+         , if sshQuiet cfg then ["-q"] else []
+         , args
+         ]
   where
     host' = printf "%s%s" (maybe "" (++"@") (sshUsername cfg)) host
     params = foldr applyArg [] [ (sshLoginName cfg, "-l")
@@ -87,3 +95,8 @@ applyArg (ms, p) acc =
     Nothing -> acc
     Just a -> p : a : acc
 
+-- | Terminate the SSH process
+--
+-- This is not guaranteed to work at all.
+killConnection :: SSHHandle -> IO ()
+killConnection hdl = P.terminateProcess (sshProcHandle hdl)

@@ -81,6 +81,7 @@ runRemote hostName testCases testResults logMessages = do
       _ <- A.wait recvResults
       A.cancel logger
       A.cancel sendCases
+      SSH.killConnection sshHdl
       return Nothing
 
 logRemoteStderr :: C.Chan LogMessage -> String -> IO.Handle -> IO ()
