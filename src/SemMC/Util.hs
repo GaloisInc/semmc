@@ -7,17 +7,24 @@ module SemMC.Util
   ( groundValToExpr
   , makeSymbol
   , mapFKeys
+  , mapFReverse
   , Witness (..)
+  , sequenceMaybes
+  , walkElt
   ) where
 
 import Text.Printf
 
+import           Control.Applicative ( Const(..) )
+import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
+import           Data.Parameterized.TraversableFC
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
 import           GHC.Exts ( Constraint )
 
 import           Lang.Crucible.BaseTypes
+import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
@@ -70,3 +77,17 @@ mapFKeys = MapF.foldrWithKey (\k _ l -> Some k : l) []
 -- are the new keys.
 mapFReverse :: (OrdF value) => MapF.MapF key value -> MapF.MapF value key
 mapFReverse = MapF.foldrWithKey (flip MapF.insert) MapF.empty
+
+-- This short-circuits, useful for long (or infinite) lists.
+sequenceMaybes :: (Monad m) => [m (Maybe a)] -> m (Maybe a)
+sequenceMaybes [] = return Nothing
+sequenceMaybes (x : xs) = x >>= maybe (sequenceMaybes xs) (return . Just)
+
+-- | Walk the tree of the expression, collecting results in the monoid. Visits
+-- nodes before leaves.
+walkElt :: (Monoid m) => (forall tp'. S.Elt t tp' -> m) -> S.Elt t tp -> m
+walkElt f e@(S.AppElt appElt) = f e <> down
+  where down = getConst (traverseFC_ (Const . walkElt f) (S.appEltApp appElt))
+walkElt f e@(S.NonceAppElt nonceAppElt) = f e <> down
+  where down = getConst (traverseFC_ (Const . walkElt f) (S.nonceEltApp nonceAppElt))
+walkElt f e = f e
