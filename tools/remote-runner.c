@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <arpa/inet.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <ucontext.h>
@@ -20,8 +21,10 @@
 
   Notes:
 
-  * We don't deal with endianness; it is the responsibility of the test
-    generator to send data in the correct endianness
+  * We don't deal with endianness in the 'mcontext_t's; it is the responsibility
+    of the test generator to send data in the correct endianness.  Lengths that
+    are inspected are expected to come in network byte order and are corrected
+    to host network order as appropriate.
 
   * The state of the program stack isn't tracked for test programs
 
@@ -65,7 +68,7 @@ typedef enum {
   // Received a SIGILL or SIGSEGV (followed by an int32_t with the signal number)
   RESPONSE_SIGNAL_ERROR = 2,
   // Failed to map the program into memory (no metadata)
-  RESPONSE_ERROR_MAPFAILED = 7
+  RESPONSE_ERROR_MAPFAILED = 3
 } ResponseTag;
 
 typedef enum {
@@ -234,6 +237,7 @@ void allocateProgramSpace(WorkItem* item) {
 WorkTag readWorkItem(FILE* stream, WorkItem* item) {
   uint8_t tagByte;
   size_t nItems = fread(&tagByte, 1, sizeof(uint8_t), stream);
+  tagByte = ntohs(tagByte);
   if(nItems == 0 || tagByte == WORK_DONE)
     return WORK_DONE;
 
@@ -246,6 +250,7 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
 
   uint16_t ctxSize;
   nItems = fread(&ctxSize, 1, sizeof(ctxSize), stream);
+  ctxSize = ntohs(ctxSize);
   if(nItems == 0 || ctxSize != sizeof(item->ctx)) {
     return WORK_ERROR_CTX_SIZE_MISMATCH;
   }
@@ -274,6 +279,7 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
   if(nItems == 0) {
     return WORK_ERROR_NOBYTECOUNT;
   }
+  item->programByteCount = ntohs(item->programByteCount);
 
   allocateProgramSpace(item);
   nItems = fread(item->program, item->programByteCount, 1, stream);
@@ -384,9 +390,9 @@ void otherSigHandler(int sigNum) {
 // Both are uint16_t
 void writeReadErrorResult(FILE* stream, WorkTag wtag, const char* msg) {
   fprintf(stderr, "%s\n", msg);
-  uint16_t tagBytes = RESPONSE_READ_ERROR;
+  uint16_t tagBytes = htons(RESPONSE_READ_ERROR);
   fwrite(&tagBytes, sizeof(tagBytes), 1, stream);
-  tagBytes = wtag;
+  tagBytes = htons(wtag);
   fwrite(&tagBytes, sizeof(tagBytes), 1, stream);
 }
 
@@ -395,7 +401,7 @@ void writeReadErrorResult(FILE* stream, WorkTag wtag, const char* msg) {
 void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item) {
   // All responses start off with a uint16_t ResponseTag code followed by a
   // nonce
-  uint16_t tagBytes = rtag;
+  uint16_t tagBytes = htons(rtag);
   fwrite(&tagBytes, sizeof(tagBytes), 1, stream);
   fwrite(&item->nonce, sizeof(item->nonce), 1, stream);
 
@@ -404,14 +410,21 @@ void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item) {
     assert(0 && "Impossible, this should have been handled earlier");
   case RESPONSE_ERROR_MAPFAILED:
     break;
-  case RESPONSE_SIGNAL_ERROR:
-    fwrite(&otherSignal, sizeof(otherSignal), 1, stream);
+  case RESPONSE_SIGNAL_ERROR: {
+    int32_t sigBytes = htonl(otherSignal);
+    fwrite(&sigBytes, sizeof(sigBytes), 1, stream);
     break;
-  case RESPONSE_SUCCESS:
+  }
+  case RESPONSE_SUCCESS: {
+    uint16_t szBytes = htons(sizeof(signalCtx.uc_mcontext));
+    fwrite(&szBytes, sizeof(szBytes), 1, stream);
     fwrite(&signalCtx.uc_mcontext, sizeof(signalCtx.uc_mcontext), 1, stream);
+    szBytes = htons(sizeof(item->mem1));
+    fwrite(&szBytes, sizeof(szBytes), 1, stream);
     fwrite(item->mem1, sizeof(item->mem1), 1, stream);
     fwrite(item->mem2, sizeof(item->mem2), 1, stream);
     break;
+  }
   }
 }
 
