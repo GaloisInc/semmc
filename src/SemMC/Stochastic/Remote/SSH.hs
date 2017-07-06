@@ -1,3 +1,8 @@
+-- | An interface on top of the command line @ssh@ binary
+--
+-- Clients can connect to remote machines and execute commands.  The interface
+-- allows clients to interact with the remote process through handles capturing
+-- stdin, stdout, and stderr.
 module SemMC.Stochastic.Remote.SSH (
   defaultSSHConfig,
   SSHConfig(..),
