@@ -6,27 +6,37 @@
 #include <unistd.h>
 
 #include <arpa/inet.h>
+#include <elf.h>
 #include <signal.h>
 #include <sys/mman.h>
-#include <ucontext.h>
+#include <sys/procfs.h>
+#include <sys/ptrace.h>
+#include <sys/reg.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/wait.h>
 
 /*
-  This program is designed to be a remote runner of programs with test vectors.  It:
+  This program is designed to be a remote runner of programs with test vectors.
+  It is based on ptrace and is two processes: a test orchestrator and a test
+  runner.  The test runner is trivial (see runTests).  The test orchestrator
+  uses ptrace to set up test states, allow the runner to run them, and then
+  inspect the state after the test.  The test orchestrator (see traceChild):
 
   1) reads a test vector and test program off of stdin,
-  2) maps the test program as executable (splicing in code at the end to raise a SIGTRAP),
+  2) sets up the initial test state (program + registers + memory), splicing in code at the end to raise a SIGTRAP,
   3) catches the SIGTRAP and takes a snapshot of the register and memory state, and
   4) sends the result out over stdout.
 
 
   Notes:
 
-  * We don't deal with endianness in the 'mcontext_t's; it is the responsibility
+  * We don't deal with endianness in the register states.  It is the responsibility
     of the test generator to send data in the correct endianness.  Lengths that
     are inspected are expected to come in network byte order and are corrected
     to host network order as appropriate.
 
-  * The state of the program stack isn't tracked for test programs
+  * The state of the program stack isn't tracked for test programs (though the stack pointer is)
 
   * The value of the IP after a test program isn't particularly meaningful due
     to the extra code to raise a SIGTRAP, and should be used carefully (if at all)
@@ -49,6 +59,201 @@
 // The number of bytes for our hand-allocated memory regions
 #define MEM_REGION_BYTES 32
 
+/*
+  Architecture configuration
+
+  Five things are required:
+
+  1) A `RegisterState` struct type that includes memory regions
+
+  2) `raiseTrap`, an array of bytes encoding a trap instruction that will cause
+     the processor to raise a SIGTRAP when executed
+
+  3) `RAISE_TRAP`, a macro that expands to inline assembly raising a SIGTRAP
+
+  4) `setupRegisterState`, which takes a `RegisterState` and uses ptrace to set
+     up a test vector on the target process (tracee)
+
+  5) `snapshotRegisterState`, which uses ptrace to read out a `RegisterState`
+
+  The last two are non-trivial because it requires multiple ptrace calls to
+  assemble the required information.  That information varies greatly by
+  platform.
+ */
+#if defined(__x86_64__) || defined(__i386__)
+
+#if defined(__x86_64__)
+
+// The standard general purpose integer registers
+#define SEM_NGPRS 16
+// The MM registers (for MMX), which overlay the x87 floating point stack
+#define SEM_NFPRS 8
+// The 16 YMM registers (the lower halves of which are the XMM registers)
+//
+// Note, this doesn't support the ZMM registers from AVX2 yet
+#define SEM_NVECREGS 16
+
+typedef struct {
+  uint64_t chunks[4];
+} YMM;
+
+typedef struct {
+  uint64_t gprs[SEM_NGPRS];
+  uint64_t gprs_mask[SEM_NGPRS];
+  uint64_t eflags;
+  uint64_t fprs[SEM_NFPRS];
+  YMM vrs[SEM_NVECREGS];
+  uint8_t mem1[MEM_REGION_BYTES];
+  uint8_t mem2[MEM_REGION_BYTES];
+} RegisterState;
+
+#else
+
+// The standard general purpose integer registers
+#define SEM_NGPRS 8
+// The MM registers (for MMX), which overlay the x87 floating point stack
+#define SEM_NFPRS 8
+// The 16 YMM registers (the lower halves of which are the XMM registers)
+#define SEM_NVECREGS 8
+
+typedef struct {
+  uint32_t chunks[4];
+} XMM;
+
+typedef struct {
+  uint32_t gprs[SEM_NGPRS];
+  uint32_t gprs_mask[SEM_NGPRS];
+  uint32_t eflags;
+  uint64_t fprs[SEM_NFPRS];
+  XMM vrs[SEM_NVECREGS];
+} RegisterState;
+
+
+#endif
+
+// Raise a trap with INT 3
+uint8_t raiseTrap[] = {0xcc};
+
+#define RAISE_TRAP asm("int3")
+
+#if defined(__x86_64__)
+#define CAST_PTR(x) ((unsigned long long)(x))
+
+/*
+  Do we want to change WorkItem to have fixed-size register buffers?  It would
+  simplify some things.  We would just have to float the arch-specific defs up
+  before WorkItem.
+ */
+
+// Install the expected register and memory state from the work item.
+//
+// This requires that the tracee must be stopped.
+void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace, RegisterState* rs) {
+  struct elf_prstatus prstatus;
+  struct iovec iov;
+  iov.iov_base = &prstatus;
+  iov.iov_len = sizeof(prstatus);
+  assert(!ptrace(PTRACE_GETREGSET, childPid, NT_PRSTATUS, &iov));
+
+  // Set up the provided memory state
+  //
+  // We have to copy the memory from the input buffers into memSpace because the
+  // input buffers aren't visible in the address space of the tracee - only the
+  // memSpace is shared.
+  uint8_t* mem1Addr = memSpace;
+  uint8_t* mem2Addr = memSpace + sizeof(rs->mem1);
+  memcpy(mem1Addr, rs->mem1, sizeof(rs->mem1));
+  memcpy(mem2Addr, rs->mem2, sizeof(rs->mem2));
+
+  // Apply the reg mask; this modifies the test vector, but that is fine.  We
+  // won't need the original values ever again.
+  for(int i = 0; i < SEM_NGPRS; ++i) {
+    if(rs->gprs_mask[i] == 1)
+      rs->gprs[i] = CAST_PTR(mem1Addr);
+    else if(rs->gprs_mask[i] == 2)
+      rs->gprs[i] = CAST_PTR(mem2Addr);
+  }
+
+  prstatus.pr_reg[EFLAGS] =   rs->eflags;
+  prstatus.pr_reg[RAX] =   rs->gprs[0];
+  prstatus.pr_reg[RBX] =   rs->gprs[1];
+  prstatus.pr_reg[RCX] =   rs->gprs[2];
+  prstatus.pr_reg[RDX] =   rs->gprs[3];
+  prstatus.pr_reg[RDI] =   rs->gprs[4];
+  prstatus.pr_reg[RSI] =   rs->gprs[5];
+  prstatus.pr_reg[RBP] =   rs->gprs[6];
+  prstatus.pr_reg[RSP] =   rs->gprs[7];
+  prstatus.pr_reg[R8] =   rs->gprs[8];
+  prstatus.pr_reg[R9] =   rs->gprs[9];
+  prstatus.pr_reg[R10] =   rs->gprs[10];
+  prstatus.pr_reg[R11] =   rs->gprs[11];
+  prstatus.pr_reg[R12] =   rs->gprs[12];
+  prstatus.pr_reg[R13] =   rs->gprs[13];
+  prstatus.pr_reg[R14] =   rs->gprs[14];
+  prstatus.pr_reg[R15] =   rs->gprs[15];
+
+
+  // Finally, set the IP to be at the start of our test program
+  prstatus.pr_reg[RIP] = CAST_PTR(programSpace);
+
+  assert(!ptrace(PTRACE_SETREGSET, childPid, NT_PRSTATUS, &iov));
+}
+
+// Extract the register state via ptrace and copy the memory values.
+//
+// This requires that the tracee be stopped
+void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs) {
+  struct elf_prstatus prstatus;
+  struct iovec iov;
+  iov.iov_base = &prstatus;
+  iov.iov_len = sizeof(prstatus);
+  assert(!ptrace(PTRACE_GETREGSET, childPid, NT_PRSTATUS, &iov));
+  rs->eflags = prstatus.pr_reg[EFLAGS];
+  rs->gprs[0] = prstatus.pr_reg[RAX];
+  rs->gprs[1] = prstatus.pr_reg[RBX];
+  rs->gprs[2] = prstatus.pr_reg[RCX];
+  rs->gprs[3] = prstatus.pr_reg[RDX];
+  rs->gprs[4] = prstatus.pr_reg[RDI];
+  rs->gprs[5] = prstatus.pr_reg[RSI];
+  rs->gprs[6] = prstatus.pr_reg[RBP];
+  rs->gprs[7] = prstatus.pr_reg[RSP];
+  rs->gprs[8] = prstatus.pr_reg[R8];
+  rs->gprs[9] = prstatus.pr_reg[R9];
+  rs->gprs[10] = prstatus.pr_reg[R10];
+  rs->gprs[11] = prstatus.pr_reg[R11];
+  rs->gprs[12] = prstatus.pr_reg[R12];
+  rs->gprs[13] = prstatus.pr_reg[R13];
+  rs->gprs[14] = prstatus.pr_reg[R14];
+  rs->gprs[15] = prstatus.pr_reg[R15];
+
+
+  // Also save the memory state back into rs
+  memcpy(&rs->mem1, memSpace, sizeof(rs->mem1));
+  memcpy(&rs->mem2, memSpace + sizeof(rs->mem1), sizeof(rs->mem2));
+}
+
+#undef CAST_PTR
+#elif defined(__i386__)
+
+#define CAST_PTR(x) ((unsigned long)(x))
+
+#endif
+#elif defined(__arm__)
+
+#elif defined(__aarch64__)
+
+#elif defined(__powerpc__)
+
+#if defined(__powerpc64__)
+#define CAST_PTR(x) ((long long)(x))
+#else
+#define CAST_PTR(x) ((long)(x))
+#endif
+
+#undef CAST_PTR
+
+#endif
+
 typedef enum {
   WORK_ITEM = 0,
   WORK_DONE = 1,
@@ -58,7 +263,9 @@ typedef enum {
   WORK_ERROR_NOMEM = 4,
   WORK_ERROR_NOBYTECOUNT = 5,
   WORK_ERROR_SHORT_PROGRAM = 6,
-  WORK_ERROR_CTX_SIZE_MISMATCH = 7
+  WORK_ERROR_CTX_SIZE_MISMATCH = 7,
+  WORK_ERROR_FORK_FAILED = 8,
+  WORK_ERROR_REGSTATE_SIZE_ERROR = 9
 } WorkTag;
 
 typedef enum {
@@ -66,39 +273,16 @@ typedef enum {
   // Error reading a WorkItem (followed by a WorkTag as a uint16_t)
   RESPONSE_READ_ERROR = 1,
   // Received a SIGILL or SIGSEGV (followed by an int32_t with the signal number)
-  RESPONSE_SIGNAL_ERROR = 2,
-  // Failed to map the program into memory (no metadata)
-  RESPONSE_ERROR_MAPFAILED = 3
+  RESPONSE_SIGNAL_ERROR = 2
 } ResponseTag;
-
-typedef enum {
-  // Successful execution
-  SIGNAL_SUCCESS = 0,
-  // Failed with a different signal (signal number encoded separately as an int32)
-  SIGNAL_OTHER = 1
-} SignalTag;
 
 // The definition of a work item
 typedef struct {
   // The unique identifier of this work item.  It only needs to be unique in this process.
   uint64_t nonce;
 
-  // The register state for the test vector
-  mcontext_t ctx;
-
-  // Another context that acts as a mask over `ctx`.  If a register value in
-  // ctxMask is 1, then that register is actually modified to point to the first
-  // memory buffer.  Likewise 2 and the second memory buffer.  Any other values
-  // are ignored.
-  //
-  // This allows us to make register states also refer to memory fairly easily.
-  mcontext_t ctxMask;
-
-  // The contents of the first memory region available to the program
-  uint8_t mem1[MEM_REGION_BYTES];
-
-  // The contents of the second memory region available to the program
-  uint8_t mem2[MEM_REGION_BYTES];
+  // The register (and memory) state for the test vector
+  RegisterState regs;
 
   // The number of bytes occupied by the test program
   uint16_t programByteCount;
@@ -109,100 +293,12 @@ typedef struct {
 } WorkItem;
 
 
-// The context to restore after the trap is handled
-ucontext_t restoreCtx;
-// The context saved from the signal context
-ucontext_t signalCtx;
-// The type of signal received in a handler
-SignalTag signalTag;
 // The signal number received in the handler (probably either segv or sigill)
 int32_t otherSignal;
 // The size of a page in the system.  We store this as a global so we only need
 // to compute it once.
 int pageSize = 0;
-// A pre-allocated stack, used for setting up a ucontext_t
-uint8_t* programStack = NULL;
 
-
-/*
-  Architecture configuration
- */
-#if defined(__x86_64__) || defined(__i386__)
-
-#if defined(__x86_64__)
-#define CAST_PTR(x) ((long long)(x))
-#else
-#define CAST_PTR(x) ((long)(x))
-#endif
-
-// Raise a trap with INT 3
-uint8_t raiseTrap[] = {0xcc};
-
-// For any register with a value of 1 or 2 in the mask, overwrite the associated
-// slot in the real mcontext_t with mem1 or mem2, respectively.
-//
-// We have to do some ugly casts from pointers to ints here.
-//
-// Note: this only handles the substitution for general purpose registers.  I
-// don't think it makes sense for floating point registers...
-void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
-  for(int i = 0; i < NGREG; ++i) {
-    if(mctxMask->gregs[i] == 1) {
-      mctx->gregs[i] = CAST_PTR(mem1);
-    } else if(mctxMask->gregs[i] == 2) {
-      mctx->gregs[i] = CAST_PTR(mem2);
-    }
-  }
-}
-
-#undef CAST_PTR
-
-#elif defined(__arm__)
-
-// This byte sequence encodes the `BKPT` instruction
-uint8_t raiseTrap[] = {0xe1, 0x20, 0x00, 0x70};
-
-// For any register with a value of 1 or 2, overwrite the associated slot with
-// mem1 or mem2, respectively.
-void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
-  for(int i = 0; i < NGREG; ++i) {
-    if(mctxMask->gregs[i] == 1) {
-      mctx->gregs[i] = (int)mem1;
-    } else if(mctxMask->gregs[i] == 2) {
-      mctx->gregs[i] = (int)mem2;
-    }
-  }
-}
-
-#elif defined(__aarch64__)
-
-uint8_t raiseTrap[] = {};
-void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
-  assert(0);
-}
-
-#elif defined(__powerpc__)
-
-#if defined(__powerpc64__)
-#define CAST_PTR(x) ((long long)(x))
-#else
-#define CAST_PTR(x) ((long)(x))
-#endif
-
-uint8_t raiseTrap[] = {};
-void applyMContextMask(mcontext_t* mctx, mcontext_t* mctxMask, uint8_t* mem1, uint8_t* mem2) {
-  for(int i = 0; i < NGREG; ++i) {
-    if(mctxMask->gp_regs[i] == 1) {
-      mctx->gp_regs[i] = CAST_PTR(mem1);
-    } else if(mctxMask->gp_regs[i] == 2) {
-      mctx->gp_regs[i] = CAST_PTR(mem2);
-    }
-  }
-}
-
-#undef CAST_PTR
-
-#endif
 
 // Allocate space for the program in the work item based on the
 // `programByteCount` field.
@@ -215,6 +311,22 @@ void allocateProgramSpace(WorkItem* item) {
   item->program = calloc(item->programByteCount, 1);
 }
 
+// Wait for a signal and return the signal number
+//
+// Returns -1 on error (if wait failed or if the process was terminated instead
+// of stopped).
+int waitForSignal(pid_t childPid) {
+  int wstatus;
+  int res = waitpid(childPid, &wstatus, 0);
+  if(res == -1)
+    return -1;
+
+  if(WIFSTOPPED(wstatus)) {
+    return WSTOPSIG(wstatus);
+  }
+
+  return -1;
+}
 
 /*
   Read a work item off of the stream (or report an error/end of work).
@@ -226,13 +338,10 @@ void allocateProgramSpace(WorkItem* item) {
   The work format will be:
 
   1) The work item nonce (uint64_t)
-  2) The size of the mcontext_t as a uint16_t (verified against the size expected in this process)
-  3) A mcontext_t (that matches the definition in ucontext.h)
-  4) Another mcontext_t that acts as a mask
-  5) A 32 byte buffer representing the state of the first distinguished memory location
-  6) A 32 byte buffer representing the state of the second distinguished memory location
-  7) A uint16_t denoting the number of bytes in the test program
-  8) The program to run
+  2) The size of the register state as a uint16_t (verified against the size expected in this process)
+  3) A register context (platform specific)
+  4) A uint16_t denoting the number of bytes in the test program
+  5) The program to run
  */
 WorkTag readWorkItem(FILE* stream, WorkItem* item) {
   uint8_t tagByte;
@@ -248,32 +357,22 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
     return WORK_ERROR_NONONCE;
   }
 
-  uint16_t ctxSize;
-  nItems = fread(&ctxSize, 1, sizeof(ctxSize), stream);
-  ctxSize = ntohs(ctxSize);
-  if(nItems == 0 || ctxSize != sizeof(item->ctx)) {
-    return WORK_ERROR_CTX_SIZE_MISMATCH;
-  }
-
-  nItems = fread(&item->ctx, 1, sizeof(item->ctx), stream);
+  RegisterState rs;
+  uint16_t regStateBytes;
+  nItems = fread(&regStateBytes, 1, sizeof(regStateBytes), stream);
+  regStateBytes = ntohs(regStateBytes);
   if(nItems == 0) {
+    if(regStateBytes != sizeof(rs)) {
+      fprintf(stderr, "Register state size mismatch (expected %lu but got %d)\n", sizeof(rs),  regStateBytes);
+      return WORK_ERROR_REGSTATE_SIZE_ERROR;
+    }
+
     return WORK_ERROR_NOCONTEXT;
   }
 
-  nItems = fread(&item->ctxMask, 1, sizeof(item->ctxMask), stream);
-  if(nItems == 0) {
+  nItems = fread(&rs, 1, sizeof(rs), stream);
+  if(nItems == 0)
     return WORK_ERROR_NOCONTEXT;
-  }
-
-  nItems = fread(item->mem1, 1, sizeof(item->mem1), stream);
-  if(nItems == 0) {
-    return WORK_ERROR_NOMEM;
-  }
-
-  nItems = fread(item->mem2, 1, sizeof(item->mem2), stream);
-  if(nItems == 0) {
-    return WORK_ERROR_NOMEM;
-  }
 
   nItems = fread(&item->programByteCount, 1, sizeof(item->programByteCount), stream);
   if(nItems == 0) {
@@ -294,8 +393,8 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
 //
 // mmap guarantees that its result will be aligned to a page boundary, so just
 // use that for simplicity.
-void* allocatePage() {
-  void* res = mmap(NULL, pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+void* allocatePage(int sharedOrPrivate) {
+  void* res = mmap(NULL, pageSize, PROT_READ | PROT_WRITE, sharedOrPrivate | MAP_ANONYMOUS, -1, 0);
   // mmap doesn't return NULL on failure, because some systems can map the zero
   // page.  We don't have to worry about that on modern Linux.
   if(res == MAP_FAILED)
@@ -304,82 +403,42 @@ void* allocatePage() {
   return res;
 }
 
-typedef void (*Program)(void);
-
-Program mapProgram(WorkItem* item) {
+// Copy the program into our memory region (followed by a trap).
+//
+// We don't change any permissions because the tracee already has it mapped as
+// executable.
+void mapProgram(uint8_t* programSpace, WorkItem* item) {
+  // Zero out the page before we continue.
+  memset(programSpace, 0, pageSize);
   int totalBytes = item->programByteCount + sizeof(raiseTrap);
   assert(totalBytes < pageSize);
 
-  uint8_t* program = allocatePage();
-  if(!program) return NULL;
-
-  memcpy(program, item->program, item->programByteCount);
-  memcpy(program + item->programByteCount, raiseTrap, sizeof(raiseTrap));
-
-  // Now mark the program as executable
-  int res = mprotect(program,  totalBytes, PROT_READ | PROT_EXEC);
-  if(!res)
-    return (Program) program;
-
-  return NULL;
-}
-
-// Apply any fixes to the context required to make it valid
-void fixupContext(ucontext_t* ctx, WorkItem* item) {
-  ctx->uc_mcontext = item->ctx;
-  ctx->uc_stack.ss_sp = programStack;
-  ctx->uc_stack.ss_flags = 0;
-  ctx->uc_stack.ss_size = pageSize;
-  applyMContextMask(&ctx->uc_mcontext, &item->ctxMask, item->mem1, item->mem2);
-  // When we return from executing the program, we are in theory going to return
-  // to restoreCtx (the main thread of execution).  That said, this link might
-  // never need to be followed because we never really get to the end of that
-  // context (i.e., we always throw a synchronous signal instead of returning,
-  // and we jump back to restoreCtx from that signal handler).  It is set for
-  // good form...
-  ctx->uc_link = &restoreCtx;
+  memcpy(programSpace, item->program, item->programByteCount);
+  memcpy(programSpace + item->programByteCount, raiseTrap, sizeof(raiseTrap));
 }
 
 // Take a work item, map the program (possibly with modifications), then jump to
 // it.
-ResponseTag processWorkItem(WorkItem* item) {
-  Program p = mapProgram(item);
-  if(!p) return RESPONSE_ERROR_MAPFAILED;
-  ucontext_t ctx;
-  fixupContext(&ctx, item);
-  makecontext(&ctx, p, 0);
-  swapcontext(&restoreCtx, &ctx);
-  // We'll return here from the signal handler, so we can send our result back.
-  // We just return a success code, and the handler code will handle writing the
-  // necessary state back.
-  if(signalTag == SIGNAL_SUCCESS)
+ResponseTag processWorkItem(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace, WorkItem* item, RegisterState* postState) {
+  int sig;
+
+  mapProgram(programSpace, item);
+  setupRegisterState(childPid, programSpace, memSpace, &item->regs);
+  assert(!ptrace(PTRACE_CONT, childPid, NULL, NULL));
+  sig = waitForSignal(childPid);
+  // FIXME: This is all pretty unsatisfying.  Eliminate the global and be more
+  // specific in the error condition if we get a different return value from
+  // waitForSignal.
+  if(sig == SIGTRAP) {
+    snapshotRegisterState(childPid, memSpace, postState);
     return RESPONSE_SUCCESS;
+  }
+  else if(sig == SIGSEGV || sig == SIGILL) {
+    otherSignal = sig;
+    return RESPONSE_SIGNAL_ERROR;
+  }
   else
     return RESPONSE_SIGNAL_ERROR;
-}
-
-// A handler for traps that captures the current CPU state into `signalCtx` and
-// then tells the handler to return to `restoreCtx`.  We mark the handling as
-// "successful" to mean that the test program completed without raising a
-// segfault or executing an illegal instruction.
-void trapHandler(int sigNum, siginfo_t* info, void* ctxp) {
-  ucontext_t* ctx = ctxp;
-  signalCtx = *ctx;
-  *ctx = restoreCtx;
-  signalTag = SIGNAL_SUCCESS;
-  otherSignal = 0;
-
-  // We don't need the signal number or detailed signal info.  We just need the
-  // ucontext_t, which we can only get through this form of signal handler.
-  (void)sigNum;
-  (void)info;
-}
-
-// A handler for other types of signals we might catch as a result of running
-// synthesized programs
-void otherSigHandler(int sigNum) {
-  signalTag = SIGNAL_OTHER;
-  otherSignal = sigNum;
 }
 
 // Write a message indicating a read error to the channel.
@@ -398,7 +457,7 @@ void writeReadErrorResult(FILE* stream, WorkTag wtag, const char* msg) {
 
 // Write a response back onto the stream.  It will either be an error with
 // metadata or a success with a final processor state.
-void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item) {
+void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item, RegisterState* postState) {
   // All responses start off with a uint16_t ResponseTag code followed by a
   // nonce
   uint16_t tagBytes = htons(rtag);
@@ -408,65 +467,52 @@ void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item) {
   switch(rtag) {
   case RESPONSE_READ_ERROR:
     assert(0 && "Impossible, this should have been handled earlier");
-  case RESPONSE_ERROR_MAPFAILED:
-    break;
   case RESPONSE_SIGNAL_ERROR: {
     int32_t sigBytes = htonl(otherSignal);
     fwrite(&sigBytes, sizeof(sigBytes), 1, stream);
     break;
   }
   case RESPONSE_SUCCESS: {
-    uint16_t szBytes = htons(sizeof(signalCtx.uc_mcontext));
+    uint16_t szBytes = htons(sizeof(*postState));
     fwrite(&szBytes, sizeof(szBytes), 1, stream);
-    fwrite(&signalCtx.uc_mcontext, sizeof(signalCtx.uc_mcontext), 1, stream);
-    szBytes = htons(sizeof(item->mem1));
-    fwrite(&szBytes, sizeof(szBytes), 1, stream);
-    fwrite(item->mem1, sizeof(item->mem1), 1, stream);
-    fwrite(item->mem2, sizeof(item->mem2), 1, stream);
+    fwrite(postState, sizeof(*postState), 1, stream);
     break;
   }
   }
 }
 
-// We have to handle a few signals, so set up all of the handlers in one place
-//
-// We use SIGTRAP to indicate the end of the program and give us a chance to
-// collect the processor state
-//
-// We have to also catch SIGILL (illegal instruction) in case we accidentally
-// created an invalid instruction
-//
-// We are also on the lookout for SIGSEGV in case we accessed memory we
-// shouldn't.
-void setupSignalHandlers() {
-  sigset_t mask;
-  sigemptyset(&mask);
-  struct sigaction sa;
-  sa.sa_sigaction = trapHandler;
-  sa.sa_mask = mask;
-  sa.sa_flags = SA_SIGINFO;
-  assert(!sigaction(SIGTRAP, &sa, NULL));
-
-  sa.sa_flags = 0;
-  sa.sa_handler = otherSigHandler;
-  assert(!sigaction(SIGILL, &sa, NULL));
-  assert(!sigaction(SIGSEGV, &sa, NULL));
+// Free all the dynamically allocated parts of a WorkItem
+void freeWorkItem(WorkItem* item) {
+  free(item->program);
 }
 
-int main(int argc, char* argv[]) {
-  pageSize = sysconf(_SC_PAGESIZE);
-  // This is the stack that will be used for executing the programs we get in
-  // work items.  Using mmap to ensure that it is 4k aligned, though that
-  // probably isn't really necessary.  The one nice thing about using mmap
-  // instead of allocating the new stack on the real stack is that overflows
-  // (highly unlikely) will hit an unmapped page instead of spilling onto the
-  // main stack.
-  programStack = allocatePage();
-  assert(programStack);
-  setupSignalHandlers();
+/*
+  Wait for the first trap, then enter the work loop to receive work items and
+  then execute the test vectors.
+
+  After that, accept program states over a pipe from the tracee (which will then
+  stop with a trap).  Set up the requested states and then alter the IP of the
+  tracee to the address of the function (which is also passed over the pipe).
+  The tracer never needs to communicate back to the tracee, so the one-way pipe
+  is fine.
+ */
+int traceChild(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace) {
+  int sig = waitForSignal(childPid);
+  if(sig != SIGTRAP)
+    return -1;
 
   do {
+    // The invariant in this loop is that the tracee is stopped at the loop entry.
+    //
+    // We enforce this manually for the first iteration (since the tracee is set
+    // up to trap immediately, we can start off by waiting on it).
+    //
+    // For all other loop iterations, the tracee is stopped because the test
+    // program traps when it is done (or halts due to another signal) so that we
+    // can capture its state.  We don't resume it until we have a work item (the
+    // WORK_ITEM case below).
     WorkItem item;
+    memset(&item, 0, sizeof(item));
     WorkTag tag = readWorkItem(stdin, &item);
     ResponseTag rtag;
     switch(tag) {
@@ -490,15 +536,74 @@ int main(int argc, char* argv[]) {
     case WORK_ERROR_CTX_SIZE_MISMATCH:
       writeReadErrorResult(stdout, tag, "Error while reading a work item (mcontext_t size mismatch)");
       break;
-    case WORK_ITEM:
-      rtag = processWorkItem(&item);
-      writeWorkResponse(stdout, rtag, &item);
-      free(item.program);
+    case WORK_ERROR_REGSTATE_SIZE_ERROR:
+      writeReadErrorResult(stdout, tag, "Invalid RegisterState size");
+      break;
+    case WORK_ERROR_FORK_FAILED:
+      writeReadErrorResult(stdout, tag, "Fork failed");
+      break;
+    case WORK_ITEM: {
+      RegisterState postState;
+      memset(&postState, 0, sizeof(postState));
+      rtag = processWorkItem(childPid, programSpace, memSpace, &item, &postState);
+      writeWorkResponse(stdout, rtag, &item, &postState);
       break;
     }
+    }
+    freeWorkItem(&item);
   } while(1);
+}
 
+/*
+  Do whatever initial setup is required and then pause so that the tracer can
+  capture the necessary state to be able to reset to the start of the work loop.
+
+  The loop is implicit: it runs from the explicit trap here until the trap at
+  the end of the work item (stored in programSpace).  The tracer manages the
+  loop by dropping us back at the beginning of programSpace for each new test.
+ */
+void runTests(uint8_t* programSpace) {
+  int mpres = mprotect(programSpace, pageSize, PROT_EXEC | PROT_READ);
+  assert(!mpres);
+  // We always want to return after this point once we receive a trap from the
+  // test program.  This should just work out, as the IP will be incremented
+  // before the trap is run, so we can just capture the entire state here.
+  //
+  // Note that we don't really need any code here: we'll always be stopping and
+  // restarting at the beginning of the shared code page, which isn't really
+  // visible here.
+  RAISE_TRAP;
+}
+
+int main(int argc, char* argv[]) {
   (void)argc;
   (void)argv;
-  return 0;
+  pid_t childPid;
+  uint8_t* memSpace = NULL;
+  uint8_t* programSpace = NULL;
+
+  pageSize = sysconf(_SC_PAGESIZE);
+
+  // Allocate space for our test vectors in shared memory (before we fork) so
+  // both the tracer and tracee can read them (and at the same address).
+  memSpace = allocatePage(MAP_SHARED);
+  programSpace = allocatePage(MAP_SHARED);
+
+  assert(memSpace);
+  assert(programSpace);
+
+  childPid = fork();
+  if(childPid == -1) {
+    writeReadErrorResult(stdout, WORK_ERROR_FORK_FAILED, "Failed to fork runner");
+    return -1;
+  } else if(childPid == 0) {
+    // This is the child process that will map programs and generate SIGTRAPs
+    ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+    runTests(programSpace);
+    return 0;
+  } else {
+    // This is the parent process that will handle SIGTRAPs (and other signals)
+    // to capture state.
+    return traceChild(childPid, programSpace, memSpace);
+  }
 }
