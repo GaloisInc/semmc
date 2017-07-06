@@ -5,7 +5,8 @@ module SemMC.Stochastic.Remote (
   TestCase(..),
   TestResult(..),
   ResultOrError(..),
-  LogMessage(..)
+  LogMessage(..),
+  MachineState(..)
   ) where
 
 import qualified Control.Concurrent as C
@@ -21,6 +22,10 @@ import Data.Word ( Word16, Word64 )
 import qualified System.IO as IO
 
 import qualified SemMC.Stochastic.Remote.SSH as SSH
+
+class MachineState a where
+  flattenMachineState :: a -> B.ByteString
+  parseMachineState :: B.ByteString -> Maybe a
 
 data TestCase =
   TestCase { testNonce :: Word64
