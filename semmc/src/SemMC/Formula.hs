@@ -19,12 +19,8 @@ module SemMC.Formula (
   coerceFormula,
   Parameter(..),
   paramType,
-  BaseSet(..),
   Index(..),
   indexOpList,
-  -- FormulaVar(..),
-  loadBaseSet,
-  formulaFromProgram
   ) where
 
 import           Control.Monad ( foldM )
@@ -148,47 +144,3 @@ coerceFormula f =
           , formParamVars = formParamVars f
           , formDefs = formDefs f
           }
-
--- replaceVarExpression :: sym -> Formula sym -> FormulaVar -> Some (S.SymExpr sym) -> IO (Formula sym)
-
-newtype BaseSet sym arch = BaseSet { unBaseSet :: MapF.MapF ((Opcode arch) (Operand arch)) (ParameterizedFormula sym arch) }
-deriving instance (ShowF (BoundVar sym arch),
-                   ShowF (S.SymExpr sym),
-                   ShowF (S.BoundVar sym),
-                   ShowF (Location arch),
-                   ShowF ((Opcode arch) (Operand arch)))
-                => Show (BaseSet sym arch)
-
-loadBaseSet :: sym -> FilePath -> IO (BaseSet sym arch)
-loadBaseSet = undefined
-
-data FormulaError opcode operand = NoFormulaForOpcode (I.SomeOpcode opcode operand)
-  deriving (Show)
-
-lookupSemantics :: (C.MonadThrow m, MonadIO m, Architecture arch)
-                => sym
-                -> BaseSet sym arch
-                -> Instruction arch
-                -> m (Formula sym arch)
-lookupSemantics sym (BaseSet m) i =
-  case i of
-    I.Instruction op _ ->
-      case MapF.lookup op m of
-        Just f -> liftIO $ undefined sym f i
-        -- Nothing -> C.throwM (NoFormulaForOpcode (I.SomeOpcode op))
-        Nothing -> C.throwM (undefined :: C.SomeException)
-
-sequenceFormulas :: a
-sequenceFormulas = undefined
-
-formulaFromProgram :: (C.MonadThrow m, MonadIO m, Architecture arch)
-                   => sym
-                   -- ^ The SymInterface used to build expressions
-                   -> BaseSet sym arch
-                   -- ^ The formulas for instructions with known semantics
-                   -> [Instruction arch]
-                   -- ^ The program to create a formula for
-                   -> m (Formula sym arch)
-formulaFromProgram sym base p = do
-  sems <- mapM (lookupSemantics sym base) p
-  liftIO $ foldM (sequenceFormulas sym) emptyFormula sems

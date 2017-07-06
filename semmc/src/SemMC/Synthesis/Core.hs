@@ -12,7 +12,6 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.Sequence as Seq
 import           Data.Foldable
-import qualified Data.Parameterized.Map as MapF
 import qualified Data.Set as Set
 import           Data.Typeable
 
@@ -43,7 +42,7 @@ condenseFormula sym = fmap (coerceFormula :: Formula sym (TemplatedArch arch) ->
 
 data SynthesisParams sym arch =
   SynthesisParams { synthSym :: sym
-                  , synthBaseSet :: MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula sym (TemplatedArch arch))
+                  , synthBaseSet :: BaseSet sym arch
                   , synthMaxLength :: Int
                   }
 

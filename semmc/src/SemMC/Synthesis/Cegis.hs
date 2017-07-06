@@ -101,15 +101,14 @@ handleSatResult insns (Sat (evalFn, _)) = Just <$> handleSat evalFn insns
 handleSatResult _ Unsat = return Nothing
 handleSatResult _ Unknown = fail "got Unknown when checking sat-ness"
 
-type BaseSet' sym arch = MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula sym (TemplatedArch arch))
-
 instantiateFormula' :: (Architecture arch)
                     => S.SimpleBuilder t st
-                    -> BaseSet' (S.SimpleBuilder t st) arch
+                    -> BaseSet (S.SimpleBuilder t st) arch
                     -> TemplatableInstruction arch
                     -> IO (Formula (S.SimpleBuilder t st) arch)
 instantiateFormula' sym m (TemplatableInstruction op oplist) =
-  snd <$> instantiateFormula sym (unTemplate . fromJust $ MapF.lookup op m) oplist
+  snd <$> instantiateFormula sym pf oplist
+  where pf = unTemplate . fromJust $ MapF.lookup op m
 
 condenseFormula :: forall t st arch.
                    (Architecture arch)
@@ -123,7 +122,7 @@ type TestCases sym arch = [(ArchState sym arch, ArchState sym arch)]
 -- TODO: tidy up this type signature
 cegis :: (Architecture arch)
       => S.SimpleBackend t
-      -> BaseSet' (S.SimpleBackend t) arch
+      -> BaseSet (S.SimpleBackend t) arch
       -> Formula (S.SimpleBackend t) arch
       -> TestCases (S.SimpleBackend t) arch
       -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]

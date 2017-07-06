@@ -21,7 +21,8 @@ given constraints.
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ConstraintKinds #-}
 module SemMC.Synthesis.Template
-  ( TemplatedArch
+  ( BaseSet
+  , TemplatedArch
   , TemplatedFormula
   , TemplatableOpcode
   , TemplatedInstructionFormula(..)
@@ -41,6 +42,7 @@ import           Control.Monad ( join )
 import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
@@ -214,6 +216,10 @@ instance (Architecture arch,
     (:>) <$> (valueToOperand (Proxy :: Proxy arch) <$> groundEval evalFn expr)
          <*> recoverOperands evalFn restOps restExprs
 
+type TemplatableOpcode arch = Witness (TemplatableOperands arch) ((Opcode arch) (Operand arch))
+
+type BaseSet sym arch = MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula sym (TemplatedArch arch))
+
 -- | Make a list of all possible 'TemplatedFormula's from a given
 -- 'ParameterizedFormula'.
 templatizeFormula :: (TemplateConstraints arch,
@@ -230,8 +236,6 @@ templatizeFormula' :: (TemplateConstraints arch,
                    -> ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch) sh
                    -> IO [TemplatedFormula (S.SimpleBuilder t st) arch sh]
 templatizeFormula' sym = sequence . templatizeFormula sym
-
-type TemplatableOpcode arch = Witness (TemplatableOperands arch) ((Opcode arch) (Operand arch))
 
 -- | An opcode along with a 'TemplatedFormula' that implements it for specific
 -- templated operands.
@@ -250,7 +254,7 @@ instance (ShowF ((Opcode arch) (Operand arch)),
 -- | A list of all possible templated instructions, given some opcodes.
 templatedInstructions :: (TemplateConstraints arch)
                       => S.SimpleBuilder t st
-                      -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch))
+                      -> BaseSet (S.SimpleBuilder t st) arch
                       -> IO [TemplatedInstructionFormula (S.SimpleBuilder t st) arch]
 templatedInstructions sym m = join <$> mapM f (MapF.toList m)
-  where f (MapF.Pair (Witness op) pf) = fmap (map (TemplatedInstructionFormula op)) (templatizeFormula' sym pf)
+  where f (Pair (Witness op) pf) = fmap (map (TemplatedInstructionFormula op)) (templatizeFormula' sym pf)
