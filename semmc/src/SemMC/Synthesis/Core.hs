@@ -1,11 +1,14 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE LambdaCase #-}
-module SemMC.Synthesis
+{-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+module SemMC.Synthesis.Core
   ( synthesizeFormula
+  , SynthesisParams(..)
   ) where
 
+import           Control.Monad.Reader
 import           Control.Monad.State
 import qualified Data.Sequence as Seq
 import           Data.Foldable
@@ -38,6 +41,12 @@ condenseFormula sym = fmap (coerceFormula :: Formula sym (TemplatedArch arch) ->
 
 -- Algorithm Synthesize, from [Srinivasan and Reps 2015]:
 
+data SynthesisParams sym arch =
+  SynthesisParams { synthSym :: sym
+                  , synthBaseSet :: MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula sym (TemplatedArch arch))
+                  , synthMaxLength :: Int
+                  }
+
 data SynthesisState sym arch =
   SynthesisState { synthTests :: [(ArchState sym arch, ArchState sym arch)]
                  , synthPrefixes :: Seq.Seq [TemplatedInstructionFormula sym arch]
@@ -51,22 +60,24 @@ footprintFilter target candidate =
      formUses candidate `Set.isSubsetOf` formUses target
   && Set.fromList (mapFKeys (formDefs candidate)) `Set.isSubsetOf` Set.fromList (mapFKeys (formDefs target))
 
-instantiate :: (MonadState (SynthesisState (S.SimpleBackend t) arch) m,
+instantiate :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
+                MonadState (SynthesisState (S.SimpleBackend t) arch) m,
                 MonadIO m,
                 Architecture arch,
                 Architecture (TemplatedArch arch))
-            => S.SimpleBackend t
-            -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
-            -> Formula (S.SimpleBackend t) arch
+            => Formula (S.SimpleBackend t) arch
             -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
             -> m (Maybe [Instruction arch])
-instantiate sym m target trial = do
+instantiate target trial = do
+  SynthesisParams { synthSym = sym
+                  , synthBaseSet = baseSet
+                  } <- ask
   trialFormula <- liftIO $ condenseFormula sym trial
   -- TODO: footprintFilter can probably be run faster before condensing the formula
   case footprintFilter target trialFormula of
     True -> do
       st <- get
-      liftIO (cegis sym m target (synthTests st) trial trialFormula)
+      liftIO (cegis sym baseSet target (synthTests st) trial trialFormula)
         >>= \case
                Right insns -> return (Just insns)
                Left newTests -> do
@@ -77,49 +88,43 @@ instantiate sym m target trial = do
                 return Nothing
     False -> return Nothing
 
--- This short-circuits, useful for long (or infinite) lists.
-sequenceMaybes :: (Monad m) => [m (Maybe a)] -> m (Maybe a)
-sequenceMaybes [] = return Nothing
-sequenceMaybes (x : xs) = x >>= maybe (sequenceMaybes xs) (return . Just)
-
-synthesizeFormula' :: (MonadState (SynthesisState (S.SimpleBackend t) arch) m,
+synthesizeFormula' :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
+                       MonadState (SynthesisState (S.SimpleBackend t) arch) m,
                        MonadIO m,
                        Architecture arch,
                        Architecture (TemplatedArch arch))
-                   => S.SimpleBackend t
-                   -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
-                   -> Formula (S.SimpleBackend t) arch
+                   => Formula (S.SimpleBackend t) arch
                    -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                    -> m (Maybe [Instruction arch])
-synthesizeFormula' sym m target possibleInsns = do
+synthesizeFormula' target possibleInsns = do
   -- I'm still conflicted whether to use MonadState here or not...
   st <- get
   case Seq.viewl (synthPrefixes st) of
     prefix Seq.:< prefixesTail -> do
+      maxLen <- reader synthMaxLength
+      if 1 + length prefix > maxLen then return Nothing else do
       put $ st { synthPrefixes = prefixesTail }
       -- N.B.: 'instantiate' here will add back to the prefixes if it's worth
       -- saving. I'm not a big fan of MonadState here, but it was the nicest
       -- solution I could come up with.
       result <- sequenceMaybes $
-        map (\insn -> instantiate sym m target (prefix ++ [insn])) possibleInsns
+        map (\insn -> instantiate target (prefix ++ [insn])) possibleInsns
       case result of
         Just insns -> return (Just insns)
-        Nothing -> synthesizeFormula' sym m target possibleInsns
+        Nothing -> synthesizeFormula' target possibleInsns
     Seq.EmptyL -> return Nothing
 
 synthesizeFormula :: forall t arch.
                      (Architecture arch,
                       Architecture (TemplatedArch arch),
-                      Typeable arch
-                      )
-                  => S.SimpleBackend t
-                  -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
+                      Typeable arch)
+                  => SynthesisParams (S.SimpleBackend t) arch
                   -> Formula (S.SimpleBackend t) arch
-                  -> [(ArchState (S.SimpleBackend t) arch, ArchState (S.SimpleBackend t) arch)]
                   -> IO (Maybe [Instruction arch])
-synthesizeFormula sym m target tests = do
-  insns <- templatedInstructions sym m
-  evalStateT (synthesizeFormula' sym m target insns)
-    $ SynthesisState { synthTests = tests
+synthesizeFormula params target = do
+  insns <- templatedInstructions (synthSym params) (synthBaseSet params)
+  flip runReaderT params
+    $ evalStateT (synthesizeFormula' target insns)
+    $ SynthesisState { synthTests = []
                      , synthPrefixes = Seq.singleton []
                      }

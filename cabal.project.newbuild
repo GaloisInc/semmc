@@ -1,5 +1,5 @@
 packages:
-  ./
+  semmc/
   submodules/dismantle/dismantle-tablegen/
 
 optional-packages:

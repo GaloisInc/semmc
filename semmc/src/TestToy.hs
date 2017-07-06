@@ -6,6 +6,7 @@ module TestToy where
 
 import qualified Data.Text as T
 import qualified Data.Set as Set
+import Data.Maybe
 import Data.Monoid
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Classes
@@ -23,6 +24,7 @@ import SemMC.Formula.Printer
 import SemMC.ToyExample
 import SemMC.Synthesis.Template
 import SemMC.Synthesis.Cegis
+import SemMC.Synthesis.DivideAndConquer
 import SemMC.Synthesis
 import SemMC.Util
 
@@ -68,6 +70,41 @@ fooFormula sym = do
                               $ MapF.empty
                    }
 
+independentFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
+independentFormula sym = do
+  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (locationType (RegLoc Reg1))
+  reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (locationType (RegLoc Reg2))
+  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
+  -- reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
+  reg1Def <- S.bvMul sym (S.varExpr sym reg1) twoLit
+  -- reg2TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg2)
+  reg2Def <- S.bvMul sym (S.varExpr sym reg2) twoLit
+  return $ Formula { formUses = Set.fromList [Some (RegLoc Reg1), Some (RegLoc Reg2)]
+                   , formParamVars = MapF.insert (RegLoc Reg1) reg1
+                                   $ MapF.insert (RegLoc Reg2) reg2
+                                   $ MapF.empty
+                   , formDefs = MapF.insert (RegLoc Reg2) reg2Def
+                              $ MapF.insert (RegLoc Reg1) reg1Def
+                              $ MapF.empty
+                   }
+
+dependentFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
+dependentFormula sym = do
+  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (locationType (RegLoc Reg1))
+  -- reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (locationType (RegLoc Reg2))
+  twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
+  reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
+  reg1Def <- S.bvAdd sym reg1TimesTwo twoLit
+  reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
+  reg2Def <- S.bvAdd sym reg1TimesTwo twoLit
+  return $ Formula { formUses = Set.fromList [Some (RegLoc Reg1)]
+                   , formParamVars = MapF.insert (RegLoc Reg1) reg1
+                                   $ MapF.empty
+                   , formDefs = MapF.insert (RegLoc Reg2) reg2Def
+                              $ MapF.insert (RegLoc Reg1) reg1Def
+                              $ MapF.empty
+                   }
+
 doThing2 :: IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
@@ -75,13 +112,15 @@ doThing2 = do
   Right add <- readBinOp sym "AddRr.sem"
   Right sub <- readBinOp sym "SubRr.sem"
   Right movi <- readBinOp' sym "MovRi.sem"
-  let opcodes = MapF.insert (Witness AddRr) add
+  let baseset = MapF.insert (Witness AddRr) add
               $ MapF.insert (Witness SubRr) sub
               $ MapF.insert (Witness MovRi) movi
               $ MapF.empty
-  target <- fooFormula sym
+  -- target <- fooFormula sym
+  target <- independentFormula sym
 
-  print =<< synthesizeFormula sym opcodes target []
+  print =<< mcSynth sym baseset target
+  print $ findUses (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
 doThing3 :: IO ()
 doThing3 = do
@@ -89,3 +128,19 @@ doThing3 = do
   sym <- newSimpleBackend r
   Right add <- readBinOp sym "AddRr.sem"
   putStrLn $ T.unpack $ printFormula add
+
+doThing4 :: IO ()
+doThing4 = do
+  Some r <- newIONonceGenerator
+  sym <- newSimpleBackend r
+  Right add <- readBinOp sym "AddRr.sem"
+  print add
+  Right sub <- readBinOp sym "SubRr.sem"
+  Right movi <- readBinOp' sym "MovRi.sem"
+  let baseset = MapF.insert (Witness AddRr) add
+              $ MapF.insert (Witness SubRr) sub
+              $ MapF.insert (Witness MovRi) movi
+              $ MapF.empty
+
+  ind <- independentFormula sym
+  print =<< mcSynth sym baseset ind
