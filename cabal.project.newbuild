@@ -1,8 +1,10 @@
 packages:
   semmc/
+  semmc-ppc/
   submodules/dismantle/dismantle-tablegen/
 
 optional-packages:
   submodules/crucible/crucible
   submodules/crucible/galois-matlab
   submodules/parameterized-utils
+  submodules/dismantle/dismantle-ppc/

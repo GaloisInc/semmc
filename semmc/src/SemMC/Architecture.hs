@@ -91,7 +91,8 @@ class (IsOperand (Operand arch),
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
   operandValue :: forall proxy sym s.
-                  (S.IsSymInterface sym)
+                  (S.IsSymInterface sym,
+                   S.IsExprBuilder sym)
                => proxy arch
                -> sym
                -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))

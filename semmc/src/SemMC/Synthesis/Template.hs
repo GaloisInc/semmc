@@ -22,6 +22,7 @@ given constraints.
 {-# LANGUAGE ConstraintKinds #-}
 module SemMC.Synthesis.Template
   ( BaseSet
+  , TemplatedOperand
   , TemplatedArch
   , TemplatedFormula
   , TemplatableOpcode
