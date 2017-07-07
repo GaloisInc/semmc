@@ -2,17 +2,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module SemMC.Synthesis.DivideAndConquer
-  ( findUses
-  , truncateFormula
+  ( truncateFormula
   , splits
   , enumerateSplits
   , divideAndConquer
   ) where
 
-import           Control.Monad.ST ( runST )
 import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Trans.Maybe ( runMaybeT )
-import qualified Data.HashTable.Class as H
 import           Data.Maybe ( fromJust, mapMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
@@ -30,18 +27,6 @@ import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.Template
 import           SemMC.Util
 
-allBoundVars :: S.Elt t tp -> Set.Set (Some (S.SimpleBoundVar t))
-allBoundVars e = runST (S.boundVars e >>= H.foldM f Set.empty)
-  where f s (_, v) = return (Set.union s v)
-
-findUses :: (OrdF loc)
-         => MapF.MapF loc (S.SimpleBoundVar t)
-         -> S.Elt t tp
-         -> MapF.MapF loc (S.SimpleBoundVar t)
-findUses locMapping = foldr f MapF.empty . allBoundVars
-  where reversed = mapFReverse locMapping
-        f (Some var) = MapF.insert (fromJust $ MapF.lookup var reversed) var
-
 truncateFormula :: forall t st arch.
                    (OrdF (Location arch))
                 => Formula (S.SimpleBuilder t st) arch
@@ -56,7 +41,7 @@ truncateFormula form keepLocs =
         | Set.member (Some loc) keepLocs = MapF.insert loc expr
         | otherwise = id
       newDefs = MapF.foldrWithKey filterDef MapF.empty (formDefs form)
-      newParamVars = foldrF (MapF.union . findUses (formParamVars form)) MapF.empty newDefs
+      newParamVars = foldrF (MapF.union . extractUsedLocs (formParamVars form)) MapF.empty newDefs
       newUses = Set.fromList $ mapFKeys newParamVars
   in Formula { formUses = newUses
              , formParamVars = newParamVars

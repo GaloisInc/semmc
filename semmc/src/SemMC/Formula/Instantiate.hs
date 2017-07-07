@@ -171,12 +171,16 @@ instantiateFormula
     -- ^ This loads the relevant lit vars into the map, so reading the IORef
     -- must happen afterwards :)
     newLitVars <- readIORef newLitVarsRef
+    let newActualLitVars = foldrF (MapF.union . extractUsedLocs newLitVars) MapF.empty newDefs
 
-    let mapParam (Some param) = maybe Set.empty (Set.singleton . Some) $ paramToLocation opVals param
-        newUses = foldMap mapParam uses
+    let -- mapParam (Some param) = maybe Set.empty (Set.singleton . Some) $ paramToLocation opVals param
+        newUses = Set.fromList $ mapFKeys newActualLitVars
+
+    -- TODO: Should we filter out definitions that are syntactically identity
+    -- functions?
 
     return $ (opValsList, Formula { formUses = newUses
-                                  , formParamVars = newLitVars
+                                  , formParamVars = newActualLitVars
                                   , formDefs = newDefs
                                   })
 
