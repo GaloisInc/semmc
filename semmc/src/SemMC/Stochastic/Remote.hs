@@ -15,8 +15,6 @@ import qualified Control.Concurrent.Async as A
 import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
-import qualified Conduit as P
-import qualified Data.Conduit.Serialization.Binary as P
 import Data.Int ( Int32 )
 import qualified Data.Time.Clock as T
 import Data.Word ( Word8, Word16, Word64 )
@@ -125,10 +123,28 @@ sendTestCases c h = do
 recvTestResults :: (MachineState a) => C.Chan (ResultOrError a) -> IO.Handle -> IO ()
 recvTestResults c h = do
   IO.hSetBinaryMode h True
-  P.runConduit (P.sourceHandle h P.=$= P.conduitGet getTestResultOrError P.$$ P.mapM_C writeParsedResult)
+  start
   IO.hClose h
   where
-    writeParsedResult r = P.liftBase (C.writeChan c r)
+    tryRead hdl = do
+      bs <- B.hGetSome hdl 4096
+      case B.null bs of
+        True -> return Nothing
+        False -> return (Just bs)
+    start = do
+      mbs <- tryRead h
+      case mbs of
+        Nothing -> return ()
+        Just bs -> go (G.runGetIncremental getTestResultOrError `G.pushChunk` bs)
+    go d =
+      case d of
+        G.Fail _ _ msg -> fail msg
+        G.Done rest _ res -> do
+          C.writeChan c res
+          case B.null rest of
+            True -> start
+            False -> go (G.runGetIncremental getTestResultOrError `G.pushChunk` rest)
+        G.Partial f -> tryRead h >>= (go . f)
 
 data ResultOrError a = TestReadError Word16
                      | TestSignalError Word64 Int32
