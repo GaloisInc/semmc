@@ -1,4 +1,6 @@
 #include <assert.h>
+#include <errno.h>
+#include <execinfo.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -14,6 +16,7 @@
 #include <sys/reg.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <sys/user.h>
 #include <sys/wait.h>
 
 /*
@@ -58,6 +61,44 @@
 
 // The number of bytes for our hand-allocated memory regions
 #define MEM_REGION_BYTES 32
+
+#define LOG_FILE "/tmp/remote-runner.log"
+#if defined(LOGGING)
+
+FILE* logStream = NULL;
+#define LOG(...) fprintf(stderr, __VA_ARGS__)
+void initializeLogger() {
+  /* logStream = fopen(LOG_FILE, "w"); */
+  /* assert(logStream); */
+  /* setlinebuf(logStream); */
+  LOG("Log initialized\n");
+}
+
+#else
+
+#define LOG(...)
+void initializeLogger() {
+}
+
+#endif
+
+
+void checkedPtrace(enum __ptrace_request rq, pid_t pid, void* addr, void* data) {
+  long res = ptrace(rq, pid, addr, data);
+  if(!res)
+    return;
+
+  LOG("ptrace call (rq=%d) failed: %s\n", rq, strerror(errno));
+  void* bt[128];
+  int nframes = backtrace(bt, 128);
+  char** symbols = backtrace_symbols(bt, nframes);
+  for(int i = 0; i < nframes; ++i) {
+    LOG("%s\n", symbols[i]);
+  }
+  free(symbols);
+
+  exit(-1);
+}
 
 /*
   Architecture configuration
@@ -149,11 +190,11 @@ uint8_t raiseTrap[] = {0xcc};
 //
 // This requires that the tracee must be stopped.
 void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace, RegisterState* rs) {
-  struct elf_prstatus prstatus;
+  struct user_regs_struct regs;
   struct iovec iov;
-  iov.iov_base = &prstatus;
-  iov.iov_len = sizeof(prstatus);
-  assert(!ptrace(PTRACE_GETREGSET, childPid, NT_PRSTATUS, &iov));
+  iov.iov_base = &regs;
+  iov.iov_len = sizeof(regs);
+  checkedPtrace(PTRACE_GETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
 
   // Set up the provided memory state
   //
@@ -174,58 +215,56 @@ void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace
       rs->gprs[i] = CAST_PTR(mem2Addr);
   }
 
-  prstatus.pr_reg[EFLAGS] =   rs->eflags;
-  prstatus.pr_reg[RAX] =   rs->gprs[0];
-  prstatus.pr_reg[RBX] =   rs->gprs[1];
-  prstatus.pr_reg[RCX] =   rs->gprs[2];
-  prstatus.pr_reg[RDX] =   rs->gprs[3];
-  prstatus.pr_reg[RDI] =   rs->gprs[4];
-  prstatus.pr_reg[RSI] =   rs->gprs[5];
-  prstatus.pr_reg[RBP] =   rs->gprs[6];
-  prstatus.pr_reg[RSP] =   rs->gprs[7];
-  prstatus.pr_reg[R8] =   rs->gprs[8];
-  prstatus.pr_reg[R9] =   rs->gprs[9];
-  prstatus.pr_reg[R10] =   rs->gprs[10];
-  prstatus.pr_reg[R11] =   rs->gprs[11];
-  prstatus.pr_reg[R12] =   rs->gprs[12];
-  prstatus.pr_reg[R13] =   rs->gprs[13];
-  prstatus.pr_reg[R14] =   rs->gprs[14];
-  prstatus.pr_reg[R15] =   rs->gprs[15];
-
+  regs.eflags =   rs->eflags;
+  regs.rax =   rs->gprs[0];
+  regs.rbx =   rs->gprs[1];
+  regs.rcx =   rs->gprs[2];
+  regs.rdx =   rs->gprs[3];
+  regs.rdi =   rs->gprs[4];
+  regs.rsi =   rs->gprs[5];
+  regs.rbp =   rs->gprs[6];
+  regs.rsp =   rs->gprs[7];
+  regs.r8 =   rs->gprs[8];
+  regs.r9 =   rs->gprs[9];
+  regs.r10 =   rs->gprs[10];
+  regs.r11 =   rs->gprs[11];
+  regs.r12 =   rs->gprs[12];
+  regs.r13 =   rs->gprs[13];
+  regs.r14 =   rs->gprs[14];
+  regs.r15 =   rs->gprs[15];
 
   // Finally, set the IP to be at the start of our test program
-  prstatus.pr_reg[RIP] = CAST_PTR(programSpace);
-
-  assert(!ptrace(PTRACE_SETREGSET, childPid, NT_PRSTATUS, &iov));
+  regs.rip = CAST_PTR(programSpace);
+  iov.iov_len = sizeof(regs);
+  LOG("PTRACE_SETREGSET: setting RIP to %llx\n", regs.rip);
+  checkedPtrace(PTRACE_SETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
 }
-
 // Extract the register state via ptrace and copy the memory values.
 //
 // This requires that the tracee be stopped
 void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs) {
-  struct elf_prstatus prstatus;
+  struct user_regs_struct regs;
   struct iovec iov;
-  iov.iov_base = &prstatus;
-  iov.iov_len = sizeof(prstatus);
-  assert(!ptrace(PTRACE_GETREGSET, childPid, NT_PRSTATUS, &iov));
-  rs->eflags = prstatus.pr_reg[EFLAGS];
-  rs->gprs[0] = prstatus.pr_reg[RAX];
-  rs->gprs[1] = prstatus.pr_reg[RBX];
-  rs->gprs[2] = prstatus.pr_reg[RCX];
-  rs->gprs[3] = prstatus.pr_reg[RDX];
-  rs->gprs[4] = prstatus.pr_reg[RDI];
-  rs->gprs[5] = prstatus.pr_reg[RSI];
-  rs->gprs[6] = prstatus.pr_reg[RBP];
-  rs->gprs[7] = prstatus.pr_reg[RSP];
-  rs->gprs[8] = prstatus.pr_reg[R8];
-  rs->gprs[9] = prstatus.pr_reg[R9];
-  rs->gprs[10] = prstatus.pr_reg[R10];
-  rs->gprs[11] = prstatus.pr_reg[R11];
-  rs->gprs[12] = prstatus.pr_reg[R12];
-  rs->gprs[13] = prstatus.pr_reg[R13];
-  rs->gprs[14] = prstatus.pr_reg[R14];
-  rs->gprs[15] = prstatus.pr_reg[R15];
-
+  iov.iov_base = &regs;
+  iov.iov_len = sizeof(regs);
+  checkedPtrace(PTRACE_GETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
+  rs->eflags = regs.eflags;
+  rs->gprs[0] = regs.rax;
+  rs->gprs[1] = regs.rbx;
+  rs->gprs[2] = regs.rcx;
+  rs->gprs[3] = regs.rdx;
+  rs->gprs[4] = regs.rdi;
+  rs->gprs[5] = regs.rsi;
+  rs->gprs[6] = regs.rbp;
+  rs->gprs[7] = regs.rsp;
+  rs->gprs[8] = regs.r8;
+  rs->gprs[9] = regs.r9;
+  rs->gprs[10] = regs.r10;
+  rs->gprs[11] = regs.r11;
+  rs->gprs[12] = regs.r12;
+  rs->gprs[13] = regs.r13;
+  rs->gprs[14] = regs.r14;
+  rs->gprs[15] = regs.r15;
 
   // Also save the memory state back into rs
   memcpy(&rs->mem1, memSpace, sizeof(rs->mem1));
@@ -344,11 +383,13 @@ int waitForSignal(pid_t childPid) {
   5) The program to run
  */
 WorkTag readWorkItem(FILE* stream, WorkItem* item) {
+  LOG("readWorkItem\n");
   uint8_t tagByte;
-  size_t nItems = fread(&tagByte, 1, sizeof(uint8_t), stream);
-  tagByte = ntohs(tagByte);
+  size_t nItems = fread(&tagByte, 1, sizeof(tagByte), stream);
+  LOG("  tagByte = %d\n", tagByte);
   if(nItems == 0 || tagByte == WORK_DONE)
     return WORK_DONE;
+
 
   // Note that we don't byte swap the nonce since it doesn't really matter on
   // this end
@@ -357,20 +398,23 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
     return WORK_ERROR_NONONCE;
   }
 
-  RegisterState rs;
+  LOG("  nonce = %lu\n", item->nonce);
+
   uint16_t regStateBytes;
   nItems = fread(&regStateBytes, 1, sizeof(regStateBytes), stream);
   regStateBytes = ntohs(regStateBytes);
   if(nItems == 0) {
-    if(regStateBytes != sizeof(rs)) {
-      fprintf(stderr, "Register state size mismatch (expected %lu but got %d)\n", sizeof(rs),  regStateBytes);
+    if(regStateBytes != sizeof(item->regs)) {
+      fprintf(stderr, "Register state size mismatch (expected %lu but got %d)\n", sizeof(item->regs),  regStateBytes);
       return WORK_ERROR_REGSTATE_SIZE_ERROR;
     }
 
     return WORK_ERROR_NOCONTEXT;
   }
 
-  nItems = fread(&rs, 1, sizeof(rs), stream);
+  LOG("  expecting %hu bytes of context\n", regStateBytes);
+
+  nItems = fread(&item->regs, 1, sizeof(item->regs), stream);
   if(nItems == 0)
     return WORK_ERROR_NOCONTEXT;
 
@@ -380,9 +424,11 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
   }
   item->programByteCount = ntohs(item->programByteCount);
 
+  LOG(" expecting %hu bytes of program\n", item->programByteCount);
+
   allocateProgramSpace(item);
   nItems = fread(item->program, item->programByteCount, 1, stream);
-  if(nItems < item->programByteCount) {
+  if(nItems != 1) {
     return WORK_ERROR_SHORT_PROGRAM;
   }
 
@@ -424,12 +470,15 @@ ResponseTag processWorkItem(pid_t childPid, uint8_t* programSpace, uint8_t* memS
 
   mapProgram(programSpace, item);
   setupRegisterState(childPid, programSpace, memSpace, &item->regs);
-  assert(!ptrace(PTRACE_CONT, childPid, NULL, NULL));
+  LOG("Sending SIGCONT\n");
+  checkedPtrace(PTRACE_CONT, childPid, NULL, NULL);
   sig = waitForSignal(childPid);
+  LOG("Received signal %d\n", sig);
   // FIXME: This is all pretty unsatisfying.  Eliminate the global and be more
   // specific in the error condition if we get a different return value from
   // waitForSignal.
   if(sig == SIGTRAP) {
+    LOG("Taking a state snapshot\n");
     snapshotRegisterState(childPid, memSpace, postState);
     return RESPONSE_SUCCESS;
   }
@@ -448,20 +497,24 @@ ResponseTag processWorkItem(pid_t childPid, uint8_t* programSpace, uint8_t* memS
 //
 // Both are uint16_t
 void writeReadErrorResult(FILE* stream, WorkTag wtag, const char* msg) {
+  LOG("%s\n", msg);
   fprintf(stderr, "%s\n", msg);
-  uint16_t tagBytes = htons(RESPONSE_READ_ERROR);
-  fwrite(&tagBytes, sizeof(tagBytes), 1, stream);
-  tagBytes = htons(wtag);
-  fwrite(&tagBytes, sizeof(tagBytes), 1, stream);
+  uint8_t tagByte = RESPONSE_READ_ERROR;
+  fwrite(&tagByte, sizeof(tagByte), 1, stream);
+  tagByte = wtag;
+  fwrite(&tagByte, sizeof(tagByte), 1, stream);
+
+  fflush(stream);
 }
 
 // Write a response back onto the stream.  It will either be an error with
 // metadata or a success with a final processor state.
 void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item, RegisterState* postState) {
+  LOG("Writing a work response with tag %d\n", rtag);
   // All responses start off with a uint16_t ResponseTag code followed by a
   // nonce
-  uint16_t tagBytes = htons(rtag);
-  fwrite(&tagBytes, sizeof(tagBytes), 1, stream);
+  uint8_t tagByte = rtag;
+  fwrite(&tagByte, sizeof(tagByte), 1, stream);
   fwrite(&item->nonce, sizeof(item->nonce), 1, stream);
 
   switch(rtag) {
@@ -473,12 +526,15 @@ void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item, RegisterS
     break;
   }
   case RESPONSE_SUCCESS: {
+    LOG("RESPONSE_SUCCESS (context size = %lu)\n", sizeof(*postState));
     uint16_t szBytes = htons(sizeof(*postState));
     fwrite(&szBytes, sizeof(szBytes), 1, stream);
     fwrite(postState, sizeof(*postState), 1, stream);
     break;
   }
   }
+
+  fflush(stream);
 }
 
 // Free all the dynamically allocated parts of a WorkItem
@@ -497,9 +553,11 @@ void freeWorkItem(WorkItem* item) {
   is fine.
  */
 int traceChild(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace) {
+  LOG("Tracing child process %d\n", childPid);
   int sig = waitForSignal(childPid);
   if(sig != SIGTRAP)
     return -1;
+  LOG("Child process stopped with SIGTRAP\n");
 
   do {
     // The invariant in this loop is that the tracee is stopped at the loop entry.
@@ -517,7 +575,8 @@ int traceChild(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace) {
     ResponseTag rtag;
     switch(tag) {
     case WORK_DONE:
-      break;
+      LOG("Work done\n");
+      return 0;
     case WORK_ERROR_NONONCE:
       writeReadErrorResult(stdout, tag, "Error while reading a work item (missing nonce)");
       break;
@@ -543,6 +602,7 @@ int traceChild(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace) {
       writeReadErrorResult(stdout, tag, "Fork failed");
       break;
     case WORK_ITEM: {
+      LOG("Got a work item with nonce %lu\n", item.nonce);
       RegisterState postState;
       memset(&postState, 0, sizeof(postState));
       rtag = processWorkItem(childPid, programSpace, memSpace, &item, &postState);
@@ -602,6 +662,7 @@ int main(int argc, char* argv[]) {
     runTests(programSpace);
     return 0;
   } else {
+    initializeLogger();
     // This is the parent process that will handle SIGTRAPs (and other signals)
     // to capture state.
     return traceChild(childPid, programSpace, memSpace);

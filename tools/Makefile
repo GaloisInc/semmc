@@ -1,2 +1,2 @@
 remote-runner: remote-runner.c
-	clang -Wextra -Wall remote-runner.c -o remote-runner
+	clang -DLOGGING -Wextra -Wall -rdynamic -g remote-runner.c -o remote-runner

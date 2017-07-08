@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 -- | A module implementing communication with a remote oracle for machine
 -- instructions
 module SemMC.Stochastic.Remote (
@@ -18,7 +19,7 @@ import qualified Conduit as P
 import qualified Data.Conduit.Serialization.Binary as P
 import Data.Int ( Int32 )
 import qualified Data.Time.Clock as T
-import Data.Word ( Word16, Word64 )
+import Data.Word ( Word8, Word16, Word64 )
 import qualified System.IO as IO
 
 import qualified SemMC.Stochastic.Remote.SSH as SSH
@@ -27,20 +28,15 @@ class MachineState a where
   flattenMachineState :: a -> B.ByteString
   parseMachineState :: B.ByteString -> Maybe a
 
-data TestCase =
+data TestCase a =
   TestCase { testNonce :: Word64
-           , testContext :: B.ByteString
-           , testContextMask :: B.ByteString
-           , testMem1 :: B.ByteString
-           , testMem2 :: B.ByteString
+           , testContext :: a
            , testProgram :: B.ByteString
            }
 
-data TestResult =
+data TestResult a =
   TestResult { resultNonce :: Word64
-             , resultContext :: B.ByteString
-             , resultMem1 :: B.ByteString
-             , resultMem2 :: B.ByteString
+             , resultContext :: a
              }
 
 data LogMessage = LogMessage { lmTime :: T.UTCTime
@@ -59,12 +55,13 @@ data LogMessage = LogMessage { lmTime :: T.UTCTime
 -- is expected to be in the @PATH@, and password-less auth is assumed.  It is
 -- also assumed that the @remote-runner@ executable is in the @PATH@ on the
 -- remote machine.
-runRemote :: String
+runRemote :: (MachineState a)
+          => String
           -- ^ The hostname to run test cases on
-          -> C.Chan (Maybe TestCase)
+          -> C.Chan (Maybe (TestCase a))
           -- ^ A channel with test cases to be run; a 'Nothing' indicates that
           -- the stream should be terminated.
-          -> C.Chan ResultOrError
+          -> C.Chan (ResultOrError a)
           -- ^ The channel that results are written to (can include error cases)
           -> C.Chan LogMessage
           -- ^ A channel to record log messages on; these include the stderr
@@ -100,7 +97,7 @@ logRemoteStderr logMessages host h = do
   C.writeChan logMessages lm
   logRemoteStderr logMessages host h
 
-sendTestCases :: C.Chan (Maybe TestCase) -> IO.Handle -> IO ()
+sendTestCases :: (MachineState a) => C.Chan (Maybe (TestCase a)) -> IO.Handle -> IO ()
 sendTestCases c h = do
   IO.hSetBinaryMode h True
   IO.hSetBuffering h (IO.BlockBuffering Nothing)
@@ -110,16 +107,14 @@ sendTestCases c h = do
       mtc <- C.readChan c
       case mtc of
         Nothing -> do
-          B.hPutBuilder h (B.word16BE 1)
+          B.hPutBuilder h (B.word8 1)
           IO.hFlush h
         Just tc -> do
-          let bs = mconcat [ B.word16BE 0
+          let regStateBytes = flattenMachineState (testContext tc)
+          let bs = mconcat [ B.word8 0
                            , B.word64LE (testNonce tc)
-                           , B.word16BE (fromIntegral (B.length (testContext tc)))
-                           , B.byteString (testContext tc)
-                           , B.byteString (testContextMask tc)
-                           , B.byteString (testMem1 tc)
-                           , B.byteString (testMem2 tc)
+                           , B.word16BE (fromIntegral (B.length regStateBytes))
+                           , B.byteString regStateBytes
                            , B.word16BE (fromIntegral (B.length (testProgram tc)))
                            , B.byteString (testProgram tc)
                            ]
@@ -127,41 +122,44 @@ sendTestCases c h = do
           IO.hFlush h
           go
 
-recvTestResults :: C.Chan ResultOrError -> IO.Handle -> IO ()
+recvTestResults :: (MachineState a) => C.Chan (ResultOrError a) -> IO.Handle -> IO ()
 recvTestResults c h = do
   IO.hSetBinaryMode h True
-  P.runConduit (P.sourceHandle h P.=$= P.conduitGet getTestResultOrError P.$$ P.mapM_C (P.liftBase . C.writeChan c))
+  P.runConduit (P.sourceHandle h P.=$= P.conduitGet getTestResultOrError P.$$ P.mapM_C writeParsedResult)
   IO.hClose h
+  where
+    writeParsedResult r = P.liftBase (C.writeChan c r)
 
-data ResultOrError = TestReadError Word16
-                   | TestSignalError Word64 Int32
-                   -- ^ (Nonce, Signum)
-                   | TestMapFailed Word64
-                   -- ^ Nonce
-                   | TestSuccess TestResult
-                   | InvalidTag Word16
-                   -- ^ Tag value
+data ResultOrError a = TestReadError Word16
+                     | TestSignalError Word64 Int32
+                     -- ^ (Nonce, Signum)
+                     | TestSuccess (TestResult a)
+                     | TestContextParseFailure
+                     | InvalidTag Word8
+                     -- ^ Tag value
 
-getTestResultOrError :: G.Get ResultOrError
+getTestResultOrError :: (MachineState a) => G.Get (ResultOrError a)
 getTestResultOrError = do
-  tag <- G.getWord16be
+  tag <- G.getWord8
   case tag of
-    0 -> TestSuccess <$> getTestResult
+    0 -> do
+      mtr <- getTestResult
+      case mtr of
+        Just tr -> return (TestSuccess tr)
+        Nothing -> return TestContextParseFailure
     1 -> TestReadError <$> G.getWord16be
     2 -> TestSignalError <$> G.getWord64le <*> G.getInt32be
-    3 -> TestMapFailed <$> G.getWord64le
     _ -> return (InvalidTag tag)
 
-getTestResult :: G.Get TestResult
+getTestResult :: (MachineState a) => G.Get (Maybe (TestResult a))
 getTestResult = do
   nonce <- G.getWord64le
   ctxSize <- G.getWord16be
-  ctx <- G.getByteString (fromIntegral ctxSize)
-  memLen <- G.getWord16be
-  mem1 <- G.getByteString (fromIntegral memLen)
-  mem2 <- G.getByteString (fromIntegral memLen)
-  return TestResult { resultNonce  = nonce
-                    , resultContext = ctx
-                    , resultMem1 = mem1
-                    , resultMem2 = mem2
-                    }
+  ctxbs <- G.getByteString (fromIntegral ctxSize)
+  case parseMachineState ctxbs of
+    Just ctx -> do
+      let tr = TestResult { resultNonce = nonce
+                          , resultContext = ctx
+                          }
+      return (Just tr)
+    Nothing -> return Nothing

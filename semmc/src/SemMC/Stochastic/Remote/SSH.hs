@@ -62,7 +62,7 @@ ssh :: SSHConfig
     -> IO (Either SSHError SSHHandle)
 ssh cfg host command = do
   errOrHdl <- E.tryIOError $ do
-    (Just hout, Just herr, Just hin, ph) <- P.createProcess p'
+    (Just hin, Just hout, Just herr, ph) <- P.createProcess p'
     return SSHHandle { sshStdout = hout
                      , sshStderr = herr
                      , sshStdin = hin
