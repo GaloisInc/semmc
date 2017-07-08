@@ -20,6 +20,7 @@ import           Data.EnumF ( EnumF(..) )
 import           Data.Int ( Int32 )
 import qualified Data.Int.Indexed as I
 import           Data.Monoid ( (<>) )
+import qualified Data.Parameterized.Ctx as Ctx
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
@@ -166,26 +167,28 @@ instance A.IsSpecificOperand PPC.Operand "S16imm" where
   allOperandValues = PPC.S16imm <$> [minBound..]
 
 data Location :: BaseType -> * where
-  GPR :: PPC.GPR -> Location (BaseBVType 32)
-  IP :: Location (BaseBVType 32)
-  MSR :: Location (BaseBVType 32)
-  CTR :: Location (BaseBVType 32)
-  LNK :: Location (BaseBVType 32)
-  XER :: Location (BaseBVType 32)
-  CR :: Location (BaseBVType 32)
-  FR :: PPC.FR -> Location (BaseBVType 64)
-  VR :: PPC.VR -> Location (BaseBVType 128)
+  LocGPR :: PPC.GPR -> Location (BaseBVType 32)
+  LocIP :: Location (BaseBVType 32)
+  LocMSR :: Location (BaseBVType 32)
+  LocCTR :: Location (BaseBVType 32)
+  LocLNK :: Location (BaseBVType 32)
+  LocXER :: Location (BaseBVType 32)
+  LocCR :: Location (BaseBVType 32)
+  LocFR :: PPC.FR -> Location (BaseBVType 64)
+  LocVR :: PPC.VR -> Location (BaseBVType 128)
+  LocMem :: Location (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
 instance Show (Location tp) where
-  show (GPR gpr) = show (pPrint gpr)
-  show IP = "IP"
-  show MSR = "MSR"
-  show CTR = "CTR"
-  show LNK = "LNK"
-  show XER = "XER"
-  show CR = "CR"
-  show (FR fr) = show (pPrint fr)
-  show (VR vr) = show (pPrint vr)
+  show (LocGPR gpr) = show (pPrint gpr)
+  show LocIP = "IP"
+  show LocMSR = "MSR"
+  show LocCTR = "CTR"
+  show LocLNK = "LNK"
+  show LocXER = "XER"
+  show LocCR = "CR"
+  show (LocFR fr) = show (pPrint fr)
+  show (LocVR vr) = show (pPrint vr)
+  show LocMem = "Mem"
 instance ShowF Location
 
 $(return [])
@@ -216,41 +219,53 @@ instance OrdF Location where
 
 instance A.IsLocation Location where
   readLocation s
-    -- | s `elem` ["r" ++ show i | i <- [0..31]] = Some (GPR (PPC.GPR (read (tail s))))
-    | s `elem` ["r" ++ show i | i <- [(0 :: Int)..31]] = (Just . Some . GPR . PPC.GPR . read . tail) s
-    | s == "ip" = Just (Some IP)
-    | s == "msr" = Just (Some MSR)
-    | s == "ctr" = Just (Some CTR)
-    | s == "lnk" = Just (Some LNK)
-    | s == "xer" = Just (Some XER)
-    | s == "cr" = Just (Some CR)
-    -- | floating point
-    -- | vector
+    | s `elem` ["r" ++ show i | i <- [(0 :: Int)..31]] =
+      (Just . Some . LocGPR . PPC.GPR . read . tail) s
+    | s == "ip" = Just (Some LocIP)
+    | s == "msr" = Just (Some LocMSR)
+    | s == "ctr" = Just (Some LocCTR)
+    | s == "lnk" = Just (Some LocLNK)
+    | s == "xer" = Just (Some LocXER)
+    | s == "cr" = Just (Some LocCR)
+    | s `elem` ["f" ++ show i | i <- [(0 :: Int)..31]] =
+      (Just . Some . LocFR . PPC.FR . read . tail) s
+    | s `elem` ["vr" ++ show i | i <- [(0 :: Int)..31]] =
+      (Just . Some . LocVR . PPC.VR . read . tail . tail) s
+    | s == "mem" = Just (Some LocMem)
     | otherwise = Nothing
 
-  locationType (GPR _) = BaseBVRepr (knownNat :: NatRepr 32)
-  locationType IP = BaseBVRepr (knownNat :: NatRepr 32)
-  locationType MSR = BaseBVRepr (knownNat :: NatRepr 32)
-  locationType CTR = BaseBVRepr (knownNat :: NatRepr 32)
-  locationType LNK = BaseBVRepr (knownNat :: NatRepr 32)
-  locationType XER = BaseBVRepr (knownNat :: NatRepr 32)
-  locationType CR = BaseBVRepr (knownNat :: NatRepr 32)
-  locationType (FR _) = BaseBVRepr (knownNat :: NatRepr 64)
-  locationType (VR _) = BaseBVRepr (knownNat :: NatRepr 128)
+  locationType (LocGPR _) = knownRepr
+  locationType LocIP = knownRepr
+  locationType LocMSR = knownRepr
+  locationType LocCTR = knownRepr
+  locationType LocLNK = knownRepr
+  locationType LocXER = knownRepr
+  locationType LocCR = knownRepr
+  locationType (LocFR _) = knownRepr
+  locationType (LocVR _) = knownRepr
+  locationType LocMem = knownRepr
 
-  defaultLocationExpr sym (GPR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym IP = S.bvLit sym knownNat 0
-  defaultLocationExpr sym MSR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym CTR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LNK = S.bvLit sym knownNat 0
-  defaultLocationExpr sym XER = S.bvLit sym knownNat 0
-  defaultLocationExpr sym CR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (FR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (VR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocIP = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocMSR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocCTR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocLNK = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocXER = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocFR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocVR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocMem =
+    S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
 type instance A.Location PPC = Location
 
-operandValue :: forall sym s. (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> (forall tp. Location tp -> IO (S.SymExpr sym tp)) -> PPC.Operand s -> IO (S.SymExpr sym (A.OperandType PPC s))
+operandValue :: forall sym s.
+                (S.IsSymInterface sym,
+                 S.IsExprBuilder sym)
+             => sym
+             -> (forall tp. Location tp -> IO (S.SymExpr sym tp))
+             -> PPC.Operand s
+             -> IO (S.SymExpr sym (A.OperandType PPC s))
 operandValue sym locLookup = operandValue'
   where operandValue' :: PPC.Operand s -> IO (S.SymExpr sym (A.OperandType PPC s))
         operandValue' (PPC.Abscalltarget (PPC.ABT absTarget)) =
@@ -270,40 +285,40 @@ operandValue sym locLookup = operandValue'
         operandValue' (PPC.Directbrtarget (PPC.ABT absTarget)) =
           S.bvLit sym knownNat (toInteger absTarget)
         operandValue' (PPC.F4rc _) = error "F4rc not yet implemented"
-        operandValue' (PPC.F8rc fr) = locLookup (FR fr)
+        operandValue' (PPC.F8rc fr) = locLookup (LocFR fr)
         operandValue' (PPC.G8rc _) = error "Found a G8rc operand, but PPC64 not supported"
         operandValue' (PPC.G8rc_nox0 _) = error "Found a G8rc_nox0 operand, but PPC64 not supported"
-        operandValue' (PPC.Gprc gpr) = locLookup (GPR gpr)
+        operandValue' (PPC.Gprc gpr) = locLookup (LocGPR gpr)
         operandValue' (PPC.Gprc_nor0 (PPC.GPR gpr)) =
           if gpr /= 0
-          then locLookup (GPR (PPC.GPR gpr))
+          then locLookup (LocGPR (PPC.GPR gpr))
           else S.bvLit sym knownNat 0
         operandValue' (PPC.I1imm (I.I x)) = S.bvLit sym knownNat (toInteger x)
         operandValue' (PPC.I32imm (I.I x)) = S.bvLit sym knownNat (toInteger x)
         operandValue' (PPC.Memri (PPC.MemRI gpr offset)) = do
           base <- case gpr of
-                    Just gpr' -> locLookup (GPR gpr')
+                    Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger offset)
           S.bvAdd sym base offset'
         operandValue' (PPC.Memrix (PPC.MemRIX gpr offset)) = do
           base <- case gpr of
-                    Just gpr' -> locLookup (GPR gpr')
+                    Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger offset)
           S.bvAdd sym base offset'
         operandValue' (PPC.Memrix16 (PPC.MemRIX gpr offset)) = do
           -- ?
           base <- case gpr of
-                    Just gpr' -> locLookup (GPR gpr')
+                    Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger offset)
           S.bvAdd sym base offset'
         operandValue' (PPC.Memrr (PPC.MemRR gpr1 gpr2)) = do
           gpr1Val <- case gpr1 of
-                       Just gpr -> locLookup (GPR gpr)
+                       Just gpr -> locLookup (LocGPR gpr)
                        Nothing -> S.bvLit sym knownNat 0
-          gpr2Val <- locLookup (GPR gpr2)
+          gpr2Val <- locLookup (LocGPR gpr2)
           S.bvAdd sym gpr1Val gpr2Val
         operandValue' (PPC.S16imm i16) = S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S16imm64 i16) = S.bvLit sym knownNat (toInteger i16)
@@ -314,26 +329,26 @@ operandValue sym locLookup = operandValue'
         operandValue' (PPC.S5imm (I.I i5)) = S.bvLit sym knownNat (toInteger i5)
         operandValue' (PPC.Spe2dis (PPC.SPEDis gpr offset)) = do
           base <- case gpr of
-                    Just gpr' -> locLookup (GPR gpr')
+                    Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger offset)
           S.bvAdd sym base offset'
         operandValue' (PPC.Spe4dis (PPC.SPEDis gpr offset)) = do
           base <- case gpr of
-                    Just gpr' -> locLookup (GPR gpr')
+                    Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger offset)
           S.bvAdd sym base offset'
         operandValue' (PPC.Spe8dis (PPC.SPEDis gpr offset)) = do
           base <- case gpr of
-                    Just gpr' -> locLookup (GPR gpr')
+                    Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger offset)
           S.bvAdd sym base offset'
         operandValue' (PPC.Tlscall _) = error "Tlscall not implemented"
         operandValue' (PPC.Tlscall32 bt) = btVal bt
         operandValue' (PPC.Tlsreg _) = error "Tlsreg not implemented"
-        operandValue' (PPC.Tlsreg32 gpr) = locLookup (GPR gpr)
+        operandValue' (PPC.Tlsreg32 gpr) = locLookup (LocGPR gpr)
         operandValue' (PPC.U10imm (W.W w10)) =
           S.bvLit sym knownNat (toInteger w10)
         operandValue' (PPC.U16imm (W.W w16)) =
@@ -354,41 +369,41 @@ operandValue sym locLookup = operandValue'
           S.bvLit sym knownNat (toInteger w7)
         operandValue' (PPC.U8imm (W.W w8)) =
           S.bvLit sym knownNat (toInteger w8)
-        operandValue' (PPC.Vrrc vr) = locLookup (VR vr)
-        operandValue' (PPC.Vsfrc vr) = locLookup (VR vr)
-        operandValue' (PPC.Vsrc vr) = locLookup (VR vr)
-        operandValue' (PPC.Vssrc vr) = locLookup (VR vr)
+        operandValue' (PPC.Vrrc vr) = locLookup (LocVR vr)
+        operandValue' (PPC.Vsfrc vr) = locLookup (LocVR vr)
+        operandValue' (PPC.Vsrc vr) = locLookup (LocVR vr)
+        operandValue' (PPC.Vssrc vr) = locLookup (LocVR vr)
 
         btVal (PPC.BT bt) = do
-          ip <- locLookup IP
+          ip <- locLookup LocIP
           offset <- S.bvLit sym knownNat (toInteger bt)
           S.bvAdd sym ip offset
 
 operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
-operandToLocation (PPC.Crbitrc _) = error "Crbitrc operandToLocation ?"
-operandToLocation (PPC.Crrc _) = error "Crrc operandToLocation ?"
+-- operandToLocation (PPC.Crbitrc _) = error "Crbitrc operandToLocation ?"
+-- operandToLocation (PPC.Crrc _) = error "Crrc operandToLocation ?"
 operandToLocation (PPC.F4rc _) = error "F4rc operandToLocation ?"
-operandToLocation (PPC.F8rc fr) = Just $ FR fr
+operandToLocation (PPC.F8rc fr) = Just $ LocFR fr
 operandToLocation (PPC.G8rc _) = error "G8rc operandToLocation ?"
 operandToLocation (PPC.G8rc_nox0 _) = error "G8rc_nox0 operandToLocation ?"
-operandToLocation (PPC.Gprc gpr) = Just $ GPR gpr
-operandToLocation (PPC.Gprc_nor0 gpr@(PPC.GPR gpr'))
-  | gpr' /= 0 = Just $ GPR gpr
-  | otherwise = error "can't get the location of (Gprc_nor0 (GPR 0))"
-operandToLocation (PPC.Memrr _) = error "MemRR operandToLocation?"
+operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
+-- operandToLocation (PPC.Gprc_nor0 gpr@(PPC.GPR gpr'))
+--   | gpr' /= 0 = Just $ LocGPR gpr
+--   | otherwise = error "can't get the location of (Gprc_nor0 (GPR 0))"
+-- operandToLocation (PPC.Memrr _) = error "MemRR operandToLocation?"
 operandToLocation (PPC.Tlsreg _) = error "Tlsreg operandToLocation?"
-operandToLocation (PPC.Tlsreg32 gpr) = Just $ GPR gpr
-operandToLocation (PPC.Vrrc vr) = Just $ VR vr
-operandToLocation (PPC.Vsfrc vr) = Just $ VR vr
-operandToLocation (PPC.Vsrc vr) = Just $ VR vr
-operandToLocation (PPC.Vssrc vr) = Just $ VR vr
+operandToLocation (PPC.Tlsreg32 gpr) = Just $ LocGPR gpr
+operandToLocation (PPC.Vrrc vr) = Just $ LocVR vr
+operandToLocation (PPC.Vsfrc vr) = Just $ LocVR vr
+operandToLocation (PPC.Vsrc vr) = Just $ LocVR vr
+operandToLocation (PPC.Vssrc vr) = Just $ LocVR vr
 
-operandToLocation (PPC.Memri _) = error "Memri operandToLocation?"
-operandToLocation (PPC.Memrix _) = error "Memrix operandToLocation?"
-operandToLocation (PPC.Memrix16 _) = error "Memrix16 operandToLocation?"
-operandToLocation (PPC.Spe2dis _) = error "Spe2dis operandToLocation?"
-operandToLocation (PPC.Spe4dis _) = error "Spe4dis operandToLocation?"
-operandToLocation (PPC.Spe8dis _) = error "Spe8dis operandToLocation?"
+-- operandToLocation (PPC.Memri _) = error "Memri operandToLocation?"
+-- operandToLocation (PPC.Memrix _) = error "Memrix operandToLocation?"
+-- operandToLocation (PPC.Memrix16 _) = error "Memrix16 operandToLocation?"
+-- operandToLocation (PPC.Spe2dis _) = error "Spe2dis operandToLocation?"
+-- operandToLocation (PPC.Spe4dis _) = error "Spe4dis operandToLocation?"
+-- operandToLocation (PPC.Spe8dis _) = error "Spe8dis operandToLocation?"
 
 operandToLocation _ = Nothing
 

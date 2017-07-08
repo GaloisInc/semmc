@@ -13,7 +13,7 @@ import Lang.Crucible.Solver.SimpleBackend
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
 
-import qualified Dismantle.PPC as DPPC
+import qualified Dismantle.PPC as PPC
 
 import SemMC.Architecture
 import SemMC.Architecture.PPC ( PPC )
@@ -39,6 +39,6 @@ doThing = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
   baseSet <- PPC.loadBaseSet sym
-  moveFiveIntoGPR2 <- moveFive sym (PPC.GPR (DPPC.GPR 2))
+  moveFiveIntoGPR2 <- moveFive sym (PPC.LocGPR (PPC.GPR 2))
   -- print . take 5 =<< templatedInstructions sym baseSet
   print =<< mcSynth sym baseSet moveFiveIntoGPR2
