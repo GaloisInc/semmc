@@ -48,7 +48,6 @@ library
                        text >= 1 && < 2,
                        mwc-random >= 0.13 && < 0.14,
                        exceptions >= 0.8 && < 0.9,
-                       sbv >= 6 && < 7,
                        s-cargot >= 0.1 && < 0.2,
                        dismantle-tablegen,
                        crucible == 0.3.1,
