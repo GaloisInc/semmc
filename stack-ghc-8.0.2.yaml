@@ -5,6 +5,7 @@ packages:
 #- submodules/dismantle/dismantle-ppc
 - submodules/dismantle/dismantle-tablegen
 - semmc
+- semmc-ppc
 - location: submodules/crucible
   subdirs:
   - crucible
@@ -13,6 +14,8 @@ packages:
   # needed as a dependency, and don't load it into GHCi.
   extra-dep: true
 - location: submodules/parameterized-utils
+  extra-dep: true
+- location: submodules/dismantle/dismantle-ppc
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver

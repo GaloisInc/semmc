@@ -1,0 +1,5 @@
+((operands ((rT . 'Gprc)
+            (si . 'S16imm)
+            (rA . 'Gprc_nor0)))
+ (in (rA))
+ (defs ((rT (bvadd rA si)))))

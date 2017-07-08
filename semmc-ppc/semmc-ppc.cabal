@@ -1,0 +1,27 @@
+name:                semmc-ppc
+version:             0.1.0.0
+synopsis:            Relevant semantics definitions for PPC
+-- description:
+license:             BSD3
+license-file:        LICENSE
+author:              Galois Inc.
+maintainer:          jgrosen@galois.com
+copyright:           (c) Galois Inc. 2017
+category:            Compiler
+build-type:          Simple
+extra-source-files:  ChangeLog.md
+cabal-version:       >=1.10
+
+library
+  exposed-modules:     SemMC.Architecture.PPC
+  build-depends:       base >= 4.9 && < 5
+                     , parameterized-utils == 0.1.10
+                     , crucible == 0.3.1
+                     , semmc
+                     , dismantle-tablegen
+                     , dismantle-ppc
+                     , pretty
+
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  ghc-options:         -Wall

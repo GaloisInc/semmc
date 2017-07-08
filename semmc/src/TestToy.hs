@@ -120,7 +120,7 @@ doThing2 = do
   target <- independentFormula sym
 
   print =<< mcSynth sym baseset target
-  print $ findUses (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
+  print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
 doThing3 :: IO ()
 doThing3 = do

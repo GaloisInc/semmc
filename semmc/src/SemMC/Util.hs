@@ -1,8 +1,11 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 module SemMC.Util
   ( groundValToExpr
   , makeSymbol
@@ -11,16 +14,22 @@ module SemMC.Util
   , Witness (..)
   , sequenceMaybes
   , walkElt
+  , extractUsedLocs
   ) where
 
 import Text.Printf
 
+import           Control.Monad.ST ( runST )
 import           Control.Applicative ( Const(..) )
+import qualified Data.HashTable.Class as H
+import           Data.Maybe ( fromJust )
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.TraversableFC
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
+import           Data.Proxy ( Proxy(..) )
+import qualified Data.Set as Set
 import           GHC.Exts ( Constraint )
 
 import           Lang.Crucible.BaseTypes
@@ -41,6 +50,15 @@ instance (OrdF f) => OrdF (Witness c f) where
       LTF -> LTF
       EQF -> EQF
       GTF -> GTF
+
+instance (Show (f x)) => Show (Witness c f x) where
+  show (Witness d) = "Witness (" ++ show d ++ ")"
+
+witnessWithShow :: forall p c f q tp a. (ShowF f) => p (Witness c f) -> q tp -> (Show (Witness c f tp) => a) -> a
+witnessWithShow _ _ = withShow (Proxy @f) (Proxy @tp)
+
+instance (ShowF f) => ShowF (Witness c f) where
+  withShow = witnessWithShow
 
 makeSymbol :: String -> SolverSymbol
 makeSymbol name = case userSymbol sanitizedName of
@@ -91,3 +109,15 @@ walkElt f e@(S.AppElt appElt) = f e <> down
 walkElt f e@(S.NonceAppElt nonceAppElt) = f e <> down
   where down = getConst (traverseFC_ (Const . walkElt f) (S.nonceEltApp nonceAppElt))
 walkElt f e = f e
+
+allBoundVars :: S.Elt t tp -> Set.Set (Some (S.SimpleBoundVar t))
+allBoundVars e = runST (S.boundVars e >>= H.foldM f Set.empty)
+  where f s (_, v) = return (Set.union s v)
+
+extractUsedLocs :: (OrdF loc)
+                => MapF.MapF loc (S.SimpleBoundVar t)
+                -> S.Elt t tp
+                -> MapF.MapF loc (S.SimpleBoundVar t)
+extractUsedLocs locMapping = foldr f MapF.empty . allBoundVars
+  where reversed = mapFReverse locMapping
+        f (Some var) = MapF.insert (fromJust $ MapF.lookup var reversed) var
