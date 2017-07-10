@@ -22,6 +22,7 @@ library
                        SemMC.Formula
                        SemMC.Formula.Equivalence
                        SemMC.Formula.Instantiate
+                       SemMC.Formula.Load
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
                        SemMC.Classify
