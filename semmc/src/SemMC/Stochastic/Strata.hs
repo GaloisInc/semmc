@@ -8,6 +8,9 @@ module SemMC.Stochastic.Strata (
   strata
   ) where
 
+import Control.Monad.Trans ( liftIO )
+import qualified Data.Set as S
+
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 
@@ -108,6 +111,12 @@ buildFormula :: Opcode arch (Operand arch) sh
              -> Syn sym arch (F.ParameterizedFormula sym arch sh)
 buildFormula = undefined
 
-instantiateInstruction :: Opcode arch (Operand arch) sh
+instantiateInstruction :: (D.ArbitraryOperands (Opcode arch) (Operand arch))
+                       => Opcode arch (Operand arch) sh
                        -> Syn sym arch (Instruction arch)
-instantiateInstruction = undefined
+instantiateInstruction op = do
+  gen <- askGen
+  -- Note: randomInstruction can only return Nothing if the set it is given is
+  -- empty.  We should probably change it to accept a non-empty list.
+  Just target <- liftIO $ D.randomInstruction gen (S.singleton (Some op))
+  return target
