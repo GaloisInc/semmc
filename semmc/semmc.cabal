@@ -24,10 +24,13 @@ library
                        SemMC.Formula.Load
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
-                       SemMC.Classify
-                       SemMC.Generalize
-                       SemMC.Statistics
-                       SemMC.Strata
+                       SemMC.Stochastic.Classify
+                       SemMC.Stochastic.Generalize
+                       SemMC.Stochastic.Monad
+                       SemMC.Stochastic.Remote
+                       SemMC.Stochastic.Remote.SSH
+                       SemMC.Stochastic.Statistics
+                       SemMC.Stochastic.Strata
                        SemMC.Synthesis
                        SemMC.Synthesis.Cegis
                        SemMC.Synthesis.Core
@@ -36,9 +39,6 @@ library
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist
-                       SemMC.Stochastic.Monad
-                       SemMC.Stochastic.Remote
-                       SemMC.Stochastic.Remote.SSH
   other-modules:       TestToy
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,

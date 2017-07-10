@@ -32,15 +32,23 @@ import qualified SemMC.Formula.Load as F
 import qualified SemMC.Worklist as WL
 import SemMC.Util ( Witness(..) )
 
+import qualified SemMC.Stochastic.Statistics as S
+
 data SynEnv sym arch =
   SymEnv { seFormulas :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch))
          -- ^ All of the known formulas (base set + learned set)
          , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
          -- ^ Work items
          , seAllOpcodes :: [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
+         -- ^ The list of all available opcodes for the architecture
          , seRandomGen :: A.Gen
+         -- ^ A random generator used for creating random instructions
          , seSymBackend :: sym
+         -- ^ The solver backend from Crucible (likely a 'SimpleBuilder')
+         , seStatsThread :: S.StatisticsThread arch
+         -- ^ A thread for maintaining statistics about the search
          , seConfig :: Config
+         -- ^ The initial configuration
          }
 
 newtype Syn sym arch a = Syn { unSyn :: R.ReaderT (SynEnv sym arch) IO a }
@@ -69,6 +77,7 @@ askGen = R.asks seRandomGen
 
 data Config = Config { baseSetDir :: FilePath
                      , learnedSetDir :: FilePath
+                     , statisticsFile :: FilePath
                      }
 
 loadInitialState :: (CRU.IsExprBuilder sym,
@@ -88,12 +97,14 @@ loadInitialState cfg sym allOpcodes = do
   fref <- STM.newTVarIO initialFormulas
   wlref <- STM.newTVarIO (makeWorklist allOpcodes initialFormulas)
   gen <- A.createGen
+  statsThread <- S.newStatisticsThread (statisticsFile cfg)
   return SymEnv { seFormulas = fref
                 , seWorklist = wlref
                 , seAllOpcodes = allOpcodes
                 , seRandomGen = gen
                 , seSymBackend = sym
                 , seConfig = cfg
+                , seStatsThread = statsThread
                 }
 
 makeWorklist :: [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]

@@ -3,7 +3,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module SemMC.Strata (
+module SemMC.Stochastic.Strata (
   Config(..),
   strata
   ) where
@@ -20,7 +20,7 @@ import qualified Lang.Crucible.Solver.Interface as CRU
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture ( Architecture, Opcode, Operand )
-import qualified SemMC.Statistics as Stats
+-- import qualified SemMC.Stochastic.Statistics as Stats
 import qualified SemMC.Formula.Parser as FP
 import SemMC.Util ( Witness(..) )
 import SemMC.Stochastic.Monad
@@ -50,9 +50,8 @@ strata allOpcodes = do
   return undefined
 
 processWorklist :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
-                => Stats.StatisticsThread
-                -> Syn sym arch ()
-processWorklist _stats = do
+                => Syn sym arch ()
+processWorklist = do
   mwork <- takeWork
   case mwork of
     Nothing -> return ()
