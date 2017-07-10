@@ -26,11 +26,6 @@ import SemMC.Stochastic.Generalize ( generalize )
 import SemMC.Stochastic.Monad
 import SemMC.Stochastic.Synthesize ( synthesize )
 
--- Have this process the worklist in a single-threaded way, but for each work
--- item spawn off an Async thread to process it.  Wait once there are enough
--- outstanding threads.
-
-
 {-
 
 Goal: Have a basic setup function to establish the environment (e.g., parse the
@@ -42,9 +37,7 @@ caller controls the number and placement of threads.
 
 strata :: (CRU.IsExprBuilder sym, CRU.IsSymInterface sym, Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
        => Syn sym arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch))
-strata = do
-  processWorklist
-  generalize
+strata = processWorklist >> generalize
 
 processWorklist :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                 => Syn sym arch ()
@@ -59,8 +52,6 @@ processWorklist = do
         Nothing -> addWork so
         -- Success, record the formula
         Just formula -> recordLearnedFormula so formula
-      -- Just _target <- liftIO $ D.randomInstruction gen (S.singleton so)
-      -- return ()
       processWorklist
 
 -- | Attempt to learn a formula for the given opcode
@@ -105,6 +96,9 @@ finishStrataOne op instr eqclasses = do
   prog <- C.chooseProgram bestClass
   buildFormula op instr prog
 
+-- | Construct a formula for the given instruction based on the selected representative program.
+--
+-- We pass in the opcode because we need the shape of the opcode in the type signature.
 buildFormula :: Opcode arch (Operand arch) sh
              -> Instruction arch
              -> [Instruction arch]
