@@ -336,10 +336,10 @@ instance D.ArbitraryOperands Opcode Operand where
 
 -- | The set of all opcodes, e.g. for use with
 -- 'D.Random.randomInstruction'.
-opcodes :: Set.Set (D.SomeOpcode Opcode Operand)
+opcodes :: Set.Set (Some (Opcode Operand))
 opcodes = Set.fromList
-  [ D.SomeOpcode AddRr
-  , D.SomeOpcode SubRr
-  , D.SomeOpcode NegR
-  , D.SomeOpcode MovRi
+  [ Some AddRr
+  , Some SubRr
+  , Some NegR
+  , Some MovRi
   ]

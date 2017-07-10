@@ -18,7 +18,6 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC
                        SemMC.Architecture
-                       SemMC.Backend
                        SemMC.Formula
                        SemMC.Formula.Equivalence
                        SemMC.Formula.Instantiate

@@ -17,7 +17,6 @@ import Data.Parameterized.Some ( Some(..) )
 
 import qualified Lang.Crucible.Solver.Interface as CRU
 
-import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture ( Architecture, Opcode, Operand )
@@ -57,9 +56,9 @@ processWorklist _stats = do
   mwork <- takeWork
   case mwork of
     Nothing -> return ()
-    Just (Some someOp) -> do
+    Just so -> do
       gen <- askGen
-      Just _target <- liftIO $ D.randomInstruction gen (S.singleton (D.SomeOpcode someOp))
+      Just _target <- liftIO $ D.randomInstruction gen (S.singleton so)
       return ()
 
 
