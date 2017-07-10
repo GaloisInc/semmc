@@ -8,7 +8,11 @@ module SemMC.Stochastic.Monad (
   Config(..),
   -- * Operations
   askGen,
-  takeWork
+  askConfig,
+  askFormulas,
+  recordLearnedFormula,
+  takeWork,
+  addWork
   ) where
 
 import qualified Control.Concurrent.STM as STM
@@ -61,6 +65,17 @@ newtype Syn sym arch a = Syn { unSyn :: R.ReaderT (SynEnv sym arch) IO a }
 runSyn :: SynEnv sym arch -> Syn sym arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
+-- | Record a learned formula for the opcode in the state
+recordLearnedFormula :: (P.OrdF (Opcode arch (Operand arch)))
+                     => Opcode arch (Operand arch) sh
+                     -> F.ParameterizedFormula sym arch sh
+                     -> Syn sym arch ()
+recordLearnedFormula op f = do
+  mref <- R.asks seFormulas
+  liftIO $ STM.atomically $ do
+    STM.modifyTVar' mref (MapF.insert op f)
+
+-- | Take an opcode off of the worklist
 takeWork :: Syn sym arch (Maybe (Some (Opcode arch (Operand arch))))
 takeWork = do
   wlref <- R.asks seWorklist
@@ -72,12 +87,28 @@ takeWork = do
         STM.writeTVar wlref rest
         return (Just work)
 
+-- | Add an opcode back to into the worklist
+addWork :: Opcode arch (Operand arch) sh -> Syn sym arch ()
+addWork op = do
+  wlref <- R.asks seWorklist
+  liftIO $ STM.atomically $ STM.modifyTVar wlref (WL.putWork (Some op))
+
+askConfig :: Syn sym arch Config
+askConfig = R.asks seConfig
+
 askGen :: Syn sym arch A.Gen
 askGen = R.asks seRandomGen
+
+askFormulas :: Syn sym arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch))
+askFormulas = R.asks seFormulas >>= (liftIO . STM.readTVarIO)
 
 data Config = Config { baseSetDir :: FilePath
                      , learnedSetDir :: FilePath
                      , statisticsFile :: FilePath
+                     -- ^ A file to store statistics in
+                     , programCountThreshold :: Int
+                     -- ^ Minimum number of equivalent programs to require
+                     -- before stopping the stochastic search
                      }
 
 loadInitialState :: (CRU.IsExprBuilder sym,

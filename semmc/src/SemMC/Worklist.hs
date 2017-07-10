@@ -22,5 +22,5 @@ takeWork wl = do
       someWork Seq.:< rest -> Just (someWork, Worklist rest)
 
 -- | Put an item back onto the end of the worklist
-putWork :: Worklist a -> a -> Worklist a
-putWork wl work = wl { unWorklist = unWorklist wl Seq.|> work }
+putWork :: a -> Worklist a -> Worklist a
+putWork work wl = wl { unWorklist = unWorklist wl Seq.|> work }

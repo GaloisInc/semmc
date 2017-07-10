@@ -31,6 +31,7 @@ library
                        SemMC.Stochastic.Remote.SSH
                        SemMC.Stochastic.Statistics
                        SemMC.Stochastic.Strata
+                       SemMC.Stochastic.Synthesize
                        SemMC.Synthesis
                        SemMC.Synthesis.Cegis
                        SemMC.Synthesis.Core
