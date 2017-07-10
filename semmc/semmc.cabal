@@ -37,6 +37,7 @@ library
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist
+                       SemMC.Stochastic.Monad
                        SemMC.Stochastic.Remote
                        SemMC.Stochastic.Remote.SSH
   other-modules:       TestToy
