@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PolyKinds #-}
 module SemMC.Stochastic.Monad (
   Syn,
   loadInitialState,
@@ -13,7 +14,9 @@ module SemMC.Stochastic.Monad (
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Monad.Reader as R
 import Control.Monad.Trans ( MonadIO, liftIO )
+import System.FilePath ( (</>), (<.>) )
 
+import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 
@@ -77,8 +80,10 @@ loadInitialState :: (CRU.IsExprBuilder sym,
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -> IO (SynEnv sym arch)
 loadInitialState cfg sym allOpcodes = do
-  baseSet <- F.loadFormulas sym allOpcodes (baseSetDir cfg)
-  learnedSet <- F.loadFormulas sym allOpcodes (learnedSetDir cfg)
+  let toFP dir oc = dir </> P.showF oc <.> "sem"
+      load dir = F.loadFormulas sym (toFP dir) allOpcodes
+  baseSet <- load (baseSetDir cfg)
+  learnedSet <- load (learnedSetDir cfg)
   let initialFormulas = MapF.union baseSet learnedSet
   fref <- STM.newTVarIO initialFormulas
   wlref <- STM.newTVarIO (makeWorklist allOpcodes initialFormulas)
