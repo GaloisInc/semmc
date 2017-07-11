@@ -11,6 +11,7 @@ module SemMC.Stochastic.Monad (
   askConfig,
   askTestCases,
   askFormulas,
+  addTestCase,
   recordLearnedFormula,
   takeWork,
   addWork
@@ -98,7 +99,7 @@ takeWork = do
 addWork :: Opcode arch (Operand arch) sh -> Syn sym arch ()
 addWork op = do
   wlref <- R.asks seWorklist
-  liftIO $ STM.atomically $ STM.modifyTVar wlref (WL.putWork (Some op))
+  liftIO $ STM.atomically $ STM.modifyTVar' wlref (WL.putWork (Some op))
 
 askConfig :: Syn sym arch Config
 askConfig = R.asks seConfig
@@ -108,6 +109,12 @@ askGen = R.asks seRandomGen
 
 askTestCases :: Syn sym arch [ArchState sym arch]
 askTestCases = R.asks seTestCases >>= (liftIO . STM.readTVarIO)
+
+-- | Add a counterexample test case to the set of tests
+addTestCase :: ArchState sym arch -> Syn sym arch ()
+addTestCase tc = do
+  testref <- R.asks seTestCases
+  liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
 
 askFormulas :: Syn sym arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch))
 askFormulas = R.asks seFormulas >>= (liftIO . STM.readTVarIO)
