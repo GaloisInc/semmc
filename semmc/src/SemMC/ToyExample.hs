@@ -52,6 +52,7 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
+import qualified Data.Set.NonEmpty as NES
 import           Data.Word ( Word32 )
 import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
 
@@ -320,7 +321,7 @@ instance D.Arbitrary (Operand "I32") where
   arbitrary gen = I32 <$> D.uniform gen
 
 instance D.Arbitrary (Operand "R32") where
-  arbitrary gen = R32 <$> D.choose gen (Set.fromList [Reg1, Reg2, Reg3])
+  arbitrary gen = R32 <$> D.choose gen (NES.fromList Reg1 [Reg2, Reg3])
 
 instance D.ArbitraryOperands Opcode Operand where
   arbitraryOperands gen op = case op of
