@@ -22,8 +22,10 @@ equivalenceClasses p = EquivalenceClasses (S.singleton (S.singleton p))
 countPrograms :: EquivalenceClasses arch -> Int
 countPrograms s = sum (map S.size (S.toList (unClasses s)))
 
-classify :: [Instruction arch] -> EquivalenceClasses arch -> Syn sym arch (Maybe (EquivalenceClasses arch))
-classify = undefined
+classify :: [Instruction arch]
+         -> EquivalenceClasses arch
+         -> Syn sym arch (Maybe (EquivalenceClasses arch))
+classify p eqclasses = undefined
 
 chooseClass :: EquivalenceClasses arch -> Syn sym arch (EquivalenceClass arch)
 chooseClass = undefined
