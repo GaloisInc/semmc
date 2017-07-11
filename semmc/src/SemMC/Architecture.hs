@@ -41,7 +41,7 @@ class IsSpecificOperand o (s :: Symbol) where
   allOperandValues :: [o s]
 
 -- | Type of opcodes for a given architecture.
-type family Opcode (arch :: *) :: (Symbol -> *) -> [Symbol] -> *
+type family Opcode (arch :: *) = (r :: (Symbol -> *) -> [Symbol] -> *)
 
 -- | Class containing methods we want on opcodes. (Nothing for now.)
 class IsOpcode (op :: (Symbol -> *) -> [Symbol] -> *)
