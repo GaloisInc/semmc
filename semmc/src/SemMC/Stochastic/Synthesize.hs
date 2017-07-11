@@ -8,5 +8,5 @@ import SemMC.Stochastic.Monad
 --
 -- Can fail due to timeouts.
 synthesize :: Instruction arch
-           -> Syn sym arch (Maybe [Instruction arch])
+           -> Syn t arch (Maybe [Instruction arch])
 synthesize = undefined
