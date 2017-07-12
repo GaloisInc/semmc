@@ -32,7 +32,7 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-import           Dismantle.Instruction ( OperandList(..) )
+import           Dismantle.Instruction ( indexOpList, OperandList(..) )
 
 import           SemMC.Architecture
 import           SemMC.Formula

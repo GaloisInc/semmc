@@ -19,15 +19,11 @@ module SemMC.Formula (
   coerceFormula,
   Parameter(..),
   paramType,
-  Index(..),
-  indexOpList,
   ) where
 
-import           Control.Monad ( foldM )
-import qualified Control.Monad.Catch as C
-import           Control.Monad.IO.Class ( MonadIO(..) )
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
+import           Text.Printf ( printf )
 
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some
@@ -39,47 +35,12 @@ import qualified Dismantle.Instruction as I
 
 import           SemMC.Architecture
 
--- | Represents an index into a type-level list. Used in place of integers to
---   1. ensure that the given index *does* exist in the list
---   2. guarantee that it has the given kind
-data Index :: [k] -> k -> * where
-  IndexHere :: forall x sh. Index (x ': sh) x
-  IndexThere :: forall x x' sh. Index sh x -> Index (x' ': sh) x
-deriving instance Eq (Index sh x)
-deriving instance Show (Index sh x)
-
-instance TestEquality (Index sh) where
-  IndexHere `testEquality` IndexHere = Just Refl
-  IndexThere idx1 `testEquality` IndexThere idx2 = testEquality idx1 idx2
-  _ `testEquality` _ = Nothing
-
-instance OrdF (Index sh) where
-  IndexHere `compareF` IndexHere = EQF
-  IndexHere `compareF` IndexThere _ = LTF
-  IndexThere _ `compareF` IndexHere = GTF
-  IndexThere idx1 `compareF` IndexThere idx2 =
-    case idx1 `compareF` idx2 of
-      LTF -> LTF
-      EQF -> EQF
-      GTF -> GTF
-
-instance Ord (Index sh x) where
-  x `compare` y = toOrdering $ x `compareF` y
-
--- | Evaluate an index for a given operand list.
-indexOpList :: I.OperandList f sh -> Index sh s -> f s
--- Why not destructure @vals@ in the argument position? GHC gives a warning
--- about not handling the Nil case of vals. This way, GHC verifies that the
--- pattern-matching is exhaustive.
-indexOpList vals IndexHere = case vals of x I.:> _ -> x
-indexOpList vals (IndexThere th) = case vals of _ I.:> rest -> indexOpList rest th
-
 data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
-  Operand :: BaseTypeRepr (OperandType arch s) -> Index sh s -> Parameter arch sh (OperandType arch s)
+  Operand :: BaseTypeRepr (OperandType arch s) -> I.Index sh s -> Parameter arch sh (OperandType arch s)
   Literal :: Location arch tp -> Parameter arch sh tp
 
 instance ShowF (Location arch) => Show (Parameter arch sh tp) where
-  show (Operand repr idx) = unwords ["Operand", "(" ++ show repr ++ ")", show idx]
+  show (Operand repr idx) = printf "Operand (%s) (%s)" (show repr) (show idx)
   show (Literal var) = unwords ["Literal", showF var]
 
 instance (ShowF (Location arch)) => ShowF (Parameter arch sh)
@@ -124,8 +85,7 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
 
 deriving instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => Show (ParameterizedFormula sym arch sh)
 
-instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch) where
-  showF = show
+instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch)
 
 -- | A formula representing a concrete instruction.
 data Formula sym arch =
