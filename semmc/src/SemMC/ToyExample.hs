@@ -24,24 +24,6 @@
 -- possibilities for how an instruction interacts with a bit of
 -- machine state: 1) modifies it in a deterministic way; 2) modifies
 -- it in an undefined way; 3) does not modify it).
---
--- TODO:
---
--- - [ ] generate random instructions.
---
--- - [ ] specify what locations each instruction mutates.
---
--- - [ ] implement a metric (probably number of bits different) on
---   machine states, and on machine states restricted to the mutation
---   set of a specific instruction.
---
--- - [ ] synthesize programs and check equality on concrete inputs
---   using 'evalProg'.
---
--- - [ ] check equality using formal SMT semantics, after generating
---   candidates using concrete inputs and 'evalProg'.
---
--- - [ ] add flags.
 module SemMC.ToyExample where
 
 import           Data.EnumF ( congruentF, EnumF, enumF )
@@ -154,10 +136,10 @@ instance EnumF (Opcode o) where
   enumF NegR = 2
   enumF MovRi = 3
 
-  congruentF AddRr = Set.fromList [AddRr, SubRr]
-  congruentF SubRr = Set.fromList [AddRr, SubRr]
-  congruentF NegR = Set.fromList [NegR]
-  congruentF MovRi = Set.fromList [MovRi]
+  congruentF AddRr = NES.fromList AddRr [AddRr, SubRr]
+  congruentF SubRr = NES.fromList SubRr [AddRr, SubRr]
+  congruentF NegR  = NES.fromList NegR [NegR]
+  congruentF MovRi = NES.fromList MovRi [MovRi]
 
 instance TestEquality (Opcode o) where
   testEquality AddRr AddRr = Just Refl
