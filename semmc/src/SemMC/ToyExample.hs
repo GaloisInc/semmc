@@ -24,24 +24,6 @@
 -- possibilities for how an instruction interacts with a bit of
 -- machine state: 1) modifies it in a deterministic way; 2) modifies
 -- it in an undefined way; 3) does not modify it).
---
--- TODO:
---
--- - [ ] generate random instructions.
---
--- - [ ] specify what locations each instruction mutates.
---
--- - [ ] implement a metric (probably number of bits different) on
---   machine states, and on machine states restricted to the mutation
---   set of a specific instruction.
---
--- - [ ] synthesize programs and check equality on concrete inputs
---   using 'evalProg'.
---
--- - [ ] check equality using formal SMT semantics, after generating
---   candidates using concrete inputs and 'evalProg'.
---
--- - [ ] add flags.
 module SemMC.ToyExample where
 
 import           Data.EnumF ( congruentF, EnumF, enumF )
@@ -52,6 +34,7 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
+import qualified Data.Set.NonEmpty as NES
 import           Data.Word ( Word32 )
 import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
 
@@ -153,10 +136,10 @@ instance EnumF (Opcode o) where
   enumF NegR = 2
   enumF MovRi = 3
 
-  congruentF AddRr = Set.fromList [AddRr, SubRr]
-  congruentF SubRr = Set.fromList [AddRr, SubRr]
-  congruentF NegR = Set.fromList [NegR]
-  congruentF MovRi = Set.fromList [MovRi]
+  congruentF AddRr = NES.fromList AddRr [AddRr, SubRr]
+  congruentF SubRr = NES.fromList SubRr [AddRr, SubRr]
+  congruentF NegR  = NES.fromList NegR [NegR]
+  congruentF MovRi = NES.fromList MovRi [MovRi]
 
 instance TestEquality (Opcode o) where
   testEquality AddRr AddRr = Just Refl
@@ -320,7 +303,7 @@ instance D.Arbitrary (Operand "I32") where
   arbitrary gen = I32 <$> D.uniform gen
 
 instance D.Arbitrary (Operand "R32") where
-  arbitrary gen = R32 <$> D.choose gen (Set.fromList [Reg1, Reg2, Reg3])
+  arbitrary gen = R32 <$> D.choose gen (NES.fromList Reg1 [Reg2, Reg3])
 
 instance D.ArbitraryOperands Opcode Operand where
   arbitraryOperands gen op = case op of
@@ -336,10 +319,10 @@ instance D.ArbitraryOperands Opcode Operand where
 
 -- | The set of all opcodes, e.g. for use with
 -- 'D.Random.randomInstruction'.
-opcodes :: Set.Set (D.SomeOpcode Opcode Operand)
+opcodes :: Set.Set (Some (Opcode Operand))
 opcodes = Set.fromList
-  [ D.SomeOpcode AddRr
-  , D.SomeOpcode SubRr
-  , D.SomeOpcode NegR
-  , D.SomeOpcode MovRi
+  [ Some AddRr
+  , Some SubRr
+  , Some NegR
+  , Some MovRi
   ]

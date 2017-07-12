@@ -20,6 +20,7 @@ module SemMC.Formula.Parser
   , literalVarPrefix
   , readFormula
   , readFormulaFromFile
+  , BuildOperandList
   ) where
 
 import           Control.Monad.Except

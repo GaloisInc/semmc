@@ -18,16 +18,21 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC
                        SemMC.Architecture
-                       SemMC.Backend
                        SemMC.Formula
                        SemMC.Formula.Equivalence
                        SemMC.Formula.Instantiate
+                       SemMC.Formula.Load
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
-                       SemMC.Classify
-                       SemMC.Generalize
-                       SemMC.Statistics
-                       SemMC.Strata
+                       SemMC.Stochastic.Classify
+                       SemMC.Stochastic.Generalize
+                       SemMC.Stochastic.IORelation
+                       SemMC.Stochastic.Monad
+                       SemMC.Stochastic.Remote
+                       SemMC.Stochastic.Remote.SSH
+                       SemMC.Stochastic.Statistics
+                       SemMC.Stochastic.Strata
+                       SemMC.Stochastic.Synthesize
                        SemMC.Synthesis
                        SemMC.Synthesis.Cegis
                        SemMC.Synthesis.Core
@@ -36,19 +41,17 @@ library
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist
-                       SemMC.Stochastic.Remote
-                       SemMC.Stochastic.Remote.SSH
   other-modules:       TestToy
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
                        containers,
                        bytestring,
                        binary,
+                       filepath,
                        stm,
                        text >= 1 && < 2,
                        mwc-random >= 0.13 && < 0.14,
                        exceptions >= 0.8 && < 0.9,
-                       sbv >= 6 && < 7,
                        s-cargot >= 0.1 && < 0.2,
                        dismantle-tablegen,
                        crucible == 0.3.1,
@@ -56,8 +59,6 @@ library
                        process >= 1.4 && < 1.7,
                        async >= 2 && < 3,
                        time,
-                       conduit-combinators >= 1 && < 2,
-                       binary-conduit >= 1.2 && < 1.3,
                        parsec >= 3.1 && < 3.2,
                        mtl >= 2.2 && < 2.3,
                        hashtables >= 1.2 && < 1.3,
