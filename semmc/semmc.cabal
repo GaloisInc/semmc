@@ -26,6 +26,7 @@ library
                        SemMC.Formula.Printer
                        SemMC.Stochastic.Classify
                        SemMC.Stochastic.Generalize
+                       SemMC.Stochastic.IORelation
                        SemMC.Stochastic.Monad
                        SemMC.Stochastic.Remote
                        SemMC.Stochastic.Remote.SSH
