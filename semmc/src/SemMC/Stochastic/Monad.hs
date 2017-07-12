@@ -61,12 +61,17 @@ data SynEnv t arch =
          , seRandomGen :: A.Gen
          -- ^ A random generator used for creating random instructions
          , seSymBackend :: Sym t
-         -- ^ The solver backend from Crucible (likely a 'SimpleBuilder')
+         -- ^ The solver backend from Crucible
          , seStatsThread :: S.StatisticsThread arch
          -- ^ A thread for maintaining statistics about the search
          , seConfig :: Config
          -- ^ The initial configuration
          }
+
+-- | Thread-local environment
+--
+-- This includes a remote connection to run test cases
+data LocalSymEnv = LocalSymEnv
 
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (SynEnv t arch) IO a }
   deriving (Functor,
