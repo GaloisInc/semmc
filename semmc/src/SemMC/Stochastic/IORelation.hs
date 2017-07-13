@@ -1,15 +1,19 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 -- | A module for learning the input and output relations for instructions
 module SemMC.Stochastic.IORelation (
   LearnConfig(..),
   IORelation(..),
   OperandRef(..),
-  learn
+  learn,
+  readIORelation,
+  printIORelation
   ) where
 
 import Control.Applicative
@@ -35,6 +39,7 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
+import qualified Data.Parameterized.Unfold as U
 import SemMC.Architecture
 import qualified SemMC.Formula.Parser as F
 import SemMC.Util ( Witness(..) )
@@ -88,13 +93,15 @@ printIORelation :: Opcode arch (Operand arch) sh -> IORelation arch sh -> T.Text
 printIORelation = undefined
 
 data IORelationParseError arch = IORelationParseError (Proxy arch) (Some (Opcode arch (Operand arch))) T.Text
-                               | InvalidSExpr (Proxy arch) (SC.SExpr Atom)
+                               | InvalidSExpr (Proxy arch) (Some (Opcode arch (Operand arch))) (SC.SExpr Atom)
+                               | InvalidLocation (Proxy arch) String
+                               | InvalidIndex (Proxy arch) (Some (Opcode arch (Operand arch))) Word
 
 deriving instance (Architecture arch) => Show (IORelationParseError arch)
 instance (Architecture arch) => E.Exception (IORelationParseError arch)
 
 readIORelation :: forall arch m sh
-                . (E.MonadThrow m, Architecture arch)
+                . (E.MonadThrow m, Architecture arch, U.UnfoldShape sh)
                => Proxy arch
                -> T.Text
                -> Opcode arch (Operand arch) sh
@@ -107,17 +114,52 @@ readIORelation p t op = do
     SC.SCons (SC.SCons (SC.SAtom (AIdent "inputs")) inputsS)
              (SC.SCons (SC.SCons (SC.SAtom (AIdent "outputs")) outputsS)
                         SC.SNil) -> return (inputsS, outputsS)
-    _ -> E.throwM (InvalidSExpr p sx)
+    _ -> E.throwM (InvalidSExpr p (Some op) sx)
   ins <- parseRelationList p op inputsS
   outs <- parseRelationList p op outputsS
   return IORelation { inputs = ins, outputs = outs }
 
-parseRelationList :: (E.MonadThrow m)
+parseRelationList :: forall m sh arch
+                   . (E.MonadThrow m, U.UnfoldShape sh, Architecture arch)
                   => Proxy arch
                   -> Opcode arch (Operand arch) sh
                   -> SC.SExpr Atom
                   -> m [OperandRef arch sh]
-parseRelationList = undefined
+parseRelationList proxy opcode s0 =
+  case s0 of
+    SC.SNil -> return []
+    SC.SCons (SC.SCons (SC.SAtom (AIdent "implicit")) (SC.SAtom (AIdent loc))) rest -> do
+      rest' <- parseRelationList proxy opcode rest
+      case readLocation loc of
+        Nothing -> E.throwM (InvalidLocation proxy loc)
+        Just sloc -> return (ImplicitOperand sloc : rest')
+    SC.SCons (SC.SCons (SC.SAtom (AIdent "operand")) (SC.SAtom (AWord ix))) rest -> do
+      rest' <- parseRelationList proxy opcode rest
+      oref <- mkOperandRef proxy opcode ix
+      return (oref : rest')
+    _ -> E.throwM (InvalidSExpr proxy (Some opcode) s0)
+
+-- | Take an integer and try to construct a `D.Index` that points at the
+-- appropriate index into the operand list of the given opcode.
+--
+-- This involves traversing the type level operand list via 'U.unfoldShape'
+mkOperandRef :: forall m arch sh . (E.MonadThrow m, U.UnfoldShape sh, Architecture arch)
+             => Proxy arch
+             -> Opcode arch (Operand arch) sh
+             -> Word
+             -> m (OperandRef arch sh)
+mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
+  where
+    -- We got to the end of the type level list without finding our index, so it
+    -- was out of bounds
+    nil :: Word -> m (OperandRef arch '[])
+    nil _ = E.throwM (InvalidIndex proxy (Some op) w0)
+
+    elt :: forall tp tps' tps . (U.RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> Word -> m (OperandRef arch tps)
+    elt _ _ w =
+      case w of
+        0 -> return (OperandRef D.IndexHere)
+        _ -> U.unfoldShape nil elt (w - 1)
 
 testOpcode :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
            => MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
@@ -168,7 +210,7 @@ generateTestVariants = undefined
 
 The format is expected to be a simple s-expression recording inputs and outputs
 
-((inputs ((implicit . rax) (operand  . 0)))
+((inputs ((implicit . rax) (operand . 0)))
  (outputs ()))
 
 -}
