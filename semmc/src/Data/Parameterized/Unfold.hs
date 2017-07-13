@@ -24,7 +24,7 @@ class UnfoldShape (tps :: [k]) where
   unfoldShape :: (MonadThrow m)
               => (a -> m (b '[]))
               -- ^ Produce the value associated with the empty list (e.g., an HList nil)
-              -> (forall proxy1 proxy2 tp tps' . (RecShape tp tps' tps) => proxy1 tp -> proxy2 tps' -> a -> m (b tps))
+              -> (forall tp tps' . (RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> a -> m (b tps))
               -- ^ Recursively process a smaller part of the shape and then
               -- augment the resulting value with the current element (almost
               -- certainly requires a recursive call to 'unfoldShape')
