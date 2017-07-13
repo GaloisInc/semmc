@@ -1,13 +1,9 @@
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
 -- | A module for learning the input and output relations for instructions
 module SemMC.Stochastic.IORelation (
   LearnConfig(..),
@@ -197,28 +193,3 @@ parserLL = SC.mkParser parseAtom
 parseLL :: T.Text -> Either String (SC.SExpr Atom)
 parseLL = SC.decodeOne parserLL
 
-{-
-class BuildShapedList (tps :: [k]) where
-  buildShapedList :: forall tp m a b c
-                   . (E.MonadThrow m)
-                  => a
-                  -> (a -> m (b '[]))
-                  -- ^ The function to call on an empty list
-                  -> (a -> m (c tp, a))
-                  -- ^ The function to call on the seed to split it into a value
-                  -- (to be combined into a larger result) and the rest of the
-                  -- seed (to be consumed later)
-                  -> (c tp -> b tps -> m (b (tp ': tps)))
-                  -- ^ The function to combine the current element with the rest
-                  -- of the constructed shape
-                  -> m (b tps)
-
-instance BuildShapedList '[] where
-  buildShapedList a nil _f _c = nil a
-
-instance BuildShapedList (tp ': tps) where
-  buildShapedList a nil f c = do
-    (elt, rest) <- f a
-    rest' <- buildShapedList rest nil f c
-    c elt rest'
--}
