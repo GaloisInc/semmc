@@ -19,6 +19,7 @@ import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
+import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( KnownSymbol, Symbol )
 
 import           Lang.Crucible.BaseTypes
@@ -84,6 +85,7 @@ type ArchState sym arch = MapF.MapF (Location arch) (S.SymExpr sym)
 class (IsOperand (Operand arch),
        IsOpcode (Opcode arch),
        IsLocation (Location arch),
+       Typeable arch,
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),
        EnumF (Opcode arch (Operand arch)))
