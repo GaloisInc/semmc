@@ -36,10 +36,10 @@ import Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Map as MapF
 
 import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
-import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import SemMC.Util ( Witness(..) )
 
@@ -59,7 +59,7 @@ data LearnConfig t arch =
 
 data OperandRef arch sh = ImplicitOperand (Some (Location arch))
                         -- ^ A location that is implicitly read from or written to by an instruction
-                        | forall s . OperandRef (F.Index sh s)
+                        | forall s . OperandRef (D.Index sh s)
                         -- ^ An index into an operand list
 
 data IORelation arch sh =
