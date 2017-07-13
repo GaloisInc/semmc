@@ -49,7 +49,7 @@ import           SemMC.Architecture
 import           SemMC.Formula
 import           SemMC.Util
 
-import           Dismantle.Instruction ( OperandList(..), traverseOperandList )
+import           Dismantle.Instruction ( Index(..), indexOpList, OperandList(..), traverseOperandList )
 
 -- * First pass of parsing: turning the raw text into s-expressions
 
