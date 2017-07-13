@@ -1,27 +1,45 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 -- | A module for learning the input and output relations for instructions
 module SemMC.Stochastic.IORelation (
   LearnConfig(..),
   IORelation(..),
+  OperandRef(..),
   learn
   ) where
 
+import Control.Applicative
 import qualified Control.Concurrent as C
+import qualified Control.Monad.Catch as E
 import qualified Control.Monad.State.Strict as St
 import Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
-import qualified Data.Map as M
+import Data.Proxy ( Proxy(..) )
+import qualified Data.SCargot as SC
+import qualified Data.SCargot.Repr as SC
+import qualified Data.Text as T
 import Data.Word ( Word64 )
+import qualified Text.Parsec as P
+import qualified Text.Parsec.Text as P
 
 import qualified Data.Set.NonEmpty as NES
 import Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.Map as MapF
 
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
+import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import SemMC.Util ( Witness(..) )
 
@@ -39,10 +57,15 @@ data LearnConfig t arch =
               -- ^ Nonces for test vectors
               }
 
-data IORelation arch =
-  IORelation { inputs :: [Some (Location arch)]
+data OperandRef arch sh = ImplicitOperand (Some (Location arch))
+                        -- ^ A location that is implicitly read from or written to by an instruction
+                        | forall s . OperandRef (F.Index sh s)
+                        -- ^ An index into an operand list
+
+data IORelation arch sh =
+  IORelation { inputs :: [OperandRef arch sh]
              -- ^ Locations read by an instruction
-             , outputs :: [Some (Location arch)]
+             , outputs :: [OperandRef arch sh]
              -- ^ Locations written by an instruction
              }
 
@@ -60,15 +83,50 @@ newtype M t arch a = M { runM :: St.StateT (LearnConfig t arch) IO a }
 learn :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
       => LearnConfig t arch
       -> [Some (Witness (F.BuildOperandList arch) (Opcode arch (Operand arch)))]
-      -> IO (M.Map (Some (Opcode arch (Operand arch))) (IORelation arch))
+      -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 learn config ops = St.evalStateT (runM act) config
   where
-    act = F.foldlM (\m (Some (Witness op)) -> testOpcode m op) M.empty ops
+    act = F.foldlM (\m (Some (Witness op)) -> testOpcode m op) MapF.empty ops
+
+printIORelation :: Opcode arch (Operand arch) sh -> IORelation arch sh -> T.Text
+printIORelation = undefined
+
+data IORelationParseError arch = IORelationParseError (Proxy arch) (Some (Opcode arch (Operand arch))) T.Text
+                               | InvalidSExpr (Proxy arch) (SC.SExpr Atom)
+
+deriving instance (Architecture arch) => Show (IORelationParseError arch)
+instance (Architecture arch) => E.Exception (IORelationParseError arch)
+
+readIORelation :: forall arch m sh
+                . (E.MonadThrow m, Architecture arch)
+               => Proxy arch
+               -> T.Text
+               -> Opcode arch (Operand arch) sh
+               -> m (IORelation arch sh)
+readIORelation p t op = do
+  sx <- case parseLL t of
+    Left err -> E.throwM (IORelationParseError p (Some op) t)
+    Right res -> return res
+  (inputsS, outputsS) <- case sx of
+    SC.SCons (SC.SCons (SC.SAtom (AIdent "inputs")) inputsS)
+             (SC.SCons (SC.SCons (SC.SAtom (AIdent "outputs")) outputsS)
+                        SC.SNil) -> return (inputsS, outputsS)
+    _ -> E.throwM (InvalidSExpr p sx)
+  ins <- parseRelationList p op inputsS
+  outs <- parseRelationList p op outputsS
+  return IORelation { inputs = ins, outputs = outs }
+
+parseRelationList :: (E.MonadThrow m)
+                  => Proxy arch
+                  -> Opcode arch (Operand arch) sh
+                  -> SC.SExpr Atom
+                  -> m [OperandRef arch sh]
+parseRelationList = undefined
 
 testOpcode :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
-           => M.Map (Some (Opcode arch (Operand arch))) (IORelation arch)
+           => MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
            -> Opcode arch (Operand arch) sh
-           -> M t arch (M.Map (Some (Opcode arch (Operand arch))) (IORelation arch))
+           -> M t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 testOpcode m op = do
   g <- St.gets gen
   mkTest <- St.gets testGen
@@ -107,3 +165,60 @@ makeTestCase i c = do
 -- that test vector: all modified registers are in the output set.
 generateTestVariants :: Instruction arch -> ArchState (Sym t) arch -> M t arch [ArchState (Sym t) arch]
 generateTestVariants = undefined
+
+-- On-disk data format (s-expression based)
+
+{-
+
+The format is expected to be a simple s-expression recording inputs and outputs
+
+((inputs ((implicit . rax) (operand  . 0)))
+ (outputs ()))
+
+-}
+
+data Atom = AIdent String
+          | AWord Word
+          deriving (Show)
+
+parseIdent :: P.Parser String
+parseIdent = undefined
+
+parseWord :: P.Parser Word
+parseWord = undefined
+
+parseAtom :: P.Parser Atom
+parseAtom = AIdent <$> parseIdent
+        <|> AWord <$> parseWord
+
+parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
+parserLL = SC.mkParser parseAtom
+
+parseLL :: T.Text -> Either String (SC.SExpr Atom)
+parseLL = SC.decodeOne parserLL
+
+{-
+class BuildShapedList (tps :: [k]) where
+  buildShapedList :: forall tp m a b c
+                   . (E.MonadThrow m)
+                  => a
+                  -> (a -> m (b '[]))
+                  -- ^ The function to call on an empty list
+                  -> (a -> m (c tp, a))
+                  -- ^ The function to call on the seed to split it into a value
+                  -- (to be combined into a larger result) and the rest of the
+                  -- seed (to be consumed later)
+                  -> (c tp -> b tps -> m (b (tp ': tps)))
+                  -- ^ The function to combine the current element with the rest
+                  -- of the constructed shape
+                  -> m (b tps)
+
+instance BuildShapedList '[] where
+  buildShapedList a nil _f _c = nil a
+
+instance BuildShapedList (tp ': tps) where
+  buildShapedList a nil f c = do
+    (elt, rest) <- f a
+    rest' <- buildShapedList rest nil f c
+    c elt rest'
+-}
