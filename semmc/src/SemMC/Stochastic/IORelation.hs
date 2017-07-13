@@ -30,6 +30,7 @@ import qualified Data.Text as T
 import Data.Word ( Word64 )
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Text as P
+import Text.Read ( readMaybe )
 
 import qualified Data.Set.NonEmpty as NES
 import Data.Parameterized.Some ( Some(..) )
@@ -89,8 +90,114 @@ learn config ops = St.evalStateT (runM act) config
   where
     act = F.foldlM (\m (Some (Witness op)) -> testOpcode m op) MapF.empty ops
 
-printIORelation :: Opcode arch (Operand arch) sh -> IORelation arch sh -> T.Text
-printIORelation = undefined
+testOpcode :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
+           => MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
+           -> Opcode arch (Operand arch) sh
+           -> M t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
+testOpcode m op = do
+  g <- St.gets gen
+  mkTest <- St.gets testGen
+  t0 <- liftIO mkTest
+  insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
+  tests <- generateTestVariants insn t0
+  tests' <- mapM (makeTestCase insn) tests
+  tchan <- St.gets testChan
+  liftIO $ mapM_ (C.writeChan tchan . Just) tests'
+  return undefined
+
+makeTestCase :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
+             => Instruction arch
+             -> ArchState (Sym t) arch
+             -> M t arch (R.TestCase (ArchState (Sym t) arch))
+makeTestCase i c = do
+  tid <- St.gets nonce
+  asm <- St.gets assemble
+  St.modify' $ \s -> s { nonce = nonce s + 1 }
+  return R.TestCase { R.testNonce = tid
+                    , R.testContext = c
+                    , R.testProgram = asm i
+                    }
+
+-- | Given an initial test state, generate all interesting variants on it.  The
+-- idea is to see which outputs change when we tweak an input.
+--
+-- We learn the *inputs* set by starting with an initial test t0 and tweaking
+-- each element in the state in turn.  For each tweaked input, we examine the
+-- effects on the output states.  We want to avoid tweaking the registers that
+-- are instantiated as operands to the instruction, as we expect those to cause
+-- changes.  We really just need to learn which of the operands are inputs vs
+-- outputs, and if there are any implicit arguments.
+--
+-- We learn the *outputs* set by comparing the tweaked input vs the output from
+-- that test vector: all modified registers are in the output set.
+generateTestVariants :: Instruction arch -> ArchState (Sym t) arch -> M t arch [ArchState (Sym t) arch]
+generateTestVariants = undefined
+
+-- On-disk data format (s-expression based)
+
+{-
+
+The format is expected to be a simple s-expression recording inputs and outputs
+
+((inputs ((implicit . rax) (operand . 0)))
+ (outputs ()))
+
+-}
+
+data Atom = AIdent String
+          | AWord Word
+          deriving (Show)
+
+parseIdent :: P.Parser String
+parseIdent = P.many P.letter
+
+parseWord :: P.Parser Word
+parseWord = do
+  mw <- P.many1 P.digit
+  case readMaybe mw of
+    Just w -> return w
+    Nothing -> fail "Invalid word"
+
+parseAtom :: P.Parser Atom
+parseAtom = AIdent <$> parseIdent
+        <|> AWord <$> parseWord
+
+parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
+parserLL = SC.mkParser parseAtom
+
+parseLL :: T.Text -> Either String (SC.SExpr Atom)
+parseLL = SC.decodeOne parserLL
+
+printIORelation :: forall arch sh . (Architecture arch) => IORelation arch sh -> T.Text
+printIORelation = SC.encodeOne (SC.basicPrint printAtom) . (fromIORelation (Proxy :: Proxy arch))
+
+printAtom :: Atom -> T.Text
+printAtom a =
+  case a of
+    AIdent s -> T.pack s
+    AWord w -> T.pack (show w)
+
+fromIORelation :: (Architecture arch) => Proxy arch -> IORelation arch sh -> SC.SExpr Atom
+fromIORelation p ior =
+  SC.SCons (SC.SCons (SC.SAtom (AIdent "inputs")) inputsS)
+           (SC.SCons (SC.SCons (SC.SAtom (AIdent "outputs")) outputsS)
+                      SC.SNil)
+  where
+    inputsS = fromList (map toSExpr (inputs ior))
+    outputsS = fromList (map toSExpr (outputs ior))
+
+    fromList = foldr SC.SCons SC.SNil
+
+    toSExpr rel =
+      case rel of
+        ImplicitOperand loc -> SC.SAtom (AIdent (show loc))
+        OperandRef ix -> SC.SAtom (AWord (indexToWord p ix))
+
+indexToWord :: Proxy arch -> D.Index sh s -> Word
+indexToWord p ix =
+  case ix of
+    D.IndexHere -> 0
+    D.IndexThere ix' -> 1 + indexToWord p ix'
 
 data IORelationParseError arch = IORelationParseError (Proxy arch) (Some (Opcode arch (Operand arch))) T.Text
                                | InvalidSExpr (Proxy arch) (Some (Opcode arch (Operand arch))) (SC.SExpr Atom)
@@ -159,79 +266,7 @@ mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
     elt _ _ w =
       case w of
         0 -> return (OperandRef D.IndexHere)
-        _ -> U.unfoldShape nil elt (w - 1)
-
-testOpcode :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
-           => MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
-           -> Opcode arch (Operand arch) sh
-           -> M t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
-testOpcode m op = do
-  g <- St.gets gen
-  mkTest <- St.gets testGen
-  t0 <- liftIO mkTest
-  insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
-  tests <- generateTestVariants insn t0
-  tests' <- mapM (makeTestCase insn) tests
-  tchan <- St.gets testChan
-  liftIO $ mapM_ (C.writeChan tchan . Just) tests'
-  return undefined
-
-makeTestCase :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
-             => Instruction arch
-             -> ArchState (Sym t) arch
-             -> M t arch (R.TestCase (ArchState (Sym t) arch))
-makeTestCase i c = do
-  tid <- St.gets nonce
-  asm <- St.gets assemble
-  St.modify' $ \s -> s { nonce = nonce s + 1 }
-  return R.TestCase { R.testNonce = tid
-                    , R.testContext = c
-                    , R.testProgram = asm i
-                    }
-
--- | Given an initial test state, generate all interesting variants on it.  The
--- idea is to see which outputs change when we tweak an input.
---
--- We learn the *inputs* set by starting with an initial test t0 and tweaking
--- each element in the state in turn.  For each tweaked input, we examine the
--- effects on the output states.  We want to avoid tweaking the registers that
--- are instantiated as operands to the instruction, as we expect those to cause
--- changes.  We really just need to learn which of the operands are inputs vs
--- outputs, and if there are any implicit arguments.
---
--- We learn the *outputs* set by comparing the tweaked input vs the output from
--- that test vector: all modified registers are in the output set.
-generateTestVariants :: Instruction arch -> ArchState (Sym t) arch -> M t arch [ArchState (Sym t) arch]
-generateTestVariants = undefined
-
--- On-disk data format (s-expression based)
-
-{-
-
-The format is expected to be a simple s-expression recording inputs and outputs
-
-((inputs ((implicit . rax) (operand . 0)))
- (outputs ()))
-
--}
-
-data Atom = AIdent String
-          | AWord Word
-          deriving (Show)
-
-parseIdent :: P.Parser String
-parseIdent = undefined
-
-parseWord :: P.Parser Word
-parseWord = undefined
-
-parseAtom :: P.Parser Atom
-parseAtom = AIdent <$> parseIdent
-        <|> AWord <$> parseWord
-
-parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
-parserLL = SC.mkParser parseAtom
-
-parseLL :: T.Text -> Either String (SC.SExpr Atom)
-parseLL = SC.decodeOne parserLL
+        _ -> do
+          OperandRef ix <- U.unfoldShape nil elt (w - 1)
+          return (OperandRef (D.IndexThere ix))
 
