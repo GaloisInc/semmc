@@ -1,13 +1,16 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
 module SemMC.Stochastic.Monad (
   Syn,
+  SynC,
   loadInitialState,
   runSyn,
   Config(..),
   -- * Operations
   askGen,
+  askBaseSet,
   askConfig,
   askTestCases,
   askFormulas,
@@ -34,6 +37,7 @@ import qualified Lang.Crucible.Solver.SimpleBackend as CRU
 
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
+import qualified Data.Set.NonEmpty as NES
 
 import SemMC.Architecture ( ArchState, Architecture, Opcode, Operand )
 import qualified SemMC.Formula as F
@@ -44,10 +48,12 @@ import SemMC.Util ( Witness(..) )
 
 import qualified SemMC.Stochastic.Statistics as S
 
+-- | Symbolic something?
 type Sym t = CRU.SimpleBackend t
 
+-- | Synthesis environment.
 data SynEnv t arch =
-  SymEnv { seFormulas :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+  SynEnv { seFormulas :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
          -- ^ All of the known formulas (base set + learned set)
          , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
          -- ^ Work items
@@ -73,6 +79,11 @@ data SynEnv t arch =
 -- This includes a remote connection to run test cases
 data LocalSymEnv = LocalSymEnv
 
+-- Synthesis constraints.
+type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
+                 , D.ArbitraryOperands (Opcode arch) (Operand arch) )
+
+-- Synthesis monad.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (SynEnv t arch) IO a }
   deriving (Functor,
             Applicative,
@@ -132,6 +143,26 @@ addTestCase tc = do
 askFormulas :: Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 askFormulas = R.asks seFormulas >>= (liftIO . STM.readTVarIO)
 
+-- | Return the set of opcodes with known semantics.
+--
+-- WARNING: The use of "base set" here with 'askBaseSet' is not the
+-- same as in 'Config.baseSetDir' below, where we distinguish between
+-- the initial base set and the opcodes we learn semantics for
+-- later. The occurrences of "base set" in 'Dismantle.Random' refer to
+-- the whole set like here with 'askBaseSet', which is also consistent
+-- with the STRATA paper. We probably want to change one of these
+-- naming conventions to make them distinct.
+askBaseSet :: Ord (Some (Opcode arch (Operand arch)))
+           => Syn t arch (NES.Set (Some (Opcode arch (Operand arch))))
+askBaseSet = do
+  -- Since we don't update the base set during a round, it would make
+  -- sense to cache this for constant lookup, instead of doing this
+  -- O(n) lookup every time!
+  xs <- MapF.keys <$> askFormulas
+  case xs of
+    [] -> error "askBaseSet: empty base set!"
+    (x:xs') -> return $ NES.fromList x xs'
+
 lookupFormula :: (Architecture arch)
               => Opcode arch (Operand arch) sh
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
@@ -175,7 +206,7 @@ loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes = do
   testref <- STM.newTVarIO (interestingTests ++ randomTests)
   gen <- A.createGen
   statsThread <- S.newStatisticsThread (statisticsFile cfg)
-  return SymEnv { seFormulas = fref
+  return SynEnv { seFormulas = fref
                 , seTestCases = testref
                 , seWorklist = wlref
                 , seAllOpcodes = allOpcodes

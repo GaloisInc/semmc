@@ -65,7 +65,7 @@ strataOne op = do
     Nothing -> return Nothing
     Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
 
-strataOneLoop :: (Architecture arch, Ord (Instruction arch))
+strataOneLoop :: (Architecture arch, Ord (Instruction arch), SynC arch)
               => Opcode arch (Operand arch) sh
               -> Instruction arch
               -> C.EquivalenceClasses arch

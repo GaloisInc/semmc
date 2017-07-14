@@ -299,11 +299,15 @@ instance A.IsLocation Location where
 ----------------------------------------------------------------
 -- * Random Instruction Generation
 
+-- TODO: if this is used to generate immediates for synthesis, then we
+-- don't want to generate an uniform value, but rather one from a
+-- distinguished set (IIRC [-16..16] and powers of 2). But then
+-- "arbitrary" seems like an unfortunate name ...
 instance D.Arbitrary (Operand "I32") where
   arbitrary gen = I32 <$> D.uniform gen
 
 instance D.Arbitrary (Operand "R32") where
-  arbitrary gen = R32 <$> D.choose gen (NES.fromList Reg1 [Reg2, Reg3])
+  arbitrary gen = R32 <$> D.choose (NES.fromList Reg1 [Reg2, Reg3]) gen
 
 instance D.ArbitraryOperands Opcode Operand where
   arbitraryOperands gen op = case op of
