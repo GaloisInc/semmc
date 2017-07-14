@@ -18,6 +18,7 @@ module SemMC.Stochastic.IORelation (
 
 import Control.Applicative
 import qualified Control.Concurrent as C
+import Control.Monad ( replicateM )
 import qualified Control.Monad.Catch as E
 import qualified Control.Monad.State.Strict as St
 import Control.Monad.Trans ( MonadIO, liftIO )
@@ -27,7 +28,9 @@ import Data.Proxy ( Proxy(..) )
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Text as T
+import Data.Typeable ( Typeable )
 import Data.Word ( Word64 )
+import System.Timeout ( timeout )
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Text as P
 import Text.Read ( readMaybe )
@@ -57,6 +60,8 @@ data LearnConfig t arch =
               , assemble :: Instruction arch -> BS.ByteString
               , nonce :: !Word64
               -- ^ Nonces for test vectors
+              , resWaitSeconds :: Int
+              -- ^ Number of seconds to wait to receive all of the results over the 'resChan'
               }
 
 data OperandRef arch sh = ImplicitOperand (Some (Location arch))
@@ -78,6 +83,16 @@ newtype M t arch a = M { runM :: St.StateT (LearnConfig t arch) IO a }
             St.MonadState (LearnConfig t arch),
             MonadIO)
 
+-- | Number of microseconds to wait for all results to come in over the channel
+askWaitMicroseconds :: M t arch Int
+askWaitMicroseconds = (* 1000000) <$> St.gets resWaitSeconds
+
+data LearningException arch = LearningTimeout (Proxy arch) (Some (Opcode arch (Operand arch)))
+
+deriving instance (Architecture arch) => Show (LearningException arch)
+
+instance (Architecture arch, Typeable arch) => E.Exception (LearningException arch)
+
 -- | Find the locations read from and written to by each instruction passed in
 --
 -- This is determined by observing the behavior of instructions on tests and
@@ -90,7 +105,7 @@ learn config ops = St.evalStateT (runM act) config
   where
     act = F.foldlM (\m (Some (Witness op)) -> testOpcode m op) MapF.empty ops
 
-testOpcode :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
+testOpcode :: forall arch sh t . (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
            => MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
            -> Opcode arch (Operand arch) sh
            -> M t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
@@ -103,7 +118,14 @@ testOpcode m op = do
   tests' <- mapM (makeTestCase insn) tests
   tchan <- St.gets testChan
   liftIO $ mapM_ (C.writeChan tchan . Just) tests'
-  return undefined
+  ms <- askWaitMicroseconds
+  rchan <- St.gets resChan
+  mresults <- liftIO $ timeout ms $ replicateM (length tests') (C.readChan rchan)
+  case mresults of
+    Just results -> do
+      ior <- computeIORelation op tests' results
+      return (MapF.insert op ior m)
+    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy :: Proxy arch) (Some op))
 
 makeTestCase :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
              => Instruction arch
@@ -117,6 +139,13 @@ makeTestCase i c = do
                     , R.testContext = c
                     , R.testProgram = asm i
                     }
+
+computeIORelation :: (Architecture arch)
+                  => Opcode arch (Operand arch) sh
+                  -> [R.TestCase (ArchState (Sym t) arch)]
+                  -> [R.ResultOrError (ArchState (Sym t) arch)]
+                  -> M t arch (IORelation arch sh)
+computeIORelation = undefined
 
 -- | Given an initial test state, generate all interesting variants on it.  The
 -- idea is to see which outputs change when we tweak an input.
@@ -215,7 +244,7 @@ readIORelation :: forall arch m sh
                -> m (IORelation arch sh)
 readIORelation p t op = do
   sx <- case parseLL t of
-    Left err -> E.throwM (IORelationParseError p (Some op) t)
+    Left _err -> E.throwM (IORelationParseError p (Some op) t)
     Right res -> return res
   (inputsS, outputsS) <- case sx of
     SC.SCons (SC.SCons (SC.SAtom (AIdent "inputs")) inputsS)
