@@ -7,27 +7,31 @@ operands. This allows an SMT solver to later "fill in" the abstract operands,
 given constraints.
 
 -}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Synthesis.Template
   ( BaseSet
-  , TemplatedOperand
+  , TemplatedOperandFn
+  , TemplatedOperand(..)
+  , WrappedRecoverOperandFn(..)
   , TemplatedArch
   , TemplatedFormula
+  , TemplatableOperand(..)
   , TemplatableOpcode
   , TemplatedInstructionFormula(..)
-  , tfOperandList
   , tfOperandExprs
   , tfFormula
   , templatizeFormula
@@ -48,12 +52,10 @@ import           Data.Parameterized.Some
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Typeable
-import           GHC.TypeLits ( KnownSymbol, sameSymbol, Symbol, symbolVal )
+import           GHC.TypeLits ( Symbol )
 import           Unsafe.Coerce ( unsafeCoerce )
 
-import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
-import qualified Lang.Crucible.Solver.SimpleBackend as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
@@ -64,26 +66,29 @@ import           SemMC.Formula
 import           SemMC.Formula.Instantiate
 import           SemMC.Util
 
--- | Type used in an 'OperandList' for a templated instruction.
-data TemplatedOperand (arch :: *) (s :: Symbol) where
-  -- | A filled-in operand -- in practice, a particular register.
-  Concrete :: Operand arch s -> TemplatedOperand arch s
-  -- | A blank operand -- an immediate.
-  Abstract :: (KnownSymbol s) => BaseTypeRepr (OperandType arch s) -> TemplatedOperand arch s
+type RecoverOperandFn sym op = (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op
 
-instance (ShowF (Operand arch)) => Show (TemplatedOperand arch s) where
-  show (Concrete op) = "Concrete (" ++ showF op ++ ")"
-  show (Abstract _) = "Abstract"
+newtype WrappedRecoverOperandFn sym op =
+  WrappedRecoverOperandFn { unWrappedRecOpFn :: RecoverOperandFn sym op }
+
+type TemplatedOperandFn arch s = forall sym.
+                                 (S.IsExprBuilder sym,
+                                  S.IsSymInterface sym)
+                              => sym
+                              -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
+                              -> IO (S.SymExpr sym (OperandType arch s),
+                                     WrappedRecoverOperandFn sym (Operand arch s))
+
+data TemplatedOperand (arch :: *) (s :: Symbol) =
+  TemplatedOperand (Maybe (Location arch (OperandType arch s))) (TemplatedOperandFn arch s)
+
+instance Show (TemplatedOperand arch s) where
+  show _ = "some weird templated operand"
 
 instance (ShowF (Operand arch)) => ShowF (TemplatedOperand arch)
 
-instance (TestEquality (Operand arch)) => TestEquality (TemplatedOperand arch) where
-  Concrete op1 `testEquality` Concrete op2 = (\Refl -> Refl) <$> op1 `testEquality` op2
-  (Abstract _ :: TemplatedOperand arch s1) `testEquality` (Abstract _ :: TemplatedOperand arch s2) =
-    (\Refl -> Refl) <$> (Proxy :: Proxy s1) `sameSymbol` (Proxy :: Proxy s2)
-  _            `testEquality` _            = Nothing
+instance IsOperand (TemplatedOperand arch)
 
-instance (IsOperand (Operand arch)) => IsOperand (TemplatedOperand arch)
 
 -- | Phantom architecture used to signal we want to use template operands when
 -- instantiating a formula, rather than all concrete operands.
@@ -101,15 +106,27 @@ type TemplateConstraints arch = (Architecture arch,
                                  EnumF ((Opcode arch) (TemplatedOperand arch)))
 
 instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
-  operandValue _ sym newVars (Concrete op) = operandValue (Proxy :: Proxy arch) sym newVars op
-  operandValue _ sym _ (Abstract tpRepr :: TemplatedOperand arch s) =
-    S.freshConstant sym (makeSymbol (symbolVal (Proxy :: Proxy s))) tpRepr
+  data TaggedExpr (TemplatedArch arch) sym s =
+    TaggedExpr { taggedExpr :: S.SymExpr sym (OperandType arch s)
+               , taggedRecover :: WrappedRecoverOperandFn sym (Operand arch s)
+               }
 
-  operandToLocation _ (Concrete op) = operandToLocation (Proxy :: Proxy arch) op
-  operandToLocation _ (Abstract _)  = Nothing
+  unTagged = taggedExpr
 
-  -- ?
-  valueToOperand = undefined
+  operandValue _ sym locLookup (TemplatedOperand _ f) = do
+    (expr, recover) <- f sym locLookup
+    return (TaggedExpr expr recover)
+
+  operandToLocation _ (TemplatedOperand loc _ ) = loc
+
+instance Show (S.SymExpr sym (OperandType arch s)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
+  show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
+
+taggedWithShow :: forall sym arch p q s a. (ShowF (S.SymExpr sym)) => p (TaggedExpr (TemplatedArch arch) sym) -> q s -> (Show (TaggedExpr (TemplatedArch arch) sym s) => a) -> a
+taggedWithShow _ _ = withShow (Proxy @(S.SymExpr sym)) (Proxy @(OperandType arch s))
+
+instance ShowF (S.SymExpr sym) => ShowF (TaggedExpr (TemplatedArch arch) sym) where
+  withShow = taggedWithShow
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using 'unsafeCoerce'.
@@ -162,8 +179,7 @@ unTemplate = unTemplateUnsafe
 -- | 'Formula' along with the expressions that correspond to each operand (for
 -- pulling out the values of immediates after solving, primarily).
 data TemplatedFormula sym arch sh =
-  TemplatedFormula { tfOperandList :: OperandList (TemplatedOperand arch) sh
-                   , tfOperandExprs :: OperandList (WrappedExpr sym (TemplatedArch arch)) sh
+  TemplatedFormula { tfOperandExprs :: OperandList (TaggedExpr (TemplatedArch arch) sym) sh
                    , tfFormula :: Formula sym (TemplatedArch arch)
                    }
 deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (TemplatedFormula sym arch sh)
@@ -171,51 +187,35 @@ deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S
 instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => ShowF (TemplatedFormula sym arch) where
   showF = show
 
-class KnownBool (b :: Bool) where
-  boolVal :: Proxy b -> Bool
-
-instance KnownBool 'False where
-  boolVal _ = False
-
-instance KnownBool 'True where
-  boolVal _ = True
+class TemplatableOperand (arch :: *) (s :: Symbol) where
+  opTemplates :: [TemplatedOperand arch s]
 
 -- | The only way to define structure-dependent operations on type-level lists...
 class TemplatableOperands arch sh where
   -- | For a given shape, generate all possible templated operand lists.
   makeTemplatedOpLists :: [OperandList (TemplatedOperand arch) sh]
   -- | Recover the resulting concrete operands once the SMT solver has run.
-  recoverOperands :: GroundEvalFn t
-                  -> OperandList (TemplatedOperand arch) sh
-                  -> OperandList (WrappedExpr (S.SimpleBackend t) (TemplatedArch arch)) sh
+  recoverOperands :: (forall tp. S.SymExpr sym tp -> IO (GroundValue tp))
+                  -> OperandList (TaggedExpr (TemplatedArch arch) sym) sh
                   -> IO (OperandList (Operand arch) sh)
 
 instance TemplatableOperands arch '[] where
   makeTemplatedOpLists = [Nil]
-  recoverOperands _ Nil Nil = return Nil
+  recoverOperands _ Nil = return Nil
 
 instance (Architecture arch,
-          KnownSymbol s,
-          IsSpecificOperand (Operand arch) s,
-          KnownBool (IsReg arch s),
-          KnownRepr BaseTypeRepr (OperandType arch s),
+          TemplatableOperand arch s,
           TemplatableOperands arch sh) =>
          TemplatableOperands arch (s ': sh) where
   makeTemplatedOpLists =
-    -- We're in the List monad.
-    -- This first @makeTemplatedOpLists@ call is to the oplist tail.
-    makeTemplatedOpLists >>= \opList ->
-      -- Ideally, this @boolVal@ would instead be at compile-time, but I
-      -- couldn't figure out how to finagle the types to do that.
-      case boolVal (Proxy :: Proxy (IsReg arch s)) of
-        True -> map (\op -> Concrete op :> opList) allOperandValues
-        False -> return $ Abstract (knownRepr :: BaseTypeRepr (OperandType arch s)) :> opList
+    -- We're in the List applicative.
+    (:>) <$> opTemplates
+         <*> makeTemplatedOpLists
 
-  recoverOperands evalFn (Concrete op :> restOps) (_ :> restExprs) =
-    (op :>) <$> recoverOperands evalFn restOps restExprs
-  recoverOperands evalFn (Abstract _ :> restOps) (WrappedExpr expr :> restExprs) =
-    (:>) <$> (valueToOperand (Proxy :: Proxy arch) <$> groundEval evalFn expr)
-         <*> recoverOperands evalFn restOps restExprs
+  recoverOperands evalFn (TaggedExpr _ (WrappedRecoverOperandFn recover) :> restExprs) =
+    -- Now we're in IO.
+    (:>) <$> recover evalFn
+         <*> recoverOperands evalFn restExprs
 
 type TemplatableOpcode arch = Witness (TemplatableOperands arch) ((Opcode arch) (Operand arch))
 
@@ -229,7 +229,7 @@ templatizeFormula :: (TemplateConstraints arch,
                   -> ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch) sh
                   -> [IO (TemplatedFormula (S.SimpleBuilder t st) arch sh)]
 templatizeFormula sym pf = map mkFormula makeTemplatedOpLists
-  where mkFormula ol = uncurry (TemplatedFormula ol) <$> instantiateFormula sym pf ol
+  where mkFormula ol = uncurry TemplatedFormula <$> instantiateFormula sym pf ol
 
 templatizeFormula' :: (TemplateConstraints arch,
                        TemplatableOperands arch sh)

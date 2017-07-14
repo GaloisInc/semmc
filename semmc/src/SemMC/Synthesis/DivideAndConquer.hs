@@ -10,7 +10,7 @@ module SemMC.Synthesis.DivideAndConquer
 
 import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Trans.Maybe ( runMaybeT )
-import           Data.Maybe ( fromJust, mapMaybe )
+import           Data.Maybe ( mapMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some

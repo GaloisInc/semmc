@@ -91,8 +91,9 @@ buildEquality sym test (Formula _ vars defs) = foldlMWithKey f (S.truePred sym) 
 handleSat :: GroundEvalFn t
           -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
           -> IO [TemplatableInstruction arch]
-handleSat evalFn = mapM f
-  where f (TemplatedInstructionFormula op tf) = TemplatableInstruction (Witness op) <$> recoverOperands evalFn (tfOperandList tf) (tfOperandExprs tf)
+handleSat (GroundEvalFn evalFn) = mapM f
+  where f (TemplatedInstructionFormula op tf) =
+          TemplatableInstruction (Witness op) <$> recoverOperands evalFn (tfOperandExprs tf)
 
 handleSatResult :: [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                 -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))

@@ -48,6 +48,8 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
+import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
+import           SemMC.Util ( makeSymbol )
 
 ----------------------------------------------------------------
 -- * Instructions
@@ -227,18 +229,25 @@ evalProg ms is = foldl evalInstruction ms is
 
 data Toy = Toy
 
-type instance A.IsReg Toy "R32" = 'True
-type instance A.IsReg Toy "I32" = 'False
-
 instance A.IsOperand Operand
 
 instance A.IsOpcode Opcode
 
-instance A.IsSpecificOperand Operand "R32" where
-  allOperandValues = R32 <$> [Reg1, Reg2, Reg3]
+instance TemplatableOperand Toy "R32" where
+  opTemplates = mkTemplate <$> [Reg1, Reg2, Reg3]
+    where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) mkTemplate' :: TemplatedOperand Toy "R32"
+            where mkTemplate' :: TemplatedOperandFn Toy "R32"
+                  mkTemplate' _ locLookup = do
+                    expr <- locLookup (RegLoc reg)
+                    return (expr, WrappedRecoverOperandFn $ const (return (R32 reg)))
 
-instance A.IsSpecificOperand Operand "I32" where
-  allOperandValues = I32 <$> [0..]
+instance TemplatableOperand Toy "I32" where
+  opTemplates = [TemplatedOperand Nothing mkConst]
+    where mkConst :: TemplatedOperandFn Toy "I32"
+          mkConst sym _ = do
+            v <- S.freshConstant sym (makeSymbol "I32") knownRepr
+            let recover evalFn = I32 . fromInteger <$> evalFn v
+            return (v, WrappedRecoverOperandFn recover)
 
 type instance A.Operand Toy = Operand
 type instance A.Opcode Toy = Opcode
@@ -256,14 +265,15 @@ valueToOperand val
   | otherwise = undefined
 
 instance A.Architecture Toy where
-  operandValue _ _ newVars (R32 reg) = newVars (RegLoc reg)
-  operandValue _ sym _       (I32 imm) = S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
+  data TaggedExpr Toy sym s = TaggedExpr { unTaggedExpr :: S.SymExpr sym (A.OperandType Toy s) }
+
+  unTagged = unTaggedExpr
+
+  operandValue _ _ newVars (R32 reg) = TaggedExpr <$> newVars (RegLoc reg)
+  operandValue _ sym _     (I32 imm) = TaggedExpr <$> S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
 
   operandToLocation _ (R32 reg) = Just (RegLoc reg)
   operandToLocation _ (I32 _) = Nothing
-
-  -- TODO: how to handle this?
-  valueToOperand _ = valueToOperand
 
 ----------------------------------------------------------------
 -- ** Locations

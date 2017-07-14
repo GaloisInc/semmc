@@ -1,4 +1,6 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -27,80 +29,27 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
 import           Data.Parameterized.Some
 import           Data.Proxy ( Proxy(..) )
+import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
-import           GHC.TypeLits ( KnownSymbol, sameSymbol )
 import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.SimpleBackend.GroundEval ( GroundValue )
 
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
-import           SemMC.Formula.Parser ( readFormulaFromFile )
-import           SemMC.Synthesis.Template ( BaseSet, TemplatedOperand )
-import           SemMC.Util ( Witness(..) )
+import           SemMC.Formula
+import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
+import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
+import           SemMC.Util ( makeSymbol, Equal, Witness(..) )
 
 data PPC
 
 type instance A.Operand PPC = PPC.Operand
 
--- TODO: rename IsReg to IsImm and negate everything
-type instance A.IsReg PPC "Abscalltarget" = 'False
-type instance A.IsReg PPC "Abscondbrtarget" = 'False
-type instance A.IsReg PPC "Absdirectbrtarget" = 'False
-type instance A.IsReg PPC "Calltarget" = 'False
-type instance A.IsReg PPC "Condbrtarget" = 'False
-type instance A.IsReg PPC "Crbitm" = 'False
-type instance A.IsReg PPC "Crbitrc" = 'False
-type instance A.IsReg PPC "Crrc" = 'False
-type instance A.IsReg PPC "Directbrtarget" = 'False
-type instance A.IsReg PPC "F4rc" = 'True
-type instance A.IsReg PPC "F8rc" = 'True
-type instance A.IsReg PPC "G8rc" = 'True
-type instance A.IsReg PPC "G8rc_nox0" = 'True
-type instance A.IsReg PPC "Gprc" = 'True
-type instance A.IsReg PPC "Gprc_nor0" = 'True
-type instance A.IsReg PPC "I1imm" = 'False
-type instance A.IsReg PPC "I32imm" = 'False
-type instance A.IsReg PPC "I32imm" = 'False
--- What to do about these combinations?
--- type instance A.IsReg PPC "Memri" =
--- type instance A.IsReg PPC "Memrix" =
--- type instance A.IsReg PPC "Memrix16" =
-type instance A.IsReg PPC "Memrr" = 'True
-type instance A.IsReg PPC "S16imm" = 'False
-type instance A.IsReg PPC "S16imm64" = 'False
-type instance A.IsReg PPC "S17imm" = 'False
-type instance A.IsReg PPC "S5imm" = 'False
--- What to do about these combinations?
--- type instance A.IsReg PPC "Spe2dis" =
--- type instance A.IsReg PPC "Spe4dis" =
--- type instance A.IsReg PPC "Spe8dis" =
-type instance A.IsReg PPC "Tlscall" = 'False
-type instance A.IsReg PPC "Tlscall32" = 'False
-type instance A.IsReg PPC "Tlsreg" = 'True
-type instance A.IsReg PPC "Tlsreg32" = 'True
-type instance A.IsReg PPC "U10imm" = 'False
-type instance A.IsReg PPC "U16imm" = 'False
-type instance A.IsReg PPC "U16imm64" = 'False
-type instance A.IsReg PPC "U1imm" = 'False
-type instance A.IsReg PPC "U2imm" = 'False
-type instance A.IsReg PPC "U4imm" = 'False
-type instance A.IsReg PPC "U5imm" = 'False
-type instance A.IsReg PPC "U6imm" = 'False
-type instance A.IsReg PPC "U7imm" = 'False
-type instance A.IsReg PPC "U8imm" = 'False
-type instance A.IsReg PPC "Vrrc" = 'True
-type instance A.IsReg PPC "Vsfrc" = 'True
-type instance A.IsReg PPC "Vsrc" = 'True
-type instance A.IsReg PPC "Vssrc" = 'True
-
 instance A.IsOperand PPC.Operand
-
--- TODO: IsSpecificOperand instances
 
 type instance A.Opcode PPC = PPC.Opcode
 
@@ -157,14 +106,47 @@ type instance A.OperandType PPC "Vsfrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsrc" = BaseBVType 128
 type instance A.OperandType PPC "Vssrc" = BaseBVType 128
 
-instance A.IsSpecificOperand PPC.Operand "Gprc" where
-  allOperandValues = PPC.Gprc . PPC.GPR <$> [0..31]
+concreteTemplatedOperand :: forall arch s a.
+                            (A.Architecture arch)
+                         => (a -> A.Operand arch s)
+                         -> (a -> A.Location arch (A.OperandType arch s))
+                         -> a
+                         -> TemplatedOperand arch s
+concreteTemplatedOperand op loc x = TemplatedOperand (Just (loc x)) mkTemplate' :: TemplatedOperand arch s
+  where mkTemplate' :: TemplatedOperandFn arch s
+        mkTemplate' sym locLookup = do
+          expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
+          return (expr, WrappedRecoverOperandFn $ const (return (op x)))
 
-instance A.IsSpecificOperand PPC.Operand "Gprc_nor0" where
-  allOperandValues = PPC.Gprc_nor0 . PPC.GPR <$> [0..31]
+instance TemplatableOperand PPC "Gprc" where
+  opTemplates = concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
 
-instance A.IsSpecificOperand PPC.Operand "S16imm" where
-  allOperandValues = PPC.S16imm <$> [minBound..]
+instance TemplatableOperand PPC "Gprc_nor0" where
+  opTemplates = concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
+
+instance TemplatableOperand PPC "S16imm" where
+  opTemplates = [TemplatedOperand Nothing mkConst]
+    where mkConst :: TemplatedOperandFn PPC "S16imm"
+          mkConst sym _ = do
+            v <- S.freshConstant sym (makeSymbol "S16imm") knownRepr
+            let recover evalFn = PPC.S16imm . fromInteger <$> evalFn v
+            return (v, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "Memri" where
+  opTemplates = mkTemplate <$> [0..31]
+    where mkTemplate gprNum = TemplatedOperand Nothing mkTemplate' :: TemplatedOperand PPC "Memri"
+            where mkTemplate' :: TemplatedOperandFn PPC "Memri"
+                  mkTemplate' sym locLookup = do
+                    base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
+                    offset <- S.freshConstant sym (makeSymbol "Memri_off") knownRepr
+                    expr <- S.bvAdd sym base offset
+                    let recover evalFn = do
+                          offsetVal <- fromInteger <$> evalFn offset
+                          let gpr
+                                | gprNum /= 0 = Just (PPC.GPR gprNum)
+                                | otherwise = Nothing
+                          return $ PPC.Memri $ PPC.MemRI gpr offsetVal
+                    return (expr, WrappedRecoverOperandFn recover)
 
 data Location :: BaseType -> * where
   LocGPR :: PPC.GPR -> Location (BaseBVType 32)
@@ -265,8 +247,8 @@ operandValue :: forall sym s.
              => sym
              -> (forall tp. Location tp -> IO (S.SymExpr sym tp))
              -> PPC.Operand s
-             -> IO (S.SymExpr sym (A.OperandType PPC s))
-operandValue sym locLookup = operandValue'
+             -> IO (A.TaggedExpr PPC sym s)
+operandValue sym locLookup op = TaggedExpr <$> operandValue' op
   where operandValue' :: PPC.Operand s -> IO (S.SymExpr sym (A.OperandType PPC s))
         operandValue' (PPC.Abscalltarget (PPC.ABT absTarget)) =
           S.bvLit sym knownNat (toInteger absTarget)
@@ -380,178 +362,53 @@ operandValue sym locLookup = operandValue'
           S.bvAdd sym ip offset
 
 operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
--- operandToLocation (PPC.Crbitrc _) = error "Crbitrc operandToLocation ?"
--- operandToLocation (PPC.Crrc _) = error "Crrc operandToLocation ?"
 operandToLocation (PPC.F4rc _) = error "F4rc operandToLocation ?"
 operandToLocation (PPC.F8rc fr) = Just $ LocFR fr
 operandToLocation (PPC.G8rc _) = error "G8rc operandToLocation ?"
 operandToLocation (PPC.G8rc_nox0 _) = error "G8rc_nox0 operandToLocation ?"
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
--- operandToLocation (PPC.Gprc_nor0 gpr@(PPC.GPR gpr'))
---   | gpr' /= 0 = Just $ LocGPR gpr
---   | otherwise = error "can't get the location of (Gprc_nor0 (GPR 0))"
--- operandToLocation (PPC.Memrr _) = error "MemRR operandToLocation?"
 operandToLocation (PPC.Tlsreg _) = error "Tlsreg operandToLocation?"
 operandToLocation (PPC.Tlsreg32 gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Vrrc vr) = Just $ LocVR vr
 operandToLocation (PPC.Vsfrc vr) = Just $ LocVR vr
 operandToLocation (PPC.Vsrc vr) = Just $ LocVR vr
 operandToLocation (PPC.Vssrc vr) = Just $ LocVR vr
-
--- operandToLocation (PPC.Memri _) = error "Memri operandToLocation?"
--- operandToLocation (PPC.Memrix _) = error "Memrix operandToLocation?"
--- operandToLocation (PPC.Memrix16 _) = error "Memrix16 operandToLocation?"
--- operandToLocation (PPC.Spe2dis _) = error "Spe2dis operandToLocation?"
--- operandToLocation (PPC.Spe4dis _) = error "Spe4dis operandToLocation?"
--- operandToLocation (PPC.Spe8dis _) = error "Spe8dis operandToLocation?"
-
 operandToLocation _ = Nothing
 
-valueToOperand :: forall s. (KnownSymbol s) => GroundValue (A.OperandType PPC s) -> PPC.Operand s
-valueToOperand
-  | Just Refl <- sameSymbol @s @"Abscalltarget" Proxy Proxy =
-      PPC.Abscalltarget . PPC.ABT . fromInteger
-  | Just Refl <- sameSymbol @s @"Abscondbrtarget" Proxy Proxy =
-      PPC.Abscondbrtarget . PPC.ABT . fromInteger
-  | Just Refl <- sameSymbol @s @"Absdirectbrtarget" Proxy Proxy =
-      PPC.Absdirectbrtarget . PPC.ABT . fromInteger
-  | Just Refl <- sameSymbol @s @"Calltarget" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Condbrtarget" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Crbitm" Proxy Proxy =
-      PPC.Crbitm . PPC.CRBitM . fromInteger
-  | Just Refl <- sameSymbol @s @"Crbitrc" Proxy Proxy =
-      PPC.Crbitrc . PPC.CRBitRC . fromInteger
-  | Just Refl <- sameSymbol @s @"Crrc" Proxy Proxy =
-      PPC.Crrc . PPC.CRRC . fromInteger
-  | Just Refl <- sameSymbol @s @"Directbrtarget" Proxy Proxy =
-      PPC.Directbrtarget . PPC.ABT . fromInteger
-  | Just Refl <- sameSymbol @s @"F4rc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"F8rc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"G8rc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"G8rc_nox0" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Gprc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Gprc_nor0" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"I1imm" Proxy Proxy =
-      PPC.I1imm . fromInteger
-  | Just Refl <- sameSymbol @s @"I32imm" Proxy Proxy =
-      PPC.I32imm . fromInteger
-  | Just Refl <- sameSymbol @s @"Memri" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Memrix" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Memrix16" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Memrr" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"S16imm" Proxy Proxy =
-      PPC.S16imm . fromInteger
-  | Just Refl <- sameSymbol @s @"S16imm64" Proxy Proxy =
-      PPC.S16imm64 . fromInteger
-  | Just Refl <- sameSymbol @s @"S17imm" Proxy Proxy =
-      PPC.S17imm . fromInteger
-  | Just Refl <- sameSymbol @s @"S5imm" Proxy Proxy =
-      PPC.S5imm . fromInteger
-  | Just Refl <- sameSymbol @s @"Spe2dis" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Spe4dis" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Spe8dis" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Tlscall" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Tlscall32" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Tlsreg" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Tlsreg32" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"U10imm" Proxy Proxy =
-      PPC.U10imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U16imm" Proxy Proxy =
-      PPC.U16imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U16imm64" Proxy Proxy =
-      PPC.U16imm64 . fromInteger
-  | Just Refl <- sameSymbol @s @"U1imm" Proxy Proxy =
-      PPC.U1imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U2imm" Proxy Proxy =
-      PPC.U2imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U4imm" Proxy Proxy =
-      PPC.U4imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U5imm" Proxy Proxy =
-      PPC.U5imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U6imm" Proxy Proxy =
-      PPC.U6imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U7imm" Proxy Proxy =
-      PPC.U7imm . fromInteger
-  | Just Refl <- sameSymbol @s @"U8imm" Proxy Proxy =
-      PPC.U8imm . fromInteger
-  | Just Refl <- sameSymbol @s @"Vrrc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Vsfrc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Vsrc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | Just Refl <- sameSymbol @s @"Vssrc" Proxy Proxy =
-      -- XXX:
-      undefined
-  | otherwise =
-      undefined
-
 instance A.Architecture PPC where
+  data TaggedExpr PPC sym s = TaggedExpr (S.SymExpr sym (A.OperandType PPC s))
+  unTagged (TaggedExpr e) = e
   operandValue _ = operandValue
-
   operandToLocation _ = operandToLocation
 
-  valueToOperand _ = valueToOperand
+opcodeToVoid :: (Equal o PPC.Operand ~ 'False) => PPC.Opcode o sh -> Void
+opcodeToVoid x = case x of {}
 
 -- This is a hack.
 instance OrdF (PPC.Opcode (TemplatedOperand PPC)) where
-  -- This is valid because no values inhabit this type.
-  compareF = undefined
+  compareF = absurd . opcodeToVoid
 
 instance ShowF (PPC.Opcode (TemplatedOperand PPC))
 
 instance EnumF (PPC.Opcode (TemplatedOperand PPC)) where
-  -- This is valid because no values inhabit this type.
-  enumF = undefined
-  congruentF = undefined
+  enumF = absurd . opcodeToVoid
+  congruentF = absurd . opcodeToVoid
 
 fromRight :: (Monad m) => Either String a -> m a
 fromRight = either fail return
 
-loadBaseSet :: S.SimpleBuilder t st -> IO (BaseSet (S.SimpleBuilder t st) PPC)
+loadBaseSet :: forall sym.
+               (S.IsExprBuilder sym,
+                S.IsSymInterface sym)
+            => sym
+            -> IO (BaseSet sym PPC)
 loadBaseSet sym = do
-  let readOp fp = readFormulaFromFile sym ("semmc-ppc/data/base/" <> fp)
+  let readOp :: (BuildOperandList (TemplatedArch PPC) sh)
+             => FilePath
+             -> IO (Either String (ParameterizedFormula sym (TemplatedArch PPC) sh))
+      readOp fp = readFormulaFromFile sym ("semmc-ppc/data/base/" <> fp)
   addi <- fromRight =<< readOp "ADDI.sem"
+  stb <- fromRight =<< readOp "STB.sem"
   return $ MapF.insert (Witness PPC.ADDI) addi
+         $ MapF.insert (Witness PPC.STB) stb
          $ MapF.empty

@@ -16,6 +16,7 @@
 -- | A parser for an s-expression representation of formulas
 module SemMC.Formula.Parser
   ( Atom(..)
+  , BuildOperandList
   , operandVarPrefix
   , literalVarPrefix
   , readFormula
@@ -37,6 +38,8 @@ import qualified Data.Set as Set
 import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal )
 import           Data.Proxy
 
+import qualified Data.Parameterized.Ctx as Ctx
+import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.NatRepr ( NatRepr, someNat, isPosNat, withLeqProof )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some
@@ -473,6 +476,55 @@ readIte (SC.SAtom (AIdent "ite")) args =
       tp -> throwError $ "test expression must be a boolean; got " ++ show tp
 readIte _ _ = return Nothing
 
+data ArrayJudgment :: BaseType -> BaseType -> * where
+  ArraySingleDim :: forall idx res.
+                    BaseTypeRepr res
+                 -> ArrayJudgment idx (BaseArrayType (Ctx.SingleCtx idx) res)
+
+expectArrayWithIndex :: (MonadError String m) => BaseTypeRepr tp1 -> BaseTypeRepr tp2 -> m (ArrayJudgment tp1 tp2)
+expectArrayWithIndex dimRepr (BaseArrayRepr idxTpReprs resRepr) =
+  case Ctx.view idxTpReprs of
+    Ctx.AssignExtend rest idxTpRepr ->
+      case Ctx.view rest of
+        Ctx.AssignEmpty ->
+          case testEquality idxTpRepr dimRepr of
+            Just Refl -> return $ ArraySingleDim resRepr
+            Nothing -> throwError $ unwords ["Array index type", show idxTpRepr,
+                                             "does not match", show dimRepr]
+        _ -> throwError "multidimensional arrays are not supported"
+expectArrayWithIndex _ repr = throwError $ unwords ["expected an array, got", show repr]
+
+-- | Parse an expression of the form @(select arr i)@
+readSelect :: ExprParser sym arch sh m
+readSelect (SC.SAtom (AIdent "select")) args =
+  prefixError "in reading select expression: " $ do
+    when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
+    sym <- reader getSym
+    Some arr <- return $ args !! 0
+    Some idx <- return $ args !! 1
+    ArraySingleDim _ <- expectArrayWithIndex (S.exprType idx) (S.exprType arr)
+    let idx' = Ctx.empty Ctx.%> idx
+    liftIO (Just . Some <$> S.arrayLookup sym arr idx')
+readSelect _ _ = return Nothing
+
+-- | Parse an expression of the form @(store arr i e)@
+readStore :: ExprParser sym arch sh m
+readStore (SC.SAtom (AIdent "store")) args =
+  prefixError "in reading store expression: " $ do
+    when (length args /= 3) (throwError $ "expecting 3 arguments, got " ++ show (length args))
+    sym <- reader getSym
+    Some arr <- return $ args !! 0
+    Some idx <- return $ args !! 1
+    Some expr <- return $ args !! 2
+    ArraySingleDim resRepr <- expectArrayWithIndex (S.exprType idx) (S.exprType arr)
+    case testEquality resRepr (S.exprType expr) of
+      Just Refl ->
+        let idx' = Ctx.empty Ctx.%> idx
+        in liftIO (Just . Some <$> S.arrayUpdate sym arr idx' expr)
+      Nothing -> throwError $ unwords ["Array result type", show resRepr,
+                                       "does not match", show (S.exprType expr)]
+readStore _ _ = return Nothing
+
 -- | Parse an arbitrary expression.
 readExpr :: (S.IsExprBuilder sym,
              S.IsSymInterface sym,
@@ -488,10 +540,10 @@ readExpr (SC.SAtom (AInt _)) = throwError "found int where expected an expressio
 readExpr (SC.SAtom (ABV len val)) = do
   -- This is a bitvector literal.
   sym <- reader getSym
+  -- The following two patterns should never fail, given that during parsing we
+  -- can only construct BVs with positive length.
   Just (Some lenRepr) <- return $ someNat (toInteger len)
   let Just pf = isPosNat lenRepr
-  -- ^ The above two patterns should never fail, given that during parsing we
-  -- can only construct BVs with positive length.
   liftIO $ withLeqProof pf (Some <$> S.bvLit sym lenRepr val)
 readExpr (SC.SAtom paramRaw) = do
   -- This is a parameter (i.e., variable).
@@ -508,7 +560,16 @@ readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
   args <- readExprs argsRaw
   parseTries <- sequence $ map (\f -> f opRaw args)
-    [readConcat, readExtract, readExtend, readBVUnop, readBVBinop, readEq, readIte]
+    [ readConcat
+    , readExtract
+    , readExtend
+    , readBVUnop
+    , readBVBinop
+    , readEq
+    , readIte
+    , readSelect
+    , readStore
+    ]
   case asum parseTries of
     Just expr -> return expr
     Nothing -> throwError $ "couldn't parse expression " ++ show opRaw

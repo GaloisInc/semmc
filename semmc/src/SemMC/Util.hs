@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 module SemMC.Util
   ( groundValToExpr
   , makeSymbol
@@ -15,25 +17,29 @@ module SemMC.Util
   , sequenceMaybes
   , walkElt
   , extractUsedLocs
+  , Equal
   ) where
 
-import Text.Printf
-
-import           Control.Monad.ST ( runST )
 import           Control.Applicative ( Const(..) )
+import           Control.Monad.ST ( runST )
+import           Data.Foldable ( foldrM )
 import qualified Data.HashTable.Class as H
+import qualified Data.Map.Strict as Map
 import           Data.Maybe ( fromJust )
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
-import           Data.Parameterized.TraversableFC
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
+import           Data.Parameterized.TraversableFC
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           GHC.Exts ( Constraint )
+import           Text.Printf
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import qualified Lang.Crucible.Utils.Hashable as Hash
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
@@ -70,7 +76,8 @@ makeSymbol name = case userSymbol sanitizedName of
 
 -- | Convert a 'GroundValue' (a primitive type that represents the given
 -- Crucible type) back into a symbolic expression, just as a literal.
-groundValToExpr :: (S.IsExprBuilder sym)
+groundValToExpr :: forall sym tp.
+                   (S.IsExprBuilder sym)
                 => sym
                 -> BaseTypeRepr tp
                 -> GroundValue tp
@@ -82,7 +89,11 @@ groundValToExpr sym BaseNatRepr val = S.natLit sym val
 groundValToExpr sym BaseIntegerRepr val = S.intLit sym val
 groundValToExpr sym BaseRealRepr val = S.realLit sym val
 groundValToExpr sym BaseComplexRepr val = S.mkComplexLit sym val
-groundValToExpr _ (BaseArrayRepr _ _) _ = error "groundValToExpr: array type isn't handled yet"
+groundValToExpr sym (BaseArrayRepr idxTp elemTp) (ArrayConcrete base m) = do
+  base' <- groundValToExpr sym elemTp base
+  entries <- Hash.mkMap <$> traverse (groundValToExpr sym elemTp) m
+  S.arrayFromMap sym idxTp entries base'
+groundValToExpr _ (BaseArrayRepr _ _) (ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
 
 -- * MapF Utilities
@@ -121,3 +132,7 @@ extractUsedLocs :: (OrdF loc)
 extractUsedLocs locMapping = foldr f MapF.empty . allBoundVars
   where reversed = mapFReverse locMapping
         f (Some var) = MapF.insert (fromJust $ MapF.lookup var reversed) var
+
+type family Equal (a :: k1) (b :: k2) :: Bool where
+  Equal a a = 'True
+  Equal a b = 'False

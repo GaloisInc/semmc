@@ -1,5 +1,6 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -19,11 +20,10 @@ import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
-import           GHC.TypeLits ( KnownSymbol, Symbol )
+import           GHC.TypeLits ( Symbol )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified Dismantle.Instruction as I
 
@@ -32,13 +32,8 @@ type Instruction arch = I.GenericInstruction (Opcode arch) (Operand arch)
 -- | Type of operands for a given architecture.
 type family Operand (arch :: *) :: Symbol -> *
 
-type family IsReg (arch :: *) (s :: Symbol) :: Bool
-
 -- | Class containing methods we want on operands. (Nothing for now.)
 class IsOperand (o :: Symbol -> *) where
-
-class IsSpecificOperand o (s :: Symbol) where
-  allOperandValues :: [o s]
 
 -- | Type of opcodes for a given architecture.
 type family Opcode (arch :: *) = (r :: (Symbol -> *) -> [Symbol] -> *)
@@ -88,6 +83,14 @@ class (IsOperand (Operand arch),
        ShowF (Opcode arch (Operand arch)),
        EnumF (Opcode arch (Operand arch)))
       => Architecture arch where
+  -- | Tagged expression type for this architecture.
+  --
+  -- This is a bit of a hack to add extra metadata needed for the templating stuff.
+  data TaggedExpr arch sym :: Symbol -> *
+
+  -- | Untag a tagged expression.
+  unTagged :: TaggedExpr arch sym s -> S.SymExpr sym (OperandType arch s)
+
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
   operandValue :: forall proxy sym s.
@@ -97,18 +100,10 @@ class (IsOperand (Operand arch),
                -> sym
                -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                -> Operand arch s
-               -> IO (S.SymExpr sym (OperandType arch s))
+               -> IO (TaggedExpr arch sym s)
 
   -- | Map an operand to a specific state variable, if possible.
   operandToLocation :: forall proxy s.
                        proxy arch
                     -> Operand arch s
                     -> Maybe (Location arch (OperandType arch s))
-
-  -- | Recover an operand value from a "ground value" of the same type. Unclear
-  -- how we should handle registers here; for now, just do undefined...
-  valueToOperand :: forall proxy s.
-                    (KnownSymbol s)
-                 => proxy arch
-                 -> GroundValue (OperandType arch s)
-                 -> Operand arch s

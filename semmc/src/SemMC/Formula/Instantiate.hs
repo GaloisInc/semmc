@@ -9,8 +9,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
 module SemMC.Formula.Instantiate
-  ( WrappedExpr(..)
-  , instantiateFormula
+  ( instantiateFormula
   , copyFormula
   , sequenceFormulas
   , replaceLitVars
@@ -51,14 +50,6 @@ type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
   ShapeCtx _    '[] = EmptyCtx
   ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> OperandType arch s
 
--- | Just a 'S.SymExpr', but indexed by operand symbol rather than 'BaseType'.
-newtype WrappedExpr sym arch s = WrappedExpr { unWrappedExpr :: S.SymExpr sym (OperandType arch s) }
-
-instance (ShowF (S.SymExpr sym)) => Show (WrappedExpr sym arch s) where
-  show (WrappedExpr e) = showF e
-
-instance (ShowF (S.SymExpr sym)) => ShowF (WrappedExpr sym arch)
-
 buildOpAssignment :: forall sym arch sh.
                   (Architecture arch,
                    S.IsSymInterface sym)
@@ -70,14 +61,14 @@ buildOpAssignment :: forall sym arch sh.
                 -- ^ List of variables corresponding to each operand
                 -> OperandList (Operand arch) sh
                 -- ^ List of operand values corresponding to each operand
-                -> IO (OperandList (WrappedExpr sym arch) sh,
+                -> IO (OperandList (TaggedExpr arch sym) sh,
                        Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh),
                        Ctx.Assignment (S.SymExpr sym) (ShapeCtx arch sh))
 buildOpAssignment _ _ Nil Nil = return (Nil, Ctx.empty, Ctx.empty)
 buildOpAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) = do
   val' <- operandValue (Proxy :: Proxy arch) sym newVars val
   (valsList, varsRest', valsRest') <- buildOpAssignment sym newVars varsRest valsRest
-  return (WrappedExpr val' :> valsList, Ctx.extend varsRest' var, Ctx.extend valsRest' val')
+  return (val' :> valsList, Ctx.extend varsRest' var, Ctx.extend valsRest' (unTagged val'))
 
 buildLitAssignment :: forall sym loc.
                       sym
@@ -145,11 +136,10 @@ instantiateFormula :: forall arch t st sh.
                    => SB t st
                    -> ParameterizedFormula (SB t st) arch sh
                    -> OperandList (Operand arch) sh
-                   -> IO (OperandList (WrappedExpr (SB t st) arch) sh, Formula (SB t st) arch)
+                   -> IO (OperandList (TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
 instantiateFormula
   sym
-  (ParameterizedFormula { pfUses = uses
-                        , pfOperandVars = opVars
+  (ParameterizedFormula { pfOperandVars = opVars
                         , pfLiteralVars = litVars
                         , pfDefs = defs
                         })
@@ -165,11 +155,11 @@ instantiateFormula
     let mapDef :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
         mapDef p e = case paramToLocation opVals p of
           Just loc -> (loc,) <$> (replaceLitVars sym newLitExprLookup litVars =<< S.evalBoundVars sym e opVarsAssn opValsAssn)
-          Nothing -> error "XXX: handle this error case more gracefully"
+          Nothing -> error $ unwords ["parameter", show p, "is not a valid location"]
 
-    newDefs <- mapFMapMBoth mapDef defs
-    -- ^ This loads the relevant lit vars into the map, so reading the IORef
+    -- This loads the relevant lit vars into the map, so reading the IORef
     -- must happen afterwards :)
+    newDefs <- mapFMapMBoth mapDef defs
     newLitVars <- readIORef newLitVarsRef
     let newActualLitVars = foldrF (MapF.union . extractUsedLocs newLitVars) MapF.empty newDefs
 
@@ -251,14 +241,14 @@ sequenceFormulas sym form1 form2 = do
 
   let varReplace :: forall tp. Location arch tp -> S.Elt t tp
       varReplace loc
-        | Just expr <- MapF.lookup loc defs1 = expr
-        -- ^ If this location is defined in the first formula, use the new
+        -- If this location is defined in the first formula, use the new
         -- definition.
-        | Just newVar <- MapF.lookup loc vars1 = S.varExpr sym newVar
-        -- ^ If this location isn't defined in the first formula, but is used by
+        | Just expr <- MapF.lookup loc defs1 = expr
+        -- If this location isn't defined in the first formula, but is used by
         -- it, use the first formula's variable.
+        | Just newVar <- MapF.lookup loc vars1 = S.varExpr sym newVar
+        -- Otherwise, use the original variable.
         | otherwise = S.varExpr sym $ fromJust $ MapF.lookup loc vars2
-        -- ^ Otherwise, use the original variable.
   SomeVarAssignment varAssign exprAssign :: SomeVarAssignment (SB t st)
     <- return $ changeVariablesAssignment vars2 varReplace
   let replaceVars :: forall tp. S.Elt t tp -> IO (S.Elt t tp)
