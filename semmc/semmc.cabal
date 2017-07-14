@@ -41,6 +41,7 @@ library
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist
+                       Data.Parameterized.Unfold
   other-modules:       TestToy
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
