@@ -66,8 +66,11 @@ data LearnConfig t arch =
 
 data OperandRef arch sh = ImplicitOperand (Some (Location arch))
                         -- ^ A location that is implicitly read from or written to by an instruction
-                        | forall s . OperandRef (D.Index sh s)
+                        | OperandRef (Some (D.Index sh))
                         -- ^ An index into an operand list
+
+deriving instance (Architecture arch) => Eq (OperandRef arch sh)
+deriving instance (Architecture arch) => Ord (OperandRef arch sh)
 
 data IORelation arch sh =
   IORelation { inputs :: [OperandRef arch sh]
@@ -162,6 +165,34 @@ computeIORelation = undefined
 generateTestVariants :: Instruction arch -> ArchState (Sym t) arch -> M t arch [ArchState (Sym t) arch]
 generateTestVariants = undefined
 
+instructionRegisterOperands :: (Architecture arch)
+                            => proxy arch
+                            -> Opcode arch (Operand arch) sh
+                            -> Instruction arch
+                            -> [(Some (D.Index sh), Some (Location arch))]
+instructionRegisterOperands _ op i =
+  case i of
+    D.Instruction _op operands -> undefined
+
+{-
+
+We want to generate tests to determine, for each register operand, if it is
+input, output, or both.
+
+We'll start off with a single initial register state passed to
+generateTestVariants.  All of the variants will be derived from that state.
+
+We need to walk down the operand list and, for each register operand (r0),
+generate a set of new states with that register (r0) value tweaked.  For those
+nonces, if other registers change in the post state, r0 was an input register.
+Registers that change values in the post state are outputs.  If registers that
+are not mentioned in the operand list change, they are implicit outputs.  If
+changing a register not in the operand list causes a change in outputs, it is an
+implicit input.
+
+
+-}
+
 -- On-disk data format (s-expression based)
 
 {-
@@ -220,7 +251,7 @@ fromIORelation p ior =
     toSExpr rel =
       case rel of
         ImplicitOperand loc -> SC.SAtom (AIdent (show loc))
-        OperandRef ix -> SC.SAtom (AWord (indexToWord p ix))
+        OperandRef (Some ix) -> SC.SAtom (AWord (indexToWord p ix))
 
 indexToWord :: Proxy arch -> D.Index sh s -> Word
 indexToWord p ix =
@@ -294,8 +325,8 @@ mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
     elt :: forall tp tps' tps . (U.RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> Word -> m (OperandRef arch tps)
     elt _ _ w =
       case w of
-        0 -> return (OperandRef D.IndexHere)
+        0 -> return (OperandRef (Some D.IndexHere))
         _ -> do
-          OperandRef ix <- U.unfoldShape nil elt (w - 1)
-          return (OperandRef (D.IndexThere ix))
+          OperandRef (Some ix) <- U.unfoldShape nil elt (w - 1)
+          return (OperandRef (Some (D.IndexThere ix)))
 
