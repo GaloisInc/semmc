@@ -30,6 +30,7 @@ module SemMC.Synthesis.Template
   , TemplatedArch
   , TemplatedFormula
   , TemplatableOperand(..)
+  , TemplatableOperands
   , TemplatableOpcode
   , TemplatedInstructionFormula(..)
   , tfOperandExprs

@@ -1,0 +1,6 @@
+((operands ((rS . 'Gprc)
+            (spr . 'I32imm)))
+ (in (rS spr 'xer 'lnk 'ctr))
+ (defs (('xer (ite (= spr #x00000001) rS 'xer))
+        ('lnk (ite (= spr #x00000008) rS 'lnk))
+        ('ctr (ite (= spr #x00000009) rS 'ctr)))))
