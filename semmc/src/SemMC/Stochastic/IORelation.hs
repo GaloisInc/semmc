@@ -3,9 +3,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 -- | A module for learning the input and output relations for instructions
 module SemMC.Stochastic.IORelation (
   LearnConfig(..),
@@ -38,6 +40,8 @@ import Text.Read ( readMaybe )
 import qualified Data.Set.NonEmpty as NES
 import Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Map as MapF
+import qualified Lang.Crucible.BaseTypes as S
+import qualified Lang.Crucible.Solver.Interface as S
 
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
@@ -113,23 +117,105 @@ testOpcode :: forall arch sh t . (Architecture arch, R.MachineState (ArchState (
            -> Opcode arch (Operand arch) sh
            -> M t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 testOpcode m op = do
+  implicitOperands <- findImplicitOperands op
+  explicitOperands <- classifyExplicitOperands (Proxy :: Proxy arch) op implicitOperands
+  let ioRelation = mergeIORelations implicitOperands explicitOperands
+  return $ MapF.insert op ioRelation m
+
+mergeIORelations :: IORelation arch sh -> IORelation arch sh -> IORelation arch sh
+mergeIORelations ior1 ior2 =
+  IORelation { inputs = inputs ior1 ++ inputs ior2
+             , outputs = outputs ior1 ++ outputs ior2
+             }
+
+-- | Collect all of the locations that are read from or written to implicitly
+implicitLocations :: IORelation arch sh -> [Some (Location arch)]
+implicitLocations ior = foldr collectImplicits (foldr collectImplicits [] (inputs ior)) (outputs ior)
+  where
+    collectImplicits opRef acc =
+      case opRef of
+        ImplicitOperand sloc -> sloc : acc
+        OperandRef {} -> acc
+
+-- | Make a random instruction that does not reference any implicit operands.
+--
+-- This could be made more efficient - right now, it just tries to generate
+-- random instructions until it gets a match.
+generateExplicitInstruction :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
+                            => Proxy arch
+                            -> Opcode arch (Operand arch) sh
+                            -> [Some (Location arch)]
+                            -> M t arch (Instruction arch)
+generateExplicitInstruction proxy op implicitOperands = do
   g <- St.gets gen
+  insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
+  case insn of
+    D.Instruction _ ops ->
+      case D.foldrOperandList (matchesOperand proxy implicitOperands) False ops of
+        True -> generateExplicitInstruction proxy op implicitOperands
+        False -> return insn
+
+matchesOperand :: (Architecture arch)
+               => Proxy arch
+               -> [Some (Location arch)]
+               -> D.Index sh tp
+               -> Operand arch tp
+               -> Bool
+               -> Bool
+matchesOperand proxy implicits _ix operand matches =
+  case operandToLocation proxy operand of
+    Nothing -> matches
+    Just loc -> matches || any (== Some loc) implicits
+
+classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
+                         => Proxy arch
+                         -> Opcode arch (Operand arch) sh
+                         -> IORelation arch sh
+                         -> M t arch (IORelation arch sh)
+classifyExplicitOperands proxy op (implicitLocations -> implicitOperands) = do
   mkTest <- St.gets testGen
   t0 <- liftIO mkTest
-  insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
-  tests <- generateTestVariants insn t0
-  tests' <- mapM (makeTestCase insn) tests
+  insn <- generateExplicitInstruction proxy op implicitOperands
+  tests <- generateTestVariants proxy implicitOperands insn t0
+  tests' <- mapM (wrapTestBundle insn) tests
   tchan <- St.gets testChan
-  liftIO $ mapM_ (C.writeChan tchan . Just) tests'
+  let remoteTestCases = [ t
+                        | tb <- tests'
+                        , t <- tbTestOrig tb : tbTestCases tb
+                        ]
+  liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
   ms <- askWaitMicroseconds
   rchan <- St.gets resChan
-  mresults <- liftIO $ timeout ms $ replicateM (length tests') (C.readChan rchan)
+  mresults <- liftIO $ timeout ms $ replicateM (length remoteTestCases) (C.readChan rchan)
   case mresults of
-    Just results -> do
-      ior <- computeIORelation op tests' results
-      return (MapF.insert op ior m)
-    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy :: Proxy arch) (Some op))
+    Just results -> computeIORelation op tests' results
+    Nothing -> liftIO $ E.throwM (LearningTimeout proxy (Some op))
 
+-- | Sweep through the parameter space to find locations not mentioned in
+-- parameter lists that are modified by the instruction.
+--
+-- To do this, we generate a bunch of randomized operand lists to cycle through
+-- possible registers.
+findImplicitOperands :: (Architecture arch)
+                     => Opcode arch (Operand arch) sh
+                     -> M t arch (IORelation arch sh)
+findImplicitOperands = undefined
+
+-- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
+wrapTestBundle :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
+               => Instruction arch
+               -> TestBundle (ArchState (Sym t) arch) arch
+               -> M t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) arch)
+wrapTestBundle i tb = do
+  orig <- makeTestCase i (tbTestOrig tb)
+  cases <- mapM (makeTestCase i) (tbTestCases tb)
+  return TestBundle { tbTestOrig = orig
+                    , tbTestCases = cases
+                    , tbResult = tbResult tb
+                    }
+
+-- | Take a test bundle of raw tests ('ArchState (Sym t) arch') and convert the
+-- raw tests to 'R.TestCase' by allocating a nonce
 makeTestCase :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
              => Instruction arch
              -> ArchState (Sym t) arch
@@ -143,9 +229,18 @@ makeTestCase i c = do
                     , R.testProgram = asm i
                     }
 
+-- | Run tests to determine the input and output locations for the given instruction opcode.
+--
+-- 1) Learn implicit operands by choosing a large set of randomly chosen
+-- operands: operands that change when not present in the operand list are
+-- implicit
+--
+-- 2) Generate a random instruction that contains no explicit references to
+-- implicit operands.  Then generate test variants to determine if each
+-- referenced location is an input or an output.
 computeIORelation :: (Architecture arch)
                   => Opcode arch (Operand arch) sh
-                  -> [R.TestCase (ArchState (Sym t) arch)]
+                  -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) arch]
                   -> [R.ResultOrError (ArchState (Sym t) arch)]
                   -> M t arch (IORelation arch sh)
 computeIORelation = undefined
@@ -162,17 +257,108 @@ computeIORelation = undefined
 --
 -- We learn the *outputs* set by comparing the tweaked input vs the output from
 -- that test vector: all modified registers are in the output set.
-generateTestVariants :: Instruction arch -> ArchState (Sym t) arch -> M t arch [ArchState (Sym t) arch]
-generateTestVariants = undefined
-
-instructionRegisterOperands :: (Architecture arch)
-                            => proxy arch
-                            -> Opcode arch (Operand arch) sh
-                            -> Instruction arch
-                            -> [(Some (D.Index sh), Some (Location arch))]
-instructionRegisterOperands _ op i =
+generateTestVariants :: forall proxy arch t
+                      . (Architecture arch)
+                     => proxy arch
+                     -> [Some (Location arch)]
+                     -> Instruction arch
+                     -> ArchState (Sym t) arch
+                     -> M t arch [TestBundle (ArchState (Sym t) arch) arch]
+generateTestVariants proxy implicitOperands i s0 =
   case i of
-    D.Instruction _op operands -> undefined
+    D.Instruction opcode operands -> do
+      mapM (genVar opcode) (instructionRegisterOperands proxy operands)
+  where
+    genVar :: forall sh
+            . Opcode arch (Operand arch) sh
+           -> Some (PairF (D.Index sh) (TypedLocation arch))
+           -> M t arch (TestBundle (ArchState (Sym t) arch) arch)
+    genVar opcode (Some (PairF ix (TL loc))) = do
+      cases <- generateVariantsFor proxy s0 opcode ix loc
+      return TestBundle { tbTestOrig = s0
+                        , tbTestCases = cases
+                        , tbResult = Learned { lOpcode = opcode
+                                             , lIndex = ix
+                                             , lLocation = loc
+                                             }
+                        }
+
+-- FIXME: For each test variant, build a new structure that tells us what we
+-- learn if there is a difference from the original.  We'll need to map those to
+-- nonces to compare against the results we get back.
+--
+-- To learn implicit operands, we need the list of all (register) locations for
+-- the architecture.  We won't deal with implicit memory locations
+
+data TestBundle f arch = TestBundle { tbTestOrig :: f
+                                    -- ^ The base case to compare against
+                                    , tbTestCases :: [f]
+                                    -- ^ The variants to run
+                                    , tbResult :: LearnedFact arch
+                                    -- ^ The fact we learn if the test cases
+                                    -- differ
+                                    }
+
+-- | If the given location changes, it was an output location.  Otherwise, if
+-- the test cases differ from the original test case, it was an input operand.
+data LearnedFact arch =
+  forall sh tp . Learned { lOpcode :: Opcode arch (Operand arch) sh
+                         , lIndex :: D.Index sh tp
+                         , lLocation :: Location arch (OperandType arch tp)
+                         }
+
+-- | Tweak the value in the 'ArchState' at the given location to a number of
+-- random values.
+--
+-- This has to be in IO so that we can generate 'S.SymExpr's
+--
+-- Right now, we only support generating random bitvectors.  That will get more
+-- interesting once we start dealing with floats.  Note that we could just
+-- generate random bitvectors for floats, too, but we would probably want to
+-- tweak the distribution to generate interesting types of floats.
+generateVariantsFor :: (Architecture arch)
+                    => proxy arch
+                    -> ArchState (Sym t) arch
+                    -> Opcode arch (Operand arch) sh
+                    -> D.Index sh tp
+                    -> Location arch (OperandType arch tp)
+                    -> M t arch [ArchState (Sym t) arch]
+generateVariantsFor _ s0 opcode _ix loc = do
+  sym <- St.gets backend
+  g <- St.gets gen
+  replicateM 5 (genOne sym g)
+  where
+    genOne sym g =
+      case locationType loc of
+        S.BaseBVRepr w -> do
+          randomInt :: Int
+                    <- liftIO (A.uniform g)
+          bv <- liftIO $ S.bvLit sym w (fromIntegral randomInt)
+          return (MapF.insert loc bv s0)
+        repr -> error ("Unsupported base type repr in generateVariantsFor: " ++ show repr)
+
+-- | This is a newtype to shuffle type arguments around so that the 'tp'
+-- parameter is last (so that we can use it with PairF and Some)
+newtype TypedLocation arch tp = TL (Location arch (OperandType arch tp))
+
+data PairF a b tp = PairF (a tp) (b tp)
+
+instructionRegisterOperands :: forall arch sh proxy
+                             . (Architecture arch)
+                            => proxy arch
+                            -> D.OperandList (Operand arch) sh
+                            -> [Some (PairF (D.Index sh) (TypedLocation arch))]
+instructionRegisterOperands proxy operands =
+  D.foldrOperandList collectLocations [] operands
+  where
+    collectLocations :: forall tp . D.Index sh tp
+                     -> Operand arch tp
+                     -> [Some (PairF (D.Index sh) (TypedLocation arch))]
+                     -> [Some (PairF (D.Index sh) (TypedLocation arch))]
+    collectLocations ix operand acc =
+      case operandToLocation proxy operand of
+        Just loc -> Some (PairF ix (TL loc)) : acc
+        Nothing -> acc
 
 {-
 
