@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Architecture.PPC
   ( PPC
   , Location(..)
@@ -19,6 +20,7 @@ module SemMC.Architecture.PPC
 
 import           Data.Bits ( shiftL )
 import           Data.EnumF ( EnumF(..) )
+import           Data.Foldable ( foldrM )
 import           Data.Int ( Int32 )
 import qualified Data.Int.Indexed as I
 import           Data.Monoid ( (<>) )
@@ -32,6 +34,7 @@ import           Data.Proxy ( Proxy(..) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
 import           Text.PrettyPrint.HughesPJClass ( pPrint )
+import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
@@ -42,7 +45,7 @@ import qualified Dismantle.PPC as PPC
 import qualified SemMC.Architecture as A
 import           SemMC.Formula
 import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
-import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
+import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal, Witness(..) )
 
 data PPC
@@ -128,9 +131,10 @@ instance TemplatableOperand PPC "S16imm" where
   opTemplates = [TemplatedOperand Nothing mkConst]
     where mkConst :: TemplatedOperandFn PPC "S16imm"
           mkConst sym _ = do
-            v <- S.freshConstant sym (makeSymbol "S16imm") knownRepr
+            v <- S.freshConstant sym (makeSymbol "S16imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
+            extended <- S.bvSext sym knownNat v
             let recover evalFn = PPC.S16imm . fromInteger <$> evalFn v
-            return (v, WrappedRecoverOperandFn recover)
+            return (extended, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "Memri" where
   opTemplates = mkTemplate <$> [0..31]
@@ -147,6 +151,95 @@ instance TemplatableOperand PPC "Memri" where
                                 | otherwise = Nothing
                           return $ PPC.Memri $ PPC.MemRI gpr offsetVal
                     return (expr, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "Directbrtarget" where
+  opTemplates = [TemplatedOperand Nothing mkDirect]
+    where mkDirect :: TemplatedOperandFn PPC "Directbrtarget"
+          mkDirect sym locLookup = do
+            ip <- locLookup LocIP
+            offsetRaw <- S.freshConstant sym (makeSymbol "Directbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
+            zeroes <- S.bvLit sym (knownNat @2) 0
+            shifted <- S.bvConcat sym offsetRaw zeroes
+            extended <- S.bvSext sym knownNat shifted
+            expr <- S.bvAdd sym ip extended
+            let recover evalFn =
+                  PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
+            return (expr, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "U5imm" where
+  opTemplates = [TemplatedOperand Nothing mkImm]
+    where mkImm :: TemplatedOperandFn PPC "U5imm"
+          mkImm sym _ = do
+            v <- S.freshConstant sym (makeSymbol "U5imm") (knownRepr :: BaseTypeRepr (BaseBVType 5))
+            extended <- S.bvSext sym knownNat v
+            let recover evalFn = PPC.U5imm . fromInteger <$> evalFn v
+            return (extended, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "S17imm" where
+  opTemplates = [TemplatedOperand Nothing mkImm]
+    where mkImm :: TemplatedOperandFn PPC "S17imm"
+          mkImm sym _ = do
+            v <- S.freshConstant sym (makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
+            zeroes <- S.bvLit sym knownNat 0
+            extended <- S.bvConcat sym v zeroes
+            let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
+            return (extended, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "Absdirectbrtarget" where
+  opTemplates = [TemplatedOperand Nothing mkDirect]
+    where mkDirect :: TemplatedOperandFn PPC "Absdirectbrtarget"
+          mkDirect sym _ = do
+            offsetRaw <- S.freshConstant sym (makeSymbol "Absdirectbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
+            zeroes <- S.bvLit sym (knownNat @2) 0
+            shifted <- S.bvConcat sym offsetRaw zeroes
+            extended <- S.bvSext sym knownNat shifted
+            let recover evalFn =
+                  PPC.Absdirectbrtarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
+            return (extended, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "Calltarget" where
+  opTemplates = [TemplatedOperand Nothing mkDirect]
+    where mkDirect :: TemplatedOperandFn PPC "Calltarget"
+          mkDirect sym locLookup = do
+            ip <- locLookup LocIP
+            offsetRaw <- S.freshConstant sym (makeSymbol "Calltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
+            zeroes <- S.bvLit sym (knownNat @2) 0
+            shifted <- S.bvConcat sym offsetRaw zeroes
+            extended <- S.bvSext sym knownNat shifted
+            expr <- S.bvAdd sym ip extended
+            let recover evalFn =
+                  PPC.Calltarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
+            return (expr, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "Abscalltarget" where
+  opTemplates = [TemplatedOperand Nothing mkDirect]
+    where mkDirect :: TemplatedOperandFn PPC "Abscalltarget"
+          mkDirect sym _ = do
+            offsetRaw <- S.freshConstant sym (makeSymbol "Abscalltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
+            zeroes <- S.bvLit sym (knownNat @2) 0
+            shifted <- S.bvConcat sym offsetRaw zeroes
+            extended <- S.bvSext sym knownNat shifted
+            let recover evalFn =
+                  PPC.Abscalltarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
+            return (extended, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "Crrc" where
+  opTemplates = [TemplatedOperand Nothing mkDirect]
+    where mkDirect :: TemplatedOperandFn PPC "Crrc"
+          mkDirect sym _ = do
+            crrc <- S.freshConstant sym (makeSymbol "Crrc") (knownRepr :: BaseTypeRepr (BaseBVType 3))
+            let recover evalFn =
+                  PPC.Crrc . PPC.CRRC . fromInteger <$> evalFn crrc
+            return (crrc, WrappedRecoverOperandFn recover)
+
+instance TemplatableOperand PPC "I32imm" where
+  -- XXX: What to do here? seems very instruction-specific
+  opTemplates = [TemplatedOperand Nothing mkImm]
+    where mkImm :: TemplatedOperandFn PPC "I32imm"
+          mkImm sym _ = do
+            v <- S.freshConstant sym (makeSymbol "I32imm") knownRepr
+            let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
+            return (v, WrappedRecoverOperandFn recover)
 
 data Location :: BaseType -> * where
   LocGPR :: PPC.GPR -> Location (BaseBVType 32)
@@ -264,8 +357,7 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Crrc (PPC.CRRC n)) =
           S.bvLit sym knownNat (toInteger n)
-        operandValue' (PPC.Directbrtarget (PPC.ABT absTarget)) =
-          S.bvLit sym knownNat (toInteger absTarget)
+        operandValue' (PPC.Directbrtarget bt) = btVal bt
         operandValue' (PPC.F4rc _) = error "F4rc not yet implemented"
         operandValue' (PPC.F8rc fr) = locLookup (LocFR fr)
         operandValue' (PPC.G8rc _) = error "Found a G8rc operand, but PPC64 not supported"
@@ -397,6 +489,9 @@ instance EnumF (PPC.Opcode (TemplatedOperand PPC)) where
 fromRight :: (Monad m) => Either String a -> m a
 fromRight = either fail return
 
+class (BuildOperandList (TemplatedArch PPC) sh, TemplatableOperands PPC sh) => Foo sh
+instance (BuildOperandList (TemplatedArch PPC) sh, TemplatableOperands PPC sh) => Foo sh
+
 loadBaseSet :: forall sym.
                (S.IsExprBuilder sym,
                 S.IsSymInterface sym)
@@ -407,8 +502,31 @@ loadBaseSet sym = do
              => FilePath
              -> IO (Either String (ParameterizedFormula sym (TemplatedArch PPC) sh))
       readOp fp = readFormulaFromFile sym ("semmc-ppc/data/base/" <> fp)
-  addi <- fromRight =<< readOp "ADDI.sem"
-  stb <- fromRight =<< readOp "STB.sem"
-  return $ MapF.insert (Witness PPC.ADDI) addi
-         $ MapF.insert (Witness PPC.STB) stb
-         $ MapF.empty
+      addOp :: Some (Witness Foo (PPC.Opcode PPC.Operand))
+            -> BaseSet sym PPC
+            -> IO (BaseSet sym PPC)
+      addOp (Some (Witness op)) m = do
+        printf "reading op %s\n" (showF op)
+        op' <- fromRight =<< readOp (showF op <> ".sem")
+        return $ MapF.insert (Witness op) op' m
+  foldrM addOp MapF.empty [ Some (Witness PPC.ADD4)
+                          , Some (Witness PPC.ADDI)
+                          , Some (Witness PPC.ADDIS)
+                          , Some (Witness PPC.B)
+                          , Some (Witness PPC.BA)
+                          -- , Some (Witness PPC.BC)
+                          -- , Some (Witness PPC.BCA)
+                          -- , Some (Witness PPC.BCL)
+                          -- , Some (Witness PPC.BCLA)
+                          , Some (Witness PPC.BL)
+                          , Some (Witness PPC.BLA)
+                          , Some (Witness PPC.CMPLW)
+                          , Some (Witness PPC.CMPW)
+                          , Some (Witness PPC.LBZ)
+                          , Some (Witness PPC.MFCR)
+                          , Some (Witness PPC.MFSPR)
+                          , Some (Witness PPC.MTCRF)
+                          , Some (Witness PPC.MTSPR)
+                          , Some (Witness PPC.STB)
+                          , Some (Witness PPC.SUBF)
+                          ]

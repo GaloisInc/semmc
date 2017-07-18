@@ -1,0 +1,4 @@
+((operands ((rT . 'Gprc)
+            (addr . 'Memri)))
+ (in (addr 'mem))
+ (defs ((rT ((_ zero_extend 24) (select 'mem addr))))))

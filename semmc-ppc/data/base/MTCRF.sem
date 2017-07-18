@@ -1,0 +1,7 @@
+((operands ((rS . 'Gprc)
+            (fxm . 'I32imm)))
+ (in (rS fxm 'cr))
+ (defs (('cr (bvor (bvand rS
+                          (concat (concat (concat (concat (concat (concat (concat ((_ sign_extend 3) ((_ extract 7 7) fxm)) ((_ sign_extend 3) ((_ extract 6 6) fxm))) ((_ sign_extend 3) ((_ extract 5 5) fxm))) ((_ sign_extend 3) ((_ extract 4 4) fxm))) ((_ sign_extend 3) ((_ extract 3 3) fxm))) ((_ sign_extend 3) ((_ extract 2 2) fxm))) ((_ sign_extend 3) ((_ extract 1 1) fxm))) ((_ sign_extend 3) ((_ extract 0 0) fxm))))
+                   (bvand 'cr
+                          (bvnot (concat (concat (concat (concat (concat (concat (concat ((_ sign_extend 3) ((_ extract 7 7) fxm)) ((_ sign_extend 3) ((_ extract 6 6) fxm))) ((_ sign_extend 3) ((_ extract 5 5) fxm))) ((_ sign_extend 3) ((_ extract 4 4) fxm))) ((_ sign_extend 3) ((_ extract 3 3) fxm))) ((_ sign_extend 3) ((_ extract 2 2) fxm))) ((_ sign_extend 3) ((_ extract 1 1) fxm))) ((_ sign_extend 3) ((_ extract 0 0) fxm))))))))))

@@ -1,0 +1,4 @@
+((operands ((target . 'Calltarget)))
+ (in (target 'ip))
+ (defs (('ip target)
+        ('lnk (bvadd 'ip #x00000004)))))
