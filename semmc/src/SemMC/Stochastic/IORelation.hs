@@ -1,11 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 -- | A module for learning the input and output relations for instructions
@@ -18,26 +16,21 @@ module SemMC.Stochastic.IORelation (
   printIORelation
   ) where
 
-import Control.Applicative
+import qualified GHC.Err.Located as L
+
 import qualified Control.Concurrent as C
 import Control.Monad ( replicateM )
 import qualified Control.Monad.Catch as E
 import qualified Control.Monad.State.Strict as St
-import Control.Monad.Trans ( MonadIO, liftIO )
-import qualified Data.ByteString as BS
+import Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
+import qualified Data.Map.Strict as M
+import Data.Monoid
 import Data.Proxy ( Proxy(..) )
-import qualified Data.SCargot as SC
-import qualified Data.SCargot.Repr as SC
-import qualified Data.Text as T
-import Data.Typeable ( Typeable )
-import Data.Word ( Word64 )
-import System.Timeout ( timeout )
-import qualified Text.Parsec as P
-import qualified Text.Parsec.Text as P
-import Text.Read ( readMaybe )
+import qualified Data.Set as S
 
 import qualified Data.Set.NonEmpty as NES
+import qualified Data.Parameterized.Classes as P
 import Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Map as MapF
 import qualified Lang.Crucible.BaseTypes as S
@@ -47,58 +40,16 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import qualified Data.Parameterized.Unfold as U
 import SemMC.Architecture
 import qualified SemMC.Formula.Parser as F
 import SemMC.Util ( Witness(..) )
 
 import SemMC.Stochastic.Monad ( Sym )
 import qualified SemMC.Stochastic.Remote as R
+import SemMC.Stochastic.IORelation.Parser
+import SemMC.Stochastic.IORelation.Types
 
-data LearnConfig t arch =
-  LearnConfig { testChan :: C.Chan (Maybe (R.TestCase (ArchState (Sym t) arch)))
-              , resChan :: C.Chan (R.ResultOrError (ArchState (Sym t) arch))
-              , backend :: Sym t
-              , testGen :: IO (ArchState (Sym t) arch)
-              , gen :: A.Gen
-              , assemble :: Instruction arch -> BS.ByteString
-              , nonce :: !Word64
-              -- ^ Nonces for test vectors
-              , resWaitSeconds :: Int
-              -- ^ Number of seconds to wait to receive all of the results over the 'resChan'
-              }
 
-data OperandRef arch sh = ImplicitOperand (Some (Location arch))
-                        -- ^ A location that is implicitly read from or written to by an instruction
-                        | OperandRef (Some (D.Index sh))
-                        -- ^ An index into an operand list
-
-deriving instance (Architecture arch) => Eq (OperandRef arch sh)
-deriving instance (Architecture arch) => Ord (OperandRef arch sh)
-
-data IORelation arch sh =
-  IORelation { inputs :: [OperandRef arch sh]
-             -- ^ Locations read by an instruction
-             , outputs :: [OperandRef arch sh]
-             -- ^ Locations written by an instruction
-             }
-
-newtype M t arch a = M { runM :: St.StateT (LearnConfig t arch) IO a }
-  deriving (Functor,
-            Applicative,
-            Monad,
-            St.MonadState (LearnConfig t arch),
-            MonadIO)
-
--- | Number of microseconds to wait for all results to come in over the channel
-askWaitMicroseconds :: M t arch Int
-askWaitMicroseconds = (* 1000000) <$> St.gets resWaitSeconds
-
-data LearningException arch = LearningTimeout (Proxy arch) (Some (Opcode arch (Operand arch)))
-
-deriving instance (Architecture arch) => Show (LearningException arch)
-
-instance (Architecture arch, Typeable arch) => E.Exception (LearningException arch)
 
 -- | Find the locations read from and written to by each instruction passed in
 --
@@ -118,15 +69,14 @@ testOpcode :: forall arch sh t . (Architecture arch, R.MachineState (ArchState (
            -> M t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 testOpcode m op = do
   implicitOperands <- findImplicitOperands op
-  explicitOperands <- classifyExplicitOperands (Proxy :: Proxy arch) op implicitOperands
-  let ioRelation = mergeIORelations implicitOperands explicitOperands
-  return $ MapF.insert op ioRelation m
-
-mergeIORelations :: IORelation arch sh -> IORelation arch sh -> IORelation arch sh
-mergeIORelations ior1 ior2 =
-  IORelation { inputs = inputs ior1 ++ inputs ior2
-             , outputs = outputs ior1 ++ outputs ior2
-             }
+  insn <- generateExplicitInstruction (Proxy :: Proxy arch) op (implicitLocations implicitOperands)
+  case insn of
+    D.Instruction op' operandList
+      | Just P.Refl <- P.testEquality op op' -> do
+        explicitOperands <- classifyExplicitOperands (Proxy :: Proxy arch) op operandList implicitOperands
+        let ioRelation = implicitOperands <> explicitOperands
+        return $ MapF.insert op ioRelation m
+      | otherwise -> L.error ("randomInstruction returned an instruction with the wrong opcode: " ++ P.showF op')
 
 -- | Collect all of the locations that are read from or written to implicitly
 implicitLocations :: IORelation arch sh -> [Some (Location arch)]
@@ -167,15 +117,18 @@ matchesOperand proxy implicits _ix operand matches =
     Nothing -> matches
     Just loc -> matches || any (== Some loc) implicits
 
+-- | Generate test cases and send them off to the remote runner.  Collect and
+-- interpret the results to create an IORelation that describes the explicit
+-- operands of the instruction.
 classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
                          => Proxy arch
                          -> Opcode arch (Operand arch) sh
+                         -> D.OperandList (Operand arch) sh
                          -> IORelation arch sh
                          -> M t arch (IORelation arch sh)
-classifyExplicitOperands proxy op (implicitLocations -> implicitOperands) = do
+classifyExplicitOperands proxy op explicitOperands (implicitLocations -> implicitOperands) = do
   mkTest <- St.gets testGen
   t0 <- liftIO mkTest
-  insn <- generateExplicitInstruction proxy op implicitOperands
   tests <- generateTestVariants proxy implicitOperands insn t0
   tests' <- mapM (wrapTestBundle insn) tests
   tchan <- St.gets testChan
@@ -184,12 +137,13 @@ classifyExplicitOperands proxy op (implicitLocations -> implicitOperands) = do
                         , t <- tbTestOrig tb : tbTestCases tb
                         ]
   liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
-  ms <- askWaitMicroseconds
   rchan <- St.gets resChan
-  mresults <- liftIO $ timeout ms $ replicateM (length remoteTestCases) (C.readChan rchan)
+  mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
   case mresults of
-    Just results -> computeIORelation op tests' results
+    Just results -> computeIORelation op explicitOperands tests' results
     Nothing -> liftIO $ E.throwM (LearningTimeout proxy (Some op))
+  where
+    insn = D.Instruction op explicitOperands
 
 -- | Sweep through the parameter space to find locations not mentioned in
 -- parameter lists that are modified by the instruction.
@@ -229,21 +183,92 @@ makeTestCase i c = do
                     , R.testProgram = asm i
                     }
 
--- | Run tests to determine the input and output locations for the given instruction opcode.
---
--- 1) Learn implicit operands by choosing a large set of randomly chosen
--- operands: operands that change when not present in the operand list are
--- implicit
---
--- 2) Generate a random instruction that contains no explicit references to
--- implicit operands.  Then generate test variants to determine if each
--- referenced location is an input or an output.
+
+-- | For all of the explicit operands, map the results of tests to deductions
+-- (forming an 'IORelation')
 computeIORelation :: (Architecture arch)
                   => Opcode arch (Operand arch) sh
+                  -> D.OperandList (Operand arch) sh
                   -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) arch]
                   -> [R.ResultOrError (ArchState (Sym t) arch)]
                   -> M t arch (IORelation arch sh)
-computeIORelation = undefined
+computeIORelation opcode operands bundles results =
+  F.foldlM (buildIORelation opcode operands idx) mempty bundles
+  where
+    idx = F.foldl' indexResults emptyResultIndex results
+
+-- | Interpret the results of a test (by consulting the 'ResultIndex' based on nonces)
+--
+-- 1) Look up the result of the concrete run of the original test
+--    ('tbTestOrig').  We'll learn information based on deviation of the other
+--    test cases from this one.
+--
+-- 2) If any of the locations referenced by the instruction change, they are
+--    (explicit) output locations and the tagged location is an input.  If no
+--    locations change due to the tagged location, it could be an output -- we
+--    don't know, so don't conclude anything.  Future tests will figure out if
+--    it is an output.
+buildIORelation :: forall arch t sh
+                 . (Architecture arch)
+                => Opcode arch (Operand arch) sh
+                -> D.OperandList (Operand arch) sh
+                -> ResultIndex (ArchState (Sym t) arch)
+                -> IORelation arch sh
+                -> TestBundle (R.TestCase (ArchState (Sym t) arch)) arch
+                -> M t arch (IORelation arch sh)
+buildIORelation op explicitOperands ri iorel tb = do
+  -- If the set of explicit output locations discovered by this test bundle is
+  -- non-empty, then the location mentioned in the learned fact is an input.
+  -- Keep that in mind while augmenting the IORelation
+  explicitOutputLocs <- S.unions <$> mapM (collectExplicitLocations explicitOperands explicitLocs ri) (tbTestCases tb)
+  -- FIXME: Should it be an error if this is null?  That would be pretty strange...
+  case S.null explicitOutputLocs of
+    True -> return iorel
+    False ->
+      case tbResult tb of
+        Learned { lIndex = ix, lOpcode = lop }
+          | Just P.Refl <- P.testEquality op lop ->
+            let newRel = IORelation { inputs = [ OperandRef (Some ix) ]
+                                    , outputs = map OperandRef (F.toList explicitOutputLocs)
+                                    }
+            in return (iorel <> newRel)
+          | otherwise -> L.error ("Opcode mismatch: expected " ++ P.showF op ++ " but got " ++ P.showF lop)
+  where
+    Just initialRes = M.lookup (R.testNonce (tbTestOrig tb)) (riSuccesses ri)
+    explicitLocs = instructionRegisterOperands (Proxy :: Proxy arch) explicitOperands
+
+-- | For the given test case, look up the results and compare them to the input
+--
+-- If the test failed, return an empty set.
+collectExplicitLocations :: (Architecture arch)
+                         => D.OperandList (Operand arch) sh
+                         -> [Some (PairF (D.Index sh) (TypedLocation arch))]
+                         -> ResultIndex (ArchState (Sym t) arch)
+                         -> R.TestCase (ArchState (Sym t) arch)
+                         -> M t arch (S.Set (Some (D.Index sh)))
+collectExplicitLocations _opList explicitLocs ri tc = do
+  case M.lookup (R.testNonce tc) (riSuccesses ri) of
+    Nothing -> return S.empty
+    Just res -> F.foldrM (addLocIfDifferent (R.resultContext res)) S.empty explicitLocs
+  where
+    addLocIfDifferent resCtx (Some (PairF idx (TL opLoc))) s
+      | Just output <- MapF.lookup opLoc resCtx
+      , Just input <- MapF.lookup opLoc (R.testContext tc) =
+          case input /= output of
+            True -> return (S.insert (Some idx) s)
+            False -> return s
+      | otherwise = L.error ("Missing location in architecture state: " ++ P.showF opLoc)
+
+indexResults :: ResultIndex a -> R.ResultOrError a -> ResultIndex a
+indexResults ri res =
+  case res of
+    R.TestReadError {} -> ri
+    R.TestSignalError trNonce trSignum ->
+      ri { riExitedWithSignal = M.insert trNonce trSignum (riExitedWithSignal ri) }
+    R.TestContextParseFailure -> ri
+    R.InvalidTag {} -> ri
+    R.TestSuccess tr ->
+      ri { riSuccesses = M.insert (R.resultNonce tr) tr (riSuccesses ri) }
 
 -- | Given an initial test state, generate all interesting variants on it.  The
 -- idea is to see which outputs change when we tweak an input.
@@ -280,6 +305,7 @@ generateTestVariants proxy implicitOperands i s0 =
                         , tbResult = Learned { lOpcode = opcode
                                              , lIndex = ix
                                              , lLocation = loc
+                                             , lInstruction = i
                                              }
                         }
 
@@ -290,22 +316,6 @@ generateTestVariants proxy implicitOperands i s0 =
 -- To learn implicit operands, we need the list of all (register) locations for
 -- the architecture.  We won't deal with implicit memory locations
 
-data TestBundle f arch = TestBundle { tbTestOrig :: f
-                                    -- ^ The base case to compare against
-                                    , tbTestCases :: [f]
-                                    -- ^ The variants to run
-                                    , tbResult :: LearnedFact arch
-                                    -- ^ The fact we learn if the test cases
-                                    -- differ
-                                    }
-
--- | If the given location changes, it was an output location.  Otherwise, if
--- the test cases differ from the original test case, it was an input operand.
-data LearnedFact arch =
-  forall sh tp . Learned { lOpcode :: Opcode arch (Operand arch) sh
-                         , lIndex :: D.Index sh tp
-                         , lLocation :: Location arch (OperandType arch tp)
-                         }
 
 -- | Tweak the value in the 'ArchState' at the given location to a number of
 -- random values.
@@ -323,7 +333,7 @@ generateVariantsFor :: (Architecture arch)
                     -> D.Index sh tp
                     -> Location arch (OperandType arch tp)
                     -> M t arch [ArchState (Sym t) arch]
-generateVariantsFor _ s0 opcode _ix loc = do
+generateVariantsFor _ s0 _opcode _ix loc = do
   sym <- St.gets backend
   g <- St.gets gen
   replicateM 5 (genOne sym g)
@@ -379,140 +389,4 @@ implicit input.
 
 -}
 
--- On-disk data format (s-expression based)
-
-{-
-
-The format is expected to be a simple s-expression recording inputs and outputs
-
-((inputs ((implicit . rax) (operand . 0)))
- (outputs ()))
-
--}
-
-data Atom = AIdent String
-          | AWord Word
-          deriving (Show)
-
-parseIdent :: P.Parser String
-parseIdent = P.many P.letter
-
-parseWord :: P.Parser Word
-parseWord = do
-  mw <- P.many1 P.digit
-  case readMaybe mw of
-    Just w -> return w
-    Nothing -> fail "Invalid word"
-
-parseAtom :: P.Parser Atom
-parseAtom = AIdent <$> parseIdent
-        <|> AWord <$> parseWord
-
-parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
-parserLL = SC.mkParser parseAtom
-
-parseLL :: T.Text -> Either String (SC.SExpr Atom)
-parseLL = SC.decodeOne parserLL
-
-printIORelation :: forall arch sh . (Architecture arch) => IORelation arch sh -> T.Text
-printIORelation = SC.encodeOne (SC.basicPrint printAtom) . (fromIORelation (Proxy :: Proxy arch))
-
-printAtom :: Atom -> T.Text
-printAtom a =
-  case a of
-    AIdent s -> T.pack s
-    AWord w -> T.pack (show w)
-
-fromIORelation :: (Architecture arch) => Proxy arch -> IORelation arch sh -> SC.SExpr Atom
-fromIORelation p ior =
-  SC.SCons (SC.SCons (SC.SAtom (AIdent "inputs")) inputsS)
-           (SC.SCons (SC.SCons (SC.SAtom (AIdent "outputs")) outputsS)
-                      SC.SNil)
-  where
-    inputsS = fromList (map toSExpr (inputs ior))
-    outputsS = fromList (map toSExpr (outputs ior))
-
-    fromList = foldr SC.SCons SC.SNil
-
-    toSExpr rel =
-      case rel of
-        ImplicitOperand loc -> SC.SAtom (AIdent (show loc))
-        OperandRef (Some ix) -> SC.SAtom (AWord (indexToWord p ix))
-
-indexToWord :: Proxy arch -> D.Index sh s -> Word
-indexToWord p ix =
-  case ix of
-    D.IndexHere -> 0
-    D.IndexThere ix' -> 1 + indexToWord p ix'
-
-data IORelationParseError arch = IORelationParseError (Proxy arch) (Some (Opcode arch (Operand arch))) T.Text
-                               | InvalidSExpr (Proxy arch) (Some (Opcode arch (Operand arch))) (SC.SExpr Atom)
-                               | InvalidLocation (Proxy arch) String
-                               | InvalidIndex (Proxy arch) (Some (Opcode arch (Operand arch))) Word
-
-deriving instance (Architecture arch) => Show (IORelationParseError arch)
-instance (Architecture arch) => E.Exception (IORelationParseError arch)
-
-readIORelation :: forall arch m sh
-                . (E.MonadThrow m, Architecture arch, U.UnfoldShape sh)
-               => Proxy arch
-               -> T.Text
-               -> Opcode arch (Operand arch) sh
-               -> m (IORelation arch sh)
-readIORelation p t op = do
-  sx <- case parseLL t of
-    Left _err -> E.throwM (IORelationParseError p (Some op) t)
-    Right res -> return res
-  (inputsS, outputsS) <- case sx of
-    SC.SCons (SC.SCons (SC.SAtom (AIdent "inputs")) inputsS)
-             (SC.SCons (SC.SCons (SC.SAtom (AIdent "outputs")) outputsS)
-                        SC.SNil) -> return (inputsS, outputsS)
-    _ -> E.throwM (InvalidSExpr p (Some op) sx)
-  ins <- parseRelationList p op inputsS
-  outs <- parseRelationList p op outputsS
-  return IORelation { inputs = ins, outputs = outs }
-
-parseRelationList :: forall m sh arch
-                   . (E.MonadThrow m, U.UnfoldShape sh, Architecture arch)
-                  => Proxy arch
-                  -> Opcode arch (Operand arch) sh
-                  -> SC.SExpr Atom
-                  -> m [OperandRef arch sh]
-parseRelationList proxy opcode s0 =
-  case s0 of
-    SC.SNil -> return []
-    SC.SCons (SC.SCons (SC.SAtom (AIdent "implicit")) (SC.SAtom (AIdent loc))) rest -> do
-      rest' <- parseRelationList proxy opcode rest
-      case readLocation loc of
-        Nothing -> E.throwM (InvalidLocation proxy loc)
-        Just sloc -> return (ImplicitOperand sloc : rest')
-    SC.SCons (SC.SCons (SC.SAtom (AIdent "operand")) (SC.SAtom (AWord ix))) rest -> do
-      rest' <- parseRelationList proxy opcode rest
-      oref <- mkOperandRef proxy opcode ix
-      return (oref : rest')
-    _ -> E.throwM (InvalidSExpr proxy (Some opcode) s0)
-
--- | Take an integer and try to construct a `D.Index` that points at the
--- appropriate index into the operand list of the given opcode.
---
--- This involves traversing the type level operand list via 'U.unfoldShape'
-mkOperandRef :: forall m arch sh . (E.MonadThrow m, U.UnfoldShape sh, Architecture arch)
-             => Proxy arch
-             -> Opcode arch (Operand arch) sh
-             -> Word
-             -> m (OperandRef arch sh)
-mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
-  where
-    -- We got to the end of the type level list without finding our index, so it
-    -- was out of bounds
-    nil :: Word -> m (OperandRef arch '[])
-    nil _ = E.throwM (InvalidIndex proxy (Some op) w0)
-
-    elt :: forall tp tps' tps . (U.RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> Word -> m (OperandRef arch tps)
-    elt _ _ w =
-      case w of
-        0 -> return (OperandRef (Some D.IndexHere))
-        _ -> do
-          OperandRef (Some ix) <- U.unfoldShape nil elt (w - 1)
-          return (OperandRef (Some (D.IndexThere ix)))
 

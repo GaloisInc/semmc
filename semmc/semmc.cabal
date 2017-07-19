@@ -27,6 +27,8 @@ library
                        SemMC.Stochastic.Classify
                        SemMC.Stochastic.Generalize
                        SemMC.Stochastic.IORelation
+                       SemMC.Stochastic.IORelation.Parser
+                       SemMC.Stochastic.IORelation.Types
                        SemMC.Stochastic.Monad
                        SemMC.Stochastic.Remote
                        SemMC.Stochastic.Remote.SSH
@@ -50,6 +52,7 @@ library
                        binary,
                        filepath,
                        stm,
+                       located-base,
                        text >= 1 && < 2,
                        mwc-random >= 0.13 && < 0.14,
                        exceptions >= 0.8 && < 0.9,
