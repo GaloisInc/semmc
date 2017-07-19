@@ -129,7 +129,7 @@ classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t
 classifyExplicitOperands proxy op explicitOperands (implicitLocations -> implicitOperands) = do
   mkTest <- St.gets testGen
   t0 <- liftIO mkTest
-  tests <- generateTestVariants proxy implicitOperands insn t0
+  tests <- generateTestVariants implicitOperands insn t0
   tests' <- mapM (wrapTestBundle insn) tests
   tchan <- St.gets testChan
   let remoteTestCases = [ t
@@ -150,6 +150,9 @@ classifyExplicitOperands proxy op explicitOperands (implicitLocations -> implici
 --
 -- To do this, we generate a bunch of randomized operand lists to cycle through
 -- possible registers.
+--
+-- For this, we will want to focus on generating values that trigger edge cases
+-- to make sure we can deal with flags registers.
 findImplicitOperands :: (Architecture arch)
                      => Opcode arch (Operand arch) sh
                      -> M t arch (IORelation arch sh)
@@ -282,24 +285,23 @@ indexResults ri res =
 --
 -- We learn the *outputs* set by comparing the tweaked input vs the output from
 -- that test vector: all modified registers are in the output set.
-generateTestVariants :: forall proxy arch t
+generateTestVariants :: forall arch t
                       . (Architecture arch)
-                     => proxy arch
-                     -> [Some (Location arch)]
+                     => [Some (Location arch)]
                      -> Instruction arch
                      -> ArchState (Sym t) arch
                      -> M t arch [TestBundle (ArchState (Sym t) arch) arch]
-generateTestVariants proxy implicitOperands i s0 =
+generateTestVariants implicitOperands i s0 =
   case i of
     D.Instruction opcode operands -> do
-      mapM (genVar opcode) (instructionRegisterOperands proxy operands)
+      mapM (genVar opcode) (instructionRegisterOperands (Proxy :: Proxy arch) operands)
   where
     genVar :: forall sh
             . Opcode arch (Operand arch) sh
            -> Some (PairF (D.Index sh) (TypedLocation arch))
            -> M t arch (TestBundle (ArchState (Sym t) arch) arch)
     genVar opcode (Some (PairF ix (TL loc))) = do
-      cases <- generateVariantsFor proxy s0 opcode ix loc
+      cases <- generateVariantsFor s0 opcode ix loc
       return TestBundle { tbTestOrig = s0
                         , tbTestCases = cases
                         , tbResult = Learned { lOpcode = opcode
@@ -327,13 +329,12 @@ generateTestVariants proxy implicitOperands i s0 =
 -- generate random bitvectors for floats, too, but we would probably want to
 -- tweak the distribution to generate interesting types of floats.
 generateVariantsFor :: (Architecture arch)
-                    => proxy arch
-                    -> ArchState (Sym t) arch
+                    => ArchState (Sym t) arch
                     -> Opcode arch (Operand arch) sh
                     -> D.Index sh tp
                     -> Location arch (OperandType arch tp)
                     -> M t arch [ArchState (Sym t) arch]
-generateVariantsFor _ s0 _opcode _ix loc = do
+generateVariantsFor s0 _opcode _ix loc = do
   sym <- St.gets backend
   g <- St.gets gen
   replicateM 5 (genOne sym g)
