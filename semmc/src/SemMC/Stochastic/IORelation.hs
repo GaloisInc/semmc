@@ -73,7 +73,7 @@ testOpcode m op = do
   case insn of
     D.Instruction op' operandList
       | Just P.Refl <- P.testEquality op op' -> do
-        explicitOperands <- classifyExplicitOperands (Proxy :: Proxy arch) op operandList implicitOperands
+        explicitOperands <- classifyExplicitOperands (Proxy :: Proxy arch) op operandList
         let ioRelation = implicitOperands <> explicitOperands
         return $ MapF.insert op ioRelation m
       | otherwise -> L.error ("randomInstruction returned an instruction with the wrong opcode: " ++ P.showF op')
@@ -124,12 +124,11 @@ classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t
                          => Proxy arch
                          -> Opcode arch (Operand arch) sh
                          -> D.OperandList (Operand arch) sh
-                         -> IORelation arch sh
                          -> M t arch (IORelation arch sh)
-classifyExplicitOperands proxy op explicitOperands (implicitLocations -> implicitOperands) = do
+classifyExplicitOperands proxy op explicitOperands = do
   mkTest <- St.gets testGen
   t0 <- liftIO mkTest
-  tests <- generateTestVariants implicitOperands insn t0
+  tests <- generateTestVariants insn t0
   tests' <- mapM (wrapTestBundle insn) tests
   tchan <- St.gets testChan
   let remoteTestCases = [ t
@@ -237,7 +236,6 @@ buildIORelation op explicitOperands ri iorel tb = do
             in return (iorel <> newRel)
           | otherwise -> L.error ("Opcode mismatch: expected " ++ P.showF op ++ " but got " ++ P.showF lop)
   where
-    Just initialRes = M.lookup (R.testNonce (tbTestOrig tb)) (riSuccesses ri)
     explicitLocs = instructionRegisterOperands (Proxy :: Proxy arch) explicitOperands
 
 -- | For the given test case, look up the results and compare them to the input
@@ -287,11 +285,10 @@ indexResults ri res =
 -- that test vector: all modified registers are in the output set.
 generateTestVariants :: forall arch t
                       . (Architecture arch)
-                     => [Some (Location arch)]
-                     -> Instruction arch
+                     => Instruction arch
                      -> ArchState (Sym t) arch
                      -> M t arch [TestBundle (ArchState (Sym t) arch) arch]
-generateTestVariants implicitOperands i s0 =
+generateTestVariants i s0 =
   case i of
     D.Instruction opcode operands -> do
       mapM (genVar opcode) (instructionRegisterOperands (Proxy :: Proxy arch) operands)
