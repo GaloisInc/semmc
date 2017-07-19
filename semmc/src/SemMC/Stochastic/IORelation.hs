@@ -133,7 +133,7 @@ classifyExplicitOperands proxy op explicitOperands = do
   tchan <- St.gets testChan
   let remoteTestCases = [ t
                         | tb <- tests'
-                        , t <- tbTestOrig tb : tbTestCases tb
+                        , t <- tbTestCases tb
                         ]
   liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
   rchan <- St.gets resChan
@@ -155,18 +155,21 @@ classifyExplicitOperands proxy op explicitOperands = do
 findImplicitOperands :: (Architecture arch)
                      => Opcode arch (Operand arch) sh
                      -> M t arch (IORelation arch sh)
-findImplicitOperands = undefined
+findImplicitOperands op = do
+  mkTest <- St.gets testGen
+  t0 <- liftIO mkTest
+  undefined
+
 
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
 wrapTestBundle :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
                => Instruction arch
-               -> TestBundle (ArchState (Sym t) arch) arch
-               -> M t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) arch)
+               -> TestBundle (ArchState (Sym t) arch) (ExplicitFact arch)
+               -> M t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) (ExplicitFact arch))
 wrapTestBundle i tb = do
-  orig <- makeTestCase i (tbTestOrig tb)
+--  orig <- makeTestCase i (tbTestOrig tb)
   cases <- mapM (makeTestCase i) (tbTestCases tb)
-  return TestBundle { tbTestOrig = orig
-                    , tbTestCases = cases
+  return TestBundle { tbTestCases = cases
                     , tbResult = tbResult tb
                     }
 
@@ -191,7 +194,7 @@ makeTestCase i c = do
 computeIORelation :: (Architecture arch)
                   => Opcode arch (Operand arch) sh
                   -> D.OperandList (Operand arch) sh
-                  -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) arch]
+                  -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) (ExplicitFact arch)]
                   -> [R.ResultOrError (ArchState (Sym t) arch)]
                   -> M t arch (IORelation arch sh)
 computeIORelation opcode operands bundles results =
@@ -216,7 +219,7 @@ buildIORelation :: forall arch t sh
                 -> D.OperandList (Operand arch) sh
                 -> ResultIndex (ArchState (Sym t) arch)
                 -> IORelation arch sh
-                -> TestBundle (R.TestCase (ArchState (Sym t) arch)) arch
+                -> TestBundle (R.TestCase (ArchState (Sym t) arch)) (ExplicitFact arch)
                 -> M t arch (IORelation arch sh)
 buildIORelation op explicitOperands ri iorel tb = do
   -- If the set of explicit output locations discovered by this test bundle is
@@ -228,7 +231,7 @@ buildIORelation op explicitOperands ri iorel tb = do
     True -> return iorel
     False ->
       case tbResult tb of
-        Learned { lIndex = ix, lOpcode = lop }
+        ExplicitFact { lIndex = ix, lOpcode = lop }
           | Just P.Refl <- P.testEquality op lop ->
             let newRel = IORelation { inputs = [ OperandRef (Some ix) ]
                                     , outputs = map OperandRef (F.toList explicitOutputLocs)
@@ -287,7 +290,7 @@ generateTestVariants :: forall arch t
                       . (Architecture arch)
                      => Instruction arch
                      -> ArchState (Sym t) arch
-                     -> M t arch [TestBundle (ArchState (Sym t) arch) arch]
+                     -> M t arch [TestBundle (ArchState (Sym t) arch) (ExplicitFact arch)]
 generateTestVariants i s0 =
   case i of
     D.Instruction opcode operands -> do
@@ -296,16 +299,15 @@ generateTestVariants i s0 =
     genVar :: forall sh
             . Opcode arch (Operand arch) sh
            -> Some (PairF (D.Index sh) (TypedLocation arch))
-           -> M t arch (TestBundle (ArchState (Sym t) arch) arch)
+           -> M t arch (TestBundle (ArchState (Sym t) arch) (ExplicitFact arch))
     genVar opcode (Some (PairF ix (TL loc))) = do
       cases <- generateVariantsFor s0 opcode ix loc
-      return TestBundle { tbTestOrig = s0
-                        , tbTestCases = cases
-                        , tbResult = Learned { lOpcode = opcode
-                                             , lIndex = ix
-                                             , lLocation = loc
-                                             , lInstruction = i
-                                             }
+      return TestBundle { tbTestCases = cases
+                        , tbResult = ExplicitFact { lOpcode = opcode
+                                                  , lIndex = ix
+                                                  , lLocation = loc
+                                                  , lInstruction = i
+                                                  }
                         }
 
 -- FIXME: For each test variant, build a new structure that tells us what we

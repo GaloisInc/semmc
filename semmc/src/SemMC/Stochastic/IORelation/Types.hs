@@ -6,7 +6,7 @@ module SemMC.Stochastic.IORelation.Types (
   IORelation(..),
   LearnConfig(..),
   TestBundle(..),
-  LearnedFact(..),
+  ExplicitFact(..),
   OperandRef(..),
   LearningException(..),
   ResultIndex(..),
@@ -57,23 +57,21 @@ data OperandRef arch sh = ImplicitOperand (Some (Location arch))
 deriving instance (Architecture arch) => Eq (OperandRef arch sh)
 deriving instance (Architecture arch) => Ord (OperandRef arch sh)
 
-data TestBundle f arch = TestBundle { tbTestOrig :: f
-                                    -- ^ The base case to compare against
-                                    , tbTestCases :: [f]
-                                    -- ^ The variants to run
-                                    , tbResult :: LearnedFact arch
-                                    -- ^ The fact we learn if the test cases
-                                    -- differ
-                                    }
+data TestBundle t l =
+  TestBundle { tbTestCases :: [t]
+             -- ^ The variants to run
+             , tbResult :: l
+             -- ^ The fact we learn if the test cases differ
+             }
 
 -- | If the given location changes, it was an output location.  Otherwise, if
 -- the test cases differ from the original test case, it was an input operand.
-data LearnedFact arch =
-  forall sh tp . Learned { lOpcode :: Opcode arch (Operand arch) sh
-                         , lIndex :: D.Index sh tp
-                         , lLocation :: Location arch (OperandType arch tp)
-                         , lInstruction :: Instruction arch
-                         }
+data ExplicitFact arch =
+  forall sh tp . ExplicitFact { lOpcode :: Opcode arch (Operand arch) sh
+                              , lIndex :: D.Index sh tp
+                              , lLocation :: Location arch (OperandType arch tp)
+                              , lInstruction :: Instruction arch
+                              }
 
 data IORelation arch sh =
   IORelation { inputs :: [OperandRef arch sh]
@@ -121,6 +119,7 @@ emptyResultIndex = ResultIndex { riExitedWithSignal = M.empty
 askWaitMicroseconds :: M t arch Int
 askWaitMicroseconds = (* 1000000) <$> St.gets resWaitSeconds
 
+-- | Execute an 'IO' action with a timeout (provided by the 'M' environment)
 timeout :: IO a -> M t arch (Maybe a)
 timeout a = do
   ms <- askWaitMicroseconds
