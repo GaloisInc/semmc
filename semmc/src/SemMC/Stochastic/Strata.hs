@@ -33,11 +33,11 @@ caller controls the number and placement of threads.
 
 -}
 
-strata :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch), Ord (Instruction arch))
+strata :: (Architecture arch, SynC arch, Ord (Instruction arch))
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
-processWorklist :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch), Ord (Instruction arch))
+processWorklist :: (Architecture arch, SynC arch, Ord (Instruction arch))
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
@@ -55,7 +55,7 @@ processWorklist = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we time out trying to find a formula
-strataOne :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch), Ord (Instruction arch))
+strataOne :: (Architecture arch, SynC arch, Ord (Instruction arch))
           => Opcode arch (Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
