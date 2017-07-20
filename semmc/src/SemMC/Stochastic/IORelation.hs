@@ -73,7 +73,7 @@ testOpcode m op = do
   case insn of
     D.Instruction op' operandList
       | Just P.Refl <- P.testEquality op op' -> do
-        explicitOperands <- classifyExplicitOperands (Proxy :: Proxy arch) op operandList
+        explicitOperands <- classifyExplicitOperands op operandList
         let ioRelation = implicitOperands <> explicitOperands
         return $ MapF.insert op ioRelation m
       | otherwise -> L.error ("randomInstruction returned an instruction with the wrong opcode: " ++ P.showF op')
@@ -121,26 +121,15 @@ matchesOperand proxy implicits _ix operand matches =
 -- interpret the results to create an IORelation that describes the explicit
 -- operands of the instruction.
 classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
-                         => Proxy arch
-                         -> Opcode arch (Operand arch) sh
+                         => Opcode arch (Operand arch) sh
                          -> D.OperandList (Operand arch) sh
                          -> M t arch (IORelation arch sh)
-classifyExplicitOperands proxy op explicitOperands = do
+classifyExplicitOperands op explicitOperands = do
   mkTest <- St.gets testGen
   t0 <- liftIO mkTest
   tests <- generateExplicitTestVariants insn t0
   tests' <- mapM (wrapTestBundle insn) tests
-  tchan <- St.gets testChan
-  let remoteTestCases = [ t
-                        | tb <- tests'
-                        , t <- tbTestCases tb
-                        ]
-  liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
-  rchan <- St.gets resChan
-  mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
-  case mresults of
-    Just results -> computeIORelation op explicitOperands tests' results
-    Nothing -> liftIO $ E.throwM (LearningTimeout proxy (Some op))
+  withTestResults op tests' $ computeIORelation op explicitOperands tests'
   where
     insn = D.Instruction op explicitOperands
 
@@ -160,15 +149,7 @@ findImplicitOperands op = do
   mkTest <- St.gets testGen
   g <- St.gets gen
   tests <- concat <$> replicateM 20 (genTestSet mkTest g)
-
-  tchan <- St.gets testChan
-  rchan <- St.gets resChan
-  let remoteTestCases = concatMap tbTestCases tests
-  liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
-  mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
-  case mresults of
-    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy :: Proxy arch) (Some op))
-    Just results -> computeImplicitOperands op tests results
+  withTestResults op tests $ computeImplicitOperands op tests
   where
     genTestSet mkTest g = do
       t0 <- liftIO mkTest
@@ -176,13 +157,38 @@ findImplicitOperands op = do
       tb0 <- generateImplicitTests insn t0
       mapM (wrapTestBundle insn) tb0
 
+withTestResults :: forall a f t arch sh
+                 . (Architecture arch)
+                => Opcode arch (Operand arch) sh
+                -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) f]
+                -> ([R.ResultOrError (ArchState (Sym t) arch)] -> M t arch a)
+                -> M t arch a
+withTestResults op tests k = do
+  tchan <- St.gets testChan
+  rchan <- St.gets resChan
+  let remoteTestCases = concatMap tbTestCases tests
+  liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
+  mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
+  case mresults of
+    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy :: Proxy arch) (Some op))
+    Just results -> k results
+
 -- | Interpret the results of the implicit operand search
+--
+-- The fact records all of the explicit locations.  We just need to look at all
+-- of the *other* (unmentioned) locations to find any changes.  Any changed
+-- locations are implicit outputs.
+--
+-- FIXME: To find implicit inputs, we have to keep the explicit operands
+-- constant and vary all of the other locations.
 computeImplicitOperands :: (Architecture arch)
                         => Opcode arch (Operand arch) sh
                         -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) (ImplicitFact arch)]
                         -> [R.ResultOrError (ArchState (Sym t) arch)]
                         -> M t arch (IORelation arch sh)
-computeImplicitOperands = undefined
+computeImplicitOperands op tests results = undefined idx
+  where
+    idx = F.foldl' indexResults emptyResultIndex results
 
 -- | For an instruction instance, sweep across the parameter space of all of the
 -- interesting values for the operands.  Examine all of the locations that do
