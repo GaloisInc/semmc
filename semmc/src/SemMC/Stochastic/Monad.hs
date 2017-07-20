@@ -24,14 +24,15 @@ module SemMC.Stochastic.Monad (
   ) where
 
 import qualified Control.Concurrent.STM as STM
-import Control.Monad ( replicateM )
+import           Control.Monad ( replicateM )
 import qualified Control.Monad.Reader as R
-import Control.Monad.Trans ( MonadIO, liftIO )
-import System.FilePath ( (</>), (<.>) )
+import           Control.Monad.Trans ( MonadIO, liftIO )
+import           System.FilePath ( (</>), (<.>) )
 
+import qualified Data.EnumF as P
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Lang.Crucible.Solver.SimpleBackend as CRU
 
@@ -39,12 +40,12 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
-import SemMC.Architecture ( ArchState, Architecture, Opcode, Operand )
+import           SemMC.Architecture ( ArchState, Architecture, Opcode, Operand )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
 import qualified SemMC.Worklist as WL
-import SemMC.Util ( Witness(..) )
+import           SemMC.Util ( Witness(..) )
 
 import qualified SemMC.Stochastic.Statistics as S
 
@@ -81,7 +82,9 @@ data LocalSymEnv = LocalSymEnv
 
 -- Synthesis constraints.
 type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
-                 , D.ArbitraryOperands (Opcode arch) (Operand arch) )
+                 , D.ArbitraryOperand (Operand arch)
+                 , D.ArbitraryOperands (Opcode arch) (Operand arch)
+                 , P.EnumF (Opcode arch (Operand arch)) )
 
 -- Synthesis monad.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (SynEnv t arch) IO a }

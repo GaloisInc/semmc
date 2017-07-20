@@ -2,6 +2,12 @@
 -- | Description: Synthesize a program that implements a target instruction.
 --
 -- Stochastic synthesis as described in the STOKE and STRATA papers.
+--
+-- STOKE: Stochastic superoptimization:
+-- https://cs.stanford.edu/people/eschkufz/docs/asplos_13.pdf
+--
+-- STRATA: Stratified Synthesis:
+-- https://cs.stanford.edu/people/eschkufz/docs/pldi_16.pdf
 module SemMC.Stochastic.Synthesize ( synthesize ) where
 
 import           Control.Monad ( join )
@@ -143,16 +149,36 @@ perturb candidate = do
 
 -- | Randomly replace an opcode with another compatible opcode, while
 -- keeping the operands fixed.
-perturbOpcode :: a
-perturbOpcode = undefined
+perturbOpcode :: SynC arch => Candidate arch -> Syn t arch (Candidate arch)
+perturbOpcode candidate = do
+  gen <- askGen
+  index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
+  baseSet <- askBaseSet
+  let oldInstruction = candidate `S.index` index
+  newInstruction <- liftIO $
+    D.randomizeOpcode gen baseSet `mapM` oldInstruction
+  return $ S.update index newInstruction candidate
 
 -- | Randomly replace the operands, while keeping the opcode fixed.
-perturbOperand :: a
-perturbOperand = undefined
+perturbOperand :: SynC arch => Candidate arch -> Syn t arch (Candidate arch)
+perturbOperand candidate = do
+  gen <- askGen
+  index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
+  let oldInstruction = candidate `S.index` index
+  newInstruction <- liftIO $ D.randomizeOperand gen `mapM` oldInstruction
+  return $ S.update index newInstruction candidate
 
 -- | Swap two instructions in a program.
-swapInstructions :: a
-swapInstructions = undefined
+swapInstructions :: SynC arch => Candidate arch -> Syn t arch (Candidate arch)
+swapInstructions candidate = do
+  gen <- askGen
+  index1 <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
+  index2 <- liftIO $ do
+    -- Avoid @index1 == index2@.
+    i2 <- D.uniformR (0, S.length candidate - 2) gen
+    return $ if i2 < index1 then i2 else i2+1
+  let [instr1, instr2] = map (candidate `S.index`) [index1, index2]
+  return $ S.update index1 instr2 $ S.update index2 instr1 candidate
 
 -- | Replace an instruction with an unrelated instruction.
 perturbInstruction :: SynC arch => Candidate arch -> Syn t arch (Candidate arch)
