@@ -128,7 +128,7 @@ classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t
 classifyExplicitOperands proxy op explicitOperands = do
   mkTest <- St.gets testGen
   t0 <- liftIO mkTest
-  tests <- generateTestVariants insn t0
+  tests <- generateExplicitTestVariants insn t0
   tests' <- mapM (wrapTestBundle insn) tests
   tchan <- St.gets testChan
   let remoteTestCases = [ t
@@ -152,22 +152,56 @@ classifyExplicitOperands proxy op explicitOperands = do
 --
 -- For this, we will want to focus on generating values that trigger edge cases
 -- to make sure we can deal with flags registers.
-findImplicitOperands :: (Architecture arch)
+findImplicitOperands :: forall t arch sh
+                      . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch), R.MachineState (ArchState (Sym t) arch))
                      => Opcode arch (Operand arch) sh
                      -> M t arch (IORelation arch sh)
 findImplicitOperands op = do
   mkTest <- St.gets testGen
-  t0 <- liftIO mkTest
-  undefined
+  g <- St.gets gen
+  tests <- concat <$> replicateM 20 (genTestSet mkTest g)
 
+  tchan <- St.gets testChan
+  rchan <- St.gets resChan
+  let remoteTestCases = concatMap tbTestCases tests
+  liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
+  mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
+  case mresults of
+    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy :: Proxy arch) (Some op))
+    Just results -> computeImplicitOperands op tests results
+  where
+    genTestSet mkTest g = do
+      t0 <- liftIO mkTest
+      insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
+      tb0 <- generateImplicitTests insn t0
+      mapM (wrapTestBundle insn) tb0
+
+-- | Interpret the results of the implicit operand search
+computeImplicitOperands :: (Architecture arch)
+                        => Opcode arch (Operand arch) sh
+                        -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) (ImplicitFact arch)]
+                        -> [R.ResultOrError (ArchState (Sym t) arch)]
+                        -> M t arch (IORelation arch sh)
+computeImplicitOperands = undefined
+
+-- | For an instruction instance, sweep across the parameter space of all of the
+-- interesting values for the operands.  Examine all of the locations that do
+-- not appear in the register list for changes.
+--
+-- Repeat for a number of random instructions
+generateImplicitTests :: forall arch t
+                       . (Architecture arch)
+                      => Instruction arch
+                      -> ArchState (Sym t) arch
+                      -> M t arch [TestBundle (ArchState (Sym t) arch) (ImplicitFact arch)]
+generateImplicitTests = undefined
 
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
 wrapTestBundle :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
                => Instruction arch
-               -> TestBundle (ArchState (Sym t) arch) (ExplicitFact arch)
-               -> M t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) (ExplicitFact arch))
+               -> TestBundle (ArchState (Sym t) arch) f
+               -> M t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) f)
 wrapTestBundle i tb = do
---  orig <- makeTestCase i (tbTestOrig tb)
   cases <- mapM (makeTestCase i) (tbTestCases tb)
   return TestBundle { tbTestCases = cases
                     , tbResult = tbResult tb
@@ -286,12 +320,12 @@ indexResults ri res =
 --
 -- We learn the *outputs* set by comparing the tweaked input vs the output from
 -- that test vector: all modified registers are in the output set.
-generateTestVariants :: forall arch t
-                      . (Architecture arch)
-                     => Instruction arch
-                     -> ArchState (Sym t) arch
-                     -> M t arch [TestBundle (ArchState (Sym t) arch) (ExplicitFact arch)]
-generateTestVariants i s0 =
+generateExplicitTestVariants :: forall arch t
+                              . (Architecture arch)
+                             => Instruction arch
+                             -> ArchState (Sym t) arch
+                             -> M t arch [TestBundle (ArchState (Sym t) arch) (ExplicitFact arch)]
+generateExplicitTestVariants i s0 =
   case i of
     D.Instruction opcode operands -> do
       mapM (genVar opcode) (instructionRegisterOperands (Proxy :: Proxy arch) operands)

@@ -7,6 +7,7 @@ module SemMC.Stochastic.IORelation.Types (
   LearnConfig(..),
   TestBundle(..),
   ExplicitFact(..),
+  ImplicitFact(..),
   OperandRef(..),
   LearningException(..),
   ResultIndex(..),
@@ -72,6 +73,15 @@ data ExplicitFact arch =
                               , lLocation :: Location arch (OperandType arch tp)
                               , lInstruction :: Instruction arch
                               }
+
+-- | We just need to track the explicitly-referenced locations.  Changes to any
+-- state variables that are not explicitly mentioned in the operand list
+-- indicate implicit operands.
+data ImplicitFact arch =
+  forall sh . ImplicitFact { ifOpcode :: Opcode arch (Operand arch) sh
+                           , ifExplicits :: [Some (Location arch)]
+                           , ifInstruction :: Instruction arch
+                           }
 
 data IORelation arch sh =
   IORelation { inputs :: [OperandRef arch sh]
