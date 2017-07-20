@@ -27,6 +27,7 @@ library
                        SemMC.Stochastic.Classify
                        SemMC.Stochastic.Generalize
                        SemMC.Stochastic.IORelation
+                       SemMC.Stochastic.IORelation.Explicit
                        SemMC.Stochastic.IORelation.Parser
                        SemMC.Stochastic.IORelation.Shared
                        SemMC.Stochastic.IORelation.Types
