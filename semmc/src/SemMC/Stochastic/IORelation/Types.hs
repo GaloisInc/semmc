@@ -5,6 +5,7 @@
 module SemMC.Stochastic.IORelation.Types (
   IORelation(..),
   LearnConfig(..),
+  TypedLocation(..),
   TestBundle(..),
   ExplicitFact(..),
   ImplicitFact(..),
@@ -134,3 +135,8 @@ timeout :: IO a -> M t arch (Maybe a)
 timeout a = do
   ms <- askWaitMicroseconds
   liftIO $ T.timeout ms a
+
+
+-- | This is a newtype to shuffle type arguments around so that the 'tp'
+-- parameter is last (so that we can use it with PairF and Some)
+newtype TypedLocation arch tp = TL (Location arch (OperandType arch tp))

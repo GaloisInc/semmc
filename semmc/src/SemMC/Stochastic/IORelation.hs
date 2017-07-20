@@ -18,9 +18,7 @@ module SemMC.Stochastic.IORelation (
 
 import qualified GHC.Err.Located as L
 
-import qualified Control.Concurrent as C
 import Control.Monad ( replicateM )
-import qualified Control.Monad.Catch as E
 import qualified Control.Monad.State.Strict as St
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
@@ -45,9 +43,10 @@ import qualified SemMC.Formula.Parser as F
 import SemMC.Util ( Witness(..) )
 
 import SemMC.Stochastic.Monad ( Sym )
-import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.IORelation.Parser
+import SemMC.Stochastic.IORelation.Shared
 import SemMC.Stochastic.IORelation.Types
+import qualified SemMC.Stochastic.Remote as R
 
 
 
@@ -157,22 +156,6 @@ findImplicitOperands op = do
       tb0 <- generateImplicitTests insn t0
       mapM (wrapTestBundle insn) tb0
 
-withTestResults :: forall a f t arch sh
-                 . (Architecture arch)
-                => Opcode arch (Operand arch) sh
-                -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) f]
-                -> ([R.ResultOrError (ArchState (Sym t) arch)] -> M t arch a)
-                -> M t arch a
-withTestResults op tests k = do
-  tchan <- St.gets testChan
-  rchan <- St.gets resChan
-  let remoteTestCases = concatMap tbTestCases tests
-  liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
-  mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
-  case mresults of
-    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy :: Proxy arch) (Some op))
-    Just results -> k results
-
 -- | Interpret the results of the implicit operand search
 --
 -- The fact records all of the explicit locations.  We just need to look at all
@@ -201,32 +184,6 @@ generateImplicitTests :: forall arch t
                       -> ArchState (Sym t) arch
                       -> M t arch [TestBundle (ArchState (Sym t) arch) (ImplicitFact arch)]
 generateImplicitTests = undefined
-
--- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
-wrapTestBundle :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
-               => Instruction arch
-               -> TestBundle (ArchState (Sym t) arch) f
-               -> M t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) f)
-wrapTestBundle i tb = do
-  cases <- mapM (makeTestCase i) (tbTestCases tb)
-  return TestBundle { tbTestCases = cases
-                    , tbResult = tbResult tb
-                    }
-
--- | Take a test bundle of raw tests ('ArchState (Sym t) arch') and convert the
--- raw tests to 'R.TestCase' by allocating a nonce
-makeTestCase :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
-             => Instruction arch
-             -> ArchState (Sym t) arch
-             -> M t arch (R.TestCase (ArchState (Sym t) arch))
-makeTestCase i c = do
-  tid <- St.gets nonce
-  asm <- St.gets assemble
-  St.modify' $ \s -> s { nonce = nonce s + 1 }
-  return R.TestCase { R.testNonce = tid
-                    , R.testContext = c
-                    , R.testProgram = asm i
-                    }
 
 
 -- | For all of the explicit operands, map the results of tests to deductions
@@ -303,17 +260,6 @@ collectExplicitLocations _opList explicitLocs ri tc = do
             False -> return s
       | otherwise = L.error ("Missing location in architecture state: " ++ P.showF opLoc)
 
-indexResults :: ResultIndex a -> R.ResultOrError a -> ResultIndex a
-indexResults ri res =
-  case res of
-    R.TestReadError {} -> ri
-    R.TestSignalError trNonce trSignum ->
-      ri { riExitedWithSignal = M.insert trNonce trSignum (riExitedWithSignal ri) }
-    R.TestContextParseFailure -> ri
-    R.InvalidTag {} -> ri
-    R.TestSuccess tr ->
-      ri { riSuccesses = M.insert (R.resultNonce tr) tr (riSuccesses ri) }
-
 -- | Given an initial test state, generate all interesting variants on it.  The
 -- idea is to see which outputs change when we tweak an input.
 --
@@ -386,29 +332,6 @@ generateVariantsFor s0 _opcode _ix loc = do
           bv <- liftIO $ S.bvLit sym w (fromIntegral randomInt)
           return (MapF.insert loc bv s0)
         repr -> error ("Unsupported base type repr in generateVariantsFor: " ++ show repr)
-
--- | This is a newtype to shuffle type arguments around so that the 'tp'
--- parameter is last (so that we can use it with PairF and Some)
-newtype TypedLocation arch tp = TL (Location arch (OperandType arch tp))
-
-data PairF a b tp = PairF (a tp) (b tp)
-
-instructionRegisterOperands :: forall arch sh proxy
-                             . (Architecture arch)
-                            => proxy arch
-                            -> D.OperandList (Operand arch) sh
-                            -> [Some (PairF (D.Index sh) (TypedLocation arch))]
-instructionRegisterOperands proxy operands =
-  D.foldrOperandList collectLocations [] operands
-  where
-    collectLocations :: forall tp . D.Index sh tp
-                     -> Operand arch tp
-                     -> [Some (PairF (D.Index sh) (TypedLocation arch))]
-                     -> [Some (PairF (D.Index sh) (TypedLocation arch))]
-    collectLocations ix operand acc =
-      case operandToLocation proxy operand of
-        Just loc -> Some (PairF ix (TL loc)) : acc
-        Nothing -> acc
 
 {-
 
