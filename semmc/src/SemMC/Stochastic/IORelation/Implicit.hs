@@ -21,7 +21,6 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 
-import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
@@ -60,9 +59,6 @@ findImplicitOperands op = do
 -- The fact records all of the explicit locations.  We just need to look at all
 -- of the *other* (unmentioned) locations to find any changes.  Any changed
 -- locations are implicit outputs.
---
--- FIXME: To find implicit inputs, we have to keep the explicit operands
--- constant and vary all of the other locations.
 computeImplicitOperands :: (Architecture arch)
                         => Opcode arch (Operand arch) sh
                         -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) (ImplicitFact arch)]
@@ -82,36 +78,41 @@ buildImplicitRelation :: (Architecture arch)
                       -> IORelation arch sh
                       -> TestBundle (R.TestCase (ArchState (Sym t) arch)) (ImplicitFact arch)
                       -> M t arch (IORelation arch sh)
-buildImplicitRelation _op rix iorel tb = do
-  implicitOutputLocs <- S.unions <$> mapM (collectImplicitOutputLocations rix (tbResult tb)) (tbTestCases tb)
-  let newRel = IORelation { inputs = S.empty
-                          , outputs = S.fromList $ map ImplicitOperand (F.toList implicitOutputLocs)
-                          }
-  return (iorel <> newRel)
+buildImplicitRelation op rix iorel tb = do
+  implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix (tbResult tb)) (tbTestCases tb)
+  return (iorel <> implicitLocs)
 
 collectImplicitOutputLocations :: (Architecture arch)
-                               => ResultIndex (ArchState (Sym t) arch)
+                               => Opcode arch (Operand arch) sh
+                               -> ResultIndex (ArchState (Sym t) arch)
                                -> ImplicitFact arch
                                -> R.TestCase (ArchState (Sym t) arch)
-                               -> M t arch (S.Set (Some (Location arch)))
-collectImplicitOutputLocations rix f tc =
+                               -> M t arch (IORelation arch sh) -- S.Set (Some (Location arch)))
+collectImplicitOutputLocations _op rix f tc =
   case M.lookup (R.testNonce tc) (riSuccesses rix) of
-    Nothing -> return S.empty
+    Nothing -> return mempty
     Just res ->
       case f of
-        ImplicitFact { ifExplicits = explicitOperands } ->
-          F.foldrM (addLocIfImplicitAndDifferent explicitOperands) S.empty (MapF.toList (R.resultContext res))
+        ImplicitFact { ifExplicits = explicitOperands
+                     , ifLocation = loc0
+                     } ->
+          F.foldrM (addLocIfImplicitAndDifferent (Some loc0) explicitOperands) mempty (MapF.toList (R.resultContext res))
   where
-    addLocIfImplicitAndDifferent explicitOperands pair s =
+    addLocIfImplicitAndDifferent loc0 explicitOperands pair s =
       case pair of
-        MapF.Pair loc postVal
-          | Some loc `S.member` explicitOperands -> return s
-          | otherwise ->
-            case MapF.lookup loc (R.testContext tc) of
-              Nothing -> L.error ("Expected location in state: " ++ P.showF loc)
-              Just preVal
-                | preVal == postVal -> return s
-                | otherwise -> return (S.insert (Some loc) s)
+        MapF.Pair loc postVal ->
+          case MapF.lookup loc (R.testContext tc) of
+            Nothing -> L.error ("Expected location in state: " ++ P.showF loc)
+            Just preVal
+              -- If there is no change, we learned nothing (but suspect that loc0 was not implicit)
+              | preVal == postVal -> return s
+              | Some loc /= loc0 && S.member (Some loc) explicitOperands ->
+                return s { inputs = S.insert (ImplicitOperand loc0) (inputs s) }
+              | Some loc /= loc0 ->
+                return s { inputs = S.insert (ImplicitOperand loc0) (inputs s)
+                         , outputs = S.insert (ImplicitOperand (Some loc)) (outputs s)
+                         }
+              | otherwise -> return s
 
 -- | For an instruction instance, sweep across the parameter space of all of the
 -- interesting values for the operands.  Examine all of the locations that do
@@ -136,9 +137,11 @@ To find implicit operands, we generate test inputs where we tweak locations one
 at a time.  Let the location to be tweaked be L_0.  Generate a number of test
 cases that tweak L_0 with both random and interesting values.  We then compare
 the inputs against the corresponding outputs from the test cases after they are
-run.  In the output states, for each L_i (where i != 0), if L_i is changed:
+run.  In the output states, for each L_i, if L_i is changed:
 
  * If L_i is an explicit operand, then L_0 is an implicit input operand
+   (unless i == 0, in which case L_0 is an explicit input and output)
  * If L_i is not an explicit operand, then L_0 is an implicit input operand and L_i is an implicit output operand
+   (unless i == 0, in which case L_0 is an implicit input and output)
 
 -}
