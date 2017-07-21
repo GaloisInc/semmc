@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -8,7 +9,9 @@ module SemMC.Stochastic.IORelation.Shared (
   wrapTestBundle,
   withTestResults,
   indexResults,
+  withGeneratedValueForLocation,
   instructionRegisterOperands,
+  testCaseLocations,
   PairF(..)
   ) where
 
@@ -20,8 +23,12 @@ import Control.Monad.Trans ( liftIO )
 import qualified Data.Map.Strict as M
 import Data.Proxy ( Proxy(..) )
 
+import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
+import qualified Lang.Crucible.BaseTypes as S
+import qualified Lang.Crucible.Solver.Interface as S
 
+import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
@@ -100,3 +107,28 @@ instructionRegisterOperands proxy operands =
       case operandToLocation proxy operand of
         Just loc -> Some (PairF ix (TL loc)) : acc
         Nothing -> acc
+
+-- | Return all of the locations referenced in the architecture state
+testCaseLocations :: (Architecture arch)
+                  => proxy arch
+                  -> ArchState (Sym t) arch
+                  -> [Some (Location arch)]
+testCaseLocations _ = MapF.foldrWithKey getKeys []
+  where
+    getKeys k _ acc = Some k : acc
+
+withGeneratedValueForLocation :: forall arch tp a t
+                               . (Architecture arch)
+                              => Location arch tp
+                              -> (S.SymExpr (Sym t) tp -> a)
+                              -> M t arch a
+withGeneratedValueForLocation loc k = do
+  sym <- St.gets backend
+  g <- St.gets gen
+  case locationType loc of
+    S.BaseBVRepr w -> do
+      randomInt :: Int
+                <- liftIO (A.uniform g)
+      bv <- liftIO $ S.bvLit sym w (fromIntegral randomInt)
+      return (k bv)
+    repr -> error ("Unsupported base type repr in withGeneratedValueForLocation: " ++ show repr)

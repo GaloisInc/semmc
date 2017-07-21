@@ -82,13 +82,11 @@ data ExplicitFact arch =
 -- state variables that are not explicitly mentioned in the operand list
 -- indicate implicit operands.
 data ImplicitFact arch =
-  forall sh tp . ImplicitFact { ifOpcode :: Opcode arch (Operand arch) sh
-                              , ifExplicits :: S.Set (Some (Location arch))
-                              , ifLocation :: Location arch (OperandType arch tp)
-                              -- ^ The location that was modified for this test
-                              , ifInstruction :: Instruction arch
-                              , ifProxy :: Proxy tp
-                              }
+  ImplicitFact { ifExplicits :: S.Set (Some (Location arch))
+               , ifLocation :: Some (Location arch)
+               -- ^ The location that was modified for this test
+               , ifInstruction :: Instruction arch
+               }
 
 data IORelation arch sh =
   IORelation { inputs :: S.Set (OperandRef arch sh)

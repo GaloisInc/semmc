@@ -22,10 +22,7 @@ import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Classes as P
 import Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Map as MapF
-import qualified Lang.Crucible.BaseTypes as S
-import qualified Lang.Crucible.Solver.Interface as S
 
-import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
@@ -205,18 +202,7 @@ generateVariantsFor :: (Architecture arch)
                     -> Location arch (OperandType arch tp)
                     -> M t arch [ArchState (Sym t) arch]
 generateVariantsFor s0 _opcode _ix loc = do
-  sym <- St.gets backend
-  g <- St.gets gen
-  replicateM 5 (genOne sym g)
-  where
-    genOne sym g =
-      case locationType loc of
-        S.BaseBVRepr w -> do
-          randomInt :: Int
-                    <- liftIO (A.uniform g)
-          bv <- liftIO $ S.bvLit sym w (fromIntegral randomInt)
-          return (MapF.insert loc bv s0)
-        repr -> error ("Unsupported base type repr in generateVariantsFor: " ++ show repr)
+  replicateM 20 (withGeneratedValueForLocation loc (\x -> MapF.insert loc x s0))
 
 matchesOperand :: (Architecture arch)
                => Proxy arch

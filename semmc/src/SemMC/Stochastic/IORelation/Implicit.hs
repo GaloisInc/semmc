@@ -14,6 +14,7 @@ import Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as M
 import Data.Monoid
+import Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 
 import qualified Data.Set.NonEmpty as NES
@@ -21,6 +22,7 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 
+import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
@@ -45,6 +47,8 @@ findImplicitOperands :: forall t arch sh
 findImplicitOperands op = do
   mkTest <- St.gets testGen
   g <- St.gets gen
+  -- We generate 20 random instruction instances with this opcode (and for each
+  -- random instruction instance, generate many test vectors).
   tests <- concat <$> replicateM 20 (genTestSet mkTest g)
   withTestResults op tests $ computeImplicitOperands op tests
   where
@@ -96,7 +100,7 @@ collectImplicitOutputLocations _op rix f tc =
         ImplicitFact { ifExplicits = explicitOperands
                      , ifLocation = loc0
                      } ->
-          F.foldrM (addLocIfImplicitAndDifferent (Some loc0) explicitOperands) mempty (MapF.toList (R.resultContext res))
+          F.foldrM (addLocIfImplicitAndDifferent loc0 explicitOperands) mempty (MapF.toList (R.resultContext res))
   where
     addLocIfImplicitAndDifferent loc0 explicitOperands pair s =
       case pair of
@@ -124,7 +128,29 @@ generateImplicitTests :: forall arch t
                       => Instruction arch
                       -> ArchState (Sym t) arch
                       -> M t arch [TestBundle (ArchState (Sym t) arch) (ImplicitFact arch)]
-generateImplicitTests = undefined
+generateImplicitTests i s0 = do
+  let allLocs = testCaseLocations (Proxy :: Proxy arch) s0
+  mapM (genTestForLoc i s0) allLocs
+
+genTestForLoc :: forall arch t
+               . (Architecture arch)
+              => Instruction arch
+              -> ArchState (Sym t) arch
+              -> Some (Location arch)
+              -> M t arch (TestBundle (ArchState (Sym t) arch) (ImplicitFact arch))
+genTestForLoc i s0 (Some loc0) = do
+  testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (\x -> MapF.insert loc0 x s0))
+  case i of
+    D.Instruction _ ops -> do
+      let explicits = [ Some loc
+                      | Some (PairF _ (TL loc)) <- instructionRegisterOperands (Proxy :: Proxy arch) ops
+                      ]
+      return TestBundle { tbTestCases = testStates
+                        , tbResult = ImplicitFact { ifExplicits = S.fromList explicits
+                                                  , ifLocation = Some loc0
+                                                  , ifInstruction = i
+                                                  }
+                        }
 
 {- Note [Test Form]
 
