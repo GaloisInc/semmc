@@ -84,8 +84,8 @@ buildImplicitRelation :: (Architecture arch)
                       -> M t arch (IORelation arch sh)
 buildImplicitRelation _op rix iorel tb = do
   implicitOutputLocs <- S.unions <$> mapM (collectImplicitOutputLocations rix (tbResult tb)) (tbTestCases tb)
-  let newRel = IORelation { inputs = []
-                          , outputs = map ImplicitOperand (F.toList implicitOutputLocs)
+  let newRel = IORelation { inputs = S.empty
+                          , outputs = S.fromList $ map ImplicitOperand (F.toList implicitOutputLocs)
                           }
   return (iorel <> newRel)
 
@@ -100,7 +100,7 @@ collectImplicitOutputLocations rix f tc =
     Just res ->
       case f of
         ImplicitFact { ifExplicits = explicitOperands } ->
-          F.foldrM (addLocIfImplicitAndDifferent (S.fromList explicitOperands)) S.empty (MapF.toList (R.resultContext res))
+          F.foldrM (addLocIfImplicitAndDifferent explicitOperands) S.empty (MapF.toList (R.resultContext res))
   where
     addLocIfImplicitAndDifferent explicitOperands pair s =
       case pair of
@@ -124,3 +124,21 @@ generateImplicitTests :: forall arch t
                       -> ArchState (Sym t) arch
                       -> M t arch [TestBundle (ArchState (Sym t) arch) (ImplicitFact arch)]
 generateImplicitTests = undefined
+
+{- Note [Test Form]
+
+In this module we are trying to learn the set of locations that are *implicit
+operands* (i.e., operands not mentioned in operand lists) for each instruction.
+
+Implicit operands can be both inputs and outputs (e.g., flags registers).
+
+To find implicit operands, we generate test inputs where we tweak locations one
+at a time.  Let the location to be tweaked be L_0.  Generate a number of test
+cases that tweak L_0 with both random and interesting values.  We then compare
+the inputs against the corresponding outputs from the test cases after they are
+run.  In the output states, for each L_i (where i != 0), if L_i is changed:
+
+ * If L_i is an explicit operand, then L_0 is an implicit input operand
+ * If L_i is not an explicit operand, then L_0 is an implicit input operand and L_i is an implicit output operand
+
+-}

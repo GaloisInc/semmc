@@ -115,8 +115,8 @@ buildIORelation op explicitOperands ri iorel tb = do
       case tbResult tb of
         ExplicitFact { lIndex = ix, lOpcode = lop }
           | Just P.Refl <- P.testEquality op lop ->
-            let newRel = IORelation { inputs = [ OperandRef (Some ix) ]
-                                    , outputs = map OperandRef (F.toList explicitOutputLocs)
+            let newRel = IORelation { inputs = S.singleton (OperandRef (Some ix))
+                                    , outputs = S.fromList $ map OperandRef (F.toList explicitOutputLocs)
                                     }
             in return (iorel <> newRel)
           | otherwise -> L.error ("Opcode mismatch: expected " ++ P.showF op ++ " but got " ++ P.showF lop)

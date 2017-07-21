@@ -74,3 +74,5 @@ library
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
+  if impl(ghc >= 8.1)
+     ghc-options: -Wno-simplifiable-class-constraints

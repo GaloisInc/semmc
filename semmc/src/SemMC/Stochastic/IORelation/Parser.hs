@@ -14,6 +14,7 @@ import qualified Control.Monad.Catch as E
 import Data.Proxy ( Proxy(..) )
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Text as P
@@ -74,8 +75,8 @@ fromIORelation p ior =
            (SC.SCons (SC.SCons (SC.SAtom (AIdent "outputs")) outputsS)
                       SC.SNil)
   where
-    inputsS = fromList (map toSExpr (inputs ior))
-    outputsS = fromList (map toSExpr (outputs ior))
+    inputsS = fromList (map toSExpr (S.toList (inputs ior)))
+    outputsS = fromList (map toSExpr (S.toList (outputs ior)))
 
     fromList = foldr SC.SCons SC.SNil
 
@@ -115,7 +116,7 @@ readIORelation p t op = do
     _ -> E.throwM (InvalidSExpr p (Some op) sx)
   ins <- parseRelationList p op inputsS
   outs <- parseRelationList p op outputsS
-  return IORelation { inputs = ins, outputs = outs }
+  return IORelation { inputs = S.fromList ins, outputs = S.fromList outs }
 
 parseRelationList :: forall m sh arch
                    . (E.MonadThrow m, U.UnfoldShape sh, Architecture arch)

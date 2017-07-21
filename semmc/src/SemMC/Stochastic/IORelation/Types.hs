@@ -26,6 +26,7 @@ import qualified Data.ByteString as BS
 import Data.Int ( Int32 )
 import qualified Data.Map.Strict as M
 import Data.Proxy ( Proxy(..) )
+import qualified Data.Set as S
 import Data.Typeable ( Typeable )
 import Data.Word ( Word64 )
 import qualified System.Timeout as T
@@ -71,7 +72,9 @@ data TestBundle t l =
 data ExplicitFact arch =
   forall sh tp . ExplicitFact { lOpcode :: Opcode arch (Operand arch) sh
                               , lIndex :: D.Index sh tp
+                              -- ^ The index into the operand list of the location we are watching
                               , lLocation :: Location arch (OperandType arch tp)
+                              -- ^ The location we are watching
                               , lInstruction :: Instruction arch
                               }
 
@@ -79,29 +82,32 @@ data ExplicitFact arch =
 -- state variables that are not explicitly mentioned in the operand list
 -- indicate implicit operands.
 data ImplicitFact arch =
-  forall sh . ImplicitFact { ifOpcode :: Opcode arch (Operand arch) sh
-                           , ifExplicits :: [Some (Location arch)]
-                           , ifInstruction :: Instruction arch
-                           }
+  forall sh tp . ImplicitFact { ifOpcode :: Opcode arch (Operand arch) sh
+                              , ifExplicits :: S.Set (Some (Location arch))
+                              , ifLocation :: Location arch (OperandType arch tp)
+                              -- ^ The location that was modified for this test
+                              , ifInstruction :: Instruction arch
+                              , ifProxy :: Proxy tp
+                              }
 
 data IORelation arch sh =
-  IORelation { inputs :: [OperandRef arch sh]
+  IORelation { inputs :: S.Set (OperandRef arch sh)
              -- ^ Locations read by an instruction
-             , outputs :: [OperandRef arch sh]
+             , outputs :: S.Set (OperandRef arch sh)
              -- ^ Locations written by an instruction
              }
 
-instance Monoid (IORelation arch sh) where
+instance (Architecture arch) => Monoid (IORelation arch sh) where
   mempty = emptyIORelation
   mappend = mergeIORelations
 
 emptyIORelation  :: IORelation arch sh
-emptyIORelation = IORelation { inputs = [], outputs = [] }
+emptyIORelation = IORelation { inputs = S.empty, outputs = S.empty }
 
-mergeIORelations :: IORelation arch sh -> IORelation arch sh -> IORelation arch sh
+mergeIORelations :: (Architecture arch) => IORelation arch sh -> IORelation arch sh -> IORelation arch sh
 mergeIORelations ior1 ior2 =
-  IORelation { inputs = inputs ior1 ++ inputs ior2
-             , outputs = outputs ior1 ++ outputs ior2
+  IORelation { inputs = inputs ior1 `S.union` inputs ior2
+             , outputs = outputs ior1 `S.union` outputs ior2
              }
 
 newtype M t arch a = M { runM :: St.StateT (LearnConfig t arch) IO a }

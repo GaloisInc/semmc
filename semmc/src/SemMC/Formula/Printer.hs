@@ -124,9 +124,9 @@ convertDef opVars paramLookup (Pair param expr) =
 -- be a bottleneck.
 
 convertElt :: ParamLookup t -> S.Elt t tp -> SC.SExpr Atom
-convertElt _ (S.NatElt _ _) = error "NatElt not supported"
-convertElt _ (S.IntElt _ _) = error "IntElt not supported"
-convertElt _ (S.RatElt _ _) = error "RatElt not supported"
+convertElt _ (S.SemiRingLiteral S.SemiRingNat _ _) = error "NatElt not supported"
+convertElt _ (S.SemiRingLiteral S.SemiRingInt _ _) = error "IntElt not supported"
+convertElt _ (S.SemiRingLiteral S.SemiRingReal _ _) = error "RatElt not supported"
 convertElt _ (S.BVElt sz val _) = SC.SAtom (ABV (widthVal sz) val)
 convertElt paramLookup (S.AppElt appElt) = convertAppElt paramLookup appElt
 convertElt _ (S.NonceAppElt _) = error "NonceAppElt not supported"
