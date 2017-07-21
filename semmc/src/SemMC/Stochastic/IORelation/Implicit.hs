@@ -102,21 +102,18 @@ collectImplicitOutputLocations _op rix f tc =
                      } ->
           F.foldrM (addLocIfImplicitAndDifferent loc0 explicitOperands) mempty (MapF.toList (R.resultContext res))
   where
-    addLocIfImplicitAndDifferent loc0 explicitOperands pair s =
-      case pair of
-        MapF.Pair loc postVal ->
-          case MapF.lookup loc (R.testContext tc) of
-            Nothing -> L.error ("Expected location in state: " ++ P.showF loc)
-            Just preVal
-              -- If there is no change, we learned nothing (but suspect that loc0 was not implicit)
-              | preVal == postVal -> return s
-              | Some loc /= loc0 && S.member (Some loc) explicitOperands ->
-                return s { inputs = S.insert (ImplicitOperand loc0) (inputs s) }
-              | Some loc /= loc0 ->
-                return s { inputs = S.insert (ImplicitOperand loc0) (inputs s)
-                         , outputs = S.insert (ImplicitOperand (Some loc)) (outputs s)
-                         }
-              | otherwise -> return s
+    addLocIfImplicitAndDifferent loc0 explicitOperands (MapF.Pair loc postVal) s
+      | Just preVal <- MapF.lookup loc (R.testContext tc) =
+          case () of
+            () | preVal == postVal -> return s
+               | Some loc /= loc0 && S.member (Some loc) explicitOperands ->
+                 return s { inputs = S.insert (ImplicitOperand loc0) (inputs s) }
+               | Some loc /= loc0 ->
+                 return s { inputs = S.insert (ImplicitOperand loc0) (inputs s)
+                          , outputs = S.insert (ImplicitOperand (Some loc)) (outputs s)
+                          }
+               | otherwise -> return s
+      | otherwise = L.error ("Expected location in state: " ++ P.showF loc)
 
 -- | For an instruction instance, sweep across the parameter space of all of the
 -- interesting values for the operands.  Examine all of the locations that do
