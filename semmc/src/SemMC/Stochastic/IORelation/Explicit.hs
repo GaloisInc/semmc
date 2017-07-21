@@ -178,14 +178,6 @@ generateExplicitTestVariants i s0 =
                                                   }
                         }
 
--- FIXME: For each test variant, build a new structure that tells us what we
--- learn if there is a difference from the original.  We'll need to map those to
--- nonces to compare against the results we get back.
---
--- To learn implicit operands, we need the list of all (register) locations for
--- the architecture.  We won't deal with implicit memory locations
-
-
 -- | Tweak the value in the 'ArchState' at the given location to a number of
 -- random values.
 --
@@ -215,3 +207,18 @@ matchesOperand proxy implicits _ix operand matches =
   case operandToLocation proxy operand of
     Nothing -> matches
     Just loc -> matches || any (== Some loc) implicits
+
+{- Note [Test Form]
+
+For each explicit operand in an instruction, we generate test cases with
+different values for that location.  The ExplicitFact records the index of the
+operand so that we can generate appropriate entries in the IORelation later.
+
+If changing the location causes other locations to change after the test, it
+means the location was an input location.  At the same time, the locations that
+change are output locations.
+
+Note that a location can be both an input and an output.
+
+
+-}
