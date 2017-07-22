@@ -10,7 +10,6 @@ module SemMC.Stochastic.IORelation.Explicit (
 import qualified GHC.Err.Located as L
 
 import Control.Monad ( replicateM )
-import qualified Control.Monad.State.Strict as St
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as M
@@ -42,9 +41,9 @@ generateExplicitInstruction :: (Architecture arch, D.ArbitraryOperands (Opcode a
                             => Proxy arch
                             -> Opcode arch (Operand arch) sh
                             -> [Some (Location arch)]
-                            -> M t arch (Instruction arch)
+                            -> Learning t arch (Instruction arch)
 generateExplicitInstruction proxy op implicitOperands = do
-  g <- St.gets gen
+  g <- askGen
   insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
   case insn of
     D.Instruction _ ops ->
@@ -58,9 +57,9 @@ generateExplicitInstruction proxy op implicitOperands = do
 classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
                          => Opcode arch (Operand arch) sh
                          -> D.OperandList (Operand arch) sh
-                         -> M t arch (IORelation arch sh)
+                         -> Learning t arch (IORelation arch sh)
 classifyExplicitOperands op explicitOperands = do
-  mkTest <- St.gets testGen
+  mkTest <- askTestGen
   t0 <- liftIO mkTest
   tests <- generateExplicitTestVariants insn t0
   tests' <- mapM (wrapTestBundle insn) tests
@@ -75,7 +74,7 @@ computeIORelation :: (Architecture arch)
                   -> D.OperandList (Operand arch) sh
                   -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) (ExplicitFact arch)]
                   -> [R.ResultOrError (ArchState (Sym t) arch)]
-                  -> M t arch (IORelation arch sh)
+                  -> Learning t arch (IORelation arch sh)
 computeIORelation opcode operands bundles results =
   F.foldlM (buildIORelation opcode operands idx) mempty bundles
   where
@@ -99,7 +98,7 @@ buildIORelation :: forall arch t sh
                 -> ResultIndex (ArchState (Sym t) arch)
                 -> IORelation arch sh
                 -> TestBundle (R.TestCase (ArchState (Sym t) arch)) (ExplicitFact arch)
-                -> M t arch (IORelation arch sh)
+                -> Learning t arch (IORelation arch sh)
 buildIORelation op explicitOperands ri iorel tb = do
   -- If the set of explicit output locations discovered by this test bundle is
   -- non-empty, then the location mentioned in the learned fact is an input.
@@ -128,7 +127,7 @@ collectExplicitLocations :: (Architecture arch)
                          -> [Some (PairF (D.Index sh) (TypedLocation arch))]
                          -> ResultIndex (ArchState (Sym t) arch)
                          -> R.TestCase (ArchState (Sym t) arch)
-                         -> M t arch (S.Set (Some (D.Index sh)))
+                         -> Learning t arch (S.Set (Some (D.Index sh)))
 collectExplicitLocations _opList explicitLocs ri tc = do
   case M.lookup (R.testNonce tc) (riSuccesses ri) of
     Nothing -> return S.empty
@@ -158,7 +157,7 @@ generateExplicitTestVariants :: forall arch t
                               . (Architecture arch)
                              => Instruction arch
                              -> ArchState (Sym t) arch
-                             -> M t arch [TestBundle (ArchState (Sym t) arch) (ExplicitFact arch)]
+                             -> Learning t arch [TestBundle (ArchState (Sym t) arch) (ExplicitFact arch)]
 generateExplicitTestVariants i s0 =
   case i of
     D.Instruction opcode operands -> do
@@ -167,7 +166,7 @@ generateExplicitTestVariants i s0 =
     genVar :: forall sh
             . Opcode arch (Operand arch) sh
            -> Some (PairF (D.Index sh) (TypedLocation arch))
-           -> M t arch (TestBundle (ArchState (Sym t) arch) (ExplicitFact arch))
+           -> Learning t arch (TestBundle (ArchState (Sym t) arch) (ExplicitFact arch))
     genVar opcode (Some (PairF ix (TL loc))) = do
       cases <- generateVariantsFor s0 opcode ix loc
       return TestBundle { tbTestCases = cases
@@ -192,7 +191,7 @@ generateVariantsFor :: (Architecture arch)
                     -> Opcode arch (Operand arch) sh
                     -> D.Index sh tp
                     -> Location arch (OperandType arch tp)
-                    -> M t arch [ArchState (Sym t) arch]
+                    -> Learning t arch [ArchState (Sym t) arch]
 generateVariantsFor s0 _opcode _ix loc = do
   replicateM 20 (withGeneratedValueForLocation loc (\x -> MapF.insert loc x s0))
 

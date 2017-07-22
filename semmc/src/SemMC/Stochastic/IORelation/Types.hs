@@ -4,7 +4,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 module SemMC.Stochastic.IORelation.Types (
   IORelation(..),
-  LearnConfig(..),
+  LocalLearningEnv(..),
+  GlobalLearningEnv(..),
   TypedLocation(..),
   TestBundle(..),
   ExplicitFact(..),
@@ -13,14 +14,23 @@ module SemMC.Stochastic.IORelation.Types (
   LearningException(..),
   ResultIndex(..),
   emptyResultIndex,
-  M,
-  runM,
+  Learning,
+  askTestChan,
+  askResultChan,
+  askGen,
+  askBackend,
+  askAssembler,
+  askTestGen,
+  nextNonce,
+  nextOpcode,
+  runLearning,
   timeout
   ) where
 
 import qualified Control.Concurrent as C
+import qualified Control.Concurrent.STM as STM
 import qualified Control.Monad.Catch as E
-import qualified Control.Monad.State.Strict as St
+import qualified Control.Monad.Reader as Rd
 import Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.ByteString as BS
 import Data.Int ( Int32 )
@@ -31,26 +41,86 @@ import Data.Typeable ( Typeable )
 import Data.Word ( Word64 )
 import qualified System.Timeout as T
 
+import qualified Data.Parameterized.Nonce as N
 import Data.Parameterized.Some ( Some(..) )
+import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
+import qualified SemMC.Formula.Parser as F
 import SemMC.Stochastic.Monad ( Sym )
 import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Worklist as WL
+import SemMC.Util ( Witness(..) )
 
-data LearnConfig t arch =
-  LearnConfig { testChan :: C.Chan (Maybe (R.TestCase (ArchState (Sym t) arch)))
-              , resChan :: C.Chan (R.ResultOrError (ArchState (Sym t) arch))
-              , backend :: Sym t
-              , testGen :: IO (ArchState (Sym t) arch)
-              , gen :: A.Gen
-              , assemble :: Instruction arch -> BS.ByteString
-              , nonce :: !Word64
-              -- ^ Nonces for test vectors
-              , resWaitSeconds :: Int
-              -- ^ Number of seconds to wait to receive all of the results over the 'resChan'
-              }
+data GlobalLearningEnv t arch =
+  GlobalLearningEnv { assemble :: Instruction arch -> BS.ByteString
+                    , testGen :: IO (ArchState (Sym t) arch)
+                    -- ^ FIXME: Ensure that this is thread safe, or push it to the local state
+                    , resWaitSeconds :: Int
+                    -- ^ Number of seconds to wait to receive all of the results over the 'resChan'
+                    , worklist :: STM.TVar (WL.Worklist (Some (Witness (F.BuildOperandList arch) (Opcode arch (Operand arch)))))
+                    }
+
+data LocalLearningEnv t arch =
+  LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv t arch
+                   , testChan :: C.Chan (Maybe (R.TestCase (ArchState (Sym t) arch)))
+                   , resChan :: C.Chan (R.ResultOrError (ArchState (Sym t) arch))
+                   , backend :: Sym t
+                   , gen :: A.Gen
+                   , nonce :: STM.TVar Word64
+                   }
+
+askTestChan :: Learning t arch (C.Chan (Maybe (R.TestCase (ArchState (Sym t) arch))))
+askTestChan = Rd.asks testChan
+
+askResultChan :: Learning t arch (C.Chan (R.ResultOrError (ArchState (Sym t) arch)))
+askResultChan = Rd.asks resChan
+
+askBackend :: Learning t arch (Sym t)
+askBackend = Rd.asks backend
+
+askGen :: Learning t arch A.Gen
+askGen = Rd.asks gen
+
+nextNonce :: Learning t arch Word64
+nextNonce = do
+  nvar <- Rd.asks nonce
+  liftIO $ STM.atomically $ do
+    nn <- STM.readTVar nvar
+    STM.modifyTVar' nvar (+1)
+    return nn
+
+nextOpcode :: Learning t arch (Maybe (Some (Witness (F.BuildOperandList arch) (Opcode arch (Operand arch)))))
+nextOpcode = do
+  wlref <- Rd.asks (worklist . globalLearningEnv)
+  liftIO $ STM.atomically $ do
+    wl <- STM.readTVar wlref
+    case WL.takeWork wl of
+      Nothing -> return Nothing
+      Just (op, wl') -> do
+        STM.writeTVar wlref wl'
+        return (Just op)
+
+askTestGen :: Learning t arch (IO (ArchState (Sym t) arch))
+askTestGen = Rd.asks (testGen . globalLearningEnv)
+
+askAssembler :: Learning t arch (Instruction arch -> BS.ByteString)
+askAssembler = Rd.asks (assemble . globalLearningEnv)
+
+-- data LearnConfig t arch =
+--   LearnConfig { testChan :: C.Chan (Maybe (R.TestCase (ArchState (Sym t) arch)))
+--               , resChan :: C.Chan (R.ResultOrError (ArchState (Sym t) arch))
+--               , backend :: Sym t
+--               , testGen :: IO (ArchState (Sym t) arch)
+--               , gen :: A.Gen
+--               , assemble :: Instruction arch -> BS.ByteString
+--               , nonce :: !Word64
+--               -- ^ Nonces for test vectors
+--               , resWaitSeconds :: Int
+--               -- ^ Number of seconds to wait to receive all of the results over the 'resChan'
+--               }
 
 data OperandRef arch sh = ImplicitOperand (Some (Location arch))
                         -- ^ A location that is implicitly read from or written to by an instruction
@@ -108,11 +178,11 @@ mergeIORelations ior1 ior2 =
              , outputs = outputs ior1 `S.union` outputs ior2
              }
 
-newtype M t arch a = M { runM :: St.StateT (LearnConfig t arch) IO a }
+newtype Learning t arch a = Learning { runLearning :: Rd.ReaderT (LocalLearningEnv t arch) IO a }
   deriving (Functor,
             Applicative,
             Monad,
-            St.MonadState (LearnConfig t arch),
+            Rd.MonadReader (LocalLearningEnv t arch),
             MonadIO)
 
 data LearningException arch = LearningTimeout (Proxy arch) (Some (Opcode arch (Operand arch)))
@@ -131,11 +201,11 @@ emptyResultIndex = ResultIndex { riExitedWithSignal = M.empty
                                }
 
 -- | Number of microseconds to wait for all results to come in over the channel
-askWaitMicroseconds :: M t arch Int
-askWaitMicroseconds = (* 1000000) <$> St.gets resWaitSeconds
+askWaitMicroseconds :: Learning t arch Int
+askWaitMicroseconds = (* 1000000) <$> Rd.asks (resWaitSeconds . globalLearningEnv)
 
 -- | Execute an 'IO' action with a timeout (provided by the 'M' environment)
-timeout :: IO a -> M t arch (Maybe a)
+timeout :: IO a -> Learning t arch (Maybe a)
 timeout a = do
   ms <- askWaitMicroseconds
   liftIO $ T.timeout ms a

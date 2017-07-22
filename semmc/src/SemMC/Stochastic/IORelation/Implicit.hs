@@ -9,7 +9,6 @@ module SemMC.Stochastic.IORelation.Implicit (
 import qualified GHC.Err.Located as L
 
 import Control.Monad ( replicateM )
-import qualified Control.Monad.State.Strict as St
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as M
@@ -43,10 +42,10 @@ import qualified SemMC.Stochastic.Remote as R
 findImplicitOperands :: forall t arch sh
                       . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch), R.MachineState (ArchState (Sym t) arch))
                      => Opcode arch (Operand arch) sh
-                     -> M t arch (IORelation arch sh)
+                     -> Learning t arch (IORelation arch sh)
 findImplicitOperands op = do
-  mkTest <- St.gets testGen
-  g <- St.gets gen
+  mkTest <- askTestGen
+  g <- askGen
   -- We generate 20 random instruction instances with this opcode (and for each
   -- random instruction instance, generate many test vectors).
   tests <- concat <$> replicateM 20 (genTestSet mkTest g)
@@ -67,7 +66,7 @@ computeImplicitOperands :: (Architecture arch)
                         => Opcode arch (Operand arch) sh
                         -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) (ImplicitFact arch)]
                         -> [R.ResultOrError (ArchState (Sym t) arch)]
-                        -> M t arch (IORelation arch sh)
+                        -> Learning t arch (IORelation arch sh)
 computeImplicitOperands op tests results =
   F.foldlM (buildImplicitRelation op idx) mempty tests
   where
@@ -81,7 +80,7 @@ buildImplicitRelation :: (Architecture arch)
                       -> ResultIndex (ArchState (Sym t) arch)
                       -> IORelation arch sh
                       -> TestBundle (R.TestCase (ArchState (Sym t) arch)) (ImplicitFact arch)
-                      -> M t arch (IORelation arch sh)
+                      -> Learning t arch (IORelation arch sh)
 buildImplicitRelation op rix iorel tb = do
   implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix (tbResult tb)) (tbTestCases tb)
   return (iorel <> implicitLocs)
@@ -91,7 +90,7 @@ collectImplicitOutputLocations :: (Architecture arch)
                                -> ResultIndex (ArchState (Sym t) arch)
                                -> ImplicitFact arch
                                -> R.TestCase (ArchState (Sym t) arch)
-                               -> M t arch (IORelation arch sh) -- S.Set (Some (Location arch)))
+                               -> Learning t arch (IORelation arch sh) -- S.Set (Some (Location arch)))
 collectImplicitOutputLocations _op rix f tc =
   case M.lookup (R.testNonce tc) (riSuccesses rix) of
     Nothing -> return mempty
@@ -124,7 +123,7 @@ generateImplicitTests :: forall arch t
                        . (Architecture arch)
                       => Instruction arch
                       -> ArchState (Sym t) arch
-                      -> M t arch [TestBundle (ArchState (Sym t) arch) (ImplicitFact arch)]
+                      -> Learning t arch [TestBundle (ArchState (Sym t) arch) (ImplicitFact arch)]
 generateImplicitTests i s0 = do
   let allLocs = testCaseLocations (Proxy :: Proxy arch) s0
   mapM (genTestForLoc i s0) allLocs
@@ -134,7 +133,7 @@ genTestForLoc :: forall arch t
               => Instruction arch
               -> ArchState (Sym t) arch
               -> Some (Location arch)
-              -> M t arch (TestBundle (ArchState (Sym t) arch) (ImplicitFact arch))
+              -> Learning t arch (TestBundle (ArchState (Sym t) arch) (ImplicitFact arch))
 genTestForLoc i s0 (Some loc0) = do
   testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (\x -> MapF.insert loc0 x s0))
   case i of

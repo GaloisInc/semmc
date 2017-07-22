@@ -18,7 +18,6 @@ module SemMC.Stochastic.IORelation.Shared (
 import qualified Control.Concurrent as C
 import Control.Monad ( replicateM )
 import qualified Control.Monad.Catch as E
-import qualified Control.Monad.State.Strict as St
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Map.Strict as M
 import Data.Proxy ( Proxy(..) )
@@ -40,11 +39,11 @@ withTestResults :: forall a f t arch sh
                  . (Architecture arch)
                 => Opcode arch (Operand arch) sh
                 -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) f]
-                -> ([R.ResultOrError (ArchState (Sym t) arch)] -> M t arch a)
-                -> M t arch a
+                -> ([R.ResultOrError (ArchState (Sym t) arch)] -> Learning t arch a)
+                -> Learning t arch a
 withTestResults op tests k = do
-  tchan <- St.gets testChan
-  rchan <- St.gets resChan
+  tchan <- askTestChan
+  rchan <- askResultChan
   let remoteTestCases = concatMap tbTestCases tests
   liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
   mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
@@ -56,7 +55,7 @@ withTestResults op tests k = do
 wrapTestBundle :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
                => Instruction arch
                -> TestBundle (ArchState (Sym t) arch) f
-               -> M t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) f)
+               -> Learning t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
   return TestBundle { tbTestCases = cases
@@ -68,11 +67,10 @@ wrapTestBundle i tb = do
 makeTestCase :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
              => Instruction arch
              -> ArchState (Sym t) arch
-             -> M t arch (R.TestCase (ArchState (Sym t) arch))
+             -> Learning t arch (R.TestCase (ArchState (Sym t) arch))
 makeTestCase i c = do
-  tid <- St.gets nonce
-  asm <- St.gets assemble
-  St.modify' $ \s -> s { nonce = nonce s + 1 }
+  tid <- nextNonce
+  asm <- askAssembler
   return R.TestCase { R.testNonce = tid
                     , R.testContext = c
                     , R.testProgram = asm i
@@ -121,10 +119,10 @@ withGeneratedValueForLocation :: forall arch tp a t
                                . (Architecture arch)
                               => Location arch tp
                               -> (S.SymExpr (Sym t) tp -> a)
-                              -> M t arch a
+                              -> Learning t arch a
 withGeneratedValueForLocation loc k = do
-  sym <- St.gets backend
-  g <- St.gets gen
+  sym <- askBackend
+  g <- askGen
   case locationType loc of
     S.BaseBVRepr w -> do
       randomInt :: Int

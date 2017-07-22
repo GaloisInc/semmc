@@ -8,7 +8,6 @@
 {-# LANGUAGE ViewPatterns #-}
 -- | A module for learning the input and output relations for instructions
 module SemMC.Stochastic.IORelation (
-  LearnConfig(..),
   IORelation(..),
   OperandRef(..),
   learn,
@@ -43,24 +42,24 @@ import SemMC.Stochastic.IORelation.Parser
 import SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R
 
-
-
 -- | Find the locations read from and written to by each instruction passed in
 --
 -- This is determined by observing the behavior of instructions on tests and
 -- perturbing inputs randomly.
-learn :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
-      => LearnConfig t arch
-      -> [Some (Witness (F.BuildOperandList arch) (Opcode arch (Operand arch)))]
-      -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
-learn config ops = St.evalStateT (runM act) config
+learn :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch), R.MachineState (ArchState (Sym t) arch))
+      => Learning t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
+learn = go MapF.empty
   where
-    act = F.foldlM (\m (Some (Witness op)) -> testOpcode m op) MapF.empty ops
+    go m = do
+      mop <- nextOpcode
+      case mop of
+        Nothing -> return m
+        Just (Some (Witness op)) -> testOpcode m op >>= go
 
 testOpcode :: forall arch sh t . (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
            => MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
            -> Opcode arch (Operand arch) sh
-           -> M t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
+           -> Learning t arch (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 testOpcode m op = do
   implicitOperands <- findImplicitOperands op
   insn <- generateExplicitInstruction (Proxy :: Proxy arch) op (implicitLocations implicitOperands)
