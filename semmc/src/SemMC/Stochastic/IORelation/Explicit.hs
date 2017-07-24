@@ -54,7 +54,7 @@ generateExplicitInstruction proxy op implicitOperands = do
 -- | Generate test cases and send them off to the remote runner.  Collect and
 -- interpret the results to create an IORelation that describes the explicit
 -- operands of the instruction.
-classifyExplicitOperands :: (Architecture arch, R.MachineState (ArchState (Sym t) arch), D.ArbitraryOperands (Opcode arch) (Operand arch))
+classifyExplicitOperands :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                          => Opcode arch (Operand arch) sh
                          -> D.OperandList (Operand arch) sh
                          -> Learning t arch (IORelation arch sh)

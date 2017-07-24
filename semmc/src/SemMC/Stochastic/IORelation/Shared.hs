@@ -52,7 +52,7 @@ withTestResults op tests k = do
     Just results -> k results
 
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
-wrapTestBundle :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
+wrapTestBundle :: (Architecture arch)
                => Instruction arch
                -> TestBundle (ArchState (Sym t) arch) f
                -> Learning t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) f)
@@ -64,7 +64,7 @@ wrapTestBundle i tb = do
 
 -- | Take a test bundle of raw tests ('ArchState (Sym t) arch') and convert the
 -- raw tests to 'R.TestCase' by allocating a nonce
-makeTestCase :: (Architecture arch, R.MachineState (ArchState (Sym t) arch))
+makeTestCase :: (Architecture arch)
              => Instruction arch
              -> ArchState (Sym t) arch
              -> Learning t arch (R.TestCase (ArchState (Sym t) arch))

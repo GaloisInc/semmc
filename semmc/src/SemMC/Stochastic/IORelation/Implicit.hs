@@ -40,7 +40,7 @@ import qualified SemMC.Stochastic.Remote as R
 -- For this, we will want to focus on generating values that trigger edge cases
 -- to make sure we can deal with flags registers.
 findImplicitOperands :: forall t arch sh
-                      . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch), R.MachineState (ArchState (Sym t) arch))
+                      . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                      => Opcode arch (Operand arch) sh
                      -> Learning t arch (IORelation arch sh)
 findImplicitOperands op = do

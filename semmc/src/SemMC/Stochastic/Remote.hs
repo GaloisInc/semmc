@@ -22,9 +22,10 @@ import qualified System.IO as IO
 
 import qualified SemMC.Stochastic.Remote.SSH as SSH
 
-class MachineState a where
-  flattenMachineState :: a -> B.ByteString
-  parseMachineState :: B.ByteString -> Maybe a
+data MachineState a =
+  MachineState { flattenMachineState :: a -> B.ByteString
+               , parseMachineState :: B.ByteString -> Maybe a
+               }
 
 data TestCase a =
   TestCase { testNonce :: Word64
@@ -53,9 +54,10 @@ data LogMessage = LogMessage { lmTime :: T.UTCTime
 -- is expected to be in the @PATH@, and password-less auth is assumed.  It is
 -- also assumed that the @remote-runner@ executable is in the @PATH@ on the
 -- remote machine.
-runRemote :: (MachineState a)
-          => String
+runRemote :: String
           -- ^ The hostname to run test cases on
+          -> MachineState a
+          -- ^ Functions for converting to and from machine states
           -> C.Chan (Maybe (TestCase a))
           -- ^ A channel with test cases to be run; a 'Nothing' indicates that
           -- the stream should be terminated.
@@ -67,14 +69,14 @@ runRemote :: (MachineState a)
           -- it is better to collect it than discard it or just dump it to
           -- stderr)
           -> IO (Maybe SSH.SSHError)
-runRemote hostName testCases testResults logMessages = do
+runRemote hostName ms testCases testResults logMessages = do
   ehdl <- SSH.ssh SSH.defaultSSHConfig hostName ["remote-runner"]
   case ehdl of
     Left err -> return (Just err)
     Right sshHdl -> do
       logger <- A.async (logRemoteStderr logMessages hostName (SSH.sshStderr sshHdl))
-      sendCases <- A.async (sendTestCases testCases (SSH.sshStdin sshHdl))
-      recvResults <- A.async (recvTestResults testResults (SSH.sshStdout sshHdl))
+      sendCases <- A.async (sendTestCases ms testCases (SSH.sshStdin sshHdl))
+      recvResults <- A.async (recvTestResults ms testResults (SSH.sshStdout sshHdl))
       -- We only want to end when the receive end finishes (i.e., when the
       -- receive handle is closed due to running out of input).  If we end when
       -- the send end finishes, we might miss some results.
@@ -95,8 +97,8 @@ logRemoteStderr logMessages host h = do
   C.writeChan logMessages lm
   logRemoteStderr logMessages host h
 
-sendTestCases :: (MachineState a) => C.Chan (Maybe (TestCase a)) -> IO.Handle -> IO ()
-sendTestCases c h = do
+sendTestCases :: MachineState a -> C.Chan (Maybe (TestCase a)) -> IO.Handle -> IO ()
+sendTestCases ms c h = do
   IO.hSetBinaryMode h True
   IO.hSetBuffering h (IO.BlockBuffering Nothing)
   go
@@ -108,7 +110,7 @@ sendTestCases c h = do
           B.hPutBuilder h (B.word8 1)
           IO.hFlush h
         Just tc -> do
-          let regStateBytes = flattenMachineState (testContext tc)
+          let regStateBytes = flattenMachineState ms (testContext tc)
           let bs = mconcat [ B.word8 0
                            , B.word64LE (testNonce tc)
                            , B.word16BE (fromIntegral (B.length regStateBytes))
@@ -120,8 +122,8 @@ sendTestCases c h = do
           IO.hFlush h
           go
 
-recvTestResults :: (MachineState a) => C.Chan (ResultOrError a) -> IO.Handle -> IO ()
-recvTestResults c h = do
+recvTestResults :: MachineState a -> C.Chan (ResultOrError a) -> IO.Handle -> IO ()
+recvTestResults ms c h = do
   IO.hSetBinaryMode h True
   start
   IO.hClose h
@@ -135,7 +137,7 @@ recvTestResults c h = do
       mbs <- tryRead h
       case mbs of
         Nothing -> return ()
-        Just bs -> go (G.runGetIncremental getTestResultOrError `G.pushChunk` bs)
+        Just bs -> go (G.runGetIncremental (getTestResultOrError ms) `G.pushChunk` bs)
     go d =
       case d of
         G.Fail _ _ msg -> fail msg
@@ -143,7 +145,7 @@ recvTestResults c h = do
           C.writeChan c res
           case B.null rest of
             True -> start
-            False -> go (G.runGetIncremental getTestResultOrError `G.pushChunk` rest)
+            False -> go (G.runGetIncremental (getTestResultOrError ms) `G.pushChunk` rest)
         G.Partial f -> tryRead h >>= (go . f)
 
 data ResultOrError a = TestReadError Word16
@@ -154,12 +156,12 @@ data ResultOrError a = TestReadError Word16
                      | InvalidTag Word8
                      -- ^ Tag value
 
-getTestResultOrError :: (MachineState a) => G.Get (ResultOrError a)
-getTestResultOrError = do
+getTestResultOrError :: MachineState a -> G.Get (ResultOrError a)
+getTestResultOrError ms = do
   tag <- G.getWord8
   case tag of
     0 -> do
-      mtr <- getTestResult
+      mtr <- getTestResult ms
       case mtr of
         Just tr -> return (TestSuccess tr)
         Nothing -> return TestContextParseFailure
@@ -167,12 +169,12 @@ getTestResultOrError = do
     2 -> TestSignalError <$> G.getWord64le <*> G.getInt32be
     _ -> return (InvalidTag tag)
 
-getTestResult :: (MachineState a) => G.Get (Maybe (TestResult a))
-getTestResult = do
+getTestResult :: MachineState a -> G.Get (Maybe (TestResult a))
+getTestResult ms = do
   nonce <- G.getWord64le
   ctxSize <- G.getWord16be
   ctxbs <- G.getByteString (fromIntegral ctxSize)
-  case parseMachineState ctxbs of
+  case parseMachineState ms ctxbs of
     Just ctx -> do
       let tr = TestResult { resultNonce = nonce
                           , resultContext = ctx
