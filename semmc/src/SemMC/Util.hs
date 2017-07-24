@@ -72,7 +72,7 @@ makeSymbol name = case userSymbol sanitizedName of
                     Left _ -> error $ printf "tried to create symbol with bad name: %s (%s)"
                                              name sanitizedName
   where
-    sanitizedName = map (\c -> case c of ' ' -> '_'; _ -> c) name
+    sanitizedName = map (\c -> case c of ' ' -> '_'; '.' -> '_'; _ -> c) name
 
 -- | Convert a 'GroundValue' (a primitive type that represents the given
 -- Crucible type) back into a symbolic expression, just as a literal.

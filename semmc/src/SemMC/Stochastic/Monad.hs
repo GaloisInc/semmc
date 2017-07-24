@@ -27,6 +27,7 @@ import qualified Control.Concurrent.STM as STM
 import           Control.Monad ( replicateM )
 import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
+import qualified Data.Map as Map
 import           System.FilePath ( (</>), (<.>) )
 
 import qualified Data.EnumF as P
@@ -199,7 +200,8 @@ loadInitialState :: (Architecture arch,
                  -> IO (SynEnv t arch)
 loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes = do
   let toFP dir oc = dir </> P.showF oc <.> "sem"
-      load dir = F.loadFormulas sym (toFP dir) allOpcodes
+      -- TODO: handle uninterpreted functions
+      load dir = F.loadFormulas sym (toFP dir) Map.empty allOpcodes
   baseSet <- load (baseSetDir cfg)
   learnedSet <- load (learnedSetDir cfg)
   let initialFormulas = MapF.union baseSet learnedSet

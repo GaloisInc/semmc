@@ -1,0 +1,5 @@
+((operands ((frT . 'F4rc)
+            (frA . 'F4rc)
+            (frB . 'F4rc)))
+ (in ('fpscr frA frB))
+ (defs ((frT ((_ call "fp.add32") ((_ extract 63 62) 'fpscr) frA frB)))))

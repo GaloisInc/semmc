@@ -23,8 +23,10 @@ import           Data.EnumF ( EnumF(..) )
 import           Data.Foldable ( foldrM )
 import           Data.Int ( Int32 )
 import qualified Data.Int.Indexed as I
+import qualified Data.Map as Map
 import           Data.Monoid ( (<>) )
 import qualified Data.Parameterized.Ctx as Ctx
+import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
@@ -44,7 +46,7 @@ import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
 import           SemMC.Formula
-import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
+import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile, SomeSome(..), UninterpretedFunctions )
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal, Witness(..) )
 
@@ -68,8 +70,7 @@ type instance A.OperandType PPC "Crbitm" = BaseBVType 3
 type instance A.OperandType PPC "Crbitrc" = BaseBVType 5
 type instance A.OperandType PPC "Crrc" = BaseBVType 3
 type instance A.OperandType PPC "Directbrtarget" = BaseBVType 32
-type instance A.OperandType PPC "F4rc" = BaseBVType 32
-type instance A.OperandType PPC "F8rc" = BaseBVType 64
+type instance A.OperandType PPC "F4rc" = BaseBVType 64
 type instance A.OperandType PPC "F8rc" = BaseBVType 64
 type instance A.OperandType PPC "G8rc" = BaseBVType 64
 type instance A.OperandType PPC "G8rc_nox0" = BaseBVType 64
@@ -120,6 +121,12 @@ concreteTemplatedOperand op loc x = TemplatedOperand (Just (loc x)) mkTemplate' 
         mkTemplate' sym locLookup = do
           expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
           return (expr, WrappedRecoverOperandFn $ const (return (op x)))
+
+instance TemplatableOperand PPC "F4rc" where
+  opTemplates = concreteTemplatedOperand PPC.F4rc LocFR . PPC.FR <$> [0..31]
+
+instance TemplatableOperand PPC "F8rc" where
+  opTemplates = concreteTemplatedOperand PPC.F8rc LocFR . PPC.FR <$> [0..31]
 
 instance TemplatableOperand PPC "Gprc" where
   opTemplates = concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
@@ -250,6 +257,7 @@ data Location :: BaseType -> * where
   LocXER :: Location (BaseBVType 32)
   LocCR :: Location (BaseBVType 32)
   LocFR :: PPC.FR -> Location (BaseBVType 64)
+  LocFPSCR :: Location (BaseBVType 64)
   LocVR :: PPC.VR -> Location (BaseBVType 128)
   LocMem :: Location (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
@@ -262,6 +270,7 @@ instance Show (Location tp) where
   show LocXER = "XER"
   show LocCR = "CR"
   show (LocFR fr) = show (pPrint fr)
+  show LocFPSCR = "FPSCR"
   show (LocVR vr) = show (pPrint vr)
   show LocMem = "Mem"
 instance ShowF Location
@@ -304,6 +313,7 @@ instance A.IsLocation Location where
     | s == "cr" = Just (Some LocCR)
     | s `elem` ["f" ++ show i | i <- [(0 :: Int)..31]] =
       (Just . Some . LocFR . PPC.FR . read . tail) s
+    | s == "fpscr" = Just (Some LocFPSCR)
     | s `elem` ["vr" ++ show i | i <- [(0 :: Int)..31]] =
       (Just . Some . LocVR . PPC.VR . read . tail . tail) s
     | s == "mem" = Just (Some LocMem)
@@ -317,6 +327,7 @@ instance A.IsLocation Location where
   locationType LocXER = knownRepr
   locationType LocCR = knownRepr
   locationType (LocFR _) = knownRepr
+  locationType LocFPSCR = knownRepr
   locationType (LocVR _) = knownRepr
   locationType LocMem = knownRepr
 
@@ -328,6 +339,7 @@ instance A.IsLocation Location where
   defaultLocationExpr sym LocXER = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
   defaultLocationExpr sym (LocFR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
   defaultLocationExpr sym (LocVR _) = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocMem =
     S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
@@ -358,7 +370,7 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.Crrc (PPC.CRRC n)) =
           S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Directbrtarget bt) = btVal bt
-        operandValue' (PPC.F4rc _) = error "F4rc not yet implemented"
+        operandValue' (PPC.F4rc fr) = locLookup (LocFR fr)
         operandValue' (PPC.F8rc fr) = locLookup (LocFR fr)
         operandValue' (PPC.G8rc _) = error "Found a G8rc operand, but PPC64 not supported"
         operandValue' (PPC.G8rc_nox0 _) = error "Found a G8rc_nox0 operand, but PPC64 not supported"
@@ -454,7 +466,7 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           S.bvAdd sym ip offset
 
 operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
-operandToLocation (PPC.F4rc _) = error "F4rc operandToLocation ?"
+operandToLocation (PPC.F4rc fr) = Just $ LocFR fr
 operandToLocation (PPC.F8rc fr) = Just $ LocFR fr
 operandToLocation (PPC.G8rc _) = error "G8rc operandToLocation ?"
 operandToLocation (PPC.G8rc_nox0 _) = error "G8rc_nox0 operandToLocation ?"
@@ -498,10 +510,28 @@ loadBaseSet :: forall sym.
             => sym
             -> IO (BaseSet sym PPC)
 loadBaseSet sym = do
+  let addFn :: (String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)
+            -> UninterpretedFunctions sym
+            -> IO (UninterpretedFunctions sym)
+      addFn (name, Some args, Some ret) m =
+        flip (Map.insert name) m . SomeSome <$> S.freshTotalUninterpFn sym (makeSymbol name) args ret
+  fns <- foldrM addFn Map.empty [ ("fp.add64",
+                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+                                , ("fp.add32",
+                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+                                , ("fp.sub64",
+                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+                                , ("fp.sub32",
+                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+                                ]
   let readOp :: (BuildOperandList (TemplatedArch PPC) sh)
              => FilePath
              -> IO (Either String (ParameterizedFormula sym (TemplatedArch PPC) sh))
-      readOp fp = readFormulaFromFile sym ("semmc-ppc/data/base/" <> fp)
+      readOp fp = readFormulaFromFile sym fns ("semmc-ppc/data/base/" <> fp)
       addOp :: Some (Witness Foo (PPC.Opcode PPC.Operand))
             -> BaseSet sym PPC
             -> IO (BaseSet sym PPC)
@@ -524,6 +554,8 @@ loadBaseSet sym = do
                           , Some (Witness PPC.CMPLW)
                           , Some (Witness PPC.CMPW)
                           , Some (Witness PPC.EQV)
+                          , Some (Witness PPC.FADD)
+                          , Some (Witness PPC.FADDS)
                           , Some (Witness PPC.LBZ)
                           , Some (Witness PPC.MFCR)
                           , Some (Witness PPC.MFSPR)

@@ -7,6 +7,7 @@ module TestToy where
 import qualified Data.Text as T
 import qualified Data.Set as Set
 import Data.Maybe
+import qualified Data.Map as Map
 import Data.Monoid
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Classes
@@ -29,10 +30,10 @@ import SemMC.Synthesis
 import SemMC.Util
 
 readBinOp :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "R32"]))
-readBinOp sym fp = readFormulaFromFile sym ("data/toy/base/" <> fp)
+readBinOp sym fp = readFormulaFromFile sym Map.empty ("data/toy/base/" <> fp)
 
 readBinOp' :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "I32"]))
-readBinOp' sym fp = readFormulaFromFile sym ("data/toy/base/" <> fp)
+readBinOp' sym fp = readFormulaFromFile sym Map.empty ("data/toy/base/" <> fp)
 
 doThing :: IO ()
 doThing = do

@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -13,6 +14,7 @@ module SemMC.Formula.Printer
 
 import qualified Data.Map as Map
 import           Data.Maybe ( fromJust )
+import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair
@@ -48,6 +50,7 @@ printFormula = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert
 printAtom :: Atom -> T.Text
 printAtom (AIdent s) = T.pack s
 printAtom (AQuoted s) = T.pack ('\'' : s)
+printAtom (AString s) = "\"" <> T.pack s <> "\""
 printAtom (AInt i) = T.pack (show i)
 printAtom (ABV sz val) = T.pack (prefix ++ printf fmt val)
   where (prefix, fmt)

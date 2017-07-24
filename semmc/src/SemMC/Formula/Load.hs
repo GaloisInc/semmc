@@ -28,16 +28,17 @@ loadFormulas :: forall sym arch a
               . (CRU.IsExprBuilder sym, CRU.IsSymInterface sym, Architecture arch, MapF.OrdF a)
              => sym
              -> (forall sh' . a sh' -> FilePath)
+             -> FP.UninterpretedFunctions sym
              -> [Some (Witness (FP.BuildOperandList arch) a)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulas sym toFP shapes =
+loadFormulas sym toFP fns shapes =
   F.foldlM (\m (Some (Witness oc)) -> addIfJust readFormulaForOpcode m oc) MapF.empty shapes
   where
     readFormulaForOpcode :: (FP.BuildOperandList arch sh)
                          => a sh
                          -> IO (Maybe (F.ParameterizedFormula sym arch sh))
     readFormulaForOpcode a = do
-      ef <- FP.readFormulaFromFile sym (toFP a)
+      ef <- FP.readFormulaFromFile sym fns (toFP a)
       case ef of
         Left _ -> return Nothing
         Right f -> return (Just f)
