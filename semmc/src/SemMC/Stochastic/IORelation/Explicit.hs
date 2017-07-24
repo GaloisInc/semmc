@@ -59,8 +59,7 @@ classifyExplicitOperands :: (Architecture arch, D.ArbitraryOperands (Opcode arch
                          -> D.OperandList (Operand arch) sh
                          -> Learning t arch (IORelation arch sh)
 classifyExplicitOperands op explicitOperands = do
-  mkTest <- askTestGen
-  t0 <- liftIO mkTest
+  t0 <- mkRandomTest
   tests <- generateExplicitTestVariants insn t0
   tests' <- mapM (wrapTestBundle insn) tests
   withTestResults op tests' $ computeIORelation op explicitOperands tests'

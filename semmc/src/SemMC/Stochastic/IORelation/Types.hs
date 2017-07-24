@@ -22,7 +22,7 @@ module SemMC.Stochastic.IORelation.Types (
   askGen,
   askBackend,
   askAssembler,
-  askTestGen,
+  mkRandomTest,
   nextNonce,
   nextOpcode,
   recordLearnedRelation,
@@ -68,7 +68,7 @@ data LocalLearningEnv t arch =
                    , resChan :: C.Chan (R.ResultOrError (ArchState (Sym t) arch))
                    , backend :: Sym t
                    , gen :: A.Gen
-                   , testGen :: Proxy t -> IO (ArchState (Sym t) arch)
+                   , testGen :: Sym t -> IO (ArchState (Sym t) arch)
                    -- ^ The test generator is part of local state because it
                    -- might not be thread safe.  Be sure to allocate one per
                    -- runner.
@@ -113,8 +113,11 @@ nextOpcode = do
         STM.writeTVar wlref wl'
         return (Just op)
 
-askTestGen :: Learning t arch (IO (ArchState (Sym t) arch))
-askTestGen = undefined -- Rd.asks testGen
+mkRandomTest :: Learning t arch (ArchState (Sym t) arch)
+mkRandomTest = do
+  mkTest <- Rd.asks testGen
+  sym <- askBackend
+  liftIO $ mkTest sym
 
 askAssembler :: Learning t arch (Instruction arch -> BS.ByteString)
 askAssembler = Rd.asks (assemble . globalLearningEnv)

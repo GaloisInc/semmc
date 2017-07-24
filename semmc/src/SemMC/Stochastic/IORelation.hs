@@ -56,7 +56,7 @@ data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
                  , lcAssemble :: Instruction arch -> BS.ByteString
-                 , lcTestGen :: forall t . Proxy t -> IO (ArchState (Sym t) arch)
+                 , lcTestGen :: forall t . Sym t -> IO (ArchState (Sym t) arch)
                  , lcMachineState :: forall t . () -> R.MachineState (ArchState (Sym t) arch)
                  , lcTimeoutSeconds :: Int
                  , lcRemoteHost :: String

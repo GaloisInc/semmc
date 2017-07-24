@@ -44,15 +44,14 @@ findImplicitOperands :: forall t arch sh
                      => Opcode arch (Operand arch) sh
                      -> Learning t arch (IORelation arch sh)
 findImplicitOperands op = do
-  mkTest <- askTestGen
   g <- askGen
   -- We generate 20 random instruction instances with this opcode (and for each
   -- random instruction instance, generate many test vectors).
-  tests <- concat <$> replicateM 20 (genTestSet mkTest g)
+  tests <- concat <$> replicateM 20 (genTestSet g)
   withTestResults op tests $ computeImplicitOperands op tests
   where
-    genTestSet mkTest g = do
-      t0 <- liftIO mkTest
+    genTestSet g = do
+      t0 <- mkRandomTest
       insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
       tb0 <- generateImplicitTests insn t0
       mapM (wrapTestBundle insn) tb0
