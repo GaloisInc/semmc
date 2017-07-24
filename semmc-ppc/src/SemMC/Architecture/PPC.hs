@@ -32,6 +32,7 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
 import           Data.Parameterized.Some
+import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
@@ -48,7 +49,7 @@ import qualified SemMC.Architecture as A
 import           SemMC.Formula
 import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile, SomeSome(..), UninterpretedFunctions )
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
-import           SemMC.Util ( makeSymbol, Equal, Witness(..) )
+import           SemMC.Util ( makeSymbol, Equal )
 
 data PPC
 

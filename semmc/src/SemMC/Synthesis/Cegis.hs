@@ -24,6 +24,7 @@ import qualified Lang.Crucible.Solver.SimpleBackend as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
+import           Data.Parameterized.Witness ( Witness(..) )
 import           Dismantle.Instruction
 
 import           SemMC.Architecture
@@ -31,7 +32,6 @@ import           SemMC.Formula
 import           SemMC.Formula.Equivalence
 import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
-import           SemMC.Util
 
 data TemplatableInstruction (arch :: *) where
   TemplatableInstruction :: TemplatableOpcode arch sh -> OperandList (Operand arch) sh -> TemplatableInstruction arch

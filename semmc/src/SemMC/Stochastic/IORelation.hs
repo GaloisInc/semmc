@@ -32,6 +32,7 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as N
 import Data.Parameterized.Some ( Some(..) )
+import Data.Parameterized.Witness ( Witness(..) )
 import qualified Data.Parameterized.Unfold as U
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 
@@ -40,7 +41,6 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
-import SemMC.Util ( Witness(..) )
 import qualified SemMC.Worklist as WL
 
 import SemMC.Stochastic.Monad ( Sym )

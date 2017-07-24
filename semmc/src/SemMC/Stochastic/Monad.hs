@@ -37,6 +37,7 @@ import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Lang.Crucible.Solver.SimpleBackend as CRU
 
+import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
@@ -46,7 +47,6 @@ import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
 import qualified SemMC.Worklist as WL
-import           SemMC.Util ( Witness(..) )
 
 import qualified SemMC.Stochastic.Statistics as S
 

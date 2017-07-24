@@ -14,7 +14,7 @@ import qualified Lang.Crucible.Solver.Interface as CRU
 import SemMC.Architecture ( Architecture )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as FP
-import SemMC.Util ( Witness(..) )
+import Data.Parameterized.Witness ( Witness(..) )
 
 -- | Load formulas from disk
 --

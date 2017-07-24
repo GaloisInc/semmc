@@ -13,7 +13,6 @@ module SemMC.Util
   , makeSymbol
   , mapFKeys
   , mapFReverse
-  , Witness (..)
   , sequenceMaybes
   , walkElt
   , extractUsedLocs
@@ -22,19 +21,14 @@ module SemMC.Util
 
 import           Control.Applicative ( Const(..) )
 import           Control.Monad.ST ( runST )
-import           Data.Foldable ( foldrM )
 import qualified Data.HashTable.Class as H
-import qualified Data.Map.Strict as Map
 import           Data.Maybe ( fromJust )
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
 import           Data.Parameterized.TraversableFC
-import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
-import           GHC.Exts ( Constraint )
 import           Text.Printf
 
 import           Lang.Crucible.BaseTypes
@@ -44,27 +38,6 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
 
-data Witness (c :: k -> Constraint) (f :: k -> *) (x :: k) where
-  Witness :: (c x) => f x -> Witness c f x
-
-instance (TestEquality f) => TestEquality (Witness c f) where
-  testEquality (Witness x) (Witness y) = (\Refl -> Refl) <$> testEquality x y
-
-instance (OrdF f) => OrdF (Witness c f) where
-  compareF (Witness x) (Witness y) =
-    case compareF x y of
-      LTF -> LTF
-      EQF -> EQF
-      GTF -> GTF
-
-instance (Show (f x)) => Show (Witness c f x) where
-  show (Witness d) = "Witness (" ++ show d ++ ")"
-
-witnessWithShow :: forall p c f q tp a. (ShowF f) => p (Witness c f) -> q tp -> (Show (Witness c f tp) => a) -> a
-witnessWithShow _ _ = withShow (Proxy @f) (Proxy @tp)
-
-instance (ShowF f) => ShowF (Witness c f) where
-  withShow = witnessWithShow
 
 makeSymbol :: String -> SolverSymbol
 makeSymbol name = case userSymbol sanitizedName of

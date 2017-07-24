@@ -60,12 +60,12 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
+import           Data.Parameterized.Witness ( Witness(..) )
 import           Dismantle.Instruction ( mapOperandList, OperandList(..) )
 
 import           SemMC.Architecture
 import           SemMC.Formula
 import           SemMC.Formula.Instantiate
-import           SemMC.Util
 
 type RecoverOperandFn sym op = (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op
 
