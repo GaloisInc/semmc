@@ -1,0 +1,39 @@
+#+TITLE: Notes on problems encountered
+
+* Register Aliasing
+Several architectures have multiple names for the same logical register locations.
+x86 is the obvious example, with =ax= referring to the lower 16 bits of the 32-bit register =eax= (or the 64-bit register =rax= on x86_64).
+However, PPC (with the VSX extension) also has aliased registers, e.g. =F0= refers to the first half of =VSR0=.
+ARM (with NEON) does as well, e.g. =B0= refers to the low byte of =V0=.
+
+As I see it, there are two main approaches for dealing with this.
+** Register File as a Byte Array
+This is the approach VEX takes.
+Essentially, it maps each possible "real" register to an offset and size within an array of bytes.
+Thus, on x86, if =0= is the offset of =eax= and =4= is the offset of =ebx=, then ~mov ax, bx~ is represented (roughly) as
+#+BEGIN_SRC vex
+t0 = GET:I16(0)
+t1 = GET:I16(4)
+t2 = ADD:I16(t0, t1)
+PUT:I16(0) = t2
+#+END_SRC
+Though dealing with these offsets directly would get annoying, we could easily define sugar to use in semantics definitions.
+*** Advantages
+- simple
+*** Disadvantages
+- human readability of registers within formulas would probably suffer (unless substantial work is put into making it better)
+- we would have to explicitly determine when the part of the register not primarily referred to is zeroed or left alone, rather than be able to learn it.
+  however, I don't think this is that big of a deal, since the rules are almost entirely consistent on x86 and entirely consistent on PPC.
+** Only Consider Largest Registers
+Instead, we could have "real" registers for each of the largest registers, e.g. the =r*= registers for x86_64 or the =VSR*= registers for PPC.
+This way, ~mov ax, bx~ would be translated as
+#+BEGIN_SRC lisp
+(= rax' (concat ((_ extract 63 16) rax) ((_ extract 15 0) rbx)))
+#+END_SRC
+We could fairly easily implement sugar to use in semantics definitions here.
+*** Advantages
+- better fits mental model of how registers work
+*** Disadvantages
+- makes determining data dependencies more difficult in some situations.
+  however, I think this is rare enough that it wouldn't be too big a deal
+- formulas uglied by noise of concats/extracts everywhere
