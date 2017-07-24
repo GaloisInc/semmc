@@ -1,17 +1,18 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | A parser for an s-expression representation of formulas
 module SemMC.Formula.Parser
@@ -19,21 +20,24 @@ module SemMC.Formula.Parser
   , BuildOperandList
   , operandVarPrefix
   , literalVarPrefix
+  , SomeSome(..)
+  , UninterpretedFunctions
   , readFormula
   , readFormulaFromFile
-  , BuildOperandList
   ) where
 
 import           Control.Monad.Except
 import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Reader
 import           Data.Foldable ( asum, foldrM )
+import qualified Data.Map as Map
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Text.Parsec
 import           Text.Parsec.Text ( Parser )
+import           Text.Printf ( printf )
 import qualified Data.Set as Set
 import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal )
 import           Data.Proxy
@@ -58,6 +62,7 @@ import           Dismantle.Instruction ( Index(..), indexOpList, OperandList(..)
 
 data Atom = AIdent String
           | AQuoted String
+          | AString String
           | AInt Integer
           | ABV Int Integer
           deriving (Show)
@@ -66,6 +71,13 @@ parseIdent :: Parser String
 parseIdent = (:) <$> first <*> many rest
   where first = letter <|> oneOf "+-=<>_"
         rest = letter <|> digit <|> oneOf "+-=<>_"
+
+parseString :: Parser String
+parseString = do
+  _ <- char '"'
+  s <- many (noneOf ['"'])
+  _ <- char '"'
+  return s
 
 parseBV :: Parser (Int, Integer)
 parseBV = char '#' >> ((char 'b' >> parseBin) <|> (char 'x' >> parseHex))
@@ -83,7 +95,8 @@ parseAtom :: Parser Atom
 parseAtom
   =   AIdent      <$> parseIdent
   <|> AQuoted     <$> (char '\'' >> parseIdent)
-  <|> AInt         .  read <$> many1 digit
+  <|> AString     <$> parseString
+  <|> AInt . read <$> many1 digit
   <|> uncurry ABV <$> parseBV
 
 parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
@@ -218,11 +231,17 @@ readInputs _ _ = throwError "malformed input list"
 
 -- ** Parsing definitions
 
+data SomeSome (f :: k1 -> k2 -> *) = forall x y. SomeSome (f x y)
+
+type UninterpretedFunctions sym = Map.Map String (SomeSome (S.SymFn sym))
+
 -- | "Global" data stored in the Reader monad throughout parsing the definitions.
 data DefsInfo sym arch sh = DefsInfo
                             { getSym :: sym
                             -- ^ SymInterface/ExprBuilder used to build up symbolic
                             -- expressions while parsing the definitions.
+                            , getFns :: Map.Map String (SomeSome (S.SymFn sym))
+                            -- ^ Uninterpreted functions that may be called.
                             , getLitLookup :: forall tp. Location arch tp -> Maybe (S.SymExpr sym tp)
                             -- ^ Function used to retrieve the expression
                             -- corresponding to a given literal.
@@ -261,7 +280,7 @@ getBVProof expr =
 -- GHC cannot do let-destructuring when existentials are involved.
 --
 -- ...yes, it's a lot of type parameters.
-type ExprParser sym arch sh m = (S.IsExprBuilder sym,
+type ExprParser sym arch sh m = (S.IsSymInterface sym,
                                  MonadError String m,
                                  MonadReader (DefsInfo sym arch sh) m,
                                  MonadIO m)
@@ -525,6 +544,43 @@ readStore (SC.SAtom (AIdent "store")) args =
                                        "does not match", show (S.exprType expr)]
 readStore _ _ = return Nothing
 
+exprAssignment' :: (MonadError String m,
+                    S.IsExpr ex)
+                => Ctx.Assignment BaseTypeRepr ctx
+                -> [Some ex]
+                -> m (Ctx.Assignment ex ctx)
+exprAssignment' (Ctx.view -> Ctx.AssignEmpty) [] = return Ctx.empty
+exprAssignment' (Ctx.view -> Ctx.AssignExtend restTps tp) (Some e : restExprs) = do
+  Refl <- case testEquality tp (S.exprType e) of
+            Just pf -> return pf
+            Nothing -> throwError "unexpected type"
+  restAssn <- exprAssignment' restTps restExprs
+  return $ restAssn Ctx.%> e
+exprAssignment' _ _ = throwError "mismatching numbers of arguments"
+
+exprAssignment :: (MonadError String m,
+                   S.IsExpr ex)
+               => Ctx.Assignment BaseTypeRepr ctx
+               -> [Some ex]
+               -> m (Ctx.Assignment ex ctx)
+exprAssignment tpAssn exs = exprAssignment' tpAssn (reverse exs)
+
+-- | Parse an expression of the form @((_ call "foo") x y ...)@
+readCall :: ExprParser sym arch sh m
+readCall (SC.SCons (SC.SAtom (AIdent "_"))
+            (SC.SCons (SC.SAtom (AIdent "call"))
+               (SC.SCons (SC.SAtom (AString fnName))
+                  SC.SNil))) args =
+  prefixError "in reading call expression: " $ do
+    sym <- reader getSym
+    fns <- reader getFns
+    SomeSome fn <- case Map.lookup fnName fns of
+                     Just fn -> return fn
+                     Nothing -> throwError $ printf "uninterpreted function \"%s\" is not defined" fnName
+    assn <- exprAssignment (S.fnArgTypes fn) args
+    liftIO (Just . Some <$> S.applySymFn sym fn assn)
+readCall _ _ = return Nothing
+
 -- | Parse an arbitrary expression.
 readExpr :: (S.IsExprBuilder sym,
              S.IsSymInterface sym,
@@ -569,6 +625,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
     , readIte
     , readSelect
     , readStore
+    , readCall
     ]
   case asum parseTries of
     Just expr -> return expr
@@ -626,9 +683,10 @@ readFormula' :: forall sym arch sh m.
                  Architecture arch,
                  BuildOperandList arch sh)
              => sym
+             -> UninterpretedFunctions sym
              -> T.Text
              -> m (ParameterizedFormula sym arch sh)
-readFormula' sym text = do
+readFormula' sym fns text = do
   sexpr <- case parseLL text of
              Left err -> throwError err
              Right res -> return res
@@ -682,6 +740,7 @@ readFormula' sym text = do
 
   defs <- runReaderT (readDefs defsRaw) $
     DefsInfo { getSym = sym
+             , getFns = fns
              , getLitLookup = \loc -> S.varExpr sym <$> flip MapF.lookup litVars loc
              , getOpVarList = opVarList
              , getOpNameList = operands
@@ -700,9 +759,10 @@ readFormula :: (S.IsExprBuilder sym,
                 Architecture arch,
                 BuildOperandList arch sh)
             => sym
+            -> UninterpretedFunctions sym
             -> T.Text
             -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormula sym text = runExceptT $ readFormula' sym text
+readFormula sym fns text = runExceptT $ readFormula' sym fns text
 
 -- | Read a templated formula definition from file, then parse it.
 readFormulaFromFile :: (S.IsExprBuilder sym,
@@ -710,6 +770,7 @@ readFormulaFromFile :: (S.IsExprBuilder sym,
                         Architecture arch,
                         BuildOperandList arch sh)
                     => sym
+                    -> UninterpretedFunctions sym
                     -> FilePath
                     -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormulaFromFile sym fp = readFormula sym =<< T.readFile fp
+readFormulaFromFile sym fns fp = readFormula sym fns =<< T.readFile fp
