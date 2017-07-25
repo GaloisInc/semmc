@@ -35,7 +35,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import           Dismantle.Instruction ( indexOpList, OperandList(..) )
 
 import           SemMC.Architecture
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Formula.Parser ( Atom(..), operandVarPrefix )
 
 -- This file is organized top-down, i.e., from high-level to low-level.

@@ -20,6 +20,7 @@ library
                        SemMC.Architecture
                        SemMC.Formula
                        SemMC.Formula.Equivalence
+                       SemMC.Formula.Formula
                        SemMC.Formula.Instantiate
                        SemMC.Formula.Load
                        SemMC.Formula.Parser

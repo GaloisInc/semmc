@@ -33,7 +33,7 @@ import           Lang.Crucible.Solver.SimpleBuilder
 import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
 
 import           SemMC.Architecture
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Formula.Instantiate
 import           SemMC.Util
 
