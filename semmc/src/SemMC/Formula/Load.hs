@@ -12,7 +12,7 @@ import Data.Parameterized.Some ( Some(..) )
 import qualified Lang.Crucible.Solver.Interface as CRU
 
 import SemMC.Architecture ( Architecture )
-import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Parser as FP
 import Data.Parameterized.Witness ( Witness(..) )
 

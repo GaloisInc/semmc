@@ -53,7 +53,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.Symbol ( userSymbol )
 
 import           SemMC.Architecture
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Util
 
 import           Dismantle.Instruction ( Index(..), indexOpList, OperandList(..), traverseOperandList )

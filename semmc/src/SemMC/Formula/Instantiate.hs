@@ -34,7 +34,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import           Dismantle.Instruction ( indexOpList, OperandList(..) )
 
 import           SemMC.Architecture
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Util
 
 -- I got tired of typing this.

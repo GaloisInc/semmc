@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 -- | Definitions of formulas
-module SemMC.Formula (
+module SemMC.Formula.Formula (
   ParameterizedFormula(..),
   Formula(..),
   emptyFormula,
