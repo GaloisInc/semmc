@@ -18,7 +18,7 @@ import qualified Data.Set as S
 import qualified Dismantle.Instruction as I
 
 import SemMC.Architecture ( ArchState, Instruction, Architecture )
-import qualified SemMC.Formula.Formula as F
+import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
 import SemMC.Stochastic.Monad

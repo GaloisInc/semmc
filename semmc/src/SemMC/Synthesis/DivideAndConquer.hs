@@ -22,7 +22,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 
 import           SemMC.Architecture
-import           SemMC.Formula.Formula
+import           SemMC.Formula
 import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.Template
 import           SemMC.Util

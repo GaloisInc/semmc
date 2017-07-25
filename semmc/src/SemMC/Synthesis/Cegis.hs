@@ -28,7 +28,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import           Dismantle.Instruction
 
 import           SemMC.Architecture
-import           SemMC.Formula.Formula
+import           SemMC.Formula
 import           SemMC.Formula.Equivalence
 import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template

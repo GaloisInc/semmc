@@ -35,7 +35,9 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 
+import           Lang.Crucible.BaseTypes ( knownRepr )
 import qualified Lang.Crucible.Solver.SimpleBackend as CRU
+import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
@@ -43,9 +45,10 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
 import           SemMC.Architecture ( ArchState, Architecture, Opcode, Operand )
-import qualified SemMC.Formula.Formula as F
+import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
+import           SemMC.Util ( makeSymbol )
 import qualified SemMC.Worklist as WL
 
 import qualified SemMC.Stochastic.Statistics as S
@@ -199,9 +202,13 @@ loadInitialState :: (Architecture arch,
                  -- ^ The opcodes we want to learn formulas for (could be all, but could omit instructions e.g., jumps)
                  -> IO (SynEnv t arch)
 loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes = do
+  undefinedBit <- CRUI.freshConstant sym (makeSymbol "undefined_bit") knownRepr
   let toFP dir oc = dir </> P.showF oc <.> "sem"
       -- TODO: handle uninterpreted functions
-      load dir = F.loadFormulas sym (toFP dir) Map.empty allOpcodes
+      env = F.FormulaEnv { F.envFunctions = Map.empty
+                         , F.envUndefinedBit = undefinedBit
+                         }
+      load dir = F.loadFormulas sym (toFP dir) env allOpcodes
   baseSet <- load (baseSetDir cfg)
   learnedSet <- load (learnedSetDir cfg)
   let initialFormulas = MapF.union baseSet learnedSet
