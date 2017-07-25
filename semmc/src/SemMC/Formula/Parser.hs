@@ -20,8 +20,6 @@ module SemMC.Formula.Parser
   , BuildOperandList
   , operandVarPrefix
   , literalVarPrefix
-  , SomeSome(..)
-  , UninterpretedFunctions
   , readFormula
   , readFormulaFromFile
   ) where
@@ -53,6 +51,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.Symbol ( userSymbol )
 
 import           SemMC.Architecture
+import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..) )
 import           SemMC.Formula.Formula
 import           SemMC.Util
 
@@ -231,17 +230,13 @@ readInputs _ _ = throwError "malformed input list"
 
 -- ** Parsing definitions
 
-data SomeSome (f :: k1 -> k2 -> *) = forall x y. SomeSome (f x y)
-
-type UninterpretedFunctions sym = Map.Map String (SomeSome (S.SymFn sym))
-
 -- | "Global" data stored in the Reader monad throughout parsing the definitions.
 data DefsInfo sym arch sh = DefsInfo
                             { getSym :: sym
                             -- ^ SymInterface/ExprBuilder used to build up symbolic
                             -- expressions while parsing the definitions.
-                            , getFns :: Map.Map String (SomeSome (S.SymFn sym))
-                            -- ^ Uninterpreted functions that may be called.
+                            , getEnv :: FormulaEnv sym arch
+                            -- ^ Global formula environment
                             , getLitLookup :: forall tp. Location arch tp -> Maybe (S.SymExpr sym tp)
                             -- ^ Function used to retrieve the expression
                             -- corresponding to a given literal.
@@ -573,7 +568,7 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
                   SC.SNil))) args =
   prefixError "in reading call expression: " $ do
     sym <- reader getSym
-    fns <- reader getFns
+    fns <- reader (envFunctions . getEnv)
     SomeSome fn <- case Map.lookup fnName fns of
                      Just fn -> return fn
                      Nothing -> throwError $ printf "uninterpreted function \"%s\" is not defined" fnName
@@ -683,10 +678,10 @@ readFormula' :: forall sym arch sh m.
                  Architecture arch,
                  BuildOperandList arch sh)
              => sym
-             -> UninterpretedFunctions sym
+             -> FormulaEnv sym arch
              -> T.Text
              -> m (ParameterizedFormula sym arch sh)
-readFormula' sym fns text = do
+readFormula' sym env text = do
   sexpr <- case parseLL text of
              Left err -> throwError err
              Right res -> return res
@@ -740,7 +735,7 @@ readFormula' sym fns text = do
 
   defs <- runReaderT (readDefs defsRaw) $
     DefsInfo { getSym = sym
-             , getFns = fns
+             , getEnv = env
              , getLitLookup = \loc -> S.varExpr sym <$> flip MapF.lookup litVars loc
              , getOpVarList = opVarList
              , getOpNameList = operands
@@ -759,10 +754,10 @@ readFormula :: (S.IsExprBuilder sym,
                 Architecture arch,
                 BuildOperandList arch sh)
             => sym
-            -> UninterpretedFunctions sym
+            -> FormulaEnv sym arch
             -> T.Text
             -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormula sym fns text = runExceptT $ readFormula' sym fns text
+readFormula sym env text = runExceptT $ readFormula' sym env text
 
 -- | Read a templated formula definition from file, then parse it.
 readFormulaFromFile :: (S.IsExprBuilder sym,
@@ -770,7 +765,7 @@ readFormulaFromFile :: (S.IsExprBuilder sym,
                         Architecture arch,
                         BuildOperandList arch sh)
                     => sym
-                    -> UninterpretedFunctions sym
+                    -> FormulaEnv sym arch
                     -> FilePath
                     -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormulaFromFile sym fns fp = readFormula sym fns =<< T.readFile fp
+readFormulaFromFile sym env fp = readFormula sym env =<< T.readFile fp

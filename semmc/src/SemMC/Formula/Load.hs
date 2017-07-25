@@ -12,6 +12,7 @@ import Data.Parameterized.Some ( Some(..) )
 import qualified Lang.Crucible.Solver.Interface as CRU
 
 import SemMC.Architecture ( Architecture )
+import SemMC.Formula.Env ( FormulaEnv )
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Parser as FP
 import Data.Parameterized.Witness ( Witness(..) )
@@ -28,17 +29,17 @@ loadFormulas :: forall sym arch a
               . (CRU.IsExprBuilder sym, CRU.IsSymInterface sym, Architecture arch, MapF.OrdF a)
              => sym
              -> (forall sh' . a sh' -> FilePath)
-             -> FP.UninterpretedFunctions sym
+             -> FormulaEnv sym arch
              -> [Some (Witness (FP.BuildOperandList arch) a)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulas sym toFP fns shapes =
+loadFormulas sym toFP env shapes =
   F.foldlM (\m (Some (Witness oc)) -> addIfJust readFormulaForOpcode m oc) MapF.empty shapes
   where
     readFormulaForOpcode :: (FP.BuildOperandList arch sh)
                          => a sh
                          -> IO (Maybe (F.ParameterizedFormula sym arch sh))
     readFormulaForOpcode a = do
-      ef <- FP.readFormulaFromFile sym fns (toFP a)
+      ef <- FP.readFormulaFromFile sym env (toFP a)
       case ef of
         Left _ -> return Nothing
         Right f -> return (Just f)

@@ -37,10 +37,10 @@ allOperands :: [Some (Witness U.UnfoldShape (T.Opcode T.Operand))]
 allOperands = $(captureDictionaries ''T.Opcode)
 
 readBinOp :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "R32"]))
-readBinOp sym fp = readFormulaFromFile sym Map.empty ("data/toy/base/" <> fp)
+readBinOp sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("data/toy/base/" <> fp)
 
 readBinOp' :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "I32"]))
-readBinOp' sym fp = readFormulaFromFile sym Map.empty ("data/toy/base/" <> fp)
+readBinOp' sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("data/toy/base/" <> fp)
 
 doThing :: IO ()
 doThing = do
