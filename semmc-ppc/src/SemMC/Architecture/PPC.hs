@@ -46,7 +46,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile, SomeSome(..), UninterpretedFunctions )
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal )

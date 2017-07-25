@@ -19,7 +19,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 
 import           SemMC.Architecture
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
 import           SemMC.Synthesis.Cegis

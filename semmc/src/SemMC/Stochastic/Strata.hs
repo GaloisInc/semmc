@@ -17,7 +17,7 @@ import Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture ( Architecture, Instruction, Opcode, Operand, Location )
-import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Formula as F
 
 import qualified SemMC.Stochastic.Classify as C
 import SemMC.Stochastic.Generalize ( generalize )

@@ -9,7 +9,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 
 import           SemMC.Architecture
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.DivideAndConquer
 import           SemMC.Synthesis.Template

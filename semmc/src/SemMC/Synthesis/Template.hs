@@ -64,7 +64,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import           Dismantle.Instruction ( mapOperandList, OperandList(..) )
 
 import           SemMC.Architecture
-import           SemMC.Formula
+import           SemMC.Formula.Formula
 import           SemMC.Formula.Instantiate
 
 type RecoverOperandFn sym op = (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op

@@ -43,7 +43,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
 import           SemMC.Architecture ( ArchState, Architecture, Opcode, Operand )
-import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
 import qualified SemMC.Worklist as WL

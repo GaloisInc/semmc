@@ -23,7 +23,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import Dismantle.Tablegen.TH ( captureDictionaries )
 
 import SemMC.Architecture
-import SemMC.Formula
+import SemMC.Formula.Formula
 import SemMC.Formula.Parser
 import SemMC.Formula.Printer
 import SemMC.ToyExample as T
