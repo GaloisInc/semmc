@@ -47,7 +47,8 @@ import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
 import           SemMC.Formula
-import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile, SomeSome(..), UninterpretedFunctions )
+import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
+import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal )
 
@@ -529,10 +530,14 @@ loadBaseSet sym = do
                                    Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
                                    Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
                                 ]
+  undefinedBit <- S.freshConstant sym (makeSymbol "undefined_bit") knownRepr
+  let env = FormulaEnv { envFunctions = fns
+                       , envUndefinedBit = undefinedBit
+                       }
   let readOp :: (BuildOperandList (TemplatedArch PPC) sh)
              => FilePath
              -> IO (Either String (ParameterizedFormula sym (TemplatedArch PPC) sh))
-      readOp fp = readFormulaFromFile sym fns ("semmc-ppc/data/base/" <> fp)
+      readOp fp = readFormulaFromFile sym env ("semmc-ppc/data/base/" <> fp)
       addOp :: Some (Witness Foo (PPC.Opcode PPC.Operand))
             -> BaseSet sym PPC
             -> IO (BaseSet sym PPC)

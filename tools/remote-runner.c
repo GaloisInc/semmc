@@ -13,7 +13,6 @@
 #include <sys/mman.h>
 #include <sys/procfs.h>
 #include <sys/ptrace.h>
-#include <sys/reg.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/user.h>
@@ -125,6 +124,8 @@ void checkedPtrace(enum __ptrace_request rq, pid_t pid, void* addr, void* data) 
 
 #if defined(__x86_64__)
 
+#include <sys/reg.h>
+
 // The standard general purpose integer registers
 #define SEM_NGPRS 16
 // The MM registers (for MMX), which overlay the x87 floating point stack
@@ -133,6 +134,9 @@ void checkedPtrace(enum __ptrace_request rq, pid_t pid, void* addr, void* data) 
 //
 // Note, this doesn't support the ZMM registers from AVX2 yet
 #define SEM_NVECREGS 16
+
+uint8_t raiseTrap[] = {0x7f, 0xe0, 0x00, 0x08};
+#define RAISE_TRAP asm("trap")
 
 typedef struct {
   uint64_t chunks[4];
@@ -283,13 +287,146 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 
 #elif defined(__powerpc__)
 
-#if defined(__powerpc64__)
-#define CAST_PTR(x) ((long long)(x))
-#else
-#define CAST_PTR(x) ((long)(x))
-#endif
+#define CAST_PTR(x) ((uintptr_t) (x))
 
-#undef CAST_PTR
+#if defined(__powerpc64__)
+#error "PPC64 not supported yet"
+#else
+
+// The standard general purpose integer registers
+#define SEM_NGPRS 32
+#define SEM_NVRS 32
+#define SEM_NFPRS 32
+
+typedef struct {
+  uint64_t chunks[2];
+} VR;
+
+typedef struct {
+  uint32_t gprs[SEM_NGPRS];
+  uint32_t gprs_mask[SEM_NGPRS];
+  uint32_t msr;
+  uint32_t ctr;
+  uint32_t link;
+  uint32_t xer;
+  uint32_t cr;
+  uint64_t fprs[SEM_NFPRS];
+  uint64_t fpscr;
+  VR vrs[SEM_NVSRS];
+  uint8_t mem1[MEM_REGION_BYTES];
+  uint8_t mem2[MEM_REGION_BYTES];
+} RegisterState;
+
+#define VRREGS_SIZE (33 * sizeof(VR) + sizeof(uint32_t))
+
+void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace, RegisterState *rs) {
+  struct pt_regs regs;
+
+  checkedPtrace(PTRACE_GETREGS, childPid, 0, (void *) &regs);
+
+  // Set up the provided memory state
+  //
+  // We have to copy the memory from the input buffers into memSpace because the
+  // input buffers aren't visible in the address space of the tracee - only the
+  // memSpace is shared.
+  uint8_t* mem1Addr = memSpace;
+  uint8_t* mem2Addr = memSpace + sizeof(rs->mem1);
+  memcpy(mem1Addr, rs->mem1, sizeof(rs->mem1));
+  memcpy(mem2Addr, rs->mem2, sizeof(rs->mem2));
+
+  // Apply the reg mask; this modifies the test vector, but that is fine.  We
+  // won't need the original values ever again.
+  for(int i = 0; i < SEM_NGPRS; ++i) {
+    if(rs->gprs_mask[i] == 1)
+      rs->gprs[i] = CAST_PTR(mem1Addr);
+    else if(rs->gprs_mask[i] == 2)
+      rs->gprs[i] = CAST_PTR(mem2Addr);
+  }
+
+  for (int i = 0; i < SEM_NGPRS; i++) {
+    regs.gprs[i] = rs->gprs[i];
+  }
+  regs.msr  = rs->msr;
+  regs.ctr  = rs->ctr;
+  regs.link = rs->link;
+  regs.xer  = rs->xer;
+  regs.ccr  = rs->cr;
+
+  // Set the IP to be at the start of our test program
+  regs.nip = rs->ip;
+  LOG("PTRACE_SETREGS: setting IP to %" PRIxPTR "\n", regs.nip);
+
+  checkedPtrace(PTRACE_SETREGS, childPid, 0, &regs);
+
+  elf_fpregset_t fpregs;
+
+  checkedPtrace(PTRACE_GETFPREGS, childPid, 0, (void *) &fpregs);
+
+  // Copy in the FP regs
+  for (int i = 0; i < SEM_NFPRS; i++) {
+    fpregs[i] = *((const double *) &rs->fprs[i]);
+  }
+  fpregs[SEM_NFPRS] = *((const double *) &rs->fpscr);
+
+  checkedPtrace(PTRACE_SETFPREGS, childPid, 0, (void *) &fpregs);
+
+  // Anonymous struct to ensure proper alignment
+  struct {
+    VR vrregs[SEM_NVRS];
+    VR vrstatus;
+    uint32_t vrweird;
+  } vrbuf;
+
+  checkedPtrace(PTRACE_GETVRREGS, childPid, 0, (void *) &vrbuf);
+
+  // Copy in the VR regs
+  for (int i = 0; i < SEM_NVRS; i++) {
+    vrbuf.vrregs[i] = vs->vrs[i];
+  }
+
+  checkedPtrace(PTRACE_SETVRREGS, childPid, 0, (void *) &vrBuf);
+}
+
+void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs) {
+  struct pt_regs regs;
+
+  checkedPtrace(PTRACE_GETREGS, childPid, 0, (void *) &regs);
+
+  for (int i = 0; i < SEM_NGPRS; i++) {
+    rs->gprs[i] = regs.gprs[i];
+  }
+  rs->msr = regs.msr;
+  rs->ctr = regs.ctr;
+  rs->link = regs.link;
+  rs->xer = regs.xer;
+  rs->cr = regs.ccr;
+
+  elf_fpregset_t fpregs;
+
+  checkedPtrace(PTRACE_GETFPREGS, childPid, 0, (void *) &fpregs);
+
+  // Copy in the FP regs
+  for (int i = 0; i < SEM_NFPRS; i++) {
+    rs->fprs[i] = *((const uint64_t *) &fpregs[i]);
+  }
+  rs->fpscr = *((const uint64_t *) &fpregs[SEM_NFPRS]);
+
+  // Anonymous struct to ensure proper alignment
+  struct {
+    VR vrregs[SEM_NVRS];
+    VR vrstatus;
+    uint32_t vrweird;
+  } vrbuf;
+
+  checkedPtrace(PTRACE_GETVRREGS, childPid, 0, (void *) &vrbuf);
+
+  // Copy in the VR regs
+  for (int i = 0; i < SEM_NVRS; i++) {
+    vs->vrs[i] = vrbuf.vrregs[i];
+  }
+}
+
+#endif
 
 #endif
 
