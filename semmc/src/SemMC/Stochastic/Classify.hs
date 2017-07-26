@@ -21,6 +21,7 @@ import SemMC.Architecture ( ArchState, Instruction, Architecture )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
+import           SemMC.Symbolic ( Sym )
 import SemMC.Stochastic.Monad
 
 -- | A set of equivalence classes of programs

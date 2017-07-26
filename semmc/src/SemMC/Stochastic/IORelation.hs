@@ -41,9 +41,9 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
+import SemMC.Symbolic ( Sym )
 import qualified SemMC.Worklist as WL
 
-import SemMC.Stochastic.Monad ( Sym )
 import SemMC.Stochastic.IORelation.Explicit ( generateExplicitInstruction,
                                               classifyExplicitOperands
                                             )

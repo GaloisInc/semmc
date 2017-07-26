@@ -23,7 +23,7 @@ module SemMC.Stochastic.Monad (
   recordLearnedFormula,
   takeWork,
   addWork,
-  Sym
+  opcodeIORelation
   ) where
 
 import qualified GHC.Err.Located as L
@@ -43,7 +43,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 
 import           Lang.Crucible.BaseTypes ( knownRepr )
-import qualified Lang.Crucible.Solver.SimpleBackend as CRU
 import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.Witness ( Witness(..) )
@@ -55,14 +54,14 @@ import           SemMC.Architecture ( ArchState, Architecture, Opcode, Operand, 
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
+import           SemMC.Symbolic ( Sym )
 import           SemMC.Util ( makeSymbol )
 import qualified SemMC.Worklist as WL
 
+import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Stochastic.Statistics as S
 
--- | Symbolic something?
-type Sym t = CRU.SimpleBackend t
 
 -- | Synthesis environment.
 data SynEnv t arch =
@@ -75,6 +74,8 @@ data SynEnv t arch =
          -- initial heuristically interesting tests, as well as a set of ~1000
          -- random tests.  It also includes counterexamples learned during
          -- classification.
+         , seIORelations :: MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
+         -- ^ Descriptions of implicit and explicit operands for each opcode
          , seSymBackend :: STM.TMVar (Sym t)
          -- ^ The solver backend from Crucible.  This is behind a TMVar because
          -- it isn't thread safe - we have to serialize access.  We can't
@@ -194,6 +195,13 @@ lookupFormula op = do
   frms <- askFormulas
   return $ MapF.lookup op frms
 
+opcodeIORelation :: (Architecture arch)
+                 => Opcode arch (Operand arch) sh
+                 -> Syn t arch (Maybe (IORelation arch sh))
+opcodeIORelation op = do
+  iorels <- R.asks (seIORelations . seGlobalEnv)
+  return $ MapF.lookup op iorels
+
 data Config arch =
   Config { baseSetDir :: FilePath
          , learnedSetDir :: FilePath
@@ -221,8 +229,10 @@ loadInitialState :: (Architecture arch,
                  -- ^ All possible opcodes
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -- ^ The opcodes we want to learn formulas for (could be all, but could omit instructions e.g., jumps)
+                 -> MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
+                 -- ^ IORelations
                  -> IO (SynEnv t arch)
-loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes = do
+loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes iorels = do
   undefinedBit <- CRUI.freshConstant sym (makeSymbol "undefined_bit") knownRepr
   let toFP dir oc = dir </> P.showF oc <.> "sem"
       -- TODO: handle uninterpreted functions
@@ -242,6 +252,7 @@ loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes = do
   return SynEnv { seFormulas = fref
                 , seTestCases = testref
                 , seWorklist = wlref
+                , seIORelations = iorels
                 , seSymBackend = symVar
                 , seConfig = cfg
                 , seStatsThread = statsThread
@@ -258,6 +269,7 @@ makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
     opSet = S.fromList [ Some op | Some (Witness op) <- allOps ]
     opSet' = F.foldl' removeIfPresent opSet (MapF.keys knownFormulas)
     removeIfPresent s sop = S.delete sop s
+
 
 {-
 

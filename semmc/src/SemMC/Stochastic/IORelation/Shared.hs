@@ -31,7 +31,8 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
-import SemMC.Stochastic.Monad ( Sym )
+import SemMC.Symbolic ( Sym )
+
 import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.IORelation.Types
 

@@ -20,6 +20,7 @@ import           Dismantle.Arbitrary as D
 import           Dismantle.Instruction.Random as D
 
 import           SemMC.Architecture ( ArchState, Instruction )
+import           SemMC.Symbolic ( Sym )
 import           SemMC.Stochastic.Monad
 
 -- | Attempt to stochastically find a program in terms of the base set that has

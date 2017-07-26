@@ -24,6 +24,7 @@ import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture ( Architecture, Instruction, Opcode, Operand, Location )
 import qualified SemMC.Formula as F
+import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
 import qualified SemMC.Stochastic.Remote as R
@@ -125,7 +126,7 @@ finishStrataOne op instr eqclasses = do
 --
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 --
--- Here we need the set of output locations (which could include implicit locations)
+-- FIXME: Here we need the set of output locations (which could include implicit locations)
 buildFormula :: Opcode arch (Operand arch) sh
              -> Instruction arch
              -> [Some (Location arch)]

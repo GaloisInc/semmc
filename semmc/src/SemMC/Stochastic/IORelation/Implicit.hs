@@ -25,8 +25,8 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
+import SemMC.Symbolic ( Sym )
 
-import SemMC.Stochastic.Monad ( Sym )
 import SemMC.Stochastic.IORelation.Shared
 import SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R
