@@ -47,7 +47,7 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
-import           SemMC.Architecture ( ArchState, Architecture, Opcode, Operand )
+import           SemMC.Architecture ( ArchState, Architecture, Opcode, Operand, Instruction )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
@@ -94,6 +94,7 @@ data LocalSynEnv t arch =
 type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
                  , D.ArbitraryOperand (Operand arch)
                  , D.ArbitraryOperands (Opcode arch) (Operand arch)
+                 , Ord (Instruction arch)
                  , P.EnumF (Opcode arch (Operand arch)) )
 
 -- Synthesis monad.

@@ -40,7 +40,7 @@ caller controls the number and placement of threads.
 
 -}
 
-stratifiedSynthesis :: (Architecture arch, SynC arch, Ord (Instruction arch))
+stratifiedSynthesis :: (Architecture arch, SynC arch)
                     => SynEnv t arch
                     -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
@@ -59,11 +59,11 @@ stratifiedSynthesis env0 = do
     runSyn localEnv strata
   STM.readTVarIO (seFormulas env0)
 
-strata :: (Architecture arch, SynC arch, Ord (Instruction arch))
+strata :: (Architecture arch, SynC arch)
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
-processWorklist :: (Architecture arch, SynC arch, Ord (Instruction arch))
+processWorklist :: (Architecture arch, SynC arch)
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
@@ -81,7 +81,7 @@ processWorklist = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we time out trying to find a formula
-strataOne :: (Architecture arch, SynC arch, Ord (Instruction arch))
+strataOne :: (Architecture arch, SynC arch)
           => Opcode arch (Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
@@ -91,7 +91,7 @@ strataOne op = do
     Nothing -> return Nothing
     Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
 
-strataOneLoop :: (Architecture arch, Ord (Instruction arch), SynC arch)
+strataOneLoop :: (Architecture arch, SynC arch)
               => Opcode arch (Operand arch) sh
               -> Instruction arch
               -> C.EquivalenceClasses arch
