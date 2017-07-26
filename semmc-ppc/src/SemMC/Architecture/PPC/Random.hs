@@ -7,7 +7,6 @@ module SemMC.Architecture.PPC.Random (
   machineState
   ) where
 
-import qualified GHC.Err.Located as L
 import GHC.TypeLits
 
 import Data.Bits
@@ -17,10 +16,10 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.Foldable as F
 import Data.Monoid
 import qualified Data.Serialize.Get as G
-import Data.Word ( Word64 )
-
+import Numeric.Natural
 
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Word.Indexed as W
 import qualified Lang.Crucible.BaseTypes as C
 
 import qualified Dismantle.Arbitrary as A
@@ -29,7 +28,6 @@ import qualified Dismantle.PPC as PPC
 import SemMC.Architecture
 import SemMC.ConcreteState ( ConcreteState, Value(ValueBV) )
 import qualified SemMC.Architecture.PPC as PPC
-import SemMC.Symbolic ( Sym )
 import qualified SemMC.Stochastic.Remote as R
 
 
@@ -76,11 +74,9 @@ serializeVec i = B.word64BE w1 <> B.word64BE w2
     w2 = fromInteger (i `shiftR` 64)
 
 serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> Value (C.BaseBVType n) -> B.Builder
-serializeSymVal toBuilder sv = undefined
-
-  -- case SB.asUnsignedBV sv of
-  --   Nothing -> L.error ("Expected a concrete value in machine state: " ++ show sv)
-  --   Just cv -> toBuilder cv
+serializeSymVal toBuilder sv =
+  case sv of
+    ValueBV (W.W w) -> toBuilder (toInteger w)
 
 extractLocs :: ConcreteState PPC.PPC
             -> [PPC.Location tp]
@@ -99,16 +95,39 @@ fromBS bs =
 
 getArchState :: G.Get (ConcreteState PPC.PPC)
 getArchState = do
- -- gprs' <- mapM (getWith G.getWord32be) gprs
-  undefined
+  gprs' <- mapM (getWith (getValue G.getWord32be repr32)) gprs
+  fprs' <- mapM (getWith (getValue G.getWord64be repr64)) fprs
+  spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
+  spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
+  vrs' <- mapM (getWith (getValue getWord128be repr128)) vrs
+  let m1 = F.foldl' addLoc MapF.empty gprs'
+      m2 = F.foldl' addLoc m1 fprs'
+      m3 = F.foldl' addLoc m2 spregs32'
+      m4 = F.foldl' addLoc m3 spregs64'
+      m5 = F.foldl' addLoc m4 vrs'
+  return m5
+  where
+    addLoc :: forall tp . ConcreteState PPC.PPC -> (PPC.Location tp, Value tp) -> ConcreteState PPC.PPC
+    addLoc m (loc, v) = MapF.insert loc v m
 
--- getWith :: (1 <= n, KnownNat n)
---         => Sym t
---         -> G.Get w
---         -> NR.NatRepr n
---         -> Location PPC.PPC (C.BaseBVType n)
---         -> G.Get (Location PPC.PPC (C.BaseBVType n), SB.SymExpr (Sym t) (C.BaseBVType))
+getWord128be :: G.Get Natural
+getWord128be = do
+  w1 <- G.getWord64be
+  w2 <- G.getWord64be
+  return ((fromIntegral w2 `shiftL` 64) .|. fromIntegral w1)
 
+getWith :: G.Get (Value tp)
+        -> PPC.Location tp
+        -> G.Get (PPC.Location tp, Value tp)
+getWith g loc = do
+  w <- g
+  return (loc, w)
+
+getValue :: (Integral w, KnownNat n)
+         => G.Get w
+         -> C.NatRepr n
+         -> G.Get (Value (C.BaseBVType n))
+getValue g _ = (ValueBV . W.W . fromIntegral) <$> g
 
 addRandomBV :: (KnownNat n, 1 <= n)
             => A.Gen
@@ -141,3 +160,13 @@ specialRegs32 = [ PPC.LocCTR
 
 specialRegs64 :: [Location PPC.PPC (C.BaseBVType 64)]
 specialRegs64 = [ PPC.LocFPSCR ]
+
+repr32 :: C.NatRepr 32
+repr32 = C.knownNat
+
+repr64 :: C.NatRepr 64
+repr64 = C.knownNat
+
+repr128 :: C.NatRepr 128
+repr128 = C.knownNat
+
