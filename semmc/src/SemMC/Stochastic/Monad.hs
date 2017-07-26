@@ -26,6 +26,8 @@ module SemMC.Stochastic.Monad (
   Sym
   ) where
 
+import qualified GHC.Err.Located as L
+
 import qualified Control.Concurrent.STM as STM
 import           Control.Monad ( replicateM )
 import qualified Control.Monad.Reader as R
@@ -182,7 +184,7 @@ askBaseSet = do
   -- O(n) lookup every time!
   xs <- MapF.keys <$> askFormulas
   case xs of
-    [] -> error "askBaseSet: empty base set!"
+    [] -> L.error "askBaseSet: empty base set!"
     (x:xs') -> return $ NES.fromList x xs'
 
 lookupFormula :: (Architecture arch)
