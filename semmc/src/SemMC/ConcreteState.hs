@@ -116,12 +116,6 @@ pokeMS m (View sl loc) newPart = MapF.insert loc new m
   where orig = fromJust (MapF.lookup loc m)
         new = pokeSlice sl orig newPart
 
--- | Convert an operand to the corresponding view, if any.
---
--- Useful for perturbing a machine state when computing the IO
--- relation for an instruction?
-operandToView :: Operand arch sh -> Maybe (Some (View arch))
-operandToView = undefined
 
 ----------------------------------------------------------------
 -- Comparing machine states in stratified synthesis
@@ -141,7 +135,14 @@ data OutMask arch n = OutMask (View arch n) (Diff n)
 -- Need to learn one of these for each instruction.
 type OutMasks arch = [Some (OutMask arch)]
 
--- | Return the other places where we should look for our target
--- values in the candidate's out state.
-congruentViews :: View arch n -> [View arch n]
-congruentViews = undefined
+-- | An architecture with certain operations needed for concrete work.
+class (Architecture arch) => ConcreteArchitecture arch where
+  -- | Convert an operand to the corresponding view, if any.
+  --
+  -- Useful for perturbing a machine state when computing the IO
+  -- relation for an instruction?
+  operandToView :: Proxy arch -> Operand arch sh -> Maybe (Some (View arch))
+
+  -- | Return the other places where we should look for our target
+  -- values in the candidate's out state.
+  congruentViews :: Proxy arch -> View arch n -> [View arch n]
