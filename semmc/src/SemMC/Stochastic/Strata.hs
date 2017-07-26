@@ -86,7 +86,7 @@ strataOne :: (Architecture arch, SynC arch)
           => Opcode arch (Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
-  instr <- instantiateInstruction op undefined -- Add in the input relation
+  instr <- instantiateInstruction op
   mprog <- synthesize instr
   case mprog of
     Nothing -> return Nothing
@@ -145,11 +145,10 @@ buildFormula = undefined
 -- to inform the initial state generation.
 instantiateInstruction :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                        => Opcode arch (Operand arch) sh
-                       -> [Some (Location arch)]
-                       -- ^ Input locations for the opcode
                        -> Syn t arch (Instruction arch)
-instantiateInstruction op _inputs = do
+instantiateInstruction op = do
   gen <- askGen
+  Just iorel <- opcodeIORelation op
   target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
   return target
 
