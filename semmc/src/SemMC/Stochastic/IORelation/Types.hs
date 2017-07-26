@@ -50,6 +50,7 @@ import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
 import SemMC.ConcreteState ( ConcreteState )
+
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
 

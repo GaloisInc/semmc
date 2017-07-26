@@ -46,6 +46,7 @@ library
                        SemMC.Synthesis.Core
                        SemMC.Synthesis.DivideAndConquer
                        SemMC.Synthesis.Template
+                       SemMC.Symbolic
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist

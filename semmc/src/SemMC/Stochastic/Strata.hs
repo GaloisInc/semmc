@@ -4,22 +4,30 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module SemMC.Stochastic.Strata (
+  SynEnv,
   Config(..),
-  strata
+  loadInitialState,
+  stratifiedSynthesis
   ) where
 
+import qualified Control.Concurrent as C
+import qualified Control.Concurrent.Async as A
+import qualified Control.Concurrent.STM as STM
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 
+import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture ( Architecture, Instruction, Opcode, Operand, Location )
 import qualified SemMC.Formula as F
+import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
+import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Generalize ( generalize )
 import SemMC.Stochastic.Monad
 import SemMC.Stochastic.Synthesize ( synthesize )
@@ -33,11 +41,30 @@ caller controls the number and placement of threads.
 
 -}
 
-strata :: (Architecture arch, SynC arch, Ord (Instruction arch))
+stratifiedSynthesis :: (Architecture arch, SynC arch)
+                    => SynEnv t arch
+                    -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+stratifiedSynthesis env0 = do
+  A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
+    gen <- A.createGen
+    let localEnv = LocalSynEnv { seGlobalEnv = env0
+                               , seRandomGen = gen
+                               }
+    tChan <- C.newChan
+    rChan <- C.newChan
+    logChan <- C.newChan
+    ssh <- A.async $ do
+      _ <- R.runRemote (remoteHost (seConfig env0)) (machineState (seConfig env0) ()) tChan rChan logChan
+      return ()
+    A.link ssh
+    runSyn localEnv strata
+  STM.readTVarIO (seFormulas env0)
+
+strata :: (Architecture arch, SynC arch)
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
-processWorklist :: (Architecture arch, SynC arch, Ord (Instruction arch))
+processWorklist :: (Architecture arch, SynC arch)
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
@@ -55,17 +82,17 @@ processWorklist = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we time out trying to find a formula
-strataOne :: (Architecture arch, SynC arch, Ord (Instruction arch))
+strataOne :: (Architecture arch, SynC arch)
           => Opcode arch (Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
-  instr <- instantiateInstruction op undefined -- Add in the input relation
+  instr <- instantiateInstruction op
   mprog <- synthesize instr
   case mprog of
     Nothing -> return Nothing
     Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
 
-strataOneLoop :: (Architecture arch, Ord (Instruction arch), SynC arch)
+strataOneLoop :: (Architecture arch, SynC arch)
               => Opcode arch (Operand arch) sh
               -> Instruction arch
               -> C.EquivalenceClasses arch
@@ -99,7 +126,7 @@ finishStrataOne op instr eqclasses = do
 --
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 --
--- Here we need the set of output locations (which could include implicit locations)
+-- FIXME: Here we need the set of output locations (which could include implicit locations)
 buildFormula :: Opcode arch (Operand arch) sh
              -> Instruction arch
              -> [Some (Location arch)]
@@ -118,11 +145,10 @@ buildFormula = undefined
 -- to inform the initial state generation.
 instantiateInstruction :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                        => Opcode arch (Operand arch) sh
-                       -> [Some (Location arch)]
-                       -- ^ Input locations for the opcode
                        -> Syn t arch (Instruction arch)
-instantiateInstruction op _inputs = do
+instantiateInstruction op = do
   gen <- askGen
+  Just iorel <- opcodeIORelation op
   target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
   return target
 

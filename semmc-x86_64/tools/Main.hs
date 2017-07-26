@@ -10,7 +10,7 @@ import qualified System.IO as IO
 import Text.Printf ( printf )
 
 import qualified SemMC.Stochastic.Remote as R
-import SemMC.X86 ( MachineState(..), YMM(..) )
+import SemMC.X86 ( MachineState(..), machineState, YMM(..) )
 
 main :: IO ()
 main = do
@@ -20,7 +20,7 @@ main = do
   resChan <- C.newChan
   _ <- C.forkIO (printLogMessages logChan)
   _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- R.runRemote hostname caseChan resChan logChan
+  merr <- R.runRemote hostname machineState caseChan resChan logChan
   case merr of
     Just err -> do
       IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)

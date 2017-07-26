@@ -22,6 +22,7 @@ import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
 import SemMC.ConcreteState ( ConcreteState, Value )
+import           SemMC.Symbolic ( Sym )
 import SemMC.Stochastic.Monad
 
 -- | A set of equivalence classes of programs
@@ -151,7 +152,8 @@ programFormula sym insns = do
 -- If they are not, return an input that demonstrates the difference.
 testEquivalence :: (Architecture arch) => [Instruction arch] -> [Instruction arch] -> Syn t arch (F.EquivalenceResult arch Value)
 testEquivalence p representative = do
-  sym <- askSymBackend
-  pf <- programFormula sym p
-  repFormula <- programFormula sym representative
-  liftIO $ F.formulasEquivConcrete sym pf repFormula
+  withSymBackend $ \sym -> do
+    pf <- programFormula sym p
+    repFormula <- programFormula sym representative
+    liftIO $ F.formulasEquivConcrete sym pf repFormula
+

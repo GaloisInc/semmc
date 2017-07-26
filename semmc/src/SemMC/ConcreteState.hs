@@ -26,6 +26,7 @@ module SemMC.ConcreteState
 
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR )
 import           Data.Maybe ( fromJust )
+import           Data.Proxy ( Proxy(..) )
 import           Data.Parameterized.Classes ( OrdF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr ( NatRepr, widthVal )
@@ -37,7 +38,7 @@ import qualified Dismantle.Arbitrary as A
 
 import           Lang.Crucible.BaseTypes ( BaseBVType )
 
-import           SemMC.Architecture ( ArchState, Location, Operand )
+import           SemMC.Architecture ( Architecture, ArchState, Location, Operand )
 
 ----------------------------------------------------------------
 -- Locations, values, and views

@@ -30,7 +30,6 @@ import qualified Data.Text.IO as T
 
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.Nonce as N
 import Data.Parameterized.Some ( Some(..) )
 import Data.Parameterized.Witness ( Witness(..) )
 import qualified Data.Parameterized.Unfold as U
@@ -138,7 +137,7 @@ learn = do
       recordLearnedRelation op rel
       learn
 
-testOpcode :: forall arch sym sh
+testOpcode :: forall arch sh
             . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
            => Opcode arch (Operand arch) sh
            -> Learning arch (IORelation arch sh)

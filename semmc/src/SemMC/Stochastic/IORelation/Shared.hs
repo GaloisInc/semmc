@@ -21,7 +21,6 @@ import qualified Control.Monad.Catch as E
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Map.Strict as M
 import Data.Proxy ( Proxy(..) )
-import qualified Data.Word.Indexed as W
 
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr ( NatRepr, withKnownNat )

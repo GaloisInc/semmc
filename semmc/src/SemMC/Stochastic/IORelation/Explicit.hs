@@ -27,6 +27,7 @@ import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
 import SemMC.ConcreteState ( ConcreteState )
+
 import SemMC.Stochastic.IORelation.Shared
 import SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R

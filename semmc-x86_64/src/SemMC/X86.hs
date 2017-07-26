@@ -2,11 +2,13 @@
 {-# LANGUAGE DataKinds #-}
 module SemMC.X86 (
   MachineState(..),
+  machineState,
   YMM(..)
   ) where
 
 import Control.Monad ( replicateM )
 import qualified Data.Binary.Get as G
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Vector.Sized as V
@@ -33,22 +35,29 @@ data MachineState =
                }
   deriving (Show)
 
-instance R.MachineState MachineState where
-  flattenMachineState ms = LB.toStrict (B.toLazyByteString bld)
-    where
-      bld = mconcat [ mconcat (map B.word64LE (V.toList (gprs ms)))
-                    , mconcat (map B.word64LE (V.toList (gprs_mask ms)))
-                    , B.word64LE (eflags ms)
-                    , mconcat (map B.word64LE (V.toList (fprs ms)))
-                    , mconcat (map ymmBytes (V.toList (vrs ms)))
-                    , mconcat (map B.word8 (V.toList (mem1 ms)))
-                    , mconcat (map B.word8 (V.toList (mem2 ms)))
-                    ]
-  parseMachineState bs =
-    case G.pushChunk (G.runGetIncremental getMachineState) bs of
-      G.Done _ _ ms -> Just ms
-      G.Fail {} -> Nothing
-      G.Partial {} -> Nothing
+machineState :: R.MachineState MachineState
+machineState = R.MachineState { R.flattenMachineState = toBS
+                              , R.parseMachineState = fromBS
+                              }
+
+toBS :: MachineState -> B.ByteString
+toBS ms = LB.toStrict (B.toLazyByteString bld)
+  where
+    bld = mconcat [ mconcat (map B.word64LE (V.toList (gprs ms)))
+                  , mconcat (map B.word64LE (V.toList (gprs_mask ms)))
+                  , B.word64LE (eflags ms)
+                  , mconcat (map B.word64LE (V.toList (fprs ms)))
+                  , mconcat (map ymmBytes (V.toList (vrs ms)))
+                  , mconcat (map B.word8 (V.toList (mem1 ms)))
+                  , mconcat (map B.word8 (V.toList (mem2 ms)))
+                  ]
+
+fromBS :: B.ByteString -> Maybe MachineState
+fromBS bs =
+  case G.pushChunk (G.runGetIncremental getMachineState) bs of
+    G.Done _ _ ms -> Just ms
+    G.Fail {} -> Nothing
+    G.Partial {} -> Nothing
 
 ymmBytes :: YMM -> B.Builder
 ymmBytes (YMM w1 w2 w3 w4) =
