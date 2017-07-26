@@ -37,12 +37,12 @@ import SemMC.ConcreteState ( ConcreteState, Value(..) )
 import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.IORelation.Types
 
-withTestResults :: forall a f t arch sh
+withTestResults :: forall a f arch sh
                  . (Architecture arch)
                 => Opcode arch (Operand arch) sh
                 -> [TestBundle (R.TestCase (ConcreteState arch)) f]
-                -> ([R.ResultOrError (ConcreteState arch)] -> Learning t arch a)
-                -> Learning t arch a
+                -> ([R.ResultOrError (ConcreteState arch)] -> Learning arch a)
+                -> Learning arch a
 withTestResults op tests k = do
   tchan <- askTestChan
   rchan <- askResultChan
@@ -57,7 +57,7 @@ withTestResults op tests k = do
 wrapTestBundle :: (Architecture arch)
                => Instruction arch
                -> TestBundle (ConcreteState arch) f
-               -> Learning t arch (TestBundle (R.TestCase (ConcreteState arch)) f)
+               -> Learning arch (TestBundle (R.TestCase (ConcreteState arch)) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
   return TestBundle { tbTestCases = cases
@@ -69,7 +69,7 @@ wrapTestBundle i tb = do
 makeTestCase :: (Architecture arch)
              => Instruction arch
              -> ConcreteState arch
-             -> Learning t arch (R.TestCase (ConcreteState arch))
+             -> Learning arch (R.TestCase (ConcreteState arch))
 makeTestCase i c = do
   tid <- nextNonce
   asm <- askAssembler
@@ -117,16 +117,16 @@ testCaseLocations _ = MapF.foldrWithKey getKeys []
   where
     getKeys k _ acc = Some k : acc
 
-withGeneratedValueForLocation :: forall arch tp a t
+withGeneratedValueForLocation :: forall arch tp a
                                . (Architecture arch)
                               => Location arch tp
                               -> (Value tp -> a)
-                              -> Learning t arch a
+                              -> Learning arch a
 withGeneratedValueForLocation loc k = do
   g <- askGen
   case locationType loc of
     S.BaseBVRepr (wVal :: NatRepr w) -> withKnownNat wVal $ do
-      randomWord :: W.W w
+      randomBV :: Value (S.BaseBVType w)
                 <- liftIO (A.arbitrary g)
-      return (k (ValueBV randomWord))
+      return (k randomBV)
     repr -> error ("Unsupported base type repr in withGeneratedValueForLocation: " ++ show repr)

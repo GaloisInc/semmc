@@ -20,7 +20,6 @@ module SemMC.Stochastic.IORelation.Types (
   askTestChan,
   askResultChan,
   askGen,
-  askBackend,
   askAssembler,
   mkRandomTest,
   nextNonce,
@@ -51,7 +50,6 @@ import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
 import SemMC.ConcreteState ( ConcreteState )
-import SemMC.Stochastic.Monad ( Sym )
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
 
@@ -63,39 +61,35 @@ data GlobalLearningEnv arch =
                     , learnedRelations :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
                     }
 
-data LocalLearningEnv t arch =
+data LocalLearningEnv arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
                    , testChan :: C.Chan (Maybe (R.TestCase (ConcreteState arch)))
                    , resChan :: C.Chan (R.ResultOrError (ConcreteState arch))
-                   , backend :: Sym t
                    , gen :: A.Gen
-                   , testGen :: Sym t -> IO (ConcreteState arch)
+                   , testGen :: IO (ConcreteState arch)
                    -- ^ The test generator is part of local state because it
                    -- might not be thread safe.  Be sure to allocate one per
                    -- runner.
                    , nonce :: STM.TVar Word64
                    }
 
-askTestChan :: Learning t arch (C.Chan (Maybe (R.TestCase (ConcreteState arch))))
+askTestChan :: Learning arch (C.Chan (Maybe (R.TestCase (ConcreteState arch))))
 askTestChan = Rd.asks testChan
 
-askResultChan :: Learning t arch (C.Chan (R.ResultOrError (ConcreteState arch)))
+askResultChan :: Learning arch (C.Chan (R.ResultOrError (ConcreteState arch)))
 askResultChan = Rd.asks resChan
 
-askBackend :: Learning t arch (Sym t)
-askBackend = Rd.asks backend
-
-askGen :: Learning t arch A.Gen
+askGen :: Learning arch A.Gen
 askGen = Rd.asks gen
 
 -- | Record a learned IORelation into the global environment
-recordLearnedRelation :: (Architecture arch) => Opcode arch (Operand arch) sh -> IORelation arch sh -> Learning t arch ()
+recordLearnedRelation :: (Architecture arch) => Opcode arch (Operand arch) sh -> IORelation arch sh -> Learning arch ()
 recordLearnedRelation op rel = do
   ref <- Rd.asks (learnedRelations . globalLearningEnv)
   liftIO $ STM.atomically $ do
     STM.modifyTVar' ref (MapF.insert op rel)
 
-nextNonce :: Learning t arch Word64
+nextNonce :: Learning arch Word64
 nextNonce = do
   nvar <- Rd.asks nonce
   liftIO $ STM.atomically $ do
@@ -103,7 +97,7 @@ nextNonce = do
     STM.modifyTVar' nvar (+1)
     return nn
 
-nextOpcode :: Learning t arch (Maybe (Some (Opcode arch (Operand arch))))
+nextOpcode :: Learning arch (Maybe (Some (Opcode arch (Operand arch))))
 nextOpcode = do
   wlref <- Rd.asks (worklist . globalLearningEnv)
   liftIO $ STM.atomically $ do
@@ -114,13 +108,10 @@ nextOpcode = do
         STM.writeTVar wlref wl'
         return (Just op)
 
-mkRandomTest :: Learning t arch (ConcreteState arch)
-mkRandomTest = do
-  mkTest <- Rd.asks testGen
-  sym <- askBackend
-  liftIO $ mkTest sym
+mkRandomTest :: Learning arch (ConcreteState arch)
+mkRandomTest = liftIO =<< Rd.asks testGen
 
-askAssembler :: Learning t arch (Instruction arch -> BS.ByteString)
+askAssembler :: Learning arch (Instruction arch -> BS.ByteString)
 askAssembler = Rd.asks (assemble . globalLearningEnv)
 
 data OperandRef arch sh = ImplicitOperand (Some (Location arch))
@@ -179,14 +170,14 @@ mergeIORelations ior1 ior2 =
              , outputs = outputs ior1 `S.union` outputs ior2
              }
 
-newtype Learning t arch a = Learning { runM :: Rd.ReaderT (LocalLearningEnv t arch) IO a }
+newtype Learning arch a = Learning { runM :: Rd.ReaderT (LocalLearningEnv arch) IO a }
   deriving (Functor,
             Applicative,
             Monad,
-            Rd.MonadReader (LocalLearningEnv t arch),
+            Rd.MonadReader (LocalLearningEnv arch),
             MonadIO)
 
-runLearning :: LocalLearningEnv t arch -> Learning t arch a -> IO a
+runLearning :: LocalLearningEnv arch -> Learning arch a -> IO a
 runLearning env a = Rd.runReaderT (runM a) env
 
 data LearningException arch = LearningTimeout (Proxy arch) (Some (Opcode arch (Operand arch)))
@@ -205,11 +196,11 @@ emptyResultIndex = ResultIndex { riExitedWithSignal = M.empty
                                }
 
 -- | Number of microseconds to wait for all results to come in over the channel
-askWaitMicroseconds :: Learning t arch Int
+askWaitMicroseconds :: Learning arch Int
 askWaitMicroseconds = (* 1000000) <$> Rd.asks (resWaitSeconds . globalLearningEnv)
 
 -- | Execute an 'IO' action with a timeout (provided by the 'M' environment)
-timeout :: IO a -> Learning t arch (Maybe a)
+timeout :: IO a -> Learning arch (Maybe a)
 timeout a = do
   ms <- askWaitMicroseconds
   liftIO $ T.timeout ms a

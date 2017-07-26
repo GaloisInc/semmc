@@ -33,6 +33,8 @@ import           Data.Parameterized.Some ( Some )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( KnownNat, Nat, type (+), type (<=) )
 
+import qualified Dismantle.Arbitrary as A
+
 import           Lang.Crucible.BaseTypes ( BaseBVType )
 
 import           SemMC.Architecture ( ArchState, Location, Operand )
@@ -47,6 +49,9 @@ data Value tp where
 deriving instance (KnownNat n) => Show (Value (BaseBVType n))
 deriving instance Eq (Value tp)
 deriving instance Ord (Value tp)
+
+instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
+  arbitrary gen = ValueBV <$> A.arbitrary gen
 
 -- | A view into a location. Could be the whole location.
 --

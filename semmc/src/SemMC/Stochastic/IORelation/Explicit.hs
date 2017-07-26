@@ -27,7 +27,6 @@ import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
 import SemMC.ConcreteState ( ConcreteState )
-import SemMC.Stochastic.Monad ( Sym )
 import SemMC.Stochastic.IORelation.Shared
 import SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R
@@ -41,7 +40,7 @@ generateExplicitInstruction :: (Architecture arch, D.ArbitraryOperands (Opcode a
                             => Proxy arch
                             -> Opcode arch (Operand arch) sh
                             -> [Some (Location arch)]
-                            -> Learning t arch (Instruction arch)
+                            -> Learning arch (Instruction arch)
 generateExplicitInstruction proxy op implicitOperands = do
   g <- askGen
   insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
@@ -57,7 +56,7 @@ generateExplicitInstruction proxy op implicitOperands = do
 classifyExplicitOperands :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                          => Opcode arch (Operand arch) sh
                          -> D.OperandList (Operand arch) sh
-                         -> Learning t arch (IORelation arch sh)
+                         -> Learning arch (IORelation arch sh)
 classifyExplicitOperands op explicitOperands = do
   t0 <- mkRandomTest
   tests <- generateExplicitTestVariants insn t0
@@ -73,7 +72,7 @@ computeIORelation :: (Architecture arch)
                   -> D.OperandList (Operand arch) sh
                   -> [TestBundle (R.TestCase (ConcreteState arch)) (ExplicitFact arch)]
                   -> [R.ResultOrError (ConcreteState arch)]
-                  -> Learning t arch (IORelation arch sh)
+                  -> Learning arch (IORelation arch sh)
 computeIORelation opcode operands bundles results =
   F.foldlM (buildIORelation opcode operands idx) mempty bundles
   where
@@ -90,14 +89,14 @@ computeIORelation opcode operands bundles results =
 --    locations change due to the tagged location, it could be an output -- we
 --    don't know, so don't conclude anything.  Future tests will figure out if
 --    it is an output.
-buildIORelation :: forall arch t sh
+buildIORelation :: forall arch sh
                  . (Architecture arch)
                 => Opcode arch (Operand arch) sh
                 -> D.OperandList (Operand arch) sh
                 -> ResultIndex (ConcreteState arch)
                 -> IORelation arch sh
                 -> TestBundle (R.TestCase (ConcreteState arch)) (ExplicitFact arch)
-                -> Learning t arch (IORelation arch sh)
+                -> Learning arch (IORelation arch sh)
 buildIORelation op explicitOperands ri iorel tb = do
   -- If the set of explicit output locations discovered by this test bundle is
   -- non-empty, then the location mentioned in the learned fact is an input.
@@ -126,7 +125,7 @@ collectExplicitLocations :: (Architecture arch)
                          -> [Some (PairF (D.Index sh) (TypedLocation arch))]
                          -> ResultIndex (ConcreteState arch)
                          -> R.TestCase (ConcreteState arch)
-                         -> Learning t arch (S.Set (Some (D.Index sh)))
+                         -> Learning arch (S.Set (Some (D.Index sh)))
 collectExplicitLocations _opList explicitLocs ri tc = do
   case M.lookup (R.testNonce tc) (riSuccesses ri) of
     Nothing -> return S.empty
@@ -152,11 +151,11 @@ collectExplicitLocations _opList explicitLocs ri tc = do
 --
 -- We learn the *outputs* set by comparing the tweaked input vs the output from
 -- that test vector: all modified registers are in the output set.
-generateExplicitTestVariants :: forall arch t
+generateExplicitTestVariants :: forall arch
                               . (Architecture arch)
                              => Instruction arch
                              -> ConcreteState arch
-                             -> Learning t arch [TestBundle (ConcreteState arch) (ExplicitFact arch)]
+                             -> Learning arch [TestBundle (ConcreteState arch) (ExplicitFact arch)]
 generateExplicitTestVariants i s0 =
   case i of
     D.Instruction opcode operands -> do
@@ -165,7 +164,7 @@ generateExplicitTestVariants i s0 =
     genVar :: forall sh
             . Opcode arch (Operand arch) sh
            -> Some (PairF (D.Index sh) (TypedLocation arch))
-           -> Learning t arch (TestBundle (ConcreteState arch) (ExplicitFact arch))
+           -> Learning arch (TestBundle (ConcreteState arch) (ExplicitFact arch))
     genVar opcode (Some (PairF ix (TL loc))) = do
       cases <- generateVariantsFor s0 opcode ix loc
       return TestBundle { tbTestCases = cases
@@ -190,7 +189,7 @@ generateVariantsFor :: (Architecture arch)
                     -> Opcode arch (Operand arch) sh
                     -> D.Index sh tp
                     -> Location arch (OperandType arch tp)
-                    -> Learning t arch [ConcreteState arch]
+                    -> Learning arch [ConcreteState arch]
 generateVariantsFor s0 _opcode _ix loc = do
   replicateM 20 (withGeneratedValueForLocation loc (\x -> MapF.insert loc x s0))
 

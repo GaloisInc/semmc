@@ -34,16 +34,15 @@ import qualified Data.Parameterized.Nonce as N
 import Data.Parameterized.Some ( Some(..) )
 import Data.Parameterized.Witness ( Witness(..) )
 import qualified Data.Parameterized.Unfold as U
-import qualified Lang.Crucible.Solver.SimpleBackend as SB
 
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
+import SemMC.ConcreteState ( ConcreteState )
 import qualified SemMC.Worklist as WL
 
-import SemMC.Stochastic.Monad ( Sym )
 import SemMC.Stochastic.IORelation.Explicit ( generateExplicitInstruction,
                                               classifyExplicitOperands
                                             )
@@ -56,8 +55,8 @@ data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
                  , lcAssemble :: Instruction arch -> BS.ByteString
-                 , lcTestGen :: forall t . Sym t -> IO (ConcreteState (Sym t) arch)
-                 , lcMachineState :: forall t . () -> R.MachineState (ConcreteState (Sym t) arch)
+                 , lcTestGen :: IO (ConcreteState arch)
+                 , lcMachineState :: R.MachineState (ConcreteState arch)
                  , lcTimeoutSeconds :: Int
                  , lcRemoteHost :: String
                  }
@@ -101,19 +100,17 @@ learnIORelations cfg proxy toFP ops = do
                               , worklist = wlref
                               , learnedRelations = lrref
                               }
-  A.replicateConcurrently_ (lcNumThreads cfg) $ N.withIONonceGenerator $ \ng -> do
+  A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
     rChan <- C.newChan
     logChan <- C.newChan
     ssh <- A.async $ do
-      _ <- R.runRemote (lcRemoteHost cfg) (lcMachineState cfg ()) tChan rChan logChan
+      _ <- R.runRemote (lcRemoteHost cfg) (lcMachineState cfg) tChan rChan logChan
       return ()
     A.link ssh
-    sb <- SB.newSimpleBackend ng
     nref <- STM.newTVarIO 0
     agen <- A.createGen
     let lle = LocalLearningEnv { globalLearningEnv = glv
-                               , backend = sb
                                , gen = agen
                                , nonce = nref
                                , testGen = lcTestGen cfg
@@ -131,7 +128,7 @@ learnIORelations cfg proxy toFP ops = do
 -- This is determined by observing the behavior of instructions on tests and
 -- perturbing inputs randomly.
 learn :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
-      => Learning sym arch ()
+      => Learning arch ()
 learn = do
   mop <- nextOpcode
   case mop of
@@ -144,7 +141,7 @@ learn = do
 testOpcode :: forall arch sym sh
             . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
            => Opcode arch (Operand arch) sh
-           -> Learning sym arch (IORelation arch sh)
+           -> Learning arch (IORelation arch sh)
 testOpcode op = do
   implicitOperands <- findImplicitOperands op
   insn <- generateExplicitInstruction (Proxy :: Proxy arch) op (implicitLocations implicitOperands)

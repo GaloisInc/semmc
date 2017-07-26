@@ -39,10 +39,10 @@ import qualified SemMC.Stochastic.Remote as R
 --
 -- For this, we will want to focus on generating values that trigger edge cases
 -- to make sure we can deal with flags registers.
-findImplicitOperands :: forall t arch sh
+findImplicitOperands :: forall arch sh
                       . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                      => Opcode arch (Operand arch) sh
-                     -> Learning t arch (IORelation arch sh)
+                     -> Learning arch (IORelation arch sh)
 findImplicitOperands op = do
   g <- askGen
   -- We generate 20 random instruction instances with this opcode (and for each
@@ -65,7 +65,7 @@ computeImplicitOperands :: (Architecture arch)
                         => Opcode arch (Operand arch) sh
                         -> [TestBundle (R.TestCase (ConcreteState arch)) (ImplicitFact arch)]
                         -> [R.ResultOrError (ConcreteState arch)]
-                        -> Learning t arch (IORelation arch sh)
+                        -> Learning arch (IORelation arch sh)
 computeImplicitOperands op tests results =
   F.foldlM (buildImplicitRelation op idx) mempty tests
   where
@@ -79,7 +79,7 @@ buildImplicitRelation :: (Architecture arch)
                       -> ResultIndex (ConcreteState arch)
                       -> IORelation arch sh
                       -> TestBundle (R.TestCase (ConcreteState arch)) (ImplicitFact arch)
-                      -> Learning t arch (IORelation arch sh)
+                      -> Learning arch (IORelation arch sh)
 buildImplicitRelation op rix iorel tb = do
   implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix (tbResult tb)) (tbTestCases tb)
   return (iorel <> implicitLocs)
@@ -89,7 +89,7 @@ collectImplicitOutputLocations :: (Architecture arch)
                                -> ResultIndex (ConcreteState arch)
                                -> ImplicitFact arch
                                -> R.TestCase (ConcreteState arch)
-                               -> Learning t arch (IORelation arch sh) -- S.Set (Some (Location arch)))
+                               -> Learning arch (IORelation arch sh) -- S.Set (Some (Location arch)))
 collectImplicitOutputLocations _op rix f tc =
   case M.lookup (R.testNonce tc) (riSuccesses rix) of
     Nothing -> return mempty
@@ -118,21 +118,21 @@ collectImplicitOutputLocations _op rix f tc =
 -- not appear in the register list for changes.
 --
 -- Repeat for a number of random instructions
-generateImplicitTests :: forall arch t
+generateImplicitTests :: forall arch
                        . (Architecture arch)
                       => Instruction arch
                       -> ConcreteState arch
-                      -> Learning t arch [TestBundle (ConcreteState arch) (ImplicitFact arch)]
+                      -> Learning arch [TestBundle (ConcreteState arch) (ImplicitFact arch)]
 generateImplicitTests i s0 = do
   let allLocs = testCaseLocations (Proxy :: Proxy arch) s0
   mapM (genTestForLoc i s0) allLocs
 
-genTestForLoc :: forall arch t
+genTestForLoc :: forall arch
                . (Architecture arch)
               => Instruction arch
               -> ConcreteState arch
               -> Some (Location arch)
-              -> Learning t arch (TestBundle (ConcreteState arch) (ImplicitFact arch))
+              -> Learning arch (TestBundle (ConcreteState arch) (ImplicitFact arch))
 genTestForLoc i s0 (Some loc0) = do
   testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (\x -> MapF.insert loc0 x s0))
   case i of

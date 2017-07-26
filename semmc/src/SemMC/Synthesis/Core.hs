@@ -47,7 +47,7 @@ data SynthesisParams sym arch =
                   }
 
 data SynthesisState sym arch =
-  SynthesisState { synthTests :: [(ArchState sym arch, ArchState sym arch)]
+  SynthesisState { synthTests :: [(ArchState arch (S.SymExpr sym), ArchState arch (S.SymExpr sym))]
                  , synthPrefixes :: Seq.Seq [TemplatedInstructionFormula sym arch]
                  }
 

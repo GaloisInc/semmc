@@ -59,7 +59,7 @@ evalFormula :: (Architecture arch)
             => S.SimpleBuilder t st
             -> Formula (S.SimpleBuilder t st) arch
             -> ArchState arch (S.Elt t)
-            -> IO (ArchState (S.SimpleBuilder t st) arch)
+            -> IO (ArchState arch (S.Elt t))
 evalFormula sym (Formula _ vars defs) input =
   traverseF (replaceLitVars sym (lookupInState sym input) vars) defs
 
@@ -81,7 +81,7 @@ buildEquality' sym (input, output) vars outputLoc expr = do
 buildEquality :: forall arch t st.
                  (Architecture arch)
               => S.SimpleBuilder t st
-              -> (ArchState (S.SimpleBuilder t st) arch, ArchState (S.SimpleBuilder t st) arch)
+              -> (ArchState arch (S.Elt t) , ArchState arch (S.Elt t))
               -> Formula (S.SimpleBuilder t st) arch
               -> IO (S.BoolElt t)
 buildEquality sym test (Formula _ vars defs) = foldlMWithKey f (S.truePred sym) defs
@@ -118,7 +118,7 @@ condenseFormula :: forall t st arch.
                 -> IO (Formula (S.SimpleBuilder t st) arch)
 condenseFormula sym = foldrM (sequenceFormulas sym) emptyFormula
 
-type TestCases sym arch = [(ArchState sym arch, ArchState sym arch)]
+type TestCases sym arch = [(ArchState arch (S.SymExpr sym), ArchState arch (S.SymExpr sym))]
 
 -- TODO: tidy up this type signature
 cegis :: (Architecture arch)
