@@ -30,7 +30,9 @@ import qualified Control.Concurrent.STM as STM
 import           Control.Monad ( replicateM )
 import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
+import qualified Data.Foldable as F
 import qualified Data.Map as Map
+import qualified Data.Set as S
 import           System.FilePath ( (</>), (<.>) )
 
 import qualified Data.EnumF as P
@@ -248,10 +250,15 @@ loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes = do
 
 -- | The worklist consists of all of the opcodes for which we do not already
 -- have a formula (and that we actually want to learn)
-makeWorklist :: [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
-              -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
-              -> WL.Worklist (Some (Opcode arch (Operand arch)))
-makeWorklist allOps knownFormulas = WL.fromList []
+makeWorklist :: (MapF.OrdF (Opcode arch (Operand arch)))
+             => [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
+             -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
+             -> WL.Worklist (Some (Opcode arch (Operand arch)))
+makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
+  where
+    opSet = S.fromList [ Some op | Some (Witness op) <- allOps ]
+    opSet' = F.foldl' removeIfPresent opSet (MapF.keys knownFormulas)
+    removeIfPresent s sop = S.delete sop s
 
 {-
 
