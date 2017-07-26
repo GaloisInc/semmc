@@ -215,7 +215,7 @@ data Config arch =
          -- ^ The number of random tests to generate
          , threadCount :: Int
          , remoteHost :: String
-         , machineState :: () -> R.MachineState (ConcreteState arch)
+         , machineState :: R.MachineState (ConcreteState arch)
          }
 
 loadInitialState :: (Architecture arch,
