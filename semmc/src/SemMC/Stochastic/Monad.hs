@@ -235,14 +235,11 @@ loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes = do
   wlref <- STM.newTVarIO (makeWorklist targetOpcodes initialFormulas)
   randomTests <- replicateM (randomTestCount cfg) genTest
   testref <- STM.newTVarIO (interestingTests ++ randomTests)
---  gen <- A.createGen
   symVar <- STM.newTMVarIO sym
   statsThread <- S.newStatisticsThread (statisticsFile cfg)
   return SynEnv { seFormulas = fref
                 , seTestCases = testref
                 , seWorklist = wlref
---                , seAllOpcodes = allOpcodes
-                -- , seRandomGen = gen
                 , seSymBackend = symVar
                 , seConfig = cfg
                 , seStatsThread = statsThread
