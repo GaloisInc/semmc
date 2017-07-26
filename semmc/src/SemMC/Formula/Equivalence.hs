@@ -1,15 +1,18 @@
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
+
 module SemMC.Formula.Equivalence
   ( EquivalenceResult(..)
   , checkSatZ3
   , formulasEquiv
+  , formulasEquivConcrete
   ) where
 
 import           Control.Monad.IO.Class ( liftIO )
@@ -19,9 +22,11 @@ import           Data.Parameterized.Some
 import           Data.Parameterized.Classes
 import           Data.Parameterized.TraversableF
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.NatRepr ( withKnownNat )
 import qualified Data.Set as Set
 import           System.IO ( stderr )
 
+import           Lang.Crucible.BaseTypes
 import           Lang.Crucible.Config ( initialConfig )
 import           Lang.Crucible.Solver.Adapter
 import qualified Lang.Crucible.Solver.Interface as S
@@ -33,21 +38,49 @@ import           Lang.Crucible.Solver.SimpleBuilder
 import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
 
 import           SemMC.Architecture
+import           SemMC.ConcreteState ( Value(..) )
 import           SemMC.Formula.Formula
 import           SemMC.Formula.Instantiate
 import           SemMC.Util
 
-data EquivalenceResult sym arch = Equivalent
-                                | Mismatching
-                                | DifferentBehavior (ArchState sym arch)
-deriving instance (ShowF (Location arch), ShowF (S.SymExpr sym)) => Show (EquivalenceResult sym arch)
+data EquivalenceResult arch ex = Equivalent
+                               | Mismatching
+                               | DifferentBehavior (ArchState arch ex)
+deriving instance (ShowF (Location arch), ShowF ex) => Show (EquivalenceResult arch ex)
 
-formulasEquiv :: (Architecture arch)
+formulasEquiv :: forall arch t.
+                 (Architecture arch)
               => SimpleBackend t
               -> Formula (SimpleBackend t) arch
               -> Formula (SimpleBackend t) arch
-              -> IO (EquivalenceResult (SimpleBackend t) arch)
-formulasEquiv
+              -> IO (EquivalenceResult arch (Elt t))
+formulasEquiv sym =
+  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (Elt t tp)
+      eval (GroundEvalFn evalFn) e = groundValToExpr sym (S.exprType e) =<< evalFn e
+  in formulasEquiv' eval sym
+
+formulasEquivConcrete :: forall arch t.
+                         (Architecture arch)
+                      => SimpleBackend t
+                      -> Formula (SimpleBackend t) arch
+                      -> Formula (SimpleBackend t) arch
+                      -> IO (EquivalenceResult arch Value)
+formulasEquivConcrete =
+  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (Value tp)
+      eval (GroundEvalFn evalFn) e =
+        case S.exprType e of
+          BaseBVRepr w -> withKnownNat w (ValueBV . fromInteger <$> evalFn e)
+          _ -> error "formulasEquivConcrete: only BVs supported"
+  in formulasEquiv' eval
+
+formulasEquiv' :: (Architecture arch)
+               => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
+               -> SimpleBackend t
+               -> Formula (SimpleBackend t) arch
+               -> Formula (SimpleBackend t) arch
+               -> IO (EquivalenceResult arch ex)
+formulasEquiv'
+  eval
   sym
   f1@(Formula {formUses = uses1, formDefs = defs1})
   f2@(Formula {formUses = uses2, formDefs = defs2}) =
@@ -56,15 +89,17 @@ formulasEquiv
           -- need to turn it into a list first.
           mapFKeys defs1 == mapFKeys defs2)
   then return Mismatching
-  else formulasEquiv' sym f1 f2
+  else formulasEquiv'' eval sym f1 f2
 
-formulasEquiv' :: forall t arch.
-                  (Architecture arch)
-               => SimpleBackend t
-               -> Formula (SimpleBackend t) arch
-               -> Formula (SimpleBackend t) arch
-               -> IO (EquivalenceResult (SimpleBackend t) arch)
-formulasEquiv'
+formulasEquiv'' :: forall t arch ex.
+                   (Architecture arch)
+                => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
+                -> SimpleBackend t
+                -> Formula (SimpleBackend t) arch
+                -> Formula (SimpleBackend t) arch
+                -> IO (EquivalenceResult arch ex)
+formulasEquiv''
+  eval
   sym
   (Formula {formParamVars = bvars1, formDefs = defs1})
   (Formula {formParamVars = bvars2, formDefs = defs2}) =
@@ -104,11 +139,9 @@ formulasEquiv'
     -- ~((d1 = d1') /\ ... /\ (dm = dm'))
     testExpr <- S.notPred sym allDefsEqual
 
-    let handler (Sat (GroundEvalFn evalFn, _)) = do
+    let handler (Sat (evalFn, _)) = do
           -- Extract the failing test case.
-          let eval :: forall tp. Location arch tp -> Elt t tp -> IO (Elt t tp)
-              eval loc e = groundValToExpr sym (locationType loc) =<< evalFn e
-          DifferentBehavior <$> MapF.traverseWithKey eval varConstants
+          DifferentBehavior <$> traverseF (eval evalFn) varConstants
         handler Unsat = return Equivalent
         handler Unknown = fail "Got Unknown result when checking sat-ness"
 

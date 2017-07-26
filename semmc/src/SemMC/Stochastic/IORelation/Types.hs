@@ -50,6 +50,7 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
+import SemMC.ConcreteState ( ConcreteState )
 import SemMC.Stochastic.Monad ( Sym )
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
@@ -64,21 +65,21 @@ data GlobalLearningEnv arch =
 
 data LocalLearningEnv t arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
-                   , testChan :: C.Chan (Maybe (R.TestCase (ArchState (Sym t) arch)))
-                   , resChan :: C.Chan (R.ResultOrError (ArchState (Sym t) arch))
+                   , testChan :: C.Chan (Maybe (R.TestCase (ConcreteState arch)))
+                   , resChan :: C.Chan (R.ResultOrError (ConcreteState arch))
                    , backend :: Sym t
                    , gen :: A.Gen
-                   , testGen :: Sym t -> IO (ArchState (Sym t) arch)
+                   , testGen :: Sym t -> IO (ConcreteState arch)
                    -- ^ The test generator is part of local state because it
                    -- might not be thread safe.  Be sure to allocate one per
                    -- runner.
                    , nonce :: STM.TVar Word64
                    }
 
-askTestChan :: Learning t arch (C.Chan (Maybe (R.TestCase (ArchState (Sym t) arch))))
+askTestChan :: Learning t arch (C.Chan (Maybe (R.TestCase (ConcreteState arch))))
 askTestChan = Rd.asks testChan
 
-askResultChan :: Learning t arch (C.Chan (R.ResultOrError (ArchState (Sym t) arch)))
+askResultChan :: Learning t arch (C.Chan (R.ResultOrError (ConcreteState arch)))
 askResultChan = Rd.asks resChan
 
 askBackend :: Learning t arch (Sym t)
@@ -113,7 +114,7 @@ nextOpcode = do
         STM.writeTVar wlref wl'
         return (Just op)
 
-mkRandomTest :: Learning t arch (ArchState (Sym t) arch)
+mkRandomTest :: Learning t arch (ConcreteState arch)
 mkRandomTest = do
   mkTest <- Rd.asks testGen
   sym <- askBackend

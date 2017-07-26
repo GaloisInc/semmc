@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC
                        SemMC.Architecture
+                       SemMC.ConcreteState
                        SemMC.Formula
                        SemMC.Formula.Env
                        SemMC.Formula.Equivalence

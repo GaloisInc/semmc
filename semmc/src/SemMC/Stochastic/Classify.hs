@@ -17,10 +17,11 @@ import qualified Data.Set as S
 
 import qualified Dismantle.Instruction as I
 
-import SemMC.Architecture ( ArchState, Instruction, Architecture )
+import SemMC.Architecture ( Instruction, Architecture )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
+import SemMC.ConcreteState ( ConcreteState, Value )
 import SemMC.Stochastic.Monad
 
 -- | A set of equivalence classes of programs
@@ -97,7 +98,7 @@ classifyByClass p eqs klasses =
 
 -- | Remove the programs in the equivalence classes that do not have the same
 -- output on the counterexample as the target instruction
-removeInvalidPrograms :: ArchState (Sym t) arch -> EquivalenceClasses arch -> Syn t arch (EquivalenceClasses arch)
+removeInvalidPrograms :: ConcreteState arch -> EquivalenceClasses arch -> Syn t arch (EquivalenceClasses arch)
 removeInvalidPrograms = undefined
 
 -- | Heuristically-choose the best equivalence class
@@ -148,9 +149,9 @@ programFormula sym insns = do
 -- | Use an SMT solver to check if two programs are equivalent.
 --
 -- If they are not, return an input that demonstrates the difference.
-testEquivalence :: (Architecture arch) => [Instruction arch] -> [Instruction arch] -> Syn t arch (F.EquivalenceResult (Sym t) arch)
+testEquivalence :: (Architecture arch) => [Instruction arch] -> [Instruction arch] -> Syn t arch (F.EquivalenceResult arch Value)
 testEquivalence p representative = do
   sym <- askSymBackend
   pf <- programFormula sym p
   repFormula <- programFormula sym representative
-  liftIO $ F.formulasEquiv sym pf repFormula
+  liftIO $ F.formulasEquivConcrete sym pf repFormula

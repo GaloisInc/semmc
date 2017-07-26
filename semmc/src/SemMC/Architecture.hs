@@ -73,7 +73,7 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   -- | Default value for this location. Typically something like 0.
   defaultLocationExpr :: (S.IsExprBuilder sym) => sym -> a tp -> IO (S.SymExpr sym tp)
 
-type ArchState sym arch = MapF.MapF (Location arch) (S.SymExpr sym)
+type ArchState arch ex = MapF.MapF (Location arch) ex
 
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.

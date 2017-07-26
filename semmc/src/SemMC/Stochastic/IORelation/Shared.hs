@@ -21,25 +21,27 @@ import qualified Control.Monad.Catch as E
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Map.Strict as M
 import Data.Proxy ( Proxy(..) )
+import qualified Data.Word.Indexed as W
 
 import qualified Data.Parameterized.Map as MapF
+import Data.Parameterized.NatRepr ( NatRepr, withKnownNat )
 import Data.Parameterized.Some ( Some(..) )
 import qualified Lang.Crucible.BaseTypes as S
-import qualified Lang.Crucible.Solver.Interface as S
 
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
-import SemMC.Stochastic.Monad ( Sym )
+import SemMC.ConcreteState ( ConcreteState, Value(..) )
+
 import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.IORelation.Types
 
 withTestResults :: forall a f t arch sh
                  . (Architecture arch)
                 => Opcode arch (Operand arch) sh
-                -> [TestBundle (R.TestCase (ArchState (Sym t) arch)) f]
-                -> ([R.ResultOrError (ArchState (Sym t) arch)] -> Learning t arch a)
+                -> [TestBundle (R.TestCase (ConcreteState arch)) f]
+                -> ([R.ResultOrError (ConcreteState arch)] -> Learning t arch a)
                 -> Learning t arch a
 withTestResults op tests k = do
   tchan <- askTestChan
@@ -54,20 +56,20 @@ withTestResults op tests k = do
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
 wrapTestBundle :: (Architecture arch)
                => Instruction arch
-               -> TestBundle (ArchState (Sym t) arch) f
-               -> Learning t arch (TestBundle (R.TestCase (ArchState (Sym t) arch)) f)
+               -> TestBundle (ConcreteState arch) f
+               -> Learning t arch (TestBundle (R.TestCase (ConcreteState arch)) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
   return TestBundle { tbTestCases = cases
                     , tbResult = tbResult tb
                     }
 
--- | Take a test bundle of raw tests ('ArchState (Sym t) arch') and convert the
+-- | Take a test bundle of raw tests ('ConcreteState (Sym t) arch') and convert the
 -- raw tests to 'R.TestCase' by allocating a nonce
 makeTestCase :: (Architecture arch)
              => Instruction arch
-             -> ArchState (Sym t) arch
-             -> Learning t arch (R.TestCase (ArchState (Sym t) arch))
+             -> ConcreteState arch
+             -> Learning t arch (R.TestCase (ConcreteState arch))
 makeTestCase i c = do
   tid <- nextNonce
   asm <- askAssembler
@@ -109,7 +111,7 @@ instructionRegisterOperands proxy operands =
 -- | Return all of the locations referenced in the architecture state
 testCaseLocations :: (Architecture arch)
                   => proxy arch
-                  -> ArchState (Sym t) arch
+                  -> ConcreteState arch
                   -> [Some (Location arch)]
 testCaseLocations _ = MapF.foldrWithKey getKeys []
   where
@@ -118,15 +120,13 @@ testCaseLocations _ = MapF.foldrWithKey getKeys []
 withGeneratedValueForLocation :: forall arch tp a t
                                . (Architecture arch)
                               => Location arch tp
-                              -> (S.SymExpr (Sym t) tp -> a)
+                              -> (Value tp -> a)
                               -> Learning t arch a
 withGeneratedValueForLocation loc k = do
-  sym <- askBackend
   g <- askGen
   case locationType loc of
-    S.BaseBVRepr w -> do
-      randomInt :: Int
-                <- liftIO (A.uniform g)
-      bv <- liftIO $ S.bvLit sym w (fromIntegral randomInt)
-      return (k bv)
+    S.BaseBVRepr (wVal :: NatRepr w) -> withKnownNat wVal $ do
+      randomWord :: W.W w
+                <- liftIO (A.arbitrary g)
+      return (k (ValueBV randomWord))
     repr -> error ("Unsupported base type repr in withGeneratedValueForLocation: " ++ show repr)

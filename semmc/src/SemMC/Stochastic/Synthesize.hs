@@ -19,7 +19,8 @@ import           GHC.Exts ( IsList(..) )
 import           Dismantle.Arbitrary as D
 import           Dismantle.Instruction.Random as D
 
-import           SemMC.Architecture ( ArchState, Instruction )
+import           SemMC.Architecture ( Instruction )
+import           SemMC.ConcreteState ( ConcreteState )
 import           SemMC.Stochastic.Monad
 
 -- | Attempt to stochastically find a program in terms of the base set that has
@@ -91,7 +92,7 @@ chooseNextCandidate target candidate cost candidate' = do
 -- (are live) for the target.
 compareTargetToCandidate :: Instruction arch
                          -> Candidate arch
-                         -> ArchState (Sym t) arch
+                         -> ConcreteState arch
                          -> Syn t arch Double
 compareTargetToCandidate target candidate test = do
   undefined "run candidate on test state and compare with result of running target on test state"
@@ -106,7 +107,7 @@ compareTargetToCandidate target candidate test = do
 -- cache the result of evaluating the target on them (if being network
 -- bound by SSH traffic to the eval oracle doesn't turn out to be the
 -- dominating cost).
-type Test t arch = ArchState (Sym t) arch
+type Test arch = ConcreteState arch
 
 -- | The initial tests, including random tests and "heuristically
 -- interesting" tests.
@@ -114,7 +115,7 @@ type Test t arch = ArchState (Sym t) arch
 -- During synthesis these tests get augmented by new tests discovered
 -- by the SMT solver that distinguish candidates that are equal on all
 -- tests so far.
-generateInitialTests :: Instruction arch -> Syn t arch [Test t arch]
+generateInitialTests :: Instruction arch -> Syn t arch [Test arch]
 generateInitialTests target = undefined
 
 -- | A candidate program.

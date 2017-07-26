@@ -44,13 +44,14 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
-import           SemMC.Architecture ( ArchState, Architecture, Opcode, Operand )
+import           SemMC.Architecture ( Architecture, Opcode, Operand )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
 import           SemMC.Util ( makeSymbol )
 import qualified SemMC.Worklist as WL
 
+import           SemMC.ConcreteState ( ConcreteState )
 import qualified SemMC.Stochastic.Statistics as S
 
 -- | Symbolic something?
@@ -62,7 +63,7 @@ data SynEnv t arch =
          -- ^ All of the known formulas (base set + learned set)
          , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
          -- ^ Work items
-         , seTestCases :: STM.TVar [ArchState (Sym t) arch]
+         , seTestCases :: STM.TVar [ConcreteState arch]
          -- ^ All of the test cases we have accumulated.  This includes a set of
          -- initial heuristically interesting tests, as well as a set of ~1000
          -- random tests.  It also includes counterexamples learned during
@@ -138,11 +139,11 @@ askGen = R.asks seRandomGen
 askSymBackend :: Syn t arch (Sym t)
 askSymBackend = R.asks seSymBackend
 
-askTestCases :: Syn t arch [ArchState (Sym t) arch]
+askTestCases :: Syn t arch [ConcreteState arch]
 askTestCases = R.asks seTestCases >>= (liftIO . STM.readTVarIO)
 
 -- | Add a counterexample test case to the set of tests
-addTestCase :: ArchState (Sym t) arch -> Syn t arch ()
+addTestCase :: ConcreteState arch -> Syn t arch ()
 addTestCase tc = do
   testref <- R.asks seTestCases
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
@@ -192,9 +193,9 @@ loadInitialState :: (Architecture arch,
                      D.ArbitraryOperands (Opcode arch) (Operand arch))
                  => Config
                  -> Sym t
-                 -> IO (ArchState (Sym t) arch)
+                 -> IO (ConcreteState arch)
                  -- ^ A generator of random test cases
-                 -> [ArchState (Sym t) arch]
+                 -> [ConcreteState arch]
                  -- ^ Heuristically-interesting test cases
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -- ^ All possible opcodes

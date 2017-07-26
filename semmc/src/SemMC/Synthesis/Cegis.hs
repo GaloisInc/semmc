@@ -58,7 +58,7 @@ lookupInState sym st loc = maybe (defaultLocationExpr sym loc) return $ MapF.loo
 evalFormula :: (Architecture arch)
             => S.SimpleBuilder t st
             -> Formula (S.SimpleBuilder t st) arch
-            -> ArchState (S.SimpleBuilder t st) arch
+            -> ArchState arch (S.Elt t)
             -> IO (ArchState (S.SimpleBuilder t st) arch)
 evalFormula sym (Formula _ vars defs) input =
   traverseF (replaceLitVars sym (lookupInState sym input) vars) defs
