@@ -4,22 +4,29 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module SemMC.Stochastic.Strata (
+  SynEnv,
   Config(..),
-  strata
+  loadInitialState,
+  stratifiedSynthesis
   ) where
 
+import qualified Control.Concurrent as C
+import qualified Control.Concurrent.Async as A
+import qualified Control.Concurrent.STM as STM
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 
+import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture ( Architecture, Instruction, Opcode, Operand, Location )
 import qualified SemMC.Formula as F
 
 import qualified SemMC.Stochastic.Classify as C
+import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Generalize ( generalize )
 import SemMC.Stochastic.Monad
 import SemMC.Stochastic.Synthesize ( synthesize )
@@ -32,6 +39,25 @@ environment to multiple threads running the strata function.  Key point: the
 caller controls the number and placement of threads.
 
 -}
+
+stratifiedSynthesis :: (Architecture arch, SynC arch, Ord (Instruction arch))
+                    => SynEnv t arch
+                    -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+stratifiedSynthesis env0 = do
+  A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
+    gen <- A.createGen
+    let localEnv = LocalSynEnv { seGlobalEnv = env0
+                               , seRandomGen = gen
+                               }
+    tChan <- C.newChan
+    rChan <- C.newChan
+    logChan <- C.newChan
+    ssh <- A.async $ do
+      _ <- R.runRemote (remoteHost (seConfig env0)) (machineState (seConfig env0) ()) tChan rChan logChan
+      return ()
+    A.link ssh
+    runSyn localEnv strata
+  STM.readTVarIO (seFormulas env0)
 
 strata :: (Architecture arch, SynC arch, Ord (Instruction arch))
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))

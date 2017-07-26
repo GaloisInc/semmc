@@ -150,7 +150,7 @@ programFormula sym insns = do
 -- If they are not, return an input that demonstrates the difference.
 testEquivalence :: (Architecture arch) => [Instruction arch] -> [Instruction arch] -> Syn t arch (F.EquivalenceResult (Sym t) arch)
 testEquivalence p representative = do
-  sym <- askSymBackend
-  pf <- programFormula sym p
-  repFormula <- programFormula sym representative
-  liftIO $ F.formulasEquiv sym pf repFormula
+  withSymBackend $ \sym -> do
+    pf <- programFormula sym p
+    repFormula <- programFormula sym representative
+    liftIO $ F.formulasEquiv sym pf repFormula
