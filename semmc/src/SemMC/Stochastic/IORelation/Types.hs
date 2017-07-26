@@ -200,7 +200,7 @@ emptyResultIndex = ResultIndex { riExitedWithSignal = M.empty
 askWaitMicroseconds :: Learning arch Int
 askWaitMicroseconds = (* 1000000) <$> Rd.asks (resWaitSeconds . globalLearningEnv)
 
--- | Execute an 'IO' action with a timeout (provided by the 'M' environment)
+-- | Execute an 'IO' action with a timeout (provided by the 'Learning' environment)
 timeout :: IO a -> Learning arch (Maybe a)
 timeout a = do
   ms <- askWaitMicroseconds
