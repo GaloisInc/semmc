@@ -98,6 +98,7 @@ data LocalSynEnv t arch =
 
 -- Synthesis constraints.
 type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
+                 , P.OrdF (Operand arch)
                  , D.ArbitraryOperand (Operand arch)
                  , D.ArbitraryOperands (Opcode arch) (Operand arch)
                  , Ord (Instruction arch)

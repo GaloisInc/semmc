@@ -1,5 +1,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -14,21 +15,27 @@ import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import Control.Monad.Trans ( liftIO )
+import qualified Data.Foldable as F
+import Data.Monoid
+import Data.Proxy ( Proxy(..) )
+import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import SemMC.Architecture ( Architecture, Instruction, Opcode, Operand, Location )
+import SemMC.Architecture ( Architecture(..), Instruction, Opcode, Operand, Location )
 import qualified SemMC.Formula as F
 import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
 import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Generalize ( generalize )
+import SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 import SemMC.Stochastic.Monad
 import SemMC.Stochastic.Synthesize ( synthesize )
 
@@ -137,18 +144,51 @@ buildFormula = undefined
 
 -- | Generate an arbitrary instruction for the given opcode.
 --
--- Note that this function should strive to avoid operands that are distinct
--- from any implicit operands.  It may also want to ensure that registers are
--- not reused.  To do that, we'll need to pass in the set of input locations
+-- Note that this function should strive to avoid generating instructions with
+-- explicit operands that overlap with implicit operands.  It should also avoid
+-- generating instructions that re-use registers.
 --
 -- We'll also want to return a mapping from locations to input values to be used
 -- to inform the initial state generation.
-instantiateInstruction :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
+instantiateInstruction :: forall arch sh t
+                        . (Architecture arch, SynC arch)
                        => Opcode arch (Operand arch) sh
                        -> Syn t arch (Instruction arch)
 instantiateInstruction op = do
   gen <- askGen
   Just iorel <- opcodeIORelation op
-  target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
-  return target
+  go gen (implicitOperands iorel)
+  where
+    -- Generate random instructions until we get one with explicit operands that
+    -- do not overlap with implicit operands.
+    go :: A.Gen -> S.Set (Some (Location arch)) -> Syn t arch (Instruction arch)
+    go gen implicitOps = do
+      target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
+      case target of
+        D.Instruction op' ops
+          | Just MapF.Refl <- MapF.testEquality op op'
+          , fst (D.foldrOperandList (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops) ->
+            go gen implicitOps
+          | otherwise -> return target
 
+isImplicitOrReusedOperand :: (Architecture arch, SynC arch)
+                          => Proxy arch
+                          -> S.Set (Some (Location arch))
+                          -> ix
+                          -> Operand arch tp
+                          -> (Bool, S.Set (Some (Operand arch)))
+                          -> (Bool, S.Set (Some (Operand arch)))
+isImplicitOrReusedOperand proxy implicitLocs _ix operand (isIorR, seen)
+  | isIorR || S.member (Some operand) seen = (True, seen)
+  | Just loc <- operandToLocation proxy operand
+  , S.member (Some loc) implicitLocs = (True, seen)
+  | otherwise = (isIorR, S.insert (Some operand) seen)
+
+implicitOperands :: (Architecture arch) => IORelation arch sh -> S.Set (Some (Location arch))
+implicitOperands iorel =
+  F.foldl' addImplicitLoc S.empty (inputs iorel <> outputs iorel)
+  where
+    addImplicitLoc s opref =
+      case opref of
+        ImplicitOperand sloc -> S.insert sloc s
+        OperandRef {} -> s
