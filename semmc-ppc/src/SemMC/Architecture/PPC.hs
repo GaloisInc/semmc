@@ -18,6 +18,8 @@ module SemMC.Architecture.PPC
   , loadBaseSet
   ) where
 
+import qualified GHC.Err.Located as L
+
 import           Data.Bits ( shiftL )
 import           Data.EnumF ( EnumF(..) )
 import           Data.Foldable ( foldrM )
@@ -46,6 +48,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.ConcreteState as CS
 import           SemMC.Formula
 import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
@@ -574,3 +577,39 @@ loadBaseSet sym = do
                           , Some (Witness PPC.SUBF)
                           , Some (Witness PPC.XOR)
                           ]
+
+instance CS.ConcreteArchitecture PPC where
+  operandToView _proxy op = do
+    loc <- operandToLocation op
+    case loc of
+      LocGPR {} -> return (Some (CS.trivialView loc))
+      LocIP {} -> return (Some (CS.trivialView loc))
+      LocMSR {} -> return (Some (CS.trivialView loc))
+      LocCTR {} -> return (Some (CS.trivialView loc))
+      LocLNK {} -> return (Some (CS.trivialView loc))
+      LocXER {} -> return (Some (CS.trivialView loc))
+      LocCR {} -> return (Some (CS.trivialView loc))
+      LocFPSCR {} -> return (Some (CS.trivialView loc))
+      LocVR {} -> return (Some (CS.trivialView loc))
+      LocMem {} -> L.error "PPC memory support in progress"
+      LocFR (PPC.FR rno) ->
+        let frSlice :: CS.Slice 64 128
+            frSlice = CS.Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
+        in return (Some (CS.View frSlice (LocVR (PPC.VR rno))))
+  congruentViews _proxy v =
+    case v of
+      CS.View s (LocGPR (PPC.GPR rno)) ->
+        [ CS.View s (LocGPR (PPC.GPR rno'))
+        | rno' <- [0..31]
+        , rno /= rno'
+        ]
+      CS.View s (LocVR (PPC.VR rno)) ->
+        [ CS.View s (LocVR (PPC.VR rno'))
+        | rno' <- [0..31]
+        , rno /= rno'
+        ]
+      -- There are no views of LocFR.  The other registers all have no alternatives
+      --
+      -- FIXME: Are there alternatives to memory?
+      _ -> []
+
