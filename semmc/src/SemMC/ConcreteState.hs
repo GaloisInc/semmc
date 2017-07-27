@@ -28,8 +28,7 @@ module SemMC.ConcreteState
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR )
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust )
-import           Data.Proxy ( Proxy(..) )
-import           Data.Parameterized.Classes ( OrdF )
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr ( NatRepr, widthVal, knownNat )
 import           Data.Parameterized.Some ( Some )
@@ -165,25 +164,25 @@ class (Architecture arch) => ConcreteArchitecture arch where
   --
   -- Useful for perturbing a machine state when computing the IO
   -- relation for an instruction?
-  operandToView :: Proxy arch -> Operand arch sh -> Maybe (Some (View arch))
+  operandToView :: proxy arch -> Operand arch sh -> Maybe (Some (View arch))
 
   -- | Return the other places where we should look for our target
   -- values in the candidate's out state.
-  congruentViews :: Proxy arch -> View arch n -> [View arch n]
+  congruentViews :: proxy arch -> View arch n -> [View arch n]
 
   -- | Construct a complete state with all locations set to zero
   --
   -- This is a useful starting point for constructing a desired state to ensure
   -- that all locations are filled in.
-  zeroState :: Proxy arch -> ConcreteState arch
+  zeroState :: proxy arch -> ConcreteState arch
 
   -- | Generate a completely random state
   --
   -- The random state has all locations filled in
-  randomState :: Proxy arch -> A.Gen -> IO (ConcreteState arch)
+  randomState :: proxy arch -> A.Gen -> IO (ConcreteState arch)
 
   -- | Convert a 'ConcreteState' into a 'B.ByteString'
-  serialize :: Proxy arch -> ConcreteState arch -> B.ByteString
+  serialize :: proxy arch -> ConcreteState arch -> B.ByteString
 
   -- | Try to convert a 'B.ByteString' into a 'ConcreteState'
-  deserialize :: Proxy arch -> B.ByteString -> Maybe (ConcreteState arch)
+  deserialize :: proxy arch -> B.ByteString -> Maybe (ConcreteState arch)
