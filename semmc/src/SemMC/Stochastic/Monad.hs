@@ -11,6 +11,7 @@ module SemMC.Stochastic.Monad (
   loadInitialState,
   runSyn,
   Config(..),
+  Test,
   -- * Operations
   askGen,
   askBaseSet,

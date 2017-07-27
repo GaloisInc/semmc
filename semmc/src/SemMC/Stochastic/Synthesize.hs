@@ -23,7 +23,6 @@ import           Dismantle.Arbitrary as D
 import           Dismantle.Instruction.Random as D
 
 import           SemMC.Architecture ( Instruction )
-import           SemMC.ConcreteState ( ConcreteState )
 import qualified SemMC.ConcreteState as C
 import           SemMC.Stochastic.Monad
 
