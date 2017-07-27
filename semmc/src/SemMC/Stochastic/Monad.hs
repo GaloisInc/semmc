@@ -58,7 +58,7 @@ import           SemMC.Symbolic ( Sym )
 import           SemMC.Util ( makeSymbol )
 import qualified SemMC.Worklist as WL
 
-import           SemMC.ConcreteState ( ConcreteState )
+import           SemMC.ConcreteState ( ConcreteArchitecture, ConcreteState )
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Stochastic.Statistics as S
@@ -102,7 +102,8 @@ type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
                  , D.ArbitraryOperand (Operand arch)
                  , D.ArbitraryOperands (Opcode arch) (Operand arch)
                  , Ord (Instruction arch)
-                 , P.EnumF (Opcode arch (Operand arch)) )
+                 , P.EnumF (Opcode arch (Operand arch))
+                 , ConcreteArchitecture arch )
 
 -- Synthesis monad.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }

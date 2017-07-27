@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Description: Synthesize a program that implements a target instruction.
 --
 -- Stochastic synthesis as described in the STOKE and STRATA papers.
@@ -13,14 +14,17 @@ module SemMC.Stochastic.Synthesize ( synthesize ) where
 import           Control.Monad ( join )
 import           Control.Monad.Trans ( liftIO )
 import           Data.Maybe ( catMaybes )
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as S
 import           GHC.Exts ( IsList(..) )
 
+import           Data.Parameterized.Some ( Some(..) )
 import           Dismantle.Arbitrary as D
 import           Dismantle.Instruction.Random as D
 
 import           SemMC.Architecture ( Instruction )
 import           SemMC.ConcreteState ( ConcreteState )
+import qualified SemMC.ConcreteState as C
 import           SemMC.Stochastic.Monad
 
 -- | Attempt to stochastically find a program in terms of the base set that has
@@ -62,7 +66,8 @@ mcmcSynthesizeOne target = do
 -- This includes an optimization from the paper where we compute
 -- the cost of the new candidate incrementally and stop as soon as
 -- we know it's too expensive [STOKE Section 4.5].
-chooseNextCandidate :: Instruction arch
+chooseNextCandidate :: SynC arch
+                    => Instruction arch
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
@@ -85,17 +90,75 @@ chooseNextCandidate target candidate cost candidate' = do
 
     beta = 0.1 -- STOKE Figure 10.
 
+----------------------------------------------------------------
+
 -- | Compute the cost, in terms of mismatch, of the candidate compared
 -- to the target. STOKE Section 4.6.
 --
 -- TODO: We'd like to only compare the parts of the state that matter
 -- (are live) for the target.
-compareTargetToCandidate :: Instruction arch
+compareTargetToCandidate :: forall arch t.
+                            SynC arch
+                         => Instruction arch
                          -> Candidate arch
-                         -> ConcreteState arch
+                         -> Test arch
                          -> Syn t arch Double
 compareTargetToCandidate target candidate test = do
-  undefined "run candidate on test state and compare with result of running target on test state"
+  let candidateProg = catMaybes . toList $ candidate
+  let targetProg = [target]
+  -- TODO: cache result of running target on test, since it never
+  -- changes. An easy way to do this is to change the definition of
+  -- test to be a pair of a start state and the end state for the
+  -- start state when running the target.
+  candidateSt <- runTest test candidateProg
+  targetSt    <- runTest test targetProg
+  -- This will be part of the Reader state.
+  let liveOut = getOutMasks target
+  let p = Proxy :: Proxy arch
+  let weight = compareTargetOutToCandidateOut p liveOut targetSt candidateSt
+  return weight
+  where
+    runTest :: Test arch -> [Instruction arch] -> Syn t arch (C.ConcreteState arch)
+    runTest = undefined
+
+    -- | The locations that are live out for the target instruction.
+    --
+    -- Assuming this is learned, we probably want it cached in the
+    -- monad. Also, tristan's IORelation stuff might already do this.
+    getOutMasks :: Instruction arch -> C.OutMasks arch
+    getOutMasks = undefined
+
+-- Sum the weights of all test outputs.
+compareTargetOutToCandidateOut :: forall arch.
+                                  SynC arch
+                               => Proxy arch
+                               -> C.OutMasks arch
+                               -> C.ConcreteState arch
+                               -> C.ConcreteState arch
+                               -> Double
+compareTargetOutToCandidateOut arch masks targetSt candidateSt =
+  sum [ weighBestMatch arch mask targetSt candidateSt
+      | Some mask <- masks ]
+
+-- Find the number-of-bits error in the best match, penalizing matches
+-- that are in the wrong location.
+weighBestMatch :: forall arch n.
+                  SynC arch
+               => Proxy arch
+               -> C.OutMask arch n
+               -> C.ConcreteState arch
+               -> C.ConcreteState arch
+               -> Double
+weighBestMatch arch (C.OutMask view diff) targetSt candidateSt =
+  minimum $ [ weigh (C.peekMS candidateSt view) ] ++
+            [ weigh (C.peekMS candidateSt view') + penalty
+            | view' <- C.congruentViews arch view ]
+  where
+    targetVal = C.peekMS targetSt view
+    penalty = 3 -- STOKE Figure 10.
+    weigh candidateVal = fromIntegral $ diff targetVal candidateVal
+
+----------------------------------------------------------------
 
 -- | A test here is an initial machine state.
 --
