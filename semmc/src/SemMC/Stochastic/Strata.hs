@@ -120,27 +120,29 @@ strataOneLoop op instr eqclasses = do
             Just <$> finishStrataOne op instr eqclasses'
           | otherwise -> strataOneLoop op instr eqclasses'
 
-finishStrataOne :: Opcode arch (Operand arch) sh
+finishStrataOne :: (Architecture arch)
+                => Opcode arch (Operand arch) sh
                 -> Instruction arch
                 -> C.EquivalenceClasses arch
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
   bestClass <- C.chooseClass eqclasses
   prog <- C.chooseProgram bestClass
-  buildFormula op instr undefined prog
+  buildFormula op instr prog
 
 -- | Construct a formula for the given instruction based on the selected representative program.
 --
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 --
 -- FIXME: Here we need the set of output locations (which could include implicit locations)
-buildFormula :: Opcode arch (Operand arch) sh
+buildFormula :: (Architecture arch)
+             => Opcode arch (Operand arch) sh
              -> Instruction arch
-             -> [Some (Location arch)]
-             -- ^ Output locations for the opcode
              -> [Instruction arch]
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
-buildFormula = undefined
+buildFormula o i prog = do
+  Just iorel <- opcodeIORelation o
+  undefined i prog iorel
 
 -- | Generate an arbitrary instruction for the given opcode.
 --
