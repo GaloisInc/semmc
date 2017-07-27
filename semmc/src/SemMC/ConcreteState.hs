@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -11,17 +12,17 @@
 module SemMC.ConcreteState
   ( Value(..)
   , View(..)
+  , trivialView
   , Slice(..)
   , peekSlice
   , pokeSlice
   , ConcreteState
   , peekMS
   , pokeMS
-  , operandToView
   , Diff
   , OutMask(..)
   , OutMasks
-  , congruentViews
+  , ConcreteArchitecture(..)
   ) where
 
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR )
@@ -29,7 +30,7 @@ import           Data.Maybe ( fromJust )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Parameterized.Classes ( OrdF )
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.NatRepr ( NatRepr, widthVal )
+import           Data.Parameterized.NatRepr ( NatRepr, widthVal, knownNat )
 import           Data.Parameterized.Some ( Some )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( KnownNat, Nat, type (+), type (<=) )
@@ -62,6 +63,12 @@ instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
 --
 -- Note that (non-immediate) operands are like 'View's, not
 -- 'Location's.
+--
+-- The @m@ parameter is the size (number of bits) of the view.
+--
+-- The @n@ parameter is the size of the underlying location.
+--
+-- The @s@ parameter is the start bit of the slice.
 data View arch (m :: Nat) where
   View :: Slice m n -> Location arch (BaseBVType n) -> View arch m
 
@@ -74,10 +81,25 @@ data View arch (m :: Nat) where
 -- >   Slice :: (a <= b, a+m ~ b, b <= n) => NatRepr a -> NatRepr b :: Slice m n
 --
 -- but that might be overkill.
+--
+-- A slice is @m@ bits long in a @n@ bit base location
+--
+-- @a@ is the start bit and @b@ is the end bit
 data Slice (m :: Nat) (n :: Nat) where
-  Slice :: (a+1 <= b, (a+m) ~ b, b <= n) => NatRepr a -> NatRepr b -> Slice m n
+  Slice :: ( a+1 <= b   -- Slices are non-empty
+           , (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
+           , b <= n)    -- The last bit (b) doesn't run off the end of the location (n)
+        => NatRepr a -> NatRepr b -> Slice m n
+
 -- data Slice (l :: Nat) (h :: Nat) where
 --   Slice :: (KnownNat l, KnownNat h, l < h) => Slice l h
+
+-- | Produce a view of an entire location
+trivialView :: forall arch n . (KnownNat n, 1 <= n) => Location arch (BaseBVType n) -> View arch n
+trivialView loc = View s loc
+  where
+    s :: Slice n n
+    s = Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr n)
 
 onesMask :: (Integral a, Bits b, Num b) => a -> b
 onesMask sz = shiftL 1 (fromIntegral sz) - 1
