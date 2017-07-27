@@ -14,8 +14,8 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC.Architecture.PPC
-                       SemMC.Architecture.PPC.Random
   build-depends:       base >= 4.9 && < 5
+                     , mtl
                      , parameterized-utils == 0.1.10
                      , crucible == 0.3.1
                      , semmc

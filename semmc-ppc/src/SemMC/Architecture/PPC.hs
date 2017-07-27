@@ -19,8 +19,14 @@ module SemMC.Architecture.PPC
   ) where
 
 import qualified GHC.Err.Located as L
+import           GHC.TypeLits ( KnownNat )
 
-import           Data.Bits ( shiftL )
+import           Control.Monad.Trans ( liftIO )
+import qualified Control.Monad.State.Strict as St
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Builder as B
+import qualified Data.ByteString.Lazy as LB
+import           Data.Bits
 import           Data.EnumF ( EnumF(..) )
 import           Data.Foldable ( foldrM )
 import           Data.Int ( Int32 )
@@ -36,8 +42,10 @@ import           Data.Parameterized.TH.GADT
 import           Data.Parameterized.Some
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
+import qualified Data.Serialize.Get as G
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
+import           Numeric.Natural
 import           Text.PrettyPrint.HughesPJClass ( pPrint )
 import           Text.Printf ( printf )
 
@@ -45,6 +53,7 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
 
+import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
@@ -579,37 +588,186 @@ loadBaseSet sym = do
                           ]
 
 instance CS.ConcreteArchitecture PPC where
-  operandToView _proxy op = do
-    loc <- operandToLocation op
-    case loc of
-      LocGPR {} -> return (Some (CS.trivialView loc))
-      LocIP {} -> return (Some (CS.trivialView loc))
-      LocMSR {} -> return (Some (CS.trivialView loc))
-      LocCTR {} -> return (Some (CS.trivialView loc))
-      LocLNK {} -> return (Some (CS.trivialView loc))
-      LocXER {} -> return (Some (CS.trivialView loc))
-      LocCR {} -> return (Some (CS.trivialView loc))
-      LocFPSCR {} -> return (Some (CS.trivialView loc))
-      LocVR {} -> return (Some (CS.trivialView loc))
-      LocMem {} -> L.error "PPC memory support in progress"
-      LocFR (PPC.FR rno) ->
-        let frSlice :: CS.Slice 64 128
-            frSlice = CS.Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
-        in return (Some (CS.View frSlice (LocVR (PPC.VR rno))))
-  congruentViews _proxy v =
-    case v of
-      CS.View s (LocGPR (PPC.GPR rno)) ->
-        [ CS.View s (LocGPR (PPC.GPR rno'))
-        | rno' <- [0..31]
-        , rno /= rno'
-        ]
-      CS.View s (LocVR (PPC.VR rno)) ->
-        [ CS.View s (LocVR (PPC.VR rno'))
-        | rno' <- [0..31]
-        , rno /= rno'
-        ]
-      -- There are no views of LocFR.  The other registers all have no alternatives
-      --
-      -- FIXME: Are there alternatives to memory?
-      _ -> []
+  operandToView _proxy = operandToViewPPC
+  congruentViews _proxy = congruentViewsPPC
+  zeroState _proxy = zeroStatePPC
+  randomState _proxy = randomStatePPC
+  serialize _proxy = serializePPC
+  deserialize _proxy = deserializePPC
 
+-- | FIXME: Does not include memory
+randomStatePPC :: A.Gen -> IO (CS.ConcreteState PPC)
+randomStatePPC gen = St.execStateT randomize MapF.empty
+  where
+    randomize = do
+      mapM_ addRandomBV gprs
+      mapM_ addRandomBV vrs
+      mapM_ addRandomBV specialRegs32
+      mapM_ addRandomBV specialRegs64
+
+    addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT (CS.ConcreteState PPC) IO ()
+    addRandomBV loc = do
+      bv <- CS.ValueBV <$> liftIO (A.arbitrary gen)
+      St.modify' $ MapF.insert loc bv
+
+-- | FIXME: Does not include memory
+zeroStatePPC :: CS.ConcreteState PPC
+zeroStatePPC = St.execState addZeros MapF.empty
+  where
+    addZero :: Location (BaseBVType n) -> St.State (CS.ConcreteState PPC) ()
+    addZero loc = St.modify' $ MapF.insert loc (CS.ValueBV (W.W 0))
+    addZeros = do
+      mapM_ addZero gprs
+      mapM_ addZero vrs
+      mapM_ addZero specialRegs32
+      mapM_ addZero specialRegs64
+
+congruentViewsPPC :: CS.View PPC n -> [CS.View PPC n]
+congruentViewsPPC v =
+  case v of
+    CS.View s (LocGPR (PPC.GPR rno)) ->
+      [ CS.View s (LocGPR (PPC.GPR rno'))
+      | rno' <- [0..31]
+      , rno /= rno'
+      ]
+    CS.View s (LocVR (PPC.VR rno)) ->
+      [ CS.View s (LocVR (PPC.VR rno'))
+      | rno' <- [0..31]
+      , rno /= rno'
+      ]
+    -- There are no views of LocFR.  The other registers all have no alternatives
+    --
+    -- FIXME: Are there alternatives to memory?
+    _ -> []
+
+operandToViewPPC :: PPC.Operand s -> Maybe (Some (CS.View PPC))
+operandToViewPPC op = do
+  loc <- operandToLocation op
+  case loc of
+    LocGPR {} -> return (Some (CS.trivialView loc))
+    LocIP {} -> return (Some (CS.trivialView loc))
+    LocMSR {} -> return (Some (CS.trivialView loc))
+    LocCTR {} -> return (Some (CS.trivialView loc))
+    LocLNK {} -> return (Some (CS.trivialView loc))
+    LocXER {} -> return (Some (CS.trivialView loc))
+    LocCR {} -> return (Some (CS.trivialView loc))
+    LocFPSCR {} -> return (Some (CS.trivialView loc))
+    LocVR {} -> return (Some (CS.trivialView loc))
+    LocMem {} -> L.error "PPC memory support in progress"
+    LocFR (PPC.FR rno) ->
+      let frSlice :: CS.Slice 64 128
+          frSlice = CS.Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
+      in return (Some (CS.View frSlice (LocVR (PPC.VR rno))))
+
+
+-- | Convert a machine state to the wire protocol.
+--
+-- Note that we perform a byte swap to put data in big endian so that the
+-- machine on the receiving end doesn't need to do anything special besides map
+-- the data.
+serializePPC :: CS.ConcreteState PPC -> B.ByteString
+serializePPC s = LB.toStrict (B.toLazyByteString b)
+  where
+    b = mconcat [ mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprs))
+                , mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
+                , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
+                , mconcat (map (serializeSymVal serializeVec) (extractLocs s vrs))
+                ]
+
+
+-- | Serialize a 128 bit value into a bytestring
+serializeVec :: Integer -> B.Builder
+serializeVec i = B.word64BE w1 <> B.word64BE w2
+  where
+    w1 = fromInteger i
+    w2 = fromInteger (i `shiftR` 64)
+
+serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> CS.Value (BaseBVType n) -> B.Builder
+serializeSymVal toBuilder sv =
+  case sv of
+    CS.ValueBV (W.W w) -> toBuilder (toInteger w)
+
+extractLocs :: CS.ConcreteState PPC
+            -> [Location tp]
+            -> [CS.Value tp]
+extractLocs s locs = map extractLoc locs
+  where
+    extractLoc l =
+      let Just v = MapF.lookup l s
+      in v
+
+deserializePPC :: B.ByteString -> Maybe (CS.ConcreteState PPC)
+deserializePPC bs =
+  case G.runGet getArchState bs of
+    Left _ -> Nothing
+    Right s -> Just s
+
+getArchState :: G.Get (CS.ConcreteState PPC)
+getArchState = do
+  gprs' <- mapM (getWith (getValue G.getWord32be repr32)) gprs
+  spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
+  spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
+  vrs' <- mapM (getWith (getValue getWord128be repr128)) vrs
+  return (St.execState (addLocs gprs' spregs32' spregs64' vrs') MapF.empty)
+  -- let m1 = F.foldl' addLoc MapF.empty gprs'
+  --     m2 = F.foldl' addLoc m1 spregs32'
+  --     m3 = F.foldl' addLoc m2 spregs64'
+  --     m4 = F.foldl' addLoc m3 vrs'
+  -- return m4
+  where
+    addLoc :: forall tp . (Location tp, CS.Value tp) -> St.State (CS.ConcreteState PPC) ()
+    addLoc (loc, v) = St.modify' $ MapF.insert loc v
+
+    addLocs gprs' spregs32' spregs64' vrs' = do
+      mapM_ addLoc gprs'
+      mapM_ addLoc spregs32'
+      mapM_ addLoc spregs64'
+      mapM_ addLoc vrs'
+
+getWord128be :: G.Get Natural
+getWord128be = do
+  w1 <- G.getWord64be
+  w2 <- G.getWord64be
+  return ((fromIntegral w2 `shiftL` 64) .|. fromIntegral w1)
+
+getWith :: G.Get (CS.Value tp)
+        -> Location tp
+        -> G.Get (Location tp, CS.Value tp)
+getWith g loc = do
+  w <- g
+  return (loc, w)
+
+getValue :: (Integral w, KnownNat n)
+         => G.Get w
+         -> NatRepr n
+         -> G.Get (CS.Value (BaseBVType n))
+getValue g _ = (CS.ValueBV . W.W . fromIntegral) <$> g
+
+gprs :: [Location (BaseBVType 32)]
+gprs = fmap (LocGPR . PPC.GPR) [0..31]
+
+vrs :: [Location (BaseBVType 128)]
+vrs = fmap (LocVR . PPC.VR) [0..63]
+
+specialRegs32 :: [Location (BaseBVType 32)]
+specialRegs32 = [ LocCTR
+                , LocLNK
+                , LocXER
+                , LocCR
+                  -- Lets not randomly generate an MSR.  That would
+                  -- be problematic (e.g., it would switch endianness)
+                  --
+                  -- , LocMSR
+                ]
+
+specialRegs64 :: [Location (BaseBVType 64)]
+specialRegs64 = [ LocFPSCR ]
+
+repr32 :: NatRepr 32
+repr32 = knownNat
+
+repr64 :: NatRepr 64
+repr64 = knownNat
+
+repr128 :: NatRepr 128
+repr128 = knownNat
