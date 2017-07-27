@@ -160,18 +160,6 @@ weighBestMatch arch (C.OutMask view diff) targetSt candidateSt =
 
 ----------------------------------------------------------------
 
--- | A test here is an initial machine state.
---
--- The actual test process is to run the target program and candidate
--- program on the initial state and compare the final states in some
--- way.
---
--- The 'SynEnv' type has a collection of 'Test's, but we may want to
--- cache the result of evaluating the target on them (if being network
--- bound by SSH traffic to the eval oracle doesn't turn out to be the
--- dominating cost).
-type Test arch = ConcreteState arch
-
 -- | The initial tests, including random tests and "heuristically
 -- interesting" tests.
 --
