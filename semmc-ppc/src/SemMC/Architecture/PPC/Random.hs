@@ -34,16 +34,15 @@ import qualified SemMC.Stochastic.Remote as R
 randomArchState :: A.Gen -> IO (ConcreteState PPC.PPC)
 randomArchState gen = do
   m0 <- F.foldlM (addRandomBV gen) MapF.empty gprs
-  m1 <- F.foldlM (addRandomBV gen) m0 fprs
-  m2 <- F.foldlM (addRandomBV gen) m1 [ PPC.LocMSR
+  m1 <- F.foldlM (addRandomBV gen) m0 [ PPC.LocMSR
                                       , PPC.LocCTR
                                       , PPC.LocLNK
                                       , PPC.LocXER
                                       , PPC.LocCR
                                       ]
-  m3 <- F.foldlM (addRandomBV gen) m2 [ PPC.LocFPSCR ]
-  m4 <- F.foldlM (addRandomBV gen) m3 vrs
-  return m4
+  m2 <- F.foldlM (addRandomBV gen) m1 [ PPC.LocFPSCR ]
+  m3 <- F.foldlM (addRandomBV gen) m2 vrs
+  return m3
 
 -- | Convert PPC machine states to/from the wire protocol
 machineState :: R.MachineState (ConcreteState PPC.PPC)
@@ -60,7 +59,6 @@ toBS :: ConcreteState PPC.PPC -> B.ByteString
 toBS s = LB.toStrict (B.toLazyByteString b)
   where
     b = mconcat [ mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprs))
-                , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s fprs))
                 , mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
                 , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
                 , mconcat (map (serializeSymVal serializeVec) (extractLocs s vrs))
@@ -96,16 +94,14 @@ fromBS bs =
 getArchState :: G.Get (ConcreteState PPC.PPC)
 getArchState = do
   gprs' <- mapM (getWith (getValue G.getWord32be repr32)) gprs
-  fprs' <- mapM (getWith (getValue G.getWord64be repr64)) fprs
   spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
   spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
   vrs' <- mapM (getWith (getValue getWord128be repr128)) vrs
   let m1 = F.foldl' addLoc MapF.empty gprs'
-      m2 = F.foldl' addLoc m1 fprs'
-      m3 = F.foldl' addLoc m2 spregs32'
-      m4 = F.foldl' addLoc m3 spregs64'
-      m5 = F.foldl' addLoc m4 vrs'
-  return m5
+      m2 = F.foldl' addLoc m1 spregs32'
+      m3 = F.foldl' addLoc m2 spregs64'
+      m4 = F.foldl' addLoc m3 vrs'
+  return m4
   where
     addLoc :: forall tp . ConcreteState PPC.PPC -> (PPC.Location tp, Value tp) -> ConcreteState PPC.PPC
     addLoc m (loc, v) = MapF.insert loc v m
@@ -145,7 +141,7 @@ fprs :: [Location PPC.PPC (C.BaseBVType 64)]
 fprs = fmap (PPC.LocFR . PPC.FR) [0..31]
 
 vrs :: [Location PPC.PPC (C.BaseBVType 128)]
-vrs = fmap (PPC.LocVR . PPC.VR) [0..31]
+vrs = fmap (PPC.LocVR . PPC.VR) [0..63]
 
 specialRegs32 :: [Location PPC.PPC (C.BaseBVType 32)]
 specialRegs32 = [ PPC.LocCTR
@@ -170,3 +166,11 @@ repr64 = C.knownNat
 repr128 :: C.NatRepr 128
 repr128 = C.knownNat
 
+{- Note [Aliasing]
+
+There are 64 VSRs (vector-scalar registers).  The lower 64 bits of the first 32
+VSRs alias the floating point registers, so we don't add explicit
+representations of the FPRs.  Manipulations of the FPR state will go through
+views.
+
+-}
