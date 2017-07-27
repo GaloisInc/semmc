@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -13,23 +14,23 @@ module SemMC.ConcreteState
   , liftValueBV1
   , liftValueBV2
   , View(..)
+  , trivialView
   , Slice(..)
   , peekSlice
   , pokeSlice
   , ConcreteState
   , peekMS
   , pokeMS
-  , operandToView
   , Diff
   , OutMask(..)
   , OutMasks
-  , congruentViews
-  , ConcreteArchitecture
+  , ConcreteArchitecture(..)
   , module Data.Parameterized.NatRepr
   , module GHC.TypeLits
   ) where
 
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR )
+import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Parameterized.Classes ( OrdF )
@@ -84,6 +85,12 @@ instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
 --
 -- Note that (non-immediate) operands are like 'View's, not
 -- 'Location's.
+--
+-- The @m@ parameter is the size (number of bits) of the view.
+--
+-- The @n@ parameter is the size of the underlying location.
+--
+-- The @s@ parameter is the start bit of the slice.
 data View arch (m :: Nat) where
   View :: Slice m n -> Location arch (BaseBVType n) -> View arch m
 
@@ -96,12 +103,14 @@ data View arch (m :: Nat) where
 -- is a view into the @m@ contiguous bits in the range @[a,b)@ in an
 -- @n@-bit bit vector. This is a little endian view, in that the bits
 -- in an @n@-bit bv are numbered from @0@ to @n-1@, with the @0@th bit
--- the least significant. For example
+-- the least significant.
+--
+-- For example
 --
 -- > Slice 1 3 :: Slice 2 5
 --
 -- refers to bits 1 and 2 in a 5-bit bv with little-endian bits 0, 1,
--- 2, 3, and 4. So, for example
+-- 2, 3, and 4. So,
 --
 -- > :set -XBinaryLiterals
 -- > peekSlice (Slice (knownNat :: NatRepr 1) (knownNat :: NatRepr 3) :: Slice 2 5) (ValueBV (0b00010 :: W.W 4))
@@ -109,7 +118,16 @@ data View arch (m :: Nat) where
 --
 -- whereas a big-endian slice would have value @0b00@ here.
 data Slice (m :: Nat) (n :: Nat) where
-  Slice :: (a <= b, (a+m) ~ b, b <= n) => NatRepr a -> NatRepr b -> Slice m n
+  Slice :: ( (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
+           , b <= n)    -- The last bit (b) doesn't run off the end of the location (n)
+        => NatRepr a -> NatRepr b -> Slice m n
+
+-- | Produce a view of an entire location
+trivialView :: forall arch n . (KnownNat n, 1 <= n) => Location arch (BaseBVType n) -> View arch n
+trivialView loc = View s loc
+  where
+    s :: Slice n n
+    s = Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr n)
 
 onesMask :: (Integral a, Bits b, Num b) => a -> b
 onesMask sz = shiftL 1 (fromIntegral sz) - 1
@@ -185,3 +203,20 @@ class (Architecture arch) => ConcreteArchitecture arch where
   -- wrong places on the way to discovering a program that computes
   -- the right values in the right places.
   congruentViews :: Proxy arch -> View arch n -> [View arch n]
+
+  -- | Construct a complete state with all locations set to zero
+  --
+  -- This is a useful starting point for constructing a desired state to ensure
+  -- that all locations are filled in.
+  zeroState :: Proxy arch -> ConcreteState arch
+
+  -- | Generate a completely random state
+  --
+  -- The random state has all locations filled in
+  randomState :: Proxy arch -> A.Gen -> IO (ConcreteState arch)
+
+  -- | Convert a 'ConcreteState' into a 'B.ByteString'
+  serialize :: Proxy arch -> ConcreteState arch -> B.ByteString
+
+  -- | Try to convert a 'B.ByteString' into a 'ConcreteState'
+  deserialize :: Proxy arch -> B.ByteString -> Maybe (ConcreteState arch)

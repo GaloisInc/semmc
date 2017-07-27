@@ -18,7 +18,9 @@ module SemMC.Architecture.PPC
   , loadBaseSet
   ) where
 
-import           Data.Bits ( shiftL )
+import qualified GHC.Err.Located as L
+
+import           Data.Bits
 import           Data.EnumF ( EnumF(..) )
 import           Data.Foldable ( foldrM )
 import           Data.Int ( Int32 )
@@ -30,13 +32,11 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
-import           Data.Parameterized.TH.GADT
 import           Data.Parameterized.Some
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
-import           Text.PrettyPrint.HughesPJClass ( pPrint )
 import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
@@ -46,11 +46,15 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.ConcreteState as CS
 import           SemMC.Formula
 import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal )
+
+import           SemMC.Architecture.PPC.Location
+import qualified SemMC.Architecture.PPC.ConcreteState as PPCS
 
 data PPC
 
@@ -250,101 +254,6 @@ instance TemplatableOperand PPC "I32imm" where
             let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
             return (v, WrappedRecoverOperandFn recover)
 
-data Location :: BaseType -> * where
-  LocGPR :: PPC.GPR -> Location (BaseBVType 32)
-  LocIP :: Location (BaseBVType 32)
-  LocMSR :: Location (BaseBVType 32)
-  LocCTR :: Location (BaseBVType 32)
-  LocLNK :: Location (BaseBVType 32)
-  LocXER :: Location (BaseBVType 32)
-  LocCR :: Location (BaseBVType 32)
-  LocFR :: PPC.FR -> Location (BaseBVType 64)
-  LocFPSCR :: Location (BaseBVType 64)
-  LocVR :: PPC.VR -> Location (BaseBVType 128)
-  LocMem :: Location (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
-
-instance Show (Location tp) where
-  show (LocGPR gpr) = show (pPrint gpr)
-  show LocIP = "IP"
-  show LocMSR = "MSR"
-  show LocCTR = "CTR"
-  show LocLNK = "LNK"
-  show LocXER = "XER"
-  show LocCR = "CR"
-  show (LocFR fr) = show (pPrint fr)
-  show LocFPSCR = "FPSCR"
-  show (LocVR vr) = show (pPrint vr)
-  show LocMem = "Mem"
-instance ShowF Location
-
-$(return [])
-
-fakeTestEq :: (Eq a) => a -> a -> Maybe (a :~: a)
-fakeTestEq x y = if x == y
-                 then Just Refl
-                 else Nothing
-
-instance TestEquality Location where
-  testEquality = $(structuralTypeEquality [t|Location|]
-                   [ (ConType [t|PPC.GPR|], [|fakeTestEq|])
-                   , (ConType [t|PPC.FR|], [|fakeTestEq|])
-                   , (ConType [t|PPC.VR|], [|fakeTestEq|])
-                   ]
-                  )
-
-fakeCompareF :: (Ord a) => a -> a -> OrderingF a a
-fakeCompareF x y = fromOrdering (compare x y)
-
-instance OrdF Location where
-  compareF = $(structuralTypeOrd [t|Location|]
-               [ (ConType [t|PPC.GPR|], [|fakeCompareF|])
-               , (ConType [t|PPC.FR|], [|fakeCompareF|])
-               , (ConType [t|PPC.VR|], [|fakeCompareF|])
-               ]
-              )
-
-instance A.IsLocation Location where
-  readLocation s
-    | s `elem` ["r" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocGPR . PPC.GPR . read . tail) s
-    | s == "ip" = Just (Some LocIP)
-    | s == "msr" = Just (Some LocMSR)
-    | s == "ctr" = Just (Some LocCTR)
-    | s == "lnk" = Just (Some LocLNK)
-    | s == "xer" = Just (Some LocXER)
-    | s == "cr" = Just (Some LocCR)
-    | s `elem` ["f" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocFR . PPC.FR . read . tail) s
-    | s == "fpscr" = Just (Some LocFPSCR)
-    | s `elem` ["vr" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocVR . PPC.VR . read . tail . tail) s
-    | s == "mem" = Just (Some LocMem)
-    | otherwise = Nothing
-
-  locationType (LocGPR _) = knownRepr
-  locationType LocIP = knownRepr
-  locationType LocMSR = knownRepr
-  locationType LocCTR = knownRepr
-  locationType LocLNK = knownRepr
-  locationType LocXER = knownRepr
-  locationType LocCR = knownRepr
-  locationType (LocFR _) = knownRepr
-  locationType LocFPSCR = knownRepr
-  locationType (LocVR _) = knownRepr
-  locationType LocMem = knownRepr
-
-  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocIP = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocMSR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocCTR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocLNK = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocXER = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (LocFR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (LocVR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocMem =
-    S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
 type instance A.Location PPC = Location
 
@@ -574,3 +483,49 @@ loadBaseSet sym = do
                           , Some (Witness PPC.SUBF)
                           , Some (Witness PPC.XOR)
                           ]
+
+instance CS.ConcreteArchitecture PPC where
+  operandToView _proxy = operandToViewPPC
+  congruentViews _proxy = congruentViewsPPC
+  zeroState _proxy = PPCS.zeroState
+  randomState _proxy = PPCS.randomState
+  serialize _proxy = PPCS.serialize
+  deserialize _proxy = PPCS.deserialize
+
+
+congruentViewsPPC :: CS.View PPC n -> [CS.View PPC n]
+congruentViewsPPC v =
+  case v of
+    CS.View s (LocGPR (PPC.GPR rno)) ->
+      [ CS.View s (LocGPR (PPC.GPR rno'))
+      | rno' <- [0..31]
+      , rno /= rno'
+      ]
+    CS.View s (LocVR (PPC.VR rno)) ->
+      [ CS.View s (LocVR (PPC.VR rno'))
+      | rno' <- [0..31]
+      , rno /= rno'
+      ]
+    -- There are no views of LocFR.  The other registers all have no alternatives
+    --
+    -- FIXME: Are there alternatives to memory?
+    _ -> []
+
+operandToViewPPC :: PPC.Operand s -> Maybe (Some (CS.View PPC))
+operandToViewPPC op = do
+  loc <- operandToLocation op
+  case loc of
+    LocGPR {} -> return (Some (CS.trivialView loc))
+    LocIP {} -> return (Some (CS.trivialView loc))
+    LocMSR {} -> return (Some (CS.trivialView loc))
+    LocCTR {} -> return (Some (CS.trivialView loc))
+    LocLNK {} -> return (Some (CS.trivialView loc))
+    LocXER {} -> return (Some (CS.trivialView loc))
+    LocCR {} -> return (Some (CS.trivialView loc))
+    LocFPSCR {} -> return (Some (CS.trivialView loc))
+    LocVR {} -> return (Some (CS.trivialView loc))
+    LocMem {} -> L.error "PPC memory support in progress"
+    LocFR (PPC.FR rno) ->
+      let frSlice :: CS.Slice 64 128
+          frSlice = CS.Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
+      in return (Some (CS.View frSlice (LocVR (PPC.VR rno))))
