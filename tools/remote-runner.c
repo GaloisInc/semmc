@@ -283,6 +283,16 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 #endif
 #elif defined(__arm__)
 
+/*
+
+  There are 32 single precision floating point registers that are aliased to the
+  16 double precision floating point registers.
+
+  There is a separate register bank for NEON instructions, which contains 32
+  64-bit registers that can be viewed as 16 128-bit registers.
+
+ */
+
 #elif defined(__aarch64__)
 
 #elif defined(__powerpc__)
