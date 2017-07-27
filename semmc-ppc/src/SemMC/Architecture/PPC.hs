@@ -19,13 +19,7 @@ module SemMC.Architecture.PPC
   ) where
 
 import qualified GHC.Err.Located as L
-import           GHC.TypeLits ( KnownNat )
 
-import           Control.Monad.Trans ( liftIO )
-import qualified Control.Monad.State.Strict as St
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Builder as B
-import qualified Data.ByteString.Lazy as LB
 import           Data.Bits
 import           Data.EnumF ( EnumF(..) )
 import           Data.Foldable ( foldrM )
@@ -38,22 +32,17 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
-import           Data.Parameterized.TH.GADT
 import           Data.Parameterized.Some
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
-import qualified Data.Serialize.Get as G
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
-import           Numeric.Natural
-import           Text.PrettyPrint.HughesPJClass ( pPrint )
 import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
 
-import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
@@ -63,6 +52,9 @@ import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal )
+
+import           SemMC.Architecture.PPC.Location
+import qualified SemMC.Architecture.PPC.ConcreteState as PPCS
 
 data PPC
 
@@ -262,101 +254,6 @@ instance TemplatableOperand PPC "I32imm" where
             let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
             return (v, WrappedRecoverOperandFn recover)
 
-data Location :: BaseType -> * where
-  LocGPR :: PPC.GPR -> Location (BaseBVType 32)
-  LocIP :: Location (BaseBVType 32)
-  LocMSR :: Location (BaseBVType 32)
-  LocCTR :: Location (BaseBVType 32)
-  LocLNK :: Location (BaseBVType 32)
-  LocXER :: Location (BaseBVType 32)
-  LocCR :: Location (BaseBVType 32)
-  LocFR :: PPC.FR -> Location (BaseBVType 64)
-  LocFPSCR :: Location (BaseBVType 64)
-  LocVR :: PPC.VR -> Location (BaseBVType 128)
-  LocMem :: Location (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
-
-instance Show (Location tp) where
-  show (LocGPR gpr) = show (pPrint gpr)
-  show LocIP = "IP"
-  show LocMSR = "MSR"
-  show LocCTR = "CTR"
-  show LocLNK = "LNK"
-  show LocXER = "XER"
-  show LocCR = "CR"
-  show (LocFR fr) = show (pPrint fr)
-  show LocFPSCR = "FPSCR"
-  show (LocVR vr) = show (pPrint vr)
-  show LocMem = "Mem"
-instance ShowF Location
-
-$(return [])
-
-fakeTestEq :: (Eq a) => a -> a -> Maybe (a :~: a)
-fakeTestEq x y = if x == y
-                 then Just Refl
-                 else Nothing
-
-instance TestEquality Location where
-  testEquality = $(structuralTypeEquality [t|Location|]
-                   [ (ConType [t|PPC.GPR|], [|fakeTestEq|])
-                   , (ConType [t|PPC.FR|], [|fakeTestEq|])
-                   , (ConType [t|PPC.VR|], [|fakeTestEq|])
-                   ]
-                  )
-
-fakeCompareF :: (Ord a) => a -> a -> OrderingF a a
-fakeCompareF x y = fromOrdering (compare x y)
-
-instance OrdF Location where
-  compareF = $(structuralTypeOrd [t|Location|]
-               [ (ConType [t|PPC.GPR|], [|fakeCompareF|])
-               , (ConType [t|PPC.FR|], [|fakeCompareF|])
-               , (ConType [t|PPC.VR|], [|fakeCompareF|])
-               ]
-              )
-
-instance A.IsLocation Location where
-  readLocation s
-    | s `elem` ["r" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocGPR . PPC.GPR . read . tail) s
-    | s == "ip" = Just (Some LocIP)
-    | s == "msr" = Just (Some LocMSR)
-    | s == "ctr" = Just (Some LocCTR)
-    | s == "lnk" = Just (Some LocLNK)
-    | s == "xer" = Just (Some LocXER)
-    | s == "cr" = Just (Some LocCR)
-    | s `elem` ["f" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocFR . PPC.FR . read . tail) s
-    | s == "fpscr" = Just (Some LocFPSCR)
-    | s `elem` ["vr" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocVR . PPC.VR . read . tail . tail) s
-    | s == "mem" = Just (Some LocMem)
-    | otherwise = Nothing
-
-  locationType (LocGPR _) = knownRepr
-  locationType LocIP = knownRepr
-  locationType LocMSR = knownRepr
-  locationType LocCTR = knownRepr
-  locationType LocLNK = knownRepr
-  locationType LocXER = knownRepr
-  locationType LocCR = knownRepr
-  locationType (LocFR _) = knownRepr
-  locationType LocFPSCR = knownRepr
-  locationType (LocVR _) = knownRepr
-  locationType LocMem = knownRepr
-
-  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocIP = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocMSR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocCTR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocLNK = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocXER = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (LocFR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (LocVR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocMem =
-    S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
 type instance A.Location PPC = Location
 
@@ -590,37 +487,11 @@ loadBaseSet sym = do
 instance CS.ConcreteArchitecture PPC where
   operandToView _proxy = operandToViewPPC
   congruentViews _proxy = congruentViewsPPC
-  zeroState _proxy = zeroStatePPC
-  randomState _proxy = randomStatePPC
-  serialize _proxy = serializePPC
-  deserialize _proxy = deserializePPC
+  zeroState _proxy = PPCS.zeroState
+  randomState _proxy = PPCS.randomState
+  serialize _proxy = PPCS.serialize
+  deserialize _proxy = PPCS.deserialize
 
--- | FIXME: Does not include memory
-randomStatePPC :: A.Gen -> IO (CS.ConcreteState PPC)
-randomStatePPC gen = St.execStateT randomize MapF.empty
-  where
-    randomize = do
-      mapM_ addRandomBV gprs
-      mapM_ addRandomBV vrs
-      mapM_ addRandomBV specialRegs32
-      mapM_ addRandomBV specialRegs64
-
-    addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT (CS.ConcreteState PPC) IO ()
-    addRandomBV loc = do
-      bv <- CS.ValueBV <$> liftIO (A.arbitrary gen)
-      St.modify' $ MapF.insert loc bv
-
--- | FIXME: Does not include memory
-zeroStatePPC :: CS.ConcreteState PPC
-zeroStatePPC = St.execState addZeros MapF.empty
-  where
-    addZero :: Location (BaseBVType n) -> St.State (CS.ConcreteState PPC) ()
-    addZero loc = St.modify' $ MapF.insert loc (CS.ValueBV (W.W 0))
-    addZeros = do
-      mapM_ addZero gprs
-      mapM_ addZero vrs
-      mapM_ addZero specialRegs32
-      mapM_ addZero specialRegs64
 
 congruentViewsPPC :: CS.View PPC n -> [CS.View PPC n]
 congruentViewsPPC v =
@@ -658,116 +529,3 @@ operandToViewPPC op = do
       let frSlice :: CS.Slice 64 128
           frSlice = CS.Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
       in return (Some (CS.View frSlice (LocVR (PPC.VR rno))))
-
-
--- | Convert a machine state to the wire protocol.
---
--- Note that we perform a byte swap to put data in big endian so that the
--- machine on the receiving end doesn't need to do anything special besides map
--- the data.
-serializePPC :: CS.ConcreteState PPC -> B.ByteString
-serializePPC s = LB.toStrict (B.toLazyByteString b)
-  where
-    b = mconcat [ mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprs))
-                , mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
-                , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
-                , mconcat (map (serializeSymVal serializeVec) (extractLocs s vrs))
-                ]
-
-
--- | Serialize a 128 bit value into a bytestring
-serializeVec :: Integer -> B.Builder
-serializeVec i = B.word64BE w1 <> B.word64BE w2
-  where
-    w1 = fromInteger i
-    w2 = fromInteger (i `shiftR` 64)
-
-serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> CS.Value (BaseBVType n) -> B.Builder
-serializeSymVal toBuilder sv =
-  case sv of
-    CS.ValueBV (W.W w) -> toBuilder (toInteger w)
-
-extractLocs :: CS.ConcreteState PPC
-            -> [Location tp]
-            -> [CS.Value tp]
-extractLocs s locs = map extractLoc locs
-  where
-    extractLoc l =
-      let Just v = MapF.lookup l s
-      in v
-
-deserializePPC :: B.ByteString -> Maybe (CS.ConcreteState PPC)
-deserializePPC bs =
-  case G.runGet getArchState bs of
-    Left _ -> Nothing
-    Right s -> Just s
-
-getArchState :: G.Get (CS.ConcreteState PPC)
-getArchState = do
-  gprs' <- mapM (getWith (getValue G.getWord32be repr32)) gprs
-  spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
-  spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
-  vrs' <- mapM (getWith (getValue getWord128be repr128)) vrs
-  return (St.execState (addLocs gprs' spregs32' spregs64' vrs') MapF.empty)
-  -- let m1 = F.foldl' addLoc MapF.empty gprs'
-  --     m2 = F.foldl' addLoc m1 spregs32'
-  --     m3 = F.foldl' addLoc m2 spregs64'
-  --     m4 = F.foldl' addLoc m3 vrs'
-  -- return m4
-  where
-    addLoc :: forall tp . (Location tp, CS.Value tp) -> St.State (CS.ConcreteState PPC) ()
-    addLoc (loc, v) = St.modify' $ MapF.insert loc v
-
-    addLocs gprs' spregs32' spregs64' vrs' = do
-      mapM_ addLoc gprs'
-      mapM_ addLoc spregs32'
-      mapM_ addLoc spregs64'
-      mapM_ addLoc vrs'
-
-getWord128be :: G.Get Natural
-getWord128be = do
-  w1 <- G.getWord64be
-  w2 <- G.getWord64be
-  return ((fromIntegral w2 `shiftL` 64) .|. fromIntegral w1)
-
-getWith :: G.Get (CS.Value tp)
-        -> Location tp
-        -> G.Get (Location tp, CS.Value tp)
-getWith g loc = do
-  w <- g
-  return (loc, w)
-
-getValue :: (Integral w, KnownNat n)
-         => G.Get w
-         -> NatRepr n
-         -> G.Get (CS.Value (BaseBVType n))
-getValue g _ = (CS.ValueBV . W.W . fromIntegral) <$> g
-
-gprs :: [Location (BaseBVType 32)]
-gprs = fmap (LocGPR . PPC.GPR) [0..31]
-
-vrs :: [Location (BaseBVType 128)]
-vrs = fmap (LocVR . PPC.VR) [0..63]
-
-specialRegs32 :: [Location (BaseBVType 32)]
-specialRegs32 = [ LocCTR
-                , LocLNK
-                , LocXER
-                , LocCR
-                  -- Lets not randomly generate an MSR.  That would
-                  -- be problematic (e.g., it would switch endianness)
-                  --
-                  -- , LocMSR
-                ]
-
-specialRegs64 :: [Location (BaseBVType 64)]
-specialRegs64 = [ LocFPSCR ]
-
-repr32 :: NatRepr 32
-repr32 = knownNat
-
-repr64 :: NatRepr 64
-repr64 = knownNat
-
-repr128 :: NatRepr 128
-repr128 = knownNat
