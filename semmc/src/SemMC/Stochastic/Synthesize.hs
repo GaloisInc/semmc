@@ -16,15 +16,18 @@ import           Control.Monad.Trans ( liftIO )
 import           Data.Maybe ( catMaybes )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as S
+import qualified Data.Set as Set
 import           GHC.Exts ( IsList(..) )
 
 import           Data.Parameterized.Some ( Some(..) )
 import           Dismantle.Arbitrary as D
 import           Dismantle.Instruction.Random as D
+import qualified Dismantle.Instruction as D
 
-import           SemMC.Architecture ( Instruction )
+import           SemMC.Architecture ( Instruction, Operand )
 import qualified SemMC.ConcreteState as C
 import           SemMC.Stochastic.Monad
+import qualified SemMC.Stochastic.IORelation as I
 
 -- | Attempt to stochastically find a program in terms of the base set that has
 -- the same semantics as the given instruction.
@@ -111,8 +114,7 @@ compareTargetToCandidate target candidate test = do
   -- start state when running the target.
   candidateSt <- runTest test candidateProg
   targetSt    <- runTest test targetProg
-  -- This will be part of the Reader state.
-  let liveOut = getOutMasks target
+  liveOut     <- getOutMasks target
   let p = Proxy :: Proxy arch
   let weight = compareTargetOutToCandidateOut p liveOut targetSt candidateSt
   return weight
@@ -120,12 +122,30 @@ compareTargetToCandidate target candidate test = do
     runTest :: Test arch -> [Instruction arch] -> Syn t arch (C.ConcreteState arch)
     runTest = undefined
 
-    -- | The locations that are live out for the target instruction.
-    --
-    -- Assuming this is learned, we probably want it cached in the
-    -- monad. Also, tristan's IORelation stuff might already do this.
-    getOutMasks :: Instruction arch -> C.OutMasks arch
-    getOutMasks = undefined
+-- | The masks for locations that are live out for the target instruction.
+--
+-- We could cache this since the target instruction is fixed.
+getOutMasks :: forall arch t. SynC arch
+            => Instruction arch -> Syn t arch (C.OutMasks arch)
+getOutMasks (D.Instruction opcode operands) = do
+  Just ioRel <- opcodeIORelation opcode
+  let outputs = Set.toList $ I.outputs ioRel
+  -- Ignore implicit operands for now.
+  -- TODO: handle implicits.
+  let outputs' = [ s | I.OperandRef s <- outputs ]
+  let outputs'' = [ Some (D.indexOpList operands i) | Some i <- outputs' ]
+  let masks = [ operandToOutMask operand | operand <- outputs'' ]
+  return masks
+  where
+    -- TODO: we just assume all operands are integers, but this isn't
+    -- sound. Rather, the interpretation (int or float) of operand
+    -- should be determined by the opcode, perhaps by another method in
+    -- @Architecture@.
+    operandToOutMask :: Some (Operand arch) -> Some (C.OutMask arch)
+    operandToOutMask (Some operand) = case someView of
+      Some view -> Some $ C.OutMask view C.diffInt
+      where
+        Just someView = C.operandToView (Proxy :: Proxy arch) operand
 
 -- Sum the weights of all test outputs.
 compareTargetOutToCandidateOut :: forall arch.

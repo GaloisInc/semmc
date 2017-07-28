@@ -53,7 +53,7 @@ randomState gen = St.execStateT randomize MapF.empty
 zeroState :: ConcreteState
 zeroState = St.execState addZeros MapF.empty
   where
-    addZero :: Location (BaseBVType n) -> St.State ConcreteState ()
+    addZero :: KnownNat n => Location (BaseBVType n) -> St.State ConcreteState ()
     addZero loc = St.modify' $ MapF.insert loc (CS.ValueBV (W.W 0))
     addZeros = do
       mapM_ addZero gprs

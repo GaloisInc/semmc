@@ -326,8 +326,13 @@ congruentViewsImpl (C.View s (RegLoc r)) =
   [ C.View s (RegLoc r') | r' <- [Reg1, Reg2, Reg3], r /= r' ]
 
 instance C.ConcreteArchitecture Toy where
-  operandToView = error "ToyExample.operandToView"
+  operandToView _ = operandToViewImpl
   congruentViews _ = congruentViewsImpl
+  zeroState _ = initialMachineState
+
+  randomState = undefined "Toy: randomState"
+  serialize = undefined "Toy: serialize"
+  deserialize = undefined "Toy: deserialize"
 
 ----------------------------------------------------------------
 -- * Random Instruction Generation

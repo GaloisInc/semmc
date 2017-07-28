@@ -22,6 +22,8 @@ module SemMC.ConcreteState
   , peekMS
   , pokeMS
   , Diff
+  , diffInt
+  , diffFloat
   , OutMask(..)
   , OutMasks
   , ConcreteArchitecture(..)
@@ -29,7 +31,7 @@ module SemMC.ConcreteState
   , module GHC.TypeLits
   ) where
 
-import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR )
+import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor, popCount )
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust )
 import           Data.Proxy ( Proxy(..) )
@@ -51,7 +53,8 @@ import           SemMC.Architecture ( Architecture, ArchState, Location, Operand
 
 -- | Type of concrete values.
 data Value tp where
-  ValueBV :: W.W n -> Value (BaseBVType n)
+  -- Need the 'KnownNat' constraint to get 'Bits' on the 'W.W' bv.
+  ValueBV :: KnownNat n => W.W n -> Value (BaseBVType n)
 
 -- | Lift a bitvector computation to a value computation.
 liftValueBV1 :: (W.W n -> W.W n)
@@ -118,8 +121,10 @@ data View arch (m :: Nat) where
 --
 -- whereas a big-endian slice would have value @0b00@ here.
 data Slice (m :: Nat) (n :: Nat) where
-  Slice :: ( (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
-           , b <= n)    -- The last bit (b) doesn't run off the end of the location (n)
+  Slice :: ( KnownNat m
+           , KnownNat n
+           , (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
+           , b <= n )   -- The last bit (b) doesn't run off the end of the location (n)
         => NatRepr a -> NatRepr b -> Slice m n
 
 -- | Produce a view of an entire location
@@ -177,6 +182,17 @@ pokeMS m (View sl loc) newPart = MapF.insert loc new m
 -- (regular equality) or floating point (equivalence relation that
 -- equates various NaN representations).
 type Diff n = Value (BaseBVType n) -> Value (BaseBVType n) -> Int
+
+-- | Compute distance in bits between two bvs interpreted as integers.
+diffInt :: Diff n
+diffInt (ValueBV x) (ValueBV y) = popCount (x `xor` y)
+
+-- | Compute distance in bits between two bvs interpreted as floats.
+--
+-- This will need to be a class method if different arches have
+-- different float encodings.
+diffFloat :: Diff n
+diffFloat = undefined "diffFloat"
 
 -- | Some state that is live out of an instruction.
 data OutMask arch n = OutMask (View arch n) (Diff n)
