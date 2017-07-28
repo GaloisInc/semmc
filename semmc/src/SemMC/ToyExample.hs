@@ -47,6 +47,7 @@ import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as C
+import qualified SemMC.Stochastic.IORelation as I
 import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
 import           SemMC.Util ( makeSymbol )
 
@@ -137,6 +138,27 @@ opcodes = Set.fromList
   , Some NegR
   , Some MovRi
   ]
+
+-- | The map of 'IORelation's for all opcodes.
+--
+-- This will need to include implicit operands once we add flags.
+ioRelations :: MapF.MapF (Opcode Operand) (I.IORelation Toy)
+ioRelations = MapF.fromList
+  [ MapF.Pair AddRr $ I.IORelation
+      { I.inputs = Set.fromList [o0, o1]
+      , I.outputs = Set.fromList [o0] }
+  , MapF.Pair SubRr $ I.IORelation
+      { I.inputs = Set.fromList [o0, o1]
+      , I.outputs = Set.fromList [o0] }
+  , MapF.Pair NegR $ I.IORelation
+      { I.inputs = Set.fromList [o0]
+      , I.outputs = Set.fromList [o0] }
+  , MapF.Pair MovRi $ I.IORelation
+      { I.inputs = Set.fromList [o0, o1]
+      , I.outputs = Set.fromList [o0] } ]
+  where
+    o0 = I.OperandRef (Some D.IndexHere)
+    o1 = I.OperandRef (Some (D.IndexThere D.IndexHere))
 
 instance ShowF (Opcode o) where
   showF = show
