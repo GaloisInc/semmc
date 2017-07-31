@@ -27,6 +27,7 @@ module SemMC.ConcreteState
   , diffInt
   , diffFloat
   , OutMask(..)
+  , outMaskView
   , OutMasks
   , ConcreteArchitecture(..)
   , module Data.Parameterized.NatRepr
@@ -300,6 +301,10 @@ data OutMask arch n = OutMask (View arch n) (Diff n)
 --
 -- Need to learn one of these for each instruction.
 type OutMasks arch = [Some (OutMask arch)]
+
+-- | Project out the view of an 'OutMask'
+outMaskView :: OutMask arch n -> View arch n
+outMaskView (OutMask v _) = v
 
 -- | An architecture with certain operations needed for concrete work.
 class (Architecture arch) => ConcreteArchitecture arch where
