@@ -515,17 +515,19 @@ operandToViewPPC :: PPC.Operand s -> Maybe (Some (CS.View PPC))
 operandToViewPPC op = do
   loc <- operandToLocation op
   case loc of
-    LocGPR {} -> return (Some (CS.trivialView loc))
-    LocIP {} -> return (Some (CS.trivialView loc))
-    LocMSR {} -> return (Some (CS.trivialView loc))
-    LocCTR {} -> return (Some (CS.trivialView loc))
-    LocLNK {} -> return (Some (CS.trivialView loc))
-    LocXER {} -> return (Some (CS.trivialView loc))
-    LocCR {} -> return (Some (CS.trivialView loc))
-    LocFPSCR {} -> return (Some (CS.trivialView loc))
-    LocVR {} -> return (Some (CS.trivialView loc))
+    LocGPR {} -> return (Some (CS.trivialView proxy loc))
+    LocIP {} -> return (Some (CS.trivialView proxy loc))
+    LocMSR {} -> return (Some (CS.trivialView proxy loc))
+    LocCTR {} -> return (Some (CS.trivialView proxy loc))
+    LocLNK {} -> return (Some (CS.trivialView proxy loc))
+    LocXER {} -> return (Some (CS.trivialView proxy loc))
+    LocCR {} -> return (Some (CS.trivialView proxy loc))
+    LocFPSCR {} -> return (Some (CS.trivialView proxy loc))
+    LocVR {} -> return (Some (CS.trivialView proxy loc))
     LocMem {} -> L.error "PPC memory support in progress"
     LocFR (PPC.FR rno) ->
       let frSlice :: CS.Slice 64 128
-          frSlice = CS.Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
+          frSlice = CS.Slice (knownNat :: NatRepr 64) (knownNat :: NatRepr 128) (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
       in return (Some (CS.View frSlice (LocVR (PPC.VR rno))))
+  where
+    proxy = Proxy :: Proxy PPC
