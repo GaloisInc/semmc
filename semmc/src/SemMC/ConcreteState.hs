@@ -11,6 +11,8 @@
 
 module SemMC.ConcreteState
   ( Value(..)
+  , liftValueBV1
+  , liftValueBV2
   , View(..)
   , trivialView
   , Slice(..)
@@ -20,12 +22,16 @@ module SemMC.ConcreteState
   , peekMS
   , pokeMS
   , Diff
+  , diffInt
+  , diffFloat
   , OutMask(..)
   , OutMasks
   , ConcreteArchitecture(..)
+  , module Data.Parameterized.NatRepr
+  , module GHC.TypeLits
   ) where
 
-import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR )
+import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor, popCount )
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Classes
@@ -46,7 +52,25 @@ import           SemMC.Architecture ( Architecture, ArchState, Location, Operand
 
 -- | Type of concrete values.
 data Value tp where
-  ValueBV :: W.W n -> Value (BaseBVType n)
+  -- Need the 'KnownNat' constraint to get 'Bits' on the 'W.W' bv.
+  ValueBV :: KnownNat n => W.W n -> Value (BaseBVType n)
+
+-- | Lift a bitvector computation to a value computation.
+liftValueBV1 :: (W.W n -> W.W n)
+             -> Value (BaseBVType n)
+             -> Value (BaseBVType n)
+liftValueBV1 op (ValueBV x) = ValueBV (op x)
+
+-- | Lift a bitvector computation to a value computation.
+--
+-- E.g.
+--
+-- > liftValueBV2 (+) (ValueBV x) (ValueBV y) == ValueBV (x + y)
+liftValueBV2 :: (W.W n -> W.W n -> W.W n)
+             -> Value (BaseBVType n)
+             -> Value (BaseBVType n)
+             -> Value (BaseBVType n)
+liftValueBV2 op (ValueBV x1) (ValueBV x2) = ValueBV (op x1 x2)
 
 deriving instance (KnownNat n) => Show (Value (BaseBVType n))
 deriving instance Eq (Value tp)
@@ -74,25 +98,33 @@ data View arch (m :: Nat) where
 
 -- | A slice of a bit vector.
 --
--- Could even go crazy, enforcing at the type level that the slice
--- makes sense:
+-- A
 --
--- > data Slice (m :: Nat) (n :: Nat) where
--- >   Slice :: (a <= b, a+m ~ b, b <= n) => NatRepr a -> NatRepr b :: Slice m n
+-- > Slice a b :: Slice m n
 --
--- but that might be overkill.
+-- is a view into the @m@ contiguous bits in the range @[a,b)@ in an
+-- @n@-bit bit vector. This is a little endian view, in that the bits
+-- in an @n@-bit bv are numbered from @0@ to @n-1@, with the @0@th bit
+-- the least significant.
 --
--- A slice is @m@ bits long in a @n@ bit base location
+-- For example
 --
--- @a@ is the start bit and @b@ is the end bit
+-- > Slice 1 3 :: Slice 2 5
+--
+-- refers to bits 1 and 2 in a 5-bit bv with little-endian bits 0, 1,
+-- 2, 3, and 4. So,
+--
+-- > :set -XBinaryLiterals
+-- > peekSlice (Slice (knownNat :: NatRepr 1) (knownNat :: NatRepr 3) :: Slice 2 5) (ValueBV (0b00010 :: W.W 4))
+-- > == ValueBV (0b01 :: W.W 2)
+--
+-- whereas a big-endian slice would have value @0b00@ here.
 data Slice (m :: Nat) (n :: Nat) where
-  Slice :: ( a+1 <= b   -- Slices are non-empty
+  Slice :: ( KnownNat m
+           , KnownNat n
            , (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
-           , b <= n)    -- The last bit (b) doesn't run off the end of the location (n)
+           , b <= n )   -- The last bit (b) doesn't run off the end of the location (n)
         => NatRepr a -> NatRepr b -> Slice m n
-
--- data Slice (l :: Nat) (h :: Nat) where
---   Slice :: (KnownNat l, KnownNat h, l < h) => Slice l h
 
 -- | Produce a view of an entire location
 trivialView :: forall arch n . (KnownNat n, 1 <= n) => Location arch (BaseBVType n) -> View arch n
@@ -122,7 +154,8 @@ pokeSlice (Slice (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> x)
 
 -- | Concrete machine state.
 --
--- Current we have symbolic machine state in 'ConcreteState'.
+-- Currently we have symbolic machine state in 'ConcreteState'
+-- (conathan: what does this mean?).
 type ConcreteState arch = ArchState arch Value
 
 -- | Read machine states.
@@ -139,7 +172,6 @@ pokeMS m (View sl loc) newPart = MapF.insert loc new m
   where orig = fromJust (MapF.lookup loc m)
         new = pokeSlice sl orig newPart
 
-
 ----------------------------------------------------------------
 -- Comparing machine states in stratified synthesis
 
@@ -149,6 +181,17 @@ pokeMS m (View sl loc) newPart = MapF.insert loc new m
 -- (regular equality) or floating point (equivalence relation that
 -- equates various NaN representations).
 type Diff n = Value (BaseBVType n) -> Value (BaseBVType n) -> Int
+
+-- | Compute distance in bits between two bvs interpreted as integers.
+diffInt :: Diff n
+diffInt (ValueBV x) (ValueBV y) = popCount (x `xor` y)
+
+-- | Compute distance in bits between two bvs interpreted as floats.
+--
+-- This will need to be a class method if different arches have
+-- different float encodings.
+diffFloat :: Diff n
+diffFloat = undefined "diffFloat"
 
 -- | Some state that is live out of an instruction.
 data OutMask arch n = OutMask (View arch n) (Diff n)
@@ -168,6 +211,12 @@ class (Architecture arch) => ConcreteArchitecture arch where
 
   -- | Return the other places where we should look for our target
   -- values in the candidate's out state.
+  --
+  -- The STOKE machine state comparison looks for the target values
+  -- not just in the target locations, but in other locations, to
+  -- allow discovering a program that computes the right values in the
+  -- wrong places on the way to discovering a program that computes
+  -- the right values in the right places.
   congruentViews :: proxy arch -> View arch n -> [View arch n]
 
   -- | Construct a complete state with all locations set to zero

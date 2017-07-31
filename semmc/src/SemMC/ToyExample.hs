@@ -27,10 +27,8 @@
 module SemMC.ToyExample where
 
 import           Data.EnumF ( congruentF, EnumF, enumF )
-import           Data.Map.Strict ( Map )
-import qualified Data.Map.Strict as M
-import qualified Data.Parameterized.Classes as ParamClasses
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
@@ -48,6 +46,8 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.ConcreteState as C
+import qualified SemMC.Stochastic.IORelation as I
 import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
 import           SemMC.Util ( makeSymbol )
 
@@ -129,6 +129,37 @@ deriving instance Show (Opcode o sh)
 deriving instance Eq (Opcode o sh)
 deriving instance Ord (Opcode o sh)
 
+-- | The set of all opcodes, e.g. for use with
+-- 'D.Random.randomInstruction'.
+opcodes :: Set.Set (Some (Opcode Operand))
+opcodes = Set.fromList
+  [ Some AddRr
+  , Some SubRr
+  , Some NegR
+  , Some MovRi
+  ]
+
+-- | The map of 'IORelation's for all opcodes.
+--
+-- This will need to include implicit operands once we add flags.
+ioRelations :: MapF.MapF (Opcode Operand) (I.IORelation Toy)
+ioRelations = MapF.fromList
+  [ MapF.Pair AddRr $ I.IORelation
+      { I.inputs = Set.fromList [o0, o1]
+      , I.outputs = Set.fromList [o0] }
+  , MapF.Pair SubRr $ I.IORelation
+      { I.inputs = Set.fromList [o0, o1]
+      , I.outputs = Set.fromList [o0] }
+  , MapF.Pair NegR $ I.IORelation
+      { I.inputs = Set.fromList [o0]
+      , I.outputs = Set.fromList [o0] }
+  , MapF.Pair MovRi $ I.IORelation
+      { I.inputs = Set.fromList [o0, o1]
+      , I.outputs = Set.fromList [o0] } ]
+  where
+    o0 = I.OperandRef (Some D.IndexHere)
+    o1 = I.OperandRef (Some (D.IndexThere D.IndexHere))
+
 instance ShowF (Opcode o) where
   showF = show
 
@@ -173,34 +204,30 @@ type Instruction = D.GenericInstruction Opcode Operand
 ----------------------------------------------------------------
 -- * Virtual Machine / Concrete Evaluation
 
--- | Registers, flags, and memory.
-data MachineState = MachineState
-  { msRegs :: !(Map Reg (Value "R32"))
---  , msFlags :: *
---  , msMem :: *
-  }
+type MachineState = C.ConcreteState Toy
 
 initialMachineState :: MachineState
-initialMachineState = MachineState
-  { msRegs = M.fromList [ (Reg1, 0)
-                        , (Reg2, 0)
-                        , (Reg3, 0)
-                        ]
-  }
+initialMachineState = MapF.fromList
+  [ MapF.Pair (RegLoc r) (C.ValueBV 0)
+  | r <- [Reg1, Reg2, Reg3] ]
 
 -- | The value type of a symbol, e.g. @"R32"@ registers are 32 bits.
 type family Value (s :: Symbol) :: *
 type instance Value "R32" = Word32
 type instance Value "I32" = Word32
 
+type family   BitWidth (s :: Symbol) :: C.Nat
+type instance BitWidth "R32" = 32
+type instance BitWidth "I32" = 32
+
 -- | Get the value of an operand in a machine state.
-getOperand :: MachineState -> Operand s -> Value s
-getOperand ms (R32 r) = msRegs ms M.! r
-getOperand _ (I32 x) = x
+getOperand :: MachineState -> Operand s -> C.Value (BaseBVType (BitWidth s))
+getOperand ms (R32 r) = C.peekMS ms (regView r)
+getOperand _ (I32 x) = C.ValueBV (fromIntegral x)
 
 -- | Update the value of an operand in a machine state.
-putOperand :: MachineState -> Operand s -> Value s -> MachineState
-putOperand ms (R32 r) x = ms { msRegs = M.insert r x $ msRegs ms }
+putOperand :: MachineState -> Operand s -> C.Value (BaseBVType (BitWidth s)) -> MachineState
+putOperand ms (R32 r) x = C.pokeMS ms (regView r) x
 putOperand _ I32{} _ = error "putOperand: putting an immediate does not make sense!"
 
 -- | Evaluate an instruction, updating the machine state.
@@ -209,14 +236,14 @@ evalInstruction ms (D.Instruction op args) = case (op, args) of
   (AddRr, r1 :> r2 :> Nil) ->
     let x1 = getOperand ms r1
         x2 = getOperand ms r2
-    in putOperand ms r1 (x1 + x2)
+    in putOperand ms r1 (C.liftValueBV2 (+) x1 x2)
   (SubRr, r1 :> r2 :> Nil) ->
     let x1 = getOperand ms r1
         x2 = getOperand ms r2
-    in putOperand ms r1 (x1 - x2)
+    in putOperand ms r1 (C.liftValueBV2 (-) x1 x2)
   (NegR, r1 :> Nil) ->
     let x1 = getOperand ms r1
-    in putOperand ms r1 (- x1)
+    in putOperand ms r1 (C.liftValueBV1 negate x1)
   (MovRi, r1 :> i1 :> Nil) ->
     let x1 = getOperand ms i1
     in putOperand ms r1 x1
@@ -306,9 +333,31 @@ instance A.IsLocation Location where
 
   defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
 
+-- If we got rid of the 'NatRepr' / 'knownNat' stuff we could make
+-- this a pattern synonym.
+regView :: Reg -> C.View Toy 32
+regView r = C.View (C.Slice (knownNat :: C.NatRepr 0) (knownNat :: C.NatRepr 32))
+                   (RegLoc r)
+
+operandToViewImpl :: Operand sh -> Maybe (Some (C.View Toy))
+operandToViewImpl (R32 r) = Just (Some (regView r))
+operandToViewImpl (I32 _) = Nothing
+
+congruentViewsImpl :: C.View Toy n -> [C.View Toy n]
+congruentViewsImpl (C.View s (RegLoc r)) =
+  [ C.View s (RegLoc r') | r' <- [Reg1, Reg2, Reg3], r /= r' ]
+
+instance C.ConcreteArchitecture Toy where
+  operandToView _ = operandToViewImpl
+  congruentViews _ = congruentViewsImpl
+  zeroState _ = initialMachineState
+
+  randomState = undefined "Toy: randomState"
+  serialize = undefined "Toy: serialize"
+  deserialize = undefined "Toy: deserialize"
+
 ----------------------------------------------------------------
 -- * Random Instruction Generation
-
 
 -- | An random but *not* uniform choice.
 --
@@ -340,12 +389,3 @@ instance D.ArbitraryOperands Opcode Operand where
     NegR  -> D.arbitraryOperandList gen
     MovRi -> D.arbitraryOperandList gen
 
--- | The set of all opcodes, e.g. for use with
--- 'D.Random.randomInstruction'.
-opcodes :: Set.Set (Some (Opcode Operand))
-opcodes = Set.fromList
-  [ Some AddRr
-  , Some SubRr
-  , Some NegR
-  , Some MovRi
-  ]

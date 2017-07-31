@@ -11,6 +11,7 @@ module SemMC.Stochastic.Monad (
   loadInitialState,
   runSyn,
   Config(..),
+  Test,
   -- * Operations
   askGen,
   askBaseSet,
@@ -58,11 +59,21 @@ import           SemMC.Symbolic ( Sym )
 import           SemMC.Util ( makeSymbol )
 import qualified SemMC.Worklist as WL
 
-import           SemMC.ConcreteState ( ConcreteState )
+import           SemMC.ConcreteState ( ConcreteArchitecture, ConcreteState )
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Stochastic.Statistics as S
 
+-- | A test here is an initial machine state.
+--
+-- The actual test process is to run the target program and candidate
+-- program on the initial state and compare the final states in some
+-- way.
+--
+-- The 'SynEnv' type has a collection of 'Test's, but we may want to
+-- cache the result of evaluating the target on them, in which case we
+-- can change this to be a pair of states.
+type Test arch = ConcreteState arch
 
 -- | Synthesis environment.
 data SynEnv t arch =
@@ -70,7 +81,7 @@ data SynEnv t arch =
          -- ^ All of the known formulas (base set + learned set)
          , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
          -- ^ Work items
-         , seTestCases :: STM.TVar [ConcreteState arch]
+         , seTestCases :: STM.TVar [Test arch]
          -- ^ All of the test cases we have accumulated.  This includes a set of
          -- initial heuristically interesting tests, as well as a set of ~1000
          -- random tests.  It also includes counterexamples learned during
@@ -102,7 +113,8 @@ type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
                  , D.ArbitraryOperand (Operand arch)
                  , D.ArbitraryOperands (Opcode arch) (Operand arch)
                  , Ord (Instruction arch)
-                 , P.EnumF (Opcode arch (Operand arch)) )
+                 , P.EnumF (Opcode arch (Operand arch))
+                 , ConcreteArchitecture arch )
 
 -- Synthesis monad.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
@@ -158,11 +170,11 @@ withSymBackend k = do
   liftIO $ STM.atomically $ STM.putTMVar symVar sym
   return res
 
-askTestCases :: Syn t arch [ConcreteState arch]
+askTestCases :: Syn t arch [Test arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Add a counterexample test case to the set of tests
-addTestCase :: ConcreteState arch -> Syn t arch ()
+addTestCase :: Test arch -> Syn t arch ()
 addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
@@ -225,7 +237,7 @@ loadInitialState :: (Architecture arch,
                  -> Sym t
                  -> IO (ConcreteState arch)
                  -- ^ A generator of random test cases
-                 -> [ConcreteState arch]
+                 -> [Test arch]
                  -- ^ Heuristically-interesting test cases
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -- ^ All possible opcodes
