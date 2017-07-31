@@ -34,6 +34,8 @@ module SemMC.ConcreteState
   , module GHC.TypeLits
   ) where
 
+import qualified GHC.Err.Located as L
+
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor, popCount )
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust, fromMaybe )
@@ -232,7 +234,7 @@ someTrivialView :: (ConcreteArchitecture arch)
 someTrivialView proxy (Some loc) =
   case locationType loc of
     BaseBVRepr nr -> withKnownNat nr (Some (trivialView proxy loc))
---    lt -> L.error ("Unsupported location type: " ++ show lt)
+    lt -> L.error ("Unsupported location type: " ++ show lt)
 
 onesMask :: (Integral a, Bits b, Num b) => a -> b
 onesMask sz = shiftL 1 (fromIntegral sz) - 1
