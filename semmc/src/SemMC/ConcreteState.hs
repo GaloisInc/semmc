@@ -74,27 +74,6 @@ liftValueBV2 :: (W.W n -> W.W n -> W.W n)
              -> Value (BaseBVType n)
 liftValueBV2 op (ValueBV x1) (ValueBV x2) = ValueBV (op x1 x2)
 
-deriving instance (KnownNat n) => Show (Value (BaseBVType n))
-deriving instance Eq (Value tp)
-deriving instance Ord (Value tp)
-
-instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
-  arbitrary gen = ValueBV <$> A.arbitrary gen
-
-instance TestEquality Value where
-  testEquality bv1 bv2 =
-    case bv1 of
-      ValueBV (w1 :: W.W n1) ->
-        let repr1 = knownNat :: NatRepr n1
-        in case bv2 of
-          ValueBV (w2 :: W.W n2) ->
-            let repr2 = knownNat :: NatRepr n2
-            in case testEquality repr1 repr2 of
-              Just Refl
-                | w1 == w2 -> Just Refl
-                | otherwise -> Nothing
-              Nothing -> Nothing
-
 -- | A slice of a bit vector.
 --
 -- A
@@ -125,43 +104,6 @@ data Slice (m :: Nat) (n :: Nat) where
            , b <= n)    -- The last bit (b) doesn't run off the end of the location (n)
         => NatRepr m -> NatRepr n -> NatRepr a -> NatRepr b -> Slice m n
 
-instance Show (Slice m n) where
-  show (Slice m n a b) = unwords [ "Slice"
-                                 , show m
-                                 , show n
-                                 , show a
-                                 , show b
-                                 ]
-instance ShowF (Slice m)
-
-instance Eq (Slice m n) where
-  Slice _ _ a1 b1 == Slice _ _ a2 b2 = fromMaybe False $ do
-    Refl <- testEquality a1 a2
-    Refl <- testEquality b1 b2
-    return True
-
-instance Ord (Slice m n) where
-  compare (Slice _ _ a1 b1) (Slice _ _ a2 b2) =
-    case compareF a1 a2 of
-      LTF -> LT
-      GTF -> GT
-      EQF ->
-        case compareF b1 b2 of
-          LTF -> LT
-          GTF -> GT
-          EQF -> EQ
-
-instance TestEquality (Slice m) where
-  testEquality (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) = do
-    Refl <- testEquality m1 m2
-    Refl <- testEquality n1 n2
-    Refl <- testEquality a1 a2
-    Refl <- testEquality b1 b2
-    return Refl
-
--- data Slice (l :: Nat) (h :: Nat) where
---   Slice :: (KnownNat l, KnownNat h, l < h) => Slice l h
-
 -- | A view into a location. Could be the whole location.
 --
 -- E.g.
@@ -181,42 +123,6 @@ data View arch (m :: Nat) where
 
 viewTypeRepr :: View arch n -> NatRepr n
 viewTypeRepr (View (Slice repr _ _ _) _) = repr
-
-instance (Architecture arch) => TestEquality (View arch) where
-  testEquality (View (Slice m1 n1 a1 b1) loc1) (View (Slice m2 n2 a2 b2) loc2) = do
-    Refl <- testEquality loc1 loc2
-    Refl <- testEquality m1 m2
-    Refl <- testEquality n1 n2
-    Refl <- testEquality a1 a2
-    Refl <- testEquality b1 b2
-    return Refl
-
-instance (Architecture arch) => Show (View arch m) where
-  show (View s loc) = "View " ++ showF s ++ " " ++ showF loc
-instance (Architecture arch) => ShowF (View arch)
-
-compareSliceF :: Slice m1 n1 -> Slice m2 n2 -> OrderingF m1 m2
-compareSliceF (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) =
-  case compareF m1 m2 of
-    LTF -> LTF
-    GTF -> GTF
-    EQF -> case compareF n1 n2 of
-      LTF -> LTF
-      GTF -> GTF
-      EQF -> case compareF a1 a2 of
-        LTF -> LTF
-        GTF -> GTF
-        EQF -> case compareF b1 b2 of
-          LTF -> LTF
-          GTF -> GTF
-          EQF -> EQF
-
-instance (Architecture arch) => OrdF (View arch) where
-  compareF (View s1 l1) (View s2 l2) =
-    case compareF l1 l2 of
-      LTF -> LTF
-      GTF -> GTF
-      EQF -> compareSliceF s1 s2
 
 -- | Produce a view of an entire location
 trivialView :: forall proxy arch n . (KnownNat n, 1 <= n) => proxy arch -> Location arch (BaseBVType n) -> View arch n
@@ -344,3 +250,98 @@ class (Architecture arch) => ConcreteArchitecture arch where
   readView :: String -> Maybe (Some (View arch))
 
   showView :: View arch n -> String
+
+
+-- Boring instances
+
+
+instance (Architecture arch) => TestEquality (View arch) where
+  testEquality (View (Slice m1 n1 a1 b1) loc1) (View (Slice m2 n2 a2 b2) loc2) = do
+    Refl <- testEquality loc1 loc2
+    Refl <- testEquality m1 m2
+    Refl <- testEquality n1 n2
+    Refl <- testEquality a1 a2
+    Refl <- testEquality b1 b2
+    return Refl
+
+instance (Architecture arch) => Show (View arch m) where
+  show (View s loc) = "View " ++ showF s ++ " " ++ showF loc
+instance (Architecture arch) => ShowF (View arch)
+
+compareSliceF :: Slice m1 n1 -> Slice m2 n2 -> OrderingF m1 m2
+compareSliceF (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) =
+  case compareF m1 m2 of
+    LTF -> LTF
+    GTF -> GTF
+    EQF -> case compareF n1 n2 of
+      LTF -> LTF
+      GTF -> GTF
+      EQF -> case compareF a1 a2 of
+        LTF -> LTF
+        GTF -> GTF
+        EQF -> case compareF b1 b2 of
+          LTF -> LTF
+          GTF -> GTF
+          EQF -> EQF
+
+instance (Architecture arch) => OrdF (View arch) where
+  compareF (View s1 l1) (View s2 l2) =
+    case compareF l1 l2 of
+      LTF -> LTF
+      GTF -> GTF
+      EQF -> compareSliceF s1 s2
+
+instance Show (Slice m n) where
+  show (Slice m n a b) = unwords [ "Slice"
+                                 , show m
+                                 , show n
+                                 , show a
+                                 , show b
+                                 ]
+instance ShowF (Slice m)
+
+instance Eq (Slice m n) where
+  Slice _ _ a1 b1 == Slice _ _ a2 b2 = fromMaybe False $ do
+    Refl <- testEquality a1 a2
+    Refl <- testEquality b1 b2
+    return True
+
+instance Ord (Slice m n) where
+  compare (Slice _ _ a1 b1) (Slice _ _ a2 b2) =
+    case compareF a1 a2 of
+      LTF -> LT
+      GTF -> GT
+      EQF ->
+        case compareF b1 b2 of
+          LTF -> LT
+          GTF -> GT
+          EQF -> EQ
+
+instance TestEquality (Slice m) where
+  testEquality (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) = do
+    Refl <- testEquality m1 m2
+    Refl <- testEquality n1 n2
+    Refl <- testEquality a1 a2
+    Refl <- testEquality b1 b2
+    return Refl
+
+deriving instance (KnownNat n) => Show (Value (BaseBVType n))
+deriving instance Eq (Value tp)
+deriving instance Ord (Value tp)
+
+instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
+  arbitrary gen = ValueBV <$> A.arbitrary gen
+
+instance TestEquality Value where
+  testEquality bv1 bv2 =
+    case bv1 of
+      ValueBV (w1 :: W.W n1) ->
+        let repr1 = knownNat :: NatRepr n1
+        in case bv2 of
+          ValueBV (w2 :: W.W n2) ->
+            let repr2 = knownNat :: NatRepr n2
+            in case testEquality repr1 repr2 of
+              Just Refl
+                | w1 == w2 -> Just Refl
+                | otherwise -> Nothing
+              Nothing -> Nothing
