@@ -18,8 +18,6 @@ module SemMC.ConcreteState
   , trivialView
   , someTrivialView
   , Slice(..)
-  , peekSlice
-  , pokeSlice
   , ConcreteState
   , peekMS
   , pokeMS
