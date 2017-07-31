@@ -156,13 +156,14 @@ compareTargetOutToCandidateOut :: forall arch.
                                -> C.ConcreteState arch
                                -> Double
 compareTargetOutToCandidateOut arch masks targetSt candidateSt =
-  sum [ weighBestMatch arch mask targetSt candidateSt
-      | Some mask <- masks ]
+  sum [ C.withKnownNat (C.viewTypeRepr v) $ weighBestMatch arch mask targetSt candidateSt
+      | Some (mask@(C.OutMask v _)) <- masks
+      ]
 
 -- Find the number-of-bits error in the best match, penalizing matches
 -- that are in the wrong location.
 weighBestMatch :: forall arch n.
-                  SynC arch
+                  (C.KnownNat n, SynC arch)
                => Proxy arch
                -> C.OutMask arch n
                -> C.ConcreteState arch

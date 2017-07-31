@@ -39,7 +39,7 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
-import SemMC.ConcreteState ( ConcreteState )
+import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Worklist as WL
 
 import SemMC.Stochastic.IORelation.Explicit ( generateExplicitInstruction,
@@ -54,14 +54,14 @@ data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
                  , lcAssemble :: Instruction arch -> BS.ByteString
-                 , lcTestGen :: IO (ConcreteState arch)
-                 , lcMachineState :: R.MachineState (ConcreteState arch)
+                 , lcTestGen :: IO (CS.ConcreteState arch)
+                 , lcMachineState :: R.MachineState (CS.ConcreteState arch)
                  , lcTimeoutSeconds :: Int
                  , lcRemoteHost :: String
                  }
 
 loadIORelations :: forall arch
-                 . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
+                 . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                 => Proxy arch
                 -> (forall sh . Opcode arch (Operand arch) sh -> FilePath)
                 -> [Some (Witness U.UnfoldShape (Opcode arch (Operand arch)))]
@@ -84,7 +84,7 @@ loadIORelations proxy toFP ops = do
 --
 -- This function spins up a user-specified number of worker threads.
 learnIORelations :: forall arch
-                  . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
+                  . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                  => LearningConfig arch
                  -> Proxy arch
                  -> (forall sh . (Opcode arch (Operand arch)) sh -> FilePath)
@@ -126,7 +126,7 @@ learnIORelations cfg proxy toFP ops = do
 --
 -- This is determined by observing the behavior of instructions on tests and
 -- perturbing inputs randomly.
-learn :: (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
+learn :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
       => Learning arch ()
 learn = do
   mop <- nextOpcode
@@ -138,7 +138,7 @@ learn = do
       learn
 
 testOpcode :: forall arch sh
-            . (Architecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
+            . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
            => Opcode arch (Operand arch) sh
            -> Learning arch (IORelation arch sh)
 testOpcode op = do
@@ -152,7 +152,7 @@ testOpcode op = do
       | otherwise -> L.error ("randomInstruction returned an instruction with the wrong opcode: " ++ P.showF op')
 
 -- | Collect all of the locations that are read from or written to implicitly
-implicitLocations :: IORelation arch sh -> [Some (Location arch)]
+implicitLocations :: IORelation arch sh -> [Some (CS.View arch)]
 implicitLocations ior = foldr collectImplicits (foldr collectImplicits [] (inputs ior)) (outputs ior)
   where
     collectImplicits opRef acc =

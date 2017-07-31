@@ -25,6 +25,7 @@ import qualified Dismantle.Instruction as D
 
 import qualified Data.Parameterized.Unfold as U
 import SemMC.Architecture
+import qualified SemMC.ConcreteState as CS
 import SemMC.Stochastic.IORelation.Types
 
 {-
@@ -60,7 +61,7 @@ parserLL = SC.mkParser parseAtom
 parseLL :: T.Text -> Either String (SC.SExpr Atom)
 parseLL = SC.decodeOne parserLL
 
-printIORelation :: forall arch sh . (Architecture arch) => IORelation arch sh -> T.Text
+printIORelation :: forall arch sh . (CS.ConcreteArchitecture arch) => IORelation arch sh -> T.Text
 printIORelation = SC.encodeOne (SC.basicPrint printAtom) . (fromIORelation (Proxy :: Proxy arch))
 
 printAtom :: Atom -> T.Text
@@ -69,7 +70,7 @@ printAtom a =
     AIdent s -> T.pack s
     AWord w -> T.pack (show w)
 
-fromIORelation :: (Architecture arch) => Proxy arch -> IORelation arch sh -> SC.SExpr Atom
+fromIORelation :: (CS.ConcreteArchitecture arch) => Proxy arch -> IORelation arch sh -> SC.SExpr Atom
 fromIORelation p ior =
   SC.SCons (SC.SCons (SC.SAtom (AIdent "inputs")) inputsS)
            (SC.SCons (SC.SCons (SC.SAtom (AIdent "outputs")) outputsS)
@@ -82,7 +83,7 @@ fromIORelation p ior =
 
     toSExpr rel =
       case rel of
-        ImplicitOperand loc -> SC.SAtom (AIdent (show loc))
+        ImplicitOperand (Some loc) -> SC.SAtom (AIdent (CS.showView loc))
         OperandRef (Some ix) -> SC.SAtom (AWord (indexToWord p ix))
 
 indexToWord :: Proxy arch -> D.Index sh s -> Word
@@ -100,7 +101,7 @@ deriving instance (Architecture arch) => Show (IORelationParseError arch)
 instance (Architecture arch) => E.Exception (IORelationParseError arch)
 
 readIORelation :: forall arch m sh
-                . (E.MonadThrow m, Architecture arch, U.UnfoldShape sh)
+                . (E.MonadThrow m, CS.ConcreteArchitecture arch, U.UnfoldShape sh)
                => Proxy arch
                -> T.Text
                -> Opcode arch (Operand arch) sh
@@ -119,7 +120,7 @@ readIORelation p t op = do
   return IORelation { inputs = S.fromList ins, outputs = S.fromList outs }
 
 parseRelationList :: forall m sh arch
-                   . (E.MonadThrow m, U.UnfoldShape sh, Architecture arch)
+                   . (E.MonadThrow m, U.UnfoldShape sh, CS.ConcreteArchitecture arch)
                   => Proxy arch
                   -> Opcode arch (Operand arch) sh
                   -> SC.SExpr Atom
@@ -129,7 +130,7 @@ parseRelationList proxy opcode s0 =
     SC.SNil -> return []
     SC.SCons (SC.SCons (SC.SAtom (AIdent "implicit")) (SC.SAtom (AIdent loc))) rest -> do
       rest' <- parseRelationList proxy opcode rest
-      case readLocation loc of
+      case CS.readView loc of
         Nothing -> E.throwM (InvalidLocation proxy loc)
         Just sloc -> return (ImplicitOperand sloc : rest')
     SC.SCons (SC.SCons (SC.SAtom (AIdent "operand")) (SC.SAtom (AWord ix))) rest -> do

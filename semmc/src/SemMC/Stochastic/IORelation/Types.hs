@@ -8,7 +8,7 @@ module SemMC.Stochastic.IORelation.Types (
   IORelation(..),
   LocalLearningEnv(..),
   GlobalLearningEnv(..),
-  TypedLocation(..),
+--  TypedLocation(..),
   TestBundle(..),
   ExplicitFact(..),
   ImplicitFact(..),
@@ -49,7 +49,7 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
-import SemMC.ConcreteState ( ConcreteState )
+import qualified SemMC.ConcreteState as CS
 
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
@@ -64,20 +64,20 @@ data GlobalLearningEnv arch =
 
 data LocalLearningEnv arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
-                   , testChan :: C.Chan (Maybe (R.TestCase (ConcreteState arch)))
-                   , resChan :: C.Chan (R.ResultOrError (ConcreteState arch))
+                   , testChan :: C.Chan (Maybe (R.TestCase (CS.ConcreteState arch)))
+                   , resChan :: C.Chan (R.ResultOrError (CS.ConcreteState arch))
                    , gen :: A.Gen
-                   , testGen :: IO (ConcreteState arch)
+                   , testGen :: IO (CS.ConcreteState arch)
                    -- ^ The test generator is part of local state because it
                    -- might not be thread safe.  Be sure to allocate one per
                    -- runner.
                    , nonce :: STM.TVar Word64
                    }
 
-askTestChan :: Learning arch (C.Chan (Maybe (R.TestCase (ConcreteState arch))))
+askTestChan :: Learning arch (C.Chan (Maybe (R.TestCase (CS.ConcreteState arch))))
 askTestChan = Rd.asks testChan
 
-askResultChan :: Learning arch (C.Chan (R.ResultOrError (ConcreteState arch)))
+askResultChan :: Learning arch (C.Chan (R.ResultOrError (CS.ConcreteState arch)))
 askResultChan = Rd.asks resChan
 
 askGen :: Learning arch A.Gen
@@ -109,13 +109,13 @@ nextOpcode = do
         STM.writeTVar wlref wl'
         return (Just op)
 
-mkRandomTest :: Learning arch (ConcreteState arch)
+mkRandomTest :: Learning arch (CS.ConcreteState arch)
 mkRandomTest = liftIO =<< Rd.asks testGen
 
 askAssembler :: Learning arch (Instruction arch -> BS.ByteString)
 askAssembler = Rd.asks (assemble . globalLearningEnv)
 
-data OperandRef arch sh = ImplicitOperand (Some (Location arch))
+data OperandRef arch sh = ImplicitOperand (Some (CS.View arch))
                         -- ^ A location that is implicitly read from or written to by an instruction
                         | OperandRef (Some (D.Index sh))
                         -- ^ An index into an operand list
@@ -133,10 +133,10 @@ data TestBundle t l =
 -- | If the given location changes, it was an output location.  Otherwise, if
 -- the test cases differ from the original test case, it was an input operand.
 data ExplicitFact arch =
-  forall sh tp . ExplicitFact { lOpcode :: Opcode arch (Operand arch) sh
+  forall sh tp n . ExplicitFact { lOpcode :: Opcode arch (Operand arch) sh
                               , lIndex :: D.Index sh tp
                               -- ^ The index into the operand list of the location we are watching
-                              , lLocation :: Location arch (OperandType arch tp)
+                              , lLocation :: CS.View arch n
                               -- ^ The location we are watching
                               , lInstruction :: Instruction arch
                               }
@@ -145,8 +145,8 @@ data ExplicitFact arch =
 -- state variables that are not explicitly mentioned in the operand list
 -- indicate implicit operands.
 data ImplicitFact arch =
-  ImplicitFact { ifExplicits :: S.Set (Some (Location arch))
-               , ifLocation :: Some (Location arch)
+  ImplicitFact { ifExplicits :: S.Set (Some (CS.View arch))
+               , ifLocation :: Some (CS.View arch)
                -- ^ The location that was modified for this test
                , ifInstruction :: Instruction arch
                }
@@ -209,4 +209,4 @@ timeout a = do
 
 -- | This is a newtype to shuffle type arguments around so that the 'tp'
 -- parameter is last (so that we can use it with PairF and Some)
-newtype TypedLocation arch tp = TL (Location arch (OperandType arch tp))
+-- newtype TypedLocation arch tp = TL (Location arch (OperandType arch tp))

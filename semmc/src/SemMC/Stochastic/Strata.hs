@@ -28,7 +28,8 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import SemMC.Architecture ( Architecture(..), Instruction, Opcode, Operand, Location )
+import SemMC.Architecture ( Instruction, Opcode, Operand )
+import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import           SemMC.Symbolic ( Sym )
 
@@ -48,7 +49,7 @@ caller controls the number and placement of threads.
 
 -}
 
-stratifiedSynthesis :: (Architecture arch, SynC arch)
+stratifiedSynthesis :: (CS.ConcreteArchitecture arch, SynC arch)
                     => SynEnv t arch
                     -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
@@ -67,11 +68,11 @@ stratifiedSynthesis env0 = do
     runSyn localEnv strata
   STM.readTVarIO (seFormulas env0)
 
-strata :: (Architecture arch, SynC arch)
+strata :: (CS.ConcreteArchitecture arch, SynC arch)
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
-processWorklist :: (Architecture arch, SynC arch)
+processWorklist :: (CS.ConcreteArchitecture arch, SynC arch)
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
@@ -89,7 +90,7 @@ processWorklist = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we time out trying to find a formula
-strataOne :: (Architecture arch, SynC arch)
+strataOne :: (CS.ConcreteArchitecture arch, SynC arch)
           => Opcode arch (Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
@@ -99,7 +100,7 @@ strataOne op = do
     Nothing -> return Nothing
     Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
 
-strataOneLoop :: (Architecture arch, SynC arch)
+strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
               => Opcode arch (Operand arch) sh
               -> Instruction arch
               -> C.EquivalenceClasses arch
@@ -120,7 +121,7 @@ strataOneLoop op instr eqclasses = do
             Just <$> finishStrataOne op instr eqclasses'
           | otherwise -> strataOneLoop op instr eqclasses'
 
-finishStrataOne :: (Architecture arch)
+finishStrataOne :: (CS.ConcreteArchitecture arch)
                 => Opcode arch (Operand arch) sh
                 -> Instruction arch
                 -> C.EquivalenceClasses arch
@@ -135,7 +136,7 @@ finishStrataOne op instr eqclasses = do
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 --
 -- FIXME: Here we need the set of output locations (which could include implicit locations)
-buildFormula :: (Architecture arch)
+buildFormula :: (CS.ConcreteArchitecture arch)
              => Opcode arch (Operand arch) sh
              -> Instruction arch
              -> [Instruction arch]
@@ -153,7 +154,7 @@ buildFormula o i prog = do
 -- We'll also want to return a mapping from locations to input values to be used
 -- to inform the initial state generation.
 instantiateInstruction :: forall arch sh t
-                        . (Architecture arch, SynC arch)
+                        . (CS.ConcreteArchitecture arch, SynC arch)
                        => Opcode arch (Operand arch) sh
                        -> Syn t arch (Instruction arch)
 instantiateInstruction op = do
@@ -163,7 +164,7 @@ instantiateInstruction op = do
   where
     -- Generate random instructions until we get one with explicit operands that
     -- do not overlap with implicit operands.
-    go :: A.Gen -> S.Set (Some (Location arch)) -> Syn t arch (Instruction arch)
+    go :: A.Gen -> S.Set (Some (CS.View arch)) -> Syn t arch (Instruction arch)
     go gen implicitOps = do
       target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
       case target of
@@ -173,20 +174,20 @@ instantiateInstruction op = do
             go gen implicitOps
           | otherwise -> return target
 
-isImplicitOrReusedOperand :: (Architecture arch, SynC arch)
+isImplicitOrReusedOperand :: (CS.ConcreteArchitecture arch, SynC arch)
                           => Proxy arch
-                          -> S.Set (Some (Location arch))
+                          -> S.Set (Some (CS.View arch))
                           -> ix
                           -> Operand arch tp
                           -> (Bool, S.Set (Some (Operand arch)))
                           -> (Bool, S.Set (Some (Operand arch)))
 isImplicitOrReusedOperand proxy implicitLocs _ix operand (isIorR, seen)
   | isIorR || S.member (Some operand) seen = (True, seen)
-  | Just loc <- operandToLocation proxy operand
-  , S.member (Some loc) implicitLocs = (True, seen)
+  | Just loc <- CS.operandToView proxy operand
+  , S.member loc implicitLocs = (True, seen)
   | otherwise = (isIorR, S.insert (Some operand) seen)
 
-implicitOperands :: (Architecture arch) => IORelation arch sh -> S.Set (Some (Location arch))
+implicitOperands :: (CS.ConcreteArchitecture arch) => IORelation arch sh -> S.Set (Some (CS.View arch))
 implicitOperands iorel =
   F.foldl' addImplicitLoc S.empty (inputs iorel <> outputs iorel)
   where

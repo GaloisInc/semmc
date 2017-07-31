@@ -12,7 +12,7 @@ module SemMC.Stochastic.IORelation.Shared (
   withGeneratedValueForLocation,
   instructionRegisterOperands,
   testCaseLocations,
-  PairF(..)
+  IndexedView(..)
   ) where
 
 import qualified Control.Concurrent as C
@@ -23,7 +23,7 @@ import qualified Data.Map.Strict as M
 import Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.NatRepr ( NatRepr, withKnownNat )
+import Data.Parameterized.NatRepr ( withKnownNat )
 import Data.Parameterized.Some ( Some(..) )
 import qualified Lang.Crucible.BaseTypes as S
 
@@ -31,7 +31,7 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
-import SemMC.ConcreteState ( ConcreteState, Value(..) )
+import qualified SemMC.ConcreteState as CS
 
 import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.IORelation.Types
@@ -39,8 +39,8 @@ import SemMC.Stochastic.IORelation.Types
 withTestResults :: forall a f arch sh
                  . (Architecture arch)
                 => Opcode arch (Operand arch) sh
-                -> [TestBundle (R.TestCase (ConcreteState arch)) f]
-                -> ([R.ResultOrError (ConcreteState arch)] -> Learning arch a)
+                -> [TestBundle (R.TestCase (CS.ConcreteState arch)) f]
+                -> ([R.ResultOrError (CS.ConcreteState arch)] -> Learning arch a)
                 -> Learning arch a
 withTestResults op tests k = do
   tchan <- askTestChan
@@ -55,8 +55,8 @@ withTestResults op tests k = do
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
 wrapTestBundle :: (Architecture arch)
                => Instruction arch
-               -> TestBundle (ConcreteState arch) f
-               -> Learning arch (TestBundle (R.TestCase (ConcreteState arch)) f)
+               -> TestBundle (CS.ConcreteState arch) f
+               -> Learning arch (TestBundle (R.TestCase (CS.ConcreteState arch)) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
   return TestBundle { tbTestCases = cases
@@ -67,8 +67,8 @@ wrapTestBundle i tb = do
 -- raw tests to 'R.TestCase' by allocating a nonce
 makeTestCase :: (Architecture arch)
              => Instruction arch
-             -> ConcreteState arch
-             -> Learning arch (R.TestCase (ConcreteState arch))
+             -> CS.ConcreteState arch
+             -> Learning arch (R.TestCase (CS.ConcreteState arch))
 makeTestCase i c = do
   tid <- nextNonce
   asm <- askAssembler
@@ -88,44 +88,45 @@ indexResults ri res =
     R.TestSuccess tr ->
       ri { riSuccesses = M.insert (R.resultNonce tr) tr (riSuccesses ri) }
 
-data PairF a b tp = PairF (a tp) (b tp)
+-- | A view of a location, indexed by its position in the operand list
+data IndexedView arch sh where
+  IndexedView :: D.Index sh tp -> Some (CS.View arch) -> IndexedView arch sh
 
 instructionRegisterOperands :: forall arch sh proxy
-                             . (Architecture arch)
+                             . (CS.ConcreteArchitecture arch)
                             => proxy arch
                             -> D.OperandList (Operand arch) sh
-                            -> [Some (PairF (D.Index sh) (TypedLocation arch))]
+                            -> [IndexedView arch sh]
 instructionRegisterOperands proxy operands =
   D.foldrOperandList collectLocations [] operands
   where
     collectLocations :: forall tp . D.Index sh tp
                      -> Operand arch tp
-                     -> [Some (PairF (D.Index sh) (TypedLocation arch))]
-                     -> [Some (PairF (D.Index sh) (TypedLocation arch))]
+                     -> [IndexedView arch sh]
+                     -> [IndexedView arch sh]
     collectLocations ix operand acc =
-      case operandToLocation proxy operand of
-        Just loc -> Some (PairF ix (TL loc)) : acc
+      case CS.operandToView proxy operand of
+        Just v -> IndexedView ix v : acc
         Nothing -> acc
 
 -- | Return all of the locations referenced in the architecture state
-testCaseLocations :: (Architecture arch)
+testCaseLocations :: forall proxy arch
+                   . (CS.ConcreteArchitecture arch)
                   => proxy arch
-                  -> ConcreteState arch
-                  -> [Some (Location arch)]
-testCaseLocations _ = MapF.foldrWithKey getKeys []
+                  -> CS.ConcreteState arch
+                  -> [Some (CS.View arch)]
+testCaseLocations proxy = MapF.foldrWithKey getKeys []
   where
-    getKeys k _ acc = Some k : acc
+    getKeys :: forall a s . Location arch s -> a s -> [Some (CS.View arch)] -> [Some (CS.View arch)]
+    getKeys k _ acc = CS.someTrivialView proxy (Some k) : acc
 
-withGeneratedValueForLocation :: forall arch tp a
+withGeneratedValueForLocation :: forall arch n a
                                . (Architecture arch)
-                              => Location arch tp
-                              -> (Value tp -> a)
+                              => CS.View arch n
+                              -> (CS.Value (S.BaseBVType n) -> a)
                               -> Learning arch a
 withGeneratedValueForLocation loc k = do
   g <- askGen
-  case locationType loc of
-    S.BaseBVRepr (wVal :: NatRepr w) -> withKnownNat wVal $ do
-      randomBV :: Value (S.BaseBVType w)
-                <- liftIO (A.arbitrary g)
-      return (k randomBV)
-    repr -> error ("Unsupported base type repr in withGeneratedValueForLocation: " ++ show repr)
+  withKnownNat (CS.viewTypeRepr loc) $ do
+    randomBV <- liftIO (A.arbitrary g)
+    return (k randomBV)

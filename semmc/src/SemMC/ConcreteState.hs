@@ -14,7 +14,9 @@ module SemMC.ConcreteState
   , liftValueBV1
   , liftValueBV2
   , View(..)
+  , viewTypeRepr
   , trivialView
+  , someTrivialView
   , Slice(..)
   , peekSlice
   , pokeSlice
@@ -33,27 +35,26 @@ module SemMC.ConcreteState
 
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor, popCount )
 import qualified Data.ByteString as B
-import           Data.Maybe ( fromJust )
+import           Data.Maybe ( fromJust, fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.NatRepr ( NatRepr, widthVal, knownNat )
-import           Data.Parameterized.Some ( Some )
+import           Data.Parameterized.NatRepr ( NatRepr, widthVal, knownNat, withKnownNat )
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( KnownNat, Nat, type (+), type (<=) )
 
 import qualified Dismantle.Arbitrary as A
 
-import           Lang.Crucible.BaseTypes ( BaseBVType )
+import           Lang.Crucible.BaseTypes ( BaseBVType, BaseTypeRepr(..) )
 
-import           SemMC.Architecture ( Architecture, ArchState, Location, Operand )
+import           SemMC.Architecture ( Architecture, ArchState, Location, Operand, locationType )
 
 ----------------------------------------------------------------
 -- Locations, values, and views
 
 -- | Type of concrete values.
 data Value tp where
-  -- Need the 'KnownNat' constraint to get 'Bits' on the 'W.W' bv.
-  ValueBV :: KnownNat n => W.W n -> Value (BaseBVType n)
+  ValueBV :: (KnownNat n) => W.W n -> Value (BaseBVType n)
 
 -- | Lift a bitvector computation to a value computation.
 liftValueBV1 :: (W.W n -> W.W n)
@@ -79,22 +80,19 @@ deriving instance Ord (Value tp)
 instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
   arbitrary gen = ValueBV <$> A.arbitrary gen
 
--- | A view into a location. Could be the whole location.
---
--- E.g.
---
--- > pattern F12 = View (Slice 0 64 :: Slice 64) VSX12 :: View PPC 64
---
--- Note that (non-immediate) operands are like 'View's, not
--- 'Location's.
---
--- The @m@ parameter is the size (number of bits) of the view.
---
--- The @n@ parameter is the size of the underlying location.
---
--- The @s@ parameter is the start bit of the slice.
-data View arch (m :: Nat) where
-  View :: Slice m n -> Location arch (BaseBVType n) -> View arch m
+instance TestEquality Value where
+  testEquality bv1 bv2 =
+    case bv1 of
+      ValueBV (w1 :: W.W n1) ->
+        let repr1 = knownNat :: NatRepr n1
+        in case bv2 of
+          ValueBV (w2 :: W.W n2) ->
+            let repr2 = knownNat :: NatRepr n2
+            in case testEquality repr1 repr2 of
+              Just Refl
+                | w1 == w2 -> Just Refl
+                | otherwise -> Nothing
+              Nothing -> Nothing
 
 -- | A slice of a bit vector.
 --
@@ -123,27 +121,129 @@ data Slice (m :: Nat) (n :: Nat) where
   Slice :: ( KnownNat m
            , KnownNat n
            , (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
-           , b <= n )   -- The last bit (b) doesn't run off the end of the location (n)
-        => NatRepr a -> NatRepr b -> Slice m n
+           , b <= n)    -- The last bit (b) doesn't run off the end of the location (n)
+        => NatRepr m -> NatRepr n -> NatRepr a -> NatRepr b -> Slice m n
+
+instance Show (Slice m n) where
+  show (Slice m n a b) = unwords [ "Slice"
+                                 , show m
+                                 , show n
+                                 , show a
+                                 , show b
+                                 ]
+instance ShowF (Slice m)
+
+instance Eq (Slice m n) where
+  Slice _ _ a1 b1 == Slice _ _ a2 b2 = fromMaybe False $ do
+    Refl <- testEquality a1 a2
+    Refl <- testEquality b1 b2
+    return True
+
+instance Ord (Slice m n) where
+  compare (Slice _ _ a1 b1) (Slice _ _ a2 b2) =
+    case compareF a1 a2 of
+      LTF -> LT
+      GTF -> GT
+      EQF ->
+        case compareF b1 b2 of
+          LTF -> LT
+          GTF -> GT
+          EQF -> EQ
+
+instance TestEquality (Slice m) where
+  testEquality (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) = do
+    Refl <- testEquality m1 m2
+    Refl <- testEquality n1 n2
+    Refl <- testEquality a1 a2
+    Refl <- testEquality b1 b2
+    return Refl
+
+-- data Slice (l :: Nat) (h :: Nat) where
+--   Slice :: (KnownNat l, KnownNat h, l < h) => Slice l h
+
+-- | A view into a location. Could be the whole location.
+--
+-- E.g.
+--
+-- > pattern F12 = View (Slice 0 64 :: Slice 64) VSX12 :: View PPC 64
+--
+-- Note that (non-immediate) operands are like 'View's, not
+-- 'Location's.
+--
+-- The @m@ parameter is the size (number of bits) of the view.
+--
+-- The @n@ parameter is the size of the underlying location.
+--
+-- The @s@ parameter is the start bit of the slice.
+data View arch (m :: Nat) where
+  View :: Slice m n -> Location arch (BaseBVType n) -> View arch m
+
+viewTypeRepr :: View arch n -> NatRepr n
+viewTypeRepr (View (Slice repr _ _ _) _) = repr
+
+instance (Architecture arch) => TestEquality (View arch) where
+  testEquality (View (Slice m1 n1 a1 b1) loc1) (View (Slice m2 n2 a2 b2) loc2) = do
+    Refl <- testEquality loc1 loc2
+    Refl <- testEquality m1 m2
+    Refl <- testEquality n1 n2
+    Refl <- testEquality a1 a2
+    Refl <- testEquality b1 b2
+    return Refl
+
+instance (Architecture arch) => Show (View arch m) where
+  show (View s loc) = "View " ++ showF s ++ " " ++ showF loc
+instance (Architecture arch) => ShowF (View arch)
+
+compareSliceF :: Slice m1 n1 -> Slice m2 n2 -> OrderingF m1 m2
+compareSliceF (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) =
+  case compareF m1 m2 of
+    LTF -> LTF
+    GTF -> GTF
+    EQF -> case compareF n1 n2 of
+      LTF -> LTF
+      GTF -> GTF
+      EQF -> case compareF a1 a2 of
+        LTF -> LTF
+        GTF -> GTF
+        EQF -> case compareF b1 b2 of
+          LTF -> LTF
+          GTF -> GTF
+          EQF -> EQF
+
+instance (Architecture arch) => OrdF (View arch) where
+  compareF (View s1 l1) (View s2 l2) =
+    case compareF l1 l2 of
+      LTF -> LTF
+      GTF -> GTF
+      EQF -> compareSliceF s1 s2
 
 -- | Produce a view of an entire location
-trivialView :: forall arch n . (KnownNat n, 1 <= n) => Location arch (BaseBVType n) -> View arch n
-trivialView loc = View s loc
+trivialView :: forall proxy arch n . (KnownNat n, 1 <= n) => proxy arch -> Location arch (BaseBVType n) -> View arch n
+trivialView _ loc = View s loc
   where
     s :: Slice n n
-    s = Slice (knownNat :: NatRepr 0) (knownNat :: NatRepr n)
+    s = Slice (knownNat :: NatRepr n) (knownNat :: NatRepr n) (knownNat :: NatRepr 0) (knownNat :: NatRepr n)
+
+someTrivialView :: (ConcreteArchitecture arch)
+                => proxy arch
+                -> Some (Location arch)
+                -> Some (View arch)
+someTrivialView proxy (Some loc) =
+  case locationType loc of
+    BaseBVRepr nr -> withKnownNat nr (Some (trivialView proxy loc))
+--    lt -> L.error ("Unsupported location type: " ++ show lt)
 
 onesMask :: (Integral a, Bits b, Num b) => a -> b
 onesMask sz = shiftL 1 (fromIntegral sz) - 1
 
 -- | Read sliced bits.
-peekSlice :: Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m)
-peekSlice (Slice (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> val))) =
+peekSlice :: (KnownNat m) => Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m)
+peekSlice (Slice _ _ (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> val))) =
   (ValueBV . W.W . fromInteger) ((val .&. onesMask b) `shiftR` a)
 
 -- | Write sliced bits.
 pokeSlice :: Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m) -> Value (BaseBVType n)
-pokeSlice (Slice (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> x))) (ValueBV (W.W (toInteger -> y))) =
+pokeSlice (Slice _ _ (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> x))) (ValueBV (W.W (toInteger -> y))) =
   let shiftedY = y `shiftL` a
       clearLower nLower val = (val `shiftR` nLower) `shiftL` nLower
       xMask = complement (clearLower a (onesMask b))
@@ -159,7 +259,7 @@ pokeSlice (Slice (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> x)
 type ConcreteState arch = ArchState arch Value
 
 -- | Read machine states.
-peekMS :: (OrdF (Location arch)) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
+peekMS :: (OrdF (Location arch), KnownNat n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
 peekMS = flip peekMS'
   where peekMS' (View sl loc) = peekSlice sl . fromJust . MapF.lookup loc
 
@@ -235,3 +335,7 @@ class (Architecture arch) => ConcreteArchitecture arch where
 
   -- | Try to convert a 'B.ByteString' into a 'ConcreteState'
   deserialize :: proxy arch -> B.ByteString -> Maybe (ConcreteState arch)
+
+  readView :: String -> Maybe (Some (View arch))
+
+  showView :: View arch n -> String

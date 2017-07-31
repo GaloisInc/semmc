@@ -336,8 +336,7 @@ instance A.IsLocation Location where
 -- If we got rid of the 'NatRepr' / 'knownNat' stuff we could make
 -- this a pattern synonym.
 regView :: Reg -> C.View Toy 32
-regView r = C.View (C.Slice (knownNat :: C.NatRepr 0) (knownNat :: C.NatRepr 32))
-                   (RegLoc r)
+regView r = C.trivialView (Proxy :: Proxy Toy) (RegLoc r)
 
 operandToViewImpl :: Operand sh -> Maybe (Some (C.View Toy))
 operandToViewImpl (R32 r) = Just (Some (regView r))
