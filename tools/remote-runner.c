@@ -303,10 +303,13 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 #error "PPC64 not supported yet"
 #else
 
+uint8_t raiseTrap[] = {0x7f, 0xe0, 0x00, 0x08};
+
+#define RAISE_TRAP asm("trap")
+
 // The standard general purpose integer registers
 #define SEM_NGPRS 32
-#define SEM_NVRS 32
-#define SEM_NFPRS 32
+#define SEM_NVRS 64
 
 typedef struct {
   uint64_t chunks[2];
@@ -320,9 +323,8 @@ typedef struct {
   uint32_t link;
   uint32_t xer;
   uint32_t cr;
-  uint64_t fprs[SEM_NFPRS];
   uint64_t fpscr;
-  VR vrs[SEM_NVSRS];
+  VR vrs[SEM_NVRS];
   uint8_t mem1[MEM_REGION_BYTES];
   uint8_t mem2[MEM_REGION_BYTES];
 } RegisterState;
@@ -354,7 +356,7 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
   }
 
   for (int i = 0; i < SEM_NGPRS; i++) {
-    regs.gprs[i] = rs->gprs[i];
+    regs.gpr[i] = rs->gprs[i];
   }
   regs.msr  = rs->msr;
   regs.ctr  = rs->ctr;
@@ -363,22 +365,10 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
   regs.ccr  = rs->cr;
 
   // Set the IP to be at the start of our test program
-  regs.nip = rs->ip;
+  regs.nip = CAST_PTR(programSpace);
   LOG("PTRACE_SETREGS: setting IP to %" PRIxPTR "\n", regs.nip);
 
   checkedPtrace(PTRACE_SETREGS, childPid, 0, &regs);
-
-  elf_fpregset_t fpregs;
-
-  checkedPtrace(PTRACE_GETFPREGS, childPid, 0, (void *) &fpregs);
-
-  // Copy in the FP regs
-  for (int i = 0; i < SEM_NFPRS; i++) {
-    fpregs[i] = *((const double *) &rs->fprs[i]);
-  }
-  fpregs[SEM_NFPRS] = *((const double *) &rs->fpscr);
-
-  checkedPtrace(PTRACE_SETFPREGS, childPid, 0, (void *) &fpregs);
 
   // Anonymous struct to ensure proper alignment
   struct {
@@ -391,10 +381,10 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
 
   // Copy in the VR regs
   for (int i = 0; i < SEM_NVRS; i++) {
-    vrbuf.vrregs[i] = vs->vrs[i];
+    vrbuf.vrregs[i] = rs->vrs[i];
   }
 
-  checkedPtrace(PTRACE_SETVRREGS, childPid, 0, (void *) &vrBuf);
+  checkedPtrace(PTRACE_SETVRREGS, childPid, 0, (void *) &vrbuf);
 }
 
 void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs) {
@@ -403,23 +393,13 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   checkedPtrace(PTRACE_GETREGS, childPid, 0, (void *) &regs);
 
   for (int i = 0; i < SEM_NGPRS; i++) {
-    rs->gprs[i] = regs.gprs[i];
+    rs->gprs[i] = regs.gpr[i];
   }
   rs->msr = regs.msr;
   rs->ctr = regs.ctr;
   rs->link = regs.link;
   rs->xer = regs.xer;
   rs->cr = regs.ccr;
-
-  elf_fpregset_t fpregs;
-
-  checkedPtrace(PTRACE_GETFPREGS, childPid, 0, (void *) &fpregs);
-
-  // Copy in the FP regs
-  for (int i = 0; i < SEM_NFPRS; i++) {
-    rs->fprs[i] = *((const uint64_t *) &fpregs[i]);
-  }
-  rs->fpscr = *((const uint64_t *) &fpregs[SEM_NFPRS]);
 
   // Anonymous struct to ensure proper alignment
   struct {
@@ -432,7 +412,7 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 
   // Copy in the VR regs
   for (int i = 0; i < SEM_NVRS; i++) {
-    vs->vrs[i] = vrbuf.vrregs[i];
+    rs->vrs[i] = vrbuf.vrregs[i];
   }
 }
 
