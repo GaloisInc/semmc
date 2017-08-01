@@ -4,7 +4,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 module SemMC.Architecture.PPC.Location (
-  Location(..)
+  Location(..),
+  parseLocation
   ) where
 
 import qualified Data.Parameterized.Ctx as Ctx
@@ -12,6 +13,9 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
 import           Data.Parameterized.Some
+import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec.Char as P
+import qualified Text.Megaparsec.Char.Lexer as P
 import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
 import           Lang.Crucible.BaseTypes
@@ -71,20 +75,7 @@ instance OrdF Location where
               )
 
 instance A.IsLocation Location where
-  readLocation s
-    | s `elem` ["r" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocGPR . PPC.GPR . read . tail) s
-    | s == "ip" = Just (Some LocIP)
-    | s == "msr" = Just (Some LocMSR)
-    | s == "ctr" = Just (Some LocCTR)
-    | s == "lnk" = Just (Some LocLNK)
-    | s == "xer" = Just (Some LocXER)
-    | s == "cr" = Just (Some LocCR)
-    | s == "fpscr" = Just (Some LocFPSCR)
-    | s `elem` ["x" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocVSR . PPC.VSReg . read . tail . tail) s
-    | s == "mem" = Just (Some LocMem)
-    | otherwise = Nothing
+  readLocation = P.parseMaybe parseLocation
 
   locationType (LocGPR _) = knownRepr
   locationType LocIP = knownRepr
@@ -108,3 +99,34 @@ instance A.IsLocation Location where
   defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocMem =
     S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
+
+type Parser = P.Parsec String String
+
+tryOne :: [Parser a] -> Parser a
+tryOne = P.choice . map P.try
+
+parseLocation :: Parser (Some Location)
+parseLocation = do
+  c <- P.lookAhead (P.anyChar)
+  case c of
+    'i' -> Some LocIP <$ P.string "ip"
+    'x' -> Some LocXER <$ P.string "xer"
+    'l' -> Some LocLNK <$ P.string "lnk"
+    'r' -> parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'r'
+    'v' -> parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'v'
+    'c' -> tryOne [ Some LocCTR <$ P.string "ctr"
+                  , Some LocCR <$ P.string "cr"
+                  ]
+    'm' -> tryOne [ Some LocMSR <$ P.string "msr"
+                  , Some LocMem <$ P.string "mem"
+                  ]
+    'f' -> Some LocFPSCR <$ P.string "fpscr"
+    _ -> fail ("Unexpected location prefix character: " ++ (c :[]))
+
+parsePrefixedRegister :: (Integral a, Show a) => (a -> b) -> Char -> Parser b
+parsePrefixedRegister f c = do
+  _ <- P.char c
+  n <- P.decimal
+  case n >= 0 && n <= 31 of
+    True -> return (f n)
+    False -> fail ("Register number out of range: " ++ show n)
