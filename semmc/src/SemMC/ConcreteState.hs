@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -28,21 +29,32 @@ module SemMC.ConcreteState
   , outMaskView
   , OutMasks
   , ConcreteArchitecture(..)
+  , parseView
+  , printView
   , module Data.Parameterized.NatRepr
   , module GHC.TypeLits
   ) where
 
 import qualified GHC.Err.Located as L
 
+import           Control.Applicative
+import           Control.Monad ( guard )
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor, popCount )
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust, fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.NatRepr ( NatRepr, widthVal, knownNat, withKnownNat )
+import           Data.Parameterized.NatRepr ( NatRepr, widthVal, knownNat, withKnownNat, LeqProof(..), testLeq )
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Word.Indexed as W
-import           GHC.TypeLits ( KnownNat, Nat, type (+), type (<=) )
+import           Numeric.Natural ( Natural )
+import           GHC.TypeLits ( KnownNat, Nat, type (+), type (<=), SomeNat(..), someNatVal )
+import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec.Char as P
+import qualified Text.Megaparsec.Char.Lexer as P
+import           Text.Printf ( printf )
+import qualified Unsafe.Coerce as U
 
 import qualified Dismantle.Arbitrary as A
 
@@ -101,7 +113,8 @@ data Slice (m :: Nat) (n :: Nat) where
   Slice :: ( KnownNat m
            , KnownNat n
            , (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
-           , b <= n)    -- The last bit (b) doesn't run off the end of the location (n)
+           , b <= n     -- The last bit (b) doesn't run off the end of the location (n)
+           )
         => NatRepr m -> NatRepr n -> NatRepr a -> NatRepr b -> Slice m n
 
 -- | A view into a location. Could be the whole location.
@@ -251,9 +264,51 @@ class (Architecture arch) => ConcreteArchitecture arch where
 
   showView :: View arch n -> String
 
+type Parser = P.Parsec String String
+
+parseView :: forall arch . (ConcreteArchitecture arch) => Parser (Some (Location arch)) -> Parser (Some (View arch))
+parseView parseLoc = do
+  loc <- parseLoc
+  P.try (parseSlicedView loc) <|> pure (someTrivialView (Proxy :: Proxy arch) loc)
+
+parseSlicedView :: (ConcreteArchitecture arch) => Some (Location arch) -> Parser (Some (View arch))
+parseSlicedView (Some loc) = do
+  _ <- P.char '['
+  ix0 <- P.decimal
+  _ <- P.char ':'
+  ixN <- P.decimal
+  _ <- P.char ']'
+  guard (ix0 >= 0)
+  guard (ixN > ix0)
+  -- the range of bits is [a, b) (i.e., excludes b), so when we want to write
+  -- loc[0:31] to get a 32 bit slice, we actually need to represent the b as 32
+  -- internally.  We add one here to make it happen
+  let a = ix0
+      b = ixN + 1
+      m = b - a
+  withUnknownNat a $ \(arepr :: NatRepr a) ->
+    withUnknownNat b $ \(brepr :: NatRepr b) ->
+      withUnknownNat m $ \(mrepr :: NatRepr m) ->
+          case locationType loc of
+            BaseBVRepr nrepr ->
+              case brepr `testLeq` nrepr of
+                Just LeqProof ->
+                  case U.unsafeCoerce (Refl :: 0 :~: 0) :: (b :~: (a + m)) of
+                    Refl -> return (withKnownNat nrepr (Some (View (Slice mrepr nrepr arepr brepr) loc)))
+                Nothing -> fail "Invalid slice"
+            lt -> fail ("Unsupported location type: " ++ show lt)
+
+printView :: (ConcreteArchitecture arch) => (forall tp . Location arch tp -> String) -> View arch m -> String
+printView printLocation (View (Slice _m _n a b) loc) =
+  printf "%s[%d:%d]" (printLocation loc) (widthVal a) (widthVal b)
+
+withUnknownNat :: Natural -> (forall n . (KnownNat n) => NatRepr n -> a) -> a
+withUnknownNat n k =
+  case someNatVal (fromIntegral n) of
+    Nothing -> error "impossible"
+    Just (SomeNat (Proxy :: Proxy n')) -> k (knownNat :: NatRepr n')
 
 -- Boring instances
-
 
 instance (Architecture arch) => TestEquality (View arch) where
   testEquality (View (Slice m1 n1 a1 b1) loc1) (View (Slice m2 n2 a2 b2) loc2) = do

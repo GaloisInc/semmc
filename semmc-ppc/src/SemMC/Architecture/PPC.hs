@@ -37,6 +37,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
+import qualified Text.Megaparsec as P
 import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
@@ -491,6 +492,8 @@ instance CS.ConcreteArchitecture PPC where
   randomState _proxy = PPCS.randomState
   serialize _proxy = PPCS.serialize
   deserialize _proxy = PPCS.deserialize
+  readView = P.parseMaybe (CS.parseView parseLocation)
+  showView = CS.printView show
 
 
 congruentViewsPPC :: CS.View PPC n -> [CS.View PPC n]
