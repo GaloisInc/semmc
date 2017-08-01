@@ -76,8 +76,8 @@ type instance A.OperandType PPC "Crbitm" = BaseBVType 3
 type instance A.OperandType PPC "Crbitrc" = BaseBVType 5
 type instance A.OperandType PPC "Crrc" = BaseBVType 3
 type instance A.OperandType PPC "Directbrtarget" = BaseBVType 32
-type instance A.OperandType PPC "F4rc" = BaseBVType 64
-type instance A.OperandType PPC "F8rc" = BaseBVType 64
+type instance A.OperandType PPC "F4rc" = BaseBVType 128
+type instance A.OperandType PPC "F8rc" = BaseBVType 128
 type instance A.OperandType PPC "G8rc" = BaseBVType 64
 type instance A.OperandType PPC "G8rc_nox0" = BaseBVType 64
 type instance A.OperandType PPC "Gprc" = BaseBVType 32
@@ -129,10 +129,10 @@ concreteTemplatedOperand op loc x = TemplatedOperand (Just (loc x)) mkTemplate' 
           return (expr, WrappedRecoverOperandFn $ const (return (op x)))
 
 instance TemplatableOperand PPC "F4rc" where
-  opTemplates = concreteTemplatedOperand PPC.F4rc LocFR . PPC.FR <$> [0..31]
+  opTemplates = concreteTemplatedOperand (PPC.F4rc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
 
 instance TemplatableOperand PPC "F8rc" where
-  opTemplates = concreteTemplatedOperand PPC.F8rc LocFR . PPC.FR <$> [0..31]
+  opTemplates = concreteTemplatedOperand (PPC.F8rc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
 
 instance TemplatableOperand PPC "Gprc" where
   opTemplates = concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
@@ -281,8 +281,8 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.Crrc (PPC.CRRC n)) =
           S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Directbrtarget bt) = btVal bt
-        operandValue' (PPC.F4rc fr) = locLookup (LocFR fr)
-        operandValue' (PPC.F8rc fr) = locLookup (LocFR fr)
+        operandValue' (PPC.F4rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
+        operandValue' (PPC.F8rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
         operandValue' (PPC.G8rc _) = error "Found a G8rc operand, but PPC64 not supported"
         operandValue' (PPC.G8rc_nox0 _) = error "Found a G8rc_nox0 operand, but PPC64 not supported"
         operandValue' (PPC.Gprc gpr) = locLookup (LocGPR gpr)
@@ -366,10 +366,10 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           S.bvLit sym knownNat (toInteger w7)
         operandValue' (PPC.U8imm (W.W w8)) =
           S.bvLit sym knownNat (toInteger w8)
-        operandValue' (PPC.Vrrc vr) = locLookup (LocVR vr)
-        operandValue' (PPC.Vsfrc vr) = locLookup (LocVR vr)
-        operandValue' (PPC.Vsrc vr) = locLookup (LocVR vr)
-        operandValue' (PPC.Vssrc vr) = locLookup (LocVR vr)
+        operandValue' (PPC.Vrrc (PPC.VR vr)) = locLookup (LocVSR (PPC.VSReg (vr + 32)))
+        operandValue' (PPC.Vsfrc vsr) = locLookup (LocVSR vsr)
+        operandValue' (PPC.Vsrc vsr) = locLookup (LocVSR vsr)
+        operandValue' (PPC.Vssrc vsr) = locLookup (LocVSR vsr)
 
         btVal (PPC.BT bt) = do
           ip <- locLookup LocIP
@@ -377,17 +377,17 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           S.bvAdd sym ip offset
 
 operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
-operandToLocation (PPC.F4rc fr) = Just $ LocFR fr
-operandToLocation (PPC.F8rc fr) = Just $ LocFR fr
+operandToLocation (PPC.F4rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
+operandToLocation (PPC.F8rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.G8rc _) = error "G8rc operandToLocation ?"
 operandToLocation (PPC.G8rc_nox0 _) = error "G8rc_nox0 operandToLocation ?"
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Tlsreg _) = error "Tlsreg operandToLocation?"
 operandToLocation (PPC.Tlsreg32 gpr) = Just $ LocGPR gpr
-operandToLocation (PPC.Vrrc vr) = Just $ LocVR vr
-operandToLocation (PPC.Vsfrc vr) = Just $ LocVR vr
-operandToLocation (PPC.Vsrc vr) = Just $ LocVR vr
-operandToLocation (PPC.Vssrc vr) = Just $ LocVR vr
+operandToLocation (PPC.Vrrc (PPC.VR vr)) = Just $ LocVSR (PPC.VSReg (vr + 32))
+operandToLocation (PPC.Vsfrc vr) = Just $ LocVSR vr
+operandToLocation (PPC.Vsrc vr) = Just $ LocVSR vr
+operandToLocation (PPC.Vssrc vr) = Just $ LocVSR vr
 operandToLocation _ = Nothing
 
 instance A.Architecture PPC where
@@ -501,9 +501,10 @@ congruentViewsPPC v =
       | rno' <- [0..31]
       , rno /= rno'
       ]
-    CS.View s (LocVR (PPC.VR rno)) ->
-      [ CS.View s (LocVR (PPC.VR rno'))
-      | rno' <- [0..31]
+    -- FIXME: This definitely doesn't work for VR and FR
+    CS.View s (LocVSR (PPC.VSReg rno)) ->
+      [ CS.View s (LocVSR (PPC.VSReg rno'))
+      | rno' <- [0..63]
       , rno /= rno'
       ]
     -- There are no views of LocFR.  The other registers all have no alternatives
@@ -511,23 +512,29 @@ congruentViewsPPC v =
     -- FIXME: Are there alternatives to memory?
     _ -> []
 
+vsrLowerHalf :: CS.Slice 64 128
+vsrLowerHalf = CS.Slice knownNat knownNat (knownNat @0) (knownNat @64)
+
 operandToViewPPC :: PPC.Operand s -> Maybe (Some (CS.View PPC))
-operandToViewPPC op = do
-  loc <- operandToLocation op
-  case loc of
-    LocGPR {} -> return (Some (CS.trivialView proxy loc))
-    LocIP {} -> return (Some (CS.trivialView proxy loc))
-    LocMSR {} -> return (Some (CS.trivialView proxy loc))
-    LocCTR {} -> return (Some (CS.trivialView proxy loc))
-    LocLNK {} -> return (Some (CS.trivialView proxy loc))
-    LocXER {} -> return (Some (CS.trivialView proxy loc))
-    LocCR {} -> return (Some (CS.trivialView proxy loc))
-    LocFPSCR {} -> return (Some (CS.trivialView proxy loc))
-    LocVR {} -> return (Some (CS.trivialView proxy loc))
-    LocMem {} -> L.error "PPC memory support in progress"
-    LocFR (PPC.FR rno) ->
-      let frSlice :: CS.Slice 64 128
-          frSlice = CS.Slice (knownNat :: NatRepr 64) (knownNat :: NatRepr 128) (knownNat :: NatRepr 0) (knownNat :: NatRepr 64)
-      in return (Some (CS.View frSlice (LocVR (PPC.VR rno))))
-  where
-    proxy = Proxy :: Proxy PPC
+operandToViewPPC op =
+  case op of
+    PPC.F4rc fr -> frView fr
+    PPC.F8rc fr -> frView fr
+    PPC.G8rc _ -> L.error "G8rc not handled"
+    PPC.G8rc_nox0 _ -> L.error "G8rc_nox0 not handled"
+    PPC.Gprc gpr -> gprView gpr
+    PPC.Tlsreg _ -> L.error "Tlsreg not handled"
+    PPC.Tlsreg32 gpr -> gprView gpr
+    PPC.Vrrc vr -> vrView vr
+    PPC.Vsfrc vsr -> vsrView vsr
+    PPC.Vsrc vsr -> vsrView vsr
+    PPC.Vssrc vsr -> vsrView vsr
+    _ -> Nothing
+  where frView (PPC.FR rno) =
+          Just (Some (CS.View vsrLowerHalf (LocVSR (PPC.VSReg rno))))
+        gprView gpr =
+          Just (Some (CS.trivialView Proxy (LocGPR gpr)))
+        vrView (PPC.VR rno) =
+          Just (Some (CS.trivialView Proxy (LocVSR (PPC.VSReg (rno + 32)))))
+        vsrView vsr =
+          Just (Some (CS.trivialView Proxy (LocVSR vsr)))

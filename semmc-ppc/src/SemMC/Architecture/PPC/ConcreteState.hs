@@ -40,7 +40,7 @@ randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprs
-      mapM_ addRandomBV vrs
+      mapM_ addRandomBV vsrs
       mapM_ addRandomBV specialRegs32
       mapM_ addRandomBV specialRegs64
 
@@ -57,7 +57,7 @@ zeroState = St.execState addZeros MapF.empty
     addZero loc = St.modify' $ MapF.insert loc (CS.ValueBV (W.W 0))
     addZeros = do
       mapM_ addZero gprs
-      mapM_ addZero vrs
+      mapM_ addZero vsrs
       mapM_ addZero specialRegs32
       mapM_ addZero specialRegs64
 
@@ -73,7 +73,7 @@ serialize s = LB.toStrict (B.toLazyByteString b)
     b = mconcat [ mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprs))
                 , mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
                 , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
-                , mconcat (map (serializeSymVal serializeVec) (extractLocs s vrs))
+                , mconcat (map (serializeSymVal serializeVec) (extractLocs s vsrs))
                 ]
 
 
@@ -109,17 +109,17 @@ getArchState = do
   gprs' <- mapM (getWith (getValue G.getWord32be repr32)) gprs
   spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
   spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
-  vrs' <- mapM (getWith (getValue getWord128be repr128)) vrs
-  return (St.execState (addLocs gprs' spregs32' spregs64' vrs') MapF.empty)
+  vsrs' <- mapM (getWith (getValue getWord128be repr128)) vsrs
+  return (St.execState (addLocs gprs' spregs32' spregs64' vsrs') MapF.empty)
   where
     addLoc :: forall tp . (Location tp, CS.Value tp) -> St.State ConcreteState ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
 
-    addLocs gprs' spregs32' spregs64' vrs' = do
+    addLocs gprs' spregs32' spregs64' vsrs' = do
       mapM_ addLoc gprs'
       mapM_ addLoc spregs32'
       mapM_ addLoc spregs64'
-      mapM_ addLoc vrs'
+      mapM_ addLoc vsrs'
 
 getWord128be :: G.Get Natural
 getWord128be = do
@@ -143,8 +143,8 @@ getValue g _ = (CS.ValueBV . W.W . fromIntegral) <$> g
 gprs :: [Location (BaseBVType 32)]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]
 
-vrs :: [Location (BaseBVType 128)]
-vrs = fmap (LocVR . PPC.VR) [0..63]
+vsrs :: [Location (BaseBVType 128)]
+vsrs = fmap (LocVSR . PPC.VSReg) [0..63]
 
 specialRegs32 :: [Location (BaseBVType 32)]
 specialRegs32 = [ LocCTR

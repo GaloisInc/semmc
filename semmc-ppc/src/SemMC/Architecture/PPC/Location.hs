@@ -29,9 +29,8 @@ data Location :: BaseType -> * where
   LocLNK :: Location (BaseBVType 32)
   LocXER :: Location (BaseBVType 32)
   LocCR :: Location (BaseBVType 32)
-  LocFR :: PPC.FR -> Location (BaseBVType 64)
+  LocVSR :: PPC.VSReg -> Location (BaseBVType 128)
   LocFPSCR :: Location (BaseBVType 64)
-  LocVR :: PPC.VR -> Location (BaseBVType 128)
   LocMem :: Location (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
 instance Show (Location tp) where
@@ -42,9 +41,8 @@ instance Show (Location tp) where
   show LocLNK = "LNK"
   show LocXER = "XER"
   show LocCR = "CR"
-  show (LocFR fr) = show (pPrint fr)
+  show (LocVSR vsr) = show (pPrint vsr)
   show LocFPSCR = "FPSCR"
-  show (LocVR vr) = show (pPrint vr)
   show LocMem = "Mem"
 instance ShowF Location
 
@@ -58,8 +56,7 @@ fakeTestEq x y = if x == y
 instance TestEquality Location where
   testEquality = $(structuralTypeEquality [t|Location|]
                    [ (ConType [t|PPC.GPR|], [|fakeTestEq|])
-                   , (ConType [t|PPC.FR|], [|fakeTestEq|])
-                   , (ConType [t|PPC.VR|], [|fakeTestEq|])
+                   , (ConType [t|PPC.VSReg|], [|fakeTestEq|])
                    ]
                   )
 
@@ -69,8 +66,7 @@ fakeCompareF x y = fromOrdering (compare x y)
 instance OrdF Location where
   compareF = $(structuralTypeOrd [t|Location|]
                [ (ConType [t|PPC.GPR|], [|fakeCompareF|])
-               , (ConType [t|PPC.FR|], [|fakeCompareF|])
-               , (ConType [t|PPC.VR|], [|fakeCompareF|])
+               , (ConType [t|PPC.VSReg|], [|fakeCompareF|])
                ]
               )
 
@@ -84,11 +80,9 @@ instance A.IsLocation Location where
     | s == "lnk" = Just (Some LocLNK)
     | s == "xer" = Just (Some LocXER)
     | s == "cr" = Just (Some LocCR)
-    | s `elem` ["f" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocFR . PPC.FR . read . tail) s
     | s == "fpscr" = Just (Some LocFPSCR)
-    | s `elem` ["vr" ++ show i | i <- [(0 :: Int)..31]] =
-      (Just . Some . LocVR . PPC.VR . read . tail . tail) s
+    | s `elem` ["x" ++ show i | i <- [(0 :: Int)..31]] =
+      (Just . Some . LocVSR . PPC.VSReg . read . tail . tail) s
     | s == "mem" = Just (Some LocMem)
     | otherwise = Nothing
 
@@ -99,9 +93,8 @@ instance A.IsLocation Location where
   locationType LocLNK = knownRepr
   locationType LocXER = knownRepr
   locationType LocCR = knownRepr
-  locationType (LocFR _) = knownRepr
+  locationType (LocVSR _) = knownRepr
   locationType LocFPSCR = knownRepr
-  locationType (LocVR _) = knownRepr
   locationType LocMem = knownRepr
 
   defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
@@ -111,8 +104,7 @@ instance A.IsLocation Location where
   defaultLocationExpr sym LocLNK = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocXER = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (LocFR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocVSR _) = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym (LocVR _) = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocMem =
     S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
