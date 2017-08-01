@@ -22,8 +22,10 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - located-base-0.1.1.0
+- parser-combinators-0.2.0
 - s-cargot-0.1.2.0
 - sbv-6.1
+- megaparsec-6.0.2
 
 - crucible-0.3.1
 - parameterized-utils-0.1.9
