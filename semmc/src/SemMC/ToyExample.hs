@@ -338,17 +338,16 @@ instance A.IsLocation Location where
 regView :: Reg -> C.View Toy 32
 regView r = C.trivialView (Proxy :: Proxy Toy) (RegLoc r)
 
-operandToViewImpl :: Operand sh -> Maybe (Some (C.View Toy))
-operandToViewImpl (R32 r) = Just (Some (regView r))
-operandToViewImpl (I32 _) = Nothing
-
-congruentViewsImpl :: C.View Toy n -> [C.View Toy n]
-congruentViewsImpl (C.View s (RegLoc r)) =
-  [ C.View s (RegLoc r') | r' <- [Reg1, Reg2, Reg3], r /= r' ]
+operandToSemanticViewImpl :: Operand sh -> Maybe (C.SemanticView Toy)
+operandToSemanticViewImpl (R32 r) =
+  Just $ C.SemanticView { C.semvView = regView r
+                        , C.semvCongruentViews = [ regView r' | r' <- [Reg1, Reg2, Reg3], r /= r' ]
+                        , C.semvDiff = C.diffInt
+                        }
+operandToSemanticViewImpl (I32 _) = Nothing
 
 instance C.ConcreteArchitecture Toy where
-  operandToView _ = operandToViewImpl
-  congruentViews _ = congruentViewsImpl
+  operandToSemanticView _ = operandToSemanticViewImpl
   zeroState _ = initialMachineState
 
   randomState = undefined "Toy: randomState"

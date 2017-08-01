@@ -181,10 +181,10 @@ isImplicitOrReusedOperand :: (CS.ConcreteArchitecture arch, SynC arch)
                           -> Operand arch tp
                           -> (Bool, S.Set (Some (Operand arch)))
                           -> (Bool, S.Set (Some (Operand arch)))
-isImplicitOrReusedOperand proxy implicitLocs _ix operand (isIorR, seen)
+isImplicitOrReusedOperand proxy implicitViews _ix operand (isIorR, seen)
   | isIorR || S.member (Some operand) seen = (True, seen)
-  | Just loc <- CS.operandToView proxy operand
-  , S.member loc implicitLocs = (True, seen)
+  | Just (CS.SemanticView { CS.semvView = view }) <- CS.operandToSemanticView proxy operand
+  , S.member (Some view) implicitViews = (True, seen)
   | otherwise = (isIorR, S.insert (Some operand) seen)
 
 implicitOperands :: (CS.ConcreteArchitecture arch) => IORelation arch sh -> S.Set (Some (CS.View arch))

@@ -5,6 +5,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -24,9 +25,7 @@ module SemMC.ConcreteState
   , Diff
   , diffInt
   , diffFloat
-  , OutMask(..)
-  , outMaskView
-  , OutMasks
+  , SemanticView(..)
   , ConcreteArchitecture(..)
   , module Data.Parameterized.NatRepr
   , module GHC.TypeLits
@@ -125,11 +124,16 @@ viewTypeRepr :: View arch n -> NatRepr n
 viewTypeRepr (View (Slice repr _ _ _) _) = repr
 
 -- | Produce a view of an entire location
-trivialView :: forall proxy arch n . (KnownNat n, 1 <= n) => proxy arch -> Location arch (BaseBVType n) -> View arch n
+trivialView :: forall proxy arch n
+             . (KnownNat n,
+                1 <= n)
+            => proxy arch
+            -> Location arch (BaseBVType n)
+            -> View arch n
 trivialView _ loc = View s loc
   where
     s :: Slice n n
-    s = Slice (knownNat :: NatRepr n) (knownNat :: NatRepr n) (knownNat :: NatRepr 0) (knownNat :: NatRepr n)
+    s = Slice (knownNat @n) (knownNat @n) (knownNat @0) (knownNat @n)
 
 someTrivialView :: (ConcreteArchitecture arch)
                 => proxy arch
@@ -200,17 +204,24 @@ diffInt (ValueBV x) (ValueBV y) = popCount (x `xor` y)
 diffFloat :: Diff n
 diffFloat = undefined "diffFloat"
 
--- | Some state that is live out of an instruction.
-data OutMask arch n = OutMask (View arch n) (Diff n)
-
--- | All state that is live out of an instruction.
---
--- Need to learn one of these for each instruction.
-type OutMasks arch = [Some (OutMask arch)]
-
--- | Project out the view of an 'OutMask'
-outMaskView :: OutMask arch n -> View arch n
-outMaskView (OutMask v _) = v
+-- | A 'View' along with more information about how it should be interepreted.
+data SemanticView arch =
+  forall n . SemanticView { semvView :: View arch n
+                          -- ^ The underlying view.
+                          , semvCongruentViews :: [View arch n]
+                          -- ^ The other places where we should look for our
+                          -- target values in the candidate's out state.
+                          --
+                          -- The STOKE machine state comparison looks for the
+                          -- target values not just in the target locations, but
+                          -- in other locations, to allow discovering a program
+                          -- that computes the right values in the wrong places
+                          -- on the way to discovering a program that computes
+                          -- the right values in the right places.
+                          , semvDiff :: Diff n
+                          -- ^ The function that should be used to calculate the
+                          -- distance between two values of this semantic view.
+                          }
 
 -- | An architecture with certain operations needed for concrete work.
 class (Architecture arch) => ConcreteArchitecture arch where
@@ -218,17 +229,7 @@ class (Architecture arch) => ConcreteArchitecture arch where
   --
   -- Useful for perturbing a machine state when computing the IO
   -- relation for an instruction?
-  operandToView :: proxy arch -> Operand arch sh -> Maybe (Some (View arch))
-
-  -- | Return the other places where we should look for our target
-  -- values in the candidate's out state.
-  --
-  -- The STOKE machine state comparison looks for the target values
-  -- not just in the target locations, but in other locations, to
-  -- allow discovering a program that computes the right values in the
-  -- wrong places on the way to discovering a program that computes
-  -- the right values in the right places.
-  congruentViews :: proxy arch -> View arch n -> [View arch n]
+  operandToSemanticView :: proxy arch -> Operand arch sh -> Maybe (SemanticView arch)
 
   -- | Construct a complete state with all locations set to zero
   --

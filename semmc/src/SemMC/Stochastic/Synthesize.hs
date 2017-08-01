@@ -126,7 +126,7 @@ compareTargetToCandidate target candidate test = do
 --
 -- We could cache this since the target instruction is fixed.
 getOutMasks :: forall arch t. SynC arch
-            => Instruction arch -> Syn t arch (C.OutMasks arch)
+            => Instruction arch -> Syn t arch [C.SemanticView arch]
 getOutMasks (D.Instruction opcode operands) = do
   Just ioRel <- opcodeIORelation opcode
   let outputs = Set.toList $ I.outputs ioRel
@@ -134,45 +134,39 @@ getOutMasks (D.Instruction opcode operands) = do
   -- TODO: handle implicits.
   let outputs' = [ s | I.OperandRef s <- outputs ]
   let outputs'' = [ Some (D.indexOpList operands i) | Some i <- outputs' ]
-  let masks = [ operandToOutMask operand | operand <- outputs'' ]
-  return masks
+  let semViews = map operandToSemView outputs''
+  return semViews
   where
-    -- TODO: we just assume all operands are integers, but this isn't
-    -- sound. Rather, the interpretation (int or float) of operand
-    -- should be determined by the opcode, perhaps by another method in
-    -- @Architecture@.
-    operandToOutMask :: Some (Operand arch) -> Some (C.OutMask arch)
-    operandToOutMask (Some operand) = case someView of
-      Some view -> Some $ C.OutMask view C.diffInt
-      where
-        Just someView = C.operandToView (Proxy :: Proxy arch) operand
+    operandToSemView :: Some (Operand arch) -> C.SemanticView arch
+    operandToSemView (Some operand) = desc
+      where Just desc = C.operandToSemanticView (Proxy :: Proxy arch) operand
 
 -- Sum the weights of all test outputs.
 compareTargetOutToCandidateOut :: forall arch.
                                   SynC arch
                                => Proxy arch
-                               -> C.OutMasks arch
+                               -> [C.SemanticView arch]
                                -> C.ConcreteState arch
                                -> C.ConcreteState arch
                                -> Double
-compareTargetOutToCandidateOut arch masks targetSt candidateSt =
-  sum [ C.withKnownNat (C.viewTypeRepr (C.outMaskView mask)) $ weighBestMatch arch mask targetSt candidateSt
-      | Some mask <- masks
+compareTargetOutToCandidateOut arch descs targetSt candidateSt =
+  sum [ C.withKnownNat (C.viewTypeRepr view) $ weighBestMatch arch desc targetSt candidateSt
+      | desc@(C.SemanticView { C.semvView = view }) <- descs
       ]
 
 -- Find the number-of-bits error in the best match, penalizing matches
 -- that are in the wrong location.
-weighBestMatch :: forall arch n.
-                  (C.KnownNat n, SynC arch)
+weighBestMatch :: forall arch.
+                  (SynC arch)
                => Proxy arch
-               -> C.OutMask arch n
+               -> C.SemanticView arch
                -> C.ConcreteState arch
                -> C.ConcreteState arch
                -> Double
-weighBestMatch arch (C.OutMask view diff) targetSt candidateSt =
+weighBestMatch arch (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews diff) targetSt candidateSt =
   minimum $ [ weigh (C.peekMS candidateSt view) ] ++
             [ weigh (C.peekMS candidateSt view') + penalty
-            | view' <- C.congruentViews arch view ]
+            | view' <- congruentViews ]
   where
     targetVal = C.peekMS targetSt view
     penalty = 3 -- STOKE Figure 10.
@@ -187,7 +181,7 @@ weighBestMatch arch (C.OutMask view diff) targetSt candidateSt =
 -- by the SMT solver that distinguish candidates that are equal on all
 -- tests so far.
 generateInitialTests :: Instruction arch -> Syn t arch [Test arch]
-generateInitialTests target = undefined
+generateInitialTests _target = undefined
 
 -- | A candidate program.
 --

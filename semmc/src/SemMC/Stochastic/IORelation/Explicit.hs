@@ -123,7 +123,7 @@ buildIORelation op explicitOperands ri iorel tb = do
 -- If the test failed, return an empty set.
 collectExplicitLocations :: (CS.ConcreteArchitecture arch)
                          => D.OperandList (Operand arch) sh
-                         -> [IndexedView arch sh]
+                         -> [IndexedSemanticView arch sh]
                          -> ResultIndex (CS.ConcreteState arch)
                          -> R.TestCase (CS.ConcreteState arch)
                          -> Learning arch (S.Set (Some (D.Index sh)))
@@ -132,13 +132,13 @@ collectExplicitLocations _opList explicitLocs ri tc = do
     Nothing -> return S.empty
     Just res -> F.foldrM (addLocIfDifferent (R.resultContext res)) S.empty explicitLocs
   where
-    addLocIfDifferent resCtx (IndexedView idx (Some opLoc)) s
-      | output <- NR.withKnownNat (CS.viewTypeRepr opLoc) (CS.peekMS resCtx opLoc)
-      , input <- NR.withKnownNat (CS.viewTypeRepr opLoc) (CS.peekMS (R.testContext tc) opLoc) =
+    addLocIfDifferent resCtx (IndexedSemanticView idx (CS.SemanticView { CS.semvView = opView })) s
+      | output <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS resCtx opView)
+      , input <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS (R.testContext tc) opView) =
           case input /= output of
             True -> return (S.insert (Some idx) s)
             False -> return s
-      | otherwise = L.error ("Missing location in architecture state: " ++ P.showF opLoc)
+      | otherwise = L.error ("Missing location in architecture state: " ++ P.showF opView)
 
 -- | Given an initial test state, generate all interesting variants on it.  The
 -- idea is to see which outputs change when we tweak an input.
@@ -164,14 +164,14 @@ generateExplicitTestVariants i s0 =
   where
     genVar :: forall sh
             . Opcode arch (Operand arch) sh
-           -> IndexedView arch sh
+           -> IndexedSemanticView arch sh
            -> Learning arch (TestBundle (CS.ConcreteState arch) (ExplicitFact arch))
-    genVar opcode (IndexedView ix (Some loc)) = do
-      cases <- generateVariantsFor s0 opcode ix (Some loc)
+    genVar opcode (IndexedSemanticView ix (CS.SemanticView { CS.semvView = view })) = do
+      cases <- generateVariantsFor s0 opcode ix (Some view)
       return TestBundle { tbTestCases = cases
                         , tbResult = ExplicitFact { lOpcode = opcode
                                                   , lIndex = ix
-                                                  , lLocation = loc
+                                                  , lLocation = view
                                                   , lInstruction = i
                                                   }
                         }
@@ -202,9 +202,10 @@ matchesOperand :: (CS.ConcreteArchitecture arch)
                -> Bool
                -> Bool
 matchesOperand proxy implicits _ix operand matches =
-  case CS.operandToView proxy operand of
+  case CS.operandToSemanticView proxy operand of
     Nothing -> matches
-    Just loc -> matches || any (== loc) implicits
+    Just (CS.SemanticView { CS.semvView = view }) ->
+      matches || any (== (Some view)) implicits
 
 {- Note [Test Form]
 

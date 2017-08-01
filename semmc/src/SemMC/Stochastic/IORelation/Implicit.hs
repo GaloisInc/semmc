@@ -149,8 +149,9 @@ genTestForLoc i s0 (Some loc0) = do
   testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (CS.pokeMS s0 loc0))
   case i of
     D.Instruction _ ops -> do
-      let explicits = [ v
-                      | IndexedView _ v <- instructionRegisterOperands (Proxy :: Proxy arch) ops
+      let explicits = [ Some v
+                      | IndexedSemanticView _ (CS.SemanticView { CS.semvView = v })
+                          <- instructionRegisterOperands (Proxy :: Proxy arch) ops
                       ]
       return TestBundle { tbTestCases = testStates
                         , tbResult = ImplicitFact { ifExplicits = S.fromList explicits

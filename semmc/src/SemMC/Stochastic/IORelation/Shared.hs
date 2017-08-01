@@ -12,7 +12,7 @@ module SemMC.Stochastic.IORelation.Shared (
   withGeneratedValueForLocation,
   instructionRegisterOperands,
   testCaseLocations,
-  IndexedView(..)
+  IndexedSemanticView(..)
   ) where
 
 import qualified Control.Concurrent as C
@@ -89,24 +89,24 @@ indexResults ri res =
       ri { riSuccesses = M.insert (R.resultNonce tr) tr (riSuccesses ri) }
 
 -- | A view of a location, indexed by its position in the operand list
-data IndexedView arch sh where
-  IndexedView :: D.Index sh tp -> Some (CS.View arch) -> IndexedView arch sh
+data IndexedSemanticView arch sh where
+  IndexedSemanticView :: D.Index sh tp -> CS.SemanticView arch -> IndexedSemanticView arch sh
 
 instructionRegisterOperands :: forall arch sh proxy
                              . (CS.ConcreteArchitecture arch)
                             => proxy arch
                             -> D.OperandList (Operand arch) sh
-                            -> [IndexedView arch sh]
+                            -> [IndexedSemanticView arch sh]
 instructionRegisterOperands proxy operands =
   D.foldrOperandList collectLocations [] operands
   where
     collectLocations :: forall tp . D.Index sh tp
                      -> Operand arch tp
-                     -> [IndexedView arch sh]
-                     -> [IndexedView arch sh]
+                     -> [IndexedSemanticView arch sh]
+                     -> [IndexedSemanticView arch sh]
     collectLocations ix operand acc =
-      case CS.operandToView proxy operand of
-        Just v -> IndexedView ix v : acc
+      case CS.operandToSemanticView proxy operand of
+        Just v -> IndexedSemanticView ix v : acc
         Nothing -> acc
 
 -- | Return all of the locations referenced in the architecture state

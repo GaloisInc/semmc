@@ -485,56 +485,56 @@ loadBaseSet sym = do
                           ]
 
 instance CS.ConcreteArchitecture PPC where
-  operandToView _proxy = operandToViewPPC
-  congruentViews _proxy = congruentViewsPPC
+  operandToSemanticView _proxy = operandToSemanticViewPPC
   zeroState _proxy = PPCS.zeroState
   randomState _proxy = PPCS.randomState
   serialize _proxy = PPCS.serialize
   deserialize _proxy = PPCS.deserialize
 
-
-congruentViewsPPC :: CS.View PPC n -> [CS.View PPC n]
-congruentViewsPPC v =
-  case v of
-    CS.View s (LocGPR (PPC.GPR rno)) ->
-      [ CS.View s (LocGPR (PPC.GPR rno'))
-      | rno' <- [0..31]
-      , rno /= rno'
-      ]
-    -- FIXME: This definitely doesn't work for VR and FR
-    CS.View s (LocVSR (PPC.VSReg rno)) ->
-      [ CS.View s (LocVSR (PPC.VSReg rno'))
-      | rno' <- [0..63]
-      , rno /= rno'
-      ]
-    -- There are no views of LocFR.  The other registers all have no alternatives
-    --
-    -- FIXME: Are there alternatives to memory?
-    _ -> []
-
 vsrLowerHalf :: CS.Slice 64 128
 vsrLowerHalf = CS.Slice knownNat knownNat (knownNat @0) (knownNat @64)
 
-operandToViewPPC :: PPC.Operand s -> Maybe (Some (CS.View PPC))
-operandToViewPPC op =
+operandToSemanticViewPPC :: PPC.Operand s -> Maybe (CS.SemanticView PPC)
+operandToSemanticViewPPC op =
   case op of
-    PPC.F4rc fr -> frView fr
-    PPC.F8rc fr -> frView fr
+    PPC.F4rc fr -> frSemanticView fr
+    PPC.F8rc fr -> frSemanticView fr
     PPC.G8rc _ -> L.error "G8rc not handled"
     PPC.G8rc_nox0 _ -> L.error "G8rc_nox0 not handled"
-    PPC.Gprc gpr -> gprView gpr
+    PPC.Gprc gpr -> gprSemanticView gpr
     PPC.Tlsreg _ -> L.error "Tlsreg not handled"
-    PPC.Tlsreg32 gpr -> gprView gpr
-    PPC.Vrrc vr -> vrView vr
-    PPC.Vsfrc vsr -> vsrView vsr
-    PPC.Vsrc vsr -> vsrView vsr
-    PPC.Vssrc vsr -> vsrView vsr
+    PPC.Tlsreg32 gpr -> gprSemanticView gpr
+    PPC.Vrrc vr -> vrSemanticView vr
+    PPC.Vsfrc vsr -> vsrSemanticView vsr
+    PPC.Vsrc vsr -> vsrSemanticView vsr
+    PPC.Vssrc vsr -> vsrSemanticView vsr
     _ -> Nothing
-  where frView (PPC.FR rno) =
-          Just (Some (CS.View vsrLowerHalf (LocVSR (PPC.VSReg rno))))
-        gprView gpr =
-          Just (Some (CS.trivialView Proxy (LocGPR gpr)))
-        vrView (PPC.VR rno) =
-          Just (Some (CS.trivialView Proxy (LocVSR (PPC.VSReg (rno + 32)))))
-        vsrView vsr =
-          Just (Some (CS.trivialView Proxy (LocVSR vsr)))
+  where frSemanticView (PPC.FR rno) =
+          Just $ CS.SemanticView { CS.semvView = frView rno
+                                 , CS.semvCongruentViews = [ frView rno' | rno' <- [0..31], rno' /= rno ]
+                                 , CS.semvDiff = CS.diffFloat
+                                 }
+        frView rno = CS.View vsrLowerHalf (LocVSR (PPC.VSReg rno))
+
+        gprSemanticView (PPC.GPR rno) =
+          Just $ CS.SemanticView { CS.semvView = gprView rno
+                                 , CS.semvCongruentViews = [ gprView rno' | rno' <- [0..31], rno' /= rno ]
+                                 , CS.semvDiff = CS.diffInt
+                                 }
+        gprView rno = CS.trivialView Proxy (LocGPR (PPC.GPR rno))
+
+        vrSemanticView (PPC.VR rno) =
+          Just $ CS.SemanticView { CS.semvView = vrView rno
+                                 , CS.semvCongruentViews = [ vrView rno' | rno' <- [0..31], rno' /= rno ]
+                                 -- FIXME: we'll have to decide the diff function based on opcode
+                                 , CS.semvDiff = CS.diffInt
+                                 }
+        vrView rno = CS.trivialView Proxy (LocVSR (PPC.VSReg (rno + 32)))
+
+        vsrSemanticView (PPC.VSReg rno) =
+          Just $ CS.SemanticView { CS.semvView = vsrView rno
+                                 , CS.semvCongruentViews = [ vsrView rno' | rno' <- [0..63], rno' /= rno ]
+                                 -- FIXME: we'll have to decide the diff function based on opcode
+                                 , CS.semvDiff = CS.diffInt
+                                 }
+        vsrView rno = CS.trivialView Proxy (LocVSR (PPC.VSReg rno))
