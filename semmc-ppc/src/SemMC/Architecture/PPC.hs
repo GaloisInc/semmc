@@ -15,6 +15,7 @@
 module SemMC.Architecture.PPC
   ( PPC
   , Location(..)
+  , machineState
   , loadBaseSet
   ) where
 
@@ -51,6 +52,7 @@ import qualified SemMC.ConcreteState as CS
 import           SemMC.Formula
 import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
+import qualified SemMC.Stochastic.Remote as R
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal )
 
@@ -493,6 +495,11 @@ instance CS.ConcreteArchitecture PPC where
   deserialize _proxy = PPCS.deserialize
   readView = P.parseMaybe (CS.parseView parseLocation)
   showView = CS.printView show
+
+machineState :: R.MachineState (CS.ConcreteState PPC)
+machineState = R.MachineState { R.flattenMachineState = PPCS.serialize
+                              , R.parseMachineState = PPCS.deserialize
+                              }
 
 vsrLowerHalf :: CS.Slice 64 128
 vsrLowerHalf = CS.Slice knownNat knownNat (knownNat @0) (knownNat @64)
