@@ -291,7 +291,66 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   There is a separate register bank for NEON instructions, which contains 32
   64-bit registers that can be viewed as 16 128-bit registers.
 
+
+  PC is r15
+  LR is r14
+  SP is r13
  */
+#define CAST_PTR(x) ((unsigned int)(x))
+uint8_t raiseTrap[] = {0x70, 0x00, 0x20, 0xe1};
+#define RAISE_TRAP asm("bkpt")
+
+typedef unsigned long elf_gregset_t[18];
+
+#define SEM_NGPRS 16
+#define SEM_NFPRS 32 // single precision
+
+typedef struct {
+  uint32_t gprs[SEM_NGPRS];
+  uint32_t gprs_mask[SEM_NGPRS];
+  uint32_t fprs[SEM_NFPRS];
+  uint8_t mem1[MEM_REGION_BYTES];
+  uint8_t mem2[MEM_REGION_BYTES];
+} RegisterState;
+
+void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace, RegisterState* rs) {
+  elf_gregset_t regs;
+  struct iovec iov;
+  iov.iov_base = &regs;
+  iov.iov_len = sizeof(regs);
+  checkedPtrace(PTRACE_GETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
+
+  uint8_t* mem1Addr = memSpace;
+  uint8_t* mem2Addr = memSpace + sizeof(rs->mem1);
+  memcpy(mem1Addr, rs->mem1, sizeof(rs->mem1));
+  memcpy(mem2Addr, rs->mem2, sizeof(rs->mem2));
+
+  // Apply the reg mask; this modifies the test vector, but that is fine.  We
+  // won't need the original values ever again.
+  for(int i = 0; i < SEM_NGPRS; ++i) {
+    if(rs->gprs_mask[i] == 1)
+      rs->gprs[i] = CAST_PTR(mem1Addr);
+    else if(rs->gprs_mask[i] == 2)
+      rs->gprs[i] = CAST_PTR(mem2Addr);
+  }
+
+  memcpy(regs, rs->gprs, sizeof(rs->gprs));
+  regs[15] = CAST_PTR(programSpace);
+
+  checkedPtrace(PTRACE_SETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
+}
+
+void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs) {
+  elf_gregset_t regs;
+  struct iovec iov;
+  iov.iov_base = &regs;
+  iov.iov_len = sizeof(regs);
+  checkedPtrace(PTRACE_GETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
+  memcpy(rs->gprs, regs, sizeof(rs->gprs));
+
+  memcpy(&rs->mem1, memSpace, sizeof(rs->mem1));
+  memcpy(&rs->mem2, memSpace + sizeof(rs->mem1), sizeof(rs->mem2));
+}
 
 #elif defined(__aarch64__)
 
