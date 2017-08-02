@@ -381,9 +381,11 @@ instance TestEquality (Slice m) where
     Refl <- testEquality b1 b2
     return Refl
 
-deriving instance (KnownNat n) => Show (Value (BaseBVType n))
+deriving instance Show (Value tp)
 deriving instance Eq (Value tp)
 deriving instance Ord (Value tp)
+
+instance ShowF Value
 
 instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
   arbitrary gen = ValueBV <$> A.arbitrary gen
