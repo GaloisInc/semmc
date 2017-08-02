@@ -49,9 +49,12 @@ caller controls the number and placement of threads.
 
 -}
 
-stratifiedSynthesis :: (CS.ConcreteArchitecture arch, SynC arch)
+type OpcodeFormulas sym arch = MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
+
+stratifiedSynthesis :: forall arch t
+                     . (CS.ConcreteArchitecture arch, SynC arch)
                     => SynEnv t arch
-                    -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+                    -> IO (OpcodeFormulas (Sym t) arch)
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
     gen <- A.createGen
@@ -66,10 +69,17 @@ stratifiedSynthesis env0 = do
       return ()
     A.link ssh
     runSyn localEnv strata
-  STM.readTVarIO (seFormulas env0)
+  formulas <- STM.readTVarIO (seFormulas env0)
+  let addIfReal :: SynthOpcode arch sh
+                -> F.ParameterizedFormula (Sym t) arch sh
+                -> OpcodeFormulas (Sym t) arch
+                -> OpcodeFormulas (Sym t) arch
+      addIfReal (RealOpcode op) form m = MapF.insert op form m
+      addIfReal (PseudoOpcode _ _) _ m = m
+  return (MapF.foldrWithKey addIfReal MapF.empty formulas)
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)
-       => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+       => Syn t arch (MapF.MapF (SynthOpcode arch) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
 processWorklist :: (CS.ConcreteArchitecture arch, SynC arch)

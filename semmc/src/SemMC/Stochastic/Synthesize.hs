@@ -11,7 +11,7 @@
 -- https://cs.stanford.edu/people/eschkufz/docs/pldi_16.pdf
 module SemMC.Stochastic.Synthesize ( synthesize ) where
 
-import           Control.Monad ( join )
+import           Control.Monad ( join, (<=<) )
 import           Control.Monad.Trans ( liftIO )
 import           Data.Maybe ( catMaybes )
 import           Data.Proxy ( Proxy(..) )
@@ -19,9 +19,10 @@ import qualified Data.Sequence as S
 import qualified Data.Set as Set
 import           GHC.Exts ( IsList(..) )
 
+import qualified Data.Set.NonEmpty as NES
 import           Data.Parameterized.Some ( Some(..) )
 import           Dismantle.Arbitrary as D
-import           Dismantle.Instruction.Random as D
+import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
 import           SemMC.Architecture ( Instruction, Operand )
@@ -41,7 +42,7 @@ synthesize target = do
   mapM_ addTestCase initialTests
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
   candidate <- mcmcSynthesizeOne target
-  let candidateWithoutNops = catMaybes . toList $ candidate
+  let candidateWithoutNops = synthInsnToActual <=< catMaybes . toList $ candidate
   return $ Just candidateWithoutNops
 
 mcmcSynthesizeOne :: SynC arch => Instruction arch -> Syn t arch (Candidate arch)
@@ -112,7 +113,7 @@ compareTargetToCandidate target candidate test = do
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
-  candidateSt <- runTest test candidateProg
+  candidateSt <- runTest test (synthInsnToActual =<< candidateProg)
   targetSt    <- runTest test targetProg
   liveOut     <- getOutMasks target
   let p = Proxy :: Proxy arch
@@ -163,7 +164,7 @@ weighBestMatch :: forall arch.
                -> C.ConcreteState arch
                -> C.ConcreteState arch
                -> Double
-weighBestMatch arch (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews diff) targetSt candidateSt =
+weighBestMatch _ (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews diff) targetSt candidateSt =
   minimum $ [ weigh (C.peekMS candidateSt view) ] ++
             [ weigh (C.peekMS candidateSt view') + penalty
             | view' <- congruentViews ]
@@ -187,7 +188,7 @@ generateInitialTests _target = undefined
 --
 -- We use 'Nothing' to represent no-ops, which we need because the
 -- candidate program has fixed length during its evolution.
-type Candidate arch = S.Seq (Maybe (Instruction arch))
+type Candidate arch = S.Seq (Maybe (SynthInstruction arch))
 
 -- | The empty program is a sequence of no-ops.
 emptyCandidate :: Int -> Syn t arch (Candidate arch)
@@ -213,6 +214,15 @@ perturb candidate = do
     p_s = 1/6
     p_i = 1/6
 
+randomizeOpcode :: D.Gen -> NES.Set (Some (SynthOpcode arch)) -> SynthInstruction arch -> IO (SynthInstruction arch)
+randomizeOpcode = undefined
+
+randomizeOperand :: D.Gen -> SynthInstruction arch -> IO (SynthInstruction arch)
+randomizeOperand = undefined
+
+randomInstruction :: D.Gen -> NES.Set (Some (SynthOpcode arch)) -> IO (SynthInstruction arch)
+randomInstruction = undefined
+
 -- | Randomly replace an opcode with another compatible opcode, while
 -- keeping the operands fixed.
 perturbOpcode :: SynC arch => Candidate arch -> Syn t arch (Candidate arch)
@@ -222,7 +232,7 @@ perturbOpcode candidate = do
   baseSet <- askBaseSet
   let oldInstruction = candidate `S.index` index
   newInstruction <- liftIO $
-    D.randomizeOpcode gen baseSet `mapM` oldInstruction
+    randomizeOpcode gen baseSet `mapM` oldInstruction
   return $ S.update index newInstruction candidate
 
 -- | Randomly replace the operands, while keeping the opcode fixed.
@@ -231,7 +241,7 @@ perturbOperand candidate = do
   gen <- askGen
   index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
   let oldInstruction = candidate `S.index` index
-  newInstruction <- liftIO $ D.randomizeOperand gen `mapM` oldInstruction
+  newInstruction <- liftIO $ randomizeOperand gen `mapM` oldInstruction
   return $ S.update index newInstruction candidate
 
 -- | Swap two instructions in a program.
@@ -254,7 +264,7 @@ perturbInstruction candidate = do
   baseSet <- askBaseSet
   newInstruction <- liftIO $ join $ D.categoricalChoose
     [ (p_u, return Nothing)
-    , (1 - p_u, Just <$> D.randomInstruction gen baseSet) ]
+    , (1 - p_u, Just <$> randomInstruction gen baseSet) ]
     gen
   return $ S.update index newInstruction candidate
   where

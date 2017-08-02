@@ -1,11 +1,20 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Stochastic.Monad (
   Syn,
   SynC,
+  SynthOpcode(..),
+  SynthInstruction(..),
+  synthInsnToActual,
   SynEnv(..),
   LocalSynEnv(..),
   loadInitialState,
@@ -35,8 +44,11 @@ import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map as Map
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import           System.FilePath ( (</>), (<.>) )
+import           Text.Printf ( printf )
+import           Unsafe.Coerce ( unsafeCoerce )
 
 import qualified Data.EnumF as P
 import qualified Data.Parameterized.Classes as P
@@ -48,6 +60,7 @@ import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
@@ -75,9 +88,53 @@ import qualified SemMC.Stochastic.Statistics as S
 -- can change this to be a pair of states.
 type Test arch = ConcreteState arch
 
+data SynthOpcode arch sh = RealOpcode (Opcode arch (Operand arch) sh)
+                         | PseudoOpcode String (D.OperandList (Operand arch) sh -> [Instruction arch])
+
+instance (Show (Opcode arch (Operand arch) sh)) => Show (SynthOpcode arch sh) where
+  show (RealOpcode op) = printf "RealOpcode %s" (show op)
+  show (PseudoOpcode name _) = printf "PseudoOpcode %s" name
+
+instance forall arch . (P.ShowF (Opcode arch (Operand arch))) => P.ShowF (SynthOpcode arch) where
+  withShow _ (_ :: q sh) x = P.withShow (Proxy @(Opcode arch (Operand arch)))
+                                        (Proxy @sh)
+                                        x
+
+instance (P.TestEquality (Opcode arch (Operand arch))) => P.TestEquality (SynthOpcode arch) where
+  testEquality (RealOpcode op1) (RealOpcode op2) =
+    fmap (\P.Refl -> P.Refl) (P.testEquality op1 op2)
+  testEquality (PseudoOpcode name1 _) (PseudoOpcode name2 _)
+    | name1 == name2 = Just (unsafeCoerce P.Refl)
+    | otherwise = Nothing
+  testEquality _ _ = Nothing
+
+instance forall arch . (P.OrdF (Opcode arch (Operand arch))) => P.OrdF (SynthOpcode arch) where
+  compareF (RealOpcode op1) (RealOpcode op2) =
+    case P.compareF op1 op2 of
+      P.LTF -> P.LTF
+      P.EQF -> P.EQF
+      P.GTF -> P.GTF
+  compareF (RealOpcode _) (PseudoOpcode _ _) = P.LTF
+  compareF (PseudoOpcode _ _) (RealOpcode _) = P.GTF
+  compareF (PseudoOpcode name1 _ :: SynthOpcode arch sh1) (PseudoOpcode name2 _ :: SynthOpcode arch sh2) =
+    case compare name1 name2 of
+      LT -> P.LTF
+      EQ -> case unsafeCoerce P.Refl of
+              (P.Refl :: sh1 P.:~: sh2) -> P.EQF
+      GT -> P.GTF
+
+data SynthInstruction arch =
+  forall sh . SynthInstruction (SynthOpcode arch sh) (D.OperandList (Operand arch) sh)
+
+synthInsnToActual :: SynthInstruction arch -> [Instruction arch]
+synthInsnToActual (SynthInstruction opcode operands) =
+  case opcode of
+    RealOpcode opcode' -> [D.Instruction opcode' operands]
+    PseudoOpcode _ convert -> convert operands
+
 -- | Synthesis environment.
 data SynEnv t arch =
-  SynEnv { seFormulas :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+  SynEnv { seFormulas :: STM.TVar (MapF.MapF (SynthOpcode arch) (F.ParameterizedFormula (Sym t) arch))
          -- ^ All of the known formulas (base set + learned set)
          , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
          -- ^ Work items
@@ -135,7 +192,7 @@ recordLearnedFormula :: (P.OrdF (Opcode arch (Operand arch)))
 recordLearnedFormula op f = do
   mref <- R.asks (seFormulas . seGlobalEnv)
   liftIO $ STM.atomically $ do
-    STM.modifyTVar' mref (MapF.insert op f)
+    STM.modifyTVar' mref (MapF.insert (RealOpcode op) f)
 
 -- | Take an opcode off of the worklist
 takeWork :: Syn t arch (Maybe (Some (Opcode arch (Operand arch))))
@@ -179,7 +236,7 @@ addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
 
-askFormulas :: Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+askFormulas :: Syn t arch (MapF.MapF (SynthOpcode arch) (F.ParameterizedFormula (Sym t) arch))
 askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.
@@ -191,8 +248,8 @@ askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 -- the whole set like here with 'askBaseSet', which is also consistent
 -- with the STRATA paper. We probably want to change one of these
 -- naming conventions to make them distinct.
-askBaseSet :: Ord (Some (Opcode arch (Operand arch)))
-           => Syn t arch (NES.Set (Some (Opcode arch (Operand arch))))
+askBaseSet :: P.OrdF (Opcode arch (Operand arch))
+           => Syn t arch (NES.Set (Some (SynthOpcode arch)))
 askBaseSet = do
   -- Since we don't update the base set during a round, it would make
   -- sense to cache this for constant lookup, instead of doing this
@@ -207,7 +264,7 @@ lookupFormula :: (Architecture arch)
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 lookupFormula op = do
   frms <- askFormulas
-  return $ MapF.lookup op frms
+  return $ MapF.lookup (RealOpcode op) frms
 
 opcodeIORelation :: (Architecture arch)
                  => Opcode arch (Operand arch) sh
@@ -218,6 +275,7 @@ opcodeIORelation op = do
 
 data Config arch =
   Config { baseSetDir :: FilePath
+         , pseudoSetDir :: FilePath
          , learnedSetDir :: FilePath
          , statisticsFile :: FilePath
          -- ^ A file to store statistics in
@@ -239,7 +297,7 @@ loadInitialState :: (Architecture arch,
                  -- ^ A generator of random test cases
                  -> [Test arch]
                  -- ^ Heuristically-interesting test cases
-                 -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
+                 -> [Some (Witness (F.BuildOperandList arch) (SynthOpcode arch))]
                  -- ^ All possible opcodes
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -- ^ The opcodes we want to learn formulas for (could be all, but could omit instructions e.g., jumps)
@@ -276,13 +334,14 @@ loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes iorel
 -- have a formula (and that we actually want to learn)
 makeWorklist :: (MapF.OrdF (Opcode arch (Operand arch)))
              => [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
-             -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
+             -> MapF.MapF (SynthOpcode arch) (F.ParameterizedFormula (Sym t) arch)
              -> WL.Worklist (Some (Opcode arch (Operand arch)))
 makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
   where
     opSet = S.fromList [ Some op | Some (Witness op) <- allOps ]
     opSet' = F.foldl' removeIfPresent opSet (MapF.keys knownFormulas)
-    removeIfPresent s sop = S.delete sop s
+    removeIfPresent s (Some (RealOpcode sop)) = S.delete (Some sop) s
+    removeIfPresent s (Some (PseudoOpcode _ _)) = s
 
 
 {-
