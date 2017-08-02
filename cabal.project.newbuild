@@ -2,6 +2,7 @@ packages:
   semmc/
   semmc-ppc/
   semmc-x86_64/
+  semmc-arm/
   submodules/dismantle/dismantle-tablegen/
 
 optional-packages:
