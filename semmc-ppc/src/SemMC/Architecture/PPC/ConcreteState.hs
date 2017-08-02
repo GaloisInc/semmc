@@ -17,6 +17,7 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.Bits
 import           Data.Monoid ( (<>) )
+import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
 import qualified Data.Serialize.Get as G
@@ -60,7 +61,7 @@ zeroState = St.execState addZeros MapF.empty
       mapM_ addZero vsrs
       mapM_ addZero specialRegs32
       mapM_ addZero specialRegs64
-
+      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
 
 -- | Convert a machine state to the wire protocol.
 --
@@ -74,8 +75,13 @@ serialize s = LB.toStrict (B.toLazyByteString b)
                 , mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
                 , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
                 , mconcat (map (serializeSymVal serializeVec) (extractLocs s vsrs))
+                , mconcat (map serializeMem (extractLocs s [LocMem]))
                 ]
 
+serializeMem :: CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> B.Builder
+serializeMem val =
+  case val of
+    CS.ValueMem bs -> B.byteString bs
 
 -- | Serialize a 128 bit value into a bytestring
 serializeVec :: Integer -> B.Builder
@@ -110,7 +116,8 @@ getArchState = do
   spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
   spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
   vsrs' <- mapM (getWith (getValue getWord128be repr128)) vsrs
-  return (St.execState (addLocs gprs' spregs32' spregs64' vsrs') MapF.empty)
+  mem' <- getBS
+  return (St.execState (addLocs gprs' spregs32' spregs64' vsrs' >> addLoc (LocMem, mem')) MapF.empty)
   where
     addLoc :: forall tp . (Location tp, CS.Value tp) -> St.State ConcreteState ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
@@ -139,6 +146,9 @@ getValue :: (Integral w, KnownNat n)
          -> NatRepr n
          -> G.Get (CS.Value (BaseBVType n))
 getValue g _ = (CS.ValueBV . W.W . fromIntegral) <$> g
+
+getBS :: G.Get (CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
+getBS = CS.ValueMem <$> G.getBytes 64
 
 gprs :: [Location (BaseBVType 32)]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]

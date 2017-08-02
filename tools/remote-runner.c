@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <execinfo.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -376,8 +377,7 @@ typedef struct {
 
 typedef struct {
   uint32_t gprs[SEM_NGPRS];
-  uint32_t gprs_mask[SEM_NGPRS];
-  uint32_t msr;
+//  uint32_t gprs_mask[SEM_NGPRS];
   uint32_t ctr;
   uint32_t link;
   uint32_t xer;
@@ -407,17 +407,17 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
 
   // Apply the reg mask; this modifies the test vector, but that is fine.  We
   // won't need the original values ever again.
-  for(int i = 0; i < SEM_NGPRS; ++i) {
-    if(rs->gprs_mask[i] == 1)
-      rs->gprs[i] = CAST_PTR(mem1Addr);
-    else if(rs->gprs_mask[i] == 2)
-      rs->gprs[i] = CAST_PTR(mem2Addr);
-  }
+  /* for(int i = 0; i < SEM_NGPRS; ++i) { */
+  /*   if(rs->gprs_mask[i] == 1) */
+  /*     rs->gprs[i] = CAST_PTR(mem1Addr); */
+  /*   else if(rs->gprs_mask[i] == 2) */
+  /*     rs->gprs[i] = CAST_PTR(mem2Addr); */
+  /* } */
 
   for (int i = 0; i < SEM_NGPRS; i++) {
     regs.gpr[i] = rs->gprs[i];
   }
-  regs.msr  = rs->msr;
+//  regs.msr  = rs->msr;
   regs.ctr  = rs->ctr;
   regs.link = rs->link;
   regs.xer  = rs->xer;
@@ -425,7 +425,7 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
 
   // Set the IP to be at the start of our test program
   regs.nip = CAST_PTR(programSpace);
-  LOG("PTRACE_SETREGS: setting IP to %" PRIxPTR "\n", regs.nip);
+  LOG("PTRACE_SETREGS: setting IP to %" PRIXPTR "\n", regs.nip);
 
   checkedPtrace(PTRACE_SETREGS, childPid, 0, &regs);
 
@@ -454,7 +454,7 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   for (int i = 0; i < SEM_NGPRS; i++) {
     rs->gprs[i] = regs.gpr[i];
   }
-  rs->msr = regs.msr;
+//  rs->msr = regs.msr;
   rs->ctr = regs.ctr;
   rs->link = regs.link;
   rs->xer = regs.xer;
@@ -598,7 +598,7 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
     return WORK_ERROR_NOCONTEXT;
   }
 
-  LOG("  expecting %hu bytes of context\n", regStateBytes);
+  LOG("  expecting %hu bytes of context (compared to struct size %d)\n", regStateBytes, (int)sizeof(RegisterState));
 
   nItems = fread(&item->regs, 1, sizeof(item->regs), stream);
   if(nItems == 0)

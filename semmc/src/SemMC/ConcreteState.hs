@@ -42,6 +42,7 @@ import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust, fromMaybe )
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr ( NatRepr, widthVal, knownNat, withKnownNat, LeqProof(..), testLeq )
 import           Data.Parameterized.Some ( Some(..) )
@@ -57,7 +58,7 @@ import qualified Unsafe.Coerce as U
 
 import qualified Dismantle.Arbitrary as A
 
-import           Lang.Crucible.BaseTypes ( BaseBVType, BaseTypeRepr(..) )
+import           Lang.Crucible.BaseTypes ( BaseBVType, BaseTypeRepr(..), BaseArrayType )
 
 import           SemMC.Architecture ( Architecture, ArchState, Location, Operand, locationType )
 
@@ -67,6 +68,7 @@ import           SemMC.Architecture ( Architecture, ArchState, Location, Operand
 -- | Type of concrete values.
 data Value tp where
   ValueBV :: (KnownNat n) => W.W n -> Value (BaseBVType n)
+  ValueMem :: B.ByteString -> Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
 -- | Lift a bitvector computation to a value computation.
 liftValueBV1 :: (W.W n -> W.W n)
