@@ -425,7 +425,7 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
 
   // Set the IP to be at the start of our test program
   regs.nip = CAST_PTR(programSpace);
-  LOG("PTRACE_SETREGS: setting IP to %" PRIXPTR "\n", regs.nip);
+  LOG("PTRACE_SETREGS: setting IP to %" PRIXPTR "\n", CAST_PTR(regs.nip));
 
   checkedPtrace(PTRACE_SETREGS, childPid, 0, &regs);
 
@@ -584,14 +584,14 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
     return WORK_ERROR_NONONCE;
   }
 
-  LOG("  nonce = %lu\n", item->nonce);
+  LOG("  nonce = %llu\n", item->nonce);
 
   uint16_t regStateBytes;
   nItems = fread(&regStateBytes, 1, sizeof(regStateBytes), stream);
   regStateBytes = ntohs(regStateBytes);
   if(nItems == 0) {
     if(regStateBytes != sizeof(item->regs)) {
-      fprintf(stderr, "Register state size mismatch (expected %lu but got %d)\n", sizeof(item->regs),  regStateBytes);
+      fprintf(stderr, "Register state size mismatch (expected %lu but got %d)\n", (unsigned long)sizeof(item->regs),  regStateBytes);
       return WORK_ERROR_REGSTATE_SIZE_ERROR;
     }
 
@@ -712,7 +712,7 @@ void writeWorkResponse(FILE* stream, ResponseTag rtag, WorkItem* item, RegisterS
     break;
   }
   case RESPONSE_SUCCESS: {
-    LOG("RESPONSE_SUCCESS (context size = %lu)\n", sizeof(*postState));
+    LOG("RESPONSE_SUCCESS (context size = %lu)\n", (unsigned long)sizeof(*postState));
     uint16_t szBytes = htons(sizeof(*postState));
     fwrite(&szBytes, sizeof(szBytes), 1, stream);
     fwrite(postState, sizeof(*postState), 1, stream);
@@ -788,7 +788,7 @@ int traceChild(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace) {
       writeReadErrorResult(stdout, tag, "Fork failed");
       break;
     case WORK_ITEM: {
-      LOG("Got a work item with nonce %lu\n", item.nonce);
+      LOG("Got a work item with nonce %llu\n", item.nonce);
       RegisterState postState;
       memset(&postState, 0, sizeof(postState));
       rtag = processWorkItem(childPid, programSpace, memSpace, &item, &postState);
