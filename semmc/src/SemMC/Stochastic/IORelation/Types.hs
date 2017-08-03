@@ -130,6 +130,7 @@ data OperandRef arch sh = ImplicitOperand (Some (CS.View arch))
                         | OperandRef (Some (D.Index sh))
                         -- ^ An index into an operand list
 
+deriving instance (Architecture arch) => Show (OperandRef arch sh)
 deriving instance (Architecture arch) => Eq (OperandRef arch sh)
 deriving instance (Architecture arch) => Ord (OperandRef arch sh)
 
@@ -167,6 +168,7 @@ data IORelation arch sh =
              , outputs :: S.Set (OperandRef arch sh)
              -- ^ Locations written by an instruction
              }
+  deriving (Show)
 
 instance (Architecture arch) => Monoid (IORelation arch sh) where
   mempty = emptyIORelation

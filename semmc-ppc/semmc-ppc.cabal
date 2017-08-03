@@ -54,6 +54,8 @@ executable semmc-ppc-iorels
   main-is: IORelation.hs
   build-depends: base,
                  directory,
+                 async,
+                 time,
                  semmc,
                  semmc-ppc,
                  parameterized-utils,

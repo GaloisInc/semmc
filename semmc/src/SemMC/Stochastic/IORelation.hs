@@ -62,6 +62,7 @@ data LearningConfig arch =
                  , lcMachineState :: R.MachineState (CS.ConcreteState arch)
                  , lcTimeoutSeconds :: Int
                  , lcRemoteHost :: String
+                 , lcLog :: C.Chan R.LogMessage
                  }
 
 loadIORelations :: forall arch
@@ -115,9 +116,8 @@ learnIORelations cfg proxy toFP ops = do
   A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
     rChan <- C.newChan
-    logChan <- C.newChan
     ssh <- A.async $ do
-      _ <- R.runRemote (lcRemoteHost cfg) (lcMachineState cfg) tChan rChan logChan
+      _ <- R.runRemote (lcRemoteHost cfg) (lcMachineState cfg) tChan rChan (lcLog cfg)
       return ()
     A.link ssh
     nref <- STM.newTVarIO 0
