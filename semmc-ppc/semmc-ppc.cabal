@@ -46,3 +46,17 @@ executable semmc-ppc-test
                  semmc-ppc,
                  dismantle-tablegen,
                  dismantle-ppc
+
+executable semmc-ppc-iorels
+  default-language: Haskell2010
+  ghc-options: -Wall
+  hs-source-dirs: tools
+  main-is: IORelation.hs
+  build-depends: base,
+                 directory,
+                 semmc,
+                 semmc-ppc,
+                 parameterized-utils,
+                 dismantle-tablegen,
+                 dismantle-ppc,
+                 optparse-applicative
