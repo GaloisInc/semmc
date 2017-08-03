@@ -4,6 +4,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 -- | A module for learning the input and output relations for instructions
@@ -93,7 +94,10 @@ learnIORelations :: forall arch
                  -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 learnIORelations cfg proxy toFP ops = do
   rels0 <- loadIORelations proxy toFP ops
-  wlref <- STM.newTVarIO (WL.fromList (map (unWitness (Proxy :: Proxy arch)) ops))
+  -- Remove IORelations we already have before we construct the worklist
+  let someOps = map (unWitness (Proxy @arch)) ops
+      opsWithoutRels = filter (\(Some op) -> MapF.notMember op rels0) someOps
+  wlref <- STM.newTVarIO (WL.fromList opsWithoutRels)
   lrref <- STM.newTVarIO rels0
   let glv = GlobalLearningEnv { assemble = lcAssemble cfg
                               , resWaitSeconds = lcTimeoutSeconds cfg
