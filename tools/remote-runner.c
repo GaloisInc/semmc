@@ -384,8 +384,8 @@ typedef struct {
   uint32_t cr;
   uint64_t fpscr;
   VR vrs[SEM_NVRS];
-  uint8_t mem1[MEM_REGION_BYTES];
-  uint8_t mem2[MEM_REGION_BYTES];
+  /* uint8_t mem1[MEM_REGION_BYTES]; */
+  /* uint8_t mem2[MEM_REGION_BYTES]; */
 } RegisterState;
 
 #define VRREGS_SIZE (33 * sizeof(VR) + sizeof(uint32_t))
@@ -400,10 +400,10 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
   // We have to copy the memory from the input buffers into memSpace because the
   // input buffers aren't visible in the address space of the tracee - only the
   // memSpace is shared.
-  uint8_t* mem1Addr = memSpace;
-  uint8_t* mem2Addr = memSpace + sizeof(rs->mem1);
-  memcpy(mem1Addr, rs->mem1, sizeof(rs->mem1));
-  memcpy(mem2Addr, rs->mem2, sizeof(rs->mem2));
+  /* uint8_t* mem1Addr = memSpace; */
+  /* uint8_t* mem2Addr = memSpace + sizeof(rs->mem1); */
+  /* memcpy(mem1Addr, rs->mem1, sizeof(rs->mem1)); */
+  /* memcpy(mem2Addr, rs->mem2, sizeof(rs->mem2)); */
 
   // Apply the reg mask; this modifies the test vector, but that is fine.  We
   // won't need the original values ever again.

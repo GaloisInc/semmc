@@ -44,6 +44,7 @@ randomState gen = St.execStateT randomize MapF.empty
       mapM_ addRandomBV vsrs
       mapM_ addRandomBV specialRegs32
       mapM_ addRandomBV specialRegs64
+--      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
 
     addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
@@ -61,7 +62,7 @@ zeroState = St.execState addZeros MapF.empty
       mapM_ addZero vsrs
       mapM_ addZero specialRegs32
       mapM_ addZero specialRegs64
-      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
+--      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
 
 -- | Convert a machine state to the wire protocol.
 --
@@ -75,7 +76,7 @@ serialize s = LB.toStrict (B.toLazyByteString b)
                 , mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
                 , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
                 , mconcat (map (serializeSymVal serializeVec) (extractLocs s vsrs))
-                , mconcat (map serializeMem (extractLocs s [LocMem]))
+--                , mconcat (map serializeMem (extractLocs s [LocMem]))
                 ]
 
 serializeMem :: CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> B.Builder
@@ -116,8 +117,8 @@ getArchState = do
   spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
   spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
   vsrs' <- mapM (getWith (getValue getWord128be repr128)) vsrs
-  mem' <- getBS
-  return (St.execState (addLocs gprs' spregs32' spregs64' vsrs' >> addLoc (LocMem, mem')) MapF.empty)
+--  mem' <- getBS
+  return (St.execState (addLocs gprs' spregs32' spregs64' vsrs' {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
     addLoc :: forall tp . (Location tp, CS.Value tp) -> St.State ConcreteState ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
