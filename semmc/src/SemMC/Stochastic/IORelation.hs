@@ -23,7 +23,7 @@ import qualified GHC.Err.Located as L
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Foldable as F
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
@@ -55,7 +55,7 @@ import qualified SemMC.Stochastic.Remote as R
 data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
-                 , lcAssemble :: Instruction arch -> BS.ByteString
+                 , lcAssemble :: Instruction arch -> LBS.ByteString
                  , lcTestGen :: IO (CS.ConcreteState arch)
                  , lcMachineState :: R.MachineState (CS.ConcreteState arch)
                  , lcTimeoutSeconds :: Int

@@ -34,7 +34,7 @@ import qualified Control.Concurrent.STM as STM
 import qualified Control.Monad.Catch as E
 import qualified Control.Monad.Reader as Rd
 import Control.Monad.Trans ( MonadIO, liftIO )
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.Int ( Int32 )
 import qualified Data.Map.Strict as M
 import Data.Proxy ( Proxy(..) )
@@ -55,7 +55,7 @@ import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
 
 data GlobalLearningEnv arch =
-  GlobalLearningEnv { assemble :: Instruction arch -> BS.ByteString
+  GlobalLearningEnv { assemble :: Instruction arch -> LBS.ByteString
                     , resWaitSeconds :: Int
                     -- ^ Number of seconds to wait to receive all of the results over the 'resChan'
                     , worklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
@@ -112,7 +112,7 @@ nextOpcode = do
 mkRandomTest :: Learning arch (CS.ConcreteState arch)
 mkRandomTest = liftIO =<< Rd.asks testGen
 
-askAssembler :: Learning arch (Instruction arch -> BS.ByteString)
+askAssembler :: Learning arch (Instruction arch -> LBS.ByteString)
 askAssembler = Rd.asks (assemble . globalLearningEnv)
 
 data OperandRef arch sh = ImplicitOperand (Some (CS.View arch))

@@ -3,7 +3,6 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
-import qualified Data.ByteString.Lazy as LB
 import Data.Proxy ( Proxy(..) )
 import qualified Data.Time.Format as T
 import qualified System.Environment as E
@@ -65,7 +64,7 @@ testVector1 :: R.TestCase PPCState
 testVector1 =
   R.TestCase { R.testNonce = 11
              , R.testContext = ctx2
-             , R.testProgram = LB.toStrict (PPC.assembleInstruction i)
+             , R.testProgram = PPC.assembleInstruction i
              }
   where
     ctx0 = CS.zeroState (Proxy @PPC)

@@ -15,6 +15,7 @@ import qualified Control.Concurrent.Async as A
 import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
+import qualified Data.ByteString.Lazy as LB
 import Data.Int ( Int32 )
 import qualified Data.Time.Clock as T
 import Data.Word ( Word8, Word16, Word64 )
@@ -30,7 +31,7 @@ data MachineState a =
 data TestCase a =
   TestCase { testNonce :: Word64
            , testContext :: a
-           , testProgram :: B.ByteString
+           , testProgram :: LB.ByteString
            }
 
 data TestResult a =
@@ -115,8 +116,8 @@ sendTestCases ms c h = do
                            , B.word64LE (testNonce tc)
                            , B.word16BE (fromIntegral (B.length regStateBytes))
                            , B.byteString regStateBytes
-                           , B.word16BE (fromIntegral (B.length (testProgram tc)))
-                           , B.byteString (testProgram tc)
+                           , B.word16BE (fromIntegral (LB.length (testProgram tc)))
+                           , B.lazyByteString (testProgram tc)
                            ]
           B.hPutBuilder h bs
           IO.hFlush h

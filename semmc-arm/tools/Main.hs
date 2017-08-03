@@ -1,7 +1,7 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as LB
 import qualified Data.Time.Format as T
 import qualified Data.Vector.Sized as V
 import qualified System.Environment as E
@@ -58,7 +58,7 @@ testVector1 :: R.TestCase MachineState
 testVector1 = R.TestCase { R.testNonce = 11
                          , R.testContext = ctx
                          -- add r1, r2?
-                         , R.testProgram = B.pack [0x02, 0x10, 0x81, 0xE0]
+                         , R.testProgram = LB.pack [0x02, 0x10, 0x81, 0xE0]
                          }
   where
     ctx = MachineState { gprs = grs
@@ -79,7 +79,7 @@ testVector1 = R.TestCase { R.testNonce = 11
 testVector2 :: R.TestCase MachineState
 testVector2 = testVector1 { R.testNonce = 22
                           , R.testContext = (R.testContext testVector1) { gprs = grs }
-                          , R.testProgram = B.pack [0x02, 0x10, 0x81, 0xE0]
+                          , R.testProgram = LB.pack [0x02, 0x10, 0x81, 0xE0]
                           }
   where
     Just grs = V.fromList [ 200, 100, 9, 0, 0
