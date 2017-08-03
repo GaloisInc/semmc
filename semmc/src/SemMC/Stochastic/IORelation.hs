@@ -28,10 +28,12 @@ import qualified Data.Foldable as F
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
 import qualified Data.Text.IO as T
+import System.FilePath ( (</>) )
 import qualified System.IO.Error as IOE
 
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.Pair as P
 import Data.Parameterized.Some ( Some(..) )
 import Data.Parameterized.Witness ( Witness(..) )
 import qualified Data.Parameterized.Unfold as U
@@ -85,6 +87,8 @@ loadIORelations proxy toFP ops = do
 -- and learn the rest through randomized testing.
 --
 -- This function spins up a user-specified number of worker threads.
+--
+-- Note that this function assumes that the lcIORelationDirectory already exists
 learnIORelations :: forall arch
                   . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                  => LearningConfig arch
@@ -99,10 +103,14 @@ learnIORelations cfg proxy toFP ops = do
       opsWithoutRels = filter (\(Some op) -> MapF.notMember op rels0) someOps
   wlref <- STM.newTVarIO (WL.fromList opsWithoutRels)
   lrref <- STM.newTVarIO rels0
+  serializeChan <- C.newChan
+  serializer <- A.async $ (serializeLearnedRelations (lcIORelationDirectory cfg) toFP serializeChan)
+  A.link serializer
   let glv = GlobalLearningEnv { assemble = lcAssemble cfg
                               , resWaitSeconds = lcTimeoutSeconds cfg
                               , worklist = wlref
                               , learnedRelations = lrref
+                              , serializationChan = serializeChan
                               }
   A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
@@ -126,6 +134,19 @@ learnIORelations cfg proxy toFP ops = do
   where
     unWitness :: proxy arch -> Some (Witness U.UnfoldShape (Opcode arch (Operand arch))) -> Some (Opcode arch (Operand arch))
     unWitness _ (Some (Witness o)) = Some o
+
+serializeLearnedRelations :: (CS.ConcreteArchitecture arch)
+                          => FilePath
+                          -> (forall sh . (Opcode arch (Operand arch)) sh -> FilePath)
+                          -> C.Chan (Maybe (P.Pair (Opcode arch (Operand arch)) (IORelation arch)))
+                          -> IO ()
+serializeLearnedRelations dir toFP c = do
+  mp <- C.readChan c
+  case mp of
+    Nothing -> return ()
+    Just (P.Pair op iorel) -> do
+      T.writeFile (dir </> toFP op) (printIORelation iorel)
+      serializeLearnedRelations dir toFP c
 
 -- | Find the locations read from and written to by each instruction passed in
 --

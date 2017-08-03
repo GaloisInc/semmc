@@ -44,6 +44,7 @@ import Data.Word ( Word64 )
 import qualified System.Timeout as T
 
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.Pair as P
 import Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
@@ -60,6 +61,7 @@ data GlobalLearningEnv arch =
                     -- ^ Number of seconds to wait to receive all of the results over the 'resChan'
                     , worklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
                     , learnedRelations :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
+                    , serializationChan :: C.Chan (Maybe (P.Pair (Opcode arch (Operand arch)) (IORelation arch)))
                     }
 
 data LocalLearningEnv arch =
@@ -83,12 +85,20 @@ askResultChan = Rd.asks resChan
 askGen :: Learning arch A.Gen
 askGen = Rd.asks gen
 
+-- FIXME: Add an optional channel here to accept opcode/iorelation pairs in
+-- real-time.  We want to use this to incrementally serialize learned relations,
+-- instead of just collecting them in memory.  We already have the directory -
+-- we just need to use it.  Maybe we can have recordLearnedRelation do the
+-- necessary IO or fork a thread.
+
 -- | Record a learned IORelation into the global environment
 recordLearnedRelation :: (Architecture arch) => Opcode arch (Operand arch) sh -> IORelation arch sh -> Learning arch ()
 recordLearnedRelation op rel = do
   ref <- Rd.asks (learnedRelations . globalLearningEnv)
   liftIO $ STM.atomically $ do
     STM.modifyTVar' ref (MapF.insert op rel)
+  c <- Rd.asks (serializationChan . globalLearningEnv)
+  liftIO $ C.writeChan c (Just (P.Pair op rel))
 
 nextNonce :: Learning arch Word64
 nextNonce = do
