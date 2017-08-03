@@ -27,6 +27,7 @@ import qualified Data.Foldable as F
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
 import qualified Data.Text.IO as T
+import qualified System.IO.Error as IOE
 
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
@@ -67,7 +68,7 @@ loadIORelations :: forall arch
                 -> [Some (Witness U.UnfoldShape (Opcode arch (Operand arch)))]
                 -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 loadIORelations proxy toFP ops = do
-  F.foldlM (\m (Some (Witness oc)) -> addIfJust m oc) MapF.empty ops
+  F.foldlM (\m (Some (Witness oc)) -> IOE.catchIOError (addIfJust m oc) (\_ -> return m)) MapF.empty ops
   where
     addIfJust :: (U.UnfoldShape sh)
               => MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
