@@ -148,7 +148,7 @@ testOpcode :: forall arch sh
            -> Learning arch (IORelation arch sh)
 testOpcode op = do
   implicitOperands <- findImplicitOperands op
-  insn <- generateExplicitInstruction (Proxy :: Proxy arch) op (implicitLocations implicitOperands)
+  insn <- generateExplicitInstruction (Proxy @arch) op (implicitLocations implicitOperands)
   case insn of
     D.Instruction op' operandList
       | Just P.Refl <- P.testEquality op op' -> do
