@@ -4,6 +4,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 module SemMC.Stochastic.Strata (
   SynEnv,
   Config(..),
@@ -11,11 +12,14 @@ module SemMC.Stochastic.Strata (
   stratifiedSynthesis
   ) where
 
+import qualified GHC.Err.Located as L
+
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
+import Data.Maybe ( catMaybes, isNothing )
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
@@ -28,9 +32,10 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import SemMC.Architecture ( Instruction, Opcode, Operand )
+import SemMC.Architecture ( Instruction, Opcode, Operand, operandToLocation )
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
@@ -121,7 +126,7 @@ strataOneLoop op instr eqclasses = do
             Just <$> finishStrataOne op instr eqclasses'
           | otherwise -> strataOneLoop op instr eqclasses'
 
-finishStrataOne :: (CS.ConcreteArchitecture arch)
+finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
                 => Opcode arch (Operand arch) sh
                 -> Instruction arch
                 -> C.EquivalenceClasses arch
@@ -134,16 +139,55 @@ finishStrataOne op instr eqclasses = do
 -- | Construct a formula for the given instruction based on the selected representative program.
 --
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
---
--- FIXME: Here we need the set of output locations (which could include implicit locations)
-buildFormula :: (CS.ConcreteArchitecture arch)
+buildFormula :: (CS.ConcreteArchitecture arch, SynC arch)
              => Opcode arch (Operand arch) sh
              -> Instruction arch
              -> [Instruction arch]
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 buildFormula o i prog = do
   Just iorel <- opcodeIORelation o
-  undefined i prog iorel
+  mfrms <- mapM instantiateFormula prog
+  case any isNothing mfrms of
+    True -> fail ""
+    False -> do
+      let formulas = catMaybes mfrms
+      withSymBackend $ \sym -> do
+        progFormula <- liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula formulas
+        case i of
+          D.Instruction opcode operands
+            | Just MapF.Refl <- MapF.testEquality opcode o -> do
+                -- Now, for all of the outputs (implicit and explicit) in the target
+                -- instruction, look up the corresponding formula in `progFormula`
+                extractFormula opcode operands progFormula iorel
+            | otherwise -> L.error ("Unexpected opcode mismatch: " ++ MapF.showF o)
+
+extractFormula :: forall arch t sh
+                . (CS.ConcreteArchitecture arch, SynC arch)
+               => Opcode arch (Operand arch) sh
+               -> D.OperandList (Operand arch) sh
+               -> F.Formula (Sym t) arch
+               -> IORelation arch sh
+               -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
+extractFormula opc ops progForm iorel = go F.emptyFormula (F.toList (outputs iorel))
+  where
+    go acc [] = parameterizeFormula opc ops iorel acc
+    go acc (out:rest) =
+      case out of
+        ImplicitOperand _ -> L.error "Implicit output operands not supported yet"
+        -- FIXME: Should we be using views instead of locations here?  It would
+        -- require referring to views instead of locations in formulas..
+        OperandRef (Some idx) -> do
+          let operand = D.indexOpList ops idx
+              Just loc = operandToLocation (Proxy @arch) operand
+              Just expr = MapF.lookup loc (F.formDefs progForm)
+          go (undefined expr acc) rest
+
+parameterizeFormula :: Opcode arch (Operand arch) sh
+                    -> D.OperandList (Operand arch) sh
+                    -> IORelation arch sh
+                    -> F.Formula (Sym t) arch
+                    -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
+parameterizeFormula = undefined
 
 -- | Generate an arbitrary instruction for the given opcode.
 --

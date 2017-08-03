@@ -22,6 +22,7 @@ module SemMC.Stochastic.Monad (
   withSymBackend,
   addTestCase,
   recordLearnedFormula,
+  instantiateFormula,
   takeWork,
   addWork,
   opcodeIORelation
@@ -48,11 +49,13 @@ import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
 import           SemMC.Architecture ( Architecture, Opcode, Operand, Instruction )
 import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Instantiate as F
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Formula.Load as F
 import           SemMC.Symbolic ( Sym )
@@ -208,6 +211,18 @@ lookupFormula :: (Architecture arch)
 lookupFormula op = do
   frms <- askFormulas
   return $ MapF.lookup op frms
+
+instantiateFormula :: (Architecture arch)
+                   => Instruction arch -- Opcode arch (Operand arch) sh
+                   -> Syn t arch (Maybe (F.Formula (Sym t) arch))
+instantiateFormula (D.Instruction opcode oplist) = do
+  mpf <- lookupFormula opcode
+  case mpf of
+    Nothing -> return Nothing
+    Just pf -> do
+      withSymBackend $ \sym -> do
+        (_, f) <- liftIO $ F.instantiateFormula sym pf oplist
+        return (Just f)
 
 opcodeIORelation :: (Architecture arch)
                  => Opcode arch (Operand arch) sh
