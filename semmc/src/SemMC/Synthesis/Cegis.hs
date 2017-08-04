@@ -16,6 +16,7 @@ module SemMC.Synthesis.Cegis
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.ShapedList ( ShapedList )
 import           Data.Parameterized.TraversableF
 
 import qualified Lang.Crucible.Solver.Interface as S
@@ -34,7 +35,7 @@ import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
 
 data TemplatableInstruction (arch :: *) where
-  TemplatableInstruction :: TemplatableOpcode arch sh -> OperandList (Operand arch) sh -> TemplatableInstruction arch
+  TemplatableInstruction :: TemplatableOpcode arch sh -> ShapedList (Operand arch) sh -> TemplatableInstruction arch
 
 ungood :: TemplatableInstruction arch -> Instruction arch
 ungood (TemplatableInstruction (Witness op) oplist) = Instruction op oplist

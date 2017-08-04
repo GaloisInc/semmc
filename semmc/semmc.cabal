@@ -50,6 +50,7 @@ library
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist
+                       Data.Parameterized.Seq
                        Data.Parameterized.Unfold
   other-modules:       TestToy
   -- other-extensions:    

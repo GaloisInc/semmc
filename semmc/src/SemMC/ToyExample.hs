@@ -30,13 +30,13 @@ import           Data.EnumF ( congruentF, EnumF, enumF )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)), Index(IndexHere, IndexThere) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
 import           Data.Word ( Word32 )
 import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
 
-import           Dismantle.Instruction ( OperandList(Nil,(:>)) )
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Arbitrary as D
@@ -157,8 +157,8 @@ ioRelations = MapF.fromList
       { I.inputs = Set.fromList [o0, o1]
       , I.outputs = Set.fromList [o0] } ]
   where
-    o0 = I.OperandRef (Some D.IndexHere)
-    o1 = I.OperandRef (Some (D.IndexThere D.IndexHere))
+    o0 = I.OperandRef (Some IndexHere)
+    o1 = I.OperandRef (Some (IndexThere IndexHere))
 
 instance ShowF (Opcode o) where
   showF = show
@@ -382,7 +382,7 @@ instance D.ArbitraryOperands Opcode Operand where
     -- in 'D.arbitraryOperandList', and so without duplicating here it
     -- seems we need to a way to universally quantify the existence of
     -- needed instances ...
-    AddRr -> D.arbitraryOperandList gen
-    SubRr -> D.arbitraryOperandList gen
-    NegR  -> D.arbitraryOperandList gen
-    MovRi -> D.arbitraryOperandList gen
+    AddRr -> D.arbitraryShapedList gen
+    SubRr -> D.arbitraryShapedList gen
+    NegR  -> D.arbitraryShapedList gen
+    MovRi -> D.arbitraryShapedList gen

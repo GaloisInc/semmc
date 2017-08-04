@@ -48,9 +48,9 @@ import qualified System.Timeout as T
 
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as P
+import Data.Parameterized.ShapedList ( Index )
 import Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as A
-import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
 import qualified SemMC.ConcreteState as CS
@@ -136,7 +136,7 @@ askAssembler = Rd.asks (assemble . globalLearningEnv)
 
 data OperandRef arch sh = ImplicitOperand (Some (CS.View arch))
                         -- ^ A location that is implicitly read from or written to by an instruction
-                        | OperandRef (Some (D.Index sh))
+                        | OperandRef (Some (Index sh))
                         -- ^ An index into an operand list
 
 deriving instance (Architecture arch) => Eq (OperandRef arch sh)
@@ -153,12 +153,12 @@ data TestBundle t l =
 -- the test cases differ from the original test case, it was an input operand.
 data ExplicitFact arch =
   forall sh tp n . ExplicitFact { lOpcode :: Opcode arch (Operand arch) sh
-                              , lIndex :: D.Index sh tp
-                              -- ^ The index into the operand list of the location we are watching
-                              , lLocation :: CS.View arch n
-                              -- ^ The location we are watching
-                              , lInstruction :: Instruction arch
-                              }
+                                , lIndex :: Index sh tp
+                                -- ^ The index into the operand list of the location we are watching
+                                , lLocation :: CS.View arch n
+                                -- ^ The location we are watching
+                                , lInstruction :: Instruction arch
+                                }
 
 -- | We just need to track the explicitly-referenced locations.  Changes to any
 -- state variables that are not explicitly mentioned in the operand list

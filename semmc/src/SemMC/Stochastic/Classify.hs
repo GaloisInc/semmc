@@ -12,12 +12,10 @@ module SemMC.Stochastic.Classify (
 
 import Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
-import Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 
-import qualified Dismantle.Instruction as I
-
-import SemMC.Architecture ( Instruction, Architecture )
+import           Data.Parameterized.Classes ( OrdF )
+import           SemMC.Architecture ( Operand )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
@@ -26,12 +24,12 @@ import           SemMC.Symbolic ( Sym )
 import SemMC.Stochastic.Monad
 
 -- | A set of equivalence classes of programs
-data EquivalenceClasses arch = EquivalenceClasses { unClasses :: S.Set (S.Set [Instruction arch]) }
+data EquivalenceClasses arch = EquivalenceClasses { unClasses :: S.Set (S.Set [SynthInstruction arch]) }
 
-data EquivalenceClass arch = EquivalenceClass { unClass :: S.Set [Instruction arch] }
+data EquivalenceClass arch = EquivalenceClass { unClass :: S.Set [SynthInstruction arch] }
 
 -- | Construct an initial set of equivalence classes with a single program
-equivalenceClasses :: [Instruction arch] -> EquivalenceClasses arch
+equivalenceClasses :: [SynthInstruction arch] -> EquivalenceClasses arch
 equivalenceClasses p = EquivalenceClasses (S.singleton (S.singleton p))
 
 -- | Count the total number of programs in the set of equivalence classes
@@ -45,8 +43,8 @@ countPrograms s = sum (map S.size (S.toList (unClasses s)))
 -- This function returns 'Nothing' if the new program generates a counterexample
 -- that invalidates all of the previous programs.
 classify :: forall arch t
-          . (Architecture arch, Ord (Instruction arch))
-         => [Instruction arch]
+          . (ArchitectureWithPseudo arch, OrdF (Operand arch))
+         => [SynthInstruction arch]
          -> EquivalenceClasses arch
          -> Syn t arch (Maybe (EquivalenceClasses arch))
 classify p eqclasses = do
@@ -59,7 +57,7 @@ classify p eqclasses = do
           -- equivalent to any existing class
           return (Just (EquivalenceClasses (S.singleton (S.singleton p) `S.union` unClasses eqclasses)))
       | otherwise -> do
-          let eqclasses' = S.insert p (mergeClasses (Proxy :: Proxy arch) classes)
+          let eqclasses' = S.insert p (mergeClasses classes)
           return (Just (EquivalenceClasses (S.singleton eqclasses')))
 
 -- | For each class in the current equivalence classes, see if the given program
@@ -71,14 +69,14 @@ classify p eqclasses = do
 --
 -- This function also produces counterexamples if the new program isn't
 -- equivalent to the old programs.
-classifyByClass :: (Architecture arch, Ord (Instruction arch))
-                => [Instruction arch]
+classifyByClass :: (ArchitectureWithPseudo arch, Ord (SynthInstruction arch))
+                => [SynthInstruction arch]
                 -- ^ The program to classify
-                -> S.Set (S.Set [Instruction arch])
+                -> S.Set (S.Set [SynthInstruction arch])
                 -- ^ The set of classes matching the input program
-                -> [S.Set [Instruction arch]]
+                -> [S.Set [SynthInstruction arch]]
                 -- ^ The existing equivalence classes
-                -> Syn t arch (Maybe (S.Set (S.Set [Instruction arch])))
+                -> Syn t arch (Maybe (S.Set (S.Set [SynthInstruction arch])))
 classifyByClass p eqs klasses =
   case klasses of
     [] -> return (Just eqs)
@@ -112,36 +110,31 @@ chooseClass = undefined
 --
 -- We want to minimize the number of uninterpreted functions and non-linear
 -- operations (as well as formula size).
-chooseProgram :: EquivalenceClass arch -> Syn t arch [Instruction arch]
+chooseProgram :: EquivalenceClass arch -> Syn t arch [SynthInstruction arch]
 chooseProgram = undefined
 
 -- | Flatten a set of equivalence classes into one equivalence class
---
--- Note that the proxy argument is annoying, but required to control instance
--- selection (because 'Instruction' is a type function, and type functions are
--- not injective).  It would be really nice if that wasn't required.
-mergeClasses :: (Ord (Instruction arch))
-             => proxy arch
-             -> S.Set (S.Set [Instruction arch])
-             -> S.Set [Instruction arch]
-mergeClasses _ s = S.unions (S.toList s)
+mergeClasses :: (Ord pgm)
+             => S.Set (S.Set pgm)
+             -> S.Set pgm
+mergeClasses s = S.unions (S.toList s)
 
 -- | Convert an instruction into a 'F.Formula'
-instructionFormula :: (Architecture arch)
+instructionFormula :: (ArchitectureWithPseudo arch)
                    => Sym t
-                   -> Instruction arch
+                   -> SynthInstruction arch
                    -> Syn t arch (F.Formula (Sym t) arch)
 instructionFormula sym i = do
   case i of
-    I.Instruction op operands -> do
+    SynthInstruction op operands -> do
       Just pf <- lookupFormula op
       (_, f) <- liftIO $ F.instantiateFormula sym pf operands
       return f
 
 -- | Convert a program into a formula
-programFormula :: (Architecture arch)
+programFormula :: (ArchitectureWithPseudo arch)
                => Sym t
-               -> [Instruction arch]
+               -> [SynthInstruction arch]
                -> Syn t arch (F.Formula (Sym t) arch)
 programFormula sym insns = do
   fs <- mapM (instructionFormula sym) insns
@@ -150,7 +143,10 @@ programFormula sym insns = do
 -- | Use an SMT solver to check if two programs are equivalent.
 --
 -- If they are not, return an input that demonstrates the difference.
-testEquivalence :: (Architecture arch) => [Instruction arch] -> [Instruction arch] -> Syn t arch (F.EquivalenceResult arch Value)
+testEquivalence :: (ArchitectureWithPseudo arch)
+                => [SynthInstruction arch]
+                -> [SynthInstruction arch]
+                -> Syn t arch (F.EquivalenceResult arch Value)
 testEquivalence p representative = do
   withSymBackend $ \sym -> do
     pf <- programFormula sym p

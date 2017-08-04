@@ -1,4 +1,6 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- | Description: Synthesize a program that implements a target instruction.
 --
@@ -18,13 +20,17 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as S
 import qualified Data.Set as Set
 import           GHC.Exts ( IsList(..) )
+import qualified GHC.Err.Located as L
 
+import qualified Data.Set.NonEmpty as NES
+import           Data.Parameterized.HasRepr ( HasRepr )
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.ShapedList ( lengthFC, traverseFCIndexed, indexAsInt, indexShapedList, ShapeRepr )
 import           Dismantle.Arbitrary as D
-import           Dismantle.Instruction.Random as D
+import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
-import           SemMC.Architecture ( Instruction, Operand )
+import           SemMC.Architecture ( Instruction, Opcode, Operand )
 import qualified SemMC.ConcreteState as C
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.IORelation as I
@@ -35,7 +41,7 @@ import qualified SemMC.Stochastic.IORelation as I
 -- Can fail due to timeouts.
 synthesize :: SynC arch
            => Instruction arch
-           -> Syn t arch (Maybe [Instruction arch])
+           -> Syn t arch (Maybe [SynthInstruction arch])
 synthesize target = do
   initialTests <- generateInitialTests target
   mapM_ addTestCase initialTests
@@ -113,7 +119,7 @@ compareTargetToCandidate target candidate test = do
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
   runTest     <- askRunTest
-  candidateSt <- runTest test candidateProg
+  candidateSt <- runTest test (synthInsnToActual =<< candidateProg)
   targetSt    <- runTest test targetProg
   liveOut     <- getOutMasks target
   let weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
@@ -130,7 +136,7 @@ getOutMasks (D.Instruction opcode operands) = do
   -- Ignore implicit operands for now.
   -- TODO: handle implicits.
   let outputs' = [ s | I.OperandRef s <- outputs ]
-  let outputs'' = [ Some (D.indexOpList operands i) | Some i <- outputs' ]
+  let outputs'' = [ Some (indexShapedList operands i) | Some i <- outputs' ]
   let semViews = map operandToSemView outputs''
   return semViews
   where
@@ -182,7 +188,7 @@ generateInitialTests _target = undefined
 --
 -- We use 'Nothing' to represent no-ops, which we need because the
 -- candidate program has fixed length during its evolution.
-type Candidate arch = S.Seq (Maybe (Instruction arch))
+type Candidate arch = S.Seq (Maybe (SynthInstruction arch))
 
 -- | The empty program is a sequence of no-ops.
 emptyCandidate :: Int -> Syn t arch (Candidate arch)
@@ -208,16 +214,57 @@ perturb candidate = do
     p_s = 1/6
     p_i = 1/6
 
+-- | Replace the opcode of the given instruction with a random one of the same
+-- shape.
+randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) ShapeRepr,
+                    HasRepr (Pseudo arch (Operand arch)) ShapeRepr)
+                => SynthInstruction arch
+                -> Syn t arch (SynthInstruction arch)
+randomizeOpcode (SynthInstruction oldOpcode operands) = do
+  gen <- askGen
+  congruent <- lookupCongruent oldOpcode
+  case S.length congruent of
+    0 -> L.error "bug! The opcode being replaced should always be in the congruent set!"
+    len -> do
+      ix <- liftIO $ D.uniformR (0, len - 1) gen
+      let !newOpcode = congruent `S.index` ix
+      return (SynthInstruction newOpcode operands)
+
+-- | Randomly replace one operand of an instruction.
+--
+-- FIXME: This is ripped straight out of dismantle. We should probably make the
+-- one there more generic.
+randomizeOperand :: (D.ArbitraryOperand (Operand arch))
+                 => D.Gen
+                 -> SynthInstruction arch
+                 -> IO (SynthInstruction arch)
+randomizeOperand gen (SynthInstruction op os) = do
+  updateAt <- D.uniformR (0, (lengthFC os - 1)) gen
+  os' <- traverseFCIndexed (f' updateAt gen) os
+  return (SynthInstruction op os')
+  where
+    f' target g ix o
+      | indexAsInt ix == target = D.arbitraryOperand g o
+      | otherwise = return o
+
+-- | Generate a random instruction
+randomInstruction :: (D.ArbitraryOperands (Opcode arch) (Operand arch),
+                      D.ArbitraryOperands (Pseudo arch) (Operand arch))
+                  => D.Gen
+                  -> NES.Set (Some (SynthOpcode arch))
+                  -> IO (SynthInstruction arch)
+randomInstruction gen baseSet = do
+  Some opcode <- D.choose baseSet gen
+  SynthInstruction opcode <$> synthArbitraryOperands gen opcode
+
 -- | Randomly replace an opcode with another compatible opcode, while
 -- keeping the operands fixed.
 perturbOpcode :: SynC arch => Candidate arch -> Syn t arch (Candidate arch)
 perturbOpcode candidate = do
   gen <- askGen
   index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
-  baseSet <- askBaseSet
   let oldInstruction = candidate `S.index` index
-  newInstruction <- liftIO $
-    D.randomizeOpcode gen baseSet `mapM` oldInstruction
+  newInstruction <- randomizeOpcode `mapM` oldInstruction
   return $ S.update index newInstruction candidate
 
 -- | Randomly replace the operands, while keeping the opcode fixed.
@@ -226,7 +273,7 @@ perturbOperand candidate = do
   gen <- askGen
   index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
   let oldInstruction = candidate `S.index` index
-  newInstruction <- liftIO $ D.randomizeOperand gen `mapM` oldInstruction
+  newInstruction <- liftIO $ randomizeOperand gen `mapM` oldInstruction
   return $ S.update index newInstruction candidate
 
 -- | Swap two instructions in a program.
@@ -249,7 +296,7 @@ perturbInstruction candidate = do
   baseSet <- askBaseSet
   newInstruction <- liftIO $ join $ D.categoricalChoose
     [ (p_u, return Nothing)
-    , (1 - p_u, Just <$> D.randomInstruction gen baseSet) ]
+    , (1 - p_u, Just <$> randomInstruction gen baseSet) ]
     gen
   return $ S.update index newInstruction candidate
   where
