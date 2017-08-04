@@ -253,8 +253,14 @@ randomizeOperand gen (SynthInstruction op os) = do
       | otherwise = return o
 
 -- | Generate a random instruction
-randomInstruction :: D.Gen -> NES.Set (Some (SynthOpcode arch)) -> IO (SynthInstruction arch)
-randomInstruction gen baseSet = undefined
+randomInstruction :: (D.ArbitraryOperands (Opcode arch) (Operand arch),
+                      D.ArbitraryOperands (Pseudo arch) (Operand arch))
+                  => D.Gen
+                  -> NES.Set (Some (SynthOpcode arch))
+                  -> IO (SynthInstruction arch)
+randomInstruction gen baseSet = do
+  Some opcode <- D.choose baseSet gen
+  SynthInstruction opcode <$> synthArbitraryOperands gen opcode
 
 -- | Randomly replace an opcode with another compatible opcode, while
 -- keeping the operands fixed.

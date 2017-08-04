@@ -21,6 +21,7 @@ module SemMC.Stochastic.Monad (
   SynthInstruction(..),
   synthInsnToActual,
   actualInsnToSynth,
+  synthArbitraryOperands,
   SynEnv(..),
   LocalSynEnv(..),
   loadInitialState,
@@ -202,6 +203,14 @@ synthInsnToActual (SynthInstruction opcode operands) =
 
 actualInsnToSynth :: Instruction arch -> SynthInstruction arch
 actualInsnToSynth (D.Instruction opcode operands) = SynthInstruction (RealOpcode opcode) operands
+
+synthArbitraryOperands :: (D.ArbitraryOperands (Opcode arch) (Operand arch),
+                           D.ArbitraryOperands (Pseudo arch) (Operand arch))
+                       => A.Gen
+                       -> SynthOpcode arch sh
+                       -> IO (ShapedList (Operand arch) sh)
+synthArbitraryOperands gen (RealOpcode opcode) = D.arbitraryOperands gen opcode
+synthArbitraryOperands gen (PseudoOpcode opcode) = D.arbitraryOperands gen opcode
 
 -- | Synthesis environment.
 data SynEnv t arch =
