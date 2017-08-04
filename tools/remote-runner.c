@@ -369,7 +369,8 @@ uint8_t raiseTrap[] = {0x7f, 0xe0, 0x00, 0x08};
 
 // The standard general purpose integer registers
 #define SEM_NGPRS 32
-#define SEM_NVRS 64
+#define SEM_NFPRS 32
+#define SEM_NVSRS 64
 
 typedef struct {
   uint64_t chunks[2];
@@ -383,12 +384,10 @@ typedef struct {
   uint32_t xer;
   uint32_t cr;
   uint64_t fpscr;
-  VR vrs[SEM_NVRS];
+  VR vsrs[SEM_NVSRS];
   uint8_t mem1[MEM_REGION_BYTES];
   uint8_t mem2[MEM_REGION_BYTES];
 } RegisterState;
-
-#define VRREGS_SIZE (33 * sizeof(VR) + sizeof(uint32_t))
 
 void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace, RegisterState *rs) {
   struct pt_regs regs;
@@ -429,20 +428,34 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
 
   checkedPtrace(PTRACE_SETREGS, childPid, 0, &regs);
 
+  uint64_t fpregs[SEM_NFPRS+1];
+  checkedPtrace(PTRACE_GETFPREGS, childPid, 0, (void *) &fpregs);
+  // Set the FP regs
+  for (int i = 0; i < SEM_NFPRS; i++) {
+    fpregs[i] = rs->vsrs[i].chunks[0];
+  }
+  fpregs[SEM_NFPRS] = rs->fpscr;
+  checkedPtrace(PTRACE_SETFPREGS, childPid, 0, (void *) &fpregs)
+
+  uint64_t vsrhalves[SEM_NFPRS];
+  checkedPtrace(PTRACE_GETVSRREGS, childPid, 0, (void *) &vsrhalves);
+  // Set up the other halves of the low VSR registers
+  for (int i = 0; i < SEM_NFPRS; i++) {
+    vsrhalves[i] = rs->vsrs[i].chunks[1];
+  }
+  checkedPtrace(PTRACE_SETVSRREGS, childPid, 0, (void *) &vsrHalves);
+
   // Anonymous struct to ensure proper alignment
   struct {
     VR vrregs[SEM_NVRS];
     VR vrstatus;
     uint32_t vrweird;
   } vrbuf;
-
   checkedPtrace(PTRACE_GETVRREGS, childPid, 0, (void *) &vrbuf);
-
   // Copy in the VR regs
   for (int i = 0; i < SEM_NVRS; i++) {
-    vrbuf.vrregs[i] = rs->vrs[i];
+    vrbuf.vrregs[i] = rs->vsrs[SEM_NFPRS + i];
   }
-
   checkedPtrace(PTRACE_SETVRREGS, childPid, 0, (void *) &vrbuf);
 }
 
@@ -460,6 +473,25 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   rs->xer = regs.xer;
   rs->cr = regs.ccr;
 
+  uint64_t fpregs[SEM_NFPRS+1];
+
+  checkedPtrace(PTRACE_GETFPREGS, childPid, 0, (void *) &fpregs);
+
+  // Copy in the FP regs
+  for (int i = 0; i < SEM_NFPRS; i++) {
+    rs->vsrs[i].chunks[0] = fpregs[i];
+  }
+  rs->fpscr = fpregs[SEM_NFPRS];
+
+  uint64_t vsrhalves[SEM_NFPRS];
+
+  checkedPtrace(PTRACE_GETVSRREGS, childPid, 0, (void *) &vsrhalves);
+
+  // Copy in the other halves of the low VSR regs
+  for (int i = 0; i < SEM_NFPRS; i++) {
+    rs->vsrs[i].chunks[1] = vsrhalves[i];
+  }
+
   // Anonymous struct to ensure proper alignment
   struct {
     VR vrregs[SEM_NVRS];
@@ -471,7 +503,7 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 
   // Copy in the VR regs
   for (int i = 0; i < SEM_NVRS; i++) {
-    rs->vrs[i] = vrbuf.vrregs[i];
+    rs->vsrs[SEM_NFPRS + i] = vrbuf.vrregs[i];
   }
 }
 
