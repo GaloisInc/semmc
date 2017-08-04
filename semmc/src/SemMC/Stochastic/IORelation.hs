@@ -44,6 +44,7 @@ import qualified Dismantle.Instruction.Random as D
 
 import SemMC.Architecture
 import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
 
 import SemMC.Stochastic.IORelation.Explicit ( generateExplicitInstruction,
