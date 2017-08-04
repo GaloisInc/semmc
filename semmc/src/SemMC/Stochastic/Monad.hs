@@ -397,8 +397,7 @@ data Config arch =
          }
 
 loadInitialState :: forall arch t
-                  . (ArchitectureWithPseudo arch,
-                     D.ArbitraryOperands (Opcode arch) (Operand arch))
+                  . (SynC arch)
                  => Config arch
                  -> Sym t
                  -> IO (ConcreteState arch)
@@ -417,8 +416,6 @@ loadInitialState :: forall arch t
 loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
   undefinedBit <- CRUI.freshConstant sym (makeSymbol "undefined_bit") knownRepr
   let toFP dir oc = dir </> P.showF oc <.> "sem"
-      -- pseudoToFP :: Pseudo arch sh -> FilePath
-      -- pseudoToFP (Pseudo name _ _) = pseudoSetDir cfg </> name <.> "sem"
       -- TODO: handle uninterpreted functions
       env = F.FormulaEnv { F.envFunctions = Map.empty
                          , F.envUndefinedBit = undefinedBit
@@ -427,9 +424,12 @@ loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targe
   baseSet <- load (baseSetDir cfg)
   learnedSet <- load (learnedSetDir cfg)
   let initialFormulas = MapF.union baseSet learnedSet
-  -- pseudoSet <- load (pseudoSetDir cfg)
   pseudoSet <- F.loadFormulas sym (toFP (pseudoSetDir cfg)) env pseudoOpcodes
+  let addCongruentOp op _ = MapF.insertWith (SeqF.><) (typeRepr op) (SeqF.singleton op)
+      congruentOps' = MapF.foldrWithKey (addCongruentOp . RealOpcode) MapF.empty initialFormulas
+      congruentOps = MapF.foldrWithKey (addCongruentOp . PseudoOpcode) congruentOps' pseudoSet
   fref <- STM.newTVarIO initialFormulas
+  congruentRef <- STM.newTVarIO congruentOps
   wlref <- STM.newTVarIO (makeWorklist targetOpcodes initialFormulas)
   randomTests <- replicateM (randomTestCount cfg) genTest
   testref <- STM.newTVarIO (interestingTests ++ randomTests)
@@ -437,6 +437,7 @@ loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targe
   statsThread <- S.newStatisticsThread (statisticsFile cfg)
   return SynEnv { seFormulas = fref
                 , sePseudoFormulas = pseudoSet
+                , seKnownCongruentOps = congruentRef
                 , seTestCases = testref
                 , seWorklist = wlref
                 , seIORelations = iorels
