@@ -21,7 +21,7 @@ import qualified Text.Parsec.Text as P
 import Text.Read ( readMaybe )
 
 import Data.Parameterized.Some ( Some(..) )
-import qualified Dismantle.Instruction as D
+import Data.Parameterized.ShapedList ( Index(..) )
 
 import qualified Data.Parameterized.Unfold as U
 import SemMC.Architecture
@@ -86,11 +86,11 @@ fromIORelation p ior =
         ImplicitOperand (Some loc) -> SC.SAtom (AIdent (CS.showView loc))
         OperandRef (Some ix) -> SC.SAtom (AWord (indexToWord p ix))
 
-indexToWord :: Proxy arch -> D.Index sh s -> Word
+indexToWord :: Proxy arch -> Index sh s -> Word
 indexToWord p ix =
   case ix of
-    D.IndexHere -> 0
-    D.IndexThere ix' -> 1 + indexToWord p ix'
+    IndexHere -> 0
+    IndexThere ix' -> 1 + indexToWord p ix'
 
 data IORelationParseError arch = IORelationParseError (Proxy arch) (Some (Opcode arch (Operand arch))) T.Text
                                | InvalidSExpr (Proxy arch) (Some (Opcode arch (Operand arch))) (SC.SExpr Atom)
@@ -158,8 +158,7 @@ mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
     elt :: forall tp tps' tps . (U.RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> Word -> m (OperandRef arch tps)
     elt _ _ w =
       case w of
-        0 -> return (OperandRef (Some D.IndexHere))
+        0 -> return (OperandRef (Some IndexHere))
         _ -> do
           OperandRef (Some ix) <- U.unfoldShape nil elt (w - 1)
-          return (OperandRef (Some (D.IndexThere ix)))
-
+          return (OperandRef (Some (IndexThere ix)))

@@ -20,6 +20,7 @@ import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.NatRepr as NR
+import Data.Parameterized.ShapedList ( foldrFCIndexed, Index, ShapedList )
 import Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Instruction as D
@@ -47,7 +48,7 @@ generateExplicitInstruction proxy op implicitOperands = do
   insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
   case insn of
     D.Instruction _ ops ->
-      case D.foldrOperandList (matchesOperand proxy implicitOperands) False ops of
+      case foldrFCIndexed (matchesOperand proxy implicitOperands) False ops of
         True -> generateExplicitInstruction proxy op implicitOperands
         False -> return insn
 
@@ -56,7 +57,7 @@ generateExplicitInstruction proxy op implicitOperands = do
 -- operands of the instruction.
 classifyExplicitOperands :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                          => Opcode arch (Operand arch) sh
-                         -> D.OperandList (Operand arch) sh
+                         -> ShapedList (Operand arch) sh
                          -> Learning arch (IORelation arch sh)
 classifyExplicitOperands op explicitOperands = do
   t0 <- mkRandomTest
@@ -70,8 +71,8 @@ classifyExplicitOperands op explicitOperands = do
 -- (forming an 'IORelation')
 computeIORelation :: (CS.ConcreteArchitecture arch)
                   => Opcode arch (Operand arch) sh
-                  -> D.OperandList (Operand arch) sh
-                  -> [TestBundle (R.TestCase (CS.ConcreteState arch)) (ExplicitFact arch)]
+                  -> ShapedList (Operand arch) sh
+                  -> [TestBundle (TestCase arch) (ExplicitFact arch)]
                   -> [R.ResultOrError (CS.ConcreteState arch)]
                   -> Learning arch (IORelation arch sh)
 computeIORelation opcode operands bundles results =
@@ -93,10 +94,10 @@ computeIORelation opcode operands bundles results =
 buildIORelation :: forall arch sh
                  . (CS.ConcreteArchitecture arch)
                 => Opcode arch (Operand arch) sh
-                -> D.OperandList (Operand arch) sh
+                -> ShapedList (Operand arch) sh
                 -> ResultIndex (CS.ConcreteState arch)
                 -> IORelation arch sh
-                -> TestBundle (R.TestCase (CS.ConcreteState arch)) (ExplicitFact arch)
+                -> TestBundle (TestCase arch) (ExplicitFact arch)
                 -> Learning arch (IORelation arch sh)
 buildIORelation op explicitOperands ri iorel tb = do
   -- If the set of explicit output locations discovered by this test bundle is
@@ -122,11 +123,11 @@ buildIORelation op explicitOperands ri iorel tb = do
 --
 -- If the test failed, return an empty set.
 collectExplicitLocations :: (CS.ConcreteArchitecture arch)
-                         => D.OperandList (Operand arch) sh
+                         => ShapedList (Operand arch) sh
                          -> [IndexedSemanticView arch sh]
                          -> ResultIndex (CS.ConcreteState arch)
-                         -> R.TestCase (CS.ConcreteState arch)
-                         -> Learning arch (S.Set (Some (D.Index sh)))
+                         -> TestCase arch
+                         -> Learning arch (S.Set (Some (Index sh)))
 collectExplicitLocations _opList explicitLocs ri tc = do
   case M.lookup (R.testNonce tc) (riSuccesses ri) of
     Nothing -> return S.empty
@@ -188,7 +189,7 @@ generateExplicitTestVariants i s0 =
 generateVariantsFor :: (CS.ConcreteArchitecture arch)
                     => CS.ConcreteState arch
                     -> Opcode arch (Operand arch) sh
-                    -> D.Index sh tp
+                    -> Index sh tp
                     -> Some (CS.View arch)
                     -> Learning arch [CS.ConcreteState arch]
 generateVariantsFor s0 _opcode _ix (Some v) = do
@@ -197,7 +198,7 @@ generateVariantsFor s0 _opcode _ix (Some v) = do
 matchesOperand :: (CS.ConcreteArchitecture arch)
                => Proxy arch
                -> [Some (CS.View arch)]
-               -> D.Index sh tp
+               -> Index sh tp
                -> Operand arch tp
                -> Bool
                -> Bool

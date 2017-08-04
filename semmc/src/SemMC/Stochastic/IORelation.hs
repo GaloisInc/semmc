@@ -52,16 +52,14 @@ import SemMC.Stochastic.IORelation.Explicit ( generateExplicitInstruction,
 import SemMC.Stochastic.IORelation.Implicit ( findImplicitOperands )
 import SemMC.Stochastic.IORelation.Parser
 import SemMC.Stochastic.IORelation.Types
-import qualified SemMC.Stochastic.Remote as R
 
 data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
                  , lcAssemble :: Instruction arch -> LBS.ByteString
                  , lcTestGen :: IO (CS.ConcreteState arch)
-                 , lcMachineState :: R.MachineState (CS.ConcreteState arch)
                  , lcTimeoutSeconds :: Int
-                 , lcRemoteHost :: String
+                 , lcTestRunner :: TestRunner arch
                  , lcLog :: C.Chan R.LogMessage
                  }
 
@@ -116,10 +114,8 @@ learnIORelations cfg proxy toFP ops = do
   A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
     rChan <- C.newChan
-    ssh <- A.async $ do
-      _ <- R.runRemote (lcRemoteHost cfg) (lcMachineState cfg) tChan rChan (lcLog cfg)
-      return ()
-    A.link ssh
+    testRunner <- A.async $ lcTestRunner cfg tChan rChan (lcLog cfg)
+    A.link testRunner
     nref <- STM.newTVarIO 0
     agen <- A.createGen
     let lle = LocalLearningEnv { globalLearningEnv = glv

@@ -36,6 +36,7 @@ library
                        SemMC.Stochastic.IORelation.Shared
                        SemMC.Stochastic.IORelation.Types
                        SemMC.Stochastic.Monad
+                       SemMC.Stochastic.Pseudo
                        SemMC.Stochastic.Remote
                        SemMC.Stochastic.Remote.SSH
                        SemMC.Stochastic.Statistics
@@ -50,6 +51,7 @@ library
                        SemMC.ToyExample
                        SemMC.Util
                        SemMC.Worklist
+                       Data.Parameterized.Seq
                        Data.Parameterized.Unfold
   other-modules:       TestToy
   -- other-extensions:    

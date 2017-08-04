@@ -25,10 +25,10 @@ import Data.Proxy ( Proxy(..) )
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.NatRepr ( withKnownNat )
 import Data.Parameterized.Some ( Some(..) )
+import Data.Parameterized.ShapedList ( foldrFCIndexed, Index, ShapedList )
 import qualified Lang.Crucible.BaseTypes as S
 
 import qualified Dismantle.Arbitrary as A
-import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
 import qualified SemMC.ConcreteState as CS
@@ -39,7 +39,7 @@ import SemMC.Stochastic.IORelation.Types
 withTestResults :: forall a f arch sh
                  . (Architecture arch)
                 => Opcode arch (Operand arch) sh
-                -> [TestBundle (R.TestCase (CS.ConcreteState arch)) f]
+                -> [TestBundle (TestCase arch) f]
                 -> ([R.ResultOrError (CS.ConcreteState arch)] -> Learning arch a)
                 -> Learning arch a
 withTestResults op tests k = do
@@ -56,7 +56,7 @@ withTestResults op tests k = do
 wrapTestBundle :: (Architecture arch)
                => Instruction arch
                -> TestBundle (CS.ConcreteState arch) f
-               -> Learning arch (TestBundle (R.TestCase (CS.ConcreteState arch)) f)
+               -> Learning arch (TestBundle (TestCase arch) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
   return TestBundle { tbTestCases = cases
@@ -68,13 +68,12 @@ wrapTestBundle i tb = do
 makeTestCase :: (Architecture arch)
              => Instruction arch
              -> CS.ConcreteState arch
-             -> Learning arch (R.TestCase (CS.ConcreteState arch))
+             -> Learning arch (TestCase arch)
 makeTestCase i c = do
   tid <- nextNonce
-  asm <- askAssembler
   return R.TestCase { R.testNonce = tid
                     , R.testContext = c
-                    , R.testProgram = asm i
+                    , R.testProgram = [i]
                     }
 
 indexResults :: ResultIndex a -> R.ResultOrError a -> ResultIndex a
@@ -90,17 +89,17 @@ indexResults ri res =
 
 -- | A view of a location, indexed by its position in the operand list
 data IndexedSemanticView arch sh where
-  IndexedSemanticView :: D.Index sh tp -> CS.SemanticView arch -> IndexedSemanticView arch sh
+  IndexedSemanticView :: Index sh tp -> CS.SemanticView arch -> IndexedSemanticView arch sh
 
 instructionRegisterOperands :: forall arch sh proxy
                              . (CS.ConcreteArchitecture arch)
                             => proxy arch
-                            -> D.OperandList (Operand arch) sh
+                            -> ShapedList (Operand arch) sh
                             -> [IndexedSemanticView arch sh]
 instructionRegisterOperands proxy operands =
-  D.foldrOperandList collectLocations [] operands
+  foldrFCIndexed collectLocations [] operands
   where
-    collectLocations :: forall tp . D.Index sh tp
+    collectLocations :: forall tp . Index sh tp
                      -> Operand arch tp
                      -> [IndexedSemanticView arch sh]
                      -> [IndexedSemanticView arch sh]

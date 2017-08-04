@@ -1,8 +1,17 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Stochastic.Monad (
   Syn,
   SynC,
@@ -16,9 +25,12 @@ module SemMC.Stochastic.Monad (
   askGen,
   askBaseSet,
   askConfig,
+  askRunTest,
   askTestCases,
   askFormulas,
+  askPseudoFormulas,
   lookupFormula,
+  lookupCongruent,
   withSymBackend,
   addTestCase,
   recordLearnedFormula,
@@ -37,22 +49,25 @@ import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map as Map
 import qualified Data.Set as S
+import qualified Data.Sequence as Seq
 import           System.FilePath ( (</>), (<.>) )
 
 import qualified Data.EnumF as P
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some ( mapSome, Some(..) )
 
 import           Lang.Crucible.BaseTypes ( knownRepr )
 import qualified Lang.Crucible.Solver.Interface as CRUI
 
+import           Data.Parameterized.HasRepr ( HasRepr(..) )
+import           Data.Parameterized.ShapedList ( ShapeRepr )
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
-import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
+import qualified Data.Parameterized.Seq as SeqF
 import           SemMC.Architecture ( Architecture, Opcode, Operand, Instruction )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
@@ -64,7 +79,13 @@ import qualified SemMC.Worklist as WL
 
 import           SemMC.ConcreteState ( ConcreteArchitecture, ConcreteState )
 import           SemMC.Stochastic.IORelation ( IORelation )
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Stochastic.IORelation.Types as I
+import           SemMC.Stochastic.Pseudo
+                 ( ArchitectureWithPseudo(..)
+                 , Pseudo
+                 , SynthOpcode(..)
+                 , SynthInstruction(..)
+                 )
 import qualified SemMC.Stochastic.Statistics as S
 
 -- | A test here is an initial machine state.
@@ -80,8 +101,12 @@ type Test arch = ConcreteState arch
 
 -- | Synthesis environment.
 data SynEnv t arch =
-  SynEnv { seFormulas :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
-         -- ^ All of the known formulas (base set + learned set)
+  SynEnv { seFormulas :: STM.TVar (MapF.MapF ((Opcode arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+         -- ^ All of the known formulas (base set + learned set) for real opcodes
+         , sePseudoFormulas :: MapF.MapF ((Pseudo arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
+         -- ^ Formulas for all pseudo opcodes
+         , seKnownCongruentOps :: STM.TVar (MapF.MapF ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
+         -- ^ All opcodes with known formulas with operands of a given shape
          , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
          -- ^ Work items
          , seTestCases :: STM.TVar [Test arch]
@@ -108,6 +133,10 @@ data SynEnv t arch =
 data LocalSynEnv t arch =
   LocalSynEnv { seGlobalEnv :: SynEnv t arch
               , seRandomGen :: A.Gen
+              , seRunTest :: ConcreteState arch -> [Instruction arch] -> Syn t arch (ConcreteState arch)
+                -- ^ Starting with a synchronous test runner. Will
+                -- worry about batching tests and running them in
+                -- parallel later.
               }
 
 -- Synthesis constraints.
@@ -115,9 +144,13 @@ type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
                  , P.OrdF (Operand arch)
                  , D.ArbitraryOperand (Operand arch)
                  , D.ArbitraryOperands (Opcode arch) (Operand arch)
+                 , D.ArbitraryOperands (Pseudo arch) (Operand arch)
                  , Ord (Instruction arch)
                  , P.EnumF (Opcode arch (Operand arch))
-                 , ConcreteArchitecture arch )
+                 , HasRepr (Opcode arch (Operand arch)) ShapeRepr
+                 , HasRepr (Pseudo arch (Operand arch)) ShapeRepr
+                 , ConcreteArchitecture arch
+                 , ArchitectureWithPseudo arch )
 
 -- Synthesis monad.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
@@ -131,14 +164,19 @@ runSyn :: LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
 -- | Record a learned formula for the opcode in the state
-recordLearnedFormula :: (P.OrdF (Opcode arch (Operand arch)))
+recordLearnedFormula :: (P.OrdF (Opcode arch (Operand arch)),
+                         HasRepr (Opcode arch (Operand arch)) ShapeRepr)
                      => Opcode arch (Operand arch) sh
                      -> F.ParameterizedFormula (Sym t) arch sh
                      -> Syn t arch ()
 recordLearnedFormula op f = do
-  mref <- R.asks (seFormulas . seGlobalEnv)
+  formulasRef <- R.asks (seFormulas . seGlobalEnv)
+  congruentRef <- R.asks (seKnownCongruentOps . seGlobalEnv)
+  let opShape = typeRepr op
+      newOps = SeqF.singleton (RealOpcode op)
   liftIO $ STM.atomically $ do
-    STM.modifyTVar' mref (MapF.insert op f)
+    STM.modifyTVar' formulasRef (MapF.insert op f)
+    STM.modifyTVar' congruentRef (MapF.insertWith (SeqF.><) opShape newOps)
 
 -- | Take an opcode off of the worklist
 takeWork :: Syn t arch (Maybe (Some (Opcode arch (Operand arch))))
@@ -164,6 +202,9 @@ askConfig = R.asks (seConfig . seGlobalEnv)
 askGen :: Syn t arch A.Gen
 askGen = R.asks seRandomGen
 
+askRunTest :: Syn t arch (ConcreteState arch -> [Instruction arch] -> Syn t arch (ConcreteState arch))
+askRunTest = R.asks seRunTest
+
 withSymBackend :: (Sym t -> Syn t arch a) -> Syn t arch a
 withSymBackend k = do
   -- FIXME: Use a bracket here
@@ -182,8 +223,14 @@ addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
 
-askFormulas :: Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+askFormulas :: Syn t arch (MapF.MapF ((Opcode arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
+
+askPseudoFormulas :: Syn t arch (MapF.MapF (Pseudo arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
+
+askKnownCongruentOps :: Syn t arch (MapF.MapF ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
+askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.
 --
@@ -194,28 +241,36 @@ askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 -- the whole set like here with 'askBaseSet', which is also consistent
 -- with the STRATA paper. We probably want to change one of these
 -- naming conventions to make them distinct.
-askBaseSet :: Ord (Some (Opcode arch (Operand arch)))
-           => Syn t arch (NES.Set (Some (Opcode arch (Operand arch))))
+askBaseSet :: (P.OrdF (Opcode arch (Operand arch)),
+               P.OrdF (Pseudo arch (Operand arch)))
+           => Syn t arch (NES.Set (Some (SynthOpcode arch)))
 askBaseSet = do
   -- Since we don't update the base set during a round, it would make
   -- sense to cache this for constant lookup, instead of doing this
   -- O(n) lookup every time!
-  xs <- MapF.keys <$> askFormulas
-  case xs of
+  realOps <- map (mapSome RealOpcode) . MapF.keys <$> askFormulas
+  pseudoOps <- map (mapSome PseudoOpcode) . MapF.keys <$> askPseudoFormulas
+  let allOps = realOps ++ pseudoOps
+  case allOps of
     [] -> L.error "askBaseSet: empty base set!"
-    (x:xs') -> return $ NES.fromList x xs'
+    (x:xs) -> return $ NES.fromList x xs
 
-lookupFormula :: (Architecture arch)
-              => Opcode arch (Operand arch) sh
+lookupFormula :: (ArchitectureWithPseudo arch)
+              => SynthOpcode arch sh
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
-lookupFormula op = do
-  frms <- askFormulas
-  return $ MapF.lookup op frms
+lookupFormula (RealOpcode op) = MapF.lookup op <$> askFormulas
+lookupFormula (PseudoOpcode pseudo) = MapF.lookup pseudo <$> askPseudoFormulas
 
-instantiateFormula :: (Architecture arch)
-                   => Instruction arch -- Opcode arch (Operand arch) sh
+lookupCongruent :: (HasRepr (Opcode arch (Operand arch)) ShapeRepr,
+                    HasRepr (Pseudo arch (Operand arch)) ShapeRepr)
+                => SynthOpcode arch sh
+                -> Syn t arch (Seq.Seq (SynthOpcode arch sh))
+lookupCongruent op = maybe Seq.empty SeqF.unSeqF . MapF.lookup (typeRepr op) <$> askKnownCongruentOps
+
+instantiateFormula :: (ArchitectureWithPseudo arch)
+                   => SynthInstruction arch
                    -> Syn t arch (Maybe (F.Formula (Sym t) arch))
-instantiateFormula (D.Instruction opcode oplist) = do
+instantiateFormula (SynthInstruction opcode oplist) = do
   mpf <- lookupFormula opcode
   case mpf of
     Nothing -> return Nothing
@@ -233,6 +288,7 @@ opcodeIORelation op = do
 
 data Config arch =
   Config { baseSetDir :: FilePath
+         , pseudoSetDir :: FilePath
          , learnedSetDir :: FilePath
          , statisticsFile :: FilePath
          -- ^ A file to store statistics in
@@ -242,12 +298,12 @@ data Config arch =
          , randomTestCount :: Int
          -- ^ The number of random tests to generate
          , threadCount :: Int
-         , remoteHost :: String
-         , machineState :: R.MachineState (ConcreteState arch)
+         , testRunner :: I.TestRunner arch
+         -- ^ See the related @lcTestRunner@ for usage examples.
          }
 
-loadInitialState :: (Architecture arch,
-                     D.ArbitraryOperands (Opcode arch) (Operand arch))
+loadInitialState :: forall arch t
+                  . (SynC arch)
                  => Config arch
                  -> Sym t
                  -> IO (ConcreteState arch)
@@ -256,12 +312,14 @@ loadInitialState :: (Architecture arch,
                  -- ^ Heuristically-interesting test cases
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -- ^ All possible opcodes
+                 -> [Some (Witness (F.BuildOperandList arch) ((Pseudo arch) (Operand arch)))]
+                 -- ^ All pseudo opcodes
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -- ^ The opcodes we want to learn formulas for (could be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
                  -- ^ IORelations
                  -> IO (SynEnv t arch)
-loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes iorels = do
+loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
   undefinedBit <- CRUI.freshConstant sym (makeSymbol "undefined_bit") knownRepr
   let toFP dir oc = dir </> P.showF oc <.> "sem"
       -- TODO: handle uninterpreted functions
@@ -272,13 +330,20 @@ loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes iorel
   baseSet <- load (baseSetDir cfg)
   learnedSet <- load (learnedSetDir cfg)
   let initialFormulas = MapF.union baseSet learnedSet
+  pseudoSet <- F.loadFormulas sym (toFP (pseudoSetDir cfg)) env pseudoOpcodes
+  let addCongruentOp op _ = MapF.insertWith (SeqF.><) (typeRepr op) (SeqF.singleton op)
+      congruentOps' = MapF.foldrWithKey (addCongruentOp . RealOpcode) MapF.empty initialFormulas
+      congruentOps = MapF.foldrWithKey (addCongruentOp . PseudoOpcode) congruentOps' pseudoSet
   fref <- STM.newTVarIO initialFormulas
+  congruentRef <- STM.newTVarIO congruentOps
   wlref <- STM.newTVarIO (makeWorklist targetOpcodes initialFormulas)
   randomTests <- replicateM (randomTestCount cfg) genTest
   testref <- STM.newTVarIO (interestingTests ++ randomTests)
   symVar <- STM.newTMVarIO sym
   statsThread <- S.newStatisticsThread (statisticsFile cfg)
   return SynEnv { seFormulas = fref
+                , sePseudoFormulas = pseudoSet
+                , seKnownCongruentOps = congruentRef
                 , seTestCases = testref
                 , seWorklist = wlref
                 , seIORelations = iorels
@@ -291,7 +356,7 @@ loadInitialState cfg sym genTest interestingTests allOpcodes targetOpcodes iorel
 -- have a formula (and that we actually want to learn)
 makeWorklist :: (MapF.OrdF (Opcode arch (Operand arch)))
              => [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
-             -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
+             -> MapF.MapF ((Opcode arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
              -> WL.Worklist (Some (Opcode arch (Operand arch)))
 makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
   where

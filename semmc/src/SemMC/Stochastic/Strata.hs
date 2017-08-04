@@ -15,6 +15,7 @@ module SemMC.Stochastic.Strata (
 import qualified GHC.Err.Located as L
 
 import qualified Control.Concurrent as C
+import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import Control.Monad.Trans ( liftIO )
@@ -27,7 +28,9 @@ import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
+import Data.Parameterized.TraversableFC ( foldrFC )
 
+import Data.Parameterized.ShapedList ( ShapedList, indexShapedList )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
@@ -39,10 +42,11 @@ import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
-import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Generalize ( generalize )
 import SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
+import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Monad
+import SemMC.Stochastic.Pseudo ( SynthInstruction )
 import SemMC.Stochastic.Synthesize ( synthesize )
 
 {-
@@ -54,24 +58,35 @@ caller controls the number and placement of threads.
 
 -}
 
-stratifiedSynthesis :: (CS.ConcreteArchitecture arch, SynC arch)
+stratifiedSynthesis :: forall arch t
+                     . (CS.ConcreteArchitecture arch, SynC arch)
                     => SynEnv t arch
                     -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
     gen <- A.createGen
-    let localEnv = LocalSynEnv { seGlobalEnv = env0
-                               , seRandomGen = gen
-                               }
     tChan <- C.newChan
     rChan <- C.newChan
     logChan <- C.newChan
-    ssh <- A.async $ do
-      _ <- R.runRemote (remoteHost (seConfig env0)) (machineState (seConfig env0)) tChan rChan logChan
-      return ()
-    A.link ssh
-    runSyn localEnv strata
+    testRunner' <- A.async $ testRunner (seConfig env0) tChan rChan logChan
+    A.link testRunner'
+    let localEnv = LocalSynEnv { seGlobalEnv = env0
+                               , seRandomGen = gen
+                               , seRunTest = runTest tChan rChan
+                               }
+    runSyn localEnv strata `C.finally` A.cancel testRunner'
   STM.readTVarIO (seFormulas env0)
+  where
+    -- A naive test runner: it's synchronous, and dies on test
+    -- failures. Will need to be improved later.
+    runTest tChan rChan c p = liftIO $ do
+      let nonce = 0
+      C.writeChan tChan (Just (R.TestCase nonce c p))
+      r <- C.readChan rChan
+      case r of
+        R.TestSuccess tr
+          | R.resultNonce tr == nonce -> return $ R.resultContext tr
+        _ -> L.error "Unexpected test result in Strata.runTest!"
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
@@ -142,7 +157,7 @@ finishStrataOne op instr eqclasses = do
 buildFormula :: (CS.ConcreteArchitecture arch, SynC arch)
              => Opcode arch (Operand arch) sh
              -> Instruction arch
-             -> [Instruction arch]
+             -> [SynthInstruction arch]
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 buildFormula o i prog = do
   Just iorel <- opcodeIORelation o
@@ -164,7 +179,7 @@ buildFormula o i prog = do
 extractFormula :: forall arch t sh
                 . (CS.ConcreteArchitecture arch, SynC arch)
                => Opcode arch (Operand arch) sh
-               -> D.OperandList (Operand arch) sh
+               -> ShapedList (Operand arch) sh
                -> F.Formula (Sym t) arch
                -> IORelation arch sh
                -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
@@ -177,13 +192,13 @@ extractFormula opc ops progForm iorel = go F.emptyFormula (F.toList (outputs ior
         -- FIXME: Should we be using views instead of locations here?  It would
         -- require referring to views instead of locations in formulas..
         OperandRef (Some idx) -> do
-          let operand = D.indexOpList ops idx
+          let operand = indexShapedList ops idx
               Just loc = operandToLocation (Proxy @arch) operand
               Just expr = MapF.lookup loc (F.formDefs progForm)
           go (undefined expr acc) rest
 
 parameterizeFormula :: Opcode arch (Operand arch) sh
-                    -> D.OperandList (Operand arch) sh
+                    -> ShapedList (Operand arch) sh
                     -> IORelation arch sh
                     -> F.Formula (Sym t) arch
                     -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
@@ -214,18 +229,17 @@ instantiateInstruction op = do
       case target of
         D.Instruction op' ops
           | Just MapF.Refl <- MapF.testEquality op op'
-          , fst (D.foldrOperandList (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops) ->
+          , fst (foldrFC (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops) ->
             go gen implicitOps
           | otherwise -> return target
 
 isImplicitOrReusedOperand :: (CS.ConcreteArchitecture arch, SynC arch)
                           => Proxy arch
                           -> S.Set (Some (CS.View arch))
-                          -> ix
                           -> Operand arch tp
                           -> (Bool, S.Set (Some (Operand arch)))
                           -> (Bool, S.Set (Some (Operand arch)))
-isImplicitOrReusedOperand proxy implicitViews _ix operand (isIorR, seen)
+isImplicitOrReusedOperand proxy implicitViews operand (isIorR, seen)
   | isIorR || S.member (Some operand) seen = (True, seen)
   | Just (CS.SemanticView { CS.semvView = view }) <- CS.operandToSemanticView proxy operand
   , S.member (Some view) implicitViews = (True, seen)

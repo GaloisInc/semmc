@@ -10,6 +10,9 @@ module SemMC.Stochastic.IORelation.Types (
   GlobalLearningEnv(..),
 --  TypedLocation(..),
   TestBundle(..),
+  TestCase,
+  TestSerializer,
+  TestRunner,
   ExplicitFact(..),
   ImplicitFact(..),
   OperandRef(..),
@@ -45,15 +48,21 @@ import qualified System.Timeout as T
 
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as P
+import Data.Parameterized.ShapedList ( Index )
 import Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as A
-import qualified Dismantle.Instruction as D
 
 import SemMC.Architecture
 import qualified SemMC.ConcreteState as CS
 
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
+
+type TestCase arch = R.TestCase (CS.ConcreteState arch) (Instruction arch)
+
+type TestSerializer arch = R.TestSerializer (CS.ConcreteState arch) (Instruction arch)
+
+type TestRunner arch = R.TestRunner (CS.ConcreteState arch) (Instruction arch)
 
 data GlobalLearningEnv arch =
   GlobalLearningEnv { assemble :: Instruction arch -> LBS.ByteString
@@ -66,7 +75,7 @@ data GlobalLearningEnv arch =
 
 data LocalLearningEnv arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
-                   , testChan :: C.Chan (Maybe (R.TestCase (CS.ConcreteState arch)))
+                   , testChan :: C.Chan (Maybe (TestCase arch))
                    , resChan :: C.Chan (R.ResultOrError (CS.ConcreteState arch))
                    , gen :: A.Gen
                    , testGen :: IO (CS.ConcreteState arch)
@@ -76,7 +85,7 @@ data LocalLearningEnv arch =
                    , nonce :: STM.TVar Word64
                    }
 
-askTestChan :: Learning arch (C.Chan (Maybe (R.TestCase (CS.ConcreteState arch))))
+askTestChan :: Learning arch (C.Chan (Maybe (TestCase arch)))
 askTestChan = Rd.asks testChan
 
 askResultChan :: Learning arch (C.Chan (R.ResultOrError (CS.ConcreteState arch)))
@@ -127,7 +136,7 @@ askAssembler = Rd.asks (assemble . globalLearningEnv)
 
 data OperandRef arch sh = ImplicitOperand (Some (CS.View arch))
                         -- ^ A location that is implicitly read from or written to by an instruction
-                        | OperandRef (Some (D.Index sh))
+                        | OperandRef (Some (Index sh))
                         -- ^ An index into an operand list
 
 deriving instance (Architecture arch) => Show (OperandRef arch sh)
@@ -145,12 +154,12 @@ data TestBundle t l =
 -- the test cases differ from the original test case, it was an input operand.
 data ExplicitFact arch =
   forall sh tp n . ExplicitFact { lOpcode :: Opcode arch (Operand arch) sh
-                              , lIndex :: D.Index sh tp
-                              -- ^ The index into the operand list of the location we are watching
-                              , lLocation :: CS.View arch n
-                              -- ^ The location we are watching
-                              , lInstruction :: Instruction arch
-                              }
+                                , lIndex :: Index sh tp
+                                -- ^ The index into the operand list of the location we are watching
+                                , lLocation :: CS.View arch n
+                                -- ^ The location we are watching
+                                , lInstruction :: Instruction arch
+                                }
 
 -- | We just need to track the explicitly-referenced locations.  Changes to any
 -- state variables that are not explicitly mentioned in the operand list

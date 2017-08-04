@@ -22,6 +22,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
+import           Data.Parameterized.ShapedList ( indexShapedList, ShapedList(..) )
 import           Data.Parameterized.TraversableF
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
@@ -31,7 +32,6 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-import           Dismantle.Instruction ( indexOpList, OperandList(..) )
 
 import           SemMC.Architecture
 import           SemMC.Formula.Formula
@@ -57,11 +57,11 @@ buildOpAssignment :: forall sym arch sh.
                 -- ^ Symbolic expression builder
                 -> (forall tp'. Location arch tp' -> IO (S.SymExpr sym tp'))
                 -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
-                -> OperandList (BoundVar sym arch) sh
+                -> ShapedList (BoundVar sym arch) sh
                 -- ^ List of variables corresponding to each operand
-                -> OperandList (Operand arch) sh
+                -> ShapedList (Operand arch) sh
                 -- ^ List of operand values corresponding to each operand
-                -> IO (OperandList (TaggedExpr arch sym) sh,
+                -> IO (ShapedList (TaggedExpr arch sym) sh,
                        Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh),
                        Ctx.Assignment (S.SymExpr sym) (ShapeCtx arch sh))
 buildOpAssignment _ _ Nil Nil = return (Nil, Ctx.empty, Ctx.empty)
@@ -110,10 +110,10 @@ mapFMapMBoth f = MapF.foldrWithKey f' (return MapF.empty)
 
 paramToLocation :: forall arch sh tp.
                    (Architecture arch)
-                => OperandList (Operand arch) sh
+                => ShapedList (Operand arch) sh
                 -> Parameter arch sh tp
                 -> Maybe (Location arch tp)
-paramToLocation opVals (Operand _ idx) = operandToLocation (Proxy :: Proxy arch) $ indexOpList opVals idx
+paramToLocation opVals (Operand _ idx) = operandToLocation (Proxy :: Proxy arch) $ indexShapedList opVals idx
 paramToLocation _      (Literal loc) = Just loc
 
 lookupOrCreateVar :: (S.IsSymInterface sym,
@@ -135,8 +135,8 @@ instantiateFormula :: forall arch t st sh.
                       (Architecture arch)
                    => SB t st
                    -> ParameterizedFormula (SB t st) arch sh
-                   -> OperandList (Operand arch) sh
-                   -> IO (OperandList (TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
+                   -> ShapedList (Operand arch) sh
+                   -> IO (ShapedList (TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
 instantiateFormula
   sym
   (ParameterizedFormula { pfOperandVars = opVars

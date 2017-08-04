@@ -7,7 +7,8 @@ module SemMC.Stochastic.Remote (
   TestResult(..),
   ResultOrError(..),
   LogMessage(..),
-  MachineState(..)
+  TestSerializer(..),
+  TestRunner
   ) where
 
 import qualified Control.Concurrent as C
@@ -23,20 +24,23 @@ import qualified System.IO as IO
 
 import qualified SemMC.Stochastic.Remote.SSH as SSH
 
-data MachineState a =
-  MachineState { flattenMachineState :: a -> B.ByteString
-               , parseMachineState :: B.ByteString -> Maybe a
-               }
+-- | Functions for converting a 'TestCase' to binary and parsing
+-- binary machine state.
+data TestSerializer c{-^machine state/context-} i{-^instruction-} =
+  TestSerializer { flattenMachineState :: c -> B.ByteString
+                 , parseMachineState :: B.ByteString -> Maybe c
+                 , flattenProgram :: [i] -> LB.ByteString -- ^ This means assemble in practice.
+                 }
 
-data TestCase a =
+data TestCase c i =
   TestCase { testNonce :: Word64
-           , testContext :: a
-           , testProgram :: LB.ByteString
+           , testContext :: c -- ^ The machine state to start the test in.
+           , testProgram :: [i]
            }
 
-data TestResult a =
+data TestResult c =
   TestResult { resultNonce :: Word64
-             , resultContext :: a
+             , resultContext :: c -- ^ The final machine state.
              }
 
 data LogMessage = LogMessage { lmTime :: T.UTCTime
@@ -44,6 +48,24 @@ data LogMessage = LogMessage { lmTime :: T.UTCTime
                              , lmMessage :: String
                              }
                 deriving (Eq, Ord, Show)
+
+-- | The 'runRemote' below provides the main implementation of
+-- 'TestRunner'. The Toy architecture uses a simpler 'TestRunner',
+-- that does everything locally.
+type TestRunner c i
+  =  C.Chan (Maybe (TestCase c i))
+  -- ^ A channel with test cases to be run; a 'Nothing' indicates that
+  -- the stream should be terminated.
+  -> C.Chan (ResultOrError c)
+  -- ^ The channel that results are written to (can include error cases)
+  -> C.Chan LogMessage
+  -- ^ A channel to record log messages on; these include the stderr
+  -- output from the runner process (there shouldn't really be much, but
+  -- it is better to collect it than discard it or just dump it to
+  -- stderr)
+  -> IO (Maybe SSH.SSHError)
+  -- ^ Errors raised by SSH. Not meaningful for test runners that
+  -- don't use SSH, e.g. Toy arch test runner.
 
 -- | Spawn threads to manage a remote test runner.
 --
@@ -57,27 +79,17 @@ data LogMessage = LogMessage { lmTime :: T.UTCTime
 -- remote machine.
 runRemote :: String
           -- ^ The hostname to run test cases on
-          -> MachineState a
+          -> TestSerializer c i
           -- ^ Functions for converting to and from machine states
-          -> C.Chan (Maybe (TestCase a))
-          -- ^ A channel with test cases to be run; a 'Nothing' indicates that
-          -- the stream should be terminated.
-          -> C.Chan (ResultOrError a)
-          -- ^ The channel that results are written to (can include error cases)
-          -> C.Chan LogMessage
-          -- ^ A channel to record log messages on; these include the stderr
-          -- output from the runner process (there shouldn't really be much, but
-          -- it is better to collect it than discard it or just dump it to
-          -- stderr)
-          -> IO (Maybe SSH.SSHError)
-runRemote hostName ms testCases testResults logMessages = do
+          -> TestRunner c i
+runRemote hostName ts testCases testResults logMessages = do
   ehdl <- SSH.ssh SSH.defaultSSHConfig hostName ["remote-runner"]
   case ehdl of
     Left err -> return (Just err)
     Right sshHdl -> do
       logger <- A.async (logRemoteStderr logMessages hostName (SSH.sshStderr sshHdl))
-      sendCases <- A.async (sendTestCases ms testCases (SSH.sshStdin sshHdl))
-      recvResults <- A.async (recvTestResults ms testResults (SSH.sshStdout sshHdl))
+      sendCases <- A.async (sendTestCases ts testCases (SSH.sshStdin sshHdl))
+      recvResults <- A.async (recvTestResults ts testResults (SSH.sshStdout sshHdl))
       -- We only want to end when the receive end finishes (i.e., when the
       -- receive handle is closed due to running out of input).  If we end when
       -- the send end finishes, we might miss some results.
@@ -98,8 +110,8 @@ logRemoteStderr logMessages host h = do
   C.writeChan logMessages lm
   logRemoteStderr logMessages host h
 
-sendTestCases :: MachineState a -> C.Chan (Maybe (TestCase a)) -> IO.Handle -> IO ()
-sendTestCases ms c h = do
+sendTestCases :: TestSerializer c i -> C.Chan (Maybe (TestCase c i)) -> IO.Handle -> IO ()
+sendTestCases ts c h = do
   IO.hSetBinaryMode h True
   IO.hSetBuffering h (IO.BlockBuffering Nothing)
   go
@@ -110,21 +122,22 @@ sendTestCases ms c h = do
         Nothing -> do
           B.hPutBuilder h (B.word8 1)
           IO.hFlush h
-        Just tc -> do
-          let regStateBytes = flattenMachineState ms (testContext tc)
+        Just tc -> do -- convert to binary
+          let regStateBytes = flattenMachineState ts (testContext tc)
+          let asm = flattenProgram ts $ testProgram tc
           let bs = mconcat [ B.word8 0
                            , B.word64LE (testNonce tc)
                            , B.word16BE (fromIntegral (B.length regStateBytes))
                            , B.byteString regStateBytes
-                           , B.word16BE (fromIntegral (LB.length (testProgram tc)))
-                           , B.lazyByteString (testProgram tc)
+                           , B.word16BE (fromIntegral (LB.length asm))
+                           , B.lazyByteString asm
                            ]
           B.hPutBuilder h bs
           IO.hFlush h
           go
 
-recvTestResults :: MachineState a -> C.Chan (ResultOrError a) -> IO.Handle -> IO ()
-recvTestResults ms c h = do
+recvTestResults :: TestSerializer c i -> C.Chan (ResultOrError c) -> IO.Handle -> IO ()
+recvTestResults ts c h = do
   IO.hSetBinaryMode h True
   start
   IO.hClose h
@@ -138,7 +151,7 @@ recvTestResults ms c h = do
       mbs <- tryRead h
       case mbs of
         Nothing -> return ()
-        Just bs -> go (G.runGetIncremental (getTestResultOrError ms) `G.pushChunk` bs)
+        Just bs -> go (G.runGetIncremental (getTestResultOrError ts) `G.pushChunk` bs)
     go d =
       case d of
         G.Fail _ _ msg -> fail msg
@@ -146,23 +159,23 @@ recvTestResults ms c h = do
           C.writeChan c res
           case B.null rest of
             True -> start
-            False -> go (G.runGetIncremental (getTestResultOrError ms) `G.pushChunk` rest)
+            False -> go (G.runGetIncremental (getTestResultOrError ts) `G.pushChunk` rest)
         G.Partial f -> tryRead h >>= (go . f)
 
-data ResultOrError a = TestReadError Word16
+data ResultOrError c = TestReadError Word16
                      | TestSignalError Word64 Int32
                      -- ^ (Nonce, Signum)
-                     | TestSuccess (TestResult a)
+                     | TestSuccess (TestResult c)
                      | TestContextParseFailure
                      | InvalidTag Word8
                      -- ^ Tag value
 
-getTestResultOrError :: MachineState a -> G.Get (ResultOrError a)
-getTestResultOrError ms = do
+getTestResultOrError :: TestSerializer c i -> G.Get (ResultOrError c)
+getTestResultOrError ts = do
   tag <- G.getWord8
   case tag of
     0 -> do
-      mtr <- getTestResult ms
+      mtr <- getTestResult ts
       case mtr of
         Just tr -> return (TestSuccess tr)
         Nothing -> return TestContextParseFailure
@@ -170,12 +183,12 @@ getTestResultOrError ms = do
     2 -> TestSignalError <$> G.getWord64le <*> G.getInt32be
     _ -> return (InvalidTag tag)
 
-getTestResult :: MachineState a -> G.Get (Maybe (TestResult a))
-getTestResult ms = do
+getTestResult :: TestSerializer c i -> G.Get (Maybe (TestResult c))
+getTestResult ts = do
   nonce <- G.getWord64le
   ctxSize <- G.getWord16be
   ctxbs <- G.getByteString (fromIntegral ctxSize)
-  case parseMachineState ms ctxbs of
+  case parseMachineState ts ctxbs of
     Just ctx -> do
       let tr = TestResult { resultNonce = nonce
                           , resultContext = ctx

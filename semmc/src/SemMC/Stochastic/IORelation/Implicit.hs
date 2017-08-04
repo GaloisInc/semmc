@@ -64,7 +64,7 @@ findImplicitOperands op = do
 -- locations are implicit outputs.
 computeImplicitOperands :: (CS.ConcreteArchitecture arch)
                         => Opcode arch (Operand arch) sh
-                        -> [TestBundle (R.TestCase (CS.ConcreteState arch)) (ImplicitFact arch)]
+                        -> [TestBundle (TestCase arch) (ImplicitFact arch)]
                         -> [R.ResultOrError (CS.ConcreteState arch)]
                         -> Learning arch (IORelation arch sh)
 computeImplicitOperands op tests results =
@@ -79,7 +79,7 @@ buildImplicitRelation :: (CS.ConcreteArchitecture arch)
                       => Opcode arch (Operand arch) sh
                       -> ResultIndex (CS.ConcreteState arch)
                       -> IORelation arch sh
-                      -> TestBundle (R.TestCase (CS.ConcreteState arch)) (ImplicitFact arch)
+                      -> TestBundle (TestCase arch) (ImplicitFact arch)
                       -> Learning arch (IORelation arch sh)
 buildImplicitRelation op rix iorel tb = do
   implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix (tbResult tb)) (tbTestCases tb)
@@ -90,7 +90,7 @@ collectImplicitOutputLocations :: forall arch sh
                                => Opcode arch (Operand arch) sh
                                -> ResultIndex (CS.ConcreteState arch)
                                -> ImplicitFact arch
-                               -> R.TestCase (CS.ConcreteState arch)
+                               -> TestCase arch
                                -> Learning arch (IORelation arch sh)
 collectImplicitOutputLocations _op rix f tc =
   case M.lookup (R.testNonce tc) (riSuccesses rix) of
