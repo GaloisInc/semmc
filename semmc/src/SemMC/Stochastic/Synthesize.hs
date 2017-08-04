@@ -112,15 +112,12 @@ compareTargetToCandidate target candidate test = do
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
+  runTest     <- askRunTest
   candidateSt <- runTest test candidateProg
   targetSt    <- runTest test targetProg
   liveOut     <- getOutMasks target
-  let p = Proxy :: Proxy arch
-  let weight = compareTargetOutToCandidateOut p liveOut targetSt candidateSt
+  let weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
   return weight
-  where
-    runTest :: Test arch -> [Instruction arch] -> Syn t arch (C.ConcreteState arch)
-    runTest = undefined
 
 -- | The masks for locations that are live out for the target instruction.
 --
@@ -144,13 +141,12 @@ getOutMasks (D.Instruction opcode operands) = do
 -- Sum the weights of all test outputs.
 compareTargetOutToCandidateOut :: forall arch.
                                   SynC arch
-                               => Proxy arch
-                               -> [C.SemanticView arch]
+                               => [C.SemanticView arch]
                                -> C.ConcreteState arch
                                -> C.ConcreteState arch
                                -> Double
-compareTargetOutToCandidateOut arch descs targetSt candidateSt =
-  sum [ C.withKnownNat (C.viewTypeRepr view) $ weighBestMatch arch desc targetSt candidateSt
+compareTargetOutToCandidateOut descs targetSt candidateSt =
+  sum [ C.withKnownNat (C.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
       | desc@(C.SemanticView { C.semvView = view }) <- descs
       ]
 
@@ -158,12 +154,11 @@ compareTargetOutToCandidateOut arch descs targetSt candidateSt =
 -- that are in the wrong location.
 weighBestMatch :: forall arch.
                   (SynC arch)
-               => Proxy arch
-               -> C.SemanticView arch
+               => C.SemanticView arch
                -> C.ConcreteState arch
                -> C.ConcreteState arch
                -> Double
-weighBestMatch arch (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews diff) targetSt candidateSt =
+weighBestMatch (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews diff) targetSt candidateSt =
   minimum $ [ weigh (C.peekMS candidateSt view) ] ++
             [ weigh (C.peekMS candidateSt view') + penalty
             | view' <- congruentViews ]

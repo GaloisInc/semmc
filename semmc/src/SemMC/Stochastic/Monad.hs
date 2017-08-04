@@ -16,6 +16,7 @@ module SemMC.Stochastic.Monad (
   askGen,
   askBaseSet,
   askConfig,
+  askRunTest,
   askTestCases,
   askFormulas,
   lookupFormula,
@@ -108,6 +109,10 @@ data SynEnv t arch =
 data LocalSynEnv t arch =
   LocalSynEnv { seGlobalEnv :: SynEnv t arch
               , seRandomGen :: A.Gen
+              , seRunTest :: ConcreteState arch -> [Instruction arch] -> Syn t arch (ConcreteState arch)
+                -- ^ Starting with a synchronous test runner. Will
+                -- worry about batching tests and running them in
+                -- parallel later.
               }
 
 -- Synthesis constraints.
@@ -163,6 +168,9 @@ askConfig = R.asks (seConfig . seGlobalEnv)
 
 askGen :: Syn t arch A.Gen
 askGen = R.asks seRandomGen
+
+askRunTest :: Syn t arch (ConcreteState arch -> [Instruction arch] -> Syn t arch (ConcreteState arch))
+askRunTest = R.asks seRunTest
 
 withSymBackend :: (Sym t -> Syn t arch a) -> Syn t arch a
 withSymBackend k = do

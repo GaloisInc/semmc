@@ -15,6 +15,7 @@ module SemMC.Stochastic.Strata (
 import qualified GHC.Err.Located as L
 
 import qualified Control.Concurrent as C
+import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import Control.Monad.Trans ( liftIO )
@@ -41,6 +42,7 @@ import           SemMC.Symbolic ( Sym )
 import qualified SemMC.Stochastic.Classify as C
 import SemMC.Stochastic.Generalize ( generalize )
 import SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
+import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Monad
 import SemMC.Stochastic.Synthesize ( synthesize )
 
@@ -59,16 +61,28 @@ stratifiedSynthesis :: (CS.ConcreteArchitecture arch, SynC arch)
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
     gen <- A.createGen
-    let localEnv = LocalSynEnv { seGlobalEnv = env0
-                               , seRandomGen = gen
-                               }
     tChan <- C.newChan
     rChan <- C.newChan
     logChan <- C.newChan
     testRunner' <- A.async $ testRunner (seConfig env0) tChan rChan logChan
     A.link testRunner'
-    runSyn localEnv strata
+    let localEnv = LocalSynEnv { seGlobalEnv = env0
+                               , seRandomGen = gen
+                               , seRunTest = runTest tChan rChan
+                               }
+    runSyn localEnv strata `C.finally` A.cancel testRunner'
   STM.readTVarIO (seFormulas env0)
+  where
+    -- A naive test runner: it's synchronous, and dies on test
+    -- failures. Will need to be improved later.
+    runTest tChan rChan c p = liftIO $ do
+      let nonce = 0
+      C.writeChan tChan (Just (R.TestCase nonce c p))
+      r <- C.readChan rChan
+      case r of
+        R.TestSuccess tr
+          | R.resultNonce tr == nonce -> return $ R.resultContext tr
+        _ -> L.error "Unexpected test result in Strata.runTest!"
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
