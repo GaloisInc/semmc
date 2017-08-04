@@ -24,8 +24,6 @@ import Dismantle.Tablegen.TH ( captureDictionaries )
 
 import SemMC.Architecture
 import SemMC.Formula
-import SemMC.Formula.Parser
-import SemMC.Formula.Printer
 import SemMC.ToyExample as T
 import SemMC.Synthesis.Template
 import SemMC.Synthesis

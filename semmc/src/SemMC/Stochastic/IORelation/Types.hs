@@ -12,6 +12,7 @@ module SemMC.Stochastic.IORelation.Types (
   TestBundle(..),
   TestCase,
   TestSerializer,
+  TestRunner,
   ExplicitFact(..),
   ImplicitFact(..),
   OperandRef(..),
@@ -60,6 +61,8 @@ import qualified SemMC.Worklist as WL
 type TestCase arch = R.TestCase (CS.ConcreteState arch) (Instruction arch)
 
 type TestSerializer arch = R.TestSerializer (CS.ConcreteState arch) (Instruction arch)
+
+type TestRunner arch = R.TestRunner (CS.ConcreteState arch) (Instruction arch)
 
 data GlobalLearningEnv arch =
   GlobalLearningEnv { assemble :: Instruction arch -> LBS.ByteString

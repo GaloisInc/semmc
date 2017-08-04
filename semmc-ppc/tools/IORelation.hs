@@ -23,6 +23,7 @@ import Dismantle.PPC.Random ()
 -- import qualified Dismantle.Tablegen.TH as DT
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Stochastic.IORelation as IOR
+import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Architecture.PPC as PPC
 
 data Options = Options { oRelDir :: FilePath
@@ -71,9 +72,8 @@ mainWithOptions opt = do
                                , IOR.lcNumThreads = oNumThreads opt
                                , IOR.lcAssemble = PPC.assembleInstruction
                                , IOR.lcTestGen = CS.randomState (Proxy @PPC.PPC) gen
-                               , IOR.lcTestSerializer = PPC.testSerializer
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
-                               , IOR.lcRemoteHost = oRemoteHost opt
+                               , IOR.lcTestRunner = R.runRemote (oRemoteHost opt) PPC.testSerializer
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
   _iorels <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toFP allOps

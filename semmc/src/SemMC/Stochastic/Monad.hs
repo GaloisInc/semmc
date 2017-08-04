@@ -242,8 +242,8 @@ data Config arch =
          , randomTestCount :: Int
          -- ^ The number of random tests to generate
          , threadCount :: Int
-         , remoteHost :: String
-         , testSerializer :: I.TestSerializer arch
+         , testRunner :: I.TestRunner arch
+         -- ^ See the related @lcTestRunner@ for usage examples.
          }
 
 loadInitialState :: (Architecture arch,

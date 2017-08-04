@@ -7,7 +7,8 @@ module SemMC.Stochastic.Remote (
   TestResult(..),
   ResultOrError(..),
   LogMessage(..),
-  TestSerializer(..)
+  TestSerializer(..),
+  TestRunner
   ) where
 
 import qualified Control.Concurrent as C
@@ -48,6 +49,24 @@ data LogMessage = LogMessage { lmTime :: T.UTCTime
                              }
                 deriving (Eq, Ord, Show)
 
+-- | The 'runRemote' below provides the main implementation of
+-- 'TestRunner'. The Toy architecture uses a simpler 'TestRunner',
+-- that does everything locally.
+type TestRunner c i
+  =  C.Chan (Maybe (TestCase c i))
+  -- ^ A channel with test cases to be run; a 'Nothing' indicates that
+  -- the stream should be terminated.
+  -> C.Chan (ResultOrError c)
+  -- ^ The channel that results are written to (can include error cases)
+  -> C.Chan LogMessage
+  -- ^ A channel to record log messages on; these include the stderr
+  -- output from the runner process (there shouldn't really be much, but
+  -- it is better to collect it than discard it or just dump it to
+  -- stderr)
+  -> IO (Maybe SSH.SSHError)
+  -- ^ Errors raised by SSH. Not meaningful for test runners that
+  -- don't use SSH, e.g. Toy arch test runner.
+
 -- | Spawn threads to manage a remote test runner.
 --
 -- The runner will read tests off of the first channel and write results to the
@@ -62,17 +81,7 @@ runRemote :: String
           -- ^ The hostname to run test cases on
           -> TestSerializer c i
           -- ^ Functions for converting to and from machine states
-          -> C.Chan (Maybe (TestCase c i))
-          -- ^ A channel with test cases to be run; a 'Nothing' indicates that
-          -- the stream should be terminated.
-          -> C.Chan (ResultOrError c)
-          -- ^ The channel that results are written to (can include error cases)
-          -> C.Chan LogMessage
-          -- ^ A channel to record log messages on; these include the stderr
-          -- output from the runner process (there shouldn't really be much, but
-          -- it is better to collect it than discard it or just dump it to
-          -- stderr)
-          -> IO (Maybe SSH.SSHError)
+          -> TestRunner c i
 runRemote hostName ts testCases testResults logMessages = do
   ehdl <- SSH.ssh SSH.defaultSSHConfig hostName ["remote-runner"]
   case ehdl of

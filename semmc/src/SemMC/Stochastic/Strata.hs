@@ -39,7 +39,6 @@ import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
-import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Generalize ( generalize )
 import SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 import SemMC.Stochastic.Monad
@@ -66,10 +65,8 @@ stratifiedSynthesis env0 = do
     tChan <- C.newChan
     rChan <- C.newChan
     logChan <- C.newChan
-    ssh <- A.async $ do
-      _ <- R.runRemote (remoteHost (seConfig env0)) (testSerializer (seConfig env0)) tChan rChan logChan
-      return ()
-    A.link ssh
+    testRunner' <- A.async $ testRunner (seConfig env0) tChan rChan logChan
+    A.link testRunner'
     runSyn localEnv strata
   STM.readTVarIO (seFormulas env0)
 
