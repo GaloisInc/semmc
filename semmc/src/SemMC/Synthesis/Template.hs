@@ -50,6 +50,9 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
+import           Data.Parameterized.ShapedList ( ShapedList(..) )
+import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
+import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Typeable
@@ -59,9 +62,6 @@ import           Unsafe.Coerce ( unsafeCoerce )
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
-
-import           Data.Parameterized.Witness ( Witness(..) )
-import           Dismantle.Instruction ( mapOperandList, OperandList(..) )
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -158,7 +158,7 @@ unTemplateSafe (ParameterizedFormula { pfUses = uses
                        , pfDefs = newDefs
                        }
   where newUses = Set.map (mapSome coerceParameter) uses
-        newOpVars = mapOperandList coerceBoundVar opVars
+        newOpVars = fmapFC coerceBoundVar opVars
         newDefs = MapF.foldrWithKey (MapF.insert . coerceParameter) MapF.empty defs
         coerceParameter :: forall tp. Parameter (TemplatedArch arch) sh tp -> Parameter arch sh tp
         coerceParameter (Operand tpRepr idx) = Operand tpRepr idx
@@ -180,7 +180,7 @@ unTemplate = unTemplateUnsafe
 -- | 'Formula' along with the expressions that correspond to each operand (for
 -- pulling out the values of immediates after solving, primarily).
 data TemplatedFormula sym arch sh =
-  TemplatedFormula { tfOperandExprs :: OperandList (TaggedExpr (TemplatedArch arch) sym) sh
+  TemplatedFormula { tfOperandExprs :: ShapedList (TaggedExpr (TemplatedArch arch) sym) sh
                    , tfFormula :: Formula sym (TemplatedArch arch)
                    }
 deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (TemplatedFormula sym arch sh)
@@ -194,11 +194,11 @@ class TemplatableOperand (arch :: *) (s :: Symbol) where
 -- | The only way to define structure-dependent operations on type-level lists...
 class TemplatableOperands arch sh where
   -- | For a given shape, generate all possible templated operand lists.
-  makeTemplatedOpLists :: [OperandList (TemplatedOperand arch) sh]
+  makeTemplatedOpLists :: [ShapedList (TemplatedOperand arch) sh]
   -- | Recover the resulting concrete operands once the SMT solver has run.
   recoverOperands :: (forall tp. S.SymExpr sym tp -> IO (GroundValue tp))
-                  -> OperandList (TaggedExpr (TemplatedArch arch) sym) sh
-                  -> IO (OperandList (Operand arch) sh)
+                  -> ShapedList (TaggedExpr (TemplatedArch arch) sym) sh
+                  -> IO (ShapedList (Operand arch) sh)
 
 instance TemplatableOperands arch '[] where
   makeTemplatedOpLists = [Nil]

@@ -28,15 +28,14 @@ import           Text.Printf ( printf )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.ShapedList ( ShapedList, Index )
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.BaseTypes
-
-import qualified Dismantle.Instruction as I
 
 import           SemMC.Architecture
 
 data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
-  Operand :: BaseTypeRepr (OperandType arch s) -> I.Index sh s -> Parameter arch sh (OperandType arch s)
+  Operand :: BaseTypeRepr (OperandType arch s) -> Index sh s -> Parameter arch sh (OperandType arch s)
   Literal :: Location arch tp -> Parameter arch sh tp
 
 instance ShowF (Location arch) => Show (Parameter arch sh tp) where
@@ -78,7 +77,7 @@ paramType (Literal loc) = locationType loc
 -- instruction.
 data ParameterizedFormula sym arch (sh :: [Symbol]) =
   ParameterizedFormula { pfUses :: Set.Set (Some (Parameter arch sh))
-                       , pfOperandVars :: I.OperandList (BoundVar sym arch) sh
+                       , pfOperandVars :: ShapedList (BoundVar sym arch) sh
                        , pfLiteralVars :: MapF.MapF (Location arch) (S.BoundVar sym)
                        , pfDefs :: MapF.MapF (Parameter arch sh) (S.SymExpr sym)
                        }

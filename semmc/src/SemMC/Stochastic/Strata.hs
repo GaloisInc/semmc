@@ -23,6 +23,7 @@ import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
+import Data.Parameterized.TraversableFC ( foldrFC )
 
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
@@ -49,12 +50,10 @@ caller controls the number and placement of threads.
 
 -}
 
-type OpcodeFormulas sym arch = MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
-
 stratifiedSynthesis :: forall arch t
                      . (CS.ConcreteArchitecture arch, SynC arch)
                     => SynEnv t arch
-                    -> IO (OpcodeFormulas (Sym t) arch)
+                    -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
     gen <- A.createGen
@@ -69,17 +68,10 @@ stratifiedSynthesis env0 = do
       return ()
     A.link ssh
     runSyn localEnv strata
-  formulas <- STM.readTVarIO (seFormulas env0)
-  let addIfReal :: SynthOpcode arch sh
-                -> F.ParameterizedFormula (Sym t) arch sh
-                -> OpcodeFormulas (Sym t) arch
-                -> OpcodeFormulas (Sym t) arch
-      addIfReal (RealOpcode op) form m = MapF.insert op form m
-      addIfReal (PseudoOpcode _ _) _ m = m
-  return (MapF.foldrWithKey addIfReal MapF.empty formulas)
+  STM.readTVarIO (seFormulas env0)
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)
-       => Syn t arch (MapF.MapF (SynthOpcode arch) (F.ParameterizedFormula (Sym t) arch))
+       => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
 processWorklist :: (CS.ConcreteArchitecture arch, SynC arch)
@@ -149,7 +141,7 @@ finishStrataOne op instr eqclasses = do
 buildFormula :: (CS.ConcreteArchitecture arch)
              => Opcode arch (Operand arch) sh
              -> Instruction arch
-             -> [Instruction arch]
+             -> [SynthInstruction arch]
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 buildFormula o i prog = do
   Just iorel <- opcodeIORelation o
@@ -180,18 +172,17 @@ instantiateInstruction op = do
       case target of
         D.Instruction op' ops
           | Just MapF.Refl <- MapF.testEquality op op'
-          , fst (D.foldrOperandList (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops) ->
+          , fst (foldrFC (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops) ->
             go gen implicitOps
           | otherwise -> return target
 
 isImplicitOrReusedOperand :: (CS.ConcreteArchitecture arch, SynC arch)
                           => Proxy arch
                           -> S.Set (Some (CS.View arch))
-                          -> ix
                           -> Operand arch tp
                           -> (Bool, S.Set (Some (Operand arch)))
                           -> (Bool, S.Set (Some (Operand arch)))
-isImplicitOrReusedOperand proxy implicitViews _ix operand (isIorR, seen)
+isImplicitOrReusedOperand proxy implicitViews operand (isIorR, seen)
   | isIorR || S.member (Some operand) seen = (True, seen)
   | Just (CS.SemanticView { CS.semvView = view }) <- CS.operandToSemanticView proxy operand
   , S.member (Some view) implicitViews = (True, seen)

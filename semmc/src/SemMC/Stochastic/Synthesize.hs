@@ -1,4 +1,6 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- | Description: Synthesize a program that implements a target instruction.
 --
@@ -11,21 +13,24 @@
 -- https://cs.stanford.edu/people/eschkufz/docs/pldi_16.pdf
 module SemMC.Stochastic.Synthesize ( synthesize ) where
 
-import           Control.Monad ( join, (<=<) )
+import           Control.Monad ( join )
 import           Control.Monad.Trans ( liftIO )
 import           Data.Maybe ( catMaybes )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as S
 import qualified Data.Set as Set
 import           GHC.Exts ( IsList(..) )
+import qualified GHC.Err.Located as L
 
 import qualified Data.Set.NonEmpty as NES
+import           Data.Parameterized.HasRepr ( HasRepr )
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.ShapedList ( lengthFC, traverseFCIndexed, indexAsInt, indexShapedList, ShapeRepr )
 import           Dismantle.Arbitrary as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
-import           SemMC.Architecture ( Instruction, Operand )
+import           SemMC.Architecture ( Instruction, Opcode, Operand )
 import qualified SemMC.ConcreteState as C
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.IORelation as I
@@ -36,13 +41,13 @@ import qualified SemMC.Stochastic.IORelation as I
 -- Can fail due to timeouts.
 synthesize :: SynC arch
            => Instruction arch
-           -> Syn t arch (Maybe [Instruction arch])
+           -> Syn t arch (Maybe [SynthInstruction arch])
 synthesize target = do
   initialTests <- generateInitialTests target
   mapM_ addTestCase initialTests
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
   candidate <- mcmcSynthesizeOne target
-  let candidateWithoutNops = synthInsnToActual <=< catMaybes . toList $ candidate
+  let candidateWithoutNops = catMaybes . toList $ candidate
   return $ Just candidateWithoutNops
 
 mcmcSynthesizeOne :: SynC arch => Instruction arch -> Syn t arch (Candidate arch)
@@ -134,7 +139,7 @@ getOutMasks (D.Instruction opcode operands) = do
   -- Ignore implicit operands for now.
   -- TODO: handle implicits.
   let outputs' = [ s | I.OperandRef s <- outputs ]
-  let outputs'' = [ Some (D.indexOpList operands i) | Some i <- outputs' ]
+  let outputs'' = [ Some (indexShapedList operands i) | Some i <- outputs' ]
   let semViews = map operandToSemView outputs''
   return semViews
   where
@@ -214,14 +219,42 @@ perturb candidate = do
     p_s = 1/6
     p_i = 1/6
 
-randomizeOpcode :: D.Gen -> NES.Set (Some (SynthOpcode arch)) -> SynthInstruction arch -> IO (SynthInstruction arch)
-randomizeOpcode = undefined
+-- | Replace the opcode of the given instruction with a random one of the same
+-- shape.
+randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) ShapeRepr,
+                    HasRepr (Pseudo arch (Operand arch)) ShapeRepr)
+                => SynthInstruction arch
+                -> Syn t arch (SynthInstruction arch)
+randomizeOpcode (SynthInstruction oldOpcode operands) = do
+  gen <- askGen
+  congruent <- lookupCongruent oldOpcode
+  case S.length congruent of
+    0 -> L.error "bug! The opcode being replaced should always be in the congruent set!"
+    len -> do
+      ix <- liftIO $ D.uniformR (0, len - 1) gen
+      let !newOpcode = congruent `S.index` ix
+      return (SynthInstruction newOpcode operands)
 
-randomizeOperand :: D.Gen -> SynthInstruction arch -> IO (SynthInstruction arch)
-randomizeOperand = undefined
+-- | Randomly replace one operand of an instruction.
+--
+-- FIXME: This is ripped straight out of dismantle. We should probably make the
+-- one there more generic.
+randomizeOperand :: (D.ArbitraryOperand (Operand arch))
+                 => D.Gen
+                 -> SynthInstruction arch
+                 -> IO (SynthInstruction arch)
+randomizeOperand gen (SynthInstruction op os) = do
+  updateAt <- D.uniformR (0, (lengthFC os - 1)) gen
+  os' <- traverseFCIndexed (f' updateAt gen) os
+  return (SynthInstruction op os')
+  where
+    f' target g ix o
+      | indexAsInt ix == target = D.arbitraryOperand g o
+      | otherwise = return o
 
+-- | Generate a random instruction
 randomInstruction :: D.Gen -> NES.Set (Some (SynthOpcode arch)) -> IO (SynthInstruction arch)
-randomInstruction = undefined
+randomInstruction gen baseSet = undefined
 
 -- | Randomly replace an opcode with another compatible opcode, while
 -- keeping the operands fixed.
@@ -229,10 +262,8 @@ perturbOpcode :: SynC arch => Candidate arch -> Syn t arch (Candidate arch)
 perturbOpcode candidate = do
   gen <- askGen
   index <- liftIO $ D.uniformR (0, S.length candidate - 1) gen
-  baseSet <- askBaseSet
   let oldInstruction = candidate `S.index` index
-  newInstruction <- liftIO $
-    randomizeOpcode gen baseSet `mapM` oldInstruction
+  newInstruction <- randomizeOpcode `mapM` oldInstruction
   return $ S.update index newInstruction candidate
 
 -- | Randomly replace the operands, while keeping the opcode fixed.

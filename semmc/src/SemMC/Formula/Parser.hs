@@ -45,6 +45,8 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.NatRepr ( NatRepr, someNat, isPosNat, withLeqProof )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some
+import           Data.Parameterized.ShapedList ( ShapedList(..), Index(..), indexShapedList )
+import           Data.Parameterized.TraversableFC ( TraversableFC(..) )
 import qualified Data.Parameterized.Map as MapF
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
@@ -54,8 +56,6 @@ import           SemMC.Architecture
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..) )
 import           SemMC.Formula.Formula
 import           SemMC.Util
-
-import           Dismantle.Instruction ( Index(..), indexOpList, OperandList(..), traverseOperandList )
 
 -- * First pass of parsing: turning the raw text into s-expressions
 
@@ -139,7 +139,7 @@ class BuildOperandList (arch :: *) (tps :: [Symbol]) where
   -- >  (n . 'Imm16)
   -- >  (rt . 'Gprc))
   --
-  buildOperandList :: SC.SExpr Atom -> Maybe (OperandList (OpData arch) tps)
+  buildOperandList :: SC.SExpr Atom -> Maybe (ShapedList (OpData arch) tps)
 
 -- nil case...
 instance BuildOperandList arch '[] where
@@ -195,7 +195,7 @@ data IndexWithType (arch :: *) (sh :: [Symbol]) (s :: Symbol) where
   IndexWithType :: BaseTypeRepr (OperandType arch s) -> Index sh s -> IndexWithType arch sh s
 
 -- | Look up a name in the given operand list, returning its index and type if found.
-findOpListIndex :: String -> OperandList (OpData arch) sh -> Maybe (Some (IndexWithType arch sh))
+findOpListIndex :: String -> ShapedList (OpData arch) sh -> Maybe (Some (IndexWithType arch sh))
 findOpListIndex _ Nil = Nothing
 findOpListIndex x ((OpData name tpRepr) :> rest)
   | x == name = Just $ Some (IndexWithType tpRepr IndexHere)
@@ -203,7 +203,7 @@ findOpListIndex x ((OpData name tpRepr) :> rest)
       where incrIndex (IndexWithType tpRepr' idx) = IndexWithType tpRepr' (IndexThere idx)
 
 -- | Parse a single parameter, given the list of operands to use as a lookup.
-readParameter :: (MonadError String m, Architecture arch) => OperandList (OpData arch) sh -> Atom -> m (Some (Parameter arch sh))
+readParameter :: (MonadError String m, Architecture arch) => ShapedList (OpData arch) sh -> Atom -> m (Some (Parameter arch sh))
 readParameter oplist atom =
   readRawParameter atom >>= \case
     RawOperand op ->
@@ -218,7 +218,7 @@ readParameter oplist atom =
 -- | Parses the input list, e.g., @(ra rb 'ca)@
 readInputs :: (MonadError String m,
                Architecture arch)
-           => OperandList (OpData arch) sh
+           => ShapedList (OpData arch) sh
            -> SC.SExpr Atom
            -> m [Some (Parameter arch sh)]
 readInputs _ SC.SNil = return []
@@ -240,11 +240,11 @@ data DefsInfo sym arch sh = DefsInfo
                             , getLitLookup :: forall tp. Location arch tp -> Maybe (S.SymExpr sym tp)
                             -- ^ Function used to retrieve the expression
                             -- corresponding to a given literal.
-                            , getOpVarList :: OperandList (BoundVar sym arch) sh
-                            -- ^ OperandList used to retrieve the variable
+                            , getOpVarList :: ShapedList (BoundVar sym arch) sh
+                            -- ^ ShapedList used to retrieve the variable
                             -- corresponding to a given literal.
-                            , getOpNameList :: OperandList (OpData arch) sh
-                            -- ^ OperandList used to look up the index given an
+                            , getOpNameList :: ShapedList (OpData arch) sh
+                            -- ^ ShapedList used to look up the index given an
                             -- operand's name.
                             }
 
@@ -605,7 +605,7 @@ readExpr (SC.SAtom paramRaw) = do
            } <- ask
   param <- readParameter opNames paramRaw
   case param of
-    Some (Operand _ idx) -> return . Some . S.varExpr sym . unBoundVar $ indexOpList opVars idx
+    Some (Operand _ idx) -> return . Some . S.varExpr sym . unBoundVar $ indexShapedList opVars idx
     Some (Literal lit) -> maybe (throwError "not declared as input") (return . Some) $ litLookup lit
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
@@ -700,7 +700,7 @@ readFormula' sym env text = do
 
   -- Build the operand list from the given s-expression, validating that it
   -- matches the correct shape as we go.
-  operands :: OperandList (OpData arch) sh
+  operands :: ShapedList (OpData arch) sh
     <- fromMaybeError "invalid operand structure" (buildOperandList opsRaw)
 
   inputs :: [Some (Parameter arch sh)]
@@ -711,8 +711,8 @@ readFormula' sym env text = do
         let symbol = makeSymbol (operandVarPrefix ++ name)
         in BoundVar <$> (liftIO $ S.freshBoundVar sym symbol tpRepr)
 
-  opVarList :: OperandList (BoundVar sym arch) sh
-    <- traverseOperandList mkOperandVar operands
+  opVarList :: ShapedList (BoundVar sym arch) sh
+    <- traverseFC mkOperandVar operands
 
   -- NOTE: At the moment, we just trust that the semantics definition declares
   -- the correct input operands; instead of validating it, we generate BoundVars
