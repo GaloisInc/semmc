@@ -386,4 +386,3 @@ instance D.ArbitraryOperands Opcode Operand where
     SubRr -> D.arbitraryOperandList gen
     NegR  -> D.arbitraryOperandList gen
     MovRi -> D.arbitraryOperandList gen
-

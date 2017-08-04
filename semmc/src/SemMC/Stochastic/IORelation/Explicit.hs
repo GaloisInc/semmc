@@ -71,7 +71,7 @@ classifyExplicitOperands op explicitOperands = do
 computeIORelation :: (CS.ConcreteArchitecture arch)
                   => Opcode arch (Operand arch) sh
                   -> D.OperandList (Operand arch) sh
-                  -> [TestBundle (R.TestCase (CS.ConcreteState arch)) (ExplicitFact arch)]
+                  -> [TestBundle (TestCase arch) (ExplicitFact arch)]
                   -> [R.ResultOrError (CS.ConcreteState arch)]
                   -> Learning arch (IORelation arch sh)
 computeIORelation opcode operands bundles results =
@@ -96,7 +96,7 @@ buildIORelation :: forall arch sh
                 -> D.OperandList (Operand arch) sh
                 -> ResultIndex (CS.ConcreteState arch)
                 -> IORelation arch sh
-                -> TestBundle (R.TestCase (CS.ConcreteState arch)) (ExplicitFact arch)
+                -> TestBundle (TestCase arch) (ExplicitFact arch)
                 -> Learning arch (IORelation arch sh)
 buildIORelation op explicitOperands ri iorel tb = do
   -- If the set of explicit output locations discovered by this test bundle is
@@ -125,7 +125,7 @@ collectExplicitLocations :: (CS.ConcreteArchitecture arch)
                          => D.OperandList (Operand arch) sh
                          -> [IndexedSemanticView arch sh]
                          -> ResultIndex (CS.ConcreteState arch)
-                         -> R.TestCase (CS.ConcreteState arch)
+                         -> TestCase arch
                          -> Learning arch (S.Set (Some (D.Index sh)))
 collectExplicitLocations _opList explicitLocs ri tc = do
   case M.lookup (R.testNonce tc) (riSuccesses ri) of

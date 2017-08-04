@@ -67,7 +67,7 @@ stratifiedSynthesis env0 = do
     rChan <- C.newChan
     logChan <- C.newChan
     ssh <- A.async $ do
-      _ <- R.runRemote (remoteHost (seConfig env0)) (machineState (seConfig env0)) tChan rChan logChan
+      _ <- R.runRemote (remoteHost (seConfig env0)) (testSerializer (seConfig env0)) tChan rChan logChan
       return ()
     A.link ssh
     runSyn localEnv strata

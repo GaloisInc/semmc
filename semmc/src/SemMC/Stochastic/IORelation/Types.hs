@@ -10,6 +10,8 @@ module SemMC.Stochastic.IORelation.Types (
   GlobalLearningEnv(..),
 --  TypedLocation(..),
   TestBundle(..),
+  TestCase,
+  TestSerializer,
   ExplicitFact(..),
   ImplicitFact(..),
   OperandRef(..),
@@ -55,6 +57,10 @@ import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
 
+type TestCase arch = R.TestCase (CS.ConcreteState arch) (Instruction arch)
+
+type TestSerializer arch = R.TestSerializer (CS.ConcreteState arch) (Instruction arch)
+
 data GlobalLearningEnv arch =
   GlobalLearningEnv { assemble :: Instruction arch -> LBS.ByteString
                     , resWaitSeconds :: Int
@@ -66,7 +72,7 @@ data GlobalLearningEnv arch =
 
 data LocalLearningEnv arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
-                   , testChan :: C.Chan (Maybe (R.TestCase (CS.ConcreteState arch)))
+                   , testChan :: C.Chan (Maybe (TestCase arch))
                    , resChan :: C.Chan (R.ResultOrError (CS.ConcreteState arch))
                    , gen :: A.Gen
                    , testGen :: IO (CS.ConcreteState arch)
@@ -76,7 +82,7 @@ data LocalLearningEnv arch =
                    , nonce :: STM.TVar Word64
                    }
 
-askTestChan :: Learning arch (C.Chan (Maybe (R.TestCase (CS.ConcreteState arch))))
+askTestChan :: Learning arch (C.Chan (Maybe (TestCase arch)))
 askTestChan = Rd.asks testChan
 
 askResultChan :: Learning arch (C.Chan (R.ResultOrError (CS.ConcreteState arch)))

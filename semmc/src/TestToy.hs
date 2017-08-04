@@ -28,8 +28,6 @@ import SemMC.Formula.Parser
 import SemMC.Formula.Printer
 import SemMC.ToyExample as T
 import SemMC.Synthesis.Template
-import SemMC.Synthesis.Cegis
-import SemMC.Synthesis.DivideAndConquer
 import SemMC.Synthesis
 import SemMC.Util
 

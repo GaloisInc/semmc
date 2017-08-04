@@ -26,14 +26,14 @@ main = do
   resChan <- C.newChan
   _ <- C.forkIO (printLogMessages logChan)
   _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- R.runRemote hostname machineState caseChan resChan logChan
+  merr <- R.runRemote hostname testSerializer caseChan resChan logChan
   case merr of
     Just err -> do
       IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)
       IO.exitFailure
     Nothing -> return ()
 
-testRunner :: C.Chan (Maybe (R.TestCase PPCState))
+testRunner :: C.Chan (Maybe (R.TestCase PPCState PPC.Instruction))
            -> C.Chan (R.ResultOrError PPCState)
            -> IO ()
 testRunner caseChan resChan = do
@@ -60,11 +60,11 @@ testRunner caseChan resChan = do
           printf "Received test result with nonce %d\n" (R.resultNonce tr)
           print (R.resultContext tr)
 
-testVector1 :: R.TestCase PPCState
+testVector1 :: R.TestCase PPCState PPC.Instruction
 testVector1 =
   R.TestCase { R.testNonce = 11
              , R.testContext = ctx2
-             , R.testProgram = PPC.assembleInstruction i
+             , R.testProgram = [i]
              }
   where
     ctx0 = CS.zeroState (Proxy @PPC)
@@ -85,7 +85,7 @@ v2 = CS.trivialView (Proxy @PPC) (LocGPR r2)
 v3 :: CS.View PPC 32
 v3 = CS.trivialView (Proxy @PPC) (LocGPR r3)
 
-testVector2 :: R.TestCase PPCState
+testVector2 :: R.TestCase PPCState PPC.Instruction
 testVector2 = testVector1 { R.testNonce = 22
                           , R.testContext = ctx2
                           }

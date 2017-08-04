@@ -59,7 +59,7 @@ data LearningConfig arch =
                  , lcNumThreads :: Int
                  , lcAssemble :: Instruction arch -> LBS.ByteString
                  , lcTestGen :: IO (CS.ConcreteState arch)
-                 , lcMachineState :: R.MachineState (CS.ConcreteState arch)
+                 , lcTestSerializer :: TestSerializer arch
                  , lcTimeoutSeconds :: Int
                  , lcRemoteHost :: String
                  }
@@ -117,7 +117,7 @@ learnIORelations cfg proxy toFP ops = do
     rChan <- C.newChan
     logChan <- C.newChan
     ssh <- A.async $ do
-      _ <- R.runRemote (lcRemoteHost cfg) (lcMachineState cfg) tChan rChan logChan
+      _ <- R.runRemote (lcRemoteHost cfg) (lcTestSerializer cfg) tChan rChan logChan
       return ()
     A.link ssh
     nref <- STM.newTVarIO 0

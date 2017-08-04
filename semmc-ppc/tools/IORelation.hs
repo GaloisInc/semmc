@@ -71,7 +71,7 @@ mainWithOptions opt = do
                                , IOR.lcNumThreads = oNumThreads opt
                                , IOR.lcAssemble = PPC.assembleInstruction
                                , IOR.lcTestGen = CS.randomState (Proxy @PPC.PPC) gen
-                               , IOR.lcMachineState = PPC.machineState
+                               , IOR.lcTestSerializer = PPC.testSerializer
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
                                , IOR.lcRemoteHost = oRemoteHost opt
                                }

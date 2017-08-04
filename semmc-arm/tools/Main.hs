@@ -10,7 +10,7 @@ import qualified System.IO as IO
 import Text.Printf ( printf )
 
 import qualified SemMC.Stochastic.Remote as R
-import SemMC.ARM ( MachineState(..), machineState )
+import SemMC.ARM ( MachineState(..), Instruction, testSerializer )
 
 main :: IO ()
 main = do
@@ -20,14 +20,14 @@ main = do
   resChan <- C.newChan
   _ <- C.forkIO (printLogMessages logChan)
   _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- R.runRemote hostname machineState caseChan resChan logChan
+  merr <- R.runRemote hostname testSerializer caseChan resChan logChan
   case merr of
     Just err -> do
       IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)
       IO.exitFailure
     Nothing -> return ()
 
-testRunner :: C.Chan (Maybe (R.TestCase MachineState))
+testRunner :: C.Chan (Maybe (R.TestCase MachineState Instruction))
            -> C.Chan (R.ResultOrError MachineState)
            -> IO ()
 testRunner caseChan resChan = do
@@ -54,11 +54,11 @@ testRunner caseChan resChan = do
           printf "Received test result with nonce %d\n" (R.resultNonce tr)
           print (R.resultContext tr)
 
-testVector1 :: R.TestCase MachineState
+testVector1 :: R.TestCase MachineState Instruction
 testVector1 = R.TestCase { R.testNonce = 11
                          , R.testContext = ctx
                          -- add r1, r2?
-                         , R.testProgram = LB.pack [0x02, 0x10, 0x81, 0xE0]
+                         , R.testProgram = [LB.pack [0x02, 0x10, 0x81, 0xE0]]
                          }
   where
     ctx = MachineState { gprs = grs
@@ -76,10 +76,10 @@ testVector1 = R.TestCase { R.testNonce = 11
     Just frs = V.fromList (replicate 32 0)
     Just m1 = V.fromList (replicate 32 0)
 
-testVector2 :: R.TestCase MachineState
+testVector2 :: R.TestCase MachineState Instruction
 testVector2 = testVector1 { R.testNonce = 22
                           , R.testContext = (R.testContext testVector1) { gprs = grs }
-                          , R.testProgram = LB.pack [0x02, 0x10, 0x81, 0xE0]
+                          , R.testProgram = [LB.pack [0x02, 0x10, 0x81, 0xE0]]
                           }
   where
     Just grs = V.fromList [ 200, 100, 9, 0, 0

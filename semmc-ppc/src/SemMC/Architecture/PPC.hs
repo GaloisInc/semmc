@@ -15,7 +15,7 @@
 module SemMC.Architecture.PPC
   ( PPC
   , Location(..)
-  , machineState
+  , testSerializer
   , loadBaseSet
   ) where
 
@@ -496,10 +496,11 @@ instance CS.ConcreteArchitecture PPC where
   readView = P.parseMaybe (CS.parseView parseLocation)
   showView = CS.printView show
 
-machineState :: R.MachineState (CS.ConcreteState PPC)
-machineState = R.MachineState { R.flattenMachineState = PPCS.serialize
-                              , R.parseMachineState = PPCS.deserialize
-                              }
+testSerializer :: R.TestSerializer (CS.ConcreteState PPC) (A.Instruction PPC)
+testSerializer = R.TestSerializer { R.flattenMachineState = PPCS.serialize
+                                  , R.parseMachineState = PPCS.deserialize
+                                  , R.flattenProgram = mconcat . map PPC.assembleInstruction
+                                  }
 
 vsrLowerHalf :: CS.Slice 64 128
 vsrLowerHalf = CS.Slice knownNat knownNat (knownNat @0) (knownNat @64)

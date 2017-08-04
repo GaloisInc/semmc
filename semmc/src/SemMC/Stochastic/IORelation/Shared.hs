@@ -39,7 +39,7 @@ import SemMC.Stochastic.IORelation.Types
 withTestResults :: forall a f arch sh
                  . (Architecture arch)
                 => Opcode arch (Operand arch) sh
-                -> [TestBundle (R.TestCase (CS.ConcreteState arch)) f]
+                -> [TestBundle (TestCase arch) f]
                 -> ([R.ResultOrError (CS.ConcreteState arch)] -> Learning arch a)
                 -> Learning arch a
 withTestResults op tests k = do
@@ -56,7 +56,7 @@ withTestResults op tests k = do
 wrapTestBundle :: (Architecture arch)
                => Instruction arch
                -> TestBundle (CS.ConcreteState arch) f
-               -> Learning arch (TestBundle (R.TestCase (CS.ConcreteState arch)) f)
+               -> Learning arch (TestBundle (TestCase arch) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
   return TestBundle { tbTestCases = cases
@@ -68,13 +68,12 @@ wrapTestBundle i tb = do
 makeTestCase :: (Architecture arch)
              => Instruction arch
              -> CS.ConcreteState arch
-             -> Learning arch (R.TestCase (CS.ConcreteState arch))
+             -> Learning arch (TestCase arch)
 makeTestCase i c = do
   tid <- nextNonce
-  asm <- askAssembler
   return R.TestCase { R.testNonce = tid
                     , R.testContext = c
-                    , R.testProgram = asm i
+                    , R.testProgram = [i]
                     }
 
 indexResults :: ResultIndex a -> R.ResultOrError a -> ResultIndex a

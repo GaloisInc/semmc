@@ -64,7 +64,7 @@ import qualified SemMC.Worklist as WL
 
 import           SemMC.ConcreteState ( ConcreteArchitecture, ConcreteState )
 import           SemMC.Stochastic.IORelation ( IORelation )
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Stochastic.IORelation.Types as I
 import qualified SemMC.Stochastic.Statistics as S
 
 -- | A test here is an initial machine state.
@@ -243,7 +243,7 @@ data Config arch =
          -- ^ The number of random tests to generate
          , threadCount :: Int
          , remoteHost :: String
-         , machineState :: R.MachineState (ConcreteState arch)
+         , testSerializer :: I.TestSerializer arch
          }
 
 loadInitialState :: (Architecture arch,

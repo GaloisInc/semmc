@@ -2,7 +2,8 @@
 {-# LANGUAGE DataKinds #-}
 module SemMC.ARM (
   MachineState(..),
-  machineState
+  Instruction,
+  testSerializer
   ) where
 
 import Control.Monad ( replicateM )
@@ -28,10 +29,14 @@ data MachineState =
                }
   deriving (Show)
 
-machineState :: R.MachineState MachineState
-machineState = R.MachineState { R.flattenMachineState = toBS
-                              , R.parseMachineState = fromBS
-                              }
+-- The instruction representation is literal machine code.
+type Instruction = LB.ByteString
+
+testSerializer :: R.TestSerializer MachineState Instruction
+testSerializer = R.TestSerializer { R.flattenMachineState = toBS
+                                  , R.parseMachineState = fromBS
+                                  , R.flattenProgram = mconcat
+                                  }
 
 toBS :: MachineState -> B.ByteString
 toBS ms = LB.toStrict (B.toLazyByteString bld)
