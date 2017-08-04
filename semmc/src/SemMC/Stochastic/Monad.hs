@@ -15,13 +15,6 @@
 module SemMC.Stochastic.Monad (
   Syn,
   SynC,
-  Pseudo,
-  ArchitectureWithPseudo,
-  SynthOpcode(..),
-  SynthInstruction(..),
-  synthInsnToActual,
-  actualInsnToSynth,
-  synthArbitraryOperands,
   SynEnv(..),
   LocalSynEnv(..),
   loadInitialState,
@@ -55,28 +48,22 @@ import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map as Map
-import           Data.Maybe ( isJust )
-import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import qualified Data.Sequence as Seq
-import           GHC.TypeLits ( Symbol )
 import           System.FilePath ( (</>), (<.>) )
-import           Text.Printf ( printf )
 
 import qualified Data.EnumF as P
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( mapSome, Some(..) )
-import           Data.Parameterized.SymbolRepr ( SymbolRepr )
 
 import           Lang.Crucible.BaseTypes ( knownRepr )
 import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
-import           Data.Parameterized.ShapedList ( ShapedList, ShapeRepr )
+import           Data.Parameterized.ShapedList ( ShapeRepr )
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
-import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
@@ -93,6 +80,12 @@ import qualified SemMC.Worklist as WL
 import           SemMC.ConcreteState ( ConcreteArchitecture, ConcreteState )
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.IORelation.Types as I
+import           SemMC.Stochastic.Pseudo
+                 ( ArchitectureWithPseudo(..)
+                 , Pseudo
+                 , SynthOpcode(..)
+                 , SynthInstruction(..)
+                 )
 import qualified SemMC.Stochastic.Statistics as S
 
 -- | A test here is an initial machine state.
@@ -105,115 +98,6 @@ import qualified SemMC.Stochastic.Statistics as S
 -- cache the result of evaluating the target on them, in which case we
 -- can change this to be a pair of states.
 type Test arch = ConcreteState arch
-
-type family Pseudo arch :: (Symbol -> *) -> [Symbol] -> *
-
-class (Architecture arch,
-       P.ShowF (Pseudo arch (Operand arch)),
-       P.TestEquality (Pseudo arch (Operand arch)),
-       P.OrdF (Pseudo arch (Operand arch)),
-       HasRepr (Pseudo arch (Operand arch)) ShapeRepr,
-       D.ArbitraryOperands (Pseudo arch) (Operand arch)) =>
-      ArchitectureWithPseudo arch where
-  assemblePseudo :: proxy arch -> Pseudo arch o sh -> ShapedList o sh -> [Instruction arch]
-
-data SynthOpcode arch sh = RealOpcode (Opcode arch (Operand arch) sh)
-                         | PseudoOpcode (Pseudo arch (Operand arch) sh)
-
-instance (Show (Opcode arch (Operand arch) sh),
-          Show (Pseudo arch (Operand arch) sh)) =>
-         Show (SynthOpcode arch sh) where
-  show (RealOpcode op) = printf "RealOpcode %s" (show op)
-  show (PseudoOpcode pseudo) = printf "PseudoOpcode (%s)" (show pseudo)
-
-instance forall arch . (P.ShowF (Opcode arch (Operand arch)),
-                        P.ShowF (Pseudo arch (Operand arch))) =>
-         P.ShowF (SynthOpcode arch) where
-  withShow _ (_ :: q sh) x =
-    P.withShow (Proxy @(Opcode arch (Operand arch))) (Proxy @sh) $
-    P.withShow (Proxy @(Pseudo arch (Operand arch))) (Proxy @sh) $
-    x
-
-instance (P.TestEquality (Opcode arch (Operand arch)),
-          P.TestEquality (Pseudo arch (Operand arch))) =>
-         P.TestEquality (SynthOpcode arch) where
-  testEquality (RealOpcode op1) (RealOpcode op2) =
-    fmap (\P.Refl -> P.Refl) (P.testEquality op1 op2)
-  testEquality (PseudoOpcode pseudo1) (PseudoOpcode pseudo2) =
-    fmap (\P.Refl -> P.Refl) (P.testEquality pseudo1 pseudo2)
-  testEquality _ _ = Nothing
-
-instance (P.TestEquality (Opcode arch (Operand arch)),
-          P.TestEquality (Pseudo arch (Operand arch))) =>
-         Eq (SynthOpcode arch sh) where
-  op1 == op2 = isJust (P.testEquality op1 op2)
-
-instance (P.OrdF (Opcode arch (Operand arch)),
-          P.OrdF (Pseudo arch (Operand arch))) =>
-         P.OrdF (SynthOpcode arch) where
-  compareF (RealOpcode op1) (RealOpcode op2) =
-    case P.compareF op1 op2 of
-      P.LTF -> P.LTF
-      P.EQF -> P.EQF
-      P.GTF -> P.GTF
-  compareF (RealOpcode _) (PseudoOpcode _) = P.LTF
-  compareF (PseudoOpcode _) (RealOpcode _) = P.GTF
-  compareF (PseudoOpcode pseudo1) (PseudoOpcode pseudo2) =
-    case P.compareF pseudo1 pseudo2 of
-      P.LTF -> P.LTF
-      P.EQF -> P.EQF
-      P.GTF -> P.GTF
-
-instance (P.OrdF (Opcode arch (Operand arch)),
-          P.OrdF (Pseudo arch (Operand arch))) =>
-         Ord (SynthOpcode arch sh) where
-  compare op1 op2 = P.toOrdering (P.compareF op1 op2)
-
-instance (HasRepr ((Opcode arch) (Operand arch)) ShapeRepr,
-          HasRepr ((Pseudo arch) (Operand arch)) ShapeRepr) =>
-  HasRepr (SynthOpcode arch) (ShapedList SymbolRepr) where
-  typeRepr (RealOpcode op) = typeRepr op
-  typeRepr (PseudoOpcode op) = typeRepr op
-
-data SynthInstruction arch =
-  forall sh . SynthInstruction (SynthOpcode arch sh) (ShapedList (Operand arch) sh)
-
-instance (P.TestEquality (Opcode arch (Operand arch)),
-          P.TestEquality (Pseudo arch (Operand arch)),
-          P.TestEquality (Operand arch)) =>
-         Eq (SynthInstruction arch) where
-  SynthInstruction op1 list1 == SynthInstruction op2 list2 =
-    isJust (P.testEquality op1 op2) && isJust (P.testEquality list1 list2)
-
-instance (P.OrdF (Opcode arch (Operand arch)),
-          P.OrdF (Pseudo arch (Operand arch)),
-          P.OrdF (Operand arch)) =>
-         Ord (SynthInstruction arch) where
-  compare (SynthInstruction op1 list1) (SynthInstruction op2 list2) =
-    case P.compareF op1 op2 of
-      P.LTF -> LT
-      P.EQF -> case P.compareF list1 list2 of
-                 P.LTF -> LT
-                 P.EQF -> EQ
-                 P.GTF -> GT
-      P.GTF -> GT
-
-synthInsnToActual :: forall arch . (ArchitectureWithPseudo arch) => SynthInstruction arch -> [Instruction arch]
-synthInsnToActual (SynthInstruction opcode operands) =
-  case opcode of
-    RealOpcode opcode' -> [D.Instruction opcode' operands]
-    PseudoOpcode opcode' -> assemblePseudo (Proxy @arch) opcode' operands
-
-actualInsnToSynth :: Instruction arch -> SynthInstruction arch
-actualInsnToSynth (D.Instruction opcode operands) = SynthInstruction (RealOpcode opcode) operands
-
-synthArbitraryOperands :: (D.ArbitraryOperands (Opcode arch) (Operand arch),
-                           D.ArbitraryOperands (Pseudo arch) (Operand arch))
-                       => A.Gen
-                       -> SynthOpcode arch sh
-                       -> IO (ShapedList (Operand arch) sh)
-synthArbitraryOperands gen (RealOpcode opcode) = D.arbitraryOperands gen opcode
-synthArbitraryOperands gen (PseudoOpcode opcode) = D.arbitraryOperands gen opcode
 
 -- | Synthesis environment.
 data SynEnv t arch =

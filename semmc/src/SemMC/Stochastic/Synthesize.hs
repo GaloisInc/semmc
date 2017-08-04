@@ -33,6 +33,13 @@ import qualified Dismantle.Instruction as D
 import           SemMC.Architecture ( Instruction, Opcode, Operand )
 import qualified SemMC.ConcreteState as C
 import           SemMC.Stochastic.Monad
+import           SemMC.Stochastic.Pseudo
+                 ( Pseudo
+                 , SynthOpcode
+                 , SynthInstruction(..)
+                 , synthArbitraryOperands
+                 , synthInsnToActual
+                 )
 import qualified SemMC.Stochastic.IORelation as I
 
 -- | Attempt to stochastically find a program in terms of the base set that has

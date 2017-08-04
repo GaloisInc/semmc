@@ -22,6 +22,7 @@ import qualified SemMC.Formula.Instantiate as F
 import SemMC.ConcreteState ( ConcreteState, Value )
 import           SemMC.Symbolic ( Sym )
 import SemMC.Stochastic.Monad
+import           SemMC.Stochastic.Pseudo ( ArchitectureWithPseudo, SynthInstruction(..) )
 
 -- | A set of equivalence classes of programs
 data EquivalenceClasses arch = EquivalenceClasses { unClasses :: S.Set (S.Set [SynthInstruction arch]) }

@@ -46,6 +46,7 @@ import SemMC.Stochastic.Generalize ( generalize )
 import SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 import qualified SemMC.Stochastic.Remote as R
 import SemMC.Stochastic.Monad
+import SemMC.Stochastic.Pseudo ( SynthInstruction )
 import SemMC.Stochastic.Synthesize ( synthesize )
 
 {-
