@@ -17,6 +17,7 @@ module SemMC.Architecture.PPC
   , Location(..)
   , testSerializer
   , loadBaseSet
+  , PseudoOpcode(..)
   ) where
 
 import qualified GHC.Err.Located as L
@@ -31,9 +32,12 @@ import           Data.Monoid ( (<>) )
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
+import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
+import           Data.Parameterized.ShapedList ( ShapeRepr )
 import           Data.Parameterized.Some
+import           Data.Parameterized.TH.GADT ( structuralTypeEquality, structuralTypeOrd )
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Void ( absurd, Void )
@@ -45,13 +49,18 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
 
+import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)) )
+import qualified Dismantle.Instruction as D
+import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
+import           Dismantle.PPC.Random ()
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as CS
 import           SemMC.Formula
 import           SemMC.Formula.Parser ( BuildOperandList, readFormulaFromFile )
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
+import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Stochastic.Remote as R
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
 import           SemMC.Util ( makeSymbol, Equal )
@@ -549,3 +558,76 @@ operandToSemanticViewPPC op =
                                  , CS.semvDiff = CS.diffInt
                                  }
         vsrView rno = CS.trivialView Proxy (LocVSR (PPC.VSReg rno))
+
+data PseudoOpcode op sh where
+  -- | @ReplaceByteGPR rA, n, rB@ replaces the @n@th byte of @rA@ with the low
+  -- byte of @rB@.
+  ReplaceByteGPR :: PseudoOpcode PPC.Operand '["Gprc", "U2imm", "Gprc"]
+  -- | @ExtractByteGPR rA, rB, n@ extracts the @n@th byte of @rB@ into the low
+  -- byte of @rA@, zero-extending it.
+  ExtractByteGPR :: PseudoOpcode PPC.Operand '["Gprc", "Gprc", "U2imm"]
+  -- | @ReplaceWordVR vrA, n, rB@ replaces the @n@th word of @vrA@ with the
+  -- value of @rB@.
+  ReplaceWordVR :: PseudoOpcode PPC.Operand '["Vrrc", "U2imm", "Gprc"]
+  -- | @ExtractWordVR rA, vrB, n@ extracts the @n@th word of @vrB@ into @rA@.
+  ExtractWordVR :: PseudoOpcode PPC.Operand '["Gprc", "Vrrc", "U2imm"]
+
+deriving instance Show (PseudoOpcode op sh)
+
+instance ShowF (PseudoOpcode op)
+
+$(return [])
+
+instance TestEquality (PseudoOpcode op) where
+  testEquality = $(structuralTypeEquality [t| PseudoOpcode |] [])
+
+instance OrdF (PseudoOpcode op) where
+  compareF = $(structuralTypeOrd [t| PseudoOpcode |] [])
+
+instance HasRepr (PseudoOpcode op) ShapeRepr where
+  typeRepr ReplaceByteGPR = knownRepr
+  typeRepr ExtractByteGPR = knownRepr
+  typeRepr ReplaceWordVR = knownRepr
+  typeRepr ExtractWordVR = knownRepr
+
+type instance Pseudo PPC = PseudoOpcode
+
+ppcAssemblePseudo :: PseudoOpcode op sh -> ShapedList op sh -> [A.Instruction PPC]
+ppcAssemblePseudo op oplist =
+  case op of
+    ReplaceByteGPR ->
+      case oplist of
+        (target :> PPC.U2imm (W.W n) :> source :> Nil) ->
+          let n' :: W.W 5 = fromIntegral n
+          in [ D.Instruction PPC.RLWIMI ( target :>
+                                          PPC.U5imm (n' * 8 + 7) :>
+                                          PPC.U5imm (n' * 8) :>
+                                          PPC.U5imm (n' * 8) :>
+                                          source :>
+                                          source :>
+                                          Nil
+                                        )
+             ]
+    ExtractByteGPR ->
+      case oplist of
+        (target :> source :> PPC.U2imm (W.W n) :> Nil) ->
+          let n' :: W.W 5 = fromIntegral n
+          in [ D.Instruction PPC.RLWINM ( target :>
+                                          PPC.U5imm 31 :>
+                                          PPC.U5imm (0 - n') :>
+                                          PPC.U5imm (8 + n') :>
+                                          source :>
+                                          Nil
+                                        )
+             ]
+    _ -> error "only ReplaceByteGPR and ExtractByteGPR are supported for now"
+
+instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
+  arbitraryOperands gen op = case op of
+    ReplaceByteGPR -> D.arbitraryShapedList gen
+    ExtractByteGPR -> D.arbitraryShapedList gen
+    ReplaceWordVR  -> D.arbitraryShapedList gen
+    ExtractWordVR  -> D.arbitraryShapedList gen
+
+instance ArchitectureWithPseudo PPC where
+  assemblePseudo _ = ppcAssemblePseudo
