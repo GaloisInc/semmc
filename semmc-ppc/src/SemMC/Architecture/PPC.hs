@@ -42,6 +42,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
+import           GHC.TypeLits ( Symbol )
 import qualified Text.Megaparsec as P
 import           Text.Printf ( printf )
 
@@ -559,7 +560,7 @@ operandToSemanticViewPPC op =
                                  }
         vsrView rno = CS.trivialView Proxy (LocVSR (PPC.VSReg rno))
 
-data PseudoOpcode op sh where
+data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
   -- | @ReplaceByteGPR rA, n, rB@ replaces the @n@th byte of @rA@ with the low
   -- byte of @rB@.
   ReplaceByteGPR :: PseudoOpcode PPC.Operand '["Gprc", "U2imm", "Gprc"]
@@ -593,10 +594,10 @@ instance HasRepr (PseudoOpcode op) ShapeRepr where
 type instance Pseudo PPC = PseudoOpcode
 
 ppcAssemblePseudo :: PseudoOpcode op sh -> ShapedList op sh -> [A.Instruction PPC]
-ppcAssemblePseudo op oplist =
-  case op of
+ppcAssemblePseudo opcode oplist =
+  case opcode of
     ReplaceByteGPR ->
-      case oplist of
+      case (oplist :: ShapedList PPC.Operand '["Gprc", "U2imm", "Gprc"]) of
         (target :> PPC.U2imm (W.W n) :> source :> Nil) ->
           let n' :: W.W 5 = fromIntegral n
           in [ D.Instruction PPC.RLWIMI ( target :>
@@ -609,7 +610,7 @@ ppcAssemblePseudo op oplist =
                                         )
              ]
     ExtractByteGPR ->
-      case oplist of
+      case (oplist :: ShapedList PPC.Operand '["Gprc", "Gprc", "U2imm"]) of
         (target :> source :> PPC.U2imm (W.W n) :> Nil) ->
           let n' :: W.W 5 = fromIntegral n
           in [ D.Instruction PPC.RLWINM ( target :>
@@ -620,7 +621,8 @@ ppcAssemblePseudo op oplist =
                                           Nil
                                         )
              ]
-    _ -> error "only ReplaceByteGPR and ExtractByteGPR are supported for now"
+    ReplaceWordVR -> error "ReplaceWordVR not supported yet"
+    ExtractWordVR -> error "ExtractWordVR not supported yet"
 
 instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
   arbitraryOperands gen op = case op of
