@@ -1,4 +1,4 @@
-resolver: ghc-8.0.2
+resolver: ghc-8.2.1
 
 packages:
 #- submodules/dismantle/dismantle-arm
@@ -71,9 +71,8 @@ extra-deps:
 - profunctors-5.2.1
 - random-1.1
 - reflection-2.1.2
-- regex-1.0.1.3
+- regex-1.0.0.0
 - regex-base-0.93.2
-- regex-pcre-builtin-0.94.4.8.8.35
 - regex-tdfa-1.2.2
 - regex-tdfa-text-1.0.0.3
 - s-cargot-0.1.2.0
