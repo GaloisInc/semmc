@@ -52,11 +52,11 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.metavar "SECONDS"
                                             <> O.help "The number of seconds to wait for all responses from the remote runner" )
                         <*> O.strOption ( O.long "remote-host"
-                                        <> O.short 'h'
+                                        <> O.short 'H'
                                         <> O.metavar "HOST"
                                         <> O.help "The host to run the remote work on" )
                         <*> O.flag Quiet Verbose ( O.long "verbose"
-                                                 <> O.short 'v'
+                                                 <> O.short 'V'
                                                  <> O.help "Print log messages from the remote runner" )
 
 main :: IO ()
