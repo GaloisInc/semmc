@@ -80,6 +80,8 @@ type ArchState arch ex = MapF.MapF (Location arch) ex
 class (IsOperand (Operand arch),
        IsOpcode (Opcode arch),
        IsLocation (Location arch),
+       Show (Instruction arch),
+       ShowF (Operand arch),
        Typeable arch,
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),

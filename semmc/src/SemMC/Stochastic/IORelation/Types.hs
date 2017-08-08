@@ -146,6 +146,11 @@ deriving instance (Architecture arch) => Ord (OperandRef arch sh)
 data TestBundle t l =
   TestBundle { tbTestCases :: [t]
              -- ^ The variants to run
+             , tbTestBase :: t
+             -- ^ The base test case from which the test cases were derived
+             --
+             -- We want this so that we can determine the difference that the
+             -- tweak in the test case made
              , tbResult :: l
              -- ^ The fact we learn if the test cases differ
              }

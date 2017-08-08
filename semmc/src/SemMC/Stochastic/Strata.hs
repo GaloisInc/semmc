@@ -29,13 +29,14 @@ import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
 import Data.Parameterized.TraversableFC ( foldrFC )
+import qualified Lang.Crucible.Solver.Interface as C
 
 import Data.Parameterized.ShapedList ( ShapedList, indexShapedList )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import SemMC.Architecture ( Instruction, Opcode, Operand, operandToLocation )
+import SemMC.Architecture ( Instruction, Opcode, Operand, Location, operandToLocation )
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
@@ -189,20 +190,30 @@ extractFormula opc ops progForm iorel = go F.emptyFormula (F.toList (outputs ior
     go acc (out:rest) =
       case out of
         ImplicitOperand _ -> L.error "Implicit output operands not supported yet"
-        -- FIXME: Should we be using views instead of locations here?  It would
-        -- require referring to views instead of locations in formulas..
         OperandRef (Some idx) -> do
           let operand = indexShapedList ops idx
               Just loc = operandToLocation (Proxy @arch) operand
               Just expr = MapF.lookup loc (F.formDefs progForm)
-          go (undefined expr acc) rest
+          go (defineLocation loc expr acc) rest
 
+defineLocation :: (CS.ConcreteArchitecture arch)
+               => Location arch tp
+               -> C.SymExpr sym tp
+               -> F.Formula sym arch
+               -> F.Formula sym arch
+defineLocation loc expr acc = acc { F.formDefs = MapF.insert loc expr (F.formDefs acc)
+                                  , F.formUses = S.insert (Some loc) (F.formUses acc)
+                                  }
+
+-- | Based on the iorelation, identify the inputs of the opcode (and the
+-- corresponding operands).  For each input operand backed by a location, create
+-- a boundvar and substitute them for the corresponding expressions in formulas.
 parameterizeFormula :: Opcode arch (Operand arch) sh
                     -> ShapedList (Operand arch) sh
                     -> IORelation arch sh
                     -> F.Formula (Sym t) arch
                     -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
-parameterizeFormula = undefined
+parameterizeFormula opcode oplist iorel f = undefined
 
 -- | Generate an arbitrary instruction for the given opcode.
 --

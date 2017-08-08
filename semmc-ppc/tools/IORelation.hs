@@ -108,9 +108,10 @@ printLogMessages c = do
   printLogMessages c
 
 toFP :: PPC.Opcode PPC.Operand sh -> FilePath
-toFP op = printf "%s.sem" (P.showF op)
+toFP op = printf "%s.iorel" (P.showF op)
 
 allOps :: [Some (Witness U.UnfoldShape (PPC.Opcode PPC.Operand))]
-allOps = [Some (Witness PPC.ADD4)
+allOps = [ Some (Witness PPC.ADD4)
+         , Some (Witness PPC.ADD4o)
          ]
   -- $(DT.captureDictionaries ''PPC.Opcode)

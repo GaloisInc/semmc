@@ -42,6 +42,7 @@ executable semmc-ppc-test
   build-depends: base,
                  time,
                  bytestring,
+                 crucible,
                  semmc,
                  semmc-ppc,
                  dismantle-tablegen,

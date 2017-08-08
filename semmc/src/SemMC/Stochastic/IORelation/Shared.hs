@@ -45,7 +45,7 @@ withTestResults :: forall a f arch sh
 withTestResults op tests k = do
   tchan <- askTestChan
   rchan <- askResultChan
-  let remoteTestCases = concatMap tbTestCases tests
+  let remoteTestCases = map tbTestBase tests ++ concatMap tbTestCases tests
   liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
   mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
   case mresults of
@@ -59,7 +59,9 @@ wrapTestBundle :: (Architecture arch)
                -> Learning arch (TestBundle (TestCase arch) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
+  base <- makeTestCase i (tbTestBase tb)
   return TestBundle { tbTestCases = cases
+                    , tbTestBase = base
                     , tbResult = tbResult tb
                     }
 

@@ -41,14 +41,19 @@ randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprs
-      mapM_ addRandomBV vsrs
-      mapM_ addRandomBV specialRegs32
-      mapM_ addRandomBV specialRegs64
+      mapM_ addZeroBV vsrs -- RandomBV vsrs
+      mapM_ addZeroBV specialRegs32
+      mapM_ addZeroBV specialRegs64
 --      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
 
     addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
       bv <- CS.ValueBV <$> liftIO (A.arbitrary gen)
+      St.modify' $ MapF.insert loc bv
+
+    addZeroBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
+    addZeroBV loc = do
+      let bv = CS.ValueBV (W.W 0)
       St.modify' $ MapF.insert loc bv
 
 -- | FIXME: Does not include memory
@@ -127,7 +132,8 @@ getArchState = do
       mapM_ addLoc gprs'
       mapM_ addLoc spregs32'
       mapM_ addLoc spregs64'
-      mapM_ addLoc vsrs'
+      mapM_ addLoc [ (r, CS.ValueBV (W.W 0)) | r <- vsrs ]
+      -- vsrs'
 
 getWord128be :: G.Get Natural
 getWord128be = do
