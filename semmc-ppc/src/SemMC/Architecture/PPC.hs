@@ -621,8 +621,45 @@ ppcAssemblePseudo opcode oplist =
                                           Nil
                                         )
              ]
-    ReplaceWordVR -> error "ReplaceWordVR not supported yet"
-    ExtractWordVR -> error "ExtractWordVR not supported yet"
+    ReplaceWordVR ->
+      case (oplist :: ShapedList PPC.Operand '["Vrrc", "U2imm", "Gprc"]) of
+        (target :> PPC.U2imm (W.W n) :> source :> Nil) ->
+          -- Assumes there's a free chunk of memory pointed to by R31.
+          let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
+              gprWriteLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))
+          in [ -- First, store the current contents of the target into memory.
+               D.Instruction PPC.STVX ( vrLocation :>
+                                        target :>
+                                        Nil
+                                      )
+             , -- Next, write the GPR into the appropriate spot.
+               D.Instruction PPC.STW ( gprWriteLocation :>
+                                       source :>
+                                       Nil
+                                     )
+             , -- Finally, read the target back from memory.
+               D.Instruction PPC.LVX ( target :>
+                                       vrLocation :>
+                                       Nil
+                                     )
+             ]
+    ExtractWordVR ->
+      case (oplist :: ShapedList PPC.Operand '["Gprc", "Vrrc", "U2imm"]) of
+        (target :> source :> PPC.U2imm (W.W n) :> Nil) ->
+          -- Assumes there's a free chunk of memory pointed to by R31.
+          let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
+              gprReadLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))
+          in [ -- First, write the contents of the vector register into memory.
+               D.Instruction PPC.STVX ( vrLocation :>
+                                        source :>
+                                        Nil
+                                      )
+             , -- Then, read the GPR from an offset into that saved register.
+               D.Instruction PPC.LWZ ( target :>
+                                       gprReadLocation :>
+                                       Nil
+                                     )
+             ]
 
 instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
   arbitraryOperands gen op = case op of
