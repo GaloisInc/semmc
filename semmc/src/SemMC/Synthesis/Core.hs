@@ -5,11 +5,16 @@
 {-# LANGUAGE RankNTypes #-}
 module SemMC.Synthesis.Core
   ( synthesizeFormula
+  , SynthesisEnvironment(..)
   , SynthesisParams(..)
   ) where
 
+import           Control.Monad ( when )
 import           Control.Monad.Reader
 import           Control.Monad.State
+import           Data.Parameterized.Classes ( OrdF )
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some ( Some, viewSome )
 import qualified Data.Sequence as Seq
 import           Data.Foldable
 import qualified Data.Set as Set
@@ -40,9 +45,14 @@ condenseFormula sym = fmap (coerceFormula :: Formula sym (TemplatedArch arch) ->
 
 -- Algorithm Synthesize, from [Srinivasan and Reps 2015]:
 
+data SynthesisEnvironment sym arch =
+  SynthesisEnvironment { synthSym :: sym
+                       , synthBaseSet :: BaseSet sym arch
+                       , synthInsns :: [TemplatedInstructionFormula sym arch]
+                       }
+
 data SynthesisParams sym arch =
-  SynthesisParams { synthSym :: sym
-                  , synthBaseSet :: BaseSet sym arch
+  SynthesisParams { synthEnv :: SynthesisEnvironment sym arch
                   , synthMaxLength :: Int
                   }
 
@@ -51,13 +61,33 @@ data SynthesisState sym arch =
                  , synthPrefixes :: Seq.Seq [TemplatedInstructionFormula sym arch]
                  }
 
-footprintFilter :: (Architecture arch)
-                => Formula (S.SimpleBuilder t st) arch
-                -> Formula (S.SimpleBuilder t st) arch
+askSym :: (MonadReader (SynthesisParams sym arch) m) => m sym
+askSym = reader (synthSym . synthEnv)
+
+askBaseSet :: (MonadReader (SynthesisParams sym arch) m) => m (BaseSet sym arch)
+askBaseSet = reader (synthBaseSet . synthEnv)
+
+askInsns :: (MonadReader (SynthesisParams sym arch) m) => m [TemplatedInstructionFormula sym arch]
+askInsns = reader (synthInsns . synthEnv)
+
+askMaxLength :: (MonadReader (SynthesisParams sym arch) m) => m Int
+askMaxLength = reader synthMaxLength
+
+calcFootprint :: (OrdF (Location arch))
+              => [TemplatedInstructionFormula sym arch]
+              -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
+calcFootprint = foldl' asdf (Set.empty, Set.empty)
+  where asdf (curInput, curOutput) (tifFormula -> Formula { formUses = uses, formDefs = defs }) =
+          (curInput `Set.union` (uses Set.\\ curOutput),
+           curOutput `Set.union` Set.fromList (MapF.keys defs))
+
+footprintFilter :: (OrdF (Location arch))
+                => Formula sym arch
+                -> [TemplatedInstructionFormula sym arch]
                 -> Bool
-footprintFilter target candidate =
-     formUses candidate `Set.isSubsetOf` formUses target
-  && Set.fromList (mapFKeys (formDefs candidate)) `Set.isSubsetOf` Set.fromList (mapFKeys (formDefs target))
+footprintFilter (Formula { formUses = targetUses, formDefs = targetDefs }) candidate =
+  let (candUses, candOutputs) = calcFootprint candidate
+  in candUses `Set.isSubsetOf` targetUses && candOutputs `Set.isSubsetOf` (Set.fromList (MapF.keys targetDefs))
 
 instantiate :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
                 MonadState (SynthesisState (S.SimpleBackend t) arch) m,
@@ -67,14 +97,11 @@ instantiate :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
             => Formula (S.SimpleBackend t) arch
             -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
             -> m (Maybe [Instruction arch])
-instantiate target trial = do
-  SynthesisParams { synthSym = sym
-                  , synthBaseSet = baseSet
-                  } <- ask
-  trialFormula <- liftIO $ condenseFormula sym trial
-  -- TODO: footprintFilter can probably be run faster before condensing the formula
-  case footprintFilter target trialFormula of
-    True -> do
+instantiate target trial
+  | footprintFilter target trial = do
+      sym <- askSym
+      baseSet <- askBaseSet
+      trialFormula <- liftIO $ condenseFormula sym trial
       st <- get
       liftIO (cegis sym baseSet target (synthTests st) trial trialFormula)
         >>= \case
@@ -85,7 +112,7 @@ instantiate target trial = do
                         , synthPrefixes = oldPrefixes Seq.|> trial
                         })
                 return Nothing
-    False -> return Nothing
+  | otherwise = return Nothing
 
 synthesizeFormula' :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
                        MonadState (SynthesisState (S.SimpleBackend t) arch) m,
@@ -93,16 +120,16 @@ synthesizeFormula' :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
                        Architecture arch,
                        Architecture (TemplatedArch arch))
                    => Formula (S.SimpleBackend t) arch
-                   -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                    -> m (Maybe [Instruction arch])
-synthesizeFormula' target possibleInsns = do
+synthesizeFormula' target = do
   -- I'm still conflicted whether to use MonadState here or not...
   st <- get
   case Seq.viewl (synthPrefixes st) of
     prefix Seq.:< prefixesTail -> do
-      maxLen <- reader synthMaxLength
+      maxLen <- askMaxLength
       if 1 + length prefix > maxLen then return Nothing else do
       put $ st { synthPrefixes = prefixesTail }
+      possibleInsns <- askInsns
       -- N.B.: 'instantiate' here will add back to the prefixes if it's worth
       -- saving. I'm not a big fan of MonadState here, but it was the nicest
       -- solution I could come up with.
@@ -110,7 +137,7 @@ synthesizeFormula' target possibleInsns = do
         map (\insn -> instantiate target (prefix ++ [insn])) possibleInsns
       case result of
         Just insns -> return (Just insns)
-        Nothing -> synthesizeFormula' target possibleInsns
+        Nothing -> synthesizeFormula' target
     Seq.EmptyL -> return Nothing
 
 synthesizeFormula :: forall t arch.
@@ -121,9 +148,8 @@ synthesizeFormula :: forall t arch.
                   -> Formula (S.SimpleBackend t) arch
                   -> IO (Maybe [Instruction arch])
 synthesizeFormula params target = do
-  insns <- templatedInstructions (synthSym params) (synthBaseSet params)
   flip runReaderT params
-    $ evalStateT (synthesizeFormula' target insns)
+    $ evalStateT (synthesizeFormula' target)
     $ SynthesisState { synthTests = []
                      , synthPrefixes = Seq.singleton []
                      }

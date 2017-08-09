@@ -28,7 +28,7 @@ module SemMC.Synthesis.Template
   , TemplatedOperand(..)
   , WrappedRecoverOperandFn(..)
   , TemplatedArch
-  , TemplatedFormula
+  , TemplatedFormula(..)
   , TemplatableOperand(..)
   , TemplatableOperands
   , TemplatableOpcode
@@ -252,6 +252,9 @@ instance (ShowF ((Opcode arch) (Operand arch)),
        => Show (TemplatedInstructionFormula sym arch) where
   show (TemplatedInstructionFormula op tf) =
     unwords ["TemplatedInstructionFormula", showF op, showF tf]
+
+tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
+tifFormula (TemplatedInstructionFormula (_ tf) = tfFormula tf
 
 -- | A list of all possible templated instructions, given some opcodes.
 templatedInstructions :: (TemplateConstraints arch)

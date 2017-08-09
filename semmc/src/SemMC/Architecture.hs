@@ -81,6 +81,7 @@ class (IsOperand (Operand arch),
        IsOpcode (Opcode arch),
        IsLocation (Location arch),
        Typeable arch,
+       ShowF (Operand arch),
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),
        EnumF (Opcode arch (Operand arch)))

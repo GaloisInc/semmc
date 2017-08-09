@@ -131,7 +131,6 @@ cegis :: (Architecture arch)
       -> Formula (S.SimpleBackend t) arch
       -> IO (Either (TestCases (S.SimpleBackend t) arch) [Instruction arch])
 cegis sym semantics target tests trial trialFormula = do
-  -- initial dumb thing: return Just [] if all the tests are satisfiable
   check <- foldrM (\test b -> S.andPred sym b =<< buildEquality sym test trialFormula) (S.truePred sym) tests
 
   insns <- checkSatZ3 sym check (handleSatResult trial)
