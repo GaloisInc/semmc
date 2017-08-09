@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module SemMC.Synthesis
-  ( mcSynth
+  ( setupEnvironment
+  , mcSynth
   ) where
 
 import           Data.Typeable
@@ -14,16 +15,27 @@ import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.DivideAndConquer
 import           SemMC.Synthesis.Template
 
+setupEnvironment :: (Architecture arch,
+                     Architecture (TemplatedArch arch),
+                     Typeable arch)
+                 => S.SimpleBackend t
+                 -> BaseSet (S.SimpleBackend t) arch
+                 -> IO (SynthesisEnvironment (S.SimpleBackend t) arch)
+setupEnvironment sym baseSet = do
+  insns <- templatedInstructions sym baseSet
+  return $! SynthesisEnvironment { synthSym = sym
+                                 , synthBaseSet = baseSet
+                                 , synthInsns = insns
+                                 }
+
 mcSynth :: (Architecture arch,
             Architecture (TemplatedArch arch),
             Typeable arch)
-        => S.SimpleBackend t
-        -> MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula (S.SimpleBackend t) (TemplatedArch arch))
+        => SynthesisEnvironment (S.SimpleBackend t) arch
         -> Formula (S.SimpleBackend t) arch
         -> IO (Maybe [Instruction arch])
-mcSynth sym baseSet target = do
-  let params = SynthesisParams { synthSym = sym
-                               , synthBaseSet = baseSet
+mcSynth env target = do
+  let params = SynthesisParams { synthEnv = env
                                , synthMaxLength = 0
                                }
   ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target

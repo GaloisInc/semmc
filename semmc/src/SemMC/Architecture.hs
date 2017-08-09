@@ -83,6 +83,7 @@ class (IsOperand (Operand arch),
        Show (Instruction arch),
        ShowF (Operand arch),
        Typeable arch,
+       ShowF (Operand arch),
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),
        EnumF (Opcode arch (Operand arch)))

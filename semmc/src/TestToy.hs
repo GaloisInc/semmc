@@ -123,7 +123,8 @@ doThing2 = do
   -- target <- fooFormula sym
   target <- independentFormula sym
 
-  print =<< mcSynth sym baseset target
+  env <- setupEnvironment sym baseset
+  print =<< mcSynth env target
   print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
 doThing3 :: IO ()
@@ -147,4 +148,5 @@ doThing4 = do
               $ MapF.empty
 
   ind <- independentFormula sym
-  print =<< mcSynth sym baseset ind
+  env <- setupEnvironment sym baseset
+  print =<< mcSynth env ind
