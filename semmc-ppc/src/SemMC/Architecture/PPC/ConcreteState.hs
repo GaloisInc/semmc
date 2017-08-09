@@ -41,7 +41,7 @@ randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprs
-      mapM_ addZeroBV vsrs -- RandomBV vsrs
+      mapM_ addRandomBV vsrs
       mapM_ addZeroBV specialRegs32
       mapM_ addZeroBV specialRegs64
 --      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
@@ -132,8 +132,7 @@ getArchState = do
       mapM_ addLoc gprs'
       mapM_ addLoc spregs32'
       mapM_ addLoc spregs64'
-      mapM_ addLoc [ (r, CS.ValueBV (W.W 0)) | r <- vsrs ]
-      -- vsrs'
+      mapM_ addLoc vsrs'
 
 getWord128be :: G.Get Natural
 getWord128be = do
