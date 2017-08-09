@@ -42,7 +42,10 @@ data Atom = AIdent String
           deriving (Show)
 
 parseIdent :: P.Parser String
-parseIdent = P.many P.letter
+parseIdent = do
+  l1 <- P.letter
+  ls <- P.many (P.try P.alphaNum <|> P.oneOf "[]:")
+  return (l1 : ls)
 
 parseWord :: P.Parser Word
 parseWord = do
@@ -83,8 +86,8 @@ fromIORelation p ior =
 
     toSExpr rel =
       case rel of
-        ImplicitOperand (Some loc) -> SC.SAtom (AIdent (CS.showView loc))
-        OperandRef (Some ix) -> SC.SAtom (AWord (indexToWord p ix))
+        ImplicitOperand (Some loc) -> SC.SCons (SC.SAtom (AIdent "implicit")) (SC.SAtom (AIdent (CS.showView loc)))
+        OperandRef (Some ix) -> SC.SCons (SC.SAtom (AIdent "operand")) (SC.SAtom (AWord (indexToWord p ix)))
 
 indexToWord :: Proxy arch -> Index sh s -> Word
 indexToWord p ix =
