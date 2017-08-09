@@ -6,7 +6,7 @@ remote-runner: remote-runner.c
 # We build this as a static binary because our PPC box doesn't have a 32 bit
 # userland at all, but the kernel supports 32 bit binaries.
 remote-runner.ppc32: remote-runner.c
-	powerpc-linux-gnu-gcc -static $< -o $@
+	powerpc-linux-gnu-gcc -static $< -o $@ -g -O1
 
 # A 32 bit ARM build suitable for ARMv7 or AArch32
 remote-runner.arm: remote-runner.c

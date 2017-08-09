@@ -62,6 +62,9 @@
 // The number of bytes for our hand-allocated memory regions
 #define MEM_REGION_BYTES 32
 
+int pageSize;
+int waitForSignal(pid_t);
+
 #define LOG_FILE "/tmp/remote-runner.log"
 #if defined(LOGGING)
 
@@ -135,9 +138,6 @@ void checkedPtrace(enum __ptrace_request rq, pid_t pid, void* addr, void* data) 
 //
 // Note, this doesn't support the ZMM registers from AVX2 yet
 #define SEM_NVECREGS 16
-
-uint8_t raiseTrap[] = {0x7f, 0xe0, 0x00, 0x08};
-#define RAISE_TRAP asm("trap")
 
 typedef struct {
   uint64_t chunks[4];
@@ -276,6 +276,12 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   memcpy(&rs->mem2, memSpace + sizeof(rs->mem1), sizeof(rs->mem2));
 }
 
+void flushICache(pid_t childPid, uint8_t* programSpace) {
+
+  (void)childPid;
+  (void)programSpace;
+}
+
 #undef CAST_PTR
 #elif defined(__i386__)
 
@@ -353,6 +359,12 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   memcpy(&rs->mem2, memSpace + sizeof(rs->mem1), sizeof(rs->mem2));
 }
 
+void flushICache(pid_t childPid, uint8_t* programSpace) {
+
+  (void)childPid;
+  (void)programSpace;
+}
+
 #elif defined(__aarch64__)
 
 #elif defined(__powerpc__)
@@ -386,12 +398,13 @@ typedef struct {
   uint32_t cr;
   uint64_t fpscr;
   VR vsrs[SEM_NVSRS];
-  uint8_t mem1[MEM_REGION_BYTES];
-  uint8_t mem2[MEM_REGION_BYTES];
+  /* uint8_t mem1[MEM_REGION_BYTES]; */
+  /* uint8_t mem2[MEM_REGION_BYTES]; */
 } RegisterState;
 
 void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace, RegisterState *rs) {
   struct pt_regs regs;
+  memset(&regs, 0, sizeof(regs));
 
   checkedPtrace(PTRACE_GETREGS, childPid, 0, (void *) &regs);
 
@@ -417,11 +430,15 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
   for (int i = 0; i < SEM_NGPRS; i++) {
     regs.gpr[i] = rs->gprs[i];
   }
-//  regs.msr  = rs->msr;
-  regs.ctr  = rs->ctr;
-  regs.link = rs->link;
-  regs.xer  = rs->xer;
-  regs.ccr  = rs->cr;
+  // For now, don't populate MSR.  That will be tricky, because changes to MSR
+  // affect processor endianness.  If we want to do this, we'll need to be
+  // careful to generate reasonable MSR values.
+  //
+  // regs.msr  = rs->msr;
+  regs.ctr  = 0; // rs->ctr;
+  regs.link = 0; // rs->link;
+  regs.xer  = 0; // rs->xer;
+  regs.ccr  = 0; // rs->cr;
 
   // Set the IP to be at the start of our test program
   regs.nip = CAST_PTR(programSpace);
@@ -436,15 +453,19 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
     fpregs[i] = rs->vsrs[i].chunks[0];
   }
   fpregs[SEM_NFPRS] = rs->fpscr;
+
   checkedPtrace(PTRACE_SETFPREGS, childPid, 0, (void *) &fpregs);
 
-  uint64_t vsrhalves[SEM_NFPRS];
-  checkedPtrace(PTRACE_GETVSRREGS, childPid, 0, (void *) &vsrhalves);
-  // Set up the other halves of the low VSR registers
-  for (int i = 0; i < SEM_NFPRS; i++) {
-    vsrhalves[i] = rs->vsrs[i].chunks[1];
-  }
-  checkedPtrace(PTRACE_SETVSRREGS, childPid, 0, (void *) &vsrhalves);
+  // Our processor doesn't support VSX registers
+
+  /* uint64_t vsrhalves[SEM_NFPRS]; */
+  /* checkedPtrace(PTRACE_GETVSRREGS, childPid, 0, (void *) &vsrhalves); */
+  /* // Set up the other halves of the low VSR registers */
+  /* for (int i = 0; i < SEM_NFPRS; i++) { */
+  /*   vsrhalves[i] = rs->vsrs[i].chunks[1]; */
+  /* } */
+
+  /* checkedPtrace(PTRACE_SETVSRREGS, childPid, 0, (void *) &vsrhalves); */
 
   // Anonymous struct to ensure proper alignment
   struct {
@@ -457,24 +478,27 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
   for (int i = 0; i < SEM_NVRS; i++) {
     vrbuf.vrregs[i] = rs->vsrs[SEM_NFPRS + i];
   }
+
   checkedPtrace(PTRACE_SETVRREGS, childPid, 0, (void *) &vrbuf);
 }
 
 void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs) {
   struct pt_regs regs;
+  memset(&regs, 0, sizeof(regs));
 
   checkedPtrace(PTRACE_GETREGS, childPid, 0, (void *) &regs);
 
   for (int i = 0; i < SEM_NGPRS; i++) {
     rs->gprs[i] = regs.gpr[i];
   }
-//  rs->msr = regs.msr;
+  // rs->msr = regs.msr;
   rs->ctr = regs.ctr;
   rs->link = regs.link;
   rs->xer = regs.xer;
   rs->cr = regs.ccr;
 
   uint64_t fpregs[SEM_NFPRS+1];
+  memset(fpregs, 0, sizeof(fpregs));
 
   checkedPtrace(PTRACE_GETFPREGS, childPid, 0, (void *) &fpregs);
 
@@ -484,14 +508,14 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   }
   rs->fpscr = fpregs[SEM_NFPRS];
 
-  uint64_t vsrhalves[SEM_NFPRS];
+  /* uint64_t vsrhalves[SEM_NFPRS]; */
 
-  checkedPtrace(PTRACE_GETVSRREGS, childPid, 0, (void *) &vsrhalves);
+  /* checkedPtrace(PTRACE_GETVSRREGS, childPid, 0, (void *) &vsrhalves); */
 
-  // Copy in the other halves of the low VSR regs
-  for (int i = 0; i < SEM_NFPRS; i++) {
-    rs->vsrs[i].chunks[1] = vsrhalves[i];
-  }
+  /* // Copy in the other halves of the low VSR regs */
+  /* for (int i = 0; i < SEM_NFPRS; i++) { */
+  /*   rs->vsrs[i].chunks[1] = vsrhalves[i]; */
+  /* } */
 
   // Anonymous struct to ensure proper alignment
   struct {
@@ -500,12 +524,70 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
     uint32_t vrweird;
   } vrbuf;
 
+  memset(&vrbuf, 0, sizeof(vrbuf));
   checkedPtrace(PTRACE_GETVRREGS, childPid, 0, (void *) &vrbuf);
 
   // Copy in the VR regs
   for (int i = 0; i < SEM_NVRS; i++) {
     rs->vsrs[SEM_NFPRS + i] = vrbuf.vrregs[i];
   }
+}
+
+uint8_t flushStack[4096];
+
+void ppcFlush(uint8_t* programSpace) {
+  // The details of cache flushing on PPC are a bit funky.  The best description
+  // I found is at
+  //
+  // http://uninformed.org/index.cgi?v=1&a=1&p=8
+  //
+  // Basically, the icache reads directly from memory instead of the data cache
+  // (i.e., it is incoherent).  This means that we have to first flush the data
+  // cache to memory (dcbf) before we flush and repopulate the icache (icbi).
+  //
+  // Note that it would be awesome if we could just use mprotect to trick the
+  // system into flushing the necessary caches for us.  Unfortunately, it
+  // doesn't seem to work, so we have to do it manually.
+  const int cacheLineSize = 32;
+  for(int i = 0; i < pageSize; i+=cacheLineSize) {
+    asm("dcbf %[program], %[lineAddr]"
+        :
+        : [lineAddr] "r" (i),  [program] "r" (programSpace)
+        );
+  }
+  asm("sync");
+  for(int i = 0; i < pageSize; i+=cacheLineSize) {
+    asm("icbi %[program], %[lineAddr]"
+        :
+        : [lineAddr] "r" (i),  [program] "r" (programSpace)
+        );
+  }
+  asm("sync");
+  asm("isync");
+  RAISE_TRAP;
+}
+
+void flushICache(pid_t childPid, uint8_t* programSpace) {
+  struct pt_regs regs;
+  checkedPtrace(PTRACE_GETREGS, childPid, 0, (void*)&regs);
+  // The first argument to ppcFlush goes in r3 (according to the PPC calling
+  // convention).
+  //
+  // r1 must contain the stack pointer.  We set up a fake stack in static memory
+  // (the stack pointer was probably clobbered by the previous test, which
+  // filled r1 with a random value, so we need to explicitly reset it here).
+  // Note that `ppcFlush` doesn't really use the stack, except GCC generates a
+  // function prelude that pushes the return value on to the stack.  It
+  // segfaults if we provide junk.
+  regs.gpr[1] = CAST_PTR(flushStack) + 4000;
+  regs.gpr[3] = CAST_PTR(programSpace);
+  regs.nip = CAST_PTR(ppcFlush);
+  checkedPtrace(PTRACE_SETREGS, childPid, 0, (void*)&regs);
+  checkedPtrace(PTRACE_CONT, childPid, NULL, NULL);
+  // This runs ppcFlush, which ends in a trap.  That will put us back into the
+  // invariant state where the tracee is stopped.
+  int sig = waitForSignal(childPid);
+  assert(sig == SIGTRAP);
 }
 
 #endif
@@ -617,7 +699,7 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
     return WORK_ERROR_NONONCE;
   }
 
-  LOG("  nonce = %llu\n", item->nonce);
+  LOG("  nonce = %llu\n", le64toh(item->nonce));
 
   uint16_t regStateBytes;
   nItems = fread(&regStateBytes, 1, sizeof(regStateBytes), stream);
@@ -688,6 +770,9 @@ ResponseTag processWorkItem(pid_t childPid, uint8_t* programSpace, uint8_t* memS
   int sig;
 
   mapProgram(programSpace, item);
+  // NOTE: We flush the icache before we set up the register state, as flushing
+  // the will require mucking with register values.
+  flushICache(childPid, programSpace);
   setupRegisterState(childPid, programSpace, memSpace, &item->regs);
   LOG("Sending SIGCONT\n");
   checkedPtrace(PTRACE_CONT, childPid, NULL, NULL);
@@ -821,7 +906,7 @@ int traceChild(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace) {
       writeReadErrorResult(stdout, tag, "Fork failed");
       break;
     case WORK_ITEM: {
-      LOG("Got a work item with nonce %llu\n", item.nonce);
+      LOG("Got a work item with nonce %llu\n", le64toh(item.nonce));
       RegisterState postState;
       memset(&postState, 0, sizeof(postState));
       rtag = processWorkItem(childPid, programSpace, memSpace, &item, &postState);

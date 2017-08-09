@@ -42,13 +42,18 @@ randomState gen = St.execStateT randomize MapF.empty
     randomize = do
       mapM_ addRandomBV gprs
       mapM_ addRandomBV vsrs
-      mapM_ addRandomBV specialRegs32
-      mapM_ addRandomBV specialRegs64
+      mapM_ addZeroBV specialRegs32
+      mapM_ addZeroBV specialRegs64
 --      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
 
     addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
       bv <- CS.ValueBV <$> liftIO (A.arbitrary gen)
+      St.modify' $ MapF.insert loc bv
+
+    addZeroBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
+    addZeroBV loc = do
+      let bv = CS.ValueBV (W.W 0)
       St.modify' $ MapF.insert loc bv
 
 -- | FIXME: Does not include memory

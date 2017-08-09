@@ -16,6 +16,7 @@ import qualified Data.Map.Strict as M
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
+import Text.Printf ( printf )
 
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Classes as P
@@ -33,7 +34,6 @@ import SemMC.Stochastic.IORelation.Shared
 import SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R
 
-
 -- | Make a random instruction that does not reference any implicit operands.
 --
 -- This could be made more efficient - right now, it just tries to generate
@@ -48,9 +48,11 @@ generateExplicitInstruction proxy op implicitOperands = do
   insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
   case insn of
     D.Instruction _ ops ->
-      case foldrFCIndexed (matchesOperand proxy implicitOperands) False ops of
-        True -> generateExplicitInstruction proxy op implicitOperands
-        False -> return insn
+      case foldrFCIndexed (matchesOperand proxy implicitOperands) (False, S.empty) ops of
+        (False, sops)
+          -- The operands are all distinct and no operands are implicit
+          | S.size sops == length (instructionRegisterOperands proxy ops) -> return insn
+        _ -> generateExplicitInstruction proxy op implicitOperands
 
 -- | Generate test cases and send them off to the remote runner.  Collect and
 -- interpret the results to create an IORelation that describes the explicit
@@ -100,22 +102,21 @@ buildIORelation :: forall arch sh
                 -> TestBundle (TestCase arch) (ExplicitFact arch)
                 -> Learning arch (IORelation arch sh)
 buildIORelation op explicitOperands ri iorel tb = do
-  -- If the set of explicit output locations discovered by this test bundle is
-  -- non-empty, then the location mentioned in the learned fact is an input.
-  -- Keep that in mind while augmenting the IORelation
-  explicitOutputLocs <- S.unions <$> mapM (collectExplicitLocations explicitOperands explicitLocs ri) (tbTestCases tb)
-  -- FIXME: Should it be an error if this is null?  That would be pretty strange...
-  case S.null explicitOutputLocs of
-    True -> return iorel
-    False ->
-      case tbResult tb of
-        ExplicitFact { lIndex = ix, lOpcode = lop }
-          | Just P.Refl <- P.testEquality op lop ->
-            let newRel = IORelation { inputs = S.singleton (OperandRef (Some ix))
-                                    , outputs = S.fromList $ map OperandRef (F.toList explicitOutputLocs)
-                                    }
-            in return (iorel <> newRel)
-          | otherwise -> L.error ("Opcode mismatch: expected " ++ P.showF op ++ " but got " ++ P.showF lop)
+  case tbResult tb of
+    ExplicitFact { lIndex = alteredIndex, lOpcode = lop }
+      | Just P.Refl <- P.testEquality op lop -> do
+          explicitOutputLocs <- S.unions <$> mapM (collectExplicitLocations alteredIndex explicitOperands explicitLocs ri) (tbTestCases tb)
+          case S.null explicitOutputLocs of
+            True -> return iorel
+            False ->
+              -- If the set of explicit output locations discovered by this test
+              -- bundle is non-empty, then the location mentioned in the learned
+              -- fact is an input.
+              let newRel = IORelation { inputs = S.singleton (OperandRef (Some alteredIndex))
+                                      , outputs = S.fromList $ map OperandRef (F.toList explicitOutputLocs)
+                                      }
+              in return (iorel <> newRel)
+      | otherwise -> L.error (printf "Opcode mismatch; expected %s but got %s" (P.showF op) (P.showF lop))
   where
     explicitLocs = instructionRegisterOperands (Proxy :: Proxy arch) explicitOperands
 
@@ -123,19 +124,21 @@ buildIORelation op explicitOperands ri iorel tb = do
 --
 -- If the test failed, return an empty set.
 collectExplicitLocations :: (CS.ConcreteArchitecture arch)
-                         => ShapedList (Operand arch) sh
+                         => Index sh tp
+                         -> ShapedList (Operand arch) sh
                          -> [IndexedSemanticView arch sh]
                          -> ResultIndex (CS.ConcreteState arch)
                          -> TestCase arch
                          -> Learning arch (S.Set (Some (Index sh)))
-collectExplicitLocations _opList explicitLocs ri tc = do
+collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
   case M.lookup (R.testNonce tc) (riSuccesses ri) of
     Nothing -> return S.empty
     Just res -> F.foldrM (addLocIfDifferent (R.resultContext res)) S.empty explicitLocs
   where
     addLocIfDifferent resCtx (IndexedSemanticView idx (CS.SemanticView { CS.semvView = opView })) s
+      | Just P.Refl <- P.testEquality alteredIndex idx = return s
       | output <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS resCtx opView)
-      , input <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS (R.testContext tc) opView) =
+      , input <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS (R.testContext tc) opView) = do
           case input /= output of
             True -> return (S.insert (Some idx) s)
             False -> return s
@@ -170,6 +173,7 @@ generateExplicitTestVariants i s0 =
     genVar opcode (IndexedSemanticView ix (CS.SemanticView { CS.semvView = view })) = do
       cases <- generateVariantsFor s0 opcode ix (Some view)
       return TestBundle { tbTestCases = cases
+                        , tbTestBase = s0
                         , tbResult = ExplicitFact { lOpcode = opcode
                                                   , lIndex = ix
                                                   , lLocation = view
@@ -200,13 +204,13 @@ matchesOperand :: (CS.ConcreteArchitecture arch)
                -> [Some (CS.View arch)]
                -> Index sh tp
                -> Operand arch tp
-               -> Bool
-               -> Bool
-matchesOperand proxy implicits _ix operand matches =
+               -> (Bool, S.Set (Some (CS.View arch)))
+               -> (Bool, S.Set (Some (CS.View arch)))
+matchesOperand proxy implicits _ix operand (matches, sops) =
   case CS.operandToSemanticView proxy operand of
-    Nothing -> matches
+    Nothing -> (matches, sops)
     Just (CS.SemanticView { CS.semvView = view }) ->
-      matches || any (== (Some view)) implicits
+      (matches || any (== (Some view)) implicits, S.insert (Some view) sops)
 
 {- Note [Test Form]
 

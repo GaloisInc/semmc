@@ -82,24 +82,31 @@ buildImplicitRelation :: (CS.ConcreteArchitecture arch)
                       -> TestBundle (TestCase arch) (ImplicitFact arch)
                       -> Learning arch (IORelation arch sh)
 buildImplicitRelation op rix iorel tb = do
-  implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix (tbResult tb)) (tbTestCases tb)
-  return (iorel <> implicitLocs)
+  case M.lookup (R.testNonce (tbTestBase tb)) (riSuccesses rix) of
+    Just baseRes -> do
+      implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix baseRes (tbResult tb)) (tbTestCases tb)
+      return (iorel <> implicitLocs)
+    Nothing ->
+      case M.lookup (R.testNonce (tbTestBase tb)) (riExitedWithSignal rix) of
+        Just sno -> L.error ("Exited with signal " ++ show sno)
+        Nothing -> L.error "Non-signal failure"
 
 collectImplicitOutputLocations :: forall arch sh
                                 . (CS.ConcreteArchitecture arch)
                                => Opcode arch (Operand arch) sh
                                -> ResultIndex (CS.ConcreteState arch)
+                               -> R.TestResult (CS.ConcreteState arch)
                                -> ImplicitFact arch
                                -> TestCase arch
                                -> Learning arch (IORelation arch sh)
-collectImplicitOutputLocations _op rix f tc =
+collectImplicitOutputLocations _op rix baseRes f tc =
   case M.lookup (R.testNonce tc) (riSuccesses rix) of
     Nothing -> return mempty
     Just res ->
       case f of
         ImplicitFact { ifExplicits = explicitOperands
                      , ifLocation = loc0
-                     } ->
+                     } -> do
           F.foldrM (addLocIfImplicitAndDifferent loc0 explicitOperands) mempty (MapF.toList (R.resultContext res))
   where
     addLocIfImplicitAndDifferent :: Some (CS.View arch)
@@ -112,16 +119,18 @@ collectImplicitOutputLocations _op rix f tc =
       in case locationType loc of
         BaseBVRepr nr ->
           case withKnownNat nr (let tv = CS.trivialView proxy loc
-                                in (CS.peekMS (R.testContext tc) tv, tv)) of
-            (preVal, tv) ->
+                                in (CS.peekMS (R.testContext tc) tv, CS.peekMS (R.resultContext baseRes) tv,tv)) of
+            (_preVal, baseResVal, tv) ->
               case () of
-                () | Some preVal == Some postVal -> return s
-                   | Some tv /= loc0 && S.member (Some tv) explicitOperands ->
-                     return s { inputs = S.insert (ImplicitOperand loc0) (inputs s) }
-                   | Some tv /= loc0 ->
+                () | Some baseResVal == Some postVal -> return s
+                   | Some tv /= loc0 && not (S.member (Some tv) explicitOperands) && not (S.member loc0 explicitOperands) ->
                      return s { inputs = S.insert (ImplicitOperand loc0) (inputs s)
                               , outputs = S.insert (ImplicitOperand (Some tv)) (outputs s)
                               }
+                   | Some tv /= loc0 && not (S.member loc0 explicitOperands) && S.member (Some tv) explicitOperands ->
+                     return s { inputs = S.insert (ImplicitOperand loc0) (inputs s) }
+                   | Some tv /= loc0 && S.member loc0 explicitOperands && not (S.member (Some tv) explicitOperands) ->
+                     return s { outputs = S.insert (ImplicitOperand (Some tv)) (outputs s) }
                    | otherwise -> return s
         lt -> L.error ("Unexpected location type: " ++ show lt)
 
@@ -154,6 +163,7 @@ genTestForLoc i s0 (Some loc0) = do
                           <- instructionRegisterOperands (Proxy :: Proxy arch) ops
                       ]
       return TestBundle { tbTestCases = testStates
+                        , tbTestBase = s0
                         , tbResult = ImplicitFact { ifExplicits = S.fromList explicits
                                                   , ifLocation = Some loc0
                                                   , ifInstruction = i

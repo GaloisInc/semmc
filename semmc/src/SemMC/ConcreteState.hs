@@ -40,7 +40,7 @@ import           Control.Applicative
 import           Control.Monad ( guard )
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor, popCount )
 import qualified Data.ByteString as B
-import           Data.Maybe ( fromJust, fromMaybe )
+import           Data.Maybe ( fromJust, isJust, fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Map as MapF
@@ -303,7 +303,7 @@ parseSlicedView (Some loc) = do
 
 printView :: (ConcreteArchitecture arch) => (forall tp . Location arch tp -> String) -> View arch m -> String
 printView printLocation (View (Slice _m _n a b) loc) =
-  printf "%s[%d:%d]" (printLocation loc) (widthVal a) (widthVal b)
+  printf "%s[%d:%d]" (printLocation loc) (widthVal a) (widthVal b - 1)
 
 withUnknownNat :: Natural -> (forall n . (KnownNat n) => NatRepr n -> a) -> a
 withUnknownNat n k =
@@ -405,3 +405,6 @@ instance TestEquality Value where
                 | w1 == w2 -> Just Refl
                 | otherwise -> Nothing
               Nothing -> Nothing
+
+instance EqF Value where
+  eqF bv1 bv2 = isJust (testEquality bv1 bv2)

@@ -67,10 +67,11 @@ data LearningConfig arch =
 loadIORelations :: forall arch
                  . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
                 => Proxy arch
+                -> FilePath
                 -> (forall sh . Opcode arch (Operand arch) sh -> FilePath)
                 -> [Some (Witness U.UnfoldShape (Opcode arch (Operand arch)))]
                 -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
-loadIORelations proxy toFP ops = do
+loadIORelations proxy relDir toFP ops = do
   F.foldlM (\m (Some (Witness oc)) -> IOE.catchIOError (addIfJust m oc) (\_ -> return m)) MapF.empty ops
   where
     addIfJust :: (U.UnfoldShape sh)
@@ -78,10 +79,10 @@ loadIORelations proxy toFP ops = do
               -> Opcode arch (Operand arch) sh
               -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
     addIfJust m oc = do
-      t <- T.readFile (toFP oc)
+      t <- T.readFile (relDir </> toFP oc)
       case readIORelation proxy t oc of
-        Nothing -> return m
-        Just iorel -> return (MapF.insert oc iorel m)
+        Left _err -> return m
+        Right iorel -> return (MapF.insert oc iorel m)
 
 -- | Given a list of opcodes, load up all of the existing learned IORelations
 -- and learn the rest through randomized testing.
@@ -97,7 +98,7 @@ learnIORelations :: forall arch
                  -> [Some (Witness U.UnfoldShape (Opcode arch (Operand arch)))]
                  -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
 learnIORelations cfg proxy toFP ops = do
-  rels0 <- loadIORelations proxy toFP ops
+  rels0 <- loadIORelations proxy (lcIORelationDirectory cfg) toFP ops
   -- Remove IORelations we already have before we construct the worklist
   let someOps = map (unWitness (Proxy @arch)) ops
       opsWithoutRels = filter (\(Some op) -> MapF.notMember op rels0) someOps

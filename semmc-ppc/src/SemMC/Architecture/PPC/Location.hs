@@ -109,18 +109,18 @@ parseLocation :: Parser (Some Location)
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
-    'i' -> Some LocIP <$ P.string "ip"
-    'x' -> Some LocXER <$ P.string "xer"
-    'l' -> Some LocLNK <$ P.string "lnk"
-    'r' -> parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'r'
-    'v' -> parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'v'
-    'c' -> tryOne [ Some LocCTR <$ P.string "ctr"
-                  , Some LocCR <$ P.string "cr"
+    'I' -> Some LocIP <$ P.string "IP"
+    'X' -> Some LocXER <$ P.string "XER"
+    'L' -> Some LocLNK <$ P.string "LNK"
+    'R' -> parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'R'
+    'V' -> parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'V'
+    'C' -> tryOne [ Some LocCTR <$ P.string "CTR"
+                  , Some LocCR <$ P.string "CR"
                   ]
-    'm' -> tryOne [ Some LocMSR <$ P.string "msr"
-                  , Some LocMem <$ P.string "mem"
+    'M' -> tryOne [ Some LocMSR <$ P.string "MSR"
+                  , Some LocMem <$ P.string "Mem"
                   ]
-    'f' -> Some LocFPSCR <$ P.string "fpscr"
+    'F' -> Some LocFPSCR <$ P.string "FPSCR"
     _ -> fail ("Unexpected location prefix character: " ++ (c :[]))
 
 parsePrefixedRegister :: (Integral a, Show a) => (a -> b) -> Char -> Parser b
