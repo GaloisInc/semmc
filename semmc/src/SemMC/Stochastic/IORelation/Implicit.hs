@@ -82,10 +82,14 @@ buildImplicitRelation :: (CS.ConcreteArchitecture arch)
                       -> TestBundle (TestCase arch) (ImplicitFact arch)
                       -> Learning arch (IORelation arch sh)
 buildImplicitRelation op rix iorel tb = do
-  implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix baseRes (tbResult tb)) (tbTestCases tb)
-  return (iorel <> implicitLocs)
-  where
-    Just baseRes = M.lookup (R.testNonce (tbTestBase tb)) (riSuccesses rix)
+  case M.lookup (R.testNonce (tbTestBase tb)) (riSuccesses rix) of
+    Just baseRes -> do
+      implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix baseRes (tbResult tb)) (tbTestCases tb)
+      return (iorel <> implicitLocs)
+    Nothing ->
+      case M.lookup (R.testNonce (tbTestBase tb)) (riExitedWithSignal rix) of
+        Just sno -> L.error ("Exited with signal " ++ show sno)
+        Nothing -> L.error "Non-signal failure"
 
 collectImplicitOutputLocations :: forall arch sh
                                 . (CS.ConcreteArchitecture arch)
