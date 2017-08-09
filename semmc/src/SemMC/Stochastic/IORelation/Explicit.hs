@@ -21,7 +21,7 @@ import Text.Printf ( printf )
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.NatRepr as NR
-import Data.Parameterized.ShapedList ( foldrFCIndexed, Index, ShapedList, lengthFC )
+import Data.Parameterized.ShapedList ( foldrFCIndexed, Index, ShapedList )
 import Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Instruction as D
@@ -51,7 +51,7 @@ generateExplicitInstruction proxy op implicitOperands = do
       case foldrFCIndexed (matchesOperand proxy implicitOperands) (False, S.empty) ops of
         (False, sops)
           -- The operands are all distinct and no operands are implicit
-          | S.size sops == lengthFC ops -> return insn
+          | S.size sops == length (instructionRegisterOperands proxy ops) -> return insn
         _ -> generateExplicitInstruction proxy op implicitOperands
 
 -- | Generate test cases and send them off to the remote runner.  Collect and
