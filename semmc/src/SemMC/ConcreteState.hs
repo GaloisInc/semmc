@@ -303,7 +303,7 @@ parseSlicedView (Some loc) = do
 
 printView :: (ConcreteArchitecture arch) => (forall tp . Location arch tp -> String) -> View arch m -> String
 printView printLocation (View (Slice _m _n a b) loc) =
-  printf "%s[%d:%d]" (printLocation loc) (widthVal a) (widthVal b)
+  printf "%s[%d:%d]" (printLocation loc) (widthVal a) (widthVal b - 1)
 
 withUnknownNat :: Natural -> (forall n . (KnownNat n) => NatRepr n -> a) -> a
 withUnknownNat n k =
