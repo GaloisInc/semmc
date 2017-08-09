@@ -53,6 +53,7 @@ executable semmc-ppc-iorels
   ghc-options: -Wall
   hs-source-dirs: tools
   main-is: IORelation.hs
+  other-modules: Util
   build-depends: base,
                  directory,
                  async,
@@ -62,4 +63,5 @@ executable semmc-ppc-iorels
                  parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc,
+                 regex >= 1 && < 2,
                  optparse-applicative
