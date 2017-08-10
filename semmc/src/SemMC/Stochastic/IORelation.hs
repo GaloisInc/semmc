@@ -133,6 +133,8 @@ learnIORelations cfg proxy toFP ops = do
                                , resChan = rChan
                                }
     runLearning lle learn
+  C.writeChan serializeChan Nothing
+  () <- A.wait serializer
   (,) <$> STM.readTVarIO lrref <*> STM.readTVarIO errref
   where
     unWitness :: proxy arch -> Some (Witness U.UnfoldShape (Opcode arch (Operand arch))) -> Some (Opcode arch (Operand arch))
