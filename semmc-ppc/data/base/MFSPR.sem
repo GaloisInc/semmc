@@ -1,10 +1,10 @@
 ((operands ((rT . 'Gprc)
             (spr . 'I32imm)))
- (in (spr 'xer 'lnk 'ctr))
+ (in (spr 'XER 'LNK 'CTR))
  (defs ((rT (ite (= spr #x00000001)
-                 'xer
+                 'XER
                  (ite (= spr #x00000008)
-                      'lnk
+                      'LNK
                       (ite (= spr #x00000009)
-                           'ctr
+                           'CTR
                            #x00000000)))))))
