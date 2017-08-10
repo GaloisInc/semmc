@@ -118,6 +118,8 @@ learnIORelations cfg proxy toFP ops = do
                               , serializationChan = serializeChan
                               , learningFailures = errref
                               }
+
+  -- Spawn a bunch of worker threads to process the worklist in parallel
   A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
     rChan <- C.newChan
@@ -133,8 +135,12 @@ learnIORelations cfg proxy toFP ops = do
                                , resChan = rChan
                                }
     runLearning lle learn
+
+  -- Set the serialization channel down cleanly (giving it time to write out the
+  -- last few relations)
   C.writeChan serializeChan Nothing
   () <- A.wait serializer
+
   (,) <$> STM.readTVarIO lrref <*> STM.readTVarIO errref
   where
     unWitness :: proxy arch -> Some (Witness U.UnfoldShape (Opcode arch (Operand arch))) -> Some (Opcode arch (Operand arch))
