@@ -1,13 +1,13 @@
 ((operands ((bf . 'Crrc)
             (rA . 'Gprc)
             (rB . 'Gprc)))
- (in ('cr 'xer rA rB))
- (defs (('cr (bvor (bvshl ((_ zero_extend 28) (concat (ite (bvult rA rB)
+ (in ('CR 'XER rA rB))
+ (defs (('CR (bvor (bvshl ((_ zero_extend 28) (concat (ite (bvult rA rB)
                                                            #b100
                                                            (ite (bvugt rA rB)
                                                                 #b010
                                                                 #b001))
-                                                      ((_ extract 0 0) 'xer)))
+                                                      ((_ extract 0 0) 'XER)))
                           (bvshl ((_ zero_extend 29) bf) #x00000002))
                    (bvand (bvnot (bvshl #x0000000f (bvshl ((_ zero_extend 29) bf) #x00000002)))
-                          'cr))))))
+                          'CR))))))
