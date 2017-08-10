@@ -112,8 +112,8 @@ parseLocation = do
     'I' -> Some LocIP <$ P.string "IP"
     'X' -> Some LocXER <$ P.string "XER"
     'L' -> Some LocLNK <$ P.string "LNK"
-    'R' -> parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'R'
-    'V' -> parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'V'
+    'r' -> parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'r'
+    'x' -> parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'x'
     'C' -> tryOne [ Some LocCTR <$ P.string "CTR"
                   , Some LocCR <$ P.string "CR"
                   ]
