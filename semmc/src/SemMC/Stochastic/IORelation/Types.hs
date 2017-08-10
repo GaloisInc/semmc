@@ -104,12 +104,6 @@ askResultChan = Rd.asks resChan
 askGen :: Learning arch A.Gen
 askGen = Rd.asks gen
 
--- FIXME: Add an optional channel here to accept opcode/iorelation pairs in
--- real-time.  We want to use this to incrementally serialize learned relations,
--- instead of just collecting them in memory.  We already have the directory -
--- we just need to use it.  Maybe we can have recordLearnedRelation do the
--- necessary IO or fork a thread.
-
 -- | Record a learned IORelation into the global environment
 recordLearnedRelation :: (Architecture arch) => Opcode arch (Operand arch) sh -> IORelation arch sh -> Learning arch ()
 recordLearnedRelation op rel = do
