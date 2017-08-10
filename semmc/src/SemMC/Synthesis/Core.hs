@@ -3,18 +3,18 @@
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 module SemMC.Synthesis.Core
   ( synthesizeFormula
   , SynthesisEnvironment(..)
   , SynthesisParams(..)
   ) where
 
-import           Control.Monad ( when )
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Parameterized.Classes ( OrdF )
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some, viewSome )
+import           Data.Parameterized.Some ( Some )
 import qualified Data.Sequence as Seq
 import           Data.Foldable
 import qualified Data.Set as Set
@@ -76,8 +76,8 @@ askMaxLength = reader synthMaxLength
 calcFootprint :: (OrdF (Location arch))
               => [TemplatedInstructionFormula sym arch]
               -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
-calcFootprint = foldl' asdf (Set.empty, Set.empty)
-  where asdf (curInput, curOutput) (tifFormula -> Formula { formUses = uses, formDefs = defs }) =
+calcFootprint = foldl' addPrint (Set.empty, Set.empty)
+  where addPrint (curInput, curOutput) (tifFormula -> Formula { formUses = uses, formDefs = defs }) =
           (curInput `Set.union` (uses Set.\\ curOutput),
            curOutput `Set.union` Set.fromList (MapF.keys defs))
 

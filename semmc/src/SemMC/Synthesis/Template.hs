@@ -33,6 +33,7 @@ module SemMC.Synthesis.Template
   , TemplatableOperands
   , TemplatableOpcode
   , TemplatedInstructionFormula(..)
+  , tifFormula
   , tfOperandExprs
   , tfFormula
   , templatizeFormula
@@ -254,7 +255,7 @@ instance (ShowF ((Opcode arch) (Operand arch)),
     unwords ["TemplatedInstructionFormula", showF op, showF tf]
 
 tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
-tifFormula (TemplatedInstructionFormula (_ tf) = tfFormula tf
+tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
 
 -- | A list of all possible templated instructions, given some opcodes.
 templatedInstructions :: (TemplateConstraints arch)

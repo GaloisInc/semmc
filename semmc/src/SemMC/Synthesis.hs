@@ -5,7 +5,6 @@ module SemMC.Synthesis
   ) where
 
 import           Data.Typeable
-import qualified Data.Parameterized.Map as MapF
 
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 
