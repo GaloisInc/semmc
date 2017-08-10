@@ -5,7 +5,7 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
-import Control.Monad ( when )
+import Control.Monad ( when, unless )
 import qualified Data.Foldable as F
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
@@ -110,7 +110,8 @@ mainWithOptions opt = do
     Quiet -> A.async $ dumpLog logChan
   A.link logger
   (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toFP allOps
-  putStrLn "Failed opcodes:"
-  putStrLn (unlines (map show (F.toList failures)))
+  unless (F.null failures) $ do
+    putStrLn "Failed opcodes:"
+    putStrLn (unlines (map show (F.toList failures)))
   return ()
 
