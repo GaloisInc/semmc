@@ -27,6 +27,7 @@ module SemMC.Stochastic.IORelation.Types (
   mkRandomTest,
   nextNonce,
   nextOpcode,
+  recordFailure,
   recordLearnedRelation,
   runLearning,
   timeout
@@ -46,6 +47,7 @@ import Data.Typeable ( Typeable )
 import Data.Word ( Word64 )
 import qualified System.Timeout as T
 
+import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as P
 import Data.Parameterized.ShapedList ( Index )
@@ -71,6 +73,9 @@ data GlobalLearningEnv arch =
                     , worklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
                     , learnedRelations :: STM.TVar (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
                     , serializationChan :: C.Chan (Maybe (P.Pair (Opcode arch (Operand arch)) (IORelation arch)))
+                    , learningFailures :: STM.TVar (S.Set (Some (Opcode arch (Operand arch)), Maybe Int))
+                    -- ^ Opcodes for which we received a signal while processing
+                    -- and couldn't learn
                     }
 
 data LocalLearningEnv arch =
@@ -84,6 +89,11 @@ data LocalLearningEnv arch =
                    -- runner.
                    , nonce :: STM.TVar Word64
                    }
+
+recordFailure :: (P.OrdF (Opcode arch (Operand arch))) => Opcode arch (Operand arch) sh -> Maybe Int -> Learning arch ()
+recordFailure op sigNum = do
+  ref <- Rd.asks (learningFailures . globalLearningEnv)
+  liftIO $ STM.atomically $ STM.modifyTVar' ref (S.insert (Some op, sigNum))
 
 askTestChan :: Learning arch (C.Chan (Maybe (TestCase arch)))
 askTestChan = Rd.asks testChan

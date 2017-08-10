@@ -6,6 +6,7 @@ module Main ( main ) where
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import Control.Monad ( when )
+import qualified Data.Foldable as F
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
 import qualified Data.Time.Format as T
@@ -108,37 +109,8 @@ mainWithOptions opt = do
 
     Quiet -> A.async $ dumpLog logChan
   A.link logger
-  _iorels <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toFP allOps
+  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toFP allOps
+  putStrLn "Failed opcodes:"
+  putStrLn (unlines (map show (F.toList failures)))
   return ()
 
-{-
-[ Some (Witness PPC.ADD4)
-         , Some (Witness PPC.ADD4o)
-         -- , Some (Witness PPC.ADDC)
-         -- , Some (Witness PPC.ADDCo)
-         -- , Some (Witness PPC.ADDI)
-         -- , Some (Witness PPC.ADDIC)
-         -- , Some (Witness PPC.ADDICo)
-         -- , Some (Witness PPC.ADDIS)
-         -- , Some (Witness PPC.ADDME)
-         -- , Some (Witness PPC.ADDMEo)
-         -- , Some (Witness PPC.ADDZE)
-         -- , Some (Witness PPC.ADDZEo)
-         -- , Some (Witness PPC.AND)
-         -- , Some (Witness PPC.ANDo)
-         -- , Some (Witness PPC.ANDC)
-         -- , Some (Witness PPC.ANDCo)
-         -- , Some (Witness PPC.ANDISo)
-         -- , Some (Witness PPC.ANDIo)
-         -- , Some (Witness PPC.ATTN)
-         -- , Some (Witness PPC.CMPB)
-         -- , Some (Witness PPC.CMPD)
-         -- , Some (Witness PPC.CMPDI)
-         -- , Some (Witness PPC.CMPEQB)
-         -- , Some (Witness PPC.CMPLD)
-         -- , Some (Witness PPC.CMPLDI)
-         -- , Some (Witness PPC.CMPLW)
-         -- , Some (Witness PPC.CMPLWI)
-         -- , Some (Witness PPC.CNTLZD)
-         ]
--}

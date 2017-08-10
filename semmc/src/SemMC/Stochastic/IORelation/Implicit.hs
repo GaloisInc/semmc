@@ -32,6 +32,7 @@ import SemMC.Stochastic.IORelation.Shared
 import SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R
 
+import Debug.Trace
 -- | Sweep through the parameter space to find locations not mentioned in
 -- parameter lists that are modified by the instruction.
 --
@@ -86,10 +87,15 @@ buildImplicitRelation op rix iorel tb = do
     Just baseRes -> do
       implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix baseRes (tbResult tb)) (tbTestCases tb)
       return (iorel <> implicitLocs)
-    Nothing ->
+    Nothing -> do
+      traceM "Failed"
       case M.lookup (R.testNonce (tbTestBase tb)) (riExitedWithSignal rix) of
-        Just sno -> L.error ("Exited with signal " ++ show sno)
-        Nothing -> L.error "Non-signal failure"
+        Just sno -> do
+          recordFailure op (Just (fromIntegral sno))
+          return iorel
+        Nothing -> do
+          recordFailure op Nothing
+          return iorel
 
 collectImplicitOutputLocations :: forall arch sh
                                 . (CS.ConcreteArchitecture arch)

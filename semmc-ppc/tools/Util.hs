@@ -21,6 +21,10 @@ matchConstructor s = and [ notElem '8' s
   where
     Just erx = RE.compileRegex (L.intercalate "|" exclude)
     exclude = [ "^DIV.*E.*$"
+              , "^ATTN$"
+              , "^CMPEQB$"
+              , "^CMPRB$"
+              , "^CNTT.*"
               ]
     Just rx = RE.compileRegex (L.intercalate "|" matchers)
     matchers = [ "^A.*"

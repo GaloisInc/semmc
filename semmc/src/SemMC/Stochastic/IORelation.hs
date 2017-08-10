@@ -4,6 +4,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -27,6 +28,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Foldable as F
 import Data.Monoid
 import Data.Proxy ( Proxy(..) )
+import qualified Data.Set as S
 import qualified Data.Text.IO as T
 import System.FilePath ( (</>) )
 import qualified System.IO.Error as IOE
@@ -96,7 +98,8 @@ learnIORelations :: forall arch
                  -> Proxy arch
                  -> (forall sh . (Opcode arch (Operand arch)) sh -> FilePath)
                  -> [Some (Witness U.UnfoldShape (Opcode arch (Operand arch)))]
-                 -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch))
+                 -> IO (MapF.MapF (Opcode arch (Operand arch)) (IORelation arch),
+                        S.Set (Some (Opcode arch (Operand arch)), Maybe Int))
 learnIORelations cfg proxy toFP ops = do
   rels0 <- loadIORelations proxy (lcIORelationDirectory cfg) toFP ops
   -- Remove IORelations we already have before we construct the worklist
@@ -104,6 +107,7 @@ learnIORelations cfg proxy toFP ops = do
       opsWithoutRels = filter (\(Some op) -> MapF.notMember op rels0) someOps
   wlref <- STM.newTVarIO (WL.fromList opsWithoutRels)
   lrref <- STM.newTVarIO rels0
+  errref <- STM.newTVarIO S.empty
   serializeChan <- C.newChan
   serializer <- A.async $ (serializeLearnedRelations (lcIORelationDirectory cfg) toFP serializeChan)
   A.link serializer
@@ -112,6 +116,7 @@ learnIORelations cfg proxy toFP ops = do
                               , worklist = wlref
                               , learnedRelations = lrref
                               , serializationChan = serializeChan
+                              , learningFailures = errref
                               }
   A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
@@ -128,7 +133,7 @@ learnIORelations cfg proxy toFP ops = do
                                , resChan = rChan
                                }
     runLearning lle learn
-  STM.readTVarIO lrref
+  (,) <$> STM.readTVarIO lrref <*> STM.readTVarIO errref
   where
     unWitness :: proxy arch -> Some (Witness U.UnfoldShape (Opcode arch (Operand arch))) -> Some (Opcode arch (Operand arch))
     unWitness _ (Some (Witness o)) = Some o
