@@ -164,7 +164,7 @@ buildFormula o i prog = do
   Just iorel <- opcodeIORelation o
   mfrms <- mapM instantiateFormula prog
   case any isNothing mfrms of
-    True -> fail ""
+    True -> fail ("Failed to instantiate program: " ++ show prog)
     False -> do
       let formulas = catMaybes mfrms
       withSymBackend $ \sym -> do
