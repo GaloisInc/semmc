@@ -147,6 +147,13 @@ instance (OrdF (Opcode arch (Operand arch)),
   compare (SynthInstruction op1 list1) (SynthInstruction op2 list2) =
     toOrdering (compareF op1 op2) <> toOrdering (compareF list1 list2)
 
+instance (ShowF (Operand arch), ShowF (Opcode arch (Operand arch)), ShowF (Pseudo arch (Operand arch))) => Show (SynthInstruction arch) where
+  show (SynthInstruction op lst) =
+    unwords [ "SynthInstruction"
+            , showF op
+            , show lst
+            ]
+
 -- | Convert a 'SynthInstruction' into a list of 'Instruction's, either by
 -- pulling out the real opcode, or by assembling the pseudo-opcode into real
 -- instructions.
