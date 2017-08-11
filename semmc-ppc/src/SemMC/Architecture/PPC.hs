@@ -395,6 +395,7 @@ operandToLocation (PPC.F8rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.G8rc _) = error "G8rc operandToLocation ?"
 operandToLocation (PPC.G8rc_nox0 _) = error "G8rc_nox0 operandToLocation ?"
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
+operandToLocation (PPC.Gprc_nor0 gpr) = Just (LocGPR gpr)
 operandToLocation (PPC.Tlsreg _) = error "Tlsreg operandToLocation?"
 operandToLocation (PPC.Tlsreg32 gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Vrrc (PPC.VR vr)) = Just $ LocVSR (PPC.VSReg (vr + 32))
@@ -520,9 +521,10 @@ operandToSemanticViewPPC op =
   case op of
     PPC.F4rc fr -> frSemanticView fr
     PPC.F8rc fr -> frSemanticView fr
-    PPC.G8rc _ -> L.error "G8rc not handled"
+    PPC.G8rc gpr -> gprSemanticView gpr -- L.error "G8rc not handled"
     PPC.G8rc_nox0 _ -> L.error "G8rc_nox0 not handled"
     PPC.Gprc gpr -> gprSemanticView gpr
+    PPC.Gprc_nor0 gpr -> gprSemanticView gpr
     PPC.Tlsreg _ -> L.error "Tlsreg not handled"
     PPC.Tlsreg32 gpr -> gprSemanticView gpr
     PPC.Vrrc vr -> vrSemanticView vr
