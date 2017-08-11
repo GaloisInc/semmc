@@ -81,3 +81,4 @@ executable semmc-ppc-synthdemo
                  , dismantle-ppc
                  , crucible
                  , base16-bytestring
+                 , elf-edit

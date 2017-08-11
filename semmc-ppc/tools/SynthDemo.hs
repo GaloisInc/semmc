@@ -7,9 +7,13 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Base16 as BSHex
+import           Data.Functor.Identity ( runIdentity )
 import           Data.Foldable ( foldrM, traverse_ )
+import           System.Environment ( getArgs )
 import           System.IO ( hFlush, stdout )
 import           Text.Printf ( printf )
+
+import           Data.ElfEdit ( findSectionByName, parseElf, ElfGetResult(..), ElfSection(..), updateSections, renderElf )
 
 import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map as MapF
@@ -73,39 +77,54 @@ printLines = traverse_ (putStrLn . show)
 
 main :: IO ()
 main = do
+  -- Fetch the ELF from disk
+  objName <- head <$> getArgs
+  objFile <- BS.readFile objName
+  elf <- case parseElf objFile of
+           Elf32Res _ e -> return e
+           err -> fail "Expected an Elf32, but got, well, something else"
+  textSection <- case findSectionByName (BS8.fromString ".text") elf of
+                   (s : _) -> return s
+                   [] -> fail "Couldn't find .text section in the binary"
+  let insnBytes = elfSectionData textSection
+  insns <- fromRightM (disassembleProgram insnBytes)
+
+  -- Make it look nice
+  putStrLn "This is the program you gave me, disassembled:"
+  printLines insns
+
   -- Set up the synthesis side of things
+  putStrLn ""
+  putStrLn "Parsing semantics for known PPC opcodes"
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
   baseSet <- PPC.loadBaseSet sym
   let plainBaseSet = makePlain baseSet
   synthEnv <- setupEnvironment sym baseSet
 
-  forever $ do
-    -- Read in the instructions we want to recreate
-    putStrLn ""
-    putStr "Enter an instruction sequence, hex-encoded: "
-    hFlush stdout
-    hexLine <- BS.getLine
-    let (decoded, rest) = BSHex.decode hexLine
-    when (BS.length rest /= 0) (fail "Invalid hex")
-    insns <- fromRightM (disassembleProgram decoded)
+  -- Turn it into a formula
+  forms <- traverse (instantiateFormula' sym plainBaseSet) insns
+  form <- foldrM (sequenceFormulas sym) emptyFormula forms
+  putStrLn ""
+  putStrLn "Here's the formula for the whole program:"
+  print form
 
-    -- Make it look nice
-    putStrLn ""
-    putStrLn "This is the program you gave me, disassembled:"
-    printLines insns
+  -- Look for an equivalent program!
+  putStrLn ""
+  putStrLn "Starting synthesis..."
+  newInsns <- maybe (fail "Sorry, synthesis failed") return =<< mcSynth synthEnv form
+  putStrLn ""
+  putStrLn "Here's the equivalent program:"
+  printLines newInsns
 
-    -- Turn it into a formula
-    forms <- traverse (instantiateFormula' sym plainBaseSet) insns
-    form <- foldrM (sequenceFormulas sym) emptyFormula forms
-    putStrLn ""
-    putStrLn "Here's the formula for the whole program:"
-    print form
+  let newInsnBytes = BSL.toStrict . mconcat $ map DPPC.assembleInstruction newInsns
+      newElf = runIdentity $ updateSections upd elf
+        where upd sect
+                | elfSectionIndex sect == elfSectionIndex textSection =
+                  pure . Just $ sect { elfSectionSize = fromIntegral (BS.length newInsnBytes)
+                                     , elfSectionData = newInsnBytes
+                                     }
+                | otherwise = pure (Just sect)
+      newObj = renderElf newElf
 
-    -- Look for an equivalent program!
-    putStrLn ""
-    putStrLn "Starting synthesis..."
-    newInsns <- maybe (fail "Sorry, synthesis failed") return =<< mcSynth synthEnv form
-    putStrLn ""
-    putStrLn "Here's the equivalent program:"
-    printLines newInsns
+  BSL.writeFile (objName ++ ".out") newObj
