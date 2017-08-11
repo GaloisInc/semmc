@@ -89,6 +89,9 @@ deriving instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundV
 instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch)
 
 -- | A formula representing a concrete instruction.
+--
+-- INVARIANT: All bound variables used in 'formDefs' should be in
+-- 'formParamVars'.
 data Formula sym arch =
   Formula { formUses :: Set.Set (Some (Location arch))
           , formParamVars :: MapF.MapF (Location arch) (S.BoundVar sym)
@@ -96,6 +99,7 @@ data Formula sym arch =
           }
 deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (Formula sym arch)
 
+-- | Check if a given 'Formula' obeys the stated invariant.
 validFormula :: Formula (S.SimpleBuilder t st) arch -> Bool
 validFormula (Formula { formParamVars = paramVars, formDefs = defs }) =
   mconcat (map (viewSome allBoundVars) (MapF.elems defs))
