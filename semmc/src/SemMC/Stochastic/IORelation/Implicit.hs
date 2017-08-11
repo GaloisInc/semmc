@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 module SemMC.Stochastic.IORelation.Implicit (
   findImplicitOperands
@@ -164,8 +165,8 @@ genTestForLoc i s0 (Some loc0) = do
   testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (CS.pokeMS s0 loc0))
   case i of
     D.Instruction _ ops -> do
-      let explicits = [ Some v
-                      | IndexedSemanticView _ (CS.SemanticView { CS.semvView = v })
+      let explicits = [ CS.someTrivialView (Proxy @arch) (Some loc)
+                      | IndexedSemanticView _ (CS.SemanticView { CS.semvView = CS.View _ loc })
                           <- instructionRegisterOperands (Proxy :: Proxy arch) ops
                       ]
       return TestBundle { tbTestCases = testStates

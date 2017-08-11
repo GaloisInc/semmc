@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module SemMC.Architecture.PPC.ConcreteState (
   zeroState,
   randomState,
@@ -41,10 +42,20 @@ randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprs
-      mapM_ addRandomBV vsrs
+      mapM_ addRandomBV64 frs
+      mapM_ addRandomBV vrs
       mapM_ addZeroBV specialRegs32
       mapM_ addZeroBV specialRegs64
 --      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
+
+    -- | Create a random 128 bit bitvector with the high 64 bits as zero.  We
+    -- want this for the FRs, which would normally overlap with the VSRs.  If we
+    -- had the VSRs, then we would want to generate full 128 bit values instead.
+    addRandomBV64 :: Location (BaseBVType 128) -> St.StateT ConcreteState IO ()
+    addRandomBV64 loc = do
+      bv :: CS.Value (BaseBVType 64)
+         <- CS.ValueBV <$> liftIO (A.arbitrary gen)
+      St.modify' $ MapF.insert loc (extendBV bv)
 
     addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
@@ -55,6 +66,9 @@ randomState gen = St.execStateT randomize MapF.empty
     addZeroBV loc = do
       let bv = CS.ValueBV (W.W 0)
       St.modify' $ MapF.insert loc bv
+
+extendBV :: CS.Value (BaseBVType 64) -> CS.Value (BaseBVType 128)
+extendBV (CS.ValueBV (W.W n)) = CS.ValueBV (W.W n)
 
 -- | FIXME: Does not include memory
 zeroState :: ConcreteState
@@ -121,9 +135,10 @@ getArchState = do
   gprs' <- mapM (getWith (getValue G.getWord32be repr32)) gprs
   spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
   spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
-  vsrs' <- mapM (getWith (getValue getWord128be repr128)) vsrs
+  frs' <- mapM (getWith (getValue (getWord128be IgnoreHighBits) repr128)) frs
+  vrs' <- mapM (getWith (getValue (getWord128be KeepHighBits) repr128)) vrs
 --  mem' <- getBS
-  return (St.execState (addLocs gprs' spregs32' spregs64' vsrs' {- >> addLoc (LocMem, mem') -}) MapF.empty)
+  return (St.execState (addLocs gprs' spregs32' spregs64' (frs' ++ vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
     addLoc :: forall tp . (Location tp, CS.Value tp) -> St.State ConcreteState ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
@@ -134,11 +149,16 @@ getArchState = do
       mapM_ addLoc spregs64'
       mapM_ addLoc vsrs'
 
-getWord128be :: G.Get Natural
-getWord128be = do
+data HighBits = IgnoreHighBits
+              | KeepHighBits
+
+getWord128be :: HighBits -> G.Get Natural
+getWord128be hb = do
   w1 <- G.getWord64be
   w2 <- G.getWord64be
-  return ((fromIntegral w2 `shiftL` 64) .|. fromIntegral w1)
+  case hb of
+    IgnoreHighBits -> return (fromIntegral w1)
+    KeepHighBits -> return ((fromIntegral w2 `shiftL` 64) .|. fromIntegral w1)
 
 getWith :: G.Get (CS.Value tp)
         -> Location tp
@@ -161,6 +181,12 @@ gprs = fmap (LocGPR . PPC.GPR) [0..31]
 
 vsrs :: [Location (BaseBVType 128)]
 vsrs = fmap (LocVSR . PPC.VSReg) [0..63]
+
+frs :: [Location (BaseBVType 128)]
+frs = fmap (LocVSR . PPC.VSReg) [0..31]
+
+vrs :: [Location (BaseBVType 128)]
+vrs = fmap (LocVSR . PPC.VSReg) [32..63]
 
 specialRegs32 :: [Location (BaseBVType 32)]
 specialRegs32 = [ LocCTR
