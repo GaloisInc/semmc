@@ -19,6 +19,10 @@ packages:
   extra-dep: true
 - location: submodules/dismantle/dismantle-ppc
   extra-dep: true
+- location:
+    git: git@github.com:GaloisInc/elf-edit
+    commit: 41f560ff320b96a6b90c4015b9c27821367eb1a1
+  extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
