@@ -435,10 +435,10 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
   // careful to generate reasonable MSR values.
   //
   // regs.msr  = rs->msr;
-  regs.ctr  = 0; // rs->ctr;
-  regs.link = 0; // rs->link;
-  regs.xer  = 0; // rs->xer;
-  regs.ccr  = 0; // rs->cr;
+  regs.ctr  =  rs->ctr;
+  regs.link =  rs->link;
+  regs.xer  =  rs->xer;
+  regs.ccr  =  rs->cr;
 
   // Set the IP to be at the start of our test program
   regs.nip = CAST_PTR(programSpace);
