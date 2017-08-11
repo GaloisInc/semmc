@@ -189,13 +189,16 @@ extractFormula opc ops progForm iorel = go F.emptyFormula (F.toList (outputs ior
     go acc [] = parameterizeFormula opc ops iorel acc
     go acc (out:rest) =
       case out of
-        ImplicitOperand _ -> L.error "Implicit output operands not supported yet"
+        ImplicitOperand (Some (CS.View _ loc)) ->
+          let Just expr = MapF.lookup loc (F.formDefs progForm)
+          in go (defineLocation loc expr acc) rest
         OperandRef (Some idx) -> do
           let operand = indexShapedList ops idx
               Just loc = operandToLocation (Proxy @arch) operand
               Just expr = MapF.lookup loc (F.formDefs progForm)
           go (defineLocation loc expr acc) rest
 
+-- Can we just copy all of the formParamVars from the original formula?
 defineLocation :: (CS.ConcreteArchitecture arch)
                => Location arch tp
                -> C.SymExpr sym tp
