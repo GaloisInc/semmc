@@ -30,9 +30,11 @@ import           Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.ShapedList ( ShapedList, Index )
 import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import           Lang.Crucible.BaseTypes
 
 import           SemMC.Architecture
+import           SemMC.Util
 
 data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   Operand :: BaseTypeRepr (OperandType arch s) -> Index sh s -> Parameter arch sh (OperandType arch s)
@@ -87,12 +89,21 @@ deriving instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundV
 instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch)
 
 -- | A formula representing a concrete instruction.
+--
+-- INVARIANT: All bound variables used in 'formDefs' should be in
+-- 'formParamVars'.
 data Formula sym arch =
   Formula { formUses :: Set.Set (Some (Location arch))
           , formParamVars :: MapF.MapF (Location arch) (S.BoundVar sym)
           , formDefs :: MapF.MapF (Location arch) (S.SymExpr sym)
           }
 deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (Formula sym arch)
+
+-- | Check if a given 'Formula' obeys the stated invariant.
+validFormula :: Formula (S.SimpleBuilder t st) arch -> Bool
+validFormula (Formula { formParamVars = paramVars, formDefs = defs }) =
+  mconcat (map (viewSome allBoundVars) (MapF.elems defs))
+  `Set.isSubsetOf` Set.fromList (MapF.elems paramVars)
 
 emptyFormula :: Formula sym arch
 emptyFormula = Formula { formUses = Set.empty, formParamVars = MapF.empty, formDefs = MapF.empty }

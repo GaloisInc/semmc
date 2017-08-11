@@ -65,3 +65,19 @@ executable semmc-ppc-iorels
                  dismantle-ppc,
                  regex >= 1 && < 2,
                  optparse-applicative
+
+executable semmc-ppc-synthdemo
+  default-language: Haskell2010
+  ghc-options: -Wall -rtsopts
+  hs-source-dirs: tools
+  main-is: SynthDemo.hs
+  build-depends:   base
+                 , semmc
+                 , semmc-ppc
+                 , bytestring
+                 , utf8-string
+                 , parameterized-utils
+                 , dismantle-tablegen
+                 , dismantle-ppc
+                 , crucible
+                 , base16-bytestring

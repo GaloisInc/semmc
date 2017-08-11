@@ -15,6 +15,7 @@ module SemMC.Util
   , mapFReverse
   , sequenceMaybes
   , walkElt
+  , allBoundVars
   , extractUsedLocs
   , Equal
   ) where
