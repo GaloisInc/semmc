@@ -101,7 +101,7 @@ mainWith opts = do
   objFile <- BS.readFile (oInputFile opts)
   elf <- case parseElf objFile of
            Elf32Res _ e -> return e
-           err -> fail "Expected an Elf32, but got, well, something else"
+           _err -> fail "Expected an Elf32, but got, well, something else"
   textSection <- case findSectionByName (BS8.fromString ".text") elf of
                    (s : _) -> return s
                    [] -> fail "Couldn't find .text section in the binary"
