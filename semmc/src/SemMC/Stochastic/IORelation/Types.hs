@@ -11,6 +11,8 @@ module SemMC.Stochastic.IORelation.Types (
 --  TypedLocation(..),
   TestBundle(..),
   TestCase,
+  TestResult,
+  ResultOrError,
   TestSerializer,
   TestRunner,
   ExplicitFact(..),
@@ -60,11 +62,11 @@ import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Worklist as WL
 
-type TestCase arch = R.TestCase (CS.ConcreteState arch) (Instruction arch)
-
+type TestCase arch       = R.TestCase (CS.ConcreteState arch) (Instruction arch)
+type TestResult arch     = R.TestResult (CS.ConcreteState arch)
+type ResultOrError arch  = R.ResultOrError (CS.ConcreteState arch)
 type TestSerializer arch = R.TestSerializer (CS.ConcreteState arch) (Instruction arch)
-
-type TestRunner arch = R.TestRunner (CS.ConcreteState arch) (Instruction arch)
+type TestRunner arch     = R.TestRunner (CS.ConcreteState arch) (Instruction arch)
 
 data GlobalLearningEnv arch =
   GlobalLearningEnv { assemble :: Instruction arch -> LBS.ByteString
