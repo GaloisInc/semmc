@@ -61,7 +61,7 @@ evalFormula :: (Architecture arch)
             -> Formula (S.SimpleBuilder t st) arch
             -> ArchState arch (S.Elt t)
             -> IO (ArchState arch (S.Elt t))
-evalFormula sym (Formula _ vars defs) input =
+evalFormula sym (Formula vars defs) input =
   traverseF (replaceLitVars sym (lookupInState sym input) vars) defs
 
 -- XXX: make sure that all locations are actually checked correctly, i.e., in
@@ -85,7 +85,7 @@ buildEquality :: forall arch t st.
               -> (ArchState arch (S.Elt t) , ArchState arch (S.Elt t))
               -> Formula (S.SimpleBuilder t st) arch
               -> IO (S.BoolElt t)
-buildEquality sym test (Formula _ vars defs) = foldlMWithKey f (S.truePred sym) defs
+buildEquality sym test (Formula vars defs) = foldlMWithKey f (S.truePred sym) defs
   where f :: S.BoolElt t -> Location arch tp -> S.Elt t tp -> IO (S.BoolElt t)
         f b loc e = (S.andPred sym b =<< buildEquality' sym test vars loc e)
 

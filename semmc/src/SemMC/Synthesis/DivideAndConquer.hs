@@ -42,9 +42,7 @@ truncateFormula form keepLocs =
         | otherwise = id
       newDefs = MapF.foldrWithKey filterDef MapF.empty (formDefs form)
       newParamVars = foldrF (MapF.union . extractUsedLocs (formParamVars form)) MapF.empty newDefs
-      newUses = Set.fromList $ mapFKeys newParamVars
-  in Formula { formUses = newUses
-             , formParamVars = newParamVars
+  in Formula { formParamVars = newParamVars
              , formDefs = newDefs
              }
 
@@ -56,7 +54,7 @@ makeSplit form (locs1, locs2)
   | Set.null locs1 || Set.null locs2 = Nothing
   | otherwise = let form1 = truncateFormula form locs1
                     form2 = truncateFormula form locs2
-                in if Set.null (Set.fromList (mapFKeys (formDefs form1)) `Set.intersection` formUses form2)
+                in if Set.null (formOutputs form1 `Set.intersection` formInputs form2)
                    then Just (form1, form2)
                    else Nothing
 

@@ -34,8 +34,6 @@ module SemMC.Synthesis.Template
   , TemplatableOpcode
   , TemplatedInstructionFormula(..)
   , tifFormula
-  , tfOperandExprs
-  , tfFormula
   , templatizeFormula
   , templatizeFormula'
   , templatedInstructions

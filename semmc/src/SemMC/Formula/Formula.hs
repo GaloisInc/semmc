@@ -15,6 +15,9 @@
 module SemMC.Formula.Formula (
   ParameterizedFormula(..),
   Formula(..),
+  formInputs,
+  formOutputs,
+  validFormula,
   emptyFormula,
   coerceFormula,
   Parameter(..),
@@ -93,11 +96,18 @@ instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) 
 -- INVARIANT: All bound variables used in 'formDefs' should be in
 -- 'formParamVars'.
 data Formula sym arch =
-  Formula { formUses :: Set.Set (Some (Location arch))
-          , formParamVars :: MapF.MapF (Location arch) (S.BoundVar sym)
+  Formula { formParamVars :: MapF.MapF (Location arch) (S.BoundVar sym)
           , formDefs :: MapF.MapF (Location arch) (S.SymExpr sym)
           }
 deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (Formula sym arch)
+
+-- | Get the locations used by a formula.
+formInputs :: (OrdF (Location arch)) => Formula sym arch -> Set.Set (Some (Location arch))
+formInputs = Set.fromList . MapF.keys . formParamVars
+
+-- | Get the locations modified by a formula.
+formOutputs :: (OrdF (Location arch)) => Formula sym arch -> Set.Set (Some (Location arch))
+formOutputs = Set.fromList . MapF.keys . formDefs
 
 -- | Check if a given 'Formula' obeys the stated invariant.
 validFormula :: Formula (S.SimpleBuilder t st) arch -> Bool
@@ -105,12 +115,14 @@ validFormula (Formula { formParamVars = paramVars, formDefs = defs }) =
   mconcat (map (viewSome allBoundVars) (MapF.elems defs))
   `Set.isSubsetOf` Set.fromList (MapF.elems paramVars)
 
+-- | A formula that uses no variables and changes no variables.
 emptyFormula :: Formula sym arch
-emptyFormula = Formula { formUses = Set.empty, formParamVars = MapF.empty, formDefs = MapF.empty }
+emptyFormula = Formula { formParamVars = MapF.empty, formDefs = MapF.empty }
 
+-- | Turn a formula from one architecture into that of another, assuming the
+-- location types of the architectures are the same.
 coerceFormula :: (Location arch1 ~ Location arch2) => Formula sym arch1 -> Formula sym arch2
 coerceFormula f =
-  Formula { formUses = formUses f
-          , formParamVars = formParamVars f
+  Formula { formParamVars = formParamVars f
           , formDefs = formDefs f
           }

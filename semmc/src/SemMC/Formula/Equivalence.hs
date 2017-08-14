@@ -82,9 +82,9 @@ formulasEquiv' :: (Architecture arch)
 formulasEquiv'
   eval
   sym
-  f1@(Formula {formUses = uses1, formDefs = defs1})
-  f2@(Formula {formUses = uses2, formDefs = defs2}) =
-  if not (uses1 == uses2 &&
+  f1@(Formula { formDefs = defs1 })
+  f2@(Formula { formDefs = defs2 }) =
+  if not (formInputs f1 == formInputs f2 &&
           -- Map.keys returns a list in a unique (increasing) order, so we don't
           -- need to turn it into a list first.
           mapFKeys defs1 == mapFKeys defs2)
@@ -107,6 +107,9 @@ formulasEquiv''
     -- Create constants for each of the bound variables, then replace them in
     -- each of the definitions. This way, the equations in the different
     -- formulas refer to the same input variables.
+    --
+    -- Here 'constant' does not mean a literal, like '5'. Instead, it means a
+    -- variable in SMT land that isn't meant to be bound.
     let allVars = Set.union (Set.fromList (mapFKeys bvars1)) (Set.fromList (mapFKeys bvars2))
         mkConstant (Some loc) m =
           fmap (\e -> MapF.insert loc e m)
