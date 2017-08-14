@@ -19,6 +19,7 @@ module SemMC.Stochastic.Monad (
   LocalSynEnv(..),
   loadInitialState,
   runSyn,
+  tryJust,
   Config(..),
   Test,
   -- * Operations
@@ -43,13 +44,14 @@ module SemMC.Stochastic.Monad (
 import qualified GHC.Err.Located as L
 
 import qualified Control.Concurrent.STM as STM
+import qualified Control.Exception as C
 import           Control.Monad ( replicateM )
 import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map as Map
-import qualified Data.Set as S
 import qualified Data.Sequence as Seq
+import qualified Data.Set as S
 import           System.FilePath ( (</>), (<.>) )
 
 import qualified Data.EnumF as P
@@ -97,6 +99,12 @@ import qualified SemMC.Stochastic.Statistics as S
 -- The 'SynEnv' type has a collection of 'Test's, but we may want to
 -- cache the result of evaluating the target on them, in which case we
 -- can change this to be a pair of states.
+--
+-- Note there is also 'I.TestCase', which includes a machine state
+-- (the 'Test' here), a program, and a nonce. We don't want to store
+-- those tests here, since the nonce is just an implementation detail
+-- for matching test inputs with their results, and the same 'Test'
+-- will be run on multiple programs.
 type Test arch = ConcreteState arch
 
 -- | Synthesis environment.
@@ -139,13 +147,12 @@ data LocalSynEnv t arch =
                 -- parallel later.
               }
 
--- Synthesis constraints.
+-- | Synthesis constraints.
 type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
                  , P.OrdF (Operand arch)
                  , D.ArbitraryOperand (Operand arch)
                  , D.ArbitraryOperands (Opcode arch) (Operand arch)
                  , D.ArbitraryOperands (Pseudo arch) (Operand arch)
-                 , Ord (Instruction arch)
                  , P.EnumF (Opcode arch (Operand arch))
                  , HasRepr (Opcode arch (Operand arch)) ShapeRepr
                  , HasRepr (Pseudo arch (Operand arch)) ShapeRepr
@@ -160,8 +167,22 @@ newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
             MonadIO,
             R.MonadReader (LocalSynEnv t arch))
 
-runSyn :: LocalSynEnv t arch -> Syn t arch a -> IO a
+-- | Runner for 'Syn' monad.
+--
+-- The ty vars are explicitly quantified with @arch@ first so that we
+-- can use @-XTypeApplications@ more conveniently.
+runSyn :: forall arch t a. LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
+
+-- | A version of 'C.tryJust' wrapped for our 'Syn' monad.
+--
+-- The @unliftio@ package generalizes this idea and provides a
+-- @tryJust@ like this.
+tryJust :: C.Exception e
+        => (e -> Maybe b) -> Syn t arch a -> Syn t arch (Either b a)
+tryJust pred action = do
+  localEnv <- R.ask
+  liftIO $ C.tryJust pred (runSyn localEnv action)
 
 -- | Record a learned formula for the opcode in the state
 recordLearnedFormula :: (P.OrdF (Opcode arch (Operand arch)),
