@@ -2,7 +2,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main ( main ) where
 
-import           Control.Monad ( forever, when )
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.UTF8 as BS8
@@ -11,7 +10,6 @@ import           Data.Functor.Identity ( runIdentity )
 import           Data.Foldable ( foldrM, traverse_ )
 import           Data.Monoid
 import qualified Options.Applicative as O
-import           System.IO ( hFlush, stdout )
 import           Text.Printf ( printf )
 
 import           Data.ElfEdit ( findSectionByName, parseElf, ElfGetResult(..), ElfSection(..), updateSections, renderElf )
