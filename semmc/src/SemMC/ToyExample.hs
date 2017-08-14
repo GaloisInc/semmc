@@ -26,16 +26,21 @@
 -- it in an undefined way; 3) does not modify it).
 module SemMC.ToyExample where
 
+import           Control.Monad
 import           Data.EnumF ( congruentF, EnumF, enumF )
-import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)), Index(IndexHere, IndexThere) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
 import           Data.Word ( Word32 )
+import qualified GHC.Err.Located as L
 import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
+
+import           Data.Parameterized.Classes
+import           Data.Parameterized.HasRepr
+import           Data.Parameterized.Witness ( Witness(..) )
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)), Index(IndexHere, IndexThere), ShapeRepr )
+import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
@@ -47,9 +52,13 @@ import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as C
+import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Stochastic.IORelation as I
+import qualified SemMC.Stochastic.Pseudo as P
 import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
 import           SemMC.Util ( makeSymbol )
+
+-- import Debug.Trace
 
 ----------------------------------------------------------------
 -- * Instructions
@@ -139,6 +148,15 @@ opcodes = Set.fromList
   , Some MovRi
   ]
 
+-- | For use with @loadInitialState@
+opcodesWitnessingBuildOperandList ::
+  [Some (Witness (F.BuildOperandList Toy) (Opcode Operand))]
+opcodesWitnessingBuildOperandList =
+  [ Some (Witness AddRr)
+  , Some (Witness SubRr)
+  , Some (Witness NegR)
+  , Some (Witness MovRi) ]
+
 -- | The map of 'IORelation's for all opcodes.
 --
 -- This will need to include implicit operands once we add flags.
@@ -199,6 +217,12 @@ instance OrdF (Opcode o) where
   MovRi `compareF`  NegR = GTF
   MovRi `compareF` MovRi = EQF
 
+instance HasRepr (Opcode Operand) ShapeRepr where
+  typeRepr AddRr = knownRepr
+  typeRepr SubRr = knownRepr
+  typeRepr NegR  = knownRepr
+  typeRepr MovRi = knownRepr
+
 type Instruction = D.GenericInstruction Opcode Operand
 
 ----------------------------------------------------------------
@@ -228,7 +252,7 @@ getOperand _ (I32 x) = C.ValueBV (fromIntegral x)
 -- | Update the value of an operand in a machine state.
 putOperand :: MachineState -> Operand s -> C.Value (BaseBVType (BitWidth s)) -> MachineState
 putOperand ms (R32 r) x = C.pokeMS ms (regView r) x
-putOperand _ I32{} _ = error "putOperand: putting an immediate does not make sense!"
+putOperand _ I32{} _ = L.error "putOperand: putting an immediate does not make sense!"
 
 -- | Evaluate an instruction, updating the machine state.
 evalInstruction :: MachineState -> Instruction -> MachineState
@@ -288,7 +312,7 @@ valueToOperand :: forall s. (KnownSymbol s) => GroundValue (A.OperandType Toy s)
 valueToOperand val
   | Just Refl <- sameSymbol (Proxy :: Proxy s) (Proxy :: Proxy "I32") = I32 (fromInteger val)
   | Just Refl <- sameSymbol (Proxy :: Proxy s) (Proxy :: Proxy "R32") =
-      error "can't get register operand from value"
+      L.error "can't get register operand from value"
   | otherwise = undefined
 
 instance A.Architecture Toy where
@@ -346,13 +370,22 @@ operandToSemanticViewImpl (R32 r) =
                         }
 operandToSemanticViewImpl (I32 _) = Nothing
 
+randomStateImpl :: D.Gen -> IO (C.ConcreteState Toy)
+randomStateImpl gen = do
+  pairs <- forM [Reg1, Reg2, Reg3] $ \r -> do
+    value <- D.arbitrary gen
+    return $ MapF.Pair (RegLoc r) value
+  return $ MapF.fromList pairs
+
 instance C.ConcreteArchitecture Toy where
   operandToSemanticView _ = operandToSemanticViewImpl
   zeroState _ = initialMachineState
+  randomState _ = randomStateImpl
 
-  randomState = undefined "Toy: randomState"
-  serialize = undefined "Toy: serialize"
-  deserialize = undefined "Toy: deserialize"
+  serialize = L.error "Toy: serialize"
+  deserialize = L.error "Toy: deserialize"
+  readView = L.error "Toy: readView"
+  showView = L.error "Toy: showView"
 
 ----------------------------------------------------------------
 -- * Random Instruction Generation
@@ -380,9 +413,23 @@ instance D.ArbitraryOperands Opcode Operand where
     -- ??? Is there a way to avoid the repetition here? We are
     -- implicitly using the shape of the operand to choose instances
     -- in 'D.arbitraryOperandList', and so without duplicating here it
-    -- seems we need to a way to universally quantify the existence of
+    -- seems we need a way to universally quantify the existence of
     -- needed instances ...
     AddRr -> D.arbitraryShapedList gen
     SubRr -> D.arbitraryShapedList gen
     NegR  -> D.arbitraryShapedList gen
     MovRi -> D.arbitraryShapedList gen
+
+----------------------------------------------------------------
+-- * Pseudo Ops
+--
+-- We need to define a pseudo op type, even if it's empty.
+
+type instance P.Pseudo Toy = P.EmptyPseudo
+
+instance P.ArchitectureWithPseudo Toy where
+  assemblePseudo _ = P.pseudoAbsurd
+
+pseudoOpcodesWitnessingBuildOperandList ::
+  [Some (Witness (F.BuildOperandList Toy) ((P.Pseudo Toy) Operand))]
+pseudoOpcodesWitnessingBuildOperandList = []
