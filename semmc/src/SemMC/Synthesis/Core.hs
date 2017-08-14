@@ -13,7 +13,6 @@ module SemMC.Synthesis.Core
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Parameterized.Classes ( OrdF )
-import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some )
 import qualified Data.Sequence as Seq
 import           Data.Foldable
@@ -77,17 +76,22 @@ calcFootprint :: (OrdF (Location arch))
               => [TemplatedInstructionFormula sym arch]
               -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
 calcFootprint = foldl' addPrint (Set.empty, Set.empty)
-  where addPrint (curInput, curOutput) (tifFormula -> Formula { formUses = uses, formDefs = defs }) =
-          (curInput `Set.union` (uses Set.\\ curOutput),
-           curOutput `Set.union` Set.fromList (MapF.keys defs))
+  where addPrint (curInputs, curOutputs) (tifFormula -> f) =
+          let newInputs = formInputs f
+              newOutputs = formOutputs f
+          in (curInputs `Set.union` (newInputs Set.\\ curOutputs),
+              curOutputs `Set.union` newOutputs)
 
 footprintFilter :: (OrdF (Location arch))
                 => Formula sym arch
                 -> [TemplatedInstructionFormula sym arch]
                 -> Bool
-footprintFilter (Formula { formUses = targetUses, formDefs = targetDefs }) candidate =
-  let (candUses, candOutputs) = calcFootprint candidate
-  in candUses `Set.isSubsetOf` targetUses && candOutputs `Set.isSubsetOf` (Set.fromList (MapF.keys targetDefs))
+footprintFilter target candidate =
+  let (candInputs, candOutputs) = calcFootprint candidate
+      targetInputs = formInputs target
+      targetOutputs = formOutputs target
+  in candInputs `Set.isSubsetOf` targetInputs &&
+     candOutputs `Set.isSubsetOf` targetOutputs
 
 instantiate :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
                 MonadState (SynthesisState (S.SimpleBackend t) arch) m,

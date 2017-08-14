@@ -67,8 +67,7 @@ fooFormula sym = do
   twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
   reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg2Def <- S.bvAdd sym reg1TimesTwo twoLit
-  return $ Formula { formUses = Set.singleton (Some (RegLoc Reg1)) -- Do we really need uses? Should just be the keys of vars.
-                   , formParamVars = MapF.insert (RegLoc Reg1) reg1
+  return $ Formula { formParamVars = MapF.insert (RegLoc Reg1) reg1
                                    $ MapF.empty
                    , formDefs = MapF.insert (RegLoc Reg2) reg2Def
                               $ MapF.empty
@@ -83,8 +82,7 @@ independentFormula sym = do
   reg1Def <- S.bvMul sym (S.varExpr sym reg1) twoLit
   -- reg2TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg2)
   reg2Def <- S.bvMul sym (S.varExpr sym reg2) twoLit
-  return $ Formula { formUses = Set.fromList [Some (RegLoc Reg1), Some (RegLoc Reg2)]
-                   , formParamVars = MapF.insert (RegLoc Reg1) reg1
+  return $ Formula { formParamVars = MapF.insert (RegLoc Reg1) reg1
                                    $ MapF.insert (RegLoc Reg2) reg2
                                    $ MapF.empty
                    , formDefs = MapF.insert (RegLoc Reg2) reg2Def
@@ -101,8 +99,7 @@ dependentFormula sym = do
   reg1Def <- S.bvAdd sym reg1TimesTwo twoLit
   reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg2Def <- S.bvAdd sym reg1TimesTwo twoLit
-  return $ Formula { formUses = Set.fromList [Some (RegLoc Reg1)]
-                   , formParamVars = MapF.insert (RegLoc Reg1) reg1
+  return $ Formula { formParamVars = MapF.insert (RegLoc Reg1) reg1
                                    $ MapF.empty
                    , formDefs = MapF.insert (RegLoc Reg2) reg2Def
                               $ MapF.insert (RegLoc Reg1) reg1Def

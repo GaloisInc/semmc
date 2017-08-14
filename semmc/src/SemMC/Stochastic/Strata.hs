@@ -198,6 +198,7 @@ extractFormula opc ops progForm iorel = go F.emptyFormula (F.toList (outputs ior
               Just expr = MapF.lookup loc (F.formDefs progForm)
           go (defineLocation loc expr acc) rest
 
+-- FIXME: no, you can't!
 -- Can we just copy all of the formParamVars from the original formula?
 defineLocation :: (CS.ConcreteArchitecture arch)
                => Location arch tp
@@ -205,7 +206,6 @@ defineLocation :: (CS.ConcreteArchitecture arch)
                -> F.Formula sym arch
                -> F.Formula sym arch
 defineLocation loc expr acc = acc { F.formDefs = MapF.insert loc expr (F.formDefs acc)
-                                  , F.formUses = S.insert (Some loc) (F.formUses acc)
                                   }
 
 -- | Based on the iorelation, identify the inputs of the opcode (and the

@@ -21,11 +21,9 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Ctx
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some
 import           Data.Parameterized.ShapedList ( indexShapedList, ShapedList(..) )
 import           Data.Parameterized.TraversableF
 import           Data.Proxy ( Proxy(..) )
-import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
 
 import           Lang.Crucible.BaseTypes
@@ -163,14 +161,10 @@ instantiateFormula
     newLitVars <- readIORef newLitVarsRef
     let newActualLitVars = foldrF (MapF.union . extractUsedLocs newLitVars) MapF.empty newDefs
 
-    let -- mapParam (Some param) = maybe Set.empty (Set.singleton . Some) $ paramToLocation opVals param
-        newUses = Set.fromList $ mapFKeys newActualLitVars
-
     -- TODO: Should we filter out definitions that are syntactically identity
     -- functions?
 
-    return $ (opValsList, Formula { formUses = newUses
-                                  , formParamVars = newActualLitVars
+    return $ (opValsList, Formula { formParamVars = newActualLitVars
                                   , formDefs = newDefs
                                   })
 
@@ -197,7 +191,7 @@ copyFormula :: forall t st arch.
             => SB t st
             -> Formula (SB t st) arch
             -> IO (Formula (SB t st) arch)
-copyFormula sym (Formula { formUses = uses, formParamVars = vars, formDefs = defs}) = do
+copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
   let mkVar :: forall tp. Location arch tp -> IO (S.SimpleBoundVar t tp)
       mkVar loc = S.freshBoundVar sym (makeSymbol (showF loc)) (locationType loc)
   newVars <- MapF.traverseWithKey (const . mkVar) vars
@@ -208,8 +202,7 @@ copyFormula sym (Formula { formUses = uses, formParamVars = vars, formDefs = def
   let replaceVars :: forall tp. S.Elt t tp -> IO (S.Elt t tp)
       replaceVars e = S.evalBoundVars sym e varAssign exprAssign
   newDefs <- traverseF replaceVars defs
-  return $ Formula { formUses = uses
-                   , formParamVars = newVars
+  return $ Formula { formParamVars = newVars
                    , formDefs = newDefs
                    }
 
@@ -230,12 +223,10 @@ sequenceFormulas :: forall t st arch.
 sequenceFormulas sym form1 form2 = do
   -- First, copy them, just to be safe. This might not be necessary for one of
   -- them, but I'll keep it like this for now.
-  Formula { formUses = uses1
-          , formParamVars = vars1
+  Formula { formParamVars = vars1
           , formDefs = defs1
           } <- copyFormula sym form1
-  Formula { formUses = uses2
-          , formParamVars = vars2
+  Formula { formParamVars = vars2
           , formDefs = defs2
           } <- copyFormula sym form2
 
@@ -259,9 +250,7 @@ sequenceFormulas sym form1 form2 = do
       -- The new vars are all the vars from the first, plus the vars from the
       -- second that are neither required in the first nor defined in the first.
       newVars = MapF.union vars1 (filterMapF (\k _ -> isNothing $ MapF.lookup k defs1) vars2)
-      newUses = Set.union uses1 (Set.filter (\(Some loc) -> isNothing $ MapF.lookup loc defs1) uses2)
 
-  return $ Formula { formUses = newUses
-                   , formParamVars = newVars
+  return $ Formula { formParamVars = newVars
                    , formDefs = newDefs
                    }

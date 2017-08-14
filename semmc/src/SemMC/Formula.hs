@@ -3,6 +3,8 @@ module SemMC.Formula
     -- * SemMC.Formula.Formula
     ParameterizedFormula(..)
   , Formula(..)
+  , formInputs
+  , formOutputs
   , emptyFormula
   , coerceFormula
   , Parameter(..)
@@ -22,6 +24,8 @@ module SemMC.Formula
 import SemMC.Formula.Formula
   ( ParameterizedFormula(..)
   , Formula(..)
+  , formInputs
+  , formOutputs
   , emptyFormula
   , coerceFormula
   , Parameter(..)
