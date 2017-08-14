@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main ( main ) where
@@ -6,20 +7,20 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Base16 as BSHex
-import           Data.Functor.Identity ( runIdentity )
-import           Data.Foldable ( foldrM, traverse_ )
+import qualified Data.Functor.Identity as I
+import qualified Data.Foldable as F
 import           Data.Monoid
+import           Data.Word ( Word32 )
 import qualified Options.Applicative as O
 import           Text.Printf ( printf )
 
-import           Data.ElfEdit ( findSectionByName, parseElf, ElfGetResult(..), ElfSection(..), updateSections, renderElf )
+import qualified Data.ElfEdit as E
 
 import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Nonce ( newIONonceGenerator )
-import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Witness ( Witness(..) )
-import           Lang.Crucible.Solver.SimpleBackend ( newSimpleBackend )
+import qualified Lang.Crucible.Solver.SimpleBackend as SB -- ( SimpleBackend, newSimpleBackend )
 import           Lang.Crucible.Solver.SimpleBuilder ( SimpleBuilder )
 
 import qualified Dismantle.PPC as DPPC
@@ -29,6 +30,7 @@ import           SemMC.Formula ( emptyFormula, Formula, ParameterizedFormula )
 import           SemMC.Formula.Instantiate ( instantiateFormula, sequenceFormulas )
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatableOpcode, unTemplate )
 import           SemMC.Synthesis ( mcSynth, setupEnvironment )
+import qualified SemMC.Synthesis.Core as SemMC
 
 import qualified SemMC.Architecture.PPC as PPC
 
@@ -83,11 +85,53 @@ instantiateFormula' sym m (DPPC.Instruction op params) =
     Just pf -> snd <$> instantiateFormula sym pf params
     Nothing -> fail (printf "Couldn't find semantics for opcode \"%s\"" (showF op))
 
-printLines :: (Traversable f, Show a) => f a -> IO ()
-printLines = traverse_ (putStrLn . show)
+loadProgramBytes :: FilePath -> IO (E.Elf 32, E.ElfSection Word32)
+loadProgramBytes fp = do
+  objFile <- BS.readFile fp
+  elf <- case E.parseElf objFile of
+           E.Elf32Res _ e -> return e
+           _err -> fail "Expected an Elf32, but got, well, something else"
+  textSection <- case E.findSectionByName (BS8.fromString ".text") elf of
+                   (s : _) -> return s
+                   [] -> fail "Couldn't find .text section in the binary"
+  return (elf, textSection)
+
+loadBaseSet :: SimpleBuilder t SB.SimpleBackendState
+            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (ParameterizedFormula (SimpleBuilder t SB.SimpleBackendState) PPC.PPC),
+                   SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC.PPC)
+loadBaseSet sym = do
+  baseSet <- PPC.loadBaseSet sym
+  let plainBaseSet = makePlain baseSet
+  synthEnv <- setupEnvironment sym baseSet
+  return (plainBaseSet, synthEnv)
+
+symbolicallyExecute :: (Architecture arch, Traversable t)
+                    => SimpleBuilder s st
+                    -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula (SimpleBuilder s st) arch)
+                    -> t (DPPC.GenericInstruction (Opcode arch) (Operand arch))
+                    -> IO (Formula (SimpleBuilder s st) arch)
+symbolicallyExecute sym plainBaseSet insns = do
+  formulas <- traverse (instantiateFormula' sym plainBaseSet) insns
+  F.foldrM (sequenceFormulas sym) emptyFormula formulas
+
+rewriteElfText :: E.ElfSection w -> E.Elf 32 -> [DPPC.Instruction] -> BSL.ByteString
+rewriteElfText textSection elf newInsns =
+  E.renderElf newElf
+  where
+    newInsnBytes = BSL.toStrict (mconcat (map DPPC.assembleInstruction newInsns))
+    newElf = I.runIdentity (E.updateSections upd elf)
+    upd sect
+      | E.elfSectionIndex sect == E.elfSectionIndex textSection =
+        pure (Just sect { E.elfSectionSize = fromIntegral (BS.length newInsnBytes)
+                        , E.elfSectionData = newInsnBytes
+                        })
+      | otherwise = pure (Just sect)
+
+printProgram :: [DPPC.Instruction] -> String
+printProgram insns = unlines (map (("  " ++) . show . DPPC.ppInstruction) insns)
 
 main :: IO ()
-main = O.execParser opts >>= mainWith
+main = N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
   where
     opts = O.info (O.helper <*> options) components
     components = mconcat [ O.fullDesc
@@ -95,55 +139,36 @@ main = O.execParser opts >>= mainWith
                          , O.header "SynthDemo"
                          ]
 
-mainWith :: Options -> IO ()
-mainWith opts = do
+mainWith :: N.NonceGenerator IO s -> Options -> IO ()
+mainWith r opts = do
   -- Fetch the ELF from disk
-  objFile <- BS.readFile (oInputFile opts)
-  elf <- case parseElf objFile of
-           Elf32Res _ e -> return e
-           _err -> fail "Expected an Elf32, but got, well, something else"
-  textSection <- case findSectionByName (BS8.fromString ".text") elf of
-                   (s : _) -> return s
-                   [] -> fail "Couldn't find .text section in the binary"
-  let insnBytes = elfSectionData textSection
+  (elf, textSection) <- loadProgramBytes (oInputFile opts)
+  let insnBytes = E.elfSectionData  textSection
   insns <- fromRightM (disassembleProgram insnBytes)
 
   -- Make it look nice
   putStrLn "This is the program you gave me, disassembled:"
-  printLines insns
+  putStrLn (printProgram insns)
 
   -- Set up the synthesis side of things
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
-  Some r <- newIONonceGenerator
-  sym <- newSimpleBackend r
-  baseSet <- PPC.loadBaseSet sym
-  let plainBaseSet = makePlain baseSet
-  synthEnv <- setupEnvironment sym baseSet
+  sym <- SB.newSimpleBackend r
+  (plainBaseSet, synthEnv) <- loadBaseSet sym
 
   -- Turn it into a formula
-  forms <- traverse (instantiateFormula' sym plainBaseSet) insns
-  form <- foldrM (sequenceFormulas sym) emptyFormula forms
+  formula <- symbolicallyExecute sym plainBaseSet insns
   putStrLn ""
   putStrLn "Here's the formula for the whole program:"
-  print form
+  print formula
 
   -- Look for an equivalent program!
   putStrLn ""
   putStrLn "Starting synthesis..."
-  newInsns <- maybe (fail "Sorry, synthesis failed") return =<< mcSynth synthEnv form
+  newInsns <- maybe (fail "Sorry, synthesis failed") return =<< mcSynth synthEnv formula
   putStrLn ""
   putStrLn "Here's the equivalent program:"
-  printLines newInsns
+  putStrLn (printProgram newInsns)
 
-  let newInsnBytes = BSL.toStrict . mconcat $ map DPPC.assembleInstruction newInsns
-      newElf = runIdentity $ updateSections upd elf
-        where upd sect
-                | elfSectionIndex sect == elfSectionIndex textSection =
-                  pure . Just $ sect { elfSectionSize = fromIntegral (BS.length newInsnBytes)
-                                     , elfSectionData = newInsnBytes
-                                     }
-                | otherwise = pure (Just sect)
-      newObj = renderElf newElf
-
-  BSL.writeFile (oOutputFile opts) newObj
+  let newObjBytes = rewriteElfText textSection elf newInsns
+  BSL.writeFile (oOutputFile opts) newObjBytes
