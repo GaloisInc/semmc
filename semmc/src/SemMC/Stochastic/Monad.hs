@@ -332,11 +332,14 @@ loadInitialState :: forall arch t
                  -> [Test arch]
                  -- ^ Heuristically-interesting test cases
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
-                 -- ^ All possible opcodes
+                 -- ^ All possible opcodes. These are used to guess
+                 -- the names of opcode semantics files to attempt to
+                 -- read from disk.
                  -> [Some (Witness (F.BuildOperandList arch) ((Pseudo arch) (Operand arch)))]
                  -- ^ All pseudo opcodes
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
-                 -- ^ The opcodes we want to learn formulas for (could be all, but could omit instructions e.g., jumps)
+                 -- ^ The opcodes we want to learn formulas for (could
+                 -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
                  -- ^ IORelations
                  -> IO (SynEnv t arch)
