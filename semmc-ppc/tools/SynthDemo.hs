@@ -20,16 +20,16 @@ import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Witness ( Witness(..) )
-import qualified Lang.Crucible.Solver.SimpleBackend as SB -- ( SimpleBackend, newSimpleBackend )
-import           Lang.Crucible.Solver.SimpleBuilder ( SimpleBuilder )
+import qualified Lang.Crucible.Solver.SimpleBackend as SB
+import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
 import qualified Dismantle.PPC as DPPC
 
 import           SemMC.Architecture ( Architecture, Instruction, Location, Opcode, Operand )
-import           SemMC.Formula ( emptyFormula, Formula, ParameterizedFormula )
-import           SemMC.Formula.Instantiate ( instantiateFormula, sequenceFormulas )
+import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatableOpcode, unTemplate )
-import           SemMC.Synthesis ( mcSynth, setupEnvironment )
+import qualified SemMC.Synthesis as SemMC
 import qualified SemMC.Synthesis.Core as SemMC
 
 import qualified SemMC.Architecture.PPC as PPC
@@ -51,9 +51,9 @@ disassembleProgram bs
   | BS.null bs = Right []
   | otherwise =
       case DPPC.disassembleInstruction (BSL.fromStrict bs) of
-        (_lengthUsed, Just insn) ->
+        (lengthUsed, Just insn) ->
           -- FIXME: replace this "4" with lengthUsed once the Dismantle bug is fixed
-          (insn :) <$> disassembleProgram (BS.drop 4 bs)
+          (insn :) <$> disassembleProgram (BS.drop lengthUsed bs)
         (lengthUsed, Nothing) ->
           let badInsnHex = BS8.toString (BSHex.encode (BS.take lengthUsed bs))
           in Left (printf "Invalid instruction \"%s\"" badInsnHex)
@@ -66,23 +66,23 @@ makePlain :: forall arch sym
            . (OrdF (Opcode arch (Operand arch)),
               OrdF (Location arch))
           => BaseSet sym arch
-          -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym arch)
+          -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
 makePlain = MapF.foldrWithKey f MapF.empty
   where f :: forall sh
            . TemplatableOpcode arch sh
-          -> ParameterizedFormula sym (TemplatedArch arch) sh
-          -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym arch)
-          -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym arch)
+          -> F.ParameterizedFormula sym (TemplatedArch arch) sh
+          -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
+          -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
         f (Witness op) pf = MapF.insert op (unTemplate pf)
 
 instantiateFormula' :: (Architecture arch)
-                    => SimpleBuilder t st
-                    -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula (SimpleBuilder t st) arch)
+                    => SB.SimpleBuilder t st
+                    -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.SimpleBuilder t st) arch)
                     -> Instruction arch
-                    -> IO (Formula (SimpleBuilder t st) arch)
+                    -> IO (F.Formula (SB.SimpleBuilder t st) arch)
 instantiateFormula' sym m (DPPC.Instruction op params) =
   case MapF.lookup op m of
-    Just pf -> snd <$> instantiateFormula sym pf params
+    Just pf -> snd <$> F.instantiateFormula sym pf params
     Nothing -> fail (printf "Couldn't find semantics for opcode \"%s\"" (showF op))
 
 loadProgramBytes :: FilePath -> IO (E.Elf 32, E.ElfSection Word32)
@@ -96,23 +96,23 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
-loadBaseSet :: SimpleBuilder t SB.SimpleBackendState
-            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (ParameterizedFormula (SimpleBuilder t SB.SimpleBackendState) PPC.PPC),
+loadBaseSet :: SB.SimpleBuilder t SB.SimpleBackendState
+            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC.PPC),
                    SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC.PPC)
 loadBaseSet sym = do
   baseSet <- PPC.loadBaseSet sym
   let plainBaseSet = makePlain baseSet
-  synthEnv <- setupEnvironment sym baseSet
+  synthEnv <- SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
 
 symbolicallyExecute :: (Architecture arch, Traversable t)
-                    => SimpleBuilder s st
-                    -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula (SimpleBuilder s st) arch)
+                    => SB.SimpleBuilder s st
+                    -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.SimpleBuilder s st) arch)
                     -> t (DPPC.GenericInstruction (Opcode arch) (Operand arch))
-                    -> IO (Formula (SimpleBuilder s st) arch)
+                    -> IO (F.Formula (SB.SimpleBuilder s st) arch)
 symbolicallyExecute sym plainBaseSet insns = do
   formulas <- traverse (instantiateFormula' sym plainBaseSet) insns
-  F.foldrM (sequenceFormulas sym) emptyFormula formulas
+  F.foldrM (F.sequenceFormulas sym) F.emptyFormula formulas
 
 rewriteElfText :: E.ElfSection w -> E.Elf 32 -> [DPPC.Instruction] -> BSL.ByteString
 rewriteElfText textSection elf newInsns =
@@ -165,7 +165,7 @@ mainWith r opts = do
   -- Look for an equivalent program!
   putStrLn ""
   putStrLn "Starting synthesis..."
-  newInsns <- maybe (fail "Sorry, synthesis failed") return =<< mcSynth synthEnv formula
+  newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth synthEnv formula
   putStrLn ""
   putStrLn "Here's the equivalent program:"
   putStrLn (printProgram newInsns)
