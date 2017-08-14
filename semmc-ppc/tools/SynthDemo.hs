@@ -9,7 +9,8 @@ import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Base16 as BSHex
 import           Data.Functor.Identity ( runIdentity )
 import           Data.Foldable ( foldrM, traverse_ )
-import           System.Environment ( getArgs )
+import           Data.Monoid
+import qualified Options.Applicative as O
 import           System.IO ( hFlush, stdout )
 import           Text.Printf ( printf )
 
@@ -32,6 +33,18 @@ import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatableO
 import           SemMC.Synthesis ( mcSynth, setupEnvironment )
 
 import qualified SemMC.Architecture.PPC as PPC
+
+data Options = Options { oInputFile :: FilePath
+                       , oOutputFile :: FilePath
+                       }
+
+options :: O.Parser Options
+options = Options <$> O.strArgument ( O.metavar "FILE"
+                                    <> O.help "An object file to use as a specification" )
+                  <*> O.strOption ( O.long "output"
+                                  <> O.short 'o'
+                                  <> O.metavar "FILE"
+                                  <> O.help "The file to write out" )
 
 disassembleProgram :: BS.ByteString -> Either String [DPPC.Instruction]
 disassembleProgram bs
@@ -76,10 +89,18 @@ printLines :: (Traversable f, Show a) => f a -> IO ()
 printLines = traverse_ (putStrLn . show)
 
 main :: IO ()
-main = do
+main = O.execParser opts >>= mainWith
+  where
+    opts = O.info (O.helper <*> options) components
+    components = mconcat [ O.fullDesc
+                         , O.progDesc "A demo driver for program synthesis (PPC)"
+                         , O.header "SynthDemo"
+                         ]
+
+mainWith :: Options -> IO ()
+mainWith opts = do
   -- Fetch the ELF from disk
-  objName <- head <$> getArgs
-  objFile <- BS.readFile objName
+  objFile <- BS.readFile (oInputFile opts)
   elf <- case parseElf objFile of
            Elf32Res _ e -> return e
            err -> fail "Expected an Elf32, but got, well, something else"
@@ -127,4 +148,4 @@ main = do
                 | otherwise = pure (Just sect)
       newObj = renderElf newElf
 
-  BSL.writeFile (objName ++ ".out") newObj
+  BSL.writeFile (oOutputFile opts) newObj

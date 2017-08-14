@@ -82,3 +82,4 @@ executable semmc-ppc-synthdemo
                  , crucible
                  , base16-bytestring
                  , elf-edit
+                 , optparse-applicative
