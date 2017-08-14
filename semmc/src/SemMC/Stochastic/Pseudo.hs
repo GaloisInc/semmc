@@ -1,3 +1,6 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -13,6 +16,8 @@
 module SemMC.Stochastic.Pseudo
   ( Pseudo
   , ArchitectureWithPseudo(..)
+  , EmptyPseudo
+  , pseudoAbsurd
   , SynthOpcode(..)
   , synthArbitraryOperands
   , SynthInstruction(..)
@@ -37,8 +42,11 @@ import           SemMC.Architecture ( Architecture, Instruction, Operand, Opcode
 
 -- | The type of pseudo-ops for the given architecture.
 --
--- If you don't want any pseudo-ops, then just make this a type with no
--- constructors.
+-- If you don't want any pseudo-ops, then just use 'EmptyPseudo':
+--
+-- > type instance Pseudo <your arch> = EmptyPseudo
+-- > instance ArchitectureWithPseudo <your arch> where
+-- >   assemblePseudo _ = pseudoAbsurd
 type family Pseudo arch :: (Symbol -> *) -> [Symbol] -> *
 
 -- | An architecture with pseuo-ops.
@@ -52,6 +60,38 @@ class (Architecture arch,
   -- | Turn a given pseudo-op with parameters into a series of actual,
   -- machine-level instructions.
   assemblePseudo :: proxy arch -> Pseudo arch o sh -> ShapedList o sh -> [Instruction arch]
+
+----------------------------------------------------------------
+-- * Helper type for arches with no pseudo ops
+--
+-- $emptyPseudo
+--
+-- See 'Pseudo' type family above for usage.
+
+data EmptyPseudo o sh
+
+deriving instance Show (EmptyPseudo o sh)
+
+-- | Do proof-by-contradiction by eliminating an `EmptyPseudo`.
+pseudoAbsurd :: EmptyPseudo o sh -> a
+pseudoAbsurd = \case
+
+instance D.ArbitraryOperands EmptyPseudo o where
+  arbitraryOperands _gen = pseudoAbsurd
+
+instance HasRepr (EmptyPseudo o) ShapeRepr where
+  typeRepr = pseudoAbsurd
+
+instance ShowF (EmptyPseudo o) where
+  showF = pseudoAbsurd
+
+instance TestEquality (EmptyPseudo o) where
+  testEquality = pseudoAbsurd
+
+instance OrdF (EmptyPseudo o) where
+  compareF = pseudoAbsurd
+
+----------------------------------------------------------------
 
 -- | An opcode in the context of this learning process.
 --
