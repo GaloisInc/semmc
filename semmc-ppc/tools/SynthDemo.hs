@@ -36,6 +36,7 @@ import qualified SemMC.Architecture.PPC as PPC
 
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
+                       , oOriginalWithReturn :: Maybe FilePath
                        , oBaseSetDir :: FilePath
                        , oAppendReturn :: Bool
                        }
@@ -47,6 +48,9 @@ options = Options <$> O.strArgument ( O.metavar "FILE"
                                   <> O.short 'o'
                                   <> O.metavar "FILE"
                                   <> O.help "The file to write out" )
+                  <*> O.optional ( O.strOption ( O.long "with-return"
+                                               <> O.metavar "FILE"
+                                               <> O.help "The file to save the original program with a return instruction appended" ))
                   <*> O.strOption ( O.long "base-set"
                                   <> O.short 'b'
                                   <> O.metavar "DIR"
@@ -182,8 +186,16 @@ mainWith r opts = do
 
   -- Optionally append a return instruction so that we can call into this
   -- function.
+  let retInsn = DPPC.Instruction DPPC.BLR DPPC.Nil
   newInsns' <- case oAppendReturn opts of
     False -> return newInsns
-    True -> return (newInsns ++ [DPPC.Instruction DPPC.BLR DPPC.Nil])
+    True -> return (newInsns ++ [retInsn])
   let newObjBytes = rewriteElfText textSection elf newInsns'
   BSL.writeFile (oOutputFile opts) newObjBytes
+
+  case oOriginalWithReturn opts of
+    Nothing -> return ()
+    Just owr -> do
+      let origWithReturn = insns ++ [retInsn]
+          origObjBytes = rewriteElfText textSection elf origWithReturn
+      BSL.writeFile owr origObjBytes
