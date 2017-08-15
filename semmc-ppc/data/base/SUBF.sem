@@ -1,5 +1,5 @@
 ((operands ((rT . 'Gprc)
-            (rA . 'Gprc)
-            (rB . 'Gprc)))
+            (rB . 'Gprc)
+            (rA . 'Gprc)))
  (in (rA rB))
  (defs ((rT (bvsub rB rA)))))
