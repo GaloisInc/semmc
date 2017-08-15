@@ -50,8 +50,6 @@ synthesize :: SynC arch
            => Instruction arch
            -> Syn t arch (Maybe [SynthInstruction arch])
 synthesize target = do
-  initialTests <- generateInitialTests target
-  mapM_ addTestCase initialTests
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
   candidate <- mcmcSynthesizeOne target
   let candidateWithoutNops = catMaybes . toList $ candidate
@@ -59,7 +57,7 @@ synthesize target = do
 
 mcmcSynthesizeOne :: SynC arch => Instruction arch -> Syn t arch (Candidate arch)
 mcmcSynthesizeOne target = do
-  -- Fixed start and make it a parameter if needed. STOKE Figure 10.
+  -- Fixed to start and make it a parameter if needed. STOKE Figure 10.
   let progLen = 50
   candidate <- emptyCandidate progLen
 
@@ -119,14 +117,15 @@ compareTargetToCandidate :: forall arch t.
                          -> Test arch
                          -> Syn t arch Double
 compareTargetToCandidate target candidate test = do
-  let candidateProg = catMaybes . toList $ candidate
+  let candidateProg =
+        concatMap synthInsnToActual . catMaybes . toList $ candidate
   let targetProg = [target]
   -- TODO: cache result of running target on test, since it never
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
   runTest     <- askRunTest
-  candidateSt <- runTest test (synthInsnToActual =<< candidateProg)
+  candidateSt <- runTest test candidateProg
   targetSt    <- runTest test targetProg
   liveOut     <- getOutMasks target
   let weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
@@ -181,15 +180,6 @@ weighBestMatch (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews 
     weigh candidateVal = fromIntegral $ diff targetVal candidateVal
 
 ----------------------------------------------------------------
-
--- | The initial tests, including random tests and "heuristically
--- interesting" tests.
---
--- During synthesis these tests get augmented by new tests discovered
--- by the SMT solver that distinguish candidates that are equal on all
--- tests so far.
-generateInitialTests :: Instruction arch -> Syn t arch [Test arch]
-generateInitialTests _target = undefined
 
 -- | A candidate program.
 --

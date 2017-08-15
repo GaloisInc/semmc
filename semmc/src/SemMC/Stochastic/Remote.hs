@@ -37,11 +37,13 @@ data TestCase c i =
            , testContext :: c -- ^ The machine state to start the test in.
            , testProgram :: [i]
            }
+  deriving (Show)
 
 data TestResult c =
   TestResult { resultNonce :: Word64
              , resultContext :: c -- ^ The final machine state.
              }
+  deriving (Show)
 
 data LogMessage = LogMessage { lmTime :: T.UTCTime
                              , lmHost :: String

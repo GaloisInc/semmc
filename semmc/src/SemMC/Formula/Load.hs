@@ -6,6 +6,8 @@
 module SemMC.Formula.Load ( loadFormulas ) where
 
 import qualified Data.Foldable as F
+import System.Directory ( doesFileExist )
+import qualified GHC.Err.Located as L
 
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Some ( Some(..) )
@@ -25,6 +27,12 @@ import Data.Parameterized.Witness ( Witness(..) )
 --
 -- The provided function is called on each shaped value to produce the
 -- 'FilePath' to load.
+--
+-- The shapes argument specifies a superset of possible opcodes to
+-- load formulas for. If the file for an opcode doesn't exist then we
+-- skip it. So, the list of shapes can simply be all possible opcodes,
+-- and what files actually exist on disk determine what we actually
+-- load.
 loadFormulas :: forall sym arch a
               . (CRU.IsExprBuilder sym, CRU.IsSymInterface sym, Architecture arch, MapF.OrdF a)
              => sym
@@ -39,10 +47,19 @@ loadFormulas sym toFP env shapes =
                          => a sh
                          -> IO (Maybe (F.ParameterizedFormula sym arch sh))
     readFormulaForOpcode a = do
-      ef <- FP.readFormulaFromFile sym env (toFP a)
-      case ef of
-        Left _ -> return Nothing
-        Right f -> return (Just f)
+      let file = toFP a
+      fileExists <- doesFileExist file
+      if fileExists
+      then do
+        debug $ "loading file: "++file
+        ef <- FP.readFormulaFromFile sym env file
+        case ef of
+          Left err -> L.error $ "Failed to parse "++file++": "++err
+          Right f -> return (Just f)
+      else do
+        debug $ "skipping non-existent file: "++file
+        return Nothing
+    debug msg = putStrLn msg
 
 addIfJust :: (MapF.OrdF k, Monad m)
           => (k tp -> m (Maybe (a tp)))

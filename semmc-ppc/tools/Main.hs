@@ -197,7 +197,7 @@ ValueBV (2715791173 :: W 32), r9 -> ValueBV (705601903 :: W 32), r10 -> ValueBV
 
 toState vals = foldr poke (CS.zeroState (Proxy @PPC)) (zip gprviews vals)
   where
-    poke (v, val) ctx = CS.pokeMS ctx v (CS.ValueBV (W.W val))
+    poke (v, val) ctx = CS.pokeMS ctx v (CS.ValueBV (W.w val))
 
 gprs :: [Location (BaseBVType 32)]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]

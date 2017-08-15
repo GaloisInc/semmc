@@ -164,16 +164,16 @@ onesMask sz = shiftL 1 (fromIntegral sz) - 1
 
 -- | Read sliced bits.
 peekSlice :: (KnownNat m) => Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m)
-peekSlice (Slice _ _ (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> val))) =
-  (ValueBV . W.W . fromInteger) ((val .&. onesMask b) `shiftR` a)
+peekSlice (Slice _ _ (widthVal -> a) (widthVal -> b)) (ValueBV (W.unW -> val)) =
+  (ValueBV . W.w) ((val .&. onesMask b) `shiftR` a)
 
 -- | Write sliced bits.
 pokeSlice :: Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m) -> Value (BaseBVType n)
-pokeSlice (Slice _ _ (widthVal -> a) (widthVal -> b)) (ValueBV (W.W (toInteger -> x))) (ValueBV (W.W (toInteger -> y))) =
+pokeSlice (Slice _ _ (widthVal -> a) (widthVal -> b)) (ValueBV (W.unW -> x)) (ValueBV (W.unW -> y)) =
   let shiftedY = y `shiftL` a
       clearLower nLower val = (val `shiftR` nLower) `shiftL` nLower
       xMask = complement (clearLower a (onesMask b))
-  in (ValueBV . W.W . fromInteger) (shiftedY .|. (x .&. xMask))
+  in (ValueBV . W.w) (shiftedY .|. (x .&. xMask))
 
 ----------------------------------------------------------------
 -- Machine states
