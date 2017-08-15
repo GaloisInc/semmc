@@ -65,7 +65,6 @@ disassembleProgram bs
   | otherwise =
       case DPPC.disassembleInstruction (BSL.fromStrict bs) of
         (lengthUsed, Just insn) ->
-          -- FIXME: replace this "4" with lengthUsed once the Dismantle bug is fixed
           (insn :) <$> disassembleProgram (BS.drop lengthUsed bs)
         (lengthUsed, Nothing) ->
           let badInsnHex = BS8.toString (BSHex.encode (BS.take lengthUsed bs))
