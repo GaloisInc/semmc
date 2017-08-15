@@ -28,6 +28,7 @@ library
                      , cereal
                      , containers
                      , located-base
+                     , filepath
                      , megaparsec >= 6 && < 7
 
   hs-source-dirs:      src

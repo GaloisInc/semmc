@@ -43,6 +43,7 @@ import           Data.Proxy ( Proxy(..) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( Symbol )
+import           System.FilePath ( (</>) )
 import qualified Text.Megaparsec as P
 import           Text.Printf ( printf )
 
@@ -432,9 +433,10 @@ instance (BuildOperandList (TemplatedArch PPC) sh, TemplatableOperands PPC sh) =
 loadBaseSet :: forall sym.
                (S.IsExprBuilder sym,
                 S.IsSymInterface sym)
-            => sym
+            => FilePath
+            -> sym
             -> IO (BaseSet sym PPC)
-loadBaseSet sym = do
+loadBaseSet baseSetDir sym = do
   let addFn :: (String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)
             -> UninterpretedFunctions sym
             -> IO (UninterpretedFunctions sym)
@@ -460,7 +462,7 @@ loadBaseSet sym = do
   let readOp :: (BuildOperandList (TemplatedArch PPC) sh)
              => FilePath
              -> IO (Either String (ParameterizedFormula sym (TemplatedArch PPC) sh))
-      readOp fp = readFormulaFromFile sym env ("semmc-ppc/data/base/" <> fp)
+      readOp fp = readFormulaFromFile sym env (baseSetDir </> fp)
       addOp :: Some (Witness Foo (PPC.Opcode PPC.Operand))
             -> BaseSet sym PPC
             -> IO (BaseSet sym PPC)

@@ -59,7 +59,7 @@ doThing :: IO ()
 doThing = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
-  baseSet <- PPC.loadBaseSet sym
+  baseSet <- PPC.loadBaseSet "semmc-ppc/data/base" sym
   foo <- memFormula sym (PPC.LocGPR (PPC.GPR 5))
   print foo
   print =<< mcSynth sym baseSet foo

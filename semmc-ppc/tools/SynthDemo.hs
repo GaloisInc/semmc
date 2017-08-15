@@ -36,6 +36,8 @@ import qualified SemMC.Architecture.PPC as PPC
 
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
+                       , oBaseSetDir :: FilePath
+                       , oAppendReturn :: Bool
                        }
 
 options :: O.Parser Options
@@ -45,6 +47,13 @@ options = Options <$> O.strArgument ( O.metavar "FILE"
                                   <> O.short 'o'
                                   <> O.metavar "FILE"
                                   <> O.help "The file to write out" )
+                  <*> O.strOption ( O.long "base-set"
+                                  <> O.short 'b'
+                                  <> O.metavar "DIR"
+                                  <> O.help "The directory containing the base set" )
+                  <*> O.switch ( O.long "append-return"
+                               <> O.short 'r'
+                               <> O.help "Append a return instruction to the synthesized program" )
 
 disassembleProgram :: BS.ByteString -> Either String [DPPC.Instruction]
 disassembleProgram bs
@@ -96,11 +105,12 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
-loadBaseSet :: SB.SimpleBuilder t SB.SimpleBackendState
+loadBaseSet :: FilePath
+            -> SB.SimpleBuilder t SB.SimpleBackendState
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC.PPC),
                    SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC.PPC)
-loadBaseSet sym = do
-  baseSet <- PPC.loadBaseSet sym
+loadBaseSet baseDir sym = do
+  baseSet <- PPC.loadBaseSet baseDir sym
   let plainBaseSet = makePlain baseSet
   synthEnv <- SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
@@ -154,7 +164,7 @@ mainWith r opts = do
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
   sym <- SB.newSimpleBackend r
-  (plainBaseSet, synthEnv) <- loadBaseSet sym
+  (plainBaseSet, synthEnv) <- loadBaseSet (oBaseSetDir opts) sym
 
   -- Turn it into a formula
   formula <- symbolicallyExecute sym plainBaseSet insns
@@ -170,5 +180,10 @@ mainWith r opts = do
   putStrLn "Here's the equivalent program:"
   putStrLn (printProgram newInsns)
 
-  let newObjBytes = rewriteElfText textSection elf newInsns
+  -- Optionally append a return instruction so that we can call into this
+  -- function.
+  newInsns' <- case oAppendReturn opts of
+    False -> return newInsns
+    True -> return (newInsns ++ [DPPC.Instruction DPPC.BLR DPPC.Nil])
+  let newObjBytes = rewriteElfText textSection elf newInsns'
   BSL.writeFile (oOutputFile opts) newObjBytes
