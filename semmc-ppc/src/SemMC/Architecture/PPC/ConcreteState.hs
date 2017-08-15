@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
@@ -64,18 +65,18 @@ randomState gen = St.execStateT randomize MapF.empty
 
     addZeroBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
     addZeroBV loc = do
-      let bv = CS.ValueBV (W.W 0)
+      let bv = CS.ValueBV (W.w 0)
       St.modify' $ MapF.insert loc bv
 
 extendBV :: CS.Value (BaseBVType 64) -> CS.Value (BaseBVType 128)
-extendBV (CS.ValueBV (W.W n)) = CS.ValueBV (W.W n)
+extendBV (CS.ValueBV (W.unW -> n)) = CS.ValueBV (W.w n)
 
 -- | FIXME: Does not include memory
 zeroState :: ConcreteState
 zeroState = St.execState addZeros MapF.empty
   where
     addZero :: KnownNat n => Location (BaseBVType n) -> St.State ConcreteState ()
-    addZero loc = St.modify' $ MapF.insert loc (CS.ValueBV (W.W 0))
+    addZero loc = St.modify' $ MapF.insert loc (CS.ValueBV (W.w 0))
     addZeros = do
       mapM_ addZero gprs
       mapM_ addZero vsrs
@@ -113,7 +114,7 @@ serializeVec i = B.word64BE w1 <> B.word64BE w2
 serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> CS.Value (BaseBVType n) -> B.Builder
 serializeSymVal toBuilder sv =
   case sv of
-    CS.ValueBV (W.W w) -> toBuilder (toInteger w)
+    CS.ValueBV (W.unW -> w) -> toBuilder (toInteger w)
 
 extractLocs :: ConcreteState
             -> [Location tp]
@@ -171,7 +172,7 @@ getValue :: (Integral w, KnownNat n)
          => G.Get w
          -> NatRepr n
          -> G.Get (CS.Value (BaseBVType n))
-getValue g _ = (CS.ValueBV . W.W . fromIntegral) <$> g
+getValue g _ = (CS.ValueBV . W.w . fromIntegral) <$> g
 
 getBS :: G.Get (CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
 getBS = CS.ValueMem <$> G.getBytes 64
