@@ -1,3 +1,7 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TupleSections #-}
@@ -5,29 +9,46 @@
 {-# LANGUAGE TemplateHaskell #-}
 module TestToy where
 
-import qualified Data.Text as T
-import qualified Data.Set as Set
-import Data.Maybe
+import qualified Control.Concurrent.Async as C
+import qualified Control.Concurrent.Chan as C
+import           Control.Monad
 import qualified Data.Map as Map
-import Data.Monoid
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Proxy
+import qualified Data.Text as T
+
+import qualified GHC.Err.Located as L
+
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.Classes
-import Data.Parameterized.NatRepr
-import Data.Parameterized.Nonce
-import Data.Parameterized.Some ( Some(..) )
-import Data.Parameterized.Witness ( Witness(..) )
+import           Data.Parameterized.NatRepr
+import           Data.Parameterized.ShapedList ( ShapedList(..) )
+import           Data.Parameterized.Nonce
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Unfold as U
-
-import Lang.Crucible.Solver.SimpleBackend
+import           Data.Parameterized.Witness ( Witness(..) )
+import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Instruction as D
+import           Dismantle.Tablegen.TH ( captureDictionaries )
 import qualified Lang.Crucible.Solver.Interface as S
-import Dismantle.Tablegen.TH ( captureDictionaries )
+import           Lang.Crucible.Solver.SimpleBackend
 
-import SemMC.Architecture
-import SemMC.Formula
-import SemMC.ToyExample as T
-import SemMC.Synthesis.Template
-import SemMC.Synthesis
-import SemMC.Util
+import           SemMC.Architecture
+import           SemMC.Formula
+import qualified SemMC.ConcreteState as C
+import qualified SemMC.Stochastic.IORelation.Types as I
+import           SemMC.Stochastic.Monad
+import qualified SemMC.Stochastic.Pseudo as P
+import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Stochastic.Strata as S
+import qualified SemMC.Stochastic.Synthesize as S
+import           SemMC.Synthesis
+import           SemMC.Synthesis.Template
+import           SemMC.ToyExample as T
+import           SemMC.Util
+
+import Debug.Trace
 
 allOperands :: [Some (Witness U.UnfoldShape (T.Opcode T.Operand))]
 allOperands = $(captureDictionaries (const True) ''T.Opcode)
@@ -147,3 +168,132 @@ doThing4 = do
   ind <- independentFormula sym
   env <- setupEnvironment sym baseset
   print =<< mcSynth env ind
+
+----------------------------------------------------------------
+-- * Stratefied synthesis
+
+-- Goal: run 'synthesize' directly and see if we learn a program that
+-- passes the tests. Remaining work
+--
+-- - initialize LocalSynEnv, including nested SynEnv
+--
+--   - [ ] initial test cases
+--     - [X] random
+--     - [ ] heuristic
+--
+--   - [X] base set with semantics
+--
+--   - [X] test runner with backend thread running tests
+
+{-
+-- | The initial tests, including random tests and "heuristically
+-- interesting" tests. STRATA Section 3.3.
+--
+-- During synthesis these tests get augmented by new tests discovered
+-- by the SMT solver that distinguish candidates that are equal on all
+-- tests so far.
+--
+-- XXX: right now the 'loadInitialState' takes a list of heuristically
+-- interesting tests, a test generator, and number of tests to
+-- generate as arguments (some in the config).
+generateTestCases :: (C.ConcreteArchitecture arch)
+                  => proxy arch -> A.Gen -> IO [Test arch]
+generateTestCases p gen = do
+  let numRandomTests = 1024
+  randomTests <- replicateM numRandomTests (C.randomState p gen)
+  heuristicTests <- return [] -- TODO
+  return $ randomTests ++ heuristicTests
+-}
+
+-- | Test runner backend for Toy arch.
+toyTestRunnerBackend :: arch ~ Toy => Integer -> I.TestRunner arch
+toyTestRunnerBackend !i tChan rChan _logChan = do
+  maybeTest <- C.readChan tChan
+  case maybeTest of
+    Nothing -> return Nothing
+    Just test -> do
+      let resultContext = evalProg (R.testContext test) (R.testProgram test)
+      let result = R.TestResult
+            { R.resultNonce = R.testNonce test
+            , R.resultContext = resultContext
+            }
+      C.writeChan rChan (R.TestSuccess result)
+      toyTestRunnerBackend (i+1) tChan rChan _logChan
+  where
+    _debug i msg = traceIO $ "toyTestRunnerBackend: "++show i++": "++msg
+
+-- | Synthesize a single candidate program that agrees with the target
+-- program on the tests.
+--
+-- This is the inner loop of stratified synthesis, and candidates
+-- generated this way are then proven equivalent to build confidence
+-- that they implement the target on all possible inputs.
+synthesizeCandidate :: IO (Maybe [P.SynthInstruction Toy])
+synthesizeCandidate = do
+  let cfg :: Config Toy
+      cfg = Config
+        { baseSetDir = "test-toy/test1/base"
+        , pseudoSetDir = "test-toy/test1/pseudo"
+        , learnedSetDir = "test-toy/test1/learned"
+        , statisticsFile = "test-toy/test1/stats.txt"
+        , programCountThreshold = L.error "programCountThreshold"
+        , randomTestCount = 1024
+        , threadCount = L.error "threadCount"
+        , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
+        }
+
+  {-
+  testCases <- generateTestCases p gen
+  seTestCases <- C.newTVarIO testCases
+  -- seFormulas <- C.newTVarIO $ MapF.fromList []
+  let synEnv :: SynEnv t Toy -- What's @t@?
+      synEnv = SynEnv
+        { seFormulas = L.error "seFormulas"
+        , sePseudoFormulas = L.error "sePseudoFormulas"
+        , seKnownCongruentOps = L.error "seKnownCongruentOps"
+        , seWorklist = L.error "seWorklist"
+        , seTestCases = seTestCases
+        , seIORelations = ioRelations
+        , seSymBackend = L.error "seSymBackend"
+        , seStatsThread = L.error "seStatsThread"
+        , seConfig = cfg
+        }
+  -}
+  Some r <- newIONonceGenerator
+  sym <- newSimpleBackend r
+
+  gen <- A.createGen
+  let p = Proxy :: Proxy Toy
+  let genTest = C.randomState p gen
+
+  -- TODO: heuristic tests.
+  let interestingTests = []
+  -- The way the opcode list and semantic files on disk interact is a
+  -- little weird: the opcode list bounds the possible semantic files
+  -- we look for. I.e., the instructions with known semantics are the
+  -- intersection of the opcode lists here and the semantic files on
+  -- disk.
+  --
+  -- let allOpcodes = opcodesWitnessingBuildOperandList
+  let allOpcodes = [ {- Some (Witness AddRr)
+                   , -} Some (Witness NegR)
+                   , Some (Witness SubRr) ]
+  let pseudoOpcodes = pseudoOpcodesWitnessingBuildOperandList
+  let targetOpcodes = L.error "targetOpcodes"
+  synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
+
+  tChan <- C.newChan :: IO (C.Chan (Maybe (I.TestCase Toy)))
+  rChan <- C.newChan
+  logChan <- C.newChan
+  _testRunnerThread <- C.async $
+    testRunner (seConfig synEnv) tChan rChan logChan
+  C.link _testRunnerThread
+  let runTest = S.naiveRunTest @Toy tChan rChan
+  let localSynEnv = LocalSynEnv
+        { seGlobalEnv = synEnv
+        , seRandomGen = gen
+        , seRunTest = runTest
+        }
+  let instruction = D.Instruction AddRr (R32 Reg1 :> R32 Reg2 :> Nil)
+  -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
+  runSyn @Toy localSynEnv (S.synthesize instruction)

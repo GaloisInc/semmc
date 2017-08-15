@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
@@ -13,6 +14,7 @@
 -- https://cs.stanford.edu/people/eschkufz/docs/pldi_16.pdf
 module SemMC.Stochastic.Synthesize ( synthesize ) where
 
+import qualified Control.Exception as C
 import           Control.Monad ( join )
 import           Control.Monad.Trans ( liftIO )
 import           Data.Maybe ( catMaybes )
@@ -39,8 +41,14 @@ import           SemMC.Stochastic.Pseudo
                  , SynthInstruction(..)
                  , synthArbitraryOperands
                  , synthInsnToActual
+                 , actualInsnToSynth
                  )
 import qualified SemMC.Stochastic.IORelation as I
+
+import Debug.Trace
+import Text.Printf
+import qualified Data.List as L
+import Control.Monad
 
 -- | Attempt to stochastically find a program in terms of the base set that has
 -- the same semantics as the given instruction.
@@ -51,27 +59,53 @@ synthesize :: SynC arch
            -> Syn t arch (Maybe [SynthInstruction arch])
 synthesize target = do
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
-  candidate <- mcmcSynthesizeOne target
+  (numRounds, candidate) <- mcmcSynthesizeOne target
+  debug $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . toList $ candidate
+  debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
   return $ Just candidateWithoutNops
+  where
+    debug msg = liftIO $ traceIO msg
 
-mcmcSynthesizeOne :: SynC arch => Instruction arch -> Syn t arch (Candidate arch)
+mcmcSynthesizeOne :: forall arch t. SynC arch => Instruction arch -> Syn t arch (Integer, Candidate arch)
 mcmcSynthesizeOne target = do
-  -- Fixed to start and make it a parameter if needed. STOKE Figure 10.
-  let progLen = 50
+  -- Max length of candidate programs. Can make it a parameter if
+  -- needed.
+  let progLen = 50 -- STOKE Figure 10.
   candidate <- emptyCandidate progLen
+  -- let candidate = fromList [Just $ actualInsnToSynth @arch target]
 
   tests <- askTestCases
   cost <- sum <$> mapM (compareTargetToCandidate target candidate) tests
-  evolve cost candidate
+  liftIO $ print cost
+  evolve 0 cost candidate
   where
     -- | Evolve the candidate until it agrees with the target on the
     -- tests.
-    evolve 0    candidate = return candidate
-    evolve cost candidate = do
+    evolve k  0    candidate = return (k, candidate)
+    evolve !k cost candidate = do
       candidate' <- perturb candidate
-      (cost'', candidate'') <- chooseNextCandidate target candidate cost candidate'
-      evolve cost'' candidate''
+      if candidate == candidate'
+      then evolve (k+1) cost candidate
+      else do
+        debug $ let prog = unlines . map show . catMaybes . toList $ candidate' in "candidate':\n"++prog
+        debug $ "cost = " ++ show cost
+        -- liftIO $ showDiff candidate candidate'
+        (cost'', candidate'') <- chooseNextCandidate @arch target candidate cost candidate'
+        evolve (k+1) cost'' candidate''
+
+    debug msg = liftIO $ traceIO $ "mcmcSynthesizeOne: "++msg
+
+    showDiff c c' = do
+      debug "===================================================="
+      forM_ zipped $ \xs -> do
+        debug $ case xs of
+          [Nothing] -> ""
+          [Just i] -> "=== "++show i++"\n"
+          [x,x'] -> "!!! "++show x++"\n!!! "++show x'++"\n"
+          _ -> L.error "the sky is falling"
+      where
+        zipped = S.zipWith (\x x' -> L.nub [x,x']) c c'
 
 -- | Choose the new candidate if it's a better match, and with the
 -- Metropolis probability otherwise.
@@ -88,6 +122,7 @@ chooseNextCandidate :: SynC arch
 chooseNextCandidate target candidate cost candidate' = do
   gen <- askGen
   threshold <- liftIO $ D.uniformR (0::Double, 1) gen
+  debug $ printf "threshold = %f" threshold
   tests <- askTestCases
   go threshold 0 tests
   where
@@ -95,21 +130,26 @@ chooseNextCandidate target candidate cost candidate' = do
         -- STOKE Equation 14. Note that the min expression there
         -- is a typo, as in Equation 6, and should be a *difference*
         -- of costs in the exponent, not a *ratio* of costs.
-      | cost' >= cost - log threshold/beta = return (cost, candidate)
-      | [] <- tests = return (cost', candidate')
+      | cost' >= cost - log threshold/beta = do
+          debug "reject"
+          return (cost, candidate)
+      | [] <- tests = do
+          debug "accept"
+          return (cost', candidate')
       | (test:tests') <- tests = do
-          dcost <- compareTargetToCandidate target candidate test
-          go threshold (cost + dcost) tests'
+          -- debug $ printf "%f %f" cost threshold
+          dcost <- compareTargetToCandidate target candidate' test
+          -- debug (show dcost)
+          go threshold (cost' + dcost) tests'
 
     beta = 0.1 -- STOKE Figure 10.
+
+    debug (msg :: String) = liftIO $ traceIO $ "chooseNextCandidate: "++msg
 
 ----------------------------------------------------------------
 
 -- | Compute the cost, in terms of mismatch, of the candidate compared
 -- to the target. STOKE Section 4.6.
---
--- TODO: We'd like to only compare the parts of the state that matter
--- (are live) for the target.
 compareTargetToCandidate :: forall arch t.
                             SynC arch
                          => Instruction arch
@@ -124,12 +164,23 @@ compareTargetToCandidate target candidate test = do
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
-  runTest     <- askRunTest
-  candidateSt <- runTest test candidateProg
-  targetSt    <- runTest test targetProg
-  liveOut     <- getOutMasks target
-  let weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
-  return weight
+  !runTest     <- askRunTest
+  !candidateSt <- runTest test candidateProg
+  !targetSt    <- runTest test targetProg
+  !liveOut     <- getOutMasks target
+  !eitherWeight <- liftIO $ C.tryJust pred $ do
+    let !weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
+    return weight
+  case eitherWeight of
+    Left e -> do
+      debug (show e)
+      debug $ printf "target = %s" (show targetSt)
+      debug $ printf "candidate = %s" (show candidateSt)
+      liftIO (C.throwIO e)
+    Right weight -> return weight
+  where
+    pred = \(e :: C.ArithException) -> Just e
+    debug (msg :: String) = liftIO $ traceIO $ "compareTargetToCandidate: "++msg
 
 -- | The masks for locations that are live out for the target instruction.
 --
