@@ -12,6 +12,7 @@ module SemMC.Formula.Equivalence
   ( EquivalenceResult(..)
   , checkSatZ3
   , formulasEquiv
+  , formulasEquivSym
   , formulasEquivConcrete
   ) where
 
@@ -43,22 +44,33 @@ import           SemMC.Formula.Formula
 import           SemMC.Formula.Instantiate
 import           SemMC.Util
 
-data EquivalenceResult arch ex = Equivalent
-                               | Mismatching
-                               | DifferentBehavior (ArchState arch ex)
+-- | The result of an equivalence check.
+data EquivalenceResult arch ex
+  = Equivalent
+    -- ^ The two formulas are equivalent (or, if you want to be pedantic,
+    -- equisatisfiable).
+  | Mismatching
+    -- ^ The two formulas are trivially different, e.g., one uses inputs that
+    -- the other does not.
+  | DifferentBehavior (ArchState arch ex)
+    -- ^ The two formulas are non-trivially different, i.e., the SAT solver was
+    -- needed to show difference. The 'ArchState' is a machine state that is a
+    -- counterexample to their equivalence.
 deriving instance (ShowF (Location arch), ShowF ex) => Show (EquivalenceResult arch ex)
 
-formulasEquiv :: forall arch t.
-                 (Architecture arch)
-              => SimpleBackend t
-              -> Formula (SimpleBackend t) arch
-              -> Formula (SimpleBackend t) arch
-              -> IO (EquivalenceResult arch (Elt t))
-formulasEquiv sym =
+-- | Check the equivalence of two formulas. The counterexample values are 'Elt's.
+formulasEquivSym :: forall arch t.
+                    (Architecture arch)
+                 => SimpleBackend t
+                 -> Formula (SimpleBackend t) arch
+                 -> Formula (SimpleBackend t) arch
+                 -> IO (EquivalenceResult arch (Elt t))
+formulasEquivSym sym =
   let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (Elt t tp)
       eval (GroundEvalFn evalFn) e = groundValToExpr sym (S.exprType e) =<< evalFn e
-  in formulasEquiv' eval sym
+  in formulasEquiv eval sym
 
+-- | Check the equivalence of two formulas. The counterexample values are 'Value's.
 formulasEquivConcrete :: forall arch t.
                          (Architecture arch)
                       => SimpleBackend t
@@ -71,9 +83,24 @@ formulasEquivConcrete =
         case S.exprType e of
           BaseBVRepr w -> withKnownNat w (ValueBV . fromInteger <$> evalFn e)
           _ -> error "formulasEquivConcrete: only BVs supported"
-  in formulasEquiv' eval
+  in formulasEquiv eval
 
-formulasEquiv' :: (Architecture arch)
+-- | Check the equivalence of two formulas, using the first parameter to extract
+-- expression values for the counterexample.
+formulasEquiv :: (Architecture arch)
+              => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
+              -> SimpleBackend t
+              -> Formula (SimpleBackend t) arch
+              -> Formula (SimpleBackend t) arch
+              -> IO (EquivalenceResult arch ex)
+formulasEquiv eval sym f1 f2 =
+  if not (formInputs f1 == formInputs f2 &&
+          formOutputs f1 == formOutputs f2)
+  then return Mismatching
+  else formulasEquiv' eval sym f1 f2
+
+formulasEquiv' :: forall t arch ex.
+                  (Architecture arch)
                => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
                -> SimpleBackend t
                -> Formula (SimpleBackend t) arch
@@ -82,27 +109,8 @@ formulasEquiv' :: (Architecture arch)
 formulasEquiv'
   eval
   sym
-  f1@(Formula { formDefs = defs1 })
-  f2@(Formula { formDefs = defs2 }) =
-  if not (formInputs f1 == formInputs f2 &&
-          -- Map.keys returns a list in a unique (increasing) order, so we don't
-          -- need to turn it into a list first.
-          mapFKeys defs1 == mapFKeys defs2)
-  then return Mismatching
-  else formulasEquiv'' eval sym f1 f2
-
-formulasEquiv'' :: forall t arch ex.
-                   (Architecture arch)
-                => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
-                -> SimpleBackend t
-                -> Formula (SimpleBackend t) arch
-                -> Formula (SimpleBackend t) arch
-                -> IO (EquivalenceResult arch ex)
-formulasEquiv''
-  eval
-  sym
-  (Formula {formParamVars = bvars1, formDefs = defs1})
-  (Formula {formParamVars = bvars2, formDefs = defs2}) =
+  (Formula { formParamVars = bvars1, formDefs = defs1} )
+  (Formula { formParamVars = bvars2, formDefs = defs2} ) =
   do
     -- Create constants for each of the bound variables, then replace them in
     -- each of the definitions. This way, the equations in the different

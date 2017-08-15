@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -360,25 +361,25 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.Tlscall32 bt) = btVal bt
         operandValue' (PPC.Tlsreg _) = error "Tlsreg not implemented"
         operandValue' (PPC.Tlsreg32 gpr) = locLookup (LocGPR gpr)
-        operandValue' (PPC.U10imm (W.W w10)) =
+        operandValue' (PPC.U10imm (W.unW ->  w10)) =
           S.bvLit sym knownNat (toInteger w10)
-        operandValue' (PPC.U16imm (W.W w16)) =
+        operandValue' (PPC.U16imm (W.unW ->  w16)) =
           S.bvLit sym knownNat (toInteger w16)
-        operandValue' (PPC.U16imm64 (W.W w16)) =
+        operandValue' (PPC.U16imm64 (W.unW ->  w16)) =
           S.bvLit sym knownNat (toInteger w16)
-        operandValue' (PPC.U1imm (W.W w1)) =
+        operandValue' (PPC.U1imm (W.unW ->  w1)) =
           S.bvLit sym knownNat (toInteger w1)
-        operandValue' (PPC.U2imm (W.W w2)) =
+        operandValue' (PPC.U2imm (W.unW ->  w2)) =
           S.bvLit sym knownNat (toInteger w2)
-        operandValue' (PPC.U4imm (W.W w4)) =
+        operandValue' (PPC.U4imm (W.unW ->  w4)) =
           S.bvLit sym knownNat (toInteger w4)
-        operandValue' (PPC.U5imm (W.W w5)) =
+        operandValue' (PPC.U5imm (W.unW ->  w5)) =
           S.bvLit sym knownNat (toInteger w5)
-        operandValue' (PPC.U6imm (W.W w6)) =
+        operandValue' (PPC.U6imm (W.unW ->  w6)) =
           S.bvLit sym knownNat (toInteger w6)
-        operandValue' (PPC.U7imm (W.W w7)) =
+        operandValue' (PPC.U7imm (W.unW ->  w7)) =
           S.bvLit sym knownNat (toInteger w7)
-        operandValue' (PPC.U8imm (W.W w8)) =
+        operandValue' (PPC.U8imm (W.unW ->  w8)) =
           S.bvLit sym knownNat (toInteger w8)
         operandValue' (PPC.Vrrc (PPC.VR vr)) = locLookup (LocVSR (PPC.VSReg (vr + 32)))
         operandValue' (PPC.Vsfrc vsr) = locLookup (LocVSR vsr)
@@ -602,7 +603,7 @@ ppcAssemblePseudo opcode oplist =
   case opcode of
     ReplaceByteGPR ->
       case (oplist :: ShapedList PPC.Operand '["Gprc", "U2imm", "Gprc"]) of
-        (target :> PPC.U2imm (W.W n) :> source :> Nil) ->
+        (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
           let n' :: W.W 5 = fromIntegral n
           in [ D.Instruction PPC.RLWIMI ( target :>
                                           PPC.U5imm (n' * 8 + 7) :>
@@ -615,7 +616,7 @@ ppcAssemblePseudo opcode oplist =
              ]
     ExtractByteGPR ->
       case (oplist :: ShapedList PPC.Operand '["Gprc", "Gprc", "U2imm"]) of
-        (target :> source :> PPC.U2imm (W.W n) :> Nil) ->
+        (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
           let n' :: W.W 5 = fromIntegral n
           in [ D.Instruction PPC.RLWINM ( target :>
                                           PPC.U5imm 31 :>
@@ -627,7 +628,7 @@ ppcAssemblePseudo opcode oplist =
              ]
     ReplaceWordVR ->
       case (oplist :: ShapedList PPC.Operand '["Vrrc", "U2imm", "Gprc"]) of
-        (target :> PPC.U2imm (W.W n) :> source :> Nil) ->
+        (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
           -- Assumes there's a free chunk of memory pointed to by R31.
           let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
               gprWriteLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))
@@ -649,7 +650,7 @@ ppcAssemblePseudo opcode oplist =
              ]
     ExtractWordVR ->
       case (oplist :: ShapedList PPC.Operand '["Gprc", "Vrrc", "U2imm"]) of
-        (target :> source :> PPC.U2imm (W.W n) :> Nil) ->
+        (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
           -- Assumes there's a free chunk of memory pointed to by R31.
           let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
               gprReadLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))

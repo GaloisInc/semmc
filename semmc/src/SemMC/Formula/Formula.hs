@@ -12,16 +12,19 @@
 {-# LANGUAGE TypeOperators #-}
 
 -- | Definitions of formulas
-module SemMC.Formula.Formula (
-  ParameterizedFormula(..),
-  Formula(..),
-  formInputs,
-  formOutputs,
-  validFormula,
-  emptyFormula,
-  coerceFormula,
-  Parameter(..),
-  paramType,
+module SemMC.Formula.Formula
+  ( -- * Parameter
+    Parameter(..)
+  , paramType
+    -- * ParameterizedFormula
+  , ParameterizedFormula(..)
+    -- * Formula
+  , Formula(..)
+  , formInputs
+  , formOutputs
+  , validFormula
+  , emptyFormula
+  , coerceFormula
   ) where
 
 import qualified Data.Set as Set
@@ -39,8 +42,15 @@ import           Lang.Crucible.BaseTypes
 import           SemMC.Architecture
 import           SemMC.Util
 
+-- | A parameter for use in the 'ParameterizedFormula' before.
 data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
+  -- | A parameter that will be filled in at instantiation time. For example, if
+  -- you have the x86 opcode @call r32@, an 'Operand' would be used to represent
+  -- the @r32@ hole. It could also represent an immediate.
   Operand :: BaseTypeRepr (OperandType arch s) -> Index sh s -> Parameter arch sh (OperandType arch s)
+  -- | A parameter that always represents a particular machine location. For
+  -- example, if you have the x86 opcode @call r32@, a 'Literal' would be used
+  -- to represent the implicit @esp@ register used.
   Literal :: Location arch tp -> Parameter arch sh tp
 
 instance ShowF (Location arch) => Show (Parameter arch sh tp) where
@@ -73,6 +83,8 @@ instance OrdF (Location arch) => OrdF (Parameter arch sh) where
       EQF -> EQF
       GTF -> GTF
 
+-- | Get a representation of the 'BaseType' this formula parameter is
+-- type-parameterized over.
 paramType :: (Architecture arch) => Parameter arch sh tp -> BaseTypeRepr tp
 paramType (Operand repr _) = repr
 paramType (Literal loc) = locationType loc
@@ -93,8 +105,12 @@ instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) 
 
 -- | A formula representing a concrete instruction.
 --
--- INVARIANT: All bound variables used in 'formDefs' should be in
--- 'formParamVars'.
+-- Invariants:
+-- * All bound variables used in 'formDefs' should be in 'formParamVars'. This
+--   is checkable using the 'validFormula' function.
+-- * All bound variables in 'formParamVars' should not appear in any other
+--   formula. Yes, this breaks the notion of referential transparency in many
+--   ways, but it was the least bad solution.
 data Formula sym arch =
   Formula { formParamVars :: MapF.MapF (Location arch) (S.BoundVar sym)
           , formDefs :: MapF.MapF (Location arch) (S.SymExpr sym)

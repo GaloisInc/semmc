@@ -9,7 +9,8 @@ module SemMC.Stochastic.Strata (
   SynEnv,
   Config(..),
   loadInitialState,
-  stratifiedSynthesis
+  stratifiedSynthesis,
+  naiveRunTest
   ) where
 
 import qualified GHC.Err.Located as L
@@ -18,37 +19,38 @@ import qualified Control.Concurrent as C
 import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
-import Control.Monad.Trans ( liftIO )
+import           Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
-import Data.Maybe ( catMaybes, isNothing )
-import Data.Monoid
-import Data.Proxy ( Proxy(..) )
+import           Data.Maybe ( catMaybes, isNothing )
+import           Data.Monoid
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.Some ( Some(..) )
-import Data.Parameterized.TraversableFC ( foldrFC )
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.TraversableFC ( foldrFC )
 import qualified Lang.Crucible.Solver.Interface as C
 
-import Data.Parameterized.ShapedList ( ShapedList, indexShapedList )
+import           Data.Parameterized.ShapedList ( ShapedList, indexShapedList )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import SemMC.Architecture ( Instruction, Opcode, Operand, Location, operandToLocation )
+import           SemMC.Architecture ( Instruction, Opcode, Operand, Location, operandToLocation )
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
-import SemMC.Stochastic.Generalize ( generalize )
-import SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
+import           SemMC.Stochastic.Generalize ( generalize )
+import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
+import           SemMC.Stochastic.Monad
+import           SemMC.Stochastic.Pseudo ( SynthInstruction )
 import qualified SemMC.Stochastic.Remote as R
-import SemMC.Stochastic.Monad
-import SemMC.Stochastic.Pseudo ( SynthInstruction )
-import SemMC.Stochastic.Synthesize ( synthesize )
+import           SemMC.Stochastic.Synthesize ( synthesize )
+import qualified SemMC.Stochastic.IORelation.Types as I
 
 {-
 
@@ -73,21 +75,29 @@ stratifiedSynthesis env0 = do
     A.link testRunner'
     let localEnv = LocalSynEnv { seGlobalEnv = env0
                                , seRandomGen = gen
-                               , seRunTest = runTest tChan rChan
+                               , seRunTest = naiveRunTest tChan rChan
                                }
     runSyn localEnv strata `C.finally` A.cancel testRunner'
   STM.readTVarIO (seFormulas env0)
-  where
-    -- A naive test runner: it's synchronous, and dies on test
-    -- failures. Will need to be improved later.
-    runTest tChan rChan c p = liftIO $ do
-      let nonce = 0
-      C.writeChan tChan (Just (R.TestCase nonce c p))
-      r <- C.readChan rChan
-      case r of
-        R.TestSuccess tr
-          | R.resultNonce tr == nonce -> return $ R.resultContext tr
-        _ -> L.error "Unexpected test result in Strata.runTest!"
+
+-- | A naive test runner: it's synchronous, and dies on test
+-- failures.
+--
+-- Will need to be improved later. There is more sophisticated test
+-- runner code in the @IORelation@ modules.
+naiveRunTest :: C.Chan (Maybe (I.TestCase arch))
+             -> C.Chan (I.ResultOrError arch)
+             -> Test arch
+             -> [Instruction arch]
+             -> Syn t arch (Test arch)
+naiveRunTest tChan rChan c p = liftIO $ do
+  let nonce = 0
+  C.writeChan tChan (Just (R.TestCase nonce c p))
+  r <- C.readChan rChan
+  case r of
+    R.TestSuccess tr
+      | R.resultNonce tr == nonce -> return $ R.resultContext tr
+    _ -> L.error "Unexpected test result in Strata.runTest!"
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)
        => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
