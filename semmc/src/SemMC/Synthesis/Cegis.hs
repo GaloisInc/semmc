@@ -138,7 +138,7 @@ cegis sym semantics target tests trial trialFormula = do
   case insns of
     Just insns' -> do
       filledInFormula <- condenseFormula sym =<< mapM (instantiateFormula' sym semantics) insns'
-      equiv <- formulasEquiv sym target filledInFormula
+      equiv <- formulasEquivSym sym target filledInFormula
       case equiv of
         Equivalent -> return . Right $ map ungood insns'
         Mismatching -> return (Left tests)

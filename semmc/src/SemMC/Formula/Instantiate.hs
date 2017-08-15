@@ -1,13 +1,14 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE FlexibleContexts #-}
 module SemMC.Formula.Instantiate
   ( instantiateFormula
   , copyFormula
@@ -15,12 +16,14 @@ module SemMC.Formula.Instantiate
   , replaceLitVars
   ) where
 
+import           Data.Foldable ( foldlM )
 import           Data.IORef
 import           Data.Maybe ( fromJust, isNothing )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Ctx
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.ShapedList ( indexShapedList, ShapedList(..) )
 import           Data.Parameterized.TraversableF
 import           Data.Proxy ( Proxy(..) )
@@ -30,7 +33,6 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-
 import           SemMC.Architecture
 import           SemMC.Formula.Formula
 import           SemMC.Util
@@ -38,16 +40,39 @@ import           SemMC.Util
 -- I got tired of typing this.
 type SB t st = S.SimpleBuilder t st
 
-foldlMWithKey :: forall k a b m. (Monad m) => (forall s. b -> k s -> a s -> m b) -> b -> MapF.MapF k a -> m b
-foldlMWithKey f z0 m = MapF.foldrWithKey f' return m z0
-  where f' :: forall s. k s -> a s -> (b -> m b) -> b -> m b
-        f' k x c z = f z k x >>= c
+-- | Monadically map both keys and values of a 'MapF.MapF'.
+mapFMapBothM :: forall k1 v1 k2 v2 m.
+                (OrdF k2, Monad m)
+             => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp))
+             -> MapF.MapF k1 v1
+             -> m (MapF.MapF k2 v2)
+mapFMapBothM f = MapF.foldrWithKey f' (return MapF.empty)
+  where f' :: forall tp. k1 tp -> v1 tp -> m (MapF.MapF k2 v2) -> m (MapF.MapF k2 v2)
+        f' k v wrappedM = do
+          (k', v') <- f k v
+          m <- wrappedM
+          return $ MapF.insert k' v' m
 
--- This reverses it, but we don't care about that for our use case.
+-- | Filter the elements of a 'MapF.MapF'.
+filterMapF :: forall k v. (OrdF k) => (forall tp. k tp -> v tp -> Bool) -> MapF.MapF k v -> MapF.MapF k v
+filterMapF f = MapF.foldrWithKey go MapF.empty
+  where go :: forall tp. k tp -> v tp -> MapF.MapF k v -> MapF.MapF k v
+        go key value m
+          | f key value = MapF.insert key value m
+          | otherwise   = m
+
+-- | Convert a type-level list of operands to a Crucible-style context of
+-- operand types. This reverses it, but we don't care about that for our use
+-- case (and not doing so would be harder).
 type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
   ShapeCtx _    '[] = EmptyCtx
   ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> OperandType arch s
 
+-- | For a given pair of bound variables and operands, build up:
+-- 1. 'TaggedExpr's corresponding to each operand.
+-- 2. a 'Ctx.Assignment' form of the bound variables (for use in substitution)
+-- 3. a 'Ctx.Assignment' of the created expressions corresponding to each
+--    operand
 buildOpAssignment :: forall sym arch sh.
                   (Architecture arch,
                    S.IsSymInterface sym)
@@ -66,54 +91,64 @@ buildOpAssignment _ _ Nil Nil = return (Nil, Ctx.empty, Ctx.empty)
 buildOpAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) = do
   val' <- operandValue (Proxy :: Proxy arch) sym newVars val
   (valsList, varsRest', valsRest') <- buildOpAssignment sym newVars varsRest valsRest
-  return (val' :> valsList, Ctx.extend varsRest' var, Ctx.extend valsRest' (unTagged val'))
+  return (val' :> valsList, varsRest' Ctx.%> var, valsRest' Ctx.%> (unTagged val'))
 
-buildLitAssignment :: forall sym loc.
-                      sym
-                   -> (forall tp. loc tp -> IO (S.SymExpr sym tp))
+type SomeVarAssignment sym = Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym))
+
+-- | Given
+-- 1. a generator for expressions given locations
+-- 2. a mapping of all locations used to their corresponding bound variables
+-- this function builds an assignment of bound variables to expressions to use
+-- as a substitution.
+buildLitAssignment :: forall m proxy sym loc
+                    . (Monad m)
+                   => proxy sym
+                   -> (forall tp. loc tp -> m (S.SymExpr sym tp))
                    -> MapF.MapF loc (S.BoundVar sym)
-                   -> IO (MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym)))
-buildLitAssignment _ exprLookup = foldlMWithKey f (MapF.Pair Ctx.empty Ctx.empty)
-  where f :: forall (tp :: BaseType).
-             MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym))
-          -> loc tp
-          -> S.BoundVar sym tp
-          -> IO (MapF.Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym)))
-        f (MapF.Pair varAssn exprAssn) loc var =
-          fmap (\expr -> MapF.Pair (Ctx.extend varAssn var) (Ctx.extend exprAssn expr))
+                   -> m (SomeVarAssignment sym)
+buildLitAssignment _ exprLookup = foldlM f (MapF.Pair Ctx.empty Ctx.empty) . MapF.toList
+  where f (Pair varAssn exprAssn) (Pair loc var) =
+          fmap (\expr -> Pair (varAssn Ctx.%> var) (exprAssn Ctx.%> expr))
                (exprLookup loc)
 
+-- | Replace all the variables in the given 'SomeVarAssignment' with their
+-- corresponding expressions, in the given expression.
+replaceVars :: forall t st tp
+             . SB t st
+            -> SomeVarAssignment (SB t st)
+            -> S.Elt t tp
+            -> IO (S.Elt t tp)
+replaceVars sym (Pair varAssn exprAssn) expr =
+  S.evalBoundVars sym expr varAssn exprAssn
+
+-- | Given a generator for expressions given machine locations and all used
+-- machine locations, this replaces bound variables with their corresponding
+-- expressions in the given top-level expression.
 replaceLitVars :: forall loc t st tp.
                   (OrdF loc)
-               => S.SimpleBuilder t st
+               => SB t st
                -> (forall tp'. loc tp' -> IO (S.Elt t tp'))
                -> MapF.MapF loc (S.SimpleBoundVar t)
                -> S.Elt t tp
                -> IO (S.Elt t tp)
-replaceLitVars sym newExprs oldVars expr =
-  buildLitAssignment sym newExprs oldVars >>=
-    \(MapF.Pair varAssn exprAssn) -> S.evalBoundVars sym expr varAssn exprAssn
+replaceLitVars sym newExprs oldVars expr = do
+  assn <- buildLitAssignment (Proxy @(SB t st)) newExprs oldVars
+  replaceVars sym assn expr
 
-mapFMapMBoth :: forall k1 v1 k2 v2 m.
-                (OrdF k2, Monad m)
-             => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp))
-             -> MapF.MapF k1 v1
-             -> m (MapF.MapF k2 v2)
-mapFMapMBoth f = MapF.foldrWithKey f' (return MapF.empty)
-  where f' :: forall tp. k1 tp -> v1 tp -> m (MapF.MapF k2 v2) -> m (MapF.MapF k2 v2)
-        f' k v wrappedM = do
-          (k', v') <- f k v
-          m <- wrappedM
-          return $ MapF.insert k' v' m
-
+-- | Get the corresponding location of a parameter, if it actually corresponds
+-- to one.
 paramToLocation :: forall arch sh tp.
                    (Architecture arch)
                 => ShapedList (Operand arch) sh
                 -> Parameter arch sh tp
                 -> Maybe (Location arch tp)
-paramToLocation opVals (Operand _ idx) = operandToLocation (Proxy :: Proxy arch) $ indexShapedList opVals idx
-paramToLocation _      (Literal loc) = Just loc
+paramToLocation opVals (Operand _ idx) =
+  operandToLocation (Proxy @arch) $ indexShapedList opVals idx
+paramToLocation _ (Literal loc) = Just loc
 
+-- | Return the bound variable corresponding to the given location, by either
+-- looking it up in the given map or creating it then inserting it if it doesn't
+-- exist yet.
 lookupOrCreateVar :: (S.IsSymInterface sym,
                       IsLocation loc)
                   => sym
@@ -129,6 +164,9 @@ lookupOrCreateVar sym litVarsRef loc = do
       writeIORef litVarsRef (MapF.insert loc bVar litVars)
       return bVar
 
+-- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
+-- operand list. The first result is the list of created 'TaggedExpr's for each
+-- operand that are used within the returned formula.
 instantiateFormula :: forall arch t st sh.
                       (Architecture arch)
                    => SB t st
@@ -157,7 +195,7 @@ instantiateFormula
 
     -- This loads the relevant lit vars into the map, so reading the IORef
     -- must happen afterwards :)
-    newDefs <- mapFMapMBoth mapDef defs
+    newDefs <- mapFMapBothM mapDef defs
     newLitVars <- readIORef newLitVarsRef
     let newActualLitVars = foldrF (MapF.union . extractUsedLocs newLitVars) MapF.empty newDefs
 
@@ -168,24 +206,7 @@ instantiateFormula
                                   , formDefs = newDefs
                                   })
 
-data SomeVarAssignment sym = forall ctx. SomeVarAssignment (Ctx.Assignment (S.BoundVar sym) ctx) (Ctx.Assignment (S.SymExpr sym) ctx)
-
-changeVariablesAssignment :: forall sym var.
-                             (S.IsSymInterface sym,
-                              OrdF var)
-                          => MapF.MapF var (S.BoundVar sym)
-                          -- ^ Old variables
-                          -- -> MapF.MapF var (S.BoundVar sym)
-                          -> (forall tp. var tp -> S.SymExpr sym tp)
-                          -- ^ New expressions
-                          -> SomeVarAssignment sym
-changeVariablesAssignment oldVars newExprs =
-  let addAssignment :: var tp -> S.BoundVar sym tp -> SomeVarAssignment sym -> SomeVarAssignment sym
-      addAssignment var bVar (SomeVarAssignment varsAssign exprsAssign) =
-        SomeVarAssignment (Ctx.extend varsAssign bVar)
-                          (Ctx.extend exprsAssign $ newExprs var)
-  in MapF.foldrWithKey addAssignment (SomeVarAssignment Ctx.empty Ctx.empty) oldVars
-
+-- | Create a new formula with the same semantics, but with fresh bound vars.
 copyFormula :: forall t st arch.
                (IsLocation (Location arch))
             => SB t st
@@ -197,21 +218,11 @@ copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
   newVars <- MapF.traverseWithKey (const . mkVar) vars
   let lookupNewVar :: forall tp. Location arch tp -> S.Elt t tp
       lookupNewVar = S.varExpr sym . fromJust . flip MapF.lookup newVars
-  SomeVarAssignment varAssign exprAssign :: SomeVarAssignment (SB t st)
-    <- return $ (changeVariablesAssignment vars lookupNewVar)
-  let replaceVars :: forall tp. S.Elt t tp -> IO (S.Elt t tp)
-      replaceVars e = S.evalBoundVars sym e varAssign exprAssign
-  newDefs <- traverseF replaceVars defs
+  assn <- buildLitAssignment (Proxy @(SB t st)) (return . lookupNewVar) vars
+  newDefs <- traverseF (replaceVars sym assn) defs
   return $ Formula { formParamVars = newVars
                    , formDefs = newDefs
                    }
-
-filterMapF :: forall k v. (OrdF k) => (forall tp. k tp -> v tp -> Bool) -> MapF.MapF k v -> MapF.MapF k v
-filterMapF f = MapF.foldrWithKey go MapF.empty
-  where go :: forall tp. k tp -> v tp -> MapF.MapF k v -> MapF.MapF k v
-        go key value m
-          | f key value = MapF.insert key value m
-          | otherwise   = m
 
 -- | Combine two formulas in sequential execution
 sequenceFormulas :: forall t st arch.
@@ -240,16 +251,14 @@ sequenceFormulas sym form1 form2 = do
         | Just newVar <- MapF.lookup loc vars1 = S.varExpr sym newVar
         -- Otherwise, use the original variable.
         | otherwise = S.varExpr sym $ fromJust $ MapF.lookup loc vars2
-  SomeVarAssignment varAssign exprAssign :: SomeVarAssignment (SB t st)
-    <- return $ changeVariablesAssignment vars2 varReplace
-  let replaceVars :: forall tp. S.Elt t tp -> IO (S.Elt t tp)
-      replaceVars e = S.evalBoundVars sym e varAssign exprAssign
-  newDefs2 <- traverseF replaceVars defs2
+  assn <- buildLitAssignment (Proxy @(SB t st)) (return . varReplace) vars2
+  newDefs2 <- traverseF (replaceVars sym assn) defs2
 
   let newDefs = MapF.union newDefs2 defs1
       -- The new vars are all the vars from the first, plus the vars from the
       -- second that are neither required in the first nor defined in the first.
-      newVars = MapF.union vars1 (filterMapF (\k _ -> isNothing $ MapF.lookup k defs1) vars2)
+      notWrittenVars2 = filterMapF (\k _ -> isNothing $ MapF.lookup k defs1) vars2
+      newVars = MapF.union vars1 notWrittenVars2
 
   return $ Formula { formParamVars = newVars
                    , formDefs = newDefs
