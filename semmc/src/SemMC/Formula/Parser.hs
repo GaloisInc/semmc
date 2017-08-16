@@ -183,11 +183,11 @@ literalVarPrefix = "lit_"
 readRawParameter :: (MonadError String m) => Atom -> m RawParameter
 readRawParameter (AIdent name)
   | Right _ <- userSymbol (operandVarPrefix ++ name) = return (RawOperand name)
-  | otherwise = throwError $ name ++ " is not a valid parameter name"
+  | otherwise = throwError $ printf "%s is not a valid parameter name" name
 readRawParameter (AQuoted name)
   | Right _ <- userSymbol (literalVarPrefix ++ name) = return (RawLiteral name)
-  | otherwise = throwError $ name ++ " is not a valid parameter name"
-readRawParameter a = throwError $ "expected parameter, found " ++ show a
+  | otherwise = throwError $ printf "%s is not a valid parameter name" name
+readRawParameter a = throwError $ printf "expected parameter, found %s" (show a)
 
 -- | Short-lived type that just stores an index with its corresponding type
 -- representation, with the type parameter ensuring they correspond to one another.
@@ -207,11 +207,11 @@ readParameter :: (MonadError String m, Architecture arch) => ShapedList (OpData 
 readParameter oplist atom =
   readRawParameter atom >>= \case
     RawOperand op ->
-      maybe (throwError $ "couldn't find operand " ++ op)
+      maybe (throwError $ printf "couldn't find operand %s" op)
             (viewSome (\(IndexWithType tpRepr idx) -> return $ Some (Operand tpRepr idx)))
             (findOpListIndex op oplist)
     RawLiteral lit ->
-      maybe (throwError $ lit ++ " is an invalid literal for this arch")
+      maybe (throwError $ printf "%s is an invalid literal for this arch" lit)
             (return . viewSome (Some . Literal))
             (readLocation lit)
 
@@ -260,7 +260,7 @@ getBVProof :: (S.IsExpr ex, MonadError String m) => ex tp -> m (BVProof tp)
 getBVProof expr =
   case S.exprType expr of
     BaseBVRepr n -> return $ BVProof n
-    t -> throwError $ "expected BV, found " ++ show t
+    t -> throwError $ printf "expected BV, found %s" (show t)
 
 -- | Type of the various different handlers for building up expressions formed
 -- by applying arguments to some function.
@@ -287,7 +287,7 @@ type ExprParser sym arch sh m = (S.IsSymInterface sym,
 readConcat :: ExprParser sym arch sh m
 readConcat (SC.SAtom (AIdent "concat")) args =
   prefixError "in reading concat expression: " $ do
-    when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
+    when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
     sym <- reader getSym
     Some arg1 <- return $ args !! 0
     Some arg2 <- return $ args !! 1
@@ -309,7 +309,7 @@ readExtract (SC.SCons (SC.SAtom (AIdent "_"))
                (SC.SCons (SC.SAtom (AInt jInt))
                 SC.SNil))))
             args = prefixError "in reading extract expression: " $ do
-  when (length args /= 1) (throwError $ "expecting 1 argument, got " ++ show (length args))
+  when (length args /= 1) (throwError $ printf "expecting 1 argument, got %d" (length args))
   sym <- reader getSym
   -- The SMT-LIB spec represents extracts differently than Crucible does. Per
   -- SMT: "extraction of bits i down to j from a bitvector of size m to yield a
@@ -352,8 +352,8 @@ readExtend (SC.SCons (SC.SAtom (AIdent "_"))
                 SC.SNil)))
            args
   | extend == "zero_extend" ||
-    extend == "sign_extend" = prefixError ("in reading " ++ extend ++ " expression: ") $ do
-      when (length args /= 1) (throwError $ "expecting 1 argument, got " ++ show (length args))
+    extend == "sign_extend" = prefixError (printf "in reading %s expression: " extend) $ do
+      when (length args /= 1) (throwError $ printf "expecting 1 argument, got %d" (length args))
       sym <- reader getSym
       Some iNat <- intToNatM iInt
       iPositive <- fromMaybeError "must extend by a positive length" $ isPosNat iNat
@@ -380,8 +380,8 @@ bvUnop       _ = Nothing
 readBVUnop :: forall sym arch sh m. ExprParser sym arch sh m
 readBVUnop (SC.SAtom (AIdent ident)) args
   | Just (BVUnop op :: BVUnop sym) <- bvUnop ident =
-      prefixError ("in reading " ++ ident ++ " expression: ") $ do
-        when (length args /= 1) (throwError $ "expecting 1 argument, got " ++ show (length args))
+      prefixError (printf "in reading %s expression: " ident) $ do
+        when (length args /= 1) (throwError $ printf "expecting 1 argument, got %d" (length args))
         sym <- reader getSym
         Some expr <- return $ args !! 0
         BVProof _ <- getBVProof expr
@@ -430,49 +430,48 @@ bvBinop        _ = Nothing
 readBVBinop :: forall sym arch sh m. ExprParser sym arch sh m
 readBVBinop (SC.SAtom (AIdent ident)) args
   | Just (op :: BVBinop sym) <- bvBinop ident =
-      prefixError ("in reading " ++ ident ++ " expression: ") $ do
-        when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
+      prefixError (printf "in reading %s expression: " ident) $ do
+        when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
         sym <- reader getSym
         Some arg1 <- return $ args !! 0
         Some arg2 <- return $ args !! 1
-        BVProof m <- prefixError ("in arg 1: ") $ getBVProof arg1
-        BVProof n <- prefixError ("in arg 2: ") $ getBVProof arg2
+        BVProof m <- prefixError "in arg 1: " $ getBVProof arg1
+        BVProof n <- prefixError "in arg 2: " $ getBVProof arg2
         case testEquality m n of
           Just Refl -> liftIO $ Just <$>
             case op of
               BinopBV op' -> Some <$> op' sym arg1 arg2
               BinopBool op' -> Some <$> op' sym arg1 arg2
-          Nothing -> throwError $ unwords
-                       ["arguments to",
-                        ident,
-                        "must be the same length, but arg 1 has length",
-                        show m,
-                        "and arg 2 has length",
-                        show n]
+          Nothing -> throwError $ printf "arguments to %s must be the same length, \
+                                         \but arg 1 has length %s \
+                                         \and arg 2 has length %s"
+                                         ident
+                                         (show m)
+                                         (show n)
 readBVBinop _ _ = return Nothing
 
 -- | Parse an expression of the form @(= x y)@.
 readEq :: ExprParser sym arch sh m
 readEq (SC.SAtom (AIdent "=")) args =
   prefixError ("in reading '=' expression: ") $ do
-    when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
+    when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
     sym <- reader getSym
     Some arg1 <- return $ args !! 0
     Some arg2 <- return $ args !! 1
     case testEquality (S.exprType arg1) (S.exprType arg2) of
       Just Refl -> liftIO (Just . Some <$> S.isEq sym arg1 arg2)
-      Nothing -> throwError $ unwords
-                   ["arguments must have same types; instead, got for arg 1",
-                    show (S.exprType arg1),
-                    "and for arg 2 got",
-                    show (S.exprType arg2)]
+      Nothing -> throwError $ printf "arguments must have same types, \
+                                     \but arg 1 has type %s \
+                                     \and arg 2 has type %s"
+                                     (show (S.exprType arg1))
+                                     (show (S.exprType arg2))
 readEq _ _ = return Nothing
 
 -- | Parse an expression of the form @(ite b x y)@
 readIte :: ExprParser sym arch sh m
 readIte (SC.SAtom (AIdent "ite")) args =
   prefixError ("in reading ite expression: ") $ do
-    when (length args /= 3) (throwError $ "expecting 3 arguments, got " ++ show (length args))
+    when (length args /= 3) (throwError $ printf "expecting 3 arguments, got %d" (length args))
     sym <- reader getSym
     Some test <- return $ args !! 0
     Some then_ <- return $ args !! 1
@@ -481,13 +480,12 @@ readIte (SC.SAtom (AIdent "ite")) args =
       BaseBoolRepr ->
         case testEquality (S.exprType then_) (S.exprType else_) of
           Just Refl -> liftIO (Just . Some <$> S.baseTypeIte sym test then_ else_)
-          Nothing -> throwError $ unwords
-                       ["then and else branches must have same type; got",
-                        show (S.exprType then_),
-                        "for then and",
-                        show (S.exprType else_),
-                        "for else"]
-      tp -> throwError $ "test expression must be a boolean; got " ++ show tp
+          Nothing -> throwError $ printf "then and else branches must have same type, \
+                                         \but then has type %s \
+                                         \and else has type %s"
+                                         (show (S.exprType then_))
+                                         (show (S.exprType else_))
+      tp -> throwError $ printf "test expression must be a boolean; got %s" (show tp)
 readIte _ _ = return Nothing
 
 data ArrayJudgment :: BaseType -> BaseType -> * where
@@ -512,7 +510,7 @@ expectArrayWithIndex _ repr = throwError $ unwords ["expected an array, got", sh
 readSelect :: ExprParser sym arch sh m
 readSelect (SC.SAtom (AIdent "select")) args =
   prefixError "in reading select expression: " $ do
-    when (length args /= 2) (throwError $ "expecting 2 arguments, got " ++ show (length args))
+    when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
     sym <- reader getSym
     Some arr <- return $ args !! 0
     Some idx <- return $ args !! 1
@@ -525,7 +523,7 @@ readSelect _ _ = return Nothing
 readStore :: ExprParser sym arch sh m
 readStore (SC.SAtom (AIdent "store")) args =
   prefixError "in reading store expression: " $ do
-    when (length args /= 3) (throwError $ "expecting 3 arguments, got " ++ show (length args))
+    when (length args /= 3) (throwError $ printf "expecting 3 arguments, got %d" (length args))
     sym <- reader getSym
     Some arr <- return $ args !! 0
     Some idx <- return $ args !! 1
@@ -535,8 +533,9 @@ readStore (SC.SAtom (AIdent "store")) args =
       Just Refl ->
         let idx' = Ctx.empty Ctx.%> idx
         in liftIO (Just . Some <$> S.arrayUpdate sym arr idx' expr)
-      Nothing -> throwError $ unwords ["Array result type", show resRepr,
-                                       "does not match", show (S.exprType expr)]
+      Nothing -> throwError $ printf "Array result type %s does not match %s"
+                                     (show resRepr)
+                                     (show (S.exprType expr))
 readStore _ _ = return Nothing
 
 exprAssignment' :: (MonadError String m,
@@ -624,7 +623,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
     ]
   case parseAttempt of
     Just expr -> return expr
-    Nothing -> throwError $ "couldn't parse expression " ++ show opRaw
+    Nothing -> throwError $ printf "couldn't parse expression %s" (show opRaw)
 
 -- | Parse multiple expressions in a list.
 readExprs :: (S.IsExprBuilder sym,
