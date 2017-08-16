@@ -7,3 +7,6 @@
 [submodule "submodules/parameterized-utils"]
 	path = submodules/parameterized-utils
 	url = https://github.com/GaloisInc/parameterized-utils.git
+[submodule "submodules/elf-edit"]
+	path = submodules/elf-edit
+	url = git@github.com:GaloisInc/elf-edit.git

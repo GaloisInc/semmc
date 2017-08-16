@@ -9,4 +9,5 @@ optional-packages:
   submodules/crucible/crucible
   submodules/crucible/galois-matlab
   submodules/parameterized-utils
+  submodules/elf-edit/
   submodules/dismantle/dismantle-ppc/
