@@ -610,7 +610,7 @@ readExpr (SC.SAtom paramRaw) = do
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
   args <- readExprs argsRaw
-  parseTries <- sequence $ map (\f -> f opRaw args)
+  parseAttempt <- sequenceMaybes $ map (\f -> f opRaw args)
     [ readConcat
     , readExtract
     , readExtend
@@ -622,7 +622,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
     , readStore
     , readCall
     ]
-  case asum parseTries of
+  case parseAttempt of
     Just expr -> return expr
     Nothing -> throwError $ "couldn't parse expression " ++ show opRaw
 
