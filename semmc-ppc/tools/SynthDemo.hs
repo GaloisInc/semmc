@@ -115,7 +115,7 @@ loadBaseSet :: FilePath
 loadBaseSet baseDir sym = do
   baseSet <- PPC.loadBaseSet baseDir sym
   let plainBaseSet = makePlain baseSet
-  synthEnv <- SemMC.setupEnvironment sym baseSet
+  let synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
 
 symbolicallyExecute :: (Architecture arch, Traversable t)

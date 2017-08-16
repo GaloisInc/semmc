@@ -10,10 +10,10 @@ module SemMC.Synthesis.Core
   , SynthesisParams(..)
   ) where
 
+import           Control.Arrow ( (&&&) )
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Data.Parameterized.Classes ( OrdF )
-import           Data.Parameterized.Some ( Some )
+import           Data.Parameterized.Some ( Some, viewSome )
 import qualified Data.Sequence as Seq
 import           Data.Foldable
 import qualified Data.Set as Set
@@ -24,7 +24,6 @@ import qualified Lang.Crucible.Solver.SimpleBackend as S
 
 import           SemMC.Architecture
 import           SemMC.Formula
-import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
 import           SemMC.Synthesis.Cegis
 import           SemMC.Util
@@ -32,22 +31,13 @@ import           SemMC.Util
 -- NOTE: This initial implementation is not meant to be at all fast; it is just
 -- a proof of concept.
 
-condenseFormula :: forall t st arch.
-                   (Architecture arch,
-                    Architecture (TemplatedArch arch))
-                => S.SimpleBuilder t st
-                -> [TemplatedInstructionFormula (S.SimpleBuilder t st) arch]
-                -> IO (Formula (S.SimpleBuilder t st) arch)
-condenseFormula sym = fmap (coerceFormula :: Formula sym (TemplatedArch arch) -> Formula sym arch)
-                    . foldrM (sequenceFormulas sym) emptyFormula
-                    . map (\(TemplatedInstructionFormula _ tf) -> tfFormula tf)
 
 -- Algorithm Synthesize, from [Srinivasan and Reps 2015]:
 
 data SynthesisEnvironment sym arch =
   SynthesisEnvironment { synthSym :: sym
                        , synthBaseSet :: BaseSet sym arch
-                       , synthInsns :: [TemplatedInstructionFormula sym arch]
+                       , synthInsns :: [Some (TemplatedInstruction sym arch)]
                        }
 
 data SynthesisParams sym arch =
@@ -57,7 +47,7 @@ data SynthesisParams sym arch =
 
 data SynthesisState sym arch =
   SynthesisState { synthTests :: [(ArchState arch (S.SymExpr sym), ArchState arch (S.SymExpr sym))]
-                 , synthPrefixes :: Seq.Seq [TemplatedInstructionFormula sym arch]
+                 , synthPrefixes :: Seq.Seq [Some (TemplatedInstruction sym arch)]
                  }
 
 askSym :: (MonadReader (SynthesisParams sym arch) m) => m sym
@@ -66,25 +56,24 @@ askSym = reader (synthSym . synthEnv)
 askBaseSet :: (MonadReader (SynthesisParams sym arch) m) => m (BaseSet sym arch)
 askBaseSet = reader (synthBaseSet . synthEnv)
 
-askInsns :: (MonadReader (SynthesisParams sym arch) m) => m [TemplatedInstructionFormula sym arch]
+askInsns :: (MonadReader (SynthesisParams sym arch) m) => m [Some (TemplatedInstruction sym arch)]
 askInsns = reader (synthInsns . synthEnv)
 
 askMaxLength :: (MonadReader (SynthesisParams sym arch) m) => m Int
 askMaxLength = reader synthMaxLength
 
-calcFootprint :: (OrdF (Location arch))
-              => [TemplatedInstructionFormula sym arch]
+calcFootprint :: (Architecture arch)
+              => [Some (TemplatedInstruction sym arch)]
               -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
 calcFootprint = foldl' addPrint (Set.empty, Set.empty)
-  where addPrint (curInputs, curOutputs) (tifFormula -> f) =
-          let newInputs = formInputs f
-              newOutputs = formOutputs f
+  where addPrint (curInputs, curOutputs) insn =
+          let (newInputs, newOutputs) = viewSome (templatedInputs &&& templatedOutputs) insn
           in (curInputs `Set.union` (newInputs Set.\\ curOutputs),
               curOutputs `Set.union` newOutputs)
 
-footprintFilter :: (OrdF (Location arch))
+footprintFilter :: (Architecture arch)
                 => Formula sym arch
-                -> [TemplatedInstructionFormula sym arch]
+                -> [Some (TemplatedInstruction sym arch)]
                 -> Bool
 footprintFilter target candidate =
   let (candInputs, candOutputs) = calcFootprint candidate
@@ -96,18 +85,17 @@ footprintFilter target candidate =
 instantiate :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
                 MonadState (SynthesisState (S.SimpleBackend t) arch) m,
                 MonadIO m,
-                Architecture arch,
-                Architecture (TemplatedArch arch))
+                TemplateConstraints arch)
             => Formula (S.SimpleBackend t) arch
-            -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
+            -> [Some (TemplatedInstruction (S.SimpleBackend t) arch)]
             -> m (Maybe [Instruction arch])
 instantiate target trial
   | footprintFilter target trial = do
       sym <- askSym
       baseSet <- askBaseSet
-      trialFormula <- liftIO $ condenseFormula sym trial
+      tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
       st <- get
-      liftIO (cegis sym baseSet target (synthTests st) trial trialFormula)
+      liftIO (cegis sym baseSet target (synthTests st) tifs)
         >>= \case
                Right insns -> return (Just insns)
                Left newTests -> do

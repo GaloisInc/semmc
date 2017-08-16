@@ -71,7 +71,7 @@ doThing = do
               $ MapF.insert (Witness MovRi) movi
               $ MapF.empty
   -- print =<< instantiateFormula sym pf (R32 Reg1 :> R32 Reg3 :> Nil)
-  templated <- templatedInstructions sym opcodes
+  let templated = templatedInstructions opcodes
   print $ templated !! 50
   -- (f1 : f2 : _) <- templatizeFormula' sym pf
   -- print =<< sequenceFormulas sym (tfFormula f1) (tfFormula f2)
@@ -141,7 +141,7 @@ doThing2 = do
   -- target <- fooFormula sym
   target <- independentFormula sym
 
-  env <- setupEnvironment sym baseset
+  let env = setupEnvironment sym baseset
   print =<< mcSynth env target
   print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
@@ -166,7 +166,7 @@ doThing4 = do
               $ MapF.empty
 
   ind <- independentFormula sym
-  env <- setupEnvironment sym baseset
+  let env = setupEnvironment sym baseset
   print =<< mcSynth env ind
 
 ----------------------------------------------------------------

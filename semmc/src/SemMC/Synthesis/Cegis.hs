@@ -93,7 +93,7 @@ handleSat :: GroundEvalFn t
           -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
           -> IO [TemplatableInstruction arch]
 handleSat (GroundEvalFn evalFn) = mapM f
-  where f (TemplatedInstructionFormula op tf) =
+  where f (TemplatedInstructionFormula (TemplatedInstruction op _ _) tf) =
           TemplatableInstruction (Witness op) <$> recoverOperands evalFn (tfOperandExprs tf)
 
 handleSatResult :: [TemplatedInstructionFormula (S.SimpleBackend t) arch]
@@ -128,9 +128,9 @@ cegis :: (Architecture arch)
       -> Formula (S.SimpleBackend t) arch
       -> TestCases (S.SimpleBackend t) arch
       -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
-      -> Formula (S.SimpleBackend t) arch
       -> IO (Either (TestCases (S.SimpleBackend t) arch) [Instruction arch])
-cegis sym semantics target tests trial trialFormula = do
+cegis sym semantics target tests trial = do
+  trialFormula <- foldrM (sequenceFormulas sym . tifFormula) emptyFormula trial
   check <- foldrM (\test b -> S.andPred sym b =<< buildEquality sym test trialFormula) (S.truePred sym) tests
 
   insns <- checkSatZ3 sym check (handleSatResult trial)
@@ -144,5 +144,5 @@ cegis sym semantics target tests trial trialFormula = do
         Mismatching -> return (Left tests)
         DifferentBehavior ctrExample -> do
           ctrExampleOut <- evalFormula sym target ctrExample
-          cegis sym semantics target ((ctrExample, ctrExampleOut) : tests) trial trialFormula
+          cegis sym semantics target ((ctrExample, ctrExampleOut) : tests) trial
     Nothing -> return (Left tests)

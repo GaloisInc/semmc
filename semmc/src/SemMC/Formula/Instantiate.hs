@@ -14,6 +14,7 @@ module SemMC.Formula.Instantiate
   , copyFormula
   , sequenceFormulas
   , replaceLitVars
+  , paramToLocation
   ) where
 
 import           Data.Foldable ( foldlM )

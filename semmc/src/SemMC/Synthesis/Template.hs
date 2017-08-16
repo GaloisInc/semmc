@@ -24,6 +24,7 @@ given constraints.
 {-# LANGUAGE UndecidableInstances #-}
 module SemMC.Synthesis.Template
   ( BaseSet
+  , TemplateConstraints
   , TemplatedOperandFn
   , TemplatedOperand(..)
   , WrappedRecoverOperandFn(..)
@@ -32,24 +33,27 @@ module SemMC.Synthesis.Template
   , TemplatableOperand(..)
   , TemplatableOperands
   , TemplatableOpcode
+  , TemplatedInstruction(..)
   , TemplatedInstructionFormula(..)
   , tifFormula
-  , templatizeFormula
-  , templatizeFormula'
+  -- , templatizeFormula
+  -- , templatizeFormula'
   , templatedInstructions
+  , templatedInputs
+  , templatedOutputs
+  , genTemplatedFormula
   , recoverOperands
   , unTemplateUnsafe
   , unTemplateSafe
   , unTemplate
   ) where
 
-import           Control.Monad ( join )
 import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
-import           Data.Parameterized.ShapedList ( ShapedList(..) )
+import           Data.Parameterized.ShapedList ( ShapedList(..), indexShapedList )
 import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
@@ -138,6 +142,10 @@ unTemplateUnsafe :: ParameterizedFormula sym (TemplatedArch arch) sh
                  -> ParameterizedFormula sym arch sh
 unTemplateUnsafe = unsafeCoerce
 
+coerceParameter :: Parameter (TemplatedArch arch) sh tp -> Parameter arch sh tp
+coerceParameter (Operand tp idx) = Operand tp idx
+coerceParameter (Literal loc) = Literal loc
+
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using a manual mapping.
 --
@@ -159,9 +167,6 @@ unTemplateSafe (ParameterizedFormula { pfUses = uses
   where newUses = Set.map (mapSome coerceParameter) uses
         newOpVars = fmapFC coerceBoundVar opVars
         newDefs = MapF.foldrWithKey (MapF.insert . coerceParameter) MapF.empty defs
-        coerceParameter :: forall tp. Parameter (TemplatedArch arch) sh tp -> Parameter arch sh tp
-        coerceParameter (Operand tpRepr idx) = Operand tpRepr idx
-        coerceParameter (Literal loc) = Literal loc
         coerceBoundVar :: forall op. BoundVar sym (TemplatedArch arch) op -> BoundVar sym arch op
         coerceBoundVar (BoundVar var) = BoundVar var
 
@@ -221,44 +226,69 @@ type TemplatableOpcode arch = Witness (TemplatableOperands arch) ((Opcode arch) 
 
 type BaseSet sym arch = MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula sym (TemplatedArch arch))
 
--- | Make a list of all possible 'TemplatedFormula's from a given
--- 'ParameterizedFormula'.
-templatizeFormula :: (TemplateConstraints arch,
-                      TemplatableOperands arch sh)
-                  => S.SimpleBuilder t st
-                  -> ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch) sh
-                  -> [IO (TemplatedFormula (S.SimpleBuilder t st) arch sh)]
-templatizeFormula sym pf = map mkFormula makeTemplatedOpLists
-  where mkFormula ol = uncurry TemplatedFormula <$> instantiateFormula sym pf ol
+data TemplatedInstruction sym arch sh where
+  TemplatedInstruction :: (TemplatableOperands arch sh)
+                       => (Opcode arch) (Operand arch) sh
+                       -> ParameterizedFormula sym (TemplatedArch arch) sh
+                       -> ShapedList (TemplatedOperand arch) sh
+                       -> TemplatedInstruction sym arch sh
 
-templatizeFormula' :: (TemplateConstraints arch,
-                       TemplatableOperands arch sh)
-                   => S.SimpleBuilder t st
-                   -> ParameterizedFormula (S.SimpleBuilder t st) (TemplatedArch arch) sh
-                   -> IO [TemplatedFormula (S.SimpleBuilder t st) arch sh]
-templatizeFormula' sym = sequence . templatizeFormula sym
+deriving instance (Show ((Opcode arch) (Operand arch) sh), Show (ParameterizedFormula sym (TemplatedArch arch) sh), Show (ShapedList (TemplatedOperand arch) sh)) => Show (TemplatedInstruction sym arch sh)
+
+instance (ShowF ((Opcode arch) (Operand arch)), ShowF (ParameterizedFormula sym (TemplatedArch arch)), ShowF (TemplatedOperand arch)) => ShowF (TemplatedInstruction sym arch) where
+  withShow (_ :: p (TemplatedInstruction sym arch)) (_ :: q sh) x =
+    withShow (Proxy @((Opcode arch) (Operand arch))) (Proxy @sh) $
+      withShow (Proxy @(ParameterizedFormula sym (TemplatedArch arch))) (Proxy @sh) $
+        withShow (Proxy @(ShapedList (TemplatedOperand arch))) (Proxy @sh) $
+          x
+
+paramsToLocations :: (OrdF (Location arch),
+                      Foldable t)
+                  => ShapedList (TemplatedOperand arch) sh
+                  -> t (Some (Parameter arch sh))
+                  -> Set.Set (Some (Location arch))
+paramsToLocations oplist = foldr addParam Set.empty
+  where addParam (Some param) s =
+          case param of
+            Operand _ idx ->
+              case indexShapedList oplist idx of
+                TemplatedOperand (Just loc) _ -> Set.insert (Some loc) s
+                _ -> s
+            Literal loc -> Set.insert (Some loc) s
+
+templatedInputs :: (OrdF (Location arch))
+                => TemplatedInstruction sym arch sh
+                -> Set.Set (Some (Location arch))
+templatedInputs (TemplatedInstruction _ pf oplist) =
+  paramsToLocations oplist (Set.map (mapSome coerceParameter) (pfUses pf))
+
+templatedOutputs :: (OrdF (Location arch))
+                 => TemplatedInstruction sym arch sh
+                 -> Set.Set (Some (Location arch))
+templatedOutputs (TemplatedInstruction _ pf oplist) =
+  paramsToLocations oplist (map (mapSome coerceParameter) (MapF.keys (pfDefs pf)))
+
+genTemplatedFormula :: (TemplateConstraints arch)
+                    => S.SimpleBuilder t st
+                    -> TemplatedInstruction (S.SimpleBuilder t st) arch sh
+                    -> IO (TemplatedInstructionFormula (S.SimpleBuilder t st) arch)
+genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
+  TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist
+
+templatedInstructions :: (TemplateConstraints arch)
+                      => BaseSet sym arch
+                      -> [Some (TemplatedInstruction sym arch)]
+templatedInstructions baseSet = do
+  Pair (Witness opcode) pf <- MapF.toList baseSet
+  oplist <- makeTemplatedOpLists
+  return . Some $! TemplatedInstruction opcode pf oplist
 
 -- | An opcode along with a 'TemplatedFormula' that implements it for specific
 -- templated operands.
 data TemplatedInstructionFormula sym arch where
-  TemplatedInstructionFormula :: (TemplatableOperands arch sh)
-                              => (Opcode arch) (Operand arch) sh
+  TemplatedInstructionFormula :: TemplatedInstruction sym arch sh
                               -> TemplatedFormula sym arch sh
                               -> TemplatedInstructionFormula sym arch
 
-instance (ShowF ((Opcode arch) (Operand arch)),
-          ShowF (TemplatedFormula sym arch))
-       => Show (TemplatedInstructionFormula sym arch) where
-  show (TemplatedInstructionFormula op tf) =
-    unwords ["TemplatedInstructionFormula", showF op, showF tf]
-
 tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
 tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
-
--- | A list of all possible templated instructions, given some opcodes.
-templatedInstructions :: (TemplateConstraints arch)
-                      => S.SimpleBuilder t st
-                      -> BaseSet (S.SimpleBuilder t st) arch
-                      -> IO [TemplatedInstructionFormula (S.SimpleBuilder t st) arch]
-templatedInstructions sym m = join <$> mapM f (MapF.toList m)
-  where f (Pair (Witness op) pf) = fmap (map (TemplatedInstructionFormula op)) (templatizeFormula' sym pf)

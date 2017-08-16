@@ -19,13 +19,13 @@ setupEnvironment :: (Architecture arch,
                      Typeable arch)
                  => S.SimpleBackend t
                  -> BaseSet (S.SimpleBackend t) arch
-                 -> IO (SynthesisEnvironment (S.SimpleBackend t) arch)
-setupEnvironment sym baseSet = do
-  insns <- templatedInstructions sym baseSet
-  return $! SynthesisEnvironment { synthSym = sym
-                                 , synthBaseSet = baseSet
-                                 , synthInsns = insns
-                                 }
+                 -> SynthesisEnvironment (S.SimpleBackend t) arch
+setupEnvironment sym baseSet =
+  let insns = templatedInstructions baseSet
+  in SynthesisEnvironment { synthSym = sym
+                          , synthBaseSet = baseSet
+                          , synthInsns = insns
+                          }
 
 mcSynth :: (Architecture arch,
             Architecture (TemplatedArch arch),
