@@ -267,7 +267,7 @@ instance (ShowF ((Opcode arch) (Operand arch)),
           ShowF (ParameterizedFormula sym (TemplatedArch arch)),
           ShowF (TemplatedOperand arch))
   => ShowF (TemplatedInstruction sym arch) where
-  withShow (_ :: p (TemplatedInstruction sym arch)) (_ :: q sh) =
+  withShow (_ :: p (TemplatedInstruction sym arch)) (_ :: q sh) x =
     withShow (Proxy @((Opcode arch) (Operand arch))) (Proxy @sh) $
       withShow (Proxy @(ParameterizedFormula sym (TemplatedArch arch ))) (Proxy @sh) $
         withShow (Proxy @(ShapedList (TemplatedOperand arch))) (Proxy @sh) $
