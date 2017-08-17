@@ -70,11 +70,31 @@ import           SemMC.Architecture
 import           SemMC.Formula
 import           SemMC.Formula.Instantiate
 
+
+--
+-- First, an overview about how the templating system works.
+--
+-- There are two stages of templating. The first stage generates 'TemplatedInstruction's. These associate an opcode
+
+-- | A function that allows you to recover the concrete value of a templated
+-- operand given a concrete evaluation function, typically provided as the model
+-- from an SMT solver.
 type RecoverOperandFn sym op = (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op
 
+-- | Just what it sounds like. Haskell doesn't deal that well with RankNTypes.
 newtype WrappedRecoverOperandFn sym op =
   WrappedRecoverOperandFn { unWrappedRecOpFn :: RecoverOperandFn sym op }
 
+-- | The bulk of what a 'TemplatedOperand' is. Reading off the type in English:
+-- given a symbolic expression builder and a mapping from machine location to
+-- symbolic expression, return (in IO) both an expression representing the
+-- templated operand and a way to recover a concrete operand.
+--
+-- The idea is that the expression has all the register-related information
+-- filled in directly, but all immediates are symbolic. The reason this is a
+-- function and not the expression/recovery function themselves is that we need
+-- a separation between "template possibilities" generation time and actual
+-- formula generation time.
 type TemplatedOperandFn arch s = forall sym.
                                  (S.IsExprBuilder sym,
                                   S.IsSymInterface sym)
@@ -83,8 +103,14 @@ type TemplatedOperandFn arch s = forall sym.
                               -> IO (S.SymExpr sym (OperandType arch s),
                                      WrappedRecoverOperandFn sym (Operand arch s))
 
+-- | An operand for 'TemplatedArch'.
 data TemplatedOperand (arch :: *) (s :: Symbol) =
-  TemplatedOperand (Maybe (Location arch (OperandType arch s))) (TemplatedOperandFn arch s)
+  TemplatedOperand { templOpLocation :: Maybe (Location arch (OperandType arch s))
+                   -- ^ If this operand represents a location, this is it.
+                   , templOpFn :: TemplatedOperandFn arch s
+                   -- ^ How to get an expression and recovery function for this
+                   -- operand.
+                   }
 
 instance Show (TemplatedOperand arch s) where
   show _ = "some weird templated operand"
@@ -92,7 +118,6 @@ instance Show (TemplatedOperand arch s) where
 instance (ShowF (Operand arch)) => ShowF (TemplatedOperand arch)
 
 instance IsOperand (TemplatedOperand arch)
-
 
 -- | Phantom architecture used to signal we want to use template operands when
 -- instantiating a formula, rather than all concrete operands.
@@ -103,6 +128,7 @@ type instance Opcode (TemplatedArch arch) = Opcode arch
 type instance OperandType (TemplatedArch arch) s = OperandType arch s
 type instance Location (TemplatedArch arch) = Location arch
 
+-- | Necessary constraints for 'TemplatedArch' to be valid.
 type TemplateConstraints arch = (Architecture arch,
                                  Typeable arch,
                                  OrdF ((Opcode arch) (TemplatedOperand arch)),
@@ -117,20 +143,17 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 
   unTagged = taggedExpr
 
-  operandValue _ sym locLookup (TemplatedOperand _ f) = do
-    (expr, recover) <- f sym locLookup
-    return (TaggedExpr expr recover)
+  operandValue _ sym locLookup (TemplatedOperand _ f) =
+    uncurry TaggedExpr <$> f sym locLookup
 
   operandToLocation _ (TemplatedOperand loc _ ) = loc
 
 instance Show (S.SymExpr sym (OperandType arch s)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
   show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
 
-taggedWithShow :: forall sym arch p q s a. (ShowF (S.SymExpr sym)) => p (TaggedExpr (TemplatedArch arch) sym) -> q s -> (Show (TaggedExpr (TemplatedArch arch) sym s) => a) -> a
-taggedWithShow _ _ = withShow (Proxy @(S.SymExpr sym)) (Proxy @(OperandType arch s))
-
 instance ShowF (S.SymExpr sym) => ShowF (TaggedExpr (TemplatedArch arch) sym) where
-  withShow = taggedWithShow
+  withShow (_ :: p (TaggedExpr (TemplatedArch arch) sym)) (_ :: q s) x =
+    withShow (Proxy @(S.SymExpr sym)) (Proxy @(OperandType arch s)) x
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using 'unsafeCoerce'.
@@ -180,7 +203,6 @@ unTemplate :: (OrdF (Location arch))
            -> ParameterizedFormula sym arch sh
 unTemplate = unTemplateUnsafe
 
-
 -- | 'Formula' along with the expressions that correspond to each operand (for
 -- pulling out the values of immediates after solving, primarily).
 data TemplatedFormula sym arch sh =
@@ -192,7 +214,10 @@ deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S
 instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => ShowF (TemplatedFormula sym arch) where
   showF = show
 
+-- | A specific type of operand of which you can generate templates.
 class TemplatableOperand (arch :: *) (s :: Symbol) where
+  -- | All possible templates of an operand. In a nutshell, fill in register
+  -- parts, leave immediate parts symbolic.
   opTemplates :: [TemplatedOperand arch s]
 
 -- | The only way to define structure-dependent operations on type-level lists...
@@ -233,12 +258,18 @@ data TemplatedInstruction sym arch sh where
                        -> ShapedList (TemplatedOperand arch) sh
                        -> TemplatedInstruction sym arch sh
 
-deriving instance (Show ((Opcode arch) (Operand arch) sh), Show (ParameterizedFormula sym (TemplatedArch arch) sh), Show (ShapedList (TemplatedOperand arch) sh)) => Show (TemplatedInstruction sym arch sh)
+deriving instance (Show ((Opcode arch) (Operand arch) sh),
+                   Show (ParameterizedFormula sym (TemplatedArch arch) sh),
+                   Show (ShapedList (TemplatedOperand arch) sh))
+  => Show (TemplatedInstruction sym arch sh)
 
-instance (ShowF ((Opcode arch) (Operand arch)), ShowF (ParameterizedFormula sym (TemplatedArch arch)), ShowF (TemplatedOperand arch)) => ShowF (TemplatedInstruction sym arch) where
-  withShow (_ :: p (TemplatedInstruction sym arch)) (_ :: q sh) x =
+instance (ShowF ((Opcode arch) (Operand arch)),
+          ShowF (ParameterizedFormula sym (TemplatedArch arch)),
+          ShowF (TemplatedOperand arch))
+  => ShowF (TemplatedInstruction sym arch) where
+  withShow (_ :: p (TemplatedInstruction sym arch)) (_ :: q sh) =
     withShow (Proxy @((Opcode arch) (Operand arch))) (Proxy @sh) $
-      withShow (Proxy @(ParameterizedFormula sym (TemplatedArch arch))) (Proxy @sh) $
+      withShow (Proxy @(ParameterizedFormula sym (TemplatedArch arch ))) (Proxy @sh) $
         withShow (Proxy @(ShapedList (TemplatedOperand arch))) (Proxy @sh) $
           x
 
@@ -256,24 +287,19 @@ paramsToLocations oplist = foldr addParam Set.empty
                 _ -> s
             Literal loc -> Set.insert (Some loc) s
 
+-- | Get the set of locations that a 'TemplatedInstruction' uses.
 templatedInputs :: (OrdF (Location arch))
                 => TemplatedInstruction sym arch sh
                 -> Set.Set (Some (Location arch))
 templatedInputs (TemplatedInstruction _ pf oplist) =
   paramsToLocations oplist (Set.map (mapSome coerceParameter) (pfUses pf))
 
+-- | Get the set of locations that a 'TemplatedInstruction' defines.
 templatedOutputs :: (OrdF (Location arch))
                  => TemplatedInstruction sym arch sh
                  -> Set.Set (Some (Location arch))
 templatedOutputs (TemplatedInstruction _ pf oplist) =
   paramsToLocations oplist (map (mapSome coerceParameter) (MapF.keys (pfDefs pf)))
-
-genTemplatedFormula :: (TemplateConstraints arch)
-                    => S.SimpleBuilder t st
-                    -> TemplatedInstruction (S.SimpleBuilder t st) arch sh
-                    -> IO (TemplatedInstructionFormula (S.SimpleBuilder t st) arch)
-genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
-  TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist
 
 templatedInstructions :: (TemplateConstraints arch)
                       => BaseSet sym arch
@@ -292,3 +318,10 @@ data TemplatedInstructionFormula sym arch where
 
 tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
 tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
+
+genTemplatedFormula :: (TemplateConstraints arch)
+                    => S.SimpleBuilder t st
+                    -> TemplatedInstruction (S.SimpleBuilder t st) arch sh
+                    -> IO (TemplatedInstructionFormula (S.SimpleBuilder t st) arch)
+genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
+  TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist
