@@ -1,15 +1,15 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Definitions of formulas
 module SemMC.Formula.Formula
@@ -42,7 +42,7 @@ import           Lang.Crucible.BaseTypes
 import           SemMC.Architecture
 import           SemMC.Util
 
--- | A parameter for use in the 'ParameterizedFormula' before.
+-- | A parameter for use in the 'ParameterizedFormula' below.
 data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   -- | A parameter that will be filled in at instantiation time. For example, if
   -- you have the x86 opcode @call r32@, an 'Operand' would be used to represent
@@ -89,28 +89,58 @@ paramType :: (Architecture arch) => Parameter arch sh tp -> BaseTypeRepr tp
 paramType (Operand repr _) = repr
 paramType (Literal loc) = locationType loc
 
--- | A "templated" or "parameterized" formula, i.e., a formula that has holes
--- that need to be filled in before it represents an actual concrete
--- instruction.
+-- | A "parameterized" formula, i.e., a formula that has holes for operands that
+-- need to be filled in before it represents an actual concrete instruction.
 data ParameterizedFormula sym arch (sh :: [Symbol]) =
   ParameterizedFormula { pfUses :: Set.Set (Some (Parameter arch sh))
+                       -- ^ All parameters *used* within the definitions. One
+                       -- might ask, "aren't all parameters used, lest they be
+                       -- useless?" No -- some parameters may be only used as
+                       -- outputs (locations being defined).
                        , pfOperandVars :: ShapedList (BoundVar sym arch) sh
+                       -- ^ Bound variables for each of the operands; used in
+                       -- the expressions of the definitions.
                        , pfLiteralVars :: MapF.MapF (Location arch) (S.BoundVar sym)
+                       -- ^ Bound variables for each of the locations; used in
+                       -- the expressions of the definitions.
                        , pfDefs :: MapF.MapF (Parameter arch sh) (S.SymExpr sym)
+                       -- ^ Expressions for each of the output parameters of
+                       -- this formula. Note that a 'Parameter' could possibly
+                       -- be an operand that does not represent a location, but
+                       -- instead an immediate; however, that shouldn't show up
+                       -- in here!
                        }
 
-deriving instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => Show (ParameterizedFormula sym arch sh)
+deriving instance (ShowF (Location arch),
+                   ShowF (S.SymExpr sym),
+                   ShowF (S.BoundVar sym))
+                  => Show (ParameterizedFormula sym arch sh)
 
-instance (ShowF (Location arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym)) => ShowF (ParameterizedFormula sym arch)
+instance (ShowF (Location arch),
+          ShowF (S.SymExpr sym),
+          ShowF (S.BoundVar sym))
+         => ShowF (ParameterizedFormula sym arch)
 
 -- | A formula representing a concrete instruction.
 --
+-- The structure of this is a little odd due to there being no perfect ways of
+-- representing ASTs that depend on variables. 'formParamVars' is a mapping of
+-- all locations *used* in the formula to "bound variables" -- basically
+-- variables that must be replaced before SMT checking or it'll fail.
+-- 'formDefs', then, is a mapping of all locations *defined* by the formula to
+-- expressions that use the aforementioned bound variables.
+--
 -- Invariants:
--- * All bound variables used in 'formDefs' should be in 'formParamVars'. This
---   is checkable using the 'validFormula' function.
--- * All bound variables in 'formParamVars' should not appear in any other
---   formula. Yes, this breaks the notion of referential transparency in many
---   ways, but it was the least bad solution.
+-- 1. The set of bound variables used in 'formDefs' should be exactly the set of
+--    bound variables in 'formParamVars'. This is checkable using the
+--    'validFormula' function.
+-- 2. All bound variables in 'formParamVars' should not appear in any other
+--    formula. Yes, this breaks the notion of referential transparency in many
+--    ways, but it was the least bad solution.
+-- 3. 'formParamVars' should be a one-to-one correspondence, in the sense that a
+--    bound variable should uniquely identify a location. In combination with
+--    (1), this means that only locations actually used in the definitions
+--    should be present as keys in 'formParamVars'.
 data Formula sym arch =
   Formula { formParamVars :: MapF.MapF (Location arch) (S.BoundVar sym)
           , formDefs :: MapF.MapF (Location arch) (S.SymExpr sym)
@@ -129,7 +159,7 @@ formOutputs = Set.fromList . MapF.keys . formDefs
 validFormula :: Formula (S.SimpleBuilder t st) arch -> Bool
 validFormula (Formula { formParamVars = paramVars, formDefs = defs }) =
   mconcat (map (viewSome allBoundVars) (MapF.elems defs))
-  `Set.isSubsetOf` Set.fromList (MapF.elems paramVars)
+  == Set.fromAscList (MapF.elems paramVars)
 
 -- | A formula that uses no variables and changes no variables.
 emptyFormula :: Formula sym arch
