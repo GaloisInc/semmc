@@ -27,7 +27,7 @@ module SemMC.Formula.Parser
 import           Control.Monad.Except
 import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Reader
-import           Data.Foldable ( asum, foldrM )
+import           Data.Foldable ( foldrM )
 import qualified Data.Map as Map
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC

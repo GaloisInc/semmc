@@ -118,7 +118,7 @@ formulasEquiv'
     --
     -- Here 'constant' does not mean a literal, like '5'. Instead, it means a
     -- variable in SMT land that isn't meant to be bound.
-    let allVars = Set.union (Set.fromList (mapFKeys bvars1)) (Set.fromList (mapFKeys bvars2))
+    let allVars = Set.union (Set.fromList (MapF.keys bvars1)) (Set.fromList (MapF.keys bvars2))
         mkConstant (Some loc) m =
           fmap (\e -> MapF.insert loc e m)
                (S.freshConstant sym (makeSymbol (showF loc)) (locationType loc))

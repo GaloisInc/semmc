@@ -19,7 +19,6 @@ import           Data.Foldable
 import qualified Data.Set as Set
 import           Data.Typeable
 
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 
 import           SemMC.Architecture
@@ -46,7 +45,7 @@ data SynthesisParams sym arch =
                   }
 
 data SynthesisState sym arch =
-  SynthesisState { synthTests :: [(ArchState arch (S.SymExpr sym), ArchState arch (S.SymExpr sym))]
+  SynthesisState { synthTests :: [ConcreteTest sym arch]
                  , synthPrefixes :: Seq.Seq [Some (TemplatedInstruction sym arch)]
                  }
 

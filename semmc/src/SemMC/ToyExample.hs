@@ -286,14 +286,14 @@ instance A.IsOpcode Opcode
 
 instance TemplatableOperand Toy "R32" where
   opTemplates = mkTemplate <$> [Reg1, Reg2, Reg3]
-    where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) mkTemplate' :: TemplatedOperand Toy "R32"
+    where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) (Set.singleton (Some (RegLoc reg))) mkTemplate' :: TemplatedOperand Toy "R32"
             where mkTemplate' :: TemplatedOperandFn Toy "R32"
                   mkTemplate' _ locLookup = do
                     expr <- locLookup (RegLoc reg)
                     return (expr, WrappedRecoverOperandFn $ const (return (R32 reg)))
 
 instance TemplatableOperand Toy "I32" where
-  opTemplates = [TemplatedOperand Nothing mkConst]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkConst]
     where mkConst :: TemplatedOperandFn Toy "I32"
           mkConst sym _ = do
             v <- S.freshConstant sym (makeSymbol "I32") knownRepr

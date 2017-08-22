@@ -13,11 +13,12 @@ module SemMC.Formula.Instantiate
   ( instantiateFormula
   , copyFormula
   , sequenceFormulas
+  , condenseFormulas
   , replaceLitVars
   , paramToLocation
   ) where
 
-import           Data.Foldable ( foldlM )
+import           Data.Foldable ( foldlM, foldrM )
 import           Data.IORef
 import           Data.Maybe ( fromJust, isNothing )
 import           Data.Parameterized.Classes
@@ -264,3 +265,12 @@ sequenceFormulas sym form1 form2 = do
   return $ Formula { formParamVars = newVars
                    , formDefs = newDefs
                    }
+
+condenseFormulas :: forall t f st arch.
+                    ( Architecture arch
+                    , Foldable f
+                    )
+                 => SB t st
+                 -> f (Formula (SB t st) arch)
+                 -> IO (Formula (SB t st) arch)
+condenseFormulas sym = foldrM (sequenceFormulas sym) emptyFormula

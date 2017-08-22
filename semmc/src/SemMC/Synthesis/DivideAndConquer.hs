@@ -67,7 +67,7 @@ enumerateSplits :: (OrdF (Location arch))
                 => Formula (S.SimpleBuilder t st) arch
                 -> [(Formula (S.SimpleBuilder t st) arch, Formula (S.SimpleBuilder t st) arch)]
 enumerateSplits form = mapMaybe (makeSplit form)
-                     $ splits (mapFKeys (formDefs form))
+                     $ splits (MapF.keys (formDefs form))
 
 divideAndConquer :: (Architecture arch,
                      Architecture (TemplatedArch arch),

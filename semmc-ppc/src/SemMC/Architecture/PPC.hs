@@ -41,6 +41,7 @@ import           Data.Parameterized.Some
 import           Data.Parameterized.TH.GADT ( structuralTypeEquality, structuralTypeOrd )
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
+import qualified Data.Set as Set
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( Symbol )
@@ -137,7 +138,7 @@ concreteTemplatedOperand :: forall arch s a.
                          -> (a -> A.Location arch (A.OperandType arch s))
                          -> a
                          -> TemplatedOperand arch s
-concreteTemplatedOperand op loc x = TemplatedOperand (Just (loc x)) mkTemplate' :: TemplatedOperand arch s
+concreteTemplatedOperand op loc x = TemplatedOperand (Just (loc x)) (Set.singleton (Some (loc x))) mkTemplate' :: TemplatedOperand arch s
   where mkTemplate' :: TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
           expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
@@ -156,7 +157,7 @@ instance TemplatableOperand PPC "Gprc_nor0" where
   opTemplates = concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
 
 instance TemplatableOperand PPC "S16imm" where
-  opTemplates = [TemplatedOperand Nothing mkConst]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkConst]
     where mkConst :: TemplatedOperandFn PPC "S16imm"
           mkConst sym _ = do
             v <- S.freshConstant sym (makeSymbol "S16imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
@@ -166,7 +167,7 @@ instance TemplatableOperand PPC "S16imm" where
 
 instance TemplatableOperand PPC "Memri" where
   opTemplates = mkTemplate <$> [0..31]
-    where mkTemplate gprNum = TemplatedOperand Nothing mkTemplate' :: TemplatedOperand PPC "Memri"
+    where mkTemplate gprNum = TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: TemplatedOperand PPC "Memri"
             where mkTemplate' :: TemplatedOperandFn PPC "Memri"
                   mkTemplate' sym locLookup = do
                     base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
@@ -181,7 +182,7 @@ instance TemplatableOperand PPC "Memri" where
                     return (expr, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "Directbrtarget" where
-  opTemplates = [TemplatedOperand Nothing mkDirect]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: TemplatedOperandFn PPC "Directbrtarget"
           mkDirect sym locLookup = do
             ip <- locLookup LocIP
@@ -195,7 +196,7 @@ instance TemplatableOperand PPC "Directbrtarget" where
             return (expr, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "U5imm" where
-  opTemplates = [TemplatedOperand Nothing mkImm]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkImm]
     where mkImm :: TemplatedOperandFn PPC "U5imm"
           mkImm sym _ = do
             v <- S.freshConstant sym (makeSymbol "U5imm") (knownRepr :: BaseTypeRepr (BaseBVType 5))
@@ -204,7 +205,7 @@ instance TemplatableOperand PPC "U5imm" where
             return (extended, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "S17imm" where
-  opTemplates = [TemplatedOperand Nothing mkImm]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkImm]
     where mkImm :: TemplatedOperandFn PPC "S17imm"
           mkImm sym _ = do
             v <- S.freshConstant sym (makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
@@ -214,7 +215,7 @@ instance TemplatableOperand PPC "S17imm" where
             return (extended, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "Absdirectbrtarget" where
-  opTemplates = [TemplatedOperand Nothing mkDirect]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: TemplatedOperandFn PPC "Absdirectbrtarget"
           mkDirect sym _ = do
             offsetRaw <- S.freshConstant sym (makeSymbol "Absdirectbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
@@ -226,7 +227,7 @@ instance TemplatableOperand PPC "Absdirectbrtarget" where
             return (extended, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "Calltarget" where
-  opTemplates = [TemplatedOperand Nothing mkDirect]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: TemplatedOperandFn PPC "Calltarget"
           mkDirect sym locLookup = do
             ip <- locLookup LocIP
@@ -240,7 +241,7 @@ instance TemplatableOperand PPC "Calltarget" where
             return (expr, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "Abscalltarget" where
-  opTemplates = [TemplatedOperand Nothing mkDirect]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: TemplatedOperandFn PPC "Abscalltarget"
           mkDirect sym _ = do
             offsetRaw <- S.freshConstant sym (makeSymbol "Abscalltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
@@ -252,7 +253,7 @@ instance TemplatableOperand PPC "Abscalltarget" where
             return (extended, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "Crrc" where
-  opTemplates = [TemplatedOperand Nothing mkDirect]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: TemplatedOperandFn PPC "Crrc"
           mkDirect sym _ = do
             crrc <- S.freshConstant sym (makeSymbol "Crrc") (knownRepr :: BaseTypeRepr (BaseBVType 3))
@@ -262,7 +263,7 @@ instance TemplatableOperand PPC "Crrc" where
 
 instance TemplatableOperand PPC "I32imm" where
   -- XXX: What to do here? seems very instruction-specific
-  opTemplates = [TemplatedOperand Nothing mkImm]
+  opTemplates = [TemplatedOperand Nothing Set.empty mkImm]
     where mkImm :: TemplatedOperandFn PPC "I32imm"
           mkImm sym _ = do
             v <- S.freshConstant sym (makeSymbol "I32imm") knownRepr

@@ -107,6 +107,8 @@ type TemplatedOperandFn arch s = forall sym.
 data TemplatedOperand (arch :: *) (s :: Symbol) =
   TemplatedOperand { templOpLocation :: Maybe (Location arch (OperandType arch s))
                    -- ^ If this operand represents a location, this is it.
+                   , templUsedLocations :: Set.Set (Some (Location arch))
+                   -- ^ Locations used by this operand.
                    , templOpFn :: TemplatedOperandFn arch s
                    -- ^ How to get an expression and recovery function for this
                    -- operand.
@@ -143,10 +145,10 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 
   unTagged = taggedExpr
 
-  operandValue _ sym locLookup (TemplatedOperand _ f) =
+  operandValue _ sym locLookup (TemplatedOperand _ _ f) =
     uncurry TaggedExpr <$> f sym locLookup
 
-  operandToLocation _ (TemplatedOperand loc _ ) = loc
+  operandToLocation _ (TemplatedOperand loc _ _) = loc
 
 instance Show (S.SymExpr sym (OperandType arch s)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
   show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
@@ -273,33 +275,32 @@ instance (ShowF ((Opcode arch) (Operand arch)),
         withShow (Proxy @(ShapedList (TemplatedOperand arch))) (Proxy @sh) $
           x
 
-paramsToLocations :: (OrdF (Location arch),
-                      Foldable t)
-                  => ShapedList (TemplatedOperand arch) sh
-                  -> t (Some (Parameter arch sh))
-                  -> Set.Set (Some (Location arch))
-paramsToLocations oplist = foldr addParam Set.empty
-  where addParam (Some param) s =
-          case param of
-            Operand _ idx ->
-              case indexShapedList oplist idx of
-                TemplatedOperand (Just loc) _ -> Set.insert (Some loc) s
-                _ -> s
-            Literal loc -> Set.insert (Some loc) s
-
 -- | Get the set of locations that a 'TemplatedInstruction' uses.
 templatedInputs :: (OrdF (Location arch))
                 => TemplatedInstruction sym arch sh
                 -> Set.Set (Some (Location arch))
 templatedInputs (TemplatedInstruction _ pf oplist) =
-  paramsToLocations oplist (Set.map (mapSome coerceParameter) (pfUses pf))
+  mconcat (map paramUses (Set.toList (pfUses pf)))
+  where paramUses (Some param) =
+          case param of
+            Operand _ idx ->
+              let TemplatedOperand _ uses _ = indexShapedList oplist idx
+              in uses
+            Literal loc -> Set.singleton (Some loc)
 
 -- | Get the set of locations that a 'TemplatedInstruction' defines.
 templatedOutputs :: (OrdF (Location arch))
                  => TemplatedInstruction sym arch sh
                  -> Set.Set (Some (Location arch))
 templatedOutputs (TemplatedInstruction _ pf oplist) =
-  paramsToLocations oplist (map (mapSome coerceParameter) (MapF.keys (pfDefs pf)))
+  mconcat (map paramDefs (MapF.keys (pfDefs pf)))
+  where paramDefs (Some param) =
+          case param of
+            Operand _ idx ->
+              case indexShapedList oplist idx of
+                TemplatedOperand (Just loc) _ _ -> Set.singleton (Some loc)
+                _ -> Set.empty
+            Literal loc -> Set.singleton (Some loc)
 
 templatedInstructions :: (TemplateConstraints arch)
                       => BaseSet sym arch

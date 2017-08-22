@@ -11,7 +11,6 @@
 module SemMC.Util
   ( groundValToExpr
   , makeSymbol
-  , mapFKeys
   , mapFReverse
   , sequenceMaybes
   , walkElt
@@ -71,10 +70,6 @@ groundValToExpr _ (BaseArrayRepr _ _) (ArrayMapping _) = error "groundValToExpr:
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
 
 -- * MapF Utilities
-
--- | Extract the keys of a 'MapF'.
-mapFKeys :: forall (key :: k -> *) (value :: k -> *). MapF.MapF key value -> [Some key]
-mapFKeys = MapF.foldrWithKey (\k _ l -> Some k : l) []
 
 -- | Reverse a MapF, so that the old keys are the new values and the old values
 -- are the new keys.
