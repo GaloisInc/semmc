@@ -70,6 +70,30 @@ type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
   ShapeCtx _    '[] = EmptyCtx
   ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> OperandType arch s
 
+data OperandAssignment sym arch sh =
+  OperandAssignment { opAssnTaggedExprs :: ShapedList (TaggedExpr arch sym) sh
+                    -- ^ The raw values obtained by calling 'operandValue' on
+                    -- each of the operands.
+                    , opAssnVars :: Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh)
+                    -- ^ The original bound variables associated with each
+                    -- operand, but turned into 'Ctx.Assignment' form instead of
+                    -- a 'ShapedList'.
+                    , opAssnBareExprs :: Ctx.Assignment (S.SymExpr sym) (ShapeCtx arch sh)
+                    -- ^ The bare 'S.SymExpr's corresponding to each
+                    -- 'TaggedExpr', but in 'Ctx.Assignment' form.
+                    }
+
+extendAssn :: (Architecture arch)
+           => TaggedExpr arch sym s
+           -> S.BoundVar sym (OperandType arch s)
+           -> OperandAssignment sym arch sh
+           -> OperandAssignment sym arch (s ': sh)
+extendAssn newExpr newVar oldAssn =
+  OperandAssignment { opAssnTaggedExprs = newExpr :> opAssnTaggedExprs oldAssn
+                    , opAssnVars = opAssnVars oldAssn Ctx.%> newVar
+                    , opAssnBareExprs = opAssnBareExprs oldAssn Ctx.%> unTagged newExpr
+                    }
+
 -- | For a given pair of bound variables and operands, build up:
 -- 1. 'TaggedExpr's corresponding to each operand.
 -- 2. a 'Ctx.Assignment' form of the bound variables (for use in substitution)
@@ -86,14 +110,12 @@ buildOpAssignment :: forall sym arch sh.
                 -- ^ List of variables corresponding to each operand
                 -> ShapedList (Operand arch) sh
                 -- ^ List of operand values corresponding to each operand
-                -> IO (ShapedList (TaggedExpr arch sym) sh,
-                       Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh),
-                       Ctx.Assignment (S.SymExpr sym) (ShapeCtx arch sh))
-buildOpAssignment _ _ Nil Nil = return (Nil, Ctx.empty, Ctx.empty)
-buildOpAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) = do
-  val' <- operandValue (Proxy :: Proxy arch) sym newVars val
-  (valsList, varsRest', valsRest') <- buildOpAssignment sym newVars varsRest valsRest
-  return (val' :> valsList, varsRest' Ctx.%> var, valsRest' Ctx.%> (unTagged val'))
+                -> IO (OperandAssignment sym arch sh)
+buildOpAssignment _ _ Nil Nil = return (OperandAssignment Nil Ctx.empty Ctx.empty)
+buildOpAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) =
+  extendAssn <$> operandValue (Proxy @arch) sym newVars val
+             <*> pure var
+             <*> buildOpAssignment sym newVars varsRest valsRest
 
 type SomeVarAssignment sym = Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym))
 
@@ -188,11 +210,14 @@ instantiateFormula
     let newLitExprLookup :: forall tp. Location arch tp -> IO (S.Elt t tp)
         newLitExprLookup loc = S.varExpr sym <$> lookupOrCreateVar sym newLitVarsRef loc
 
-    (opValsList, opVarsAssn, opValsAssn) <- buildOpAssignment sym newLitExprLookup opVars opVals
+    OperandAssignment { opAssnTaggedExprs = opTaggedExprs
+                      , opAssnVars = opVarsAssn
+                      , opAssnBareExprs = opExprsAssn
+                      } <- buildOpAssignment sym newLitExprLookup opVars opVals
 
     let mapDef :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
         mapDef p e = case paramToLocation opVals p of
-          Just loc -> (loc,) <$> (replaceLitVars sym newLitExprLookup litVars =<< S.evalBoundVars sym e opVarsAssn opValsAssn)
+          Just loc -> (loc,) <$> (replaceLitVars sym newLitExprLookup litVars =<< S.evalBoundVars sym e opVarsAssn opExprsAssn)
           Nothing -> error $ unwords ["parameter", show p, "is not a valid location"]
 
     -- This loads the relevant lit vars into the map, so reading the IORef
@@ -204,9 +229,9 @@ instantiateFormula
     -- TODO: Should we filter out definitions that are syntactically identity
     -- functions?
 
-    return $ (opValsList, Formula { formParamVars = newActualLitVars
-                                  , formDefs = newDefs
-                                  })
+    return $ (opTaggedExprs, Formula { formParamVars = newActualLitVars
+                                     , formDefs = newDefs
+                                     })
 
 -- | Create a new formula with the same semantics, but with fresh bound vars.
 copyFormula :: forall t st arch.
