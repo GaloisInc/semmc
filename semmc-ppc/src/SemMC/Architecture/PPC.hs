@@ -429,8 +429,8 @@ instance EnumF (PPC.Opcode (TemplatedOperand PPC)) where
 fromRight :: (Monad m) => Either String a -> m a
 fromRight = either fail return
 
-class (BuildOperandList (TemplatedArch PPC) sh, TemplatableOperands PPC sh) => Foo sh
-instance (BuildOperandList (TemplatedArch PPC) sh, TemplatableOperands PPC sh) => Foo sh
+class (BuildOperandList (TemplatedArch PPC) sh, TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+instance (BuildOperandList (TemplatedArch PPC) sh, TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
 loadBaseSet :: forall sym.
                (S.IsExprBuilder sym,
@@ -465,7 +465,7 @@ loadBaseSet baseSetDir sym = do
              => FilePath
              -> IO (Either String (ParameterizedFormula sym (TemplatedArch PPC) sh))
       readOp fp = readFormulaFromFile sym env (baseSetDir </> fp)
-      addOp :: Some (Witness Foo (PPC.Opcode PPC.Operand))
+      addOp :: Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))
             -> BaseSet sym PPC
             -> IO (BaseSet sym PPC)
       addOp (Some (Witness op)) m = do
