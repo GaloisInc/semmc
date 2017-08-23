@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -105,7 +104,10 @@ instantiate target trial
                                }
       cegisResult <- liftIO $ cegis params (synthTests st) tifs
       case cegisResult of
+        -- If we find an equivalent instantiation, we're done!
         CegisEquivalent insns -> return (Just insns)
+        -- Otherwise, add this template as a possible prefix, and adopt the new
+        -- test set.
         CegisUnmatchable newTests -> do
           let oldPrefixes = synthPrefixes st
           put (st { synthTests = newTests
@@ -119,22 +121,22 @@ synthesizeFormula' :: (Architecture arch,
                    => Formula (S.SimpleBackend t) arch
                    -> Synth (S.SimpleBackend t) arch (Maybe [Instruction arch])
 synthesizeFormula' target = do
-  -- I'm still conflicted whether to use MonadState here or not...
   st <- get
   case Seq.viewl (synthPrefixes st) of
     prefix Seq.:< prefixesTail -> do
       maxLen <- askMaxLength
       if 1 + length prefix > maxLen then return Nothing else do
-      put $ st { synthPrefixes = prefixesTail }
-      possibleInsns <- askInsns
-      -- N.B.: 'instantiate' here will add back to the prefixes if it's worth
-      -- saving. I'm not a big fan of MonadState here, but it was the nicest
-      -- solution I could come up with.
-      result <- sequenceMaybes $
-        map (\insn -> instantiate target (prefix ++ [insn])) possibleInsns
-      case result of
-        Just insns -> return (Just insns)
-        Nothing -> synthesizeFormula' target
+        put $ st { synthPrefixes = prefixesTail }
+        possibleInsns <- askInsns
+        -- N.B.: 'instantiate' here will add back to the prefixes if it's worth
+        -- saving. I'm not a big fan of MonadState here, but it was the nicest
+        -- solution I could come up with.
+        result <- sequenceMaybes $
+          map (\insn -> instantiate target (prefix ++ [insn])) possibleInsns
+        case result of
+          Just insns -> return (Just insns)
+          Nothing -> synthesizeFormula' target
+    -- If there are no more possible prefixes, we can't synthesize this formula.
     Seq.EmptyL -> return Nothing
 
 synthesizeFormula :: forall t arch.
