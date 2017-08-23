@@ -14,6 +14,22 @@ import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.DivideAndConquer
 import           SemMC.Synthesis.Template
 
+-- The synthesis implemented in this module is based on
+--
+-- Venkatesh Srinivasan and Thomas Reps. 2015. Synthesis of machine code from
+-- semantics. In Proceedings of the 36th ACM SIGPLAN Conference on Programming
+-- Language Design and Implementation (PLDI '15). ACM, New York, NY, USA,
+-- 596-607. DOI: http://dx.doi.org/10.1145/2737924.2737960
+--
+-- Further useful optimizations (none of which have been implemented here yet)
+-- can be found in
+--
+-- Venkatesh Srinivasan, Tushar Sharma, and Thomas Reps. 2016. Speeding up
+-- machine-code synthesis. In Proceedings of the 2016 ACM SIGPLAN International
+-- Conference on Object-Oriented Programming, Systems, Languages, and
+-- Applications (OOPSLA 2016). ACM, New York, NY, USA, 165-180. DOI:
+-- https://doi.org/10.1145/2983990.2984006
+
 setupEnvironment :: (Architecture arch,
                      Architecture (TemplatedArch arch),
                      Typeable arch)
