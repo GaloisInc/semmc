@@ -91,6 +91,12 @@ instantiate target trial
   | footprintFilter target trial = do
       sym <- askSym
       baseSet <- askBaseSet
+      -- Instantiate the templated formulas for the templated instructions we're
+      -- trying. Ideally we'd like to cache these somewhere, but this is hard
+      -- due to the implementation of 'TemplatedInstruction'. (It stores a list
+      -- of 'TemplatedOperand', which has a function inside it, and it's
+      -- non-trivial to either make it not use a function or come up with a
+      -- surrogate key.)
       tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
       st <- get
       let params = CegisParams { cpSym = sym
