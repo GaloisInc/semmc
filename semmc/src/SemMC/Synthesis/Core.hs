@@ -49,16 +49,18 @@ data SynthesisState sym arch =
                  , synthPrefixes :: Seq.Seq [Some (TemplatedInstruction sym arch)]
                  }
 
-askSym :: (MonadReader (SynthesisParams sym arch) m) => m sym
+type Synth sym arch = ReaderT (SynthesisParams sym arch) (StateT (SynthesisState sym arch) IO)
+
+askSym :: Synth sym arch sym
 askSym = reader (synthSym . synthEnv)
 
-askBaseSet :: (MonadReader (SynthesisParams sym arch) m) => m (BaseSet sym arch)
+askBaseSet :: Synth sym arch (BaseSet sym arch)
 askBaseSet = reader (synthBaseSet . synthEnv)
 
-askInsns :: (MonadReader (SynthesisParams sym arch) m) => m [Some (TemplatedInstruction sym arch)]
+askInsns :: Synth sym arch [Some (TemplatedInstruction sym arch)]
 askInsns = reader (synthInsns . synthEnv)
 
-askMaxLength :: (MonadReader (SynthesisParams sym arch) m) => m Int
+askMaxLength :: Synth sym arch Int
 askMaxLength = reader synthMaxLength
 
 calcFootprint :: (Architecture arch)
@@ -81,13 +83,10 @@ footprintFilter target candidate =
   in candInputs `Set.isSubsetOf` targetInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
 
-instantiate :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
-                MonadState (SynthesisState (S.SimpleBackend t) arch) m,
-                MonadIO m,
-                TemplateConstraints arch)
+instantiate :: (TemplateConstraints arch)
             => Formula (S.SimpleBackend t) arch
             -> [Some (TemplatedInstruction (S.SimpleBackend t) arch)]
-            -> m (Maybe [Instruction arch])
+            -> Synth (S.SimpleBackend t) arch (Maybe [Instruction arch])
 instantiate target trial
   | footprintFilter target trial = do
       sym <- askSym
@@ -109,13 +108,10 @@ instantiate target trial
           return Nothing
   | otherwise = return Nothing
 
-synthesizeFormula' :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,
-                       MonadState (SynthesisState (S.SimpleBackend t) arch) m,
-                       MonadIO m,
-                       Architecture arch,
+synthesizeFormula' :: (Architecture arch,
                        Architecture (TemplatedArch arch))
                    => Formula (S.SimpleBackend t) arch
-                   -> m (Maybe [Instruction arch])
+                   -> Synth (S.SimpleBackend t) arch (Maybe [Instruction arch])
 synthesizeFormula' target = do
   -- I'm still conflicted whether to use MonadState here or not...
   st <- get
@@ -143,8 +139,7 @@ synthesizeFormula :: forall t arch.
                   -> Formula (S.SimpleBackend t) arch
                   -> IO (Maybe [Instruction arch])
 synthesizeFormula params target = do
-  flip runReaderT params
-    $ evalStateT (synthesizeFormula' target)
-    $ SynthesisState { synthTests = []
-                     , synthPrefixes = Seq.singleton []
-                     }
+  evalStateT (runReaderT (synthesizeFormula' target) params) $
+    SynthesisState { synthTests = []
+                   , synthPrefixes = Seq.singleton []
+                   }
