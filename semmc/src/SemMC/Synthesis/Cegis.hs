@@ -132,10 +132,10 @@ buildEqualityLocation sym test vars outputLoc expr = do
 buildEqualityMachine :: forall arch t st
                       . (Architecture arch)
                      => S.SimpleBuilder t st
-                     -> ConcreteTest (S.SimpleBuilder t st) arch
                      -> Formula (S.SimpleBuilder t st) arch
+                     -> ConcreteTest (S.SimpleBuilder t st) arch
                      -> IO (S.BoolElt t)
-buildEqualityMachine sym test (Formula vars defs) =
+buildEqualityMachine sym (Formula vars defs) test =
   foldlM addEquality (S.truePred sym) allOutputLocs
   where allOutputLocs = Set.fromList (MapF.keys (testOutput test)) `Set.union`
                         Set.fromList (MapF.keys defs)
@@ -144,6 +144,17 @@ buildEqualityMachine sym test (Formula vars defs) =
           let locDef = MapF.lookup loc defs
           locEquality <- buildEqualityLocation sym test vars loc locDef
           S.andPred sym soFar locEquality
+
+-- | Build an equality of the form
+-- > f(test1_in) = test1_out /\ f(test2_in) = test2_out /\ ... /\ f(testn_in) = testn_out
+buildEqualityTests :: forall arch t st
+                    . (Architecture arch)
+                   => S.SimpleBuilder t st
+                   -> Formula (S.SimpleBuilder t st) arch
+                   -> [ConcreteTest (S.SimpleBuilder t st) arch]
+                   -> IO (S.BoolElt t)
+buildEqualityTests sym form = foldrM andTest (S.truePred sym)
+  where andTest test soFar = S.andPred sym soFar =<< buildEqualityMachine sym form test
 
 extractConcreteInstructions :: GroundEvalFn t
                             -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
@@ -160,6 +171,7 @@ handleSatResult insns (Sat (evalFn, _)) = Just <$> extractConcreteInstructions e
 handleSatResult _ Unsat = return Nothing
 handleSatResult _ Unknown = fail "got Unknown when checking sat-ness"
 
+-- | Build a formula for the given concrete instruction.
 instantiateFormula' :: (Architecture arch)
                     => S.SimpleBuilder t st
                     -> BaseSet (S.SimpleBuilder t st) arch
@@ -179,7 +191,7 @@ cegis :: (Architecture arch)
       -> IO (Either [ConcreteTest (S.SimpleBackend t) arch] [Instruction arch])
 cegis sym semantics target tests trial = do
   trialFormula <- condenseFormulas sym (map tifFormula trial)
-  check <- foldrM (\test b -> S.andPred sym b =<< buildEqualityMachine sym test trialFormula) (S.truePred sym) tests
+  check <- buildEqualityTests sym trialFormula tests
 
   -- Is this candidate satisfiable for the concrete tests we have so far? At
   -- this point, the machine state is concrete, but the immediate values of the
