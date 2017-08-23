@@ -357,6 +357,8 @@ instance A.IsLocation Location where
 
   defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
 
+  allLocations = map (Some . RegLoc) [Reg1, Reg2, Reg3]
+
 -- If we got rid of the 'NatRepr' / 'knownNat' stuff we could make
 -- this a pattern synonym.
 regView :: Reg -> C.View Toy 32

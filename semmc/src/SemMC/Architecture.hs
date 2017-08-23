@@ -72,6 +72,8 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   locationType :: a tp -> BaseTypeRepr tp
   -- | Default value for this location. Typically something like 0.
   defaultLocationExpr :: (S.IsExprBuilder sym) => sym -> a tp -> IO (S.SymExpr sym tp)
+  -- | All the locations!
+  allLocations :: [Some a]
 
 type ArchState arch ex = MapF.MapF (Location arch) ex
 

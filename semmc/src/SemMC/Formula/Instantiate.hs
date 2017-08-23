@@ -27,9 +27,11 @@ import           Data.Parameterized.Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.ShapedList ( indexShapedList, ShapedList(..) )
+import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF
 import           Data.Proxy ( Proxy(..) )
 import           GHC.TypeLits ( Symbol )
+import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
@@ -204,26 +206,31 @@ instantiateFormula
                         , pfDefs = defs
                         })
   opVals = do
-    -- We store the new lit vars in an IORef so we can create them as we go.
-    -- IORef should be safe, since we don't have any multithreaded code here.
-    newLitVarsRef <- newIORef MapF.empty
-    let newLitExprLookup :: forall tp. Location arch tp -> IO (S.Elt t tp)
-        newLitExprLookup loc = S.varExpr sym <$> lookupOrCreateVar sym newLitVarsRef loc
+    let addLitVar (Some loc) m = do
+          bVar <- S.freshBoundVar sym (makeSymbol (showF loc)) (locationType loc)
+          return (MapF.insert loc bVar m)
+    newLitVars <- foldrM addLitVar MapF.empty allLocations
+    let newLitExprLookup :: Location arch tp -> IO (S.Elt t tp)
+        -- 'newLitVars' has all locations in it, so this 'fromJust' is total.
+        newLitExprLookup = return . S.varExpr sym . fromJust . flip MapF.lookup newLitVars
 
     OperandAssignment { opAssnTaggedExprs = opTaggedExprs
                       , opAssnVars = opVarsAssn
                       , opAssnBareExprs = opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
 
-    let mapDef :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
-        mapDef p e = case paramToLocation opVals p of
-          Just loc -> (loc,) <$> (replaceLitVars sym newLitExprLookup litVars =<< S.evalBoundVars sym e opVarsAssn opExprsAssn)
-          Nothing -> error $ unwords ["parameter", show p, "is not a valid location"]
+    let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
+        instantiateDefn definingParam definition = do
+          definingLoc <- case paramToLocation opVals definingParam of
+            Just loc -> return loc
+            Nothing -> fail $ printf "parameter %s is not a valid location" (show definingParam)
+          opVarsReplaced <- S.evalBoundVars sym definition opVarsAssn opExprsAssn
+          litVarsReplaced <- replaceLitVars sym newLitExprLookup litVars opVarsReplaced
+          return (definingLoc, litVarsReplaced)
 
-    -- This loads the relevant lit vars into the map, so reading the IORef
-    -- must happen afterwards :)
-    newDefs <- mapFMapBothM mapDef defs
-    newLitVars <- readIORef newLitVarsRef
+    newDefs <- mapFMapBothM instantiateDefn defs
+    -- 'newLitVars' has variables for /all/ of the machine locations. Here we
+    -- extract only the ones that are actually used.
     let newActualLitVars = foldrF (MapF.union . extractUsedLocs newLitVars) MapF.empty newDefs
 
     -- TODO: Should we filter out definitions that are syntactically identity

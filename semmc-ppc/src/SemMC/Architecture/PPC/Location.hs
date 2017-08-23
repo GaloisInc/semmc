@@ -100,6 +100,20 @@ instance A.IsLocation Location where
   defaultLocationExpr sym LocMem =
     S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
+  allLocations = concat
+    [ map (Some . LocGPR . PPC.GPR) [0..31]
+    , map (Some . LocVSR . PPC.VSReg) [0..63]
+    , [ Some LocIP
+      , Some LocMSR
+      , Some LocCTR
+      , Some LocLNK
+      , Some LocXER
+      , Some LocCR
+      , Some LocFPSCR
+      , Some LocMem
+      ]
+    ]
+
 type Parser = P.Parsec String String
 
 tryOne :: [Parser a] -> Parser a
