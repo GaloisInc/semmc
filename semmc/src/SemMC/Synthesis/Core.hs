@@ -94,15 +94,19 @@ instantiate target trial
       baseSet <- askBaseSet
       tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
       st <- get
-      liftIO (cegis sym baseSet target (synthTests st) tifs)
-        >>= \case
-               Right insns -> return (Just insns)
-               Left newTests -> do
-                let oldPrefixes = synthPrefixes st
-                put (st { synthTests = newTests
-                        , synthPrefixes = oldPrefixes Seq.|> trial
-                        })
-                return Nothing
+      let params = CegisParams { cpSym = sym
+                               , cpBaseSet = baseSet
+                               , cpTarget = target
+                               }
+      cegisResult <- liftIO $ cegis params (synthTests st) tifs
+      case cegisResult of
+        CegisEquivalent insns -> return (Just insns)
+        CegisUnmatchable newTests -> do
+          let oldPrefixes = synthPrefixes st
+          put (st { synthTests = newTests
+                  , synthPrefixes = oldPrefixes Seq.|> trial
+                  })
+          return Nothing
   | otherwise = return Nothing
 
 synthesizeFormula' :: (MonadReader (SynthesisParams (S.SimpleBackend t) arch) m,

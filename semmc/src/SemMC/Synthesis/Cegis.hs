@@ -10,10 +10,14 @@
 {-# LANGUAGE GADTs #-}
 module SemMC.Synthesis.Cegis
   ( evalFormula
-  , cegis
   , ConcreteTest
+  , CegisParams(..)
+  , CegisResult(..)
+  , cegis
   ) where
 
+import           Control.Monad.IO.Class ( liftIO )
+import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
@@ -62,25 +66,46 @@ lookupInState :: forall sym loc tp.
 lookupInState sym st loc =
   maybe (defaultLocationExpr sym loc) return $ MapF.lookup loc st
 
+-- | Parameters given to call cegis.
+data CegisParams sym arch =
+  CegisParams { cpSym :: sym
+              -- ^ The symbolic expression builder.
+              , cpBaseSet :: BaseSet sym arch
+              -- ^ The base set of opcode semantics.
+              , cpTarget :: Formula sym arch
+              -- ^ The target formula we're trying to match.
+              }
+
+type Cegis sym arch = ReaderT (CegisParams sym arch) IO
+
+askSym :: Cegis sym arch sym
+askSym = reader cpSym
+
+askBaseSet :: Cegis sym arch (BaseSet sym arch)
+askBaseSet = reader cpBaseSet
+
+askTarget :: Cegis sym arch (Formula sym arch)
+askTarget = reader cpTarget
+
 -- | Evaluate an expression, substituting in the location values given in the
 -- machine state.
 evalExpression :: (IsLocation loc)
-               => S.SimpleBuilder t st
-               -> MapF.MapF loc (S.SimpleBoundVar t)
+               => MapF.MapF loc (S.SimpleBoundVar t)
                -> LocExprs (S.SimpleBuilder t st) loc
                -> S.Elt t tp
-               -> IO (S.Elt t tp)
-evalExpression sym vars state = replaceLitVars sym (lookupInState sym state) vars
+               -> Cegis (S.SimpleBuilder t st) arch (S.Elt t tp)
+evalExpression vars state expr = do
+  sym <- askSym
+  liftIO $ replaceLitVars sym (lookupInState sym state) vars expr
 
 -- | Evaluate a whole formula, substituting in the location values given in the
 -- machine state, returning the transformed machine state.
 evalFormula :: (Architecture arch)
-            => S.SimpleBuilder t st
-            -> Formula (S.SimpleBuilder t st) arch
+            => Formula (S.SimpleBuilder t st) arch
             -> ArchState arch (S.Elt t)
-            -> IO (ArchState arch (S.Elt t))
-evalFormula sym (Formula vars defs) input =
-  traverseF (evalExpression sym vars input) defs
+            -> Cegis (S.SimpleBuilder t st) arch (ArchState arch (S.Elt t))
+evalFormula (Formula vars defs) input =
+  traverseF (evalExpression vars input) defs
 
 -- | Concrete input and output states of a formula. There's nothing in the types
 -- that prevents the values from being symbolic, but please don't let them be!
@@ -106,8 +131,7 @@ type ConcreteTest sym arch = ConcreteTest' sym (Location arch)
 -- function will generate the expression @3*5 + imm5 = 10@. If the expression
 -- were instead @Nothing@, this would generate @7 = 10@.
 buildEqualityLocation :: (IsLocation loc)
-                      => S.SimpleBuilder t st
-                      -> ConcreteTest' (S.SimpleBuilder t st) loc
+                      => ConcreteTest' (S.SimpleBuilder t st) loc
                       -> MapF.MapF loc (S.SimpleBoundVar t)
                       -- ^ The bound variables representing the input values for
                       -- each location.
@@ -117,45 +141,50 @@ buildEqualityLocation :: (IsLocation loc)
                       -- ^ If 'Just', the symbolic representation of the new
                       -- definition of this location. If 'Nothing', then assume
                       -- the identity transformation.
-                      -> IO (S.BoolElt t)
-buildEqualityLocation sym test vars outputLoc expr = do
+                      -> Cegis (S.SimpleBuilder t st) arch (S.BoolElt t)
+buildEqualityLocation test vars outputLoc expr = do
+  sym <- askSym
   actuallyIs <- case expr of
-                  Just expr' -> evalExpression sym vars (testInput test) expr'
+                  Just expr' -> evalExpression vars (testInput test) expr'
                   -- If this location isn't present in the definitions of the
                   -- candidate formula, then its original value is preserved.
-                  Nothing -> lookupInState sym (testInput test) outputLoc
-  shouldBe <- lookupInState sym (testOutput test) outputLoc
-  S.isEq sym actuallyIs shouldBe
+                  Nothing -> liftIO $ lookupInState sym (testInput test) outputLoc
+  shouldBe <- liftIO $ lookupInState sym (testOutput test) outputLoc
+  liftIO $ S.isEq sym actuallyIs shouldBe
 
 -- | Build a conjuction of the equality expressions for /all/ locations in
 -- either the outputs of the 'ConcreteTest' or the definitions of the 'Formula'.
 buildEqualityMachine :: forall arch t st
                       . (Architecture arch)
-                     => S.SimpleBuilder t st
-                     -> Formula (S.SimpleBuilder t st) arch
+                     => Formula (S.SimpleBuilder t st) arch
                      -> ConcreteTest (S.SimpleBuilder t st) arch
-                     -> IO (S.BoolElt t)
-buildEqualityMachine sym (Formula vars defs) test =
+                     -> Cegis (S.SimpleBuilder t st) arch (S.BoolElt t)
+buildEqualityMachine (Formula vars defs) test = do
+  sym <- askSym
+  let allOutputLocs = Set.fromList (MapF.keys (testOutput test)) `Set.union`
+                      Set.fromList (MapF.keys defs)
+      addEquality :: S.BoolElt t -> Some (Location arch) -> Cegis (S.SimpleBuilder t st) arch (S.BoolElt t)
+      addEquality soFar (Some loc) = do
+        let locDef = MapF.lookup loc defs
+        locEquality <- buildEqualityLocation test vars loc locDef
+        liftIO $ S.andPred sym soFar locEquality
   foldlM addEquality (S.truePred sym) allOutputLocs
-  where allOutputLocs = Set.fromList (MapF.keys (testOutput test)) `Set.union`
-                        Set.fromList (MapF.keys defs)
-        addEquality :: S.BoolElt t -> Some (Location arch) -> IO (S.BoolElt t)
-        addEquality soFar (Some loc) = do
-          let locDef = MapF.lookup loc defs
-          locEquality <- buildEqualityLocation sym test vars loc locDef
-          S.andPred sym soFar locEquality
 
 -- | Build an equality of the form
 -- > f(test1_in) = test1_out /\ f(test2_in) = test2_out /\ ... /\ f(testn_in) = testn_out
 buildEqualityTests :: forall arch t st
                     . (Architecture arch)
-                   => S.SimpleBuilder t st
-                   -> Formula (S.SimpleBuilder t st) arch
+                   => Formula (S.SimpleBuilder t st) arch
                    -> [ConcreteTest (S.SimpleBuilder t st) arch]
-                   -> IO (S.BoolElt t)
-buildEqualityTests sym form = foldrM andTest (S.truePred sym)
-  where andTest test soFar = S.andPred sym soFar =<< buildEqualityMachine sym form test
+                   -> Cegis (S.SimpleBuilder t st) arch (S.BoolElt t)
+buildEqualityTests form tests = do
+  sym <- askSym
+  let andTest test soFar = (liftIO . S.andPred sym soFar) =<< buildEqualityMachine form test
+  foldrM andTest (S.truePred sym) tests
 
+-- | Given a concrete model from the SMT solver, extract concrete instructions
+-- from the templated instructions, so that all of the initially templated
+-- operands are filled in concretely.
 extractConcreteInstructions :: GroundEvalFn t
                             -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                             -> IO [TemplatableInstruction arch]
@@ -163,53 +192,88 @@ extractConcreteInstructions (GroundEvalFn evalFn) = mapM f
   where f (TemplatedInstructionFormula (TemplatedInstruction op _ _) tf) =
           TemplatableInstruction (Witness op) <$> recoverOperands evalFn (tfOperandExprs tf)
 
--- TODO: rename
-handleSatResult :: [TemplatedInstructionFormula (S.SimpleBackend t) arch]
-                -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))
-                -> IO (Maybe [TemplatableInstruction arch])
-handleSatResult insns (Sat (evalFn, _)) = Just <$> extractConcreteInstructions evalFn insns
-handleSatResult _ Unsat = return Nothing
-handleSatResult _ Unknown = fail "got Unknown when checking sat-ness"
+-- | Meant to be used as the callback in a check SAT operation. If the result is
+-- Sat, it pulls out concrete instructions corresponding to the SAT model.
+-- Otherwise, it returns Nothing.
+tryExtractingConcrete :: [TemplatedInstructionFormula (S.SimpleBackend t) arch]
+                      -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))
+                      -> IO (Maybe [TemplatableInstruction arch])
+tryExtractingConcrete insns (Sat (evalFn, _)) = Just <$> extractConcreteInstructions evalFn insns
+tryExtractingConcrete _ Unsat = return Nothing
+tryExtractingConcrete _ Unknown = fail "got Unknown when checking sat-ness"
 
 -- | Build a formula for the given concrete instruction.
 instantiateFormula' :: (Architecture arch)
-                    => S.SimpleBuilder t st
-                    -> BaseSet (S.SimpleBuilder t st) arch
-                    -> TemplatableInstruction arch
-                    -> IO (Formula (S.SimpleBuilder t st) arch)
-instantiateFormula' sym m (TemplatableInstruction op oplist) =
-  snd <$> instantiateFormula sym pf oplist
-  where pf = unTemplate . fromJust $ MapF.lookup op m
+                    => TemplatableInstruction arch
+                    -> Cegis (S.SimpleBuilder t st) arch (Formula (S.SimpleBuilder t st) arch)
+instantiateFormula' (TemplatableInstruction op oplist) = do
+  sym <- askSym
+  baseSet <- askBaseSet
+  let pf = unTemplate . fromJust $ MapF.lookup op baseSet
+  liftIO (snd <$> instantiateFormula sym pf oplist)
 
--- TODO: tidy up this type signature
-cegis :: (Architecture arch)
-      => S.SimpleBackend t
-      -> BaseSet (S.SimpleBackend t) arch
-      -> Formula (S.SimpleBackend t) arch
-      -> [ConcreteTest (S.SimpleBackend t) arch]
-      -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
-      -> IO (Either [ConcreteTest (S.SimpleBackend t) arch] [Instruction arch])
-cegis sym semantics target tests trial = do
-  trialFormula <- condenseFormulas sym (map tifFormula trial)
-  check <- buildEqualityTests sym trialFormula tests
+-- | Condense a series of instructions in sequential execution into one formula.
+condenseInstructions :: (Architecture arch)
+                     => [TemplatableInstruction arch]
+                     -> Cegis (S.SimpleBuilder t st) arch (Formula (S.SimpleBuilder t st) arch)
+condenseInstructions insns = do
+  sym <- askSym
+  insnFormulas <- traverse instantiateFormula' insns
+  liftIO $ condenseFormulas sym insnFormulas
 
+data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
+                          -- ^ There is no way to make the target and the
+                          -- candidate do the same thing. This is proven by the
+                          -- set of tests.
+                          | CegisEquivalent [Instruction arch]
+                          -- ^ This series of instructions, an instantiated form
+                          -- of the candidate instructions given, has the same
+                          -- behavior as the target formula.
+
+cegis' :: (Architecture arch)
+       => [TemplatedInstructionFormula (S.SimpleBackend t) arch]
+       -- ^ The trial instructions.
+       -> Formula (S.SimpleBackend t) arch
+       -- ^ A formula representing the sequence of trial instructions.
+       -> [ConcreteTest (S.SimpleBackend t) arch]
+       -- ^ All the tests we have so far.
+       -> Cegis (S.SimpleBackend t) arch (CegisResult (S.SimpleBackend t) arch)
+cegis' trial trialFormula tests = do
+  sym <- askSym
   -- Is this candidate satisfiable for the concrete tests we have so far? At
   -- this point, the machine state is concrete, but the immediate values of the
-  -- instructions are symbolic.
-  insns <- checkSatZ3 sym check (handleSatResult trial)
+  -- instructions are symbolic. If the candidate is satisfiable for the tests,
+  -- the SAT solver will give us values for the templated immediates in order to
+  -- make the tests pass.
+  check <- buildEqualityTests trialFormula tests
+  insns <- liftIO $ checkSatZ3 sym check (tryExtractingConcrete trial)
 
   case insns of
     Just insns' -> do
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
-      filledInFormula <- condenseFormulas sym =<< mapM (instantiateFormula' sym semantics) insns'
-      equiv <- formulasEquivSym sym target filledInFormula
+      filledInFormula <- condenseInstructions insns'
+      targetFormula <- askTarget
+      equiv <- liftIO $ formulasEquivSym sym targetFormula filledInFormula
       case equiv of
-        Equivalent -> return . Right $ map templInsnToDism insns'
-        Mismatching -> return (Left tests)
+        Equivalent -> return . CegisEquivalent $ map templInsnToDism insns'
+        Mismatching -> return (CegisUnmatchable tests)
         DifferentBehavior ctrExample -> do
-          ctrExampleOut <- evalFormula sym target ctrExample
+          ctrExampleOut <- evalFormula targetFormula ctrExample
           let newTest = ConcreteTest' ctrExample ctrExampleOut
-          cegis sym semantics target (newTest : tests) trial
-    Nothing -> return (Left tests)
+          cegis' trial trialFormula (newTest : tests)
+    Nothing -> return (CegisUnmatchable tests)
+
+cegis :: (Architecture arch)
+      => CegisParams (S.SimpleBackend t) arch
+      -- ^ Parameters not specific to the candidate. See 'CegisParams' for
+      -- details.
+      -> [ConcreteTest (S.SimpleBackend t) arch]
+      -- ^ The tests we know so far for the target formula.
+      -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
+      -- ^ The candidate program.
+      -> IO (CegisResult (S.SimpleBackend t) arch)
+cegis params tests trial = do
+  trialFormula <- condenseFormulas (cpSym params) (map tifFormula trial)
+  runReaderT (cegis' trial trialFormula tests) params
