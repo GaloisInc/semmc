@@ -258,7 +258,6 @@ cegis' trial trialFormula tests = do
       equiv <- liftIO $ formulasEquivSym sym targetFormula filledInFormula
       case equiv of
         Equivalent -> return . CegisEquivalent $ map templInsnToDism insns'
-        Mismatching -> return (CegisUnmatchable tests)
         DifferentBehavior ctrExample -> do
           ctrExampleOut <- evalFormula targetFormula ctrExample
           let newTest = ConcreteTest' ctrExample ctrExampleOut

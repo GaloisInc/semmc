@@ -86,7 +86,6 @@ classifyByClass p eqs klasses =
       eqv <- testEquivalence p representative
       case eqv of
         F.Equivalent -> classifyByClass p (S.insert klass eqs) rest
-        F.Mismatching -> error "Mismatched formulas in equivalence check..."
         F.DifferentBehavior cx -> do
           addTestCase cx
           eqclasses' <- removeInvalidPrograms cx undefined

@@ -19,11 +19,12 @@ module SemMC.Formula.Equivalence
 import           Control.Monad.IO.Class ( liftIO )
 import           Data.Foldable ( foldrM )
 import           Data.Maybe ( fromJust )
-import           Data.Parameterized.Some
 import           Data.Parameterized.Classes
-import           Data.Parameterized.TraversableF
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr ( withKnownNat )
+import           Data.Parameterized.Pair ( Pair(..) )
+import           Data.Parameterized.Some
+import           Data.Parameterized.TraversableF
 import qualified Data.Set as Set
 import           System.IO ( stderr )
 
@@ -49,9 +50,6 @@ data EquivalenceResult arch ex
   = Equivalent
     -- ^ The two formulas are equivalent (or, if you want to be pedantic,
     -- equisatisfiable).
-  | Mismatching
-    -- ^ The two formulas are trivially different, e.g., one uses inputs that
-    -- the other does not.
   | DifferentBehavior (ArchState arch ex)
     -- ^ The two formulas are non-trivially different, i.e., the SAT solver was
     -- needed to show difference. The 'ArchState' is a machine state that is a
@@ -85,32 +83,27 @@ formulasEquivConcrete =
           _ -> error "formulasEquivConcrete: only BVs supported"
   in formulasEquiv eval
 
+allPairwiseEquality :: (S.IsExprBuilder sym)
+                    => sym
+                    -> [Pair (S.SymExpr sym) (S.SymExpr sym)]
+                    -> IO (S.Pred sym)
+allPairwiseEquality sym = foldrM andPairEquality (S.truePred sym)
+  where andPairEquality (Pair e1 e2) accum = S.andPred sym accum =<< S.isEq sym e1 e2
+
 -- | Check the equivalence of two formulas, using the first parameter to extract
 -- expression values for the counterexample.
-formulasEquiv :: (Architecture arch)
+formulasEquiv :: forall t arch ex.
+                 (Architecture arch)
               => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
               -> SimpleBackend t
               -> Formula (SimpleBackend t) arch
               -> Formula (SimpleBackend t) arch
               -> IO (EquivalenceResult arch ex)
-formulasEquiv eval sym f1 f2 =
-  if not (formInputs f1 == formInputs f2 &&
-          formOutputs f1 == formOutputs f2)
-  then return Mismatching
-  else formulasEquiv' eval sym f1 f2
-
-formulasEquiv' :: forall t arch ex.
-                  (Architecture arch)
-               => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
-               -> SimpleBackend t
-               -> Formula (SimpleBackend t) arch
-               -> Formula (SimpleBackend t) arch
-               -> IO (EquivalenceResult arch ex)
-formulasEquiv'
+formulasEquiv
   eval
   sym
-  (Formula { formParamVars = bvars1, formDefs = defs1} )
-  (Formula { formParamVars = bvars2, formDefs = defs2} ) =
+  f1@(Formula { formParamVars = bvars1, formDefs = defs1 } )
+  f2@(Formula { formParamVars = bvars2, formDefs = defs2 } ) =
   do
     -- Create constants for each of the bound variables, then replace them in
     -- each of the definitions. This way, the equations in the different
@@ -118,32 +111,42 @@ formulasEquiv'
     --
     -- Here 'constant' does not mean a literal, like '5'. Instead, it means a
     -- variable in SMT land that isn't meant to be bound.
-    let allVars = Set.union (Set.fromList (MapF.keys bvars1)) (Set.fromList (MapF.keys bvars2))
+    let allInputLocs = formInputs f1 `Set.union` formInputs f2
+        allOutputLocs = formOutputs f1 `Set.union` formOutputs f2
+        allLocs = allInputLocs `Set.union` allOutputLocs
         mkConstant (Some loc) m =
           fmap (\e -> MapF.insert loc e m)
                (S.freshConstant sym (makeSymbol (showF loc)) (locationType loc))
-    varConstants <- foldrM mkConstant MapF.empty allVars
-    let replaceVars vars =
-          traverseF (replaceLitVars sym (return . fromJust . flip MapF.lookup varConstants) vars)
+
+    varConstants <- foldrM mkConstant MapF.empty allLocs
+    let -- This 'fromJust' is total because all of the used variables are in
+        -- 'varConstants'.
+        varLookup :: forall tp . Location arch tp -> IO (Elt t tp)
+        varLookup = return . fromJust . flip MapF.lookup varConstants
+        replaceVars vars = traverseF (replaceLitVars sym varLookup vars)
+
     defs1' <- replaceVars bvars1 defs1
     defs2' <- replaceVars bvars2 defs2
 
-    let matchingPair :: MapF.MapF (Location arch) (Elt t)
-                     -> Location arch tp
-                     -> Elt t tp
-                     -> [MapF.Pair (Elt t) (Elt t)]
-                     -> [MapF.Pair (Elt t) (Elt t)]
-        matchingPair table var e1 = (:) $ MapF.Pair e1 (fromJust $ MapF.lookup var table)
-
-        andPairEquality :: MapF.Pair (Elt t) (Elt t) -> BoolElt t -> IO (BoolElt t)
-        andPairEquality (MapF.Pair e1 e2) accum = do
-          S.andPred sym accum =<< S.isEq sym e1 e2
+    let lookupDefn :: MapF.MapF (Location arch) (Elt t)
+                   -> Location arch tp
+                   -> Elt t tp
+        lookupDefn defs loc =
+          case MapF.lookup loc defs of
+            Just defn -> defn
+            -- If this formula doesn't explicitly define this location, then it
+            -- implicitly preserves the same value. This 'fromJust' is total
+            -- because 'varConstants' has all locations ever mentioned (that is,
+            -- both uses and definitions) in the formula in it.
+            Nothing -> fromJust (MapF.lookup loc varConstants)
+        lookupDefns (Some loc) =
+          Pair (lookupDefn defs1' loc) (lookupDefn defs2' loc)
 
     -- Next, we build up equalities between each of the individual definitions
     -- in both of the formulas.
-    let defsPairs = MapF.foldrWithKey (matchingPair defs2') [] defs1'
+    let defnPairs = foldr ((:) . lookupDefns) [] allOutputLocs
     -- (d1 = d1') /\ (d2 = d2') /\ ... /\ (dm = dm')
-    allDefsEqual <- foldrM andPairEquality (S.truePred sym) defsPairs
+    allDefsEqual <- allPairwiseEquality sym defnPairs
 
     -- Finally, we ask, "Is it possible that all the variables are equal to each
     -- other, but not all the definitions are equal to each other?"
