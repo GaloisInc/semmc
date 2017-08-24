@@ -86,10 +86,16 @@ allBoundVars e = runST (S.boundVars e >>= H.foldM f Set.empty)
 -- | Given a map from location to bound variable, return all of the locations
 -- that are actually used in an expression (along with their corresponding
 -- variables).
-extractUsedLocs :: (OrdF loc)
+extractUsedLocs :: forall t loc tp
+                 . (OrdF loc)
                 => MapF.MapF loc (S.SimpleBoundVar t)
                 -> S.Elt t tp
                 -> MapF.MapF loc (S.SimpleBoundVar t)
-extractUsedLocs locMapping = foldr f MapF.empty . allBoundVars
-  where reversed = mapFReverse locMapping
-        f (Some var) = MapF.insert (fromJust $ MapF.lookup var reversed) var
+extractUsedLocs locMapping expr = MapF.mapMaybe keepIfNeeded locMapping
+  where
+    keepIfNeeded :: forall tp' . S.SimpleBoundVar t tp' -> Maybe (S.SimpleBoundVar t tp')
+    keepIfNeeded bv' =
+      case Set.member (Some bv') bvs of
+        False -> Nothing
+        True -> Just bv'
+    bvs = allBoundVars expr

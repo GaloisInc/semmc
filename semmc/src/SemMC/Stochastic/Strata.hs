@@ -44,7 +44,7 @@ import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
-import           SemMC.Util ( allBoundVars )
+import           SemMC.Util ( extractUsedLocs )
 
 import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Generalize ( generalize )
@@ -240,22 +240,16 @@ defineLocation :: forall t arch tp
                -> (MapF.MapF (Location arch) (C.SymExpr (Sym t)), MapF.MapF (Location arch) (C.BoundVar (Sym t)))
                -> (MapF.MapF (Location arch) (C.SymExpr (Sym t)), MapF.MapF (Location arch) (C.BoundVar (Sym t)))
 defineLocation frm loc expr (defs, vars) =
-  (MapF.insert loc expr defs, collectVars frm (allBoundVars expr) vars)
+  (MapF.insert loc expr defs, collectVars frm expr vars)
 
-collectVars :: forall t arch
+collectVars :: forall t tp arch
              . (C.TestEquality (C.BoundVar (Sym t)), P.OrdF (Location arch))
             => F.Formula (Sym t) arch
-            -> S.Set (Some (SB.SimpleBoundVar t))
+            -> SB.Elt t tp
             -> MapF.MapF (Location arch) (C.BoundVar (Sym t))
             -> MapF.MapF (Location arch) (C.BoundVar (Sym t))
-collectVars frm bvs m = MapF.union m neededDefs
-  where
-    neededDefs = MapF.mapMaybe keepIfNeeded (F.formParamVars frm)
-    keepIfNeeded :: forall tp' . C.BoundVar (Sym t) tp' -> Maybe (C.BoundVar (Sym t) tp')
-    keepIfNeeded bv' =
-      case S.member (Some bv') bvs of
-        False -> Nothing
-        True -> Just bv'
+collectVars frm expr m = MapF.union m neededVars
+  where neededVars = extractUsedLocs (F.formParamVars frm) expr
 
 -- | Based on the iorelation, identify the inputs of the opcode (and the
 -- corresponding operands).  For each input operand backed by a location, create
