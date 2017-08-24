@@ -203,7 +203,7 @@ unTemplateSafe (ParameterizedFormula { pfUses = uses
 unTemplate :: (OrdF (Location arch))
            => ParameterizedFormula sym (TemplatedArch arch) sh
            -> ParameterizedFormula sym arch sh
-unTemplate = unTemplateUnsafe
+unTemplate = unTemplateSafe
 
 -- | 'Formula' along with the expressions that correspond to each operand (for
 -- pulling out the values of immediates after solving, primarily).

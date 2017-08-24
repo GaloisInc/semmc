@@ -42,6 +42,7 @@ import           Data.Parameterized.TH.GADT ( structuralTypeEquality, structural
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
+import           Data.Type.Equality ( type (==) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( Symbol )
@@ -67,7 +68,7 @@ import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), Uninterpreted
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Stochastic.Remote as R
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..), TemplatableOperands )
-import           SemMC.Util ( makeSymbol, Equal )
+import           SemMC.Util ( makeSymbol )
 
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC.ConcreteState as PPCS
@@ -413,7 +414,7 @@ instance A.Architecture PPC where
   operandValue _ = operandValue
   operandToLocation _ = operandToLocation
 
-opcodeToVoid :: (Equal o PPC.Operand ~ 'False) => PPC.Opcode o sh -> Void
+opcodeToVoid :: ((o == PPC.Operand) ~ 'False) => PPC.Opcode o sh -> Void
 opcodeToVoid x = case x of {}
 
 -- This is a hack.
