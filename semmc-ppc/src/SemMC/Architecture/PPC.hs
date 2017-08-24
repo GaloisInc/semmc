@@ -13,6 +13,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+
+{-# OPTIONS_GHC -Wno-orphans #-}
 module SemMC.Architecture.PPC
   ( PPC
   , Location(..)
@@ -45,7 +47,7 @@ import qualified Data.Set as Set
 import           Data.Type.Equality ( type (==) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
-import           GHC.TypeLits ( Symbol )
+import           GHC.TypeLits ( KnownNat, Nat, Symbol )
 import           System.FilePath ( (</>) )
 import qualified Text.Megaparsec as P
 import           Text.Printf ( printf )
@@ -139,11 +141,46 @@ concreteTemplatedOperand :: forall arch s a.
                          -> (a -> A.Location arch (A.OperandType arch s))
                          -> a
                          -> TemplatedOperand arch s
-concreteTemplatedOperand op loc x = TemplatedOperand (Just (loc x)) (Set.singleton (Some (loc x))) mkTemplate' :: TemplatedOperand arch s
+concreteTemplatedOperand op loc x =
+  TemplatedOperand { templOpLocation = Just (loc x)
+                   , templUsedLocations = Set.singleton (Some (loc x))
+                   , templOpFn = mkTemplate'
+                   }
   where mkTemplate' :: TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
           expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
           return (expr, WrappedRecoverOperandFn $ const (return (op x)))
+
+symbolicTemplatedOperand :: forall arch s (bits :: Nat) extended
+                          . (A.OperandType arch s ~ BaseBVType extended,
+                             KnownNat bits,
+                             KnownNat extended,
+                             1 <= bits,
+                             bits <= extended)
+                         => Proxy bits
+                         -> Bool
+                         -> String
+                         -> (Integer -> A.Operand arch s)
+                         -> TemplatedOperand arch s
+symbolicTemplatedOperand Proxy signed name constr =
+  TemplatedOperand { templOpLocation = Nothing
+                   , templUsedLocations = Set.empty
+                   , templOpFn = mkTemplate'
+                   }
+  where mkTemplate' :: TemplatedOperandFn arch s
+        mkTemplate' sym _ = do
+          v <- S.freshConstant sym (makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
+          let bitsRepr = knownNat @bits
+              extendedRepr = knownNat @extended
+          extended <- case testNatCases bitsRepr extendedRepr of
+            NatCaseLT LeqProof ->
+              if signed
+              then S.bvSext sym knownNat v
+              else S.bvZext sym knownNat v
+            NatCaseEQ -> return v
+            NatCaseGT LeqProof -> error "impossible"
+          let recover evalFn = constr <$> evalFn v
+          return (extended, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "F4rc" where
   opTemplates = concreteTemplatedOperand (PPC.F4rc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
@@ -158,13 +195,7 @@ instance TemplatableOperand PPC "Gprc_nor0" where
   opTemplates = concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
 
 instance TemplatableOperand PPC "S16imm" where
-  opTemplates = [TemplatedOperand Nothing Set.empty mkConst]
-    where mkConst :: TemplatedOperandFn PPC "S16imm"
-          mkConst sym _ = do
-            v <- S.freshConstant sym (makeSymbol "S16imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
-            extended <- S.bvSext sym knownNat v
-            let recover evalFn = PPC.S16imm . fromInteger <$> evalFn v
-            return (extended, WrappedRecoverOperandFn recover)
+  opTemplates = [symbolicTemplatedOperand (Proxy @16) True "S16imm" (PPC.S16imm . fromInteger)]
 
 instance TemplatableOperand PPC "Memri" where
   opTemplates = mkTemplate <$> [0..31]
@@ -197,13 +228,7 @@ instance TemplatableOperand PPC "Directbrtarget" where
             return (expr, WrappedRecoverOperandFn recover)
 
 instance TemplatableOperand PPC "U5imm" where
-  opTemplates = [TemplatedOperand Nothing Set.empty mkImm]
-    where mkImm :: TemplatedOperandFn PPC "U5imm"
-          mkImm sym _ = do
-            v <- S.freshConstant sym (makeSymbol "U5imm") (knownRepr :: BaseTypeRepr (BaseBVType 5))
-            extended <- S.bvSext sym knownNat v
-            let recover evalFn = PPC.U5imm . fromInteger <$> evalFn v
-            return (extended, WrappedRecoverOperandFn recover)
+  opTemplates = [symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
 
 instance TemplatableOperand PPC "S17imm" where
   opTemplates = [TemplatedOperand Nothing Set.empty mkImm]
@@ -270,7 +295,6 @@ instance TemplatableOperand PPC "I32imm" where
             v <- S.freshConstant sym (makeSymbol "I32imm") knownRepr
             let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
             return (v, WrappedRecoverOperandFn recover)
-
 
 type instance A.Location PPC = Location
 
