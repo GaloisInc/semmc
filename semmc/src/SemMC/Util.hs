@@ -13,7 +13,6 @@ module SemMC.Util
   , makeSymbol
   , mapFReverse
   , sequenceMaybes
-  , walkElt
   , allBoundVars
   , extractUsedLocs
   ) where
@@ -37,7 +36,8 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
 
-
+-- | Try converting any 'String' into a 'SolverSymbol'. If it is an invalid
+-- symbol, then error.
 makeSymbol :: String -> SolverSymbol
 makeSymbol name = case userSymbol sanitizedName of
                     Right symbol -> symbol
@@ -68,31 +68,24 @@ groundValToExpr sym (BaseArrayRepr idxTp elemTp) (ArrayConcrete base m) = do
 groundValToExpr _ (BaseArrayRepr _ _) (ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
 
--- * MapF Utilities
-
 -- | Reverse a MapF, so that the old keys are the new values and the old values
 -- are the new keys.
 mapFReverse :: (OrdF value) => MapF.MapF key value -> MapF.MapF value key
 mapFReverse = MapF.foldrWithKey (flip MapF.insert) MapF.empty
 
--- This short-circuits, useful for long (or infinite) lists.
+-- | Run the monadic actions in order, returning the first 'Just' value.
 sequenceMaybes :: (Monad m) => [m (Maybe a)] -> m (Maybe a)
 sequenceMaybes [] = return Nothing
 sequenceMaybes (x : xs) = x >>= maybe (sequenceMaybes xs) (return . Just)
 
--- | Walk the tree of the expression, collecting results in the monoid. Visits
--- nodes before leaves.
-walkElt :: (Monoid m) => (forall tp'. S.Elt t tp' -> m) -> S.Elt t tp -> m
-walkElt f e@(S.AppElt appElt) = f e <> down
-  where down = getConst (traverseFC_ (Const . walkElt f) (S.appEltApp appElt))
-walkElt f e@(S.NonceAppElt nonceAppElt) = f e <> down
-  where down = getConst (traverseFC_ (Const . walkElt f) (S.nonceEltApp nonceAppElt))
-walkElt f e = f e
-
+-- | Find all the bound variables in a symbolic expression.
 allBoundVars :: S.Elt t tp -> Set.Set (Some (S.SimpleBoundVar t))
 allBoundVars e = runST (S.boundVars e >>= H.foldM f Set.empty)
   where f s (_, v) = return (Set.union s v)
 
+-- | Given a map from location to bound variable, return all of the locations
+-- that are actually used in an expression (along with their corresponding
+-- variables).
 extractUsedLocs :: (OrdF loc)
                 => MapF.MapF loc (S.SimpleBoundVar t)
                 -> S.Elt t tp
