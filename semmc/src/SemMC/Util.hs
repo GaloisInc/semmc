@@ -16,7 +16,6 @@ module SemMC.Util
   , walkElt
   , allBoundVars
   , extractUsedLocs
-  , Equal
   ) where
 
 import           Control.Applicative ( Const(..) )
@@ -101,7 +100,3 @@ extractUsedLocs :: (OrdF loc)
 extractUsedLocs locMapping = foldr f MapF.empty . allBoundVars
   where reversed = mapFReverse locMapping
         f (Some var) = MapF.insert (fromJust $ MapF.lookup var reversed) var
-
-type family Equal (a :: k1) (b :: k2) :: Bool where
-  Equal a a = 'True
-  Equal a b = 'False
