@@ -16,17 +16,18 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC ( foldrFC, traverseFC )
+import qualified Data.Parameterized.ShapedList as SL
 import qualified Lang.Crucible.Solver.Interface as C
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
 import           Data.Parameterized.ShapedList ( ShapedList, indexShapedList )
 
-import           SemMC.Architecture ( Opcode, Operand, Location, BoundVar, operandToLocation )
+import           SemMC.Architecture ( Opcode, Operand, Location, BoundVar, operandToLocation, locationType )
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
-import           SemMC.Util ( extractUsedLocs, filterMapF, mapFMapBothM )
+import           SemMC.Util ( extractUsedLocs, filterMapF )
 
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
@@ -66,11 +67,9 @@ makeFreshFormula :: (CS.ConcreteArchitecture arch)
                  -> MapF.MapF (Location arch) (C.BoundVar (Sym t))
                  -> Syn t arch (F.Formula (Sym t) arch)
 makeFreshFormula exprs vars = withSymBackend $ \sym -> do
-  liftIO $ F.copyFormula sym f0
-  where
-    f0 = F.Formula { F.formParamVars = vars
-                   , F.formDefs = exprs
-                   }
+  liftIO $ F.copyFormula sym F.Formula { F.formParamVars = vars
+                                       , F.formDefs = exprs
+                                       }
 
 -- | Collect the locations that we need to define this formula; we collect into
 -- a 'MapF.MapF' instead of a 'F.Formula' so that we don't have a very invalid
@@ -121,7 +120,8 @@ parameterizeFormula opcode oplist iorel f = do
   -- The pfLiteralVars are the parameters from the original formula not
   -- corresponding to any parameters
   let litVars = filterMapF (keepNonParams paramLocs) (F.formParamVars f)
-  defs <- mapFMapBothM replaceParameters (F.formDefs f)
+  let (nonParamDefs, paramDefs) = SL.foldrFCIndexed (replaceParameters (Proxy @arch)) (F.formDefs f, MapF.empty) oplist
+      defs = MapF.foldrWithKey liftImplicitLocations paramDefs nonParamDefs
   return F.ParameterizedFormula { F.pfUses = uses
                                 , F.pfOperandVars = opVars
                                 , F.pfLiteralVars = litVars
@@ -130,6 +130,13 @@ parameterizeFormula opcode oplist iorel f = do
   where
     paramLocs = foldrFC (collectParamLocs (Proxy @arch)) S.empty oplist
     usedLocs = map (\(Some e) -> extractUsedLocs (F.formParamVars f) e) (MapF.elems (F.formDefs f))
+
+liftImplicitLocations :: (P.OrdF (Location arch))
+                      => Location arch tp
+                      -> C.SymExpr (Sym t) tp
+                      -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t))
+                      -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t))
+liftImplicitLocations loc expr = MapF.insert (F.Literal loc) expr
 
 keepNonParams :: (P.OrdF f) => S.Set (Some f) -> f tp -> g tp -> Bool
 keepNonParams paramLocs loc _ = S.member (Some loc) paramLocs
@@ -148,8 +155,28 @@ allocateBoundVar :: Operand arch tp
                  -> Syn t arch (BoundVar (Sym t) arch tp)
 allocateBoundVar = undefined
 
+-- | For locations referenced in an operand list *and* defined by a formula (the
+-- definitions of the formula are the first element of the pair), add them to a
+-- new map (suitable for a ParameterizedFormula).
+--
+-- This just involves wrapping the location with an 'F.Operand' constructor.
+--
+-- We remove the promoted locations from the original definition map, since we
+-- need to know which locations are left (they are handled by
+-- 'liftImplicitLocations').
 replaceParameters :: (CS.ConcreteArchitecture arch)
-                  => Location arch tp
-                  -> C.SymExpr (Sym t) tp
-                  -> Syn t arch (F.Parameter arch sh tp, C.SymExpr (Sym t) tp)
-replaceParameters = undefined
+                  => proxy arch
+                  -> SL.Index sh tp
+                  -> Operand arch tp
+                  -> (MapF.MapF (Location arch) (C.SymExpr (Sym t)), MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t)))
+                  -> (MapF.MapF (Location arch) (C.SymExpr (Sym t)), MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t)))
+replaceParameters proxy ix op (defs, m) =
+  case operandToLocation proxy op of
+    Nothing -> (defs, m)
+    Just loc ->
+      case MapF.lookup loc defs of
+        Nothing ->
+          -- This lookup would fail on a purely input operand that had no
+          -- definition in the final formula
+          (defs, m)
+        Just expr -> (MapF.delete loc defs, MapF.insert (F.Operand (locationType loc) ix) expr m)
