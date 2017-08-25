@@ -22,6 +22,8 @@ data MachineState =
                , gprs_mask :: V.Vector 16 Word32
                , fprs :: V.Vector 32 Word32
                -- ^ 32 32-bit locations
+               , cpsr :: Word32
+               -- ^ Current program status register (CPSR)
                , mem1 :: V.Vector 32 Word8
                -- ^ 32 bytes
                , mem2 :: V.Vector 32 Word8
@@ -44,6 +46,7 @@ toBS ms = LB.toStrict (B.toLazyByteString bld)
     bld = mconcat [ mconcat (map B.word32LE (V.toList (gprs ms)))
                   , mconcat (map B.word32LE (V.toList (gprs_mask ms)))
                   , mconcat (map B.word32LE (V.toList (fprs ms)))
+                  , B.word32LE (cpsr ms)
                   , mconcat (map B.word8 (V.toList (mem1 ms)))
                   , mconcat (map B.word8 (V.toList (mem2 ms)))
                   ]
@@ -62,11 +65,13 @@ getMachineState = do
   -- here.
   Just grs_mask <- V.fromList <$> replicateM 16 G.getWord32le
   Just frs <- V.fromList <$> replicateM 32 G.getWord32le
+  cpsr_reg <- G.getWord32le
   Just m1 <- V.fromList <$> replicateM 32 G.getWord8
   Just m2 <- V.fromList <$> replicateM 32 G.getWord8
   return MachineState { gprs = grs
                       , gprs_mask = grs_mask
                       , fprs = frs
+                      , cpsr = cpsr_reg
                       , mem1 = m1
                       , mem2 = m2
                       }

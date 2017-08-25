@@ -61,6 +61,7 @@
 
 // The number of bytes for our hand-allocated memory regions
 #define MEM_REGION_BYTES 32
+#define LOGGING 1
 
 int pageSize;
 int waitForSignal(pid_t);
@@ -291,7 +292,6 @@ void flushICache(pid_t childPid, uint8_t* programSpace) {
 #elif defined(__arm__)
 
 /*
-
   There are 32 single precision floating point registers that are aliased to the
   16 double precision floating point registers.
 
@@ -307,15 +307,32 @@ void flushICache(pid_t childPid, uint8_t* programSpace) {
 uint8_t raiseTrap[] = {0x70, 0x00, 0x20, 0xe1};
 #define RAISE_TRAP asm("bkpt")
 
+/*
+A ptrace register request for ARM32 maps registers as follows:
+
+   elf_gregset_[0] ==  r0
+   elf_gregset_[1] ==  r1
+   ...
+   elf_gregset_[14] == r14
+   elf_gregset_[15] == pc
+   elf_gregset_[16] == cpsr
+   elf_gregset_[17] == orig_r0
+
+ Where orig_r0 is used to keep track of syscall argument, since r0
+ contains return value of syscall.
+ */
 typedef unsigned long elf_gregset_t[18];
+
 
 #define SEM_NGPRS 16
 #define SEM_NFPRS 32 // single precision
+#define IDX_CPSR  16 // CPSR index
 
 typedef struct {
   uint32_t gprs[SEM_NGPRS];
   uint32_t gprs_mask[SEM_NGPRS];
   uint32_t fprs[SEM_NFPRS];
+  uint32_t cpsr;
   uint8_t mem1[MEM_REGION_BYTES];
   uint8_t mem2[MEM_REGION_BYTES];
 } RegisterState;
@@ -331,6 +348,16 @@ void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace
   uint8_t* mem2Addr = memSpace + sizeof(rs->mem1);
   memcpy(mem1Addr, rs->mem1, sizeof(rs->mem1));
   memcpy(mem2Addr, rs->mem2, sizeof(rs->mem2));
+
+  LOG("current cpsr = 0x%4lx\n", regs[IDX_CPSR]);
+  LOG("cpsr_n = %s\n", ((regs[IDX_CPSR] >> 31) & 1) ? "N" : "-");
+  LOG("cpsr_z = %s\n", ((regs[IDX_CPSR] >> 30) & 1) ? "Z" : "-");
+  LOG("cpsr_c = %s\n", ((regs[IDX_CPSR] >> 29) & 1) ? "C" : "-");
+  LOG("cpsr_v = %s\n", ((regs[IDX_CPSR] >> 28) & 1) ? "V" : "-");
+  LOG("cpsr_q = %s\n", ((regs[IDX_CPSR] >> 27) & 1) ? "Q" : "-");
+
+  // Need to check that format of cpsr is valid
+  regs[IDX_CPSR] = rs->cpsr;
 
   // Apply the reg mask; this modifies the test vector, but that is fine.  We
   // won't need the original values ever again.
@@ -357,7 +384,10 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 
   memcpy(&rs->mem1, memSpace, sizeof(rs->mem1));
   memcpy(&rs->mem2, memSpace + sizeof(rs->mem1), sizeof(rs->mem2));
+  rs->cpsr = regs[IDX_CPSR];
 }
+
+
 
 void flushICache(pid_t childPid, uint8_t* programSpace) {
 
