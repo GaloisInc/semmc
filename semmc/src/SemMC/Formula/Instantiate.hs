@@ -44,27 +44,6 @@ import           SemMC.Util
 -- I got tired of typing this.
 type SB t st = S.SimpleBuilder t st
 
--- | Monadically map both keys and values of a 'MapF.MapF'.
-mapFMapBothM :: forall k1 v1 k2 v2 m.
-                (OrdF k2, Monad m)
-             => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp))
-             -> MapF.MapF k1 v1
-             -> m (MapF.MapF k2 v2)
-mapFMapBothM f = MapF.foldrWithKey f' (return MapF.empty)
-  where f' :: forall tp. k1 tp -> v1 tp -> m (MapF.MapF k2 v2) -> m (MapF.MapF k2 v2)
-        f' k v wrappedM = do
-          (k', v') <- f k v
-          m <- wrappedM
-          return $ MapF.insert k' v' m
-
--- | Filter the elements of a 'MapF.MapF'.
-filterMapF :: forall k v. (OrdF k) => (forall tp. k tp -> v tp -> Bool) -> MapF.MapF k v -> MapF.MapF k v
-filterMapF f = MapF.foldrWithKey go MapF.empty
-  where go :: forall tp. k tp -> v tp -> MapF.MapF k v -> MapF.MapF k v
-        go key value m
-          | f key value = MapF.insert key value m
-          | otherwise   = m
-
 -- | Convert a type-level list of operands to a Crucible-style context of
 -- operand types. This reverses it, but we don't care about that for our use
 -- case (and not doing so would be harder).
