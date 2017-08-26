@@ -36,12 +36,13 @@ import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 -- 'F.ParameterizedFormula' that has holes for the given 'Opcode'.
 extractFormula :: forall arch t sh
                 . (CS.ConcreteArchitecture arch, SynC arch)
-               => Opcode arch (Operand arch) sh
+               => RegisterizedInstruction arch
+               -> Opcode arch (Operand arch) sh
                -> ShapedList (Operand arch) sh
                -> F.Formula (Sym t) arch
                -> IORelation arch sh
                -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
-extractFormula opc ops progForm iorel = go (MapF.empty, MapF.empty) (F.toList (outputs iorel))
+extractFormula ri opc ops progForm iorel = go (MapF.empty, MapF.empty) (F.toList (outputs iorel))
   where
     go (locDefs, locVars) [] = do
       extractedFormula <- makeFreshFormula locDefs locVars

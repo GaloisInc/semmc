@@ -55,7 +55,7 @@ import Control.Monad
 --
 -- Can fail due to timeouts.
 synthesize :: SynC arch
-           => Instruction arch
+           => RegisterizedInstruction arch
            -> Syn t arch (Maybe [SynthInstruction arch])
 synthesize target = do
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
@@ -67,7 +67,7 @@ synthesize target = do
   where
     debug msg = liftIO $ traceIO msg
 
-mcmcSynthesizeOne :: forall arch t. SynC arch => Instruction arch -> Syn t arch (Integer, Candidate arch)
+mcmcSynthesizeOne :: forall arch t. SynC arch => RegisterizedInstruction arch -> Syn t arch (Integer, Candidate arch)
 mcmcSynthesizeOne target = do
   -- Max length of candidate programs. Can make it a parameter if
   -- needed.
@@ -114,7 +114,7 @@ mcmcSynthesizeOne target = do
 -- the cost of the new candidate incrementally and stop as soon as
 -- we know it's too expensive [STOKE Section 4.5].
 chooseNextCandidate :: SynC arch
-                    => Instruction arch
+                    => RegisterizedInstruction arch
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
@@ -148,18 +148,22 @@ chooseNextCandidate target candidate cost candidate' = do
 
 ----------------------------------------------------------------
 
+registerizeInstruction :: (SynC arch) => RegisterizedInstruction arch -> Test arch -> Syn t arch (Instruction arch)
+registerizeInstruction = undefined
+
 -- | Compute the cost, in terms of mismatch, of the candidate compared
 -- to the target. STOKE Section 4.6.
 compareTargetToCandidate :: forall arch t.
                             SynC arch
-                         => Instruction arch
+                         => RegisterizedInstruction arch
                          -> Candidate arch
-                         -> Test arch
+                         -> C.ConcreteState arch
                          -> Syn t arch Double
 compareTargetToCandidate target candidate test = do
   let candidateProg =
         concatMap synthInsnToActual . catMaybes . toList $ candidate
-  let targetProg = [target]
+  target' <- registerizeInstruction target test
+  let targetProg = [target']
   -- TODO: cache result of running target on test, since it never
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
@@ -167,7 +171,7 @@ compareTargetToCandidate target candidate test = do
   !runTest     <- askRunTest
   !candidateSt <- runTest test candidateProg
   !targetSt    <- runTest test targetProg
-  !liveOut     <- getOutMasks target
+  !liveOut     <- getOutMasks target'
   !eitherWeight <- liftIO $ C.tryJust pred $ do
     let !weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
     return weight

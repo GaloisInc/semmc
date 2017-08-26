@@ -294,6 +294,11 @@ synthesizeCandidate = do
         , seRandomGen = gen
         , seRunTest = runTest
         }
-  let instruction = D.Instruction AddRr (R32 Reg1 :> R32 Reg2 :> Nil)
+  let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
+  let instruction = RI { riInstruction = D.Instruction AddRr ops
+                       , riOpcode = AddRr
+                       , riOperands = ops
+                       , riLiteralLocs = MapF.empty
+                       }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
   runSyn @Toy localSynEnv (S.synthesize instruction)

@@ -109,6 +109,8 @@ class (IsOperand (Operand arch),
                -> Operand arch s
                -> IO (TaggedExpr arch sym s)
 
+  operandType :: proxy arch -> Operand arch s -> BaseTypeRepr (OperandType arch s)
+
   -- | Map an operand to a specific state variable, if possible.
   operandToLocation :: forall proxy s.
                        proxy arch

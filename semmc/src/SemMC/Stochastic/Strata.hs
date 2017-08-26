@@ -27,6 +27,8 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 
+import qualified Data.Parameterized.Classes as P
+import qualified Data.Parameterized.ShapedList as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC ( foldrFC )
@@ -35,7 +37,7 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import           SemMC.Architecture ( Instruction, Opcode, Operand )
+import           SemMC.Architecture ( Instruction, Opcode, Operand, Location, allLocations, OperandType, operandToLocation, operandType, locationType )
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
@@ -132,7 +134,7 @@ strataOne op = do
 
 strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
               => Opcode arch (Operand arch) sh
-              -> Instruction arch
+              -> RegisterizedInstruction arch
               -> C.EquivalenceClasses arch
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
@@ -153,7 +155,7 @@ strataOneLoop op instr eqclasses = do
 
 finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
                 => Opcode arch (Operand arch) sh
-                -> Instruction arch
+                -> RegisterizedInstruction arch
                 -> C.EquivalenceClasses arch
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
@@ -166,7 +168,7 @@ finishStrataOne op instr eqclasses = do
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 buildFormula :: (CS.ConcreteArchitecture arch, SynC arch)
              => Opcode arch (Operand arch) sh
-             -> Instruction arch
+             -> RegisterizedInstruction arch
              -> [SynthInstruction arch]
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 buildFormula o i prog = do
@@ -178,26 +180,34 @@ buildFormula o i prog = do
       let formulas = catMaybes mfrms
       withSymBackend $ \sym -> do
         progFormula <- liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula formulas
-        case i of
+        case riInstruction i of
           D.Instruction opcode operands
             | Just MapF.Refl <- MapF.testEquality opcode o -> do
                 -- Now, for all of the outputs (implicit and explicit) in the target
                 -- instruction, look up the corresponding formula in `progFormula`
-                extractFormula opcode operands progFormula iorel
+                extractFormula i opcode operands progFormula iorel
             | otherwise -> L.error ("Unexpected opcode mismatch: " ++ MapF.showF o)
 
 -- | Generate an arbitrary instruction for the given opcode.
+--
+-- The "registerized" instruction selects a location in the machine state to
+-- stand in for immediates.  We need this to extract formulas (and to learn
+-- formulas for instructions with immediates).
 --
 -- Note that this function should strive to avoid generating instructions with
 -- explicit operands that overlap with implicit operands.  It should also avoid
 -- generating instructions that re-use registers.
 --
--- We'll also want to return a mapping from locations to input values to be used
--- to inform the initial state generation.
+-- There is an additional restriction where we do not want to use implicit or
+-- explicit operands as stand-in locations for immediates.
+--
+-- This function can fail (with an error) if we do not have enough registers to
+-- act as stand ins for immediates; that seems highly unlikely, but something to
+-- watch out for.
 instantiateInstruction :: forall arch sh t
                         . (CS.ConcreteArchitecture arch, SynC arch)
                        => Opcode arch (Operand arch) sh
-                       -> Syn t arch (Instruction arch)
+                       -> Syn t arch (RegisterizedInstruction arch)
 instantiateInstruction op = do
   gen <- askGen
   Just iorel <- opcodeIORelation op
@@ -205,15 +215,78 @@ instantiateInstruction op = do
   where
     -- Generate random instructions until we get one with explicit operands that
     -- do not overlap with implicit operands.
-    go :: A.Gen -> S.Set (Some (CS.View arch)) -> Syn t arch (Instruction arch)
+    go :: A.Gen -> S.Set (Some (CS.View arch)) -> Syn t arch (RegisterizedInstruction arch)
     go gen implicitOps = do
       target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
       case target of
         D.Instruction op' ops
-          | Just MapF.Refl <- MapF.testEquality op op'
-          , fst (foldrFC (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops) ->
-            go gen implicitOps
-          | otherwise -> return target
+          | Just MapF.Refl <- MapF.testEquality op op' ->
+            let (isReusedOrImplicitOp, explicitLocs) = foldrFC (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops
+            in case isReusedOrImplicitOp of
+              True -> go gen implicitOps
+              False -> do
+                -- If there is a literal operand, find a register that is neither
+                -- an implicit operand nor an explicit operand to stand in for the
+                -- immediate(s).
+                let s0 = (MapF.empty, allLocations @(Location arch))
+                let usedLocs = S.union (S.map liftSomeView implicitOps) (S.foldr (liftSomeOperand (Proxy @arch)) S.empty explicitLocs)
+                let (litLocs, _) = SL.foldrFCIndexed (assignLiterals usedLocs) s0 ops
+                return RI { riInstruction = target
+                          , riOpcode = op'
+                          , riOperands = ops
+                          , riLiteralLocs = litLocs
+                          }
+          | otherwise -> L.error ("Invalid opcode: " ++ P.showF op ++ " vs " ++ P.showF op')
+
+liftSomeView :: Some (CS.View arch) -> Some (Location arch)
+liftSomeView (Some (CS.View _ loc)) = Some loc
+
+liftSomeOperand :: (CS.ConcreteArchitecture arch)
+                => proxy arch
+                -> Some (Operand arch)
+                -> S.Set (Some (Location arch))
+                -> S.Set (Some (Location arch))
+liftSomeOperand proxy (Some op) s =
+  case operandToLocation proxy op of
+    Nothing -> s
+    Just loc -> S.insert (Some loc) s
+
+-- | For each literal, assign a location in the machine state to stand in for
+-- it.
+--
+-- Note: we determine if an operand is a literal by trying to convert it to a
+-- location.  If we can't convert it to a location, it is a literal.
+--
+-- This will throw an error if there isn't a free register to represent all of
+-- the literals.  That seems extremely unlikely, but is something to potentially
+-- watch out for.
+assignLiterals :: forall arch sh tp
+                . (CS.ConcreteArchitecture arch)
+               => S.Set (Some (Location arch))
+               -> SL.Index sh tp
+               -> Operand arch tp
+               -> (MapF.MapF (LiteralRef arch sh) (Location arch), [Some (Location arch)])
+               -> (MapF.MapF (LiteralRef arch sh) (Location arch), [Some (Location arch)])
+assignLiterals usedLocs ix op acc@(m, locs) =
+  case operandToLocation (Proxy @arch) op of
+    Just _ -> acc
+    Nothing ->
+      let (locs', loc) = findUnusedLocation (Proxy @arch) usedLocs op locs
+      in (MapF.insert (LiteralRef ix) loc m, locs')
+
+findUnusedLocation :: (CS.ConcreteArchitecture arch)
+                   => proxy arch
+                   -> S.Set (Some (Location arch))
+                   -> Operand arch tp
+                   -> [Some (Location arch)]
+                   -> ([Some (Location arch)], Location arch (OperandType arch tp))
+findUnusedLocation proxy usedLocs op locs =
+  case locs of
+    [] -> L.error "Not enough locations to find a virtual literal location"
+    (Some loc : rest)
+      | Just P.Refl <- P.testEquality (locationType loc) (operandType proxy op)
+      , not (S.member (Some loc) usedLocs) -> (rest, loc)
+      | otherwise -> findUnusedLocation proxy usedLocs op rest
 
 isImplicitOrReusedOperand :: (CS.ConcreteArchitecture arch, SynC arch)
                           => Proxy arch
