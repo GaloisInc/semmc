@@ -36,6 +36,7 @@ library
                        SemMC.Stochastic.IORelation.Parser
                        SemMC.Stochastic.IORelation.Shared
                        SemMC.Stochastic.IORelation.Types
+                       SemMC.Stochastic.Instantiate
                        SemMC.Stochastic.Monad
                        SemMC.Stochastic.Pseudo
                        SemMC.Stochastic.Remote
