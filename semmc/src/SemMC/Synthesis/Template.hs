@@ -48,8 +48,6 @@ module SemMC.Synthesis.Template
   , unTemplate
   ) where
 
-import qualified GHC.Err.Located as L
-
 import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
@@ -149,8 +147,6 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 
   operandValue _ sym locLookup (TemplatedOperand _ _ f) =
     uncurry TaggedExpr <$> f sym locLookup
-
-  operandType _ _ = L.error "operandType is not supported for TemplatedArch"
 
   operandToLocation _ (TemplatedOperand loc _ _) = loc
 

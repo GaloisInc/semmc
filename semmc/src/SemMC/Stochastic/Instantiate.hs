@@ -130,7 +130,7 @@ findUnusedLocation proxy usedLocs op locs =
   case locs of
     [] -> L.error "Not enough locations to find a virtual literal location"
     (Some loc : rest)
-      | Just P.Refl <- P.testEquality (A.locationType loc) (A.operandType proxy op)
+      | Just P.Refl <- P.testEquality (A.locationType loc) (CS.operandType proxy op)
       , not (S.member (Some loc) usedLocs) -> (rest, loc)
       | otherwise -> findUnusedLocation proxy usedLocs op rest
 

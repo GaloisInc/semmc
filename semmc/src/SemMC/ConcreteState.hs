@@ -60,7 +60,7 @@ import qualified Dismantle.Arbitrary as A
 
 import           Lang.Crucible.BaseTypes ( BaseBVType, BaseTypeRepr(..), BaseArrayType )
 
-import           SemMC.Architecture ( Architecture, ArchState, Location, Operand, locationType )
+import           SemMC.Architecture ( Architecture, ArchState, Location, Operand, locationType, OperandType )
 
 ----------------------------------------------------------------
 -- Locations, values, and views
@@ -245,6 +245,9 @@ class (Architecture arch) => ConcreteArchitecture arch where
   -- Useful for perturbing a machine state when computing the IO
   -- relation for an instruction?
   operandToSemanticView :: proxy arch -> Operand arch sh -> Maybe (SemanticView arch)
+
+  -- | Obtain the type of an operand (even an operand with no associated location)
+  operandType :: proxy arch -> Operand arch s -> BaseTypeRepr (OperandType arch s)
 
   -- | Construct a complete state with all locations set to zero
   --
