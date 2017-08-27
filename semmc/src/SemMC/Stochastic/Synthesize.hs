@@ -27,6 +27,7 @@ import qualified GHC.Err.Located as L
 import qualified Data.Set.NonEmpty as NES
 import           Data.Parameterized.HasRepr ( HasRepr )
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.ShapedList ( lengthFC, traverseFCIndexed, indexAsInt, indexShapedList, ShapeRepr )
 import           Dismantle.Arbitrary as D
 import qualified Dismantle.Instruction.Random as D
@@ -213,7 +214,7 @@ compareTargetOutToCandidateOut :: forall arch.
                                -> C.ConcreteState arch
                                -> Double
 compareTargetOutToCandidateOut descs targetSt candidateSt =
-  sum [ C.withKnownNat (C.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
+  sum [ NR.withKnownNat (C.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
       | desc@(C.SemanticView { C.semvView = view }) <- descs
       ]
 
