@@ -149,7 +149,20 @@ chooseNextCandidate target candidate cost candidate' = do
 
 ----------------------------------------------------------------
 
-registerizeInstruction :: (SynC arch) => C.RegisterizedInstruction arch -> Test arch -> Syn t arch (Instruction arch)
+-- | Update the immediate operands of the wrapped instruction (if any) based on
+-- the test environment.
+--
+-- Note that this may require constraining the range of the value assigned to
+-- the immediate, as the immediate may (probably will) have a restricted range
+-- compared to the full width of a register.  Because of this, we also return
+-- the modified 'Test' to reflect the range restriction of the chosen value.
+--
+-- This is safe, as long as we use the same modified test for both the candidate
+-- and target programs.
+registerizeInstruction :: (SynC arch)
+                       => C.RegisterizedInstruction arch
+                       -> Test arch
+                       -> Syn t arch (Instruction arch, Test arch)
 registerizeInstruction = undefined
 
 -- | Compute the cost, in terms of mismatch, of the candidate compared
@@ -163,15 +176,15 @@ compareTargetToCandidate :: forall arch t.
 compareTargetToCandidate target candidate test = do
   let candidateProg =
         concatMap synthInsnToActual . catMaybes . toList $ candidate
-  target' <- registerizeInstruction target test
+  (target', test') <- registerizeInstruction target test
   let targetProg = [target']
   -- TODO: cache result of running target on test, since it never
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
   !runTest     <- askRunTest
-  !candidateSt <- runTest test candidateProg
-  !targetSt    <- runTest test targetProg
+  !candidateSt <- runTest test' candidateProg
+  !targetSt    <- runTest test' targetProg
   !liveOut     <- getOutMasks target'
   !eitherWeight <- liftIO $ C.tryJust pred $ do
     let !weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
