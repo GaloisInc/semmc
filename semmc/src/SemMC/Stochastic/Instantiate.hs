@@ -67,7 +67,7 @@ instantiateInstruction op = do
       case target of
         D.Instruction op' ops
           | Just MapF.Refl <- MapF.testEquality op op' ->
-            let (isReusedOrImplicitOp, explicitLocs) = foldrFC (isImplicitOrReusedOperand (Proxy :: Proxy arch) implicitOps) (False, S.empty) ops
+            let (isReusedOrImplicitOp, explicitLocs) = foldrFC (isImplicitOrReusedOperand (Proxy @arch) implicitOps) (False, S.empty) ops
             in case isReusedOrImplicitOp of
               True -> go gen implicitOps
               False -> do
