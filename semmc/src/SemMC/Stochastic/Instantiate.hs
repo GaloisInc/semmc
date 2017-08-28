@@ -57,13 +57,13 @@ instantiateInstruction :: forall arch sh t
 instantiateInstruction op = do
   gen <- askGen
   Just iorel <- opcodeIORelation op
-  go gen (implicitOperands iorel)
+  liftIO $ go gen (implicitOperands iorel)
   where
     -- Generate random instructions until we get one with explicit operands that
     -- do not overlap with implicit operands.
-    go :: A.Gen -> S.Set (Some (CS.View arch)) -> Syn t arch (CS.RegisterizedInstruction arch)
+    go :: A.Gen -> S.Set (Some (CS.View arch)) -> IO (CS.RegisterizedInstruction arch)
     go gen implicitOps = do
-      target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
+      target <- D.randomInstruction gen (NES.singleton (Some op))
       case target of
         D.Instruction op' ops
           | Just MapF.Refl <- MapF.testEquality op op' ->
