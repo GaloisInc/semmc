@@ -295,10 +295,10 @@ synthesizeCandidate = do
         , seRunTest = runTest
         }
   let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
-  let instruction = RI { riInstruction = D.Instruction AddRr ops
-                       , riOpcode = AddRr
-                       , riOperands = ops
-                       , riLiteralLocs = MapF.empty
-                       }
+  let instruction = C.RI { C.riInstruction = D.Instruction AddRr ops
+                         , C.riOpcode = AddRr
+                         , C.riOperands = ops
+                         , C.riLiteralLocs = MapF.empty
+                         }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
   runSyn @Toy localSynEnv (S.synthesize instruction)

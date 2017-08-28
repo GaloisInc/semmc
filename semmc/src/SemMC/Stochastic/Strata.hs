@@ -126,7 +126,7 @@ strataOne op = do
 
 strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
               => Opcode arch (Operand arch) sh
-              -> RegisterizedInstruction arch
+              -> CS.RegisterizedInstruction arch
               -> C.EquivalenceClasses arch
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
@@ -147,7 +147,7 @@ strataOneLoop op instr eqclasses = do
 
 finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
                 => Opcode arch (Operand arch) sh
-                -> RegisterizedInstruction arch
+                -> CS.RegisterizedInstruction arch
                 -> C.EquivalenceClasses arch
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
@@ -160,7 +160,7 @@ finishStrataOne op instr eqclasses = do
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 buildFormula :: (CS.ConcreteArchitecture arch, SynC arch)
              => Opcode arch (Operand arch) sh
-             -> RegisterizedInstruction arch
+             -> CS.RegisterizedInstruction arch
              -> [SynthInstruction arch]
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 buildFormula o i prog = do
@@ -172,7 +172,7 @@ buildFormula o i prog = do
       let formulas = catMaybes mfrms
       withSymBackend $ \sym -> do
         progFormula <- liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula formulas
-        case riInstruction i of
+        case CS.riInstruction i of
           D.Instruction opcode operands
             | Just MapF.Refl <- MapF.testEquality opcode o -> do
                 -- Now, for all of the outputs (implicit and explicit) in the target

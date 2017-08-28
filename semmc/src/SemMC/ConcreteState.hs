@@ -26,6 +26,8 @@ module SemMC.ConcreteState
   , Diff
   , diffInt
   , diffFloat
+  , LiteralRef(..)
+  , RegisterizedInstruction(..)
   , SemanticView(..)
   , ConcreteArchitecture(..)
   , parseView
@@ -40,10 +42,11 @@ import           Control.Monad ( guard )
 import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor, popCount )
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust, isJust, fromMaybe )
-import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.NatRepr as NR
+import qualified Data.Parameterized.ShapedList as SL
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Word.Indexed as W
@@ -55,7 +58,7 @@ import qualified Text.Megaparsec.Char.Lexer as P
 import           Text.Printf ( printf )
 import qualified Unsafe.Coerce as U
 
-import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Arbitrary as DA
 
 import           Lang.Crucible.BaseTypes ( BaseBVType, BaseTypeRepr(..), BaseArrayType )
 
@@ -184,7 +187,7 @@ pokeSlice (Slice _ _ (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> x
 type ConcreteState arch = A.ArchState arch Value
 
 -- | Read machine states.
-peekMS :: (OrdF (A.Location arch), KnownNat n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
+peekMS :: (P.OrdF (A.Location arch), KnownNat n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
 peekMS = flip peekMS'
   where peekMS' (View sl loc) = peekSlice sl . fromJust . MapF.lookup loc
 
@@ -192,7 +195,7 @@ peekMS = flip peekMS'
 --
 -- This function is "dumb", in that it's not concerned with
 -- e.g. zeroing out the upper bits of VSX12 when writing F12.
-pokeMS :: (OrdF (A.Location arch)) => ConcreteState arch -> View arch n -> Value (BaseBVType n) -> ConcreteState arch
+pokeMS :: (P.OrdF (A.Location arch)) => ConcreteState arch -> View arch n -> Value (BaseBVType n) -> ConcreteState arch
 pokeMS m (View sl loc) newPart = MapF.insert loc new m
   where orig = fromJust (MapF.lookup loc m)
         new = pokeSlice sl orig newPart
@@ -217,6 +220,62 @@ diffInt (ValueBV x) (ValueBV y) = popCount (x `xor` y)
 -- different float encodings.
 diffFloat :: Diff n
 diffFloat = undefined "diffFloat"
+
+data LiteralRef arch sh tp where
+  LiteralRef :: SL.Index sh tp -> LiteralRef arch sh (A.OperandType arch tp)
+
+instance P.TestEquality (LiteralRef arch sh) where
+  testEquality (LiteralRef ix1) (LiteralRef ix2) = do
+    P.Refl <- P.testEquality ix1 ix2
+    return P.Refl
+
+instance P.OrdF (LiteralRef arch sh) where
+  compareF (LiteralRef ix1) (LiteralRef ix2) =
+    case P.compareF ix1 ix2 of
+      P.LTF -> P.LTF
+      P.GTF -> P.GTF
+      P.EQF -> P.EQF
+
+
+-- | A wrapper around an instruction that notes part of the machine state that
+-- will be used to represent immediate operands.
+--
+-- The extra map indicates which literals in the instruction are mapped to
+-- locations in the state.  The key operation that is required to support this
+-- is to be able to rewrite test programs (i.e., single instructions we are
+-- trying to learn semantics for) such that their immediates have the same value
+-- as the value in the indicated location.
+--
+-- For example, assume we have a concrete state C that is to be used for a test
+-- case and a side note that the literal for our instruction I is stored in r15:
+--
+-- > let t = Test { testMachineState = C, testLiterals = MapF.fromList [Pair imm0 r15] }
+--
+-- Before sending the test, we would need to rewrite the test instruction to use
+-- the immediate in r15 as its value.  This effectively lets us pretend that an
+-- instruction like @ADDI r1, r2, imm@ is actually @ADDI r1, r2, r3@ where @r3@
+-- happens to hold our immediate value.  The one difficulty here is that we need
+-- to ensure that the value is in range for the literal in question.
+--
+-- The major use of this infrastructure is during formula extraction:
+-- specifically, to figure out which part of the formula represents the
+-- immediate of the instruction.  If we don't have an anchor to record what part
+-- of the formula stands in for the immediate, we can't extract a formula since
+-- we can't tell which literals in a formula might or might not correspond to
+-- immediates.  If we instead pretend that immediates came from the machine
+-- state, we will have a distinguished variable to pull out of the formula and
+-- turn into a parameter.  That means that the 'testLiterals' map will need to
+-- be an input to 'extractFormula'.
+--
+-- Note that, to construct the state to send to the remote host, we just need to
+-- extract the 'testMachineState'.
+data RegisterizedInstruction arch =
+  forall sh .
+  RI { riInstruction :: A.Instruction arch
+     , riOpcode :: A.Opcode arch (A.Operand arch) sh
+     , riOperands :: SL.ShapedList (A.Operand arch) sh
+     , riLiteralLocs :: MapF.MapF (LiteralRef arch sh) (A.Location arch)
+     }
 
 -- | A 'View' along with more information about how it should be interepreted.
 data SemanticView arch =
@@ -257,7 +316,7 @@ class (A.Architecture arch) => ConcreteArchitecture arch where
   -- | Generate a completely random state
   --
   -- The random state has all locations filled in
-  randomState :: proxy arch -> A.Gen -> IO (ConcreteState arch)
+  randomState :: proxy arch -> DA.Gen -> IO (ConcreteState arch)
 
   -- | Convert a 'ConcreteState' into a 'B.ByteString'
   serialize :: proxy arch -> ConcreteState arch -> B.ByteString
@@ -298,8 +357,8 @@ parseSlicedView (Some loc) = do
             BaseBVRepr nrepr ->
               case brepr `NR.testLeq` nrepr of
                 Just NR.LeqProof ->
-                  case U.unsafeCoerce (Refl :: 0 :~: 0) :: (b :~: (a + m)) of
-                    Refl -> return (NR.withKnownNat nrepr (Some (View (Slice mrepr nrepr arepr brepr) loc)))
+                  case U.unsafeCoerce (P.Refl :: 0 P.:~: 0) :: (b P.:~: (a + m)) of
+                    P.Refl -> return (NR.withKnownNat nrepr (Some (View (Slice mrepr nrepr arepr brepr) loc)))
                 Nothing -> fail "Invalid slice"
             lt -> fail ("Unsupported location type: " ++ show lt)
 
@@ -315,41 +374,41 @@ withUnknownNat n k =
 
 -- Boring instances
 
-instance (A.Architecture arch) => TestEquality (View arch) where
+instance (A.Architecture arch) => P.TestEquality (View arch) where
   testEquality (View (Slice m1 n1 a1 b1) loc1) (View (Slice m2 n2 a2 b2) loc2) = do
-    Refl <- testEquality loc1 loc2
-    Refl <- testEquality m1 m2
-    Refl <- testEquality n1 n2
-    Refl <- testEquality a1 a2
-    Refl <- testEquality b1 b2
-    return Refl
+    P.Refl <- P.testEquality loc1 loc2
+    P.Refl <- P.testEquality m1 m2
+    P.Refl <- P.testEquality n1 n2
+    P.Refl <- P.testEquality a1 a2
+    P.Refl <- P.testEquality b1 b2
+    return P.Refl
 
 instance (A.Architecture arch) => Show (View arch m) where
-  show (View s loc) = "View " ++ showF s ++ " " ++ showF loc
-instance (A.Architecture arch) => ShowF (View arch)
+  show (View s loc) = "View " ++ P.showF s ++ " " ++ P.showF loc
+instance (A.Architecture arch) => P.ShowF (View arch)
 
-compareSliceF :: Slice m1 n1 -> Slice m2 n2 -> OrderingF m1 m2
+compareSliceF :: Slice m1 n1 -> Slice m2 n2 -> P.OrderingF m1 m2
 compareSliceF (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) =
-  case compareF m1 m2 of
-    LTF -> LTF
-    GTF -> GTF
-    EQF -> case compareF n1 n2 of
-      LTF -> LTF
-      GTF -> GTF
-      EQF -> case compareF a1 a2 of
-        LTF -> LTF
-        GTF -> GTF
-        EQF -> case compareF b1 b2 of
-          LTF -> LTF
-          GTF -> GTF
-          EQF -> EQF
+  case P.compareF m1 m2 of
+    P.LTF -> P.LTF
+    P.GTF -> P.GTF
+    P.EQF -> case P.compareF n1 n2 of
+      P.LTF -> P.LTF
+      P.GTF -> P.GTF
+      P.EQF -> case P.compareF a1 a2 of
+        P.LTF -> P.LTF
+        P.GTF -> P.GTF
+        P.EQF -> case P.compareF b1 b2 of
+          P.LTF -> P.LTF
+          P.GTF -> P.GTF
+          P.EQF -> P.EQF
 
-instance (A.Architecture arch) => OrdF (View arch) where
+instance (A.Architecture arch) => P.OrdF (View arch) where
   compareF (View s1 l1) (View s2 l2) =
-    case compareF l1 l2 of
-      LTF -> LTF
-      GTF -> GTF
-      EQF -> compareSliceF s1 s2
+    case P.compareF l1 l2 of
+      P.LTF -> P.LTF
+      P.GTF -> P.GTF
+      P.EQF -> compareSliceF s1 s2
 
 instance Show (Slice m n) where
   show (Slice m n a b) = unwords [ "Slice"
@@ -358,43 +417,43 @@ instance Show (Slice m n) where
                                  , show a
                                  , show b
                                  ]
-instance ShowF (Slice m)
+instance P.ShowF (Slice m)
 
 instance Eq (Slice m n) where
   Slice _ _ a1 b1 == Slice _ _ a2 b2 = fromMaybe False $ do
-    Refl <- testEquality a1 a2
-    Refl <- testEquality b1 b2
+    P.Refl <- P.testEquality a1 a2
+    P.Refl <- P.testEquality b1 b2
     return True
 
 instance Ord (Slice m n) where
   compare (Slice _ _ a1 b1) (Slice _ _ a2 b2) =
-    case compareF a1 a2 of
-      LTF -> LT
-      GTF -> GT
-      EQF ->
-        case compareF b1 b2 of
-          LTF -> LT
-          GTF -> GT
-          EQF -> EQ
+    case P.compareF a1 a2 of
+      P.LTF -> LT
+      P.GTF -> GT
+      P.EQF ->
+        case P.compareF b1 b2 of
+          P.LTF -> LT
+          P.GTF -> GT
+          P.EQF -> EQ
 
-instance TestEquality (Slice m) where
+instance P.TestEquality (Slice m) where
   testEquality (Slice m1 n1 a1 b1) (Slice m2 n2 a2 b2) = do
-    Refl <- testEquality m1 m2
-    Refl <- testEquality n1 n2
-    Refl <- testEquality a1 a2
-    Refl <- testEquality b1 b2
-    return Refl
+    P.Refl <- P.testEquality m1 m2
+    P.Refl <- P.testEquality n1 n2
+    P.Refl <- P.testEquality a1 a2
+    P.Refl <- P.testEquality b1 b2
+    return P.Refl
 
 deriving instance Show (Value tp)
 deriving instance Eq (Value tp)
 deriving instance Ord (Value tp)
 
-instance ShowF Value
+instance P.ShowF Value
 
-instance (KnownNat n) => A.Arbitrary (Value (BaseBVType n)) where
-  arbitrary gen = ValueBV <$> A.arbitrary gen
+instance (KnownNat n) => DA.Arbitrary (Value (BaseBVType n)) where
+  arbitrary gen = ValueBV <$> DA.arbitrary gen
 
-instance TestEquality Value where
+instance P.TestEquality Value where
   testEquality bv1 bv2 =
     case bv1 of
       ValueBV (w1 :: W.W n1) ->
@@ -402,11 +461,11 @@ instance TestEquality Value where
         in case bv2 of
           ValueBV (w2 :: W.W n2) ->
             let repr2 = NR.knownNat :: NR.NatRepr n2
-            in case testEquality repr1 repr2 of
-              Just Refl
-                | w1 == w2 -> Just Refl
+            in case P.testEquality repr1 repr2 of
+              Just P.Refl
+                | w1 == w2 -> Just P.Refl
                 | otherwise -> Nothing
               Nothing -> Nothing
 
-instance EqF Value where
-  eqF bv1 bv2 = isJust (testEquality bv1 bv2)
+instance P.EqF Value where
+  eqF bv1 bv2 = isJust (P.testEquality bv1 bv2)

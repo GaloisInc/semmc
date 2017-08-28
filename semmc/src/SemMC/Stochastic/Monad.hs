@@ -22,8 +22,6 @@ module SemMC.Stochastic.Monad (
   runSyn,
   tryJust,
   Config(..),
-  LiteralRef(..),
-  RegisterizedInstruction(..),
   Test,
   -- * Operations
   askGen,
@@ -108,64 +106,7 @@ import qualified SemMC.Stochastic.Statistics as S
 -- those tests here, since the nonce is just an implementation detail
 -- for matching test inputs with their results, and the same 'Test'
 -- will be run on multiple programs.
--- type Test arch = ConcreteState arch
-
-data LiteralRef arch sh tp where
-  LiteralRef :: SL.Index sh tp -> LiteralRef arch sh (OperandType arch tp)
-
-instance P.TestEquality (LiteralRef arch sh) where
-  testEquality (LiteralRef ix1) (LiteralRef ix2) = do
-    P.Refl <- P.testEquality ix1 ix2
-    return P.Refl
-
-instance P.OrdF (LiteralRef arch sh) where
-  compareF (LiteralRef ix1) (LiteralRef ix2) =
-    case P.compareF ix1 ix2 of
-      P.LTF -> P.LTF
-      P.GTF -> P.GTF
-      P.EQF -> P.EQF
-
 type Test arch = ConcreteState arch
-
--- | A wrapper around an instruction that notes part of the machine state that
--- will be used to represent immediate operands.
---
--- The extra map indicates which literals in the instruction are mapped to
--- locations in the state.  The key operation that is required to support this
--- is to be able to rewrite test programs (i.e., single instructions we are
--- trying to learn semantics for) such that their immediates have the same value
--- as the value in the indicated location.
---
--- For example, assume we have a concrete state C that is to be used for a test
--- case and a side note that the literal for our instruction I is stored in r15:
---
--- > let t = Test { testMachineState = C, testLiterals = MapF.fromList [Pair imm0 r15] }
---
--- Before sending the test, we would need to rewrite the test instruction to use
--- the immediate in r15 as its value.  This effectively lets us pretend that an
--- instruction like @ADDI r1, r2, imm@ is actually @ADDI r1, r2, r3@ where @r3@
--- happens to hold our immediate value.  The one difficulty here is that we need
--- to ensure that the value is in range for the literal in question.
---
--- The major use of this infrastructure is during formula extraction:
--- specifically, to figure out which part of the formula represents the
--- immediate of the instruction.  If we don't have an anchor to record what part
--- of the formula stands in for the immediate, we can't extract a formula since
--- we can't tell which literals in a formula might or might not correspond to
--- immediates.  If we instead pretend that immediates came from the machine
--- state, we will have a distinguished variable to pull out of the formula and
--- turn into a parameter.  That means that the 'testLiterals' map will need to
--- be an input to 'extractFormula'.
---
--- Note that, to construct the state to send to the remote host, we just need to
--- extract the 'testMachineState'.
-data RegisterizedInstruction arch =
-  forall sh .
-  RI { riInstruction :: Instruction arch
-     , riOpcode :: Opcode arch (Operand arch) sh
-     , riOperands :: SL.ShapedList (Operand arch) sh
-     , riLiteralLocs :: MapF.MapF (LiteralRef arch sh) (Location arch)
-     }
 
 -- | Synthesis environment.
 data SynEnv t arch =

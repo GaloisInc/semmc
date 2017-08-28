@@ -56,7 +56,7 @@ import Control.Monad
 --
 -- Can fail due to timeouts.
 synthesize :: SynC arch
-           => RegisterizedInstruction arch
+           => C.RegisterizedInstruction arch
            -> Syn t arch (Maybe [SynthInstruction arch])
 synthesize target = do
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
@@ -68,7 +68,7 @@ synthesize target = do
   where
     debug msg = liftIO $ traceIO msg
 
-mcmcSynthesizeOne :: forall arch t. SynC arch => RegisterizedInstruction arch -> Syn t arch (Integer, Candidate arch)
+mcmcSynthesizeOne :: forall arch t. SynC arch => C.RegisterizedInstruction arch -> Syn t arch (Integer, Candidate arch)
 mcmcSynthesizeOne target = do
   -- Max length of candidate programs. Can make it a parameter if
   -- needed.
@@ -115,7 +115,7 @@ mcmcSynthesizeOne target = do
 -- the cost of the new candidate incrementally and stop as soon as
 -- we know it's too expensive [STOKE Section 4.5].
 chooseNextCandidate :: SynC arch
-                    => RegisterizedInstruction arch
+                    => C.RegisterizedInstruction arch
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
@@ -149,14 +149,14 @@ chooseNextCandidate target candidate cost candidate' = do
 
 ----------------------------------------------------------------
 
-registerizeInstruction :: (SynC arch) => RegisterizedInstruction arch -> Test arch -> Syn t arch (Instruction arch)
+registerizeInstruction :: (SynC arch) => C.RegisterizedInstruction arch -> Test arch -> Syn t arch (Instruction arch)
 registerizeInstruction = undefined
 
 -- | Compute the cost, in terms of mismatch, of the candidate compared
 -- to the target. STOKE Section 4.6.
 compareTargetToCandidate :: forall arch t.
                             SynC arch
-                         => RegisterizedInstruction arch
+                         => C.RegisterizedInstruction arch
                          -> Candidate arch
                          -> C.ConcreteState arch
                          -> Syn t arch Double

@@ -53,7 +53,7 @@ import           SemMC.Stochastic.Monad
 instantiateInstruction :: forall arch sh t
                         . (CS.ConcreteArchitecture arch, SynC arch)
                        => A.Opcode arch (A.Operand arch) sh
-                       -> Syn t arch (RegisterizedInstruction arch)
+                       -> Syn t arch (CS.RegisterizedInstruction arch)
 instantiateInstruction op = do
   gen <- askGen
   Just iorel <- opcodeIORelation op
@@ -61,7 +61,7 @@ instantiateInstruction op = do
   where
     -- Generate random instructions until we get one with explicit operands that
     -- do not overlap with implicit operands.
-    go :: A.Gen -> S.Set (Some (CS.View arch)) -> Syn t arch (RegisterizedInstruction arch)
+    go :: A.Gen -> S.Set (Some (CS.View arch)) -> Syn t arch (CS.RegisterizedInstruction arch)
     go gen implicitOps = do
       target <- liftIO $ D.randomInstruction gen (NES.singleton (Some op))
       case target of
@@ -77,11 +77,11 @@ instantiateInstruction op = do
                 let s0 = (MapF.empty, A.allLocations @(A.Location arch))
                 let usedLocs = S.union (S.map liftSomeView implicitOps) (S.foldr (liftSomeOperand (Proxy @arch)) S.empty explicitLocs)
                 let (litLocs, _) = SL.foldrFCIndexed (assignLiterals usedLocs) s0 ops
-                return RI { riInstruction = target
-                          , riOpcode = op'
-                          , riOperands = ops
-                          , riLiteralLocs = litLocs
-                          }
+                return CS.RI { CS.riInstruction = target
+                             , CS.riOpcode = op'
+                             , CS.riOperands = ops
+                             , CS.riLiteralLocs = litLocs
+                             }
           | otherwise -> L.error ("Invalid opcode: " ++ P.showF op ++ " vs " ++ P.showF op')
 
 liftSomeView :: Some (CS.View arch) -> Some (A.Location arch)
@@ -111,14 +111,14 @@ assignLiterals :: forall arch sh tp
                => S.Set (Some (A.Location arch))
                -> SL.Index sh tp
                -> A.Operand arch tp
-               -> (MapF.MapF (LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
-               -> (MapF.MapF (LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
+               -> (MapF.MapF (CS.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
+               -> (MapF.MapF (CS.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
 assignLiterals usedLocs ix op acc@(m, locs) =
   case A.operandToLocation (Proxy @arch) op of
     Just _ -> acc
     Nothing ->
       let (locs', loc) = findUnusedLocation (Proxy @arch) usedLocs op locs
-      in (MapF.insert (LiteralRef ix) loc m, locs')
+      in (MapF.insert (CS.LiteralRef ix) loc m, locs')
 
 findUnusedLocation :: (CS.ConcreteArchitecture arch)
                    => proxy arch
