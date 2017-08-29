@@ -349,12 +349,12 @@ void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace
   memcpy(mem1Addr, rs->mem1, sizeof(rs->mem1));
   memcpy(mem2Addr, rs->mem2, sizeof(rs->mem2));
 
-  LOG("current cpsr = 0x%4lx\n", regs[IDX_CPSR]);
-  LOG("cpsr_n = %s\n", ((regs[IDX_CPSR] >> 31) & 1) ? "N" : "-");
-  LOG("cpsr_z = %s\n", ((regs[IDX_CPSR] >> 30) & 1) ? "Z" : "-");
-  LOG("cpsr_c = %s\n", ((regs[IDX_CPSR] >> 29) & 1) ? "C" : "-");
-  LOG("cpsr_v = %s\n", ((regs[IDX_CPSR] >> 28) & 1) ? "V" : "-");
-  LOG("cpsr_q = %s\n", ((regs[IDX_CPSR] >> 27) & 1) ? "Q" : "-");
+  //LOG("current cpsr = 0x%4lx\n", regs[IDX_CPSR]);
+  //LOG("cpsr_n = %s\n", ((regs[IDX_CPSR] >> 31) & 1) ? "N" : "-");
+  //LOG("cpsr_z = %s\n", ((regs[IDX_CPSR] >> 30) & 1) ? "Z" : "-");
+  //LOG("cpsr_c = %s\n", ((regs[IDX_CPSR] >> 29) & 1) ? "C" : "-");
+  //LOG("cpsr_v = %s\n", ((regs[IDX_CPSR] >> 28) & 1) ? "V" : "-");
+  //LOG("cpsr_q = %s\n", ((regs[IDX_CPSR] >> 27) & 1) ? "Q" : "-");
 
   // Need to check that format of cpsr is valid
   regs[IDX_CPSR] = rs->cpsr;

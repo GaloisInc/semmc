@@ -1,17 +1,16 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
-import qualified Data.ByteString.Lazy as LB
-import           Data.Bits ((.|.))
 import qualified Data.Time.Format as T
-import qualified Data.Vector.Sized as V
-import           Data.Word (Word32)
 import qualified System.Environment as E
 import qualified System.Exit as IO
 import qualified System.IO as IO
 import Text.Printf ( printf )
 
 import qualified SemMC.Stochastic.Remote as R
+import Tests.StoreTest ( storeTests )
+import Tests.CMNTest ( cmnTests )
+import Tests.LoadTest ( loadTests )
 import SemMC.ARM ( MachineState(..), Instruction, testSerializer )
 
 main :: IO ()
@@ -33,7 +32,7 @@ testRunner :: C.Chan (Maybe (R.TestCase MachineState Instruction))
            -> C.Chan (R.ResultOrError MachineState)
            -> IO ()
 testRunner caseChan resChan = do
-  mapM_ doTest [testVector1, testVector2]
+  mapM_ doTest (cmnTests ++ storeTests ++ loadTests)
   C.writeChan caseChan Nothing
   where
     doTest vec = do
@@ -56,59 +55,20 @@ testRunner caseChan resChan = do
           printf "Received test result with nonce %d\n" (R.resultNonce tr)
           print (R.resultContext tr)
 
-
+{-
 -- | Data representation of CPSR flags
 data Flag = N | Z | C | V | Q
   deriving (Show, Eq)
 
 -- | Given a list of flags initializes a CPSR set to user mode
 mkCPSR :: [Flag] -> Word32
-mkCPSR flags = foldl (.|.) 16 [n,z,c,v,q]
+mkCPSR flags = foldr (.|.) 16 [n,z,c,v,q]
   where n = if N `elem` flags then (2 ^ (31 :: Word32)) else 0
         z = if Z `elem` flags then (2 ^ (30 :: Word32)) else 0
         c = if C `elem` flags then (2 ^ (29 :: Word32)) else 0
         v = if V `elem` flags then (2 ^ (28 :: Word32)) else 0
         q = if Q `elem` flags then (2 ^ (27 :: Word32)) else 0
-
-
-testVector1 :: R.TestCase MachineState Instruction
-testVector1 = R.TestCase { R.testNonce = 11
-                         , R.testContext = ctx
-                         -- add r1, r2?
-                         , R.testProgram = [LB.pack [0x02, 0x10, 0x81, 0xE0]]
-                         }
-  where
-    ctx = MachineState { gprs = grs
-                       , gprs_mask = mask
-                       , fprs = frs
-                       , cpsr = cpsr_reg
-                       , mem1 = m1
-                       , mem2 = m1
-                       }
-    Just grs = V.fromList [ 11, 15, 25 , 0, 0
-                          , 20, 0, 0, 0, 0
-                          , 0, 0, 0, 0, 0
-                          , 0
-                          ]
-    Just mask = V.fromList (replicate 16 0)
-    Just frs  = V.fromList (replicate 32 0)
-    Just m1   = V.fromList (replicate 32 0)
-    cpsr_reg  = mkCPSR [Z,V,Q]
-
-testVector2 :: R.TestCase MachineState Instruction
-testVector2 = testVector1 { R.testNonce = 22
-                          , R.testContext = (R.testContext testVector1) { gprs = grs }
-                          , R.testProgram = [LB.pack [0x02, 0x10, 0x81, 0xE0]]
-                          }
-  where
-    Just grs = V.fromList [ 200, 100, 9, 0, 0
-                          , 99, 0, 0, 0, 0
-                          , 0, 0, 0, 0, 0
-                          , 0
-                          ]
-
-
-
+-}
 
 printLogMessages :: C.Chan R.LogMessage -> IO ()
 printLogMessages c = do
