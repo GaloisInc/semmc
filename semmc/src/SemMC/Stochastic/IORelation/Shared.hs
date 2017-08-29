@@ -4,6 +4,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 module SemMC.Stochastic.IORelation.Shared (
   makeTestCase,
   wrapTestBundle,
@@ -16,29 +17,29 @@ module SemMC.Stochastic.IORelation.Shared (
   ) where
 
 import qualified Control.Concurrent as C
-import Control.Monad ( replicateM )
+import           Control.Monad ( replicateM )
 import qualified Control.Monad.Catch as E
-import Control.Monad.Trans ( liftIO )
+import           Control.Monad.Trans ( liftIO )
 import qualified Data.Map.Strict as M
-import Data.Proxy ( Proxy(..) )
+import           Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.NatRepr ( withKnownNat )
-import Data.Parameterized.Some ( Some(..) )
-import Data.Parameterized.ShapedList ( foldrFCIndexed, Index, ShapedList )
+import           Data.Parameterized.NatRepr ( withKnownNat )
+import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.ShapedList as SL
 import qualified Lang.Crucible.BaseTypes as S
 
-import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Arbitrary as DA
 
-import SemMC.Architecture
+import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as CS
 
 import qualified SemMC.Stochastic.Remote as R
-import SemMC.Stochastic.IORelation.Types
+import           SemMC.Stochastic.IORelation.Types
 
 withTestResults :: forall a f arch sh
-                 . (Architecture arch)
-                => Opcode arch (Operand arch) sh
+                 . (A.Architecture arch)
+                => A.Opcode arch (A.Operand arch) sh
                 -> [TestBundle (TestCase arch) f]
                 -> ([R.ResultOrError (CS.ConcreteState arch)] -> Learning arch a)
                 -> Learning arch a
@@ -49,12 +50,12 @@ withTestResults op tests k = do
   liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
   mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
   case mresults of
-    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy :: Proxy arch) (Some op))
+    Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy @arch) (Some op))
     Just results -> k results
 
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
-wrapTestBundle :: (Architecture arch)
-               => Instruction arch
+wrapTestBundle :: (A.Architecture arch)
+               => A.Instruction arch
                -> TestBundle (CS.ConcreteState arch) f
                -> Learning arch (TestBundle (TestCase arch) f)
 wrapTestBundle i tb = do
@@ -67,8 +68,8 @@ wrapTestBundle i tb = do
 
 -- | Take a test bundle of raw tests ('ConcreteState (Sym t) arch') and convert the
 -- raw tests to 'R.TestCase' by allocating a nonce
-makeTestCase :: (Architecture arch)
-             => Instruction arch
+makeTestCase :: (A.Architecture arch)
+             => A.Instruction arch
              -> CS.ConcreteState arch
              -> Learning arch (TestCase arch)
 makeTestCase i c = do
@@ -91,18 +92,19 @@ indexResults ri res =
 
 -- | A view of a location, indexed by its position in the operand list
 data IndexedSemanticView arch sh where
-  IndexedSemanticView :: Index sh tp -> CS.SemanticView arch -> IndexedSemanticView arch sh
+  IndexedSemanticView :: SL.Index sh tp -> CS.SemanticView arch -> IndexedSemanticView arch sh
 
 instructionRegisterOperands :: forall arch sh proxy
                              . (CS.ConcreteArchitecture arch)
                             => proxy arch
-                            -> ShapedList (Operand arch) sh
+                            -> SL.ShapedList (A.Operand arch) sh
                             -> [IndexedSemanticView arch sh]
 instructionRegisterOperands proxy operands =
-  foldrFCIndexed collectLocations [] operands
+  SL.foldrFCIndexed collectLocations [] operands
   where
-    collectLocations :: forall tp . Index sh tp
-                     -> Operand arch tp
+    collectLocations :: forall tp
+                      . SL.Index sh tp
+                     -> A.Operand arch tp
                      -> [IndexedSemanticView arch sh]
                      -> [IndexedSemanticView arch sh]
     collectLocations ix operand acc =
@@ -118,16 +120,16 @@ testCaseLocations :: forall proxy arch
                   -> [Some (CS.View arch)]
 testCaseLocations proxy = MapF.foldrWithKey getKeys []
   where
-    getKeys :: forall a s . Location arch s -> a s -> [Some (CS.View arch)] -> [Some (CS.View arch)]
+    getKeys :: forall a s . A.Location arch s -> a s -> [Some (CS.View arch)] -> [Some (CS.View arch)]
     getKeys k _ acc = CS.someTrivialView proxy (Some k) : acc
 
 withGeneratedValueForLocation :: forall arch n a
-                               . (Architecture arch)
+                               . (A.Architecture arch)
                               => CS.View arch n
                               -> (CS.Value (S.BaseBVType n) -> a)
                               -> Learning arch a
 withGeneratedValueForLocation loc k = do
   g <- askGen
   withKnownNat (CS.viewTypeRepr loc) $ do
-    randomBV <- liftIO (A.arbitrary g)
+    randomBV <- liftIO (DA.arbitrary g)
     return (k randomBV)

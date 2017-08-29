@@ -19,23 +19,19 @@ module SemMC.Util
   , filterMapF
   ) where
 
-import           Control.Applicative ( Const(..) )
 import           Control.Monad.ST ( runST )
 import qualified Data.HashTable.Class as H
-import           Data.Maybe ( fromJust )
-import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some
-import           Data.Parameterized.TraversableFC
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Set as Set
-import           Text.Printf
+import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Utils.Hashable as Hash
 import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.SimpleBackend.GroundEval
+import qualified Lang.Crucible.Solver.SimpleBackend.GroundEval as GE
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
 
 -- | Try converting any 'String' into a 'SolverSymbol'. If it is an invalid
@@ -54,7 +50,7 @@ groundValToExpr :: forall sym tp.
                    (S.IsExprBuilder sym)
                 => sym
                 -> BaseTypeRepr tp
-                -> GroundValue tp
+                -> GE.GroundValue tp
                 -> IO (S.SymExpr sym tp)
 groundValToExpr sym BaseBoolRepr True = return (S.truePred sym)
 groundValToExpr sym BaseBoolRepr False = return (S.falsePred sym)
@@ -63,11 +59,11 @@ groundValToExpr sym BaseNatRepr val = S.natLit sym val
 groundValToExpr sym BaseIntegerRepr val = S.intLit sym val
 groundValToExpr sym BaseRealRepr val = S.realLit sym val
 groundValToExpr sym BaseComplexRepr val = S.mkComplexLit sym val
-groundValToExpr sym (BaseArrayRepr idxTp elemTp) (ArrayConcrete base m) = do
+groundValToExpr sym (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
   base' <- groundValToExpr sym elemTp base
   entries <- Hash.mkMap <$> traverse (groundValToExpr sym elemTp) m
   S.arrayFromMap sym idxTp entries base'
-groundValToExpr _ (BaseArrayRepr _ _) (ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
+groundValToExpr _ (BaseArrayRepr _ _) (GE.ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
 
 -- | Reverse a MapF, so that the old keys are the new values and the old values

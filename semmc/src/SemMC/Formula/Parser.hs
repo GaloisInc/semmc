@@ -24,38 +24,38 @@ module SemMC.Formula.Parser
   , readFormulaFromFile
   ) where
 
-import           Control.Monad.Except
-import           Control.Monad.IO.Class ( liftIO )
-import           Control.Monad.Reader
+import qualified Control.Monad.Except as E
+import           Control.Monad.IO.Class ( MonadIO, liftIO )
+import qualified Control.Monad.Reader as MR
+import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
 import qualified Data.Map as Map
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import           Text.Parsec
+import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 import qualified Data.Set as Set
 import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal )
-import           Data.Proxy
+import           Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Context as Ctx
-import           Data.Parameterized.NatRepr ( NatRepr, someNat, isPosNat, withLeqProof )
 import           Data.Parameterized.Classes
-import           Data.Parameterized.Some
+import           Data.Parameterized.Some ( Some(..), mapSome, viewSome )
 import           Data.Parameterized.ShapedList ( ShapedList(..), Index(..), indexShapedList )
-import           Data.Parameterized.TraversableFC ( TraversableFC(..) )
+import           Data.Parameterized.TraversableFC ( traverseFC )
 import qualified Data.Parameterized.Map as MapF
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.Symbol ( userSymbol )
 
-import           SemMC.Architecture
+import qualified SemMC.Architecture as A
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..) )
 import           SemMC.Formula.Formula
-import           SemMC.Util
+import qualified SemMC.Util as U
 
 -- * First pass of parsing: turning the raw text into s-expressions
 
@@ -67,36 +67,36 @@ data Atom = AIdent String
           deriving (Show)
 
 parseIdent :: Parser String
-parseIdent = (:) <$> first <*> many rest
-  where first = letter <|> oneOf "+-=<>_"
-        rest = letter <|> digit <|> oneOf "+-=<>_"
+parseIdent = (:) <$> first <*> P.many rest
+  where first = P.letter P.<|> P.oneOf "+-=<>_"
+        rest = P.letter P.<|> P.digit P.<|> P.oneOf "+-=<>_"
 
 parseString :: Parser String
 parseString = do
-  _ <- char '"'
-  s <- many (noneOf ['"'])
-  _ <- char '"'
+  _ <- P.char '"'
+  s <- P.many (P.noneOf ['"'])
+  _ <- P.char '"'
   return s
 
 parseBV :: Parser (Int, Integer)
-parseBV = char '#' >> ((char 'b' >> parseBin) <|> (char 'x' >> parseHex))
-  where parseBin = oneOf "10" >>= \d -> parseBin' (1, if d == '1' then 1 else 0)
+parseBV = P.char '#' >> ((P.char 'b' >> parseBin) P.<|> (P.char 'x' >> parseHex))
+  where parseBin = P.oneOf "10" >>= \d -> parseBin' (1, if d == '1' then 1 else 0)
 
         parseBin' :: (Int, Integer) -> Parser (Int, Integer)
         parseBin' (bits, x) = do
-          optionMaybe (oneOf "10") >>= \case
+          P.optionMaybe (P.oneOf "10") >>= \case
             Just d -> parseBin' (bits + 1, x * 2 + (if d == '1' then 1 else 0))
             Nothing -> return (bits, x)
 
-        parseHex = (\s -> (length s * 4, read ("0x" ++ s))) <$> many1 hexDigit
+        parseHex = (\s -> (length s * 4, read ("0x" ++ s))) <$> P.many1 P.hexDigit
 
 parseAtom :: Parser Atom
 parseAtom
   =   AIdent      <$> parseIdent
-  <|> AQuoted     <$> (char '\'' >> parseIdent)
-  <|> AString     <$> parseString
-  <|> AInt . read <$> many1 digit
-  <|> uncurry ABV <$> parseBV
+  P.<|> AQuoted     <$> (P.char '\'' >> parseIdent)
+  P.<|> AString     <$> parseString
+  P.<|> AInt . read <$> P.many1 P.digit
+  P.<|> uncurry ABV <$> parseBV
 
 parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
 parserLL = SC.mkParser parseAtom
@@ -111,18 +111,18 @@ parseLL = SC.decodeOne parserLL
 
 -- | Utility function for contextualizing errors. Prepends the given prefix
 -- whenever an error is thrown.
-prefixError :: (Monoid e, MonadError e m) => e -> m a -> m a
-prefixError prefix act = catchError act (throwError . mappend prefix)
+prefixError :: (Monoid e, E.MonadError e m) => e -> m a -> m a
+prefixError prefix act = E.catchError act (E.throwError . mappend prefix)
 
 -- | Utility function for lifting a 'Maybe' into a 'MonadError'
-fromMaybeError :: (MonadError e m) => e -> Maybe a -> m a
-fromMaybeError err = maybe (throwError err) return
+fromMaybeError :: (E.MonadError e m) => e -> Maybe a -> m a
+fromMaybeError err = maybe (E.throwError err) return
 
 -- ** Parsing operands
 
 -- | Data about the operands pertinent after parsing: their name and their type.
 data OpData (arch :: *) (s :: Symbol) where
-  OpData :: String -> BaseTypeRepr (OperandType arch s) -> OpData arch s
+  OpData :: String -> BaseTypeRepr (A.OperandType arch s) -> OpData arch s
 
 -- | How to parse an operand list for a given architecture and shape. The
 -- architecture is necessary in order to know how to map a symbol representing
@@ -149,7 +149,7 @@ instance BuildOperandList arch '[] where
 -- ...and cons case. Sorry for the type operator screwing up indentation for the
 -- rest of the file.
 instance (KnownSymbol tp,
-          KnownRepr BaseTypeRepr (OperandType arch tp),
+          KnownRepr BaseTypeRepr (A.OperandType arch tp),
           BuildOperandList arch tps)
        => BuildOperandList arch (tp ': tps) where
   buildOperandList SC.SNil = Nothing
@@ -159,7 +159,7 @@ instance (KnownSymbol tp,
     let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
     when (symbolVal (Proxy :: Proxy tp) /= ty) Nothing
     rest' <- buildOperandList rest
-    let repr = knownRepr :: BaseTypeRepr (OperandType arch tp)
+    let repr = knownRepr :: BaseTypeRepr (A.OperandType arch tp)
     return $ (OpData operand repr) :> rest'
 
 -- ** Parsing parameters
@@ -180,19 +180,19 @@ literalVarPrefix :: String
 literalVarPrefix = "lit_"
 
 -- | Parses the name of a parameter and whether it's an operand or a literal.
-readRawParameter :: (MonadError String m) => Atom -> m RawParameter
+readRawParameter :: (E.MonadError String m) => Atom -> m RawParameter
 readRawParameter (AIdent name)
   | Right _ <- userSymbol (operandVarPrefix ++ name) = return (RawOperand name)
-  | otherwise = throwError $ printf "%s is not a valid parameter name" name
+  | otherwise = E.throwError $ printf "%s is not a valid parameter name" name
 readRawParameter (AQuoted name)
   | Right _ <- userSymbol (literalVarPrefix ++ name) = return (RawLiteral name)
-  | otherwise = throwError $ printf "%s is not a valid parameter name" name
-readRawParameter a = throwError $ printf "expected parameter, found %s" (show a)
+  | otherwise = E.throwError $ printf "%s is not a valid parameter name" name
+readRawParameter a = E.throwError $ printf "expected parameter, found %s" (show a)
 
 -- | Short-lived type that just stores an index with its corresponding type
 -- representation, with the type parameter ensuring they correspond to one another.
 data IndexWithType (arch :: *) (sh :: [Symbol]) (s :: Symbol) where
-  IndexWithType :: BaseTypeRepr (OperandType arch s) -> Index sh s -> IndexWithType arch sh s
+  IndexWithType :: BaseTypeRepr (A.OperandType arch s) -> Index sh s -> IndexWithType arch sh s
 
 -- | Look up a name in the given operand list, returning its index and type if found.
 findOpListIndex :: String -> ShapedList (OpData arch) sh -> Maybe (Some (IndexWithType arch sh))
@@ -203,21 +203,21 @@ findOpListIndex x ((OpData name tpRepr) :> rest)
       where incrIndex (IndexWithType tpRepr' idx) = IndexWithType tpRepr' (IndexThere idx)
 
 -- | Parse a single parameter, given the list of operands to use as a lookup.
-readParameter :: (MonadError String m, Architecture arch) => ShapedList (OpData arch) sh -> Atom -> m (Some (Parameter arch sh))
+readParameter :: (E.MonadError String m, A.Architecture arch) => ShapedList (OpData arch) sh -> Atom -> m (Some (Parameter arch sh))
 readParameter oplist atom =
   readRawParameter atom >>= \case
     RawOperand op ->
-      maybe (throwError $ printf "couldn't find operand %s" op)
+      maybe (E.throwError $ printf "couldn't find operand %s" op)
             (viewSome (\(IndexWithType tpRepr idx) -> return $ Some (Operand tpRepr idx)))
             (findOpListIndex op oplist)
     RawLiteral lit ->
-      maybe (throwError $ printf "%s is an invalid literal for this arch" lit)
+      maybe (E.throwError $ printf "%s is an invalid literal for this arch" lit)
             (return . viewSome (Some . Literal))
-            (readLocation lit)
+            (A.readLocation lit)
 
 -- | Parses the input list, e.g., @(ra rb 'ca)@
-readInputs :: (MonadError String m,
-               Architecture arch)
+readInputs :: (E.MonadError String m,
+               A.Architecture arch)
            => ShapedList (OpData arch) sh
            -> SC.SExpr Atom
            -> m [Some (Parameter arch sh)]
@@ -226,7 +226,7 @@ readInputs oplist (SC.SCons (SC.SAtom p) rest) = do
   p' <- readParameter oplist p
   rest' <- readInputs oplist rest
   return $ p' : rest'
-readInputs _ _ = throwError "malformed input list"
+readInputs _ _ = E.throwError "malformed input list"
 
 -- ** Parsing definitions
 
@@ -237,10 +237,10 @@ data DefsInfo sym arch sh = DefsInfo
                             -- expressions while parsing the definitions.
                             , getEnv :: FormulaEnv sym arch
                             -- ^ Global formula environment
-                            , getLitLookup :: forall tp. Location arch tp -> Maybe (S.SymExpr sym tp)
+                            , getLitLookup :: forall tp. A.Location arch tp -> Maybe (S.SymExpr sym tp)
                             -- ^ Function used to retrieve the expression
                             -- corresponding to a given literal.
-                            , getOpVarList :: ShapedList (BoundVar sym arch) sh
+                            , getOpVarList :: ShapedList (A.BoundVar sym arch) sh
                             -- ^ ShapedList used to retrieve the variable
                             -- corresponding to a given literal.
                             , getOpNameList :: ShapedList (OpData arch) sh
@@ -256,11 +256,11 @@ data BVProof tp where
 
 -- | Given an expression, monadically either returns proof that it is a
 -- bitvector or throws an error.
-getBVProof :: (S.IsExpr ex, MonadError String m) => ex tp -> m (BVProof tp)
+getBVProof :: (S.IsExpr ex, E.MonadError String m) => ex tp -> m (BVProof tp)
 getBVProof expr =
   case S.exprType expr of
     BaseBVRepr n -> return $ BVProof n
-    t -> throwError $ printf "expected BV, found %s" (show t)
+    t -> E.throwError $ printf "expected BV, found %s" (show t)
 
 -- | Type of the various different handlers for building up expressions formed
 -- by applying arguments to some function.
@@ -276,8 +276,8 @@ getBVProof expr =
 --
 -- ...yes, it's a lot of type parameters.
 type ExprParser sym arch sh m = (S.IsSymInterface sym,
-                                 MonadError String m,
-                                 MonadReader (DefsInfo sym arch sh) m,
+                                 E.MonadError String m,
+                                 MR.MonadReader (DefsInfo sym arch sh) m,
                                  MonadIO m)
                               => SC.SExpr Atom
                               -> [Some (S.SymExpr sym)]
@@ -287,8 +287,8 @@ type ExprParser sym arch sh m = (S.IsSymInterface sym,
 readConcat :: ExprParser sym arch sh m
 readConcat (SC.SAtom (AIdent "concat")) args =
   prefixError "in reading concat expression: " $ do
-    when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
-    sym <- reader getSym
+    when (length args /= 2) (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
+    sym <- MR.reader getSym
     Some arg1 <- return $ args !! 0
     Some arg2 <- return $ args !! 1
     BVProof _ <- prefixError "in arg 1: " $ getBVProof arg1
@@ -298,7 +298,7 @@ readConcat _ _ = return Nothing
 
 -- | Try converting an 'Integer' to a 'NatRepr' or throw an error if not
 -- possible.
-intToNatM :: (MonadError String m) => Integer -> m (Some NatRepr)
+intToNatM :: (E.MonadError String m) => Integer -> m (Some NatRepr)
 intToNatM = fromMaybeError "integer must be non-negative to be a nat" . someNat
 
 -- | Parse an expression of the form @((_ extract i j) x)@.
@@ -309,8 +309,8 @@ readExtract (SC.SCons (SC.SAtom (AIdent "_"))
                (SC.SCons (SC.SAtom (AInt jInt))
                 SC.SNil))))
             args = prefixError "in reading extract expression: " $ do
-  when (length args /= 1) (throwError $ printf "expecting 1 argument, got %d" (length args))
-  sym <- reader getSym
+  when (length args /= 1) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
+  sym <- MR.reader getSym
   -- The SMT-LIB spec represents extracts differently than Crucible does. Per
   -- SMT: "extraction of bits i down to j from a bitvector of size m to yield a
   -- new bitvector of size n, where n = i - j + 1". Per Crucible:
@@ -353,8 +353,8 @@ readExtend (SC.SCons (SC.SAtom (AIdent "_"))
            args
   | extend == "zero_extend" ||
     extend == "sign_extend" = prefixError (printf "in reading %s expression: " extend) $ do
-      when (length args /= 1) (throwError $ printf "expecting 1 argument, got %d" (length args))
-      sym <- reader getSym
+      when (length args /= 1) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
+      sym <- MR.reader getSym
       Some iNat <- intToNatM iInt
       iPositive <- fromMaybeError "must extend by a positive length" $ isPosNat iNat
       Some arg <- return $ args !! 0
@@ -381,8 +381,8 @@ readBVUnop :: forall sym arch sh m. ExprParser sym arch sh m
 readBVUnop (SC.SAtom (AIdent ident)) args
   | Just (BVUnop op :: BVUnop sym) <- bvUnop ident =
       prefixError (printf "in reading %s expression: " ident) $ do
-        when (length args /= 1) (throwError $ printf "expecting 1 argument, got %d" (length args))
-        sym <- reader getSym
+        when (length args /= 1) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
+        sym <- MR.reader getSym
         Some expr <- return $ args !! 0
         BVProof _ <- getBVProof expr
         liftIO (Just . Some <$> op sym expr)
@@ -431,8 +431,8 @@ readBVBinop :: forall sym arch sh m. ExprParser sym arch sh m
 readBVBinop (SC.SAtom (AIdent ident)) args
   | Just (op :: BVBinop sym) <- bvBinop ident =
       prefixError (printf "in reading %s expression: " ident) $ do
-        when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
-        sym <- reader getSym
+        when (length args /= 2) (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
+        sym <- MR.reader getSym
         Some arg1 <- return $ args !! 0
         Some arg2 <- return $ args !! 1
         BVProof m <- prefixError "in arg 1: " $ getBVProof arg1
@@ -442,7 +442,7 @@ readBVBinop (SC.SAtom (AIdent ident)) args
             case op of
               BinopBV op' -> Some <$> op' sym arg1 arg2
               BinopBool op' -> Some <$> op' sym arg1 arg2
-          Nothing -> throwError $ printf "arguments to %s must be the same length, \
+          Nothing -> E.throwError $ printf "arguments to %s must be the same length, \
                                          \but arg 1 has length %s \
                                          \and arg 2 has length %s"
                                          ident
@@ -454,13 +454,13 @@ readBVBinop _ _ = return Nothing
 readEq :: ExprParser sym arch sh m
 readEq (SC.SAtom (AIdent "=")) args =
   prefixError ("in reading '=' expression: ") $ do
-    when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
-    sym <- reader getSym
+    when (length args /= 2) (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
+    sym <- MR.reader getSym
     Some arg1 <- return $ args !! 0
     Some arg2 <- return $ args !! 1
     case testEquality (S.exprType arg1) (S.exprType arg2) of
       Just Refl -> liftIO (Just . Some <$> S.isEq sym arg1 arg2)
-      Nothing -> throwError $ printf "arguments must have same types, \
+      Nothing -> E.throwError $ printf "arguments must have same types, \
                                      \but arg 1 has type %s \
                                      \and arg 2 has type %s"
                                      (show (S.exprType arg1))
@@ -471,8 +471,8 @@ readEq _ _ = return Nothing
 readIte :: ExprParser sym arch sh m
 readIte (SC.SAtom (AIdent "ite")) args =
   prefixError ("in reading ite expression: ") $ do
-    when (length args /= 3) (throwError $ printf "expecting 3 arguments, got %d" (length args))
-    sym <- reader getSym
+    when (length args /= 3) (E.throwError $ printf "expecting 3 arguments, got %d" (length args))
+    sym <- MR.reader getSym
     Some test <- return $ args !! 0
     Some then_ <- return $ args !! 1
     Some else_ <- return $ args !! 2
@@ -480,12 +480,12 @@ readIte (SC.SAtom (AIdent "ite")) args =
       BaseBoolRepr ->
         case testEquality (S.exprType then_) (S.exprType else_) of
           Just Refl -> liftIO (Just . Some <$> S.baseTypeIte sym test then_ else_)
-          Nothing -> throwError $ printf "then and else branches must have same type, \
+          Nothing -> E.throwError $ printf "then and else branches must have same type, \
                                          \but then has type %s \
                                          \and else has type %s"
                                          (show (S.exprType then_))
                                          (show (S.exprType else_))
-      tp -> throwError $ printf "test expression must be a boolean; got %s" (show tp)
+      tp -> E.throwError $ printf "test expression must be a boolean; got %s" (show tp)
 readIte _ _ = return Nothing
 
 data ArrayJudgment :: BaseType -> BaseType -> * where
@@ -493,7 +493,7 @@ data ArrayJudgment :: BaseType -> BaseType -> * where
                     BaseTypeRepr res
                  -> ArrayJudgment idx (BaseArrayType (Ctx.SingleCtx idx) res)
 
-expectArrayWithIndex :: (MonadError String m) => BaseTypeRepr tp1 -> BaseTypeRepr tp2 -> m (ArrayJudgment tp1 tp2)
+expectArrayWithIndex :: (E.MonadError String m) => BaseTypeRepr tp1 -> BaseTypeRepr tp2 -> m (ArrayJudgment tp1 tp2)
 expectArrayWithIndex dimRepr (BaseArrayRepr idxTpReprs resRepr) =
   case Ctx.view idxTpReprs of
     Ctx.AssignExtend rest idxTpRepr ->
@@ -501,17 +501,17 @@ expectArrayWithIndex dimRepr (BaseArrayRepr idxTpReprs resRepr) =
         Ctx.AssignEmpty ->
           case testEquality idxTpRepr dimRepr of
             Just Refl -> return $ ArraySingleDim resRepr
-            Nothing -> throwError $ unwords ["Array index type", show idxTpRepr,
+            Nothing -> E.throwError $ unwords ["Array index type", show idxTpRepr,
                                              "does not match", show dimRepr]
-        _ -> throwError "multidimensional arrays are not supported"
-expectArrayWithIndex _ repr = throwError $ unwords ["expected an array, got", show repr]
+        _ -> E.throwError "multidimensional arrays are not supported"
+expectArrayWithIndex _ repr = E.throwError $ unwords ["expected an array, got", show repr]
 
 -- | Parse an expression of the form @(select arr i)@
 readSelect :: ExprParser sym arch sh m
 readSelect (SC.SAtom (AIdent "select")) args =
   prefixError "in reading select expression: " $ do
-    when (length args /= 2) (throwError $ printf "expecting 2 arguments, got %d" (length args))
-    sym <- reader getSym
+    when (length args /= 2) (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
+    sym <- MR.reader getSym
     Some arr <- return $ args !! 0
     Some idx <- return $ args !! 1
     ArraySingleDim _ <- expectArrayWithIndex (S.exprType idx) (S.exprType arr)
@@ -523,8 +523,8 @@ readSelect _ _ = return Nothing
 readStore :: ExprParser sym arch sh m
 readStore (SC.SAtom (AIdent "store")) args =
   prefixError "in reading store expression: " $ do
-    when (length args /= 3) (throwError $ printf "expecting 3 arguments, got %d" (length args))
-    sym <- reader getSym
+    when (length args /= 3) (E.throwError $ printf "expecting 3 arguments, got %d" (length args))
+    sym <- MR.reader getSym
     Some arr <- return $ args !! 0
     Some idx <- return $ args !! 1
     Some expr <- return $ args !! 2
@@ -533,12 +533,12 @@ readStore (SC.SAtom (AIdent "store")) args =
       Just Refl ->
         let idx' = Ctx.empty Ctx.%> idx
         in liftIO (Just . Some <$> S.arrayUpdate sym arr idx' expr)
-      Nothing -> throwError $ printf "Array result type %s does not match %s"
+      Nothing -> E.throwError $ printf "Array result type %s does not match %s"
                                      (show resRepr)
                                      (show (S.exprType expr))
 readStore _ _ = return Nothing
 
-exprAssignment' :: (MonadError String m,
+exprAssignment' :: (E.MonadError String m,
                     S.IsExpr ex)
                 => Ctx.Assignment BaseTypeRepr ctx
                 -> [Some ex]
@@ -547,12 +547,12 @@ exprAssignment' (Ctx.view -> Ctx.AssignEmpty) [] = return Ctx.empty
 exprAssignment' (Ctx.view -> Ctx.AssignExtend restTps tp) (Some e : restExprs) = do
   Refl <- case testEquality tp (S.exprType e) of
             Just pf -> return pf
-            Nothing -> throwError "unexpected type"
+            Nothing -> E.throwError "unexpected type"
   restAssn <- exprAssignment' restTps restExprs
   return $ restAssn Ctx.%> e
-exprAssignment' _ _ = throwError "mismatching numbers of arguments"
+exprAssignment' _ _ = E.throwError "mismatching numbers of arguments"
 
-exprAssignment :: (MonadError String m,
+exprAssignment :: (E.MonadError String m,
                    S.IsExpr ex)
                => Ctx.Assignment BaseTypeRepr ctx
                -> [Some ex]
@@ -566,11 +566,11 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
                (SC.SCons (SC.SAtom (AString fnName))
                   SC.SNil))) args =
   prefixError "in reading call expression: " $ do
-    sym <- reader getSym
-    fns <- reader (envFunctions . getEnv)
+    sym <- MR.reader getSym
+    fns <- MR.reader (envFunctions . getEnv)
     SomeSome fn <- case Map.lookup fnName fns of
                      Just fn -> return fn
-                     Nothing -> throwError $ printf "uninterpreted function \"%s\" is not defined" fnName
+                     Nothing -> E.throwError $ printf "uninterpreted function \"%s\" is not defined" fnName
     assn <- exprAssignment (S.fnArgTypes fn) args
     liftIO (Just . Some <$> S.applySymFn sym fn assn)
 readCall _ _ = return Nothing
@@ -579,17 +579,17 @@ readCall _ _ = return Nothing
 readExpr :: (S.IsExprBuilder sym,
              S.IsSymInterface sym,
              Monad m,
-             MonadError String m,
-             Architecture arch,
-             MonadReader (DefsInfo sym arch sh) m,
+             E.MonadError String m,
+             A.Architecture arch,
+             MR.MonadReader (DefsInfo sym arch sh) m,
              MonadIO m)
          => SC.SExpr Atom
          -> m (Some (S.SymExpr sym))
-readExpr SC.SNil = throwError "found nil where expected an expression"
-readExpr (SC.SAtom (AInt _)) = throwError "found int where expected an expression; perhaps you wanted a bitvector?"
+readExpr SC.SNil = E.throwError "found nil where expected an expression"
+readExpr (SC.SAtom (AInt _)) = E.throwError "found int where expected an expression; perhaps you wanted a bitvector?"
 readExpr (SC.SAtom (ABV len val)) = do
   -- This is a bitvector literal.
-  sym <- reader getSym
+  sym <- MR.reader getSym
   -- The following two patterns should never fail, given that during parsing we
   -- can only construct BVs with positive length.
   Just (Some lenRepr) <- return $ someNat (toInteger len)
@@ -601,15 +601,15 @@ readExpr (SC.SAtom paramRaw) = do
            , getSym = sym
            , getOpVarList = opVars
            , getLitLookup = litLookup
-           } <- ask
+           } <- MR.ask
   param <- readParameter opNames paramRaw
   case param of
-    Some (Operand _ idx) -> return . Some . S.varExpr sym . unBoundVar $ indexShapedList opVars idx
-    Some (Literal lit) -> maybe (throwError "not declared as input") (return . Some) $ litLookup lit
+    Some (Operand _ idx) -> return . Some . S.varExpr sym . A.unBoundVar $ indexShapedList opVars idx
+    Some (Literal lit) -> maybe (E.throwError "not declared as input") (return . Some) $ litLookup lit
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
   args <- readExprs argsRaw
-  parseAttempt <- sequenceMaybes $ map (\f -> f opRaw args)
+  parseAttempt <- U.sequenceMaybes $ map (\f -> f opRaw args)
     [ readConcat
     , readExtract
     , readExtend
@@ -623,20 +623,20 @@ readExpr (SC.SCons opRaw argsRaw) = do
     ]
   case parseAttempt of
     Just expr -> return expr
-    Nothing -> throwError $ printf "couldn't parse expression %s" (show opRaw)
+    Nothing -> E.throwError $ printf "couldn't parse expression %s" (show opRaw)
 
 -- | Parse multiple expressions in a list.
 readExprs :: (S.IsExprBuilder sym,
               S.IsSymInterface sym,
               Monad m,
-              MonadError String m,
-              Architecture arch,
-              MonadReader (DefsInfo sym arch sh) m,
+              E.MonadError String m,
+              A.Architecture arch,
+              MR.MonadReader (DefsInfo sym arch sh) m,
               MonadIO m)
           => SC.SExpr Atom
           -> m [Some (S.SymExpr sym)]
 readExprs SC.SNil = return []
-readExprs (SC.SAtom _) = throwError "found atom where expected a list of expressions"
+readExprs (SC.SAtom _) = E.throwError "found atom where expected a list of expressions"
 readExprs (SC.SCons e rest) = do
   e' <- readExpr e
   rest' <- readExprs rest
@@ -650,31 +650,31 @@ readExprs (SC.SCons e rest) = do
 readDefs :: (S.IsExprBuilder sym,
              S.IsSymInterface sym,
              Monad m,
-             MonadError String m,
-             Architecture arch,
-             MonadReader (DefsInfo sym arch sh) m,
+             E.MonadError String m,
+             A.Architecture arch,
+             MR.MonadReader (DefsInfo sym arch sh) m,
              MonadIO m)
          => SC.SExpr Atom
          -> m (MapF.MapF (Parameter arch sh) (S.SymExpr sym))
 readDefs SC.SNil = return MapF.empty
 readDefs (SC.SCons (SC.SCons (SC.SAtom p) (SC.SCons defRaw SC.SNil)) rest) = do
-  oplist <- reader getOpNameList
+  oplist <- MR.reader getOpNameList
   Some param <- readParameter oplist p
   Some def <- readExpr defRaw
   Refl <- fromMaybeError ("mismatching types of parameter and expression for " ++ showF param) $
             testEquality (paramType param) (S.exprType def)
   rest' <- readDefs rest
   return $ MapF.insert param def rest'
-readDefs _ = throwError "invalid defs structure"
+readDefs _ = E.throwError "invalid defs structure"
 
 -- | Parse the whole definition of a templated formula, inside an appropriate
 -- monad.
 readFormula' :: forall sym arch sh m.
                 (S.IsExprBuilder sym,
                  S.IsSymInterface sym,
-                 MonadError String m,
+                 E.MonadError String m,
                  MonadIO m,
-                 Architecture arch,
+                 A.Architecture arch,
                  BuildOperandList arch sh)
              => sym
              -> FormulaEnv sym arch
@@ -682,7 +682,7 @@ readFormula' :: forall sym arch sh m.
              -> m (ParameterizedFormula sym arch sh)
 readFormula' sym env text = do
   sexpr <- case parseLL text of
-             Left err -> throwError err
+             Left err -> E.throwError err
              Right res -> return res
   -- Extract the raw s-expressions for the three components.
   (opsRaw, inputsRaw, defsRaw) <- case sexpr of
@@ -691,7 +691,7 @@ readFormula' sym env text = do
        (SC.SCons (SC.SCons (SC.SAtom (AIdent "defs")) (SC.SCons defs SC.SNil))
          SC.SNil))
       -> return (ops, inputs, defs)
-    _ -> throwError "invalid top-level structure"
+    _ -> E.throwError "invalid top-level structure"
 
   -- Most of the following bindings have type annotations not because inference
   -- fails, but because with all the type-level hackery we have going on, it
@@ -705,12 +705,12 @@ readFormula' sym env text = do
   inputs :: [Some (Parameter arch sh)]
     <- readInputs operands inputsRaw
 
-  let mkOperandVar :: forall s. OpData arch s -> m (BoundVar sym arch s)
+  let mkOperandVar :: forall s. OpData arch s -> m (A.BoundVar sym arch s)
       mkOperandVar (OpData name tpRepr) =
-        let symbol = makeSymbol (operandVarPrefix ++ name)
-        in BoundVar <$> (liftIO $ S.freshBoundVar sym symbol tpRepr)
+        let symbol = U.makeSymbol (operandVarPrefix ++ name)
+        in A.BoundVar <$> (liftIO $ S.freshBoundVar sym symbol tpRepr)
 
-  opVarList :: ShapedList (BoundVar sym arch) sh
+  opVarList :: ShapedList (A.BoundVar sym arch) sh
     <- traverseFC mkOperandVar operands
 
   -- NOTE: At the moment, we just trust that the semantics definition declares
@@ -718,21 +718,21 @@ readFormula' sym env text = do
   -- for *all* inputs (partially because it is unclear how to treat immediates
   -- -- do they count as inputs?).
 
-  let mkLiteralVar :: forall tp. BaseTypeRepr tp -> Location arch tp -> m (S.BoundVar sym tp)
+  let mkLiteralVar :: forall tp. BaseTypeRepr tp -> A.Location arch tp -> m (S.BoundVar sym tp)
       mkLiteralVar tpRepr loc =
-        let symbol = makeSymbol (literalVarPrefix ++ showF loc)
+        let symbol = U.makeSymbol (literalVarPrefix ++ showF loc)
         in liftIO $ S.freshBoundVar sym symbol tpRepr
 
       buildLitVarMap :: Some (Parameter arch sh)
-                     -> MapF.MapF (Location arch) (S.BoundVar sym)
-                     -> m (MapF.MapF (Location arch) (S.BoundVar sym))
-      buildLitVarMap (Some (Literal loc)) m = (\v -> MapF.insert loc v m) <$> mkLiteralVar (locationType loc) loc
+                     -> MapF.MapF (A.Location arch) (S.BoundVar sym)
+                     -> m (MapF.MapF (A.Location arch) (S.BoundVar sym))
+      buildLitVarMap (Some (Literal loc)) m = (\v -> MapF.insert loc v m) <$> mkLiteralVar (A.locationType loc) loc
       buildLitVarMap (Some (Operand _ _))        m = return m
 
-  litVars :: MapF.MapF (Location arch) (S.BoundVar sym)
+  litVars :: MapF.MapF (A.Location arch) (S.BoundVar sym)
     <- foldrM buildLitVarMap MapF.empty inputs
 
-  defs <- runReaderT (readDefs defsRaw) $
+  defs <- MR.runReaderT (readDefs defsRaw) $
     DefsInfo { getSym = sym
              , getEnv = env
              , getLitLookup = \loc -> S.varExpr sym <$> flip MapF.lookup litVars loc
@@ -750,18 +750,18 @@ readFormula' sym env text = do
 -- | Parse the definition of a templated formula.
 readFormula :: (S.IsExprBuilder sym,
                 S.IsSymInterface sym,
-                Architecture arch,
+                A.Architecture arch,
                 BuildOperandList arch sh)
             => sym
             -> FormulaEnv sym arch
             -> T.Text
             -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormula sym env text = runExceptT $ readFormula' sym env text
+readFormula sym env text = E.runExceptT $ readFormula' sym env text
 
 -- | Read a templated formula definition from file, then parse it.
 readFormulaFromFile :: (S.IsExprBuilder sym,
                         S.IsSymInterface sym,
-                        Architecture arch,
+                        A.Architecture arch,
                         BuildOperandList arch sh)
                     => sym
                     -> FormulaEnv sym arch

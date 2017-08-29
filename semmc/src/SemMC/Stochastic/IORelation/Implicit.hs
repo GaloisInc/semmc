@@ -10,30 +10,30 @@ module SemMC.Stochastic.IORelation.Implicit (
 
 import qualified GHC.Err.Located as L
 
-import Control.Monad ( replicateM )
-import Control.Monad.Trans ( liftIO )
+import           Control.Monad ( replicateM )
+import           Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as M
-import Data.Monoid
-import Data.Proxy ( Proxy(..) )
+import           Data.Monoid
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.Some ( Some(..) )
-import Lang.Crucible.BaseTypes
+import           Data.Parameterized.Some ( Some(..) )
+import           Lang.Crucible.BaseTypes
 
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import SemMC.Architecture
+import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as CS
 
-import SemMC.Stochastic.IORelation.Shared
-import SemMC.Stochastic.IORelation.Types
+import           SemMC.Stochastic.IORelation.Shared
+import           SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R
 
-import Debug.Trace
+import           Debug.Trace
 -- | Sweep through the parameter space to find locations not mentioned in
 -- parameter lists that are modified by the instruction.
 --
@@ -43,8 +43,8 @@ import Debug.Trace
 -- For this, we will want to focus on generating values that trigger edge cases
 -- to make sure we can deal with flags registers.
 findImplicitOperands :: forall arch sh
-                      . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
-                     => Opcode arch (Operand arch) sh
+                      . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+                     => A.Opcode arch (A.Operand arch) sh
                      -> Learning arch (IORelation arch sh)
 findImplicitOperands op = do
   g <- askGen
@@ -65,7 +65,7 @@ findImplicitOperands op = do
 -- of the *other* (unmentioned) locations to find any changes.  Any changed
 -- locations are implicit outputs.
 computeImplicitOperands :: (CS.ConcreteArchitecture arch)
-                        => Opcode arch (Operand arch) sh
+                        => A.Opcode arch (A.Operand arch) sh
                         -> [TestBundle (TestCase arch) (ImplicitFact arch)]
                         -> [R.ResultOrError (CS.ConcreteState arch)]
                         -> Learning arch (IORelation arch sh)
@@ -78,7 +78,7 @@ computeImplicitOperands op tests results =
 --
 -- Note that the operand isn't used - it is acting like a proxy for the @sh@ parameter.
 buildImplicitRelation :: (CS.ConcreteArchitecture arch)
-                      => Opcode arch (Operand arch) sh
+                      => A.Opcode arch (A.Operand arch) sh
                       -> ResultIndex (CS.ConcreteState arch)
                       -> IORelation arch sh
                       -> TestBundle (TestCase arch) (ImplicitFact arch)
@@ -100,7 +100,7 @@ buildImplicitRelation op rix iorel tb = do
 
 collectImplicitOutputLocations :: forall arch sh
                                 . (CS.ConcreteArchitecture arch)
-                               => Opcode arch (Operand arch) sh
+                               => A.Opcode arch (A.Operand arch) sh
                                -> ResultIndex (CS.ConcreteState arch)
                                -> R.TestResult (CS.ConcreteState arch)
                                -> ImplicitFact arch
@@ -118,12 +118,12 @@ collectImplicitOutputLocations _op rix baseRes f tc =
   where
     addLocIfImplicitAndDifferent :: Some (CS.View arch)
                                  -> S.Set (Some (CS.View arch))
-                                 -> MapF.Pair (Location arch) CS.Value
+                                 -> MapF.Pair (A.Location arch) CS.Value
                                  -> IORelation arch sh
                                  -> Learning arch (IORelation arch sh)
     addLocIfImplicitAndDifferent loc0 explicitOperands (MapF.Pair loc postVal) s =
       let proxy = Proxy :: Proxy arch
-      in case locationType loc of
+      in case A.locationType loc of
         BaseBVRepr nr ->
           case withKnownNat nr (let tv = CS.trivialView proxy loc
                                 in (CS.peekMS (R.testContext tc) tv, CS.peekMS (R.resultContext baseRes) tv,tv)) of
@@ -148,7 +148,7 @@ collectImplicitOutputLocations _op rix baseRes f tc =
 -- Repeat for a number of random instructions
 generateImplicitTests :: forall arch
                        . (CS.ConcreteArchitecture arch)
-                      => Instruction arch
+                      => A.Instruction arch
                       -> CS.ConcreteState arch
                       -> Learning arch [TestBundle (CS.ConcreteState arch) (ImplicitFact arch)]
 generateImplicitTests i s0 = do
@@ -157,7 +157,7 @@ generateImplicitTests i s0 = do
 
 genTestForLoc :: forall arch
                . (CS.ConcreteArchitecture arch)
-              => Instruction arch
+              => A.Instruction arch
               -> CS.ConcreteState arch
               -> Some (CS.View arch)
               -> Learning arch (TestBundle (CS.ConcreteState arch) (ImplicitFact arch))

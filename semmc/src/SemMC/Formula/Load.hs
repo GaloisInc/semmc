@@ -5,19 +5,20 @@
 -- | Utilities for loading formulas from disk
 module SemMC.Formula.Load ( loadFormulas ) where
 
-import qualified Data.Foldable as F
-import System.Directory ( doesFileExist )
 import qualified GHC.Err.Located as L
 
+import qualified Data.Foldable as F
+import           System.Directory ( doesFileExist )
+
 import qualified Data.Parameterized.Map as MapF
-import Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Lang.Crucible.Solver.Interface as CRU
 
-import SemMC.Architecture ( Architecture )
-import SemMC.Formula.Env ( FormulaEnv )
+import           SemMC.Architecture ( Architecture )
+import           SemMC.Formula.Env ( FormulaEnv )
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Parser as FP
-import Data.Parameterized.Witness ( Witness(..) )
 
 -- | Load formulas from disk
 --

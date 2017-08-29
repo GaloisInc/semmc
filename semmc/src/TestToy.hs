@@ -11,7 +11,6 @@ module TestToy where
 
 import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
-import           Control.Monad
 import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Monoid

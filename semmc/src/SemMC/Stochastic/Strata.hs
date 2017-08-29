@@ -26,10 +26,10 @@ import           Data.Maybe ( catMaybes, isNothing )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 
-import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
 
-import           SemMC.Architecture ( Instruction, Opcode, Operand )
+import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
@@ -57,10 +57,10 @@ caller controls the number and placement of threads.
 stratifiedSynthesis :: forall arch t
                      . (CS.ConcreteArchitecture arch, SynC arch)
                     => SynEnv t arch
-                    -> IO (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+                    -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
-    gen <- A.createGen
+    gen <- DA.createGen
     tChan <- C.newChan
     rChan <- C.newChan
     logChan <- C.newChan
@@ -81,7 +81,7 @@ stratifiedSynthesis env0 = do
 naiveRunTest :: C.Chan (Maybe (I.TestCase arch))
              -> C.Chan (I.ResultOrError arch)
              -> Test arch
-             -> [Instruction arch]
+             -> [A.Instruction arch]
              -> Syn t arch (Test arch)
 naiveRunTest tChan rChan c p = liftIO $ do
   let nonce = 0
@@ -93,7 +93,7 @@ naiveRunTest tChan rChan c p = liftIO $ do
     _ -> L.error "Unexpected test result in Strata.runTest!"
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)
-       => Syn t arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+       => Syn t arch (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
 processWorklist :: (CS.ConcreteArchitecture arch, SynC arch)
@@ -115,7 +115,7 @@ processWorklist = do
 --
 -- Return 'Nothing' if we time out trying to find a formula
 strataOne :: (CS.ConcreteArchitecture arch, SynC arch)
-          => Opcode arch (Operand arch) sh
+          => A.Opcode arch (A.Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
   instr <- instantiateInstruction op
@@ -125,7 +125,7 @@ strataOne op = do
     Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
 
 strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
-              => Opcode arch (Operand arch) sh
+              => A.Opcode arch (A.Operand arch) sh
               -> CS.RegisterizedInstruction arch
               -> C.EquivalenceClasses arch
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
@@ -146,7 +146,7 @@ strataOneLoop op instr eqclasses = do
           | otherwise -> strataOneLoop op instr eqclasses'
 
 finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
-                => Opcode arch (Operand arch) sh
+                => A.Opcode arch (A.Operand arch) sh
                 -> CS.RegisterizedInstruction arch
                 -> C.EquivalenceClasses arch
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
@@ -159,7 +159,7 @@ finishStrataOne op instr eqclasses = do
 --
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 buildFormula :: (CS.ConcreteArchitecture arch, SynC arch)
-             => Opcode arch (Operand arch) sh
+             => A.Opcode arch (A.Operand arch) sh
              -> CS.RegisterizedInstruction arch
              -> [SynthInstruction arch]
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)

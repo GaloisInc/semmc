@@ -23,14 +23,12 @@ import qualified Data.Parameterized.ShapedList as SL
 import qualified Lang.Crucible.Solver.Interface as C
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
-import           Data.Parameterized.ShapedList ( ShapedList, indexShapedList )
-
 import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
-import           SemMC.Util ( extractUsedLocs, filterMapF )
+import qualified SemMC.Util as U
 
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
@@ -41,7 +39,7 @@ extractFormula :: forall arch t sh
                 . (CS.ConcreteArchitecture arch, SynC arch)
                => CS.RegisterizedInstruction arch
                -> A.Opcode arch (A.Operand arch) sh
-               -> ShapedList (A.Operand arch) sh
+               -> SL.ShapedList (A.Operand arch) sh
                -> F.Formula (Sym t) arch
                -> IORelation arch sh
                -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
@@ -56,7 +54,7 @@ extractFormula ri opc ops progForm iorel = go (MapF.empty, MapF.empty) (F.toList
           let Just expr = MapF.lookup loc (F.formDefs progForm)
           in go (defineLocation progForm loc expr acc) rest
         OperandRef (Some idx) -> do
-          let operand = indexShapedList ops idx
+          let operand = SL.indexShapedList ops idx
               Just loc = A.operandToLocation (Proxy @arch) operand
               Just expr = MapF.lookup loc (F.formDefs progForm)
           go (defineLocation progForm loc expr acc) rest
@@ -95,7 +93,7 @@ collectVars :: forall t tp arch
             -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t))
             -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t))
 collectVars frm expr m = MapF.union m neededVars
-  where neededVars = extractUsedLocs (F.formParamVars frm) expr
+  where neededVars = U.extractUsedLocs (F.formParamVars frm) expr
 
 -- | Based on the iorelation, identify the inputs of the opcode (and the
 -- corresponding operands).  For each input operand backed by a location, create
@@ -109,13 +107,13 @@ parameterizeFormula :: forall arch sh t
                      . (CS.ConcreteArchitecture arch)
                     => CS.RegisterizedInstruction arch
                     -> A.Opcode arch (A.Operand arch) sh
-                    -> ShapedList (A.Operand arch) sh
+                    -> SL.ShapedList (A.Operand arch) sh
                     -> F.Formula (Sym t) arch
                     -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 parameterizeFormula ri opcode oplist f = do
   -- The pfLiteralVars are the parameters from the original formula not
   -- corresponding to any parameters
-  let litVars = filterMapF (keepNonParams paramLocs) (F.formParamVars f)
+  let litVars = U.filterMapF (keepNonParams paramLocs) (F.formParamVars f)
   let (nonParamDefs, paramDefs) = SL.foldrFCIndexed (replaceParameters (Proxy @arch)) (F.formDefs f, MapF.empty) oplist
       defs = MapF.foldrWithKey liftImplicitLocations paramDefs nonParamDefs
 

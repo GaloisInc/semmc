@@ -23,7 +23,7 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC ( foldrFC )
 
-import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
@@ -61,7 +61,7 @@ instantiateInstruction op = do
   where
     -- Generate random instructions until we get one with explicit operands that
     -- do not overlap with implicit operands.
-    go :: A.Gen -> S.Set (Some (CS.View arch)) -> IO (CS.RegisterizedInstruction arch)
+    go :: DA.Gen -> S.Set (Some (CS.View arch)) -> IO (CS.RegisterizedInstruction arch)
     go gen implicitOps = do
       target <- D.randomInstruction gen (NES.singleton (Some op))
       case target of

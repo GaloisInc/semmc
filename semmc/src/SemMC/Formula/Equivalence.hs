@@ -23,10 +23,10 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr ( withKnownNat )
 import           Data.Parameterized.Pair ( Pair(..) )
-import           Data.Parameterized.Some
-import           Data.Parameterized.TraversableF
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.TraversableF ( traverseF )
 import qualified Data.Set as Set
-import           System.IO ( stderr )
+import qualified System.IO as IO
 
 import           Lang.Crucible.BaseTypes
 import           Lang.Crucible.Config ( initialConfig )
@@ -39,47 +39,47 @@ import           Lang.Crucible.Solver.SimpleBackend.Z3
 import           Lang.Crucible.Solver.SimpleBuilder
 import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
 
-import           SemMC.Architecture
-import           SemMC.ConcreteState ( Value(..) )
-import           SemMC.Formula.Formula
-import           SemMC.Formula.Instantiate
-import           SemMC.Util
+import qualified SemMC.Architecture as A
+import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Formula.Formula as F
+import qualified SemMC.Formula.Instantiate as FI
+import qualified SemMC.Util as U
 
 -- | The result of an equivalence check.
 data EquivalenceResult arch ex
   = Equivalent
     -- ^ The two formulas are equivalent (or, if you want to be pedantic,
     -- equisatisfiable).
-  | DifferentBehavior (ArchState arch ex)
+  | DifferentBehavior (A.ArchState arch ex)
     -- ^ The two formulas are non-trivially different, i.e., the SAT solver was
     -- needed to show difference. The 'ArchState' is a machine state that is a
     -- counterexample to their equivalence.
-deriving instance (ShowF (Location arch), ShowF ex) => Show (EquivalenceResult arch ex)
+deriving instance (ShowF (A.Location arch), ShowF ex) => Show (EquivalenceResult arch ex)
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Elt's.
 formulasEquivSym :: forall arch t.
-                    (Architecture arch)
+                    (A.Architecture arch)
                  => SimpleBackend t
-                 -> Formula (SimpleBackend t) arch
-                 -> Formula (SimpleBackend t) arch
+                 -> F.Formula (SimpleBackend t) arch
+                 -> F.Formula (SimpleBackend t) arch
                  -> IO (EquivalenceResult arch (Elt t))
 formulasEquivSym sym =
   let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (Elt t tp)
-      eval (GroundEvalFn evalFn) e = groundValToExpr sym (S.exprType e) =<< evalFn e
+      eval (GroundEvalFn evalFn) e = U.groundValToExpr sym (S.exprType e) =<< evalFn e
   in formulasEquiv eval sym
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Value's.
 formulasEquivConcrete :: forall arch t.
-                         (Architecture arch)
+                         (A.Architecture arch)
                       => SimpleBackend t
-                      -> Formula (SimpleBackend t) arch
-                      -> Formula (SimpleBackend t) arch
-                      -> IO (EquivalenceResult arch Value)
+                      -> F.Formula (SimpleBackend t) arch
+                      -> F.Formula (SimpleBackend t) arch
+                      -> IO (EquivalenceResult arch CS.Value)
 formulasEquivConcrete =
-  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (Value tp)
+  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (CS.Value tp)
       eval (GroundEvalFn evalFn) e =
         case S.exprType e of
-          BaseBVRepr w -> withKnownNat w (ValueBV . fromInteger <$> evalFn e)
+          BaseBVRepr w -> withKnownNat w (CS.ValueBV . fromInteger <$> evalFn e)
           _ -> error "formulasEquivConcrete: only BVs supported"
   in formulasEquiv eval
 
@@ -93,17 +93,17 @@ allPairwiseEquality sym = foldrM andPairEquality (S.truePred sym)
 -- | Check the equivalence of two formulas, using the first parameter to extract
 -- expression values for the counterexample.
 formulasEquiv :: forall t arch ex.
-                 (Architecture arch)
+                 (A.Architecture arch)
               => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
               -> SimpleBackend t
-              -> Formula (SimpleBackend t) arch
-              -> Formula (SimpleBackend t) arch
+              -> F.Formula (SimpleBackend t) arch
+              -> F.Formula (SimpleBackend t) arch
               -> IO (EquivalenceResult arch ex)
 formulasEquiv
   eval
   sym
-  f1@(Formula { formParamVars = bvars1, formDefs = defs1 } )
-  f2@(Formula { formParamVars = bvars2, formDefs = defs2 } ) =
+  f1@(F.Formula { F.formParamVars = bvars1, F.formDefs = defs1 } )
+  f2@(F.Formula { F.formParamVars = bvars2, F.formDefs = defs2 } ) =
   do
     -- Create constants for each of the bound variables, then replace them in
     -- each of the definitions. This way, the equations in the different
@@ -111,25 +111,25 @@ formulasEquiv
     --
     -- Here 'constant' does not mean a literal, like '5'. Instead, it means a
     -- variable in SMT land that isn't meant to be bound.
-    let allInputLocs = formInputs f1 `Set.union` formInputs f2
-        allOutputLocs = formOutputs f1 `Set.union` formOutputs f2
+    let allInputLocs = F.formInputs f1 `Set.union` F.formInputs f2
+        allOutputLocs = F.formOutputs f1 `Set.union` F.formOutputs f2
         allLocs = allInputLocs `Set.union` allOutputLocs
         mkConstant (Some loc) m =
           fmap (\e -> MapF.insert loc e m)
-               (S.freshConstant sym (makeSymbol (showF loc)) (locationType loc))
+               (S.freshConstant sym (U.makeSymbol (showF loc)) (A.locationType loc))
 
     varConstants <- foldrM mkConstant MapF.empty allLocs
     let -- This 'fromJust' is total because all of the used variables are in
         -- 'varConstants'.
-        varLookup :: forall tp . Location arch tp -> IO (Elt t tp)
+        varLookup :: forall tp . A.Location arch tp -> IO (Elt t tp)
         varLookup = return . fromJust . flip MapF.lookup varConstants
-        replaceVars vars = traverseF (replaceLitVars sym varLookup vars)
+        replaceVars vars = traverseF (FI.replaceLitVars sym varLookup vars)
 
     defs1' <- replaceVars bvars1 defs1
     defs2' <- replaceVars bvars2 defs2
 
-    let lookupDefn :: MapF.MapF (Location arch) (Elt t)
-                   -> Location arch tp
+    let lookupDefn :: MapF.MapF (A.Location arch) (Elt t)
+                   -> A.Location arch tp
                    -> Elt t tp
         lookupDefn defs loc =
           case MapF.lookup loc defs of
@@ -170,7 +170,7 @@ checkSatZ3 :: forall t a.
            -> (SatResult (GroundEvalFn t, Maybe (EltRangeBindings t)) -> IO a)
            -> IO a
 checkSatZ3 sym testExpr handler = do
-  withVerbosity stderr 1 check
+  withVerbosity IO.stderr 1 check
   where
     -- Without factoring this out and giving it an explicit type sig
     -- for use with the explicit type application below I get errors

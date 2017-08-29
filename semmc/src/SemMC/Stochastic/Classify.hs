@@ -10,7 +10,7 @@ module SemMC.Stochastic.Classify (
   countPrograms
   ) where
 
-import Control.Monad.Trans ( liftIO )
+import           Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Set as S
 
@@ -19,9 +19,9 @@ import           SemMC.Architecture ( Operand )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
-import SemMC.ConcreteState ( ConcreteState, Value )
+import           SemMC.ConcreteState ( ConcreteState, Value )
 import           SemMC.Symbolic ( Sym )
-import SemMC.Stochastic.Monad
+import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo ( ArchitectureWithPseudo, SynthInstruction(..) )
 
 -- | A set of equivalence classes of programs

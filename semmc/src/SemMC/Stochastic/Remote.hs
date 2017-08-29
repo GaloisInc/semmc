@@ -17,9 +17,9 @@ import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
-import Data.Int ( Int32 )
+import           Data.Int ( Int32 )
 import qualified Data.Time.Clock as T
-import Data.Word ( Word8, Word16, Word64 )
+import           Data.Word ( Word8, Word16, Word64 )
 import qualified System.IO as IO
 
 import qualified SemMC.Stochastic.Remote.SSH as SSH
