@@ -21,14 +21,13 @@ import           Data.Bits
 import           Data.Monoid ( (<>) )
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.NatRepr
 import qualified Data.Serialize.Get as G
 import qualified Data.Word.Indexed as W
-import           Numeric.Natural
+import           Numeric.Natural ( Natural )
 
 import           Lang.Crucible.BaseTypes
 
-import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.ConcreteState as CS
@@ -38,7 +37,7 @@ import           SemMC.Architecture.PPC.Location
 type ConcreteState = MapF.MapF Location CS.Value
 
 -- | FIXME: Does not include memory
-randomState :: A.Gen -> IO ConcreteState
+randomState :: DA.Gen -> IO ConcreteState
 randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
@@ -55,12 +54,12 @@ randomState gen = St.execStateT randomize MapF.empty
     addRandomBV64 :: Location (BaseBVType 128) -> St.StateT ConcreteState IO ()
     addRandomBV64 loc = do
       bv :: CS.Value (BaseBVType 64)
-         <- CS.ValueBV <$> liftIO (A.arbitrary gen)
+         <- CS.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc (extendBV bv)
 
     addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
-      bv <- CS.ValueBV <$> liftIO (A.arbitrary gen)
+      bv <- CS.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc bv
 
     addZeroBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
