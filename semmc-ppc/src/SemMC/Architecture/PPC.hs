@@ -526,8 +526,59 @@ loadBaseSet baseSetDir sym = do
                           , Some (Witness PPC.XOR)
                           ]
 
+operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
+operandTypePPC o =
+  case o of
+    PPC.F4rc {} -> knownRepr
+    PPC.F8rc {} -> knownRepr
+    PPC.G8rc {} -> knownRepr
+    PPC.G8rc_nox0 {} -> knownRepr
+    PPC.Gprc {} -> knownRepr
+    PPC.Gprc_nor0 {} -> knownRepr
+    PPC.Tlsreg {} -> knownRepr
+    PPC.Tlsreg32 {} -> knownRepr
+    PPC.Vrrc {} -> knownRepr
+    PPC.Vsfrc {} -> knownRepr
+    PPC.Vsrc {} -> knownRepr
+    PPC.Vssrc {} -> knownRepr
+    PPC.Abscalltarget {} -> knownRepr
+    PPC.Abscondbrtarget {} -> knownRepr
+    PPC.Absdirectbrtarget {} -> knownRepr
+    PPC.Calltarget {} -> knownRepr
+    PPC.Condbrtarget {} -> knownRepr
+    PPC.Crbitm {} -> knownRepr
+    PPC.Crbitrc {} -> knownRepr
+    PPC.Crrc {} -> knownRepr
+    PPC.Directbrtarget {} -> knownRepr
+    PPC.I1imm {} -> knownRepr
+    PPC.I32imm {} -> knownRepr
+    PPC.Memri {} -> knownRepr
+    PPC.Memrix {} -> knownRepr
+    PPC.Memrix16 {} -> knownRepr
+    PPC.Memrr {} -> knownRepr
+    PPC.S16imm {} -> knownRepr
+    PPC.S16imm64 {} -> knownRepr
+    PPC.S17imm {} -> knownRepr
+    PPC.S5imm {} -> knownRepr
+    PPC.Spe2dis {} -> knownRepr
+    PPC.Spe4dis {} -> knownRepr
+    PPC.Spe8dis {} -> knownRepr
+    PPC.Tlscall {} -> knownRepr
+    PPC.Tlscall32 {} -> knownRepr
+    PPC.U10imm {} -> knownRepr
+    PPC.U16imm {} -> knownRepr
+    PPC.U16imm64 {} -> knownRepr
+    PPC.U1imm {} -> knownRepr
+    PPC.U2imm {} -> knownRepr
+    PPC.U4imm {} -> knownRepr
+    PPC.U5imm {} -> knownRepr
+    PPC.U6imm {} -> knownRepr
+    PPC.U7imm {} -> knownRepr
+    PPC.U8imm {} -> knownRepr
+
 instance CS.ConcreteArchitecture PPC where
   operandToSemanticView _proxy = operandToSemanticViewPPC
+  operandType _proxy = operandTypePPC
   zeroState _proxy = PPCS.zeroState
   randomState _proxy = PPCS.randomState
   serialize _proxy = PPCS.serialize
