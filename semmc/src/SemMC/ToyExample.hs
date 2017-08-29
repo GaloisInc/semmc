@@ -379,10 +379,27 @@ randomStateImpl gen = do
     return $ MapF.Pair (RegLoc r) value
   return $ MapF.fromList pairs
 
+toyOperandType :: Operand s -> BaseTypeRepr (A.OperandType Toy s)
+toyOperandType o =
+  case o of
+    R32 _ -> knownRepr :: BaseTypeRepr (BaseBVType 32)
+    I32 _ -> knownRepr :: BaseTypeRepr (BaseBVType 32)
+
+-- | This is trivial for the Toy architecture, since it doesn't have any opcodes
+-- with immediates.  If we add opcodes with immediates, they will need to be
+-- patched up here.
+toyRegisterizeInstruction :: C.RegisterizedInstruction Toy
+                          -> C.ConcreteState Toy
+                          -> (A.Instruction Toy, C.ConcreteState Toy)
+toyRegisterizeInstruction ri cs = (C.riInstruction ri, cs)
+
 instance C.ConcreteArchitecture Toy where
   operandToSemanticView _ = operandToSemanticViewImpl
   zeroState _ = initialMachineState
   randomState _ = randomStateImpl
+
+  operandType _ = toyOperandType
+  registerizeInstruction = toyRegisterizeInstruction
 
   serialize = L.error "Toy: serialize"
   deserialize = L.error "Toy: deserialize"

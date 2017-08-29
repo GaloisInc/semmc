@@ -3,6 +3,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
@@ -63,7 +64,7 @@ import           Lang.Crucible.BaseTypes ( knownRepr )
 import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
-import           Data.Parameterized.ShapedList ( ShapeRepr )
+import qualified Data.Parameterized.ShapedList as SL
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction.Random as D
@@ -113,11 +114,11 @@ data SynEnv t arch =
          -- ^ All of the known formulas (base set + learned set) for real opcodes
          , sePseudoFormulas :: MapF.MapF ((Pseudo arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
          -- ^ Formulas for all pseudo opcodes
-         , seKnownCongruentOps :: STM.TVar (MapF.MapF ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
+         , seKnownCongruentOps :: STM.TVar (MapF.MapF SL.ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
          , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
          -- ^ Work items
-         , seTestCases :: STM.TVar [Test arch]
+         , seTestCases :: STM.TVar [ConcreteState arch]
          -- ^ All of the test cases we have accumulated.  This includes a set of
          -- initial heuristically interesting tests, as well as a set of ~1000
          -- random tests.  It also includes counterexamples learned during
@@ -154,8 +155,8 @@ type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
                  , D.ArbitraryOperands (Opcode arch) (Operand arch)
                  , D.ArbitraryOperands (Pseudo arch) (Operand arch)
                  , P.EnumF (Opcode arch (Operand arch))
-                 , HasRepr (Opcode arch (Operand arch)) ShapeRepr
-                 , HasRepr (Pseudo arch (Operand arch)) ShapeRepr
+                 , HasRepr (Opcode arch (Operand arch)) SL.ShapeRepr
+                 , HasRepr (Pseudo arch (Operand arch)) SL.ShapeRepr
                  , ConcreteArchitecture arch
                  , ArchitectureWithPseudo arch )
 
@@ -186,7 +187,7 @@ tryJust pred action = do
 
 -- | Record a learned formula for the opcode in the state
 recordLearnedFormula :: (P.OrdF (Opcode arch (Operand arch)),
-                         HasRepr (Opcode arch (Operand arch)) ShapeRepr)
+                         HasRepr (Opcode arch (Operand arch)) SL.ShapeRepr)
                      => Opcode arch (Operand arch) sh
                      -> F.ParameterizedFormula (Sym t) arch sh
                      -> Syn t arch ()
@@ -235,11 +236,11 @@ withSymBackend k = do
   liftIO $ STM.atomically $ STM.putTMVar symVar sym
   return res
 
-askTestCases :: Syn t arch [Test arch]
+askTestCases :: Syn t arch [ConcreteState arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Add a counterexample test case to the set of tests
-addTestCase :: Test arch -> Syn t arch ()
+addTestCase :: ConcreteState arch -> Syn t arch ()
 addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
@@ -250,7 +251,7 @@ askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 askPseudoFormulas :: Syn t arch (MapF.MapF (Pseudo arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
 
-askKnownCongruentOps :: Syn t arch (MapF.MapF ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
+askKnownCongruentOps :: Syn t arch (MapF.MapF SL.ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
 askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.
@@ -282,8 +283,8 @@ lookupFormula :: (ArchitectureWithPseudo arch)
 lookupFormula (RealOpcode op) = MapF.lookup op <$> askFormulas
 lookupFormula (PseudoOpcode pseudo) = MapF.lookup pseudo <$> askPseudoFormulas
 
-lookupCongruent :: (HasRepr (Opcode arch (Operand arch)) ShapeRepr,
-                    HasRepr (Pseudo arch (Operand arch)) ShapeRepr)
+lookupCongruent :: (HasRepr (Opcode arch (Operand arch)) SL.ShapeRepr,
+                    HasRepr (Pseudo arch (Operand arch)) SL.ShapeRepr)
                 => SynthOpcode arch sh
                 -> Syn t arch (Seq.Seq (SynthOpcode arch sh))
 lookupCongruent op = maybe Seq.empty SeqF.unSeqF . MapF.lookup (typeRepr op) <$> askKnownCongruentOps
@@ -329,7 +330,7 @@ loadInitialState :: forall arch t
                  -> Sym t
                  -> IO (ConcreteState arch)
                  -- ^ A generator of random test cases
-                 -> [Test arch]
+                 -> [ConcreteState arch]
                  -- ^ Heuristically-interesting test cases
                  -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
                  -- ^ All possible opcodes. These are used to guess
