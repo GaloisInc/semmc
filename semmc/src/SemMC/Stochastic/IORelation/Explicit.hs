@@ -9,46 +9,46 @@ module SemMC.Stochastic.IORelation.Explicit (
 
 import qualified GHC.Err.Located as L
 
-import Control.Monad ( replicateM )
-import Control.Monad.Trans ( liftIO )
+import           Control.Monad ( replicateM )
+import           Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as M
-import Data.Monoid
-import Data.Proxy ( Proxy(..) )
+import           Data.Monoid
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
-import Text.Printf ( printf )
+import           Text.Printf ( printf )
 
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.NatRepr as NR
-import Data.Parameterized.ShapedList ( foldrFCIndexed, Index, ShapedList )
-import Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.ShapedList as SL
+import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
-import SemMC.Architecture
+import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as CS
 
-import SemMC.Stochastic.IORelation.Shared
-import SemMC.Stochastic.IORelation.Types
+import           SemMC.Stochastic.IORelation.Shared
+import           SemMC.Stochastic.IORelation.Types
 import qualified SemMC.Stochastic.Remote as R
 
 -- | Make a random instruction that does not reference any implicit operands.
 --
 -- This could be made more efficient - right now, it just tries to generate
 -- random instructions until it gets a match.
-generateExplicitInstruction :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
+generateExplicitInstruction :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                             => Proxy arch
-                            -> Opcode arch (Operand arch) sh
+                            -> A.Opcode arch (A.Operand arch) sh
                             -> [Some (CS.View arch)]
-                            -> Learning arch (Instruction arch)
+                            -> Learning arch (A.Instruction arch)
 generateExplicitInstruction proxy op implicitOperands = do
   g <- askGen
   insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
   case insn of
     D.Instruction _ ops ->
-      case foldrFCIndexed (matchesOperand proxy implicitOperands) (False, S.empty) ops of
+      case SL.foldrFCIndexed (matchesOperand proxy implicitOperands) (False, S.empty) ops of
         (False, sops)
           -- The operands are all distinct and no operands are implicit
           | S.size sops == length (instructionRegisterOperands proxy ops) -> return insn
@@ -57,9 +57,9 @@ generateExplicitInstruction proxy op implicitOperands = do
 -- | Generate test cases and send them off to the remote runner.  Collect and
 -- interpret the results to create an IORelation that describes the explicit
 -- operands of the instruction.
-classifyExplicitOperands :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (Opcode arch) (Operand arch))
-                         => Opcode arch (Operand arch) sh
-                         -> ShapedList (Operand arch) sh
+classifyExplicitOperands :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+                         => A.Opcode arch (A.Operand arch) sh
+                         -> SL.ShapedList (A.Operand arch) sh
                          -> Learning arch (IORelation arch sh)
 classifyExplicitOperands op explicitOperands = do
   t0 <- mkRandomTest
@@ -72,8 +72,8 @@ classifyExplicitOperands op explicitOperands = do
 -- | For all of the explicit operands, map the results of tests to deductions
 -- (forming an 'IORelation')
 computeIORelation :: (CS.ConcreteArchitecture arch)
-                  => Opcode arch (Operand arch) sh
-                  -> ShapedList (Operand arch) sh
+                  => A.Opcode arch (A.Operand arch) sh
+                  -> SL.ShapedList (A.Operand arch) sh
                   -> [TestBundle (TestCase arch) (ExplicitFact arch)]
                   -> [R.ResultOrError (CS.ConcreteState arch)]
                   -> Learning arch (IORelation arch sh)
@@ -95,8 +95,8 @@ computeIORelation opcode operands bundles results =
 --    it is an output.
 buildIORelation :: forall arch sh
                  . (CS.ConcreteArchitecture arch)
-                => Opcode arch (Operand arch) sh
-                -> ShapedList (Operand arch) sh
+                => A.Opcode arch (A.Operand arch) sh
+                -> SL.ShapedList (A.Operand arch) sh
                 -> ResultIndex (CS.ConcreteState arch)
                 -> IORelation arch sh
                 -> TestBundle (TestCase arch) (ExplicitFact arch)
@@ -124,12 +124,12 @@ buildIORelation op explicitOperands ri iorel tb = do
 --
 -- If the test failed, return an empty set.
 collectExplicitLocations :: (CS.ConcreteArchitecture arch)
-                         => Index sh tp
-                         -> ShapedList (Operand arch) sh
+                         => SL.Index sh tp
+                         -> SL.ShapedList (A.Operand arch) sh
                          -> [IndexedSemanticView arch sh]
                          -> ResultIndex (CS.ConcreteState arch)
                          -> TestCase arch
-                         -> Learning arch (S.Set (Some (Index sh)))
+                         -> Learning arch (S.Set (Some (SL.Index sh)))
 collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
   case M.lookup (R.testNonce tc) (riSuccesses ri) of
     Nothing -> return S.empty
@@ -158,7 +158,7 @@ collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
 -- that test vector: all modified registers are in the output set.
 generateExplicitTestVariants :: forall arch
                               . (CS.ConcreteArchitecture arch)
-                             => Instruction arch
+                             => A.Instruction arch
                              -> CS.ConcreteState arch
                              -> Learning arch [TestBundle (CS.ConcreteState arch) (ExplicitFact arch)]
 generateExplicitTestVariants i s0 =
@@ -167,7 +167,7 @@ generateExplicitTestVariants i s0 =
       mapM (genVar opcode) (instructionRegisterOperands (Proxy :: Proxy arch) operands)
   where
     genVar :: forall sh
-            . Opcode arch (Operand arch) sh
+            . A.Opcode arch (A.Operand arch) sh
            -> IndexedSemanticView arch sh
            -> Learning arch (TestBundle (CS.ConcreteState arch) (ExplicitFact arch))
     genVar opcode (IndexedSemanticView ix (CS.SemanticView { CS.semvView = view })) = do
@@ -192,8 +192,8 @@ generateExplicitTestVariants i s0 =
 -- tweak the distribution to generate interesting types of floats.
 generateVariantsFor :: (CS.ConcreteArchitecture arch)
                     => CS.ConcreteState arch
-                    -> Opcode arch (Operand arch) sh
-                    -> Index sh tp
+                    -> A.Opcode arch (A.Operand arch) sh
+                    -> SL.Index sh tp
                     -> Some (CS.View arch)
                     -> Learning arch [CS.ConcreteState arch]
 generateVariantsFor s0 _opcode _ix (Some v) = do
@@ -202,8 +202,8 @@ generateVariantsFor s0 _opcode _ix (Some v) = do
 matchesOperand :: (CS.ConcreteArchitecture arch)
                => Proxy arch
                -> [Some (CS.View arch)]
-               -> Index sh tp
-               -> Operand arch tp
+               -> SL.Index sh tp
+               -> A.Operand arch tp
                -> (Bool, S.Set (Some (CS.View arch)))
                -> (Bool, S.Set (Some (CS.View arch)))
 matchesOperand proxy implicits _ix operand (matches, sops) =

@@ -3,6 +3,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
@@ -49,7 +50,7 @@ import           Control.Monad ( replicateM )
 import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.Foldable as F
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
 import           System.FilePath ( (</>), (<.>) )
@@ -63,14 +64,14 @@ import           Lang.Crucible.BaseTypes ( knownRepr )
 import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
-import           Data.Parameterized.ShapedList ( ShapeRepr )
+import qualified Data.Parameterized.ShapedList as SL
 import           Data.Parameterized.Witness ( Witness(..) )
-import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction.Random as D
 import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Seq as SeqF
-import           SemMC.Architecture ( Architecture, Opcode, Operand, Instruction )
+import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
 import qualified SemMC.Formula.Parser as F
@@ -109,20 +110,20 @@ type Test arch = ConcreteState arch
 
 -- | Synthesis environment.
 data SynEnv t arch =
-  SynEnv { seFormulas :: STM.TVar (MapF.MapF ((Opcode arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+  SynEnv { seFormulas :: STM.TVar (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
          -- ^ All of the known formulas (base set + learned set) for real opcodes
-         , sePseudoFormulas :: MapF.MapF ((Pseudo arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
+         , sePseudoFormulas :: MapF.MapF ((Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch)
          -- ^ Formulas for all pseudo opcodes
-         , seKnownCongruentOps :: STM.TVar (MapF.MapF ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
+         , seKnownCongruentOps :: STM.TVar (MapF.MapF SL.ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
-         , seWorklist :: STM.TVar (WL.Worklist (Some (Opcode arch (Operand arch))))
+         , seWorklist :: STM.TVar (WL.Worklist (Some (A.Opcode arch (A.Operand arch))))
          -- ^ Work items
-         , seTestCases :: STM.TVar [Test arch]
+         , seTestCases :: STM.TVar [ConcreteState arch]
          -- ^ All of the test cases we have accumulated.  This includes a set of
          -- initial heuristically interesting tests, as well as a set of ~1000
          -- random tests.  It also includes counterexamples learned during
          -- classification.
-         , seIORelations :: MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
+         , seIORelations :: MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
          -- ^ Descriptions of implicit and explicit operands for each opcode
          , seSymBackend :: STM.TMVar (Sym t)
          -- ^ The solver backend from Crucible.  This is behind a TMVar because
@@ -140,22 +141,22 @@ data SynEnv t arch =
 -- This includes a remote connection to run test cases
 data LocalSynEnv t arch =
   LocalSynEnv { seGlobalEnv :: SynEnv t arch
-              , seRandomGen :: A.Gen
-              , seRunTest :: ConcreteState arch -> [Instruction arch] -> Syn t arch (ConcreteState arch)
+              , seRandomGen :: DA.Gen
+              , seRunTest :: ConcreteState arch -> [A.Instruction arch] -> Syn t arch (ConcreteState arch)
                 -- ^ Starting with a synchronous test runner. Will
                 -- worry about batching tests and running them in
                 -- parallel later.
               }
 
 -- | Synthesis constraints.
-type SynC arch = ( P.OrdF (Opcode arch (Operand arch))
-                 , P.OrdF (Operand arch)
-                 , D.ArbitraryOperand (Operand arch)
-                 , D.ArbitraryOperands (Opcode arch) (Operand arch)
-                 , D.ArbitraryOperands (Pseudo arch) (Operand arch)
-                 , P.EnumF (Opcode arch (Operand arch))
-                 , HasRepr (Opcode arch (Operand arch)) ShapeRepr
-                 , HasRepr (Pseudo arch (Operand arch)) ShapeRepr
+type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
+                 , P.OrdF (A.Operand arch)
+                 , D.ArbitraryOperand (A.Operand arch)
+                 , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
+                 , D.ArbitraryOperands (Pseudo arch) (A.Operand arch)
+                 , P.EnumF (A.Opcode arch (A.Operand arch))
+                 , HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr
+                 , HasRepr (Pseudo arch (A.Operand arch)) SL.ShapeRepr
                  , ConcreteArchitecture arch
                  , ArchitectureWithPseudo arch )
 
@@ -180,14 +181,14 @@ runSyn e a = R.runReaderT (unSyn a) e
 -- @tryJust@ like this.
 tryJust :: C.Exception e
         => (e -> Maybe b) -> Syn t arch a -> Syn t arch (Either b a)
-tryJust pred action = do
+tryJust p action = do
   localEnv <- R.ask
-  liftIO $ C.tryJust pred (runSyn localEnv action)
+  liftIO $ C.tryJust p (runSyn localEnv action)
 
 -- | Record a learned formula for the opcode in the state
-recordLearnedFormula :: (P.OrdF (Opcode arch (Operand arch)),
-                         HasRepr (Opcode arch (Operand arch)) ShapeRepr)
-                     => Opcode arch (Operand arch) sh
+recordLearnedFormula :: (P.OrdF (A.Opcode arch (A.Operand arch)),
+                         HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr)
+                     => A.Opcode arch (A.Operand arch) sh
                      -> F.ParameterizedFormula (Sym t) arch sh
                      -> Syn t arch ()
 recordLearnedFormula op f = do
@@ -200,7 +201,7 @@ recordLearnedFormula op f = do
     STM.modifyTVar' congruentRef (MapF.insertWith (SeqF.><) opShape newOps)
 
 -- | Take an opcode off of the worklist
-takeWork :: Syn t arch (Maybe (Some (Opcode arch (Operand arch))))
+takeWork :: Syn t arch (Maybe (Some (A.Opcode arch (A.Operand arch))))
 takeWork = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
   liftIO $ STM.atomically $ do
@@ -212,7 +213,7 @@ takeWork = do
         return (Just work)
 
 -- | Add an opcode back to into the worklist
-addWork :: Opcode arch (Operand arch) sh -> Syn t arch ()
+addWork :: A.Opcode arch (A.Operand arch) sh -> Syn t arch ()
 addWork op = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' wlref (WL.putWork (Some op))
@@ -220,10 +221,10 @@ addWork op = do
 askConfig :: Syn t arch (Config arch)
 askConfig = R.asks (seConfig . seGlobalEnv)
 
-askGen :: Syn t arch A.Gen
+askGen :: Syn t arch DA.Gen
 askGen = R.asks seRandomGen
 
-askRunTest :: Syn t arch (ConcreteState arch -> [Instruction arch] -> Syn t arch (ConcreteState arch))
+askRunTest :: Syn t arch (ConcreteState arch -> [A.Instruction arch] -> Syn t arch (ConcreteState arch))
 askRunTest = R.asks seRunTest
 
 withSymBackend :: (Sym t -> Syn t arch a) -> Syn t arch a
@@ -235,22 +236,22 @@ withSymBackend k = do
   liftIO $ STM.atomically $ STM.putTMVar symVar sym
   return res
 
-askTestCases :: Syn t arch [Test arch]
+askTestCases :: Syn t arch [ConcreteState arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Add a counterexample test case to the set of tests
-addTestCase :: Test arch -> Syn t arch ()
+addTestCase :: ConcreteState arch -> Syn t arch ()
 addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
 
-askFormulas :: Syn t arch (MapF.MapF ((Opcode arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+askFormulas :: Syn t arch (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
-askPseudoFormulas :: Syn t arch (MapF.MapF (Pseudo arch (Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+askPseudoFormulas :: Syn t arch (MapF.MapF (Pseudo arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
 
-askKnownCongruentOps :: Syn t arch (MapF.MapF ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
+askKnownCongruentOps :: Syn t arch (MapF.MapF SL.ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
 askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.
@@ -262,8 +263,8 @@ askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . 
 -- the whole set like here with 'askBaseSet', which is also consistent
 -- with the STRATA paper. We probably want to change one of these
 -- naming conventions to make them distinct.
-askBaseSet :: (P.OrdF (Opcode arch (Operand arch)),
-               P.OrdF (Pseudo arch (Operand arch)))
+askBaseSet :: (P.OrdF (A.Opcode arch (A.Operand arch)),
+               P.OrdF (Pseudo arch (A.Operand arch)))
            => Syn t arch (NES.Set (Some (SynthOpcode arch)))
 askBaseSet = do
   -- Since we don't update the base set during a round, it would make
@@ -282,8 +283,8 @@ lookupFormula :: (ArchitectureWithPseudo arch)
 lookupFormula (RealOpcode op) = MapF.lookup op <$> askFormulas
 lookupFormula (PseudoOpcode pseudo) = MapF.lookup pseudo <$> askPseudoFormulas
 
-lookupCongruent :: (HasRepr (Opcode arch (Operand arch)) ShapeRepr,
-                    HasRepr (Pseudo arch (Operand arch)) ShapeRepr)
+lookupCongruent :: (HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr,
+                    HasRepr (Pseudo arch (A.Operand arch)) SL.ShapeRepr)
                 => SynthOpcode arch sh
                 -> Syn t arch (Seq.Seq (SynthOpcode arch sh))
 lookupCongruent op = maybe Seq.empty SeqF.unSeqF . MapF.lookup (typeRepr op) <$> askKnownCongruentOps
@@ -300,8 +301,8 @@ instantiateFormula (SynthInstruction opcode oplist) = do
         (_, f) <- liftIO $ F.instantiateFormula sym pf oplist
         return (Just f)
 
-opcodeIORelation :: (Architecture arch)
-                 => Opcode arch (Operand arch) sh
+opcodeIORelation :: (A.Architecture arch)
+                 => A.Opcode arch (A.Operand arch) sh
                  -> Syn t arch (Maybe (IORelation arch sh))
 opcodeIORelation op = do
   iorels <- R.asks (seIORelations . seGlobalEnv)
@@ -329,18 +330,18 @@ loadInitialState :: forall arch t
                  -> Sym t
                  -> IO (ConcreteState arch)
                  -- ^ A generator of random test cases
-                 -> [Test arch]
+                 -> [ConcreteState arch]
                  -- ^ Heuristically-interesting test cases
-                 -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
+                 -> [Some (Witness (F.BuildOperandList arch) ((A.Opcode arch) (A.Operand arch)))]
                  -- ^ All possible opcodes. These are used to guess
                  -- the names of opcode semantics files to attempt to
                  -- read from disk.
-                 -> [Some (Witness (F.BuildOperandList arch) ((Pseudo arch) (Operand arch)))]
+                 -> [Some (Witness (F.BuildOperandList arch) ((Pseudo arch) (A.Operand arch)))]
                  -- ^ All pseudo opcodes
-                 -> [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
+                 -> [Some (Witness (F.BuildOperandList arch) ((A.Opcode arch) (A.Operand arch)))]
                  -- ^ The opcodes we want to learn formulas for (could
                  -- be all, but could omit instructions e.g., jumps)
-                 -> MapF.MapF (Opcode arch (Operand arch)) (IORelation arch)
+                 -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
                  -> IO (SynEnv t arch)
 loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
@@ -378,10 +379,10 @@ loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targe
 
 -- | The worklist consists of all of the opcodes for which we do not already
 -- have a formula (and that we actually want to learn)
-makeWorklist :: (MapF.OrdF (Opcode arch (Operand arch)))
-             => [Some (Witness (F.BuildOperandList arch) ((Opcode arch) (Operand arch)))]
-             -> MapF.MapF ((Opcode arch) (Operand arch)) (F.ParameterizedFormula (Sym t) arch)
-             -> WL.Worklist (Some (Opcode arch (Operand arch)))
+makeWorklist :: (MapF.OrdF (A.Opcode arch (A.Operand arch)))
+             => [Some (Witness (F.BuildOperandList arch) ((A.Opcode arch) (A.Operand arch)))]
+             -> MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch)
+             -> WL.Worklist (Some (A.Opcode arch (A.Operand arch)))
 makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
   where
     opSet = S.fromList [ Some op | Some (Witness op) <- allOps ]

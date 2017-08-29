@@ -12,12 +12,12 @@ module SemMC.Stochastic.Remote.SSH (
   SSHError(..)
   ) where
 
-import Data.Maybe ( fromMaybe )
-import Data.Word ( Word16 )
+import           Data.Maybe ( fromMaybe )
+import           Data.Word ( Word16 )
 import qualified System.IO as IO
 import qualified System.IO.Error as E
 import qualified System.Process as P
-import Text.Printf ( printf )
+import           Text.Printf ( printf )
 
 data SSHConfig =
   SSHConfig { sshLoginName :: Maybe String

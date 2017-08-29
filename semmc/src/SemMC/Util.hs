@@ -15,25 +15,23 @@ module SemMC.Util
   , sequenceMaybes
   , allBoundVars
   , extractUsedLocs
+  , mapFMapBothM
+  , filterMapF
   ) where
 
-import           Control.Applicative ( Const(..) )
 import           Control.Monad.ST ( runST )
 import qualified Data.HashTable.Class as H
-import           Data.Maybe ( fromJust )
-import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some
-import           Data.Parameterized.TraversableFC
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Set as Set
-import           Text.Printf
+import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Utils.Hashable as Hash
 import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.SimpleBackend.GroundEval
+import qualified Lang.Crucible.Solver.SimpleBackend.GroundEval as GE
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
 
 -- | Try converting any 'String' into a 'SolverSymbol'. If it is an invalid
@@ -52,7 +50,7 @@ groundValToExpr :: forall sym tp.
                    (S.IsExprBuilder sym)
                 => sym
                 -> BaseTypeRepr tp
-                -> GroundValue tp
+                -> GE.GroundValue tp
                 -> IO (S.SymExpr sym tp)
 groundValToExpr sym BaseBoolRepr True = return (S.truePred sym)
 groundValToExpr sym BaseBoolRepr False = return (S.falsePred sym)
@@ -61,11 +59,11 @@ groundValToExpr sym BaseNatRepr val = S.natLit sym val
 groundValToExpr sym BaseIntegerRepr val = S.intLit sym val
 groundValToExpr sym BaseRealRepr val = S.realLit sym val
 groundValToExpr sym BaseComplexRepr val = S.mkComplexLit sym val
-groundValToExpr sym (BaseArrayRepr idxTp elemTp) (ArrayConcrete base m) = do
+groundValToExpr sym (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
   base' <- groundValToExpr sym elemTp base
   entries <- Hash.mkMap <$> traverse (groundValToExpr sym elemTp) m
   S.arrayFromMap sym idxTp entries base'
-groundValToExpr _ (BaseArrayRepr _ _) (ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
+groundValToExpr _ (BaseArrayRepr _ _) (GE.ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
 
 -- | Reverse a MapF, so that the old keys are the new values and the old values
@@ -99,3 +97,24 @@ extractUsedLocs locMapping expr = MapF.mapMaybe keepIfNeeded locMapping
         False -> Nothing
         True -> Just bv'
     bvs = allBoundVars expr
+
+-- | Monadically map both keys and values of a 'MapF.MapF'.
+mapFMapBothM :: forall k1 v1 k2 v2 m.
+                (OrdF k2, Monad m)
+             => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp))
+             -> MapF.MapF k1 v1
+             -> m (MapF.MapF k2 v2)
+mapFMapBothM f = MapF.foldrWithKey f' (return MapF.empty)
+  where f' :: forall tp. k1 tp -> v1 tp -> m (MapF.MapF k2 v2) -> m (MapF.MapF k2 v2)
+        f' k v wrappedM = do
+          (k', v') <- f k v
+          m <- wrappedM
+          return $ MapF.insert k' v' m
+
+-- | Filter the elements of a 'MapF.MapF'.
+filterMapF :: forall k v. (OrdF k) => (forall tp. k tp -> v tp -> Bool) -> MapF.MapF k v -> MapF.MapF k v
+filterMapF f = MapF.foldrWithKey go MapF.empty
+  where go :: forall tp. k tp -> v tp -> MapF.MapF k v -> MapF.MapF k v
+        go key value m
+          | f key value = MapF.insert key value m
+          | otherwise   = m

@@ -19,7 +19,7 @@ module SemMC.Formula.Instantiate
   ) where
 
 import           Data.Foldable ( foldlM, foldrM )
-import           Data.IORef
+import           Data.IORef ( IORef, readIORef, writeIORef )
 import           Data.Maybe ( fromJust, isNothing )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -37,43 +37,22 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-import           SemMC.Architecture
+import qualified SemMC.Architecture as A
 import           SemMC.Formula.Formula
-import           SemMC.Util
+import qualified SemMC.Util as U
 
 -- I got tired of typing this.
 type SB t st = S.SimpleBuilder t st
-
--- | Monadically map both keys and values of a 'MapF.MapF'.
-mapFMapBothM :: forall k1 v1 k2 v2 m.
-                (OrdF k2, Monad m)
-             => (forall tp. k1 tp -> v1 tp -> m (k2 tp, v2 tp))
-             -> MapF.MapF k1 v1
-             -> m (MapF.MapF k2 v2)
-mapFMapBothM f = MapF.foldrWithKey f' (return MapF.empty)
-  where f' :: forall tp. k1 tp -> v1 tp -> m (MapF.MapF k2 v2) -> m (MapF.MapF k2 v2)
-        f' k v wrappedM = do
-          (k', v') <- f k v
-          m <- wrappedM
-          return $ MapF.insert k' v' m
-
--- | Filter the elements of a 'MapF.MapF'.
-filterMapF :: forall k v. (OrdF k) => (forall tp. k tp -> v tp -> Bool) -> MapF.MapF k v -> MapF.MapF k v
-filterMapF f = MapF.foldrWithKey go MapF.empty
-  where go :: forall tp. k tp -> v tp -> MapF.MapF k v -> MapF.MapF k v
-        go key value m
-          | f key value = MapF.insert key value m
-          | otherwise   = m
 
 -- | Convert a type-level list of operands to a Crucible-style context of
 -- operand types. This reverses it, but we don't care about that for our use
 -- case (and not doing so would be harder).
 type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
   ShapeCtx _    '[] = EmptyCtx
-  ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> OperandType arch s
+  ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> A.OperandType arch s
 
 data OperandAssignment sym arch sh =
-  OperandAssignment { opAssnTaggedExprs :: ShapedList (TaggedExpr arch sym) sh
+  OperandAssignment { opAssnTaggedExprs :: ShapedList (A.TaggedExpr arch sym) sh
                     -- ^ The raw values obtained by calling 'operandValue' on
                     -- each of the operands.
                     , opAssnVars :: Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh)
@@ -85,15 +64,15 @@ data OperandAssignment sym arch sh =
                     -- 'TaggedExpr', but in 'Ctx.Assignment' form.
                     }
 
-extendAssn :: (Architecture arch)
-           => TaggedExpr arch sym s
-           -> S.BoundVar sym (OperandType arch s)
+extendAssn :: (A.Architecture arch)
+           => A.TaggedExpr arch sym s
+           -> S.BoundVar sym (A.OperandType arch s)
            -> OperandAssignment sym arch sh
            -> OperandAssignment sym arch (s ': sh)
 extendAssn newExpr newVar oldAssn =
   OperandAssignment { opAssnTaggedExprs = newExpr :> opAssnTaggedExprs oldAssn
                     , opAssnVars = opAssnVars oldAssn Ctx.%> newVar
-                    , opAssnBareExprs = opAssnBareExprs oldAssn Ctx.%> unTagged newExpr
+                    , opAssnBareExprs = opAssnBareExprs oldAssn Ctx.%> A.unTagged newExpr
                     }
 
 -- | For a given pair of bound variables and operands, build up:
@@ -102,20 +81,20 @@ extendAssn newExpr newVar oldAssn =
 -- 3. a 'Ctx.Assignment' of the created expressions corresponding to each
 --    operand
 buildOpAssignment :: forall sym arch sh.
-                  (Architecture arch,
+                  (A.Architecture arch,
                    S.IsSymInterface sym)
                 => sym
                 -- ^ Symbolic expression builder
-                -> (forall tp'. Location arch tp' -> IO (S.SymExpr sym tp'))
+                -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
                 -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
-                -> ShapedList (BoundVar sym arch) sh
+                -> ShapedList (A.BoundVar sym arch) sh
                 -- ^ List of variables corresponding to each operand
-                -> ShapedList (Operand arch) sh
+                -> ShapedList (A.Operand arch) sh
                 -- ^ List of operand values corresponding to each operand
                 -> IO (OperandAssignment sym arch sh)
 buildOpAssignment _ _ Nil Nil = return (OperandAssignment Nil Ctx.empty Ctx.empty)
-buildOpAssignment sym newVars ((BoundVar var) :> varsRest) (val :> valsRest) =
-  extendAssn <$> operandValue (Proxy @arch) sym newVars val
+buildOpAssignment sym newVars ((A.BoundVar var) :> varsRest) (val :> valsRest) =
+  extendAssn <$> A.operandValue (Proxy @arch) sym newVars val
              <*> pure var
              <*> buildOpAssignment sym newVars varsRest valsRest
 
@@ -164,19 +143,19 @@ replaceLitVars sym newExprs oldVars expr = do
 -- | Get the corresponding location of a parameter, if it actually corresponds
 -- to one.
 paramToLocation :: forall arch sh tp.
-                   (Architecture arch)
-                => ShapedList (Operand arch) sh
+                   (A.Architecture arch)
+                => ShapedList (A.Operand arch) sh
                 -> Parameter arch sh tp
-                -> Maybe (Location arch tp)
+                -> Maybe (A.Location arch tp)
 paramToLocation opVals (Operand _ idx) =
-  operandToLocation (Proxy @arch) $ indexShapedList opVals idx
+  A.operandToLocation (Proxy @arch) $ indexShapedList opVals idx
 paramToLocation _ (Literal loc) = Just loc
 
 -- | Return the bound variable corresponding to the given location, by either
 -- looking it up in the given map or creating it then inserting it if it doesn't
 -- exist yet.
 lookupOrCreateVar :: (S.IsSymInterface sym,
-                      IsLocation loc)
+                      A.IsLocation loc)
                   => sym
                   -> IORef (MapF.MapF loc (S.BoundVar sym))
                   -> loc tp
@@ -186,7 +165,7 @@ lookupOrCreateVar sym litVarsRef loc = do
   case MapF.lookup loc litVars of
     Just bVar -> return bVar
     Nothing -> do
-      bVar <- S.freshBoundVar sym (makeSymbol (showF loc)) (locationType loc)
+      bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
       writeIORef litVarsRef (MapF.insert loc bVar litVars)
       return bVar
 
@@ -194,11 +173,11 @@ lookupOrCreateVar sym litVarsRef loc = do
 -- operand list. The first result is the list of created 'TaggedExpr's for each
 -- operand that are used within the returned formula.
 instantiateFormula :: forall arch t st sh.
-                      (Architecture arch)
+                      (A.Architecture arch)
                    => SB t st
                    -> ParameterizedFormula (SB t st) arch sh
-                   -> ShapedList (Operand arch) sh
-                   -> IO (ShapedList (TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
+                   -> ShapedList (A.Operand arch) sh
+                   -> IO (ShapedList (A.TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
 instantiateFormula
   sym
   (ParameterizedFormula { pfOperandVars = opVars
@@ -207,10 +186,10 @@ instantiateFormula
                         })
   opVals = do
     let addLitVar (Some loc) m = do
-          bVar <- S.freshBoundVar sym (makeSymbol (showF loc)) (locationType loc)
+          bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
-    newLitVars <- foldrM addLitVar MapF.empty allLocations
-    let newLitExprLookup :: Location arch tp -> IO (S.Elt t tp)
+    newLitVars <- foldrM addLitVar MapF.empty A.allLocations
+    let newLitExprLookup :: A.Location arch tp -> IO (S.Elt t tp)
         -- 'newLitVars' has all locations in it, so this 'fromJust' is total.
         newLitExprLookup = return . S.varExpr sym . fromJust . flip MapF.lookup newLitVars
 
@@ -219,7 +198,7 @@ instantiateFormula
                       , opAssnBareExprs = opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
 
-    let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (Location arch tp, S.Elt t tp)
+    let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (A.Location arch tp, S.Elt t tp)
         instantiateDefn definingParam definition = do
           definingLoc <- case paramToLocation opVals definingParam of
             Just loc -> return loc
@@ -228,10 +207,10 @@ instantiateFormula
           litVarsReplaced <- replaceLitVars sym newLitExprLookup litVars opVarsReplaced
           return (definingLoc, litVarsReplaced)
 
-    newDefs <- mapFMapBothM instantiateDefn defs
+    newDefs <- U.mapFMapBothM instantiateDefn defs
     -- 'newLitVars' has variables for /all/ of the machine locations. Here we
     -- extract only the ones that are actually used.
-    let newActualLitVars = foldrF (MapF.union . extractUsedLocs newLitVars) MapF.empty newDefs
+    let newActualLitVars = foldrF (MapF.union . U.extractUsedLocs newLitVars) MapF.empty newDefs
 
     -- TODO: Should we filter out definitions that are syntactically identity
     -- functions?
@@ -242,15 +221,15 @@ instantiateFormula
 
 -- | Create a new formula with the same semantics, but with fresh bound vars.
 copyFormula :: forall t st arch.
-               (IsLocation (Location arch))
+               (A.IsLocation (A.Location arch))
             => SB t st
             -> Formula (SB t st) arch
             -> IO (Formula (SB t st) arch)
 copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
-  let mkVar :: forall tp. Location arch tp -> IO (S.SimpleBoundVar t tp)
-      mkVar loc = S.freshBoundVar sym (makeSymbol (showF loc)) (locationType loc)
+  let mkVar :: forall tp. A.Location arch tp -> IO (S.SimpleBoundVar t tp)
+      mkVar loc = S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
   newVars <- MapF.traverseWithKey (const . mkVar) vars
-  let lookupNewVar :: forall tp. Location arch tp -> S.Elt t tp
+  let lookupNewVar :: forall tp. A.Location arch tp -> S.Elt t tp
       lookupNewVar = S.varExpr sym . fromJust . flip MapF.lookup newVars
   assn <- buildLitAssignment (Proxy @(SB t st)) (return . lookupNewVar) vars
   newDefs <- traverseF (replaceVars sym assn) defs
@@ -260,7 +239,7 @@ copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
 
 -- | Combine two formulas in sequential execution
 sequenceFormulas :: forall t st arch.
-                    (Architecture arch)
+                    (A.Architecture arch)
                  => SB t st
                  -> Formula (SB t st) arch
                  -> Formula (SB t st) arch
@@ -275,7 +254,7 @@ sequenceFormulas sym form1 form2 = do
           , formDefs = defs2
           } <- copyFormula sym form2
 
-  let varReplace :: forall tp. Location arch tp -> S.Elt t tp
+  let varReplace :: forall tp. A.Location arch tp -> S.Elt t tp
       varReplace loc
         -- If this location is defined in the first formula, use the new
         -- definition.
@@ -291,7 +270,7 @@ sequenceFormulas sym form1 form2 = do
   let newDefs = MapF.union newDefs2 defs1
       -- The new vars are all the vars from the first, plus the vars from the
       -- second that are neither required in the first nor defined in the first.
-      notWrittenVars2 = filterMapF (\k _ -> isNothing $ MapF.lookup k defs1) vars2
+      notWrittenVars2 = U.filterMapF (\k _ -> isNothing $ MapF.lookup k defs1) vars2
       newVars = MapF.union vars1 notWrittenVars2
 
   return $ Formula { formParamVars = newVars
@@ -299,7 +278,7 @@ sequenceFormulas sym form1 form2 = do
                    }
 
 condenseFormulas :: forall t f st arch.
-                    ( Architecture arch
+                    ( A.Architecture arch
                     , Foldable f
                     )
                  => SB t st

@@ -4,29 +4,30 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 module SemMC.Stochastic.IORelation.Parser (
   readIORelation,
   printIORelation
   ) where
 
-import Control.Applicative
+import           Control.Applicative
 import qualified Control.Monad.Catch as E
-import Data.Proxy ( Proxy(..) )
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Text as P
-import Text.Read ( readMaybe )
+import           Text.Read ( readMaybe )
 
-import Data.Parameterized.Some ( Some(..) )
-import Data.Parameterized.ShapedList ( Index(..) )
+import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.ShapedList as SL
 
 import qualified Data.Parameterized.Unfold as U
-import SemMC.Architecture
+import qualified SemMC.Architecture as A
 import qualified SemMC.ConcreteState as CS
-import SemMC.Stochastic.IORelation.Types
+import           SemMC.Stochastic.IORelation.Types
 
 {-
 
@@ -65,7 +66,7 @@ parseLL :: T.Text -> Either String (SC.SExpr Atom)
 parseLL = SC.decodeOne parserLL
 
 printIORelation :: forall arch sh . (CS.ConcreteArchitecture arch) => IORelation arch sh -> T.Text
-printIORelation = SC.encodeOne (SC.basicPrint printAtom) . (fromIORelation (Proxy :: Proxy arch))
+printIORelation = SC.encodeOne (SC.basicPrint printAtom) . (fromIORelation (Proxy @arch))
 
 printAtom :: Atom -> T.Text
 printAtom a =
@@ -89,25 +90,25 @@ fromIORelation p ior =
         ImplicitOperand (Some loc) -> SC.SCons (SC.SAtom (AIdent "implicit")) (SC.SAtom (AIdent (CS.showView loc)))
         OperandRef (Some ix) -> SC.SCons (SC.SAtom (AIdent "operand")) (SC.SAtom (AWord (indexToWord p ix)))
 
-indexToWord :: Proxy arch -> Index sh s -> Word
+indexToWord :: Proxy arch -> SL.Index sh s -> Word
 indexToWord p ix =
   case ix of
-    IndexHere -> 0
-    IndexThere ix' -> 1 + indexToWord p ix'
+    SL.IndexHere -> 0
+    SL.IndexThere ix' -> 1 + indexToWord p ix'
 
-data IORelationParseError arch = IORelationParseError (Proxy arch) (Some (Opcode arch (Operand arch))) T.Text
-                               | InvalidSExpr (Proxy arch) (Some (Opcode arch (Operand arch))) (SC.SExpr Atom)
+data IORelationParseError arch = IORelationParseError (Proxy arch) (Some (A.Opcode arch (A.Operand arch))) T.Text
+                               | InvalidSExpr (Proxy arch) (Some (A.Opcode arch (A.Operand arch))) (SC.SExpr Atom)
                                | InvalidLocation (Proxy arch) String
-                               | InvalidIndex (Proxy arch) (Some (Opcode arch (Operand arch))) Word
+                               | InvalidIndex (Proxy arch) (Some (A.Opcode arch (A.Operand arch))) Word
 
-deriving instance (Architecture arch) => Show (IORelationParseError arch)
-instance (Architecture arch) => E.Exception (IORelationParseError arch)
+deriving instance (A.Architecture arch) => Show (IORelationParseError arch)
+instance (A.Architecture arch) => E.Exception (IORelationParseError arch)
 
 readIORelation :: forall arch m sh
                 . (E.MonadThrow m, CS.ConcreteArchitecture arch, U.UnfoldShape sh)
                => Proxy arch
                -> T.Text
-               -> Opcode arch (Operand arch) sh
+               -> A.Opcode arch (A.Operand arch) sh
                -> m (IORelation arch sh)
 readIORelation p t op = do
   sx <- case parseLL t of
@@ -125,7 +126,7 @@ readIORelation p t op = do
 parseRelationList :: forall m sh arch
                    . (E.MonadThrow m, U.UnfoldShape sh, CS.ConcreteArchitecture arch)
                   => Proxy arch
-                  -> Opcode arch (Operand arch) sh
+                  -> A.Opcode arch (A.Operand arch) sh
                   -> SC.SExpr Atom
                   -> m [OperandRef arch sh]
 parseRelationList proxy opcode s0 =
@@ -146,9 +147,9 @@ parseRelationList proxy opcode s0 =
 -- appropriate index into the operand list of the given opcode.
 --
 -- This involves traversing the type level operand list via 'U.unfoldShape'
-mkOperandRef :: forall m arch sh . (E.MonadThrow m, U.UnfoldShape sh, Architecture arch)
+mkOperandRef :: forall m arch sh . (E.MonadThrow m, U.UnfoldShape sh, A.Architecture arch)
              => Proxy arch
-             -> Opcode arch (Operand arch) sh
+             -> A.Opcode arch (A.Operand arch) sh
              -> Word
              -> m (OperandRef arch sh)
 mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
@@ -161,7 +162,7 @@ mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
     elt :: forall tp tps' tps . (U.RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> Word -> m (OperandRef arch tps)
     elt _ _ w =
       case w of
-        0 -> return (OperandRef (Some IndexHere))
+        0 -> return (OperandRef (Some SL.IndexHere))
         _ -> do
           OperandRef (Some ix) <- U.unfoldShape nil elt (w - 1)
-          return (OperandRef (Some (IndexThere ix)))
+          return (OperandRef (Some (SL.IndexThere ix)))

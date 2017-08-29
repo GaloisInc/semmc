@@ -27,6 +27,7 @@ import qualified GHC.Err.Located as L
 import qualified Data.Set.NonEmpty as NES
 import           Data.Parameterized.HasRepr ( HasRepr )
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.ShapedList ( lengthFC, traverseFCIndexed, indexAsInt, indexShapedList, ShapeRepr )
 import           Dismantle.Arbitrary as D
 import qualified Dismantle.Instruction.Random as D
@@ -55,7 +56,7 @@ import Control.Monad
 --
 -- Can fail due to timeouts.
 synthesize :: SynC arch
-           => Instruction arch
+           => C.RegisterizedInstruction arch
            -> Syn t arch (Maybe [SynthInstruction arch])
 synthesize target = do
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
@@ -67,7 +68,7 @@ synthesize target = do
   where
     debug msg = liftIO $ traceIO msg
 
-mcmcSynthesizeOne :: forall arch t. SynC arch => Instruction arch -> Syn t arch (Integer, Candidate arch)
+mcmcSynthesizeOne :: forall arch t. SynC arch => C.RegisterizedInstruction arch -> Syn t arch (Integer, Candidate arch)
 mcmcSynthesizeOne target = do
   -- Max length of candidate programs. Can make it a parameter if
   -- needed.
@@ -114,7 +115,7 @@ mcmcSynthesizeOne target = do
 -- the cost of the new candidate incrementally and stop as soon as
 -- we know it's too expensive [STOKE Section 4.5].
 chooseNextCandidate :: SynC arch
-                    => Instruction arch
+                    => C.RegisterizedInstruction arch
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
@@ -152,22 +153,23 @@ chooseNextCandidate target candidate cost candidate' = do
 -- to the target. STOKE Section 4.6.
 compareTargetToCandidate :: forall arch t.
                             SynC arch
-                         => Instruction arch
+                         => C.RegisterizedInstruction arch
                          -> Candidate arch
-                         -> Test arch
+                         -> C.ConcreteState arch
                          -> Syn t arch Double
 compareTargetToCandidate target candidate test = do
   let candidateProg =
         concatMap synthInsnToActual . catMaybes . toList $ candidate
-  let targetProg = [target]
+  let (target', test') = C.registerizeInstruction target test
+  let targetProg = [target']
   -- TODO: cache result of running target on test, since it never
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
   !runTest     <- askRunTest
-  !candidateSt <- runTest test candidateProg
-  !targetSt    <- runTest test targetProg
-  !liveOut     <- getOutMasks target
+  !candidateSt <- runTest test' candidateProg
+  !targetSt    <- runTest test' targetProg
+  !liveOut     <- getOutMasks target'
   !eitherWeight <- liftIO $ C.tryJust pred $ do
     let !weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
     return weight
@@ -209,7 +211,7 @@ compareTargetOutToCandidateOut :: forall arch.
                                -> C.ConcreteState arch
                                -> Double
 compareTargetOutToCandidateOut descs targetSt candidateSt =
-  sum [ C.withKnownNat (C.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
+  sum [ NR.withKnownNat (C.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
       | desc@(C.SemanticView { C.semvView = view }) <- descs
       ]
 

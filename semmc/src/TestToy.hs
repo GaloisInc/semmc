@@ -11,7 +11,6 @@ module TestToy where
 
 import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
-import           Control.Monad
 import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Monoid
@@ -294,6 +293,11 @@ synthesizeCandidate = do
         , seRandomGen = gen
         , seRunTest = runTest
         }
-  let instruction = D.Instruction AddRr (R32 Reg1 :> R32 Reg2 :> Nil)
+  let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
+  let instruction = C.RI { C.riInstruction = D.Instruction AddRr ops
+                         , C.riOpcode = AddRr
+                         , C.riOperands = ops
+                         , C.riLiteralLocs = MapF.empty
+                         }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
   runSyn @Toy localSynEnv (S.synthesize instruction)
