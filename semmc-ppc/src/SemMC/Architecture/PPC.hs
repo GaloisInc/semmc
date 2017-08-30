@@ -28,7 +28,7 @@ import qualified GHC.Err.Located as L
 import           Data.Bits
 import           Data.EnumF ( EnumF(..) )
 import           Data.Foldable ( foldrM )
-import           Data.Int ( Int32 )
+import           Data.Int ( Int16, Int32 )
 import qualified Data.Int.Indexed as I
 import qualified Data.Map.Strict as Map
 import           Data.Monoid ( (<>) )
@@ -45,6 +45,7 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Type.Equality ( type (==) )
 import           Data.Void ( absurd, Void )
+import           Data.Word ( Word16 )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( KnownNat, Nat, Symbol )
 import           System.FilePath ( (</>) )
@@ -529,55 +530,160 @@ loadBaseSet baseSetDir sym = do
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
   case o of
-    PPC.F4rc {} -> knownRepr
-    PPC.F8rc {} -> knownRepr
-    PPC.G8rc {} -> knownRepr
-    PPC.G8rc_nox0 {} -> knownRepr
-    PPC.Gprc {} -> knownRepr
-    PPC.Gprc_nor0 {} -> knownRepr
-    PPC.Tlsreg {} -> knownRepr
-    PPC.Tlsreg32 {} -> knownRepr
-    PPC.Vrrc {} -> knownRepr
-    PPC.Vsfrc {} -> knownRepr
-    PPC.Vsrc {} -> knownRepr
-    PPC.Vssrc {} -> knownRepr
-    PPC.Abscalltarget {} -> knownRepr
-    PPC.Abscondbrtarget {} -> knownRepr
+    PPC.F4rc {}              -> knownRepr
+    PPC.F8rc {}              -> knownRepr
+    PPC.G8rc {}              -> knownRepr
+    PPC.G8rc_nox0 {}         -> knownRepr
+    PPC.Gprc {}              -> knownRepr
+    PPC.Gprc_nor0 {}         -> knownRepr
+    PPC.Tlsreg {}            -> knownRepr
+    PPC.Tlsreg32 {}          -> knownRepr
+    PPC.Vrrc {}              -> knownRepr
+    PPC.Vsfrc {}             -> knownRepr
+    PPC.Vsrc {}              -> knownRepr
+    PPC.Vssrc {}             -> knownRepr
+    PPC.Abscalltarget {}     -> knownRepr
+    PPC.Abscondbrtarget {}   -> knownRepr
     PPC.Absdirectbrtarget {} -> knownRepr
-    PPC.Calltarget {} -> knownRepr
-    PPC.Condbrtarget {} -> knownRepr
-    PPC.Crbitm {} -> knownRepr
-    PPC.Crbitrc {} -> knownRepr
-    PPC.Crrc {} -> knownRepr
-    PPC.Directbrtarget {} -> knownRepr
-    PPC.I1imm {} -> knownRepr
-    PPC.I32imm {} -> knownRepr
-    PPC.Memri {} -> knownRepr
-    PPC.Memrix {} -> knownRepr
-    PPC.Memrix16 {} -> knownRepr
-    PPC.Memrr {} -> knownRepr
-    PPC.S16imm {} -> knownRepr
-    PPC.S16imm64 {} -> knownRepr
-    PPC.S17imm {} -> knownRepr
-    PPC.S5imm {} -> knownRepr
-    PPC.Spe2dis {} -> knownRepr
-    PPC.Spe4dis {} -> knownRepr
-    PPC.Spe8dis {} -> knownRepr
-    PPC.Tlscall {} -> knownRepr
-    PPC.Tlscall32 {} -> knownRepr
-    PPC.U10imm {} -> knownRepr
-    PPC.U16imm {} -> knownRepr
-    PPC.U16imm64 {} -> knownRepr
-    PPC.U1imm {} -> knownRepr
-    PPC.U2imm {} -> knownRepr
-    PPC.U4imm {} -> knownRepr
-    PPC.U5imm {} -> knownRepr
-    PPC.U6imm {} -> knownRepr
-    PPC.U7imm {} -> knownRepr
-    PPC.U8imm {} -> knownRepr
+    PPC.Calltarget {}        -> knownRepr
+    PPC.Condbrtarget {}      -> knownRepr
+    PPC.Crbitm {}            -> knownRepr
+    PPC.Crbitrc {}           -> knownRepr
+    PPC.Crrc {}              -> knownRepr
+    PPC.Directbrtarget {}    -> knownRepr
+    PPC.Memri {}             -> knownRepr
+    PPC.Memrix {}            -> knownRepr
+    PPC.Memrix16 {}          -> knownRepr
+    PPC.Memrr {}             -> knownRepr
+    PPC.I1imm {}             -> knownRepr
+    PPC.I32imm {}            -> knownRepr
+    PPC.S16imm {}            -> knownRepr
+    PPC.S16imm64 {}          -> knownRepr
+    PPC.S17imm {}            -> knownRepr
+    PPC.S5imm {}             -> knownRepr
+    PPC.Spe2dis {}           -> knownRepr
+    PPC.Spe4dis {}           -> knownRepr
+    PPC.Spe8dis {}           -> knownRepr
+    PPC.Tlscall {}           -> knownRepr
+    PPC.Tlscall32 {}         -> knownRepr
+    PPC.U10imm {}            -> knownRepr
+    PPC.U16imm {}            -> knownRepr
+    PPC.U16imm64 {}          -> knownRepr
+    PPC.U1imm {}             -> knownRepr
+    PPC.U2imm {}             -> knownRepr
+    PPC.U4imm {}             -> knownRepr
+    PPC.U5imm {}             -> knownRepr
+    PPC.U6imm {}             -> knownRepr
+    PPC.U7imm {}             -> knownRepr
+    PPC.U8imm {}             -> knownRepr
+
+registerizeInstructionPPC :: CS.RegisterizedInstruction PPC
+                          -> CS.ConcreteState PPC
+                          -> (A.Instruction PPC, CS.ConcreteState PPC)
+registerizeInstructionPPC ri s =
+  case ri of
+    CS.RI { CS.riOpcode = opc
+          , CS.riOperands = ops
+          , CS.riLiteralLocs = lls
+          } ->
+      case MapF.foldrWithKey replaceLiterals (ops, s) lls of
+        (ops', s') -> (D.Instruction opc ops', s')
+
+replaceLiterals :: CS.LiteralRef PPC sh s
+                -> Location s
+                -> (SL.ShapedList PPC.Operand sh, CS.ConcreteState PPC)
+                -> (SL.ShapedList PPC.Operand sh, CS.ConcreteState PPC)
+replaceLiterals (CS.LiteralRef ix) loc (ops, s) =
+  case MapF.lookup loc s of
+    Nothing -> L.error ("Location not defined in state: " ++ showF loc)
+    Just val ->
+      let (clampedValue, op') = truncateValue (SL.indexShapedList ops ix) val
+      in (SL.updateShapedList ops ix (const op'), MapF.insert loc clampedValue s)
+
+-- | Replace the value in the given immediate operand with the value in a
+-- 'CS.Value', truncating it if necessary.  The truncated value is returned so
+-- that the test case can be updated.
+--
+-- Note that this function calls error on operands that are not immediates.
+truncateValue :: PPC.Operand s
+              -> CS.Value (A.OperandType PPC s)
+              -> (CS.Value (A.OperandType PPC s), PPC.Operand s)
+truncateValue op v =
+  case op of
+    PPC.I1imm {}             -> withTruncIVal v (W.w 0x1) PPC.I1imm
+    PPC.I32imm {}            -> withTruncIVal v (W.w 0xffffffff) PPC.I32imm
+    PPC.S16imm {}            -> withTruncI16Val v 0xffff PPC.S16imm
+    PPC.S16imm64 {}          -> withTruncI16Val v 0xffff PPC.S16imm64
+    PPC.S17imm {}            -> withTruncI16Val v 0xffff PPC.S17imm
+    PPC.S5imm {}             -> withTruncIVal v (W.w 0x1f) PPC.S5imm
+    PPC.U1imm {}             -> withTruncWVal v (W.w 0x1) PPC.U1imm
+    PPC.U2imm {}             -> withTruncWVal v (W.w 0x3) PPC.U2imm
+    PPC.U4imm {}             -> withTruncWVal v (W.w 0xf) PPC.U4imm
+    PPC.U5imm {}             -> withTruncWVal v (W.w 0x1f) PPC.U5imm
+    PPC.U6imm {}             -> withTruncWVal v (W.w 0x3f) PPC.U6imm
+    PPC.U7imm {}             -> withTruncWVal v (W.w 0x7f) PPC.U7imm
+    PPC.U8imm {}             -> withTruncWVal v (W.w 0xff) PPC.U8imm
+    PPC.U10imm {}            -> withTruncWVal v (W.w 0x3ff) PPC.U10imm
+    PPC.U16imm {}            -> withTruncWVal v (W.w 0xffff) PPC.U16imm
+    PPC.U16imm64 {}          -> withTruncWVal v (W.w 0xffff) PPC.U16imm64
+    PPC.Memrr {}             -> L.error "Unexpected non-literal operand"
+    PPC.Memri {}             -> L.error "Unexpected non-literal operand"
+    PPC.Memrix {}            -> L.error "Unexpected non-literal operand"
+    PPC.Memrix16 {}          -> L.error "Unexpected non-literal operand"
+    PPC.Vrrc {}              -> L.error "Unexpected non-literal operand"
+    PPC.Vsfrc {}             -> L.error "Unexpected non-literal operand"
+    PPC.Vsrc {}              -> L.error "Unexpected non-literal operand"
+    PPC.Vssrc {}             -> L.error "Unexpected non-literal operand"
+    PPC.Tlsreg {}            -> L.error "Unexpected non-literal operand"
+    PPC.Tlsreg32 {}          -> L.error "Unexpected non-literal operand"
+    PPC.Gprc_nor0 {}         -> L.error "Unexpected non-literal operand"
+    PPC.G8rc_nox0 {}         -> L.error "Unexpected non-literal operand"
+    PPC.G8rc {}              -> L.error "Unexpected non-literal operand"
+    PPC.Gprc {}              -> L.error "Unexpected non-literal operand"
+    PPC.F4rc {}              -> L.error "Unexpected non-literal operand"
+    PPC.F8rc {}              -> L.error "Unexpected non-literal operand"
+    PPC.Spe2dis {}           -> L.error "Unexpected non-literal operand"
+    PPC.Spe4dis {}           -> L.error "Unexpected non-literal operand"
+    PPC.Spe8dis {}           -> L.error "Unexpected non-literal operand"
+    PPC.Abscondbrtarget {}   -> L.error "Control flow transfer instructions unsupported"
+    PPC.Absdirectbrtarget {} ->  L.error "Control flow transfer instructions unsupported"
+    PPC.Condbrtarget {}      ->  L.error "Control flow transfer instructions unsupported"
+    PPC.Directbrtarget {}    ->  L.error "Control flow transfer instructions unsupported"
+    PPC.Calltarget {}        ->  L.error "Control flow transfer instructions unsupported"
+    PPC.Abscalltarget {}     ->  L.error "Control flow transfer instructions unsupported"
+    PPC.Tlscall {}           ->  L.error "Control flow transfer instructions unsupported"
+    PPC.Tlscall32 {}         ->  L.error "Control flow transfer instructions unsupported"
+
+withTruncI16Val :: (KnownNat n)
+                => CS.Value (BaseBVType n)
+                -> Word16
+                -> (Int16 -> PPC.Operand s)
+                -> (CS.Value (BaseBVType n), PPC.Operand s)
+withTruncI16Val (CS.ValueBV w) mask con =
+  let w' = W.unW w .&. fromIntegral mask
+  in (CS.ValueBV (W.w w'), con (fromIntegral w'))
+
+withTruncIVal :: (KnownNat n)
+             => CS.Value (BaseBVType n)
+             -> W.W n
+             -> (I.I n' -> PPC.Operand s)
+             -> (CS.Value (BaseBVType n), PPC.Operand s)
+withTruncIVal (CS.ValueBV w) mask con =
+  let w' = w .&. mask
+  in (CS.ValueBV w', con (I.I (fromIntegral (W.unW w'))))
+
+withTruncWVal :: (KnownNat n, KnownNat n')
+              => CS.Value (BaseBVType n)
+              -> W.W n
+              -> (W.W n' -> PPC.Operand s)
+              -> (CS.Value (BaseBVType n), PPC.Operand s)
+withTruncWVal (CS.ValueBV w) mask con =
+  let w' = w .&. mask
+  in (CS.ValueBV w', con (W.w (fromIntegral (W.unW w'))))
 
 instance CS.ConcreteArchitecture PPC where
   operandToSemanticView _proxy = operandToSemanticViewPPC
+  registerizeInstruction = registerizeInstructionPPC
   operandType _proxy = operandTypePPC
   zeroState _proxy = PPCS.zeroState
   randomState _proxy = PPCS.randomState
