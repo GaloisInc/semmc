@@ -33,6 +33,9 @@ data Statistics arch =
              -- ^ The time required to learn the semantics for each operand
              , sOpcodeTimeouts :: M.Map (Some (Opcode arch (Operand arch))) Word64
              -- ^ The number of timeouts for each opcode
+             , sConcreteExecutions :: Word64
+             -- ^ The number of concrete program executions performed (of target
+             -- programs and candidate programs)
              }
 
 emptyStats :: Statistics arch
@@ -41,6 +44,7 @@ emptyStats = Statistics { sSolverInvocations = 0
                         , sSolverTimeouts = 0
                         , sOpcodeTime = M.empty
                         , sOpcodeTimeouts = M.empty
+                        , sConcreteExecutions = 0
                         }
 
 data StatisticsRecord arch = Terminate

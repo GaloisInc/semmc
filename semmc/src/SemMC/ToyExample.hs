@@ -51,7 +51,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as C
+import qualified SemMC.Concrete.State as C
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.Pseudo as P

@@ -19,7 +19,7 @@ import           SemMC.Architecture ( Operand )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
-import           SemMC.ConcreteState ( ConcreteState, Value )
+import           SemMC.Concrete.State ( ConcreteState, Value )
 import           SemMC.Symbolic ( Sym )
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo ( ArchitectureWithPseudo, SynthInstruction(..) )
@@ -96,7 +96,11 @@ classifyByClass p eqs klasses =
             _ -> classifyByClass p eqs rest
 
 -- | Remove the programs in the equivalence classes that do not have the same
--- output on the counterexample as the target instruction
+-- output on the counterexample as the target instruction.
+--
+-- We have a new counterexample and need to do concrete executions of *each*
+-- existing candidate programs and reject those that do not provide the correct
+-- output.
 removeInvalidPrograms :: ConcreteState arch -> EquivalenceClasses arch -> Syn t arch (EquivalenceClasses arch)
 removeInvalidPrograms = undefined
 

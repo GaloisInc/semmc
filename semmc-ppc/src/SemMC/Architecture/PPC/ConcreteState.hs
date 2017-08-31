@@ -30,7 +30,7 @@ import           Lang.Crucible.BaseTypes
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC
 
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
 
 import           SemMC.Architecture.PPC.Location
 

@@ -18,7 +18,9 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC
                        SemMC.Architecture
-                       SemMC.ConcreteState
+                       SemMC.Concrete.State
+                       SemMC.Concrete.Execution
+                       SemMC.Concrete.Execution.SSH
                        SemMC.Formula
                        SemMC.Formula.Env
                        SemMC.Formula.Equivalence
@@ -39,8 +41,6 @@ library
                        SemMC.Stochastic.Instantiate
                        SemMC.Stochastic.Monad
                        SemMC.Stochastic.Pseudo
-                       SemMC.Stochastic.Remote
-                       SemMC.Stochastic.Remote.SSH
                        SemMC.Stochastic.Statistics
                        SemMC.Stochastic.Strata
                        SemMC.Stochastic.Synthesize

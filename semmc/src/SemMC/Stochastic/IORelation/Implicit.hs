@@ -27,11 +27,11 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 
 import           SemMC.Stochastic.IORelation.Shared
 import           SemMC.Stochastic.IORelation.Types
-import qualified SemMC.Stochastic.Remote as R
 
 import           Debug.Trace
 -- | Sweep through the parameter space to find locations not mentioned in
@@ -67,7 +67,7 @@ findImplicitOperands op = do
 computeImplicitOperands :: (CS.ConcreteArchitecture arch)
                         => A.Opcode arch (A.Operand arch) sh
                         -> [TestBundle (TestCase arch) (ImplicitFact arch)]
-                        -> [R.ResultOrError (CS.ConcreteState arch)]
+                        -> [CE.ResultOrError (CS.ConcreteState arch)]
                         -> Learning arch (IORelation arch sh)
 computeImplicitOperands op tests results =
   F.foldlM (buildImplicitRelation op idx) mempty tests
@@ -84,13 +84,13 @@ buildImplicitRelation :: (CS.ConcreteArchitecture arch)
                       -> TestBundle (TestCase arch) (ImplicitFact arch)
                       -> Learning arch (IORelation arch sh)
 buildImplicitRelation op rix iorel tb = do
-  case M.lookup (R.testNonce (tbTestBase tb)) (riSuccesses rix) of
+  case M.lookup (CE.testNonce (tbTestBase tb)) (riSuccesses rix) of
     Just baseRes -> do
       implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix baseRes (tbResult tb)) (tbTestCases tb)
       return (iorel <> implicitLocs)
     Nothing -> do
       traceM "Failed"
-      case M.lookup (R.testNonce (tbTestBase tb)) (riExitedWithSignal rix) of
+      case M.lookup (CE.testNonce (tbTestBase tb)) (riExitedWithSignal rix) of
         Just sno -> do
           recordFailure op (Just (fromIntegral sno))
           return iorel
@@ -102,19 +102,19 @@ collectImplicitOutputLocations :: forall arch sh
                                 . (CS.ConcreteArchitecture arch)
                                => A.Opcode arch (A.Operand arch) sh
                                -> ResultIndex (CS.ConcreteState arch)
-                               -> R.TestResult (CS.ConcreteState arch)
+                               -> CE.TestResult (CS.ConcreteState arch)
                                -> ImplicitFact arch
                                -> TestCase arch
                                -> Learning arch (IORelation arch sh)
 collectImplicitOutputLocations _op rix baseRes f tc =
-  case M.lookup (R.testNonce tc) (riSuccesses rix) of
+  case M.lookup (CE.testNonce tc) (riSuccesses rix) of
     Nothing -> return mempty
     Just res ->
       case f of
         ImplicitFact { ifExplicits = explicitOperands
                      , ifLocation = loc0
                      } -> do
-          F.foldrM (addLocIfImplicitAndDifferent loc0 explicitOperands) mempty (MapF.toList (R.resultContext res))
+          F.foldrM (addLocIfImplicitAndDifferent loc0 explicitOperands) mempty (MapF.toList (CE.resultContext res))
   where
     addLocIfImplicitAndDifferent :: Some (CS.View arch)
                                  -> S.Set (Some (CS.View arch))
@@ -126,7 +126,7 @@ collectImplicitOutputLocations _op rix baseRes f tc =
       in case A.locationType loc of
         BaseBVRepr nr ->
           case withKnownNat nr (let tv = CS.trivialView proxy loc
-                                in (CS.peekMS (R.testContext tc) tv, CS.peekMS (R.resultContext baseRes) tv,tv)) of
+                                in (CS.peekMS (CE.testContext tc) tv, CS.peekMS (CE.resultContext baseRes) tv,tv)) of
             (_preVal, baseResVal, tv) ->
               case () of
                 () | Some baseResVal == Some postVal -> return s

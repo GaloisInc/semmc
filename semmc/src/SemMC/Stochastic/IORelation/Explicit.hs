@@ -28,11 +28,11 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 
 import           SemMC.Stochastic.IORelation.Shared
 import           SemMC.Stochastic.IORelation.Types
-import qualified SemMC.Stochastic.Remote as R
 
 -- | Make a random instruction that does not reference any implicit operands.
 --
@@ -75,7 +75,7 @@ computeIORelation :: (CS.ConcreteArchitecture arch)
                   => A.Opcode arch (A.Operand arch) sh
                   -> SL.ShapedList (A.Operand arch) sh
                   -> [TestBundle (TestCase arch) (ExplicitFact arch)]
-                  -> [R.ResultOrError (CS.ConcreteState arch)]
+                  -> [CE.ResultOrError (CS.ConcreteState arch)]
                   -> Learning arch (IORelation arch sh)
 computeIORelation opcode operands bundles results =
   F.foldlM (buildIORelation opcode operands idx) mempty bundles
@@ -131,14 +131,14 @@ collectExplicitLocations :: (CS.ConcreteArchitecture arch)
                          -> TestCase arch
                          -> Learning arch (S.Set (Some (SL.Index sh)))
 collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
-  case M.lookup (R.testNonce tc) (riSuccesses ri) of
+  case M.lookup (CE.testNonce tc) (riSuccesses ri) of
     Nothing -> return S.empty
-    Just res -> F.foldrM (addLocIfDifferent (R.resultContext res)) S.empty explicitLocs
+    Just res -> F.foldrM (addLocIfDifferent (CE.resultContext res)) S.empty explicitLocs
   where
     addLocIfDifferent resCtx (IndexedSemanticView idx (CS.SemanticView { CS.semvView = opView })) s
       | Just P.Refl <- P.testEquality alteredIndex idx = return s
       | output <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS resCtx opView)
-      , input <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS (R.testContext tc) opView) = do
+      , input <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS (CE.testContext tc) opView) = do
           case input /= output of
             True -> return (S.insert (Some idx) s)
             False -> return s

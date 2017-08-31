@@ -26,7 +26,7 @@ import qualified Data.Parameterized.ShapedList as SL
 
 import qualified Data.Parameterized.Unfold as U
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.IORelation.Types
 
 {-

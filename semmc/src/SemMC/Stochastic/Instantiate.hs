@@ -28,7 +28,7 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
 
 import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 import           SemMC.Stochastic.Monad

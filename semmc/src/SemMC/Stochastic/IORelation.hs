@@ -45,8 +45,8 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Worklist as WL
 
 import SemMC.Stochastic.IORelation.Explicit ( generateExplicitInstruction,
@@ -63,7 +63,7 @@ data LearningConfig arch =
                  , lcTestGen :: IO (CS.ConcreteState arch)
                  , lcTimeoutSeconds :: Int
                  , lcTestRunner :: TestRunner arch
-                 , lcLog :: C.Chan R.LogMessage
+                 , lcLog :: C.Chan CE.LogMessage
                  }
 
 loadIORelations :: forall arch

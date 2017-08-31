@@ -7,7 +7,7 @@ import qualified System.Exit as IO
 import qualified System.IO as IO
 import Text.Printf ( printf )
 
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Concrete.Execution as CE
 import Tests.StoreTest ( storeTests )
 import Tests.CMNTest ( cmnTests )
 import Tests.LoadTest ( loadTests )
@@ -21,15 +21,15 @@ main = do
   resChan <- C.newChan
   _ <- C.forkIO (printLogMessages logChan)
   _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- R.runRemote hostname testSerializer caseChan resChan logChan
+  merr <- CE.runRemote hostname testSerializer caseChan resChan logChan
   case merr of
     Just err -> do
       IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)
       IO.exitFailure
     Nothing -> return ()
 
-testRunner :: C.Chan (Maybe (R.TestCase MachineState Instruction))
-           -> C.Chan (R.ResultOrError MachineState)
+testRunner :: C.Chan (Maybe (CE.TestCase MachineState Instruction))
+           -> C.Chan (CE.ResultOrError MachineState)
            -> IO ()
 testRunner caseChan resChan = do
   mapM_ doTest (cmnTests ++ storeTests ++ loadTests)
@@ -39,21 +39,21 @@ testRunner caseChan resChan = do
       C.writeChan caseChan (Just vec)
       res <- C.readChan resChan
       case res of
-        R.InvalidTag t -> do
+        CE.InvalidTag t -> do
           IO.hPutStrLn IO.stderr $ printf "Invalid tag: %d" t
           IO.exitFailure
-        R.TestContextParseFailure -> do
+        CE.TestContextParseFailure -> do
           IO.hPutStrLn IO.stderr "Test context parse failure"
           IO.exitFailure
-        R.TestSignalError nonce sig -> do
+        CE.TestSignalError nonce sig -> do
           IO.hPutStrLn IO.stderr $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
           IO.exitFailure
-        R.TestReadError tag -> do
+        CE.TestReadError tag -> do
           IO.hPutStrLn IO.stderr $ printf "Failed with a read error (%d)" tag
           IO.exitFailure
-        R.TestSuccess tr -> do
-          printf "Received test result with nonce %d\n" (R.resultNonce tr)
-          print (R.resultContext tr)
+        CE.TestSuccess tr -> do
+          printf "Received test result with nonce %d\n" (CE.resultNonce tr)
+          print (CE.resultContext tr)
 
 {-
 -- | Data representation of CPSR flags
@@ -70,9 +70,9 @@ mkCPSR flags = foldr (.|.) 16 [n,z,c,v,q]
         q = if Q `elem` flags then (2 ^ (27 :: Word32)) else 0
 -}
 
-printLogMessages :: C.Chan R.LogMessage -> IO ()
+printLogMessages :: C.Chan CE.LogMessage -> IO ()
 printLogMessages c = do
   msg <- C.readChan c
-  let fmtTime = T.formatTime T.defaultTimeLocale "%T" (R.lmTime msg)
-  IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (R.lmHost msg) (R.lmMessage msg)
+  let fmtTime = T.formatTime T.defaultTimeLocale "%T" (CE.lmTime msg)
+  IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (CE.lmHost msg) (CE.lmMessage msg)
   printLogMessages c

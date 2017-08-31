@@ -57,16 +57,15 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as DA
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
-
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Worklist as WL
 
-type TestCase arch       = R.TestCase (CS.ConcreteState arch) (A.Instruction arch)
-type TestResult arch     = R.TestResult (CS.ConcreteState arch)
-type ResultOrError arch  = R.ResultOrError (CS.ConcreteState arch)
-type TestSerializer arch = R.TestSerializer (CS.ConcreteState arch) (A.Instruction arch)
-type TestRunner arch     = R.TestRunner (CS.ConcreteState arch) (A.Instruction arch)
+type TestCase arch       = CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
+type TestResult arch     = CE.TestResult (CS.ConcreteState arch)
+type ResultOrError arch  = CE.ResultOrError (CS.ConcreteState arch)
+type TestSerializer arch = CE.TestSerializer (CS.ConcreteState arch) (A.Instruction arch)
+type TestRunner arch     = CE.TestRunner (CS.ConcreteState arch) (A.Instruction arch)
 
 data GlobalLearningEnv arch =
   GlobalLearningEnv { assemble :: A.Instruction arch -> LBS.ByteString
@@ -83,7 +82,7 @@ data GlobalLearningEnv arch =
 data LocalLearningEnv arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
                    , testChan :: C.Chan (Maybe (TestCase arch))
-                   , resChan :: C.Chan (R.ResultOrError (CS.ConcreteState arch))
+                   , resChan :: C.Chan (CE.ResultOrError (CS.ConcreteState arch))
                    , gen :: DA.Gen
                    , testGen :: IO (CS.ConcreteState arch)
                    -- ^ The test generator is part of local state because it
@@ -100,7 +99,7 @@ recordFailure op sigNum = do
 askTestChan :: Learning arch (C.Chan (Maybe (TestCase arch)))
 askTestChan = Rd.asks testChan
 
-askResultChan :: Learning arch (C.Chan (R.ResultOrError (CS.ConcreteState arch)))
+askResultChan :: Learning arch (C.Chan (CE.ResultOrError (CS.ConcreteState arch)))
 askResultChan = Rd.asks resChan
 
 askGen :: Learning arch DA.Gen
@@ -219,7 +218,7 @@ instance (A.Architecture arch, Typeable arch) => E.Exception (LearningException 
 
 data ResultIndex a = ResultIndex { riExitedWithSignal :: !(M.Map Word64 Int32)
                                  -- ^ A set of nonces for tests that failed with a signal
-                                 , riSuccesses :: !(M.Map Word64 (R.TestResult a))
+                                 , riSuccesses :: !(M.Map Word64 (CE.TestResult a))
                                  -- ^ The results of tests, keyed by nonce
                                  }
 

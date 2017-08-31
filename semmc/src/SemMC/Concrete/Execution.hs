@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 -- | A module implementing communication with a remote oracle for machine
 -- instructions
-module SemMC.Stochastic.Remote (
+module SemMC.Concrete.Execution (
   runRemote,
   TestCase(..),
   TestResult(..),
@@ -22,7 +22,7 @@ import qualified Data.Time.Clock as T
 import           Data.Word ( Word8, Word16, Word64 )
 import qualified System.IO as IO
 
-import qualified SemMC.Stochastic.Remote.SSH as SSH
+import qualified SemMC.Concrete.Execution.SSH as SSH
 
 -- | Functions for converting a 'TestCase' to binary and parsing
 -- binary machine state.

@@ -15,7 +15,7 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.Vector.Sized as V
 import Data.Word ( Word8, Word64 )
 
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Concrete.Execution as CE
 
 data YMM = YMM Word64 Word64 Word64 Word64
   deriving (Show)
@@ -39,10 +39,10 @@ data MachineState =
 -- The x86 tests use literal machine code.
 type Instruction = LB.ByteString
 
-testSerializer :: R.TestSerializer MachineState Instruction
-testSerializer = R.TestSerializer { R.flattenMachineState = toBS
-                                  , R.parseMachineState = fromBS
-                                  , R.flattenProgram = mconcat
+testSerializer :: CE.TestSerializer MachineState Instruction
+testSerializer = CE.TestSerializer { CE.flattenMachineState = toBS
+                                  , CE.parseMachineState = fromBS
+                                  , CE.flattenProgram = mconcat
                                   }
 
 toBS :: MachineState -> B.ByteString

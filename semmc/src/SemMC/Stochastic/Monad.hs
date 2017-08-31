@@ -80,7 +80,7 @@ import           SemMC.Symbolic ( Sym )
 import           SemMC.Util ( makeSymbol )
 import qualified SemMC.Worklist as WL
 
-import           SemMC.ConcreteState ( ConcreteArchitecture, ConcreteState )
+import           SemMC.Concrete.State ( ConcreteArchitecture, ConcreteState )
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Pseudo

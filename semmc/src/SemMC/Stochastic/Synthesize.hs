@@ -34,7 +34,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
 import           SemMC.Architecture ( Instruction, Opcode, Operand )
-import qualified SemMC.ConcreteState as C
+import qualified SemMC.Concrete.State as C
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo
                  ( Pseudo

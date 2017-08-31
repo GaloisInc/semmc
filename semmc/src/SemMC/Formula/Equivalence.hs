@@ -40,7 +40,7 @@ import           Lang.Crucible.Solver.SimpleBuilder
 import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Instantiate as FI
 import qualified SemMC.Util as U

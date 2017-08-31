@@ -11,7 +11,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SemMC.ConcreteState
+module SemMC.Concrete.State
   ( Value(..)
   , liftValueBV1
   , liftValueBV2

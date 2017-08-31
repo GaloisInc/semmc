@@ -24,9 +24,9 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 import Dismantle.PPC.Random ()
 import qualified Dismantle.Tablegen.TH as DT
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Stochastic.IORelation as IOR
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Architecture.PPC as PPC
 
 import Util
@@ -72,16 +72,16 @@ main = O.execParser optParser >>= mainWithOptions
 allOps :: [Some (Witness U.UnfoldShape (PPC.Opcode PPC.Operand))]
 allOps = $(DT.captureDictionaries matchConstructor ''PPC.Opcode)
 
-dumpLog :: C.Chan R.LogMessage -> IO ()
+dumpLog :: C.Chan CE.LogMessage -> IO ()
 dumpLog c = do
   _msg <- C.readChan c
   dumpLog c
 
-printLogMessages :: C.Chan R.LogMessage -> IO ()
+printLogMessages :: C.Chan CE.LogMessage -> IO ()
 printLogMessages c = do
   msg <- C.readChan c
-  let fmtTime = T.formatTime T.defaultTimeLocale "%T" (R.lmTime msg)
-  IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (R.lmHost msg) (R.lmMessage msg)
+  let fmtTime = T.formatTime T.defaultTimeLocale "%T" (CE.lmTime msg)
+  IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (CE.lmHost msg) (CE.lmMessage msg)
   printLogMessages c
 
 mainWithOptions :: Options -> IO ()
@@ -100,7 +100,7 @@ mainWithOptions opt = do
                                , IOR.lcAssemble = PPC.assembleInstruction
                                , IOR.lcTestGen = CS.randomState (Proxy @PPC.PPC) gen
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
-                               , IOR.lcTestRunner = R.runRemote (oRemoteHost opt) PPC.testSerializer
+                               , IOR.lcTestRunner = CE.runRemote (oRemoteHost opt) PPC.testSerializer
                                , IOR.lcLog = logChan
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)

@@ -30,7 +30,8 @@ import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
@@ -41,7 +42,6 @@ import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo ( SynthInstruction )
-import qualified SemMC.Stochastic.Remote as R
 import           SemMC.Stochastic.Synthesize ( synthesize )
 import qualified SemMC.Stochastic.IORelation.Types as I
 
@@ -85,11 +85,11 @@ naiveRunTest :: C.Chan (Maybe (I.TestCase arch))
              -> Syn t arch (Test arch)
 naiveRunTest tChan rChan c p = liftIO $ do
   let nonce = 0
-  C.writeChan tChan (Just (R.TestCase nonce c p))
+  C.writeChan tChan (Just (CE.TestCase nonce c p))
   r <- C.readChan rChan
   case r of
-    R.TestSuccess tr
-      | R.resultNonce tr == nonce -> return $ R.resultContext tr
+    CE.TestSuccess tr
+      | CE.resultNonce tr == nonce -> return $ CE.resultContext tr
     _ -> L.error "Unexpected test result in Strata.runTest!"
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)

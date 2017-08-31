@@ -32,16 +32,15 @@ import qualified Lang.Crucible.BaseTypes as S
 import qualified Dismantle.Arbitrary as DA
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
-
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 import           SemMC.Stochastic.IORelation.Types
 
 withTestResults :: forall a f arch sh
                  . (A.Architecture arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> [TestBundle (TestCase arch) f]
-                -> ([R.ResultOrError (CS.ConcreteState arch)] -> Learning arch a)
+                -> ([CE.ResultOrError (CS.ConcreteState arch)] -> Learning arch a)
                 -> Learning arch a
 withTestResults op tests k = do
   tchan <- askTestChan
@@ -67,28 +66,28 @@ wrapTestBundle i tb = do
                     }
 
 -- | Take a test bundle of raw tests ('ConcreteState (Sym t) arch') and convert the
--- raw tests to 'R.TestCase' by allocating a nonce
+-- raw tests to 'CE.TestCase' by allocating a nonce
 makeTestCase :: (A.Architecture arch)
              => A.Instruction arch
              -> CS.ConcreteState arch
              -> Learning arch (TestCase arch)
 makeTestCase i c = do
   tid <- nextNonce
-  return R.TestCase { R.testNonce = tid
-                    , R.testContext = c
-                    , R.testProgram = [i]
-                    }
+  return CE.TestCase { CE.testNonce = tid
+                     , CE.testContext = c
+                     , CE.testProgram = [i]
+                     }
 
-indexResults :: ResultIndex a -> R.ResultOrError a -> ResultIndex a
+indexResults :: ResultIndex a -> CE.ResultOrError a -> ResultIndex a
 indexResults ri res =
   case res of
-    R.TestReadError {} -> ri
-    R.TestSignalError trNonce trSignum ->
+    CE.TestReadError {} -> ri
+    CE.TestSignalError trNonce trSignum ->
       ri { riExitedWithSignal = M.insert trNonce trSignum (riExitedWithSignal ri) }
-    R.TestContextParseFailure -> ri
-    R.InvalidTag {} -> ri
-    R.TestSuccess tr ->
-      ri { riSuccesses = M.insert (R.resultNonce tr) tr (riSuccesses ri) }
+    CE.TestContextParseFailure -> ri
+    CE.InvalidTag {} -> ri
+    CE.TestSuccess tr ->
+      ri { riSuccesses = M.insert (CE.resultNonce tr) tr (riSuccesses ri) }
 
 -- | A view of a location, indexed by its position in the operand list
 data IndexedSemanticView arch sh where

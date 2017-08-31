@@ -63,12 +63,12 @@ import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.ConcreteState as CS
+import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Parser as FP
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
-import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 
@@ -692,11 +692,11 @@ instance CS.ConcreteArchitecture PPC where
   readView = P.parseMaybe (CS.parseView parseLocation)
   showView = CS.printView show
 
-testSerializer :: R.TestSerializer (CS.ConcreteState PPC) (A.Instruction PPC)
-testSerializer = R.TestSerializer { R.flattenMachineState = PPCS.serialize
-                                  , R.parseMachineState = PPCS.deserialize
-                                  , R.flattenProgram = mconcat . map PPC.assembleInstruction
-                                  }
+testSerializer :: CE.TestSerializer (CS.ConcreteState PPC) (A.Instruction PPC)
+testSerializer = CE.TestSerializer { CE.flattenMachineState = PPCS.serialize
+                                   , CE.parseMachineState = PPCS.deserialize
+                                   , CE.flattenProgram = mconcat . map PPC.assembleInstruction
+                                   }
 
 vsrLowerHalf :: CS.Slice 64 128
 vsrLowerHalf = CS.Slice knownNat knownNat (knownNat @0) (knownNat @64)

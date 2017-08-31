@@ -4,18 +4,18 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.Vector.Sized as V
 import           Data.Word (Word32)
 
-import qualified SemMC.Stochastic.Remote as R
+import qualified SemMC.Concrete.Execution as CE
 import SemMC.ARM ( MachineState(..), Instruction )
 
-loadTests :: [R.TestCase MachineState Instruction]
+loadTests :: [CE.TestCase MachineState Instruction]
 loadTests = [testLDM1,testLDM2]
 
 
-defaultTest :: R.TestCase MachineState Instruction
-defaultTest = R.TestCase { R.testNonce = 0
-                         , R.testContext = ctx
+defaultTest :: CE.TestCase MachineState Instruction
+defaultTest = CE.TestCase { CE.testNonce = 0
+                         , CE.testContext = ctx
                          -- add r1, r2?
-                         , R.testProgram = [LB.pack [0x02, 0x10, 0x81, 0xE0]]
+                         , CE.testProgram = [LB.pack [0x02, 0x10, 0x81, 0xE0]]
                          }
   where
     ctx = MachineState { gprs = grs
@@ -42,10 +42,10 @@ defaultTest = R.TestCase { R.testNonce = 0
 
 -- | Executes ldm r0, {r1, r2, r3, r4}. Loads contents of first 4 memory locations into
 -- | r1, r2, r3, r4. Updates PC
-testLDM1 :: R.TestCase MachineState Instruction
-testLDM1 = defaultTest { R.testNonce = 21
-                       , R.testContext = (R.testContext defaultTest) { gprs_mask = mask, mem1 = m1 }
-                       , R.testProgram = [LB.pack [0x1E,0x00,0x90,0xE8]]
+testLDM1 :: CE.TestCase MachineState Instruction
+testLDM1 = defaultTest { CE.testNonce = 21
+                       , CE.testContext = (CE.testContext defaultTest) { gprs_mask = mask, mem1 = m1 }
+                       , CE.testProgram = [LB.pack [0x1E,0x00,0x90,0xE8]]
                        }
   where
     Just mask = V.fromList [ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
@@ -53,10 +53,10 @@ testLDM1 = defaultTest { R.testNonce = 21
 
 
 -- | Executes ldm r0!, {r3, r5, r9, r10}
-testLDM2 :: R.TestCase MachineState Instruction
-testLDM2 = defaultTest { R.testNonce = 22
-                       , R.testContext = (R.testContext defaultTest) { gprs_mask = mask, mem1 = m1 }
-                       , R.testProgram = [LB.pack [0x28,0x06,0xB0,0xE8]]
+testLDM2 :: CE.TestCase MachineState Instruction
+testLDM2 = defaultTest { CE.testNonce = 22
+                       , CE.testContext = (CE.testContext defaultTest) { gprs_mask = mask, mem1 = m1 }
+                       , CE.testProgram = [LB.pack [0x28,0x06,0xB0,0xE8]]
                        }
   where
     Just mask = V.fromList [ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]

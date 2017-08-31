@@ -35,11 +35,11 @@ import           Lang.Crucible.Solver.SimpleBackend
 
 import           SemMC.Architecture
 import           SemMC.Formula
-import qualified SemMC.ConcreteState as C
+import qualified SemMC.Concrete.State as C
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
-import qualified SemMC.Stochastic.Remote as R
 import qualified SemMC.Stochastic.Strata as S
 import qualified SemMC.Stochastic.Synthesize as S
 import           SemMC.Synthesis
@@ -211,12 +211,12 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
   case maybeTest of
     Nothing -> return Nothing
     Just test -> do
-      let resultContext = evalProg (R.testContext test) (R.testProgram test)
-      let result = R.TestResult
-            { R.resultNonce = R.testNonce test
-            , R.resultContext = resultContext
+      let resultContext = evalProg (CE.testContext test) (CE.testProgram test)
+      let result = CE.TestResult
+            { CE.resultNonce = CE.testNonce test
+            , CE.resultContext = resultContext
             }
-      C.writeChan rChan (R.TestSuccess result)
+      C.writeChan rChan (CE.TestSuccess result)
       toyTestRunnerBackend (i+1) tChan rChan _logChan
   where
     _debug i msg = traceIO $ "toyTestRunnerBackend: "++show i++": "++msg
