@@ -9,18 +9,14 @@ module SemMC.Stochastic.IORelation.Shared (
   makeTestCase,
   wrapTestBundle,
   withTestResults,
-  indexResults,
   withGeneratedValueForLocation,
   instructionRegisterOperands,
   testCaseLocations,
   IndexedSemanticView(..)
   ) where
 
-import qualified Control.Concurrent as C
-import           Control.Monad ( replicateM )
 import qualified Control.Monad.Catch as E
 import           Control.Monad.Trans ( liftIO )
-import qualified Data.Map.Strict as M
 import           Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Map as MapF
@@ -40,17 +36,16 @@ withTestResults :: forall a f arch sh
                  . (A.Architecture arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> [TestBundle (TestCase arch) f]
-                -> ([CE.ResultOrError (CS.ConcreteState arch)] -> Learning arch a)
+                -> (CE.ResultIndex (CS.ConcreteState arch) -> Learning arch a)
                 -> Learning arch a
 withTestResults op tests k = do
   tchan <- askTestChan
   rchan <- askResultChan
   let remoteTestCases = map tbTestBase tests ++ concatMap tbTestCases tests
-  liftIO $ mapM_ (C.writeChan tchan . Just) remoteTestCases
-  mresults <- timeout $ replicateM (length remoteTestCases) (C.readChan rchan)
+  mresults <- timeout $ CE.withTestResults tchan rchan remoteTestCases return
   case mresults of
     Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy @arch) (Some op))
-    Just results -> k results
+    Just results -> k (CE.indexResults results)
 
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
 wrapTestBundle :: (A.Architecture arch)
@@ -77,17 +72,6 @@ makeTestCase i c = do
                      , CE.testContext = c
                      , CE.testProgram = [i]
                      }
-
-indexResults :: ResultIndex a -> CE.ResultOrError a -> ResultIndex a
-indexResults ri res =
-  case res of
-    CE.TestReadError {} -> ri
-    CE.TestSignalError trNonce trSignum ->
-      ri { riExitedWithSignal = M.insert trNonce trSignum (riExitedWithSignal ri) }
-    CE.TestContextParseFailure -> ri
-    CE.InvalidTag {} -> ri
-    CE.TestSuccess tr ->
-      ri { riSuccesses = M.insert (CE.resultNonce tr) tr (riSuccesses ri) }
 
 -- | A view of a location, indexed by its position in the operand list
 data IndexedSemanticView arch sh where

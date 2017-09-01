@@ -67,30 +67,28 @@ findImplicitOperands op = do
 computeImplicitOperands :: (CS.ConcreteArchitecture arch)
                         => A.Opcode arch (A.Operand arch) sh
                         -> [TestBundle (TestCase arch) (ImplicitFact arch)]
-                        -> [CE.ResultOrError (CS.ConcreteState arch)]
+                        -> CE.ResultIndex (CS.ConcreteState arch)
                         -> Learning arch (IORelation arch sh)
-computeImplicitOperands op tests results =
+computeImplicitOperands op tests idx =
   F.foldlM (buildImplicitRelation op idx) mempty tests
-  where
-    idx = F.foldl' indexResults emptyResultIndex results
 
 -- |
 --
 -- Note that the operand isn't used - it is acting like a proxy for the @sh@ parameter.
 buildImplicitRelation :: (CS.ConcreteArchitecture arch)
                       => A.Opcode arch (A.Operand arch) sh
-                      -> ResultIndex (CS.ConcreteState arch)
+                      -> CE.ResultIndex (CS.ConcreteState arch)
                       -> IORelation arch sh
                       -> TestBundle (TestCase arch) (ImplicitFact arch)
                       -> Learning arch (IORelation arch sh)
 buildImplicitRelation op rix iorel tb = do
-  case M.lookup (CE.testNonce (tbTestBase tb)) (riSuccesses rix) of
+  case M.lookup (CE.testNonce (tbTestBase tb)) (CE.riSuccesses rix) of
     Just baseRes -> do
       implicitLocs <- mconcat <$> mapM (collectImplicitOutputLocations op rix baseRes (tbResult tb)) (tbTestCases tb)
       return (iorel <> implicitLocs)
     Nothing -> do
       traceM "Failed"
-      case M.lookup (CE.testNonce (tbTestBase tb)) (riExitedWithSignal rix) of
+      case M.lookup (CE.testNonce (tbTestBase tb)) (CE.riExitedWithSignal rix) of
         Just sno -> do
           recordFailure op (Just (fromIntegral sno))
           return iorel
@@ -101,13 +99,13 @@ buildImplicitRelation op rix iorel tb = do
 collectImplicitOutputLocations :: forall arch sh
                                 . (CS.ConcreteArchitecture arch)
                                => A.Opcode arch (A.Operand arch) sh
-                               -> ResultIndex (CS.ConcreteState arch)
+                               -> CE.ResultIndex (CS.ConcreteState arch)
                                -> CE.TestResult (CS.ConcreteState arch)
                                -> ImplicitFact arch
                                -> TestCase arch
                                -> Learning arch (IORelation arch sh)
 collectImplicitOutputLocations _op rix baseRes f tc =
-  case M.lookup (CE.testNonce tc) (riSuccesses rix) of
+  case M.lookup (CE.testNonce tc) (CE.riSuccesses rix) of
     Nothing -> return mempty
     Just res ->
       case f of

@@ -75,12 +75,10 @@ computeIORelation :: (CS.ConcreteArchitecture arch)
                   => A.Opcode arch (A.Operand arch) sh
                   -> SL.ShapedList (A.Operand arch) sh
                   -> [TestBundle (TestCase arch) (ExplicitFact arch)]
-                  -> [CE.ResultOrError (CS.ConcreteState arch)]
+                  -> CE.ResultIndex (CS.ConcreteState arch)
                   -> Learning arch (IORelation arch sh)
-computeIORelation opcode operands bundles results =
+computeIORelation opcode operands bundles idx =
   F.foldlM (buildIORelation opcode operands idx) mempty bundles
-  where
-    idx = F.foldl' indexResults emptyResultIndex results
 
 -- | Interpret the results of a test (by consulting the 'ResultIndex' based on nonces)
 --
@@ -97,7 +95,7 @@ buildIORelation :: forall arch sh
                  . (CS.ConcreteArchitecture arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> SL.ShapedList (A.Operand arch) sh
-                -> ResultIndex (CS.ConcreteState arch)
+                -> CE.ResultIndex (CS.ConcreteState arch)
                 -> IORelation arch sh
                 -> TestBundle (TestCase arch) (ExplicitFact arch)
                 -> Learning arch (IORelation arch sh)
@@ -127,11 +125,11 @@ collectExplicitLocations :: (CS.ConcreteArchitecture arch)
                          => SL.Index sh tp
                          -> SL.ShapedList (A.Operand arch) sh
                          -> [IndexedSemanticView arch sh]
-                         -> ResultIndex (CS.ConcreteState arch)
+                         -> CE.ResultIndex (CS.ConcreteState arch)
                          -> TestCase arch
                          -> Learning arch (S.Set (Some (SL.Index sh)))
 collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
-  case M.lookup (CE.testNonce tc) (riSuccesses ri) of
+  case M.lookup (CE.testNonce tc) (CE.riSuccesses ri) of
     Nothing -> return S.empty
     Just res -> F.foldrM (addLocIfDifferent (CE.resultContext res)) S.empty explicitLocs
   where

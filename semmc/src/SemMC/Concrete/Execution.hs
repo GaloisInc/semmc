@@ -3,6 +3,10 @@
 -- instructions
 module SemMC.Concrete.Execution (
   runRemote,
+  withTestResults,
+  ResultIndex(..),
+  emptyResultIndex,
+  indexResults,
   TestCase(..),
   TestResult(..),
   ResultOrError(..),
@@ -13,11 +17,15 @@ module SemMC.Concrete.Execution (
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
+import           Control.Monad.IO.Class ( MonadIO, liftIO )
+import           Control.Monad ( replicateM )
 import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
+import qualified Data.Foldable as F
 import           Data.Int ( Int32 )
+import qualified Data.Map.Strict as M
 import qualified Data.Time.Clock as T
 import           Data.Word ( Word8, Word16, Word64 )
 import qualified System.IO as IO
@@ -197,3 +205,40 @@ getTestResult ts = do
                           }
       return (Just tr)
     Nothing -> return Nothing
+
+data ResultIndex a = ResultIndex { riExitedWithSignal :: !(M.Map Word64 Int32)
+                                 -- ^ A set of nonces for tests that failed with a signal
+                                 , riSuccesses :: !(M.Map Word64 (TestResult a))
+                                 -- ^ The results of tests, keyed by nonce
+                                 }
+
+emptyResultIndex :: ResultIndex a
+emptyResultIndex = ResultIndex { riExitedWithSignal = M.empty
+                               , riSuccesses = M.empty
+                               }
+
+indexResults :: [ResultOrError c] -> ResultIndex c
+indexResults = F.foldl' addResult emptyResultIndex
+
+addResult :: ResultIndex c -> ResultOrError c -> ResultIndex c
+addResult ri res =
+  case res of
+    TestReadError {} -> ri
+    TestSignalError trNonce trSignum ->
+      ri { riExitedWithSignal = M.insert trNonce trSignum (riExitedWithSignal ri) }
+    TestContextParseFailure -> ri
+    InvalidTag {} -> ri
+    TestSuccess tr ->
+      ri { riSuccesses = M.insert (resultNonce tr) tr (riSuccesses ri) }
+
+
+withTestResults :: (MonadIO m)
+                => C.Chan (Maybe (TestCase c i))
+                -> C.Chan (ResultOrError c)
+                -> [TestCase c i]
+                -> ([ResultOrError c] -> m a)
+                -> m a
+withTestResults testChan resChan tests k = do
+  liftIO $ mapM_ (C.writeChan testChan . Just) tests
+  results <- liftIO $ replicateM (length tests) $ C.readChan resChan
+  k results

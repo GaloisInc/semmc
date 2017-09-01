@@ -19,8 +19,6 @@ module SemMC.Stochastic.IORelation.Types (
   ImplicitFact(..),
   OperandRef(..),
   LearningException(..),
-  ResultIndex(..),
-  emptyResultIndex,
   Learning,
   askTestChan,
   askResultChan,
@@ -41,8 +39,6 @@ import qualified Control.Monad.Catch as E
 import qualified Control.Monad.Reader as Rd
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Int ( Int32 )
-import qualified Data.Map.Strict as M
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import           Data.Typeable ( Typeable )
@@ -215,17 +211,6 @@ runLearning env a = Rd.runReaderT (runM a) env
 data LearningException arch = LearningTimeout (Proxy arch) (Some (A.Opcode arch (A.Operand arch)))
 deriving instance (A.Architecture arch) => Show (LearningException arch)
 instance (A.Architecture arch, Typeable arch) => E.Exception (LearningException arch)
-
-data ResultIndex a = ResultIndex { riExitedWithSignal :: !(M.Map Word64 Int32)
-                                 -- ^ A set of nonces for tests that failed with a signal
-                                 , riSuccesses :: !(M.Map Word64 (CE.TestResult a))
-                                 -- ^ The results of tests, keyed by nonce
-                                 }
-
-emptyResultIndex :: ResultIndex a
-emptyResultIndex = ResultIndex { riExitedWithSignal = M.empty
-                               , riSuccesses = M.empty
-                               }
 
 -- | Number of microseconds to wait for all results to come in over the channel
 askWaitMicroseconds :: Learning arch Int
