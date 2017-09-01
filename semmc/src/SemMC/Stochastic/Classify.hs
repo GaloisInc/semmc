@@ -19,7 +19,7 @@ import           SemMC.Architecture ( Operand )
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
-import           SemMC.Concrete.State ( ConcreteState, Value )
+import qualified SemMC.Concrete.State as CS
 import           SemMC.Symbolic ( Sym )
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo ( ArchitectureWithPseudo, SynthInstruction(..) )
@@ -45,11 +45,15 @@ countPrograms s = sum (map S.size (S.toList (unClasses s)))
 -- that invalidates all of the previous programs.
 classify :: forall arch t
           . (ArchitectureWithPseudo arch, OrdF (Operand arch))
-         => [SynthInstruction arch]
+         => CS.RegisterizedInstruction arch
+         -- ^ The instruction whose semantics we are trying to learn
+         -> [SynthInstruction arch]
+         -- ^ The program we just learned and need to add to an equivalence class
          -> EquivalenceClasses arch
+         -- ^ The current equivalence classes
          -> Syn t arch (Maybe (EquivalenceClasses arch))
-classify p eqclasses = do
-  mclasses <- classifyByClass p S.empty (S.toList (unClasses eqclasses))
+classify target p eqclasses = do
+  mclasses <- classifyByClass target p S.empty (S.toList (unClasses eqclasses))
   case mclasses of
     Nothing -> return Nothing
     Just classes
@@ -71,29 +75,31 @@ classify p eqclasses = do
 -- This function also produces counterexamples if the new program isn't
 -- equivalent to the old programs.
 classifyByClass :: (ArchitectureWithPseudo arch, Ord (SynthInstruction arch))
-                => [SynthInstruction arch]
+                => CS.RegisterizedInstruction arch
+                -- ^ The target instruction
+                -> [SynthInstruction arch]
                 -- ^ The program to classify
                 -> S.Set (S.Set [SynthInstruction arch])
                 -- ^ The set of classes matching the input program
                 -> [S.Set [SynthInstruction arch]]
                 -- ^ The existing equivalence classes
                 -> Syn t arch (Maybe (S.Set (S.Set [SynthInstruction arch])))
-classifyByClass p eqs klasses =
+classifyByClass target p eqs klasses =
   case klasses of
     [] -> return (Just eqs)
     (klass:rest) -> do
       representative <- chooseProgram (EquivalenceClass klass)
       eqv <- testEquivalence p representative
       case eqv of
-        F.Equivalent -> classifyByClass p (S.insert klass eqs) rest
+        F.Equivalent -> classifyByClass target p (S.insert klass eqs) rest
         F.DifferentBehavior cx -> do
           addTestCase cx
-          eqclasses' <- removeInvalidPrograms cx undefined
+          eqclasses' <- removeInvalidPrograms target cx undefined
           case countPrograms eqclasses' of
             0 -> return Nothing
             -- FIXME: We are modifying eqclasses while we iterate over them.
             -- What are the semantics there?  The paper isn't precise.
-            _ -> classifyByClass p eqs rest
+            _ -> classifyByClass target p eqs rest
 
 -- | Remove the programs in the equivalence classes that do not have the same
 -- output on the counterexample as the target instruction.
@@ -101,8 +107,11 @@ classifyByClass p eqs klasses =
 -- We have a new counterexample and need to do concrete executions of *each*
 -- existing candidate programs and reject those that do not provide the correct
 -- output.
-removeInvalidPrograms :: ConcreteState arch -> EquivalenceClasses arch -> Syn t arch (EquivalenceClasses arch)
-removeInvalidPrograms = undefined
+removeInvalidPrograms :: CS.RegisterizedInstruction arch
+                      -> CS.ConcreteState arch
+                      -> EquivalenceClasses arch
+                      -> Syn t arch (EquivalenceClasses arch)
+removeInvalidPrograms target cx (EquivalenceClasses klasses) = undefined
 
 -- | Heuristically-choose the best equivalence class
 --
@@ -150,7 +159,7 @@ programFormula sym insns = do
 testEquivalence :: (ArchitectureWithPseudo arch)
                 => [SynthInstruction arch]
                 -> [SynthInstruction arch]
-                -> Syn t arch (F.EquivalenceResult arch Value)
+                -> Syn t arch (F.EquivalenceResult arch CS.Value)
 testEquivalence p representative = do
   withSymBackend $ \sym -> do
     pf <- programFormula sym p

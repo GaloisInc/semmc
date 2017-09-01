@@ -34,6 +34,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
 import           SemMC.Architecture ( Instruction, Opcode, Operand )
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as C
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo
@@ -166,9 +167,11 @@ compareTargetToCandidate target candidate test = do
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
-  !runTest     <- askRunTest
-  !candidateSt <- runTest test' candidateProg
-  !targetSt    <- runTest test' targetProg
+  CE.TestSuccess (CE.TestResult { CE.resultContext = candidateSt })
+     <- runConcreteTest =<< mkTestCase test' candidateProg
+
+  CE.TestSuccess (CE.TestResult { CE.resultContext = targetSt })
+     <- runConcreteTest =<< mkTestCase test' targetProg
   !liveOut     <- getOutMasks target'
   !eitherWeight <- liftIO $ C.tryJust pred $ do
     let !weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt

@@ -9,8 +9,7 @@ module SemMC.Stochastic.Strata (
   SynEnv,
   Config(..),
   loadInitialState,
-  stratifiedSynthesis,
-  naiveRunTest
+  stratifiedSynthesis
   ) where
 
 import qualified GHC.Err.Located as L
@@ -21,6 +20,7 @@ import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import           Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
+import           Data.IORef ( newIORef )
 import           Data.Maybe ( catMaybes, isNothing )
 
 import qualified Data.Parameterized.Map as MapF
@@ -31,7 +31,6 @@ import qualified Dismantle.Instruction as D
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
-import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
@@ -43,7 +42,6 @@ import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo ( SynthInstruction )
 import           SemMC.Stochastic.Synthesize ( synthesize )
-import qualified SemMC.Stochastic.IORelation.Types as I
 
 {-
 
@@ -60,6 +58,7 @@ stratifiedSynthesis :: forall arch t
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
+    nonceRef <- newIORef 0
     gen <- DA.createGen
     tChan <- C.newChan
     rChan <- C.newChan
@@ -68,29 +67,12 @@ stratifiedSynthesis env0 = do
     A.link testRunner'
     let localEnv = LocalSynEnv { seGlobalEnv = env0
                                , seRandomGen = gen
-                               , seRunTest = naiveRunTest tChan rChan
+                               , seNonceSource = nonceRef
+                               , seTestChan = tChan
+                               , seResChan = rChan
                                }
     runSyn localEnv strata `C.finally` A.cancel testRunner'
   STM.readTVarIO (seFormulas env0)
-
--- | A naive test runner: it's synchronous, and dies on test
--- failures.
---
--- Will need to be improved later. There is more sophisticated test
--- runner code in the @IORelation@ modules.
-naiveRunTest :: C.Chan (Maybe (I.TestCase arch))
-             -> C.Chan (I.ResultOrError arch)
-             -> Test arch
-             -> [A.Instruction arch]
-             -> Syn t arch (Test arch)
-naiveRunTest tChan rChan c p = liftIO $ do
-  let nonce = 0
-  C.writeChan tChan (Just (CE.TestCase nonce c p))
-  r <- C.readChan rChan
-  case r of
-    CE.TestSuccess tr
-      | CE.resultNonce tr == nonce -> return $ CE.resultContext tr
-    _ -> L.error "Unexpected test result in Strata.runTest!"
 
 strata :: (CS.ConcreteArchitecture arch, SynC arch)
        => Syn t arch (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
@@ -137,7 +119,7 @@ strataOneLoop op instr eqclasses = do
       -- We hit a timeout, so just try to build a formula based on what we have
       Just <$> finishStrataOne op instr eqclasses
     Just prog -> do
-      meqclasses' <- C.classify prog eqclasses
+      meqclasses' <- C.classify instr prog eqclasses
       case meqclasses' of
         Nothing -> return Nothing
         Just eqclasses'

@@ -27,7 +27,6 @@ module SemMC.Stochastic.Monad (
   askGen,
   askBaseSet,
   askConfig,
-  askRunTest,
   askTestCases,
   askFormulas,
   askPseudoFormulas,
@@ -35,6 +34,9 @@ module SemMC.Stochastic.Monad (
   lookupCongruent,
   withSymBackend,
   addTestCase,
+  mkTestCase,
+  runConcreteTests,
+  runConcreteTest,
   recordLearnedFormula,
   instantiateFormula,
   takeWork,
@@ -44,15 +46,18 @@ module SemMC.Stochastic.Monad (
 
 import qualified GHC.Err.Located as L
 
+import qualified Control.Concurrent as C
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as C
 import           Control.Monad ( replicateM )
 import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.Foldable as F
+import           Data.IORef ( IORef, readIORef, modifyIORef' )
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
+import           Data.Word ( Word64 )
 import           System.FilePath ( (</>), (<.>) )
 
 import qualified Data.EnumF as P
@@ -80,7 +85,8 @@ import           SemMC.Symbolic ( Sym )
 import           SemMC.Util ( makeSymbol )
 import qualified SemMC.Worklist as WL
 
-import           SemMC.Concrete.State ( ConcreteArchitecture, ConcreteState )
+import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Pseudo
@@ -106,7 +112,7 @@ import qualified SemMC.Stochastic.Statistics as S
 -- those tests here, since the nonce is just an implementation detail
 -- for matching test inputs with their results, and the same 'Test'
 -- will be run on multiple programs.
-type Test arch = ConcreteState arch
+type Test arch = CS.ConcreteState arch
 
 -- | Synthesis environment.
 data SynEnv t arch =
@@ -118,7 +124,7 @@ data SynEnv t arch =
          -- ^ All opcodes with known formulas with operands of a given shape
          , seWorklist :: STM.TVar (WL.Worklist (Some (A.Opcode arch (A.Operand arch))))
          -- ^ Work items
-         , seTestCases :: STM.TVar [ConcreteState arch]
+         , seTestCases :: STM.TVar [CS.ConcreteState arch]
          -- ^ All of the test cases we have accumulated.  This includes a set of
          -- initial heuristically interesting tests, as well as a set of ~1000
          -- random tests.  It also includes counterexamples learned during
@@ -142,11 +148,23 @@ data SynEnv t arch =
 data LocalSynEnv t arch =
   LocalSynEnv { seGlobalEnv :: SynEnv t arch
               , seRandomGen :: DA.Gen
-              , seRunTest :: ConcreteState arch -> [A.Instruction arch] -> Syn t arch (ConcreteState arch)
-                -- ^ Starting with a synchronous test runner. Will
-                -- worry about batching tests and running them in
-                -- parallel later.
+              , seNonceSource :: IORef Word64
+              -- ^ Nonces for test cases sent to the remote runner.
+              , seTestChan :: C.Chan (Maybe (CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)))
+              , seResChan :: C.Chan (CE.ResultOrError (CS.ConcreteState arch))
               }
+
+mkTestCase :: CS.ConcreteState arch
+           -> [A.Instruction arch]
+           -> Syn t arch (CE.TestCase (CS.ConcreteState arch) (A.Instruction arch))
+mkTestCase s0 prog = do
+  nref <- R.asks seNonceSource
+  nonce <- liftIO $ readIORef nref
+  liftIO $ modifyIORef' nref (+1)
+  return CE.TestCase { CE.testNonce = nonce
+                     , CE.testContext = s0
+                     , CE.testProgram = prog
+                     }
 
 -- | Synthesis constraints.
 type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
@@ -157,7 +175,7 @@ type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
                  , P.EnumF (A.Opcode arch (A.Operand arch))
                  , HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr
                  , HasRepr (Pseudo arch (A.Operand arch)) SL.ShapeRepr
-                 , ConcreteArchitecture arch
+                 , CS.ConcreteArchitecture arch
                  , ArchitectureWithPseudo arch )
 
 -- Synthesis monad.
@@ -224,8 +242,21 @@ askConfig = R.asks (seConfig . seGlobalEnv)
 askGen :: Syn t arch DA.Gen
 askGen = R.asks seRandomGen
 
-askRunTest :: Syn t arch (ConcreteState arch -> [A.Instruction arch] -> Syn t arch (ConcreteState arch))
-askRunTest = R.asks seRunTest
+runConcreteTests :: [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
+                 -> Syn t arch (CE.ResultIndex (CS.ConcreteState arch))
+runConcreteTests tests = do
+  tChan <- R.asks seTestChan
+  rChan <- R.asks seResChan
+  results <- CE.withTestResults tChan rChan tests return
+  return (CE.indexResults results)
+
+runConcreteTest :: CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
+                -> Syn t arch (CE.ResultOrError (CS.ConcreteState arch))
+runConcreteTest tc = do
+  tChan <- R.asks seTestChan
+  rChan <- R.asks seResChan
+  [result] <- CE.withTestResults tChan rChan [tc] return
+  return result
 
 withSymBackend :: (Sym t -> Syn t arch a) -> Syn t arch a
 withSymBackend k = do
@@ -236,11 +267,11 @@ withSymBackend k = do
   liftIO $ STM.atomically $ STM.putTMVar symVar sym
   return res
 
-askTestCases :: Syn t arch [ConcreteState arch]
+askTestCases :: Syn t arch [CS.ConcreteState arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Add a counterexample test case to the set of tests
-addTestCase :: ConcreteState arch -> Syn t arch ()
+addTestCase :: CS.ConcreteState arch -> Syn t arch ()
 addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
@@ -328,9 +359,9 @@ loadInitialState :: forall arch t
                   . (SynC arch)
                  => Config arch
                  -> Sym t
-                 -> IO (ConcreteState arch)
+                 -> IO (CS.ConcreteState arch)
                  -- ^ A generator of random test cases
-                 -> [ConcreteState arch]
+                 -> [CS.ConcreteState arch]
                  -- ^ Heuristically-interesting test cases
                  -> [Some (Witness (F.BuildOperandList arch) ((A.Opcode arch) (A.Operand arch)))]
                  -- ^ All possible opcodes. These are used to guess

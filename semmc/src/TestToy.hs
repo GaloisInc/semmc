@@ -11,6 +11,7 @@ module TestToy where
 
 import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
+import           Data.IORef ( newIORef )
 import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Monoid
@@ -40,7 +41,6 @@ import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
-import qualified SemMC.Stochastic.Strata as S
 import qualified SemMC.Stochastic.Synthesize as S
 import           SemMC.Synthesis
 import           SemMC.Synthesis.Template
@@ -281,17 +281,19 @@ synthesizeCandidate = do
   let targetOpcodes = L.error "targetOpcodes"
   synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
 
+  nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe (I.TestCase Toy)))
   rChan <- C.newChan
   logChan <- C.newChan
   _testRunnerThread <- C.async $
     testRunner (seConfig synEnv) tChan rChan logChan
   C.link _testRunnerThread
-  let runTest = S.naiveRunTest @Toy tChan rChan
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv
         , seRandomGen = gen
-        , seRunTest = runTest
+        , seTestChan = tChan
+        , seResChan = rChan
+        , seNonceSource = nref
         }
   let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
   let instruction = C.RI { C.riInstruction = D.Instruction AddRr ops
