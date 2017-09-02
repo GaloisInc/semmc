@@ -237,38 +237,42 @@ instance P.OrdF (LiteralRef arch sh) where
       P.EQF -> P.EQF
 
 
--- | A wrapper around an instruction that notes part of the machine state that
--- will be used to represent immediate operands.
+-- | A wrapper around an instruction that notes part of the machine
+-- state that will be used to represent immediate operands.
 --
--- The extra map indicates which literals in the instruction are mapped to
--- locations in the state.  The key operation that is required to support this
--- is to be able to rewrite test programs (i.e., single instructions we are
--- trying to learn semantics for) such that their immediates have the same value
--- as the value in the indicated location.
+-- The extra map indicates which literals in the instruction are
+-- mapped to locations in the state.  The key operation that is
+-- required to support this is to be able to rewrite test programs
+-- (i.e., single instructions we are trying to learn semantics for)
+-- such that their immediates have the same value as the value in the
+-- indicated location.
 --
--- For example, assume we have a concrete state C that is to be used for a test
--- case and a side note that the literal for our instruction I is stored in r15:
+-- For example, assume we have a concrete state C that is to be used
+-- for a test case and a side note that the literal for our
+-- instruction I is stored in r15:
 --
 -- > let t = Test { testMachineState = C, testLiterals = MapF.fromList [Pair imm0 r15] }
 --
--- Before sending the test, we would need to rewrite the test instruction to use
--- the immediate in r15 as its value.  This effectively lets us pretend that an
--- instruction like @ADDI r1, r2, imm@ is actually @ADDI r1, r2, r3@ where @r3@
--- happens to hold our immediate value.  The one difficulty here is that we need
--- to ensure that the value is in range for the literal in question.
+-- Before sending the test, we would need to rewrite the test
+-- instruction to use the immediate in r15 as its value.  This
+-- effectively lets us pretend that an instruction like @ADDI r1, r2,
+-- imm@ is actually @ADDI r1, r2, r3@ where @r3@ happens to hold our
+-- immediate value.  The one difficulty here is that we need to ensure
+-- that the value is in range for the literal in question.
 --
 -- The major use of this infrastructure is during formula extraction:
--- specifically, to figure out which part of the formula represents the
--- immediate of the instruction.  If we don't have an anchor to record what part
--- of the formula stands in for the immediate, we can't extract a formula since
--- we can't tell which literals in a formula might or might not correspond to
--- immediates.  If we instead pretend that immediates came from the machine
--- state, we will have a distinguished variable to pull out of the formula and
--- turn into a parameter.  That means that the 'testLiterals' map will need to
--- be an input to 'extractFormula'.
+-- specifically, to figure out which part of the formula represents
+-- the immediate of the instruction.  If we don't have an anchor to
+-- record what part of the formula stands in for the immediate, we
+-- can't extract a formula since we can't tell which literals in a
+-- formula might or might not correspond to immediates.  If we instead
+-- pretend that immediates came from the machine state, we will have a
+-- distinguished variable to pull out of the formula and turn into a
+-- parameter.  That means that the 'testLiterals' map will need to be
+-- an input to 'extractFormula'.
 --
--- Note that, to construct the state to send to the remote host, we just need to
--- extract the 'testMachineState'.
+-- Note that, to construct the state to send to the remote host, we
+-- just need to extract the 'testMachineState'.
 data RegisterizedInstruction arch =
   forall sh .
   RI { riInstruction :: A.Instruction arch
