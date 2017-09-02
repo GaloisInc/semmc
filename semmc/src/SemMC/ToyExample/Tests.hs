@@ -1,3 +1,4 @@
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE GADTs #-}
@@ -7,7 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
-module TestToy where
+module SemMC.ToyExample.Tests where
 
 import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
@@ -221,14 +222,15 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
   where
     _debug i msg = traceIO $ "toyTestRunnerBackend: "++show i++": "++msg
 
--- | Synthesize a single candidate program that agrees with the target
--- program on the tests.
+-- | Initialize a 'LocalSynEnv' for the toy arch and run a toy 'Syn'
+-- action in it.
 --
--- This is the inner loop of stratified synthesis, and candidates
--- generated this way are then proven equivalent to build confidence
--- that they implement the target on all possible inputs.
-synthesizeCandidate :: IO (Maybe [P.SynthInstruction Toy])
-synthesizeCandidate = do
+-- The initializer doesn't consider the possibility that the action
+-- run in this env (with 'runSyn') has any on-disk side effects,
+-- e.g. writing a file. If we want on disk side effects, then we
+-- should change this to set up the on-disk test env in a tmp dir.
+runSynToy :: (forall t. Syn t Toy a) -> IO a
+runSynToy action = do
   let cfg :: Config Toy
       cfg = Config
         { baseSetDir = "test-toy/test1/base"
@@ -295,6 +297,16 @@ synthesizeCandidate = do
         , seResChan = rChan
         , seNonceSource = nref
         }
+  runSyn localSynEnv action
+
+-- | Synthesize a single candidate program that agrees with the target
+-- program on the tests.
+--
+-- This is the inner loop of stratified synthesis, and candidates
+-- generated this way are then proven equivalent to build confidence
+-- that they implement the target on all possible inputs.
+synthesizeCandidate :: IO (Maybe [P.SynthInstruction Toy])
+synthesizeCandidate = do
   let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
   let instruction = C.RI { C.riInstruction = D.Instruction AddRr ops
                          , C.riOpcode = AddRr
@@ -302,4 +314,11 @@ synthesizeCandidate = do
                          , C.riLiteralLocs = MapF.empty
                          }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
-  runSyn @Toy localSynEnv (S.synthesize instruction)
+  runSynToy (S.synthesize instruction)
+
+-- | Weigh a candidate that produces the right value in the wrong
+-- place.
+--
+-- The weight should be 3 * number of test cases.
+rightValueWrongPlace :: IO (Double, Double)
+rightValueWrongPlace = return (0, 0) -- TODO
