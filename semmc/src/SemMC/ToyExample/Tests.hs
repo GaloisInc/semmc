@@ -8,7 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
-module TestToy where
+module SemMC.ToyExample.Tests where
 
 import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C

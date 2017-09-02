@@ -51,11 +51,11 @@ library
                        SemMC.Synthesis.Template
                        SemMC.Symbolic
                        SemMC.ToyExample
+                       SemMC.ToyExample.Tests
                        SemMC.Util
                        SemMC.Worklist
                        Data.Parameterized.Seq
                        Data.Parameterized.Unfold
-  other-modules:       TestToy
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
                        containers,
