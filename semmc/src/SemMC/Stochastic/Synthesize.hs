@@ -64,6 +64,8 @@ synthesize target = do
   debug $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . toList $ candidate
   debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
+  tests <- askTestCases
+  debug $ printf "# test cases = %i\n" (length tests)
   return $ Just candidateWithoutNops
   where
     debug msg = liftIO $ traceIO msg
@@ -89,7 +91,8 @@ mcmcSynthesizeOne target = do
       if candidate == candidate'
       then evolve (k+1) cost candidate
       else do
-        debug $ let prog = unlines . map show . catMaybes . toList $ candidate' in "candidate':\n"++prog
+        debug $ "candidate:\n"++prettyCandidate candidate
+        debug $ "candidate':\n"++prettyCandidate candidate'
         debug $ "cost = " ++ show cost
         -- liftIO $ showDiff candidate candidate'
         (cost'', candidate'') <- chooseNextCandidate @arch target candidate cost candidate'
@@ -107,6 +110,10 @@ mcmcSynthesizeOne target = do
           _ -> L.error "the sky is falling"
       where
         zipped = S.zipWith (\x x' -> L.nub [x,x']) c c'
+
+prettyCandidate :: Show (SynthInstruction arch)
+                => Candidate arch -> String
+prettyCandidate = unlines . map show . catMaybes . toList
 
 -- | Choose the new candidate if it's a better match, and with the
 -- Metropolis probability otherwise.

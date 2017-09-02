@@ -94,6 +94,7 @@ test-suite semmc-tests
   hs-source-dirs: tests
   main-is: Main.hs
   other-modules: Formula
+               , Stochastic
   build-depends:   semmc
                  , base
                  , containers
