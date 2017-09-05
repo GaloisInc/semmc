@@ -288,6 +288,10 @@ runConcreteTest tc = do
   [result] <- CE.withTestResults tChan rChan [tc] return
   return result
 
+-- | Get access to the symbolic backend to compute something.
+--
+-- NOTE: Nested calls to this function are not allowed!  It takes an MVar, so
+-- nested calls will deadlock.
 withSymBackend :: (Sym t -> Syn t arch a) -> Syn t arch a
 withSymBackend k = do
   -- FIXME: Use a bracket here
