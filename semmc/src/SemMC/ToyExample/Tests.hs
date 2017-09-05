@@ -314,7 +314,8 @@ synthesizeCandidate = do
                          , C.riLiteralLocs = MapF.empty
                          }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
-  runSynToy (S.synthesize instruction)
+  runSynToy $ do
+    fmap cpInstructions <$> S.synthesize instruction
 
 -- | Weigh a candidate that produces the right value in the wrong
 -- place.

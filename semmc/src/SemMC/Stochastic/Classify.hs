@@ -31,36 +31,35 @@ import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Formula.Instantiate as F
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
-import           SemMC.Symbolic ( Sym )
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
 
 -- | A set of equivalence classes of programs
-data EquivalenceClasses arch = EquivalenceClasses { unClasses :: Seq.Seq (Seq.Seq [P.SynthInstruction arch]) }
+data EquivalenceClasses t arch = EquivalenceClasses { unClasses :: Seq.Seq (Seq.Seq (CandidateProgram t arch)) }
 
-data EquivalenceClass arch = EquivalenceClass (Seq.Seq [P.SynthInstruction arch])
+data EquivalenceClass t arch = EquivalenceClass (Seq.Seq (CandidateProgram t arch))
 
 -- | Construct an initial set of equivalence classes with a single program
-equivalenceClasses :: [P.SynthInstruction arch] -> EquivalenceClasses arch
+equivalenceClasses :: CandidateProgram t arch -> EquivalenceClasses t arch
 equivalenceClasses p = EquivalenceClasses (Seq.singleton (Seq.singleton p))
 
 -- | Count the total number of programs in the set of equivalence classes
-countPrograms :: EquivalenceClasses arch -> Int
+countPrograms :: EquivalenceClasses t arch -> Int
 countPrograms s = sum (map Seq.length (F.toList (unClasses s)))
 
-data ClassifyState arch =
-  ClassifyState { eqClassesSeq :: Seq.Seq (Seq.Seq (Int, [P.SynthInstruction arch]))
+data ClassifyState t arch =
+  ClassifyState { eqClassesSeq :: Seq.Seq (Seq.Seq (Int, CandidateProgram t arch))
                 , mergableClasses :: [Int]
                 -- ^ Indexes of the equivalence classes to merge
                 }
 
-classAtIndex :: Int -> ClassifyM t arch (Maybe (Seq.Seq [P.SynthInstruction arch]))
+classAtIndex :: Int -> ClassifyM t arch (Maybe (Seq.Seq (CandidateProgram t arch)))
 classAtIndex ix = do
   eqClasses <- St.gets eqClassesSeq
   return $ fmap (fmap snd) (Seq.lookup ix eqClasses)
 
 -- | Merge all of the classes marked in `mergableClasses` (if any)
-extractMergableClasses :: ClassifyM t arch (Seq.Seq (Seq.Seq [P.SynthInstruction arch]))
+extractMergableClasses :: ClassifyM t arch (Seq.Seq (Seq.Seq (CandidateProgram t arch)))
 extractMergableClasses = do
   s <- St.get
   return (Seq.fromList (fmap (fmap snd) (mapMaybe (flip Seq.lookup (eqClassesSeq s)) (mergableClasses s))))
@@ -86,11 +85,11 @@ liftC a = ClassifyM (lift a)
 --
 -- This lets us easily mutate equivalence classes (removing candidates that are
 -- invalidated by a counterexample)
-newtype ClassifyM t arch a = ClassifyM { unClassify :: St.StateT (ClassifyState arch) (Syn t arch) a }
+newtype ClassifyM t arch a = ClassifyM { unClassify :: St.StateT (ClassifyState t arch) (Syn t arch) a }
                            deriving (Functor,
                                      Applicative,
                                      Monad,
-                                     St.MonadState (ClassifyState arch))
+                                     St.MonadState (ClassifyState t arch))
 
 -- | Given a set of initial equivalence classes, assign the new program to one
 -- of them (or create a new equivalence class if the new program doesn't match
@@ -102,11 +101,11 @@ classify :: forall arch t
           . (SynC arch)
          => CS.RegisterizedInstruction arch
          -- ^ The instruction whose semantics we are trying to learn
-         -> [P.SynthInstruction arch]
+         -> CandidateProgram t arch
          -- ^ The program we just learned and need to add to an equivalence class
-         -> EquivalenceClasses arch
+         -> EquivalenceClasses t arch
          -- ^ The current equivalence classes
-         -> Syn t arch (Maybe (EquivalenceClasses arch))
+         -> Syn t arch (Maybe (EquivalenceClasses t arch))
 classify target p eqclasses = do
   let classesSeq = unClasses eqclasses
       s0 = ClassifyState { eqClassesSeq = numberNestedItems classesSeq
@@ -140,12 +139,12 @@ classify target p eqclasses = do
 classifyByClass :: (SynC arch)
                 => CS.RegisterizedInstruction arch
                 -- ^ The target instruction
-                -> [P.SynthInstruction arch]
+                -> CandidateProgram t arch
                 -- ^ The program to classify
                 -> Int
                 -- ^ The index (into the sequence of equivalence classes) of the
                 -- equivalence class that we are currently analyzing
-                -> ClassifyM t arch (Maybe (Seq.Seq (Seq.Seq [P.SynthInstruction arch])))
+                -> ClassifyM t arch (Maybe (Seq.Seq (Seq.Seq (CandidateProgram t arch))))
 classifyByClass target p ix = do
   mklass <- classAtIndex ix
   case mklass of
@@ -207,9 +206,9 @@ consistentWithTarget :: (SynC arch)
                      -- ^ All of the results that came back from the remote runner
                      -> CS.ConcreteState arch
                      -- ^ The output of the target instruction on the test vector
-                     -> (Int, [P.SynthInstruction arch])
+                     -> (Int, CandidateProgram t arch)
                      -- ^ The current program (and its index into the @testIndex@ map)
-                     -> Maybe (Int, [P.SynthInstruction arch])
+                     -> Maybe (Int, CandidateProgram t arch)
 consistentWithTarget testIndex testResults cx (testNum, tc) =
   case M.lookup nonce (CE.riExitedWithSignal testResults) of
     Just _ -> Nothing
@@ -229,14 +228,14 @@ consistentWithTarget testIndex testResults cx (testNum, tc) =
 -- between test numbers and concrete test nonces.
 makeAndIndexTest :: (P.ArchitectureWithPseudo arch)
                  => CS.ConcreteState arch
-                 -> (Int, [P.SynthInstruction arch])
+                 -> (Int, CandidateProgram t arch)
                  -> ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
                  -> ClassifyM t arch ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
-makeAndIndexTest cx (pix, insns) (cases, idx) = do
+makeAndIndexTest cx (pix, cp) (cases, idx) = do
   tc <- liftC $ mkTestCase cx program
   return (tc : cases, M.insert pix (CE.testNonce tc) idx)
   where
-    program = concatMap P.synthInsnToActual insns
+    program = concatMap P.synthInsnToActual (cpInstructions cp)
 
 -- | Assign a unique number to each list item (in the inner lists)
 numberNestedItems :: (T.Traversable t) => t (t a) -> t (t (Int, a))
@@ -248,14 +247,14 @@ numberNestedItems = snd . L.mapAccumR number1 0
 -- | Heuristically-choose the best equivalence class
 --
 -- It prefers classes with more examples and fewer uninterpreted functions
-chooseClass :: EquivalenceClasses arch -> Syn t arch (EquivalenceClass arch)
+chooseClass :: EquivalenceClasses t arch -> Syn t arch (EquivalenceClass t arch)
 chooseClass = undefined
 
 -- | Choose the best program out of an equivalence class as the basis for a formula
 --
 -- We want to minimize the number of uninterpreted functions and non-linear
 -- operations (as well as formula size).
-chooseProgram :: EquivalenceClass arch -> Syn t arch [P.SynthInstruction arch]
+chooseProgram :: EquivalenceClass t arch -> Syn t arch (CandidateProgram t arch)
 chooseProgram = undefined
 
 -- | Flatten a set of equivalence classes into one equivalence class
@@ -263,39 +262,16 @@ mergeClasses :: Seq.Seq (Seq.Seq pgm)
              -> Seq.Seq pgm
 mergeClasses = F.foldr mappend Seq.empty
 
--- | Convert an instruction into a 'F.Formula'
-instructionFormula :: (P.ArchitectureWithPseudo arch)
-                   => Sym t
-                   -> P.SynthInstruction arch
-                   -> Syn t arch (F.Formula (Sym t) arch)
-instructionFormula sym i = do
-  case i of
-    P.SynthInstruction op operands -> do
-      Just pf <- lookupFormula op
-      (_, f) <- liftIO $ F.instantiateFormula sym pf operands
-      return f
-
--- | Convert a program into a formula
-programFormula :: (P.ArchitectureWithPseudo arch)
-               => Sym t
-               -> [P.SynthInstruction arch]
-               -> Syn t arch (F.Formula (Sym t) arch)
-programFormula sym insns = do
-  fs <- mapM (instructionFormula sym) insns
-  liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula fs
-
 -- | Use an SMT solver to check if two programs are equivalent.
 --
 -- If they are not, return an input that demonstrates the difference.
 testEquivalence :: (P.ArchitectureWithPseudo arch)
-                => [P.SynthInstruction arch]
-                -> [P.SynthInstruction arch]
+                => CandidateProgram t arch
+                -> CandidateProgram t arch
                 -> Syn t arch (F.EquivalenceResult arch CS.Value)
 testEquivalence p representative = do
   withSymBackend $ \sym -> do
-    pf <- programFormula sym p
-    repFormula <- programFormula sym representative
-    liftIO $ F.formulasEquivConcrete sym pf repFormula
+    liftIO $ F.formulasEquivConcrete sym (cpFormula p) (cpFormula representative)
 
 
 {- Note [Registerization and Counterexamples]

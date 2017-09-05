@@ -58,7 +58,7 @@ import Control.Monad
 -- Can fail due to timeouts.
 synthesize :: SynC arch
            => C.RegisterizedInstruction arch
-           -> Syn t arch (Maybe [SynthInstruction arch])
+           -> Syn t arch (Maybe (CandidateProgram t arch))
 synthesize target = do
   -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
   (numRounds, candidate) <- mcmcSynthesizeOne target
@@ -67,7 +67,11 @@ synthesize target = do
   debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
   tests <- askTestCases
   debug $ printf "# test cases = %i\n" (length tests)
-  return $ Just candidateWithoutNops
+  withSymBackend $ \sym -> do
+    f <- programFormula sym candidateWithoutNops
+    return $ Just CandidateProgram { cpInstructions = candidateWithoutNops
+                                   , cpFormula = f
+                                   }
   where
     debug msg = liftIO $ traceIO msg
 

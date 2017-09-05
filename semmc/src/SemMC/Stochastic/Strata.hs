@@ -18,10 +18,7 @@ import qualified Control.Concurrent as C
 import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
-import           Control.Monad.Trans ( liftIO )
-import qualified Data.Foldable as F
 import           Data.IORef ( newIORef )
-import           Data.Maybe ( catMaybes, isNothing )
 
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
@@ -32,7 +29,6 @@ import qualified Dismantle.Instruction as D
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
-import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.Classify as C
@@ -40,7 +36,6 @@ import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
 import           SemMC.Stochastic.Monad
-import           SemMC.Stochastic.Pseudo ( SynthInstruction )
 import           SemMC.Stochastic.Synthesize ( synthesize )
 
 {-
@@ -109,7 +104,7 @@ strataOne op = do
 strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
               => A.Opcode arch (A.Operand arch) sh
               -> CS.RegisterizedInstruction arch
-              -> C.EquivalenceClasses arch
+              -> C.EquivalenceClasses t arch
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
   cfg <- askConfig
@@ -130,12 +125,12 @@ strataOneLoop op instr eqclasses = do
 finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> CS.RegisterizedInstruction arch
-                -> C.EquivalenceClasses arch
+                -> C.EquivalenceClasses t arch
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
   bestClass <- C.chooseClass eqclasses
   prog <- C.chooseProgram bestClass
-  buildFormula op instr prog
+  buildFormula op instr (cpFormula prog)
 
 -- | Construct a formula for the given instruction based on the selected representative program.
 --
@@ -143,22 +138,14 @@ finishStrataOne op instr eqclasses = do
 buildFormula :: (CS.ConcreteArchitecture arch, SynC arch)
              => A.Opcode arch (A.Operand arch) sh
              -> CS.RegisterizedInstruction arch
-             -> [SynthInstruction arch]
+             -> F.Formula (Sym t) arch
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
-buildFormula o i prog = do
+buildFormula o i progFormula = do
   Just iorel <- opcodeIORelation o
-  mfrms <- mapM instantiateFormula prog
-  case any isNothing mfrms of
-    True -> fail ("Failed to instantiate program: " ++ show prog)
-    False -> do
-      let formulas = catMaybes mfrms
-      withSymBackend $ \sym -> do
-        progFormula <- liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula formulas
-        case CS.riInstruction i of
-          D.Instruction opcode operands
-            | Just MapF.Refl <- MapF.testEquality opcode o -> do
-                -- Now, for all of the outputs (implicit and explicit) in the target
-                -- instruction, look up the corresponding formula in `progFormula`
-                extractFormula i opcode operands progFormula iorel
-            | otherwise -> L.error ("Unexpected opcode mismatch: " ++ MapF.showF o)
-
+  case CS.riInstruction i of
+    D.Instruction opcode operands
+      | Just MapF.Refl <- MapF.testEquality opcode o -> do
+          -- Now, for all of the outputs (implicit and explicit) in the target
+          -- instruction, look up the corresponding formula in `progFormula`
+          extractFormula i opcode operands progFormula iorel
+      | otherwise -> L.error ("Unexpected opcode mismatch: " ++ MapF.showF o)

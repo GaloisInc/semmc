@@ -21,8 +21,11 @@ module SemMC.Stochastic.Monad (
   loadInitialState,
   runSyn,
   tryJust,
-  Config(..),
   Test,
+  Config(..),
+  -- * Candidate Programs
+  CandidateProgram(..),
+  programFormula,
   -- * Operations
   askGen,
   askBaseSet,
@@ -165,6 +168,33 @@ mkTestCase s0 prog = do
                      , CE.testContext = s0
                      , CE.testProgram = prog
                      }
+
+data CandidateProgram t arch =
+  CandidateProgram { cpInstructions :: [SynthInstruction arch]
+                   , cpFormula :: F.Formula (Sym t) arch
+                   }
+
+-- | Convert an instruction into a 'F.Formula'
+instructionFormula :: (ArchitectureWithPseudo arch)
+                   => Sym t
+                   -> SynthInstruction arch
+                   -> Syn t arch (F.Formula (Sym t) arch)
+instructionFormula sym i = do
+  case i of
+    SynthInstruction op operands -> do
+      Just pf <- lookupFormula op
+      (_, f) <- liftIO $ F.instantiateFormula sym pf operands
+      return f
+
+-- | Convert a program into a formula
+programFormula :: (ArchitectureWithPseudo arch)
+               => Sym t
+               -> [SynthInstruction arch]
+               -> Syn t arch (F.Formula (Sym t) arch)
+programFormula sym insns = do
+  fs <- mapM (instructionFormula sym) insns
+  liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula fs
+
 
 -- | Synthesis constraints.
 type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
