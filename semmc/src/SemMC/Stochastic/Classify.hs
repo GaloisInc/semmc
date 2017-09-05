@@ -149,11 +149,7 @@ classifyByClass :: (SynC arch)
 classifyByClass target p ix = do
   mklass <- classAtIndex ix
   case mklass of
-    Nothing -> do
-      -- FIXME: We need to remove empty equivalence classes (after we extract)
-      --
-      -- Actually, we don't.  The merge is just an mconcat
-      Just <$> extractMergableClasses
+    Nothing -> Just <$> extractMergableClasses
     Just klass -> do
       representative <- liftC $ chooseProgram (EquivalenceClass klass)
       eqv <- liftC $ testEquivalence p representative
@@ -169,12 +165,10 @@ classifyByClass target p ix = do
           nClasses <- countRemainingClasses
           case nClasses of
             0 -> return Nothing
-            -- FIXME: We are modifying eqclasses while we iterate over them.
-            -- What are the semantics there?  The paper isn't precise.
-            --
-            -- In this loop, we never add a new equivalence class (we could
-            -- remove one), so iterating is fine.  We kind of have to restart
-            -- iterating after we remove classes
+            -- In this loop, we never add a new equivalence class (we could make
+            -- one empty, though), so iterating is fine.  Since we don't add or
+            -- remove classes, the iteration is stable and we never need to
+            -- restart.
             _ -> classifyByClass target p (ix + 1)
 
 -- | Remove the programs in the equivalence classes that do not have the same
