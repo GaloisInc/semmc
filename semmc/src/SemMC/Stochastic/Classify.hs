@@ -26,14 +26,20 @@ import qualified Data.Traversable as T
 import           Data.Word ( Word64 )
 import           Text.Printf ( printf )
 
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.TraversableFC as FC
+import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import qualified Lang.Crucible.BaseTypes as S
+
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Equivalence as F
-import qualified SemMC.Formula.Instantiate as F
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
+import           SemMC.Symbolic ( Sym )
 
 -- | A set of equivalence classes of programs
 data EquivalenceClasses t arch = EquivalenceClasses { unClasses :: Seq.Seq (Seq.Seq (CandidateProgram t arch)) }
@@ -256,7 +262,90 @@ chooseClass = undefined
 -- We want to minimize the number of uninterpreted functions and non-linear
 -- operations (as well as formula size).
 chooseProgram :: EquivalenceClass t arch -> Syn t arch (CandidateProgram t arch)
-chooseProgram = undefined
+chooseProgram (EquivalenceClass progs) =
+  case Seq.viewl progs of
+    Seq.EmptyL -> L.error "BUG: Empty equivalence classes are not allowed"
+    p1 Seq.:< rest -> return $ F.foldl' betterCandidateProgram p1 rest
+
+-- | Return the better of two candidate programs
+--
+-- Note that this is definitely a heuristic.  We probably want to choose the
+-- formula with the fewest uninterpreted functions and non-linear functions, but
+-- it is not obvious which of those to prefer.  If there is a tie, then use
+-- formula size.
+--
+-- FIXME: Add a weight for formulas that mix arithmetic and bitwise BV
+-- operations; mixed mode is more expensive than formulas that don't mix.
+-- Mixing includes comparisons.
+betterCandidateProgram :: CandidateProgram t arch
+                       -> CandidateProgram t arch
+                       -> CandidateProgram t arch
+betterCandidateProgram p1 p2
+  | uf1 < uf2 = p1
+  | uf2 < uf1 = p2
+  | nonLinear1 < nonLinear2 = p1
+  | nonLinear2 < nonLinear1 = p2
+  | size1 < size2 = p1
+  | otherwise = p2
+  where
+    (uf1, nonLinear1, size1) = summarizeFormula (cpFormula p1)
+    (uf2, nonLinear2, size2) = summarizeFormula (cpFormula p2)
+
+summarizeFormula :: forall t arch . F.Formula (Sym t) arch -> (Int, Int, Int)
+summarizeFormula f = F.foldl' (summarizeExpr) (0, 0, 0) someExprs
+  where
+    someExprs = MapF.elems (F.formDefs f)
+
+summarizeExpr :: (Int, Int, Int) -> Some (S.Elt t) -> (Int, Int, Int)
+summarizeExpr acc@(uf, nl, sz) (Some se) =
+  case se of
+    S.SemiRingLiteral {} -> acc
+    S.BVElt {} -> acc
+    S.BoundVarElt {} -> acc
+    S.NonceAppElt ne ->
+      case S.nonceEltApp ne of
+        S.FnApp {} -> (uf + 1, nl, sz + 1)
+        _ -> (uf, nl, sz + 1)
+    S.AppElt ae -> FC.foldlFC' summarizeElt acc (S.appEltApp ae)
+
+summarizeElt :: (Int, Int, Int) -> S.Elt t tp -> (Int, Int, Int)
+summarizeElt acc@(uf, nl, sz) elt =
+  case elt of
+    S.SemiRingLiteral {} -> acc
+    S.BVElt {} -> acc
+    S.BoundVarElt {} -> acc
+    S.NonceAppElt ne ->
+      case S.nonceEltApp ne of
+        S.FnApp {} -> (uf + 1, nl, sz + 1)
+        _ -> (uf, nl, sz + 1)
+    S.AppElt ae ->
+      case S.appEltApp ae of
+        -- According to crucible, any occurrence of this constructor is non-linear
+        S.SemiRingMul {} -> (uf, nl + 1, sz + 1)
+        S.BVMul _ lhs rhs -> addIfNonlinear lhs rhs acc
+        S.BVUdiv _ lhs rhs -> addIfNonlinear lhs rhs acc
+        S.BVUrem _ lhs rhs -> addIfNonlinear lhs rhs acc
+        S.BVSdiv _ lhs rhs -> addIfNonlinear lhs rhs acc
+        S.BVSrem _ lhs rhs -> addIfNonlinear lhs rhs acc
+        _ -> (uf, nl, sz + 1)
+
+-- | If the operation is nonlinear (based on operands), increment the nonlinear
+-- op count.
+--
+-- The operation is non-linear if one of the operands is /not/ a constant.
+addIfNonlinear :: S.Elt t (S.BaseBVType w)
+               -> S.Elt t (S.BaseBVType w)
+               -> (Int, Int, Int)
+               -> (Int, Int, Int)
+addIfNonlinear lhs rhs (uf, nl, sz)
+  | isBVConstant lhs || isBVConstant rhs = (uf, nl, sz + 1)
+  | otherwise = (uf, nl + 1, sz + 1)
+
+isBVConstant :: S.Elt t (S.BaseBVType w) -> Bool
+isBVConstant e =
+  case e of
+    S.BVElt {} -> True
+    _ -> False
 
 -- | Flatten a set of equivalence classes into one equivalence class
 mergeClasses :: Seq.Seq (Seq.Seq pgm)
