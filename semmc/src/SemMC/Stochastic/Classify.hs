@@ -9,6 +9,7 @@ module SemMC.Stochastic.Classify (
   chooseProgram,
   EquivalenceClasses,
   equivalenceClasses,
+  EquivalenceClass,
   countPrograms
   ) where
 
