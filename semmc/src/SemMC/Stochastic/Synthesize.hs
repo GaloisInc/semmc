@@ -12,7 +12,13 @@
 --
 -- STRATA: Stratified Synthesis:
 -- https://cs.stanford.edu/people/eschkufz/docs/pldi_16.pdf
-module SemMC.Stochastic.Synthesize ( synthesize ) where
+module SemMC.Stochastic.Synthesize
+  ( -- * API
+    synthesize
+    -- * Exports for testing
+  , compareTargetToCandidate
+  , wrongLocationPenalty
+  ) where
 
 import qualified Control.Exception as C
 import           Control.Monad ( join )
@@ -43,7 +49,6 @@ import           SemMC.Stochastic.Pseudo
                  , SynthInstruction(..)
                  , synthArbitraryOperands
                  , synthInsnToActual
-                 , actualInsnToSynth
                  )
 import qualified SemMC.Stochastic.IORelation as I
 
@@ -239,12 +244,16 @@ weighBestMatch :: forall arch.
                -> Double
 weighBestMatch (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews diff) targetSt candidateSt =
   minimum $ [ weigh (C.peekMS candidateSt view) ] ++
-            [ weigh (C.peekMS candidateSt view') + penalty
+            [ weigh (C.peekMS candidateSt view') + wrongLocationPenalty
             | view' <- congruentViews ]
   where
     targetVal = C.peekMS targetSt view
-    penalty = 3 -- STOKE Figure 10.
     weigh candidateVal = fromIntegral $ diff targetVal candidateVal
+
+-- | The penalty used in 'weighBestMatch' when looking for a candidate
+-- value in the wrong location.
+wrongLocationPenalty :: Double
+wrongLocationPenalty = 3 -- STOKE Figure 10.
 
 ----------------------------------------------------------------
 
