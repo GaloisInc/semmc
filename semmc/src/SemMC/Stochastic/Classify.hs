@@ -24,7 +24,7 @@ import qualified Data.Foldable as F
 import           Data.Function ( on )
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
-import           Data.Maybe ( mapMaybe )
+import           Data.Maybe ( catMaybes, mapMaybe )
 import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
 import           Data.Word ( Word64 )
@@ -64,7 +64,16 @@ equivalenceClass p = EquivalenceClass { ecPrograms = Seq.singleton p
 -- | Construct a new equivalence class from a list, choosing the best
 -- representative
 equivalenceClassFromList :: (a -> a -> Ordering) -> a -> Seq.Seq a -> EquivalenceClass a
-equivalenceClassFromList = undefined
+equivalenceClassFromList cmp e1 es =
+  EquivalenceClass { ecPrograms = e1 Seq.<| es
+                   , ecRepresentative = fst $ F.foldl' takeBest (0, e1) (Seq.zip (Seq.fromList [1..Seq.length es]) es)
+                   }
+  where
+    takeBest acc@(_ixr, r) elt@(_ixe, e) =
+      case cmp r e of
+        GT -> acc
+        EQ -> acc
+        LT -> elt
 
 equivalenceClassFromListMay :: (a -> a -> Ordering) -> Seq.Seq a -> Maybe (EquivalenceClass a)
 equivalenceClassFromListMay cmp s =
@@ -99,7 +108,6 @@ extractMergableClasses = do
   let classesToKeep = mapMaybe (flip Seq.lookup (unClasses (eqClassesSeq s))) (mergableClasses s)
       justProgramGroups = fmap ((fmap snd) . ecPrograms) classesToKeep
   return (Seq.fromList justProgramGroups)
---  return (Seq.fromList (fmap (fmap snd) (mapMaybe (flip Seq.lookup (eqClassesSeq s)) (mergableClasses s))))
 
 -- | Count the number of non-empty classes
 countRemainingClasses :: ClassifyM t arch Int
@@ -251,11 +259,46 @@ removeInvalidPrograms ix target cx = do
 
 -- | Correct indexes (from the next iteration index and the mergable classes
 -- list) if we have to remove any empty equivalence classes.
+--
+-- Note: if an index into the list is to be removed, we have to remove it from
+-- the index list.
 computeNewIndexes :: Int
-                  -> [Maybe (EquivalenceClass (Int, CandidateProgram t arch))]
+                  -- ^ The index of the current iteration (will be the basis for the next index)
+                  --
+                  -- The index is into the second argument, and will need to be
+                  -- corrected if earlier entries are eliminated
+                  -> [Maybe a]
+                  -- ^ The sequence where some elements may be filtered (replaced by a Nothing)
                   -> [Int]
-                  -> (Int, [EquivalenceClass (Int, CandidateProgram t arch)], [Int])
-computeNewIndexes = undefined
+                  -- ^ Mergable entries (indexes into the above list, which may
+                  -- need to be corrected for Nothings)
+                  -> (Int, [a], [Int])
+computeNewIndexes curIdx elts indexes =
+  (nextIdx, catMaybes elts, updatedIndexes)
+  where
+    -- First, compute all of the indexes we are removing.  We can compute the
+    -- index corrections based entirely on that.  Then the new list is just a
+    -- catMaybes away.
+    removedIndexes = mapMaybe keepNothingIndex (zip [0..] elts)
+    keepNothingIndex (idx, melt) = maybe (Just idx) (const Nothing) melt
+
+    correctIndex idx = idx - length (filter (<= curIdx) removedIndexes)
+
+    -- The next index is naturally @nextIdx + 1@; however, we have to make a
+    -- correction (by one) for each index less than or equal to the current
+    -- index.  Count the number of indexes @<=@ curIdx in removedIndexes, and
+    -- subtract that from curIdx (then add one to advance).
+    --
+    -- > curIdx = 5, removedIndexes = [0].  (5 - 1) + 1 => nextIndex = 5
+    --
+    -- > curIdx = 5, removedIndexes = [5]. (5 - 1) + 1 => nextIndex = 5
+    --
+    -- > curIdx = 5, removedIndexes = [3, 5].  (5 - 2) + 1 => nextIndex  = 4
+    nextIdx = correctIndex curIdx + 1
+    updatedIndexes = mapMaybe correctOrRemoveIndex indexes
+    correctOrRemoveIndex idx
+      | idx `elem` removedIndexes = Nothing
+      | otherwise = Just (correctIndex idx)
 
 mapMaybeSeq :: (a -> Maybe b) -> Seq.Seq a -> Seq.Seq b
 mapMaybeSeq f = Seq.fromList . mapMaybe f . F.toList
@@ -332,27 +375,12 @@ chooseProgram ec =
     Nothing -> L.error "BUG: Invalid representative index in equivalence class"
     Just repr -> return repr
 
--- | Return the better of two candidate programs
---
--- Note that this is definitely a heuristic.  We probably want to choose the
--- formula with the fewest uninterpreted functions and non-linear functions, but
--- it is not obvious which of those to prefer.  If there is a tie, then use
--- formula size.
+-- | Compare two programs: @p1@ is GT @p2@ if it is "better" according to the
+-- heuristic
 --
 -- FIXME: Add a weight for formulas that mix arithmetic and bitwise BV
 -- operations; mixed mode is more expensive than formulas that don't mix.
 -- Mixing includes comparisons.
-betterCandidateProgram :: CandidateProgram t arch
-                       -> CandidateProgram t arch
-                       -> CandidateProgram t arch
-betterCandidateProgram p1 p2 =
-  case compareCandidate p1 p2 of
-    GT -> p1
-    EQ -> p1
-    LT -> p2
-
--- | Compare two programs: @p1@ is GT @p2@ if it is "better" according to the
--- heuristic
 compareCandidate :: CandidateProgram t arch -> CandidateProgram t arch -> Ordering
 compareCandidate p1 p2
   | uf1 < uf2 = GT
