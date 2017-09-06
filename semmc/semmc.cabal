@@ -58,7 +58,7 @@ library
                        Data.Parameterized.Unfold
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
-                       containers,
+                       containers >= 0.5.8,
                        bytestring,
                        binary,
                        filepath,

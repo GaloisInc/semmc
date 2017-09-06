@@ -11,5 +11,5 @@ tests = T.testGroup "Synthesis" [ rightValueWrongPlace ]
 
 rightValueWrongPlace :: T.TestTree
 rightValueWrongPlace = T.testCase "rightValueWrongPlace" $ do
-  (expectedWeight, actualWeight) <- TT.rightValueWrongPlace
+  (expectedWeight, actualWeight) <- TT.test_rightValueWrongPlace
   T.assertEqual "weight" expectedWeight actualWeight

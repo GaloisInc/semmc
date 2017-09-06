@@ -17,6 +17,7 @@ import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Proxy
+import qualified Data.Sequence as S
 import qualified Data.Text as T
 
 import qualified GHC.Err.Located as L
@@ -48,7 +49,7 @@ import           SemMC.Synthesis.Template
 import           SemMC.ToyExample as T
 import           SemMC.Util
 
-import Debug.Trace
+import           Debug.Trace
 
 allOperands :: [Some (Witness U.UnfoldShape (T.Opcode T.Operand))]
 allOperands = $(captureDictionaries (const True) ''T.Opcode)
@@ -225,10 +226,10 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
 -- | Initialize a 'LocalSynEnv' for the toy arch and run a toy 'Syn'
 -- action in it.
 --
--- The initializer doesn't consider the possibility that the action
--- run in this env (with 'runSyn') has any on-disk side effects,
--- e.g. writing a file. If we want on disk side effects, then we
--- should change this to set up the on-disk test env in a tmp dir.
+-- WARNING: this initializer doesn't consider the possibility that the
+-- action run in this env (with 'runSyn') has any on-disk side
+-- effects, e.g. writing a file. If we want on disk side effects, then
+-- we should change this to set up the on-disk test env in a tmp dir.
 runSynToy :: (forall t. Syn t Toy a) -> IO a
 runSynToy action = do
   let cfg :: Config Toy
@@ -305,8 +306,11 @@ runSynToy action = do
 -- This is the inner loop of stratified synthesis, and candidates
 -- generated this way are then proven equivalent to build confidence
 -- that they implement the target on all possible inputs.
-synthesizeCandidate :: IO (Maybe [P.SynthInstruction Toy])
-synthesizeCandidate = do
+--
+-- The test is randomized, and the time it takes to succeed varies
+-- significantly from run to run.
+test_synthesizeCandidate :: IO (Maybe [P.SynthInstruction Toy])
+test_synthesizeCandidate = do
   let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
   let instruction = C.RI { C.riInstruction = D.Instruction AddRr ops
                          , C.riOpcode = AddRr
@@ -320,6 +324,29 @@ synthesizeCandidate = do
 -- | Weigh a candidate that produces the right value in the wrong
 -- place.
 --
--- The weight should be 3 * number of test cases.
-rightValueWrongPlace :: IO (Double, Double)
-rightValueWrongPlace = return (0, 0) -- TODO
+-- The weight should be penalty * number of test cases.
+--
+-- Returns @(<expected weight>, <actual weight>)@.
+test_rightValueWrongPlace :: IO (Double, Double)
+test_rightValueWrongPlace = do
+  runSynToy $ do
+    tests <- askTestCases
+    weight <- sum <$>
+      mapM (S.compareTargetToCandidate target candidate) tests
+    let expectedWeight =
+          S.wrongLocationPenalty * fromIntegral (length tests)
+    return (expectedWeight, weight)
+  where
+    -- Add r1 and r2 and store the result in *r3*.
+    candidate = S.fromList $ map (Just . P.actualInsnToSynth) $
+      [ D.Instruction SubRr (R32 Reg3 :> R32 Reg3 :> Nil)
+      , D.Instruction AddRr (R32 Reg3 :> R32 Reg1 :> Nil)
+      , D.Instruction AddRr (R32 Reg3 :> R32 Reg2 :> Nil) ]
+
+    -- Add r1 and r2 and store the result in *r1*.
+    ops = (R32 Reg1 :> R32 Reg2 :> Nil)
+    target =  C.RI { C.riInstruction = D.Instruction AddRr ops
+                   , C.riOpcode = AddRr
+                   , C.riOperands = ops
+                   , C.riLiteralLocs = MapF.empty
+                   }
