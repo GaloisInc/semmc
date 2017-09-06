@@ -17,7 +17,6 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC.ARM
-                       Tests.StoreTest
                        Tests.CMNTest
                        Tests.LoadTest
   -- other-modules:
