@@ -104,7 +104,7 @@ strataOne op = do
 strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
               => A.Opcode arch (A.Operand arch) sh
               -> CS.RegisterizedInstruction arch
-              -> C.EquivalenceClasses t arch
+              -> C.EquivalenceClasses (CandidateProgram t arch)
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
   cfg <- askConfig
@@ -125,7 +125,7 @@ strataOneLoop op instr eqclasses = do
 finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> CS.RegisterizedInstruction arch
-                -> C.EquivalenceClasses t arch
+                -> C.EquivalenceClasses (CandidateProgram t arch)
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
   bestClass <- C.chooseClass eqclasses

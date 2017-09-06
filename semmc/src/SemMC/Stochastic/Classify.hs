@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -18,6 +21,7 @@ import qualified GHC.Err.Located as L
 import qualified Control.Monad.State.Strict as St
 import           Control.Monad.Trans ( liftIO, lift )
 import qualified Data.Foldable as F
+import           Data.Function ( on )
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import           Data.Maybe ( mapMaybe )
@@ -42,40 +46,68 @@ import qualified SemMC.Stochastic.Pseudo as P
 import           SemMC.Symbolic ( Sym )
 
 -- | A set of equivalence classes of programs
-data EquivalenceClasses t arch = EquivalenceClasses { unClasses :: Seq.Seq (Seq.Seq (CandidateProgram t arch)) }
+data EquivalenceClasses a =
+  EquivalenceClasses { unClasses :: Seq.Seq (EquivalenceClass a) }
+  deriving (Functor, F.Foldable, T.Traversable)
 
-data EquivalenceClass t arch = EquivalenceClass (Seq.Seq (CandidateProgram t arch))
+data EquivalenceClass a =
+  EquivalenceClass { ecPrograms :: Seq.Seq a
+                   , ecRepresentative :: Int
+                   }
+  deriving (Functor, F.Foldable, T.Traversable)
+
+equivalenceClass :: CandidateProgram t arch -> EquivalenceClass (CandidateProgram t arch)
+equivalenceClass p = EquivalenceClass { ecPrograms = Seq.singleton p
+                                      , ecRepresentative = 0
+                                      }
+
+-- | Construct a new equivalence class from a list, choosing the best
+-- representative
+equivalenceClassFromList :: (a -> a -> Ordering) -> a -> Seq.Seq a -> EquivalenceClass a
+equivalenceClassFromList = undefined
+
+equivalenceClassFromListMay :: (a -> a -> Ordering) -> Seq.Seq a -> Maybe (EquivalenceClass a)
+equivalenceClassFromListMay cmp s =
+  case Seq.viewl s of
+    Seq.EmptyL -> Nothing
+    p1 Seq.:< rest -> Just (equivalenceClassFromList cmp p1 rest)
 
 -- | Construct an initial set of equivalence classes with a single program
-equivalenceClasses :: CandidateProgram t arch -> EquivalenceClasses t arch
-equivalenceClasses p = EquivalenceClasses (Seq.singleton (Seq.singleton p))
+equivalenceClasses :: CandidateProgram t arch -> EquivalenceClasses (CandidateProgram t arch)
+equivalenceClasses p = EquivalenceClasses (Seq.singleton (equivalenceClass p))
 
 -- | Count the total number of programs in the set of equivalence classes
-countPrograms :: EquivalenceClasses t arch -> Int
-countPrograms s = sum (map Seq.length (F.toList (unClasses s)))
+countPrograms :: EquivalenceClasses (CandidateProgram t arch) -> Int
+countPrograms s = sum (map (Seq.length . ecPrograms) (F.toList (unClasses s)))
 
 data ClassifyState t arch =
-  ClassifyState { eqClassesSeq :: Seq.Seq (Seq.Seq (Int, CandidateProgram t arch))
+  ClassifyState { eqClassesSeq :: EquivalenceClasses (Int, CandidateProgram t arch)
+                  -- Seq.Seq (Seq.Seq (Int, CandidateProgram t arch))
                 , mergableClasses :: [Int]
                 -- ^ Indexes of the equivalence classes to merge
                 }
 
-classAtIndex :: Int -> ClassifyM t arch (Maybe (Seq.Seq (CandidateProgram t arch)))
+classAtIndex :: Int -> ClassifyM t arch (Maybe (EquivalenceClass (CandidateProgram t arch)))
 classAtIndex ix = do
-  eqClasses <- St.gets eqClassesSeq
+  EquivalenceClasses eqClasses <- St.gets eqClassesSeq
   return $ fmap (fmap snd) (Seq.lookup ix eqClasses)
 
 -- | Merge all of the classes marked in `mergableClasses` (if any)
 extractMergableClasses :: ClassifyM t arch (Seq.Seq (Seq.Seq (CandidateProgram t arch)))
 extractMergableClasses = do
   s <- St.get
-  return (Seq.fromList (fmap (fmap snd) (mapMaybe (flip Seq.lookup (eqClassesSeq s)) (mergableClasses s))))
+  let classesToKeep = mapMaybe (flip Seq.lookup (unClasses (eqClassesSeq s))) (mergableClasses s)
+      justProgramGroups = fmap ((fmap snd) . ecPrograms) classesToKeep
+  return (Seq.fromList justProgramGroups)
+--  return (Seq.fromList (fmap (fmap snd) (mapMaybe (flip Seq.lookup (eqClassesSeq s)) (mergableClasses s))))
 
 -- | Count the number of non-empty classes
 countRemainingClasses :: ClassifyM t arch Int
 countRemainingClasses = do
   klasses <- St.gets eqClassesSeq
-  return $ sum [ if Seq.null s then 0 else 1 | s <- F.toList klasses ]
+  return $ sum [ if Seq.null (ecPrograms klass) then 0 else 1
+               | klass <- F.toList (unClasses klasses)
+               ]
 
 -- | Add a class (by index) as a class marked to be merged (because it is
 -- equivalent to the newly-discovered candidate program).
@@ -110,12 +142,11 @@ classify :: forall arch t
          -- ^ The instruction whose semantics we are trying to learn
          -> CandidateProgram t arch
          -- ^ The program we just learned and need to add to an equivalence class
-         -> EquivalenceClasses t arch
+         -> EquivalenceClasses (CandidateProgram t arch)
          -- ^ The current equivalence classes
-         -> Syn t arch (Maybe (EquivalenceClasses t arch))
+         -> Syn t arch (Maybe (EquivalenceClasses (CandidateProgram t arch)))
 classify target p eqclasses = do
-  let classesSeq = unClasses eqclasses
-      s0 = ClassifyState { eqClassesSeq = numberNestedItems classesSeq
+  let s0 = ClassifyState { eqClassesSeq = snd (L.mapAccumR numberItem 0 eqclasses)
                          , mergableClasses = []
                          }
       act = classifyByClass target p 0
@@ -126,10 +157,12 @@ classify target p eqclasses = do
       | Seq.null classes -> do
           -- Add a new equivalence class for this program, since it isn't
           -- equivalent to any existing class
-          return (Just (EquivalenceClasses (Seq.singleton p Seq.<| unClasses eqclasses)))
+          return (Just (EquivalenceClasses (equivalenceClass p Seq.<| unClasses eqclasses)))
       | otherwise -> do
-          let eqclasses' = p Seq.<| mergeClasses classes
-          return (Just (EquivalenceClasses (Seq.singleton eqclasses')))
+          return (Just (EquivalenceClasses (Seq.singleton (equivalenceClassFromList compareCandidate p (mergeClasses classes)))))
+
+numberItem :: Int -> a -> (Int, (Int, a))
+numberItem n itm = (n + 1, (n, itm))
 
 -- | For each class in the current equivalence classes, see if the given program
 -- matches any.  This function returns the list of all matching equivalence
@@ -157,7 +190,7 @@ classifyByClass target p ix = do
   case mklass of
     Nothing -> Just <$> extractMergableClasses
     Just klass -> do
-      representative <- liftC $ chooseProgram (EquivalenceClass klass)
+      representative <- liftC $ chooseProgram klass
       eqv <- liftC $ testEquivalence p representative
       case eqv of
         F.Equivalent -> do
@@ -167,7 +200,7 @@ classifyByClass target p ix = do
           -- See Note [Registerization and Counterexamples]
           let (target', cx') = CS.registerizeInstruction target cx
           liftC $ addTestCase cx'
-          removeInvalidPrograms target' cx'
+          ix' <- removeInvalidPrograms ix target' cx'
           nClasses <- countRemainingClasses
           case nClasses of
             0 -> return Nothing
@@ -175,7 +208,7 @@ classifyByClass target p ix = do
             -- one empty, though), so iterating is fine.  Since we don't add or
             -- remove classes, the iteration is stable and we never need to
             -- restart.
-            _ -> classifyByClass target p (ix + 1)
+            _ -> classifyByClass target p ix'
 
 -- | Remove the programs in the equivalence classes that do not have the same
 -- output on the counterexample as the target instruction.
@@ -183,22 +216,46 @@ classifyByClass target p ix = do
 -- We have a new counterexample and need to do concrete executions of *each*
 -- existing candidate programs and reject those that do not provide the correct
 -- output.
-removeInvalidPrograms :: (SynC arch)
-                      => A.Instruction arch
+--
+-- Returns an updated index (the next index to pass to a recursive call).  If no
+-- equivalence classes are removed, this is @ix + 1@.
+removeInvalidPrograms :: forall t arch . (SynC arch)
+                      => Int
+                      -- ^ The current index into the equivalence classes for
+                      -- our iteration; this will be modified on return if we
+                      -- had to eliminate an empty equivalence class
+                      -> A.Instruction arch
+                      -- ^ The target instruction
                       -> CS.ConcreteState arch
-                      -> ClassifyM t arch ()
-removeInvalidPrograms target cx = do
+                      -- ^ A learned counterexample
+                      -> ClassifyM t arch Int
+removeInvalidPrograms ix target cx = do
   targetTC <- liftC $ mkTestCase cx [target]
   CE.TestSuccess (CE.TestResult { CE.resultContext = targetSt })
     <- liftC $ runConcreteTest targetTC
   klasses <- St.gets eqClassesSeq
-  let allCandidates = foldr (Seq.><) Seq.empty klasses
+  let allCandidates = foldr (\k a -> ecPrograms k Seq.>< a) Seq.empty (unClasses klasses)
   (testCases, testIndex) <- F.foldrM (makeAndIndexTest cx) ([], M.empty) allCandidates
   testResults <- liftC $ runConcreteTests testCases
-  let testLists' = [ mapMaybeSeq (consistentWithTarget testIndex testResults targetSt) testList
-                   | testList <- F.toList klasses
-                   ]
-  St.modify' $ \s -> s { eqClassesSeq = Seq.fromList testLists' }
+  let testListsMay' :: [Maybe (EquivalenceClass (Int, CandidateProgram t arch))]
+      testListsMay' = [ equivalenceClassFromListMay (compareCandidate `on` snd) maybes
+                      | ec <- F.toList (unClasses klasses)
+                      , let maybes = mapMaybeSeq (consistentWithTarget testIndex testResults targetSt) (ecPrograms ec)
+                      ]
+  mergable <- St.gets mergableClasses
+  let (ix', testLists', mergable') = computeNewIndexes ix testListsMay' mergable
+  St.modify' $ \s -> s { eqClassesSeq = EquivalenceClasses (Seq.fromList testLists')
+                       , mergableClasses = mergable'
+                       }
+  return ix'
+
+-- | Correct indexes (from the next iteration index and the mergable classes
+-- list) if we have to remove any empty equivalence classes.
+computeNewIndexes :: Int
+                  -> [Maybe (EquivalenceClass (Int, CandidateProgram t arch))]
+                  -> [Int]
+                  -> (Int, [EquivalenceClass (Int, CandidateProgram t arch)], [Int])
+computeNewIndexes = undefined
 
 mapMaybeSeq :: (a -> Maybe b) -> Seq.Seq a -> Seq.Seq b
 mapMaybeSeq f = Seq.fromList . mapMaybe f . F.toList
@@ -244,28 +301,22 @@ makeAndIndexTest cx (pix, cp) (cases, idx) = do
   where
     program = concatMap P.synthInsnToActual (cpInstructions cp)
 
--- | Assign a unique number to each list item (in the inner lists)
-numberNestedItems :: (T.Traversable t) => t (t a) -> t (t (Int, a))
-numberNestedItems = snd . L.mapAccumR number1 0
-  where
-    number1 n = L.mapAccumR number2 n
-    number2 n itm = (n + 1, (n, itm))
-
 -- | Heuristically-choose the best equivalence class
 --
 -- It prefers classes with more examples and fewer uninterpreted functions
-chooseClass :: EquivalenceClasses t arch -> Syn t arch (EquivalenceClass t arch)
+chooseClass :: EquivalenceClasses (CandidateProgram t arch)
+            -> Syn t arch (EquivalenceClass (CandidateProgram t arch))
 chooseClass (EquivalenceClasses klasses) =
   case Seq.viewl klasses of
     Seq.EmptyL -> L.error "Empty equivalence class set"
-    k1 Seq.:< rest -> EquivalenceClass <$> F.foldlM bestClass k1 rest
+    k1 Seq.:< rest -> F.foldlM bestClass k1 rest
 
-bestClass :: Seq.Seq (CandidateProgram t arch)
-          -> Seq.Seq (CandidateProgram t arch)
-          -> Syn t arch (Seq.Seq (CandidateProgram t arch))
+bestClass :: EquivalenceClass (CandidateProgram t arch)
+          -> EquivalenceClass (CandidateProgram t arch)
+          -> Syn t arch (EquivalenceClass (CandidateProgram t arch))
 bestClass k1 k2 = do
-  best1 <- chooseProgram (EquivalenceClass k1)
-  best2 <- chooseProgram (EquivalenceClass k2)
+  best1 <- chooseProgram k1
+  best2 <- chooseProgram k2
   case compareCandidate best1 best2 of
     GT -> return k1
     EQ -> return k1
@@ -275,11 +326,11 @@ bestClass k1 k2 = do
 --
 -- We want to minimize the number of uninterpreted functions and non-linear
 -- operations (as well as formula size).
-chooseProgram :: EquivalenceClass t arch -> Syn t arch (CandidateProgram t arch)
-chooseProgram (EquivalenceClass progs) =
-  case Seq.viewl progs of
-    Seq.EmptyL -> L.error "BUG: Empty equivalence classes are not allowed"
-    p1 Seq.:< rest -> return $ F.foldl' betterCandidateProgram p1 rest
+chooseProgram :: EquivalenceClass (CandidateProgram t arch) -> Syn t arch (CandidateProgram t arch)
+chooseProgram ec =
+  case Seq.lookup (ecRepresentative ec) (ecPrograms ec) of
+    Nothing -> L.error "BUG: Invalid representative index in equivalence class"
+    Just repr -> return repr
 
 -- | Return the better of two candidate programs
 --
