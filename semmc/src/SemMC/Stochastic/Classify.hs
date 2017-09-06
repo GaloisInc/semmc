@@ -255,7 +255,21 @@ numberNestedItems = snd . L.mapAccumR number1 0
 --
 -- It prefers classes with more examples and fewer uninterpreted functions
 chooseClass :: EquivalenceClasses t arch -> Syn t arch (EquivalenceClass t arch)
-chooseClass = undefined
+chooseClass (EquivalenceClasses klasses) =
+  case Seq.viewl klasses of
+    Seq.EmptyL -> L.error "Empty equivalence class set"
+    k1 Seq.:< rest -> EquivalenceClass <$> F.foldlM bestClass k1 rest
+
+bestClass :: Seq.Seq (CandidateProgram t arch)
+          -> Seq.Seq (CandidateProgram t arch)
+          -> Syn t arch (Seq.Seq (CandidateProgram t arch))
+bestClass k1 k2 = do
+  best1 <- chooseProgram (EquivalenceClass k1)
+  best2 <- chooseProgram (EquivalenceClass k2)
+  case compareCandidate best1 best2 of
+    GT -> return k1
+    EQ -> return k1
+    LT -> return k2
 
 -- | Choose the best program out of an equivalence class as the basis for a formula
 --
@@ -280,16 +294,26 @@ chooseProgram (EquivalenceClass progs) =
 betterCandidateProgram :: CandidateProgram t arch
                        -> CandidateProgram t arch
                        -> CandidateProgram t arch
-betterCandidateProgram p1 p2
-  | uf1 < uf2 = p1
-  | uf2 < uf1 = p2
-  | nonLinear1 < nonLinear2 = p1
-  | nonLinear2 < nonLinear1 = p2
-  | size1 < size2 = p1
-  | otherwise = p2
+betterCandidateProgram p1 p2 =
+  case compareCandidate p1 p2 of
+    GT -> p1
+    EQ -> p1
+    LT -> p2
+
+-- | Compare two programs: @p1@ is GT @p2@ if it is "better" according to the
+-- heuristic
+compareCandidate :: CandidateProgram t arch -> CandidateProgram t arch -> Ordering
+compareCandidate p1 p2
+  | uf1 < uf2 = GT
+  | uf2 < uf1 = LT
+  | nonLinear1 < nonLinear2 = GT
+  | nonLinear2 < nonLinear1 = LT
+  | size1 < size2 = GT
+  | otherwise = LT
   where
     (uf1, nonLinear1, size1) = summarizeFormula (cpFormula p1)
     (uf2, nonLinear2, size2) = summarizeFormula (cpFormula p2)
+
 
 summarizeFormula :: forall t arch . F.Formula (Sym t) arch -> (Int, Int, Int)
 summarizeFormula f = F.foldl' (summarizeExpr) (0, 0, 0) someExprs
