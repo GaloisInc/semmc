@@ -42,7 +42,7 @@ data Options = Options { oRelDir :: FilePath
 
 optionsParser :: O.Parser Options
 optionsParser = Options <$> O.strOption ( O.long "relation-directory"
-                                        <> O.short 'd'
+                                        <> O.short 'r'
                                         <> O.metavar "DIR"
                                         <> O.help "The directory to store learned IO relations" )
                         <*> O.option O.auto ( O.long "num-threads"
@@ -109,7 +109,7 @@ mainWithOptions opt = do
 
     Quiet -> A.async $ dumpLog logChan
   A.link logger
-  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toFP allOps
+  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toIORelFP allOps
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"
     putStrLn (unlines (map show (F.toList failures)))
