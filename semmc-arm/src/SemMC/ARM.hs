@@ -29,7 +29,7 @@ data MachineState =
                , mem2 :: V.Vector 32 Word8
                -- ^ 32 bytes
                }
-  deriving (Show)
+  deriving (Show,Eq)
 
 -- The instruction representation is literal machine code.
 type Instruction = LB.ByteString
