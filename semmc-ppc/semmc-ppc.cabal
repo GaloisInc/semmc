@@ -54,7 +54,7 @@ executable semmc-ppc-iorels
   ghc-options: -Wall -rtsopts -threaded
   hs-source-dirs: tools
   main-is: IORelation.hs
-  other-modules: Util
+  other-modules: Util, Logging
   build-depends: base,
                  directory,
                  async,
@@ -72,7 +72,7 @@ executable semmc-ppc-stratify
   ghc-options: -Wall -rtsopts -threaded
   hs-source-dirs: tools
   main-is: Stratify.hs
-  other-modules: Util
+  other-modules: Util, Logging
   build-depends: base,
                  directory,
                  async,

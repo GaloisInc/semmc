@@ -4,11 +4,9 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
-import           Control.Monad ( when, unless )
-import qualified Data.Foldable as F
+import           Control.Monad ( when )
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
-import qualified Data.Time.Format as T
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
@@ -22,20 +20,21 @@ import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 
-import qualified Dismantle.Arbitrary as A
+import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified Dismantle.Tablegen.TH as DT
 import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula.Parser as F
 import qualified SemMC.Stochastic.IORelation as IOR
-import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Stochastic.Strata as SST
 import qualified SemMC.Stochastic.Pseudo as P
 
 import qualified SemMC.Architecture.PPC as PPC
 
-import           Util
+import qualified Logging as L
+import qualified Util as Util
 
 data Logging = Verbose | Quiet
 
@@ -43,10 +42,12 @@ data Options = Options { oRelDir :: FilePath
                        , oBaseDir :: FilePath
                        , oPseudoDir :: FilePath
                        , oLearnedDir :: FilePath
+                       , oStatisticsFile :: FilePath
                        , oProgramCount :: Int
                        , oRandomTests :: Int
                        , oNumThreads :: Int
-                       , oTimeoutSeconds :: Int
+                       , oOpcodeTimeoutSeconds :: Int
+                       , oRemoteTimeoutSeconds :: Int
                        , oRemoteHost :: String
                        , oPrintLog :: Logging
                        }
@@ -68,6 +69,10 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                         <> O.short 'l'
                                         <> O.metavar "DIR"
                                         <> O.help "The directory to store learned semantics" )
+                        <*> O.strOption ( O.long "statistics-file"
+                                        <> O.short 's'
+                                        <> O.metavar "FILE"
+                                        <> O.help "The file in which to persist search statistics" )
                         <*> O.option O.auto ( O.long "program-threshold"
                                             <> O.short 'P'
                                             <> O.value 10
@@ -84,8 +89,14 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.short 'N'
                                             <> O.metavar "THREADS"
                                             <> O.help "The number of executor threads to run" )
-                        <*> O.option O.auto ( O.long "timeout"
+                        <*> O.option O.auto (  O.long "opcode-timeout"
                                             <> O.short 't'
+                                            <> O.metavar "SECONDS"
+                                            <> O.value 600
+                                            <> O.showDefault
+                                            <> O.help "The number of seconds to wait before giving up on learning a program for an opcode" )
+                        <*> O.option O.auto ( O.long "remote-timeout"
+                                            <> O.short 'T'
                                             <> O.metavar "SECONDS"
                                             <> O.help "The number of seconds to wait for all responses from the remote runner" )
                         <*> O.strOption ( O.long "remote-host"
@@ -116,22 +127,44 @@ pseudoOps = undefined
 targetOpcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
 targetOpcodes = undefined
 
+die :: String -> IO a
+die msg = IO.hPutStr IO.stderr msg >> IO.exitFailure
+
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
+  when (oNumThreads opts < 1) $ do
+    die $ printf "Invalid thread count: %d\n" (oNumThreads opts)
+
+  iorels <- IOR.loadIORelations (Proxy @PPC.PPC) (oRelDir opts) Util.toIORelFP allOpsRel
+
+  rng <- DA.createGen
+  let testGenerator = CS.randomState (Proxy @PPC.PPC) rng
   Some ng <- N.newIONonceGenerator
   sym <- SB.newSimpleBackend ng
-  iorels <- IOR.loadIORelations (Proxy @PPC.PPC) (oRelDir opts) toIORelFP allOpsRel
-  senv <- SST.loadInitialState cfg sym generator initialTestCases allOps pseudoOps targetOpcodes iorels
-  undefined
+  let serializer = CE.TestSerializer { CE.flattenMachineState = CS.serialize (Proxy @PPC.PPC)
+                                     , CE.parseMachineState = CS.deserialize (Proxy @PPC.PPC)
+                                     , CE.flattenProgram = mconcat . map PPC.assembleInstruction
+                                     }
+
+  logChan <- C.newChan
+  logger <- case oPrintLog opts of
+    Verbose -> A.async (L.printLogMessages logChan)
+    Quiet -> A.async (L.dumpLog logChan)
+  A.link logger
+
+  let cfg = SST.Config { SST.baseSetDir = oBaseDir opts
+                       , SST.pseudoSetDir = oPseudoDir opts
+                       , SST.learnedSetDir = oLearnedDir opts
+                       , SST.statisticsFile = oStatisticsFile opts
+                       , SST.programCountThreshold = oProgramCount opts
+                       , SST.randomTestCount = oRandomTests opts
+                       , SST.threadCount = oNumThreads opts
+                       , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
+                       , SST.logChannel = logChan
+                       }
+
+  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases allOps pseudoOps targetOpcodes iorels
+  _ <- SST.stratifiedSynthesis senv
+  return ()
   where
-    generator = undefined
     initialTestCases = undefined
-    cfg = SST.Config { SST.baseSetDir = oBaseDir opts
-                     , SST.pseudoSetDir = oPseudoDir opts
-                     , SST.learnedSetDir = oLearnedDir opts
-                     , SST.statisticsFile = undefined
-                     , SST.programCountThreshold = oProgramCount opts
-                     , SST.randomTestCount = oRandomTests opts
-                     , SST.threadCount = oNumThreads opts
-                     , SST.testRunner = undefined
-                     }

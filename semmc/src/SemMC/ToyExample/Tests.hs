@@ -232,6 +232,7 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
 -- we should change this to set up the on-disk test env in a tmp dir.
 runSynToy :: (forall t. Syn t Toy a) -> IO a
 runSynToy action = do
+  logChan <- C.newChan
   let cfg :: Config Toy
       cfg = Config
         { baseSetDir = "test-toy/test1/base"
@@ -242,6 +243,7 @@ runSynToy action = do
         , randomTestCount = 1024
         , threadCount = L.error "threadCount"
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
+        , logChannel = logChan
         }
 
   {-
@@ -287,7 +289,6 @@ runSynToy action = do
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe (I.TestCase Toy)))
   rChan <- C.newChan
-  logChan <- C.newChan
   _testRunnerThread <- C.async $
     testRunner (seConfig synEnv) tChan rChan logChan
   C.link _testRunnerThread

@@ -385,6 +385,12 @@ data Config arch =
          , randomTestCount :: Int
          -- ^ The number of random tests to generate
          , threadCount :: Int
+         -- ^ The number of threads to use for the search.  More is usually
+         -- better, but there is locking around the symbolic backend (i.e.,
+         -- 'SimpleBuilder'), so there could be contention if there is too much
+         -- parallelism.
+         , logChannel :: C.Chan CE.LogMessage
+         -- ^ The channel to send log messages to from the remote runner
          , testRunner :: I.TestRunner arch
          -- ^ See the related @lcTestRunner@ for usage examples.
          }
