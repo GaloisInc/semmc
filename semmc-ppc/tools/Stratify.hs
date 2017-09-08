@@ -152,6 +152,8 @@ mainWithOptions opts = do
     Quiet -> A.async (L.dumpLog logChan)
   A.link logger
 
+  DIR.createDirectoryIfMissing True (oLearnedDir opts)
+
   let cfg = SST.Config { SST.baseSetDir = oBaseDir opts
                        , SST.pseudoSetDir = oPseudoDir opts
                        , SST.learnedSetDir = oLearnedDir opts
