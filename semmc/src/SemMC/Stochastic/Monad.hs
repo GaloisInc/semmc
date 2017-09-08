@@ -58,10 +58,13 @@ import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import           Data.IORef ( IORef, readIORef, modifyIORef' )
 import qualified Data.Map.Strict as Map
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
+import           Data.Typeable ( Typeable )
 import           Data.Word ( Word64 )
 import           System.FilePath ( (</>), (<.>) )
+import qualified System.Timeout as IO
 
 import qualified Data.EnumF as P
 import qualified Data.Parameterized.Classes as P
@@ -199,6 +202,8 @@ programFormula sym insns = do
 -- | Synthesis constraints.
 type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
                  , P.OrdF (A.Operand arch)
+                 , P.ShowF (A.Operand arch)
+                 , P.ShowF (A.Opcode arch (A.Operand arch))
                  , D.ArbitraryOperand (A.Operand arch)
                  , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
                  , D.ArbitraryOperands (Pseudo arch) (A.Operand arch)
@@ -272,21 +277,49 @@ askConfig = R.asks (seConfig . seGlobalEnv)
 askGen :: Syn t arch DA.Gen
 askGen = R.asks seRandomGen
 
-runConcreteTests :: [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
+-- | Return the number of microseconds to wait for a timeout
+timeoutMicros :: Syn t arch Int
+timeoutMicros = do
+  seconds <- R.asks (remoteRunnerTimeoutSeconds . seConfig . seGlobalEnv)
+  return (seconds * 1000 * 1000)
+
+data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
+
+instance (SynC arch) => Show (RemoteRunnerTimeout arch) where
+  show (RemoteRunnerTimeout _ tcs) = unwords [ "RemoteRunnerTimeout", show tcs ]
+
+instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
+
+-- | Run a set of concrete tests
+--
+-- Returns 'Nothing' if the remote runner doesn't respond by the configured
+-- timeout ('remoteRunnerTimeoutSeconds')
+runConcreteTests :: forall t arch
+                  . (SynC arch)
+                 => [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
                  -> Syn t arch (CE.ResultIndex (CS.ConcreteState arch))
 runConcreteTests tests = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
-  results <- CE.withTestResults tChan rChan tests return
-  return (CE.indexResults results)
+  us <- timeoutMicros
+  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan tests return
+  case mresults of
+    Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) tests
+    Just results -> return (CE.indexResults results)
 
-runConcreteTest :: CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
+runConcreteTest :: forall t arch
+                 . (SynC arch)
+                => CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
                 -> Syn t arch (CE.ResultOrError (CS.ConcreteState arch))
 runConcreteTest tc = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
-  [result] <- CE.withTestResults tChan rChan [tc] return
-  return result
+  us <- timeoutMicros
+  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan [tc] return
+  case mresults of
+    Just [result] -> return result
+    Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) [tc]
+    _ -> L.error "Unexpected number of results from a single concrete test run"
 
 -- | Get access to the symbolic backend to compute something.
 --
@@ -391,6 +424,12 @@ data Config arch =
          -- parallelism.
          , logChannel :: C.Chan CE.LogMessage
          -- ^ The channel to send log messages to from the remote runner
+         , remoteRunnerTimeoutSeconds :: Int
+         -- ^ The number of seconds to wait for a response from the remote
+         -- runner after sending a batch of tests
+         , opcodeTimeoutSeconds :: Int
+         -- ^ The number of seconds to spend trying to find a candidate program
+         -- that explains a target instruction before giving up.
          , testRunner :: I.TestRunner arch
          -- ^ See the related @lcTestRunner@ for usage examples.
          }

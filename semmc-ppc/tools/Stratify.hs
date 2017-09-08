@@ -158,6 +158,7 @@ mainWithOptions opts = do
                        , SST.statisticsFile = oStatisticsFile opts
                        , SST.programCountThreshold = oProgramCount opts
                        , SST.randomTestCount = oRandomTests opts
+                       , SST.remoteRunnerTimeoutSeconds = oRemoteTimeoutSeconds opts
                        , SST.threadCount = oNumThreads opts
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.logChannel = logChan

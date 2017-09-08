@@ -243,6 +243,7 @@ runSynToy action = do
         , statisticsFile = "test-toy/test1/stats.txt"
         , programCountThreshold = L.error "programCountThreshold"
         , randomTestCount = 1024
+        , remoteRunnerTimeoutSeconds = 20
         , threadCount = L.error "threadCount"
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
         , logChannel = logChan
