@@ -278,8 +278,8 @@ askGen :: Syn t arch DA.Gen
 askGen = R.asks seRandomGen
 
 -- | Return the number of microseconds to wait for a timeout
-timeoutMicros :: Syn t arch Int
-timeoutMicros = do
+remoteTimeoutMicros :: Syn t arch Int
+remoteTimeoutMicros = do
   seconds <- R.asks (remoteRunnerTimeoutSeconds . seConfig . seGlobalEnv)
   return (seconds * 1000 * 1000)
 
@@ -301,7 +301,7 @@ runConcreteTests :: forall t arch
 runConcreteTests tests = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
-  us <- timeoutMicros
+  us <- remoteTimeoutMicros
   mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan tests return
   case mresults of
     Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) tests
@@ -314,7 +314,7 @@ runConcreteTest :: forall t arch
 runConcreteTest tc = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
-  us <- timeoutMicros
+  us <- remoteTimeoutMicros
   mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan [tc] return
   case mresults of
     Just [result] -> return result
