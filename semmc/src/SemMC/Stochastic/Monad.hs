@@ -36,6 +36,7 @@ module SemMC.Stochastic.Monad (
   lookupFormula,
   lookupCongruent,
   withSymBackend,
+  withTimeout,
   addTestCase,
   mkTestCase,
   runConcreteTests,
@@ -228,6 +229,14 @@ newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
 runSyn :: forall arch t a. LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
+-- | Run a computation under the general timeout for the maximum operation
+-- length for any synthesis operation
+withTimeout :: Syn t arch a -> Syn t arch (Maybe a)
+withTimeout action = do
+  us <- timeoutMicroseconds opcodeTimeoutSeconds
+  env <- R.ask
+  liftIO $ IO.timeout us $ runSyn env action
+
 -- | A version of 'C.tryJust' wrapped for our 'Syn' monad.
 --
 -- The @unliftio@ package generalizes this idea and provides a
@@ -277,10 +286,9 @@ askConfig = R.asks (seConfig . seGlobalEnv)
 askGen :: Syn t arch DA.Gen
 askGen = R.asks seRandomGen
 
--- | Return the number of microseconds to wait for a timeout
-remoteTimeoutMicros :: Syn t arch Int
-remoteTimeoutMicros = do
-  seconds <- R.asks (remoteRunnerTimeoutSeconds . seConfig . seGlobalEnv)
+timeoutMicroseconds :: (Num b) => (Config arch -> b) -> Syn t arch b
+timeoutMicroseconds accessor = do
+  seconds <- R.asks (accessor . seConfig . seGlobalEnv)
   return (seconds * 1000 * 1000)
 
 data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
@@ -301,7 +309,7 @@ runConcreteTests :: forall t arch
 runConcreteTests tests = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
-  us <- remoteTimeoutMicros
+  us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
   mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan tests return
   case mresults of
     Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) tests
@@ -314,7 +322,7 @@ runConcreteTest :: forall t arch
 runConcreteTest tc = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
-  us <- remoteTimeoutMicros
+  us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
   mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan [tc] return
   case mresults of
     Just [result] -> return result

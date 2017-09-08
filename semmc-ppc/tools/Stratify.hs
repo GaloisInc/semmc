@@ -92,7 +92,7 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                         <*> O.option O.auto (  O.long "opcode-timeout"
                                             <> O.short 't'
                                             <> O.metavar "SECONDS"
-                                            <> O.value 600
+                                            <> O.value 1200
                                             <> O.showDefault
                                             <> O.help "The number of seconds to wait before giving up on learning a program for an opcode" )
                         <*> O.option O.auto ( O.long "remote-timeout"
@@ -159,6 +159,7 @@ mainWithOptions opts = do
                        , SST.programCountThreshold = oProgramCount opts
                        , SST.randomTestCount = oRandomTests opts
                        , SST.remoteRunnerTimeoutSeconds = oRemoteTimeoutSeconds opts
+                       , SST.opcodeTimeoutSeconds = oOpcodeTimeoutSeconds opts
                        , SST.threadCount = oNumThreads opts
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.logChannel = logChan

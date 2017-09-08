@@ -244,6 +244,7 @@ runSynToy action = do
         , programCountThreshold = L.error "programCountThreshold"
         , randomTestCount = 1024
         , remoteRunnerTimeoutSeconds = 20
+        , opcodeTimeoutSeconds = 600
         , threadCount = L.error "threadCount"
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
         , logChannel = logChan
@@ -323,7 +324,7 @@ test_synthesizeCandidate = do
                          }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
   runSynToy $ do
-    fmap cpInstructions <$> S.synthesize instruction
+    fmap cpInstructions <$> withTimeout (S.synthesize instruction)
 
 -- | Weigh a candidate that produces the right value in the wrong
 -- place.

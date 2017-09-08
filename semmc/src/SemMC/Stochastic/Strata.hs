@@ -95,7 +95,7 @@ strataOne :: (CS.ConcreteArchitecture arch, SynC arch)
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
   instr <- instantiateInstruction op
-  mprog <- synthesize instr
+  mprog <- withTimeout (synthesize instr)
   case mprog of
     Nothing -> return Nothing
     Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
@@ -107,7 +107,7 @@ strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
   cfg <- askConfig
-  mprog <- synthesize instr
+  mprog <- withTimeout (synthesize instr)
   case mprog of
     Nothing -> do
       -- We hit a timeout, so just try to build a formula based on what we have

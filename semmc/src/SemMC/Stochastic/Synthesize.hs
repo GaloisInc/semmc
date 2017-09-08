@@ -60,12 +60,11 @@ import Control.Monad
 -- | Attempt to stochastically find a program in terms of the base set that has
 -- the same semantics as the given instruction.
 --
--- Can fail due to timeouts.
+-- This function can loop forever, and should be called under a timeout
 synthesize :: SynC arch
            => C.RegisterizedInstruction arch
-           -> Syn t arch (Maybe (CandidateProgram t arch))
+           -> Syn t arch (CandidateProgram t arch)
 synthesize target = do
-  -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
   (numRounds, candidate) <- mcmcSynthesizeOne target
   debug $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . toList $ candidate
@@ -74,9 +73,9 @@ synthesize target = do
   debug $ printf "# test cases = %i\n" (length tests)
   withSymBackend $ \sym -> do
     f <- programFormula sym candidateWithoutNops
-    return $ Just CandidateProgram { cpInstructions = candidateWithoutNops
-                                   , cpFormula = f
-                                   }
+    return CandidateProgram { cpInstructions = candidateWithoutNops
+                            , cpFormula = f
+                            }
   where
     debug msg = liftIO $ traceIO msg
 
