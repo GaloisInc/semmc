@@ -60,12 +60,11 @@ import Control.Monad
 -- | Attempt to stochastically find a program in terms of the base set that has
 -- the same semantics as the given instruction.
 --
--- Can fail due to timeouts.
+-- This function can loop forever, and should be called under a timeout
 synthesize :: SynC arch
            => C.RegisterizedInstruction arch
-           -> Syn t arch (Maybe (CandidateProgram t arch))
+           -> Syn t arch (CandidateProgram t arch)
 synthesize target = do
-  -- TODO: fork and kill on timeout here, or do that in 'strataOne'.
   (numRounds, candidate) <- mcmcSynthesizeOne target
   debug $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . toList $ candidate
@@ -74,9 +73,9 @@ synthesize target = do
   debug $ printf "# test cases = %i\n" (length tests)
   withSymBackend $ \sym -> do
     f <- programFormula sym candidateWithoutNops
-    return $ Just CandidateProgram { cpInstructions = candidateWithoutNops
-                                   , cpFormula = f
-                                   }
+    return CandidateProgram { cpInstructions = candidateWithoutNops
+                            , cpFormula = f
+                            }
   where
     debug msg = liftIO $ traceIO msg
 
@@ -183,25 +182,34 @@ compareTargetToCandidate target candidate test = do
   -- changes. An easy way to do this is to change the definition of
   -- test to be a pair of a start state and the end state for the
   -- start state when running the target.
-  CE.TestSuccess (CE.TestResult { CE.resultContext = candidateSt })
-     <- runConcreteTest =<< mkTestCase test' candidateProg
-
-  CE.TestSuccess (CE.TestResult { CE.resultContext = targetSt })
-     <- runConcreteTest =<< mkTestCase test' targetProg
+  candidateRes <- runConcreteTest =<< mkTestCase test' candidateProg
+  targetRes <- runConcreteTest =<< mkTestCase test' targetProg
   !liveOut     <- getOutMasks target'
-  !eitherWeight <- liftIO $ C.tryJust pred $ do
-    let !weight = compareTargetOutToCandidateOut liveOut targetSt candidateSt
-    return weight
+  eitherWeight <- liftIO (doComparison liveOut targetRes candidateRes `C.catches` handlers)
   case eitherWeight of
     Left e -> do
       debug (show e)
-      debug $ printf "target = %s" (show targetSt)
-      debug $ printf "candidate = %s" (show candidateSt)
+      debug $ printf "target = %s" (show targetRes)
+      debug $ printf "candidate = %s" (show candidateRes)
       liftIO (C.throwIO e)
     Right weight -> return weight
   where
-    pred = \(e :: C.ArithException) -> Just e
+    handlers = [ C.Handler arithHandler
+               , C.Handler runnerHandler
+               ]
+    arithHandler :: C.ArithException -> IO (Either C.SomeException a)
+    arithHandler e = return (Left (C.SomeException e))
+    runnerHandler :: CE.RunnerResultError -> IO (Either C.SomeException a)
+    runnerHandler e = return (Left (C.SomeException e))
     debug (msg :: String) = liftIO $ traceIO $ "compareTargetToCandidate: "++msg
+    doComparison liveOut mTargetRes mCandidateRes = do
+      case CE.asResultOrError mTargetRes of
+        Right CE.TestResult { CE.resultContext = targetSt } ->
+          case CE.asResultOrError mCandidateRes of
+            Right CE.TestResult { CE.resultContext = candidateSt } ->
+              Right <$> C.evaluate (compareTargetOutToCandidateOut liveOut targetSt candidateSt)
+            Left err -> C.throwIO err
+        Left err -> C.throwIO err
 
 -- | The masks for locations that are live out for the target instruction.
 --

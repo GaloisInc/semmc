@@ -473,14 +473,14 @@ loadBaseSet baseSetDir sym = do
                                    Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
                                    Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
                                 , ("fp.add32",
-                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
                                 , ("fp.sub64",
                                    Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
                                    Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
                                 , ("fp.sub32",
-                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
                                 ]
   undefinedBit <- S.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
   let env = FormulaEnv { envFunctions = fns

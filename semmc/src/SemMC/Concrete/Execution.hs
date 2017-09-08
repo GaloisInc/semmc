@@ -10,6 +10,8 @@ module SemMC.Concrete.Execution (
   TestCase(..),
   TestResult(..),
   ResultOrError(..),
+  RunnerResultError(..),
+  asResultOrError,
   LogMessage(..),
   TestSerializer(..),
   TestRunner
@@ -17,6 +19,7 @@ module SemMC.Concrete.Execution (
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
+import qualified Control.Exception as E
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Control.Monad ( replicateM )
 import qualified Data.Binary.Get as G
@@ -179,6 +182,24 @@ data ResultOrError c = TestReadError Word16
                      | TestContextParseFailure
                      | InvalidTag Word8
                      -- ^ Tag value
+                     deriving (Show)
+
+asResultOrError :: ResultOrError c -> Either RunnerResultError (TestResult c)
+asResultOrError r =
+  case r of
+    TestSuccess tr -> Right tr
+    TestReadError w -> Left (RunnerReadError w)
+    TestSignalError n s -> Left (RunnerSignalError n s)
+    TestContextParseFailure -> Left RunnerContextParseFailure
+    InvalidTag t -> Left (RunnerInvalidTag t)
+
+data RunnerResultError = RunnerReadError Word16
+                       | RunnerSignalError Word64 Int32
+                       | RunnerContextParseFailure
+                       | RunnerInvalidTag Word8
+                       deriving (Show)
+
+instance E.Exception RunnerResultError
 
 getTestResultOrError :: TestSerializer c i -> G.Get (ResultOrError c)
 getTestResultOrError ts = do

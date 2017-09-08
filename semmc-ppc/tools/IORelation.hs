@@ -5,31 +5,31 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
-import Control.Monad ( when, unless )
+import           Control.Monad ( when, unless )
 import qualified Data.Foldable as F
-import Data.Monoid
-import Data.Proxy ( Proxy(..) )
-import qualified Data.Time.Format as T
+import           Data.Monoid
+import           Data.Proxy ( Proxy(..) )
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
 import qualified System.IO as IO
-import Text.Printf ( printf )
+import           Text.Printf ( printf )
 
-import Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.Unfold as U
-import Data.Parameterized.Witness ( Witness(..) )
+import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
-import Dismantle.PPC.Random ()
+import           Dismantle.PPC.Random ()
 import qualified Dismantle.Tablegen.TH as DT
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Architecture.PPC as PPC
 
-import Util
+import qualified Logging as L
+import           Util
 
 data Logging = Verbose | Quiet
 
@@ -42,7 +42,7 @@ data Options = Options { oRelDir :: FilePath
 
 optionsParser :: O.Parser Options
 optionsParser = Options <$> O.strOption ( O.long "relation-directory"
-                                        <> O.short 'd'
+                                        <> O.short 'r'
                                         <> O.metavar "DIR"
                                         <> O.help "The directory to store learned IO relations" )
                         <*> O.option O.auto ( O.long "num-threads"
@@ -72,18 +72,6 @@ main = O.execParser optParser >>= mainWithOptions
 allOps :: [Some (Witness U.UnfoldShape (PPC.Opcode PPC.Operand))]
 allOps = $(DT.captureDictionaries matchConstructor ''PPC.Opcode)
 
-dumpLog :: C.Chan CE.LogMessage -> IO ()
-dumpLog c = do
-  _msg <- C.readChan c
-  dumpLog c
-
-printLogMessages :: C.Chan CE.LogMessage -> IO ()
-printLogMessages c = do
-  msg <- C.readChan c
-  let fmtTime = T.formatTime T.defaultTimeLocale "%T" (CE.lmTime msg)
-  IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (CE.lmHost msg) (CE.lmMessage msg)
-  printLogMessages c
-
 mainWithOptions :: Options -> IO ()
 mainWithOptions opt = do
   when (oNumThreads opt < 1) $ do
@@ -105,11 +93,11 @@ mainWithOptions opt = do
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
   logger <- case oPrintLog opt of
-    Verbose -> A.async $ printLogMessages logChan
+    Verbose -> A.async (L.printLogMessages logChan)
+    Quiet -> A.async (L.dumpLog logChan)
 
-    Quiet -> A.async $ dumpLog logChan
   A.link logger
-  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toFP allOps
+  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toIORelFP allOps
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"
     putStrLn (unlines (map show (F.toList failures)))
