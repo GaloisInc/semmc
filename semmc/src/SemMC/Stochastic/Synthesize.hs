@@ -190,8 +190,8 @@ compareTargetToCandidate target candidate test = do
   case eitherWeight of
     Left e -> do
       debug (show e)
-      -- debug $ printf "target = %s" (show targetSt)
-      -- debug $ printf "candidate = %s" (show candidateSt)
+      debug $ printf "target = %s" (show targetRes)
+      debug $ printf "candidate = %s" (show candidateRes)
       liftIO (C.throwIO e)
     Right weight -> return weight
   where
