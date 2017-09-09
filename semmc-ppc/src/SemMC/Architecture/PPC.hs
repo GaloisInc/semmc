@@ -97,8 +97,8 @@ type instance A.OperandType PPC "Crrc" = BaseBVType 3
 type instance A.OperandType PPC "Directbrtarget" = BaseBVType 32
 type instance A.OperandType PPC "F4rc" = BaseBVType 128
 type instance A.OperandType PPC "F8rc" = BaseBVType 128
-type instance A.OperandType PPC "G8rc" = BaseBVType 64
-type instance A.OperandType PPC "G8rc_nox0" = BaseBVType 64
+type instance A.OperandType PPC "G8rc" = BaseBVType 32
+type instance A.OperandType PPC "G8rc_nox0" = BaseBVType 32
 type instance A.OperandType PPC "Gprc" = BaseBVType 32
 type instance A.OperandType PPC "Gprc_nor0" = BaseBVType 32
 type instance A.OperandType PPC "I1imm" = BaseBVType 1
@@ -188,14 +188,29 @@ instance T.TemplatableOperand PPC "F4rc" where
 instance T.TemplatableOperand PPC "F8rc" where
   opTemplates = concreteTemplatedOperand (PPC.F8rc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
 
+instance T.TemplatableOperand PPC "G8rc" where
+  opTemplates = concreteTemplatedOperand PPC.G8rc LocGPR . PPC.GPR <$> [0..31]
+
 instance T.TemplatableOperand PPC "Gprc" where
   opTemplates = concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
+
+instance T.TemplatableOperand PPC "Tlsreg32" where
+  opTemplates = concreteTemplatedOperand PPC.Tlsreg32 LocGPR . PPC.GPR <$> [0..31]
 
 instance T.TemplatableOperand PPC "Gprc_nor0" where
   opTemplates = concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
 
 instance T.TemplatableOperand PPC "S16imm" where
   opTemplates = [symbolicTemplatedOperand (Proxy @16) True "S16imm" (PPC.S16imm . fromInteger)]
+
+instance T.TemplatableOperand PPC "S16imm64" where
+  opTemplates = [symbolicTemplatedOperand (Proxy @16) True "S16imm64" (PPC.S16imm64 . fromInteger)]
+
+instance T.TemplatableOperand PPC "U16imm" where
+  opTemplates = [symbolicTemplatedOperand (Proxy @16) True "U16imm" (PPC.U16imm . fromInteger)]
+
+instance T.TemplatableOperand PPC "U16imm64" where
+  opTemplates = [symbolicTemplatedOperand (Proxy @16) True "U16imm64" (PPC.U16imm64 . fromInteger)]
 
 instance T.TemplatableOperand PPC "Memri" where
   opTemplates = mkTemplate <$> [0..31]
@@ -229,6 +244,9 @@ instance T.TemplatableOperand PPC "Directbrtarget" where
 
 instance T.TemplatableOperand PPC "U5imm" where
   opTemplates = [symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
+
+instance T.TemplatableOperand PPC "U6imm" where
+  opTemplates = [symbolicTemplatedOperand (Proxy @6) False "U6imm" (PPC.U6imm . fromInteger)]
 
 instance T.TemplatableOperand PPC "S17imm" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkImm]
@@ -285,6 +303,15 @@ instance T.TemplatableOperand PPC "Crrc" where
             crrc <- S.freshConstant sym (U.makeSymbol "Crrc") (knownRepr :: BaseTypeRepr (BaseBVType 3))
             let recover evalFn =
                   PPC.Crrc . PPC.CRRC . fromInteger <$> evalFn crrc
+            return (crrc, T.WrappedRecoverOperandFn recover)
+
+instance T.TemplatableOperand PPC "Crbitrc" where
+  opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
+    where mkDirect :: T.TemplatedOperandFn PPC "Crbitrc"
+          mkDirect sym _ = do
+            crrc <- S.freshConstant sym (U.makeSymbol "Crbitrc") (knownRepr :: BaseTypeRepr (BaseBVType 5))
+            let recover evalFn =
+                  PPC.Crbitrc . PPC.CRBitRC . fromInteger <$> evalFn crrc
             return (crrc, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "I32imm" where
