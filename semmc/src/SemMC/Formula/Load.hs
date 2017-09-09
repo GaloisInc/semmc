@@ -2,11 +2,14 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 -- | Utilities for loading formulas from disk
 module SemMC.Formula.Load ( loadFormulas ) where
 
 import qualified GHC.Err.Located as L
 
+import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import           System.Directory ( doesFileExist )
 
@@ -34,20 +37,21 @@ import qualified SemMC.Formula.Parser as FP
 -- skip it. So, the list of shapes can simply be all possible opcodes,
 -- and what files actually exist on disk determine what we actually
 -- load.
-loadFormulas :: forall sym arch a
+loadFormulas :: forall sym c arch a
               . (CRU.IsExprBuilder sym, CRU.IsSymInterface sym, Architecture arch, MapF.OrdF a)
              => sym
              -> (forall sh' . a sh' -> FilePath)
              -> FormulaEnv sym arch
-             -> [Some (Witness (FP.BuildOperandList arch) a)]
-             -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulas sym toFP env shapes =
-  F.foldlM (\m (Some (Witness oc)) -> addIfJust readFormulaForOpcode m oc) MapF.empty shapes
+             -> (forall sh . c sh C.:- FP.BuildOperandList arch sh)
+             -> [Some (Witness c a)]
+             -> IO (MapF.MapF (Witness c a) (F.ParameterizedFormula sym arch))
+loadFormulas sym toFP env impl shapes =
+  F.foldlM (\m (Some (w@(Witness _op) :: Witness c a sh)) -> addIfJust readFormulaForOpcode m w C.\\ impl @sh) MapF.empty shapes
   where
     readFormulaForOpcode :: (FP.BuildOperandList arch sh)
-                         => a sh
+                         => Witness c a sh
                          -> IO (Maybe (F.ParameterizedFormula sym arch sh))
-    readFormulaForOpcode a = do
+    readFormulaForOpcode (Witness a) = do
       let file = toFP a
       fileExists <- doesFileExist file
       if fileExists

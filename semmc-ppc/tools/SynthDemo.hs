@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Main ( main ) where
 
 import qualified Data.ByteString as BS
@@ -19,10 +20,12 @@ import qualified Data.ElfEdit as E
 import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as N
+import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
+import qualified Dismantle.Tablegen.TH as DT
 import qualified Dismantle.PPC as DPPC
 
 import           SemMC.Architecture ( Architecture, Instruction, Location, Opcode, Operand )
@@ -33,6 +36,8 @@ import qualified SemMC.Synthesis as SemMC
 import qualified SemMC.Synthesis.Core as SemMC
 
 import qualified SemMC.Architecture.PPC as PPC
+
+import           Util ( matchConstructor )
 
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
@@ -108,12 +113,15 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
+allOps :: [Some (Witness PPC.BuildableAndTemplatable (DPPC.Opcode DPPC.Operand))]
+allOps = $(DT.captureDictionaries matchConstructor ''DPPC.Opcode)
+
 loadBaseSet :: FilePath
             -> SB.SimpleBuilder t SB.SimpleBackendState
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC.PPC),
                    SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC.PPC)
 loadBaseSet baseDir sym = do
-  baseSet <- PPC.loadBaseSet baseDir sym
+  baseSet <- PPC.loadBaseSet baseDir sym allOps
   let plainBaseSet = makePlain baseSet
   let synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)

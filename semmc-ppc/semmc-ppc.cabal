@@ -27,6 +27,7 @@ library
                      , bytestring
                      , cereal
                      , containers
+                     , constraints
                      , located-base
                      , filepath
                      , megaparsec >= 6 && < 7
@@ -95,6 +96,7 @@ executable semmc-ppc-synthdemo
                  , semmc
                  , semmc-ppc
                  , bytestring
+                 , regex >= 1 && < 2
                  , utf8-string
                  , parameterized-utils
                  , dismantle-tablegen

@@ -21,17 +21,18 @@ module SemMC.Architecture.PPC
   , testSerializer
   , loadBaseSet
   , PseudoOpcode(..)
+  , BuildableAndTemplatable
   ) where
 
 import qualified GHC.Err.Located as L
 
 import           Data.Bits
+import qualified Data.Constraint as C
 import           Data.EnumF ( EnumF(..) )
-import           Data.Foldable ( foldrM )
+import qualified Data.Functor.Identity as I
 import           Data.Int ( Int16, Int32 )
 import qualified Data.Int.Indexed as I
 import qualified Data.Map.Strict as Map
-import           Data.Monoid ( (<>) )
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
@@ -48,9 +49,8 @@ import           Data.Void ( absurd, Void )
 import           Data.Word ( Word16 )
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( KnownNat, Nat, Symbol )
-import           System.FilePath ( (</>) )
+import           System.FilePath ( (</>), (<.>) )
 import qualified Text.Megaparsec as P
-import           Text.Printf ( printf )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
@@ -65,9 +65,9 @@ import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Formula.Parser as FP
-import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..), UninterpretedFunctions )
+import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..) )
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
@@ -478,81 +478,56 @@ instance EnumF (PPC.Opcode (T.TemplatedOperand PPC)) where
   enumF = absurd . opcodeToVoid
   congruentF = absurd . opcodeToVoid
 
-fromRight :: (Monad m) => Either String a -> m a
-fromRight = either fail return
-
 class (FP.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 instance (FP.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+
+formulaEnv :: (S.IsExprBuilder sym, S.IsSymInterface sym)
+           => sym
+           -> IO (FormulaEnv sym arch)
+formulaEnv sym = do
+  undefinedBit <- S.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
+  ufs <- Map.fromList <$> mapM toUF ufList
+  return FormulaEnv { envFunctions = ufs
+                    , envUndefinedBit = undefinedBit
+                    }
+  where
+    toUF (name, Some args, Some ret) = do
+      uf <- SomeSome <$> S.freshTotalUninterpFn sym (U.makeSymbol name) args ret
+      return (name, uf)
+    ufList = [ ("fp.add64",
+                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+                Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+             , ("fp.add32",
+                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+                Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+             , ("fp.sub64",
+                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+                Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+             , ("fp.sub32",
+                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+                Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+             ]
+
+weakenConstraint :: MapF.MapF (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand)) v
+                 -> MapF.MapF (Witness (T.TemplatableOperands PPC) (PPC.Opcode PPC.Operand)) v
+weakenConstraint = I.runIdentity . U.mapFMapBothM f
+  where
+    f :: Witness BuildableAndTemplatable a sh -> v sh -> I.Identity (Witness (T.TemplatableOperands PPC) a sh, v sh)
+    f (Witness a) v = return (Witness a, v)
 
 loadBaseSet :: forall sym.
                (S.IsExprBuilder sym,
                 S.IsSymInterface sym)
             => FilePath
             -> sym
+            -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
             -> IO (T.BaseSet sym PPC)
-loadBaseSet baseSetDir sym = do
-  let addFn :: (String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)
-            -> UninterpretedFunctions sym
-            -> IO (UninterpretedFunctions sym)
-      addFn (name, Some args, Some ret) m =
-        flip (Map.insert name) m . SomeSome <$> S.freshTotalUninterpFn sym (U.makeSymbol name) args ret
-  fns <- foldrM addFn Map.empty [ ("fp.add64",
-                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-                                , ("fp.add32",
-                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
-                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-                                , ("fp.sub64",
-                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-                                , ("fp.sub32",
-                                   Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
-                                   Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-                                ]
-  undefinedBit <- S.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
-  let env = FormulaEnv { envFunctions = fns
-                       , envUndefinedBit = undefinedBit
-                       }
-  let readOp :: (FP.BuildOperandList (T.TemplatedArch PPC) sh)
-             => FilePath
-             -> IO (Either String (F.ParameterizedFormula sym (T.TemplatedArch PPC) sh))
-      readOp fp = FP.readFormulaFromFile sym env (baseSetDir </> fp)
-      addOp :: Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))
-            -> T.BaseSet sym PPC
-            -> IO (T.BaseSet sym PPC)
-      addOp (Some (Witness op)) m = do
-        printf "reading op %s\n" (showF op)
-        op' <- fromRight =<< readOp (showF op <> ".sem")
-        return $ MapF.insert (Witness op) op' m
-  foldrM addOp MapF.empty [ Some (Witness PPC.ADD4)
-                          , Some (Witness PPC.ADDI)
-                          , Some (Witness PPC.ADDIS)
-                          , Some (Witness PPC.AND)
-                          , Some (Witness PPC.B)
-                          , Some (Witness PPC.BA)
-                          -- , Some (Witness PPC.BC)
-                          -- , Some (Witness PPC.BCA)
-                          -- , Some (Witness PPC.BCL)
-                          -- , Some (Witness PPC.BCLA)
-                          , Some (Witness PPC.BL)
-                          , Some (Witness PPC.BLA)
-                          , Some (Witness PPC.CMPLW)
-                          , Some (Witness PPC.CMPW)
-                          , Some (Witness PPC.EQV)
-                          , Some (Witness PPC.FADD)
-                          , Some (Witness PPC.FADDS)
-                          , Some (Witness PPC.LBZ)
-                          , Some (Witness PPC.MFCR)
-                          , Some (Witness PPC.MFSPR)
-                          , Some (Witness PPC.MTCRF)
-                          , Some (Witness PPC.MTSPR)
-                          , Some (Witness PPC.NAND)
-                          , Some (Witness PPC.NOR)
-                          , Some (Witness PPC.OR)
-                          , Some (Witness PPC.STB)
-                          , Some (Witness PPC.SUBF)
-                          , Some (Witness PPC.XOR)
-                          ]
+loadBaseSet baseSetDir sym opcodes = do
+  env <- formulaEnv sym
+  weakenConstraint <$> FL.loadFormulas sym toFP env (C.Sub C.Dict) opcodes
+  where
+    toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
+    toFP op = baseSetDir </> showF op <.> "sem"
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
