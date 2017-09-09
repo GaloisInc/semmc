@@ -7,8 +7,6 @@ import qualified System.Exit as IO
 import qualified System.IO as IO
 import Text.Printf ( printf )
 
-import Tests.CMNTest (cmnTests)
-import Tests.LoadTest (loadTests)
 import qualified SemMC.Concrete.Execution as CE
 import SemMC.ARM ( MachineState(..), Instruction, testSerializer )
 
@@ -31,7 +29,7 @@ testRunner :: C.Chan (Maybe (CE.TestCase MachineState Instruction))
            -> C.Chan (CE.ResultOrError MachineState)
            -> IO ()
 testRunner caseChan resChan = do
-  mapM_ doTest (cmnTests ++ loadTests)
+  mapM_ doTest []
   C.writeChan caseChan Nothing
   where
     doTest vec = do

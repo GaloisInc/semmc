@@ -17,8 +17,6 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC.ARM
-                       Tests.CMNTest
-                       Tests.LoadTest
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4 && <5,
