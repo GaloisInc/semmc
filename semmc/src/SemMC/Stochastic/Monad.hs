@@ -333,12 +333,11 @@ runConcreteTest tc = do
 -- nested calls will deadlock.
 withSymBackend :: (Sym t -> Syn t arch a) -> Syn t arch a
 withSymBackend k = do
-  -- FIXME: Use a bracket here
   symVar <- R.asks (seSymBackend . seGlobalEnv)
-  sym <- liftIO $ STM.atomically $ STM.takeTMVar symVar
-  res <- k sym
-  liftIO $ STM.atomically $ STM.putTMVar symVar sym
-  return res
+  env <- R.ask
+  liftIO $ C.bracket (STM.atomically $ STM.takeTMVar symVar)
+                     (STM.atomically . STM.putTMVar symVar)
+                     (runSyn env . k)
 
 askTestCases :: Syn t arch [CS.ConcreteState arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
