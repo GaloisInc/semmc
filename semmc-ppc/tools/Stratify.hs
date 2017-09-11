@@ -29,7 +29,6 @@ import qualified SemMC.Constraints as C
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
-import qualified SemMC.Stochastic.Pseudo as P
 
 import qualified SemMC.Architecture.PPC as PPC
 
