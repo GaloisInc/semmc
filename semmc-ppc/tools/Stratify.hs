@@ -166,7 +166,6 @@ mainWithOptions opts = do
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.logChannel = logChan
                        }
-
   senv <- SST.loadInitialState cfg sym testGenerator initialTestCases allOps pseudoOps targetOpcodes iorels
   _ <- SST.stratifiedSynthesis senv
   return ()

@@ -43,7 +43,7 @@ import           Data.Bits ( Bits, complement, (.&.), (.|.), shiftL, shiftR, xor
 import qualified Data.ByteString as B
 import           Data.Maybe ( fromJust, isJust, fromMaybe )
 import qualified Data.Parameterized.Classes as P
-import qualified Data.Parameterized.Ctx as Ctx
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.ShapedList as SL

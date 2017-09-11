@@ -60,7 +60,6 @@ import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import qualified Data.Functor.Identity as I
 import           Data.IORef ( IORef, readIORef, modifyIORef' )
-import qualified Data.Map.Strict as Map
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
@@ -73,9 +72,6 @@ import qualified Data.EnumF as P
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( mapSome, Some(..) )
-
-import           Lang.Crucible.BaseTypes ( knownRepr )
-import qualified Lang.Crucible.Solver.Interface as CRUI
 
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.ShapedList as SL
@@ -478,17 +474,12 @@ loadInitialState :: forall arch t
                  -- ^ IORelations
                  -> IO (SynEnv t arch)
 loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
-  undefinedBit <- CRUI.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
   let toFP dir oc = dir </> P.showF oc <.> "sem"
-      -- TODO: handle uninterpreted functions
-      env = F.FormulaEnv { F.envFunctions = Map.empty
-                         , F.envUndefinedBit = undefinedBit
-                         }
-      load dir = F.loadFormulas sym (toFP dir) env (C.Sub C.Dict) allOpcodes
+      load dir = F.loadFormulas sym (toFP dir) (C.Sub C.Dict) allOpcodes
   baseSet <- dropKeyWitnesses <$> load (baseSetDir cfg)
   learnedSet <- dropKeyWitnesses <$> load (learnedSetDir cfg)
   let initialFormulas = MapF.union baseSet learnedSet
-  pseudoSet <- dropKeyWitnesses <$> F.loadFormulas sym (toFP (pseudoSetDir cfg)) env (C.Sub C.Dict) pseudoOpcodes
+  pseudoSet <- dropKeyWitnesses <$> F.loadFormulas sym (toFP (pseudoSetDir cfg)) (C.Sub C.Dict) pseudoOpcodes
   let congruentOps' = MapF.foldrWithKey (addCongruentOp . RealOpcode) MapF.empty initialFormulas
       congruentOps = MapF.foldrWithKey (addCongruentOp . PseudoOpcode) congruentOps' pseudoSet
   fref <- STM.newTVarIO initialFormulas

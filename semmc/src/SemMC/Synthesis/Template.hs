@@ -145,6 +145,8 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 
   unTagged = taggedExpr
 
+  uninterpretedFunctions _ = uninterpretedFunctions (Proxy @arch)
+
   operandValue _ sym locLookup (TemplatedOperand _ _ f) =
     uncurry TaggedExpr <$> f sym locLookup
 

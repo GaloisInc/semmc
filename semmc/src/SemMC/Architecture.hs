@@ -18,6 +18,7 @@ module SemMC.Architecture where
 
 import           Data.EnumF
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Typeable ( Typeable )
@@ -97,6 +98,9 @@ class (IsOperand (Operand arch),
 
   -- | Untag a tagged expression.
   unTagged :: TaggedExpr arch sym s -> S.SymExpr sym (OperandType arch s)
+
+  -- | The uninterpreted functions referred to by this architecture
+  uninterpretedFunctions :: proxy arch -> [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
 
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.

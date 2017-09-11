@@ -320,6 +320,8 @@ instance A.Architecture Toy where
 
   unTagged = unTaggedExpr
 
+  uninterpretedFunctions _ = []
+
   operandValue _ _ newVars (R32 reg) = TaggedExpr <$> newVars (RegLoc reg)
   operandValue _ sym _     (I32 imm) = TaggedExpr <$> S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
 

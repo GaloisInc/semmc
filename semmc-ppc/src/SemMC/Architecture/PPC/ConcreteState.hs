@@ -3,11 +3,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 module SemMC.Architecture.PPC.ConcreteState (
   zeroState,
   randomState,
   serialize,
-  deserialize
+  deserialize,
+  uninterpretedFunctions
   ) where
 
 import           GHC.TypeLits ( KnownNat )
@@ -19,8 +21,9 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.Bits
 import           Data.Monoid ( (<>) )
-import qualified Data.Parameterized.Ctx as Ctx
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Serialize.Get as G
 import qualified Data.Word.Indexed as W
 import           Numeric.Natural ( Natural )
@@ -210,3 +213,19 @@ repr64 = knownNat
 
 repr128 :: NatRepr 128
 repr128 = knownNat
+
+uninterpretedFunctions :: [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
+uninterpretedFunctions =
+  [ ("fp.add64",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("fp.add32",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+  , ("fp.sub64",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("fp.sub32",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+  ]

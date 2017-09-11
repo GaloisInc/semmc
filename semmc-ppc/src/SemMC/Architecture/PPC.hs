@@ -32,9 +32,6 @@ import           Data.EnumF ( EnumF(..) )
 import qualified Data.Functor.Identity as I
 import           Data.Int ( Int16, Int32 )
 import qualified Data.Int.Indexed as I
-import qualified Data.Map.Strict as Map
-import qualified Data.Parameterized.Ctx as Ctx
-import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.Map as MapF
@@ -67,7 +64,6 @@ import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Formula.Parser as FP
-import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..) )
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
@@ -464,6 +460,7 @@ instance A.Architecture PPC where
   unTagged (TaggedExpr e) = e
   operandValue _ = operandValue
   operandToLocation _ = operandToLocation
+  uninterpretedFunctions _proxy = PPCS.uninterpretedFunctions
 
 opcodeToVoid :: ((o == PPC.Operand) ~ 'False) => PPC.Opcode o sh -> Void
 opcodeToVoid x = case x of {}
@@ -481,33 +478,6 @@ instance EnumF (PPC.Opcode (T.TemplatedOperand PPC)) where
 class (FP.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 instance (FP.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
-formulaEnv :: (S.IsExprBuilder sym, S.IsSymInterface sym)
-           => sym
-           -> IO (FormulaEnv sym arch)
-formulaEnv sym = do
-  undefinedBit <- S.freshConstant sym (U.makeSymbol "undefined_bit") knownRepr
-  ufs <- Map.fromList <$> mapM toUF ufList
-  return FormulaEnv { envFunctions = ufs
-                    , envUndefinedBit = undefinedBit
-                    }
-  where
-    toUF (name, Some args, Some ret) = do
-      uf <- SomeSome <$> S.freshTotalUninterpFn sym (U.makeSymbol name) args ret
-      return (name, uf)
-    ufList = [ ("fp.add64",
-                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-                Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-             , ("fp.add32",
-                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
-                Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-             , ("fp.sub64",
-                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-                Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-             , ("fp.sub32",
-                Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
-                Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-             ]
-
 weakenConstraint :: MapF.MapF (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand)) v
                  -> MapF.MapF (Witness (T.TemplatableOperands PPC) (PPC.Opcode PPC.Operand)) v
 weakenConstraint = I.runIdentity . U.mapFMapBothM f
@@ -523,8 +493,7 @@ loadBaseSet :: forall sym.
             -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
             -> IO (T.BaseSet sym PPC)
 loadBaseSet baseSetDir sym opcodes = do
-  env <- formulaEnv sym
-  weakenConstraint <$> FL.loadFormulas sym toFP env (C.Sub C.Dict) opcodes
+  weakenConstraint <$> FL.loadFormulas sym toFP (C.Sub C.Dict) opcodes
   where
     toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
     toFP op = baseSetDir </> showF op <.> "sem"
