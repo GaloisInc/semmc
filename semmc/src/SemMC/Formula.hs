@@ -14,6 +14,7 @@ module SemMC.Formula
   , FormulaEnv(..)
 
     -- * SemMC.Formula.Parser
+  , loadFormulas
   , readFormula
   , readFormulaFromFile
 
@@ -32,5 +33,6 @@ import SemMC.Formula.Formula
   , paramType
   )
 import SemMC.Formula.Env ( FormulaEnv(..) )
+import SemMC.Formula.Load ( loadFormulas )
 import SemMC.Formula.Parser ( readFormula, readFormulaFromFile )
 import SemMC.Formula.Printer ( printFormula )
