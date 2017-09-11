@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 -- | A tool for learning IORelations of PPC instructions
 module Main ( main ) where
@@ -6,6 +5,7 @@ module Main ( main ) where
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import           Control.Monad ( when, unless )
+import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
@@ -15,21 +15,18 @@ import qualified System.Exit as IO
 import qualified System.IO as IO
 import           Text.Printf ( printf )
 
-import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.Unfold as U
-import           Data.Parameterized.Witness ( Witness(..) )
-
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
-import qualified Dismantle.Tablegen.TH as DT
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Architecture.PPC as PPC
+import qualified SemMC.Formula.Load as FL
 
 import qualified Logging as L
-import           Util
+import qualified OpcodeLists as OL
+import qualified Util as U
 
 data Logging = Verbose | Quiet
 
@@ -69,9 +66,6 @@ main = O.execParser optParser >>= mainWithOptions
      <> O.progDesc "Learn IORelations for PPC"
      <> O.header "semmc-ppc-iorels - learn the input and output operands for each instruction")
 
-allOps :: [Some (Witness U.UnfoldShape (PPC.Opcode PPC.Operand))]
-allOps = $(DT.captureDictionaries matchConstructor ''PPC.Opcode)
-
 mainWithOptions :: Options -> IO ()
 mainWithOptions opt = do
   when (oNumThreads opt < 1) $ do
@@ -97,7 +91,7 @@ mainWithOptions opt = do
     Quiet -> A.async (L.dumpLog logChan)
 
   A.link logger
-  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) toIORelFP allOps
+  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) U.toIORelFP (FL.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"
     putStrLn (unlines (map show (F.toList failures)))

@@ -5,7 +5,10 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 -- | Utilities for loading formulas from disk
-module SemMC.Formula.Load ( loadFormulas ) where
+module SemMC.Formula.Load (
+  loadFormulas,
+  weakenConstraints
+  ) where
 
 import qualified GHC.Err.Located as L
 
@@ -46,6 +49,17 @@ formulaEnv proxy sym = do
     toUF (name, Some args, Some ret) = do
       uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol name) args ret
       return (name, uf)
+
+-- | Given a list of values with a more specific constraint, weaken the
+-- constraint to a less specific constraint (using a witness implication
+-- provided as an argument).
+weakenConstraints :: (forall sh . c1 sh C.:- c2 sh)
+                  -> [Some (Witness c1 a)]
+                  -> [Some (Witness c2 a)]
+weakenConstraints impl wvals =
+  [ Some (Witness a) C.\\ impl @sh
+  | Some ((Witness a) :: Witness c a sh) <- wvals
+  ]
 
 -- | Load formulas from disk
 --

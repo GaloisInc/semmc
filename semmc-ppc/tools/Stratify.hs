@@ -7,6 +7,7 @@ import qualified Control.Concurrent.Async as A
 import           Control.Monad ( when )
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
+import qualified Data.Constraint as C
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
@@ -15,7 +16,6 @@ import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.Unfold as U
 import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
@@ -23,10 +23,10 @@ import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
-import qualified Dismantle.Tablegen.TH as DT
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula.Parser as F
+import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
 import qualified SemMC.Stochastic.Pseudo as P
@@ -34,6 +34,7 @@ import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Architecture.PPC as PPC
 
 import qualified Logging as L
+import qualified OpcodeLists as OL
 import qualified Util as Util
 
 data Logging = Verbose | Quiet
@@ -115,18 +116,6 @@ main = O.execParser optParser >>= mainWithOptions
      <> O.progDesc "Learn semantics for PPC instructions"
      <> O.header "semmc-ppc-stratify - learn semantics for each instruction")
 
-allOps :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
-allOps = undefined
-
-allOpsRel :: [Some (Witness U.UnfoldShape (PPC.Opcode PPC.Operand))]
-allOpsRel = undefined
-
-pseudoOps :: [Some (Witness (F.BuildOperandList PPC.PPC) ((P.Pseudo PPC.PPC) PPC.Operand))]
-pseudoOps = undefined
-
-targetOpcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
-targetOpcodes = undefined
-
 die :: String -> IO a
 die msg = IO.hPutStr IO.stderr msg >> IO.exitFailure
 
@@ -135,7 +124,7 @@ mainWithOptions opts = do
   when (oNumThreads opts < 1) $ do
     die $ printf "Invalid thread count: %d\n" (oNumThreads opts)
 
-  iorels <- IOR.loadIORelations (Proxy @PPC.PPC) (oRelDir opts) Util.toIORelFP allOpsRel
+  iorels <- IOR.loadIORelations (Proxy @PPC.PPC) (oRelDir opts) Util.toIORelFP (FL.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
 
   rng <- DA.createGen
   let testGenerator = CS.randomState (Proxy @PPC.PPC) rng
@@ -166,7 +155,9 @@ mainWithOptions opts = do
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.logChannel = logChan
                        }
-  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases allOps pseudoOps targetOpcodes iorels
+  let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
+      opcodes = FL.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
+  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps opcodes iorels
   _ <- SST.stratifiedSynthesis senv
   return ()
   where
