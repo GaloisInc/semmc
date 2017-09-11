@@ -92,6 +92,7 @@ executable semmc-ppc-synthdemo
   ghc-options: -Wall -rtsopts
   hs-source-dirs: tools
   main-is: SynthDemo.hs
+  other-modules: Util
   build-depends:   base
                  , semmc
                  , semmc-ppc
