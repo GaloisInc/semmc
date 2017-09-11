@@ -68,8 +68,6 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
 import           SemMC.Architecture
 import           SemMC.Formula
-import           SemMC.Formula.Instantiate
-
 
 --
 -- First, an overview about how the templating system works.

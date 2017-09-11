@@ -37,8 +37,6 @@ import           Dismantle.Instruction
 
 import           SemMC.Architecture
 import           SemMC.Formula
-import           SemMC.Formula.Equivalence
-import           SemMC.Formula.Instantiate
 import           SemMC.Synthesis.Template
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of

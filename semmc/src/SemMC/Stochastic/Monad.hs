@@ -83,8 +83,6 @@ import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Seq as SeqF
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as F
-import qualified SemMC.Formula.Instantiate as F
-import qualified SemMC.Formula.Parser as F
 import           SemMC.Symbolic ( Sym )
 import qualified SemMC.Util as U
 import qualified SemMC.Worklist as WL

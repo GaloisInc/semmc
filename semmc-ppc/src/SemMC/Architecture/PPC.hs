@@ -62,8 +62,7 @@ import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Formula.Load as FL
-import qualified SemMC.Formula.Parser as FP
+import qualified SemMC.Formula as F
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
@@ -475,8 +474,8 @@ instance EnumF (PPC.Opcode (T.TemplatedOperand PPC)) where
   enumF = absurd . opcodeToVoid
   congruentF = absurd . opcodeToVoid
 
-class (FP.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
-instance (FP.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+class (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+instance (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
 weakenConstraint :: MapF.MapF (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand)) v
                  -> MapF.MapF (Witness (T.TemplatableOperands PPC) (PPC.Opcode PPC.Operand)) v
@@ -493,7 +492,7 @@ loadBaseSet :: forall sym.
             -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
             -> IO (T.BaseSet sym PPC)
 loadBaseSet baseSetDir sym opcodes = do
-  weakenConstraint <$> FL.loadFormulas sym toFP (C.Sub C.Dict) opcodes
+  weakenConstraint <$> F.loadFormulas sym toFP (C.Sub C.Dict) opcodes
   where
     toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
     toFP op = baseSetDir </> showF op <.> "sem"

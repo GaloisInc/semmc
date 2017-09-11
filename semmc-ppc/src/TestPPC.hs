@@ -22,7 +22,7 @@ import SemMC.Architecture
 import SemMC.Architecture.PPC ( PPC )
 import qualified SemMC.Architecture.PPC as PPC
 import SemMC.Formula
-import SemMC.Formula.Parser
+import SemMC.Formula
 import SemMC.Synthesis.Template
 import SemMC.Synthesis
 import SemMC.Util

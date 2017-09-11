@@ -15,7 +15,7 @@ import qualified Dismantle.PPC as PPC
 import qualified Dismantle.Tablegen.TH as DT
 
 import qualified SemMC.Architecture.PPC as PPC
-import qualified SemMC.Formula.Parser as F
+import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.Pseudo as P
 
 import qualified Util as U

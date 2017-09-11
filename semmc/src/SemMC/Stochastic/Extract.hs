@@ -26,7 +26,6 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
-import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Symbolic ( Sym )
 import qualified SemMC.Util as U
 

@@ -38,7 +38,6 @@ import qualified Lang.Crucible.BaseTypes as S
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as F
-import qualified SemMC.Formula.Equivalence as F
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.Monad

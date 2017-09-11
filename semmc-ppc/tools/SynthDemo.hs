@@ -30,7 +30,6 @@ import qualified Dismantle.PPC as DPPC
 
 import           SemMC.Architecture ( Architecture, Instruction, Location, Opcode, Operand )
 import qualified SemMC.Formula as F
-import qualified SemMC.Formula.Instantiate as F
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatableOpcode, unTemplate )
 import qualified SemMC.Synthesis as SemMC
 import qualified SemMC.Synthesis.Core as SemMC
