@@ -14,9 +14,10 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.PPC as PPC
 import qualified Dismantle.Tablegen.TH as DT
 
-import qualified SemMC.Architecture.PPC as PPC
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.Pseudo as P
+
+import qualified SemMC.Architecture.PPC as PPC
 
 import qualified Util as U
 
@@ -27,6 +28,6 @@ allOpcodes :: [Some (Witness BuildAndUnfold (PPC.Opcode PPC.Operand))]
 allOpcodes = $(DT.captureDictionaries U.matchConstructor ''PPC.Opcode)
 
 pseudoOps :: [Some (Witness (F.BuildOperandList PPC.PPC) ((P.Pseudo PPC.PPC) PPC.Operand))]
-pseudoOps = undefined
+pseudoOps = $(DT.captureDictionaries (const True) ''PPC.PseudoOpcode)
 
 
