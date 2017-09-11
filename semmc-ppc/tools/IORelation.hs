@@ -19,10 +19,10 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Constraints as C
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Architecture.PPC as PPC
-import qualified SemMC.Formula.Load as FL
 
 import qualified Logging as L
 import qualified OpcodeLists as OL
@@ -91,7 +91,7 @@ mainWithOptions opt = do
     Quiet -> A.async (L.dumpLog logChan)
 
   A.link logger
-  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) U.toIORelFP (FL.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
+  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"
     putStrLn (unlines (map show (F.toList failures)))

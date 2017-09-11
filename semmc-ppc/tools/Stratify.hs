@@ -25,8 +25,8 @@ import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Constraints as C
 import qualified SemMC.Formula.Parser as F
-import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
 import qualified SemMC.Stochastic.Pseudo as P
@@ -124,7 +124,7 @@ mainWithOptions opts = do
   when (oNumThreads opts < 1) $ do
     die $ printf "Invalid thread count: %d\n" (oNumThreads opts)
 
-  iorels <- IOR.loadIORelations (Proxy @PPC.PPC) (oRelDir opts) Util.toIORelFP (FL.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
+  iorels <- IOR.loadIORelations (Proxy @PPC.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
 
   rng <- DA.createGen
   let testGenerator = CS.randomState (Proxy @PPC.PPC) rng
@@ -156,7 +156,7 @@ mainWithOptions opts = do
                        , SST.logChannel = logChan
                        }
   let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
-      opcodes = FL.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
+      opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
   senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps opcodes iorels
   _ <- SST.stratifiedSynthesis senv
   return ()
