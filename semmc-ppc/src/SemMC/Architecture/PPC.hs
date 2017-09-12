@@ -485,8 +485,9 @@ weakenConstraint = I.runIdentity . U.mapFMapBothM f
     f (Witness a) v = return (Witness a, v)
 
 loadBaseSet :: forall sym.
-               (S.IsExprBuilder sym,
-                S.IsSymInterface sym)
+               ( S.IsExprBuilder sym
+               , S.IsSymInterface sym
+               , U.HasLogCfg )
             => FilePath
             -> sym
             -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]

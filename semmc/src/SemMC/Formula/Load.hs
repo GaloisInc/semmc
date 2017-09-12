@@ -64,7 +64,12 @@ formulaEnv proxy sym = do
 -- and what files actually exist on disk determine what we actually
 -- load.
 loadFormulas :: forall sym c arch a
-              . (CRU.IsExprBuilder sym, CRU.IsSymInterface sym, A.Architecture arch, MapF.OrdF a)
+              . ( CRU.IsExprBuilder sym
+                , CRU.IsSymInterface sym
+                , A.Architecture arch
+                , MapF.OrdF a
+                , U.HasCallStack
+                , U.HasLogCfg )
              => sym
              -> (forall sh' . a sh' -> FilePath)
              -> (forall sh . c sh C.:- FP.BuildOperandList arch sh)
@@ -83,15 +88,14 @@ loadFormulas sym toFP impl shapes = do
       fileExists <- doesFileExist file
       if fileExists
       then do
-        debug $ "loading file: "++file
+        U.log U.Info $ "loading file: "++file
         ef <- FP.readFormulaFromFile sym env file
         case ef of
           Left err -> L.error $ "Failed to parse "++file++": "++err
           Right f -> return (Just f)
       else do
-        debug $ "skipping non-existent file: "++file
+        U.log U.Debug $ "skipping non-existent file: "++file
         return Nothing
-    debug msg = putStrLn msg
 
 addIfJust :: (MapF.OrdF k, Monad m)
           => (k tp -> m (Maybe (a tp)))

@@ -208,7 +208,10 @@ type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
                  , HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr
                  , HasRepr (Pseudo arch (A.Operand arch)) SL.ShapeRepr
                  , CS.ConcreteArchitecture arch
-                 , ArchitectureWithPseudo arch )
+                 , ArchitectureWithPseudo arch
+                   -- WARNING: don't put 'U.HasCallStack' here! See
+                   -- comments in 'SemMC.Log'.
+                 , U.HasLogCfg )
 
 -- Synthesis monad.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
@@ -217,9 +220,6 @@ newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
             Monad,
             MonadIO,
             R.MonadReader (LocalSynEnv t arch))
-
-instance L.MonadLogger (Syn t arch) where
-  getLogCfg = logConfig <$> askConfig
 
 -- | Runner for 'Syn' monad.
 --
@@ -292,10 +292,15 @@ timeoutMicroseconds accessor = do
 
 data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
 
-instance (SynC arch) => Show (RemoteRunnerTimeout arch) where
+instance ( MapF.ShowF (A.Opcode arch (A.Operand arch))
+         , MapF.ShowF (A.Operand arch)
+         , MapF.ShowF (A.Location arch) ) => Show (RemoteRunnerTimeout arch) where
   show (RemoteRunnerTimeout _ tcs) = unwords [ "RemoteRunnerTimeout", show tcs ]
 
-instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
+instance ( MapF.ShowF (A.Opcode arch (A.Operand arch))
+         , MapF.ShowF (A.Operand arch)
+         , MapF.ShowF (A.Location arch)
+         , Typeable arch ) => C.Exception (RemoteRunnerTimeout arch)
 
 -- | Run a set of concrete tests
 --
@@ -438,8 +443,6 @@ data Config arch =
          -- that explains a target instruction before giving up.
          , testRunner :: I.TestRunner arch
          -- ^ See the related @lcTestRunner@ for usage examples.
-         , logConfig :: L.LogCfg
-         -- ^ A configuration for the general logging facility
          }
 
 addCongruentOp :: (HasRepr a SL.ShapeRepr)

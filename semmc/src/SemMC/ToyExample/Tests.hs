@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeApplications #-}
@@ -50,7 +51,7 @@ import qualified SemMC.Stochastic.Synthesize as S
 import           SemMC.Synthesis
 import           SemMC.Synthesis.Template
 import           SemMC.ToyExample as T
-import           SemMC.Util
+import           SemMC.Util as U
 
 import           Debug.Trace
 
@@ -233,9 +234,8 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
 -- action run in this env (with 'runSyn') has any on-disk side
 -- effects, e.g. writing a file. If we want on disk side effects, then
 -- we should change this to set up the on-disk test env in a tmp dir.
-runSynToy :: (forall t. Syn t Toy a) -> IO a
+runSynToy :: (forall t. U.HasLogCfg => Syn t Toy a) -> IO a
 runSynToy action = do
-  lcfg <- L.mkLogCfg
   logChan <- C.newChan
   let cfg :: Config Toy
       cfg = Config
@@ -250,7 +250,6 @@ runSynToy action = do
         , threadCount = L.error "threadCount"
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
         , logChannel = logChan
-        , logConfig = lcfg
         }
 
   {-
@@ -291,6 +290,13 @@ runSynToy action = do
                    , Some (Witness SubRr) ]
   let pseudoOpcodes = pseudoOpcodesWitnessingBuildOperandList
   let targetOpcodes = L.error "targetOpcodes"
+
+  logCfg <- L.mkLogCfg
+  let ?logCfg = logCfg
+  loggerThread <- C.async $ do
+    L.stdErrLogEventConsumer logCfg
+  C.link loggerThread
+
   synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
 
   nref <- newIORef 0
@@ -298,10 +304,7 @@ runSynToy action = do
   rChan <- C.newChan
   testRunnerThread <- C.async $
     testRunner (seConfig synEnv) tChan rChan logChan
-  loggerThread <- C.async $ do
-    L.stdErrLogEventConsumer lcfg
   C.link testRunnerThread
-  C.link loggerThread
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv
         , seRandomGen = gen

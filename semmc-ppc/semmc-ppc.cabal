@@ -118,3 +118,4 @@ executable semmc-ppc-synthdemo
                  , base16-bytestring
                  , elf-edit
                  , optparse-applicative
+                 , async

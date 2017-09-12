@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
@@ -141,6 +142,7 @@ mainWithOptions opts = do
     Quiet -> A.async (L.dumpLog logChan)
   A.link logger
   lcfg <- L.mkLogCfg
+  let ?logCfg = lcfg
   logThread <- A.async (L.stdErrLogEventConsumer lcfg)
   A.link logThread
 
@@ -156,7 +158,6 @@ mainWithOptions opts = do
                        , SST.threadCount = oNumThreads opts
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.logChannel = logChan
-                       , SST.logConfig = lcfg
                        }
   let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes

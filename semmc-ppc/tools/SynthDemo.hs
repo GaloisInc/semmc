@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -14,6 +15,7 @@ import           Data.Monoid
 import           Data.Word ( Word32 )
 import qualified Options.Applicative as O
 import           Text.Printf ( printf )
+import qualified Control.Concurrent.Async as C
 
 import qualified Data.ElfEdit as E
 
@@ -33,6 +35,7 @@ import qualified SemMC.Formula as F
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatableOpcode, unTemplate )
 import qualified SemMC.Synthesis as SemMC
 import qualified SemMC.Synthesis.Core as SemMC
+import qualified SemMC.Util as U
 
 import qualified SemMC.Architecture.PPC as PPC
 
@@ -115,7 +118,8 @@ loadProgramBytes fp = do
 allOps :: [Some (Witness PPC.BuildableAndTemplatable (DPPC.Opcode DPPC.Operand))]
 allOps = $(DT.captureDictionaries matchConstructor ''DPPC.Opcode)
 
-loadBaseSet :: FilePath
+loadBaseSet :: U.HasLogCfg
+            => FilePath
             -> SB.SimpleBuilder t SB.SimpleBackendState
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC.PPC),
                    SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC.PPC)
@@ -151,7 +155,13 @@ printProgram :: [DPPC.Instruction] -> String
 printProgram insns = unlines (map (("  " ++) . show . DPPC.ppInstruction) insns)
 
 main :: IO ()
-main = N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
+main = do
+  logCfg <- U.mkLogCfg
+  let ?logCfg = logCfg
+  loggerThread <- C.async $ U.stdErrLogEventConsumer logCfg
+  C.link loggerThread
+
+  N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
   where
     opts = O.info (O.helper <*> options) components
     components = mconcat [ O.fullDesc
@@ -159,7 +169,7 @@ main = N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
                          , O.header "SynthDemo"
                          ]
 
-mainWith :: N.NonceGenerator IO s -> Options -> IO ()
+mainWith :: (U.HasLogCfg) => N.NonceGenerator IO s -> Options -> IO ()
 mainWith r opts = do
   -- Fetch the ELF from disk
   (elf, textSection) <- loadProgramBytes (oInputFile opts)

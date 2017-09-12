@@ -72,7 +72,7 @@ type HasLogCfg = (?logCfg :: LogCfg)
 
 type LogMsg = String
 
--- | Log in a 'MonadLogger'.
+-- | Log in a 'MonadIO'.
 --
 -- If you want the name of function that called 'log' to be included
 -- in the output, then you need to add a 'Ghc.HasCallStack' constraint
