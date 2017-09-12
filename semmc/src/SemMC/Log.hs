@@ -5,7 +5,19 @@
 -- With inspiration from the @monad-logger@ package.
 --
 -- See examples in 'SemMC.Log.Tests'.
-module SemMC.Log where
+module SemMC.Log (
+  -- * Interface
+  log,
+  logTrace,
+  LogLevel(..),
+  LogMsg,
+  MonadLogger(..),
+  -- * Configuration
+  LogCfg,
+  mkLogCfg,
+  -- * Log consumers
+  stdErrLogEventConsumer
+  ) where
 
 import           Prelude hiding ( log )
 
