@@ -28,6 +28,7 @@ module SemMC.ToyExample where
 
 import           Control.Monad
 import           Data.EnumF ( congruentF, EnumF, enumF )
+import           Data.Int ( Int32 )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
@@ -41,6 +42,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)), Index(IndexHere, IndexThere), ShapeRepr )
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Word.Indexed as W
 
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
@@ -361,6 +363,29 @@ instance A.IsLocation Location where
 
   allLocations = map (Some . RegLoc) [Reg1, Reg2, Reg3]
 
+interestingStates :: [MachineState]
+interestingStates =
+  [ mkState r1 v1 r2 v2
+  | r1 <- regs
+  , r2 <- regs
+  , Nothing == testEquality r1 r2
+  , v1 <- values
+  , v2 <- values
+  ]
+  where
+    regs = map RegLoc [Reg1, Reg2, Reg3]
+    i32Min :: Int32
+    i32Min = minBound
+    i32Max :: Int32
+    i32Max = maxBound
+    values = [ C.ValueBV (W.w 0)
+             , C.ValueBV (W.w 1)
+             , C.ValueBV (W.w (fromIntegral i32Min))
+             , C.ValueBV (W.w (fromIntegral i32Max))
+             ]
+
+    mkState r1 v1 r2 v2 = MapF.insert r1 v1 $ MapF.insert r2 v2 initialMachineState
+
 -- If we got rid of the 'NatRepr' / 'knownNat' stuff we could make
 -- this a pattern synonym.
 regView :: Reg -> C.View Toy 32
@@ -402,6 +427,8 @@ instance C.ConcreteArchitecture Toy where
 
   operandType _ = toyOperandType
   registerizeInstruction = toyRegisterizeInstruction
+
+  heuristicallyInterestingStates _proxy = interestingStates
 
   serialize = L.error "Toy: serialize"
   deserialize = L.error "Toy: deserialize"

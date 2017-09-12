@@ -659,6 +659,7 @@ instance CS.ConcreteArchitecture PPC where
   randomState _proxy = PPCS.randomState
   serialize _proxy = PPCS.serialize
   deserialize _proxy = PPCS.deserialize
+  heuristicallyInterestingStates _proxy = PPCS.interestingStates
   readView = P.parseMaybe (CS.parseView parseLocation)
   showView = CS.printView show
 

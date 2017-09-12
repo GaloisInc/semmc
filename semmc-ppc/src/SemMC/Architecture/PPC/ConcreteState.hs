@@ -9,6 +9,7 @@ module SemMC.Architecture.PPC.ConcreteState (
   randomState,
   serialize,
   deserialize,
+  interestingStates,
   uninterpretedFunctions
   ) where
 
@@ -20,7 +21,9 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.Bits
+import           Data.Int ( Int32 )
 import           Data.Monoid ( (<>) )
+import           Data.Parameterized.Classes ( testEquality )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
@@ -69,6 +72,33 @@ randomState gen = St.execStateT randomize MapF.empty
     addZeroBV loc = do
       let bv = CS.ValueBV (W.w 0)
       St.modify' $ MapF.insert loc bv
+
+-- | States that include (pairs of) registers with interesting bit patterns.
+-- For each pair of registers, combinations of interesting bit patterns are
+-- chosen.  The other registers all have zeros.
+--
+-- FIXME: Doesn't include FP registers yet.  We'll want NaN and INF values there
+interestingStates :: [ConcreteState]
+interestingStates = gprStates -- ++ fprStates
+  where
+    i32Min :: Int32
+    i32Min = minBound
+    i32Max :: Int32
+    i32Max = maxBound
+    bvVals = [ CS.ValueBV (W.w 0)
+             , CS.ValueBV (W.w 1)
+             , CS.ValueBV (W.w (fromIntegral i32Min))
+             , CS.ValueBV (W.w (fromIntegral i32Max))
+             ]
+    gprStates = [ mkState r1 v1 r2 v2
+                | r1 <- gprs
+                , r2 <- gprs
+                , Nothing == testEquality r1 r2
+                , v1 <- bvVals
+                , v2 <- bvVals
+                ]
+    mkState r1 v1 r2 v2 =
+      MapF.insert r1 v1 $ MapF.insert r2 v2 zeroState
 
 extendBV :: CS.Value (BaseBVType 64) -> CS.Value (BaseBVType 128)
 extendBV (CS.ValueBV (W.unW -> n)) = CS.ValueBV (W.w n)

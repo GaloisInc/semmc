@@ -317,6 +317,12 @@ class (A.Architecture arch) => ConcreteArchitecture arch where
   -- that all locations are filled in.
   zeroState :: proxy arch -> ConcreteState arch
 
+  -- | A list of initial heuristically-interesting states for the architecture.
+  --
+  -- This isn't fully generic because it is hard to fully abstract the aliasing
+  -- relationships between registers.
+  heuristicallyInterestingStates :: proxy arch -> [ConcreteState arch]
+
   -- | Update the immediate operands of the wrapped instruction (if any) based on
   -- the test environment.
   --
