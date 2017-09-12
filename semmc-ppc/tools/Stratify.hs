@@ -160,4 +160,4 @@ mainWithOptions opts = do
   _ <- SST.stratifiedSynthesis senv
   return ()
   where
-    initialTestCases = undefined
+    initialTestCases = CS.heuristicallyInterestingStates (Proxy @PPC.PPC)
