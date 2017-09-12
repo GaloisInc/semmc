@@ -89,6 +89,7 @@ import qualified SemMC.Worklist as WL
 
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Log as L
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Pseudo
@@ -216,6 +217,9 @@ newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
             Monad,
             MonadIO,
             R.MonadReader (LocalSynEnv t arch))
+
+instance L.MonadLogger (Syn t arch) where
+  getLogCfg = logConfig <$> askConfig
 
 -- | Runner for 'Syn' monad.
 --
@@ -434,6 +438,8 @@ data Config arch =
          -- that explains a target instruction before giving up.
          , testRunner :: I.TestRunner arch
          -- ^ See the related @lcTestRunner@ for usage examples.
+         , logConfig :: L.LogCfg
+         -- ^ A configuration for the general logging facility
          }
 
 addCongruentOp :: (HasRepr a SL.ShapeRepr)

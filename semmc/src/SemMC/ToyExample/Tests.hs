@@ -42,6 +42,7 @@ import           SemMC.Architecture
 import           SemMC.Formula
 import qualified SemMC.Concrete.State as C
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Log as L
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
@@ -234,6 +235,7 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
 -- we should change this to set up the on-disk test env in a tmp dir.
 runSynToy :: (forall t. Syn t Toy a) -> IO a
 runSynToy action = do
+  lcfg <- L.mkLogCfg
   logChan <- C.newChan
   let cfg :: Config Toy
       cfg = Config
@@ -248,6 +250,7 @@ runSynToy action = do
         , threadCount = L.error "threadCount"
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
         , logChannel = logChan
+        , logConfig = lcfg
         }
 
   {-
@@ -293,9 +296,12 @@ runSynToy action = do
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe (I.TestCase Toy)))
   rChan <- C.newChan
-  _testRunnerThread <- C.async $
+  testRunnerThread <- C.async $
     testRunner (seConfig synEnv) tChan rChan logChan
-  C.link _testRunnerThread
+  loggerThread <- C.async $ do
+    L.stdErrLogEventConsumer lcfg
+  C.link testRunnerThread
+  C.link loggerThread
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv
         , seRandomGen = gen

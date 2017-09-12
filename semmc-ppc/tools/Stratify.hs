@@ -26,6 +26,7 @@ import           Dismantle.PPC.Random ()
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Constraints as C
+import qualified SemMC.Log as L
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
@@ -139,9 +140,11 @@ mainWithOptions opts = do
     Verbose -> A.async (L.printLogMessages logChan)
     Quiet -> A.async (L.dumpLog logChan)
   A.link logger
+  lcfg <- L.mkLogCfg
+  logThread <- A.async (L.stdErrLogEventConsumer lcfg)
+  A.link logThread
 
   DIR.createDirectoryIfMissing True (oLearnedDir opts)
-
   let cfg = SST.Config { SST.baseSetDir = oBaseDir opts
                        , SST.pseudoSetDir = oPseudoDir opts
                        , SST.learnedSetDir = oLearnedDir opts
@@ -153,6 +156,7 @@ mainWithOptions opts = do
                        , SST.threadCount = oNumThreads opts
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.logChannel = logChan
+                       , SST.logConfig = lcfg
                        }
   let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
