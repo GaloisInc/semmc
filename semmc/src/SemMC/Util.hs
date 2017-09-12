@@ -17,6 +17,7 @@ module SemMC.Util
   , extractUsedLocs
   , mapFMapBothM
   , filterMapF
+  , module SemMC.Log
   ) where
 
 import           Control.Monad.ST ( runST )
@@ -33,6 +34,8 @@ import qualified Lang.Crucible.Utils.Hashable as Hash
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBackend.GroundEval as GE
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
+
+import SemMC.Log
 
 -- | Try converting any 'String' into a 'SolverSymbol'. If it is an invalid
 -- symbol, then error.
