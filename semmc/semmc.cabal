@@ -103,3 +103,4 @@ test-suite semmc-tests
                  , containers
                  , tasty >= 0.10 && < 0.12
                  , tasty-hunit
+                 , async

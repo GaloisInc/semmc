@@ -43,7 +43,6 @@ import           SemMC.Architecture
 import           SemMC.Formula
 import qualified SemMC.Concrete.State as C
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Log as L
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
@@ -227,6 +226,13 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
   where
     _debug i msg = traceIO $ "toyTestRunnerBackend: "++show i++": "++msg
 
+{-
+  logCfg <- L.mkLogCfg
+  let ?logCfg = logCfg
+  loggerThread <- C.async $ logEventConsumer logCfg
+  C.link loggerThread
+-}
+
 -- | Initialize a 'LocalSynEnv' for the toy arch and run a toy 'Syn'
 -- action in it.
 --
@@ -234,7 +240,9 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
 -- action run in this env (with 'runSyn') has any on-disk side
 -- effects, e.g. writing a file. If we want on disk side effects, then
 -- we should change this to set up the on-disk test env in a tmp dir.
-runSynToy :: (forall t. U.HasLogCfg => Syn t Toy a) -> IO a
+runSynToy :: (U.HasLogCfg)
+          => (forall t. Syn t Toy a)
+          -> IO a
 runSynToy action = do
   logChan <- C.newChan
   let cfg :: Config Toy
@@ -291,12 +299,6 @@ runSynToy action = do
   let pseudoOpcodes = pseudoOpcodesWitnessingBuildOperandList
   let targetOpcodes = L.error "targetOpcodes"
 
-  logCfg <- L.mkLogCfg
-  let ?logCfg = logCfg
-  loggerThread <- C.async $ do
-    L.stdErrLogEventConsumer logCfg
-  C.link loggerThread
-
   synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
 
   nref <- newIORef 0
@@ -323,7 +325,8 @@ runSynToy action = do
 --
 -- The test is randomized, and the time it takes to succeed varies
 -- significantly from run to run.
-test_synthesizeCandidate :: IO (Maybe [P.SynthInstruction Toy])
+test_synthesizeCandidate :: (U.HasLogCfg)
+                         => IO (Maybe [P.SynthInstruction Toy])
 test_synthesizeCandidate = do
   let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
   let instruction = C.RI { C.riInstruction = D.Instruction AddRr ops
@@ -341,7 +344,7 @@ test_synthesizeCandidate = do
 -- The weight should be penalty * number of test cases.
 --
 -- Returns @(<expected weight>, <actual weight>)@.
-test_rightValueWrongPlace :: IO (Double, Double)
+test_rightValueWrongPlace :: (U.HasLogCfg) => IO (Double, Double)
 test_rightValueWrongPlace = do
   runSynToy $ do
     tests <- askTestCases

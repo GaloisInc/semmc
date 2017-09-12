@@ -19,7 +19,8 @@ module SemMC.Log (
   LogCfg,
   mkLogCfg,
   -- * Log consumers
-  stdErrLogEventConsumer
+  stdErrLogEventConsumer,
+  tmpFileLogEventConsumer
   ) where
 
 import           Prelude hiding ( log )
@@ -31,7 +32,8 @@ import           Control.Concurrent ( myThreadId )
 import qualified Control.Concurrent.STM as Stm
 import           Control.Monad ( forever )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
-import           System.IO ( hPutStrLn, stderr )
+import           System.Directory ( createDirectoryIfMissing )
+import           System.IO ( hFlush, hPutStrLn, openTempFile, stderr )
 import           System.IO.Unsafe ( unsafePerformIO )
 import           Text.Printf ( printf )
 
@@ -126,6 +128,19 @@ stdErrLogEventConsumer cfg = forever $ do
   let msg = prettyLogEvent event
   hPutStrLn stderr msg
 
+-- | A log event consumer that writes formatted log events to a tmp
+-- file.
+tmpFileLogEventConsumer :: LogCfg -> IO ()
+tmpFileLogEventConsumer cfg = do
+  createDirectoryIfMissing True "/tmp/brittle"
+  (tmpFilePath, tmpFile) <- openTempFile "/tmp/brittle" "log.txt"
+  printf "Writing logs to %s\n" tmpFilePath
+  forever $ do
+    event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
+    let msg = prettyLogEvent event
+    hPutStrLn tmpFile msg
+    hFlush tmpFile
+
 ----------------------------------------------------------------
 -- * Internals
 
@@ -172,7 +187,7 @@ data LogCfg = LogCfg
 prettyLogEvent :: LogEvent -> String
 prettyLogEvent le =
   printf "[%s][%s][%s]\n%s"
-  (show $ leLevel le) location (show $ leThreadId le) (leMsg le)
+  (show $ leLevel le) location (leThreadId le) (leMsg le)
   where
     location :: String
     location = printf "%s:%s"

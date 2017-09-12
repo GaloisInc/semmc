@@ -89,7 +89,6 @@ import qualified SemMC.Worklist as WL
 
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
-import qualified SemMC.Log as L
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Pseudo
