@@ -1,3 +1,5 @@
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ConstraintKinds #-}
 -- | Description: Log msgs via a synchronized channel
 --
 -- Log msgs via a synchronized channel.
@@ -11,7 +13,8 @@ module SemMC.Log (
   logTrace,
   LogLevel(..),
   LogMsg,
-  MonadLogger(..),
+  HasLogCfg,
+  Ghc.HasCallStack,
   -- * Configuration
   LogCfg,
   mkLogCfg,
@@ -42,9 +45,30 @@ data LogLevel = Debug -- ^ Fine details
               | Error -- ^ Something bad
               deriving (Show, Eq, Ord)
 
--- | Monads that provide a log configuration.
-class MonadLogger m where
-  getLogCfg :: m LogCfg
+
+-- | Constraints for functions that call the logger.
+--
+-- WARNING: Due to GHC bug, this can't be used:
+-- https://ghc.haskell.org/trac/ghc/ticket/14218
+--
+-- Prefer this to plain 'HasLogCfg', since this also adds a call stack
+-- frame which allows the logger to print the name of the function
+-- calling the logger.
+{-
+type LogC = (Ghc.HasCallStack, HasLogCfg)
+-}
+
+-- | Access to the log config.
+--
+-- We use an implicit param to avoid having to change all code in 'IO'
+-- that wants to log to be in 'MonadLogger' and 'MonadIO' classes.
+--
+-- An even more convenient but more "unsafe" implementation would
+-- store the 'LogCfg' in a global, 'unsafePerformIO'd 'IORef'
+-- (cf. @uniqueSource@ in 'Data.Unique'). This would mean there could
+-- only be a single, global 'LogCfg', but I don't see why that would
+-- matter.
+type HasLogCfg = (?logCfg :: LogCfg)
 
 type LogMsg = String
 
@@ -52,7 +76,7 @@ type LogMsg = String
 --
 -- If you want the name of function that called 'log' to be included
 -- in the output, then you need to add a 'Ghc.HasCallStack' constraint
--- to it as well. Otherwise, one of two things will happen:
+-- to it as well (see 'LogC'). Otherwise, one of two things will happen:
 --
 -- - if no enclosing function has a 'Ghc.HasCallStack' constraint,
 --   then '???' will be used for the enclosing function name.
@@ -71,25 +95,17 @@ type LogMsg = String
 --
 --   then the call to 'log' in @inner@ will have "outer" as the
 --   enclosing function name.
-log :: (Ghc.HasCallStack, MonadLogger m, MonadIO m)
+log :: (HasLogCfg, Ghc.HasCallStack, MonadIO m)
     => LogLevel -> LogMsg -> m ()
 log level msg = do
-  cfg <- getLogCfg
-  liftIO $ writeLogEvent cfg Ghc.callStack level msg
+  liftIO $ writeLogEvent ?logCfg Ghc.callStack level msg
 
 -- | Log in pure code using 'unsafePerformIO', like 'Debug.Trace'.
 --
--- See 'log' for how enclosing 'Ghc.HasCallStack' constraints affect
--- things.
---
--- The 'LogCfg' must be passed explicitly. A more convenient but more
--- "unsafe" implementation would store it in a global,
--- 'unsafePerformIO'd 'IORef' (cf. @uniqueSource@ in
--- 'Data.Unique'). This would mean there could only be a single,
--- global 'LogCfg', but I don't see why that would matter.
-logTrace :: (Ghc.HasCallStack) => LogCfg -> LogLevel -> LogMsg -> a -> a
-logTrace cfg level msg x = unsafePerformIO $ do
-  writeLogEvent cfg Ghc.callStack level msg
+-- See 'log'.
+logTrace :: (HasLogCfg, Ghc.HasCallStack) => LogLevel -> LogMsg -> a -> a
+logTrace level msg x = unsafePerformIO $ do
+  writeLogEvent ?logCfg Ghc.callStack level msg
   return x
 {-# NOINLINE logTrace #-}
 
