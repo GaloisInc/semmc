@@ -31,8 +31,6 @@ module SemMC.Log (
   tmpFileLogEventConsumer
   ) where
 
-import           Prelude hiding ( log )
-
 import qualified GHC.Err.Located as Ghc
 import qualified GHC.Stack as Ghc
 
