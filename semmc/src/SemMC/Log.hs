@@ -131,7 +131,7 @@ logIO level msg = do
 
 -- | 'logIO' with an explicit config
 logIOWith :: (Ghc.HasCallStack, MonadIO m) => LogCfg -> LogLevel -> LogMsg -> m ()
-logIOWith cfg level msg = liftIO $ writeLogEvent cfg Ghc.callStack level msg
+logIOWith cfg level msg = withLogCfg cfg $ logIO level msg
 
 -- | Log in pure code using 'unsafePerformIO', like 'Debug.Trace'.
 --
