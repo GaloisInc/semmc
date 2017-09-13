@@ -27,8 +27,9 @@ import           Data.Maybe ( catMaybes )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as S
 import qualified Data.Set as Set
-import           GHC.Exts ( IsList(..) )
 import qualified GHC.Err.Located as L
+import           GHC.Exts ( IsList(..) )
+import           Text.Printf
 
 import qualified Data.Set.NonEmpty as NES
 import           Data.Parameterized.HasRepr ( HasRepr )
@@ -52,35 +53,32 @@ import           SemMC.Stochastic.Pseudo
                  , synthInsnToActual
                  )
 import qualified SemMC.Stochastic.IORelation as I
-
-import Debug.Trace
-import Text.Printf
-import qualified Data.List as L
-import Control.Monad
+import qualified SemMC.Util as U
 
 -- | Attempt to stochastically find a program in terms of the base set that has
 -- the same semantics as the given instruction.
 --
 -- This function can loop forever, and should be called under a timeout
-synthesize :: SynC arch
+synthesize :: (SynC arch, U.HasCallStack)
            => C.RegisterizedInstruction arch
            -> Syn t arch (CP.CandidateProgram t arch)
 synthesize target = do
   (numRounds, candidate) <- mcmcSynthesizeOne target
-  debug $ printf "found candidate after %i rounds" numRounds
+  U.logM U.Info $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . toList $ candidate
-  debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
+  U.logM U.Debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
   tests <- askTestCases
-  debug $ printf "# test cases = %i\n" (length tests)
+  U.logM U.Debug $ printf "number of test cases = %i\n" (length tests)
   withSymBackend $ \sym -> do
     f <- CP.programFormula sym candidateWithoutNops
     return CP.CandidateProgram { CP.cpInstructions = candidateWithoutNops
                                , CP.cpFormula = f
                                }
-  where
-    debug msg = liftIO $ traceIO msg
 
-mcmcSynthesizeOne :: forall arch t. SynC arch => C.RegisterizedInstruction arch -> Syn t arch (Integer, Candidate arch)
+mcmcSynthesizeOne :: forall arch t
+                   . (SynC arch, U.HasCallStack)
+                  => C.RegisterizedInstruction arch
+                  -> Syn t arch (Integer, Candidate arch)
 mcmcSynthesizeOne target = do
   -- Max length of candidate programs. Can make it a parameter if
   -- needed.
@@ -90,7 +88,6 @@ mcmcSynthesizeOne target = do
 
   tests <- askTestCases
   cost <- sum <$> mapM (compareTargetToCandidate target candidate) tests
-  liftIO $ print cost
   evolve 0 cost candidate
   where
     -- | Evolve the candidate until it agrees with the target on the
@@ -101,25 +98,27 @@ mcmcSynthesizeOne target = do
       if candidate == candidate'
       then evolve (k+1) cost candidate
       else do
-        debug $ "candidate:\n"++prettyCandidate candidate
-        debug $ "candidate':\n"++prettyCandidate candidate'
-        debug $ "cost = " ++ show cost
+        U.logM U.Debug $ "candidate:\n"++prettyCandidate candidate
+        U.logM U.Debug $ "candidate':\n"++prettyCandidate candidate'
+        U.logM U.Debug $ "cost = " ++ show cost
         -- liftIO $ showDiff candidate candidate'
         (cost'', candidate'') <- chooseNextCandidate @arch target candidate cost candidate'
         evolve (k+1) cost'' candidate''
-
-    debug msg = liftIO $ traceIO $ "mcmcSynthesizeOne: "++msg
+{-
+import qualified Data.List as L
+import Control.Monad
 
     showDiff c c' = do
-      debug "===================================================="
+      U.logM U.Debug "===================================================="
       forM_ zipped $ \xs -> do
-        debug $ case xs of
+        U.logM U.Debug $ case xs of
           [Nothing] -> ""
           [Just i] -> "=== "++show i++"\n"
           [x,x'] -> "!!! "++show x++"\n!!! "++show x'++"\n"
           _ -> L.error "the sky is falling"
       where
         zipped = S.zipWith (\x x' -> L.nub [x,x']) c c'
+-}
 
 prettyCandidate :: Show (SynthInstruction arch)
                 => Candidate arch -> String
@@ -131,7 +130,7 @@ prettyCandidate = unlines . map show . catMaybes . toList
 -- This includes an optimization from the paper where we compute
 -- the cost of the new candidate incrementally and stop as soon as
 -- we know it's too expensive [STOKE Section 4.5].
-chooseNextCandidate :: SynC arch
+chooseNextCandidate :: (SynC arch, U.HasCallStack)
                     => C.RegisterizedInstruction arch
                     -> Candidate arch
                     -> Double
@@ -140,7 +139,7 @@ chooseNextCandidate :: SynC arch
 chooseNextCandidate target candidate cost candidate' = do
   gen <- askGen
   threshold <- liftIO $ D.uniformR (0::Double, 1) gen
-  debug $ printf "threshold = %f" threshold
+  U.logM U.Debug $ printf "threshold = %f" threshold
   tests <- askTestCases
   go threshold 0 tests
   where
@@ -149,20 +148,18 @@ chooseNextCandidate target candidate cost candidate' = do
         -- is a typo, as in Equation 6, and should be a *difference*
         -- of costs in the exponent, not a *ratio* of costs.
       | cost' >= cost - log threshold/beta = do
-          debug "reject"
+          U.logM U.Debug "reject"
           return (cost, candidate)
       | [] <- tests = do
-          debug "accept"
+          U.logM U.Debug "accept"
           return (cost', candidate')
       | (test:tests') <- tests = do
-          -- debug $ printf "%f %f" cost threshold
+          -- U.logM U.Debug $ printf "%f %f" cost threshold
           dcost <- compareTargetToCandidate target candidate' test
-          -- debug (show dcost)
+          -- U.logM U.Debug (show dcost)
           go threshold (cost' + dcost) tests'
 
     beta = 0.1 -- STOKE Figure 10.
-
-    debug (msg :: String) = liftIO $ traceIO $ "chooseNextCandidate: "++msg
 
 ----------------------------------------------------------------
 
@@ -189,9 +186,9 @@ compareTargetToCandidate target candidate test = do
   eitherWeight <- liftIO (doComparison liveOut targetRes candidateRes `C.catches` handlers)
   case eitherWeight of
     Left e -> do
-      debug (show e)
-      debug $ printf "target = %s" (show targetRes)
-      debug $ printf "candidate = %s" (show candidateRes)
+      U.logM U.Debug $ printf "error = %s" (show e)
+      U.logM U.Debug $ printf "target = %s" (show targetRes)
+      U.logM U.Debug $ printf "candidate = %s" (show candidateRes)
       liftIO (C.throwIO e)
     Right weight -> return weight
   where
@@ -202,7 +199,6 @@ compareTargetToCandidate target candidate test = do
     arithHandler e = return (Left (C.SomeException e))
     runnerHandler :: CE.RunnerResultError -> IO (Either C.SomeException a)
     runnerHandler e = return (Left (C.SomeException e))
-    debug (msg :: String) = liftIO $ traceIO $ "compareTargetToCandidate: "++msg
     doComparison liveOut mTargetRes mCandidateRes = do
       case CE.asResultOrError mTargetRes of
         Right CE.TestResult { CE.resultContext = targetSt } ->
