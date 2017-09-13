@@ -19,7 +19,7 @@ module SemMC.Stochastic.Monad (
   SynC,
   LocalSynEnv(..),
   runSyn,
-  tryJust,
+  tryEither,
   -- * Environment queries
   askGen,
   askBaseSet,
@@ -49,6 +49,7 @@ module SemMC.Stochastic.Monad (
 import qualified GHC.Err.Located as L
 
 import qualified Control.Concurrent as C
+import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as C
 import qualified Control.Monad.Reader as R
@@ -126,15 +127,12 @@ instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
 runSyn :: forall arch t a. LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
--- | A version of 'C.tryJust' wrapped for our 'Syn' monad.
---
--- The @unliftio@ package generalizes this idea and provides a
--- @tryJust@ like this.
-tryJust :: C.Exception e
-        => (e -> Maybe b) -> Syn t arch a -> Syn t arch (Either b a)
-tryJust p action = do
+-- | Run a 'Syn' action, returning thrown exceptions as a 'Left'
+tryEither :: Syn t arch a -> Syn t arch (Either C.SomeException a)
+tryEither syn = do
   localEnv <- R.ask
-  liftIO $ C.tryJust p (runSyn localEnv action)
+  a <- liftIO $ A.async (runSyn localEnv syn)
+  liftIO (A.waitCatch a)
 
 -- | Run a computation under the general timeout for the maximum operation
 -- length for any synthesis operation
