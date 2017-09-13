@@ -1,3 +1,4 @@
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 -- | Description: Log msgs via a synchronized channel
@@ -8,13 +9,19 @@
 --
 -- See examples in 'SemMC.Log.Tests'.
 module SemMC.Log (
-  -- * Interface
-  log,
-  logTrace,
+  -- * Misc
   LogLevel(..),
   LogMsg,
-  HasLogCfg,
   Ghc.HasCallStack,
+  -- * Implicit param logger interface
+  HasLogCfg,
+  logIO,
+  logTrace,
+  withLogCfg,
+  getLogCfg,
+  -- * Monadic logger interface
+  MonadHasLogCfg(..),
+  logM,
   -- * Configuration
   LogCfg,
   mkLogCfg,
@@ -47,6 +54,7 @@ data LogLevel = Debug -- ^ Fine details
               | Error -- ^ Something bad
               deriving (Show, Eq, Ord)
 
+type LogMsg = String
 
 -- | Constraints for functions that call the logger.
 --
@@ -60,19 +68,37 @@ data LogLevel = Debug -- ^ Fine details
 type LogC = (Ghc.HasCallStack, HasLogCfg)
 -}
 
+----------------------------------------------------------------
+-- ** Implicit param logger interface
+
 -- | Access to the log config.
 --
+-- Users should prefer 'withLogCfg' to binding the implicit param. The
+-- implicit param is an implementation detail, and we could change the
+-- implementation later, e.g. to use the @reflection@ package.
+--
 -- We use an implicit param to avoid having to change all code in 'IO'
--- that wants to log to be in 'MonadLogger' and 'MonadIO' classes.
+-- that wants to log to be in 'MonadHasLogCfg' and 'MonadIO' classes.
 --
 -- An even more convenient but more "unsafe" implementation would
 -- store the 'LogCfg' in a global, 'unsafePerformIO'd 'IORef'
--- (cf. @uniqueSource@ in 'Data.Unique'). This would mean there could
--- only be a single, global 'LogCfg', but I don't see why that would
--- matter.
+-- (cf. @uniqueSource@ in 'Data.Unique').
 type HasLogCfg = (?logCfg :: LogCfg)
 
-type LogMsg = String
+-- | Satisfy a 'HasLogCfg' constraint.
+--
+-- Users can call this function instead of using @ImplicitParams@
+-- themselves.
+withLogCfg :: LogCfg -> (HasLogCfg => a) -> a
+withLogCfg logCfg x = let ?logCfg = logCfg in x
+
+-- | Recover the log config.
+--
+-- Useful for going between implicit and monadic interfaces. E.g.
+--
+-- > flip runReaderT getLogCfg ...
+getLogCfg :: HasLogCfg => LogCfg
+getLogCfg = ?logCfg
 
 -- | Log in a 'MonadIO'.
 --
@@ -88,7 +114,7 @@ type LogMsg = String
 --   with that constraint will be used for the enclosing function
 --   name. So, for example, if you define @outer@ by
 --
---   > outer :: (MonadLogger m, Ghc.HasCallStack) => m Int
+--   > outer :: (MonadHasLogCfg m, Ghc.HasCallStack) => m Int
 --   > outer = inner
 --   >   where
 --   >     inner = do
@@ -97,19 +123,39 @@ type LogMsg = String
 --
 --   then the call to 'log' in @inner@ will have "outer" as the
 --   enclosing function name.
-log :: (HasLogCfg, Ghc.HasCallStack, MonadIO m)
-    => LogLevel -> LogMsg -> m ()
-log level msg = do
+logIO :: (HasLogCfg, Ghc.HasCallStack, MonadIO m)
+      => LogLevel -> LogMsg -> m ()
+logIO level msg = do
   liftIO $ writeLogEvent ?logCfg Ghc.callStack level msg
+
 
 -- | Log in pure code using 'unsafePerformIO', like 'Debug.Trace'.
 --
--- See 'log'.
+-- See 'logIO'.
 logTrace :: (HasLogCfg, Ghc.HasCallStack) => LogLevel -> LogMsg -> a -> a
 logTrace level msg x = unsafePerformIO $ do
   writeLogEvent ?logCfg Ghc.callStack level msg
   return x
 {-# NOINLINE logTrace #-}
+
+----------------------------------------------------------------
+-- ** Monadic logger interface
+
+-- | Monads with logger configuration.
+class MonadHasLogCfg m where
+  getLogCfgM :: m LogCfg
+
+-- | Log in a 'MonadHasLogCfg'.
+--
+-- See 'logIO'.
+logM :: (MonadHasLogCfg m, MonadIO m)
+     => LogLevel -> LogMsg -> m ()
+logM level msg = do
+  logCfg <- getLogCfgM
+  withLogCfg logCfg $ logIO level msg
+
+----------------------------------------------------------------
+-- ** Initialization
 
 -- | Initialize a 'LogCfg'.
 --
@@ -120,6 +166,9 @@ mkLogCfg :: IO LogCfg
 mkLogCfg = do
   chan <- Stm.newTChanIO
   return $ LogCfg { lcChan = chan }
+
+----------------------------------------------------------------
+-- ** Log event consumers
 
 -- | A log event consumer that prints formatted log events to stderr.
 stdErrLogEventConsumer :: LogCfg -> IO ()

@@ -88,13 +88,13 @@ loadFormulas sym toFP impl shapes = do
       fileExists <- doesFileExist file
       if fileExists
       then do
-        U.log U.Info $ "loading file: "++file
+        U.logIO U.Info $ "loading file: "++file
         ef <- FP.readFormulaFromFile sym env file
         case ef of
           Left err -> L.error $ "Failed to parse "++file++": "++err
           Right f -> return (Just f)
       else do
-        U.log U.Debug $ "skipping non-existent file: "++file
+        U.logIO U.Debug $ "skipping non-existent file: "++file
         return Nothing
 
 addIfJust :: (MapF.OrdF k, Monad m)

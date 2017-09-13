@@ -228,7 +228,6 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
 
 {-
   logCfg <- L.mkLogCfg
-  let ?logCfg = logCfg
   loggerThread <- C.async $ logEventConsumer logCfg
   C.link loggerThread
 -}
@@ -258,6 +257,7 @@ runSynToy action = do
         , threadCount = L.error "threadCount"
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
         , logChannel = logChan
+        , logConfig = getLogCfg
         }
 
   {-
