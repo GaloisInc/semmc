@@ -33,6 +33,7 @@ module SemMC.Stochastic.Monad (
   withSymBackend,
   withTimeout,
   -- * Recording results
+  timeSyn,
   addTestCase,
   recordLearnedFormula,
   -- * Worklist
@@ -57,6 +58,7 @@ import           Control.Monad.Trans ( MonadIO, liftIO )
 import           Data.IORef ( IORef, readIORef, modifyIORef' )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text.IO as T
+import qualified Data.Time.Clock as TM
 import           Data.Typeable ( Typeable )
 import           Data.Word ( Word64 )
 import qualified System.Timeout as IO
@@ -144,6 +146,14 @@ withTimeout action = do
   env <- R.ask
   liftIO $ IO.timeout us $ runSyn env action
 
+-- | Time an action, returning its value as well as the time taken to execute
+-- the action
+timeSyn :: Syn t arch a -> Syn t arch (a, TM.NominalDiffTime)
+timeSyn action = do
+  start <- liftIO TM.getCurrentTime
+  res <- action
+  end <- liftIO TM.getCurrentTime
+  return (res, TM.diffUTCTime end start)
 
 -- | Record a learned formula for the opcode in the state
 recordLearnedFormula :: (SynC arch, F.ConvertShape sh) -- P.OrdF (A.Opcode arch (A.Operand arch)),
