@@ -256,7 +256,7 @@ runSynToy action = do
         , opcodeTimeoutSeconds = 600
         , threadCount = L.error "threadCount"
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
-        , logChannel = logChan
+        , remoteRunnerOutputChannel = logChan
         , logConfig = getLogCfg
         }
 

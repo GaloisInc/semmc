@@ -157,7 +157,7 @@ mainWithOptions opts = do
                        , SST.opcodeTimeoutSeconds = oOpcodeTimeoutSeconds opts
                        , SST.threadCount = oNumThreads opts
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
-                       , SST.logChannel = logChan
+                       , SST.remoteRunnerOutputChannel = logChan
                        }
   let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes

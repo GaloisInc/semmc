@@ -427,7 +427,7 @@ data Config arch =
          -- better, but there is locking around the symbolic backend (i.e.,
          -- 'SimpleBuilder'), so there could be contention if there is too much
          -- parallelism.
-         , logChannel :: C.Chan CE.LogMessage
+         , remoteRunnerOutputChannel :: C.Chan CE.LogMessage
          -- ^ The channel to send log messages to from the remote runner
          , remoteRunnerTimeoutSeconds :: Int
          -- ^ The number of seconds to wait for a response from the remote
