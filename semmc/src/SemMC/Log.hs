@@ -28,6 +28,7 @@ module SemMC.Log (
   mkLogCfg,
   -- * Log consumers
   stdErrLogEventConsumer,
+  fileLogEventConsumer,
   tmpFileLogEventConsumer
   ) where
 
@@ -178,6 +179,17 @@ stdErrLogEventConsumer cfg = forever $ do
   event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
   let msg = prettyLogEvent event
   IO.hPutStrLn IO.stderr msg
+
+-- | A logger that writes to a user-specified file
+--
+-- Note that logs are opened in the 'w' mode (i.e., overwrite).  Callers should
+-- preserve old log files if they really want.
+fileLogEventConsumer :: FilePath -> LogCfg -> IO ()
+fileLogEventConsumer fp cfg = forever $ IO.withFile fp IO.WriteMode $ \h -> do
+  event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
+  let msg = prettyLogEvent event
+  IO.hPutStrLn h msg
+  IO.hFlush h
 
 -- | A log event consumer that writes formatted log events to a tmp
 -- file.

@@ -45,6 +45,7 @@ data Options = Options { oRelDir :: FilePath
                        , oPseudoDir :: FilePath
                        , oLearnedDir :: FilePath
                        , oStatisticsFile :: FilePath
+                       , oLogFile :: Maybe FilePath
                        , oProgramCount :: Int
                        , oRandomTests :: Int
                        , oNumThreads :: Int
@@ -75,6 +76,10 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                         <> O.short 's'
                                         <> O.metavar "FILE"
                                         <> O.help "The file in which to persist search statistics" )
+                        <*> O.optional ( O.strOption ( O.long "log-file"
+                                                     <> O.short 'L'
+                                                     <> O.metavar "FILE"
+                                                     <> O.help "A file to store the log in.  The default (with no option) is stderr." ))
                         <*> O.option O.auto ( O.long "program-threshold"
                                             <> O.short 'P'
                                             <> O.value 10
@@ -143,7 +148,9 @@ mainWithOptions opts = do
     Verbose -> A.async (L.printLogMessages lcfg logChan)
     Quiet -> A.async (L.dumpRemoteRunnerLog logChan)
   A.link logger
-  logThread <- A.async (L.stdErrLogEventConsumer lcfg)
+  logThread <- case oLogFile opts of
+    Nothing -> A.async (L.stdErrLogEventConsumer lcfg)
+    Just logFile -> A.async (L.fileLogEventConsumer logFile lcfg)
   A.link logThread
 
   DIR.createDirectoryIfMissing True (oLearnedDir opts)
