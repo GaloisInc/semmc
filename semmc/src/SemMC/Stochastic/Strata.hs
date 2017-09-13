@@ -23,7 +23,9 @@ import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import           Data.IORef ( newIORef )
+import           Text.Printf ( printf )
 
+import           Data.Parameterized.Classes ( showF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 
@@ -33,6 +35,7 @@ import qualified Dismantle.Instruction as D
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
+import qualified SemMC.Log as L
 import           SemMC.Symbolic ( Sym )
 
 import qualified SemMC.Stochastic.CandidateProgram as CP
@@ -85,12 +88,16 @@ processWorklist = do
   case mwork of
     Nothing -> return ()
     Just (Some so) -> do
-      res <- strataOne so
+      -- Catch all exceptions in the stratification process.
+      res <- tryEither (strataOne so)
       case res of
+        Left err -> do
+          -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
+          L.logM L.Error $ printf "Error while processing opcode %s: %s" (showF so) (show err)
         -- Timeout, so we can't learn it yet.  Come back later
-        Nothing -> addWork so
+        Right Nothing -> addWork so
         -- Success, record the formula
-        Just formula -> recordLearnedFormula so formula
+        Right (Just formula) -> recordLearnedFormula so formula
       processWorklist
 
 -- | Attempt to learn a formula for the given opcode
