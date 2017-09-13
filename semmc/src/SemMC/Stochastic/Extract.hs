@@ -35,7 +35,7 @@ import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 -- | Given a formula derived from a learned program (@progForm@), extract a
 -- 'F.ParameterizedFormula' that has holes for the given 'Opcode'.
 extractFormula :: forall arch t sh
-                . (CS.ConcreteArchitecture arch, SynC arch)
+                . (SynC arch)
                => CS.RegisterizedInstruction arch
                -> A.Opcode arch (A.Operand arch) sh
                -> SL.ShapedList (A.Operand arch) sh

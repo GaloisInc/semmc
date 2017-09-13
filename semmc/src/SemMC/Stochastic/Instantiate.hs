@@ -51,7 +51,7 @@ import           SemMC.Stochastic.Monad
 -- act as stand ins for immediates; that seems highly unlikely, but something to
 -- watch out for.
 instantiateInstruction :: forall arch sh t
-                        . (CS.ConcreteArchitecture arch, SynC arch)
+                        . (SynC arch)
                        => A.Opcode arch (A.Operand arch) sh
                        -> Syn t arch (CS.RegisterizedInstruction arch)
 instantiateInstruction op = do
@@ -134,7 +134,7 @@ findUnusedLocation proxy usedLocs op locs =
       , not (S.member (Some loc) usedLocs) -> (rest, loc)
       | otherwise -> findUnusedLocation proxy usedLocs op rest
 
-isImplicitOrReusedOperand :: (CS.ConcreteArchitecture arch, SynC arch)
+isImplicitOrReusedOperand :: (SynC arch)
                           => Proxy arch
                           -> S.Set (Some (CS.View arch))
                           -> A.Operand arch tp

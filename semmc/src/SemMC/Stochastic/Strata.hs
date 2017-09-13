@@ -49,7 +49,7 @@ caller controls the number and placement of threads.
 -}
 
 stratifiedSynthesis :: forall arch t
-                     . (CS.ConcreteArchitecture arch, SynC arch)
+                     . (SynC arch)
                     => SynEnv t arch
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
@@ -69,11 +69,11 @@ stratifiedSynthesis env0 = do
     runSyn localEnv strata `C.finally` A.cancel testRunner'
   STM.readTVarIO (seFormulas env0)
 
-strata :: (CS.ConcreteArchitecture arch, SynC arch)
+strata :: (SynC arch)
        => Syn t arch (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
-processWorklist :: (CS.ConcreteArchitecture arch, SynC arch)
+processWorklist :: (SynC arch)
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
@@ -91,7 +91,7 @@ processWorklist = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we time out trying to find a formula
-strataOne :: (CS.ConcreteArchitecture arch, SynC arch)
+strataOne :: (SynC arch)
           => A.Opcode arch (A.Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
@@ -101,7 +101,7 @@ strataOne op = do
     Nothing -> return Nothing
     Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
 
-strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
+strataOneLoop :: (SynC arch)
               => A.Opcode arch (A.Operand arch) sh
               -> CS.RegisterizedInstruction arch
               -> C.EquivalenceClasses (CP.CandidateProgram t arch)
@@ -122,7 +122,7 @@ strataOneLoop op instr eqclasses = do
             Just <$> finishStrataOne op instr eqclasses'
           | otherwise -> strataOneLoop op instr eqclasses'
 
-finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
+finishStrataOne :: (SynC arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> CS.RegisterizedInstruction arch
                 -> C.EquivalenceClasses (CP.CandidateProgram t arch)
@@ -135,7 +135,7 @@ finishStrataOne op instr eqclasses = do
 -- | Construct a formula for the given instruction based on the selected representative program.
 --
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
-buildFormula :: (CS.ConcreteArchitecture arch, SynC arch)
+buildFormula :: (SynC arch)
              => A.Opcode arch (A.Operand arch) sh
              -> CS.RegisterizedInstruction arch
              -> F.Formula (Sym t) arch
