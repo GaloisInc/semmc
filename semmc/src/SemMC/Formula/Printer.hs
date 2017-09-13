@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeOperators #-}
 module SemMC.Formula.Printer
   ( printFormula
+  , ConvertShape
   ) where
 
 import qualified Data.Map as Map

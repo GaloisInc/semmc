@@ -56,6 +56,7 @@ import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import           Data.IORef ( IORef, readIORef, modifyIORef' )
 import           Data.Proxy ( Proxy(..) )
+import qualified Data.Text.IO as T
 import           Data.Typeable ( Typeable )
 import           Data.Word ( Word64 )
 import qualified System.Timeout as IO
@@ -63,6 +64,7 @@ import qualified System.Timeout as IO
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( mapSome, Some(..) )
+import           Data.Parameterized.Witness ( Witness(..) )
 
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.ShapedList as SL
@@ -80,7 +82,7 @@ import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.Constraints ( SynC )
 import           SemMC.Stochastic.IORelation ( IORelation )
-import           SemMC.Stochastic.Initialize ( Config(..), SynEnv(..) )
+import           SemMC.Stochastic.Initialize ( Config(..), SynEnv(..), mkFormulaFilename )
 import           SemMC.Stochastic.Pseudo
                  ( Pseudo
                  , SynthOpcode(..)
@@ -144,22 +146,25 @@ withTimeout action = do
 
 
 -- | Record a learned formula for the opcode in the state
-recordLearnedFormula :: (P.OrdF (A.Opcode arch (A.Operand arch)),
-                         HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr)
+recordLearnedFormula :: (SynC arch, F.ConvertShape sh) -- P.OrdF (A.Opcode arch (A.Operand arch)),
+                         -- HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr)
                      => A.Opcode arch (A.Operand arch) sh
                      -> F.ParameterizedFormula (Sym t) arch sh
                      -> Syn t arch ()
 recordLearnedFormula op f = do
   formulasRef <- R.asks (seFormulas . seGlobalEnv)
   congruentRef <- R.asks (seKnownCongruentOps . seGlobalEnv)
+  learnedDir <- R.asks (learnedSetDir . seConfig . seGlobalEnv)
+
   let opShape = typeRepr op
       newOps = SeqF.singleton (RealOpcode op)
+  liftIO $ T.writeFile (mkFormulaFilename learnedDir op) (F.printFormula f)
   liftIO $ STM.atomically $ do
     STM.modifyTVar' formulasRef (MapF.insert op f)
     STM.modifyTVar' congruentRef (MapF.insertWith (SeqF.><) opShape newOps)
 
 -- | Take an opcode off of the worklist
-takeWork :: Syn t arch (Maybe (Some (A.Opcode arch (A.Operand arch))))
+takeWork :: Syn t arch (Maybe (Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch)))))
 takeWork = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
   liftIO $ STM.atomically $ do
@@ -171,10 +176,10 @@ takeWork = do
         return (Just work)
 
 -- | Add an opcode back to into the worklist
-addWork :: A.Opcode arch (A.Operand arch) sh -> Syn t arch ()
+addWork :: Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch))) -> Syn t arch ()
 addWork op = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
-  liftIO $ STM.atomically $ STM.modifyTVar' wlref (WL.putWork (Some op))
+  liftIO $ STM.atomically $ STM.modifyTVar' wlref (WL.putWork op)
 
 askConfig :: Syn t arch (Config arch)
 askConfig = R.asks (seConfig . seGlobalEnv)

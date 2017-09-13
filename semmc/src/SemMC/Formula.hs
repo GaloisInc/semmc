@@ -42,6 +42,7 @@ module SemMC.Formula
 
   -- * Classes
   , BuildOperandList
+  , ConvertShape
   ) where
 
 import SemMC.Formula.Formula
@@ -63,7 +64,7 @@ import SemMC.Formula.Instantiate ( instantiateFormula,
                                  )
 import SemMC.Formula.Load ( loadFormulas )
 import SemMC.Formula.Parser ( readFormula, readFormulaFromFile, BuildOperandList )
-import SemMC.Formula.Printer ( printFormula )
+import SemMC.Formula.Printer ( printFormula, ConvertShape )
 import SemMC.Formula.Equivalence ( EquivalenceResult(..),
                                    formulasEquiv,
                                    formulasEquivConcrete,

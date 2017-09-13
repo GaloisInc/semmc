@@ -21,8 +21,8 @@ import qualified SemMC.Architecture.PPC as PPC
 
 import qualified Util as U
 
-class (F.BuildOperandList PPC.PPC sh, U.UnfoldShape sh) => BuildAndUnfold sh
-instance (F.BuildOperandList PPC.PPC sh, U.UnfoldShape sh) => BuildAndUnfold sh
+class (F.BuildOperandList PPC.PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
+instance (F.BuildOperandList PPC.PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
 
 allOpcodes :: [Some (Witness BuildAndUnfold (PPC.Opcode PPC.Operand))]
 allOpcodes = $(DT.captureDictionaries U.matchConstructor ''PPC.Opcode)

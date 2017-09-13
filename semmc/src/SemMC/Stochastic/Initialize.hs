@@ -1,11 +1,16 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Stochastic.Initialize (
   Config(..),
   SynEnv(..),
-  loadInitialState
+  loadInitialState,
+  mkFormulaFilename,
+  BuildAndConvert
   ) where
 
 import qualified Control.Concurrent as C
@@ -77,7 +82,7 @@ data SynEnv t arch =
          -- ^ Formulas for all pseudo opcodes
          , seKnownCongruentOps :: STM.TVar (MapF.MapF SL.ShapeRepr (SeqF.SeqF (P.SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
-         , seWorklist :: STM.TVar (WL.Worklist (Some (A.Opcode arch (A.Operand arch))))
+         , seWorklist :: STM.TVar (WL.Worklist (Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch)))))
          -- ^ Work items
          , seTestCases :: STM.TVar [CS.ConcreteState arch]
          -- ^ All of the test cases we have accumulated.  This includes a set of
@@ -97,6 +102,9 @@ data SynEnv t arch =
          -- ^ The initial configuration
          }
 
+class (F.BuildOperandList arch sh, F.ConvertShape sh) => BuildAndConvert arch sh
+instance (F.BuildOperandList arch sh, F.ConvertShape sh) => BuildAndConvert arch sh
+
 loadInitialState :: forall arch t
                   . (SynC arch, L.HasLogCfg)
                  => Config arch
@@ -111,19 +119,18 @@ loadInitialState :: forall arch t
                  -- read from disk.
                  -> [Some (Witness (F.BuildOperandList arch) ((P.Pseudo arch) (A.Operand arch)))]
                  -- ^ All pseudo opcodes
-                 -> [Some (Witness (F.BuildOperandList arch) ((A.Opcode arch) (A.Operand arch)))]
+                 -> [Some (Witness (BuildAndConvert arch) ((A.Opcode arch) (A.Operand arch)))]
                  -- ^ The opcodes we want to learn formulas for (could
                  -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
                  -> IO (SynEnv t arch)
 loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
-  let toFP dir oc = dir </> P.showF oc <.> "sem"
-      load dir = F.loadFormulas sym (toFP dir) (C.Sub C.Dict) allOpcodes
+  let load dir = F.loadFormulas sym (mkFormulaFilename dir) (C.Sub C.Dict) allOpcodes
   baseSet <- dropKeyWitnesses <$> load (baseSetDir cfg)
   learnedSet <- dropKeyWitnesses <$> load (learnedSetDir cfg)
   let initialFormulas = MapF.union baseSet learnedSet
-  pseudoSet <- dropKeyWitnesses <$> F.loadFormulas sym (toFP (pseudoSetDir cfg)) (C.Sub C.Dict) pseudoOpcodes
+  pseudoSet <- dropKeyWitnesses <$> F.loadFormulas sym (mkFormulaFilename (pseudoSetDir cfg)) (C.Sub C.Dict) pseudoOpcodes
   let congruentOps' = MapF.foldrWithKey (addCongruentOp . P.RealOpcode) MapF.empty initialFormulas
       congruentOps = MapF.foldrWithKey (addCongruentOp . P.PseudoOpcode) congruentOps' pseudoSet
   fref <- STM.newTVarIO initialFormulas
@@ -144,17 +151,29 @@ loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targe
                 , seStatsThread = statsThread
                 }
 
+-- | Build the formula filename for a given opcode (given its base directory)
+mkFormulaFilename :: (P.ShowF a)
+                  => FilePath
+                  -- ^ Directory to store the file
+                  -> a sh
+                  -- ^ The opcode to store a formula for
+                  -> FilePath
+mkFormulaFilename dir oc = dir </> P.showF oc <.> "sem"
+
 -- | The worklist consists of all of the opcodes for which we do not already
 -- have a formula (and that we actually want to learn)
 makeWorklist :: (MapF.OrdF (A.Opcode arch (A.Operand arch)))
-             => [Some (Witness (F.BuildOperandList arch) ((A.Opcode arch) (A.Operand arch)))]
+             => [Some (Witness (BuildAndConvert arch) ((A.Opcode arch) (A.Operand arch)))]
              -> MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch)
-             -> WL.Worklist (Some (A.Opcode arch (A.Operand arch)))
+             -> WL.Worklist (Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch))))
 makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
   where
-    opSet = S.fromList [ Some op | Some (Witness op) <- allOps ]
-    opSet' = F.foldl' removeIfPresent opSet (MapF.keys knownFormulas)
-    removeIfPresent s sop = S.delete sop s
+    opSet = S.fromList [ Some (Witness op) | Some (Witness op) <- allOps ]
+    opSet' = F.foldl' removeIfPresent opSet opSet
+    removeIfPresent s sop@(Some (Witness op)) =
+      case MapF.lookup op knownFormulas of
+        Nothing -> s
+        Just _ -> S.delete sop s
 
 dropKeyWitnesses :: forall c a v . (MapF.OrdF a) => MapF.MapF (Witness c a) v -> MapF.MapF a v
 dropKeyWitnesses = I.runIdentity . U.mapFMapBothM f

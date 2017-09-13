@@ -9,6 +9,7 @@ module Data.Parameterized.Unfold (
   RecShape
   ) where
 
+import GHC.TypeLits ( Symbol, KnownSymbol )
 import Control.Monad.Catch ( MonadThrow )
 import Data.Proxy ( Proxy(..) )
 
@@ -20,7 +21,7 @@ type RecShape tp tps' tps = (UnfoldShape tps', tps ~ (tp ': tps'))
 --
 -- The entire process is in 'E.MonadThrow' to allow for reporting detailed
 -- failures.  It can easily be instantiated with 'Maybe', 'Either', or 'IO'.
-class UnfoldShape (tps :: [k]) where
+class UnfoldShape (tps :: [Symbol]) where
   unfoldShape :: (MonadThrow m)
               => (a -> m (b '[]))
               -- ^ Produce the value associated with the empty list (e.g., an HList nil)
@@ -35,7 +36,7 @@ class UnfoldShape (tps :: [k]) where
 instance UnfoldShape '[] where
   unfoldShape nil _elt a = nil a
 
-instance (UnfoldShape tps) => UnfoldShape (tp ': tps) where
+instance (UnfoldShape tps, KnownSymbol tp) => UnfoldShape (tp ': tps) where
   unfoldShape _nil elt a = elt (Proxy :: Proxy tp) (Proxy :: Proxy tps) a
 
 {-

@@ -13,7 +13,8 @@ module SemMC.Stochastic.Strata (
   SynEnv,
   Config(..),
   loadInitialState,
-  stratifiedSynthesis
+  stratifiedSynthesis,
+  BuildAndConvert
   ) where
 
 import qualified GHC.Err.Located as L
@@ -28,6 +29,7 @@ import           Text.Printf ( printf )
 import           Data.Parameterized.Classes ( showF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
@@ -43,7 +45,7 @@ import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
-import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..) )
+import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..), BuildAndConvert )
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Synthesize ( synthesize )
 
@@ -87,7 +89,7 @@ processWorklist = do
   mwork <- takeWork
   case mwork of
     Nothing -> return ()
-    Just (Some so) -> do
+    Just (Some (Witness so)) -> do
       -- Catch all exceptions in the stratification process.
       res <- tryEither (strataOne so)
       case res of
@@ -95,7 +97,7 @@ processWorklist = do
           -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
           L.logM L.Error $ printf "Error while processing opcode %s: %s" (showF so) (show err)
         -- Timeout, so we can't learn it yet.  Come back later
-        Right Nothing -> addWork so
+        Right Nothing -> addWork (Some (Witness so))
         -- Success, record the formula
         Right (Just formula) -> recordLearnedFormula so formula
       processWorklist
