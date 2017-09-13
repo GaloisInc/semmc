@@ -156,8 +156,7 @@ timeSyn action = do
   return (res, TM.diffUTCTime end start)
 
 -- | Record a learned formula for the opcode in the state
-recordLearnedFormula :: (SynC arch, F.ConvertShape sh) -- P.OrdF (A.Opcode arch (A.Operand arch)),
-                         -- HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr)
+recordLearnedFormula :: (SynC arch, F.ConvertShape sh)
                      => A.Opcode arch (A.Operand arch) sh
                      -> F.ParameterizedFormula (Sym t) arch sh
                      -> Syn t arch ()
