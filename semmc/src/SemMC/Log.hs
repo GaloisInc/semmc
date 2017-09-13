@@ -39,8 +39,8 @@ import qualified Control.Concurrent.STM as Stm
 import           Control.Monad ( forever )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           System.Directory ( createDirectoryIfMissing )
-import           System.IO ( hFlush, hPutStrLn, openTempFile, stderr )
-import           System.IO.Unsafe ( unsafePerformIO )
+import qualified System.IO as IO
+import qualified System.IO.Unsafe as IO
 import           Text.Printf ( printf )
 
 ----------------------------------------------------------------
@@ -135,7 +135,7 @@ logIOWith cfg level msg = liftIO $ writeLogEvent cfg Ghc.callStack level msg
 --
 -- See 'logIO'.
 logTrace :: (HasLogCfg, Ghc.HasCallStack) => LogLevel -> LogMsg -> a -> a
-logTrace level msg x = unsafePerformIO $ do
+logTrace level msg x = IO.unsafePerformIO $ do
   writeLogEvent ?logCfg Ghc.callStack level msg
   return x
 {-# NOINLINE logTrace #-}
@@ -177,20 +177,20 @@ stdErrLogEventConsumer :: LogCfg -> IO ()
 stdErrLogEventConsumer cfg = forever $ do
   event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
   let msg = prettyLogEvent event
-  hPutStrLn stderr msg
+  IO.hPutStrLn IO.stderr msg
 
 -- | A log event consumer that writes formatted log events to a tmp
 -- file.
 tmpFileLogEventConsumer :: LogCfg -> IO ()
 tmpFileLogEventConsumer cfg = do
   createDirectoryIfMissing True "/tmp/brittle"
-  (tmpFilePath, tmpFile) <- openTempFile "/tmp/brittle" "log.txt"
+  (tmpFilePath, tmpFile) <- IO.openTempFile "/tmp/brittle" "log.txt"
   printf "Writing logs to %s\n" tmpFilePath
   forever $ do
     event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
     let msg = prettyLogEvent event
-    hPutStrLn tmpFile msg
-    hFlush tmpFile
+    IO.hPutStrLn tmpFile msg
+    IO.hFlush tmpFile
 
 ----------------------------------------------------------------
 -- * Internals
