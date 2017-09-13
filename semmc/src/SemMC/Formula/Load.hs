@@ -15,7 +15,7 @@ import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as Map
 import           Data.Proxy ( Proxy(..) )
-import           System.Directory ( doesFileExist )
+import qualified System.Directory as S
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
@@ -84,8 +84,8 @@ loadFormulas sym toFP impl shapes = do
                          -> Witness c a sh
                          -> IO (Maybe (F.ParameterizedFormula sym arch sh))
     readFormulaForOpcode env (Witness a) = do
-      let file = toFP a
-      fileExists <- doesFileExist file
+      file <- S.canonicalizePath $ toFP a
+      fileExists <- S.doesFileExist file
       if fileExists
       then do
         U.logIO U.Info $ "loading file: "++file
