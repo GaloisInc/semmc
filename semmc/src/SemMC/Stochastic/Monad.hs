@@ -46,7 +46,9 @@ module SemMC.Stochastic.Monad (
   -- * Remote test execution
   mkTestCase,
   runConcreteTests,
-  runConcreteTest
+  runConcreteTest,
+  -- * Exceptions
+  RemoteRunnerTimeout(..)
   ) where
 
 import qualified GHC.Err.Located as L
@@ -90,7 +92,8 @@ import           SemMC.Stochastic.Pseudo
 
 -- | Thread-local environment
 --
--- This includes a remote connection to run test cases
+-- This includes a remote connection to run test cases, as well as a nonce
+-- source for test cases.
 data LocalSynEnv t arch =
   LocalSynEnv { seGlobalEnv :: SynEnv t arch
               , seRandomGen :: DA.Gen
@@ -100,19 +103,8 @@ data LocalSynEnv t arch =
               , seResChan :: C.Chan (CE.ResultOrError (CS.ConcreteState arch))
               }
 
-mkTestCase :: CS.ConcreteState arch
-           -> [A.Instruction arch]
-           -> Syn t arch (CE.TestCase (CS.ConcreteState arch) (A.Instruction arch))
-mkTestCase s0 prog = do
-  nref <- R.asks seNonceSource
-  nonce <- liftIO $ readIORef nref
-  liftIO $ modifyIORef' nref (+1)
-  return CE.TestCase { CE.testNonce = nonce
-                     , CE.testContext = s0
-                     , CE.testProgram = prog
-                     }
-
--- Synthesis monad.
+-- | A monad for the stochastic synthesis code.  It maintains the necessary
+-- environment to connect to the theorem prover and run remote tests.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
   deriving (Functor,
             Applicative,
@@ -123,20 +115,21 @@ newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
 instance U.MonadHasLogCfg (Syn t arch) where
   getLogCfgM = logConfig <$> askConfig
 
+-- | This is the exception that is thrown if the synthesis times out waiting for
+-- a result from the remote test runner.
+data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
+
+instance (SynC arch) => Show (RemoteRunnerTimeout arch) where
+  show (RemoteRunnerTimeout _ tcs) = unwords [ "RemoteRunnerTimeout", show tcs ]
+
+instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
+
 -- | Runner for 'Syn' monad.
 --
 -- The ty vars are explicitly quantified with @arch@ first so that we
 -- can use @-XTypeApplications@ more conveniently.
 runSyn :: forall arch t a. LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
-
--- | Run a computation under the general timeout for the maximum operation
--- length for any synthesis operation
-withTimeout :: Syn t arch a -> Syn t arch (Maybe a)
-withTimeout action = do
-  us <- timeoutMicroseconds opcodeTimeoutSeconds
-  env <- R.ask
-  liftIO $ IO.timeout us $ runSyn env action
 
 -- | A version of 'C.tryJust' wrapped for our 'Syn' monad.
 --
@@ -147,6 +140,15 @@ tryJust :: C.Exception e
 tryJust p action = do
   localEnv <- R.ask
   liftIO $ C.tryJust p (runSyn localEnv action)
+
+-- | Run a computation under the general timeout for the maximum operation
+-- length for any synthesis operation
+withTimeout :: Syn t arch a -> Syn t arch (Maybe a)
+withTimeout action = do
+  us <- timeoutMicroseconds opcodeTimeoutSeconds
+  env <- R.ask
+  liftIO $ IO.timeout us $ runSyn env action
+
 
 -- | Record a learned formula for the opcode in the state
 recordLearnedFormula :: (P.OrdF (A.Opcode arch (A.Operand arch)),
@@ -191,44 +193,6 @@ timeoutMicroseconds :: (Num b) => (Config arch -> b) -> Syn t arch b
 timeoutMicroseconds accessor = do
   seconds <- R.asks (accessor . seConfig . seGlobalEnv)
   return (seconds * 1000 * 1000)
-
-data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
-
-instance (SynC arch) => Show (RemoteRunnerTimeout arch) where
-  show (RemoteRunnerTimeout _ tcs) = unwords [ "RemoteRunnerTimeout", show tcs ]
-
-instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
-
--- | Run a set of concrete tests
---
--- Returns 'Nothing' if the remote runner doesn't respond by the configured
--- timeout ('remoteRunnerTimeoutSeconds')
-runConcreteTests :: forall t arch
-                  . (SynC arch)
-                 => [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
-                 -> Syn t arch (CE.ResultIndex (CS.ConcreteState arch))
-runConcreteTests tests = do
-  tChan <- R.asks seTestChan
-  rChan <- R.asks seResChan
-  us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
-  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan tests return
-  case mresults of
-    Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) tests
-    Just results -> return (CE.indexResults results)
-
-runConcreteTest :: forall t arch
-                 . (SynC arch)
-                => CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
-                -> Syn t arch (CE.ResultOrError (CS.ConcreteState arch))
-runConcreteTest tc = do
-  tChan <- R.asks seTestChan
-  rChan <- R.asks seResChan
-  us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
-  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan [tc] return
-  case mresults of
-    Just [result] -> return result
-    Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) [tc]
-    _ -> L.error "Unexpected number of results from a single concrete test run"
 
 -- | Get access to the symbolic backend to compute something.
 --
@@ -290,6 +254,59 @@ opcodeIORelation op = do
   iorels <- R.asks (seIORelations . seGlobalEnv)
   return $ MapF.lookup op iorels
 
+
+-- | Wrap a test vector + test program into a form suitable for the test runners
+-- (see 'runConcreteTest' and 'runConcreteTests').
+mkTestCase :: CS.ConcreteState arch
+           -> [A.Instruction arch]
+           -> Syn t arch (CE.TestCase (CS.ConcreteState arch) (A.Instruction arch))
+mkTestCase s0 prog = do
+  nref <- R.asks seNonceSource
+  nonce <- liftIO $ readIORef nref
+  liftIO $ modifyIORef' nref (+1)
+  return CE.TestCase { CE.testNonce = nonce
+                     , CE.testContext = s0
+                     , CE.testProgram = prog
+                     }
+
+-- | Run a set of concrete tests
+--
+-- The results are compiled into an index (basically a map from test nonce to
+-- result) for easy lookups.
+--
+-- Throws a 'RemoteRunnerTimeout' exception if the remote runner doesn't respond
+-- by the configured timeout ('remoteRunnerTimeoutSeconds').
+runConcreteTests :: forall t arch
+                  . (SynC arch)
+                 => [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
+                 -> Syn t arch (CE.ResultIndex (CS.ConcreteState arch))
+runConcreteTests tests = do
+  tChan <- R.asks seTestChan
+  rChan <- R.asks seResChan
+  us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
+  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan tests return
+  case mresults of
+    Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) tests
+    Just results -> return (CE.indexResults results)
+
+-- | Run a single test case and return the result
+--
+-- Throws a 'RemoteRunnerTimeout' exception if there is a timeout.
+--
+-- Calls 'L.error' if more than one result is returned.
+runConcreteTest :: forall t arch
+                 . (SynC arch)
+                => CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
+                -> Syn t arch (CE.ResultOrError (CS.ConcreteState arch))
+runConcreteTest tc = do
+  tChan <- R.asks seTestChan
+  rChan <- R.asks seResChan
+  us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
+  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan [tc] return
+  case mresults of
+    Just [result] -> return result
+    Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) [tc]
+    _ -> L.error "Unexpected number of results from a single concrete test run"
 
 {-
 
