@@ -8,6 +8,17 @@
 -- With inspiration from the @monad-logger@ package.
 --
 -- See examples in 'SemMC.Log.Tests'.
+--
+-- WARNING: loggers that automatically infer the call stack (via
+-- `Ghc.HasCallStack`) are not composable, in that they infer a call
+-- stack at their call site. So, if you use one to build up another
+-- log function, then that derived log function will infer bogus call
+-- sites! Of course, it's pretty easy to write
+--
+--     writeLogEvent logCfg level msg
+--
+-- when defining a new logger, so not a big deal, just something to
+-- watch out for.
 module SemMC.Log (
   -- * Misc
   LogLevel(..),
@@ -131,7 +142,8 @@ logIO level msg = do
 
 -- | 'logIO' with an explicit config
 logIOWith :: (Ghc.HasCallStack, MonadIO m) => LogCfg -> LogLevel -> LogMsg -> m ()
-logIOWith cfg level msg = withLogCfg cfg $ logIO level msg
+logIOWith cfg level msg =
+  liftIO $ writeLogEvent cfg Ghc.callStack level msg
 
 -- | Log in pure code using 'unsafePerformIO', like 'Debug.Trace'.
 --
@@ -152,11 +164,11 @@ class MonadHasLogCfg m where
 -- | Log in a 'MonadHasLogCfg'.
 --
 -- See 'logIO'.
-logM :: (MonadHasLogCfg m, MonadIO m)
+logM :: (MonadHasLogCfg m, Ghc.HasCallStack, MonadIO m)
      => LogLevel -> LogMsg -> m ()
 logM level msg = do
   logCfg <- getLogCfgM
-  withLogCfg logCfg $ logIO level msg
+  liftIO $ writeLogEvent logCfg Ghc.callStack level msg
 
 -- | Signal to the log consumer that there are no more log messages and
 -- terminate the log consumer.  This is useful for cases where the logger is
@@ -207,7 +219,7 @@ tmpFileLogEventConsumer :: LogCfg -> IO ()
 tmpFileLogEventConsumer cfg = do
   createDirectoryIfMissing True "/tmp/brittle"
   (tmpFilePath, tmpFile) <- IO.openTempFile "/tmp/brittle" "log.txt"
-  printf "Writing logs to %s\n" tmpFilePath
+  printf "\n\nWriting logs to %s\n\n" tmpFilePath
   consumeUntilEnd (\e -> IO.hPutStrLn tmpFile (prettyLogEvent e) >> IO.hFlush tmpFile) cfg
 
 ----------------------------------------------------------------
