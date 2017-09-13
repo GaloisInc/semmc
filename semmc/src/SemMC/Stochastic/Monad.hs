@@ -20,6 +20,7 @@
 -- to the environment of the reader should be in this module.  Code outside of
 -- this module shouldn't have to know about any of the details.
 module SemMC.Stochastic.Monad (
+  -- * Monad definition
   Syn,
   SynC,
   LocalSynEnv(..),
