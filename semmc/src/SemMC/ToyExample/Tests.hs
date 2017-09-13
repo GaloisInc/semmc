@@ -43,6 +43,7 @@ import           SemMC.Architecture
 import           SemMC.Formula
 import qualified SemMC.Concrete.State as C
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Stochastic.CandidateProgram as CP
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
@@ -336,7 +337,7 @@ test_synthesizeCandidate = do
                          }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
   runSynToy $ do
-    fmap cpInstructions <$> withTimeout (S.synthesize instruction)
+    fmap CP.cpInstructions <$> withTimeout (S.synthesize instruction)
 
 -- | Weigh a candidate that produces the right value in the wrong
 -- place.

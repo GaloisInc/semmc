@@ -31,6 +31,7 @@ import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
 import           SemMC.Symbolic ( Sym )
 
+import qualified SemMC.Stochastic.CandidateProgram as CP
 import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
@@ -103,7 +104,7 @@ strataOne op = do
 strataOneLoop :: (CS.ConcreteArchitecture arch, SynC arch)
               => A.Opcode arch (A.Operand arch) sh
               -> CS.RegisterizedInstruction arch
-              -> C.EquivalenceClasses (CandidateProgram t arch)
+              -> C.EquivalenceClasses (CP.CandidateProgram t arch)
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
   cfg <- askConfig
@@ -124,12 +125,12 @@ strataOneLoop op instr eqclasses = do
 finishStrataOne :: (CS.ConcreteArchitecture arch, SynC arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> CS.RegisterizedInstruction arch
-                -> C.EquivalenceClasses (CandidateProgram t arch)
+                -> C.EquivalenceClasses (CP.CandidateProgram t arch)
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
   bestClass <- C.chooseClass eqclasses
   prog <- C.chooseProgram bestClass
-  buildFormula op instr (cpFormula prog)
+  buildFormula op instr (CP.cpFormula prog)
 
 -- | Construct a formula for the given instruction based on the selected representative program.
 --

@@ -42,6 +42,7 @@ import qualified Dismantle.Instruction as D
 import           SemMC.Architecture ( Instruction, Opcode, Operand )
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as C
+import qualified SemMC.Stochastic.CandidateProgram as CP
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo
                  ( Pseudo
@@ -63,7 +64,7 @@ import Control.Monad
 -- This function can loop forever, and should be called under a timeout
 synthesize :: SynC arch
            => C.RegisterizedInstruction arch
-           -> Syn t arch (CandidateProgram t arch)
+           -> Syn t arch (CP.CandidateProgram t arch)
 synthesize target = do
   (numRounds, candidate) <- mcmcSynthesizeOne target
   debug $ printf "found candidate after %i rounds" numRounds
@@ -72,10 +73,10 @@ synthesize target = do
   tests <- askTestCases
   debug $ printf "# test cases = %i\n" (length tests)
   withSymBackend $ \sym -> do
-    f <- programFormula sym candidateWithoutNops
-    return CandidateProgram { cpInstructions = candidateWithoutNops
-                            , cpFormula = f
-                            }
+    f <- CP.programFormula sym candidateWithoutNops
+    return CP.CandidateProgram { CP.cpInstructions = candidateWithoutNops
+                               , CP.cpFormula = f
+                               }
   where
     debug msg = liftIO $ traceIO msg
 
@@ -303,7 +304,7 @@ randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) ShapeRepr,
                 -> Syn t arch (SynthInstruction arch)
 randomizeOpcode (SynthInstruction oldOpcode operands) = do
   gen <- askGen
-  congruent <- lookupCongruent oldOpcode
+  congruent <- CP.lookupCongruentOpcodes oldOpcode
   case S.length congruent of
     0 -> L.error "bug! The opcode being replaced should always be in the congruent set!"
     len -> do

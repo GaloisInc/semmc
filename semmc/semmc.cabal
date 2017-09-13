@@ -32,6 +32,7 @@ library
                        SemMC.Formula.Printer
                        SemMC.Log
                        SemMC.Log.Tests
+                       SemMC.Stochastic.CandidateProgram
                        SemMC.Stochastic.Classify
                        SemMC.Stochastic.Extract
                        SemMC.Stochastic.Generalize
@@ -43,6 +44,8 @@ library
                        SemMC.Stochastic.IORelation.Types
                        SemMC.Stochastic.Instantiate
                        SemMC.Stochastic.Monad
+                       SemMC.Stochastic.Monad.Constraints
+                       SemMC.Stochastic.Monad.Load
                        SemMC.Stochastic.Pseudo
                        SemMC.Stochastic.Statistics
                        SemMC.Stochastic.Strata

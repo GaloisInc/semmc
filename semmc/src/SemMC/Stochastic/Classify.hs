@@ -40,6 +40,7 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as F
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Stochastic.CandidateProgram as CP
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
 import           SemMC.Symbolic ( Sym )
@@ -55,7 +56,7 @@ data EquivalenceClass a =
                    }
   deriving (Functor, F.Foldable, T.Traversable)
 
-equivalenceClass :: CandidateProgram t arch -> EquivalenceClass (CandidateProgram t arch)
+equivalenceClass :: CP.CandidateProgram t arch -> EquivalenceClass (CP.CandidateProgram t arch)
 equivalenceClass p = EquivalenceClass { ecPrograms = Seq.singleton p
                                       , ecRepresentative = 0
                                       }
@@ -81,26 +82,26 @@ equivalenceClassFromListMay cmp s =
     p1 Seq.:< rest -> Just (equivalenceClassFromList cmp p1 rest)
 
 -- | Construct an initial set of equivalence classes with a single program
-equivalenceClasses :: CandidateProgram t arch -> EquivalenceClasses (CandidateProgram t arch)
+equivalenceClasses :: CP.CandidateProgram t arch -> EquivalenceClasses (CP.CandidateProgram t arch)
 equivalenceClasses p = EquivalenceClasses (Seq.singleton (equivalenceClass p))
 
 -- | Count the total number of programs in the set of equivalence classes
-countPrograms :: EquivalenceClasses (CandidateProgram t arch) -> Int
+countPrograms :: EquivalenceClasses (CP.CandidateProgram t arch) -> Int
 countPrograms s = sum (map (Seq.length . ecPrograms) (F.toList (unClasses s)))
 
 data ClassifyState t arch =
-  ClassifyState { eqClassesSeq :: EquivalenceClasses (Int, CandidateProgram t arch)
+  ClassifyState { eqClassesSeq :: EquivalenceClasses (Int, CP.CandidateProgram t arch)
                 , mergableClasses :: [Int]
                 -- ^ Indexes of the equivalence classes to merge
                 }
 
-classAtIndex :: Int -> ClassifyM t arch (Maybe (EquivalenceClass (CandidateProgram t arch)))
+classAtIndex :: Int -> ClassifyM t arch (Maybe (EquivalenceClass (CP.CandidateProgram t arch)))
 classAtIndex ix = do
   EquivalenceClasses eqClasses <- St.gets eqClassesSeq
   return $ fmap (fmap snd) (Seq.lookup ix eqClasses)
 
 -- | Merge all of the classes marked in `mergableClasses` (if any)
-extractMergableClasses :: ClassifyM t arch (Seq.Seq (Seq.Seq (CandidateProgram t arch)))
+extractMergableClasses :: ClassifyM t arch (Seq.Seq (Seq.Seq (CP.CandidateProgram t arch)))
 extractMergableClasses = do
   s <- St.get
   let classesToKeep = mapMaybe (flip Seq.lookup (unClasses (eqClassesSeq s))) (mergableClasses s)
@@ -146,11 +147,11 @@ classify :: forall arch t
           . (SynC arch)
          => CS.RegisterizedInstruction arch
          -- ^ The instruction whose semantics we are trying to learn
-         -> CandidateProgram t arch
+         -> CP.CandidateProgram t arch
          -- ^ The program we just learned and need to add to an equivalence class
-         -> EquivalenceClasses (CandidateProgram t arch)
+         -> EquivalenceClasses (CP.CandidateProgram t arch)
          -- ^ The current equivalence classes
-         -> Syn t arch (Maybe (EquivalenceClasses (CandidateProgram t arch)))
+         -> Syn t arch (Maybe (EquivalenceClasses (CP.CandidateProgram t arch)))
 classify target p eqclasses = do
   let s0 = ClassifyState { eqClassesSeq = snd (L.mapAccumR numberItem 0 eqclasses)
                          , mergableClasses = []
@@ -185,12 +186,12 @@ numberItem n itm = (n + 1, (n, itm))
 classifyByClass :: (SynC arch)
                 => CS.RegisterizedInstruction arch
                 -- ^ The target instruction
-                -> CandidateProgram t arch
+                -> CP.CandidateProgram t arch
                 -- ^ The program to classify
                 -> Int
                 -- ^ The index (into the sequence of equivalence classes) of the
                 -- equivalence class that we are currently analyzing
-                -> ClassifyM t arch (Maybe (Seq.Seq (Seq.Seq (CandidateProgram t arch))))
+                -> ClassifyM t arch (Maybe (Seq.Seq (Seq.Seq (CP.CandidateProgram t arch))))
 classifyByClass target p ix = do
   mklass <- classAtIndex ix
   case mklass of
@@ -246,7 +247,7 @@ removeInvalidPrograms ix target cx = do
   -- Sicne we are removing entries here, we have to rebuild each equivalence
   -- class to select a new representative.  This is done by
   -- 'equivalenceClassFromListMay'.
-  let testListsMay' :: [Maybe (EquivalenceClass (Int, CandidateProgram t arch))]
+  let testListsMay' :: [Maybe (EquivalenceClass (Int, CP.CandidateProgram t arch))]
       testListsMay' = [ equivalenceClassFromListMay (compareCandidate `on` snd) maybes
                       | ec <- F.toList (unClasses klasses)
                       , let maybes = mapMaybeSeq (consistentWithTarget testIndex testResults targetSt) (ecPrograms ec)
@@ -314,9 +315,9 @@ consistentWithTarget :: (SynC arch)
                      -- ^ All of the results that came back from the remote runner
                      -> CS.ConcreteState arch
                      -- ^ The output of the target instruction on the test vector
-                     -> (Int, CandidateProgram t arch)
+                     -> (Int, CP.CandidateProgram t arch)
                      -- ^ The current program (and its index into the @testIndex@ map)
-                     -> Maybe (Int, CandidateProgram t arch)
+                     -> Maybe (Int, CP.CandidateProgram t arch)
 consistentWithTarget testIndex testResults cx (testNum, tc) =
   case M.lookup nonce (CE.riExitedWithSignal testResults) of
     Just _ -> Nothing
@@ -336,28 +337,28 @@ consistentWithTarget testIndex testResults cx (testNum, tc) =
 -- between test numbers and concrete test nonces.
 makeAndIndexTest :: (P.ArchitectureWithPseudo arch)
                  => CS.ConcreteState arch
-                 -> (Int, CandidateProgram t arch)
+                 -> (Int, CP.CandidateProgram t arch)
                  -> ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
                  -> ClassifyM t arch ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
 makeAndIndexTest cx (pix, cp) (cases, idx) = do
   tc <- liftC $ mkTestCase cx program
   return (tc : cases, M.insert pix (CE.testNonce tc) idx)
   where
-    program = concatMap P.synthInsnToActual (cpInstructions cp)
+    program = concatMap P.synthInsnToActual (CP.cpInstructions cp)
 
 -- | Heuristically-choose the best equivalence class
 --
 -- It prefers classes with more examples and fewer uninterpreted functions
-chooseClass :: EquivalenceClasses (CandidateProgram t arch)
-            -> Syn t arch (EquivalenceClass (CandidateProgram t arch))
+chooseClass :: EquivalenceClasses (CP.CandidateProgram t arch)
+            -> Syn t arch (EquivalenceClass (CP.CandidateProgram t arch))
 chooseClass (EquivalenceClasses klasses) =
   case Seq.viewl klasses of
     Seq.EmptyL -> L.error "Empty equivalence class set"
     k1 Seq.:< rest -> F.foldlM bestClass k1 rest
 
-bestClass :: EquivalenceClass (CandidateProgram t arch)
-          -> EquivalenceClass (CandidateProgram t arch)
-          -> Syn t arch (EquivalenceClass (CandidateProgram t arch))
+bestClass :: EquivalenceClass (CP.CandidateProgram t arch)
+          -> EquivalenceClass (CP.CandidateProgram t arch)
+          -> Syn t arch (EquivalenceClass (CP.CandidateProgram t arch))
 bestClass k1 k2 = do
   best1 <- chooseProgram k1
   best2 <- chooseProgram k2
@@ -370,7 +371,7 @@ bestClass k1 k2 = do
 --
 -- We want to minimize the number of uninterpreted functions and non-linear
 -- operations (as well as formula size).
-chooseProgram :: EquivalenceClass (CandidateProgram t arch) -> Syn t arch (CandidateProgram t arch)
+chooseProgram :: EquivalenceClass (CP.CandidateProgram t arch) -> Syn t arch (CP.CandidateProgram t arch)
 chooseProgram ec =
   case Seq.lookup (ecRepresentative ec) (ecPrograms ec) of
     Nothing -> L.error "BUG: Invalid representative index in equivalence class"
@@ -382,7 +383,7 @@ chooseProgram ec =
 -- FIXME: Add a weight for formulas that mix arithmetic and bitwise BV
 -- operations; mixed mode is more expensive than formulas that don't mix.
 -- Mixing includes comparisons.
-compareCandidate :: CandidateProgram t arch -> CandidateProgram t arch -> Ordering
+compareCandidate :: CP.CandidateProgram t arch -> CP.CandidateProgram t arch -> Ordering
 compareCandidate p1 p2
   | uf1 < uf2 = GT
   | uf2 < uf1 = LT
@@ -391,8 +392,8 @@ compareCandidate p1 p2
   | size1 < size2 = GT
   | otherwise = LT
   where
-    (uf1, nonLinear1, size1) = summarizeFormula (cpFormula p1)
-    (uf2, nonLinear2, size2) = summarizeFormula (cpFormula p2)
+    (uf1, nonLinear1, size1) = summarizeFormula (CP.cpFormula p1)
+    (uf2, nonLinear2, size2) = summarizeFormula (CP.cpFormula p2)
 
 
 summarizeFormula :: forall t arch . F.Formula (Sym t) arch -> (Int, Int, Int)
@@ -460,12 +461,12 @@ mergeClasses = F.foldr mappend Seq.empty
 --
 -- If they are not, return an input that demonstrates the difference.
 testEquivalence :: (P.ArchitectureWithPseudo arch)
-                => CandidateProgram t arch
-                -> CandidateProgram t arch
+                => CP.CandidateProgram t arch
+                -> CP.CandidateProgram t arch
                 -> Syn t arch (F.EquivalenceResult arch CS.Value)
 testEquivalence p representative = do
   withSymBackend $ \sym -> do
-    liftIO $ F.formulasEquivConcrete sym (cpFormula p) (cpFormula representative)
+    liftIO $ F.formulasEquivConcrete sym (CP.cpFormula p) (CP.cpFormula representative)
 
 
 {- Note [Registerization and Counterexamples]
