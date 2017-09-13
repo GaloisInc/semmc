@@ -99,5 +99,9 @@ mainWithOptions opt = do
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"
     putStrLn (unlines (map show (F.toList failures)))
+
+  L.logEndWith logCfg
+  A.wait logThread
+
   return ()
 

@@ -171,6 +171,10 @@ mainWithOptions opts = do
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
   senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps opcodes iorels
   _ <- SST.stratifiedSynthesis senv
+
+  L.logEndWith lcfg
+  A.wait logThread
+
   return ()
   where
     initialTestCases = CS.heuristicallyInterestingStates (Proxy @PPC.PPC)

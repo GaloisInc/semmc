@@ -16,10 +16,12 @@ module SemMC.Log (
   -- * Implicit param logger interface
   HasLogCfg,
   logIO,
-  logIOWith,
   logTrace,
   withLogCfg,
   getLogCfg,
+  -- * Explicit parameter logger interface
+  logIOWith,
+  logEndWith,
   -- * Monadic logger interface
   MonadHasLogCfg(..),
   logM,
@@ -37,7 +39,6 @@ import qualified GHC.Stack as Ghc
 
 import           Control.Concurrent ( myThreadId )
 import qualified Control.Concurrent.STM as Stm
-import           Control.Monad ( forever )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           System.Directory ( createDirectoryIfMissing )
 import qualified System.IO as IO
@@ -157,6 +158,14 @@ logM level msg = do
   logCfg <- getLogCfgM
   withLogCfg logCfg $ logIO level msg
 
+-- | Signal to the log consumer that there are no more log messages and
+-- terminate the log consumer.  This is useful for cases where the logger is
+-- running in a separate thread and the parent thread wants to wait until the
+-- logger has finished logging and has successfully flushed all log messages
+-- before terminating it.
+logEndWith :: LogCfg -> IO ()
+logEndWith cfg = Stm.atomically $ Stm.writeTChan (lcChan cfg) Nothing
+
 ----------------------------------------------------------------
 -- ** Initialization
 
@@ -173,23 +182,24 @@ mkLogCfg = do
 ----------------------------------------------------------------
 -- ** Log event consumers
 
+consumeUntilEnd :: (LogEvent -> IO ()) -> LogCfg -> IO ()
+consumeUntilEnd k cfg = do
+  mevent <- Stm.atomically $ Stm.readTChan (lcChan cfg)
+  case mevent of
+    Nothing -> return ()
+    Just event -> k event >> consumeUntilEnd k cfg
+
 -- | A log event consumer that prints formatted log events to stderr.
 stdErrLogEventConsumer :: LogCfg -> IO ()
-stdErrLogEventConsumer cfg = forever $ do
-  event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
-  let msg = prettyLogEvent event
-  IO.hPutStrLn IO.stderr msg
+stdErrLogEventConsumer = consumeUntilEnd (IO.hPutStrLn IO.stderr . prettyLogEvent)
 
 -- | A logger that writes to a user-specified file
 --
 -- Note that logs are opened in the 'w' mode (i.e., overwrite).  Callers should
 -- preserve old log files if they really want.
 fileLogEventConsumer :: FilePath -> LogCfg -> IO ()
-fileLogEventConsumer fp cfg = forever $ IO.withFile fp IO.WriteMode $ \h -> do
-  event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
-  let msg = prettyLogEvent event
-  IO.hPutStrLn h msg
-  IO.hFlush h
+fileLogEventConsumer fp cfg = IO.withFile fp IO.WriteMode $ \h -> do
+  consumeUntilEnd (\e -> IO.hPutStrLn h (prettyLogEvent e) >> IO.hFlush h) cfg
 
 -- | A log event consumer that writes formatted log events to a tmp
 -- file.
@@ -198,11 +208,7 @@ tmpFileLogEventConsumer cfg = do
   createDirectoryIfMissing True "/tmp/brittle"
   (tmpFilePath, tmpFile) <- IO.openTempFile "/tmp/brittle" "log.txt"
   printf "Writing logs to %s\n" tmpFilePath
-  forever $ do
-    event <- Stm.atomically $ Stm.readTChan (lcChan cfg)
-    let msg = prettyLogEvent event
-    IO.hPutStrLn tmpFile msg
-    IO.hFlush tmpFile
+  consumeUntilEnd (\e -> IO.hPutStrLn tmpFile (prettyLogEvent e) >> IO.hFlush tmpFile) cfg
 
 ----------------------------------------------------------------
 -- * Internals
@@ -227,7 +233,7 @@ data LogEvent = LogEvent
 
 -- | Logging configuration.
 data LogCfg = LogCfg
-  { lcChan :: Stm.TChan LogEvent
+  { lcChan :: Stm.TChan (Maybe LogEvent)
   -- Idea: add a map from 'ThreadId' to user friendly names, and
   -- create special version of 'async' or 'forkIO' that automatically
   -- populate the map when forking threads. Also, have 'mkLogCfg' take
@@ -267,7 +273,7 @@ prettyLogEvent le =
 writeLogEvent :: LogCfg -> Ghc.CallStack -> LogLevel -> LogMsg -> IO ()
 writeLogEvent cfg cs level msg = do
   tid <- myThreadId
-  Stm.atomically $ Stm.writeTChan (lcChan cfg) (event $ show tid)
+  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event (show tid)))
   where
     event tid = LogEvent
       { leCallSite = callSite
