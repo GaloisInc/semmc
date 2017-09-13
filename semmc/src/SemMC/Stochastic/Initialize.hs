@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
-module SemMC.Stochastic.Monad.Load (
+module SemMC.Stochastic.Initialize (
   Config(..),
   SynEnv(..),
   loadInitialState
@@ -32,7 +32,7 @@ import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
 import           SemMC.Stochastic.IORelation ( IORelation )
 import qualified SemMC.Stochastic.IORelation.Types as I
-import           SemMC.Stochastic.Monad.Constraints ( SynC )
+import           SemMC.Stochastic.Constraints ( SynC )
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Symbolic ( Sym )

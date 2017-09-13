@@ -40,7 +40,7 @@ import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
-import           SemMC.Stochastic.Monad.Load
+import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..) )
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Synthesize ( synthesize )
 

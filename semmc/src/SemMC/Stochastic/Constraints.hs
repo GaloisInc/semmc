@@ -1,6 +1,6 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-module SemMC.Stochastic.Monad.Constraints (
+module SemMC.Stochastic.Constraints (
   SynC
   ) where
 

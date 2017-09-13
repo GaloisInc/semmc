@@ -77,9 +77,9 @@ import qualified SemMC.Worklist as WL
 
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
+import           SemMC.Stochastic.Constraints ( SynC )
 import           SemMC.Stochastic.IORelation ( IORelation )
-import           SemMC.Stochastic.Monad.Load ( Config(..), SynEnv(..) )
-import           SemMC.Stochastic.Monad.Constraints ( SynC )
+import           SemMC.Stochastic.Initialize ( Config(..), SynEnv(..) )
 import           SemMC.Stochastic.Pseudo
                  ( Pseudo
                  , SynthOpcode(..)
