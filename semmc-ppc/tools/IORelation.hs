@@ -23,6 +23,7 @@ import qualified SemMC.Constraints as C
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Architecture.PPC as PPC
+import qualified SemMC.Log as L
 
 import qualified Logging as L
 import qualified OpcodeLists as OL
@@ -86,11 +87,14 @@ mainWithOptions opt = do
                                , IOR.lcLog = logChan
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
+  logCfg <- L.mkLogCfg
   logger <- case oPrintLog opt of
-    Verbose -> A.async (L.printLogMessages logChan)
-    Quiet -> A.async (L.dumpLog logChan)
-
+    Verbose -> A.async (L.printLogMessages logCfg logChan)
+    Quiet -> A.async (L.dumpRemoteRunnerLog logChan)
   A.link logger
+  logThread <- A.async (L.stdErrLogEventConsumer logCfg)
+  A.link logThread
+
   (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"

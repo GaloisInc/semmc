@@ -136,13 +136,13 @@ mainWithOptions opts = do
                                      , CE.flattenProgram = mconcat . map PPC.assembleInstruction
                                      }
 
-  logChan <- C.newChan
-  logger <- case oPrintLog opts of
-    Verbose -> A.async (L.printLogMessages logChan)
-    Quiet -> A.async (L.dumpLog logChan)
-  A.link logger
   lcfg <- L.mkLogCfg
   let ?logCfg = lcfg
+  logChan <- C.newChan
+  logger <- case oPrintLog opts of
+    Verbose -> A.async (L.printLogMessages lcfg logChan)
+    Quiet -> A.async (L.dumpRemoteRunnerLog logChan)
+  A.link logger
   logThread <- A.async (L.stdErrLogEventConsumer lcfg)
   A.link logThread
 

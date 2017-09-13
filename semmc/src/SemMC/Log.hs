@@ -16,6 +16,7 @@ module SemMC.Log (
   -- * Implicit param logger interface
   HasLogCfg,
   logIO,
+  logIOWith,
   logTrace,
   withLogCfg,
   getLogCfg,
@@ -128,6 +129,9 @@ logIO :: (HasLogCfg, Ghc.HasCallStack, MonadIO m)
 logIO level msg = do
   liftIO $ writeLogEvent ?logCfg Ghc.callStack level msg
 
+-- | 'logIO' with an explicit config
+logIOWith :: (Ghc.HasCallStack, MonadIO m) => LogCfg -> LogLevel -> LogMsg -> m ()
+logIOWith cfg level msg = liftIO $ writeLogEvent cfg Ghc.callStack level msg
 
 -- | Log in pure code using 'unsafePerformIO', like 'Debug.Trace'.
 --
