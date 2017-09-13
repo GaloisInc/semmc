@@ -43,6 +43,7 @@ import           SemMC.Architecture
 import           SemMC.Formula
 import qualified SemMC.Concrete.State as C
 import qualified SemMC.Concrete.Execution as CE
+import           SemMC.Stochastic.Strata
 import qualified SemMC.Stochastic.CandidateProgram as CP
 import qualified SemMC.Stochastic.IORelation.Types as I
 import           SemMC.Stochastic.Monad
@@ -306,7 +307,7 @@ runSynToy action = do
   tChan <- C.newChan :: IO (C.Chan (Maybe (I.TestCase Toy)))
   rChan <- C.newChan
   testRunnerThread <- C.async $
-    testRunner (seConfig synEnv) tChan rChan logChan
+    testRunner cfg tChan rChan logChan
   C.link testRunnerThread
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv

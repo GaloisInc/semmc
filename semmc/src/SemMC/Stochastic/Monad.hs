@@ -22,13 +22,10 @@
 module SemMC.Stochastic.Monad (
   Syn,
   SynC,
-  SynEnv(..),
   LocalSynEnv(..),
-  loadInitialState,
   runSyn,
   tryJust,
-  Config(..),
-  -- * Operations
+  -- * Environment queries
   askGen,
   askBaseSet,
   askConfig,
@@ -36,16 +33,20 @@ module SemMC.Stochastic.Monad (
   askFormulas,
   askPseudoFormulas,
   askKnownCongruentOps,
+  opcodeIORelation,
+  -- * Symbolic backend manipulation
   withSymBackend,
   withTimeout,
+  -- * Recording results
   addTestCase,
-  mkTestCase,
-  runConcreteTests,
-  runConcreteTest,
   recordLearnedFormula,
+  -- * Worklist
   takeWork,
   addWork,
-  opcodeIORelation
+  -- * Remote test execution
+  mkTestCase,
+  runConcreteTests,
+  runConcreteTest
   ) where
 
 import qualified GHC.Err.Located as L
@@ -80,7 +81,7 @@ import qualified SemMC.Worklist as WL
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.IORelation ( IORelation )
-import           SemMC.Stochastic.Monad.Load ( Config(..), SynEnv(..), loadInitialState )
+import           SemMC.Stochastic.Monad.Load ( Config(..), SynEnv(..) )
 import           SemMC.Stochastic.Monad.Constraints ( SynC )
 import           SemMC.Stochastic.Pseudo
                  ( Pseudo

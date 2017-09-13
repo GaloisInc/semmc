@@ -5,6 +5,10 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+-- | This is the main entry point to the stochastic synthesis
+--
+-- Client code should only need to import this module in order to run the
+-- stochastic synthesis.
 module SemMC.Stochastic.Strata (
   SynEnv,
   Config(..),
@@ -36,6 +40,7 @@ import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
+import           SemMC.Stochastic.Monad.Load
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Synthesize ( synthesize )
 
