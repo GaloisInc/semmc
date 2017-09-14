@@ -18,10 +18,10 @@ import qualified Control.Concurrent.Chan as C
 import           Data.IORef ( newIORef )
 import qualified Data.Map as Map
 import           Data.Maybe
-import           Data.Monoid
 import           Data.Proxy
 import qualified Data.Sequence as S
 import qualified Data.Text as T
+import           System.FilePath
 
 import qualified GHC.Err.Located as L
 
@@ -60,10 +60,10 @@ allOperands :: [Some (Witness U.UnfoldShape (T.Opcode T.Operand))]
 allOperands = $(captureDictionaries (const True) ''T.Opcode)
 
 readBinOp :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "R32"]))
-readBinOp sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("data/toy/base/" <> fp)
+readBinOp sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("toy-semantics" </> fp)
 
 readBinOp' :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "I32"]))
-readBinOp' sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("data/toy/base/" <> fp)
+readBinOp' sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("toy-semantics" </> fp)
 
 doThing :: IO ()
 doThing = do
@@ -78,7 +78,7 @@ doThing = do
               $ MapF.empty
   -- print =<< instantiateFormula sym pf (R32 Reg1 :> R32 Reg3 :> Nil)
   let templated = templatedInstructions opcodes
-  print $ templated !! 50
+  mapM_ print templated
   -- (f1 : f2 : _) <- templatizeFormula' sym pf
   -- print =<< sequenceFormulas sym (tfFormula f1) (tfFormula f2)
 
@@ -242,16 +242,17 @@ toyTestRunnerBackend !i tChan rChan _logChan = do
 -- effects, e.g. writing a file. If we want on disk side effects, then
 -- we should change this to set up the on-disk test env in a tmp dir.
 runSynToy :: (U.HasLogCfg)
-          => (forall t. Syn t Toy a)
+          => FilePath -- ^ Root dir for test data, e.g. semantics.
+          -> (forall t. Syn t Toy a)
           -> IO a
-runSynToy action = do
+runSynToy dataRoot action = do
   logChan <- C.newChan
   let cfg :: Config Toy
       cfg = Config
-        { baseSetDir = "test-toy/test1/base"
-        , pseudoSetDir = "test-toy/test1/pseudo"
-        , learnedSetDir = "test-toy/test1/learned"
-        , statisticsFile = "test-toy/test1/stats.txt"
+        { baseSetDir = dataRoot </> "base"
+        , pseudoSetDir = dataRoot </> "pseudo"
+        , learnedSetDir = dataRoot </> "learned"
+        , statisticsFile = dataRoot </> "stats.txt"
         , programCountThreshold = L.error "programCountThreshold"
         , randomTestCount = 1024
         , remoteRunnerTimeoutSeconds = 20
@@ -326,7 +327,8 @@ runSynToy action = do
 -- that they implement the target on all possible inputs.
 --
 -- The test is randomized, and the time it takes to succeed varies
--- significantly from run to run.
+-- significantly from run to run. Interpreted it usually finishes in
+-- under a minute, and compiled in under 5 seconds.
 test_synthesizeCandidate :: (U.HasLogCfg)
                          => IO (Maybe [P.SynthInstruction Toy])
 test_synthesizeCandidate = do
@@ -337,7 +339,7 @@ test_synthesizeCandidate = do
                          , C.riLiteralLocs = MapF.empty
                          }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
-  runSynToy $ do
+  runSynToy "tests/data/test_synthesizeCandidate" $ do
     (res, _) <- withTimeout (S.synthesize instruction)
     return (fmap CP.cpInstructions res)
 
@@ -349,7 +351,7 @@ test_synthesizeCandidate = do
 -- Returns @(<expected weight>, <actual weight>)@.
 test_rightValueWrongPlace :: (U.HasLogCfg) => IO (Double, Double)
 test_rightValueWrongPlace = do
-  runSynToy $ do
+  runSynToy "tests/data/test_rightValueWrongPlace" $ do
     tests <- askTestCases
     weight <- sum <$>
       mapM (S.compareTargetToCandidate target candidate) tests
