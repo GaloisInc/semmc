@@ -14,6 +14,11 @@ module SemMC.Stochastic.Strata (
   Config(..),
   loadInitialState,
   stratifiedSynthesis,
+  -- * Statistics
+  S.StatisticsThread,
+  S.newStatisticsThread,
+  S.terminateStatisticsThread,
+  -- * Classes
   BuildAndConvert
   ) where
 

@@ -217,7 +217,7 @@ withSymBackend k = do
 
 withStats :: (S.StatisticsThread arch -> IO ()) -> Syn t arch ()
 withStats k = do
-  st <- R.asks (seStatsThread . seGlobalEnv)
+  st <- R.asks (statsThread . seConfig . seGlobalEnv)
   liftIO (k st)
 
 askTestCases :: Syn t arch [CS.ConcreteState arch]
