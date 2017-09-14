@@ -61,7 +61,14 @@ opcodeId :: (ShowF (Opcode arch (Operand arch)))
          -> SQL.Connection
          -> Some (Opcode arch (Operand arch))
          -> IO OpcodeId
-opcodeId _ conn (Some opc) = undefined
+opcodeId _ conn (Some opc) = do
+  res <- SQL.query conn "SELECT opid FROM opcodes WHERE name = ?" (SQL.Only (showF opc))
+  case res of
+    [SQL.Only r] -> return r
+    [] -> do
+      SQL.execute conn "INSERT INTO opcodes VALUES (?);" (SQL.Only (showF opc))
+      (OpcodeId . fromIntegral) <$> SQL.lastInsertRowId conn
+    _ -> error ("Impossible, multiple entries in the statistics database for opcode " ++ showF opc)
 
 -- | Start a new statistics thread
 --
