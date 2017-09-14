@@ -30,19 +30,24 @@ import qualified Data.Traversable as T
 import           Data.Word ( Word64 )
 import           Text.Printf ( printf )
 
+import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.BaseTypes as S
 
+import qualified Dismantle.Instruction as D
+
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as F
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Log as L
 import qualified SemMC.Stochastic.CandidateProgram as CP
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
+import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Symbolic ( Sym )
 
 -- | A set of equivalence classes of programs
@@ -198,13 +203,22 @@ classifyByClass target p ix = do
     Nothing -> Just <$> extractMergableClasses
     Just klass -> do
       representative <- liftC $ chooseProgram klass
-      eqv <- liftC $ testEquivalence p representative
+      (eqv, equivTime) <- liftC $ timeSyn $ testEquivalence p representative
       case eqv of
         F.Equivalent -> do
+          case target of
+            CS.RI { CS.riOpcode = oc } -> do
+              liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Completed equivTime)
+              liftC $ L.logM L.Info $ printf "Found a counterexample while classifying a candidate program for %s" (showF oc)
           addMergableClass ix
           classifyByClass target p (ix + 1)
         F.DifferentBehavior cx -> do
           -- See Note [Registerization and Counterexamples]
+          case target of
+            CS.RI { CS.riOpcode = oc } -> do
+              liftC $ withStats $ S.recordCounterexample (Some oc)
+              liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Completed equivTime)
+              liftC $ L.logM L.Info $ printf "Found a counterexample while classifying a candidate program for %s" (showF oc)
           let (target', cx') = CS.registerizeInstruction target cx
           liftC $ addTestCase cx'
           ix' <- removeInvalidPrograms ix target' cx'
@@ -216,6 +230,16 @@ classifyByClass target p ix = do
             -- remove classes, the iteration is stable and we never need to
             -- restart.
             _ -> classifyByClass target p ix'
+        F.Timeout -> do
+          -- If we time out, just assume that we can't put this candidate
+          -- program in the current equivalence class.  If it times out on all
+          -- of them, it will get its own (probably not very useful) equivalence
+          -- class.
+          case target of
+            CS.RI { CS.riOpcode = oc } -> do
+              liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Timeout equivTime)
+              liftC $ L.logM L.Info $ printf "Solver timeout while classifying a candidate program for %s" (showF oc)
+          classifyByClass target p (ix + 1)
 
 -- | Remove the programs in the equivalence classes that do not have the same
 -- output on the counterexample as the target instruction.
@@ -254,9 +278,18 @@ removeInvalidPrograms ix target cx = do
                       ]
   mergable <- St.gets mergableClasses
   let (ix', testLists', mergable') = computeNewIndexes ix testListsMay' mergable
-  St.modify' $ \s -> s { eqClassesSeq = EquivalenceClasses (Seq.fromList testLists')
+      klasses' = EquivalenceClasses (Seq.fromList testLists')
+  St.modify' $ \s -> s { eqClassesSeq = klasses'
                        , mergableClasses = mergable'
                        }
+
+  let nRemoved = countPrograms (fmap snd klasses) - countPrograms (fmap snd klasses')
+  case target of
+    D.Instruction oc _
+      | nRemoved > 0 -> do
+          liftC $ withStats $ S.recordRemovedCandidatePrograms (Some oc) nRemoved
+          liftC $ L.logM L.Info $ printf "Removed %d candidate programs invalidated by a counterexample for %s" nRemoved (showF oc)
+      | otherwise -> return ()
   return ix'
 
 -- | Correct indexes (from the next iteration index and the mergable classes

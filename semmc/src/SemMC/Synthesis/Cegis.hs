@@ -255,6 +255,9 @@ cegis' trial trialFormula tests = do
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym targetFormula filledInFormula
       case equiv of
+        -- FIXME: Is the correct behavior in a timeout to give up on this
+        -- branch?
+        Timeout -> return (CegisUnmatchable tests)
         Equivalent -> return . CegisEquivalent $ map templInsnToDism insns'
         DifferentBehavior ctrExample -> do
           ctrExampleOut <- evalFormula targetFormula ctrExample

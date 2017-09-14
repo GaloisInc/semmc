@@ -14,6 +14,11 @@ module SemMC.Stochastic.Strata (
   Config(..),
   loadInitialState,
   stratifiedSynthesis,
+  -- * Statistics
+  S.StatisticsThread,
+  S.newStatisticsThread,
+  S.terminateStatisticsThread,
+  -- * Classes
   BuildAndConvert
   ) where
 
@@ -47,6 +52,7 @@ import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
 import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..), BuildAndConvert )
 import           SemMC.Stochastic.Monad
+import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Stochastic.Synthesize ( synthesize )
 
 {-
@@ -91,15 +97,21 @@ processWorklist = do
     Nothing -> return ()
     Just (Some (Witness so)) -> do
       -- Catch all exceptions in the stratification process.
-      res <- tryEither "strataOne" (strataOne so)
+      (res, strataTime) <- timeSyn (tryEither "strataOne" (strataOne so))
       case res of
         Left err -> do
           -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
           L.logM L.Error $ printf "Error while processing opcode %s: %s" (showF so) (show err)
         -- Timeout, so we can't learn it yet.  Come back later
-        Right Nothing -> addWork (Some (Witness so))
+        Right Nothing -> do
+          L.logM L.Info $ printf "Timeout while processing opcode %s" (showF so)
+          withStats $ S.recordStrataTimeout (Some so)
+          addWork (Some (Witness so))
         -- Success, record the formula
-        Right (Just formula) -> recordLearnedFormula so formula
+        Right (Just formula) -> do
+          L.logM L.Info $ printf "Learned a formula for %s in %s seconds" (showF so) (show strataTime)
+          withStats $ S.recordStrataSuccess (Some so) strataTime
+          recordLearnedFormula so formula
       processWorklist
 
 -- | Attempt to learn a formula for the given opcode
@@ -109,11 +121,15 @@ strataOne :: (SynC arch)
           => A.Opcode arch (A.Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
+  L.logM L.Info $ printf "Beginning stratification for opcode %s" (showF op)
   instr <- instantiateInstruction op
-  mprog <- withTimeout (synthesize instr)
+  (mprog, synDuration) <- withTimeout (synthesize instr)
   case mprog of
     Nothing -> return Nothing
-    Just prog -> strataOneLoop op instr (C.equivalenceClasses prog)
+    Just prog -> do
+      L.logM L.Info $ printf "Synthesis success for %s in %s seconds" (showF op) (show synDuration)
+      withStats $ S.recordSynthesizeSuccess (Some op) synDuration
+      strataOneLoop op instr (C.equivalenceClasses prog)
 
 strataOneLoop :: (SynC arch)
               => A.Opcode arch (A.Operand arch) sh
@@ -122,12 +138,14 @@ strataOneLoop :: (SynC arch)
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
   cfg <- askConfig
-  mprog <- withTimeout (synthesize instr)
+  (mprog, synDuration) <- withTimeout (synthesize instr)
   case mprog of
     Nothing -> do
       -- We hit a timeout, so just try to build a formula based on what we have
       Just <$> finishStrataOne op instr eqclasses
     Just prog -> do
+      L.logM L.Info $ printf "Synthesis success for %s in %s seconds" (showF op) (show synDuration)
+      withStats $ S.recordSynthesizeSuccess (Some op) synDuration
       meqclasses' <- C.classify instr prog eqclasses
       case meqclasses' of
         Nothing -> return Nothing

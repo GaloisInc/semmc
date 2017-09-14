@@ -48,8 +48,6 @@ data Config arch =
   Config { baseSetDir :: FilePath
          , pseudoSetDir :: FilePath
          , learnedSetDir :: FilePath
-         , statisticsFile :: FilePath
-         -- ^ A file to store statistics in
          , programCountThreshold :: Int
          -- ^ Minimum number of equivalent programs to require
          -- before stopping the stochastic search
@@ -72,6 +70,8 @@ data Config arch =
          -- ^ See the related @lcTestRunner@ for usage examples.
          , logConfig :: L.LogCfg
          -- ^ A configuration for the general logging facility
+         , statsThread :: S.StatisticsThread arch
+         -- ^ A thread that persists statistics collected during synthesis
          }
 
 -- | Synthesis environment.
@@ -96,8 +96,6 @@ data SynEnv t arch =
          -- it isn't thread safe - we have to serialize access.  We can't
          -- allocate one per thread, otherwise we won't be able to compare
          -- formulas (they will have different @t@ parameters).
-         , seStatsThread :: S.StatisticsThread arch
-         -- ^ A thread for maintaining statistics about the search
          , seConfig :: Config arch
          -- ^ The initial configuration
          }
@@ -139,7 +137,6 @@ loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targe
   randomTests <- replicateM (randomTestCount cfg) genTest
   testref <- STM.newTVarIO (interestingTests ++ randomTests)
   symVar <- STM.newTMVarIO sym
-  statsThread <- S.newStatisticsThread (statisticsFile cfg)
   return SynEnv { seFormulas = fref
                 , sePseudoFormulas = pseudoSet
                 , seKnownCongruentOps = congruentRef
@@ -148,7 +145,6 @@ loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targe
                 , seIORelations = iorels
                 , seSymBackend = symVar
                 , seConfig = cfg
-                , seStatsThread = statsThread
                 }
 
 -- | Build the formula filename for a given opcode (given its base directory)

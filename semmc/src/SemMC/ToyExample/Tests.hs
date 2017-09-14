@@ -246,13 +246,13 @@ runSynToy :: (U.HasLogCfg)
           -> (forall t. Syn t Toy a)
           -> IO a
 runSynToy dataRoot action = do
+  stThread <- newStatisticsThread (dataRoot </> "stats.sqlite")
   logChan <- C.newChan
   let cfg :: Config Toy
       cfg = Config
         { baseSetDir = dataRoot </> "base"
         , pseudoSetDir = dataRoot </> "pseudo"
         , learnedSetDir = dataRoot </> "learned"
-        , statisticsFile = dataRoot </> "stats.txt"
         , programCountThreshold = L.error "programCountThreshold"
         , randomTestCount = 1024
         , remoteRunnerTimeoutSeconds = 20
@@ -261,6 +261,7 @@ runSynToy dataRoot action = do
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
         , remoteRunnerOutputChannel = logChan
         , logConfig = getLogCfg
+        , statsThread = stThread
         }
 
   {-
@@ -317,7 +318,9 @@ runSynToy dataRoot action = do
         , seResChan = rChan
         , seNonceSource = nref
         }
-  runSyn localSynEnv action
+  res <- runSyn localSynEnv action
+  terminateStatisticsThread stThread
+  return res
 
 -- | Synthesize a single candidate program that agrees with the target
 -- program on the tests.
@@ -340,7 +343,8 @@ test_synthesizeCandidate = do
                          }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
   runSynToy "tests/data/test_synthesizeCandidate" $ do
-    fmap CP.cpInstructions <$> withTimeout (S.synthesize instruction)
+    (res, _) <- withTimeout (S.synthesize instruction)
+    return (fmap CP.cpInstructions res)
 
 -- | Weigh a candidate that produces the right value in the wrong
 -- place.

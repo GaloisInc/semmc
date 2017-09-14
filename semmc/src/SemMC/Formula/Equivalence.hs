@@ -54,6 +54,8 @@ data EquivalenceResult arch ex
     -- ^ The two formulas are non-trivially different, i.e., the SAT solver was
     -- needed to show difference. The 'ArchState' is a machine state that is a
     -- counterexample to their equivalence.
+  | Timeout
+  -- ^ The solver timed out
 deriving instance (ShowF (A.Location arch), ShowF ex) => Show (EquivalenceResult arch ex)
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Elt's.
@@ -157,7 +159,7 @@ formulasEquiv
           -- Extract the failing test case.
           DifferentBehavior <$> traverseF (eval evalFn) varConstants
         handler Unsat = return Equivalent
-        handler Unknown = fail "Got Unknown result when checking sat-ness"
+        handler Unknown = return Timeout
 
     checkSatZ3 sym testExpr handler
 

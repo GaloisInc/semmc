@@ -153,11 +153,12 @@ mainWithOptions opts = do
     Just logFile -> A.async (L.fileLogEventConsumer logFile lcfg)
   A.link logThread
 
+  stThread <- SST.newStatisticsThread (oStatisticsFile opts)
+
   DIR.createDirectoryIfMissing True (oLearnedDir opts)
   let cfg = SST.Config { SST.baseSetDir = oBaseDir opts
                        , SST.pseudoSetDir = oPseudoDir opts
                        , SST.learnedSetDir = oLearnedDir opts
-                       , SST.statisticsFile = oStatisticsFile opts
                        , SST.programCountThreshold = oProgramCount opts
                        , SST.randomTestCount = oRandomTests opts
                        , SST.remoteRunnerTimeoutSeconds = oRemoteTimeoutSeconds opts
@@ -166,6 +167,7 @@ mainWithOptions opts = do
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.remoteRunnerOutputChannel = logChan
                        , SST.logConfig = lcfg
+                       , SST.statsThread = stThread
                        }
   let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
@@ -176,6 +178,8 @@ mainWithOptions opts = do
 
   L.logEndWith lcfg
   A.wait logThread
+
+  SST.terminateStatisticsThread stThread
 
   return ()
   where
