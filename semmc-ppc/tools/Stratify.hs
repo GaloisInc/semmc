@@ -141,7 +141,7 @@ mainWithOptions opts = do
                                      , CE.flattenProgram = mconcat . map PPC.assembleInstruction
                                      }
 
-  lcfg <- L.mkLogCfg
+  lcfg <- L.mkLogCfg "main"
   let ?logCfg = lcfg
   logChan <- C.newChan
   logger <- case oPrintLog opts of

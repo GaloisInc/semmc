@@ -15,7 +15,7 @@ allTests = T.testGroup "SemMC" [ Formula.tests
 
 main :: IO ()
 main = do
-  logCfg <- U.mkLogCfg
+  logCfg <- U.mkLogCfg "main"
   let ?logCfg = logCfg
   loggerThread <- C.async $ U.tmpFileLogEventConsumer logCfg
   C.link loggerThread

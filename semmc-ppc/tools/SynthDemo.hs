@@ -156,7 +156,7 @@ printProgram insns = unlines (map (("  " ++) . show . DPPC.ppInstruction) insns)
 
 main :: IO ()
 main = do
-  logCfg <- U.mkLogCfg
+  logCfg <- U.mkLogCfg "main"
   let ?logCfg = logCfg
   loggerThread <- C.async $ U.stdErrLogEventConsumer logCfg
   C.link loggerThread

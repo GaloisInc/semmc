@@ -91,7 +91,7 @@ processWorklist = do
     Nothing -> return ()
     Just (Some (Witness so)) -> do
       -- Catch all exceptions in the stratification process.
-      res <- tryEither (strataOne so)
+      res <- tryEither "strataOne" (strataOne so)
       case res of
         Left err -> do
           -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis

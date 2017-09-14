@@ -33,6 +33,7 @@ module SemMC.Log (
   -- * Explicit parameter logger interface
   logIOWith,
   logEndWith,
+  writeLogEvent,
   -- * Monadic logger interface
   MonadHasLogCfg(..),
   logM,
@@ -42,15 +43,25 @@ module SemMC.Log (
   -- * Log consumers
   stdErrLogEventConsumer,
   fileLogEventConsumer,
-  tmpFileLogEventConsumer
+  tmpFileLogEventConsumer,
+  -- * Named threads
+  asyncNamed,
+  asyncNamedM
   ) where
 
 import qualified GHC.Err.Located as Ghc
 import qualified GHC.Stack as Ghc
 
-import           Control.Concurrent ( myThreadId )
+import qualified Control.Concurrent as Cc
+import           Control.Concurrent.Async ( Async )
+import qualified Control.Concurrent.Async as Cc
+import qualified Control.Exception as Cc
+
 import qualified Control.Concurrent.STM as Stm
+import qualified Control.Monad as Cm
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
+import           Data.Map.Strict ( Map )
+import qualified Data.Map.Strict as Map
 import           System.Directory ( createDirectoryIfMissing )
 import qualified System.IO as IO
 import qualified System.IO.Unsafe as IO
@@ -183,13 +194,24 @@ logEndWith cfg = Stm.atomically $ Stm.writeTChan (lcChan cfg) Nothing
 
 -- | Initialize a 'LogCfg'.
 --
+-- The first argument is the human friendly name to assign to the
+-- current thread. Since logging should be configured as soon as
+-- possible on startup, "main" is probably the right name.
+--
+-- See 'asyncNamed' for naming other threads.
+--
 -- Need to start a log event consumer in another thread,
 -- e.g. 'stdErrLogEventConsumer', if you want anything to happen with
 -- the log events.
-mkLogCfg :: IO LogCfg
-mkLogCfg = do
-  chan <- Stm.newTChanIO
-  return $ LogCfg { lcChan = chan }
+mkLogCfg :: String -> IO LogCfg
+mkLogCfg threadName = do
+  lcChan <- Stm.newTChanIO
+  threadMap <- do
+    tid <- show <$> Cc.myThreadId
+    return $ Map.fromList [ (tid, threadName) ]
+  lcThreadMap <- Stm.newTVarIO threadMap
+  return $ LogCfg { lcChan = lcChan
+                  , lcThreadMap = lcThreadMap }
 
 ----------------------------------------------------------------
 -- ** Log event consumers
@@ -223,7 +245,45 @@ tmpFileLogEventConsumer cfg = do
   consumeUntilEnd (\e -> IO.hPutStrLn tmpFile (prettyLogEvent e) >> IO.hFlush tmpFile) cfg
 
 ----------------------------------------------------------------
+-- ** Named threads
+
+-- | Fork a thread, giving it a human friendly name for use in log
+-- messages.
+asyncNamed :: LogCfg -> String -> IO a -> IO (Async a)
+asyncNamed cfg threadName action = do
+  -- We use a semaphore to prevent a race after starting the thread
+  -- between it generating log messages and its thread name getting
+  -- registered.
+  sem <- Cc.newEmptyMVar
+  a <- Cc.async $ do
+    Cc.takeMVar sem
+    action
+  let tid = show $ Cc.asyncThreadId a
+  -- Yes, not going to use 'asyncNamed' here ...
+  Cm.void . Cc.async $ Cc.bracket_
+    (insert tid >> Cc.putMVar sem ())
+    (remove tid)
+    (Cc.wait a)
+  return a
+  where
+    insert tid = Stm.atomically $
+      Stm.modifyTVar' (lcThreadMap cfg) (Map.insert tid threadName)
+    remove tid = Stm.atomically $
+      Stm.modifyTVar' (lcThreadMap cfg) (Map.delete tid)
+
+-- | Version of 'asyncNamed' for 'MonadHasLogCfg' monads.
+asyncNamedM :: (MonadHasLogCfg m, MonadIO m) => String -> IO a -> m (Async a)
+asyncNamedM threadName action = do
+  cfg <- getLogCfgM
+  liftIO $ asyncNamed cfg threadName action
+
+----------------------------------------------------------------
 -- * Internals
+
+-- | Stored as 'String' because 'Control.Concurrent.ThreadId' docs say
+-- a thread can't be GC'd as long as someone maintains a reference to
+-- its 'ThreadId'!!!
+type ThreadId = String
 
 -- | A log event.
 --
@@ -236,24 +296,15 @@ data LogEvent = LogEvent
     -- 'Ghc.HasCallStack' constraint.
   , leLevel    :: LogLevel
   , leMsg      :: LogMsg
-  , leThreadId :: String
-    -- ^ ID of thread that generated the event. Stored as 'String'
-    -- because 'Control.Concurrent.ThreadId' docs say a thread can't
-    -- be GC'd as long as someone maintains a reference to its
-    -- 'ThreadId'!!!
+  , leThreadId :: ThreadId
+    -- ^ ID of thread that generated the event.
   }
 
 -- | Logging configuration.
 data LogCfg = LogCfg
   { lcChan :: Stm.TChan (Maybe LogEvent)
-  -- Idea: add a map from 'ThreadId' to user friendly names, and
-  -- create special version of 'async' or 'forkIO' that automatically
-  -- populate the map when forking threads. Also, have 'mkLogCfg' take
-  -- an argument that's the name for the main thread, or just infer
-  -- that it's "main".
-  --
-  -- , lcThreadMap :: Map ThreadId String -- ^ User friendly names for
-  --                                      -- threads
+  , lcThreadMap :: Stm.TVar (Map ThreadId String)
+    -- ^ User friendly names for threads. See 'asyncNamed'.
 
   -- Idea: add a predicate on log events that is used to discard log
   -- events that e.g. aren't of a high enough precedence
@@ -268,7 +319,7 @@ data LogCfg = LogCfg
 prettyLogEvent :: LogEvent -> String
 prettyLogEvent le =
   printf "[%s][%s][%s]\n%s"
-  (show $ leLevel le) location (leThreadId le) (leMsg le)
+    (show $ leLevel le) location (leThreadId le) (leMsg le)
   where
     location :: String
     location = printf "%s:%s"
@@ -277,15 +328,29 @@ prettyLogEvent le =
     prettyFun Nothing = "???"
     prettyFun (Just fun) = fun
 
+prettyThreadId :: LogCfg -> ThreadId -> IO ThreadId
+prettyThreadId cfg tid = do
+  mThreadName <- Map.lookup tid <$> Stm.readTVarIO (lcThreadMap cfg)
+  return $ printf "%s (%s)" (maybe "???" id mThreadName) tid
+
 -- | Write a 'LogEvent' to the underlying channel.
 --
--- This is a low-level function. See 'log' for a high-level interface
--- that supplies the 'LogCfg' and 'Ghc.CallStack' parameters
--- automatically.
+-- This is a low-level function. See 'logIO', 'logM', and 'logTrace'
+-- for a high-level interface that supplies the 'LogCfg' and
+-- 'Ghc.CallStack' parameters automatically.
+--
+-- However, those functions can't be used to build up custom loggers,
+-- since they infer call stack information automatically. If you want
+-- to define a custom logger (even something simple like
+--
+-- > debug msg = logM Debug msg
+--
+-- ) then use 'writeLogEvent'.
 writeLogEvent :: LogCfg -> Ghc.CallStack -> LogLevel -> LogMsg -> IO ()
 writeLogEvent cfg cs level msg = do
-  tid <- myThreadId
-  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event (show tid)))
+  tid <- show <$> Cc.myThreadId
+  ptid <- prettyThreadId cfg tid
+  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event ptid))
   where
     event tid = LogEvent
       { leCallSite = callSite

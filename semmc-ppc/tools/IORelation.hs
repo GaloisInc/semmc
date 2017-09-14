@@ -87,7 +87,7 @@ mainWithOptions opt = do
                                , IOR.lcLog = logChan
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
-  logCfg <- L.mkLogCfg
+  logCfg <- L.mkLogCfg "main"
   logger <- case oPrintLog opt of
     Verbose -> A.async (L.printLogMessages logCfg logChan)
     Quiet -> A.async (L.dumpRemoteRunnerLog logChan)

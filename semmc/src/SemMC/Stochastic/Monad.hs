@@ -130,10 +130,10 @@ runSyn :: forall arch t a. LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
 -- | Run a 'Syn' action, returning thrown exceptions as a 'Left'
-tryEither :: Syn t arch a -> Syn t arch (Either C.SomeException a)
-tryEither syn = do
+tryEither :: String -> Syn t arch a -> Syn t arch (Either C.SomeException a)
+tryEither threadName syn = do
   localEnv <- R.ask
-  a <- liftIO $ A.async (runSyn localEnv syn)
+  a <- U.asyncNamedM threadName (runSyn localEnv syn)
   liftIO (A.waitCatch a)
 
 -- | Run a computation under the general timeout for the maximum operation
