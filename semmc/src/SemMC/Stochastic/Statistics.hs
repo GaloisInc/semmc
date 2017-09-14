@@ -5,22 +5,30 @@
 -- It is structured as its own thread so that access to the on-disk stats files
 -- is synchronized.
 module SemMC.Stochastic.Statistics (
+  -- * Statistics thread management
   StatisticsThread,
   newStatisticsThread,
+  terminateStatisticsThread,
+  -- * Gatherable statistics
   SolverTime(..),
   recordSolverInvocation,
-  terminateStatisticsThread
+  recordStrataTimeout,
+  recordStrataSuccess,
+  recordSynthesizeSuccess,
+  recordRemovedCandidatePrograms,
+  recordCounterexample
   ) where
 
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Data.Map.Strict as M
-import Data.Word ( Word64 )
+import qualified Data.Time.Clock as TM
+import           Data.Word ( Word64 )
 
-import Data.Parameterized.Classes ( OrdF )
-import Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Classes ( OrdF )
+import           Data.Parameterized.Some ( Some(..) )
 
-import SemMC.Architecture ( Opcode, Operand )
+import           SemMC.Architecture ( Opcode, Operand )
 
 data Statistics arch =
   Statistics { sSolverInvocations :: Word64
@@ -52,6 +60,11 @@ data StatisticsRecord arch = Terminate
                            | SolverInvocation (Some (Opcode arch (Operand arch))) SolverTime
                            -- ^ An invocation while trying to learn the given opcode
                            -- that ran for the given number of milliseconds
+                           | CounterexampleFound (Some (Opcode arch (Operand arch)))
+                           | StrataTimeout (Some (Opcode arch (Operand arch)))
+                           | StrataSuccess (Some (Opcode arch (Operand arch))) TM.NominalDiffTime
+                           | SynthesizeSuccess (Some (Opcode arch (Operand arch))) TM.NominalDiffTime
+                           | RemovedCandidatePrograms (Some (Opcode arch (Operand arch))) Int
 
 data StatisticsThread arch =
   StatisticsThread { stMsgs :: STM.TChan (StatisticsRecord arch)
@@ -111,21 +124,41 @@ terminateStatisticsThread st = do
 
 -- | A record of the time taken for a solver invocation, with the payload being
 -- the number of milliseconds
-data SolverTime = Timeout Word64
-                | Completed Word64
+data SolverTime = Timeout TM.NominalDiffTime
+                | Completed TM.NominalDiffTime
 
 asMilliseconds :: SolverTime -> Word64
 asMilliseconds st =
   case st of
-    Timeout w -> w
-    Completed w -> w
+    Timeout w -> round (w * 1000)
+    Completed w -> round (w * 1000)
 
 -- | Record a single invocation of the solver (on behalf of some instruction)
 -- and the time taken for the invocation
-recordSolverInvocation :: StatisticsThread arch -> Some (Opcode arch (Operand arch)) -> SolverTime -> IO ()
-recordSolverInvocation st op millis = STM.atomically $ STM.writeTChan (stMsgs st) msg
+recordSolverInvocation :: Some (Opcode arch (Operand arch)) -> SolverTime -> StatisticsThread arch -> IO ()
+recordSolverInvocation op millis st = STM.atomically $ STM.writeTChan (stMsgs st) msg
   where
     msg = SolverInvocation op millis
+
+recordCounterexample :: Some (Opcode arch (Operand arch)) -> StatisticsThread arch -> IO ()
+recordCounterexample op st =
+  STM.atomically $ STM.writeTChan (stMsgs st) (CounterexampleFound op)
+
+recordStrataTimeout :: Some (Opcode arch (Operand arch)) -> StatisticsThread arch -> IO ()
+recordStrataTimeout op st =
+  STM.atomically $ STM.writeTChan (stMsgs st) (StrataTimeout op)
+
+recordStrataSuccess :: Some (Opcode arch (Operand arch)) -> TM.NominalDiffTime -> StatisticsThread arch -> IO ()
+recordStrataSuccess op diff st =
+  STM.atomically $ STM.writeTChan (stMsgs st) (StrataSuccess op diff)
+
+recordSynthesizeSuccess :: Some (Opcode arch (Operand arch)) -> TM.NominalDiffTime -> StatisticsThread arch -> IO ()
+recordSynthesizeSuccess op diff st =
+  STM.atomically $ STM.writeTChan (stMsgs st) (SynthesizeSuccess op diff)
+
+recordRemovedCandidatePrograms :: Some (Opcode arch (Operand arch)) -> Int -> StatisticsThread arch -> IO ()
+recordRemovedCandidatePrograms op nRemoved st =
+  STM.atomically $ STM.writeTChan (stMsgs st) (RemovedCandidatePrograms op nRemoved)
 
 writeStatsFile :: FilePath -> Statistics arch -> IO ()
 writeStatsFile = undefined

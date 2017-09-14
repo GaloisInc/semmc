@@ -338,7 +338,8 @@ test_synthesizeCandidate = do
                          }
   -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
   runSynToy $ do
-    fmap CP.cpInstructions <$> withTimeout (S.synthesize instruction)
+    (res, _) <- withTimeout (S.synthesize instruction)
+    return (fmap CP.cpInstructions res)
 
 -- | Weigh a candidate that produces the right value in the wrong
 -- place.

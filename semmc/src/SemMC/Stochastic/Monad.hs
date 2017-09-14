@@ -33,6 +33,7 @@ module SemMC.Stochastic.Monad (
   withSymBackend,
   withTimeout,
   -- * Recording results
+  withStats,
   timeSyn,
   addTestCase,
   recordLearnedFormula,
@@ -89,6 +90,7 @@ import           SemMC.Stochastic.Pseudo
                  ( Pseudo
                  , SynthOpcode(..)
                  )
+import qualified SemMC.Stochastic.Statistics as S
 
 -- | Thread-local environment
 --
@@ -140,11 +142,11 @@ tryEither syn = do
 
 -- | Run a computation under the general timeout for the maximum operation
 -- length for any synthesis operation
-withTimeout :: Syn t arch a -> Syn t arch (Maybe a)
+withTimeout :: Syn t arch a -> Syn t arch (Maybe a, TM.NominalDiffTime)
 withTimeout action = do
   us <- timeoutMicroseconds opcodeTimeoutSeconds
   env <- R.ask
-  liftIO $ IO.timeout us $ runSyn env action
+  timeSyn $ liftIO $ IO.timeout us $ runSyn env action
 
 -- | Time an action, returning its value as well as the time taken to execute
 -- the action
@@ -212,6 +214,11 @@ withSymBackend k = do
   liftIO $ C.bracket (STM.atomically $ STM.takeTMVar symVar)
                      (STM.atomically . STM.putTMVar symVar)
                      (runSyn env . k)
+
+withStats :: (S.StatisticsThread arch -> IO ()) -> Syn t arch ()
+withStats k = do
+  st <- R.asks (seStatsThread . seGlobalEnv)
+  liftIO (k st)
 
 askTestCases :: Syn t arch [CS.ConcreteState arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
