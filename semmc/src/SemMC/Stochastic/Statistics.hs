@@ -24,6 +24,9 @@ module SemMC.Stochastic.Statistics (
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as E
+import           Control.Monad ( forever )
+import qualified Control.Monad.Except as ME
+import           Control.Monad.Trans ( liftIO )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Time.Clock as TM
 import qualified Database.SQLite.Simple as SQL
@@ -86,74 +89,42 @@ newStatisticsThread statsFile = do
                             , stTerm = term
                             , stConn = conn
                             }
-  _a <- A.async (loop st `E.finally` SQL.close conn)
+  _a <- A.async (loop (processStatistic st) `E.finally` SQL.close conn)
   return st
 
-newtype OpcodeId = OpcodeId { unOpcodeId :: Int }
-  deriving (Show)
-
-insertSynthesizeSuccess :: SQL.Connection -> OpcodeId -> TM.NominalDiffTime -> IO ()
-insertSynthesizeSuccess conn oid tm =
-  SQL.execute conn "INSERT INTO synthesize_success VALUES(?,?);" (oid, realToFrac tm :: Double)
-
-insertStrataSuccess :: SQL.Connection -> OpcodeId -> TM.NominalDiffTime -> IO ()
-insertStrataSuccess conn oid tm =
-  SQL.execute conn "INSERT INTO strata_success VALUES(?,?);" (oid, realToFrac tm :: Double)
-
-insertCounterexample :: SQL.Connection -> OpcodeId -> IO ()
-insertCounterexample conn oid =
-  SQL.execute conn "INSERT INTO counterexample_found VALUES(?);" (SQL.Only oid)
-
-insertStrataTimeout :: SQL.Connection -> OpcodeId -> IO ()
-insertStrataTimeout conn oid =
-  SQL.execute conn "INSERT INTO strata_timeouts VALUES(?);" (SQL.Only oid)
-
-insertSolverSuccess :: SQL.Connection -> OpcodeId -> TM.NominalDiffTime -> IO ()
-insertSolverSuccess conn oid tm =
-  SQL.execute conn "INSERT INTO solver_invocation_success VALUES(?,?);" (oid, realToFrac tm :: Double)
-
-insertSolverTimeout :: SQL.Connection -> OpcodeId -> IO ()
-insertSolverTimeout conn oid =
-  SQL.execute conn "INSERT INTO solver_invocation_timeout VALUES(?);" (SQL.Only oid)
-
-insertRemovedCandidates :: SQL.Connection -> OpcodeId -> Int -> IO ()
-insertRemovedCandidates conn oid nRemoved =
-  SQL.execute conn "INSERT INTO removed_candidate_programs VALUES(?,?);" (oid, nRemoved)
-
-loop :: forall arch
-      . (OrdF (Opcode arch (Operand arch)), ShowF (Opcode arch (Operand arch)))
-     => StatisticsThread arch
-     -> IO ()
-loop st = do
-  msg <- STM.atomically $ STM.readTChan (stMsgs st)
+processStatistic :: forall arch
+                  . (OrdF (Opcode arch (Operand arch)), ShowF (Opcode arch (Operand arch)))
+                 => StatisticsThread arch
+                 -> Break () IO ()
+processStatistic st = do
+  msg <- liftIO $ STM.atomically $ STM.readTChan (stMsgs st)
   case msg of
-    Terminate -> STM.atomically $ STM.writeTChan (stTerm st) ()
-    StrataTimeout sop -> do
-      oid <- opcodeId (Proxy @arch) (stConn st) sop
-      insertStrataTimeout (stConn st) oid
-      loop st
-    SolverInvocation sop tm -> do
-      oid <- opcodeId (Proxy @arch) (stConn st) sop
+    Terminate -> do
+      liftIO $ STM.atomically $ STM.writeTChan (stTerm st) ()
+      breakWith ()
+    StrataTimeout sop -> withTransaction $ do
+      oid <- opcodeId (Proxy @arch) conn sop
+      insertStrataTimeout conn oid
+    SolverInvocation sop tm -> withTransaction $ do
+      oid <- opcodeId (Proxy @arch) conn sop
       case tm of
-        Completed dt -> insertSolverSuccess (stConn st) oid dt
-        Timeout _ -> insertSolverTimeout (stConn st) oid
-      loop st
-    RemovedCandidatePrograms sop nRemoved -> do
-      oid <- opcodeId (Proxy @arch) (stConn st) sop
-      insertRemovedCandidates (stConn st) oid nRemoved
-      loop st
-    CounterexampleFound sop -> do
-      oid <- opcodeId (Proxy @arch) (stConn st) sop
-      insertCounterexample (stConn st) oid
-      loop st
-    StrataSuccess sop tm -> do
-      oid <- opcodeId (Proxy @arch) (stConn st) sop
-      insertStrataSuccess (stConn st) oid tm
-      loop st
-    SynthesizeSuccess sop tm -> do
-      oid <- opcodeId (Proxy @arch) (stConn st) sop
-      insertSynthesizeSuccess (stConn st) oid tm
-      loop st
+        Completed dt -> insertSolverSuccess conn oid dt
+        Timeout _ -> insertSolverTimeout conn oid
+    RemovedCandidatePrograms sop nRemoved -> withTransaction $ do
+      oid <- opcodeId (Proxy @arch) conn sop
+      insertRemovedCandidates conn oid nRemoved
+    CounterexampleFound sop -> withTransaction $ do
+      oid <- opcodeId (Proxy @arch) conn sop
+      insertCounterexample conn oid
+    StrataSuccess sop tm -> withTransaction $ do
+      oid <- opcodeId (Proxy @arch) conn sop
+      insertStrataSuccess conn oid tm
+    SynthesizeSuccess sop tm -> withTransaction $ do
+      oid <- opcodeId (Proxy @arch) conn sop
+      insertSynthesizeSuccess conn oid tm
+  where
+    conn = stConn st
+    withTransaction k = liftIO (SQL.withTransaction conn k)
 
 -- | Send a message to terminate the statistics thread and wait for a response
 terminateStatisticsThread :: StatisticsThread arch -> IO ()
@@ -194,12 +165,39 @@ recordRemovedCandidatePrograms :: Some (Opcode arch (Operand arch)) -> Int -> St
 recordRemovedCandidatePrograms op nRemoved st =
   STM.atomically $ STM.writeTChan (stMsgs st) (RemovedCandidatePrograms op nRemoved)
 
+-- SQL
 
-instance SQL.ToField OpcodeId where
-  toField = SQL.toField . unOpcodeId
 
-instance SQL.FromField OpcodeId where
-  fromField x = OpcodeId <$> SQL.fromField x
+newtype OpcodeId = OpcodeId { unOpcodeId :: Int }
+  deriving (Show)
+
+insertSynthesizeSuccess :: SQL.Connection -> OpcodeId -> TM.NominalDiffTime -> IO ()
+insertSynthesizeSuccess conn oid tm =
+  SQL.execute conn "INSERT INTO synthesize_success VALUES(?,?);" (oid, realToFrac tm :: Double)
+
+insertStrataSuccess :: SQL.Connection -> OpcodeId -> TM.NominalDiffTime -> IO ()
+insertStrataSuccess conn oid tm =
+  SQL.execute conn "INSERT INTO strata_success VALUES(?,?);" (oid, realToFrac tm :: Double)
+
+insertCounterexample :: SQL.Connection -> OpcodeId -> IO ()
+insertCounterexample conn oid =
+  SQL.execute conn "INSERT INTO counterexample_found VALUES(?);" (SQL.Only oid)
+
+insertStrataTimeout :: SQL.Connection -> OpcodeId -> IO ()
+insertStrataTimeout conn oid =
+  SQL.execute conn "INSERT INTO strata_timeouts VALUES(?);" (SQL.Only oid)
+
+insertSolverSuccess :: SQL.Connection -> OpcodeId -> TM.NominalDiffTime -> IO ()
+insertSolverSuccess conn oid tm =
+  SQL.execute conn "INSERT INTO solver_invocation_success VALUES(?,?);" (oid, realToFrac tm :: Double)
+
+insertSolverTimeout :: SQL.Connection -> OpcodeId -> IO ()
+insertSolverTimeout conn oid =
+  SQL.execute conn "INSERT INTO solver_invocation_timeout VALUES(?);" (SQL.Only oid)
+
+insertRemovedCandidates :: SQL.Connection -> OpcodeId -> Int -> IO ()
+insertRemovedCandidates conn oid nRemoved =
+  SQL.execute conn "INSERT INTO removed_candidate_programs VALUES(?,?);" (oid, nRemoved)
 
 schema :: [SQL.Query]
 schema = [ "CREATE TABLE IF NOT EXISTS opcodes(opid INTEGER PRIMARY KEY,\
@@ -223,3 +221,30 @@ schema = [ "CREATE TABLE IF NOT EXISTS opcodes(opid INTEGER PRIMARY KEY,\
                                                          \synthesize_seconds REAL NOT NULL,\
                                                          \FOREIGN_KEY(synthesize_success_opid) REFERENCES(opid));"
          ]
+
+-- Control helpers
+
+-- | A helper monad to let us easily write an infinite loop that we can break
+-- out of (with 'breakWith')
+type Break r m a = ME.ExceptT r m a
+
+-- | Loop forever with the option to break using 'breakWith'
+loop :: (Monad m) => Break r m () -> m r
+loop b = do
+  res <- ME.runExceptT (forever b)
+  case res of
+    Left r -> return r
+    Right r -> return r
+
+-- | Break out of the 'Break' monad with a value
+breakWith :: (Monad m) => r -> Break r m a
+breakWith = ME.throwError
+
+-- Boring instances
+
+instance SQL.ToField OpcodeId where
+  toField = SQL.toField . unOpcodeId
+
+instance SQL.FromField OpcodeId where
+  fromField x = OpcodeId <$> SQL.fromField x
+
