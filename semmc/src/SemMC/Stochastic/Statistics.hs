@@ -203,23 +203,23 @@ schema :: [SQL.Query]
 schema = [ "CREATE TABLE IF NOT EXISTS opcodes(opid INTEGER PRIMARY KEY,\
                                               \name TEXT NOT NULL UNIQUE);"
          , "CREATE TABLE IF NOT EXISTS strata_timeouts(strata_timeout_opid INTEGER NOT NULL,\
-                                                      \FOREIGN_KEY(strata_timeout_opid) REFERENCES (opid));"
+                                                      \FOREIGN KEY(strata_timeout_opid) REFERENCES opcodes(opid));"
          , "CREATE TABLE IF NOT EXISTS solver_invocation_success(solver_invocation_opid INTEGER NOT NULL,\
                                                                 \success_seconds REAL NOT NULL,\
-                                                                \FOREIGN_KEY(solver_invocation_opid) REFERENCES (opid));"
+                                                                \FOREIGN KEY(solver_invocation_opid) REFERENCES opcodes(opid));"
          , "CREATE TABLE IF NOT EXISTS solver_invocation_timeout(solver_invocation_opid INTEGER NOT NULL,\
-                                                                \FOREIGN_KEY(solver_invocation_opid) REFERENCES (opid));"
+                                                                \FOREIGN KEY(solver_invocation_opid) REFERENCES opcodes(opid));"
          , "CREATE TABLE IF NOT EXISTS removed_candidate_programs(remove_candidate_programs_opid INTEGER NOT NULL,\
                                                                  \num_removed INTEGER NOT NULL,\
-                                                                 \FOREIGN_KEY(remove_candidate_programs_opid) REFERENCES(opid));"
+                                                                 \FOREIGN KEY(remove_candidate_programs_opid) REFERENCES opcodes(opid));"
          , "CREATE TABLE IF NOT EXISTS counterexample_found(counterexample_found_opid INTEGER NOT NULL,\
-                                                           \FOREIGN_KEY(counterexample_found_opid) REFERENCES (opid));"
+                                                           \FOREIGN KEY(counterexample_found_opid) REFERENCES opcodes(opid));"
          , "CREATE TABLE IF NOT EXISTS strata_success(strata_success_opid INTEGER NOT NULL,\
                                                      \strata_seconds REAL NOT NULL,\
-                                                     \FOREIGN_KEY(strata_success_opid) REFERENCES(opid));"
+                                                     \FOREIGN KEY(strata_success_opid) REFERENCES opcodes(opid));"
          , "CREATE TABLE IF NOT EXISTS synthesize_success(synthesize_success_opid INTEGER NOT NULL,\
                                                          \synthesize_seconds REAL NOT NULL,\
-                                                         \FOREIGN_KEY(synthesize_success_opid) REFERENCES(opid));"
+                                                         \FOREIGN KEY(synthesize_success_opid) REFERENCES opcodes(opid));"
          ]
 
 -- Control helpers
