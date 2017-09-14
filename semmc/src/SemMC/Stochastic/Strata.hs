@@ -123,7 +123,7 @@ strataOne :: (SynC arch)
 strataOne op = do
   L.logM L.Info $ printf "Beginning stratification for opcode %s" (showF op)
   instr <- instantiateInstruction op
-  (mprog, synDuration) <- withTimeout (synthesize instr)
+  (mprog, synDuration) <- withTimeout (L.namedM "synthesize" $ synthesize instr)
   case mprog of
     Nothing -> return Nothing
     Just prog -> do
