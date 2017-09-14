@@ -45,6 +45,8 @@ module SemMC.Log (
   fileLogEventConsumer,
   tmpFileLogEventConsumer,
   -- * Named threads
+  named,
+  namedM,
   asyncNamed,
   asyncNamedM
   ) where
@@ -56,6 +58,8 @@ import qualified Control.Concurrent as Cc
 import           Control.Concurrent.Async ( Async )
 import qualified Control.Concurrent.Async as Cc
 import qualified Control.Exception as Cc
+
+import qualified UnliftIO as U
 
 import qualified Control.Concurrent.STM as Stm
 import qualified Control.Monad as Cm
@@ -247,35 +251,42 @@ tmpFileLogEventConsumer cfg = do
 ----------------------------------------------------------------
 -- ** Named threads
 
+-- | Run an IO action with a human friendly thread name.
+--
+-- Any existing thread name will be restored when the action finishes.
+named :: (U.MonadUnliftIO m, MonadIO m) => LogCfg -> String -> m a -> m a
+named cfg threadName action = do
+  actionIO <- U.toIO action
+  liftIO $ do
+    tid <- show <$> Cc.myThreadId
+    mOldName <- Map.lookup tid <$> Stm.readTVarIO (lcThreadMap cfg)
+    Cc.bracket_ (insert tid) (remove tid mOldName) actionIO
+  where
+    modify = Stm.atomically . Stm.modifyTVar' (lcThreadMap cfg)
+
+    insert tid = modify $ Map.insert tid threadName
+
+    remove tid Nothing        = modify $ Map.delete tid
+    remove tid (Just oldName) = modify $ Map.insert tid oldName
+
+-- | Version of 'named' for 'MonadHasLogCfg' monads.
+namedM :: (MonadHasLogCfg m, U.MonadUnliftIO m, MonadIO m)
+       => String -> m a -> m a
+namedM threadName action = do
+  cfg <- getLogCfgM
+  named cfg threadName action
+
 -- | Fork a thread, giving it a human friendly name for use in log
 -- messages.
-asyncNamed :: LogCfg -> String -> IO a -> IO (Async a)
-asyncNamed cfg threadName action = do
-  -- We use a semaphore to prevent a race after starting the thread
-  -- between it generating log messages and its thread name getting
-  -- registered.
-  sem <- Cc.newEmptyMVar
-  a <- Cc.async $ do
-    Cc.takeMVar sem
-    action
-  let tid = show $ Cc.asyncThreadId a
-  -- Yes, not going to use 'asyncNamed' here ...
-  Cm.void . Cc.async $ Cc.bracket_
-    (insert tid >> Cc.putMVar sem ())
-    (remove tid)
-    (Cc.wait a)
-  return a
-  where
-    insert tid = Stm.atomically $
-      Stm.modifyTVar' (lcThreadMap cfg) (Map.insert tid threadName)
-    remove tid = Stm.atomically $
-      Stm.modifyTVar' (lcThreadMap cfg) (Map.delete tid)
+asyncNamed :: (U.MonadUnliftIO m, MonadIO m)
+           => LogCfg -> String -> m a -> m (Async a)
+asyncNamed cfg threadName = U.async . named cfg threadName
 
 -- | Version of 'asyncNamed' for 'MonadHasLogCfg' monads.
-asyncNamedM :: (MonadHasLogCfg m, MonadIO m) => String -> IO a -> m (Async a)
+asyncNamedM :: (MonadHasLogCfg m, U.MonadUnliftIO m, MonadIO m) => String -> m a -> m (Async a)
 asyncNamedM threadName action = do
   cfg <- getLogCfgM
-  liftIO $ asyncNamed cfg threadName action
+  asyncNamed cfg threadName action
 
 ----------------------------------------------------------------
 -- * Internals

@@ -51,7 +51,6 @@ module SemMC.Stochastic.Monad (
 import qualified GHC.Err.Located as L
 
 import qualified Control.Concurrent as C
-import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as C
 import qualified Control.Monad.Reader as R
@@ -63,6 +62,8 @@ import qualified Data.Time.Clock as TM
 import           Data.Typeable ( Typeable )
 import           Data.Word ( Word64 )
 import qualified System.Timeout as IO
+
+import qualified UnliftIO as U
 
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
@@ -107,6 +108,9 @@ data LocalSynEnv t arch =
 
 -- | A monad for the stochastic synthesis code.  It maintains the necessary
 -- environment to connect to the theorem prover and run remote tests.
+--
+-- Note: the 'U.MonadUnliftIO' instance makes sense for 'Reader' +
+-- 'IO', but will no longer make sense if e.g. 'Syn' grows 'State'.
 newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
   deriving (Functor,
             Applicative,
@@ -116,6 +120,12 @@ newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
 
 instance U.MonadHasLogCfg (Syn t arch) where
   getLogCfgM = logConfig <$> askConfig
+
+-- | The 'Syn' monad can run its actions in 'IO'.
+instance U.MonadUnliftIO (Syn t arch) where
+  askUnliftIO = do
+    localSynEnv <- R.ask
+    return $ U.UnliftIO (runSyn localSynEnv)
 
 -- | This is the exception that is thrown if the synthesis times out waiting for
 -- a result from the remote test runner.
@@ -134,19 +144,15 @@ runSyn :: forall arch t a. LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
 -- | Run a 'Syn' action, returning thrown exceptions as a 'Left'
-tryEither :: String -> Syn t arch a -> Syn t arch (Either C.SomeException a)
-tryEither threadName syn = do
-  localEnv <- R.ask
-  a <- U.asyncNamedM threadName (runSyn localEnv syn)
-  liftIO (A.waitCatch a)
+tryEither :: Syn t arch a -> Syn t arch (Either C.SomeException a)
+tryEither = U.tryAny
 
 -- | Run a computation under the general timeout for the maximum operation
 -- length for any synthesis operation
 withTimeout :: Syn t arch a -> Syn t arch (Maybe a, TM.NominalDiffTime)
 withTimeout action = do
   us <- timeoutMicroseconds opcodeTimeoutSeconds
-  env <- R.ask
-  timeSyn $ liftIO $ IO.timeout us $ runSyn env action
+  timeSyn $ U.timeout us action
 
 -- | Time an action, returning its value as well as the time taken to execute
 -- the action

@@ -97,7 +97,7 @@ processWorklist = do
     Nothing -> return ()
     Just (Some (Witness so)) -> do
       -- Catch all exceptions in the stratification process.
-      (res, strataTime) <- timeSyn (tryEither "strataOne" (strataOne so))
+      (res, strataTime) <- timeSyn (tryEither (strataOne so))
       case res of
         Left err -> do
           -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
@@ -123,7 +123,7 @@ strataOne :: (SynC arch)
 strataOne op = do
   L.logM L.Info $ printf "Beginning stratification for opcode %s" (showF op)
   instr <- instantiateInstruction op
-  (mprog, synDuration) <- withTimeout (synthesize instr)
+  (mprog, synDuration) <- withTimeout (L.namedM "synthesize" $ synthesize instr)
   case mprog of
     Nothing -> return Nothing
     Just prog -> do

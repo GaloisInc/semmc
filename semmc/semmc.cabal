@@ -87,7 +87,8 @@ library
                        transformers >= 0.5.2 && < 0.6,
                        constraints >= 0.9 && < 0.10,
                        sqlite-simple >= 0.4 && < 0.5,
-                       directory
+                       directory,
+                       unliftio
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
