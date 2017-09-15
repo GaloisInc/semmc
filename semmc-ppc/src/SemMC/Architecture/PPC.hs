@@ -442,11 +442,11 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
 operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
 operandToLocation (PPC.F4rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.F8rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
-operandToLocation (PPC.G8rc _) = error "G8rc operandToLocation ?"
-operandToLocation (PPC.G8rc_nox0 _) = error "G8rc_nox0 operandToLocation ?"
+operandToLocation (PPC.G8rc gpr) = Just (LocGPR gpr)
+operandToLocation (PPC.G8rc_nox0 gpr) = Just (LocGPR gpr)
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Gprc_nor0 gpr) = Just (LocGPR gpr)
-operandToLocation (PPC.Tlsreg _) = error "Tlsreg operandToLocation?"
+operandToLocation (PPC.Tlsreg gpr) = Just (LocGPR gpr)
 operandToLocation (PPC.Tlsreg32 gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Vrrc (PPC.VR vr)) = Just $ LocVSR (PPC.VSReg (vr + 32))
 operandToLocation (PPC.Vsfrc vr) = Just $ LocVSR vr
