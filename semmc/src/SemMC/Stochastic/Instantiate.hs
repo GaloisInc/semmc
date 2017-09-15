@@ -76,7 +76,7 @@ instantiateInstruction op = do
                 -- immediate(s).
                 let s0 = (MapF.empty, A.allLocations @(A.Location arch))
                 let usedLocs = S.union (S.map liftSomeView implicitOps) (S.foldr (liftSomeOperand (Proxy @arch)) S.empty explicitLocs)
-                let (litLocs, _) = SL.foldrFCIndexed (assignLiterals usedLocs) s0 ops
+                let (litLocs, _) = SL.foldrFCIndexed (assignLiterals op' usedLocs) s0 ops
                 return CS.RI { CS.riInstruction = target
                              , CS.riOpcode = op'
                              , CS.riOperands = ops
@@ -108,31 +108,33 @@ liftSomeOperand proxy (Some op) s =
 -- watch out for.
 assignLiterals :: forall arch sh tp
                 . (CS.ConcreteArchitecture arch)
-               => S.Set (Some (A.Location arch))
+               => A.Opcode arch (A.Operand arch) sh
+               -> S.Set (Some (A.Location arch))
                -> SL.Index sh tp
                -> A.Operand arch tp
                -> (MapF.MapF (CS.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
                -> (MapF.MapF (CS.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
-assignLiterals usedLocs ix op acc@(m, locs) =
+assignLiterals opc usedLocs ix op acc@(m, locs) =
   case A.operandToLocation (Proxy @arch) op of
     Just _ -> acc
     Nothing ->
-      let (locs', loc) = findUnusedLocation (Proxy @arch) usedLocs op locs
+      let (locs', loc) = findUnusedLocation opc (Proxy @arch) usedLocs op locs
       in (MapF.insert (CS.LiteralRef ix) loc m, locs')
 
 findUnusedLocation :: (CS.ConcreteArchitecture arch)
-                   => proxy arch
+                   => A.Opcode arch (A.Operand arch) sh
+                   -> proxy arch
                    -> S.Set (Some (A.Location arch))
                    -> A.Operand arch tp
                    -> [Some (A.Location arch)]
                    -> ([Some (A.Location arch)], A.Location arch (A.OperandType arch tp))
-findUnusedLocation proxy usedLocs op locs =
+findUnusedLocation opc proxy usedLocs op locs =
   case locs of
-    [] -> L.error "Not enough locations to find a virtual literal location"
+    [] -> L.error ("Not enough locations to find a virtual literal location for " ++ P.showF opc)
     (Some loc : rest)
       | Just P.Refl <- P.testEquality (A.locationType loc) (CS.operandType proxy op)
       , not (S.member (Some loc) usedLocs) -> (rest, loc)
-      | otherwise -> findUnusedLocation proxy usedLocs op rest
+      | otherwise -> findUnusedLocation opc proxy usedLocs op rest
 
 isImplicitOrReusedOperand :: (SynC arch)
                           => Proxy arch
