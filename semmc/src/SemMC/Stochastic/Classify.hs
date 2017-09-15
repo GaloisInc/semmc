@@ -209,7 +209,7 @@ classifyByClass target p ix = do
           case target of
             CS.RI { CS.riOpcode = oc } -> do
               liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Completed equivTime)
-              liftC $ L.logM L.Info $ printf "Found a counterexample while classifying a candidate program for %s" (showF oc)
+              liftC $ L.logM L.Info $ printf "Equivalent candidate program for %s" (showF oc)
           addMergableClass ix
           classifyByClass target p (ix + 1)
         F.DifferentBehavior cx -> do
