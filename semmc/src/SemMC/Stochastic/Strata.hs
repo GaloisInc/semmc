@@ -82,7 +82,7 @@ stratifiedSynthesis env0 = do
                                , seTestChan = tChan
                                , seResChan = rChan
                                }
-    runSyn localEnv strata `C.finally` A.cancel testRunner'
+    runSyn localEnv strata -- `C.finally` A.cancel testRunner'
   STM.readTVarIO (seFormulas env0)
 
 strata :: (SynC arch)
