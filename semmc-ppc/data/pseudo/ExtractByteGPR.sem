@@ -2,4 +2,4 @@
             (source . 'Gprc)
             (n . 'U2imm)))
  (in (source n))
- (defs ((target . (concat #x000000 ((_ extract 7 0) (bvshr source (bvshl n #x00000003))))))))
+ (defs ((target (concat #x000000 ((_ extract 7 0) (bvlshr source (bvshl n #x00000003))))))))

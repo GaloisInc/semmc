@@ -172,7 +172,8 @@ mainWithOptions opts = do
   let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
       targets :: [Some (Witness (SST.BuildAndConvert PPC.PPC) (PPC.Opcode PPC.Operand))]
-      targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
+      -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
+      targets = [ Some (Witness PPC.ORI), Some (Witness PPC.NOP) ]
   senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps targets iorels
   _ <- SST.stratifiedSynthesis senv
 

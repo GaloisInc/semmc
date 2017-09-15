@@ -75,7 +75,6 @@ stratifiedSynthesis env0 = do
     tChan <- C.newChan
     rChan <- C.newChan
     testRunner' <- A.async $ testRunner (seConfig env0) tChan rChan (remoteRunnerOutputChannel (seConfig env0))
-    A.link testRunner'
     let localEnv = LocalSynEnv { seGlobalEnv = env0
                                , seRandomGen = gen
                                , seNonceSource = nonceRef

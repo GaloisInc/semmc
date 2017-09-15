@@ -55,6 +55,7 @@ import qualified Dismantle.Arbitrary as DA
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Log as L
 import qualified SemMC.Worklist as WL
 
 type TestCase arch       = CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
@@ -73,6 +74,8 @@ data GlobalLearningEnv arch =
                     , learningFailures :: STM.TVar (S.Set (Some (A.Opcode arch (A.Operand arch)), Maybe Int))
                     -- ^ Opcodes for which we received a signal while processing
                     -- and couldn't learn
+                    , logCfg :: L.LogCfg
+                    -- ^ Logger configuration
                     }
 
 data LocalLearningEnv arch =
@@ -204,6 +207,9 @@ newtype Learning arch a = Learning { runM :: Rd.ReaderT (LocalLearningEnv arch) 
             Monad,
             Rd.MonadReader (LocalLearningEnv arch),
             MonadIO)
+
+instance L.MonadHasLogCfg (Learning arch) where
+  getLogCfgM = Rd.asks (logCfg . globalLearningEnv)
 
 runLearning :: LocalLearningEnv arch -> Learning arch a -> IO a
 runLearning env a = Rd.runReaderT (runM a) env
