@@ -23,13 +23,11 @@ matchConstructor s = and [ notElem '8' s
     exclude = [ "^DIV.*E.*$"
               , "^ATTN$"
               , "^CMPEQB$"
-              , "^CMPDI$"
               , "^CMPRB$"
               , "^CNTT.*"
               ]
     Just rx = RE.compileRegex (L.intercalate "|" matchers)
     matchers = [ "^A.*"
-               , "^CMP.*"
                , "^CNT.*"
                , "^CR.*"
                , "^DIV.*[^E]$"
