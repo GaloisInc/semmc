@@ -78,6 +78,7 @@ mainWithOptions opt = do
 
   logChan <- C.newChan
   gen <- A.createGen
+  logCfg <- L.mkLogCfg "main"
   let cfg = IOR.LearningConfig { IOR.lcIORelationDirectory = oRelDir opt
                                , IOR.lcNumThreads = oNumThreads opt
                                , IOR.lcAssemble = PPC.assembleInstruction
@@ -85,9 +86,9 @@ mainWithOptions opt = do
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
                                , IOR.lcTestRunner = CE.runRemote (oRemoteHost opt) PPC.testSerializer
                                , IOR.lcLog = logChan
+                               , IOR.lcLogCfg = logCfg
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
-  logCfg <- L.mkLogCfg "main"
   logger <- case oPrintLog opt of
     Verbose -> A.async (L.printLogMessages logCfg logChan)
     Quiet -> A.async (L.dumpRemoteRunnerLog logChan)

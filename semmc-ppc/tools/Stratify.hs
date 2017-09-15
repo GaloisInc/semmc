@@ -5,6 +5,7 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
+import qualified Control.Exception as E
 import           Control.Monad ( when )
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
@@ -144,14 +145,14 @@ mainWithOptions opts = do
   lcfg <- L.mkLogCfg "main"
   let ?logCfg = lcfg
   logChan <- C.newChan
-  logger <- case oPrintLog opts of
-    Verbose -> A.async (L.printLogMessages lcfg logChan)
-    Quiet -> A.async (L.dumpRemoteRunnerLog logChan)
-  A.link logger
   logThread <- case oLogFile opts of
-    Nothing -> A.async (L.stdErrLogEventConsumer lcfg)
-    Just logFile -> A.async (L.fileLogEventConsumer logFile lcfg)
-  A.link logThread
+    Nothing -> C.forkIO (L.stdErrLogEventConsumer lcfg `E.finally` IO.hPutStrLn IO.stderr "log thread going down")
+    Just logFile -> C.forkIO (L.fileLogEventConsumer logFile lcfg `E.finally` IO.hPutStrLn IO.stderr "log thread going down")
+  logger <- case oPrintLog opts of
+    Verbose -> C.forkIO (L.printLogMessages lcfg logChan `E.finally` IO.hPutStrLn IO.stderr "logger going down")
+    Quiet -> C.forkIO (L.dumpRemoteRunnerLog logChan `E.finally` IO.hPutStrLn IO.stderr "logger going down")
+  -- A.link logger
+  -- A.linky logThread
 
   stThread <- SST.newStatisticsThread (oStatisticsFile opts)
 
@@ -172,12 +173,13 @@ mainWithOptions opts = do
   let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
       targets :: [Some (Witness (SST.BuildAndConvert PPC.PPC) (PPC.Opcode PPC.Operand))]
-      targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
+      -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
+      targets = [ Some (Witness PPC.ORI) ]
   senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps targets iorels
   _ <- SST.stratifiedSynthesis senv
 
   L.logEndWith lcfg
-  A.wait logThread
+--  A.wait logThread
 
   SST.terminateStatisticsThread stThread
 

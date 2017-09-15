@@ -2,4 +2,4 @@
             (source . 'Vrrc)
             (n . 'U2imm)))
  (in (source n))
- (defs ((target . ((_ extract 31 0) (bvshr source ((_ zero_extend 96) (bvshl n #x00000003))))))))
+ (defs ((target ((_ extract 31 0) (bvlshr source ((_ zero_extend 96) (bvshl n #x00000003))))))))

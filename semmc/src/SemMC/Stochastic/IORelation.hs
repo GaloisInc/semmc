@@ -32,6 +32,7 @@ import qualified Data.Set as S
 import qualified Data.Text.IO as T
 import           System.FilePath ( (</>) )
 import qualified System.IO.Error as IOE
+import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
@@ -47,6 +48,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Log as L
 import qualified SemMC.Worklist as WL
 
 import SemMC.Stochastic.IORelation.Explicit ( generateExplicitInstruction,
@@ -64,6 +66,7 @@ data LearningConfig arch =
                  , lcTimeoutSeconds :: Int
                  , lcTestRunner :: TestRunner arch
                  , lcLog :: C.Chan CE.LogMessage
+                 , lcLogCfg :: L.LogCfg
                  }
 
 loadIORelations :: forall arch
@@ -117,6 +120,7 @@ learnIORelations cfg proxy toFP ops = do
                               , learnedRelations = lrref
                               , serializationChan = serializeChan
                               , learningFailures = errref
+                              , logCfg = lcLogCfg cfg
                               }
 
   -- Spawn a bunch of worker threads to process the worklist in parallel
@@ -170,7 +174,9 @@ learn = do
   case mop of
     Nothing -> return ()
     Just (Some op) -> do
+      L.logM L.Info $ printf "Learning a relation for opcode %s" (P.showF op)
       rel <- testOpcode op
+      L.logM L.Info $ printf "Successfully learned a relation for opcode %s" (P.showF op)
       recordLearnedRelation op rel
       learn
 

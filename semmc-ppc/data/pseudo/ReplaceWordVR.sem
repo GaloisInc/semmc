@@ -3,5 +3,5 @@
             (rS . 'Gprc)))
  (in (rT n rS))
  (defs ((rT (bvor (bvshl ((_ zero_extend 96) rS) ((_ zero_extend 96) (bvshl n #x00000005)))
-                  (bvand (bvnot (bvshl #x000000000000000000000000000000ff (bvshl n #x00000000000000000000000000000005)))
+                  (bvand (bvnot (bvshl #x000000000000000000000000000000ff (bvshl ((_ zero_extend 96) n) #x00000000000000000000000000000005)))
                          rT))))))

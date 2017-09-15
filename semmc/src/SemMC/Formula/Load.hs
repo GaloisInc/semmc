@@ -9,8 +9,6 @@ module SemMC.Formula.Load (
   loadFormulas
   ) where
 
-import qualified GHC.Err.Located as L
-
 import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as Map
@@ -29,6 +27,7 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.Formula.Env as FE
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Parser as FP
+import qualified SemMC.Log as L
 import qualified SemMC.Util as U
 
 formulaEnv :: forall sym arch
@@ -91,7 +90,9 @@ loadFormulas sym toFP impl shapes = do
         U.logIO U.Info $ "loading file: "++file
         ef <- FP.readFormulaFromFile sym env file
         case ef of
-          Left err -> L.error $ "Failed to parse "++file++": "++err
+          Left err -> do
+            L.logIO L.Info ("Failed to parse " ++ file ++ ": " ++ err)
+            error $ "Failed to parse "++file++": "++err
           Right f -> return (Just f)
       else do
         U.logIO U.Debug $ "skipping non-existent file: "++file

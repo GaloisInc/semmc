@@ -164,9 +164,9 @@ logIOWith cfg level msg =
 --
 -- See 'logIO'.
 logTrace :: (HasLogCfg, Ghc.HasCallStack) => LogLevel -> LogMsg -> a -> a
-logTrace level msg x = IO.unsafePerformIO $ do
+logTrace level msg x = x {- IO.unsafePerformIO $ do
   writeLogEvent ?logCfg Ghc.callStack level msg
-  return x
+  return x -}
 {-# NOINLINE logTrace #-}
 
 ----------------------------------------------------------------
@@ -359,9 +359,9 @@ prettyThreadId cfg tid = do
 -- ) then use 'writeLogEvent'.
 writeLogEvent :: LogCfg -> Ghc.CallStack -> LogLevel -> LogMsg -> IO ()
 writeLogEvent cfg cs level msg = do
-  tid <- show <$> Cc.myThreadId
-  ptid <- prettyThreadId cfg tid
-  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event ptid))
+  -- tid <- show <$> Cc.myThreadId
+  -- ptid <- prettyThreadId cfg tid
+  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event ""))
   where
     event tid = LogEvent
       { leCallSite = callSite

@@ -21,6 +21,7 @@ module SemMC.Stochastic.Statistics (
   recordCounterexample
   ) where
 
+import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as E
@@ -37,7 +38,7 @@ import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import           Data.Parameterized.Some ( Some(..) )
 
 import           SemMC.Architecture ( Opcode, Operand )
-
+import Debug.Trace
 data StatisticsRecord arch = Terminate
                            -- ^ Tell the thread to terminate
                            | SolverInvocation (Some (Opcode arch (Operand arch))) SolverTime
@@ -85,11 +86,12 @@ newStatisticsThread statsFile = do
   term <- STM.newTChanIO
   conn <- SQL.open statsFile
   initializeSchema conn
+  traceM "Schema initialized"
   let st = StatisticsThread { stMsgs = chan
                             , stTerm = term
                             , stConn = conn
                             }
-  _a <- A.async (loop (processStatistic st) `E.finally` SQL.close conn)
+  _a <- C.forkIO (loop (processStatistic st) `E.finally` (putStrLn "Cleaning up stats thread" >> SQL.close conn))
   return st
 
 processStatistic :: forall arch
@@ -97,7 +99,10 @@ processStatistic :: forall arch
                  => StatisticsThread arch
                  -> Break () IO ()
 processStatistic st = do
+  liftIO $ putStrLn "processing a statistic"
   msg <- liftIO $ STM.atomically $ STM.readTChan (stMsgs st)
+  return ()
+  {-
   case msg of
     Terminate -> do
       liftIO $ STM.atomically $ STM.writeTChan (stTerm st) ()
@@ -125,7 +130,7 @@ processStatistic st = do
   where
     conn = stConn st
     withTransaction k = liftIO (SQL.withTransaction conn k)
-
+-}
 -- | Send a message to terminate the statistics thread and wait for a response
 terminateStatisticsThread :: StatisticsThread arch -> IO ()
 terminateStatisticsThread st = do
