@@ -165,6 +165,9 @@ chooseNextCandidate target candidate cost candidate' = do
 
 -- | Compute the cost, in terms of mismatch, of the candidate compared
 -- to the target. STOKE Section 4.6.
+--
+-- If the candidate causes a crash, we give it an infinite weight to cause it to
+-- be rejected.
 compareTargetToCandidate :: forall arch t.
                             SynC arch
                          => C.RegisterizedInstruction arch
@@ -189,7 +192,7 @@ compareTargetToCandidate target candidate test = do
       U.logM U.Debug $ printf "error = %s" (show e)
       U.logM U.Debug $ printf "target = %s" (show targetRes)
       U.logM U.Debug $ printf "candidate = %s" (show candidateRes)
-      liftIO (C.throwIO e)
+      return (1.0 / 0.0)
     Right weight -> return weight
   where
     handlers = [ C.Handler arithHandler
