@@ -759,8 +759,10 @@ WorkTag readWorkItem(FILE* stream, WorkItem* item) {
 
   allocateProgramSpace(item);
   nItems = fread(item->program, item->programByteCount, 1, stream);
-  if(nItems != 1) {
-    return WORK_ERROR_SHORT_PROGRAM;
+  if(item->programByteCount > 0) {
+    if(nItems != 1) {
+      return WORK_ERROR_SHORT_PROGRAM;
+    }
   }
 
   return WORK_ITEM;
