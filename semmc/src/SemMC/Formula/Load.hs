@@ -95,7 +95,6 @@ loadFormulas sym toFP impl shapes = do
             error $ "Failed to parse "++file++": "++err
           Right f -> return (Just f)
       else do
-        U.logIO U.Debug $ "skipping non-existent file: "++file
         return Nothing
 
 addIfJust :: (MapF.OrdF k, Monad m)
