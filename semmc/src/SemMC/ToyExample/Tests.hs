@@ -15,6 +15,7 @@ module SemMC.ToyExample.Tests where
 
 import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
+import qualified Data.Foldable as F
 import           Data.IORef ( newIORef )
 import qualified Data.Map as Map
 import           Data.Maybe
@@ -214,19 +215,22 @@ generateTestCases p gen = do
 -- | Test runner backend for Toy arch.
 toyTestRunnerBackend :: arch ~ Toy => Integer -> I.TestRunner arch
 toyTestRunnerBackend !i tChan rChan _logChan = do
-  maybeTest <- C.readChan tChan
-  case maybeTest of
+  maybeTests <- C.readChan tChan
+  case maybeTests of
     Nothing -> return Nothing
-    Just test -> do
+    Just tests -> do
+      i' <- F.foldlM evaluateTest i tests
+      toyTestRunnerBackend i' tChan rChan _logChan
+  where
+    _debug i msg = traceIO $ "toyTestRunnerBackend: "++show i++": "++msg
+    evaluateTest ix test = do
       let resultContext = evalProg (CE.testContext test) (CE.testProgram test)
       let result = CE.TestResult
             { CE.resultNonce = CE.testNonce test
             , CE.resultContext = resultContext
             }
       C.writeChan rChan (CE.TestSuccess result)
-      toyTestRunnerBackend (i+1) tChan rChan _logChan
-  where
-    _debug i msg = traceIO $ "toyTestRunnerBackend: "++show i++": "++msg
+      return (ix + 1)
 
 {-
   logCfg <- L.mkLogCfg
@@ -306,7 +310,7 @@ runSynToy dataRoot action = do
   synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
 
   nref <- newIORef 0
-  tChan <- C.newChan :: IO (C.Chan (Maybe (I.TestCase Toy)))
+  tChan <- C.newChan :: IO (C.Chan (Maybe [I.TestCase Toy]))
   rChan <- C.newChan
   testRunnerThread <- C.async $
     testRunner cfg tChan rChan logChan

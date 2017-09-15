@@ -80,7 +80,7 @@ data GlobalLearningEnv arch =
 
 data LocalLearningEnv arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
-                   , testChan :: C.Chan (Maybe (TestCase arch))
+                   , testChan :: C.Chan (Maybe [TestCase arch])
                    , resChan :: C.Chan (CE.ResultOrError (CS.ConcreteState arch))
                    , gen :: DA.Gen
                    , testGen :: IO (CS.ConcreteState arch)
@@ -95,7 +95,7 @@ recordFailure op sigNum = do
   ref <- Rd.asks (learningFailures . globalLearningEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' ref (S.insert (Some op, sigNum))
 
-askTestChan :: Learning arch (C.Chan (Maybe (TestCase arch)))
+askTestChan :: Learning arch (C.Chan (Maybe [TestCase arch]))
 askTestChan = Rd.asks testChan
 
 askResultChan :: Learning arch (C.Chan (CE.ResultOrError (CS.ConcreteState arch)))

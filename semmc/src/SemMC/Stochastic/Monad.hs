@@ -102,7 +102,7 @@ data LocalSynEnv t arch =
               , seRandomGen :: DA.Gen
               , seNonceSource :: IORef Word64
               -- ^ Nonces for test cases sent to the remote runner.
-              , seTestChan :: C.Chan (Maybe (CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)))
+              , seTestChan :: C.Chan (Maybe [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)])
               , seResChan :: C.Chan (CE.ResultOrError (CS.ConcreteState arch))
               }
 

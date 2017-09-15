@@ -66,7 +66,7 @@ data LogMessage = LogMessage { lmTime :: T.UTCTime
 -- 'TestRunner'. The Toy architecture uses a simpler 'TestRunner',
 -- that does everything locally.
 type TestRunner c i
-  =  C.Chan (Maybe (TestCase c i))
+  =  C.Chan (Maybe [TestCase c i])
   -- ^ A channel with test cases to be run; a 'Nothing' indicates that
   -- the stream should be terminated.
   -> C.Chan (ResultOrError c)
@@ -123,7 +123,7 @@ logRemoteStderr logMessages host h = do
   C.writeChan logMessages lm
   logRemoteStderr logMessages host h
 
-sendTestCases :: TestSerializer c i -> C.Chan (Maybe (TestCase c i)) -> IO.Handle -> IO ()
+sendTestCases :: TestSerializer c i -> C.Chan (Maybe [TestCase c i]) -> IO.Handle -> IO ()
 sendTestCases ts c h = do
   IO.hSetBinaryMode h True
   IO.hSetBuffering h (IO.BlockBuffering Nothing)
@@ -135,17 +135,18 @@ sendTestCases ts c h = do
         Nothing -> do
           B.hPutBuilder h (B.word8 1)
           IO.hFlush h
-        Just tc -> do -- convert to binary
-          let regStateBytes = flattenMachineState ts (testContext tc)
-          let asm = flattenProgram ts $ testProgram tc
-          let bs = mconcat [ B.word8 0
-                           , B.word64LE (testNonce tc)
-                           , B.word16BE (fromIntegral (B.length regStateBytes))
-                           , B.byteString regStateBytes
-                           , B.word16BE (fromIntegral (LB.length asm))
-                           , B.lazyByteString asm
-                           ]
-          B.hPutBuilder h bs
+        Just tcs -> do -- convert to binary
+          F.forM_ tcs $ \tc -> do
+            let regStateBytes = flattenMachineState ts (testContext tc)
+            let asm = flattenProgram ts $ testProgram tc
+            let bs = mconcat [ B.word8 0
+                             , B.word64LE (testNonce tc)
+                             , B.word16BE (fromIntegral (B.length regStateBytes))
+                             , B.byteString regStateBytes
+                             , B.word16BE (fromIntegral (LB.length asm))
+                             , B.lazyByteString asm
+                             ]
+            B.hPutBuilder h bs
           IO.hFlush h
           go
 
@@ -254,12 +255,12 @@ addResult ri res =
 
 
 withTestResults :: (MonadIO m)
-                => C.Chan (Maybe (TestCase c i))
+                => C.Chan (Maybe [TestCase c i])
                 -> C.Chan (ResultOrError c)
                 -> [TestCase c i]
                 -> ([ResultOrError c] -> m a)
                 -> m a
 withTestResults testChan resChan tests k = do
-  liftIO $ mapM_ (C.writeChan testChan . Just) tests
+  liftIO (C.writeChan testChan (Just tests))
   results <- liftIO $ replicateM (length tests) $ C.readChan resChan
   k results

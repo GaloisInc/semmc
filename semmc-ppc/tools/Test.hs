@@ -36,7 +36,7 @@ main = do
       IO.exitFailure
     Nothing -> return ()
 
-testRunner :: C.Chan (Maybe (CE.TestCase PPCState PPC.Instruction))
+testRunner :: C.Chan (Maybe [CE.TestCase PPCState PPC.Instruction])
            -> C.Chan (CE.ResultOrError PPCState)
            -> IO ()
 testRunner caseChan resChan = do
@@ -46,7 +46,7 @@ testRunner caseChan resChan = do
   C.writeChan caseChan Nothing
   where
     doTest mr vec = do
-      C.writeChan caseChan (Just vec)
+      C.writeChan caseChan (Just [vec])
       res <- C.readChan resChan
       case res of
         CE.InvalidTag t -> do
