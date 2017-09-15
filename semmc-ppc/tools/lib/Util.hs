@@ -29,7 +29,6 @@ matchConstructor s = and [ notElem '8' s
     Just rx = RE.compileRegex (L.intercalate "|" matchers)
     matchers = [ "^A.*"
                , "^CNT.*"
-               , "^CR.*"
                , "^DIV.*[^E]$"
                , "^DS.*"
                , "^EQ.*"
