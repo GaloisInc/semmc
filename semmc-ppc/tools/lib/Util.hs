@@ -23,6 +23,7 @@ matchConstructor s = and [ notElem '8' s
     exclude = [ "^DIV.*E.*$"
               , "^ATTN$"
               , "^CMPEQB$"
+              , "^CMPDI$"
               , "^CMPRB$"
               , "^CNTT.*"
               ]
