@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 -- | Description: Synthesize a program that implements a target instruction.
 --
 -- Stochastic synthesis as described in the STOKE and STRATA papers.
@@ -17,18 +18,21 @@ module SemMC.Stochastic.Synthesize
     synthesize
     -- * Exports for testing
   , compareTargetToCandidate
+  , computeCandidateResults
+  , computeTargetResults
   , wrongLocationPenalty
   ) where
 
 import qualified Control.Exception as C
 import           Control.Monad ( join )
 import           Control.Monad.Trans ( liftIO )
+import qualified Data.Foldable as F
+import qualified Data.Map as M
 import           Data.Maybe ( catMaybes )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as S
 import qualified Data.Set as Set
 import qualified GHC.Err.Located as L
-import           GHC.Exts ( IsList(..) )
 import           Text.Printf
 
 import qualified Data.Set.NonEmpty as NES
@@ -65,7 +69,7 @@ synthesize :: (SynC arch, U.HasCallStack)
 synthesize target = do
   (numRounds, candidate) <- mcmcSynthesizeOne target
   U.logM U.Info $ printf "found candidate after %i rounds" numRounds
-  let candidateWithoutNops = catMaybes . toList $ candidate
+  let candidateWithoutNops = catMaybes . F.toList $ candidate
   U.logM U.Debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
   tests <- askTestCases
   U.logM U.Debug $ printf "number of test cases = %i\n" (length tests)
@@ -74,6 +78,42 @@ synthesize target = do
     return CP.CandidateProgram { CP.cpInstructions = candidateWithoutNops
                                , CP.cpFormula = f
                                }
+
+-- | Get concrete execution results for the tests on a target program.
+--
+-- Note that this function also returns the tests with alterations required by
+-- the registerization process.  The tests are paired with a unique ID that can
+-- be used to correlate the tests with runs on candidate programs.
+computeTargetResults :: (SynC arch)
+                     => C.RegisterizedInstruction arch
+                     -> [C.ConcreteState arch]
+                     -> Syn t arch ([CE.TestCase (C.ConcreteState arch) (Instruction arch)],
+                                    (CE.ResultIndex (C.ConcreteState arch)))
+computeTargetResults target tests = do
+  let registerizedInsns = map (C.registerizeInstruction target) tests
+  tcs <- mapM (\(insn, t) -> mkTestCase t [insn]) registerizedInsns
+  resultIndex <- runConcreteTests tcs
+  return (tcs, resultIndex)
+
+-- | Get concrete execution results for the tests on a candidate program.
+--
+-- Note that the tests should be the tests returned by 'computeTargetResults',
+-- which modifies test programs as necessary due to registerization.
+--
+-- In addition to the result index (containing the concrete execution results),
+-- we return a list of pairs of test cases.  The first element of each pair is
+-- the corresponding test case from the target.  The second element of each pair
+-- is the corresponding test case for the candidate.  This gives both nonces,
+-- which we can use to look up results in the relevant result indexes.
+computeCandidateResults :: (SynC arch)
+                        => Candidate arch
+                        -> [CE.TestCase (C.ConcreteState arch) (Instruction arch)]
+                        -> Syn t arch ([(CE.TestCase (C.ConcreteState arch) (Instruction arch), CE.TestCase (C.ConcreteState arch) (Instruction arch))],
+                                       (CE.ResultIndex (C.ConcreteState arch)))
+computeCandidateResults candidate tests = do
+  indexedTests <- mapM (\tc -> (tc,) <$> mkTestCase (CE.testContext tc) (candidateInstructions candidate)) tests
+  resultIndex <- runConcreteTests (map snd indexedTests)
+  return (indexedTests, resultIndex)
 
 mcmcSynthesizeOne :: forall arch t
                    . (SynC arch, U.HasCallStack)
@@ -87,23 +127,25 @@ mcmcSynthesizeOne target = do
   -- let candidate = fromList [Just $ actualInsnToSynth @arch target]
 
   tests <- askTestCases
-  cost <- sum <$> mapM (compareTargetToCandidate target candidate) tests
-  evolve 0 cost candidate
+  (targetTests, targetResults) <- computeTargetResults target tests
+  (testPairs, candidateResults) <- computeCandidateResults candidate targetTests
+  cost <- sum <$> mapM (compareTargetToCandidate target targetResults candidateResults) testPairs
+  evolve 0 cost targetTests targetResults candidate
   where
     -- | Evolve the candidate until it agrees with the target on the
     -- tests.
-    evolve k  0    candidate = return (k, candidate)
-    evolve !k cost candidate = do
+    evolve k  0    _ _ candidate = return (k, candidate)
+    evolve !k cost targetTests targetResults candidate = do
       candidate' <- perturb candidate
       if candidate == candidate'
-      then evolve (k+1) cost candidate
+      then evolve (k+1) cost targetTests targetResults candidate
       else do
         U.logM U.Debug $ "candidate:\n"++prettyCandidate candidate
         U.logM U.Debug $ "candidate':\n"++prettyCandidate candidate'
         U.logM U.Debug $ "cost = " ++ show cost
         -- liftIO $ showDiff candidate candidate'
-        (cost'', candidate'') <- chooseNextCandidate @arch target candidate cost candidate'
-        evolve (k+1) cost'' candidate''
+        (cost'', candidate'') <- chooseNextCandidate @arch target targetTests targetResults candidate cost candidate'
+        evolve (k+1) cost'' targetTests targetResults candidate''
 {-
 import qualified Data.List as L
 import Control.Monad
@@ -122,7 +164,7 @@ import Control.Monad
 
 prettyCandidate :: Show (SynthInstruction arch)
                 => Candidate arch -> String
-prettyCandidate = unlines . map show . catMaybes . toList
+prettyCandidate = unlines . map show . catMaybes . F.toList
 
 -- | Choose the new candidate if it's a better match, and with the
 -- Metropolis probability otherwise.
@@ -132,32 +174,34 @@ prettyCandidate = unlines . map show . catMaybes . toList
 -- we know it's too expensive [STOKE Section 4.5].
 chooseNextCandidate :: (SynC arch, U.HasCallStack)
                     => C.RegisterizedInstruction arch
+                    -> [CE.TestCase (C.ConcreteState arch) (Instruction arch)]
+                    -> CE.ResultIndex (C.ConcreteState arch)
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
                     -> Syn t arch (Double, Candidate arch)
-chooseNextCandidate target candidate cost candidate' = do
+chooseNextCandidate target targetTests targetResults candidate cost candidate' = do
   gen <- askGen
   threshold <- liftIO $ D.uniformR (0::Double, 1) gen
   U.logM U.Debug $ printf "threshold = %f" threshold
-  tests <- askTestCases
-  go threshold 0 tests
+  (testPairs, candidateResults) <- computeCandidateResults candidate' targetTests
+  go threshold 0 candidateResults testPairs
   where
-    go threshold cost' tests
+    go threshold cost' candidateResults testPairs
         -- STOKE Equation 14. Note that the min expression there
         -- is a typo, as in Equation 6, and should be a *difference*
         -- of costs in the exponent, not a *ratio* of costs.
       | cost' >= cost - log threshold/beta = do
           U.logM U.Debug "reject"
           return (cost, candidate)
-      | [] <- tests = do
+      | [] <- testPairs = do
           U.logM U.Debug "accept"
           return (cost', candidate')
-      | (test:tests') <- tests = do
+      | (testPair:testPairs') <- testPairs = do
           -- U.logM U.Debug $ printf "%f %f" cost threshold
-          dcost <- compareTargetToCandidate target candidate' test
+          dcost <- compareTargetToCandidate target targetResults candidateResults testPair
           -- U.logM U.Debug (show dcost)
-          go threshold (cost' + dcost) tests'
+          go threshold (cost' + dcost) candidateResults testPairs'
 
     beta = 0.1 -- STOKE Figure 10.
 
@@ -171,21 +215,15 @@ chooseNextCandidate target candidate cost candidate' = do
 compareTargetToCandidate :: forall arch t.
                             SynC arch
                          => C.RegisterizedInstruction arch
-                         -> Candidate arch
-                         -> C.ConcreteState arch
+                         -> CE.ResultIndex (C.ConcreteState arch)
+                         -> CE.ResultIndex (C.ConcreteState arch)
+                         -> (CE.TestCase (C.ConcreteState arch) (Instruction arch), CE.TestCase (C.ConcreteState arch) (Instruction arch))
                          -> Syn t arch Double
-compareTargetToCandidate target candidate test = do
-  let candidateProg =
-        concatMap synthInsnToActual . catMaybes . toList $ candidate
-  let (target', test') = C.registerizeInstruction target test
-  let targetProg = [target']
-  -- TODO: cache result of running target on test, since it never
-  -- changes. An easy way to do this is to change the definition of
-  -- test to be a pair of a start state and the end state for the
-  -- start state when running the target.
-  candidateRes <- runConcreteTest =<< mkTestCase test' candidateProg
-  targetRes <- runConcreteTest =<< mkTestCase test' targetProg
+compareTargetToCandidate target targetResultIndex candidateResultIndex (targetTest, candidateTest) = do
+  let (target', _test') = C.registerizeInstruction target (CE.testContext targetTest)
   !liveOut     <- getOutMasks target'
+  let targetRes = M.lookup (CE.testNonce targetTest) (CE.riSuccesses targetResultIndex)
+      candidateRes = M.lookup (CE.testNonce candidateTest) (CE.riSuccesses candidateResultIndex)
   eitherWeight <- liftIO (doComparison liveOut targetRes candidateRes `C.catches` handlers)
   case eitherWeight of
     Left e -> do
@@ -197,19 +235,28 @@ compareTargetToCandidate target candidate test = do
   where
     handlers = [ C.Handler arithHandler
                , C.Handler runnerHandler
+               , C.Handler comparisonHandler
                ]
     arithHandler :: C.ArithException -> IO (Either C.SomeException a)
     arithHandler e = return (Left (C.SomeException e))
     runnerHandler :: CE.RunnerResultError -> IO (Either C.SomeException a)
     runnerHandler e = return (Left (C.SomeException e))
+    comparisonHandler :: ComparisonError -> IO (Either C.SomeException a)
+    comparisonHandler e = return (Left (C.SomeException e))
     doComparison liveOut mTargetRes mCandidateRes = do
-      case CE.asResultOrError mTargetRes of
-        Right CE.TestResult { CE.resultContext = targetSt } ->
-          case CE.asResultOrError mCandidateRes of
-            Right CE.TestResult { CE.resultContext = candidateSt } ->
+      case mTargetRes of
+        Just CE.TestResult { CE.resultContext = targetSt } ->
+          case mCandidateRes of
+            Just CE.TestResult { CE.resultContext = candidateSt } ->
               Right <$> C.evaluate (compareTargetOutToCandidateOut liveOut targetSt candidateSt)
-            Left err -> C.throwIO err
-        Left err -> C.throwIO err
+            Nothing -> C.throwIO NoCandidateResult
+        Nothing -> C.throwIO NoTargetResult
+
+data ComparisonError = NoCandidateResult
+                     | NoTargetResult
+                     deriving (Show)
+
+instance C.Exception ComparisonError
 
 -- | The masks for locations that are live out for the target instruction.
 --
@@ -270,6 +317,9 @@ wrongLocationPenalty = 3 -- STOKE Figure 10.
 -- We use 'Nothing' to represent no-ops, which we need because the
 -- candidate program has fixed length during its evolution.
 type Candidate arch = S.Seq (Maybe (SynthInstruction arch))
+
+candidateInstructions :: (SynC arch) => Candidate arch -> [Instruction arch]
+candidateInstructions = concatMap synthInsnToActual . catMaybes . F.toList
 
 -- | The empty program is a sequence of no-ops.
 emptyCandidate :: Int -> Syn t arch (Candidate arch)

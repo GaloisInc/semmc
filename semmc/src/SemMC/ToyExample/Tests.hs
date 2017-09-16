@@ -360,8 +360,10 @@ test_rightValueWrongPlace :: (U.HasLogCfg) => IO (Double, Double)
 test_rightValueWrongPlace = do
   runSynToy "tests/data/test_rightValueWrongPlace" $ do
     tests <- askTestCases
+    (targetTests, targetResults) <- S.computeTargetResults target tests
+    (testPairs, candidateResults) <- S.computeCandidateResults candidate targetTests
     weight <- sum <$>
-      mapM (S.compareTargetToCandidate target candidate) tests
+      mapM (S.compareTargetToCandidate target targetResults candidateResults) testPairs
     let expectedWeight =
           S.wrongLocationPenalty * fromIntegral (length tests)
     return (expectedWeight, weight)
