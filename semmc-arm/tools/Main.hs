@@ -25,7 +25,7 @@ main = do
       IO.exitFailure
     Nothing -> return ()
 
-testRunner :: C.Chan (Maybe (CE.TestCase MachineState Instruction))
+testRunner :: C.Chan (Maybe [CE.TestCase MachineState Instruction])
            -> C.Chan (CE.ResultOrError MachineState)
            -> IO ()
 testRunner caseChan resChan = do
