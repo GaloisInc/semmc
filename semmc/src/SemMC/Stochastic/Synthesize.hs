@@ -67,6 +67,9 @@ synthesize :: (SynC arch, U.HasCallStack)
            => C.RegisterizedInstruction arch
            -> Syn t arch (CP.CandidateProgram t arch)
 synthesize target = do
+  case target of
+    C.RI { C.riInstruction = i0 } ->
+      U.logM U.Info $ printf "Attempting to synthesize a program for %s" (show i0)
   (numRounds, candidate) <- mcmcSynthesizeOne target
   U.logM U.Info $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . F.toList $ candidate
@@ -164,7 +167,7 @@ import Control.Monad
 
 prettyCandidate :: Show (SynthInstruction arch)
                 => Candidate arch -> String
-prettyCandidate = unlines . map show . catMaybes . F.toList
+prettyCandidate = unlines . map (("    "++) . show) . catMaybes . F.toList
 
 -- | Choose the new candidate if it's a better match, and with the
 -- Metropolis probability otherwise.
