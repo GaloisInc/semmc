@@ -38,6 +38,7 @@ import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Concrete.State as CS
 
+import qualified SemMC.Architecture.PPC.Shared as PPCS
 import           SemMC.Architecture.PPC32.Location
 
 type ConcreteState = MapF.MapF Location CS.Value
@@ -165,11 +166,11 @@ deserialize bs =
 
 getArchState :: G.Get ConcreteState
 getArchState = do
-  gprs' <- mapM (getWith (getValue G.getWord32be repr32)) gprs
-  spregs32' <- mapM (getWith (getValue G.getWord32be repr32)) specialRegs32
-  spregs64' <- mapM (getWith (getValue G.getWord64be repr64)) specialRegs64
-  frs' <- mapM (getWith (getValue (getWord128be IgnoreHighBits) repr128)) frs
-  vrs' <- mapM (getWith (getValue (getWord128be KeepHighBits) repr128)) vrs
+  gprs' <- mapM (getWith (getValue G.getWord32be PPCS.repr32)) gprs
+  spregs32' <- mapM (getWith (getValue G.getWord32be PPCS.repr32)) specialRegs32
+  spregs64' <- mapM (getWith (getValue G.getWord64be PPCS.repr64)) specialRegs64
+  frs' <- mapM (getWith (getValue (getWord128be IgnoreHighBits) PPCS.repr128)) frs
+  vrs' <- mapM (getWith (getValue (getWord128be KeepHighBits) PPCS.repr128)) vrs
 --  mem' <- getBS
   return (St.execState (addLocs gprs' spregs32' spregs64' (frs' ++ vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
@@ -234,15 +235,6 @@ specialRegs32 = [ LocCTR
 
 specialRegs64 :: [Location (BaseBVType 64)]
 specialRegs64 = [ LocFPSCR ]
-
-repr32 :: NatRepr 32
-repr32 = knownNat
-
-repr64 :: NatRepr 64
-repr64 = knownNat
-
-repr128 :: NatRepr 128
-repr128 = knownNat
 
 uninterpretedFunctions :: [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
 uninterpretedFunctions =
