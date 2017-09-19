@@ -82,7 +82,7 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                                      <> O.help "A file to store the log in.  The default (with no option) is stderr." ))
                         <*> O.option O.auto ( O.long "program-threshold"
                                             <> O.short 'P'
-                                            <> O.value 10
+                                            <> O.value 5
                                             <> O.showDefault
                                             <> O.metavar "COUNT"
                                             <> O.help "The number of candidate programs to find before extracting a formula" )
