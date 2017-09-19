@@ -50,7 +50,6 @@ import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Solver.Interface as S
 
-import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)) )
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
@@ -693,74 +692,5 @@ operandToSemanticViewPPC op =
 
 type instance Pseudo PPC = PPCP.PseudoOpcode
 
-ppcAssemblePseudo :: PPCP.PseudoOpcode op sh -> ShapedList op sh -> [A.Instruction PPC]
-ppcAssemblePseudo opcode oplist =
-  case opcode of
-    PPCP.ReplaceByteGPR ->
-      case (oplist :: ShapedList PPC.Operand '["Gprc", "U2imm", "Gprc"]) of
-        (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
-          let n' :: W.W 5 = fromIntegral n
-          in [ D.Instruction PPC.RLWIMI ( target :>
-                                          PPC.U5imm (n' * 8 + 7) :>
-                                          PPC.U5imm (n' * 8) :>
-                                          PPC.U5imm (n' * 8) :>
-                                          source :>
-                                          source :>
-                                          Nil
-                                        )
-             ]
-    PPCP.ExtractByteGPR ->
-      case (oplist :: ShapedList PPC.Operand '["Gprc", "Gprc", "U2imm"]) of
-        (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
-          let n' :: W.W 5 = fromIntegral n
-          in [ D.Instruction PPC.RLWINM ( target :>
-                                          PPC.U5imm 31 :>
-                                          PPC.U5imm (0 - n') :>
-                                          PPC.U5imm (8 + n') :>
-                                          source :>
-                                          Nil
-                                        )
-             ]
-    PPCP.ReplaceWordVR ->
-      case (oplist :: ShapedList PPC.Operand '["Vrrc", "U2imm", "Gprc"]) of
-        (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
-          -- Assumes there's a free chunk of memory pointed to by R31.
-          let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
-              gprWriteLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))
-          in [ -- First, store the current contents of the target into memory.
-               D.Instruction PPC.STVX ( vrLocation :>
-                                        target :>
-                                        Nil
-                                      )
-             , -- Next, write the GPR into the appropriate spot.
-               D.Instruction PPC.STW ( gprWriteLocation :>
-                                       source :>
-                                       Nil
-                                     )
-             , -- Finally, read the target back from memory.
-               D.Instruction PPC.LVX ( target :>
-                                       vrLocation :>
-                                       Nil
-                                     )
-             ]
-    PPCP.ExtractWordVR ->
-      case (oplist :: ShapedList PPC.Operand '["Gprc", "Vrrc", "U2imm"]) of
-        (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
-          -- Assumes there's a free chunk of memory pointed to by R31.
-          let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
-              gprReadLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))
-          in [ -- First, write the contents of the vector register into memory.
-               D.Instruction PPC.STVX ( vrLocation :>
-                                        source :>
-                                        Nil
-                                      )
-             , -- Then, read the GPR from an offset into that saved register.
-               D.Instruction PPC.LWZ ( target :>
-                                       gprReadLocation :>
-                                       Nil
-                                     )
-             ]
-
-
 instance ArchitectureWithPseudo PPC where
-  assemblePseudo _ = ppcAssemblePseudo
+  assemblePseudo _ = PPCP.ppcAssemblePseudo (Proxy @PPC)

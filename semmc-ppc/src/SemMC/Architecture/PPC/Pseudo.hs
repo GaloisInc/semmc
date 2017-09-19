@@ -3,22 +3,30 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 module SemMC.Architecture.PPC.Pseudo (
-  PseudoOpcode(..)
+  PseudoOpcode(..),
+  ppcAssemblePseudo
   ) where
 
 import           GHC.TypeLits ( Symbol )
 
+import qualified Data.Word.Indexed as W
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.ShapedList as SL
+import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)) )
 import qualified Data.Parameterized.TH.GADT as TH
 
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
+import qualified Dismantle.Instruction as D
 import           Dismantle.PPC.Random ()
+
+import qualified SemMC.Architecture as A
 
 data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
   -- | @ReplaceByteGPR rA, n, rB@ replaces the @n@th byte of @rA@ with the low
@@ -57,3 +65,80 @@ instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
     ExtractByteGPR -> D.arbitraryShapedList gen
     ReplaceWordVR  -> D.arbitraryShapedList gen
     ExtractWordVR  -> D.arbitraryShapedList gen
+
+-- | An assembler for pseudo-instructions.
+--
+-- While it mentions @arch@, the type functions we use are the same for both
+-- PPC32 and PPC64, so we can share this function.
+ppcAssemblePseudo :: (A.Opcode arch ~ PPC.Opcode, A.Operand arch ~ PPC.Operand)
+                  => proxy arch
+                  -> PseudoOpcode op sh
+                  -> ShapedList op sh
+                  -> [A.Instruction arch]
+ppcAssemblePseudo _proxy opcode oplist =
+  case opcode of
+    ReplaceByteGPR ->
+      case (oplist :: ShapedList PPC.Operand '["Gprc", "U2imm", "Gprc"]) of
+        (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
+          let n' :: W.W 5 = fromIntegral n
+          in [ D.Instruction PPC.RLWIMI ( target :>
+                                          PPC.U5imm (n' * 8 + 7) :>
+                                          PPC.U5imm (n' * 8) :>
+                                          PPC.U5imm (n' * 8) :>
+                                          source :>
+                                          source :>
+                                          Nil
+                                        )
+             ]
+    ExtractByteGPR ->
+      case (oplist :: ShapedList PPC.Operand '["Gprc", "Gprc", "U2imm"]) of
+        (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
+          let n' :: W.W 5 = fromIntegral n
+          in [ D.Instruction PPC.RLWINM ( target :>
+                                          PPC.U5imm 31 :>
+                                          PPC.U5imm (0 - n') :>
+                                          PPC.U5imm (8 + n') :>
+                                          source :>
+                                          Nil
+                                        )
+             ]
+    ReplaceWordVR ->
+      case (oplist :: ShapedList PPC.Operand '["Vrrc", "U2imm", "Gprc"]) of
+        (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
+          -- Assumes there's a free chunk of memory pointed to by R31.
+          let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
+              gprWriteLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))
+          in [ -- First, store the current contents of the target into memory.
+               D.Instruction PPC.STVX ( vrLocation :>
+                                        target :>
+                                        Nil
+                                      )
+             , -- Next, write the GPR into the appropriate spot.
+               D.Instruction PPC.STW ( gprWriteLocation :>
+                                       source :>
+                                       Nil
+                                     )
+             , -- Finally, read the target back from memory.
+               D.Instruction PPC.LVX ( target :>
+                                       vrLocation :>
+                                       Nil
+                                     )
+             ]
+    ExtractWordVR ->
+      case (oplist :: ShapedList PPC.Operand '["Gprc", "Vrrc", "U2imm"]) of
+        (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
+          -- Assumes there's a free chunk of memory pointed to by R31.
+          let vrLocation = PPC.Memrr (PPC.MemRR Nothing (PPC.GPR 31))
+              gprReadLocation = PPC.Memri (PPC.MemRI (Just (PPC.GPR 31)) (fromIntegral (n * 4)))
+          in [ -- First, write the contents of the vector register into memory.
+               D.Instruction PPC.STVX ( vrLocation :>
+                                        source :>
+                                        Nil
+                                      )
+             , -- Then, read the GPR from an offset into that saved register.
+               D.Instruction PPC.LWZ ( target :>
+                                       gprReadLocation :>
+                                       Nil
+                                     )
+             ]
+
