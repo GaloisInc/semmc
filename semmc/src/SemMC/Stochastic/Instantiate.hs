@@ -56,8 +56,10 @@ instantiateInstruction :: forall arch sh t
                        -> Syn t arch (CS.RegisterizedInstruction arch)
 instantiateInstruction op = do
   gen <- askGen
-  Just iorel <- opcodeIORelation op
-  liftIO $ go gen (implicitOperands iorel)
+  miorel <- opcodeIORelation op
+  case miorel of
+    Just iorel -> liftIO $ go gen (implicitOperands iorel)
+    Nothing -> error ("Error loading IORelation for " ++ P.showF op)
   where
     -- Generate random instructions until we get one with explicit operands that
     -- do not overlap with implicit operands.
