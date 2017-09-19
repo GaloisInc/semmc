@@ -75,6 +75,12 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   defaultLocationExpr :: (S.IsExprBuilder sym) => sym -> a tp -> IO (S.SymExpr sym tp)
   -- | All the locations!
   allLocations :: [Some a]
+  -- | Locations that are acceptable to use for registerization.
+  --
+  -- This isn't just allLocations because vector registers and control registers
+  -- are not valid.  Also, on some architectures r0 is special and not allowable
+  -- for holding data.
+  registerizationLocations :: [Some a]
 
 type ArchState arch ex = MapF.MapF (Location arch) ex
 

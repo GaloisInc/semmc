@@ -76,7 +76,7 @@ instantiateInstruction op = do
                 -- If there is a literal operand, find a register that is neither
                 -- an implicit operand nor an explicit operand to stand in for the
                 -- immediate(s).
-                let s0 = (MapF.empty, A.allLocations @(A.Location arch))
+                let s0 = (MapF.empty, A.registerizationLocations @(A.Location arch))
                 let usedLocs = S.union (S.map liftSomeView implicitOps) (S.foldr (liftSomeOperand (Proxy @arch)) S.empty explicitLocs)
                 let (litLocs, _) = SL.foldrFCIndexed (assignLiterals op' usedLocs) s0 ops
                 return CS.RI { CS.riInstruction = target

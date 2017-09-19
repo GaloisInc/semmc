@@ -115,6 +115,8 @@ instance A.IsLocation Location where
       ]
     ]
 
+  registerizationLocations = map (Some . LocGPR . PPC.GPR) [1..31]
+
 parseLocation :: PPCS.Parser (Some Location)
 parseLocation = do
   c <- P.lookAhead (P.anyChar)

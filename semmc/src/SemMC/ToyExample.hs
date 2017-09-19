@@ -362,6 +362,7 @@ instance A.IsLocation Location where
   defaultLocationExpr sym RegLoc{} = S.bvLit sym (knownNat :: NatRepr 32) 0
 
   allLocations = map (Some . RegLoc) [Reg1, Reg2, Reg3]
+  registerizationLocations = A.allLocations
 
 interestingStates :: [MachineState]
 interestingStates =
