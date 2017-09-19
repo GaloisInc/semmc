@@ -22,7 +22,7 @@ import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Constraints as C
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Architecture.PPC as PPC
+import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Log as L
 
 import qualified Logging as L
@@ -82,9 +82,9 @@ mainWithOptions opt = do
   let cfg = IOR.LearningConfig { IOR.lcIORelationDirectory = oRelDir opt
                                , IOR.lcNumThreads = oNumThreads opt
                                , IOR.lcAssemble = PPC.assembleInstruction
-                               , IOR.lcTestGen = CS.randomState (Proxy @PPC.PPC) gen
+                               , IOR.lcTestGen = CS.randomState (Proxy @PPC32.PPC) gen
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
-                               , IOR.lcTestRunner = CE.runRemote (oRemoteHost opt) PPC.testSerializer
+                               , IOR.lcTestRunner = CE.runRemote (oRemoteHost opt) PPC32.testSerializer
                                , IOR.lcLog = logChan
                                , IOR.lcLogCfg = logCfg
                                }
@@ -96,7 +96,7 @@ mainWithOptions opt = do
   logThread <- A.async (L.stdErrLogEventConsumer logCfg)
   A.link logThread
 
-  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
+  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC32.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"
     putStrLn (unlines (map show (F.toList failures)))

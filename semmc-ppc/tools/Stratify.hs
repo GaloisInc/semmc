@@ -32,7 +32,7 @@ import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
 
-import qualified SemMC.Architecture.PPC as PPC
+import qualified SemMC.Architecture.PPC32 as PPC32
 
 import qualified Logging as L
 import qualified OpcodeLists as OL
@@ -130,14 +130,14 @@ mainWithOptions opts = do
   when (oNumThreads opts < 1) $ do
     die $ printf "Invalid thread count: %d\n" (oNumThreads opts)
 
-  iorels <- IOR.loadIORelations (Proxy @PPC.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes)
+  iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
 
   rng <- DA.createGen
-  let testGenerator = CS.randomState (Proxy @PPC.PPC) rng
+  let testGenerator = CS.randomState (Proxy @PPC32.PPC) rng
   Some ng <- N.newIONonceGenerator
   sym <- SB.newSimpleBackend ng
-  let serializer = CE.TestSerializer { CE.flattenMachineState = CS.serialize (Proxy @PPC.PPC)
-                                     , CE.parseMachineState = CS.deserialize (Proxy @PPC.PPC)
+  let serializer = CE.TestSerializer { CE.flattenMachineState = CS.serialize (Proxy @PPC32.PPC)
+                                     , CE.parseMachineState = CS.deserialize (Proxy @PPC32.PPC)
                                      , CE.flattenProgram = mconcat . map PPC.assembleInstruction
                                      }
 
@@ -169,12 +169,12 @@ mainWithOptions opts = do
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
                        }
-  let opcodes :: [Some (Witness (F.BuildOperandList PPC.PPC) (PPC.Opcode PPC.Operand))]
-      opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
-      targets :: [Some (Witness (SST.BuildAndConvert PPC.PPC) (PPC.Opcode PPC.Operand))]
+  let opcodes :: [Some (Witness (F.BuildOperandList PPC32.PPC) (PPC.Opcode PPC.Operand))]
+      opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32
+      targets :: [Some (Witness (SST.BuildAndConvert PPC32.PPC) (PPC.Opcode PPC.Operand))]
       -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
       targets = [ Some (Witness PPC.ORI) ]
-  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps targets iorels
+  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps32 targets iorels
   _ <- SST.stratifiedSynthesis senv
 
   L.logEndWith lcfg
@@ -184,4 +184,4 @@ mainWithOptions opts = do
 
   return ()
   where
-    initialTestCases = CS.heuristicallyInterestingStates (Proxy @PPC.PPC)
+    initialTestCases = CS.heuristicallyInterestingStates (Proxy @PPC32.PPC)

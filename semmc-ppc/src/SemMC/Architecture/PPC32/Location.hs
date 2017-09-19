@@ -3,7 +3,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
-module SemMC.Architecture.PPC.Location (
+module SemMC.Architecture.PPC32.Location (
   Location(..),
   parseLocation
   ) where

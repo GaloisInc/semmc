@@ -3,8 +3,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 module OpcodeLists (
-  allOpcodes,
-  pseudoOps
+  allOpcodes32,
+  pseudoOps32
   ) where
 
 import           Data.Parameterized.Some ( Some(..) )
@@ -17,17 +17,17 @@ import qualified Dismantle.Tablegen.TH as DT
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.Pseudo as P
 
-import qualified SemMC.Architecture.PPC as PPC
+import qualified SemMC.Architecture.PPC32 as PPC32
 
 import qualified Util as U
 
-class (F.BuildOperandList PPC.PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
-instance (F.BuildOperandList PPC.PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
+class (F.BuildOperandList PPC32.PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
+instance (F.BuildOperandList PPC32.PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
 
-allOpcodes :: [Some (Witness BuildAndUnfold (PPC.Opcode PPC.Operand))]
-allOpcodes = $(DT.captureDictionaries U.matchConstructor ''PPC.Opcode)
+allOpcodes32 :: [Some (Witness BuildAndUnfold (PPC.Opcode PPC.Operand))]
+allOpcodes32 = $(DT.captureDictionaries U.matchConstructor ''PPC.Opcode)
 
-pseudoOps :: [Some (Witness (F.BuildOperandList PPC.PPC) ((P.Pseudo PPC.PPC) PPC.Operand))]
-pseudoOps = $(DT.captureDictionaries (const True) ''PPC.PseudoOpcode)
+pseudoOps32 :: [Some (Witness (F.BuildOperandList PPC32.PPC) ((P.Pseudo PPC32.PPC) PPC.Operand))]
+pseudoOps32 = $(DT.captureDictionaries (const True) ''PPC32.PseudoOpcode)
 
 

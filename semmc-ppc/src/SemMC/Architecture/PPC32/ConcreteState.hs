@@ -4,7 +4,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
-module SemMC.Architecture.PPC.ConcreteState (
+module SemMC.Architecture.PPC32.ConcreteState (
   zeroState,
   randomState,
   serialize,
@@ -38,7 +38,7 @@ import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Concrete.State as CS
 
-import           SemMC.Architecture.PPC.Location
+import           SemMC.Architecture.PPC32.Location
 
 type ConcreteState = MapF.MapF Location CS.Value
 

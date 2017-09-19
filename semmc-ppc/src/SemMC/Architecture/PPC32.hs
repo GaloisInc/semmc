@@ -15,7 +15,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
-module SemMC.Architecture.PPC
+module SemMC.Architecture.PPC32
   ( PPC
   , Location(..)
   , testSerializer
@@ -67,8 +67,8 @@ import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 
-import           SemMC.Architecture.PPC.Location
-import qualified SemMC.Architecture.PPC.ConcreteState as PPCS
+import           SemMC.Architecture.PPC32.Location
+import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
 
 data PPC
 

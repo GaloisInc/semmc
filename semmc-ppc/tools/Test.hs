@@ -17,7 +17,7 @@ import qualified Data.Word.Indexed as W
 import qualified Dismantle.PPC as PPC
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Concrete.Execution as CE
-import SemMC.Architecture.PPC
+import SemMC.Architecture.PPC32
 
 type PPCState = CS.ConcreteState PPC
 

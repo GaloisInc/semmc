@@ -37,7 +37,7 @@ import qualified SemMC.Synthesis as SemMC
 import qualified SemMC.Synthesis.Core as SemMC
 import qualified SemMC.Util as U
 
-import qualified SemMC.Architecture.PPC as PPC
+import qualified SemMC.Architecture.PPC32 as PPC32
 
 import           Util ( matchConstructor )
 
@@ -115,16 +115,16 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
-allOps :: [Some (Witness PPC.BuildableAndTemplatable (DPPC.Opcode DPPC.Operand))]
+allOps :: [Some (Witness PPC32.BuildableAndTemplatable (DPPC.Opcode DPPC.Operand))]
 allOps = $(DT.captureDictionaries matchConstructor ''DPPC.Opcode)
 
 loadBaseSet :: U.HasLogCfg
             => FilePath
             -> SB.SimpleBuilder t SB.SimpleBackendState
-            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC.PPC),
-                   SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC.PPC)
+            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC32.PPC),
+                   SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC32.PPC)
 loadBaseSet baseDir sym = do
-  baseSet <- PPC.loadBaseSet baseDir sym allOps
+  baseSet <- PPC32.loadBaseSet baseDir sym allOps
   let plainBaseSet = makePlain baseSet
   let synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
