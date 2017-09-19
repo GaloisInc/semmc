@@ -40,6 +40,12 @@ data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
   ReplaceWordVR :: PseudoOpcode PPC.Operand '["Vrrc", "U2imm", "Gprc"]
   -- | @ExtractWordVR rA, vrB, n@ extracts the @n@th word of @vrB@ into @rA@.
   ExtractWordVR :: PseudoOpcode PPC.Operand '["Gprc", "Vrrc", "U2imm"]
+  -- | A simple register to register move
+  --
+  -- This is useful, because the idiomatic way to do a MOV in PPC is @ADDI
+  -- rDest, rSrc, 0@, which is difficult for the synthesis to come up with
+  -- randomly.
+  Move :: PseudoOpcode PPC.Operand '["Gprc",  "Gprc_nor0"]
 
 deriving instance Show (PseudoOpcode op sh)
 
@@ -58,6 +64,7 @@ instance HasRepr (PseudoOpcode op) SL.ShapeRepr where
   typeRepr ExtractByteGPR = knownRepr
   typeRepr ReplaceWordVR = knownRepr
   typeRepr ExtractWordVR = knownRepr
+  typeRepr Move = knownRepr
 
 instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
   arbitraryOperands gen op = case op of
@@ -65,6 +72,7 @@ instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
     ExtractByteGPR -> D.arbitraryShapedList gen
     ReplaceWordVR  -> D.arbitraryShapedList gen
     ExtractWordVR  -> D.arbitraryShapedList gen
+    Move           -> D.arbitraryShapedList gen
 
 -- | An assembler for pseudo-instructions.
 --
@@ -141,4 +149,8 @@ ppcAssemblePseudo _proxy opcode oplist =
                                        Nil
                                      )
              ]
+    Move ->
+      case (oplist :: ShapedList PPC.Operand '["Gprc", "Gprc_nor0"]) of
+        (target :> source :> Nil) ->
+          [ D.Instruction PPC.ADDI ( target :> PPC.S16imm 0 :> source :> Nil ) ]
 
