@@ -224,6 +224,12 @@ diffFloat = undefined "diffFloat"
 data LiteralRef arch sh tp where
   LiteralRef :: SL.Index sh tp -> LiteralRef arch sh (A.OperandType arch tp)
 
+instance P.ShowF (LiteralRef arch sh) where
+  showF (LiteralRef ix) = P.showF ix
+
+instance Show (LiteralRef arch sh tp) where
+  show = P.showF
+
 instance P.TestEquality (LiteralRef arch sh) where
   testEquality (LiteralRef ix1) (LiteralRef ix2) = do
     P.Refl <- P.testEquality ix1 ix2
