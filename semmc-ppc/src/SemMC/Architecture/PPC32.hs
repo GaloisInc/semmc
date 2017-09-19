@@ -20,7 +20,7 @@ module SemMC.Architecture.PPC32
   , Location(..)
   , testSerializer
   , loadBaseSet
-  , PseudoOpcode(..)
+  , PPCP.PseudoOpcode(..)
   , BuildableAndTemplatable
   ) where
 
@@ -33,18 +33,16 @@ import qualified Data.Functor.Identity as I
 import           Data.Int ( Int32 )
 import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
-import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.ShapedList as SL
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.TH.GADT as TH
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Type.Equality ( type (==) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
-import           GHC.TypeLits ( KnownNat, Nat, Symbol )
+import           GHC.TypeLits ( KnownNat, Nat )
 import           System.FilePath ( (</>), (<.>) )
 import qualified Text.Megaparsec as P
 
@@ -54,7 +52,6 @@ import qualified Lang.Crucible.Solver.Interface as S
 
 import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)) )
 import qualified Dismantle.Instruction as D
-import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 
@@ -68,6 +65,7 @@ import qualified SemMC.Util as U
 
 import           SemMC.Architecture.PPC32.Location
 import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
+import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
 
 data PPC
@@ -692,43 +690,13 @@ operandToSemanticViewPPC op =
                                  }
         vsrView rno = CS.trivialView Proxy (LocVSR (PPC.VSReg rno))
 
-data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
-  -- | @ReplaceByteGPR rA, n, rB@ replaces the @n@th byte of @rA@ with the low
-  -- byte of @rB@.
-  ReplaceByteGPR :: PseudoOpcode PPC.Operand '["Gprc", "U2imm", "Gprc"]
-  -- | @ExtractByteGPR rA, rB, n@ extracts the @n@th byte of @rB@ into the low
-  -- byte of @rA@, zero-extending it.
-  ExtractByteGPR :: PseudoOpcode PPC.Operand '["Gprc", "Gprc", "U2imm"]
-  -- | @ReplaceWordVR vrA, n, rB@ replaces the @n@th word of @vrA@ with the
-  -- value of @rB@.
-  ReplaceWordVR :: PseudoOpcode PPC.Operand '["Vrrc", "U2imm", "Gprc"]
-  -- | @ExtractWordVR rA, vrB, n@ extracts the @n@th word of @vrB@ into @rA@.
-  ExtractWordVR :: PseudoOpcode PPC.Operand '["Gprc", "Vrrc", "U2imm"]
 
-deriving instance Show (PseudoOpcode op sh)
+type instance Pseudo PPC = PPCP.PseudoOpcode
 
-instance ShowF (PseudoOpcode op)
-
-$(return [])
-
-instance TestEquality (PseudoOpcode op) where
-  testEquality = $(TH.structuralTypeEquality [t| PseudoOpcode |] [])
-
-instance OrdF (PseudoOpcode op) where
-  compareF = $(TH.structuralTypeOrd [t| PseudoOpcode |] [])
-
-instance HasRepr (PseudoOpcode op) SL.ShapeRepr where
-  typeRepr ReplaceByteGPR = knownRepr
-  typeRepr ExtractByteGPR = knownRepr
-  typeRepr ReplaceWordVR = knownRepr
-  typeRepr ExtractWordVR = knownRepr
-
-type instance Pseudo PPC = PseudoOpcode
-
-ppcAssemblePseudo :: PseudoOpcode op sh -> ShapedList op sh -> [A.Instruction PPC]
+ppcAssemblePseudo :: PPCP.PseudoOpcode op sh -> ShapedList op sh -> [A.Instruction PPC]
 ppcAssemblePseudo opcode oplist =
   case opcode of
-    ReplaceByteGPR ->
+    PPCP.ReplaceByteGPR ->
       case (oplist :: ShapedList PPC.Operand '["Gprc", "U2imm", "Gprc"]) of
         (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
           let n' :: W.W 5 = fromIntegral n
@@ -741,7 +709,7 @@ ppcAssemblePseudo opcode oplist =
                                           Nil
                                         )
              ]
-    ExtractByteGPR ->
+    PPCP.ExtractByteGPR ->
       case (oplist :: ShapedList PPC.Operand '["Gprc", "Gprc", "U2imm"]) of
         (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
           let n' :: W.W 5 = fromIntegral n
@@ -753,7 +721,7 @@ ppcAssemblePseudo opcode oplist =
                                           Nil
                                         )
              ]
-    ReplaceWordVR ->
+    PPCP.ReplaceWordVR ->
       case (oplist :: ShapedList PPC.Operand '["Vrrc", "U2imm", "Gprc"]) of
         (target :> PPC.U2imm (W.unW -> n) :> source :> Nil) ->
           -- Assumes there's a free chunk of memory pointed to by R31.
@@ -775,7 +743,7 @@ ppcAssemblePseudo opcode oplist =
                                        Nil
                                      )
              ]
-    ExtractWordVR ->
+    PPCP.ExtractWordVR ->
       case (oplist :: ShapedList PPC.Operand '["Gprc", "Vrrc", "U2imm"]) of
         (target :> source :> PPC.U2imm (W.unW -> n) :> Nil) ->
           -- Assumes there's a free chunk of memory pointed to by R31.
@@ -793,12 +761,6 @@ ppcAssemblePseudo opcode oplist =
                                      )
              ]
 
-instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
-  arbitraryOperands gen op = case op of
-    ReplaceByteGPR -> D.arbitraryShapedList gen
-    ExtractByteGPR -> D.arbitraryShapedList gen
-    ReplaceWordVR  -> D.arbitraryShapedList gen
-    ExtractWordVR  -> D.arbitraryShapedList gen
 
 instance ArchitectureWithPseudo PPC where
   assemblePseudo _ = ppcAssemblePseudo

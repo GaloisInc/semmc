@@ -16,6 +16,7 @@ library
   exposed-modules:     SemMC.Architecture.PPC32
   other-modules:       SemMC.Architecture.PPC32.Location
                        SemMC.Architecture.PPC32.ConcreteState
+                       SemMC.Architecture.PPC.Pseudo
                        SemMC.Architecture.PPC.Shared
   build-depends:       base >= 4.9 && < 5
                      , mtl
