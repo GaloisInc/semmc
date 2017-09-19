@@ -20,16 +20,13 @@ import qualified Control.Monad.State.Strict as St
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
-import           Data.Bits
 import           Data.Int ( Int32 )
-import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes ( testEquality )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Serialize.Get as G
 import qualified Data.Word.Indexed as W
-import           Numeric.Natural ( Natural )
 
 import           Lang.Crucible.BaseTypes
 
@@ -62,7 +59,7 @@ randomState gen = St.execStateT randomize MapF.empty
     addRandomBV64 loc = do
       bv :: CS.Value (BaseBVType 64)
          <- CS.ValueBV <$> liftIO (DA.arbitrary gen)
-      St.modify' $ MapF.insert loc (extendBV bv)
+      St.modify' $ MapF.insert loc (PPCS.extendBV bv)
 
     addRandomBV :: (KnownNat n) => Location (BaseBVType n) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
@@ -101,9 +98,6 @@ interestingStates = gprStates -- ++ fprStates
     mkState r1 v1 r2 v2 =
       MapF.insert r1 v1 $ MapF.insert r2 v2 zeroState
 
-extendBV :: CS.Value (BaseBVType 64) -> CS.Value (BaseBVType 128)
-extendBV (CS.ValueBV (W.unW -> n)) = CS.ValueBV (W.w n)
-
 -- | FIXME: Does not include memory
 zeroState :: ConcreteState
 zeroState = St.execState addZeros MapF.empty
@@ -125,10 +119,10 @@ zeroState = St.execState addZeros MapF.empty
 serialize :: ConcreteState -> B.ByteString
 serialize s = LB.toStrict (B.toLazyByteString b)
   where
-    b = mconcat [ mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprs))
-                , mconcat (map (serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
-                , mconcat (map (serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
-                , mconcat (map (serializeSymVal serializeVec) (extractLocs s vsrs))
+    b = mconcat [ mconcat (map (PPCS.serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprs))
+                , mconcat (map (PPCS.serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
+                , mconcat (map (PPCS.serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
+                , mconcat (map (PPCS.serializeSymVal PPCS.serializeVec) (extractLocs s vsrs))
 --                , mconcat (map serializeMem (extractLocs s [LocMem]))
                 ]
 
@@ -136,18 +130,6 @@ serializeMem :: CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVT
 serializeMem val =
   case val of
     CS.ValueMem bs -> B.byteString bs
-
--- | Serialize a 128 bit value into a bytestring
-serializeVec :: Integer -> B.Builder
-serializeVec i = B.word64BE w1 <> B.word64BE w2
-  where
-    w1 = fromInteger i
-    w2 = fromInteger (i `shiftR` 64)
-
-serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> CS.Value (BaseBVType n) -> B.Builder
-serializeSymVal toBuilder sv =
-  case sv of
-    CS.ValueBV (W.unW -> w) -> toBuilder (toInteger w)
 
 extractLocs :: ConcreteState
             -> [Location tp]
@@ -166,11 +148,11 @@ deserialize bs =
 
 getArchState :: G.Get ConcreteState
 getArchState = do
-  gprs' <- mapM (getWith (getValue G.getWord32be PPCS.repr32)) gprs
-  spregs32' <- mapM (getWith (getValue G.getWord32be PPCS.repr32)) specialRegs32
-  spregs64' <- mapM (getWith (getValue G.getWord64be PPCS.repr64)) specialRegs64
-  frs' <- mapM (getWith (getValue (getWord128be IgnoreHighBits) PPCS.repr128)) frs
-  vrs' <- mapM (getWith (getValue (getWord128be KeepHighBits) PPCS.repr128)) vrs
+  gprs' <- mapM (getWith (PPCS.getValue G.getWord32be PPCS.repr32)) gprs
+  spregs32' <- mapM (getWith (PPCS.getValue G.getWord32be PPCS.repr32)) specialRegs32
+  spregs64' <- mapM (getWith (PPCS.getValue G.getWord64be PPCS.repr64)) specialRegs64
+  frs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.IgnoreHighBits) PPCS.repr128)) frs
+  vrs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.KeepHighBits) PPCS.repr128)) vrs
 --  mem' <- getBS
   return (St.execState (addLocs gprs' spregs32' spregs64' (frs' ++ vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
@@ -183,29 +165,12 @@ getArchState = do
       mapM_ addLoc spregs64'
       mapM_ addLoc vsrs'
 
-data HighBits = IgnoreHighBits
-              | KeepHighBits
-
-getWord128be :: HighBits -> G.Get Natural
-getWord128be hb = do
-  w1 <- G.getWord64be
-  w2 <- G.getWord64be
-  case hb of
-    IgnoreHighBits -> return (fromIntegral w1)
-    KeepHighBits -> return ((fromIntegral w2 `shiftL` 64) .|. fromIntegral w1)
-
 getWith :: G.Get (CS.Value tp)
         -> Location tp
         -> G.Get (Location tp, CS.Value tp)
 getWith g loc = do
   w <- g
   return (loc, w)
-
-getValue :: (Integral w, KnownNat n)
-         => G.Get w
-         -> NatRepr n
-         -> G.Get (CS.Value (BaseBVType n))
-getValue g _ = (CS.ValueBV . W.w . fromIntegral) <$> g
 
 getBS :: G.Get (CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
 getBS = CS.ValueMem <$> G.getBytes 64

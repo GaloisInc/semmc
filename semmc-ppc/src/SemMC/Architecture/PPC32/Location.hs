@@ -15,7 +15,6 @@ import           Data.Parameterized.TH.GADT
 import           Data.Parameterized.Some
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
-import qualified Text.Megaparsec.Char.Lexer as P
 import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
 import           Lang.Crucible.BaseTypes
@@ -24,6 +23,8 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture as A
+
+import qualified SemMC.Architecture.PPC.Shared as PPCS
 
 data Location :: BaseType -> * where
   LocGPR :: PPC.GPR -> Location (BaseBVType 32)
@@ -114,33 +115,20 @@ instance A.IsLocation Location where
       ]
     ]
 
-type Parser = P.Parsec String String
-
-tryOne :: [Parser a] -> Parser a
-tryOne = P.choice . map P.try
-
-parseLocation :: Parser (Some Location)
+parseLocation :: PPCS.Parser (Some Location)
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
     'I' -> Some LocIP <$ P.string "IP"
     'X' -> Some LocXER <$ P.string "XER"
     'L' -> Some LocLNK <$ P.string "LNK"
-    'r' -> parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'r'
-    'x' -> parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'x'
-    'C' -> tryOne [ Some LocCTR <$ P.string "CTR"
-                  , Some LocCR <$ P.string "CR"
-                  ]
-    'M' -> tryOne [ Some LocMSR <$ P.string "MSR"
-                  , Some LocMem <$ P.string "Mem"
-                  ]
+    'r' -> PPCS.parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'r'
+    'x' -> PPCS.parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'x'
+    'C' -> PPCS.tryOne [ Some LocCTR <$ P.string "CTR"
+                       , Some LocCR <$ P.string "CR"
+                       ]
+    'M' -> PPCS.tryOne [ Some LocMSR <$ P.string "MSR"
+                       , Some LocMem <$ P.string "Mem"
+                       ]
     'F' -> Some LocFPSCR <$ P.string "FPSCR"
     _ -> fail ("Unexpected location prefix character: " ++ (c :[]))
-
-parsePrefixedRegister :: (Integral a, Show a) => (a -> b) -> Char -> Parser b
-parsePrefixedRegister f c = do
-  _ <- P.char c
-  n <- P.decimal
-  case n >= 0 && n <= 31 of
-    True -> return (f n)
-    False -> fail ("Register number out of range: " ++ show n)
