@@ -3,7 +3,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE UndecidableInstances #-}
 -- | Description: Synthesize a program that implements a target instruction.
 --
 -- Stochastic synthesis as described in the STOKE and STRATA papers.
@@ -23,8 +25,12 @@ module SemMC.Stochastic.Synthesize
   , wrongLocationPenalty
   ) where
 
+import           GHC.Stack ( HasCallStack )
+
+import qualified Control.Concurrent.Async as A
 import qualified Control.Exception as C
-import           Control.Monad ( join )
+import           Control.Monad ( join, replicateM )
+import qualified Control.Monad.Catch as MC
 import           Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map as M
@@ -32,6 +38,7 @@ import           Data.Maybe ( catMaybes )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as S
 import qualified Data.Set as Set
+import           Data.Typeable ( Typeable )
 import qualified GHC.Err.Located as L
 import           Text.Printf
 
@@ -70,7 +77,7 @@ synthesize target = do
   case target of
     C.RI { C.riInstruction = i0 } ->
       U.logM U.Info $ printf "Attempting to synthesize a program for %s" (show i0)
-  (numRounds, candidate) <- mcmcSynthesizeOne target
+  (numRounds, candidate) <- parallelSynthOne target -- mcmcSynthesizeOne target
   U.logM U.Info $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . F.toList $ candidate
   U.logM U.Debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
@@ -81,6 +88,36 @@ synthesize target = do
     return CP.CandidateProgram { CP.cpInstructions = candidateWithoutNops
                                , CP.cpFormula = f
                                }
+
+data SynthesisException arch = AllSynthesisThreadsFailed (Proxy arch) (Instruction arch)
+
+deriving instance (SynC arch) => Show (SynthesisException arch)
+instance (Typeable arch, SynC arch) => C.Exception (SynthesisException arch)
+
+parallelSynthOne :: forall arch t
+                  . (SynC arch, HasCallStack)
+                 => C.RegisterizedInstruction arch
+                 -> Syn t arch (Integer, Candidate arch)
+parallelSynthOne target = do
+  nThreads <- askParallelSynth
+  asyncs <- replicateM nThreads (asyncWithIsolatedEnv (mcmcSynthesizeOne target))
+  waitForCompletion asyncs
+  where
+    waitForCompletion asyncs =
+      case asyncs of
+        [] -> do
+          U.logM U.Warn "All synthesis threads failed with exceptions"
+          MC.throwM (AllSynthesisThreadsFailed (Proxy @arch) (C.riInstruction target))
+        _ -> do
+          (firstAsync, res) <- liftIO (A.waitAnyCatch asyncs)
+          case res of
+            Left exn -> do
+              U.logM U.Info $ printf "Async synthesis thread failed with error '%s'" (show exn)
+              waitForCompletion (filter (/= firstAsync) asyncs)
+            Right success -> do
+              let rest = filter (/= firstAsync) asyncs
+              mapM_ (liftIO . A.cancel) rest
+              return success
 
 -- | Get concrete execution results for the tests on a target program.
 --
