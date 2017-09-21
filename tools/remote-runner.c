@@ -61,7 +61,6 @@
 
 // The number of bytes for our hand-allocated memory regions
 #define MEM_REGION_BYTES 32
-#define LOGGING 1
 
 int pageSize;
 int waitForSignal(pid_t);
