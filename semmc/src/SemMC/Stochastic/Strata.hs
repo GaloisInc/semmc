@@ -24,11 +24,9 @@ module SemMC.Stochastic.Strata (
 
 import qualified GHC.Err.Located as L
 
-import qualified Control.Concurrent as C
 import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
-import           Data.IORef ( newIORef )
 import           Text.Printf ( printf )
 
 import           Data.Parameterized.Classes ( showF )
@@ -36,7 +34,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 
-import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
 
 import qualified SemMC.Architecture as A
@@ -69,18 +66,8 @@ stratifiedSynthesis :: forall arch t
                     => SynEnv t arch
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
-  A.replicateConcurrently_ (threadCount (seConfig env0)) $ do
-    nonceRef <- newIORef 0
-    gen <- DA.createGen
-    tChan <- C.newChan
-    rChan <- C.newChan
-    testRunner' <- A.async $ testRunner (seConfig env0) tChan rChan (remoteRunnerOutputChannel (seConfig env0))
-    let localEnv = LocalSynEnv { seGlobalEnv = env0
-                               , seRandomGen = gen
-                               , seNonceSource = nonceRef
-                               , seTestChan = tChan
-                               , seResChan = rChan
-                               }
+  A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $ do
+    (localEnv, testRunner') <- newLocalEnv env0
     runSyn localEnv strata `C.finally` A.cancel testRunner'
   STM.readTVarIO (seFormulas env0)
 

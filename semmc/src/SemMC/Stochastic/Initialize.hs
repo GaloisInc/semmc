@@ -53,11 +53,14 @@ data Config arch =
          -- before stopping the stochastic search
          , randomTestCount :: Int
          -- ^ The number of random tests to generate
-         , threadCount :: Int
-         -- ^ The number of threads to use for the search.  More is usually
+         , parallelOpcodes :: Int
+         -- ^ The number opcodes to process in parallel.  More is usually
          -- better, but there is locking around the symbolic backend (i.e.,
          -- 'SimpleBuilder'), so there could be contention if there is too much
          -- parallelism.
+         , parallelSynth :: Int
+         -- ^ The number of threads to run in parallel to try to synthesize
+         -- candidate programs for *each* opcode.
          , remoteRunnerOutputChannel :: C.Chan CE.LogMessage
          -- ^ The channel to send log messages to from the remote runner
          , remoteRunnerTimeoutSeconds :: Int

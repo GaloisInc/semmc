@@ -20,10 +20,13 @@ module SemMC.Stochastic.Monad (
   LocalSynEnv(..),
   runSyn,
   tryEither,
+  newLocalEnv,
+  asyncWithIsolatedEnv,
   -- * Environment queries
   askGen,
   askBaseSet,
   askConfig,
+  askParallelSynth,
   askTestCases,
   askFormulas,
   askPseudoFormulas,
@@ -51,11 +54,13 @@ module SemMC.Stochastic.Monad (
 import qualified GHC.Err.Located as L
 
 import qualified Control.Concurrent as C
+import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as C
+import qualified Control.Monad.Catch as MC
 import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
-import           Data.IORef ( IORef, readIORef, modifyIORef' )
+import           Data.IORef ( IORef, readIORef, modifyIORef', newIORef )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text.IO as T
 import qualified Data.Time.Clock as TM
@@ -83,6 +88,7 @@ import qualified SemMC.Util as U
 import qualified SemMC.Worklist as WL
 
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Concrete.Execution.SSH as SSH
 import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.Constraints ( SynC )
 import           SemMC.Stochastic.IORelation ( IORelation )
@@ -117,6 +123,9 @@ newtype Syn t arch a = Syn { unSyn :: R.ReaderT (LocalSynEnv t arch) IO a }
             Monad,
             MonadIO,
             R.MonadReader (LocalSynEnv t arch))
+
+instance MC.MonadThrow (Syn t arch) where
+  throwM = liftIO . MC.throwM
 
 instance U.MonadHasLogCfg (Syn t arch) where
   getLogCfgM = logConfig <$> askConfig
@@ -162,6 +171,28 @@ timeSyn action = do
   res <- action
   end <- liftIO TM.getCurrentTime
   return (res, TM.diffUTCTime end start)
+
+newLocalEnv :: SynEnv t arch -> IO (LocalSynEnv t arch, A.Async (Maybe SSH.SSHError))
+newLocalEnv env0 = do
+  nonceRef <- newIORef 0
+  gen <- DA.createGen
+  tChan <- C.newChan
+  rChan <- C.newChan
+  runner <- A.async $ testRunner (seConfig env0) tChan rChan (remoteRunnerOutputChannel (seConfig env0))
+  let newEnv = LocalSynEnv { seGlobalEnv = env0
+                           , seRandomGen = gen
+                           , seNonceSource = nonceRef
+                           , seTestChan = tChan
+                           , seResChan = rChan
+                           }
+  return (newEnv, runner)
+
+asyncWithIsolatedEnv :: Syn t arch a -> Syn t arch (A.Async a)
+asyncWithIsolatedEnv act = do
+  env0 <- R.ask
+  (loc, runner) <- liftIO $ newLocalEnv (seGlobalEnv env0)
+  a <- liftIO $ A.async (runSyn loc act `C.finally` A.cancel runner)
+  return a
 
 -- | Record a learned formula for the opcode in the state
 recordLearnedFormula :: (SynC arch, F.ConvertShape sh)
@@ -240,6 +271,10 @@ askFormulas = R.asks (seFormulas . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 askPseudoFormulas :: Syn t arch (MapF.MapF (Pseudo arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
+
+-- | Get the number of requested parallel synthesis operations
+askParallelSynth :: Syn t arch Int
+askParallelSynth = R.asks (parallelSynth . seConfig . seGlobalEnv)
 
 askKnownCongruentOps :: Syn t arch (MapF.MapF SL.ShapeRepr (SeqF.SeqF (SynthOpcode arch)))
 askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)

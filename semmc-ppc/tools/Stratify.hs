@@ -48,7 +48,8 @@ data Options = Options { oRelDir :: FilePath
                        , oLogFile :: Maybe FilePath
                        , oProgramCount :: Int
                        , oRandomTests :: Int
-                       , oNumThreads :: Int
+                       , oParallelOpcodes :: Int
+                       , oParallelSynth :: Int
                        , oOpcodeTimeoutSeconds :: Int
                        , oRemoteTimeoutSeconds :: Int
                        , oRemoteHost :: String
@@ -92,10 +93,16 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.value 1000
                                             <> O.showDefault
                                             <> O.help "The number of random test vectors to generate" )
-                        <*> O.option O.auto ( O.long "num-threads"
-                                            <> O.short 'N'
+                        <*> O.option O.auto ( O.long "parallel-opcodes"
+                                            <> O.short 'O'
                                             <> O.metavar "THREADS"
-                                            <> O.help "The number of executor threads to run" )
+                                            <> O.value 1
+                                            <> O.showDefault
+                                            <> O.help "The number of opcodes to process in parallel" )
+                        <*> O.option O.auto ( O.long "parallel-synth"
+                                            <> O.short 'S'
+                                            <> O.metavar "THREADS"
+                                            <> O.help "The number of threads to run in parallel to find candidate programs (for each opcode)" )
                         <*> O.option O.auto (  O.long "opcode-timeout"
                                             <> O.short 't'
                                             <> O.metavar "SECONDS"
@@ -127,8 +134,8 @@ die msg = IO.hPutStr IO.stderr msg >> IO.exitFailure
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
-  when (oNumThreads opts < 1) $ do
-    die $ printf "Invalid thread count: %d\n" (oNumThreads opts)
+  when (oParallelOpcodes opts < 1 || oParallelSynth opts < 1) $ do
+    die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
 
   iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
 
@@ -163,7 +170,8 @@ mainWithOptions opts = do
                        , SST.randomTestCount = oRandomTests opts
                        , SST.remoteRunnerTimeoutSeconds = oRemoteTimeoutSeconds opts
                        , SST.opcodeTimeoutSeconds = oOpcodeTimeoutSeconds opts
-                       , SST.threadCount = oNumThreads opts
+                       , SST.parallelOpcodes = oParallelOpcodes opts
+                       , SST.parallelSynth = oParallelSynth opts
                        , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
                        , SST.remoteRunnerOutputChannel = logChan
                        , SST.logConfig = lcfg
