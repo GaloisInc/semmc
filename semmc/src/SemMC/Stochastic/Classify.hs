@@ -6,6 +6,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 module SemMC.Stochastic.Classify (
   classify,
   chooseClass,
@@ -25,6 +27,7 @@ import           Data.Function ( on )
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import           Data.Maybe ( catMaybes, mapMaybe )
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
 import           Data.Word ( Word64 )
@@ -188,7 +191,8 @@ numberItem n itm = (n + 1, (n, itm))
 --
 -- Note that this function never adds equivalence classes, so iterating by index
 -- is safe.
-classifyByClass :: (SynC arch)
+classifyByClass :: forall arch t
+                 . (SynC arch)
                 => CS.RegisterizedInstruction arch
                 -- ^ The target instruction
                 -> CP.CandidateProgram t arch
@@ -212,7 +216,7 @@ classifyByClass target p ix = do
               liftC $ L.logM L.Info $ printf "Equivalent candidate program for %s" (showF oc)
           addMergableClass ix
           classifyByClass target p (ix + 1)
-        F.DifferentBehavior cx -> do
+        F.DifferentBehavior (promoteCounterexample (Proxy @arch) -> cx) -> do
           -- See Note [Registerization and Counterexamples]
           case target of
             CS.RI { CS.riOpcode = oc } -> do
@@ -240,6 +244,18 @@ classifyByClass target p ix = do
               liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Timeout equivTime)
               liftC $ L.logM L.Info $ printf "Solver timeout while classifying a candidate program for %s" (showF oc)
           classifyByClass target p (ix + 1)
+
+-- | The counterexamples we get from the theorem prover
+--
+-- FIXME: It would be nice to make 'ConcreteState' into a newtype so that this is safer
+promoteCounterexample :: (CS.ConcreteArchitecture arch) => proxy arch -> A.ArchState arch CS.Value -> CS.ConcreteState arch
+promoteCounterexample proxy cx = F.foldl' addMissingKey cx (MapF.toList (CS.zeroState proxy))
+  where
+    addMissingKey m (MapF.Pair k v) =
+      case MapF.lookup k m of
+        Just _ -> m
+        Nothing -> MapF.insert k v m
+
 
 -- | Remove the programs in the equivalence classes that do not have the same
 -- output on the counterexample as the target instruction.
