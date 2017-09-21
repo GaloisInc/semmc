@@ -284,7 +284,7 @@ removeInvalidPrograms ix target cx = do
   let allCandidates = foldr (\k a -> ecPrograms k Seq.>< a) Seq.empty (unClasses klasses)
   (testCases, testIndex) <- F.foldrM (makeAndIndexTest cx) ([], M.empty) allCandidates
   testResults <- liftC $ runConcreteTests testCases
-  -- Sicne we are removing entries here, we have to rebuild each equivalence
+  -- Since we are removing entries here, we have to rebuild each equivalence
   -- class to select a new representative.  This is done by
   -- 'equivalenceClassFromListMay'.
   let testListsMay' :: [Maybe (EquivalenceClass (Int, CP.CandidateProgram t arch))]
