@@ -125,7 +125,7 @@ mcmcSynthesizeOne :: forall arch t
 mcmcSynthesizeOne target = do
   -- Max length of candidate programs. Can make it a parameter if
   -- needed.
-  let progLen = 50 -- STOKE Figure 10.
+  let progLen = 8 -- STOKE Figure 10.
   candidate <- emptyCandidate progLen
   -- let candidate = fromList [Just $ actualInsnToSynth @arch target]
 
