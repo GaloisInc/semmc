@@ -115,7 +115,7 @@ instance A.IsLocation Location where
       ]
     ]
 
-  registerizationLocations = map (Some . LocGPR . PPC.GPR) [1..31]
+  registerizationLocations = map (Some . LocGPR . PPC.GPR) [1..8]
 
 parseLocation :: PPCS.Parser (Some Location)
 parseLocation = do
