@@ -20,7 +20,7 @@ module SemMC.Stochastic.Classify (
 
 import qualified GHC.Err.Located as L
 
-import qualified Control.Monad.State.Strict as St
+import qualified Control.Monad.RWS.Strict as RWS
 import           Control.Monad.Trans ( liftIO, lift )
 import qualified Data.Foldable as F
 import           Data.Function ( on )
@@ -29,14 +29,17 @@ import qualified Data.Map.Strict as M
 import           Data.Maybe ( catMaybes, mapMaybe )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Sequence as Seq
+import qualified Data.Set as S
 import qualified Data.Traversable as T
 import           Data.Word ( Word64 )
 import           Text.Printf ( printf )
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.ShapedList as SL
+import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.TraversableFC as FC
+import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.BaseTypes as S
 
@@ -46,12 +49,14 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as F
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Log as L
 import qualified SemMC.Stochastic.CandidateProgram as CP
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Symbolic ( Sym )
+import           SemMC.Util ( allBoundVars, filterMapF )
 
 -- | A set of equivalence classes of programs
 data EquivalenceClasses a =
@@ -97,53 +102,31 @@ equivalenceClasses p = EquivalenceClasses (Seq.singleton (equivalenceClass p))
 countPrograms :: EquivalenceClasses (CP.CandidateProgram t arch) -> Int
 countPrograms s = sum (map (Seq.length . ecPrograms) (F.toList (unClasses s)))
 
-data ClassifyState t arch =
-  ClassifyState { eqClassesSeq :: EquivalenceClasses (Int, CP.CandidateProgram t arch)
-                , mergableClasses :: [Int]
-                -- ^ Indexes of the equivalence classes to merge
-                }
-
-classAtIndex :: Int -> ClassifyM t arch (Maybe (EquivalenceClass (CP.CandidateProgram t arch)))
+classAtIndex :: Int -> ClassifyM t sh arch (Maybe (EquivalenceClass (CP.CandidateProgram t arch)))
 classAtIndex ix = do
-  EquivalenceClasses eqClasses <- St.gets eqClassesSeq
+  EquivalenceClasses eqClasses <- RWS.gets eqClassesSeq
   return $ fmap (fmap snd) (Seq.lookup ix eqClasses)
 
 -- | Merge all of the classes marked in `mergableClasses` (if any)
-extractMergableClasses :: ClassifyM t arch (Seq.Seq (Seq.Seq (CP.CandidateProgram t arch)))
+extractMergableClasses :: ClassifyM t sh arch (Seq.Seq (Seq.Seq (CP.CandidateProgram t arch)))
 extractMergableClasses = do
-  s <- St.get
+  s <- RWS.get
   let classesToKeep = mapMaybe (flip Seq.lookup (unClasses (eqClassesSeq s))) (mergableClasses s)
       justProgramGroups = fmap ((fmap snd) . ecPrograms) classesToKeep
   return (Seq.fromList justProgramGroups)
 
 -- | Count the number of non-empty classes
-countRemainingClasses :: ClassifyM t arch Int
+countRemainingClasses :: ClassifyM t sh arch Int
 countRemainingClasses = do
-  klasses <- St.gets eqClassesSeq
+  klasses <- RWS.gets eqClassesSeq
   return $ sum [ if Seq.null (ecPrograms klass) then 0 else 1
                | klass <- F.toList (unClasses klasses)
                ]
 
 -- | Add a class (by index) as a class marked to be merged (because it is
 -- equivalent to the newly-discovered candidate program).
-addMergableClass :: Int -> ClassifyM t arch ()
-addMergableClass ix = St.modify' $ \s -> s { mergableClasses = ix : mergableClasses s }
-
--- | A version of 'lift' that actually works for our type.  The type signature
--- of 'lift' fixes the second type parameter as a 'Monad' of kind @* -> *@, but
--- our second parameter is @arch@.
-liftC :: Syn t arch a -> ClassifyM t arch a
-liftC a = ClassifyM (lift a)
-
--- | A Monad for tracking equivalence classes for reduction and merging.
---
--- This lets us easily mutate equivalence classes (removing candidates that are
--- invalidated by a counterexample)
-newtype ClassifyM t arch a = ClassifyM { unClassify :: St.StateT (ClassifyState t arch) (Syn t arch) a }
-                           deriving (Functor,
-                                     Applicative,
-                                     Monad,
-                                     St.MonadState (ClassifyState t arch))
+addMergableClass :: Int -> ClassifyM t sh arch ()
+addMergableClass ix = RWS.modify' $ \s -> s { mergableClasses = ix : mergableClasses s }
 
 -- | Given a set of initial equivalence classes, assign the new program to one
 -- of them (or create a new equivalence class if the new program doesn't match
@@ -160,12 +143,16 @@ classify :: forall arch t
          -> EquivalenceClasses (CP.CandidateProgram t arch)
          -- ^ The current equivalence classes
          -> Syn t arch (Maybe (EquivalenceClasses (CP.CandidateProgram t arch)))
-classify target p eqclasses = do
+classify target@CS.RI{ CS.riOperands = oplist, CS.riOpcode = opc } p eqclasses = do
   let s0 = ClassifyState { eqClassesSeq = snd (L.mapAccumR numberItem 0 eqclasses)
                          , mergableClasses = []
                          }
       act = classifyByClass target p 0
-  mclasses <- St.evalStateT (unClassify act) s0
+  Just iorel <- opcodeIORelation opc
+  let e0 = ClassifyEnv { operandList = oplist
+                       , iorelation = iorel
+                       }
+  (mclasses, _) <- RWS.evalRWST (unClassify act) e0 s0
   case mclasses of
     Nothing -> return Nothing
     Just classes
@@ -191,7 +178,7 @@ numberItem n itm = (n + 1, (n, itm))
 --
 -- Note that this function never adds equivalence classes, so iterating by index
 -- is safe.
-classifyByClass :: forall arch t
+classifyByClass :: forall arch t sh
                  . (SynC arch)
                 => CS.RegisterizedInstruction arch
                 -- ^ The target instruction
@@ -200,14 +187,15 @@ classifyByClass :: forall arch t
                 -> Int
                 -- ^ The index (into the sequence of equivalence classes) of the
                 -- equivalence class that we are currently analyzing
-                -> ClassifyM t arch (Maybe (Seq.Seq (Seq.Seq (CP.CandidateProgram t arch))))
+                -> ClassifyM t sh arch (Maybe (Seq.Seq (Seq.Seq (CP.CandidateProgram t arch))))
 classifyByClass target p ix = do
   mklass <- classAtIndex ix
   case mklass of
     Nothing -> Just <$> extractMergableClasses
     Just klass -> do
+      env <- RWS.ask
       representative <- liftC $ chooseProgram klass
-      (eqv, equivTime) <- liftC $ timeSyn $ testEquivalence p representative
+      (eqv, equivTime) <- liftC $ timeSyn $ testEquivalence env p representative
       case eqv of
         F.Equivalent -> do
           case target of
@@ -266,7 +254,8 @@ promoteCounterexample proxy cx = F.foldl' addMissingKey cx (MapF.toList (CS.zero
 --
 -- Returns an updated index (the next index to pass to a recursive call).  If no
 -- equivalence classes are removed, this is @ix + 1@.
-removeInvalidPrograms :: forall t arch . (SynC arch)
+removeInvalidPrograms :: forall t arch sh
+                       . (SynC arch)
                       => Int
                       -- ^ The current index into the equivalence classes for
                       -- our iteration; this will be modified on return if we
@@ -275,12 +264,12 @@ removeInvalidPrograms :: forall t arch . (SynC arch)
                       -- ^ The target instruction
                       -> CS.ConcreteState arch
                       -- ^ A learned counterexample
-                      -> ClassifyM t arch Int
+                      -> ClassifyM t sh arch Int
 removeInvalidPrograms ix target cx = do
   targetTC <- liftC $ mkTestCase cx [target]
   CE.TestSuccess (CE.TestResult { CE.resultContext = targetSt })
     <- liftC $ runConcreteTest targetTC
-  klasses <- St.gets eqClassesSeq
+  klasses <- RWS.gets eqClassesSeq
   let allCandidates = foldr (\k a -> ecPrograms k Seq.>< a) Seq.empty (unClasses klasses)
   (testCases, testIndex) <- F.foldrM (makeAndIndexTest cx) ([], M.empty) allCandidates
   testResults <- liftC $ runConcreteTests testCases
@@ -292,10 +281,10 @@ removeInvalidPrograms ix target cx = do
                       | ec <- F.toList (unClasses klasses)
                       , let maybes = mapMaybeSeq (consistentWithTarget testIndex testResults targetSt) (ecPrograms ec)
                       ]
-  mergable <- St.gets mergableClasses
+  mergable <- RWS.gets mergableClasses
   let (ix', testLists', mergable') = computeNewIndexes ix testListsMay' mergable
       klasses' = EquivalenceClasses (Seq.fromList testLists')
-  St.modify' $ \s -> s { eqClassesSeq = klasses'
+  RWS.modify' $ \s -> s { eqClassesSeq = klasses'
                        , mergableClasses = mergable'
                        }
 
@@ -388,7 +377,7 @@ makeAndIndexTest :: (P.ArchitectureWithPseudo arch)
                  => CS.ConcreteState arch
                  -> (Int, CP.CandidateProgram t arch)
                  -> ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
-                 -> ClassifyM t arch ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
+                 -> ClassifyM t sh arch ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
 makeAndIndexTest cx (pix, cp) (cases, idx) = do
   tc <- liftC $ mkTestCase cx program
   return (tc : cases, M.insert pix (CE.testNonce tc) idx)
@@ -509,14 +498,89 @@ mergeClasses = F.foldr mappend Seq.empty
 -- | Use an SMT solver to check if two programs are equivalent.
 --
 -- If they are not, return an input that demonstrates the difference.
+--
+-- We pass in the environment so that we can access the IORelation for the
+-- current target instruction
 testEquivalence :: (P.ArchitectureWithPseudo arch)
-                => CP.CandidateProgram t arch
+                => ClassifyEnv arch sh
+                -> CP.CandidateProgram t arch
                 -> CP.CandidateProgram t arch
                 -> Syn t arch (F.EquivalenceResult arch CS.Value)
-testEquivalence p representative = do
+testEquivalence env p representative = do
+  L.logM L.Info "Testing equivalence of:"
+  L.logM L.Info (show newFormula)
+  L.logM L.Info (show repFormula)
   withSymBackend $ \sym -> do
-    liftIO $ F.formulasEquivConcrete sym (CP.cpFormula p) (CP.cpFormula representative)
+    liftIO $ F.formulasEquivConcrete sym newFormula repFormula
+  where
+    newFormula = projectRelevantLocations env (CP.cpFormula p)
+    repFormula = projectRelevantLocations env (CP.cpFormula representative)
 
+-- | Using the operand list and IORelation from the environment, project out all
+-- of the relevant locations defined by the formula.
+projectRelevantLocations :: forall t arch sh
+                          . (A.Architecture arch)
+                         => ClassifyEnv arch sh
+                         -> F.Formula (Sym t) arch
+                         -> F.Formula (Sym t) arch
+projectRelevantLocations env f0 =
+  F.Formula { F.formDefs = projectedDefs
+            , F.formParamVars = paramVars
+            }
+  where
+    usedRefs = IOR.outputs (iorelation env)
+    usedLocs = S.fromList $ mapMaybe refToLoc (F.toList usedRefs)
+    boundVars = mconcat (map (viewSome allBoundVars) (MapF.elems projectedDefs))
+    projectedDefs = filterMapF keepUsedDef (F.formDefs f0)
+    paramVars = filterMapF keepUsedVar (F.formParamVars f0)
+
+    keepUsedDef :: forall tp v . A.Location arch tp -> v tp -> Bool
+    keepUsedDef k _ = S.member (Some k) usedLocs
+
+    keepUsedVar :: forall tp . A.Location arch tp -> S.BoundVar (Sym t) tp -> Bool
+    keepUsedVar _ bv = S.member (Some bv) boundVars
+
+    refToLoc oref =
+      case oref of
+        IOR.ImplicitOperand (Some (CS.View _ loc)) -> Just (Some loc)
+        IOR.OperandRef (Some ix) -> Some <$> A.operandToLocation (Proxy @arch) (SL.indexShapedList (operandList env) ix)
+
+-- Monad definition
+
+-- | The state for 'ClassifyM' that lets us maintain a mutable set of
+-- equivalence classes.
+data ClassifyState t arch =
+  ClassifyState { eqClassesSeq :: EquivalenceClasses (Int, CP.CandidateProgram t arch)
+                -- ^ The current set of equivalence classes
+                , mergableClasses :: [Int]
+                -- ^ Indexes of the equivalence classes to merge
+                }
+
+-- | The environment contains the IORelation and operand list for the target
+-- instruction.  We need these for the equivalence test, as we only want to test
+-- equality on the locations that are actually relevant for our target
+-- instruction (the search is free to use all other locations as scratch space).
+data ClassifyEnv arch sh =
+  ClassifyEnv { operandList :: SL.ShapedList (A.Operand arch) sh
+              , iorelation :: IOR.IORelation arch sh
+              }
+
+-- | A version of 'lift' that actually works for our type.  The type signature
+-- of 'lift' fixes the second type parameter as a 'Monad' of kind @* -> *@, but
+-- our second parameter is @arch@.
+liftC :: Syn t arch a -> ClassifyM t sh arch a
+liftC a = ClassifyM (lift a)
+
+-- | A Monad for tracking equivalence classes for reduction and merging.
+--
+-- This lets us easily mutate equivalence classes (removing candidates that are
+-- invalidated by a counterexample)
+newtype ClassifyM t sh arch a = ClassifyM { unClassify :: RWS.RWST (ClassifyEnv arch sh) () (ClassifyState t arch) (Syn t arch) a }
+                           deriving (Functor,
+                                     Applicative,
+                                     Monad,
+                                     RWS.MonadReader (ClassifyEnv arch sh),
+                                     RWS.MonadState (ClassifyState t arch))
 
 {- Note [Registerization and Counterexamples]
 
