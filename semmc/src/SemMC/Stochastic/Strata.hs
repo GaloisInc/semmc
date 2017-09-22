@@ -134,11 +134,16 @@ strataOneLoop op instr eqclasses = do
       withStats $ S.recordSynthesizeSuccess (Some op) synDuration
       meqclasses' <- C.classify instr prog eqclasses
       case meqclasses' of
-        Nothing -> return Nothing
+        Nothing -> do
+          L.logM L.Info "No equivalence classes left after counterexample"
+          return Nothing
         Just eqclasses'
-          | C.countPrograms eqclasses' > programCountThreshold cfg ->
-            Just <$> finishStrataOne op instr eqclasses'
-          | otherwise -> strataOneLoop op instr eqclasses'
+          | C.countPrograms eqclasses' > programCountThreshold cfg -> do
+              L.logM L.Info "Found enough candidate programs, finishing with formula extraction"
+              Just <$> finishStrataOne op instr eqclasses'
+          | otherwise -> do
+              L.logM L.Info $ printf "Currently have %d candidate programs, need %d" (C.countPrograms eqclasses') (programCountThreshold cfg)
+              strataOneLoop op instr eqclasses'
 
 finishStrataOne :: (SynC arch)
                 => A.Opcode arch (A.Operand arch) sh
