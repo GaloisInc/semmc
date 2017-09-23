@@ -178,7 +178,13 @@ findVarForOperand opc (CS.RI { CS.riLiteralLocs = lls, CS.riOpcode = rop }) form
     case A.operandToLocation (Proxy @arch) op of
       Just loc ->
         case MapF.lookup loc formulaBindings of
-          Nothing -> L.error ("Expected binding for location " ++ P.showF loc)
+          Nothing -> do
+            -- If we didn't find a variable for this binding, it is an output
+            -- operand that is not used as an input at all.  That is fine, but
+            -- we need to allocate a fresh variable here for use in the
+            -- parameterized formula.
+            withSymBackend $ \sym -> do
+              A.BoundVar <$> liftIO (C.freshBoundVar sym (U.makeSymbol (P.showF loc)) (A.locationType loc))
           Just bv -> return (A.BoundVar bv)
       Nothing -> do
         -- In this case, we are dealing with an immediate operand (since it
