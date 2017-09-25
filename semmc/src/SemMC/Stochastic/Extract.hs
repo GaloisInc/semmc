@@ -139,7 +139,10 @@ parameterizeFormula ri opcode oplist f = do
                                 , F.pfDefs = defs
                                 }
   where
-    paramLocs = foldrFC (collectParamLocs (Proxy @arch)) S.empty oplist
+    -- Param locs needs to include registerization locations
+    naturalParamLocs = foldrFC (collectParamLocs (Proxy @arch)) S.empty oplist
+    registerizedParamLocs = S.fromList (MapF.elems regLitLocs)
+    paramLocs = naturalParamLocs `S.union` registerizedParamLocs
 
 collectUses :: forall arch sh a b
              . (CS.ConcreteArchitecture arch)
