@@ -36,7 +36,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
 import qualified SemMC.Architecture as A
 import           SemMC.Formula.Formula
-import           SemMC.Formula.Parser ( Atom(..), operandVarPrefix )
+import           SemMC.Formula.Parser ( Atom(..) )
 
 -- This file is organized top-down, i.e., from high-level to low-level.
 
@@ -83,7 +83,7 @@ convertParameter :: (ShowF (A.Location arch))
                  -> Parameter arch sh tp
                  -> SC.SExpr Atom
 convertParameter opVars (Operand _ idx) = ident name
-  where name = stripPrefix operandVarPrefix (varName (indexShapedList opVars idx))
+  where name = varName (indexShapedList opVars idx)
 convertParameter _ (Literal loc) = quoted (showF loc)
 
 -- | Used for substituting in the result expression when a variable is
@@ -110,8 +110,9 @@ convertLocation = SC.SAtom . AQuoted . showF
 buildOpMapping :: ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh
                -> Map.Map (Some (S.SimpleBoundVar t)) (SC.SExpr Atom)
 buildOpMapping Nil = Map.empty
-buildOpMapping (var :> rest) = Map.insert (Some (A.unBoundVar var)) (ident name) $ buildOpMapping rest
-  where name = stripPrefix operandVarPrefix (varName var)
+buildOpMapping (var :> rest) =
+  Map.insert (Some (A.unBoundVar var)) (ident name) $ buildOpMapping rest
+  where name = varName var
 
 convertDef :: (ShowF (A.Location arch))
            => ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh
@@ -214,15 +215,6 @@ quoted = SC.SAtom . AQuoted
 int :: Integer -> SC.SExpr Atom
 int = SC.SAtom . AInt
 
--- | Remove the first argument from the beginning of the second, 'error'ing if
--- it doesn't match.
-stripPrefix :: (Eq a) => [a] -> [a] -> [a]
-stripPrefix [] s = s
-stripPrefix _ [] = error "stripPrefix: prefix didn't match"
-stripPrefix (ph : pTail) (sh : sTail)
-  | ph == sh = stripPrefix pTail sTail
-  | otherwise = error "stripPrefix: prefix didn't match"
-
 -- | Class for shape-dependent operations.
 --
 -- This is at the bottom of the file so as to not screw up code formatting for
@@ -236,6 +228,7 @@ instance ConvertShape '[] where
   convertOperandVars Nil = SC.SNil
 
 instance (KnownSymbol s, ConvertShape sh) => ConvertShape (s ': sh) where
-  convertOperandVars (var :> rest) = SC.SCons (SC.SCons nameExpr typeExpr) (convertOperandVars rest)
-    where nameExpr = ident (stripPrefix operandVarPrefix (varName var))
+  convertOperandVars (var :> rest) =
+    SC.SCons (SC.SCons nameExpr typeExpr) (convertOperandVars rest)
+    where nameExpr = ident (varName var)
           typeExpr = quoted (symbolVal (Proxy :: Proxy s))
