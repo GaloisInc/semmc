@@ -190,8 +190,8 @@ vrs = fmap (LocVSR . PPC.VSReg) [32..63]
 specialRegs32 :: [Location (BaseBVType 32)]
 specialRegs32 = [ LocCTR
                 , LocLNK
-                , LocXER
                 , LocCR
+                , LocFPSCR
                   -- Lets not randomly generate an MSR.  That would
                   -- be problematic (e.g., it would switch endianness)
                   --
@@ -199,7 +199,8 @@ specialRegs32 = [ LocCTR
                 ]
 
 specialRegs64 :: [Location (BaseBVType 64)]
-specialRegs64 = [ LocFPSCR ]
+specialRegs64 = [ LocXER
+                ]
 
 uninterpretedFunctions :: [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
 uninterpretedFunctions =

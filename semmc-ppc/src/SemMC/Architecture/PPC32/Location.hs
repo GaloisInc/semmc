@@ -32,10 +32,10 @@ data Location :: BaseType -> * where
   LocMSR :: Location (BaseBVType 32)
   LocCTR :: Location (BaseBVType 32)
   LocLNK :: Location (BaseBVType 32)
-  LocXER :: Location (BaseBVType 32)
+  LocXER :: Location (BaseBVType 64)
   LocCR :: Location (BaseBVType 32)
   LocVSR :: PPC.VSReg -> Location (BaseBVType 128)
-  LocFPSCR :: Location (BaseBVType 64)
+  LocFPSCR :: Location (BaseBVType 32)
   LocMem :: Location (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
 instance Show (Location tp) where
