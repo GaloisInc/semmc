@@ -97,6 +97,7 @@ processWorklist = do
         Right (Just formula) -> do
           L.logM L.Info $ printf "Learned a formula for %s in %s seconds" (showF so) (show strataTime)
           withStats $ S.recordStrataSuccess (Some so) strataTime
+          L.logM L.Info $ printf "  parameterized formula = %s" (show formula)
           recordLearnedFormula so formula
       processWorklist
 

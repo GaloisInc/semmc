@@ -16,9 +16,11 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 
 import qualified Data.Parameterized.Classes as P
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.TraversableFC ( foldrFC )
+import           Data.Parameterized.TraversableFC ( fmapFC, foldrFC, traverseFC )
 import qualified Data.Parameterized.ShapedList as SL
 import qualified Lang.Crucible.Solver.Interface as C
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
@@ -26,6 +28,7 @@ import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 import qualified SemMC.Architecture as A
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
+import qualified SemMC.Log as L
 import           SemMC.Symbolic ( Sym )
 import qualified SemMC.Util as U
 
@@ -42,11 +45,15 @@ extractFormula :: forall arch t sh
                -> F.Formula (Sym t) arch
                -> IORelation arch sh
                -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
-extractFormula ri opc ops progForm iorel = go (MapF.empty, MapF.empty) (F.toList (outputs iorel))
+extractFormula ri opc ops progForm iorel = do
+  L.logM L.Info ("Extracting formula from " ++ show progForm)
+  go (MapF.empty, MapF.empty) (F.toList (outputs iorel))
   where
     go (locDefs, locVars) [] = do
       extractedFormula <- makeFreshFormula locDefs locVars
-      parameterizeFormula ri opc ops extractedFormula
+      L.logM L.Info ("Fresh formula is " ++ show extractedFormula)
+      pf0 <- parameterizeFormula ri opc ops extractedFormula
+      renameVariables ops pf0
     go acc (out:rest) =
       case out of
         ImplicitOperand (Some (CS.View _ loc)) ->
@@ -57,6 +64,71 @@ extractFormula ri opc ops progForm iorel = go (MapF.empty, MapF.empty) (F.toList
               Just loc = A.operandToLocation (Proxy @arch) operand
               Just expr = MapF.lookup loc (F.formDefs progForm)
           go (defineLocation progForm loc expr acc) rest
+
+-- | Take a pass through the formula to rename variables standing in for
+-- parameters into friendlier names.
+--
+-- The names we get out of 'parameterizeFormula' are named after the concrete
+-- locations that were used in the candidate program discovered by the
+-- stochastic synthesis.  This makes it difficult to visually distinguish
+-- between parameter values and implicit parameters.
+--
+-- We only need to replace the bound vars in 'pfOperandVars' and then use the
+-- replaced list with 'S.replaceVars' to update 'pfDefs'.
+renameVariables :: forall arch sh t
+                 . (SynC arch)
+                => SL.ShapedList (A.Operand arch) sh
+                -> F.ParameterizedFormula (Sym t) arch sh
+                -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
+renameVariables oplist pf0 = do
+  withSymBackend $ \sym -> do
+    (sva, opVars') <- liftIO (buildRenameList sym (F.pfOperandVars pf0))
+    defs' <- liftIO (MapF.traverseWithKey (doReplace sym sva) (F.pfDefs pf0))
+    return pf0 { F.pfOperandVars = opVars'
+               , F.pfDefs = defs'
+               }
+  where
+    doReplace sym sva _k v = F.replaceVars sym sva v
+
+    buildRenameList :: Sym t
+                    -> SL.ShapedList (A.BoundVar (Sym t) arch) sh
+                    -> IO (Pair (Ctx.Assignment (C.BoundVar (Sym t))) (Ctx.Assignment (C.SymExpr (Sym t))), SL.ShapedList (A.BoundVar (Sym t) arch) sh)
+    buildRenameList sym opVarList = do
+      -- A shaped list with the same shape, but with pairs where the first is
+      -- the original name and the second is the newly-allocated variable (with
+      -- a more sensible name) that will be used as a replacement.
+      opVarListRenames <- SL.traverseFCIndexed (allocateSensibleVariableName sym) opVarList
+      varExprPairs <- traverseFC convertToVarExprPair opVarListRenames
+      let sva = foldrFC addToAssignmentPair (Pair Ctx.empty Ctx.empty) varExprPairs
+      return (sva, fmapFC secondVar opVarListRenames)
+
+    allocateSensibleVariableName :: forall tp
+                                  . Sym t
+                                 -> SL.Index sh tp
+                                 -> A.BoundVar (Sym t) arch tp
+                                 -> IO (VarPair (A.BoundVar (Sym t) arch) (A.BoundVar (Sym t) arch) tp)
+    allocateSensibleVariableName sym ix bv = do
+      let operand = SL.indexShapedList oplist ix
+      fresh <- C.freshBoundVar sym (U.makeSymbol ("operand" ++ show (SL.indexAsInt ix))) (CS.operandType (Proxy @arch) operand)
+      return (VarPair bv (A.BoundVar fresh))
+
+    -- Given a correspondence between and old var and a new var, create a pair
+    -- mapping the old pair to a new expr (which is just the new var wrapped
+    -- into a SymExpr)
+    convertToVarExprPair :: forall tp
+                          . VarPair (A.BoundVar (Sym t) arch) (A.BoundVar (Sym t) arch) tp
+                         -> IO (VarPair (A.BoundVar (Sym t) arch) (EltWrapper t arch) tp)
+    convertToVarExprPair (VarPair oldVar (A.BoundVar newVar)) =
+      return $ VarPair oldVar (EltWrapper (SB.BoundVarElt newVar))
+
+    addToAssignmentPair (VarPair (A.BoundVar v) (EltWrapper e)) (Pair vars exprs) =
+      Pair (Ctx.extend vars v) (Ctx.extend exprs e)
+
+newtype EltWrapper sym arch op = EltWrapper (SB.Elt sym (A.OperandType arch op))
+data VarPair a b tp = VarPair (a tp) (b tp)
+
+secondVar :: VarPair a b tp -> b tp
+secondVar (VarPair _ v) = v
 
 -- | Given the components of a formula, allocate a set of fresh variables for
 -- each location and create a new formula.
@@ -109,13 +181,16 @@ parameterizeFormula :: forall arch sh t
                     -> SL.ShapedList (A.Operand arch) sh
                     -> F.Formula (Sym t) arch
                     -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
-parameterizeFormula ri opcode oplist f = do
+parameterizeFormula ri@CS.RI { CS.riLiteralLocs = regLitLocs } opcode oplist f = do
   -- The pfLiteralVars are the parameters from the original formula not
   -- corresponding to any parameters
   let litVars = U.filterMapF (keepNonParams paramLocs) (F.formParamVars f)
+  L.logM L.Info ("litVars = " ++ show litVars)
   let (nonParamDefs, paramDefs) = SL.foldrFCIndexed (replaceParameters (Proxy @arch)) (F.formDefs f, MapF.empty) oplist
       defs = MapF.foldrWithKey liftImplicitLocations paramDefs nonParamDefs
-
+  L.logM L.Info ("nonParamDefs = " ++ show nonParamDefs)
+  L.logM L.Info ("paramDefs = " ++ show paramDefs)
+  L.logM L.Info ("defs = " ++ show defs)
   -- After we have extracted all of the necessary definitions of parameters, we
   -- have all of the formulas we actually care about.  Next, we need to identify
   -- all of the variables in those formulas corresponding to explicit operands
@@ -123,7 +198,11 @@ parameterizeFormula ri opcode oplist f = do
   --
   -- FIXME: Do we need to allocate fresh vars when we do that?  Probably not,
   -- since we copied 'f' when we created it.
+  --
+  -- FIXME: Do we really need variables for output-only locations?  It seems to
+  -- produce formulas that reference useless variables
   opVars <- SL.traverseFCIndexed (findVarForOperand opcode ri (F.formParamVars f)) oplist
+  L.logM L.Info ("opVars = " ++ show opVars)
 
   -- Uses are:
   --
