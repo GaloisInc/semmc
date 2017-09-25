@@ -14,6 +14,7 @@ module SemMC.Formula.Instantiate
   , copyFormula
   , sequenceFormulas
   , condenseFormulas
+  , replaceVars
   , replaceLitVars
   , paramToLocation
   ) where

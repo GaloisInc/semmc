@@ -21,6 +21,7 @@ module SemMC.Formula
   , copyFormula
   , condenseFormulas
   , replaceLitVars
+  , replaceVars
 
   -- * Equivalence Checking
   , EquivalenceResult(..)
@@ -60,6 +61,7 @@ import SemMC.Formula.Instantiate ( instantiateFormula,
                                    sequenceFormulas,
                                    copyFormula,
                                    condenseFormulas,
+                                   replaceVars,
                                    replaceLitVars
                                  )
 import SemMC.Formula.Load ( loadFormulas )
