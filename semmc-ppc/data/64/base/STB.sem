@@ -1,0 +1,4 @@
+((operands ((addr . 'Memri)
+            (rS . 'Gprc)))
+ (in (rS 'Mem))
+ (defs (('Mem (store 'Mem addr ((_ extract 7 0) rS))))))

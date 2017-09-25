@@ -1,0 +1,5 @@
+((operands ((RA . 'Gprc)
+            (RS . 'Gprc)
+            (RB . 'Gprc)))
+ (in (RS RB))
+ (def ((RA (bvshl RS ((_ extract 63 58)))))))

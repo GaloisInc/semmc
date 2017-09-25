@@ -1,0 +1,7 @@
+((operands ((rT . 'Gprc)
+            (n . 'U2imm)
+            (rS . 'Gprc)))
+ (in (rT n rS))
+ (defs ((rT (bvor (bvshl ((_ zero_extend 24) ((_ extract 7 0) rS)) (bvshl n #x00000003))
+                  (bvand (bvnot (bvshl #x000000ff (bvshl n #x00000003)))
+                         rT))))))

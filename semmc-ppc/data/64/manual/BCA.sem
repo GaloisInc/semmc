@@ -1,0 +1,17 @@
+((operands ((bo . 'U5imm)
+            (bi . 'Crbitrc)
+            (target . 'Abscondbrtarget))
+ (in (bo bi target 'ctr 'cr))
+ (defs (('ip (ite (and (or (= ((_ extract 2 2) bo) #b1)
+                           (= #b1
+                              (bvxor (ite (= (ite (= ((_ extract 2 2) bo) #b0) (bvsub 'ctr #x00000001) 'ctr)
+                                             #x00000000)
+                                          #b1
+                                          #b0)
+                                     ((_ extract 3 3) bo))))
+                       (or (= #b1 ((_ extract 0 0) bo))
+                           (= ((_ extract 1 1) bo)
+                              ((_ extract 0 0) (bvshr 'cr bi)))))
+                  target
+                  'ip))
+        ('ctr (ite (= ((_ extract 2 2) bo) #b0) (bvsub 'ctr #x00000001) 'ctr))))))
