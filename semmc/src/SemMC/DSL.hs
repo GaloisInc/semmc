@@ -15,6 +15,11 @@ module SemMC.DSL (
   signExtend,
   concat,
   bvadd,
+  bvsub,
+  bvxor,
+  bvor,
+  bvand,
+  bvnot,
   -- * Expressions
   Expr(..),
   Location(..),
@@ -22,6 +27,7 @@ module SemMC.DSL (
   SemM,
   Phase(..),
   runSem,
+  Parameter,
   Definition,
   printDefinition
   ) where
@@ -151,7 +157,26 @@ defLoc :: Location -> Expr -> SemM 'Def ()
 defLoc loc e = RWS.modify' $ \f -> f { fDefs = (loc, e) : fDefs f }
 
 bvadd :: Expr -> Expr -> Expr
-bvadd e1 e2 = Builtin "bvadd" [e1, e2]
+bvadd = binBuiltin "bvadd"
+
+bvsub :: Expr -> Expr -> Expr
+bvsub = binBuiltin "bvsub"
+
+bvxor :: Expr -> Expr -> Expr
+bvxor = binBuiltin "bvxor"
+
+bvor :: Expr -> Expr -> Expr
+bvor = binBuiltin "bvor"
+
+bvand :: Expr -> Expr -> Expr
+bvand = binBuiltin "bvand"
+
+-- | Bitwise not (complement)
+bvnot :: Expr -> Expr
+bvnot e = Builtin "bvnot" [e]
+
+binBuiltin :: String -> Expr -> Expr -> Expr
+binBuiltin s e1 e2 = Builtin s [e1, e2]
 
 -- | The extract operation defined on bitvectors in SMTLib
 extract :: Int
