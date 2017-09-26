@@ -8,6 +8,7 @@ module SemMC.DSL (
   param,
   input,
   defLoc,
+  comment,
   -- * Operations
   extract,
   zeroExtend,
@@ -29,6 +30,7 @@ import           Prelude hiding ( concat )
 
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
+import           Data.Monoid
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Sequence as Seq
@@ -68,6 +70,7 @@ data Formula = Formula { fName :: String
                        , fOperands :: Seq.Seq Parameter
                        , fInputs :: [Parameter]
                        , fDefs :: [(Location, Expr)]
+                       , fComment :: Maybe String
                        }
              deriving (Show)
 
@@ -86,7 +89,7 @@ newtype SemM (t :: Phase) a = SemM { unSem :: RWS.RWS () (Seq.Seq Formula) Formu
 -- | Tags used as phantom types to prevent nested opcode definitions
 data Phase = Top | Def
 
-newtype Definition = Definition { unDefinition :: SC.SExpr FAtom }
+data Definition = Definition (Maybe String) (SC.SExpr FAtom)
   deriving (Show)
 
 -- | Run a semantics defining action and return the defined formulas.
@@ -101,6 +104,7 @@ runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () badFormula))
     -- this will never be used since 'defineOpcode' handles adding the result to
     -- the writer output.
     badFormula = Formula { fName = ""
+                         , fComment = Nothing
                          , fOperands = Seq.empty
                          , fInputs = []
                          , fDefs = []
@@ -112,6 +116,7 @@ runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () badFormula))
 defineOpcode :: String -> SemM 'Def () -> SemM 'Top ()
 defineOpcode name (SemM def) = do
   let freshFormula = Formula { fName = name
+                             , fComment = Nothing
                              , fOperands = Seq.empty
                              , fInputs = []
                              , fDefs = []
@@ -121,6 +126,12 @@ defineOpcode name (SemM def) = do
   newFormula <- RWS.get
   RWS.tell (Seq.singleton newFormula)
   return ()
+
+-- | Add a descriptive comment to the output file
+--
+-- Each call overwrites the previous comment
+comment :: String -> SemM 'Def ()
+comment c = RWS.modify' $ \f -> f { fComment = Just c }
 
 -- | Declare a named parameter; the string provided is used in the produced formula
 param :: String -> String -> SemM 'Def Parameter
@@ -177,7 +188,7 @@ mkSExprs :: Seq.Seq Formula -> [(String, Definition)]
 mkSExprs = map toSExpr . F.toList
 
 toSExpr :: Formula -> (String, Definition)
-toSExpr f = (fName f, Definition (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
+toSExpr f = (fName f, Definition (fComment f) (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
 
 extractSExpr :: [Parameter] -> [Parameter] -> [(Location, Expr)] -> SC.SExpr FAtom
 extractSExpr operands inputs defs =
@@ -248,7 +259,8 @@ data FAtom = AIdent String
            deriving (Show)
 
 printDefinition :: Definition -> T.Text
-printDefinition = SC.encodeOne (SC.basicPrint printAtom) . unDefinition
+printDefinition (Definition mc sexpr) =
+  maybe (T.pack "") ((<> (T.pack "\n")) . T.pack) mc <> SC.encodeOne (SC.basicPrint printAtom) sexpr
 
 printAtom :: FAtom -> T.Text
 printAtom a =
