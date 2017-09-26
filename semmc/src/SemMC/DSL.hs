@@ -217,7 +217,7 @@ convertDefs = fromFoldable' . map convertDef
     convertDef (loc, e) =
       case loc of
         ParamLoc p -> SC.SCons (ident (pName p)) (SC.SCons (convertExpr e) SC.SNil)
-        LiteralLoc l -> SC.SCons (quoted l) (convertExpr e)
+        LiteralLoc l -> SC.SCons (quoted l) (SC.SCons (convertExpr e) SC.SNil)
 
 convertOperands :: [Parameter] -> SC.SExpr FAtom
 convertOperands = fromFoldable' . map paramToDecl
