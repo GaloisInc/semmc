@@ -22,6 +22,7 @@ library
                        SemMC.Concrete.Execution
                        SemMC.Concrete.Execution.SSH
                        SemMC.Constraints
+                       SemMC.DSL
                        SemMC.Formula
                        SemMC.Formula.Env
                        SemMC.Formula.Equivalence
