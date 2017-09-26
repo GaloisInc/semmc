@@ -31,6 +31,7 @@ import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
 import qualified Data.Map as Map
 import qualified Data.SCargot as SC
+import qualified Data.SCargot.Comments as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -99,7 +100,7 @@ parseAtom
   P.<|> uncurry ABV <$> parseBV
 
 parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
-parserLL = SC.mkParser parseAtom
+parserLL = SC.withLispComments (SC.mkParser parseAtom)
 
 parseLL :: T.Text -> Either String (SC.SExpr Atom)
 parseLL = SC.decodeOne parserLL
