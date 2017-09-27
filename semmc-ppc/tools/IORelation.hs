@@ -34,6 +34,7 @@ data Logging = Verbose | Quiet
 data Options = Options { oRelDir :: FilePath
                        , oNumThreads :: Int
                        , oTimeoutSeconds :: Int
+                       , oRemoteRunner :: FilePath
                        , oRemoteHost :: String
                        , oPrintLog :: Logging
                        }
@@ -51,6 +52,10 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.short 't'
                                             <> O.metavar "SECONDS"
                                             <> O.help "The number of seconds to wait for all responses from the remote runner" )
+                        <*> O.strOption ( O.long "remote-runner"
+                                        <> O.short 'R'
+                                        <> O.metavar "EXE"
+                                        <> O.help "The name of the remote runner (remote-runner.ppc32 or remote-runner.ppc64)" )
                         <*> O.strOption ( O.long "remote-host"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
@@ -84,7 +89,7 @@ mainWithOptions opt = do
                                , IOR.lcAssemble = PPC.assembleInstruction
                                , IOR.lcTestGen = CS.randomState (Proxy @PPC32.PPC) gen
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
-                               , IOR.lcTestRunner = CE.runRemote (oRemoteHost opt) PPC32.testSerializer
+                               , IOR.lcTestRunner = CE.runRemote (Just (oRemoteRunner opt)) (oRemoteHost opt) PPC32.testSerializer
                                , IOR.lcLog = logChan
                                , IOR.lcLogCfg = logCfg
                                }

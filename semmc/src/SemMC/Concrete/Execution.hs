@@ -29,6 +29,7 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.Foldable as F
 import           Data.Int ( Int32 )
 import qualified Data.Map.Strict as M
+import           Data.Maybe ( fromMaybe )
 import qualified Data.Time.Clock as T
 import           Data.Word ( Word8, Word16, Word64 )
 import qualified System.IO as IO
@@ -90,13 +91,15 @@ type TestRunner c i
 -- is expected to be in the @PATH@, and password-less auth is assumed.  It is
 -- also assumed that the @remote-runner@ executable is in the @PATH@ on the
 -- remote machine.
-runRemote :: String
+runRemote :: Maybe FilePath
+          -- ^ Optionally, a different name for the remote runner executable
+          -> String
           -- ^ The hostname to run test cases on
           -> TestSerializer c i
           -- ^ Functions for converting to and from machine states
           -> TestRunner c i
-runRemote hostName ts testCases testResults logMessages = do
-  ehdl <- SSH.ssh SSH.defaultSSHConfig hostName ["remote-runner"]
+runRemote mexe hostName ts testCases testResults logMessages = do
+  ehdl <- SSH.ssh SSH.defaultSSHConfig hostName [fromMaybe "remote-runner" mexe]
   case ehdl of
     Left err -> return (Just err)
     Right sshHdl -> do

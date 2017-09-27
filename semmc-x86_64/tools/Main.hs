@@ -20,7 +20,7 @@ main = do
   resChan <- C.newChan
   _ <- C.forkIO (printLogMessages logChan)
   _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- CE.runRemote hostname testSerializer caseChan resChan logChan
+  merr <- CE.runRemote Nothing hostname testSerializer caseChan resChan logChan
   case merr of
     Just err -> do
       IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)

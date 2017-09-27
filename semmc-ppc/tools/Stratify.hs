@@ -52,6 +52,7 @@ data Options = Options { oRelDir :: FilePath
                        , oParallelSynth :: Int
                        , oOpcodeTimeoutSeconds :: Int
                        , oRemoteTimeoutSeconds :: Int
+                       , oRemoteRunner :: FilePath
                        , oRemoteHost :: String
                        , oPrintLog :: Logging
                        }
@@ -113,6 +114,9 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.short 'T'
                                             <> O.metavar "SECONDS"
                                             <> O.help "The number of seconds to wait for all responses from the remote runner" )
+                        <*> O.strOption ( O.long "remote-runner"
+                                        <> O.metavar "EXE"
+                                        <> O.help "The name of the remote runner executable (remote-runner.ppc32 or remote-runner.ppc64" )
                         <*> O.strOption ( O.long "remote-host"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
@@ -172,7 +176,7 @@ mainWithOptions opts = do
                        , SST.opcodeTimeoutSeconds = oOpcodeTimeoutSeconds opts
                        , SST.parallelOpcodes = oParallelOpcodes opts
                        , SST.parallelSynth = oParallelSynth opts
-                       , SST.testRunner = CE.runRemote (oRemoteHost opts) serializer
+                       , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) serializer
                        , SST.remoteRunnerOutputChannel = logChan
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
