@@ -37,7 +37,7 @@ mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   D.createDirectoryIfMissing True (oManualDir opts)
   D.createDirectoryIfMissing True (oBaseDir opts)
-  F.forM_ B.manual $ \(opName, def) -> do
+  F.forM_ (B.manual 64) $ \(opName, def) -> do
     TIO.writeFile (oManualDir opts </> opName <.> "sem") (DSL.printDefinition def)
   F.forM_ B.base $ \(opName, def) -> do
     TIO.writeFile (oBaseDir opts </> opName <.> "sem") (DSL.printDefinition def)
