@@ -19,6 +19,7 @@ module SemMC.DSL (
   -- ** Arithmetic bitvector ops
   bvadd,
   bvsub,
+  bvmul,
   -- ** Bitwise bitvector ops
   bvxor,
   bvor,
@@ -26,6 +27,15 @@ module SemMC.DSL (
   bvshl,
   bvlshr,
   bvnot,
+  -- ** Bitwise bitvector comparisons
+  bvule,
+  bvult,
+  bvuge,
+  bvugt,
+  bvsle,
+  bvslt,
+  bvsge,
+  bvsgt,
   -- * Expressions
   Expr(..),
   Location(..),
@@ -173,6 +183,9 @@ bvadd = binBuiltin "bvadd"
 bvsub :: Expr -> Expr -> Expr
 bvsub = binBuiltin "bvsub"
 
+bvmul :: Expr -> Expr -> Expr
+bvmul = binBuiltin "bvmul"
+
 bvxor :: Expr -> Expr -> Expr
 bvxor = binBuiltin "bvxor"
 
@@ -187,6 +200,30 @@ bvshl = binBuiltin "bvshl"
 
 bvlshr :: Expr -> Expr -> Expr
 bvlshr = binBuiltin "bvlshr"
+
+bvult :: Expr -> Expr -> Expr
+bvult = binBuiltin "bvult"
+
+bvule :: Expr -> Expr -> Expr
+bvule = binBuiltin "bvule"
+
+bvugt :: Expr -> Expr -> Expr
+bvugt = binBuiltin "bvugt"
+
+bvuge :: Expr -> Expr -> Expr
+bvuge = binBuiltin "bvuge"
+
+bvslt :: Expr -> Expr -> Expr
+bvslt = binBuiltin "bvslt"
+
+bvsle :: Expr -> Expr -> Expr
+bvsle = binBuiltin "bvsle"
+
+bvsgt :: Expr -> Expr -> Expr
+bvsgt = binBuiltin "bvsgt"
+
+bvsge :: Expr -> Expr -> Expr
+bvsge = binBuiltin "bvsge"
 
 ite :: Expr -> Expr -> Expr -> Expr
 ite b t e = Builtin "ite" [b, t, e]

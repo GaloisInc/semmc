@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 -- | The definitions of the base and manual sets of formulas
 --
@@ -23,6 +24,9 @@ gprc = "Gprc"
 gprc_nor0 :: String
 gprc_nor0 = "Gprc_nor0"
 
+crrc :: String
+crrc = "Crrc"
+
 s16imm :: String
 s16imm = "S16imm"
 
@@ -42,6 +46,12 @@ lnk = "LNK"
 
 ctr :: String
 ctr = "CTR"
+
+cr :: String
+cr = "CR"
+
+xer :: String
+xer = "XER"
 
 memory :: String
 memory = "Mem"
@@ -144,25 +154,75 @@ base bitSize = runSem $ do
     let lhs = ite (isR0 (Param rA)) (LitBV bitSize 0x0) (Param rA)
     let imm = concat (Param si) (LitBV 16 0x0)
     defLoc (ParamLoc rT) (bvadd lhs (sext bitSize 32 imm))
+  defineOpcode "CMPDI" $ do
+    comment "Compare Immediate (D-form)"
+    comment "This variant is the double word variant (where L=1)"
+    fld <- param "fld" crrc
+    imm <- param "imm" s16imm
+    rA <- param "rA" gprc
+    input imm
+    input rA
+    let ximm = sext bitSize 16 (Param imm)
+    let newCR = cmpImm bvslt bvsgt (Param fld) ximm (Param rA)
+    defLoc (LiteralLoc cr) newCR
+  defineOpcode "CMPWI" $ do
+    comment "Compare Immediate (D-form)"
+    comment "This variant is the double word variant (where L=0)"
+    fld <- param "fld" crrc
+    imm <- param "imm" s16imm
+    rA <- param "rA" gprc
+    input imm
+    input rA
+    let ximm = sext bitSize 16 (Param imm)
+    let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
+    let newCR = cmpImm bvslt bvsgt (Param fld) ximm (sext bitSize 32 lowreg)
+    defLoc (LiteralLoc cr) newCR
+  defineOpcode "CMPLDI" $ do
+    comment "Compare Logical Immediate (D-form)"
+    comment "This variant is the double word variant (where L=1)"
+    fld <- param "fld" crrc
+    imm <- param "imm" s16imm
+    rA <- param "rA" gprc
+    input imm
+    input rA
+    let ximm = zext bitSize 16 (Param imm)
+    let newCR = cmpImm bvult bvugt (Param fld) ximm (Param rA)
+    defLoc (LiteralLoc cr) newCR
+  defineOpcode "CMPLWI" $ do
+    comment "Compare Logical Immediate (D-form)"
+    comment "This variant is the double word variant (where L=0)"
+    fld <- param "fld" crrc
+    imm <- param "imm" s16imm
+    rA <- param "rA" gprc
+    input imm
+    input rA
+    let ximm = zext bitSize 16 (Param imm)
+    let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
+    let newCR = cmpImm bvult bvugt (Param fld) ximm (zext bitSize 32 lowreg)
+    defLoc (LiteralLoc cr) newCR
   return ()
 
--- | Extract the @n@ low bits of a 64 bit register.
---
--- This is parameterized so that we can easily adjust the index numbering if we
--- have to in order to interface with crucible/macaw.  The bit numbering in PPC
--- is somewhat odd compared to other architectures.
-lowBits64 :: Int -> Expr -> Expr
-lowBits64 n = extract 63 (63 - n + 1)
-
-lowBits32 :: Int -> Expr -> Expr
-lowBits32 n = extract 31 (31 - n + 1)
-
--- | Mask out the high 32 bits of a 64 bit bitvector.
---
--- Again, this is factored out so that we can easily adjust the bit indexing if
--- necessary.
-maskHigh32 :: Expr -> Expr
-maskHigh32 = bvand (LitBV 64 0xFFFF0000)
+cmpImm :: (Expr -> Expr -> Expr)
+       -- ^ LT
+       -> (Expr -> Expr -> Expr)
+       -- ^ GT
+       -> Expr
+       -- ^ The crrc field
+       -> Expr
+       -- ^ The extended immediate (extended to full dword size)
+       -> Expr
+       -- ^ The register expression
+       -> Expr
+cmpImm lt gt fld ximm reg =
+  bvor (Loc cr) shiftedNibble
+  where
+    c = ite (lt reg ximm)
+            (LitBV 3 0b100)
+            (ite (gt reg ximm)
+                 (LitBV 3 0b010)
+                 (LitBV 3 0b001))
+    crnibble = concat c (xerBit SO (Loc xer))
+    shiftedNibble = bvshl (zext 32 4 crnibble) (bvmul (zext 32 3 (crToIndex fld)) (LitBV 32 0x4))
 
 pseudo :: Int -> [(String, Definition)]
 pseudo bitSize = runSem $ do
@@ -209,10 +269,60 @@ manual bitSize = runSem $ do
   --   defLoc (ParamLoc rT) (Loc memory)
   return ()
 
+-- Common operations
+
 -- | Smart sign extend (extend to the full word width, which is a parameter)
 sext :: Int -> Int -> Expr -> Expr
-sext fullWidth valWidth =
-  signExtend (fullWidth - valWidth)
+sext fullWidth valWidth e
+  | extendBy == 0 = e
+  | otherwise = signExtend extendBy e
+  where
+    extendBy = fullWidth - valWidth
+
+zext :: Int -> Int -> Expr -> Expr
+zext fullWidth valWidth e
+  | extendBy == 0 = e
+  | otherwise = zeroExtend extendBy e
+  where
+    extendBy = fullWidth - valWidth
+
+-- Helpers for endianness isolation
+
+data XERBit = OV
+            | CA
+            | SO
+            deriving (Eq, Ord, Show)
+
+xerBitNum :: XERBit -> Int
+xerBitNum b =
+  case b of
+    OV -> 33
+    SO -> 32
+    CA -> 34
+
+-- | Extract a named bit from the @XER@
+xerBit :: XERBit -> Expr -> Expr
+xerBit xb = extract (xerBitNum xb) (xerBitNum xb)
+
+-- | Extract the @n@ low bits of a 64 bit register.
+--
+-- This is parameterized so that we can easily adjust the index numbering if we
+-- have to in order to interface with crucible/macaw.  The bit numbering in PPC
+-- is somewhat odd compared to other architectures.
+lowBits64 :: Int -> Expr -> Expr
+lowBits64 n = extract 63 (63 - n + 1)
+
+lowBits32 :: Int -> Expr -> Expr
+lowBits32 n = extract 31 (31 - n + 1)
+
+-- | Mask out the high 32 bits of a 64 bit bitvector.
+--
+-- Again, this is factored out so that we can easily adjust the bit indexing if
+-- necessary.
+maskHigh32 :: Expr -> Expr
+maskHigh32 = bvand (LitBV 64 0xFFFF0000)
+
+-- Uninterpreted function helpers
 
 -- | Extract the base register from a memrix field
 memrixReg :: Expr -> Expr
@@ -222,6 +332,41 @@ memrixReg = uf "memrix_reg" . (:[])
 memrixOffset :: Expr -> Expr
 memrixOffset = uf "memrix_offset" . (:[])
 
+-- | An uninterpreted function that converts a CR register field reference
+-- (e.g. CR0) into a number.
+--
+-- Note that the result should be a 3 bit bitvector (representing field values
+-- 0-7)
+crToIndex :: Expr -> Expr
+crToIndex = uf "cr_to_index" . (:[])
+
+
 -- | An uninterpreted function that tests if the argument is zero
 isR0 :: Expr -> Expr
 isR0 = uf "is_r0" . (:[])
+
+{- Note [PPC Condition Register (CR)]
+
+The CR is 32 bits, which are usually addressed as eight 4-bit fields (CR0-CR7).
+
+ - CR0 is set as the implicit result of many fixed point operations
+ - CR1 is set as the implicit result of many floating point operations
+ - CR fields can be set as the result of various compare instructions
+
+Individual field bits are assigned based on comparison of the result of an
+operation (R) to a constant (C) (either via the compare instructions *or*
+against 0 when CR0 is implicitly set) as follows:
+
+| Bit | Name | Description               |
+|-----+------+---------------------------|
+|   0 | LT   | True if R < C             |
+|   1 | GT   | True if R > C             |
+|   2 | EQ   | True if R = C             |
+|   3 | SO   | Summary Overflow from XER |
+
+If we write out the semantics for the basic compare instructions, we should be
+in pretty good shape.  We can then write a specialized compare instruction as an
+intrinsic with its constant fixed to zero.  That would let us learn most of the
+dotted variants.
+
+-}
