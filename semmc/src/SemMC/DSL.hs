@@ -14,11 +14,17 @@ module SemMC.DSL (
   zeroExtend,
   signExtend,
   concat,
+  ite,
+  uf,
+  -- ** Arithmetic bitvector ops
   bvadd,
   bvsub,
+  -- ** Bitwise bitvector ops
   bvxor,
   bvor,
   bvand,
+  bvshl,
+  bvlshr,
   bvnot,
   -- * Expressions
   Expr(..),
@@ -156,6 +162,9 @@ input p = RWS.modify' $ \f -> f { fInputs = p : fInputs f }
 defLoc :: Location -> Expr -> SemM 'Def ()
 defLoc loc e = RWS.modify' $ \f -> f { fDefs = (loc, e) : fDefs f }
 
+uf :: String -> [Expr] -> Expr
+uf = UninterpretedFunc
+
 bvadd :: Expr -> Expr -> Expr
 bvadd = binBuiltin "bvadd"
 
@@ -170,6 +179,15 @@ bvor = binBuiltin "bvor"
 
 bvand :: Expr -> Expr -> Expr
 bvand = binBuiltin "bvand"
+
+bvshl :: Expr -> Expr -> Expr
+bvshl = binBuiltin "bvshl"
+
+bvlshr :: Expr -> Expr -> Expr
+bvlshr = binBuiltin "bvlshr"
+
+ite :: Expr -> Expr -> Expr -> Expr
+ite b t e = Builtin "ite" [b, t, e]
 
 -- | Bitwise not (complement)
 bvnot :: Expr -> Expr
@@ -285,7 +303,9 @@ data FAtom = AIdent String
 
 printDefinition :: Definition -> T.Text
 printDefinition (Definition mc sexpr) =
-  maybe (T.pack "") ((<> (T.pack "\n")) . T.pack) mc <> SC.encodeOne (SC.basicPrint printAtom) sexpr
+  maybe (T.pack "") wrap mc <> SC.encodeOne (SC.basicPrint printAtom) sexpr
+  where
+    wrap s = T.pack ";;" <> T.pack s <> T.pack "\n"
 
 printAtom :: FAtom -> T.Text
 printAtom a =
