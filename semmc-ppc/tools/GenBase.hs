@@ -50,7 +50,7 @@ mainWithOptions opts = do
   D.createDirectoryIfMissing True (oPseudoDir opts)
   F.forM_ (B.manual (oBitSize opts)) $ \(opName, def) -> do
     TIO.writeFile (oManualDir opts </> opName <.> "sem") (DSL.printDefinition def)
-  F.forM_ B.base $ \(opName, def) -> do
+  F.forM_ (B.base (oBitSize opts)) $ \(opName, def) -> do
     TIO.writeFile (oBaseDir opts </> opName <.> "sem") (DSL.printDefinition def)
   F.forM_ (B.pseudo (oBitSize opts)) $ \(opName, def) -> do
     TIO.writeFile (oPseudoDir opts </> opName <.> "sem") (DSL.printDefinition def)

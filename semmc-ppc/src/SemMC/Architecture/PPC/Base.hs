@@ -23,6 +23,9 @@ gprc = "Gprc"
 gprc_nor0 :: String
 gprc_nor0 = "Gprc_nor0"
 
+s16imm :: String
+s16imm = "S16imm"
+
 u2imm :: String
 u2imm = "U2imm"
 
@@ -63,10 +66,19 @@ xform3 = do
   input rB
   return (rA, rS, rB)
 
+dform :: SemM 'Def (Parameter, Parameter, Parameter)
+dform = do
+  rT <- param "rT" gprc
+  rA <- param "rA" gprc_nor0
+  si <- param "si" s16imm
+  input rA
+  input si
+  return (rT, rA, si)
+
 -- Defs
 
-base :: [(String, Definition)]
-base = runSem $ do
+base :: Int -> [(String, Definition)]
+base bitSize = runSem $ do
   defineOpcode "ADD4" $ do
     (rT, rA, rB) <- xoform3
     defLoc (ParamLoc rT) (bvadd (Param rA) (Param rB))
@@ -117,6 +129,21 @@ base = runSem $ do
     (rA, rS, rB) <- xform3
     let n = lowBits64 5 (Param rB)
     defLoc (ParamLoc rA) (maskHigh32 (bvlshr (Param rS) n))
+  defineOpcode "ADDI" $ do
+    comment "Add Immediate (D-form)"
+    comment "We hand wrote this formula because it is one of the few that"
+    comment "have special treatment of r0"
+    (rT, rA, si) <- dform
+    let lhs = ite (isR0 (Param rA)) (LitBV bitSize 0x0) (Param rA)
+    defLoc (ParamLoc rT) (bvadd lhs (sext bitSize 16 (Param si)))
+  defineOpcode "ADDIS" $ do
+    comment "Add Immediate Shifted (D-form)"
+    comment "Like 'ADDI', we hand wrote this formula because it is one of the few that"
+    comment "have special treatment of r0"
+    (rT, rA, si) <- dform
+    let lhs = ite (isR0 (Param rA)) (LitBV bitSize 0x0) (Param rA)
+    let imm = concat (Param si) (LitBV 16 0x0)
+    defLoc (ParamLoc rT) (bvadd lhs (sext bitSize 32 imm))
   return ()
 
 -- | Extract the @n@ low bits of a 64 bit register.
