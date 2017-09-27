@@ -82,7 +82,8 @@ data Formula = Formula { fName :: String
                        , fOperands :: Seq.Seq Parameter
                        , fInputs :: [Parameter]
                        , fDefs :: [(Location, Expr)]
-                       , fComment :: Maybe String
+                       , fComment :: Seq.Seq String
+                       -- ^ Comments stored as individual lines
                        }
              deriving (Show)
 
@@ -101,7 +102,7 @@ newtype SemM (t :: Phase) a = SemM { unSem :: RWS.RWS () (Seq.Seq Formula) Formu
 -- | Tags used as phantom types to prevent nested opcode definitions
 data Phase = Top | Def
 
-data Definition = Definition (Maybe String) (SC.SExpr FAtom)
+data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
   deriving (Show)
 
 -- | Run a semantics defining action and return the defined formulas.
@@ -116,7 +117,7 @@ runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () badFormula))
     -- this will never be used since 'defineOpcode' handles adding the result to
     -- the writer output.
     badFormula = Formula { fName = ""
-                         , fComment = Nothing
+                         , fComment = Seq.empty
                          , fOperands = Seq.empty
                          , fInputs = []
                          , fDefs = []
@@ -128,7 +129,7 @@ runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () badFormula))
 defineOpcode :: String -> SemM 'Def () -> SemM 'Top ()
 defineOpcode name (SemM def) = do
   let freshFormula = Formula { fName = name
-                             , fComment = Nothing
+                             , fComment = Seq.empty
                              , fOperands = Seq.empty
                              , fInputs = []
                              , fDefs = []
@@ -141,9 +142,10 @@ defineOpcode name (SemM def) = do
 
 -- | Add a descriptive comment to the output file
 --
--- Each call overwrites the previous comment
+-- Each call appends a new comment line.  Individual calls to comment should not
+-- contain newlines.
 comment :: String -> SemM 'Def ()
-comment c = RWS.modify' $ \f -> f { fComment = Just c }
+comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
 
 -- | Declare a named parameter; the string provided is used in the produced formula
 param :: String -> String -> SemM 'Def Parameter
@@ -303,9 +305,14 @@ data FAtom = AIdent String
 
 printDefinition :: Definition -> T.Text
 printDefinition (Definition mc sexpr) =
-  maybe (T.pack "") wrap mc <> SC.encodeOne (SC.basicPrint printAtom) sexpr
+  formatComment mc <> SC.encodeOne (SC.basicPrint printAtom) sexpr
+
+formatComment :: Seq.Seq String -> T.Text
+formatComment c
+  | Seq.null c = T.empty
+  | otherwise = T.pack $ unlines $ fmap formatLine (F.toList c)
   where
-    wrap s = T.pack ";;" <> T.pack s <> T.pack "\n"
+    formatLine l = printf ";; %s\n" l
 
 printAtom :: FAtom -> T.Text
 printAtom a =
