@@ -222,7 +222,7 @@ signExtend n e = TheoryFunc "sign_extend" [LitInt (fromIntegral n)] [e]
 
 -- | Concatenate two bitvectors
 concat :: Expr -> Expr -> Expr
-concat e1 e2 = TheoryFunc "concat" [] [e1, e2]
+concat e1 e2 = Builtin "concat" [e1, e2]
 
 
 -- SExpression conversion

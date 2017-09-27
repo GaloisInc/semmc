@@ -8,15 +8,26 @@
 -- we don't want to or cannot learn from them).
 module SemMC.Architecture.PPC.Base (
   base,
+  pseudo,
   manual
   ) where
 
+import Prelude hiding ( concat )
 import SemMC.DSL
 
 -- Types
 
 gprc :: String
 gprc = "Gprc"
+
+gprc_nor0 :: String
+gprc_nor0 = "Gprc_nor0"
+
+u2imm :: String
+u2imm = "U2imm"
+
+u4imm :: String
+u4imm = "U4imm"
 
 memrix :: String
 memrix = "Memrix"
@@ -116,12 +127,34 @@ base = runSem $ do
 lowBits64 :: Int -> Expr -> Expr
 lowBits64 n = extract 63 (63 - n + 1)
 
+lowBits32 :: Int -> Expr -> Expr
+lowBits32 n = extract 31 (31 - n + 1)
+
 -- | Mask out the high 32 bits of a 64 bit bitvector.
 --
 -- Again, this is factored out so that we can easily adjust the bit indexing if
 -- necessary.
 maskHigh32 :: Expr -> Expr
 maskHigh32 = bvand (LitBV 64 0xFFFF0000)
+
+pseudo :: Int -> [(String, Definition)]
+pseudo bitSize = runSem $ do
+  defineOpcode "Move" $ do
+    target <- param "target" gprc
+    source <- param "source" gprc_nor0
+    input source
+    defLoc (ParamLoc target) (Param source)
+  defineOpcode "ExtractByteGPR" $ do
+    target <- param "target" gprc
+    source <- param "source" gprc
+    n <- if bitSize == 32 then param "n" u2imm else param "n" u4imm
+    input source
+    input n
+    let shiftAmount = bvshl (Param n) (LitBV bitSize 0x3)
+    let shiftedInput = bvlshr (Param source) shiftAmount
+    let bits = if bitSize == 32 then lowBits32 8 shiftedInput else lowBits64 8 shiftedInput
+    let padding = if bitSize == 32 then LitBV 24 0x0 else LitBV 56 0x0
+    defLoc (ParamLoc target) (concat padding bits)
 
 manual :: Int -> [(String, Definition)]
 manual bitSize = runSem $ do
