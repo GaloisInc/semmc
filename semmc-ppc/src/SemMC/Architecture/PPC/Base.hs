@@ -177,6 +177,28 @@ base bitSize = runSem $ do
     let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
     let newCR = cmpImm bvslt bvsgt (Param fld) ximm (sext bitSize 32 lowreg)
     defLoc (LiteralLoc cr) newCR
+  defineOpcode "CMPD" $ do
+    comment "Compare (X-form)"
+    comment "Compare double word where L=1"
+    fld <- param "fld" crrc
+    rA <- param "rA" gprc
+    rB <- param "rB" gprc
+    input rA
+    input rB
+    let newCR = cmpImm bvslt bvsgt (Param fld) (Param rA) (Param rB)
+    defLoc (LiteralLoc cr) newCR
+  defineOpcode "CMPLW" $ do
+    comment "Compare (X-form)"
+    comment "Compare word (where L=0)"
+    fld <- param "fld" crrc
+    rA <- param "rA" gprc
+    rB <- param "rB" gprc
+    input rA
+    input rB
+    let lowa = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
+    let lowb = if bitSize == 32 then Param rB else lowBits64 32 (Param rB)
+    let newCR = cmpImm bvslt bvsgt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
+    defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLDI" $ do
     comment "Compare Logical Immediate (D-form)"
     comment "This variant is the double word variant (where L=1)"
@@ -199,6 +221,28 @@ base bitSize = runSem $ do
     let ximm = zext bitSize 16 (Param imm)
     let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
     let newCR = cmpImm bvult bvugt (Param fld) ximm (zext bitSize 32 lowreg)
+    defLoc (LiteralLoc cr) newCR
+  defineOpcode "CMPLD" $ do
+    comment "Compare Logical (X-form)"
+    comment "Compare double word (where L=1)"
+    fld <- param "fld" crrc
+    rA <- param "rA" gprc
+    rB <- param "rB" gprc
+    input rA
+    input rB
+    let newCR = cmpImm bvult bvugt (Param fld) (Param rA) (Param rB)
+    defLoc (LiteralLoc cr) newCR
+  defineOpcode "CMPLW" $ do
+    comment "Compare Logical (X-form)"
+    comment "Compare word (where L=0)"
+    fld <- param "fld" crrc
+    rA <- param "rA" gprc
+    rB <- param "rB" gprc
+    input rA
+    input rB
+    let lowa = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
+    let lowb = if bitSize == 32 then Param rB else lowBits64 32 (Param rB)
+    let newCR = cmpImm bvult bvugt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
     defLoc (LiteralLoc cr) newCR
   return ()
 
