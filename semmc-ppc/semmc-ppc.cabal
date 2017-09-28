@@ -20,6 +20,7 @@ library
                        SemMC.Architecture.PPC32.ConcreteState
                        SemMC.Architecture.PPC64.Location
                        SemMC.Architecture.PPC64.ConcreteState
+                       SemMC.Architecture.PPC.Base.Core
                        SemMC.Architecture.PPC.Pseudo
                        SemMC.Architecture.PPC.Shared
   build-depends:       base >= 4.9 && < 5
