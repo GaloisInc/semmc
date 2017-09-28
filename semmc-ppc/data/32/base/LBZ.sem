@@ -1,4 +1,0 @@
-((operands ((rT . 'Gprc)
-            (addr . 'Memri)))
- (in (addr 'Mem))
- (defs ((rT ((_ zero_extend 24) (select 'Mem addr))))))

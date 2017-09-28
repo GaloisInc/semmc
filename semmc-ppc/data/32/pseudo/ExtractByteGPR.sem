@@ -1,5 +1,4 @@
-((operands ((target . 'Gprc)
-            (source . 'Gprc)
-            (n . 'U2imm)))
- (in (source n))
- (defs ((target (concat #x000000 ((_ extract 7 0) (bvlshr source (bvshl n #x00000003))))))))
+((operands ((target . 'Gprc) (source . 'Gprc) (n . 'U2imm))) 
+  (in (n source))
+  (defs 
+    ((target (concat #x000000 ((_ extract 31 24) (bvlshr source (bvshl n #x00000003))))))))

@@ -1,3 +1,1 @@
-((operands ((gpr . 'Gprc))
- (in (gpr))
- (defs (('CTR gpr)))))
+((operands ((rA . 'Gprc))) (in (rA)) (defs (('CTR rA))))

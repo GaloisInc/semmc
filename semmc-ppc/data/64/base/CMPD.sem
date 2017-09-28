@@ -1,6 +1,6 @@
-;; Compare Logical (X-form)
+;; Compare (X-form)
 
-;; Compare word (where L=0)
+;; Compare double word where L=1
 
 ((operands ((fld . 'Crrc) (rA . 'Gprc) (rB . 'Gprc))) 
   (in ('CR rB rA))
@@ -11,6 +11,6 @@
          (bvshl 
            ((_ zero_extend 28) 
              (concat 
-               (ite (bvult rB rA) #b100 (ite (bvugt rB rA) #b010 #b001))
+               (ite (bvslt rB rA) #b100 (ite (bvsgt rB rA) #b010 #b001))
                ((_ extract 32 32) 'XER)))
            (bvmul ((_ zero_extend 29) fld) #x00000004)))))))

@@ -1,3 +1,0 @@
-((operands ((target . 'Absdirectbrtarget)))
- (in (target))
- (defs (('IP target))))

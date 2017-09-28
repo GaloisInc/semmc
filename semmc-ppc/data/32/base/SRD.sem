@@ -1,0 +1,3 @@
+;; Shift Right Doubleword (X-form)
+
+((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) (in (rB rS)) (defs ((rA (bvlshr rS ((_ extract 63 58) rB))))))

@@ -1,3 +1,0 @@
-((operands ((target . 'Directbrtarget)))
- (in (target))
- (defs (('IP target))))

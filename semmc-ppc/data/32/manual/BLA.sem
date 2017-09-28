@@ -1,4 +1,0 @@
-((operands ((target . 'Abscalltarget)))
- (in (target 'IP))
- (defs (('IP target)
-        ('LNK (bvadd 'IP #x00000004)))))

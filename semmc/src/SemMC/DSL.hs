@@ -7,6 +7,7 @@ module SemMC.DSL (
   defineOpcode,
   param,
   input,
+  inputLiteral,
   defLoc,
   comment,
   -- * Operations
@@ -90,7 +91,7 @@ data Location = ParamLoc Parameter
 
 data Formula = Formula { fName :: String
                        , fOperands :: Seq.Seq Parameter
-                       , fInputs :: [Parameter]
+                       , fInputs :: [Location]
                        , fDefs :: [(Location, Expr)]
                        , fComment :: Seq.Seq String
                        -- ^ Comments stored as individual lines
@@ -168,7 +169,10 @@ param name ty = do
 
 -- | Mark a parameter as an input
 input :: Parameter -> SemM 'Def ()
-input p = RWS.modify' $ \f -> f { fInputs = p : fInputs f }
+input p = RWS.modify' $ \f -> f { fInputs = ParamLoc p : fInputs f }
+
+inputLiteral :: String -> SemM 'Def ()
+inputLiteral l = RWS.modify' $ \f -> f { fInputs = LiteralLoc l : fInputs f }
 
 -- | Define a location as an expression
 defLoc :: Location -> Expr -> SemM 'Def ()
@@ -272,7 +276,7 @@ mkSExprs = map toSExpr . F.toList
 toSExpr :: Formula -> (String, Definition)
 toSExpr f = (fName f, Definition (fComment f) (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
 
-extractSExpr :: [Parameter] -> [Parameter] -> [(Location, Expr)] -> SC.SExpr FAtom
+extractSExpr :: [Parameter] -> [Location] -> [(Location, Expr)] -> SC.SExpr FAtom
 extractSExpr operands inputs defs =
   fromFoldable' [ SC.SCons (SC.SAtom (AIdent "operands")) (SC.SCons (convertOperands operands) SC.SNil)
                 , SC.SCons (SC.SAtom (AIdent "in")) (SC.SCons (convertInputs inputs) SC.SNil)
@@ -306,8 +310,13 @@ convertOperands = fromFoldable' . map paramToDecl
   where
     paramToDecl p = SC.SCons (ident (pName p)) (quoted (pType p))
 
-convertInputs :: [Parameter] -> SC.SExpr FAtom
-convertInputs = fromFoldable' . map (ident . pName)
+convertInputs :: [Location] -> SC.SExpr FAtom
+convertInputs = fromFoldable' . map locToExpr
+  where
+    locToExpr l =
+      case l of
+        ParamLoc p -> ident (pName p)
+        LiteralLoc s -> quoted s
 
 -- | Turn any 'Foldable' into an s-expression by transforming each element with
 -- the given function, then assembling as you would expect.

@@ -1,0 +1,19 @@
+;; Compare Logical Immediate (D-form)
+
+;; This variant is the double word variant (where L=1)
+
+((operands ((fld . 'Crrc) (imm . 'S16imm) (rA . 'Gprc))) 
+  (in ('CR rA imm))
+  (defs 
+    (('CR 
+       (bvor 
+         'CR
+         (bvshl 
+           ((_ zero_extend 28) 
+             (concat 
+               (ite 
+                 (bvult rA ((_ zero_extend 48) imm))
+                 #b100
+                 (ite (bvugt rA ((_ zero_extend 48) imm)) #b010 #b001))
+               ((_ extract 32 32) 'XER)))
+           (bvmul ((_ zero_extend 29) fld) #x00000004)))))))

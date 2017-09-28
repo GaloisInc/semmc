@@ -1,9 +1,9 @@
-;; Compare Logical (X-form)
+;; Compare Logical Immediate (D-form)
 
-;; Compare word (where L=0)
+;; This variant is the double word variant (where L=0)
 
-((operands ((fld . 'Crrc) (rA . 'Gprc) (rB . 'Gprc))) 
-  (in ('CR rB rA))
+((operands ((fld . 'Crrc) (imm . 'S16imm) (rA . 'Gprc))) 
+  (in ('CR rA imm))
   (defs 
     (('CR 
        (bvor 
@@ -13,13 +13,13 @@
              (concat 
                (ite 
                  (bvult 
-                   ((_ zero_extend 32) ((_ extract 63 32) rB))
-                   ((_ zero_extend 32) ((_ extract 63 32) rA)))
+                   ((_ zero_extend 32) ((_ extract 63 32) rA))
+                   ((_ zero_extend 48) imm))
                  #b100
                  (ite 
                    (bvugt 
-                     ((_ zero_extend 32) ((_ extract 63 32) rB))
-                     ((_ zero_extend 32) ((_ extract 63 32) rA)))
+                     ((_ zero_extend 32) ((_ extract 63 32) rA))
+                     ((_ zero_extend 48) imm))
                    #b010
                    #b001))
                ((_ extract 32 32) 'XER)))

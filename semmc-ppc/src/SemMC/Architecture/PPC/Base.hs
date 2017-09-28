@@ -24,6 +24,9 @@ gprc = "Gprc"
 gprc_nor0 :: String
 gprc_nor0 = "Gprc_nor0"
 
+g8rc :: String
+g8rc = "G8rc"
+
 crrc :: String
 crrc = "Crrc"
 
@@ -162,6 +165,7 @@ base bitSize = runSem $ do
     rA <- param "rA" gprc
     input imm
     input rA
+    inputLiteral cr
     let ximm = sext bitSize 16 (Param imm)
     let newCR = cmpImm bvslt bvsgt (Param fld) ximm (Param rA)
     defLoc (LiteralLoc cr) newCR
@@ -173,6 +177,7 @@ base bitSize = runSem $ do
     rA <- param "rA" gprc
     input imm
     input rA
+    inputLiteral cr
     let ximm = sext bitSize 16 (Param imm)
     let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
     let newCR = cmpImm bvslt bvsgt (Param fld) ximm (sext bitSize 32 lowreg)
@@ -185,6 +190,7 @@ base bitSize = runSem $ do
     rB <- param "rB" gprc
     input rA
     input rB
+    inputLiteral cr
     let newCR = cmpImm bvslt bvsgt (Param fld) (Param rA) (Param rB)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLW" $ do
@@ -195,6 +201,7 @@ base bitSize = runSem $ do
     rB <- param "rB" gprc
     input rA
     input rB
+    inputLiteral cr
     let lowa = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
     let lowb = if bitSize == 32 then Param rB else lowBits64 32 (Param rB)
     let newCR = cmpImm bvslt bvsgt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
@@ -207,6 +214,7 @@ base bitSize = runSem $ do
     rA <- param "rA" gprc
     input imm
     input rA
+    inputLiteral cr
     let ximm = zext bitSize 16 (Param imm)
     let newCR = cmpImm bvult bvugt (Param fld) ximm (Param rA)
     defLoc (LiteralLoc cr) newCR
@@ -218,6 +226,7 @@ base bitSize = runSem $ do
     rA <- param "rA" gprc
     input imm
     input rA
+    inputLiteral cr
     let ximm = zext bitSize 16 (Param imm)
     let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
     let newCR = cmpImm bvult bvugt (Param fld) ximm (zext bitSize 32 lowreg)
@@ -230,6 +239,7 @@ base bitSize = runSem $ do
     rB <- param "rB" gprc
     input rA
     input rB
+    inputLiteral cr
     let newCR = cmpImm bvult bvugt (Param fld) (Param rA) (Param rB)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLW" $ do
@@ -240,6 +250,7 @@ base bitSize = runSem $ do
     rB <- param "rB" gprc
     input rA
     input rB
+    inputLiteral cr
     let lowa = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
     let lowb = if bitSize == 32 then Param rB else lowBits64 32 (Param rB)
     let newCR = cmpImm bvult bvugt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
@@ -266,7 +277,7 @@ cmpImm lt gt fld ximm reg =
                  (LitBV 3 0b010)
                  (LitBV 3 0b001))
     crnibble = concat c (xerBit SO (Loc xer))
-    shiftedNibble = bvshl (zext 32 4 crnibble) (bvmul (zext 32 3 (crToIndex fld)) (LitBV 32 0x4))
+    shiftedNibble = bvshl (zext 32 4 crnibble) (bvmul (zext 32 3 fld) (LitBV 32 0x4))
 
 pseudo :: Int -> [(String, Definition)]
 pseudo bitSize = runSem $ do
@@ -290,10 +301,12 @@ pseudo bitSize = runSem $ do
     comment "SetCR0"
     comment "This pseudo-opcode sets the value of CR0 based on a comparison"
     comment "of the value in the input register against zero, as in CMPDI or CMPWI"
-    rA <- param "rA" gprc
+    rA <- param "rA" g8rc
+    inputLiteral cr
+    inputLiteral xer
     input rA
     let ximm = LitBV bitSize 0x0
-    let newCR = cmpImm bvslt bvsgt (Loc "CR0") ximm (Param rA)
+    let newCR = cmpImm bvslt bvsgt (LitBV 3 0) ximm (Param rA)
     defLoc (LiteralLoc cr) newCR
   return ()
 
@@ -391,8 +404,8 @@ memrixOffset = uf "memrix_offset" . (:[])
 --
 -- Note that the result should be a 3 bit bitvector (representing field values
 -- 0-7)
-crToIndex :: Expr -> Expr
-crToIndex = uf "cr_to_index" . (:[])
+-- crToIndex :: Expr -> Expr
+-- crToIndex = uf "cr_to_index" . (:[])
 
 
 -- | An uninterpreted function that tests if the argument is zero
