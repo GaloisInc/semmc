@@ -286,6 +286,16 @@ pseudo bitSize = runSem $ do
     let bits = if bitSize == 32 then lowBits32 8 shiftedInput else lowBits64 8 shiftedInput
     let padding = if bitSize == 32 then LitBV 24 0x0 else LitBV 56 0x0
     defLoc (ParamLoc target) (concat padding bits)
+  defineOpcode "SetSignedCR0" $ do
+    comment "SetCR0"
+    comment "This pseudo-opcode sets the value of CR0 based on a comparison"
+    comment "of the value in the input register against zero, as in CMPDI or CMPWI"
+    rA <- param "rA" gprc
+    input rA
+    let ximm = LitBV bitSize 0x0
+    let newCR = cmpImm bvslt bvsgt (Loc "CR0") ximm (Param rA)
+    defLoc (LiteralLoc cr) newCR
+  return ()
 
 manual :: Int -> [(String, Definition)]
 manual bitSize = runSem $ do

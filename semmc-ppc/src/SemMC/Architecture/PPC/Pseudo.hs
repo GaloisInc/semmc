@@ -46,6 +46,13 @@ data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
   -- rDest, rSrc, 0@, which is difficult for the synthesis to come up with
   -- randomly.
   Move :: PseudoOpcode PPC.Operand '["Gprc",  "Gprc_nor0"]
+  -- | Set the CR0 field based on the value in a register (the value is compared
+  -- against zero and part of the XER is pulled into CR0).
+  --
+  -- The comparison is signed, as this pseudo-op is designed to learn the @.@
+  -- variants of instructions which have an implicit signed comparison against
+  -- zero that populates CR0.
+  SetSignedCR0 :: PseudoOpcode PPC.Operand '["G8rc"]
 
 deriving instance Show (PseudoOpcode op sh)
 
@@ -65,6 +72,7 @@ instance HasRepr (PseudoOpcode op) SL.ShapeRepr where
   typeRepr ReplaceWordVR = knownRepr
   typeRepr ExtractWordVR = knownRepr
   typeRepr Move = knownRepr
+  typeRepr SetSignedCR0 = knownRepr
 
 instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
   arbitraryOperands gen op = case op of
@@ -73,6 +81,7 @@ instance D.ArbitraryOperands PseudoOpcode PPC.Operand where
     ReplaceWordVR  -> D.arbitraryShapedList gen
     ExtractWordVR  -> D.arbitraryShapedList gen
     Move           -> D.arbitraryShapedList gen
+    SetSignedCR0   -> D.arbitraryShapedList gen
 
 -- | An assembler for pseudo-instructions.
 --
@@ -154,3 +163,7 @@ ppcAssemblePseudo _proxy opcode oplist =
         (target :> source :> Nil) ->
           [ D.Instruction PPC.ADDI ( target :> PPC.S16imm 0 :> source :> Nil ) ]
 
+    SetSignedCR0 ->
+      case (oplist :: ShapedList PPC.Operand '["G8rc"]) of
+        (source :> Nil) ->
+          [ D.Instruction PPC.CMPDI ( PPC.Crrc (PPC.CRRC 0) :> PPC.S16imm64 0 :> source :> Nil ) ]
