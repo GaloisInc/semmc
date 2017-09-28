@@ -342,8 +342,11 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.Directbrtarget bt) = btVal bt
         operandValue' (PPC.F4rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
         operandValue' (PPC.F8rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
-        operandValue' (PPC.G8rc _) = error "Found a G8rc operand, but PPC64 not supported"
-        operandValue' (PPC.G8rc_nox0 _) = error "Found a G8rc_nox0 operand, but PPC64 not supported"
+        operandValue' (PPC.G8rc gpr) = locLookup (LocGPR gpr)
+        operandValue' (PPC.G8rc_nox0 (PPC.GPR gpr)) =
+          if gpr /= 0
+          then locLookup (LocGPR (PPC.GPR gpr))
+          else S.bvLit sym knownNat 0
         operandValue' (PPC.Gprc gpr) = locLookup (LocGPR gpr)
         operandValue' (PPC.Gprc_nor0 (PPC.GPR gpr)) =
           if gpr /= 0
