@@ -13,7 +13,7 @@ import qualified SemMC.Architecture.PPC.Base as B
 data Options = Options { oManualDir :: FilePath
                        , oBaseDir :: FilePath
                        , oPseudoDir :: FilePath
-                       , oBitSize :: Int
+                       , oBitSize :: B.BitSize
                        }
 
 optionsParser :: O.Parser Options
@@ -31,8 +31,8 @@ optionsParser = Options <$> O.strOption ( O.long "manual"
                                         <> O.help "The directory to store pseudo-operation formulas in" )
                         <*> O.option O.auto ( O.long "bit-size"
                                             <> O.short 's'
-                                            <> O.metavar "INT"
-                                            <> O.help "The bit size to use (32 or 64)" )
+                                            <> O.metavar "SIZE"
+                                            <> O.help "The bit size to use (Size32 or Size64)" )
 
 main :: IO ()
 main = O.execParser optParser >>= mainWithOptions

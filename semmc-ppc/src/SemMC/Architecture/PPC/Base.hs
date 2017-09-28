@@ -8,15 +8,26 @@
 -- different places (manual definitions are not included in the base set, since
 -- we don't want to or cannot learn from them).
 module SemMC.Architecture.PPC.Base (
+  BitSize(..),
   base,
   pseudo,
   manual
   ) where
 
 import Prelude hiding ( concat )
+import Control.Exception ( assert )
+import Control.Monad ( when )
 import SemMC.DSL
 
--- Types
+data BitSize = Size32
+             | Size64
+             deriving (Eq, Show, Read)
+
+bitSizeValue :: BitSize -> Int
+bitSizeValue Size32 = 32
+bitSizeValue Size64 = 64
+
+-- PPC Types
 
 gprc :: String
 gprc = "Gprc"
@@ -90,7 +101,7 @@ dform = do
 
 -- Defs
 
-base :: Int -> [(String, Definition)]
+base :: BitSize -> [(String, Definition)]
 base bitSize = runSem $ do
   defineOpcode "ADD4" $ do
     (rT, rA, rB) <- xoform3
@@ -147,14 +158,14 @@ base bitSize = runSem $ do
     comment "We hand wrote this formula because it is one of the few that"
     comment "have special treatment of r0"
     (rT, rA, si) <- dform
-    let lhs = ite (isR0 (Param rA)) (LitBV bitSize 0x0) (Param rA)
+    let lhs = ite (isR0 (Param rA)) (LitBV (bitSizeValue bitSize) 0x0) (Param rA)
     defLoc (ParamLoc rT) (bvadd lhs (sext bitSize 16 (Param si)))
   defineOpcode "ADDIS" $ do
     comment "Add Immediate Shifted (D-form)"
     comment "Like 'ADDI', we hand wrote this formula because it is one of the few that"
     comment "have special treatment of r0"
     (rT, rA, si) <- dform
-    let lhs = ite (isR0 (Param rA)) (LitBV bitSize 0x0) (Param rA)
+    let lhs = ite (isR0 (Param rA)) (LitBV (bitSizeValue bitSize) 0x0) (Param rA)
     let imm = concat (Param si) (LitBV 16 0x0)
     defLoc (ParamLoc rT) (bvadd lhs (sext bitSize 32 imm))
   defineOpcode "CMPDI" $ do
@@ -179,7 +190,7 @@ base bitSize = runSem $ do
     input rA
     inputLiteral cr
     let ximm = sext bitSize 16 (Param imm)
-    let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
+    let lowreg = lowBits bitSize 32 (Param rA)
     let newCR = cmpImm bvslt bvsgt (Param fld) ximm (sext bitSize 32 lowreg)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPD" $ do
@@ -202,8 +213,8 @@ base bitSize = runSem $ do
     input rA
     input rB
     inputLiteral cr
-    let lowa = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
-    let lowb = if bitSize == 32 then Param rB else lowBits64 32 (Param rB)
+    let lowa = lowBits bitSize 32 (Param rA)
+    let lowb = lowBits bitSize 32 (Param rB)
     let newCR = cmpImm bvslt bvsgt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLDI" $ do
@@ -228,7 +239,7 @@ base bitSize = runSem $ do
     input rA
     inputLiteral cr
     let ximm = zext bitSize 16 (Param imm)
-    let lowreg = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
+    let lowreg = lowBits bitSize 32 (Param rA)
     let newCR = cmpImm bvult bvugt (Param fld) ximm (zext bitSize 32 lowreg)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLD" $ do
@@ -251,8 +262,8 @@ base bitSize = runSem $ do
     input rA
     input rB
     inputLiteral cr
-    let lowa = if bitSize == 32 then Param rA else lowBits64 32 (Param rA)
-    let lowb = if bitSize == 32 then Param rB else lowBits64 32 (Param rB)
+    let lowa = lowBits bitSize 32 (Param rA)
+    let lowb = lowBits bitSize 32 (Param rB)
     let newCR = cmpImm bvult bvugt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
     defLoc (LiteralLoc cr) newCR
   return ()
@@ -277,9 +288,9 @@ cmpImm lt gt fld ximm reg =
                  (LitBV 3 0b010)
                  (LitBV 3 0b001))
     crnibble = concat c (xerBit SO (Loc xer))
-    shiftedNibble = bvshl (zext 32 4 crnibble) (bvmul (zext 32 3 fld) (LitBV 32 0x4))
+    shiftedNibble = bvshl (zext' 32 4 crnibble) (bvmul (zext' 32 3 fld) (LitBV 32 0x4))
 
-pseudo :: Int -> [(String, Definition)]
+pseudo :: BitSize -> [(String, Definition)]
 pseudo bitSize = runSem $ do
   defineOpcode "Move" $ do
     target <- param "target" gprc
@@ -289,13 +300,13 @@ pseudo bitSize = runSem $ do
   defineOpcode "ExtractByteGPR" $ do
     target <- param "target" gprc
     source <- param "source" gprc
-    n <- if bitSize == 32 then param "n" u2imm else param "n" u4imm
+    n <- if bitSize == Size32 then param "n" u2imm else param "n" u4imm
     input source
     input n
-    let shiftAmount = bvshl (Param n) (LitBV bitSize 0x3)
+    let shiftAmount = bvshl (Param n) (LitBV (bitSizeValue bitSize) 0x3)
     let shiftedInput = bvlshr (Param source) shiftAmount
-    let bits = if bitSize == 32 then lowBits32 8 shiftedInput else lowBits64 8 shiftedInput
-    let padding = if bitSize == 32 then LitBV 24 0x0 else LitBV 56 0x0
+    let bits = lowBits bitSize 8 shiftedInput
+    let padding = LitBV (bitSizeValue bitSize - 8) 0x0
     defLoc (ParamLoc target) (concat padding bits)
   defineOpcode "SetSignedCR0" $ do
     comment "SetCR0"
@@ -305,12 +316,12 @@ pseudo bitSize = runSem $ do
     inputLiteral cr
     inputLiteral xer
     input rA
-    let ximm = LitBV bitSize 0x0
+    let ximm = LitBV (bitSizeValue bitSize) 0x0
     let newCR = cmpImm bvslt bvsgt (LitBV 3 0) ximm (Param rA)
     defLoc (LiteralLoc cr) newCR
   return ()
 
-manual :: Int -> [(String, Definition)]
+manual :: BitSize -> [(String, Definition)]
 manual bitSize = runSem $ do
   defineOpcode "MTLR" $ do
     rA <- param "rA" gprc
@@ -338,16 +349,26 @@ manual bitSize = runSem $ do
 
 -- Common operations
 
--- | Smart sign extend (extend to the full word width, which is a parameter)
-sext :: Int -> Int -> Expr -> Expr
-sext fullWidth valWidth e
+-- | Smart sign extend (extend to the full word width, which is a parameter) up
+-- to the native width of registers
+sext :: BitSize -> Int -> Expr -> Expr
+sext bs = sext' (bitSizeValue bs)
+
+-- | Generalized sign extension to arbitrary bit width
+sext' :: Int -> Int -> Expr -> Expr
+sext' fullWidth valWidth e
   | extendBy == 0 = e
   | otherwise = signExtend extendBy e
   where
     extendBy = fullWidth - valWidth
 
-zext :: Int -> Int -> Expr -> Expr
-zext fullWidth valWidth e
+-- | Zero extension to the full native bit width of registers
+zext :: BitSize -> Int -> Expr -> Expr
+zext bs = zext' (bitSizeValue bs)
+
+-- | Generalized zero extension to arbitrary width
+zext' :: Int -> Int -> Expr -> Expr
+zext' fullWidth valWidth e
   | extendBy == 0 = e
   | otherwise = zeroExtend extendBy e
   where
@@ -381,6 +402,32 @@ lowBits64 n = extract 63 (63 - n + 1)
 
 lowBits32 :: Int -> Expr -> Expr
 lowBits32 n = extract 31 (31 - n + 1)
+
+lowBits128 :: Int -> Expr -> Expr
+lowBits128 n = extract 128 (128 - n + 1)
+
+-- | A wrapper around the two low bit extractors parameterized by bit size (it
+-- selects the appropriate extractor based on architecture size)
+lowBits :: BitSize -> Int -> Expr -> Expr
+lowBits bitSize n e
+  | bitSize == Size32 && n == 32 = e
+  | bitSize == Size32 = lowBits32 n e
+  | otherwise = lowBits64 n e
+
+highBits64 :: Int -> Expr -> Expr
+highBits64 n = extract 0 (n - 1)
+
+highBits32 :: Int -> Expr -> Expr
+highBits32 n = extract 0 (n - 1)
+
+highBits128 :: Int -> Expr -> Expr
+highBits128 n = extract 0 (n - 1)
+
+highBits :: BitSize -> Int -> Expr -> Expr
+highBits bitSize n e
+  | bitSize == Size32 && n == 32 = e
+  | bitSize == Size32 = highBits32 n e
+  | otherwise = highBits64 n e
 
 -- | Mask out the high 32 bits of a 64 bit bitvector.
 --
