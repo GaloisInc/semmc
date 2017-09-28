@@ -61,13 +61,13 @@ import           SemMC.Util ( allBoundVars, filterMapF )
 -- | A set of equivalence classes of programs
 data EquivalenceClasses a =
   EquivalenceClasses { unClasses :: Seq.Seq (EquivalenceClass a) }
-  deriving (Functor, F.Foldable, T.Traversable)
+  deriving (Show, Functor, F.Foldable, T.Traversable)
 
 data EquivalenceClass a =
   EquivalenceClass { ecPrograms :: Seq.Seq a
                    , ecRepresentative :: Int
                    }
-  deriving (Functor, F.Foldable, T.Traversable)
+  deriving (Show, Functor, F.Foldable, T.Traversable)
 
 equivalenceClass :: CP.CandidateProgram t arch -> EquivalenceClass (CP.CandidateProgram t arch)
 equivalenceClass p = EquivalenceClass { ecPrograms = Seq.singleton p

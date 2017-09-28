@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Stochastic.CandidateProgram (
   CandidateProgram(..),
   programFormula,
@@ -12,7 +14,6 @@ import qualified Data.Foldable as F
 import qualified Data.Sequence as Seq
 
 import qualified Data.Parameterized.Map as MapF
-
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.ShapedList as SL
 
@@ -33,6 +34,8 @@ data CandidateProgram t arch =
   CandidateProgram { cpInstructions :: [SynthInstruction arch]
                    , cpFormula :: F.Formula (Sym t) arch
                    }
+
+deriving instance (SynC arch) => Show (CandidateProgram t arch)
 
 -- | Convert an instruction into a 'F.Formula'
 instructionFormula :: (ArchitectureWithPseudo arch)

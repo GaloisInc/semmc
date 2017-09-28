@@ -152,6 +152,7 @@ finishStrataOne :: (SynC arch)
                 -> C.EquivalenceClasses (CP.CandidateProgram t arch)
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
+  L.logM L.Info ("Equivalence classes: " ++ show eqclasses)
   bestClass <- C.chooseClass eqclasses
   prog <- C.chooseProgram bestClass
   buildFormula op instr (CP.cpFormula prog)
