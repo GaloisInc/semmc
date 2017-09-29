@@ -23,6 +23,7 @@ module SemMC.Architecture.PPC.Base.Core (
   naturalBV,
   xoform3,
   xform3,
+  xform2,
   dform,
   -- * Shared
   naturalLitBV,
@@ -137,6 +138,13 @@ xform3 = do
   input rS
   input rB
   return (rA, rS, rB)
+
+xform2 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
+xform2 = do
+  rA <- param "rA" gprc naturalBV
+  rS <- param "rS" gprc naturalBV
+  input rS
+  return (rA, rS)
 
 dform :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 dform = do
