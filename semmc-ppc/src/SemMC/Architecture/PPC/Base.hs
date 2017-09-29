@@ -111,8 +111,8 @@ base bitSize = runSem $ do
     comment "Like 'ADDI', we hand wrote this formula because it is one of the few that"
     comment "have special treatment of r0"
     (rT, rA, si) <- dform
-    let lhs = ite (isR0 (Param rA)) (LitBV (bitSizeValue bitSize) 0x0) (Param rA)
-    let imm = concat (Param si) (LitBV 16 0x0)
+    let lhs = ite (isR0 (paramSize bitSize rA)) (LitBV (bitSizeValue bitSize) 0x0) (paramSize bitSize rA)
+    let imm = concat (paramSize' 16 si) (LitBV 16 0x0)
     defLoc (ParamLoc rT) (bvadd lhs (sext bitSize 32 imm))
   defineOpcode "CMPDI" $ do
     comment "Compare Immediate (D-form)"
@@ -123,8 +123,8 @@ base bitSize = runSem $ do
     input imm
     input rA
     inputLiteral cr
-    let ximm = sext bitSize 16 (Param imm)
-    let newCR = cmpImm bvslt bvsgt (Param fld) ximm (Param rA)
+    let ximm = sext bitSize 16 (paramSize' 16 imm)
+    let newCR = cmpImm bvslt bvsgt (paramSize' 3 fld) ximm (paramSize bitSize rA)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPWI" $ do
     comment "Compare Immediate (D-form)"
@@ -135,9 +135,9 @@ base bitSize = runSem $ do
     input imm
     input rA
     inputLiteral cr
-    let ximm = sext bitSize 16 (Param imm)
-    let lowreg = lowBits bitSize 32 (Param rA)
-    let newCR = cmpImm bvslt bvsgt (Param fld) ximm (sext bitSize 32 lowreg)
+    let ximm = sext bitSize 16 (paramSize' 16 imm)
+    let lowreg = lowBits bitSize 32 (paramSize bitSize rA)
+    let newCR = cmpImm bvslt bvsgt (paramSize' 3 fld) ximm (sext bitSize 32 lowreg)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPD" $ do
     comment "Compare (X-form)"
@@ -148,7 +148,7 @@ base bitSize = runSem $ do
     input rA
     input rB
     inputLiteral cr
-    let newCR = cmpImm bvslt bvsgt (Param fld) (Param rA) (Param rB)
+    let newCR = cmpImm bvslt bvsgt (paramSize' 3 fld) (paramSize bitSize rA) (paramSize bitSize rB)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLW" $ do
     comment "Compare (X-form)"
@@ -159,9 +159,9 @@ base bitSize = runSem $ do
     input rA
     input rB
     inputLiteral cr
-    let lowa = lowBits bitSize 32 (Param rA)
-    let lowb = lowBits bitSize 32 (Param rB)
-    let newCR = cmpImm bvslt bvsgt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
+    let lowa = lowBits bitSize 32 (paramSize bitSize rA)
+    let lowb = lowBits bitSize 32 (paramSize bitSize rB)
+    let newCR = cmpImm bvslt bvsgt (paramSize' 3 fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLDI" $ do
     comment "Compare Logical Immediate (D-form)"
@@ -172,8 +172,8 @@ base bitSize = runSem $ do
     input imm
     input rA
     inputLiteral cr
-    let ximm = zext bitSize 16 (Param imm)
-    let newCR = cmpImm bvult bvugt (Param fld) ximm (Param rA)
+    let ximm = zext bitSize 16 (paramSize' 16 imm)
+    let newCR = cmpImm bvult bvugt (paramSize' 3 fld) ximm (paramSize bitSize rA)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLWI" $ do
     comment "Compare Logical Immediate (D-form)"
@@ -184,9 +184,9 @@ base bitSize = runSem $ do
     input imm
     input rA
     inputLiteral cr
-    let ximm = zext bitSize 16 (Param imm)
-    let lowreg = lowBits bitSize 32 (Param rA)
-    let newCR = cmpImm bvult bvugt (Param fld) ximm (zext bitSize 32 lowreg)
+    let ximm = zext bitSize 16 (paramSize' 16 imm)
+    let lowreg = lowBits bitSize 32 (paramSize bitSize rA)
+    let newCR = cmpImm bvult bvugt (paramSize' 3 fld) ximm (zext bitSize 32 lowreg)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLD" $ do
     comment "Compare Logical (X-form)"
@@ -197,7 +197,7 @@ base bitSize = runSem $ do
     input rA
     input rB
     inputLiteral cr
-    let newCR = cmpImm bvult bvugt (Param fld) (Param rA) (Param rB)
+    let newCR = cmpImm bvult bvugt (paramSize' 3 fld) (paramSize bitSize rA) (paramSize bitSize rB)
     defLoc (LiteralLoc cr) newCR
   defineOpcode "CMPLW" $ do
     comment "Compare Logical (X-form)"
@@ -208,9 +208,9 @@ base bitSize = runSem $ do
     input rA
     input rB
     inputLiteral cr
-    let lowa = lowBits bitSize 32 (Param rA)
-    let lowb = lowBits bitSize 32 (Param rB)
-    let newCR = cmpImm bvult bvugt (Param fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
+    let lowa = lowBits bitSize 32 (paramSize bitSize rA)
+    let lowb = lowBits bitSize 32 (paramSize bitSize rB)
+    let newCR = cmpImm bvult bvugt (paramSize' 3 fld) (zext bitSize 32 lowa) (zext bitSize 32 lowb)
     defLoc (LiteralLoc cr) newCR
   return ()
 
@@ -220,15 +220,16 @@ pseudo bitSize = runSem $ do
     target <- param "target" gprc
     source <- param "source" gprc_nor0
     input source
-    defLoc (ParamLoc target) (Param source)
+    defLoc (ParamLoc target) (Param (EBV (bitSizeValue bitSize)) source)
   defineOpcode "ExtractByteGPR" $ do
     target <- param "target" gprc
     source <- param "source" gprc
     n <- if bitSize == Size32 then param "n" u2imm else param "n" u4imm
+    let nty = if bitSize == Size32 then EBV 2 else EBV 4
     input source
     input n
-    let shiftAmount = bvshl (Param n) (LitBV (bitSizeValue bitSize) 0x3)
-    let shiftedInput = bvlshr (Param source) shiftAmount
+    let shiftAmount = bvshl (Param nty n) (LitBV (bitSizeValue bitSize) 0x3)
+    let shiftedInput = bvlshr (Param (EBV (bitSizeValue bitSize)) source) shiftAmount
     let bits = lowBits bitSize 8 shiftedInput
     let padding = LitBV (bitSizeValue bitSize - 8) 0x0
     defLoc (ParamLoc target) (concat padding bits)
@@ -241,7 +242,7 @@ pseudo bitSize = runSem $ do
     inputLiteral xer
     input rA
     let ximm = LitBV (bitSizeValue bitSize) 0x0
-    let newCR = cmpImm bvslt bvsgt (LitBV 3 0) ximm (Param rA)
+    let newCR = cmpImm bvslt bvsgt (LitBV 3 0) ximm (Param (EBV (bitSizeValue bitSize)) rA)
     defLoc (LiteralLoc cr) newCR
   return ()
 
@@ -250,17 +251,17 @@ manual bitSize = runSem $ do
   defineOpcode "MTLR" $ do
     rA <- param "rA" gprc
     input rA
-    defLoc (LiteralLoc lnk) (Param rA)
+    defLoc (LiteralLoc lnk) (Param (EBV (bitSizeValue bitSize)) rA)
   defineOpcode "MFLR" $ do
     rA <- param "rA" gprc
-    defLoc (ParamLoc rA) (Loc lnk)
+    defLoc (ParamLoc rA) (Loc (EBV (bitSizeValue bitSize)) lnk)
   defineOpcode "MTCTR" $ do
     rA <- param "rA" gprc
     input rA
-    defLoc (LiteralLoc ctr) (Param rA)
+    defLoc (LiteralLoc ctr) (Param (EBV (bitSizeValue bitSize)) rA)
   defineOpcode "MFCTR" $ do
     rA <- param "rA" gprc
-    defLoc (ParamLoc rA) (Loc ctr)
+    defLoc (ParamLoc rA) (Loc (EBV (bitSizeValue bitSize)) ctr)
   -- defineOpcode "LD" do
   --   rT <- param "rT" gprc
   --   memRef <- param "memRef" memrix

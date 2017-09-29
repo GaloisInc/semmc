@@ -23,6 +23,8 @@ module SemMC.Architecture.PPC.Base.Core (
   xform3,
   dform,
   -- * Shared
+  paramSize,
+  paramSize',
   cmpImm,
   highBits,
   highBits32,
@@ -40,12 +42,13 @@ module SemMC.Architecture.PPC.Base.Core (
   zext,
   zext',
   -- * Uninterpreted Functions
-  isR0,
-  memrixOffset,
-  memrixReg
+  isR0 -- ,
+  -- memrixOffset,
+  -- memrixReg
   ) where
 
 import Prelude hiding ( concat )
+import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
 
 data BitSize = Size32
@@ -128,36 +131,46 @@ dform = do
   input si
   return (rT, rA, si)
 
-cmpImm :: (Expr -> Expr -> Expr)
+-- Smarter constructors
+
+paramSize :: BitSize -> Parameter -> Expr 'TBV
+paramSize bitSize = Param (EBV (bitSizeValue bitSize))
+
+paramSize' :: Int -> Parameter -> Expr 'TBV
+paramSize' n = Param (EBV n)
+
+-- Helpers
+
+cmpImm :: (Expr 'TBV -> Expr 'TBV -> Expr 'TBool)
        -- ^ LT
-       -> (Expr -> Expr -> Expr)
+       -> (Expr 'TBV -> Expr 'TBV -> Expr 'TBool)
        -- ^ GT
-       -> Expr
+       -> Expr 'TBV
        -- ^ The crrc field
-       -> Expr
+       -> Expr 'TBV
        -- ^ The extended immediate (extended to full dword size)
-       -> Expr
+       -> Expr 'TBV
        -- ^ The register expression
-       -> Expr
+       -> Expr 'TBV
 cmpImm lt gt fld ximm reg =
-  bvor (Loc cr) shiftedNibble
+  bvor (Loc (EBV 32) cr) shiftedNibble
   where
     c = ite (lt reg ximm)
             (LitBV 3 0b100)
             (ite (gt reg ximm)
                  (LitBV 3 0b010)
                  (LitBV 3 0b001))
-    crnibble = concat c (xerBit SO (Loc xer))
+    crnibble = concat c (xerBit SO (Loc (exprType reg) xer))
     shiftedNibble = bvshl (zext' 32 4 crnibble) (bvmul (zext' 32 3 fld) (LitBV 32 0x4))
 -- Common operations
 
 -- | Smart sign extend (extend to the full word width, which is a parameter) up
 -- to the native width of registers
-sext :: BitSize -> Int -> Expr -> Expr
+sext :: BitSize -> Int -> Expr 'TBV -> Expr 'TBV
 sext bs = sext' (bitSizeValue bs)
 
 -- | Generalized sign extension to arbitrary bit width
-sext' :: Int -> Int -> Expr -> Expr
+sext' :: Int -> Int -> Expr 'TBV -> Expr 'TBV
 sext' fullWidth valWidth e
   | extendBy == 0 = e
   | otherwise = signExtend extendBy e
@@ -165,11 +178,11 @@ sext' fullWidth valWidth e
     extendBy = fullWidth - valWidth
 
 -- | Zero extension to the full native bit width of registers
-zext :: BitSize -> Int -> Expr -> Expr
+zext :: BitSize -> Int -> Expr 'TBV -> Expr 'TBV
 zext bs = zext' (bitSizeValue bs)
 
 -- | Generalized zero extension to arbitrary width
-zext' :: Int -> Int -> Expr -> Expr
+zext' :: Int -> Int -> Expr 'TBV -> Expr 'TBV
 zext' fullWidth valWidth e
   | extendBy == 0 = e
   | otherwise = zeroExtend extendBy e
@@ -191,7 +204,7 @@ xerBitNum b =
     CA -> 34
 
 -- | Extract a named bit from the @XER@
-xerBit :: XERBit -> Expr -> Expr
+xerBit :: XERBit -> Expr 'TBV -> Expr 'TBV
 xerBit xb = extract (xerBitNum xb) (xerBitNum xb)
 
 -- | Extract the @n@ low bits of a 64 bit register.
@@ -199,33 +212,33 @@ xerBit xb = extract (xerBitNum xb) (xerBitNum xb)
 -- This is parameterized so that we can easily adjust the index numbering if we
 -- have to in order to interface with crucible/macaw.  The bit numbering in PPC
 -- is somewhat odd compared to other architectures.
-lowBits64 :: Int -> Expr -> Expr
+lowBits64 :: Int -> Expr 'TBV -> Expr 'TBV
 lowBits64 n = extract 63 (63 - n + 1)
 
-lowBits32 :: Int -> Expr -> Expr
+lowBits32 :: Int -> Expr 'TBV -> Expr 'TBV
 lowBits32 n = extract 31 (31 - n + 1)
 
-lowBits128 :: Int -> Expr -> Expr
+lowBits128 :: Int -> Expr 'TBV -> Expr 'TBV
 lowBits128 n = extract 128 (128 - n + 1)
 
 -- | A wrapper around the two low bit extractors parameterized by bit size (it
 -- selects the appropriate extractor based on architecture size)
-lowBits :: BitSize -> Int -> Expr -> Expr
+lowBits :: BitSize -> Int -> Expr 'TBV -> Expr 'TBV
 lowBits bitSize n e
   | bitSize == Size32 && n == 32 = e
   | bitSize == Size32 = lowBits32 n e
   | otherwise = lowBits64 n e
 
-highBits64 :: Int -> Expr -> Expr
+highBits64 :: Int -> Expr 'TBV -> Expr 'TBV
 highBits64 n = extract 0 (n - 1)
 
-highBits32 :: Int -> Expr -> Expr
+highBits32 :: Int -> Expr 'TBV -> Expr 'TBV
 highBits32 n = extract 0 (n - 1)
 
-highBits128 :: Int -> Expr -> Expr
+highBits128 :: Int -> Expr 'TBV -> Expr 'TBV
 highBits128 n = extract 0 (n - 1)
 
-highBits :: BitSize -> Int -> Expr -> Expr
+highBits :: BitSize -> Int -> Expr 'TBV -> Expr 'TBV
 highBits bitSize n e
   | bitSize == Size32 && n == 32 = e
   | bitSize == Size32 = highBits32 n e
@@ -235,18 +248,18 @@ highBits bitSize n e
 --
 -- Again, this is factored out so that we can easily adjust the bit indexing if
 -- necessary.
-maskHigh32 :: Expr -> Expr
+maskHigh32 :: Expr 'TBV -> Expr 'TBV
 maskHigh32 = bvand (LitBV 64 0xFFFF0000)
 
 -- Uninterpreted function helpers
 
 -- | Extract the base register from a memrix field
-memrixReg :: Expr -> Expr
-memrixReg = uf "memrix_reg" . (:[])
+-- memrixReg :: Expr tp -> Expr 'TBV
+-- memrixReg = uf "memrix_reg" . (:[])
 
--- | Extract the offset (DS field) of a memrix memory access
-memrixOffset :: Expr -> Expr
-memrixOffset = uf "memrix_offset" . (:[])
+-- -- | Extract the offset (DS field) of a memrix memory access
+-- memrixOffset :: Expr tp -> Expr 'TBV
+-- memrixOffset e = uf  "memrix_offset" . ((:[]) . Some)
 
 -- | An uninterpreted function that converts a CR register field reference
 -- (e.g. CR0) into a number.
@@ -257,6 +270,6 @@ memrixOffset = uf "memrix_offset" . (:[])
 -- crToIndex = uf "cr_to_index" . (:[])
 
 
--- | An uninterpreted function that tests if the argument is zero
-isR0 :: Expr -> Expr
-isR0 = uf "is_r0" . (:[])
+-- | An uninterpreted function that tests if the argument is register zero
+isR0 :: Expr 'TBV -> Expr 'TBool
+isR0 = uf EBool "is_r0" . ((:[]) . Some)
