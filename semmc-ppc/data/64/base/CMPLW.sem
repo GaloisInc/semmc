@@ -1,7 +1,5 @@
 ;; Compare Logical (X-form)
-
 ;; Compare word (where L=0)
-
 ((operands ((fld . 'Crrc) (rA . 'Gprc) (rB . 'Gprc))) 
   (in ('CR rB rA))
   (defs 

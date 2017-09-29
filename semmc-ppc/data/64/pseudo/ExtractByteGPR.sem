@@ -4,4 +4,4 @@
     ((target 
        (concat 
          #x00000000000000
-         ((_ extract 63 56) (bvlshr source (bvshl n #x0000000000000003))))))))
+         ((_ extract 63 56) (bvlshr source (bvshl ((_ zero_extend 60) n) #x0000000000000003))))))))

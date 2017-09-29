@@ -1,5 +1,7 @@
 ;; Shift Left Word (X-form)
-
 ((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) 
   (in (rB rS))
-  (defs ((rA (bvand #x00000000ffff0000 (bvshl rS ((_ extract 63 59) rB)))))))
+  (defs 
+    ((rA 
+       ((_ zero_extend 32) 
+         (bvshl ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB))))))))

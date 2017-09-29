@@ -1,0 +1,4 @@
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
+  (in (rB rA))
+  (defs 
+    ((rT ((_ extract 63 0) (bvmul ((_ sign_extend 64) rA) ((_ sign_extend 64) rB)))))))

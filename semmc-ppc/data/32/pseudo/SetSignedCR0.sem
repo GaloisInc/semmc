@@ -1,9 +1,6 @@
 ;; SetCR0
-
 ;; This pseudo-opcode sets the value of CR0 based on a comparison
-
 ;; of the value in the input register against zero, as in CMPDI or CMPWI
-
 ((operands ((rA . 'G8rc))) 
   (in (rA 'XER 'CR))
   (defs 
@@ -17,5 +14,5 @@
                  (bvslt rA #x00000000)
                  #b100
                  (ite (bvsgt rA #x00000000) #b010 #b001))
-               ((_ extract 32 32) 'XER)))
+               ((_ extract 0 0) 'XER)))
            (bvmul ((_ zero_extend 29) #b000) #x00000004)))))))
