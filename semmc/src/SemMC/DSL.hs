@@ -159,6 +159,12 @@ data Location tp = ParamLoc (Parameter tp)
                  | LiteralLoc (Literal tp)
               deriving (Show)
 
+locationType :: Location tp -> ExprType tp
+locationType loc =
+  case loc of
+    ParamLoc p -> pExprType p
+    LiteralLoc ll -> lExprType ll
+
 data Formula = Formula { fName :: String
                        , fOperands :: Seq.Seq (Some Parameter)
                        , fInputs :: [Some Location]
@@ -260,10 +266,13 @@ instance Definable Literal where
   asDefinable = LiteralLoc
 
 -- | Define a location as an expression
---
--- FIXME: Check that the type of the location and the expr match
-defLoc :: (Definable a) => a tp -> Expr tp -> SemM 'Def ()
-defLoc loc e = RWS.modify' $ \f -> f { fDefs = (Some (asDefinable loc), Some e) : fDefs f }
+defLoc :: (HasCallStack, Definable a) => a tp -> Expr tp -> SemM 'Def ()
+defLoc loc e
+  | locationType location == exprType e =
+    RWS.modify' $ \f -> f { fDefs = (Some location, Some e) : fDefs f }
+  | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType location)))
+  where
+    location = asDefinable loc
 
 uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
