@@ -89,38 +89,38 @@ memrix = "Memrix"
 
 -- Registers
 
-lnk :: (?bitSize :: BitSize) => Literal 'TBV
-lnk = Literal { lName = "LNK"
-              , lExprType = naturalBV
-              }
+lnk :: (?bitSize :: BitSize) => Location 'TBV
+lnk = LiteralLoc Literal { lName = "LNK"
+                         , lExprType = naturalBV
+                         }
 
-ctr :: (?bitSize :: BitSize) => Literal 'TBV
-ctr = Literal { lName = "CTR"
-              , lExprType = naturalBV
-              }
+ctr :: (?bitSize :: BitSize) => Location 'TBV
+ctr = LiteralLoc Literal { lName = "CTR"
+                         , lExprType = naturalBV
+                         }
 
 -- | The CR is always 32 bits
-cr :: Literal 'TBV
-cr = Literal { lName = "CR"
-             , lExprType = EBV 32
-             }
+cr :: Location 'TBV
+cr = LiteralLoc Literal { lName = "CR"
+                        , lExprType = EBV 32
+                        }
 
-xer :: (?bitSize :: BitSize) => Literal 'TBV
-xer = Literal { lName = "XER"
-              , lExprType = naturalBV
-              }
+xer :: (?bitSize :: BitSize) => Location 'TBV
+xer = LiteralLoc Literal { lName = "XER"
+                         , lExprType = naturalBV
+                         }
 
-memory :: Literal 'TMemory
-memory = Literal { lName = "Mem"
-                 , lExprType = EMemory
-                 }
+memory :: Location 'TMemory
+memory = LiteralLoc Literal { lName = "Mem"
+                            , lExprType = EMemory
+                            }
 
 -- Form helpers
 
 naturalBV :: (?bitSize :: BitSize) => ExprType 'TBV
 naturalBV = EBV (bitSizeValue ?bitSize)
 
-xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Parameter 'TBV, Parameter 'TBV, Parameter 'TBV)
+xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xoform3 = do
   rT <- param "rT" gprc naturalBV
   rA <- param "rA" gprc naturalBV
@@ -129,7 +129,7 @@ xoform3 = do
   input rB
   return (rT, rA, rB)
 
-xform3 :: (?bitSize :: BitSize) => SemM 'Def (Parameter 'TBV, Parameter 'TBV, Parameter 'TBV)
+xform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xform3 = do
   rA <- param "rA" gprc naturalBV
   rS <- param "rS" gprc naturalBV
@@ -138,7 +138,7 @@ xform3 = do
   input rB
   return (rA, rS, rB)
 
-dform :: (?bitSize :: BitSize) => SemM 'Def (Parameter 'TBV, Parameter 'TBV, Parameter 'TBV)
+dform :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 dform = do
   rT <- param "rT" gprc naturalBV
   rA <- param "rA" gprc_nor0 naturalBV
@@ -162,14 +162,14 @@ cmpImm :: (HasCallStack, ?bitSize :: BitSize)
        -- ^ The register expression
        -> Expr 'TBV
 cmpImm lt gt fld ximm reg =
-  bvor (LitLoc cr) shiftedNibble
+  bvor (Loc cr) shiftedNibble
   where
     c = ite (lt reg ximm)
             (LitBV 3 0b100)
             (ite (gt reg ximm)
                  (LitBV 3 0b010)
                  (LitBV 3 0b001))
-    crnibble = concat c (xerBit SO (LitLoc xer))
+    crnibble = concat c (xerBit SO (Loc xer))
     shiftedNibble = bvshl (zext' 32 crnibble) (bvmul (zext' 32 fld) (LitBV 32 0x4))
 
 -- Common operations

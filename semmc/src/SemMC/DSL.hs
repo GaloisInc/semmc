@@ -9,7 +9,6 @@ module SemMC.DSL (
   defineOpcode,
   param,
   input,
-  inputLiteral,
   defLoc,
   comment,
   -- * Operations
@@ -51,7 +50,6 @@ module SemMC.DSL (
   SemM,
   Phase(..),
   runSem,
-  Definable,
   Parameter,
   Definition,
   printDefinition
@@ -101,8 +99,7 @@ instance ShowF ExprType
 data Expr (tp :: ExprTag) where
   LitBV :: Int -> Integer -> Expr 'TBV
   LitInt :: Integer -> Expr 'TInt
-  LitLoc :: Literal tp -> Expr tp
-  Param :: Parameter tp -> Expr tp
+  Loc :: Location tp -> Expr tp
   -- | Built-in operations (e.g., bitvector ops)
   Builtin :: ExprType tp -> String -> [Some Expr] -> Expr tp
   -- | Functions provided by theory backends that are called with the underscore
@@ -119,8 +116,7 @@ exprType e =
   case e of
     LitBV w _ -> EBV w
     LitInt _ -> EInt
-    LitLoc ll -> lExprType ll
-    Param p -> pExprType p
+    Loc ll -> locationType ll
     Builtin t _ _ -> t
     TheoryFunc t _ _ _ -> t
     UninterpretedFunc t _ _ -> t
@@ -130,11 +126,8 @@ exprBVSize :: Expr 'TBV -> Int
 exprBVSize e =
   case e of
     LitBV w _ -> w
-    LitLoc ll ->
-      case lExprType ll of
-        EBV w -> w
-    Param p ->
-      case pExprType p of
+    Loc ll ->
+      case locationType ll of
         EBV w -> w
     Builtin (EBV w) _ _ -> w
     TheoryFunc (EBV w) _ _ _ -> w
@@ -240,39 +233,25 @@ comment :: String -> SemM 'Def ()
 comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
 
 -- | Declare a named parameter; the string provided is used in the produced formula
-param :: String -> String -> ExprType tp -> SemM 'Def (Parameter tp)
+param :: String -> String -> ExprType tp -> SemM 'Def (Location tp)
 param name ty ety = do
   let p = Parameter { pName = name
                     , pType = ty
                     , pExprType = ety
                     }
   RWS.modify' $ \f -> f { fOperands = fOperands f Seq.|> Some p }
-  return p
+  return (ParamLoc p)
 
 -- | Mark a parameter as an input
-input :: Parameter tp -> SemM 'Def ()
-input p = RWS.modify' $ \f -> f { fInputs = Some (ParamLoc p) : fInputs f }
-
-inputLiteral :: Literal tp -> SemM 'Def ()
-inputLiteral l = RWS.modify' $ \f -> f { fInputs = Some (LiteralLoc l) : fInputs f }
-
-class Definable a where
-  asDefinable :: a tp -> Location tp
-
-instance Definable Parameter where
-  asDefinable = ParamLoc
-
-instance Definable Literal where
-  asDefinable = LiteralLoc
+input :: Location tp -> SemM 'Def ()
+input loc = RWS.modify' $ \f -> f { fInputs = Some loc : fInputs f }
 
 -- | Define a location as an expression
-defLoc :: (HasCallStack, Definable a) => a tp -> Expr tp -> SemM 'Def ()
+defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemM 'Def ()
 defLoc loc e
-  | locationType location == exprType e =
-    RWS.modify' $ \f -> f { fDefs = (Some location, Some e) : fDefs f }
-  | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType location)))
-  where
-    location = asDefinable loc
+  | locationType loc == exprType e =
+    RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
+  | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
 
 uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
@@ -432,8 +411,10 @@ convertExpr (Some e) =
   case e of
     LitInt i -> int i
     LitBV w val -> SC.SAtom (ABV w val)
-    LitLoc ll -> quoted (lName ll)
-    Param p -> ident (pName p)
+    Loc loc ->
+      case loc of
+        ParamLoc p -> ident (pName p)
+        LiteralLoc ll -> quoted (lName ll)
     Builtin _ name params ->
       fromFoldable' (ident name : map convertExpr params)
     TheoryFunc _ name conParams appParams ->
