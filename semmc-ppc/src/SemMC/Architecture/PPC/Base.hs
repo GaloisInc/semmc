@@ -20,7 +20,9 @@ import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 import SemMC.Architecture.PPC.Base.Arithmetic
 import SemMC.Architecture.PPC.Base.Bitwise
+import SemMC.Architecture.PPC.Base.Branch
 import SemMC.Architecture.PPC.Base.Compare
+import SemMC.Architecture.PPC.Base.Special
 
 -- Defs
 
@@ -30,6 +32,7 @@ base bitSize = runSem $ do
   baseArithmetic
   baseBitwise
   baseCompare
+  baseSpecial
 
 pseudo :: BitSize -> [(String, Definition)]
 pseudo bitSize = runSem $ do
@@ -66,6 +69,7 @@ pseudo bitSize = runSem $ do
 manual :: BitSize -> [(String, Definition)]
 manual bitSize = runSem $ do
   let ?bitSize = bitSize
+  manualBranch
   defineOpcode "MTLR" $ do
     rA <- param "rA" gprc naturalBV
     input rA

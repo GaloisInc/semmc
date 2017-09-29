@@ -1,0 +1,4 @@
+;; Branch (I-form, AA=1, LK=1)
+((operands ((target . 'absdirectbrtarget))) 
+  (in (target))
+  (defs (('LNK (bvadd 'IP #x00000004)) ('IP ((_ sign_extend 6) (concat target #b00))))))

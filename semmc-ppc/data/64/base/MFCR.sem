@@ -1,0 +1,1 @@
+((operands ((rT . 'Gprc))) (in ('CR)) (defs ((rT ((_ zero_extend 32) 'CR)))))

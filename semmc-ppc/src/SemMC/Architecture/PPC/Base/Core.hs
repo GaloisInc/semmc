@@ -13,7 +13,10 @@ module SemMC.Architecture.PPC.Base.Core (
   u2imm,
   u4imm,
   memrix,
+  directbrtarget,
+  absdirectbrtarget,
   -- * Registers
+  ip,
   lnk,
   ctr,
   cr,
@@ -25,6 +28,7 @@ module SemMC.Architecture.PPC.Base.Core (
   xform3,
   xform2,
   dform,
+  iform,
   -- * Shared
   naturalLitBV,
   cmpImm,
@@ -73,6 +77,12 @@ gprc_nor0 = "Gprc_nor0"
 g8rc :: String
 g8rc = "G8rc"
 
+absdirectbrtarget :: String
+absdirectbrtarget = "absdirectbrtarget"
+
+directbrtarget :: String
+directbrtarget = "directbrtarget"
+
 crrc :: String
 crrc = "Crrc"
 
@@ -89,6 +99,11 @@ memrix :: String
 memrix = "Memrix"
 
 -- Registers
+
+ip :: (?bitSize :: BitSize) => Location 'TBV
+ip = LiteralLoc Literal { lName = "IP"
+                        , lExprType = naturalBV
+                        }
 
 lnk :: (?bitSize :: BitSize) => Location 'TBV
 lnk = LiteralLoc Literal { lName = "LNK"
@@ -154,6 +169,12 @@ dform = do
   input rA
   input si
   return (rT, rA, si)
+
+iform :: (?bitSize :: BitSize) => String -> SemM 'Def (Location 'TBV)
+iform tag = do
+  target <- param "target" tag (EBV 24)
+  input target
+  return target
 
 -- Helpers
 
