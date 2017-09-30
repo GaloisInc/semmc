@@ -18,6 +18,7 @@ module SemMC.DSL (
   concat,
   ite,
   uf,
+  locUF,
   -- ** Arithmetic bitvector ops
   bvadd,
   bvsub,
@@ -150,15 +151,19 @@ data Literal tp = Literal { lName :: String
                           }
                deriving (Show)
 
-data Location tp = ParamLoc (Parameter tp)
-                 | LiteralLoc (Literal tp)
-              deriving (Show)
+data Location tp where
+  ParamLoc :: Parameter tp -> Location tp
+  LiteralLoc :: Literal tp -> Location tp
+  LocationFunc :: ExprType tp -> String -> Location tp' -> Location tp
+
+deriving instance Show (Location tp)
 
 locationType :: Location tp -> ExprType tp
 locationType loc =
   case loc of
     ParamLoc p -> pExprType p
     LiteralLoc ll -> lExprType ll
+    LocationFunc t _ _ -> t
 
 data Formula = Formula { fName :: String
                        , fOperands :: Seq.Seq (Some Parameter)
@@ -255,8 +260,13 @@ defLoc loc e
     RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
   | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
 
+-- | Allow for user-defined functions over expressions
 uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
+
+-- | Allow for user-defined functions over locations
+locUF :: ExprType tp -> String -> Location tp' -> Location tp
+locUF = LocationFunc
 
 bvadd :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 bvadd = binBVBuiltin "bvadd"
@@ -413,10 +423,7 @@ convertExpr (Some e) =
   case e of
     LitInt i -> int i
     LitBV w val -> SC.SAtom (ABV w val)
-    Loc loc ->
-      case loc of
-        ParamLoc p -> ident (pName p)
-        LiteralLoc ll -> quoted (lName ll)
+    Loc loc -> convertLoc loc
     Builtin _ name params ->
       fromFoldable' (ident name : map convertExpr params)
     TheoryFunc _ name conParams appParams ->
@@ -424,13 +431,18 @@ convertExpr (Some e) =
     UninterpretedFunc _ name params ->
       fromFoldable' (fromFoldable' [ident "_", ident "call", string name] : map convertExpr params)
 
+convertLoc :: Location tp -> SC.SExpr FAtom
+convertLoc loc =
+  case loc of
+    ParamLoc p -> ident (pName p)
+    LiteralLoc ll -> quoted (lName ll)
+    LocationFunc _ func loc' ->
+      fromFoldable' [fromFoldable' [ident "_", ident "call", ident func], convertLoc loc']
+
 convertDefs :: [(Some Location, Some Expr)] -> SC.SExpr FAtom
 convertDefs = fromFoldable' . map convertDef
   where
-    convertDef (Some loc, e) =
-      case loc of
-        ParamLoc p -> SC.SCons (ident (pName p)) (SC.SCons (convertExpr e) SC.SNil)
-        LiteralLoc ll -> SC.SCons (quoted (lName ll)) (SC.SCons (convertExpr e) SC.SNil)
+    convertDef (Some loc, e) = SC.SCons (convertLoc loc) (SC.SCons (convertExpr e) SC.SNil)
 
 convertOperands :: [Some Parameter] -> SC.SExpr FAtom
 convertOperands = fromFoldable' . map paramToDecl
@@ -440,10 +452,7 @@ convertOperands = fromFoldable' . map paramToDecl
 convertInputs :: [Some Location] -> SC.SExpr FAtom
 convertInputs = fromFoldable' . map locToExpr
   where
-    locToExpr (Some l) =
-      case l of
-        ParamLoc p -> ident (pName p)
-        LiteralLoc ll -> quoted (lName ll)
+    locToExpr (Some l) = convertLoc l
 
 -- | Turn any 'Foldable' into an s-expression by transforming each element with
 -- the given function, then assembling as you would expect.

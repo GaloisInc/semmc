@@ -14,6 +14,7 @@ module SemMC.Architecture.PPC.Base.Core (
   u4imm,
   memrix,
   memri,
+  memrr,
   directbrtarget,
   absdirectbrtarget,
   -- * Registers
@@ -51,6 +52,8 @@ module SemMC.Architecture.PPC.Base.Core (
   isR0,
   memriReg,
   memriOffset,
+  memrrBaseReg,
+  memrrOffsetReg,
   readMem
   -- memrixOffset,
   -- memrixReg
@@ -104,6 +107,9 @@ memrix = "Memrix"
 
 memri :: String
 memri = "Memri"
+
+memrr :: String
+memrr = "Memrr"
 
 -- Registers
 
@@ -303,13 +309,23 @@ highBits n e
 -- memrixOffset :: Expr tp -> Expr 'TBV
 -- memrixOffset e = uf  "memrix_offset" . ((:[]) . Some)
 
-memriReg :: (?bitSize :: BitSize) => Expr 'TMemRef -> Expr 'TBV
-memriReg = uf naturalBV "memri_reg" . ((:[]) . Some)
+memriReg :: (?bitSize :: BitSize) => Location 'TMemRef -> Location 'TBV
+memriReg = locUF naturalBV "memri_reg"
 
 memriOffset :: Expr 'TMemRef
             -- ^ The memory ref expression
             -> Expr 'TBV
 memriOffset = uf (EBV 16) "memri_offset" . ((:[]) . Some)
+
+memrrBaseReg :: (?bitSize :: BitSize)
+             => Expr 'TMemRef
+             -> Expr 'TBV
+memrrBaseReg = uf naturalBV "memrr_base" . ((:[]) . Some)
+
+memrrOffsetReg :: (?bitSize :: BitSize)
+               => Expr 'TMemRef
+               -> Expr 'TBV
+memrrOffsetReg = uf naturalBV "memrr_offset" . ((:[]) . Some)
 
 -- | An uninterpreted function that converts a CR register field reference
 -- (e.g. CR0) into a number.
