@@ -78,10 +78,10 @@ g8rc :: String
 g8rc = "G8rc"
 
 absdirectbrtarget :: String
-absdirectbrtarget = "absdirectbrtarget"
+absdirectbrtarget = "Absdirectbrtarget"
 
 directbrtarget :: String
-directbrtarget = "directbrtarget"
+directbrtarget = "Directbrtarget"
 
 crrc :: String
 crrc = "Crrc"
