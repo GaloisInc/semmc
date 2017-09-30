@@ -77,6 +77,7 @@ data ExprTag = TBool
               | TFloat
               | TDouble
               | TMemory
+              | TMemRef
 
 data ExprType tp where
   -- | A type of bitvectors of a fixed width
@@ -86,6 +87,7 @@ data ExprType tp where
   EDouble :: ExprType 'TDouble
   EBool :: ExprType 'TBool
   EMemory :: ExprType 'TMemory
+  EMemRef :: ExprType 'TMemRef
 
 deriving instance Eq (ExprType tp)
 deriving instance Show (ExprType tp)

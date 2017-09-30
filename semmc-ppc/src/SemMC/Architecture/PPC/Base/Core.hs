@@ -13,6 +13,7 @@ module SemMC.Architecture.PPC.Base.Core (
   u2imm,
   u4imm,
   memrix,
+  memri,
   directbrtarget,
   absdirectbrtarget,
   -- * Registers
@@ -47,7 +48,10 @@ module SemMC.Architecture.PPC.Base.Core (
   zext,
   zext',
   -- * Uninterpreted Functions
-  isR0 -- ,
+  isR0,
+  memriReg,
+  memriOffset,
+  readMem
   -- memrixOffset,
   -- memrixReg
   ) where
@@ -97,6 +101,9 @@ u4imm = "U4imm"
 
 memrix :: String
 memrix = "Memrix"
+
+memri :: String
+memri = "Memri"
 
 -- Registers
 
@@ -296,6 +303,14 @@ highBits n e
 -- memrixOffset :: Expr tp -> Expr 'TBV
 -- memrixOffset e = uf  "memrix_offset" . ((:[]) . Some)
 
+memriReg :: (?bitSize :: BitSize) => Expr 'TMemRef -> Expr 'TBV
+memriReg = uf naturalBV "memri_reg" . ((:[]) . Some)
+
+memriOffset :: Expr 'TMemRef
+            -- ^ The memory ref expression
+            -> Expr 'TBV
+memriOffset = uf (EBV 16) "memri_offset" . ((:[]) . Some)
+
 -- | An uninterpreted function that converts a CR register field reference
 -- (e.g. CR0) into a number.
 --
@@ -304,6 +319,17 @@ highBits n e
 -- crToIndex :: Expr -> Expr
 -- crToIndex = uf "cr_to_index" . (:[])
 
+-- | Read from the pseudo-location "Memory"
+readMem :: (?bitSize :: BitSize)
+        => Expr 'TMemory
+        -- ^ The memory
+        -> Expr 'TBV
+        -- ^ The effective address to load
+        -> Int
+        -- ^ The number of bytes
+        -> Expr 'TBV
+readMem mem ea nBytes =
+  uf (EBV (8 * nBytes)) "read_mem" [Some mem, Some ea, Some (LitBV 32 (fromIntegral nBytes))]
 
 -- | An uninterpreted function that tests if the argument is register zero
 isR0 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
