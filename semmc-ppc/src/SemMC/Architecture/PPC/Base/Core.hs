@@ -1,5 +1,6 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 module SemMC.Architecture.PPC.Base.Core (
   BitSize(..),
@@ -54,6 +55,7 @@ module SemMC.Architecture.PPC.Base.Core (
   memriOffset,
   memrrBaseReg,
   memrrOffsetReg,
+  storeMem,
   readMem
   -- memrixOffset,
   -- memrixReg
@@ -352,6 +354,23 @@ readMem :: (?bitSize :: BitSize)
         -> Expr 'TBV
 readMem mem ea nBytes =
   uf (EBV (8 * nBytes)) "read_mem" [Some mem, Some ea, Some (LitBV 32 (fromIntegral nBytes))]
+
+-- | Define a write to memory; it takes a memory and returns a whole new memory.
+storeMem :: (?bitSize :: BitSize, HasCallStack)
+         => Expr 'TMemory
+         -- ^ The memory
+         -> Expr 'TBV
+         -- ^ The effective address to store at
+         -> Int
+         -- ^ The number of bytes to store
+         -> Expr 'TBV
+         -- ^ The bitvector value to store (size is checked)
+         -> Expr 'TMemory
+storeMem mem ea nBytes val
+  | EBV w <- exprType val
+  , w == nBytes * 8 =
+    uf EMemory "write_mem" [Some mem, Some ea, Some (LitInt (fromIntegral nBytes)), Some val]
+  | otherwise = error ("Invalid byte count to store value " ++ show val)
 
 -- | An uninterpreted function that tests if the argument is register zero
 isR0 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
