@@ -1,6 +1,6 @@
 ;; Store Byte with Update (D-form)
 ((operands ((rS . 'Gprc) (memref . 'Memri))) 
-  (in ())
+  (in ('Mem memref rS))
   (defs 
     ((((_ call memri_reg) memref) 
        (bvadd 

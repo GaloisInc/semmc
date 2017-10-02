@@ -1,6 +1,6 @@
 ;; Store Doubleword Indexed (X-form)
 ((operands ((rS . 'Gprc) (memref . 'Memrr))) 
-  (in ())
+  (in ('Mem memref rS))
   (defs 
     (('Mem 
        ((_ call "write_mem") 

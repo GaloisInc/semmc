@@ -1,6 +1,6 @@
 ;; Store Halfword with Update Indexed (X-form)
 ((operands ((rS . 'Gprc) (memref . 'Memrr))) 
-  (in ())
+  (in ('Mem memref rS))
   (defs 
     ((((_ call memrr_base) memref) (bvadd ((_ call memrr_base) memref) ((_ call "memrr_offset") memref))) 
       ('Mem 

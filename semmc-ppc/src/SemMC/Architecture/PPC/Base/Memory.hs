@@ -266,6 +266,9 @@ store :: (?bitSize :: BitSize)
 store nBytes = do
   rS <- param "rS" gprc naturalBV
   memref <- param "memref" memri EMemRef
+  input rS
+  input memref
+  input memory
   let rA = memriReg memref
   let disp = memriOffset 16 (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
@@ -281,6 +284,9 @@ storeDS :: (?bitSize :: BitSize)
 storeDS nBytes = do
   rS <- param "rS" gprc naturalBV
   memref <- param "memref" memri EMemRef
+  input rS
+  input memref
+  input memory
   let rA = memriReg memref
   let disp = memriOffset 14 (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
@@ -293,6 +299,9 @@ storeWithUpdate :: (?bitSize :: BitSize)
 storeWithUpdate nBytes = do
   rS <- param "rS" gprc naturalBV
   memref <- param "memref" memri EMemRef
+  input rS
+  input memref
+  input memory
   let rA = memriReg memref
   let disp = memriOffset 16 (Loc memref)
   let ea = bvadd (Loc rA) (sext disp)
@@ -305,6 +314,9 @@ storeWithUpdateDS :: (?bitSize :: BitSize)
 storeWithUpdateDS nBytes = do
   rS <- param "rS" gprc naturalBV
   memref <- param "memref" memri EMemRef
+  input rS
+  input memref
+  input memory
   let rA = memriReg memref
   let disp = memriOffset 14 (Loc memref)
   let ea = bvadd (Loc rA) (sext (concat disp (LitBV 2 0x0)))
@@ -317,6 +329,9 @@ storeIndexed :: (?bitSize :: BitSize)
 storeIndexed nBytes = do
   rS <- param "rS" gprc naturalBV
   memref <- param "memref" memrr EMemRef
+  input rS
+  input memref
+  input memory
   let rA = memrrBaseReg memref
   let rB = memrrOffsetReg (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
@@ -329,6 +344,9 @@ storeWithUpdateIndexed :: (?bitSize :: BitSize)
 storeWithUpdateIndexed nBytes = do
   rS <- param "rS" gprc naturalBV
   memref <- param "memref" memrr EMemRef
+  input rS
+  input memref
+  input memory
   let rA = memrrBaseReg memref
   let rB = memrrOffsetReg (Loc memref)
   let ea = bvadd (Loc rA) rB
