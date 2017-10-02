@@ -79,6 +79,9 @@ manualMemory = do
     defineOpcode "LD" $ do
       comment "Load Doubleword (DS-form)"
       loadAndExtendDS 8 id
+    defineOpcode "LDU" $ do
+      comment "Load Doubleword with Update (DS-form)"
+      loadAndUpdateDS 8 id
     defineOpcode "LDX" $ do
       comment "Load Doubleword Indexed (X-form)"
       loadIndexed 8 id
@@ -179,3 +182,19 @@ loadAndUpdate nBytes extend = do
   let ea = bvadd (Loc rA) (sext disp)
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
   defLoc rA ea
+
+loadAndUpdateDS :: (?bitSize :: BitSize)
+                => Int
+                -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                -> SemM 'Def ()
+loadAndUpdateDS nBytes extend = do
+  rT <- param "rT" gprc naturalBV
+  memref <- param "memref" memri EMemRef
+  input memory
+  input memref
+  let rA = memriReg memref
+  let disp = memriOffset 14 (Loc memref)
+  let ea = bvadd (Loc rA) (sext (concat disp (LitBV 2 0x0)))
+  defLoc rT (extend (readMem (Loc memory) ea nBytes))
+  defLoc rA ea
+
