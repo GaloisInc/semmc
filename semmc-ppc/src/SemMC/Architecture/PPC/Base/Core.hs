@@ -284,6 +284,7 @@ lowBits :: (HasCallStack, ?bitSize :: BitSize) => Int -> Expr 'TBV -> Expr 'TBV
 lowBits n e
   | ?bitSize == Size32 && n == 32 = e
   | ?bitSize == Size32 = lowBits32 n e
+  | ?bitSize == Size64 && n == 64 = e
   | otherwise = lowBits64 n e
 
 highBits64 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
@@ -299,6 +300,7 @@ highBits :: (HasCallStack, ?bitSize :: BitSize) => Int -> Expr 'TBV -> Expr 'TBV
 highBits n e
   | ?bitSize == Size32 && n == 32 = e
   | ?bitSize == Size32 = highBits32 n e
+  | ?bitSize == Size64 && n == 64 = e
   | otherwise = highBits64 n e
 
 -- Uninterpreted function helpers
