@@ -1,0 +1,15 @@
+;; Store Halfword Indexed (X-form)
+((operands ((rS . 'Gprc) (memref . 'Memrr))) 
+  (in ())
+  (defs 
+    (('Mem 
+       ((_ call "write_mem") 
+         'Mem
+         (bvadd 
+           (ite 
+             ((_ call "is_r0") ((_ call memrr_base) memref))
+             #x00000000
+             ((_ call memrr_base) memref))
+           ((_ call "memrr_offset") memref))
+         2
+         ((_ extract 31 16) rS))))))

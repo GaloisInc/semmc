@@ -1,0 +1,15 @@
+;; Store Word (D-form)
+((operands ((rS . 'Gprc) (memref . 'Memri))) 
+  (in ())
+  (defs 
+    (('Mem 
+       ((_ call "write_mem") 
+         'Mem
+         (bvadd 
+           (ite 
+             ((_ call "is_r0") ((_ call memri_reg) memref))
+             #x0000000000000000
+             ((_ call memri_reg) memref))
+           ((_ sign_extend 48) ((_ call "memri_offset") memref)))
+         4
+         ((_ extract 63 32) rS))))))

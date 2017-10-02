@@ -1,0 +1,16 @@
+;; Store Halfword with Update (D-form)
+((operands ((rS . 'Gprc) (memref . 'Memri))) 
+  (in ())
+  (defs 
+    ((((_ call memri_reg) memref) 
+       (bvadd 
+         ((_ call memri_reg) memref)
+         ((_ sign_extend 16) ((_ call "memri_offset") memref)))) 
+      ('Mem 
+        ((_ call "write_mem") 
+          'Mem
+          (bvadd 
+            ((_ call memri_reg) memref)
+            ((_ sign_extend 16) ((_ call "memri_offset") memref)))
+          2
+          ((_ extract 31 16) rS))))))
