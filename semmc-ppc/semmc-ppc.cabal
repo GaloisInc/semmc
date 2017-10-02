@@ -31,7 +31,7 @@ library
                        SemMC.Architecture.PPC.Shared
   build-depends:       base >= 4.9 && < 5
                      , mtl
-                     , parameterized-utils == 0.1.10
+                     , parameterized-utils >= 0.1.10 && < 0.2
                      , crucible == 0.3.1
                      , semmc
                      , dismantle-tablegen

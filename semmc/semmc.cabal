@@ -77,7 +77,7 @@ library
                        s-cargot >= 0.1 && < 0.2,
                        dismantle-tablegen,
                        crucible == 0.3.1,
-                       parameterized-utils == 0.1.10,
+                       parameterized-utils >= 0.1.10 && < 0.2,
                        process >= 1.4 && < 1.7,
                        async >= 2 && < 3,
                        time,
