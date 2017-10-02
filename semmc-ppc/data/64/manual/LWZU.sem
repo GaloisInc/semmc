@@ -1,0 +1,16 @@
+;; Load Word and Zero with Update (D-form)
+((operands ((rT . 'Gprc) (memref . 'Memri))) 
+  (in (memref 'Mem))
+  (defs 
+    ((((_ call memri_reg) memref) 
+       (bvadd 
+         ((_ call memri_reg) memref)
+         ((_ sign_extend 48) ((_ call "memri_offset") memref)))) 
+      (rT 
+        ((_ zero_extend 32) 
+          ((_ call "read_mem") 
+            'Mem
+            (bvadd 
+              ((_ call memri_reg) memref)
+              ((_ sign_extend 48) ((_ call "memri_offset") memref)))
+            #x00000004))))))

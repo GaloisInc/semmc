@@ -1,0 +1,11 @@
+;; Load Byte and Zero with Update Indexed (X-form)
+((operands ((rT . 'Gprc) (memref . 'Memrr))) 
+  (in ('Mem memref))
+  (defs 
+    ((((_ call memrr_base) memref) (bvadd ((_ call memrr_base) memref) ((_ call "memrr_offset") memref))) 
+      (rT 
+        ((_ zero_extend 56) 
+          ((_ call "read_mem") 
+            'Mem
+            (bvadd ((_ call memrr_base) memref) ((_ call "memrr_offset") memref))
+            #x00000001))))))

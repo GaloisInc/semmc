@@ -1,0 +1,15 @@
+;; Load Halfword Algebraic Indexed (X-form)
+((operands ((rT . 'Gprc) (memref . 'Memrr))) 
+  (in ('Mem memref))
+  (defs 
+    ((rT 
+       ((_ sign_extend 16) 
+         ((_ call "read_mem") 
+           'Mem
+           (bvadd 
+             (ite 
+               ((_ call "is_r0") ((_ call memrr_base) memref))
+               #x00000000
+               ((_ call memrr_base) memref))
+             ((_ call "memrr_offset") memref))
+           #x00000002))))))
