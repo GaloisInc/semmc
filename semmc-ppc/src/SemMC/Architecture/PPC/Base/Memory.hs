@@ -64,6 +64,9 @@ manualMemory = do
     comment "Load Word and Zero with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 4 zext
 
+  defineOpcode "LWA" $ do
+    comment "Load Word Algebraic (DS-form)"
+    loadAndExtendDS 4 sext
   defineOpcode "LWAX" $ do
     comment "Load Word Algebraic Indexed (X-form)"
     loadIndexed 4 sext
@@ -73,6 +76,9 @@ manualMemory = do
 
   -- The 64 bit variants never need extension, so we use id for the extension function.
   when (?bitSize == Size64) $ do
+    defineOpcode "LD" $ do
+      comment "Load Doubleword (DS-form)"
+      loadAndExtendDS 8 id
     defineOpcode "LDX" $ do
       comment "Load Doubleword Indexed (X-form)"
       loadIndexed 8 id
@@ -95,10 +101,29 @@ loadAndExtend nBytes extend = do
   input memref
   input memory
   let rA = memriReg memref
-  let disp = memriOffset (Loc memref)
+  let disp = memriOffset 16 (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b (sext disp)
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
+
+-- | This is a variant of 'loadAndExtend' where the displacement is concatenated
+-- on the right by two zeros.  These are the DS-forms that are used for LWA and
+-- LD only, for some reason.
+loadAndExtendDS :: (?bitSize :: BitSize)
+                => Int
+                -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                -> SemM 'Def ()
+loadAndExtendDS nBytes extend = do
+  rT <- param "rT" gprc naturalBV
+  memref <- param "memref" memri EMemRef
+  input memref
+  input memory
+  let rA = memriReg memref
+  let disp = memriOffset 14 (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b (sext (concat disp (LitBV 2 0x0)))
+  defLoc rT (extend (readMem (Loc memory) ea nBytes))
+
 
 -- | This variant computes the effective address based on registers (instead of
 -- an immediate displacement).
@@ -150,7 +175,7 @@ loadAndUpdate nBytes extend = do
   input memory
   input memref
   let rA = memriReg memref
-  let disp = memriOffset (Loc memref)
+  let disp = memriOffset 16 (Loc memref)
   let ea = bvadd (Loc rA) (sext disp)
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
   defLoc rA ea

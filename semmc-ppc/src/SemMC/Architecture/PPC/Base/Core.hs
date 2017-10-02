@@ -316,10 +316,12 @@ highBits n e
 memriReg :: (?bitSize :: BitSize) => Location 'TMemRef -> Location 'TBV
 memriReg = locUF naturalBV "memri_reg"
 
-memriOffset :: Expr 'TMemRef
+memriOffset :: Int
+            -- ^ The number of bits of the offset
+            -> Expr 'TMemRef
             -- ^ The memory ref expression
             -> Expr 'TBV
-memriOffset = uf (EBV 16) "memri_offset" . ((:[]) . Some)
+memriOffset osize = uf (EBV osize) "memri_offset" . ((:[]) . Some)
 
 memrrBaseReg :: (?bitSize :: BitSize)
              => Location 'TMemRef
