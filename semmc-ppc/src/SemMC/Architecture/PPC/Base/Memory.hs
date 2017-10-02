@@ -12,6 +12,66 @@ import SemMC.Architecture.PPC.Base.Core
 
 manualMemory :: (?bitSize :: BitSize) => SemM 'Top ()
 manualMemory = do
+  defineLoads
+  defineStores
+
+defineStores :: (?bitSize :: BitSize) => SemM 'Top ()
+defineStores = do
+  defineOpcode "STB" $ do
+    comment "Store Byte (D-form)"
+    store 1
+  defineOpcode "STBU" $ do
+    comment "Store Byte with Update (D-form)"
+    storeWithUpdate 1
+  defineOpcode "STBX" $ do
+    comment "Store Byte Indexed (X-form)"
+    storeIndexed 1
+  defineOpcode "STBUX" $ do
+    comment "Store Byte with Update Indexed (X-form)"
+    storeWithUpdateIndexed 1
+
+  defineOpcode "STH" $ do
+    comment "Store Halfword (D-form)"
+    store 2
+  defineOpcode "STHU" $ do
+    comment "Store Halfword with Update (D-form)"
+    storeWithUpdate 2
+  defineOpcode "STHX" $ do
+    comment "Store Halfword Indexed (X-form)"
+    storeIndexed 2
+  defineOpcode "STHUX" $ do
+    comment "Store Halfword with Update Indexed (X-form)"
+    storeWithUpdateIndexed 2
+
+  defineOpcode "STW" $ do
+    comment "Store Word (D-form)"
+    store 4
+  defineOpcode "STWU" $ do
+    comment "Store Word with Update (D-form)"
+    storeWithUpdate 4
+  defineOpcode "STWX" $ do
+    comment "Store Word Indexed (X-form)"
+    storeIndexed 4
+  defineOpcode "STWUX" $ do
+    comment "Store Word with Update Indexed (X-form)"
+    storeWithUpdateIndexed 4
+
+  when (?bitSize == Size64) $ do
+    defineOpcode "STD"$ do
+      comment "Store Doubleword (DS-form)"
+      storeDS 8
+    defineOpcode "STDU" $ do
+      comment "Store Doubleword with Update (DS-form)"
+      storeWithUpdateDS 8
+    defineOpcode "STDX" $ do
+      comment "Store Doubleword Indexed (X-form)"
+      storeIndexed 8
+    defineOpcode "STDUX" $ do
+      comment "Store Doubleword with Update Indexed (X-form)"
+      storeWithUpdateIndexed 8
+
+defineLoads :: (?bitSize :: BitSize) => SemM 'Top ()
+defineLoads = do
   defineOpcode "LBZ" $ do
     comment "Load Byte and Zero (D-form)"
     loadAndExtend 1 zext
@@ -90,7 +150,7 @@ manualMemory = do
       loadAndExtendWithUpdateIndexed 8 id
 
 
--- | Define a load and zero of the given number of bytes.
+-- | Define a load and zero of the given number of bytes (D-form)
 loadAndExtend :: (?bitSize :: BitSize)
               => Int
               -- ^ Number of bytes
@@ -198,3 +258,79 @@ loadAndUpdateDS nBytes extend = do
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
   defLoc rA ea
 
+
+-- | Define a store of @n@ bytes (D-form)
+store :: (?bitSize :: BitSize)
+      => Int
+      -> SemM 'Def ()
+store nBytes = do
+  rS <- param "rS" gprc naturalBV
+  memref <- param "memref" memri EMemRef
+  let rA = memriReg memref
+  let disp = memriOffset 16 (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b (sext disp)
+  defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
+
+-- | Define a store of @n@ bytes (DS-form)
+--
+-- This is just used for STD
+storeDS :: (?bitSize :: BitSize)
+        => Int
+        -> SemM 'Def ()
+storeDS nBytes = do
+  rS <- param "rS" gprc naturalBV
+  memref <- param "memref" memri EMemRef
+  let rA = memriReg memref
+  let disp = memriOffset 14 (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b (sext (concat disp (LitBV 2 0x0)))
+  defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
+
+storeWithUpdate :: (?bitSize :: BitSize)
+                => Int
+                -> SemM 'Def ()
+storeWithUpdate nBytes = do
+  rS <- param "rS" gprc naturalBV
+  memref <- param "memref" memri EMemRef
+  let rA = memriReg memref
+  let disp = memriOffset 16 (Loc memref)
+  let ea = bvadd (Loc rA) (sext disp)
+  defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
+  defLoc rA ea
+
+storeWithUpdateDS :: (?bitSize :: BitSize)
+                  => Int
+                  -> SemM 'Def ()
+storeWithUpdateDS nBytes = do
+  rS <- param "rS" gprc naturalBV
+  memref <- param "memref" memri EMemRef
+  let rA = memriReg memref
+  let disp = memriOffset 14 (Loc memref)
+  let ea = bvadd (Loc rA) (sext (concat disp (LitBV 2 0x0)))
+  defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
+  defLoc rA ea
+
+storeIndexed :: (?bitSize :: BitSize)
+             => Int
+             -> SemM 'Def ()
+storeIndexed nBytes = do
+  rS <- param "rS" gprc naturalBV
+  memref <- param "memref" memrr EMemRef
+  let rA = memrrBaseReg memref
+  let rB = memrrOffsetReg (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b rB
+  defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
+
+storeWithUpdateIndexed :: (?bitSize :: BitSize)
+                       => Int
+                       -> SemM 'Def ()
+storeWithUpdateIndexed nBytes = do
+  rS <- param "rS" gprc naturalBV
+  memref <- param "memref" memrr EMemRef
+  let rA = memrrBaseReg memref
+  let rB = memrrOffsetReg (Loc memref)
+  let ea = bvadd (Loc rA) rB
+  defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
+  defLoc rA ea
