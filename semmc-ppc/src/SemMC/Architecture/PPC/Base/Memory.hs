@@ -15,51 +15,71 @@ manualMemory = do
   defineOpcode "LBZ" $ do
     comment "Load Byte and Zero (D-form)"
     loadAndExtend 1 zext
-  defineOpcode "LHZ" $ do
-    comment "Load Halfword and Zero (D-form)"
-    loadAndExtend 2 zext
-  defineOpcode "LWZ" $ do
-    comment "Load Word and Zero (D-form)"
-    loadAndExtend 4 zext
-
   defineOpcode "LBZU" $ do
     comment "Load Byte and Zero with Update (D-form)"
     loadAndUpdate 1 zext
+  defineOpcode "LBZX" $ do
+    comment "Load Byte and Zero Indexed (X-form)"
+    loadIndexed 1 zext
+  defineOpcode "LBZUX" $ do
+    comment "Load Byte and Zero with Update Indexed (X-form)"
+    loadAndExtendWithUpdateIndexed 1 zext
+
+  defineOpcode "LHZ" $ do
+    comment "Load Halfword and Zero (D-form)"
+    loadAndExtend 2 zext
   defineOpcode "LHZU" $ do
     comment "Load Halfword and Zero with Update (D-form)"
     loadAndUpdate 2 zext
-  defineOpcode "LWZU" $ do
-    comment "Load Word and Zero with Update (D-form)"
-    loadAndUpdate 4 zext
+  defineOpcode "LHZX" $ do
+    comment "Load Halfword and Zero Indexed (X-form)"
+    loadIndexed 2 zext
+  defineOpcode "LHZUX" $ do
+    comment "Load Halfword and Zero with Update Indexed (X-form)"
+    loadAndExtendWithUpdateIndexed 2 zext
 
   defineOpcode "LHAU" $ do
     comment "Load Halfword Algebraic with Update (D-form)"
     loadAndUpdate 2 sext
-
   defineOpcode "LHA" $ do
     comment "Load Halfword Algebraic (D-form)"
     loadAndExtend 2 sext
+  defineOpcode "LHAX" $ do
+    comment "Load Halfword Algebraic Indexed (X-form)"
+    loadIndexed 2 sext
+  defineOpcode "LHAUX" $ do
+    comment "Load Halfword Algebraic with Update Indexed (X-form)"
+    loadAndExtendWithUpdateIndexed 2 sext
 
-  defineOpcode "LBZX" $ do
-    comment "Load Byte and Zero Indexed (X-form)"
-    loadAndZeroIndexed 1
-  defineOpcode "LHZX" $ do
-    comment "Load Halfword and Zero Indexed (X-form)"
-    loadAndZeroIndexed 2
+  defineOpcode "LWZ" $ do
+    comment "Load Word and Zero (D-form)"
+    loadAndExtend 4 zext
+  defineOpcode "LWZU" $ do
+    comment "Load Word and Zero with Update (D-form)"
+    loadAndUpdate 4 zext
   defineOpcode "LWZX" $ do
     comment "Load Word and Zero Indexed (X-form)"
-    loadAndZeroIndexed 4
+    loadIndexed 4 zext
+  defineOpcode "LWZUX" $ do
+    comment "Load Word and Zero with Update Indexed (X-form)"
+    loadAndExtendWithUpdateIndexed 4 zext
 
+  defineOpcode "LWAX" $ do
+    comment "Load Word Algebraic Indexed (X-form)"
+    loadIndexed 4 sext
+  defineOpcode "LWAUX" $ do
+    comment "Load Word Algebraic with Update Indexed (X-form)"
+    loadAndExtendWithUpdateIndexed 4 sext
+
+  -- The 64 bit variants never need extension, so we use id for the extension function.
   when (?bitSize == Size64) $ do
     defineOpcode "LDX" $ do
       comment "Load Doubleword Indexed (X-form)"
-      loadAndZeroIndexed 8
+      loadIndexed 8 id
+    defineOpcode "LDUX" $ do
+      comment "Load Doubleword and Update Indexed (X-form)"
+      loadAndExtendWithUpdateIndexed 8 id
 
-  -- when (?bitSize == Size64) $ do
-  --   defineOpcode "LD" $ do
-  --     -- Note that this is not the same as the L*Z forms above; the displacement
-  --     -- from the base is shorter (it can be due to alignment).
-  --     comment "Load Doubleword (DS-form)"
 
 -- | Define a load and zero of the given number of bytes.
 loadAndExtend :: (?bitSize :: BitSize)
@@ -85,17 +105,40 @@ loadAndExtend nBytes extend = do
 --
 -- This is listed as X-form, but uses different variable names.  Also, dismantle
 -- groups the second two operands into a single @Memrr@
-loadAndZeroIndexed :: (?bitSize :: BitSize) => Int -> SemM 'Def ()
-loadAndZeroIndexed nBytes = do
+loadIndexed :: (?bitSize :: BitSize)
+            => Int
+            -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+            -> SemM 'Def ()
+loadIndexed nBytes ext = do
   rT <- param "rT" gprc naturalBV
   memref <- param "memref" memrr EMemRef
   input memref
   input memory
-  let rA = memrrBaseReg (Loc memref)
+  let rA = memrrBaseReg memref
   let rB = memrrOffsetReg (Loc memref)
-  let b = ite (isR0 rA) (naturalLitBV 0x0) rA
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b rB
-  defLoc rT (zext (readMem (Loc memory) ea nBytes))
+  defLoc rT (ext (readMem (Loc memory) ea nBytes))
+
+-- | This is separate from 'loadIndexed' because it doesn't have special
+-- treatment of the case where rA is r0.
+--
+-- NOTE: There are special conditions: rA == r0 is invalid, and rA == rT is
+-- invalid.  Do we want to somehow make that explicit?
+loadAndExtendWithUpdateIndexed :: (?bitSize :: BitSize)
+                               => Int
+                               -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                               -> SemM 'Def ()
+loadAndExtendWithUpdateIndexed nBytes ext = do
+  rT <- param "rT" gprc naturalBV
+  memref <- param "memref" memrr EMemRef
+  input memref
+  input memory
+  let rA = memrrBaseReg memref
+  let rB = memrrOffsetReg (Loc memref)
+  let ea = bvadd (Loc rA) rB
+  defLoc rT (ext (readMem (Loc memory) ea nBytes))
+  defLoc rA ea
 
 loadAndUpdate :: (?bitSize :: BitSize)
               => Int

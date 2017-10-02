@@ -309,6 +309,10 @@ highBits n e
 -- memrixOffset :: Expr tp -> Expr 'TBV
 -- memrixOffset e = uf  "memrix_offset" . ((:[]) . Some)
 
+-- | This is a function over locations instead of expressions because we need to
+-- be able to call 'defLoc' on the result.
+--
+-- Note that we really need to accommodate this in the formula parser.
 memriReg :: (?bitSize :: BitSize) => Location 'TMemRef -> Location 'TBV
 memriReg = locUF naturalBV "memri_reg"
 
@@ -318,9 +322,9 @@ memriOffset :: Expr 'TMemRef
 memriOffset = uf (EBV 16) "memri_offset" . ((:[]) . Some)
 
 memrrBaseReg :: (?bitSize :: BitSize)
-             => Expr 'TMemRef
-             -> Expr 'TBV
-memrrBaseReg = uf naturalBV "memrr_base" . ((:[]) . Some)
+             => Location 'TMemRef
+             -> Location 'TBV
+memrrBaseReg = locUF naturalBV "memrr_base"
 
 memrrOffsetReg :: (?bitSize :: BitSize)
                => Expr 'TMemRef
