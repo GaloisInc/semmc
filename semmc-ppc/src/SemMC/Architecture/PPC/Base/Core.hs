@@ -39,12 +39,15 @@ module SemMC.Architecture.PPC.Base.Core (
   highBits32,
   highBits64,
   highBits128,
+  highBits',
   lowBits,
   lowBits32,
   lowBits64,
   lowBits128,
+  lowBits',
   XERBit(..),
   xerBit,
+  updateXER,
   sext,
   sext',
   zext,
@@ -264,6 +267,22 @@ xerBitNum b =
 xerBit :: (HasCallStack, ?bitSize :: BitSize) => XERBit -> Expr 'TBV -> Expr 'TBV
 xerBit xb = extract (xerBitNum xb) (xerBitNum xb)
 
+updateXER :: (HasCallStack, ?bitSize :: BitSize)
+          => XERBit
+          -- ^ The bit to update
+          -> Expr 'TBV
+          -- ^ The XER
+          -> Expr 'TBV
+          -- ^ The one-bit value to substitute in
+          -> Expr 'TBV
+updateXER xb xerExp newBit
+  | exprBVSize newBit == 1 = concat prefix (concat newBit suffix)
+  | otherwise = error ("Invalid XER bit size: " ++ show (exprBVSize newBit))
+  where
+    prefix = highBits (xerBitNum xb) xerExp
+    suffixLen = bitSizeValue ?bitSize - xerBitNum xb - 1
+    suffix = lowBits suffixLen xerExp
+
 -- | Extract the @n@ low bits of a 64 bit register.
 --
 -- This is parameterized so that we can easily adjust the index numbering if we
@@ -287,6 +306,13 @@ lowBits n e
   | ?bitSize == Size64 && n == 64 = e
   | otherwise = lowBits64 n e
 
+lowBits' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
+lowBits' n e
+  | nBits >= n = extract (nBits - 1) (nBits - n) e
+  | otherwise = error ("Unexpected small slice: " ++ show n ++ " from " ++ show e)
+  where
+    nBits = exprBVSize e
+
 highBits64 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
 highBits64 n = extract (n - 1) 0
 
@@ -302,6 +328,12 @@ highBits n e
   | ?bitSize == Size32 = highBits32 n e
   | ?bitSize == Size64 && n == 64 = e
   | otherwise = highBits64 n e
+
+-- | Take the @n@ high bits of the given value
+highBits' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
+highBits' n e
+  | exprBVSize e >= n = extract (n - 1) 0 e
+  | otherwise = error ("Unexpected small slice: " ++ show n ++ " from " ++ show e)
 
 -- Uninterpreted function helpers
 

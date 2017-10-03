@@ -67,6 +67,43 @@ baseArithmetic = do
     let lhs = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
     let imm = concat (Loc si) (LitBV 16 0x0)
     defLoc rT (bvadd lhs (sext imm))
+
+  defineOpcode "ADDC" $ do
+    comment "Add Carrying (XO-form)"
+    (rT, rA, rB) <- xoform3
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (Loc rB))
+    defLoc rT (lowBits' len eres)
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
+  defineOpcode "SUBFC" $ do
+    comment "Subtract From Carrying (XO-form)"
+    (rT, rA, rB) <- xoform3
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres0 = bvadd (bvnot (zext' (len + 1) (Loc rA))) (zext' (len + 1) (Loc rB))
+    let eres1 = bvadd eres0 (LitBV (len + 1) 0x1)
+    defLoc rT (lowBits' len eres1)
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
+  defineOpcode "ADDE" $ do
+    comment "Add Extended (XO-form)"
+    (rT, rA, rB) <- xoform3
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres0 = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (Loc rB))
+    let eres1 = bvadd eres0 (zext' (len + 1) (xerBit CA (Loc xer)))
+    defLoc rT (lowBits' len eres1)
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
+  defineOpcode "SUBFE" $ do
+    comment "Subtract From Extended (XO-form)"
+    (rT, rA, rB) <- xoform3
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres0 = bvadd (bvnot (zext' (len + 1) (Loc rA))) (zext' (len + 1) (Loc rB))
+    let eres1 = bvadd eres0 (zext' (len + 1) (xerBit CA (Loc xer)))
+    defLoc rT (lowBits' len eres1)
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
+
   when (?bitSize == Size64) $ do
     -- Not valid in 32 bit mode
     defineOpcode "MULLD" $ do
