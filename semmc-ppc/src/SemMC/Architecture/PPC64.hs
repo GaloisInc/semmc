@@ -456,7 +456,7 @@ loadBaseSet :: forall sym.
             -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
             -> IO (T.BaseSet sym PPC)
 loadBaseSet baseSetDir sym opcodes = do
-  weakenConstraint <$> F.loadFormulas sym toFP (C.Sub C.Dict) opcodes
+  weakenConstraint <$> F.loadFormulasFromFiles sym toFP (C.Sub C.Dict) opcodes
   where
     toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
     toFP op = baseSetDir </> showF op <.> "sem"
