@@ -78,6 +78,7 @@ executable semmc-ppc-test
                  crucible,
                  semmc,
                  semmc-ppc,
+                 parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc
 
