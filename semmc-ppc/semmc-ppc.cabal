@@ -19,8 +19,7 @@ library
                        SemMC.Architecture.PPC64.Opcodes
                        SemMC.Architecture.PPC.Base
                        SemMC.Architecture.PPC.Location
-  other-modules:       SemMC.Architecture.PPC32.Location
-                       SemMC.Architecture.PPC32.ConcreteState
+  other-modules:       SemMC.Architecture.PPC32.ConcreteState
                        SemMC.Architecture.PPC64.ConcreteState
                        SemMC.Architecture.PPC32.Opcodes.Internal
                        SemMC.Architecture.PPC64.Opcodes.Internal
