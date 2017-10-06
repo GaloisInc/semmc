@@ -35,6 +35,7 @@ module SemMC.Formula
 
     -- * SemMC.Formula.Parser
   , loadFormulas
+  , loadFormulasFromFiles
   , readFormula
   , readFormulaFromFile
 
@@ -64,7 +65,7 @@ import SemMC.Formula.Instantiate ( instantiateFormula,
                                    replaceVars,
                                    replaceLitVars
                                  )
-import SemMC.Formula.Load ( loadFormulas )
+import SemMC.Formula.Load ( loadFormulas, loadFormulasFromFiles )
 import SemMC.Formula.Parser ( readFormula, readFormulaFromFile, BuildOperandList )
 import SemMC.Formula.Printer ( printFormula, ConvertShape )
 import SemMC.Formula.Equivalence ( EquivalenceResult(..),

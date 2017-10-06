@@ -127,13 +127,13 @@ loadInitialState :: forall arch t
                  -- ^ IORelations
                  -> IO (SynEnv t arch)
 loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
-  let load dir = F.loadFormulas sym (mkFormulaFilename dir) (C.Sub C.Dict) allOpcodes
+  let load dir = F.loadFormulasFromFiles sym (mkFormulaFilename dir) (C.Sub C.Dict) allOpcodes
   baseSet <- dropKeyWitnesses <$> load (baseSetDir cfg)
   L.logIOWith (logConfig cfg) L.Info "Finished loading the base set"
   learnedSet <- dropKeyWitnesses <$> load (learnedSetDir cfg)
   L.logIOWith (logConfig cfg) L.Info "Finished loading learned set"
   let initialFormulas = MapF.union baseSet learnedSet
-  pseudoSet <- dropKeyWitnesses <$> F.loadFormulas sym (mkFormulaFilename (pseudoSetDir cfg)) (C.Sub C.Dict) pseudoOpcodes
+  pseudoSet <- dropKeyWitnesses <$> F.loadFormulasFromFiles sym (mkFormulaFilename (pseudoSetDir cfg)) (C.Sub C.Dict) pseudoOpcodes
   L.logIOWith (logConfig cfg) L.Info "Finished loading pseudo ops"
   let congruentOps' = MapF.foldrWithKey (addCongruentOp . P.RealOpcode) MapF.empty initialFormulas
       congruentOps = MapF.foldrWithKey (addCongruentOp . P.PseudoOpcode) congruentOps' pseudoSet
