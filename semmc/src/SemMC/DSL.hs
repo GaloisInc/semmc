@@ -1,13 +1,14 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 -- | A DSL to help defining instruction semantics to populate the base set (and manual set)
 module SemMC.DSL (
   -- * Definitions
   defineOpcode,
   param,
   input,
-  inputLiteral,
   defLoc,
   comment,
   -- * Operations
@@ -17,6 +18,7 @@ module SemMC.DSL (
   concat,
   ite,
   uf,
+  locUF,
   -- ** Arithmetic bitvector ops
   bvadd,
   bvsub,
@@ -39,7 +41,12 @@ module SemMC.DSL (
   bvsgt,
   -- * Expressions
   Expr(..),
+  ExprTag(..),
+  ExprType(..),
+  exprType,
+  exprBVSize,
   Location(..),
+  Literal(..),
   -- * Monad
   SemM,
   Phase(..),
@@ -48,6 +55,8 @@ module SemMC.DSL (
   Definition,
   printDefinition
   ) where
+
+import           GHC.Stack ( HasCallStack )
 
 import           Prelude hiding ( concat )
 
@@ -60,43 +69,115 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Text.Printf ( printf )
 
+import           Data.Parameterized.Classes ( ShowF(..) )
+import           Data.Parameterized.Some ( Some(..) )
+
+data ExprTag = TBool
+              | TBV
+              | TInt
+              | TFloat
+              | TDouble
+              | TMemory
+              | TMemRef
+
+data ExprType tp where
+  -- | A type of bitvectors of a fixed width
+  EBV :: Int -> ExprType 'TBV
+  EInt :: ExprType 'TInt
+  EFloat :: ExprType 'TFloat
+  EDouble :: ExprType 'TDouble
+  EBool :: ExprType 'TBool
+  EMemory :: ExprType 'TMemory
+  EMemRef :: ExprType 'TMemRef
+
+deriving instance Eq (ExprType tp)
+deriving instance Show (ExprType tp)
+
+instance ShowF ExprType
+
 -- | An expression representing an SMT formula.  It can reference parameters
-data Expr = LitBV Int Integer
-          | LitInt Integer
-          | Loc String
-          | Param Parameter
-          | Builtin String [Expr]
-          -- ^ Built-in operations
-          | TheoryFunc String [Expr] [Expr]
-          -- ^ Functions provided by SMT theories like extract and zero_extend;
-          -- the first list is the list of operands passed to the function
-          -- constructor, while the second list is the list of arguments that
-          -- the resulting function is applied to.
-          | UninterpretedFunc String [Expr]
-          -- ^ A call to an uninterpreted function, applied to the given arguments
-          deriving (Show)
+--
+-- Note that there are some GADT type tags -- unlike crucible, we never need to
+-- recover those.  They are only there to guard term construction.
+data Expr (tp :: ExprTag) where
+  LitBV :: Int -> Integer -> Expr 'TBV
+  LitInt :: Integer -> Expr 'TInt
+  Loc :: Location tp -> Expr tp
+  -- | Built-in operations (e.g., bitvector ops)
+  Builtin :: ExprType tp -> String -> [Some Expr] -> Expr tp
+  -- | Functions provided by theory backends that are called with the underscore
+  -- syntax in smt (e.g., extract and extend)
+  TheoryFunc :: ExprType tp -> String -> [Some Expr] -> [Some Expr] -> Expr tp
+  -- | User-defined uninterpreted functions called with the @call@ SMTLib
+  -- primitive
+  UninterpretedFunc :: ExprType tp -> String -> [Some Expr] -> Expr tp
+
+deriving instance Show (Expr tp)
+
+exprType :: Expr tp -> ExprType tp
+exprType e =
+  case e of
+    LitBV w _ -> EBV w
+    LitInt _ -> EInt
+    Loc ll -> locationType ll
+    Builtin t _ _ -> t
+    TheoryFunc t _ _ _ -> t
+    UninterpretedFunc t _ _ -> t
+
+-- | Get the size of the bitvector produced by the given expression
+exprBVSize :: Expr 'TBV -> Int
+exprBVSize e =
+  case e of
+    LitBV w _ -> w
+    Loc ll ->
+      case locationType ll of
+        EBV w -> w
+    Builtin (EBV w) _ _ -> w
+    TheoryFunc (EBV w) _ _ _ -> w
+    UninterpretedFunc (EBV w) _ _ -> w
 
 -- | A parameter and its type
 --
 -- The type is a string corresponding to an operand type from the architecture
--- (e.g., Gprc)
-data Parameter = Parameter { pName :: String
-                           , pType :: String
-                           }
+-- (e.g., Gprc), rather than an 'ExprType'.
+data Parameter tp = Parameter { pName :: String
+                              , pType :: String
+                              , pExprType :: ExprType tp
+                              }
                deriving (Show)
 
-data Location = ParamLoc Parameter
-              | LiteralLoc String
-              deriving (Show)
+data Literal tp = Literal { lName :: String
+                          , lExprType :: ExprType tp
+                          }
+               deriving (Show)
+
+data Location tp where
+  ParamLoc :: Parameter tp -> Location tp
+  LiteralLoc :: Literal tp -> Location tp
+  LocationFunc :: ExprType tp -> String -> Location tp' -> Location tp
+
+deriving instance Show (Location tp)
+
+locationType :: Location tp -> ExprType tp
+locationType loc =
+  case loc of
+    ParamLoc p -> pExprType p
+    LiteralLoc ll -> lExprType ll
+    LocationFunc t _ _ -> t
 
 data Formula = Formula { fName :: String
-                       , fOperands :: Seq.Seq Parameter
-                       , fInputs :: [Location]
-                       , fDefs :: [(Location, Expr)]
+                       , fOperands :: Seq.Seq (Some Parameter)
+                       , fInputs :: [Some Location]
+                       , fDefs :: [(Some Location, Some Expr)]
                        , fComment :: Seq.Seq String
                        -- ^ Comments stored as individual lines
                        }
              deriving (Show)
+
+instance ShowF Parameter
+instance ShowF Literal
+instance ShowF Location
+instance ShowF Expr
 
 -- | The state component of the monad is a Formula that is built up during a
 -- single definition; after the definition, it is added to the output sequence.
@@ -159,114 +240,168 @@ comment :: String -> SemM 'Def ()
 comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
 
 -- | Declare a named parameter; the string provided is used in the produced formula
-param :: String -> String -> SemM 'Def Parameter
-param name ty = do
+param :: String -> String -> ExprType tp -> SemM 'Def (Location tp)
+param name ty ety = do
   let p = Parameter { pName = name
                     , pType = ty
+                    , pExprType = ety
                     }
-  RWS.modify' $ \f -> f { fOperands = fOperands f Seq.|> p }
-  return p
+  RWS.modify' $ \f -> f { fOperands = fOperands f Seq.|> Some p }
+  return (ParamLoc p)
 
 -- | Mark a parameter as an input
-input :: Parameter -> SemM 'Def ()
-input p = RWS.modify' $ \f -> f { fInputs = ParamLoc p : fInputs f }
-
-inputLiteral :: String -> SemM 'Def ()
-inputLiteral l = RWS.modify' $ \f -> f { fInputs = LiteralLoc l : fInputs f }
+input :: Location tp -> SemM 'Def ()
+input loc = RWS.modify' $ \f -> f { fInputs = Some loc : fInputs f }
 
 -- | Define a location as an expression
-defLoc :: Location -> Expr -> SemM 'Def ()
-defLoc loc e = RWS.modify' $ \f -> f { fDefs = (loc, e) : fDefs f }
+defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemM 'Def ()
+defLoc loc e
+  | locationType loc == exprType e =
+    RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
+  | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
 
-uf :: String -> [Expr] -> Expr
+-- | Allow for user-defined functions over expressions
+uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
 
-bvadd :: Expr -> Expr -> Expr
-bvadd = binBuiltin "bvadd"
+-- | Allow for user-defined functions over locations
+locUF :: ExprType tp -> String -> Location tp' -> Location tp
+locUF = LocationFunc
 
-bvsub :: Expr -> Expr -> Expr
-bvsub = binBuiltin "bvsub"
+bvadd :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvadd = binBVBuiltin "bvadd"
 
-bvmul :: Expr -> Expr -> Expr
-bvmul = binBuiltin "bvmul"
+bvsub :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvsub = binBVBuiltin "bvsub"
 
-bvxor :: Expr -> Expr -> Expr
-bvxor = binBuiltin "bvxor"
+bvmul :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvmul = binBVBuiltin "bvmul"
 
-bvor :: Expr -> Expr -> Expr
-bvor = binBuiltin "bvor"
+bvxor :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvxor = binBVBuiltin "bvxor"
 
-bvand :: Expr -> Expr -> Expr
-bvand = binBuiltin "bvand"
+bvor :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvor = binBVBuiltin "bvor"
 
-bvshl :: Expr -> Expr -> Expr
-bvshl = binBuiltin "bvshl"
+bvand :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvand = binBVBuiltin "bvand"
 
-bvlshr :: Expr -> Expr -> Expr
-bvlshr = binBuiltin "bvlshr"
+bvshl :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvshl = binBVBuiltin "bvshl"
 
-bvult :: Expr -> Expr -> Expr
-bvult = binBuiltin "bvult"
+bvlshr :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvlshr = binBVBuiltin "bvlshr"
 
-bvule :: Expr -> Expr -> Expr
-bvule = binBuiltin "bvule"
+bvult :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvult = binTestBuiltin "bvult"
 
-bvugt :: Expr -> Expr -> Expr
-bvugt = binBuiltin "bvugt"
+bvule :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvule = binTestBuiltin "bvule"
 
-bvuge :: Expr -> Expr -> Expr
-bvuge = binBuiltin "bvuge"
+bvugt :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvugt = binTestBuiltin "bvugt"
 
-bvslt :: Expr -> Expr -> Expr
-bvslt = binBuiltin "bvslt"
+bvuge :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvuge = binTestBuiltin "bvuge"
 
-bvsle :: Expr -> Expr -> Expr
-bvsle = binBuiltin "bvsle"
+bvslt :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvslt = binTestBuiltin "bvslt"
 
-bvsgt :: Expr -> Expr -> Expr
-bvsgt = binBuiltin "bvsgt"
+bvsle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvsle = binTestBuiltin "bvsle"
 
-bvsge :: Expr -> Expr -> Expr
-bvsge = binBuiltin "bvsge"
+bvsgt :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvsgt = binTestBuiltin "bvsgt"
 
-ite :: Expr -> Expr -> Expr -> Expr
-ite b t e = Builtin "ite" [b, t, e]
+bvsge :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvsge = binTestBuiltin "bvsge"
+
+ite :: (HasCallStack) => Expr 'TBool -> Expr tp -> Expr tp -> Expr tp
+ite b t e
+  | t1 == t2 && tc == EBool = Builtin t1 "ite" [Some b, Some t, Some e]
+  | otherwise = error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show t1) (show t2) (show tc))
+  where
+    t1 = exprType t
+    t2 = exprType e
+    tc = exprType b
 
 -- | Bitwise not (complement)
-bvnot :: Expr -> Expr
-bvnot e = Builtin "bvnot" [e]
+bvnot :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+bvnot e = Builtin (exprType e) "bvnot" [Some e]
 
-binBuiltin :: String -> Expr -> Expr -> Expr
-binBuiltin s e1 e2 = Builtin s [e1, e2]
+binBVBuiltin :: (HasCallStack) => String -> Expr tp1 -> Expr tp1 -> Expr tp1
+binBVBuiltin s e1 e2
+  | t1 == t2 = Builtin t1 s [Some e1, Some e2]
+  | otherwise = error (printf "Type mismatch for bitvector builtin; lhs type is %s while rhs type is %s" (show t1) (show t2))
+  where
+    t1 = exprType e1
+    t2 = exprType e2
+
+binTestBuiltin :: (HasCallStack) => String -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+binTestBuiltin s e1 e2
+  | t1 == t2 = Builtin EBool s [Some e1, Some e2]
+  | otherwise = error (printf "Type mismatch for bitvector test builtin; lhs type is %s while rhs type is %s" (show t1) (show t2))
+  where
+    t1 = exprType e1
+    t2 = exprType e2
 
 -- | The extract operation defined on bitvectors in SMTLib
-extract :: Int
+--
+-- Checks to ensure that the requested bits are in bounds and marks the size of
+-- the new bitvector.
+--
+-- The SMTLib operation is:
+--
+--
+-- >      ((_ extract i j) (_ BitVec m) (_ BitVec n))
+-- >    where
+-- >    - i, j, m, n are numerals
+-- >    - m > i ≥ j ≥ 0,
+-- >    - n = i - j + 1
+extract :: (HasCallStack)
+        => Int
         -- ^ i
         -> Int
         -- ^ j
-        -> Expr
+        -> Expr 'TBV
         -- ^ A bitvector expression
-        -> Expr
-extract i j e = TheoryFunc "extract" [LitInt (fromIntegral i), LitInt (fromIntegral j)] [e]
+        -> Expr 'TBV
+extract i j e =
+  case exprType e of
+    EBV w ->
+      let newWidth = i - j + 1
+      in case w > i && i >= j && i >= 0 of
+        True -> TheoryFunc (EBV newWidth) "extract" [Some (LitInt (fromIntegral i)), Some (LitInt (fromIntegral j))] [Some e]
+        False -> error (printf "Invalid slice (%d,%d) of a %d-bit vector" i j w)
 
-zeroExtend :: Int
+-- | Zero extend a value (add the requested number of zeros on the left)
+--
+-- The new type of the expression reflects the increased bit width
+zeroExtend :: (HasCallStack)
+           => Int
            -- ^ The number of bits to extend by
-           -> Expr
+           -> Expr 'TBV
            -- ^ The expression to extend
-           -> Expr
-zeroExtend n e = TheoryFunc "zero_extend" [LitInt (fromIntegral n)] [e]
+           -> Expr 'TBV
+zeroExtend n e =
+  case exprType e of
+    EBV w -> TheoryFunc (EBV (w + n)) "zero_extend" [Some (LitInt (fromIntegral n))] [Some e]
 
-signExtend :: Int
+signExtend :: (HasCallStack)
+           => Int
            -- ^ The number of bits to extend by
-           -> Expr
+           -> Expr 'TBV
            -- ^ The expression to extend
-           -> Expr
-signExtend n e = TheoryFunc "sign_extend" [LitInt (fromIntegral n)] [e]
+           -> Expr 'TBV
+signExtend n e =
+  case exprType e of
+    EBV w -> TheoryFunc (EBV (w + n)) "sign_extend" [Some (LitInt (fromIntegral n))] [Some e]
 
 -- | Concatenate two bitvectors
-concat :: Expr -> Expr -> Expr
-concat e1 e2 = Builtin "concat" [e1, e2]
-
+concat :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+concat e1 e2 =
+  case (exprType e1, exprType e2) of
+    (EBV w1, EBV w2) -> Builtin (EBV (w1 + w2)) "concat" [Some e1, Some e2]
 
 -- SExpression conversion
 
@@ -276,47 +411,48 @@ mkSExprs = map toSExpr . F.toList
 toSExpr :: Formula -> (String, Definition)
 toSExpr f = (fName f, Definition (fComment f) (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
 
-extractSExpr :: [Parameter] -> [Location] -> [(Location, Expr)] -> SC.SExpr FAtom
+extractSExpr :: [Some Parameter] -> [Some Location] -> [(Some Location, Some Expr)] -> SC.SExpr FAtom
 extractSExpr operands inputs defs =
   fromFoldable' [ SC.SCons (SC.SAtom (AIdent "operands")) (SC.SCons (convertOperands operands) SC.SNil)
                 , SC.SCons (SC.SAtom (AIdent "in")) (SC.SCons (convertInputs inputs) SC.SNil)
                 , SC.SCons (SC.SAtom (AIdent "defs")) (SC.SCons (convertDefs defs) SC.SNil)
                 ]
 
-convertExpr :: Expr -> SC.SExpr FAtom
-convertExpr e =
+convertExpr :: Some Expr -> SC.SExpr FAtom
+convertExpr (Some e) =
   case e of
     LitInt i -> int i
     LitBV w val -> SC.SAtom (ABV w val)
-    Loc l -> quoted l
-    Param p -> ident (pName p)
-    Builtin name params ->
+    Loc loc -> convertLoc loc
+    Builtin _ name params ->
       fromFoldable' (ident name : map convertExpr params)
-    TheoryFunc name conParams appParams ->
+    TheoryFunc _ name conParams appParams ->
       fromFoldable' (fromFoldable' (ident "_" : ident name : map convertExpr conParams) : map convertExpr appParams)
-    UninterpretedFunc name params ->
+    UninterpretedFunc _ name params ->
       fromFoldable' (fromFoldable' [ident "_", ident "call", string name] : map convertExpr params)
 
-convertDefs :: [(Location, Expr)] -> SC.SExpr FAtom
+convertLoc :: Location tp -> SC.SExpr FAtom
+convertLoc loc =
+  case loc of
+    ParamLoc p -> ident (pName p)
+    LiteralLoc ll -> quoted (lName ll)
+    LocationFunc _ func loc' ->
+      fromFoldable' [fromFoldable' [ident "_", ident "call", ident func], convertLoc loc']
+
+convertDefs :: [(Some Location, Some Expr)] -> SC.SExpr FAtom
 convertDefs = fromFoldable' . map convertDef
   where
-    convertDef (loc, e) =
-      case loc of
-        ParamLoc p -> SC.SCons (ident (pName p)) (SC.SCons (convertExpr e) SC.SNil)
-        LiteralLoc l -> SC.SCons (quoted l) (SC.SCons (convertExpr e) SC.SNil)
+    convertDef (Some loc, e) = SC.SCons (convertLoc loc) (SC.SCons (convertExpr e) SC.SNil)
 
-convertOperands :: [Parameter] -> SC.SExpr FAtom
+convertOperands :: [Some Parameter] -> SC.SExpr FAtom
 convertOperands = fromFoldable' . map paramToDecl
   where
-    paramToDecl p = SC.SCons (ident (pName p)) (quoted (pType p))
+    paramToDecl (Some p) = SC.SCons (ident (pName p)) (quoted (pType p))
 
-convertInputs :: [Location] -> SC.SExpr FAtom
+convertInputs :: [Some Location] -> SC.SExpr FAtom
 convertInputs = fromFoldable' . map locToExpr
   where
-    locToExpr l =
-      case l of
-        ParamLoc p -> ident (pName p)
-        LiteralLoc s -> quoted s
+    locToExpr (Some l) = convertLoc l
 
 -- | Turn any 'Foldable' into an s-expression by transforming each element with
 -- the given function, then assembling as you would expect.
@@ -358,7 +494,7 @@ formatComment c
   | Seq.null c = T.empty
   | otherwise = T.pack $ unlines $ fmap formatLine (F.toList c)
   where
-    formatLine l = printf ";; %s\n" l
+    formatLine l = printf ";; %s" l
 
 printAtom :: FAtom -> T.Text
 printAtom a =

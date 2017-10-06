@@ -1,7 +1,5 @@
 ;; Compare Immediate (D-form)
-
 ;; This variant is the double word variant (where L=0)
-
 ((operands ((fld . 'Crrc) (imm . 'S16imm) (rA . 'Gprc))) 
   (in ('CR rA imm))
   (defs 
@@ -15,5 +13,5 @@
                  (bvslt rA ((_ sign_extend 16) imm))
                  #b100
                  (ite (bvsgt rA ((_ sign_extend 16) imm)) #b010 #b001))
-               ((_ extract 32 32) 'XER)))
+               ((_ extract 0 0) 'XER)))
            (bvmul ((_ zero_extend 29) fld) #x00000004)))))))

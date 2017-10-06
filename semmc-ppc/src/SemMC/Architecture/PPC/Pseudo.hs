@@ -52,7 +52,7 @@ data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
   -- The comparison is signed, as this pseudo-op is designed to learn the @.@
   -- variants of instructions which have an implicit signed comparison against
   -- zero that populates CR0.
-  SetSignedCR0 :: PseudoOpcode PPC.Operand '["G8rc"]
+  SetSignedCR0 :: PseudoOpcode PPC.Operand '["Gprc"]
 
 deriving instance Show (PseudoOpcode op sh)
 
@@ -164,6 +164,6 @@ ppcAssemblePseudo _proxy opcode oplist =
           [ D.Instruction PPC.ADDI ( target :> PPC.S16imm 0 :> source :> Nil ) ]
 
     SetSignedCR0 ->
-      case (oplist :: ShapedList PPC.Operand '["G8rc"]) of
+      case (oplist :: ShapedList PPC.Operand '["Gprc"]) of
         (source :> Nil) ->
           [ D.Instruction PPC.CMPDI ( PPC.Crrc (PPC.CRRC 0) :> PPC.S16imm64 0 :> source :> Nil ) ]

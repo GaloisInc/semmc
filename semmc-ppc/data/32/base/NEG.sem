@@ -1,0 +1,1 @@
+((operands ((rT . 'Gprc) (rA . 'Gprc))) (in (rA)) (defs ((rT (bvadd (bvnot rA) #x00000001)))))

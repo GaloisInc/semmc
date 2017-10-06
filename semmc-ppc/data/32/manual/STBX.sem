@@ -1,0 +1,15 @@
+;; Store Byte Indexed (X-form)
+((operands ((rS . 'Gprc) (memref . 'Memrr))) 
+  (in ('Mem memref rS))
+  (defs 
+    (('Mem 
+       ((_ call "write_mem") 
+         'Mem
+         (bvadd 
+           (ite 
+             ((_ call "is_r0") ((_ call memrr_base) memref))
+             #x00000000
+             ((_ call memrr_base) memref))
+           ((_ call "memrr_offset") memref))
+         1
+         ((_ extract 31 24) rS))))))

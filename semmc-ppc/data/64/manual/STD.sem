@@ -1,0 +1,15 @@
+;; Store Doubleword (DS-form)
+((operands ((rS . 'Gprc) (memref . 'Memri))) 
+  (in ('Mem memref rS))
+  (defs 
+    (('Mem 
+       ((_ call "write_mem") 
+         'Mem
+         (bvadd 
+           (ite 
+             ((_ call "is_r0") ((_ call memri_reg) memref))
+             #x0000000000000000
+             ((_ call memri_reg) memref))
+           ((_ sign_extend 48) (concat ((_ call "memri_offset") memref) #b00)))
+         8
+         rS)))))

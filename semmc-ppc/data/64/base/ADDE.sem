@@ -1,0 +1,18 @@
+;; Add Extended (XO-form)
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
+  (in ('XER rB rA))
+  (defs 
+    (('XER 
+       (concat 
+         ((_ extract 33 0) 'XER)
+         (concat 
+           ((_ extract 0 0) 
+             (bvadd 
+               (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB))
+               ((_ zero_extend 64) ((_ extract 34 34) 'XER))))
+           ((_ extract 63 35) 'XER)))) 
+      (rT 
+        ((_ extract 64 1) 
+          (bvadd 
+            (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB))
+            ((_ zero_extend 64) ((_ extract 34 34) 'XER))))))))

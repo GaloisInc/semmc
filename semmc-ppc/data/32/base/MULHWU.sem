@@ -1,0 +1,5 @@
+;; Multiply High Word Unsigned (XO-form)
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
+  (in (rB rA))
+  (defs 
+    ((rT ((_ extract 31 0) (bvmul ((_ zero_extend 32) rA) ((_ zero_extend 32) rB)))))))

@@ -1,0 +1,2 @@
+;; Extend Sign Byte (X-form)
+((operands ((rA . 'Gprc) (rS . 'Gprc))) (in (rS)) (defs ((rA ((_ sign_extend 56) ((_ extract 63 56) rS))))))

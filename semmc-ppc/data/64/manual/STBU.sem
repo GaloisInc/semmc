@@ -1,0 +1,16 @@
+;; Store Byte with Update (D-form)
+((operands ((rS . 'Gprc) (memref . 'Memri))) 
+  (in ('Mem memref rS))
+  (defs 
+    ((((_ call memri_reg) memref) 
+       (bvadd 
+         ((_ call memri_reg) memref)
+         ((_ sign_extend 48) ((_ call "memri_offset") memref)))) 
+      ('Mem 
+        ((_ call "write_mem") 
+          'Mem
+          (bvadd 
+            ((_ call memri_reg) memref)
+            ((_ sign_extend 48) ((_ call "memri_offset") memref)))
+          1
+          ((_ extract 63 56) rS))))))
