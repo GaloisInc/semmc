@@ -42,6 +42,7 @@ import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( KnownNat, Nat )
 import           System.FilePath ( (</>), (<.>) )
 import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec.Char as P
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
@@ -59,7 +60,7 @@ import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 
-import           SemMC.Architecture.PPC64.Location
+import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC64.ConcreteState as PPCS
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
@@ -120,6 +121,11 @@ type instance A.OperandType PPC "Vrrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsfrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsrc" = BaseBVType 128
 type instance A.OperandType PPC "Vssrc" = BaseBVType 128
+
+type instance ArchRegWidth PPC = 64
+
+instance ArchRepr PPC where
+  regWidthRepr _ = PPCS.repr64
 
 concreteTemplatedOperand :: forall arch s a.
                             (A.Architecture arch)
@@ -303,13 +309,13 @@ instance T.TemplatableOperand PPC "I32imm" where
             let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
             return (v, T.WrappedRecoverOperandFn recover)
 
-type instance A.Location PPC = Location
+type instance A.Location PPC = Location PPC
 
 operandValue :: forall sym s.
                 (S.IsSymInterface sym,
                  S.IsExprBuilder sym)
              => sym
-             -> (forall tp. Location tp -> IO (S.SymExpr sym tp))
+             -> (forall tp. Location PPC tp -> IO (S.SymExpr sym tp))
              -> PPC.Operand s
              -> IO (A.TaggedExpr PPC sym s)
 operandValue sym locLookup op = TaggedExpr <$> operandValue' op
@@ -400,7 +406,7 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.Vsrc vsr) = locLookup (LocVSR vsr)
         operandValue' (PPC.Vssrc vsr) = locLookup (LocVSR vsr)
 
-operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
+operandToLocation :: PPC.Operand s -> Maybe (Location PPC (A.OperandType PPC s))
 operandToLocation (PPC.F4rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.F8rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
@@ -509,7 +515,7 @@ registerizeInstructionPPC ri s =
         (ops', s') -> (D.Instruction opc ops', s')
 
 replaceLiterals :: CS.LiteralRef PPC sh s
-                -> Location s
+                -> Location PPC s
                 -> (SL.ShapedList PPC.Operand sh, CS.ConcreteState PPC)
                 -> (SL.ShapedList PPC.Operand sh, CS.ConcreteState PPC)
 replaceLiterals (CS.LiteralRef ix) loc (ops, s) =
@@ -632,3 +638,63 @@ type instance Pseudo PPC = PPCP.PseudoOpcode
 
 instance ArchitectureWithPseudo PPC where
   assemblePseudo _ = PPCP.ppcAssemblePseudo (Proxy @PPC)
+
+instance A.IsLocation (Location PPC) where
+  readLocation = P.parseMaybe parseLocation
+
+  locationType (LocGPR _) = knownRepr
+  locationType LocIP = knownRepr
+  locationType LocMSR = knownRepr
+  locationType LocCTR = knownRepr
+  locationType LocLNK = knownRepr
+  locationType LocXER = knownRepr
+  locationType LocCR = knownRepr
+  locationType (LocVSR _) = knownRepr
+  locationType LocFPSCR = knownRepr
+  locationType LocMem = knownRepr
+
+  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocIP = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocMSR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocCTR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocLNK = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocXER = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocVSR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocMem =
+    S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
+
+  allLocations = concat
+    [ map (Some . LocGPR . PPC.GPR) [0..31]
+    , map (Some . LocVSR . PPC.VSReg) [0..63]
+    , [ Some LocIP
+      , Some LocMSR
+      , Some LocCTR
+      , Some LocLNK
+      , Some LocXER
+      , Some LocCR
+      , Some LocFPSCR
+      , Some LocMem
+      ]
+    ]
+
+  registerizationLocations = map (Some . LocGPR . PPC.GPR) (0 : [3..10])
+
+parseLocation :: PPCS.Parser (Some (Location PPC))
+parseLocation = do
+  c <- P.lookAhead (P.anyChar)
+  case c of
+    'I' -> Some LocIP <$ P.string "IP"
+    'X' -> Some LocXER <$ P.string "XER"
+    'L' -> Some LocLNK <$ P.string "LNK"
+    'r' -> PPCS.parsePrefixedRegister (Some . LocGPR . PPC.GPR) 'r'
+    'x' -> PPCS.parsePrefixedRegister (Some . LocVSR . PPC.VSReg) 'x'
+    'C' -> PPCS.tryOne [ Some LocCTR <$ P.string "CTR"
+                       , Some LocCR <$ P.string "CR"
+                       ]
+    'M' -> PPCS.tryOne [ Some LocMSR <$ P.string "MSR"
+                       , Some LocMem <$ P.string "Mem"
+                       ]
+    'F' -> Some LocFPSCR <$ P.string "FPSCR"
+    _ -> fail ("Unexpected location prefix character: " ++ (c :[]))

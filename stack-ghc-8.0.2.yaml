@@ -31,7 +31,7 @@ extra-deps:
 - crucible-0.3.1
 - located-base-0.1.1.1
 - megaparsec-6.0.2
-- parameterized-utils-0.1.9
+- parameterized-utils-0.1.11
 - s-cargot-0.1.2.0
 - smtLib-1.0.8
 - time-locale-compat-0.1.1.3

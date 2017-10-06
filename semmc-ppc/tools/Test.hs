@@ -81,7 +81,7 @@ testVector1 =
   where
     i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:> PPC.Gprc r17 PPC.:> PPC.Gprc r25 PPC.:> PPC.Nil)
 
-sbase :: MapF.MapF Location CS.Value
+sbase :: MapF.MapF (Location PPC) CS.Value
 sbase = toState [ 1228099099
                 , 1418706367
                 , 1088784811
@@ -116,7 +116,7 @@ sbase = toState [ 1228099099
                 , 1933312003
                 ]
 
-smod :: MapF.MapF Location CS.Value
+smod :: MapF.MapF (Location PPC) CS.Value
 smod = toState [ 1228099099
                , 1418706367
                , 1088784811
@@ -151,12 +151,12 @@ smod = toState [ 1228099099
                , 1933312003
                ]
 
-toState :: [Integer] -> MapF.MapF Location CS.Value
+toState :: [Integer] -> MapF.MapF (Location PPC) CS.Value
 toState vals = foldr poke (CS.zeroState (Proxy @PPC)) (zip gprviews vals)
   where
     poke (v, val) ctx = CS.pokeMS ctx v (CS.ValueBV (W.w val))
 
-gprs :: [Location (BaseBVType 32)]
+gprs :: [Location PPC (BaseBVType 32)]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]
 
 gprviews :: [CS.View PPC 32]
