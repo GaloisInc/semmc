@@ -14,12 +14,16 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC.Architecture.PPC32
+                       SemMC.Architecture.PPC32.Opcodes
                        SemMC.Architecture.PPC64
+                       SemMC.Architecture.PPC64.Opcodes
                        SemMC.Architecture.PPC.Base
   other-modules:       SemMC.Architecture.PPC32.Location
                        SemMC.Architecture.PPC32.ConcreteState
                        SemMC.Architecture.PPC64.Location
                        SemMC.Architecture.PPC64.ConcreteState
+                       SemMC.Architecture.PPC32.Opcodes.Internal
+                       SemMC.Architecture.PPC64.Opcodes.Internal
                        SemMC.Architecture.PPC.Base.Core
                        SemMC.Architecture.PPC.Base.Arithmetic
                        SemMC.Architecture.PPC.Base.Bitwise
