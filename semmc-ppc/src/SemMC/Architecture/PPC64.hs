@@ -87,8 +87,6 @@ type instance A.OperandType PPC "Crrc" = BaseBVType 3
 type instance A.OperandType PPC "Directbrtarget" = BaseBVType 64
 type instance A.OperandType PPC "F4rc" = BaseBVType 128
 type instance A.OperandType PPC "F8rc" = BaseBVType 128
-type instance A.OperandType PPC "G8rc" = BaseBVType 64
-type instance A.OperandType PPC "G8rc_nox0" = BaseBVType 64
 type instance A.OperandType PPC "Gprc" = BaseBVType 64
 type instance A.OperandType PPC "Gprc_nor0" = BaseBVType 64
 type instance A.OperandType PPC "I1imm" = BaseBVType 1
@@ -178,14 +176,8 @@ instance T.TemplatableOperand PPC "F4rc" where
 instance T.TemplatableOperand PPC "F8rc" where
   opTemplates = concreteTemplatedOperand (PPC.F8rc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
 
-instance T.TemplatableOperand PPC "G8rc" where
-  opTemplates = concreteTemplatedOperand PPC.G8rc LocGPR . PPC.GPR <$> [0..31]
-
 instance T.TemplatableOperand PPC "Gprc" where
   opTemplates = concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
-
-instance T.TemplatableOperand PPC "Tlsreg32" where
-  opTemplates = concreteTemplatedOperand PPC.Tlsreg32 LocGPR . PPC.GPR <$> [0..31]
 
 instance T.TemplatableOperand PPC "Gprc_nor0" where
   opTemplates = concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
@@ -326,12 +318,13 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
   where operandValue' :: PPC.Operand s -> IO (S.SymExpr sym (A.OperandType PPC s))
         operandValue' (PPC.Abscalltarget (PPC.ABT absTarget)) =
           S.bvLit sym knownNat (toInteger absTarget)
-        operandValue' (PPC.Abscondbrtarget (PPC.ABT absTarget)) =
+        operandValue' (PPC.Abscondbrtarget (PPC.ACBT absTarget)) =
           S.bvLit sym knownNat (toInteger absTarget)
         operandValue' (PPC.Absdirectbrtarget (PPC.ABT absTarget)) =
           S.bvLit sym knownNat (toInteger absTarget)
         operandValue' (PPC.Calltarget bt) = btVal bt
-        operandValue' (PPC.Condbrtarget bt) = btVal bt
+        operandValue' (PPC.Condbrtarget (PPC.CBT target)) =
+          S.bvLit sym knownNat (toInteger target)
         operandValue' (PPC.Crbitm (PPC.CRBitM n)) =
           S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Crbitrc (PPC.CRBitRC n)) =
@@ -341,8 +334,6 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.Directbrtarget bt) = btVal bt
         operandValue' (PPC.F4rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
         operandValue' (PPC.F8rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
-        operandValue' (PPC.G8rc _) = error "Found a G8rc operand, but PPC64 not supported"
-        operandValue' (PPC.G8rc_nox0 _) = error "Found a G8rc_nox0 operand, but PPC64 not supported"
         operandValue' (PPC.Gprc gpr) = locLookup (LocGPR gpr)
         operandValue' (PPC.Gprc_nor0 (PPC.GPR gpr)) =
           if gpr /= 0
@@ -382,28 +373,6 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           let val = (fromIntegral i16 :: Int32) `shiftL` 16
           in S.bvLit sym knownNat (toInteger val)
         operandValue' (PPC.S5imm (I.I i5)) = S.bvLit sym knownNat (toInteger i5)
-        operandValue' (PPC.Spe2dis (PPC.SPEDis gpr offset)) = do
-          base <- case gpr of
-                    Just gpr' -> locLookup (LocGPR gpr')
-                    Nothing -> S.bvLit sym knownNat 0
-          offset' <- S.bvLit sym knownNat (toInteger offset)
-          S.bvAdd sym base offset'
-        operandValue' (PPC.Spe4dis (PPC.SPEDis gpr offset)) = do
-          base <- case gpr of
-                    Just gpr' -> locLookup (LocGPR gpr')
-                    Nothing -> S.bvLit sym knownNat 0
-          offset' <- S.bvLit sym knownNat (toInteger offset)
-          S.bvAdd sym base offset'
-        operandValue' (PPC.Spe8dis (PPC.SPEDis gpr offset)) = do
-          base <- case gpr of
-                    Just gpr' -> locLookup (LocGPR gpr')
-                    Nothing -> S.bvLit sym knownNat 0
-          offset' <- S.bvLit sym knownNat (toInteger offset)
-          S.bvAdd sym base offset'
-        operandValue' (PPC.Tlscall _) = error "Tlscall not implemented"
-        operandValue' (PPC.Tlscall32 bt) = btVal bt
-        operandValue' (PPC.Tlsreg _) = error "Tlsreg not implemented"
-        operandValue' (PPC.Tlsreg32 gpr) = locLookup (LocGPR gpr)
         operandValue' (PPC.U10imm (W.unW ->  w10)) =
           S.bvLit sym knownNat (toInteger w10)
         operandValue' (PPC.U16imm (W.unW ->  w16)) =
@@ -437,12 +406,8 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
 operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
 operandToLocation (PPC.F4rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.F8rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
-operandToLocation (PPC.G8rc gpr) = Just (LocGPR gpr)
-operandToLocation (PPC.G8rc_nox0 gpr) = Just (LocGPR gpr)
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Gprc_nor0 gpr) = Just (LocGPR gpr)
-operandToLocation (PPC.Tlsreg gpr) = Just (LocGPR gpr)
-operandToLocation (PPC.Tlsreg32 gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Vrrc (PPC.VR vr)) = Just $ LocVSR (PPC.VSReg (vr + 32))
 operandToLocation (PPC.Vsfrc vr) = Just $ LocVSR vr
 operandToLocation (PPC.Vsrc vr) = Just $ LocVSR vr
@@ -498,12 +463,8 @@ operandTypePPC o =
   case o of
     PPC.F4rc {}              -> knownRepr
     PPC.F8rc {}              -> knownRepr
-    PPC.G8rc {}              -> knownRepr
-    PPC.G8rc_nox0 {}         -> knownRepr
     PPC.Gprc {}              -> knownRepr
     PPC.Gprc_nor0 {}         -> knownRepr
-    PPC.Tlsreg {}            -> knownRepr
-    PPC.Tlsreg32 {}          -> knownRepr
     PPC.Vrrc {}              -> knownRepr
     PPC.Vsfrc {}             -> knownRepr
     PPC.Vsrc {}              -> knownRepr
@@ -527,11 +488,6 @@ operandTypePPC o =
     PPC.S16imm64 {}          -> knownRepr
     PPC.S17imm {}            -> knownRepr
     PPC.S5imm {}             -> knownRepr
-    PPC.Spe2dis {}           -> knownRepr
-    PPC.Spe4dis {}           -> knownRepr
-    PPC.Spe8dis {}           -> knownRepr
-    PPC.Tlscall {}           -> knownRepr
-    PPC.Tlscall32 {}         -> knownRepr
     PPC.U10imm {}            -> knownRepr
     PPC.U16imm {}            -> knownRepr
     PPC.U16imm64 {}          -> knownRepr
@@ -600,25 +556,16 @@ truncateValue op v =
     PPC.Vsfrc {}             -> L.error "Unexpected non-literal operand"
     PPC.Vsrc {}              -> L.error "Unexpected non-literal operand"
     PPC.Vssrc {}             -> L.error "Unexpected non-literal operand"
-    PPC.Tlsreg {}            -> L.error "Unexpected non-literal operand"
-    PPC.Tlsreg32 {}          -> L.error "Unexpected non-literal operand"
     PPC.Gprc_nor0 {}         -> L.error "Unexpected non-literal operand"
-    PPC.G8rc_nox0 {}         -> L.error "Unexpected non-literal operand"
-    PPC.G8rc {}              -> L.error "Unexpected non-literal operand"
     PPC.Gprc {}              -> L.error "Unexpected non-literal operand"
     PPC.F4rc {}              -> L.error "Unexpected non-literal operand"
     PPC.F8rc {}              -> L.error "Unexpected non-literal operand"
-    PPC.Spe2dis {}           -> L.error "Unexpected non-literal operand"
-    PPC.Spe4dis {}           -> L.error "Unexpected non-literal operand"
-    PPC.Spe8dis {}           -> L.error "Unexpected non-literal operand"
     PPC.Abscondbrtarget {}   -> L.error "Control flow transfer instructions unsupported"
     PPC.Absdirectbrtarget {} ->  L.error "Control flow transfer instructions unsupported"
     PPC.Condbrtarget {}      ->  L.error "Control flow transfer instructions unsupported"
     PPC.Directbrtarget {}    ->  L.error "Control flow transfer instructions unsupported"
     PPC.Calltarget {}        ->  L.error "Control flow transfer instructions unsupported"
     PPC.Abscalltarget {}     ->  L.error "Control flow transfer instructions unsupported"
-    PPC.Tlscall {}           ->  L.error "Control flow transfer instructions unsupported"
-    PPC.Tlscall32 {}         ->  L.error "Control flow transfer instructions unsupported"
 
 instance CS.ConcreteArchitecture PPC where
   operandToSemanticView _proxy = operandToSemanticViewPPC
@@ -646,12 +593,8 @@ operandToSemanticViewPPC op =
   case op of
     PPC.F4rc fr -> frSemanticView fr
     PPC.F8rc fr -> frSemanticView fr
-    PPC.G8rc gpr -> gprSemanticView gpr -- L.error "G8rc not handled"
-    PPC.G8rc_nox0 _ -> L.error "G8rc_nox0 not handled"
     PPC.Gprc gpr -> gprSemanticView gpr
     PPC.Gprc_nor0 gpr -> gprSemanticView gpr
-    PPC.Tlsreg _ -> L.error "Tlsreg not handled"
-    PPC.Tlsreg32 gpr -> gprSemanticView gpr
     PPC.Vrrc vr -> vrSemanticView vr
     PPC.Vsfrc vsr -> vsrSemanticView vsr
     PPC.Vsrc vsr -> vsrSemanticView vsr
