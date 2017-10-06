@@ -199,7 +199,7 @@ toState vals = foldr poke (CS.zeroState (Proxy @PPC)) (zip gprviews vals)
   where
     poke (v, val) ctx = CS.pokeMS ctx v (CS.ValueBV (W.w val))
 
-gprs :: [Location (BaseBVType 32)]
+gprs :: [Location PPC (BaseBVType 32)]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]
 
 gprviews = fmap (CS.trivialView (Proxy @PPC)) gprs

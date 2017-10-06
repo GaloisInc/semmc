@@ -16,15 +16,15 @@ library
   exposed-modules:     SemMC.Architecture.PPC32
                        SemMC.Architecture.PPC64
                        SemMC.Architecture.PPC.Base
+                       SemMC.Architecture.PPC.Location
   other-modules:       SemMC.Architecture.PPC32.Location
                        SemMC.Architecture.PPC32.ConcreteState
-                       SemMC.Architecture.PPC64.Location
                        SemMC.Architecture.PPC64.ConcreteState
                        SemMC.Architecture.PPC.Pseudo
                        SemMC.Architecture.PPC.Shared
   build-depends:       base >= 4.9 && < 5
                      , mtl
-                     , parameterized-utils == 0.1.10
+                     , parameterized-utils >= 0.1.10
                      , crucible == 0.3.1
                      , semmc
                      , dismantle-tablegen
@@ -137,4 +137,3 @@ executable semmc-ppc-genbase
                  filepath,
                  semmc,
                  semmc-ppc
-                 
