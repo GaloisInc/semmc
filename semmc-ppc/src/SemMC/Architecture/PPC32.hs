@@ -25,11 +25,9 @@ module SemMC.Architecture.PPC32
 
 import qualified GHC.Err.Located as L
 
-import           Data.Bits
 import qualified Data.Constraint as C
 import           Data.EnumF ( EnumF(..) )
 import qualified Data.Functor.Identity as I
-import           Data.Int ( Int32 )
 import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
@@ -323,7 +321,8 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           S.bvLit sym knownNat (toInteger absTarget)
         operandValue' (PPC.Absdirectbrtarget (PPC.ABT absTarget)) =
           S.bvLit sym knownNat (toInteger absTarget)
-        operandValue' (PPC.Calltarget bt) = btVal bt
+        operandValue' (PPC.Calltarget (PPC.BT off)) =
+          S.bvLit sym knownNat (toInteger off)
         operandValue' (PPC.Condbrtarget (PPC.CBT off)) =
           S.bvLit sym knownNat (toInteger off)
         operandValue' (PPC.Crbitm (PPC.CRBitM n)) =
@@ -332,7 +331,8 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Crrc (PPC.CRRC n)) =
           S.bvLit sym knownNat (toInteger n)
-        operandValue' (PPC.Directbrtarget bt) = btVal bt
+        operandValue' (PPC.Directbrtarget (PPC.BT off)) =
+          S.bvLit sym knownNat (toInteger off)
         operandValue' (PPC.F4rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
         operandValue' (PPC.F8rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
         operandValue' (PPC.Gprc gpr) = locLookup (LocGPR gpr)
@@ -370,9 +370,11 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.S16imm i16) = S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S16imm64 i16) = S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S17imm i16) =
-          -- Though it's called an "S17", this appears to be the correct operation.
-          let val = (fromIntegral i16 :: Int32) `shiftL` 16
-          in S.bvLit sym knownNat (toInteger val)
+          -- The s17 imm type is a bit strange.  It is actually represented as
+          -- 16 bits in the instruction, but is interpreted as shifted left by
+          -- 16 bits.  We handle that correction in the semantics, so we just
+          -- treat s17imm as a plain 16 bit value.
+          S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S5imm (I.I i5)) = S.bvLit sym knownNat (toInteger i5)
         operandValue' (PPC.U10imm (W.unW ->  w10)) =
           S.bvLit sym knownNat (toInteger w10)
@@ -398,11 +400,6 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.Vsfrc vsr) = locLookup (LocVSR vsr)
         operandValue' (PPC.Vsrc vsr) = locLookup (LocVSR vsr)
         operandValue' (PPC.Vssrc vsr) = locLookup (LocVSR vsr)
-
-        btVal (PPC.BT bt) = do
-          ip <- locLookup LocIP
-          offset <- S.bvLit sym knownNat (toInteger bt)
-          S.bvAdd sym ip offset
 
 operandToLocation :: PPC.Operand s -> Maybe (Location (A.OperandType PPC s))
 operandToLocation (PPC.F4rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
