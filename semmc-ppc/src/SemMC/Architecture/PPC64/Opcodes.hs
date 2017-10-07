@@ -28,12 +28,15 @@ import           SemMC.Architecture.PPC64.Opcodes.Internal ( BuildAndUnfold, all
 -- The base set is the set of all opcodes that have on-disk base definitions
 -- available (determined at compile time).
 baseOpcodes :: [Some (Witness BuildAndUnfold (PPC.Opcode PPC.Operand))]
-baseOpcodes = map fst $(STH.attachSemantics (\x -> show x <.> "sem") allOpcodes ["data/64/base"])
+baseOpcodes = map fst $(STH.attachSemantics (\(Some (Witness x)) -> show x <.> "sem") allOpcodes ["data/64/base"])
 
 -- | Every opcode with a defined semantics (either from the base set, the
 -- learned set, or manually defined)
 allSemantics :: [(Some (Witness BuildAndUnfold (PPC.Opcode PPC.Operand)), BS.ByteString)]
-allSemantics = $(STH.attachSemantics (\x -> show x <.> "sem") allOpcodes ["data/64/base", "data/64/manual", "data/64/learned"])
+allSemantics = $(STH.attachSemantics (\(Some (Witness x)) -> show x <.> "sem") allOpcodes [ "data/64/base"
+                                                                                          , "data/64/manual"
+                                                                                          , "data/64/learned"
+                                                                                          ])
 
 -- | Pseudo-opcodes used for learning; these are not part of 'allOpcodes'
 -- because they are not real opcodes

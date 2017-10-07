@@ -18,8 +18,9 @@ import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as UBS
 import           Data.Maybe ( catMaybes )
-import           System.FilePath ( (</>) )
 import           Language.Haskell.TH
+import           System.FilePath ( (</>) )
+import qualified System.IO.Unsafe as IO
 
 import           Data.Parameterized.Lift ( LiftF(..) )
 import           Data.Parameterized.Some ( Some(..) )
@@ -46,7 +47,7 @@ toOpcodePair :: (LiftF a) => (Some (Witness c a), BS.ByteString) -> ExpQ
 toOpcodePair (Some (Witness o), bs) = tupE [ [| Some (Witness $(liftF o)) |], bsE]
   where
     len = BS.length bs
-    bsE = [| UBS.unsafePackAddressLen len $(litE (StringPrimL (BS.unpack bs))) |]
+    bsE = [| IO.unsafePerformIO (UBS.unsafePackAddressLen len $(litE (StringPrimL (BS.unpack bs)))) |]
 
 findCorrespondingFile :: (Some (Witness c a)  -> FilePath)
                       -> [FilePath]
@@ -54,7 +55,7 @@ findCorrespondingFile :: (Some (Witness c a)  -> FilePath)
                       -> IO (Maybe (Some (Witness c a), BS.ByteString))
 findCorrespondingFile toFP dirs elt = go files
   where
-    files = [ toFP elt </> dir | dir <- dirs ]
+    files = [ dir </> toFP elt | dir <- dirs ]
     go [] = return Nothing
     go (f:rest) =
       ((Just . (elt,)) <$> BS.readFile f) `E.catch` (\(_ex :: E.IOException) -> go rest)

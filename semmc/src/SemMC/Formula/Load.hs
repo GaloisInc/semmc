@@ -54,7 +54,7 @@ formulaEnv proxy sym = do
       uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol name) args ret
       return (name, uf)
 
-data FormulaParseError = FormulaParseError String
+data FormulaParseError = FormulaParseError String String
   deriving (Show)
 
 instance E.Exception FormulaParseError
@@ -66,6 +66,7 @@ loadFormulas :: forall sym c arch a
               . (CRU.IsExprBuilder sym,
                  CRU.IsSymInterface sym,
                  A.Architecture arch,
+                 ShowF a,
                  OrdF a)
              => sym
              -> (forall sh . c sh C.:- FP.BuildOperandList arch sh)
@@ -79,11 +80,11 @@ loadFormulas sym impl contents = do
                    -> MapF.MapF (Witness c a) (F.ParameterizedFormula sym arch)
                    -> (Some (Witness c a), BS.ByteString)
                    -> IO (MapF.MapF (Witness c a) (F.ParameterizedFormula sym arch))
-    parseFormulaBS env m (Some (w@(Witness _op) :: Witness c a sh), bs) = do
+    parseFormulaBS env m (Some (w@(Witness op) :: Witness c a sh), bs) = do
       ef <- FP.readFormula sym env (T.decodeUtf8 bs) C.\\ impl @sh
       case ef of
         Right f -> return (MapF.insert w f m)
-        Left e -> E.throwIO (FormulaParseError e)
+        Left e -> E.throwIO (FormulaParseError (showF op) e)
 
 -- | Load formulas from disk
 --
