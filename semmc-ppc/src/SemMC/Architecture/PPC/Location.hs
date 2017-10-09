@@ -39,7 +39,7 @@ data Location ppc :: BaseType -> * where
   LocCR :: Location ppc (BaseBVType 32)
   LocVSR :: PPC.VSReg -> Location ppc (BaseBVType 128)
   LocFPSCR :: Location ppc (BaseBVType 32)
-  LocMem :: Location ppc (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
+  LocMem :: Location ppc (BaseArrayType (Ctx.SingleCtx (BaseBVType (ArchRegWidth ppc))) (BaseBVType 8))
 
 instance Show (Location ppc tp) where
   show (LocGPR gpr) = show (pPrint gpr)
