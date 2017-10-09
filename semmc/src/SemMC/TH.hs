@@ -19,6 +19,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as UBS
 import           Data.Maybe ( catMaybes )
 import           Language.Haskell.TH
+import           Language.Haskell.TH.Syntax ( qAddDependentFile )
 import           System.FilePath ( (</>) )
 import qualified System.IO.Unsafe as IO
 
@@ -40,7 +41,7 @@ attachSemantics :: (LiftF a)
                 -- ^ A list of directories to search for the produced filenames
                 -> Q Exp
 attachSemantics toFP elts dirs = do
-  ops <- catMaybes <$> runIO (mapM (findCorrespondingFile toFP dirs) elts)
+  ops <- catMaybes <$> mapM (findCorrespondingFile toFP dirs) elts
   listE (map toOpcodePair ops)
 
 toOpcodePair :: (LiftF a) => (Some (Witness c a), BS.ByteString) -> ExpQ
@@ -52,11 +53,16 @@ toOpcodePair (Some (Witness o), bs) = tupE [ [| Some (Witness $(liftF o)) |], bs
 findCorrespondingFile :: (Some (Witness c a)  -> FilePath)
                       -> [FilePath]
                       -> Some (Witness c a)
-                      -> IO (Maybe (Some (Witness c a), BS.ByteString))
+                      -> Q (Maybe (Some (Witness c a), BS.ByteString))
 findCorrespondingFile toFP dirs elt = go files
   where
     files = [ dir </> toFP elt | dir <- dirs ]
     go [] = return Nothing
-    go (f:rest) =
-      ((Just . (elt,)) <$> BS.readFile f) `E.catch` (\(_ex :: E.IOException) -> go rest)
+    go (f:rest) = do
+      mbs <- runIO ((Just <$> BS.readFile f) `E.catch` (\(_ex :: E.IOException) -> return Nothing))
+      case mbs of
+        Just bs -> do
+          qAddDependentFile f
+          return (Just (elt, bs))
+        Nothing -> go rest
 
