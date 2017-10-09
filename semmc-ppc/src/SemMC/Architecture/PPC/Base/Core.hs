@@ -412,4 +412,4 @@ storeMem mem ea nBytes val
 
 -- | An uninterpreted function that tests if the argument is register zero
 isR0 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
-isR0 = uf EBool "is_r0" . ((:[]) . Some)
+isR0 = uf EBool "ppc.is_r0" . ((:[]) . Some)
