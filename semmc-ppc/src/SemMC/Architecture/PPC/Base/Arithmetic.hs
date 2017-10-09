@@ -56,14 +56,22 @@ baseArithmetic = do
     comment "Add Immediate (D-form)"
     comment "We hand wrote this formula because it is one of the few that"
     comment "have special treatment of r0"
-    (rT, rA, si) <- dform
+    rT <- param "rT" gprc naturalBV
+    si <- param "si" s16imm (EBV 16)
+    rA <- param "rA" gprc_nor0 naturalBV
+    input rA
+    input si
     let lhs = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
     defLoc rT (bvadd lhs (sext (Loc si)))
   defineOpcode "ADDIS" $ do
     comment "Add Immediate Shifted (D-form)"
     comment "Like 'ADDI', we hand wrote this formula because it is one of the few that"
     comment "have special treatment of r0"
-    (rT, rA, si) <- dform
+    rT <- param "rT" gprc naturalBV
+    si <- param "si" s17imm (EBV 16)
+    rA <- param "rA" gprc_nor0 naturalBV
+    input rA
+    input si
     let lhs = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
     let imm = concat (Loc si) (LitBV 16 0x0)
     defLoc rT (bvadd lhs (sext imm))

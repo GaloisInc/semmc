@@ -95,18 +95,10 @@ type instance A.OperandType PPC "Memrix" = BaseBVType 64
 type instance A.OperandType PPC "Memrix16" = BaseBVType 64
 type instance A.OperandType PPC "Memrr" = BaseBVType 64
 -- Yes, "S16" is supposed to be 32 bits. See the tgen file.
-type instance A.OperandType PPC "S16imm" = BaseBVType 64
-type instance A.OperandType PPC "S16imm64" = BaseBVType 64
-type instance A.OperandType PPC "S17imm" = BaseBVType 64
-type instance A.OperandType PPC "S5imm" = BaseBVType 64
-type instance A.OperandType PPC "Spe2dis" = BaseBVType 64
-type instance A.OperandType PPC "Spe4dis" = BaseBVType 64
-type instance A.OperandType PPC "Spe8dis" = BaseBVType 64
-type instance A.OperandType PPC "Spe8dis" = BaseBVType 64
-type instance A.OperandType PPC "Tlscall" = BaseBVType 64
-type instance A.OperandType PPC "Tlscall32" = BaseBVType 64
-type instance A.OperandType PPC "Tlsreg" = BaseBVType 64
-type instance A.OperandType PPC "Tlsreg32" = BaseBVType 64
+type instance A.OperandType PPC "S16imm" = BaseBVType 16
+type instance A.OperandType PPC "S16imm64" = BaseBVType 16
+type instance A.OperandType PPC "S17imm" = BaseBVType 16
+type instance A.OperandType PPC "S5imm" = BaseBVType 5
 type instance A.OperandType PPC "U10imm" = BaseBVType 64
 type instance A.OperandType PPC "U16imm" = BaseBVType 64
 type instance A.OperandType PPC "U16imm64" = BaseBVType 64
@@ -239,10 +231,10 @@ instance T.TemplatableOperand PPC "S17imm" where
     where mkImm :: T.TemplatedOperandFn PPC "S17imm"
           mkImm sym _ = do
             v <- S.freshConstant sym (U.makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
-            zeroes <- S.bvLit sym knownNat 0
-            extended <- S.bvConcat sym v zeroes
+            -- zeroes <- S.bvLit sym knownNat 0
+            -- extended <- S.bvConcat sym v zeroes
             let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
-            return (extended, T.WrappedRecoverOperandFn recover)
+            return (v, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Absdirectbrtarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
