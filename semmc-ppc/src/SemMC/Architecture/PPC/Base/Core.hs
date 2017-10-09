@@ -73,6 +73,7 @@ module SemMC.Architecture.PPC.Base.Core (
 import GHC.Stack ( HasCallStack )
 
 import Prelude hiding ( concat )
+import Text.Printf ( printf )
 import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
 
@@ -411,7 +412,10 @@ readMem :: (?bitSize :: BitSize)
         -- ^ The number of bytes
         -> Expr 'TBV
 readMem mem ea nBytes =
-  uf (EBV (8 * nBytes)) "read_mem" [Some mem, Some ea, Some (LitBV 32 (fromIntegral nBytes))]
+  uf (EBV (8 * nBytes)) funcName [Some mem, Some ea]
+  where
+    funcName :: String
+    funcName = printf "read_mem.%d" (nBytes * 8)
 
 -- | Define a write to memory; it takes a memory and returns a whole new memory.
 storeMem :: (?bitSize :: BitSize, HasCallStack)
