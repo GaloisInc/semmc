@@ -437,7 +437,7 @@ convertLoc loc =
     ParamLoc p -> ident (pName p)
     LiteralLoc ll -> quoted (lName ll)
     LocationFunc _ func loc' ->
-      fromFoldable' [fromFoldable' [ident "_", ident "call", ident func], convertLoc loc']
+      fromFoldable' [fromFoldable' [ident "_", ident "call", string func], convertLoc loc']
 
 convertDefs :: [(Some Location, Some Expr)] -> SC.SExpr FAtom
 convertDefs = fromFoldable' . map convertDef
