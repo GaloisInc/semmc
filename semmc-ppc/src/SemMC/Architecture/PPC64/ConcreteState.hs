@@ -233,6 +233,12 @@ uninterpretedFunctions =
   , ("ppc.memri_offset",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
+  , ("ppc.memrr_base",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("ppc.memrr_offset",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
   , ("read_mem.8",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
