@@ -178,11 +178,11 @@ loadAndExtendDS :: (?bitSize :: BitSize)
                 -> SemM 'Def ()
 loadAndExtendDS nBytes extend = do
   rT <- param "rT" gprc naturalBV
-  memref <- param "memref" memri EMemRef
+  memref <- param "memref" memrix EMemRef
   input memref
   input memory
-  let rA = memriReg memref
-  let disp = memriOffset 14 (Loc memref)
+  let rA = memrixReg memref
+  let disp = memrixOffset 14 (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b (sext (concat disp (LitBV 2 0x0)))
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
@@ -249,11 +249,11 @@ loadAndUpdateDS :: (?bitSize :: BitSize)
                 -> SemM 'Def ()
 loadAndUpdateDS nBytes extend = do
   rT <- param "rT" gprc naturalBV
-  memref <- param "memref" memri EMemRef
+  memref <- param "memref" memrix EMemRef
   input memory
   input memref
-  let rA = memriReg memref
-  let disp = memriOffset 14 (Loc memref)
+  let rA = memrixReg memref
+  let disp = memrixOffset 14 (Loc memref)
   let ea = bvadd (Loc rA) (sext (concat disp (LitBV 2 0x0)))
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
   defLoc rA ea

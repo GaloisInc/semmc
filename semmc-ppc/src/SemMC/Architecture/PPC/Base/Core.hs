@@ -62,6 +62,8 @@ module SemMC.Architecture.PPC.Base.Core (
   isR0,
   memriReg,
   memriOffset,
+  memrixReg,
+  memrixOffset,
   memrrBaseReg,
   memrrOffsetReg,
   storeMem,
@@ -362,14 +364,6 @@ highBits' n e
 
 -- Uninterpreted function helpers
 
--- | Extract the base register from a memrix field
--- memrixReg :: Expr tp -> Expr 'TBV
--- memrixReg = uf "memrix_reg" . (:[])
-
--- -- | Extract the offset (DS field) of a memrix memory access
--- memrixOffset :: Expr tp -> Expr 'TBV
--- memrixOffset e = uf  "memrix_offset" . ((:[]) . Some)
-
 -- | This is a function over locations instead of expressions because we need to
 -- be able to call 'defLoc' on the result.
 --
@@ -383,6 +377,16 @@ memriOffset :: Int
             -- ^ The memory ref expression
             -> Expr 'TBV
 memriOffset osize = uf (EBV osize) "ppc.memri_offset" . ((:[]) . Some)
+
+memrixReg :: (?bitSize :: BitSize) => Location 'TMemRef -> Location 'TBV
+memrixReg = locUF naturalBV "ppc.memrix_reg"
+
+memrixOffset :: Int
+             -- ^ The number of bits of the offset
+             -> Expr 'TMemRef
+             -- ^ The memory ref expression
+             -> Expr 'TBV
+memrixOffset osize = uf (EBV osize) "ppc.memrix_offset" . ((:[]) . Some)
 
 memrrBaseReg :: (?bitSize :: BitSize)
              => Location 'TMemRef
