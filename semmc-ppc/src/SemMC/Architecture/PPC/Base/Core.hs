@@ -374,24 +374,24 @@ highBits' n e
 --
 -- Note that we really need to accommodate this in the formula parser.
 memriReg :: (?bitSize :: BitSize) => Location 'TMemRef -> Location 'TBV
-memriReg = locUF naturalBV "memri_reg"
+memriReg = locUF naturalBV "ppc.memri_reg"
 
 memriOffset :: Int
             -- ^ The number of bits of the offset
             -> Expr 'TMemRef
             -- ^ The memory ref expression
             -> Expr 'TBV
-memriOffset osize = uf (EBV osize) "memri_offset" . ((:[]) . Some)
+memriOffset osize = uf (EBV osize) "ppc.memri_offset" . ((:[]) . Some)
 
 memrrBaseReg :: (?bitSize :: BitSize)
              => Location 'TMemRef
              -> Location 'TBV
-memrrBaseReg = locUF naturalBV "memrr_base"
+memrrBaseReg = locUF naturalBV "ppc.memrr_base"
 
 memrrOffsetReg :: (?bitSize :: BitSize)
                => Expr 'TMemRef
                -> Expr 'TBV
-memrrOffsetReg = uf naturalBV "memrr_offset" . ((:[]) . Some)
+memrrOffsetReg = uf naturalBV "ppc.memrr_offset" . ((:[]) . Some)
 
 -- | An uninterpreted function that converts a CR register field reference
 -- (e.g. CR0) into a number.
