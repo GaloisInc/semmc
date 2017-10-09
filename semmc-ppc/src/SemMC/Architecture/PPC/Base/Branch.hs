@@ -17,7 +17,7 @@ manualBranch = do
     branchUnconditional Relative NoLink (Loc target)
   defineOpcode "BL" $ do
     comment "Branch (I-form, AA=0, LK=1)"
-    target <- iform directbrtarget
+    target <- iform calltarget
     branchUnconditional Relative Link (Loc target)
   defineOpcode "BA" $ do
     comment "Branch (I-form, AA=1, LK=0)"
@@ -25,7 +25,7 @@ manualBranch = do
     branchUnconditional Absolute NoLink (Loc target)
   defineOpcode "BLA" $ do
     comment "Branch (I-form, AA=1, LK=1)"
-    target <- iform absdirectbrtarget
+    target <- iform abscalltarget
     branchUnconditional Absolute Link (Loc target)
   -- Note, this isn't a real instruction.  It is a special form of BCLR unconditional.
   defineOpcode "BLR" $ do
@@ -50,7 +50,10 @@ branchUnconditional aa lk target = do
                 then sext (concat target (LitBV 2 0x0))
                 else bvadd (Loc ip) (sext (concat target (LitBV 2 0x0)))
   defLoc ip target'
+  -- The IP is still an input even with an absolute jump if we are setting the
+  -- link register, which depends on the current IP.
   when (lk == Link) $ do
+    input ip
     defLoc lnk (bvadd (Loc ip) (naturalLitBV 0x4))
 
 branchConditional :: (?bitSize :: BitSize)
@@ -62,5 +65,8 @@ branchConditional :: (?bitSize :: BitSize)
                   -> SemM 'Def ()
 branchConditional aa lk bo bi target = do
   let xtarget = sext (concat target (LitBV 2 0x0))
+  -- The IP is still an input even with an absolute jump if we are setting the
+  -- link register, which depends on the current IP.
   when (lk == Link) $ do
+    input ip
     defLoc lnk (bvadd (Loc ip) (naturalLitBV 0x4))

@@ -19,6 +19,8 @@ module SemMC.Architecture.PPC.Base.Core (
   memrr,
   directbrtarget,
   absdirectbrtarget,
+  calltarget,
+  abscalltarget,
   -- * Registers
   ip,
   lnk,
@@ -95,6 +97,12 @@ absdirectbrtarget = "Absdirectbrtarget"
 
 directbrtarget :: String
 directbrtarget = "Directbrtarget"
+
+abscalltarget :: String
+abscalltarget = "Abscalltarget"
+
+calltarget :: String
+calltarget = "Calltarget"
 
 crrc :: String
 crrc = "Crrc"
