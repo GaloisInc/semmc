@@ -75,15 +75,15 @@ type instance A.Opcode PPC = PPC.Opcode
 
 instance A.IsOpcode PPC.Opcode
 
-type instance A.OperandType PPC "Abscalltarget" = BaseBVType 64
-type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 64
-type instance A.OperandType PPC "Absdirectbrtarget" = BaseBVType 64
-type instance A.OperandType PPC "Calltarget" = BaseBVType 64
-type instance A.OperandType PPC "Condbrtarget" = BaseBVType 64
+type instance A.OperandType PPC "Abscalltarget" = BaseBVType 24
+type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 14
+type instance A.OperandType PPC "Absdirectbrtarget" = BaseBVType 24
+type instance A.OperandType PPC "Calltarget" = BaseBVType 24
+type instance A.OperandType PPC "Condbrtarget" = BaseBVType 14
 type instance A.OperandType PPC "Crbitm" = BaseBVType 3
 type instance A.OperandType PPC "Crbitrc" = BaseBVType 5
 type instance A.OperandType PPC "Crrc" = BaseBVType 3
-type instance A.OperandType PPC "Directbrtarget" = BaseBVType 64
+type instance A.OperandType PPC "Directbrtarget" = BaseBVType 24
 type instance A.OperandType PPC "F4rc" = BaseBVType 128
 type instance A.OperandType PPC "F8rc" = BaseBVType 128
 type instance A.OperandType PPC "Gprc" = BaseBVType 64
@@ -209,16 +209,11 @@ instance T.TemplatableOperand PPC "Memri" where
 instance T.TemplatableOperand PPC "Directbrtarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: T.TemplatedOperandFn PPC "Directbrtarget"
-          mkDirect sym locLookup = do
-            ip <- locLookup LocIP
+          mkDirect sym _locLookup = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Directbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
-            expr <- S.bvAdd sym ip extended
             let recover evalFn =
                   PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (expr, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "U5imm" where
   opTemplates = [symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
@@ -239,38 +234,27 @@ instance T.TemplatableOperand PPC "Absdirectbrtarget" where
     where mkDirect :: T.TemplatedOperandFn PPC "Absdirectbrtarget"
           mkDirect sym _ = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Absdirectbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
             let recover evalFn =
                   PPC.Absdirectbrtarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (extended, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Calltarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: T.TemplatedOperandFn PPC "Calltarget"
-          mkDirect sym locLookup = do
-            ip <- locLookup LocIP
+          mkDirect sym _locLookup = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Calltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
-            expr <- S.bvAdd sym ip extended
             let recover evalFn =
                   PPC.Calltarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (expr, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Abscalltarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: T.TemplatedOperandFn PPC "Abscalltarget"
           mkDirect sym _ = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscalltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
             let recover evalFn =
                   PPC.Abscalltarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (extended, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Crrc" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
