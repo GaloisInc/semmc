@@ -1,6 +1,6 @@
 ;; Add Immediate Shifted (D-form)
 ;; Like 'ADDI', we hand wrote this formula because it is one of the few that
 ;; have special treatment of r0
-((operands ((rT . 'Gprc) (rA . 'Gprc_nor0) (si . 'S16imm))) 
+((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc_nor0))) 
   (in (si rA))
   (defs ((rT (bvadd (ite ((_ call "is_r0") rA) #x00000000 rA) (concat si #x0000))))))

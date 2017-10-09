@@ -182,8 +182,8 @@ xform2 = do
 dform :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 dform = do
   rT <- param "rT" gprc naturalBV
-  rA <- param "rA" gprc_nor0 naturalBV
   si <- param "si" s16imm (EBV 16)
+  rA <- param "rA" gprc_nor0 naturalBV
   input rA
   input si
   return (rT, rA, si)
