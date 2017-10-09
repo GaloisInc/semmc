@@ -231,8 +231,6 @@ instance T.TemplatableOperand PPC "S17imm" where
     where mkImm :: T.TemplatedOperandFn PPC "S17imm"
           mkImm sym _ = do
             v <- S.freshConstant sym (U.makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
-            -- zeroes <- S.bvLit sym knownNat 0
-            -- extended <- S.bvConcat sym v zeroes
             let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
             return (v, T.WrappedRecoverOperandFn recover)
 
