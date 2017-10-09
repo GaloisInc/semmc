@@ -4,4 +4,5 @@
 ((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc_nor0))) 
   (in (si rA))
   (defs 
-    ((rT (bvadd (ite ((_ call "is_r0") rA) #x00000000 rA) ((_ sign_extend 16) si))))))
+    ((rT 
+       (bvadd (ite ((_ call "ppc.is_r0") rA) #x00000000 rA) ((_ sign_extend 16) si))))))
