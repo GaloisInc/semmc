@@ -11,6 +11,7 @@ module SemMC.Architecture.PPC.Base.Core (
   g8rc,
   crrc,
   s16imm,
+  s17imm,
   u2imm,
   u4imm,
   memrix,
@@ -100,6 +101,9 @@ crrc = "Crrc"
 
 s16imm :: String
 s16imm = "S16imm"
+
+s17imm :: String
+s17imm = "S17imm"
 
 u2imm :: String
 u2imm = "U2imm"
