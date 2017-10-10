@@ -14,6 +14,8 @@ module SemMC.Formula
   , coerceFormula
   , Parameter(..)
   , paramType
+  , WrappedOperand(..)
+  , LocationFuncInterp(..)
 
   -- * Use and manipulation
   , instantiateFormula
@@ -56,6 +58,8 @@ import SemMC.Formula.Formula
   , coerceFormula
   , Parameter(..)
   , paramType
+  , WrappedOperand(..)
+  , LocationFuncInterp(..)
   )
 import SemMC.Formula.Env ( FormulaEnv(..) )
 import SemMC.Formula.Instantiate ( instantiateFormula,

@@ -39,6 +39,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Formula
 import qualified SemMC.Util as U
 
@@ -88,13 +89,13 @@ buildOpAssignment :: forall sym arch sh.
                 -- ^ Symbolic expression builder
                 -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
                 -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
-                -> ShapedList (A.BoundVar sym arch) sh
+                -> ShapedList (BV.BoundVar sym arch) sh
                 -- ^ List of variables corresponding to each operand
                 -> ShapedList (A.Operand arch) sh
                 -- ^ List of operand values corresponding to each operand
                 -> IO (OperandAssignment sym arch sh)
 buildOpAssignment _ _ Nil Nil = return (OperandAssignment Nil Ctx.empty Ctx.empty)
-buildOpAssignment sym newVars ((A.BoundVar var) :> varsRest) (val :> valsRest) =
+buildOpAssignment sym newVars ((BV.BoundVar var) :> varsRest) (val :> valsRest) =
   extendAssn <$> A.operandValue (Proxy @arch) sym newVars val
              <*> pure var
              <*> buildOpAssignment sym newVars varsRest valsRest

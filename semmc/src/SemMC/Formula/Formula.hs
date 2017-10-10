@@ -16,6 +16,8 @@ module SemMC.Formula.Formula
   ( -- * Parameter
     Parameter(..)
   , paramType
+  , WrappedOperand(..)
+  , LocationFuncInterp(..)
     -- * ParameterizedFormula
   , ParameterizedFormula(..)
     -- * Formula
@@ -41,7 +43,9 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import           Lang.Crucible.BaseTypes
 
-import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Internal as A
+import qualified SemMC.Architecture.Location as L
+import qualified SemMC.BoundVar as BV
 import qualified SemMC.Util as U
 
 -- | A parameter for use in the 'ParameterizedFormula' below.
@@ -53,7 +57,7 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   -- | A parameter that always represents a particular machine location. For
   -- example, if you have the x86 opcode @call r32@, a 'Literal' would be used
   -- to represent the implicit @esp@ register used.
-  Literal :: A.Location arch tp -> Parameter arch sh tp
+  Literal :: L.Location arch tp -> Parameter arch sh tp
   -- | A function from one location to another.  The string specifies the name
   -- of the function, which is interpreted on a per-architecture basis.
   --
@@ -65,35 +69,55 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   -- to refer to part of the parameter.
   Function :: String
            -- ^ The name of the uninterpreted function
-           -> BaseTypeRepr tp'
-           -- ^ A repr for the parameter; this is mostly here as a proxy to fix
-           -- the type of @tp'@; we can always calculate this value using
-           -- 'paramType'.
-           -> Parameter arch sh tp'
-           -- ^ The parameter the function is applied to
+           -> WrappedOperand arch sh s
+           -- ^ The operand we are calling the function on (this is a newtype so
+           -- we don't need an extra typerepr)
            -> BaseTypeRepr tp
-           -- ^ A type repr for the return type of the uninterpreted function
+           -- ^ The typerepr for the return type of the function
            -> Parameter arch sh tp
 
-instance ShowF (A.Location arch) => Show (Parameter arch sh tp) where
+data WrappedOperand arch sh s where
+  WrappedOperand :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> WrappedOperand arch sh s
+
+data LocationFuncInterp arch where
+  LocationFuncInterp :: ( forall sh s tp . SL.ShapedList (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Parameter arch sh tp)
+                     -> LocationFuncInterp arch
+
+instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where
   show (Operand repr idx) = printf "Operand (%s) (%s)" (show repr) (show idx)
   show (Literal var) = unwords ["Literal", showF var]
-  show (Function fnName _ p _) = printf "%s(%s)" fnName (show p)
+  show (Function fnName (WrappedOperand rep ix) _) =
+    printf "%s(operand %s@%s)" fnName (show rep) (show ix)
 
-instance (ShowF (A.Location arch)) => ShowF (Parameter arch sh)
+instance (ShowF (L.Location arch)) => ShowF (Parameter arch sh)
 
-instance TestEquality (A.Location arch) => TestEquality (Parameter arch sh) where
+instance TestEquality (WrappedOperand arch sh) where
+  WrappedOperand r1 ix1 `testEquality` WrappedOperand r2 ix2 = do
+    Refl <- testEquality r1 r2
+    Refl <- testEquality ix1 ix2
+    return Refl
+
+instance OrdF (WrappedOperand arch sh) where
+  compareF (WrappedOperand r1 ix1) (WrappedOperand r2 ix2) =
+    case compareF r1 r2 of
+      LTF -> LTF
+      GTF -> GTF
+      EQF -> case compareF ix1 ix2 of
+        LTF -> LTF
+        GTF -> GTF
+        EQF -> EQF
+
+instance TestEquality (L.Location arch) => TestEquality (Parameter arch sh) where
   Operand _ idx1 `testEquality` Operand _ idx2 = (\Refl -> Refl) <$> testEquality idx1 idx2
   Literal   var1 `testEquality` Literal   var2 = (\Refl -> Refl) <$> testEquality var1 var2
-  Function fname1 pr1 p1 r1 `testEquality` Function fname2 pr2 p2 r2 = do
+  Function fname1 wo1 r1 `testEquality` Function fname2 wo2 r2 = do
     guard (fname1 == fname2)
-    Refl <- testEquality pr1 pr2
-    Refl <- testEquality p1 p2
+    Refl <- testEquality wo1 wo2
     Refl <- testEquality r1 r2
     return Refl
   _              `testEquality`              _ = Nothing
 
-instance (Eq (A.Location arch tp), TestEquality (A.Location arch)) => Eq (Parameter arch sh tp) where
+instance (Eq (L.Location arch tp), TestEquality (L.Location arch)) => Eq (Parameter arch sh tp) where
   Operand _ idx1 == Operand _ idx2 = isJust $ testEquality idx1 idx2
   Literal   var1 == Literal   var2 = var1 == var2
   -- NOTE: This isn't quite true - they could be equal after normalization.  Be careful...
@@ -106,29 +130,25 @@ instance (Eq (A.Location arch tp), TestEquality (A.Location arch)) => Eq (Parame
     isJust (testEquality f1 f2)
   _              ==              _ = False
 
-instance OrdF (A.Location arch) => OrdF (Parameter arch sh) where
+instance OrdF (L.Location arch) => OrdF (Parameter arch sh) where
   Function {} `compareF` Literal {} = LTF
   Literal {} `compareF` Function {} = GTF
   Function  {}`compareF` Operand {} = LTF
   Operand {} `compareF` Function {} = GTF
   Operand _ _ `compareF` Literal   _ = LTF
   Literal   _ `compareF` Operand _ _ = GTF
-  Function fnName1 pr1 p1 r1 `compareF` Function fnName2 pr2 p2 r2 =
+  Function fnName1 wo1 r1 `compareF` Function fnName2 wo2 r2 =
     case fnName1 `compare` fnName2 of
       LT -> LTF
       GT -> GTF
       EQ ->
-        case p1 `compareF` p2 of
+        case wo1 `compareF` wo2 of
           LTF -> LTF
           GTF -> GTF
-          EQF -> case pr1 `compareF` pr2 of
+          EQF -> case r1 `compareF` r2 of
                    LTF -> LTF
                    GTF -> GTF
-                   EQF ->
-                     case r1 `compareF` r2 of
-                       LTF -> LTF
-                       GTF -> GTF
-                       EQF -> EQF
+                   EQF -> EQF
 
   Operand _ idx1 `compareF` Operand _ idx2 =
     case idx1 `compareF` idx2 of
@@ -143,10 +163,10 @@ instance OrdF (A.Location arch) => OrdF (Parameter arch sh) where
 
 -- | Get a representation of the 'BaseType' this formula parameter is
 -- type-parameterized over.
-paramType :: (A.Architecture arch) => Parameter arch sh tp -> BaseTypeRepr tp
+paramType :: (L.IsLocation (L.Location arch)) => Parameter arch sh tp -> BaseTypeRepr tp
 paramType (Operand repr _) = repr
-paramType (Literal loc) = A.locationType loc
-paramType (Function _ _ _ repr) = repr
+paramType (Literal loc) = L.locationType loc
+paramType (Function _ _ repr) = repr
 
 -- | A "parameterized" formula, i.e., a formula that has holes for operands that
 -- need to be filled in before it represents an actual concrete instruction.
@@ -156,10 +176,10 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
                        -- might ask, "aren't all parameters used, lest they be
                        -- useless?" No -- some parameters may be only used as
                        -- outputs (locations being defined).
-                       , pfOperandVars :: SL.ShapedList (A.BoundVar sym arch) sh
+                       , pfOperandVars :: SL.ShapedList (BV.BoundVar sym arch) sh
                        -- ^ Bound variables for each of the operands; used in
                        -- the expressions of the definitions.
-                       , pfLiteralVars :: MapF.MapF (A.Location arch) (S.BoundVar sym)
+                       , pfLiteralVars :: MapF.MapF (L.Location arch) (S.BoundVar sym)
                        -- ^ Bound variables for each of the locations; used in
                        -- the expressions of the definitions.
                        , pfDefs :: MapF.MapF (Parameter arch sh) (S.SymExpr sym)
@@ -170,12 +190,12 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
                        -- in here!
                        }
 
-deriving instance (ShowF (A.Location arch),
+deriving instance (ShowF (L.Location arch),
                    ShowF (S.SymExpr sym),
                    ShowF (S.BoundVar sym))
                   => Show (ParameterizedFormula sym arch sh)
 
-instance (ShowF (A.Location arch),
+instance (ShowF (L.Location arch),
           ShowF (S.SymExpr sym),
           ShowF (S.BoundVar sym))
          => ShowF (ParameterizedFormula sym arch)
@@ -201,17 +221,17 @@ instance (ShowF (A.Location arch),
 --    (1), this means that only locations actually used in the definitions
 --    should be present as keys in 'formParamVars'.
 data Formula sym arch =
-  Formula { formParamVars :: MapF.MapF (A.Location arch) (S.BoundVar sym)
-          , formDefs :: MapF.MapF (A.Location arch) (S.SymExpr sym)
+  Formula { formParamVars :: MapF.MapF (L.Location arch) (S.BoundVar sym)
+          , formDefs :: MapF.MapF (L.Location arch) (S.SymExpr sym)
           }
-deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (A.Location arch)) => Show (Formula sym arch)
+deriving instance (ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (L.Location arch)) => Show (Formula sym arch)
 
 -- | Get the locations used by a formula.
-formInputs :: (OrdF (A.Location arch)) => Formula sym arch -> Set.Set (Some (A.Location arch))
+formInputs :: (OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.Location arch))
 formInputs = Set.fromList . MapF.keys . formParamVars
 
 -- | Get the locations modified by a formula.
-formOutputs :: (OrdF (A.Location arch)) => Formula sym arch -> Set.Set (Some (A.Location arch))
+formOutputs :: (OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.Location arch))
 formOutputs = Set.fromList . MapF.keys . formDefs
 
 -- | Check if a given 'Formula' obeys the stated invariant.
@@ -226,7 +246,7 @@ emptyFormula = Formula { formParamVars = MapF.empty, formDefs = MapF.empty }
 
 -- | Turn a formula from one architecture into that of another, assuming the
 -- location types of the architectures are the same.
-coerceFormula :: (A.Location arch1 ~ A.Location arch2) => Formula sym arch1 -> Formula sym arch2
+coerceFormula :: (L.Location arch1 ~ L.Location arch2) => Formula sym arch1 -> Formula sym arch2
 coerceFormula f =
   Formula { formParamVars = formParamVars f
           , formDefs = formDefs f

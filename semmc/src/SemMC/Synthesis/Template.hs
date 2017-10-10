@@ -67,6 +67,7 @@ import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
 import           SemMC.Architecture
+import qualified SemMC.BoundVar as BV
 import           SemMC.Formula
 
 --
@@ -170,7 +171,7 @@ unTemplateUnsafe = unsafeCoerce
 coerceParameter :: Parameter (TemplatedArch arch) sh tp -> Parameter arch sh tp
 coerceParameter (Operand tp idx) = Operand tp idx
 coerceParameter (Literal loc) = Literal loc
-coerceParameter (Function name pr p r) = Function name pr (coerceParameter p) r
+coerceParameter (Function name (WrappedOperand orep oix) r) = Function name (WrappedOperand orep oix) r
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using a manual mapping.
@@ -193,8 +194,8 @@ unTemplateSafe (ParameterizedFormula { pfUses = uses
   where newUses = Set.map (mapSome coerceParameter) uses
         newOpVars = fmapFC coerceBoundVar opVars
         newDefs = MapF.foldrWithKey (MapF.insert . coerceParameter) MapF.empty defs
-        coerceBoundVar :: forall op. BoundVar sym (TemplatedArch arch) op -> BoundVar sym arch op
-        coerceBoundVar (BoundVar var) = BoundVar var
+        coerceBoundVar :: forall op. BV.BoundVar sym (TemplatedArch arch) op -> BV.BoundVar sym arch op
+        coerceBoundVar (BV.BoundVar var) = BV.BoundVar var
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using 'unsafeCoerce'.

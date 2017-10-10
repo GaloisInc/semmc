@@ -35,6 +35,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Formula
 import           SemMC.Formula.Parser ( Atom(..) )
 
@@ -73,26 +74,26 @@ sexprConvert (ParameterizedFormula { pfUses = uses
                 ]
 
 convertUses :: (ShowF (A.Location arch))
-            => ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh
+            => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
             -> Set.Set (Some (Parameter arch sh))
             -> SC.SExpr Atom
 convertUses oplist = fromFoldable (viewSome (convertParameter oplist))
 
 convertParameter :: (ShowF (A.Location arch))
-                 => ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh
+                 => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
                  -> Parameter arch sh tp
                  -> SC.SExpr Atom
 convertParameter opVars (Operand _ idx) = ident name
   where name = varName (indexShapedList opVars idx)
 convertParameter _ (Literal loc) = quoted (showF loc)
-convertParameter opVars (Function fnName _ p _) =
+convertParameter opVars (Function fnName (WrappedOperand orep oix) _) =
   SC.SCons uf (SC.SCons args SC.SNil)
   where
     uf = SC.SCons (SC.SAtom (AIdent "_"))
                   (SC.SCons (SC.SAtom (AIdent "call"))
                             (SC.SCons (SC.SAtom (AString fnName))
                                                 SC.SNil))
-    args = SC.SCons (convertParameter opVars p) SC.SNil
+    args = SC.SCons (convertParameter opVars (Operand orep oix)) SC.SNil
 
 -- | Used for substituting in the result expression when a variable is
 -- encountered in a definition.
@@ -100,7 +101,7 @@ type ParamLookup t = forall tp. S.SimpleBoundVar t tp -> Maybe (SC.SExpr Atom)
 
 convertDefs :: forall t st arch sh.
                (ShowF (A.Location arch))
-            => ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh
+            => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
             -> MapF.MapF (A.Location arch) (S.SimpleBoundVar t)
             -> MapF.MapF (Parameter arch sh) (S.Elt t)
             -> SC.SExpr Atom
@@ -115,15 +116,15 @@ convertLocation :: (ShowF loc) => loc tp -> SC.SExpr Atom
 convertLocation = SC.SAtom . AQuoted . showF
 
 -- | For use in the parameter lookup function.
-buildOpMapping :: ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh
+buildOpMapping :: ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
                -> Map.Map (Some (S.SimpleBoundVar t)) (SC.SExpr Atom)
 buildOpMapping Nil = Map.empty
 buildOpMapping (var :> rest) =
-  Map.insert (Some (A.unBoundVar var)) (ident name) $ buildOpMapping rest
+  Map.insert (Some (BV.unBoundVar var)) (ident name) $ buildOpMapping rest
   where name = varName var
 
 convertDef :: (ShowF (A.Location arch))
-           => ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh
+           => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
            -> ParamLookup t
            -> Pair (Parameter arch sh) (S.Elt t)
            -> SC.SExpr Atom
@@ -199,8 +200,8 @@ convertApp paramLookup = fromFoldable' . convertApp'
                 w = case S.exprType bv of BaseBVRepr len -> natValue len
 
 -- | Extract the name, as a String, of a wrapped bound variable.
-varName :: A.BoundVar (S.SimpleBuilder t st) arch op -> String
-varName (A.BoundVar var) = show (S.bvarName var)
+varName :: BV.BoundVar (S.SimpleBuilder t st) arch op -> String
+varName (BV.BoundVar var) = show (S.bvarName var)
 
 -- | Turn any 'Foldable' into an s-expression by transforming each element with
 -- the given function, then assembling as you would expect.
@@ -230,7 +231,7 @@ int = SC.SAtom . AInt
 class ConvertShape (sh :: [Symbol]) where
   -- | Convert the 'ShapedList' of variables into the serialized s-expression
   -- form, e.g. @((ra . 'Gprc) (imm . 'I32))@.
-  convertOperandVars :: ShapedList (A.BoundVar (S.SimpleBuilder t st) arch) sh -> SC.SExpr Atom
+  convertOperandVars :: ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh -> SC.SExpr Atom
 
 instance ConvertShape '[] where
   convertOperandVars Nil = SC.SNil

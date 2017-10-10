@@ -18,6 +18,8 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC
                        SemMC.Architecture
+                       SemMC.Architecture.Location
+                       SemMC.BoundVar
                        SemMC.Concrete.State
                        SemMC.Concrete.Execution
                        SemMC.Concrete.Execution.SSH
@@ -64,6 +66,7 @@ library
                        SemMC.Worklist
                        Data.Parameterized.Seq
                        Data.Parameterized.Unfold
+  other-modules:       SemMC.Architecture.Internal
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
                        template-haskell,

@@ -54,6 +54,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.Symbol ( userSymbol )
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..) )
 import           SemMC.Formula.Formula
 import qualified SemMC.Util as U
@@ -241,7 +242,7 @@ data DefsInfo sym arch sh = DefsInfo
                             , getLitLookup :: forall tp. A.Location arch tp -> Maybe (S.SymExpr sym tp)
                             -- ^ Function used to retrieve the expression
                             -- corresponding to a given literal.
-                            , getOpVarList :: ShapedList (A.BoundVar sym arch) sh
+                            , getOpVarList :: ShapedList (BV.BoundVar sym arch) sh
                             -- ^ ShapedList used to retrieve the variable
                             -- corresponding to a given literal.
                             , getOpNameList :: ShapedList (OpData arch) sh
@@ -605,9 +606,9 @@ readExpr (SC.SAtom paramRaw) = do
            } <- MR.ask
   param <- readParameter opNames paramRaw
   case param of
-    Some (Operand _ idx) -> return . Some . S.varExpr sym . A.unBoundVar $ indexShapedList opVars idx
+    Some (Operand _ idx) -> return . Some . S.varExpr sym . BV.unBoundVar $ indexShapedList opVars idx
     Some (Literal lit) -> maybe (E.throwError "not declared as input") (return . Some) $ litLookup lit
-    Some (Function fname _ _ _) -> E.throwError ("Functions cannot appear as atoms: " ++ fname)
+    Some (Function fname _ _) -> E.throwError ("Functions cannot appear as atoms: " ++ fname)
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
   args <- readExprs argsRaw
@@ -678,7 +679,11 @@ readDefs (SC.SCons (SC.SCons (SC.SCons mUF (SC.SCons (SC.SAtom p) SC.SNil)) (SC.
         Refl <- fromMaybeError ("mismatching types of parameter and expression for " ++ showF param) $
                   testEquality rep (S.exprType def)
         rest' <- readDefs rest
-        return $ MapF.insert (Function funcName (paramType param) param rep) def rest'
+        case param of
+          Literal {} -> E.throwError "Literals are not allowed as arguments to parameter functions"
+          Function {} -> E.throwError "Nested parameter functions are not allowed"
+          Operand orep oix ->
+            return $ MapF.insert (Function funcName (WrappedOperand orep oix) rep) def rest'
       _ -> E.throwError ("Missing type repr for uninterpreted function " ++ show funcName)
 readDefs _ = E.throwError "invalid defs structure"
 
@@ -729,12 +734,12 @@ readFormula' sym env text = do
   inputs :: [Some (Parameter arch sh)]
     <- readInputs operands inputsRaw
 
-  let mkOperandVar :: forall s. OpData arch s -> m (A.BoundVar sym arch s)
+  let mkOperandVar :: forall s. OpData arch s -> m (BV.BoundVar sym arch s)
       mkOperandVar (OpData name tpRepr) =
         let symbol = U.makeSymbol (operandVarPrefix ++ name)
-        in A.BoundVar <$> (liftIO $ S.freshBoundVar sym symbol tpRepr)
+        in BV.BoundVar <$> (liftIO $ S.freshBoundVar sym symbol tpRepr)
 
-  opVarList :: ShapedList (A.BoundVar sym arch) sh
+  opVarList :: ShapedList (BV.BoundVar sym arch) sh
     <- traverseFC mkOperandVar operands
 
   -- NOTE: At the moment, we just trust that the semantics definition declares

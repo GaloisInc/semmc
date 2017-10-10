@@ -26,6 +26,7 @@ import qualified Lang.Crucible.Solver.Interface as C
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.BoundVar as BV
 import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
@@ -91,8 +92,8 @@ renameVariables oplist pf0 = do
     doReplace sym sva _k v = F.replaceVars sym sva v
 
     buildRenameList :: Sym t
-                    -> SL.ShapedList (A.BoundVar (Sym t) arch) sh
-                    -> IO (Pair (Ctx.Assignment (C.BoundVar (Sym t))) (Ctx.Assignment (C.SymExpr (Sym t))), SL.ShapedList (A.BoundVar (Sym t) arch) sh)
+                    -> SL.ShapedList (BV.BoundVar (Sym t) arch) sh
+                    -> IO (Pair (Ctx.Assignment (C.BoundVar (Sym t))) (Ctx.Assignment (C.SymExpr (Sym t))), SL.ShapedList (BV.BoundVar (Sym t) arch) sh)
     buildRenameList sym opVarList = do
       -- A shaped list with the same shape, but with pairs where the first is
       -- the original name and the second is the newly-allocated variable (with
@@ -105,23 +106,23 @@ renameVariables oplist pf0 = do
     allocateSensibleVariableName :: forall tp
                                   . Sym t
                                  -> SL.Index sh tp
-                                 -> A.BoundVar (Sym t) arch tp
-                                 -> IO (VarPair (A.BoundVar (Sym t) arch) (A.BoundVar (Sym t) arch) tp)
+                                 -> BV.BoundVar (Sym t) arch tp
+                                 -> IO (VarPair (BV.BoundVar (Sym t) arch) (BV.BoundVar (Sym t) arch) tp)
     allocateSensibleVariableName sym ix bv = do
       let operand = SL.indexShapedList oplist ix
       fresh <- C.freshBoundVar sym (U.makeSymbol ("operand" ++ show (SL.indexAsInt ix))) (CS.operandType (Proxy @arch) operand)
-      return (VarPair bv (A.BoundVar fresh))
+      return (VarPair bv (BV.BoundVar fresh))
 
     -- Given a correspondence between and old var and a new var, create a pair
     -- mapping the old pair to a new expr (which is just the new var wrapped
     -- into a SymExpr)
     convertToVarExprPair :: forall tp
-                          . VarPair (A.BoundVar (Sym t) arch) (A.BoundVar (Sym t) arch) tp
-                         -> IO (VarPair (A.BoundVar (Sym t) arch) (EltWrapper t arch) tp)
-    convertToVarExprPair (VarPair oldVar (A.BoundVar newVar)) =
+                          . VarPair (BV.BoundVar (Sym t) arch) (BV.BoundVar (Sym t) arch) tp
+                         -> IO (VarPair (BV.BoundVar (Sym t) arch) (EltWrapper t arch) tp)
+    convertToVarExprPair (VarPair oldVar (BV.BoundVar newVar)) =
       return $ VarPair oldVar (EltWrapper (SB.BoundVarElt newVar))
 
-    addToAssignmentPair (VarPair (A.BoundVar v) (EltWrapper e)) (Pair vars exprs) =
+    addToAssignmentPair (VarPair (BV.BoundVar v) (EltWrapper e)) (Pair vars exprs) =
       Pair (Ctx.extend vars v) (Ctx.extend exprs e)
 
 newtype EltWrapper sym arch op = EltWrapper (SB.Elt sym (A.OperandType arch op))
@@ -241,7 +242,7 @@ collectUses opVars litVars defs =
     wrapIndexes :: forall tp . SL.Index sh tp -> A.Operand arch tp -> S.Set (Some (F.Parameter arch sh)) -> S.Set (Some (F.Parameter arch sh))
     wrapIndexes ix op = S.insert (Some (F.Operand (CS.operandType (Proxy @arch) op) ix))
 
--- | Given an operand, find the 'A.BoundVar' the represents it.
+-- | Given an operand, find the 'BV.BoundVar' the represents it.
 --
 -- For operands with 'A.Location's (e.g., registers), this can be found in the
 -- given 'MapF.MapF'.  For operands without 'A.Location's (i.e., immediates), we
@@ -254,7 +255,7 @@ findVarForOperand :: forall arch sh tp t
                   -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t))
                   -> SL.Index sh tp
                   -> A.Operand arch tp
-                  -> Syn t arch (A.BoundVar (Sym t) arch tp)
+                  -> Syn t arch (BV.BoundVar (Sym t) arch tp)
 findVarForOperand opc (CS.RI { CS.riLiteralLocs = lls, CS.riOpcode = rop }) formulaBindings ix op
   | Just P.Refl <- P.testEquality rop opc =
     case A.operandToLocation (Proxy @arch) op of
@@ -266,8 +267,8 @@ findVarForOperand opc (CS.RI { CS.riLiteralLocs = lls, CS.riOpcode = rop }) form
             -- we need to allocate a fresh variable here for use in the
             -- parameterized formula.
             withSymBackend $ \sym -> do
-              A.BoundVar <$> liftIO (C.freshBoundVar sym (U.makeSymbol (P.showF loc)) (A.locationType loc))
-          Just bv -> return (A.BoundVar bv)
+              BV.BoundVar <$> liftIO (C.freshBoundVar sym (U.makeSymbol (P.showF loc)) (A.locationType loc))
+          Just bv -> return (BV.BoundVar bv)
       Nothing -> do
         -- In this case, we are dealing with an immediate operand (since it
         -- doesn't have a location representation).  We can find the corresponding
@@ -275,7 +276,7 @@ findVarForOperand opc (CS.RI { CS.riLiteralLocs = lls, CS.riOpcode = rop }) form
         case MapF.lookup (CS.LiteralRef ix) lls of
           Just loc ->
             case MapF.lookup loc formulaBindings of
-              Just bv -> return (A.BoundVar bv)
+              Just bv -> return (BV.BoundVar bv)
               Nothing -> L.error ("Expected a binding for location " ++ P.showF loc)
           Nothing -> L.error ("Expected a location mapping for operand at index " ++ show ix)
   | otherwise = L.error ("Unexpected opcode mismatch: " ++ P.showF opc ++ " vs " ++ P.showF rop)
