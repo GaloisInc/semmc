@@ -80,7 +80,7 @@ data WrappedOperand arch sh s where
   WrappedOperand :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> WrappedOperand arch sh s
 
 data LocationFuncInterp arch where
-  LocationFuncInterp :: ( forall sh s tp . SL.ShapedList (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Parameter arch sh tp)
+  LocationFuncInterp :: ( forall sh s tp . SL.ShapedList (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> L.Location arch tp)
                      -> LocationFuncInterp arch
 
 instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where

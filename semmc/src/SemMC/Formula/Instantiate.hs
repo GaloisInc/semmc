@@ -152,6 +152,10 @@ paramToLocation :: forall arch sh tp.
 paramToLocation opVals (Operand _ idx) =
   A.operandToLocation (Proxy @arch) $ indexShapedList opVals idx
 paramToLocation _ (Literal loc) = Just loc
+paramToLocation opVals (Function fnName wo rep) =
+  case fnName `lookup` A.locationFuncInterpretation (Proxy @arch) of
+    Nothing -> error ("No function interpretation for " ++ show fnName)
+    Just (LocationFuncInterp fn) -> Just (fn opVals wo rep)
 
 -- | Return the bound variable corresponding to the given location, by either
 -- looking it up in the given map or creating it then inserting it if it doesn't
