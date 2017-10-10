@@ -3,12 +3,11 @@
   (in ('Mem memref))
   (defs 
     ((rT 
-       ((_ call "read_mem") 
+       ((_ call "read_mem.32") 
          'Mem
          (bvadd 
            (ite 
-             ((_ call "ppc.is_r0") ((_ call memri_reg) memref))
+             ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
              #x00000000
-             ((_ call memri_reg) memref))
-           ((_ sign_extend 16) ((_ call "memri_offset") memref)))
-         #x00000004)))))
+             ((_ call "ppc.memri_reg") memref))
+           ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref))))))))

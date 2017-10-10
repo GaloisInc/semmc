@@ -2,10 +2,12 @@
 ((operands ((rT . 'Gprc) (memref . 'Memrr))) 
   (in ('Mem memref))
   (defs 
-    ((((_ call memrr_base) memref) (bvadd ((_ call memrr_base) memref) ((_ call "memrr_offset") memref))) 
+    ((((_ call "ppc.memrr_base") memref) 
+       (bvadd ((_ call "ppc.memrr_base") memref) ((_ call "ppc.memrr_offset") memref))) 
       (rT 
         ((_ sign_extend 16) 
-          ((_ call "read_mem") 
+          ((_ call "read_mem.16") 
             'Mem
-            (bvadd ((_ call memrr_base) memref) ((_ call "memrr_offset") memref))
-            #x00000002))))))
+            (bvadd 
+              ((_ call "ppc.memrr_base") memref)
+              ((_ call "ppc.memrr_offset") memref))))))))

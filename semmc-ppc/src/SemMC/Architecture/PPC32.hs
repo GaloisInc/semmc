@@ -76,15 +76,15 @@ type instance A.Opcode PPC = PPC.Opcode
 instance A.IsOpcode PPC.Opcode
 
 -- Assuming 32-bit PPC for now.
-type instance A.OperandType PPC "Abscalltarget" = BaseBVType 32
-type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 32
-type instance A.OperandType PPC "Absdirectbrtarget" = BaseBVType 32
-type instance A.OperandType PPC "Calltarget" = BaseBVType 32
-type instance A.OperandType PPC "Condbrtarget" = BaseBVType 32
+type instance A.OperandType PPC "Abscalltarget" = BaseBVType 24
+type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 14
+type instance A.OperandType PPC "Absdirectbrtarget" = BaseBVType 24
+type instance A.OperandType PPC "Calltarget" = BaseBVType 24
+type instance A.OperandType PPC "Condbrtarget" = BaseBVType 14
 type instance A.OperandType PPC "Crbitm" = BaseBVType 3
 type instance A.OperandType PPC "Crbitrc" = BaseBVType 5
 type instance A.OperandType PPC "Crrc" = BaseBVType 3
-type instance A.OperandType PPC "Directbrtarget" = BaseBVType 32
+type instance A.OperandType PPC "Directbrtarget" = BaseBVType 24
 type instance A.OperandType PPC "F4rc" = BaseBVType 128
 type instance A.OperandType PPC "F8rc" = BaseBVType 128
 type instance A.OperandType PPC "Gprc" = BaseBVType 32
@@ -95,29 +95,20 @@ type instance A.OperandType PPC "Memri" = BaseBVType 32
 type instance A.OperandType PPC "Memrix" = BaseBVType 32
 type instance A.OperandType PPC "Memrix16" = BaseBVType 32
 type instance A.OperandType PPC "Memrr" = BaseBVType 32
--- Yes, "S16" is supposed to be 32 bits. See the tgen file.
-type instance A.OperandType PPC "S16imm" = BaseBVType 32
-type instance A.OperandType PPC "S16imm64" = BaseBVType 32
-type instance A.OperandType PPC "S17imm" = BaseBVType 32
-type instance A.OperandType PPC "S5imm" = BaseBVType 32
-type instance A.OperandType PPC "Spe2dis" = BaseBVType 32
-type instance A.OperandType PPC "Spe4dis" = BaseBVType 32
-type instance A.OperandType PPC "Spe8dis" = BaseBVType 32
-type instance A.OperandType PPC "Spe8dis" = BaseBVType 32
-type instance A.OperandType PPC "Tlscall" = BaseBVType 64
-type instance A.OperandType PPC "Tlscall32" = BaseBVType 32
-type instance A.OperandType PPC "Tlsreg" = BaseBVType 32
-type instance A.OperandType PPC "Tlsreg32" = BaseBVType 32
-type instance A.OperandType PPC "U10imm" = BaseBVType 32
-type instance A.OperandType PPC "U16imm" = BaseBVType 32
-type instance A.OperandType PPC "U16imm64" = BaseBVType 32
-type instance A.OperandType PPC "U1imm" = BaseBVType 32
-type instance A.OperandType PPC "U2imm" = BaseBVType 32
-type instance A.OperandType PPC "U4imm" = BaseBVType 32
-type instance A.OperandType PPC "U5imm" = BaseBVType 32
-type instance A.OperandType PPC "U6imm" = BaseBVType 32
-type instance A.OperandType PPC "U7imm" = BaseBVType 32
-type instance A.OperandType PPC "U8imm" = BaseBVType 32
+type instance A.OperandType PPC "S16imm" = BaseBVType 16
+type instance A.OperandType PPC "S16imm64" = BaseBVType 16
+type instance A.OperandType PPC "S17imm" = BaseBVType 16
+type instance A.OperandType PPC "S5imm" = BaseBVType 5
+type instance A.OperandType PPC "U10imm" = BaseBVType 10
+type instance A.OperandType PPC "U16imm" = BaseBVType 16
+type instance A.OperandType PPC "U16imm64" = BaseBVType 16
+type instance A.OperandType PPC "U1imm" = BaseBVType 1
+type instance A.OperandType PPC "U2imm" = BaseBVType 2
+type instance A.OperandType PPC "U4imm" = BaseBVType 4
+type instance A.OperandType PPC "U5imm" = BaseBVType 5
+type instance A.OperandType PPC "U6imm" = BaseBVType 6
+type instance A.OperandType PPC "U7imm" = BaseBVType 7
+type instance A.OperandType PPC "U8imm" = BaseBVType 8
 type instance A.OperandType PPC "Vrrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsfrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsrc" = BaseBVType 128
@@ -218,16 +209,11 @@ instance T.TemplatableOperand PPC "Memri" where
 instance T.TemplatableOperand PPC "Directbrtarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: T.TemplatedOperandFn PPC "Directbrtarget"
-          mkDirect sym locLookup = do
-            ip <- locLookup LocIP
+          mkDirect sym _locLookup = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Directbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
-            expr <- S.bvAdd sym ip extended
             let recover evalFn =
                   PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (expr, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "U5imm" where
   opTemplates = [symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
@@ -240,48 +226,35 @@ instance T.TemplatableOperand PPC "S17imm" where
     where mkImm :: T.TemplatedOperandFn PPC "S17imm"
           mkImm sym _ = do
             v <- S.freshConstant sym (U.makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
-            zeroes <- S.bvLit sym knownNat 0
-            extended <- S.bvConcat sym v zeroes
             let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
-            return (extended, T.WrappedRecoverOperandFn recover)
+            return (v, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Absdirectbrtarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: T.TemplatedOperandFn PPC "Absdirectbrtarget"
           mkDirect sym _ = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Absdirectbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
             let recover evalFn =
                   PPC.Absdirectbrtarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (extended, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Calltarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: T.TemplatedOperandFn PPC "Calltarget"
-          mkDirect sym locLookup = do
-            ip <- locLookup LocIP
+          mkDirect sym _locLookup = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Calltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
-            expr <- S.bvAdd sym ip extended
             let recover evalFn =
                   PPC.Calltarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (expr, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Abscalltarget" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]
     where mkDirect :: T.TemplatedOperandFn PPC "Abscalltarget"
           mkDirect sym _ = do
             offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscalltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
-            zeroes <- S.bvLit sym (knownNat @2) 0
-            shifted <- S.bvConcat sym offsetRaw zeroes
-            extended <- S.bvSext sym knownNat shifted
             let recover evalFn =
                   PPC.Abscalltarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
-            return (extended, T.WrappedRecoverOperandFn recover)
+            return (offsetRaw, T.WrappedRecoverOperandFn recover)
 
 instance T.TemplatableOperand PPC "Crrc" where
   opTemplates = [T.TemplatedOperand Nothing Set.empty mkDirect]

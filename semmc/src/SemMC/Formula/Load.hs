@@ -49,10 +49,10 @@ formulaEnv proxy sym = do
                        }
   where
     toUF :: (String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)
-         -> IO (String, FE.SomeSome (CRU.SymFn sym))
-    toUF (name, Some args, Some ret) = do
+         -> IO (String, (FE.SomeSome (CRU.SymFn sym), Some BaseTypeRepr))
+    toUF (name, Some args, retRep@(Some ret)) = do
       uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol name) args ret
-      return (name, uf)
+      return (name, (uf, retRep))
 
 data FormulaParseError = FormulaParseError String String
   deriving (Show)

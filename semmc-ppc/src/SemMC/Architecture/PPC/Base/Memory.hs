@@ -178,11 +178,11 @@ loadAndExtendDS :: (?bitSize :: BitSize)
                 -> SemM 'Def ()
 loadAndExtendDS nBytes extend = do
   rT <- param "rT" gprc naturalBV
-  memref <- param "memref" memri EMemRef
+  memref <- param "memref" memrix EMemRef
   input memref
   input memory
-  let rA = memriReg memref
-  let disp = memriOffset 14 (Loc memref)
+  let rA = memrixReg memref
+  let disp = memrixOffset 14 (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b (sext (concat disp (LitBV 2 0x0)))
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
@@ -249,11 +249,11 @@ loadAndUpdateDS :: (?bitSize :: BitSize)
                 -> SemM 'Def ()
 loadAndUpdateDS nBytes extend = do
   rT <- param "rT" gprc naturalBV
-  memref <- param "memref" memri EMemRef
+  memref <- param "memref" memrix EMemRef
   input memory
   input memref
-  let rA = memriReg memref
-  let disp = memriOffset 14 (Loc memref)
+  let rA = memrixReg memref
+  let disp = memrixOffset 14 (Loc memref)
   let ea = bvadd (Loc rA) (sext (concat disp (LitBV 2 0x0)))
   defLoc rT (extend (readMem (Loc memory) ea nBytes))
   defLoc rA ea
@@ -264,8 +264,8 @@ store :: (?bitSize :: BitSize)
       => Int
       -> SemM 'Def ()
 store nBytes = do
-  rS <- param "rS" gprc naturalBV
   memref <- param "memref" memri EMemRef
+  rS <- param "rS" gprc naturalBV
   input rS
   input memref
   input memory
@@ -282,13 +282,13 @@ storeDS :: (?bitSize :: BitSize)
         => Int
         -> SemM 'Def ()
 storeDS nBytes = do
+  memref <- param "memref" memrix EMemRef
   rS <- param "rS" gprc naturalBV
-  memref <- param "memref" memri EMemRef
   input rS
   input memref
   input memory
-  let rA = memriReg memref
-  let disp = memriOffset 14 (Loc memref)
+  let rA = memrixReg memref
+  let disp = memrixOffset 14 (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b (sext (concat disp (LitBV 2 0x0)))
   defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
@@ -297,8 +297,8 @@ storeWithUpdate :: (?bitSize :: BitSize)
                 => Int
                 -> SemM 'Def ()
 storeWithUpdate nBytes = do
-  rS <- param "rS" gprc naturalBV
   memref <- param "memref" memri EMemRef
+  rS <- param "rS" gprc naturalBV
   input rS
   input memref
   input memory
@@ -312,13 +312,13 @@ storeWithUpdateDS :: (?bitSize :: BitSize)
                   => Int
                   -> SemM 'Def ()
 storeWithUpdateDS nBytes = do
+  memref <- param "memref" memrix EMemRef
   rS <- param "rS" gprc naturalBV
-  memref <- param "memref" memri EMemRef
   input rS
   input memref
   input memory
-  let rA = memriReg memref
-  let disp = memriOffset 14 (Loc memref)
+  let rA = memrixReg memref
+  let disp = memrixOffset 14 (Loc memref)
   let ea = bvadd (Loc rA) (sext (concat disp (LitBV 2 0x0)))
   defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
   defLoc rA ea
@@ -327,8 +327,8 @@ storeIndexed :: (?bitSize :: BitSize)
              => Int
              -> SemM 'Def ()
 storeIndexed nBytes = do
-  rS <- param "rS" gprc naturalBV
   memref <- param "memref" memrr EMemRef
+  rS <- param "rS" gprc naturalBV
   input rS
   input memref
   input memory
@@ -342,8 +342,8 @@ storeWithUpdateIndexed :: (?bitSize :: BitSize)
                        => Int
                        -> SemM 'Def ()
 storeWithUpdateIndexed nBytes = do
-  rS <- param "rS" gprc naturalBV
   memref <- param "memref" memrr EMemRef
+  rS <- param "rS" gprc naturalBV
   input rS
   input memref
   input memory

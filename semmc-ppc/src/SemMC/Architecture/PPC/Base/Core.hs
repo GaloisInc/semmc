@@ -62,6 +62,8 @@ module SemMC.Architecture.PPC.Base.Core (
   isR0,
   memriReg,
   memriOffset,
+  memrixReg,
+  memrixOffset,
   memrrBaseReg,
   memrrOffsetReg,
   storeMem,
@@ -73,6 +75,7 @@ module SemMC.Architecture.PPC.Base.Core (
 import GHC.Stack ( HasCallStack )
 
 import Prelude hiding ( concat )
+import Text.Printf ( printf )
 import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
 
@@ -361,37 +364,39 @@ highBits' n e
 
 -- Uninterpreted function helpers
 
--- | Extract the base register from a memrix field
--- memrixReg :: Expr tp -> Expr 'TBV
--- memrixReg = uf "memrix_reg" . (:[])
-
--- -- | Extract the offset (DS field) of a memrix memory access
--- memrixOffset :: Expr tp -> Expr 'TBV
--- memrixOffset e = uf  "memrix_offset" . ((:[]) . Some)
-
 -- | This is a function over locations instead of expressions because we need to
 -- be able to call 'defLoc' on the result.
 --
 -- Note that we really need to accommodate this in the formula parser.
 memriReg :: (?bitSize :: BitSize) => Location 'TMemRef -> Location 'TBV
-memriReg = locUF naturalBV "memri_reg"
+memriReg = locUF naturalBV "ppc.memri_reg"
 
 memriOffset :: Int
             -- ^ The number of bits of the offset
             -> Expr 'TMemRef
             -- ^ The memory ref expression
             -> Expr 'TBV
-memriOffset osize = uf (EBV osize) "memri_offset" . ((:[]) . Some)
+memriOffset osize = uf (EBV osize) "ppc.memri_offset" . ((:[]) . Some)
+
+memrixReg :: (?bitSize :: BitSize) => Location 'TMemRef -> Location 'TBV
+memrixReg = locUF naturalBV "ppc.memrix_reg"
+
+memrixOffset :: Int
+             -- ^ The number of bits of the offset
+             -> Expr 'TMemRef
+             -- ^ The memory ref expression
+             -> Expr 'TBV
+memrixOffset osize = uf (EBV osize) "ppc.memrix_offset" . ((:[]) . Some)
 
 memrrBaseReg :: (?bitSize :: BitSize)
              => Location 'TMemRef
              -> Location 'TBV
-memrrBaseReg = locUF naturalBV "memrr_base"
+memrrBaseReg = locUF naturalBV "ppc.memrr_base"
 
 memrrOffsetReg :: (?bitSize :: BitSize)
                => Expr 'TMemRef
                -> Expr 'TBV
-memrrOffsetReg = uf naturalBV "memrr_offset" . ((:[]) . Some)
+memrrOffsetReg = uf naturalBV "ppc.memrr_offset" . ((:[]) . Some)
 
 -- | An uninterpreted function that converts a CR register field reference
 -- (e.g. CR0) into a number.
@@ -411,7 +416,10 @@ readMem :: (?bitSize :: BitSize)
         -- ^ The number of bytes
         -> Expr 'TBV
 readMem mem ea nBytes =
-  uf (EBV (8 * nBytes)) "read_mem" [Some mem, Some ea, Some (LitBV 32 (fromIntegral nBytes))]
+  uf (EBV (8 * nBytes)) funcName [Some mem, Some ea]
+  where
+    funcName :: String
+    funcName = printf "read_mem.%d" (nBytes * 8)
 
 -- | Define a write to memory; it takes a memory and returns a whole new memory.
 storeMem :: (?bitSize :: BitSize, HasCallStack)
@@ -427,8 +435,10 @@ storeMem :: (?bitSize :: BitSize, HasCallStack)
 storeMem mem ea nBytes val
   | EBV w <- exprType val
   , w == nBytes * 8 =
-    uf EMemory "write_mem" [Some mem, Some ea, Some (LitInt (fromIntegral nBytes)), Some val]
+    uf EMemory funcName [Some mem, Some ea, Some val]
   | otherwise = error ("Invalid byte count to store value " ++ show val)
+  where
+    funcName = printf "write_mem.%d" (nBytes * 8)
 
 -- | An uninterpreted function that tests if the argument is register zero
 isR0 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool

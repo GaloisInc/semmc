@@ -227,4 +227,46 @@ uninterpretedFunctions =
   , ("ppc.is_r0",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
+  , ("ppc.memri_reg",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("ppc.memri_offset",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
+  , ("ppc.memrix_reg",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("ppc.memrix_offset",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 14)))
+  , ("ppc.memrr_base",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("ppc.memrr_offset",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("read_mem.8",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
+  , ("read_mem.16",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
+  , ("read_mem.32",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+  , ("read_mem.64",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("write_mem.8",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 8)),
+     Some (knownRepr :: BaseTypeRepr (BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8))))
+  , ("write_mem.16",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 16)),
+     Some (knownRepr :: BaseTypeRepr (BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8))))
+  , ("write_mem.32",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8))))
+  , ("write_mem.64",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8) Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseArrayType (Ctx.SingleCtx (BaseBVType 64)) (BaseBVType 8))))
   ]

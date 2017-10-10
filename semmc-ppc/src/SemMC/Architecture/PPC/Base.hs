@@ -78,6 +78,7 @@ manual bitSize = runSem $ do
     defLoc lnk (Loc rA)
   defineOpcode "MFLR" $ do
     rA <- param "rA" gprc naturalBV
+    input lnk
     defLoc rA (Loc lnk)
   defineOpcode "MTCTR" $ do
     rA <- param "rA" gprc naturalBV
@@ -85,15 +86,8 @@ manual bitSize = runSem $ do
     defLoc ctr (Loc rA)
   defineOpcode "MFCTR" $ do
     rA <- param "rA" gprc naturalBV
+    input ctr
     defLoc rA (Loc ctr)
-  -- defineOpcode "LD" do
-  --   rT <- param "rT" gprc
-  --   memRef <- param "memRef" memrix
-  --   let rA = memrixReg (Param memRef)
-  --   let ds = memrixOffset (Param memRef)
-  --   let b = ite (isR0 rA) (LitBV bitSize 0) rA
-  --   let ea = bvadd b (sext bitSize 16 (concat ds (LitBV 2 0)))
-  --   defLoc (ParamLoc rT) (Loc memory)
   return ()
 
 

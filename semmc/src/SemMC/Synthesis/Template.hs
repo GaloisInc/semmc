@@ -170,6 +170,7 @@ unTemplateUnsafe = unsafeCoerce
 coerceParameter :: Parameter (TemplatedArch arch) sh tp -> Parameter arch sh tp
 coerceParameter (Operand tp idx) = Operand tp idx
 coerceParameter (Literal loc) = Literal loc
+coerceParameter (Function name pr p r) = Function name pr (coerceParameter p) r
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using a manual mapping.
@@ -287,6 +288,7 @@ templatedInputs (TemplatedInstruction _ pf oplist) =
               let TemplatedOperand _ uses _ = indexShapedList oplist idx
               in uses
             Literal loc -> Set.singleton (Some loc)
+            Function {} -> error "Function parameters are not actually inputs: they can only be defined"
 
 -- | Get the set of locations that a 'TemplatedInstruction' defines.
 templatedOutputs :: (OrdF (Location arch))

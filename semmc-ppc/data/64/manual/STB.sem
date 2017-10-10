@@ -1,15 +1,14 @@
 ;; Store Byte (D-form)
-((operands ((rS . 'Gprc) (memref . 'Memri))) 
+((operands ((memref . 'Memri) (rS . 'Gprc))) 
   (in ('Mem memref rS))
   (defs 
     (('Mem 
-       ((_ call "write_mem") 
+       ((_ call "write_mem.8") 
          'Mem
          (bvadd 
            (ite 
-             ((_ call "ppc.is_r0") ((_ call memri_reg) memref))
+             ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
              #x0000000000000000
-             ((_ call memri_reg) memref))
-           ((_ sign_extend 48) ((_ call "memri_offset") memref)))
-         1
+             ((_ call "ppc.memri_reg") memref))
+           ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))
          ((_ extract 63 56) rS))))))

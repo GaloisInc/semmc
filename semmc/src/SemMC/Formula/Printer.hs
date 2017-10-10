@@ -85,6 +85,14 @@ convertParameter :: (ShowF (A.Location arch))
 convertParameter opVars (Operand _ idx) = ident name
   where name = varName (indexShapedList opVars idx)
 convertParameter _ (Literal loc) = quoted (showF loc)
+convertParameter opVars (Function fnName _ p _) =
+  SC.SCons uf (SC.SCons args SC.SNil)
+  where
+    uf = SC.SCons (SC.SAtom (AIdent "_"))
+                  (SC.SCons (SC.SAtom (AIdent "call"))
+                            (SC.SCons (SC.SAtom (AString fnName))
+                                                SC.SNil))
+    args = SC.SCons (convertParameter opVars p) SC.SNil
 
 -- | Used for substituting in the result expression when a variable is
 -- encountered in a definition.

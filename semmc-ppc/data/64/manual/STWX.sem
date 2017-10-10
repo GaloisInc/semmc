@@ -1,15 +1,14 @@
 ;; Store Word Indexed (X-form)
-((operands ((rS . 'Gprc) (memref . 'Memrr))) 
+((operands ((memref . 'Memrr) (rS . 'Gprc))) 
   (in ('Mem memref rS))
   (defs 
     (('Mem 
-       ((_ call "write_mem") 
+       ((_ call "write_mem.32") 
          'Mem
          (bvadd 
            (ite 
-             ((_ call "ppc.is_r0") ((_ call memrr_base) memref))
+             ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
              #x0000000000000000
-             ((_ call memrr_base) memref))
-           ((_ call "memrr_offset") memref))
-         4
+             ((_ call "ppc.memrr_base") memref))
+           ((_ call "ppc.memrr_offset") memref))
          ((_ extract 63 32) rS))))))

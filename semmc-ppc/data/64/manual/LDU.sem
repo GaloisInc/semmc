@@ -1,15 +1,14 @@
 ;; Load Doubleword with Update (DS-form)
-((operands ((rT . 'Gprc) (memref . 'Memri))) 
+((operands ((rT . 'Gprc) (memref . 'Memrix))) 
   (in (memref 'Mem))
   (defs 
-    ((((_ call memri_reg) memref) 
+    ((((_ call "ppc.memrix_reg") memref) 
        (bvadd 
-         ((_ call memri_reg) memref)
-         ((_ sign_extend 48) (concat ((_ call "memri_offset") memref) #b00)))) 
+         ((_ call "ppc.memrix_reg") memref)
+         ((_ sign_extend 48) (concat ((_ call "ppc.memrix_offset") memref) #b00)))) 
       (rT 
-        ((_ call "read_mem") 
+        ((_ call "read_mem.64") 
           'Mem
           (bvadd 
-            ((_ call memri_reg) memref)
-            ((_ sign_extend 48) (concat ((_ call "memri_offset") memref) #b00)))
-          #x00000008)))))
+            ((_ call "ppc.memrix_reg") memref)
+            ((_ sign_extend 48) (concat ((_ call "ppc.memrix_offset") memref) #b00))))))))

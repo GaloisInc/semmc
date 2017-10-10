@@ -94,7 +94,6 @@ type instance A.OperandType PPC "Memri" = BaseBVType 64
 type instance A.OperandType PPC "Memrix" = BaseBVType 64
 type instance A.OperandType PPC "Memrix16" = BaseBVType 64
 type instance A.OperandType PPC "Memrr" = BaseBVType 64
--- Yes, "S16" is supposed to be 32 bits. See the tgen file.
 type instance A.OperandType PPC "S16imm" = BaseBVType 16
 type instance A.OperandType PPC "S16imm64" = BaseBVType 16
 type instance A.OperandType PPC "S17imm" = BaseBVType 16
