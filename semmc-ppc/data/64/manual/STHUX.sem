@@ -2,10 +2,13 @@
 ((operands ((rS . 'Gprc) (memref . 'Memrr))) 
   (in ('Mem memref rS))
   (defs 
-    ((((_ call memrr_base) memref) (bvadd ((_ call memrr_base) memref) ((_ call "memrr_offset") memref))) 
+    ((((_ call "ppc.memrr_base") memref) 
+       (bvadd ((_ call "ppc.memrr_base") memref) ((_ call "ppc.memrr_offset") memref))) 
       ('Mem 
         ((_ call "write_mem") 
           'Mem
-          (bvadd ((_ call memrr_base) memref) ((_ call "memrr_offset") memref))
+          (bvadd 
+            ((_ call "ppc.memrr_base") memref)
+            ((_ call "ppc.memrr_offset") memref))
           2
           ((_ extract 63 48) rS))))))

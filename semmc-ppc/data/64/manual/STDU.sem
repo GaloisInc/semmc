@@ -2,15 +2,15 @@
 ((operands ((rS . 'Gprc) (memref . 'Memri))) 
   (in ('Mem memref rS))
   (defs 
-    ((((_ call memri_reg) memref) 
+    ((((_ call "ppc.memri_reg") memref) 
        (bvadd 
-         ((_ call memri_reg) memref)
-         ((_ sign_extend 48) (concat ((_ call "memri_offset") memref) #b00)))) 
+         ((_ call "ppc.memri_reg") memref)
+         ((_ sign_extend 48) (concat ((_ call "ppc.memri_offset") memref) #b00)))) 
       ('Mem 
         ((_ call "write_mem") 
           'Mem
           (bvadd 
-            ((_ call memri_reg) memref)
-            ((_ sign_extend 48) (concat ((_ call "memri_offset") memref) #b00)))
+            ((_ call "ppc.memri_reg") memref)
+            ((_ sign_extend 48) (concat ((_ call "ppc.memri_offset") memref) #b00)))
           8
           rS)))))
