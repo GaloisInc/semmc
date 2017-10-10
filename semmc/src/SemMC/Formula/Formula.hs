@@ -29,6 +29,7 @@ module SemMC.Formula.Formula
 
 import           GHC.TypeLits ( Symbol )
 
+import           Control.Monad ( guard )
 import qualified Data.Set as Set
 import           Text.Printf ( printf )
 
@@ -53,26 +54,62 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   -- example, if you have the x86 opcode @call r32@, a 'Literal' would be used
   -- to represent the implicit @esp@ register used.
   Literal :: A.Location arch tp -> Parameter arch sh tp
+  -- | A function from one location to another.  The string specifies the name
+  -- of the function, which is interpreted on a per-architecture basis.
+  --
+  -- This is intended to be evaluated at formula instantiation time and is
+  -- designed to accommodate cases like the PowerPC @memri@ operand type, which
+  -- actually stands for two different operands bundled together: a base and an
+  -- offset.  In some instructions, we have to define a part of the @memri@ (the
+  -- base register) as part of the semantics of an instruction, so we need a way
+  -- to refer to part of the parameter.
+  Function :: String
+           -> BaseTypeRepr tp'
+           -> Parameter arch sh tp'
+           -> BaseTypeRepr tp
+           -> Parameter arch sh tp
 
 instance ShowF (A.Location arch) => Show (Parameter arch sh tp) where
   show (Operand repr idx) = printf "Operand (%s) (%s)" (show repr) (show idx)
   show (Literal var) = unwords ["Literal", showF var]
+  show (Function fnName _ p _) = printf "%s(%s)" fnName (show p)
 
 instance (ShowF (A.Location arch)) => ShowF (Parameter arch sh)
 
 instance TestEquality (A.Location arch) => TestEquality (Parameter arch sh) where
   Operand _ idx1 `testEquality` Operand _ idx2 = (\Refl -> Refl) <$> testEquality idx1 idx2
   Literal   var1 `testEquality` Literal   var2 = (\Refl -> Refl) <$> testEquality var1 var2
+  -- Function r1 fname1 p1 `testEquality` Function r2 fname2 p2 = do
+  --   guard (fname1 == fname2)
+  --   Refl <- testEquality p1 p2
+  --   testEquality r1 r2
+--    return Refl
   _              `testEquality`              _ = Nothing
 
-instance Eq (A.Location arch tp) => Eq (Parameter arch sh tp) where
+instance (Eq (A.Location arch tp), TestEquality (A.Location arch)) => Eq (Parameter arch sh tp) where
   Operand _ idx1 == Operand _ idx2 = isJust $ testEquality idx1 idx2
   Literal   var1 == Literal   var2 = var1 == var2
+  -- This isn't quite true - they could be equal after normalization
+  -- Function fnName1 p1 == Function fnName2 p2 =
+  --   fnName1 == fnName2 && isJust (testEquality p1 p2)
   _              ==              _ = False
 
 instance OrdF (A.Location arch) => OrdF (Parameter arch sh) where
+  Function {} `compareF` Literal {} = LTF
+  Literal {} `compareF` Function {} = GTF
+  Function  {}`compareF` Operand {} = LTF
+  Operand {} `compareF` Function {} = GTF
   Operand _ _ `compareF` Literal   _ = LTF
   Literal   _ `compareF` Operand _ _ = GTF
+  -- Function fnName1 p1 `compareF` Function fnName2 p2 =
+  --   case fnName1 `compare` fnName2 of
+  --     LT -> LTF
+  --     GT -> GTF
+  --     EQ ->
+  --       case p1 `compareF` p2 of
+  --         LTF -> LTF
+  --         GTF -> GTF
+  --         EQF -> EQF
   Operand _ idx1 `compareF` Operand _ idx2 =
     case idx1 `compareF` idx2 of
       LTF -> LTF
@@ -89,6 +126,7 @@ instance OrdF (A.Location arch) => OrdF (Parameter arch sh) where
 paramType :: (A.Architecture arch) => Parameter arch sh tp -> BaseTypeRepr tp
 paramType (Operand repr _) = repr
 paramType (Literal loc) = A.locationType loc
+paramType (Function _ _ _ repr) = repr
 
 -- | A "parameterized" formula, i.e., a formula that has holes for operands that
 -- need to be filled in before it represents an actual concrete instruction.

@@ -17,12 +17,12 @@ import qualified Lang.Crucible.Solver.Interface as S
 -- | Like 'Data.Parameterized.Some.Some', but for doubly-parameterized types.
 data SomeSome (f :: k1 -> k2 -> *) = forall x y. SomeSome (f x y)
 
-type UninterpretedFunctions sym = Map.Map String (SomeSome (S.SymFn sym))
+type UninterpretedFunctions sym arch = Map.Map String (SomeSome (S.SymFn sym), Some BaseTypeRepr)
 
 -- | The environment in which formulas are parsed and interpreted. It contains
 -- global information that must be shared across multiple formulas.
 data FormulaEnv sym arch =
-  FormulaEnv { envFunctions :: UninterpretedFunctions sym
+  FormulaEnv { envFunctions :: UninterpretedFunctions sym arch
                -- ^ A mapping of all uninterpreted functions to be used in the
                -- formulas. This is necessary so that different formulas still
                -- refer to the same underlying function.

@@ -570,7 +570,7 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
     sym <- MR.reader getSym
     fns <- MR.reader (envFunctions . getEnv)
     SomeSome fn <- case Map.lookup fnName fns of
-                     Just fn -> return fn
+                     Just (fn, _) -> return fn
                      Nothing -> E.throwError $ printf "uninterpreted function \"%s\" is not defined" fnName
     assn <- exprAssignment (S.fnArgTypes fn) args
     liftIO (Just . Some <$> S.applySymFn sym fn assn)
@@ -666,7 +666,29 @@ readDefs (SC.SCons (SC.SCons (SC.SAtom p) (SC.SCons defRaw SC.SNil)) rest) = do
             testEquality (paramType param) (S.exprType def)
   rest' <- readDefs rest
   return $ MapF.insert param def rest'
+readDefs (SC.SCons (SC.SCons (SC.SCons mUF (SC.SCons (SC.SAtom p) SC.SNil)) (SC.SCons defRaw SC.SNil)) rest)
+  | Just funcName <- matchUF mUF = do
+    oplist <- MR.reader getOpNameList
+    Some param <- readParameter oplist p
+    fns <- MR.reader (envFunctions . getEnv)
+    case Map.lookup funcName fns of
+      Just (_, Some rep) -> do
+        Some def <- readExpr defRaw
+        Refl <- fromMaybeError ("mismatching types of parameter and expression for " ++ showF param) $
+                  testEquality rep (S.exprType def)
+        rest' <- readDefs rest
+        return $ MapF.insert (Function funcName (paramType param) param rep) def rest'
+      _ -> E.throwError ("Missing type repr for uninterpreted function " ++ show funcName)
 readDefs _ = E.throwError "invalid defs structure"
+
+matchUF :: SC.SExpr Atom -> Maybe String
+matchUF se =
+  case se of
+    SC.SCons (SC.SAtom (AIdent "_"))
+             (SC.SCons (SC.SAtom (AIdent "call"))
+                       (SC.SCons (SC.SAtom (AString fnName))
+                                 SC.SNil)) -> Just fnName
+    _ -> Nothing
 
 -- | Parse the whole definition of a templated formula, inside an appropriate
 -- monad.
