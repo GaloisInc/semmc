@@ -80,5 +80,8 @@ class (IsOperand (Operand arch),
                     -> Operand arch s
                     -> Maybe (Location arch (OperandType arch s))
 
+  -- | Functions used to simplify defined locations in parameterized formulas
+  -- that are defined as functions of an input parameter into a concrete
+  -- location
   locationFuncInterpretation :: proxy arch -> [(String, LocationFuncInterp arch)]
 

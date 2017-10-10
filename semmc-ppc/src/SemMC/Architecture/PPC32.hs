@@ -60,6 +60,7 @@ import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 
+import           SemMC.Architecture.PPC.Eval
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
@@ -398,6 +399,14 @@ instance A.Architecture PPC where
   operandValue _ = operandValue
   operandToLocation _ = operandToLocation
   uninterpretedFunctions _proxy = PPCS.uninterpretedFunctions
+  locationFuncInterpretation _proxy = locationFuncInterpretation
+
+locationFuncInterpretation :: [(String, F.LocationFuncInterp PPC)]
+locationFuncInterpretation =
+  [ ("ppc.memri_reg", F.LocationFuncInterp interpMemriReg)
+  , ("ppc.memrix_reg", F.LocationFuncInterp interpMemrixReg)
+  , ("ppc.memrr_base", F.LocationFuncInterp interpMemrrBase)
+  ]
 
 opcodeToVoid :: ((o == PPC.Operand) ~ 'False) => PPC.Opcode o sh -> Void
 opcodeToVoid x = case x of {}
