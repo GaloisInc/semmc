@@ -76,9 +76,16 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
            -- ^ The typerepr for the return type of the function
            -> Parameter arch sh tp
 
+-- | This is a wrapper around the contents of an 'Operand' parameter that is
+-- embedded in a 'Function' parameter.  Functions are only allowed to be called
+-- on Operands.  The new type here helps avoid an extra 'BaseTypeRepr' in
+-- 'Function'.
 data WrappedOperand arch sh s where
   WrappedOperand :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> WrappedOperand arch sh s
 
+-- | A wrapper around a function that can be called to simplify a 'Function'
+-- parameter into a 'L.Location'.  These are defined per-architecture and are
+-- invoked by 'paramToLocation' during formula instantiation.
 data LocationFuncInterp arch where
   LocationFuncInterp :: ( forall sh s tp . SL.ShapedList (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> L.Location arch tp)
                      -> LocationFuncInterp arch
