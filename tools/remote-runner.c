@@ -425,7 +425,7 @@ typedef struct {
   uint32_t link;
   uint32_t cr;
   uint32_t fpscr;
-  uint64_t xer;
+  uint32_t xer;
   VR vsrs[SEM_NVSRS];
   /* uint8_t mem1[MEM_REGION_BYTES]; */
   /* uint8_t mem2[MEM_REGION_BYTES]; */
