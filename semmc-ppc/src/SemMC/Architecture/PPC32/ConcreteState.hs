@@ -125,6 +125,7 @@ serialize s = LB.toStrict (B.toLazyByteString b)
   where
     b = mconcat [ mconcat (map (PPCS.serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprs))
                 , mconcat (map (PPCS.serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs))
+                , B.word32BE 0
                 , mconcat (map (PPCS.serializeSymVal PPCS.serializeVec) (extractLocs s vsrs))
 --                , mconcat (map serializeMem (extractLocs s [LocMem]))
                 ]
@@ -159,10 +160,12 @@ getArchState :: forall ppc . ( ArchRepr ppc
 getArchState = do
   gprs' <- mapM (getWith (PPCS.getValue G.getWord32be (regWidthRepr (Proxy @ppc)))) gprs
   spregs' <- mapM (getWith (PPCS.getValue G.getWord32be PPCS.repr32)) specialRegs
-  frs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.IgnoreHighBits) PPCS.repr128)) frs
+  -- Get a padding word
+  _ <- G.getWord32be
+--  frs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.IgnoreHighBits) PPCS.repr128)) frs
   vrs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.KeepHighBits) PPCS.repr128)) vrs
 --  mem' <- getBS
-  return (St.execState (addLocs gprs' spregs' (frs' ++ vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
+  return (St.execState (addLocs gprs' spregs' ({-frs' ++-} vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
     addLoc :: forall tp . (Location ppc tp, CS.Value tp) -> St.State (ConcreteState ppc) ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
