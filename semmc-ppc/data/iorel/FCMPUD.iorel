@@ -1,0 +1,1 @@
+((inputs) (outputs (implicit . CR[0:31]) (implicit . FPSCR[0:63])))

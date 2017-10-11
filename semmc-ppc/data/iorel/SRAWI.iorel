@@ -1,0 +1,1 @@
+((inputs (operand . 2)) (outputs (implicit . XER[0:31]) (operand . 0)))

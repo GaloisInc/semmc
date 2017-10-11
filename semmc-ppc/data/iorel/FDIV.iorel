@@ -1,0 +1,1 @@
+((inputs (implicit . FPSCR[0:63]) (operand . 1) (operand . 2)) (outputs (implicit . FPSCR[0:63]) (operand . 0)))
