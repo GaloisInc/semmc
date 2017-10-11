@@ -8,7 +8,6 @@ module SemMC.Architecture.PPC.Base.Core (
   -- * PPC Types
   gprc,
   gprc_nor0,
-  g8rc,
   crrc,
   s16imm,
   s16imm64,
@@ -94,9 +93,6 @@ gprc = "Gprc"
 
 gprc_nor0 :: String
 gprc_nor0 = "Gprc_nor0"
-
-g8rc :: String
-g8rc = "G8rc"
 
 absdirectbrtarget :: String
 absdirectbrtarget = "Absdirectbrtarget"

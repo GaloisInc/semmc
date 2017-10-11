@@ -58,7 +58,7 @@ pseudo bitSize = runSem $ do
     comment "SetCR0"
     comment "This pseudo-opcode sets the value of CR0 based on a comparison"
     comment "of the value in the input register against zero, as in CMPDI or CMPWI"
-    rA <- param "rA" g8rc naturalBV
+    rA <- param "rA" gprc naturalBV
     input cr
     input xer
     input rA
