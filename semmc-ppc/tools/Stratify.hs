@@ -12,7 +12,6 @@ import qualified Data.Constraint as C
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
-import qualified System.IO as IO
 import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Nonce as N
@@ -116,7 +115,7 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.help "The number of seconds to wait for all responses from the remote runner" )
                         <*> O.strOption ( O.long "remote-runner"
                                         <> O.metavar "EXE"
-                                        <> O.help "The name of the remote runner executable (remote-runner.ppc32 or remote-runner.ppc64" )
+                                        <> O.help "The name of the remote runner executable (remote-runner.ppc32 or remote-runner.ppc64)" )
                         <*> O.strOption ( O.long "remote-host"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
@@ -131,15 +130,13 @@ main = O.execParser optParser >>= mainWithOptions
    optParser = O.info (optionsParser O.<**> O.helper)
      ( O.fullDesc
      <> O.progDesc "Learn semantics for PPC instructions"
-     <> O.header "semmc-ppc-stratify - learn semantics for each instruction")
-
-die :: String -> IO a
-die msg = IO.hPutStr IO.stderr msg >> IO.exitFailure
+     <> O.header "semmc-ppc-stratify - learn semantics for each instruction"
+     <> O.footer "See semmc-ppc/README.md for a detailed usage example.")
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   when (oParallelOpcodes opts < 1 || oParallelSynth opts < 1) $ do
-    die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
+    IO.die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
 
   iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
 

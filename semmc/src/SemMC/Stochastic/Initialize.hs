@@ -107,7 +107,7 @@ class (F.BuildOperandList arch sh, F.ConvertShape sh) => BuildAndConvert arch sh
 instance (F.BuildOperandList arch sh, F.ConvertShape sh) => BuildAndConvert arch sh
 
 loadInitialState :: forall arch t
-                  . (SynC arch, L.HasLogCfg)
+                  . (SynC arch, L.HasLogCfg, L.HasCallStack)
                  => Config arch
                  -> Sym t
                  -> IO (V.ConcreteState arch)

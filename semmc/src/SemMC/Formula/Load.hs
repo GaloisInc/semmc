@@ -129,7 +129,7 @@ loadFormulasFromFiles sym toFP impl shapes = do
         ef <- FP.readFormulaFromFile sym env file
         case ef of
           Left err -> do
-            L.logIO L.Info ("Failed to parse " ++ file ++ ": " ++ err)
+            L.logIO L.Error ("Failed to parse " ++ file ++ ": " ++ err)
             error $ "Failed to parse "++file++": "++err
           Right f -> return (Just f)
       else do

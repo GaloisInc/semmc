@@ -75,7 +75,7 @@ strata :: (SynC arch)
        => Syn t arch (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
-processWorklist :: (SynC arch)
+processWorklist :: (SynC arch, L.HasCallStack)
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
@@ -104,7 +104,7 @@ processWorklist = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we time out trying to find a formula
-strataOne :: (SynC arch)
+strataOne :: (SynC arch, L.HasCallStack)
           => A.Opcode arch (A.Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
@@ -118,7 +118,7 @@ strataOne op = do
       withStats $ S.recordSynthesizeSuccess (Some op) synDuration
       strataOneLoop op instr (C.equivalenceClasses prog)
 
-strataOneLoop :: (SynC arch)
+strataOneLoop :: (SynC arch, L.HasCallStack)
               => A.Opcode arch (A.Operand arch) sh
               -> AC.RegisterizedInstruction arch
               -> C.EquivalenceClasses (CP.CandidateProgram t arch)
@@ -146,7 +146,7 @@ strataOneLoop op instr eqclasses = do
               L.logM L.Info $ printf "Currently have %d candidate programs, need %d" (C.countPrograms eqclasses') (programCountThreshold cfg)
               strataOneLoop op instr eqclasses'
 
-finishStrataOne :: (SynC arch)
+finishStrataOne :: (SynC arch, L.HasCallStack)
                 => A.Opcode arch (A.Operand arch) sh
                 -> AC.RegisterizedInstruction arch
                 -> C.EquivalenceClasses (CP.CandidateProgram t arch)
