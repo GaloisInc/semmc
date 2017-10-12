@@ -337,7 +337,7 @@ weighBestMatch :: forall arch.
                -> C.ConcreteState arch
                -> C.ConcreteState arch
                -> Double
-weighBestMatch (C.SemanticView view@(C.View (C.Slice _ _ _ _) _) congruentViews diff) targetSt candidateSt =
+weighBestMatch (C.SemanticView view@(C.View _ _) congruentViews diff) targetSt candidateSt =
   minimum $ [ weigh (C.peekMS candidateSt view) ] ++
             [ weigh (C.peekMS candidateSt view') + wrongLocationPenalty
             | view' <- congruentViews ]

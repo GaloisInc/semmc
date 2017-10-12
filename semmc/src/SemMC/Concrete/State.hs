@@ -19,7 +19,7 @@ module SemMC.Concrete.State
   , viewTypeRepr
   , trivialView
   , someTrivialView
-  , Slice(..)
+  , Slice
   , ConcreteState
   , peekMS
   , pokeMS
@@ -135,7 +135,7 @@ data Slice (m :: Nat) (n :: Nat) where
 --
 -- The @s@ parameter is the start bit of the slice.
 data View arch (m :: Nat) where
-  View :: Slice m n -> A.Location arch (BaseBVType n) -> View arch m
+  View :: (KnownNat n, KnownNat m) => Slice m n -> A.Location arch (BaseBVType n) -> View arch m
 
 viewTypeRepr :: View arch n -> NR.NatRepr n
 viewTypeRepr (View (Slice repr _ _ _) _) = repr
