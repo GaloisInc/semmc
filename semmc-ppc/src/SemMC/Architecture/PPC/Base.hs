@@ -22,6 +22,7 @@ import SemMC.Architecture.PPC.Base.Arithmetic
 import SemMC.Architecture.PPC.Base.Bitwise
 import SemMC.Architecture.PPC.Base.Branch
 import SemMC.Architecture.PPC.Base.Compare
+import SemMC.Architecture.PPC.Base.FP
 import SemMC.Architecture.PPC.Base.Memory
 import SemMC.Architecture.PPC.Base.Special
 
@@ -72,6 +73,7 @@ manual bitSize = runSem $ do
   let ?bitSize = bitSize
   manualBranch
   manualMemory
+  floatingPoint
   defineOpcode "MTLR" $ do
     rA <- param "rA" gprc naturalBV
     input rA

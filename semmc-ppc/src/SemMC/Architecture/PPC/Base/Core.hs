@@ -8,6 +8,8 @@ module SemMC.Architecture.PPC.Base.Core (
   -- * PPC Types
   gprc,
   gprc_nor0,
+  f8rc,
+  f4rc,
   crrc,
   s16imm,
   s16imm64,
@@ -37,6 +39,8 @@ module SemMC.Architecture.PPC.Base.Core (
   xform2,
   dform,
   iform,
+  aform8,
+  aform4,
   -- * Shared
   naturalLitBV,
   cmpImm,
@@ -93,6 +97,12 @@ gprc = "Gprc"
 
 gprc_nor0 :: String
 gprc_nor0 = "Gprc_nor0"
+
+f8rc :: String
+f8rc = "F8rc"
+
+f4rc :: String
+f4rc = "F4rc"
 
 absdirectbrtarget :: String
 absdirectbrtarget = "Absdirectbrtarget"
@@ -216,6 +226,24 @@ iform tag = do
   target <- param "target" tag (EBV 24)
   input target
   return target
+
+aform8 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+aform8 = do
+  frT <- param "frT" f8rc (EBV 64)
+  frA <- param "frA" f8rc (EBV 64)
+  frB <- param "frB" f8rc (EBV 64)
+  input frA
+  input frB
+  return (frT, frA, frB)
+
+aform4 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+aform4 = do
+  frT <- param "frT" f8rc (EBV 32)
+  frA <- param "frA" f8rc (EBV 32)
+  frB <- param "frB" f8rc (EBV 32)
+  input frA
+  input frB
+  return (frT, frA, frB)
 
 -- Helpers
 

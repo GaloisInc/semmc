@@ -28,6 +28,7 @@ library
                        SemMC.Architecture.PPC.Base.Bitwise
                        SemMC.Architecture.PPC.Base.Branch
                        SemMC.Architecture.PPC.Base.Compare
+                       SemMC.Architecture.PPC.Base.FP
                        SemMC.Architecture.PPC.Base.Memory
                        SemMC.Architecture.PPC.Base.Special
                        SemMC.Architecture.PPC.Eval
