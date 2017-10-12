@@ -36,7 +36,7 @@ import qualified Data.Parameterized.Unfold as U
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
-import           Dismantle.Tablegen.TH ( captureDictionaries )
+import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend
 

@@ -27,7 +27,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
-import qualified Dismantle.Tablegen.TH as DT
+import qualified Dismantle.Tablegen.TH.Capture as DT
 import qualified Dismantle.PPC as DPPC
 
 import           SemMC.Architecture ( Architecture, Instruction, Location, Opcode, Operand )

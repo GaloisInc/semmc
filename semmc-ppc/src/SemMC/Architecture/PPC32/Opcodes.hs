@@ -6,6 +6,7 @@ module SemMC.Architecture.PPC32.Opcodes (
   baseOpcodes,
   pseudoOpcodes,
   allOpcodes,
+  allOpcodeInfo,
   allSemantics
   ) where
 
@@ -15,13 +16,13 @@ import           System.FilePath ( (<.>) )
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.PPC as PPC
-import qualified Dismantle.Tablegen.TH as DT
+import qualified Dismantle.Tablegen.TH.Capture as DT
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.TH as STH
 
 import           SemMC.Architecture.PPC32 ( PPC, PseudoOpcode )
-import           SemMC.Architecture.PPC32.Opcodes.Internal ( BuildAndUnfold, allOpcodes )
+import           SemMC.Architecture.PPC32.Opcodes.Internal ( BuildAndUnfold, allOpcodes, allOpcodeInfo )
 
 -- | The base set of opcodes for learning
 --

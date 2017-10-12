@@ -14,7 +14,7 @@ import qualified Data.Parameterized.Unfold as U
 import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Dismantle.PPC as PPC
-import qualified Dismantle.Tablegen.TH as DT
+import qualified Dismantle.Tablegen.TH.Capture as DT
 
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.Pseudo as P
