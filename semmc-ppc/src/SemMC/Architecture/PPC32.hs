@@ -65,6 +65,7 @@ import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
+import qualified SemMC.Architecture.PPC.UF as UF
 
 data PPC
 
@@ -398,7 +399,7 @@ instance A.Architecture PPC where
   unTagged (TaggedExpr e) = e
   operandValue _ = operandValue
   operandToLocation _ = operandToLocation
-  uninterpretedFunctions _proxy = PPCS.uninterpretedFunctions
+  uninterpretedFunctions = UF.uninterpretedFunctions
   locationFuncInterpretation _proxy = locationFuncInterpretation
 
 locationFuncInterpretation :: [(String, F.LocationFuncInterp PPC)]

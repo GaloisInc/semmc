@@ -12,8 +12,7 @@ module SemMC.Architecture.PPC32.ConcreteState (
   randomState,
   serialize,
   deserialize,
-  interestingStates,
-  uninterpretedFunctions
+  interestingStates
   ) where
 
 import Data.Proxy
@@ -28,7 +27,6 @@ import           Data.Int ( Int32 )
 import           Data.Parameterized.Classes ( testEquality )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Serialize.Get as G
 import qualified Data.Word.Indexed as W
 
@@ -211,58 +209,3 @@ specialRegs = [ LocCTR
               , LocFPSCR
               , LocXER
               ]
-
-uninterpretedFunctions :: [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
-uninterpretedFunctions =
-  [ ("fp.add64",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-  , ("fp.add32",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("fp.sub64",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-  , ("fp.sub32",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 2 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("ppc.is_r0",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
-  , ("ppc.memri_reg",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("ppc.memri_offset",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
-  , ("ppc.memrix_reg",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("ppc.memrix_offset",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 14)))
-  , ("ppc.memrr_base",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("ppc.memrr_offset",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("read_mem.8",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8) Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
-  , ("read_mem.16",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8) Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
-  , ("read_mem.32",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8) Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("write_mem.8",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8) Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 8)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))))
-  , ("write_mem.16",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8) Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 16)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))))
-  , ("write_mem.32",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8) Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))))
-  ]

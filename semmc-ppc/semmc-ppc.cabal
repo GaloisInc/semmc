@@ -34,6 +34,7 @@ library
                        SemMC.Architecture.PPC.Eval
                        SemMC.Architecture.PPC.Pseudo
                        SemMC.Architecture.PPC.Shared
+                       SemMC.Architecture.PPC.UF
   build-depends:       base >= 4.9 && < 5
                      , mtl
                      , parameterized-utils >= 0.1.10 && < 0.2
