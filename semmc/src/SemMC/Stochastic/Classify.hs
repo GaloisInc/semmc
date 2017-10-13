@@ -46,9 +46,12 @@ import qualified Lang.Crucible.BaseTypes as S
 import qualified Dismantle.Instruction as D
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Location as L
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Formula as F
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Log as L
 import qualified SemMC.Stochastic.CandidateProgram as CP
@@ -136,14 +139,14 @@ addMergableClass ix = RWS.modify' $ \s -> s { mergableClasses = ix : mergableCla
 -- that invalidates all of the previous programs.
 classify :: forall arch t
           . (SynC arch)
-         => CS.RegisterizedInstruction arch
+         => AC.RegisterizedInstruction arch
          -- ^ The instruction whose semantics we are trying to learn
          -> CP.CandidateProgram t arch
          -- ^ The program we just learned and need to add to an equivalence class
          -> EquivalenceClasses (CP.CandidateProgram t arch)
          -- ^ The current equivalence classes
          -> Syn t arch (Maybe (EquivalenceClasses (CP.CandidateProgram t arch)))
-classify target@CS.RI{ CS.riOperands = oplist, CS.riOpcode = opc } p eqclasses = do
+classify target@AC.RI{ AC.riOperands = oplist, AC.riOpcode = opc } p eqclasses = do
   let s0 = ClassifyState { eqClassesSeq = snd (L.mapAccumR numberItem 0 eqclasses)
                          , mergableClasses = []
                          }
@@ -180,7 +183,7 @@ numberItem n itm = (n + 1, (n, itm))
 -- is safe.
 classifyByClass :: forall arch t sh
                  . (SynC arch)
-                => CS.RegisterizedInstruction arch
+                => AC.RegisterizedInstruction arch
                 -- ^ The target instruction
                 -> CP.CandidateProgram t arch
                 -- ^ The program to classify
@@ -199,7 +202,7 @@ classifyByClass target p ix = do
       case eqv of
         F.Equivalent -> do
           case target of
-            CS.RI { CS.riOpcode = oc } -> do
+            AC.RI { AC.riOpcode = oc } -> do
               liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Completed equivTime)
               liftC $ L.logM L.Info $ printf "Equivalent candidate program for %s" (showF oc)
           addMergableClass ix
@@ -207,11 +210,11 @@ classifyByClass target p ix = do
         F.DifferentBehavior (promoteCounterexample (Proxy @arch) -> cx) -> do
           -- See Note [Registerization and Counterexamples]
           case target of
-            CS.RI { CS.riOpcode = oc } -> do
+            AC.RI { AC.riOpcode = oc } -> do
               liftC $ withStats $ S.recordCounterexample (Some oc)
               liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Completed equivTime)
               liftC $ L.logM L.Info $ printf "Found a counterexample while classifying a candidate program for %s (CX=%s)" (showF oc) (show cx)
-          let (target', cx') = CS.registerizeInstruction target cx
+          let (target', cx') = AC.registerizeInstruction target cx
           liftC $ addTestCase cx'
           ix' <- removeInvalidPrograms ix target' cx'
           nClasses <- countRemainingClasses
@@ -228,7 +231,7 @@ classifyByClass target p ix = do
           -- of them, it will get its own (probably not very useful) equivalence
           -- class.
           case target of
-            CS.RI { CS.riOpcode = oc } -> do
+            AC.RI { AC.riOpcode = oc } -> do
               liftC $ withStats $ S.recordSolverInvocation (Some oc) (S.Timeout equivTime)
               liftC $ L.logM L.Info $ printf "Solver timeout while classifying a candidate program for %s" (showF oc)
           classifyByClass target p (ix + 1)
@@ -236,8 +239,8 @@ classifyByClass target p ix = do
 -- | The counterexamples we get from the theorem prover
 --
 -- FIXME: It would be nice to make 'ConcreteState' into a newtype so that this is safer
-promoteCounterexample :: (CS.ConcreteArchitecture arch) => proxy arch -> A.ArchState arch CS.Value -> CS.ConcreteState arch
-promoteCounterexample proxy cx = F.foldl' addMissingKey cx (MapF.toList (CS.zeroState proxy))
+promoteCounterexample :: (AC.ConcreteArchitecture arch) => proxy arch -> L.ArchState arch V.Value -> V.ConcreteState arch
+promoteCounterexample proxy cx = F.foldl' addMissingKey cx (MapF.toList (AC.zeroState proxy))
   where
     addMissingKey m (MapF.Pair k v) =
       case MapF.lookup k m of
@@ -262,7 +265,7 @@ removeInvalidPrograms :: forall t arch sh
                       -- had to eliminate an empty equivalence class
                       -> A.Instruction arch
                       -- ^ The target instruction
-                      -> CS.ConcreteState arch
+                      -> V.ConcreteState arch
                       -- ^ A learned counterexample
                       -> ClassifyM t sh arch Int
 removeInvalidPrograms ix target cx = do
@@ -349,9 +352,9 @@ consistentWithTarget :: (SynC arch)
                      -- ^ The mapping of candidate program numbers to test
                      -- nonces (so that we can find the results for a given
                      -- candidate program)
-                     -> CE.ResultIndex (CS.ConcreteState arch)
+                     -> CE.ResultIndex (V.ConcreteState arch)
                      -- ^ All of the results that came back from the remote runner
-                     -> CS.ConcreteState arch
+                     -> V.ConcreteState arch
                      -- ^ The output of the target instruction on the test vector
                      -> (Int, CP.CandidateProgram t arch)
                      -- ^ The current program (and its index into the @testIndex@ map)
@@ -374,10 +377,10 @@ consistentWithTarget testIndex testResults cx (testNum, tc) =
 -- construct the test case.  We accumulate the test cases and maintain a mapping
 -- between test numbers and concrete test nonces.
 makeAndIndexTest :: (P.ArchitectureWithPseudo arch)
-                 => CS.ConcreteState arch
+                 => V.ConcreteState arch
                  -> (Int, CP.CandidateProgram t arch)
-                 -> ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
-                 -> ClassifyM t sh arch ([CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
+                 -> ([CE.TestCase (V.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
+                 -> ClassifyM t sh arch ([CE.TestCase (V.ConcreteState arch) (A.Instruction arch)], M.Map Int Word64)
 makeAndIndexTest cx (pix, cp) (cases, idx) = do
   tc <- liftC $ mkTestCase cx program
   return (tc : cases, M.insert pix (CE.testNonce tc) idx)
@@ -505,7 +508,7 @@ testEquivalence :: (P.ArchitectureWithPseudo arch)
                 => ClassifyEnv arch sh
                 -> CP.CandidateProgram t arch
                 -> CP.CandidateProgram t arch
-                -> Syn t arch (F.EquivalenceResult arch CS.Value)
+                -> Syn t arch (F.EquivalenceResult arch V.Value)
 testEquivalence env p representative = do
   L.logM L.Info "Testing equivalence of:"
   L.logM L.Info (show newFormula)
@@ -542,7 +545,7 @@ projectRelevantLocations env f0 =
 
     refToLoc oref =
       case oref of
-        IOR.ImplicitOperand (Some (CS.View _ loc)) -> Just (Some loc)
+        IOR.ImplicitOperand (Some (V.View _ loc)) -> Just (Some loc)
         IOR.OperandRef (Some ix) -> Some <$> A.operandToLocation (Proxy @arch) (SL.indexShapedList (operandList env) ix)
 
 -- Monad definition

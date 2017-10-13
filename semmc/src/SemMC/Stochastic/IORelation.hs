@@ -46,7 +46,8 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Log as L
 import qualified SemMC.Worklist as WL
@@ -62,7 +63,7 @@ data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
                  , lcAssemble :: A.Instruction arch -> LBS.ByteString
-                 , lcTestGen :: IO (CS.ConcreteState arch)
+                 , lcTestGen :: IO (V.ConcreteState arch)
                  , lcTimeoutSeconds :: Int
                  , lcTestRunner :: TestRunner arch
                  , lcLog :: C.Chan CE.LogMessage
@@ -70,7 +71,7 @@ data LearningConfig arch =
                  }
 
 loadIORelations :: forall arch
-                 . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+                 . (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                 => Proxy arch
                 -> FilePath
                 -> (forall sh . A.Opcode arch (A.Operand arch) sh -> FilePath)
@@ -96,7 +97,7 @@ loadIORelations proxy relDir toFP ops = do
 --
 -- Note that this function assumes that the lcIORelationDirectory already exists
 learnIORelations :: forall arch
-                  . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+                  . (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                  => LearningConfig arch
                  -> Proxy arch
                  -> (forall sh . (A.Opcode arch (A.Operand arch)) sh -> FilePath)
@@ -150,7 +151,7 @@ learnIORelations cfg proxy toFP ops = do
     unWitness :: proxy arch -> Some (Witness U.UnfoldShape (A.Opcode arch (A.Operand arch))) -> Some (A.Opcode arch (A.Operand arch))
     unWitness _ (Some (Witness o)) = Some o
 
-serializeLearnedRelations :: (CS.ConcreteArchitecture arch)
+serializeLearnedRelations :: (AC.ConcreteArchitecture arch)
                           => FilePath
                           -> (forall sh . (A.Opcode arch (A.Operand arch)) sh -> FilePath)
                           -> C.Chan (Maybe (P.Pair (A.Opcode arch (A.Operand arch)) (IORelation arch)))
@@ -167,7 +168,7 @@ serializeLearnedRelations dir toFP c = do
 --
 -- This is determined by observing the behavior of instructions on tests and
 -- perturbing inputs randomly.
-learn :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+learn :: (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
       => Learning arch ()
 learn = do
   mop <- nextOpcode
@@ -181,7 +182,7 @@ learn = do
       learn
 
 testOpcode :: forall arch sh
-            . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+            . (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
            => A.Opcode arch (A.Operand arch) sh
            -> Learning arch (IORelation arch sh)
 testOpcode op = do
@@ -195,7 +196,7 @@ testOpcode op = do
       | otherwise -> L.error ("randomInstruction returned an instruction with the wrong opcode: " ++ P.showF op')
 
 -- | Collect all of the locations that are read from or written to implicitly
-implicitLocations :: IORelation arch sh -> [Some (CS.View arch)]
+implicitLocations :: IORelation arch sh -> [Some (V.View arch)]
 implicitLocations ior = foldr collectImplicits (foldr collectImplicits [] (inputs ior)) (outputs ior)
   where
     collectImplicits opRef acc =

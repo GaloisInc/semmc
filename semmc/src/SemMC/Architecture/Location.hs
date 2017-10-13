@@ -3,13 +3,17 @@
 {-# LANGUAGE TypeFamilies #-}
 module SemMC.Architecture.Location (
   Location,
-  IsLocation(..)
+  IsLocation(..),
+  ArchState
   ) where
 
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
+
+type ArchState arch ex = MapF.MapF (Location arch) ex
 
 -- | Methods we want on state variables.
 class (OrdF a, TestEquality a, ShowF a) => IsLocation a where

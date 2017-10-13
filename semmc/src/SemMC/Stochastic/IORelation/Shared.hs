@@ -28,7 +28,9 @@ import qualified Lang.Crucible.BaseTypes as S
 import qualified Dismantle.Arbitrary as DA
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import           SemMC.Stochastic.IORelation.Types
 
@@ -36,7 +38,7 @@ withTestResults :: forall a f arch sh
                  . (A.Architecture arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> [TestBundle (TestCase arch) f]
-                -> (CE.ResultIndex (CS.ConcreteState arch) -> Learning arch a)
+                -> (CE.ResultIndex (V.ConcreteState arch) -> Learning arch a)
                 -> Learning arch a
 withTestResults op tests k = do
   tchan <- askTestChan
@@ -50,7 +52,7 @@ withTestResults op tests k = do
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
 wrapTestBundle :: (A.Architecture arch)
                => A.Instruction arch
-               -> TestBundle (CS.ConcreteState arch) f
+               -> TestBundle (V.ConcreteState arch) f
                -> Learning arch (TestBundle (TestCase arch) f)
 wrapTestBundle i tb = do
   cases <- mapM (makeTestCase i) (tbTestCases tb)
@@ -64,7 +66,7 @@ wrapTestBundle i tb = do
 -- raw tests to 'CE.TestCase' by allocating a nonce
 makeTestCase :: (A.Architecture arch)
              => A.Instruction arch
-             -> CS.ConcreteState arch
+             -> V.ConcreteState arch
              -> Learning arch (TestCase arch)
 makeTestCase i c = do
   tid <- nextNonce
@@ -75,10 +77,10 @@ makeTestCase i c = do
 
 -- | A view of a location, indexed by its position in the operand list
 data IndexedSemanticView arch sh where
-  IndexedSemanticView :: SL.Index sh tp -> CS.SemanticView arch -> IndexedSemanticView arch sh
+  IndexedSemanticView :: SL.Index sh tp -> V.SemanticView arch -> IndexedSemanticView arch sh
 
 instructionRegisterOperands :: forall arch sh proxy
-                             . (CS.ConcreteArchitecture arch)
+                             . (AC.ConcreteArchitecture arch)
                             => proxy arch
                             -> SL.ShapedList (A.Operand arch) sh
                             -> [IndexedSemanticView arch sh]
@@ -91,28 +93,28 @@ instructionRegisterOperands proxy operands =
                      -> [IndexedSemanticView arch sh]
                      -> [IndexedSemanticView arch sh]
     collectLocations ix operand acc =
-      case CS.operandToSemanticView proxy operand of
+      case AC.operandToSemanticView proxy operand of
         Just v -> IndexedSemanticView ix v : acc
         Nothing -> acc
 
 -- | Return all of the locations referenced in the architecture state
 testCaseLocations :: forall proxy arch
-                   . (CS.ConcreteArchitecture arch)
+                   . (AC.ConcreteArchitecture arch)
                   => proxy arch
-                  -> CS.ConcreteState arch
-                  -> [Some (CS.View arch)]
+                  -> V.ConcreteState arch
+                  -> [Some (V.View arch)]
 testCaseLocations proxy = MapF.foldrWithKey getKeys []
   where
-    getKeys :: forall a s . A.Location arch s -> a s -> [Some (CS.View arch)] -> [Some (CS.View arch)]
-    getKeys k _ acc = CS.someTrivialView proxy (Some k) : acc
+    getKeys :: forall a s . A.Location arch s -> a s -> [Some (V.View arch)] -> [Some (V.View arch)]
+    getKeys k _ acc = V.someTrivialView proxy (Some k) : acc
 
 withGeneratedValueForLocation :: forall arch n a
                                . (A.Architecture arch)
-                              => CS.View arch n
-                              -> (CS.Value (S.BaseBVType n) -> a)
+                              => V.View arch n
+                              -> (V.Value (S.BaseBVType n) -> a)
                               -> Learning arch a
 withGeneratedValueForLocation loc k = do
   g <- askGen
-  withKnownNat (CS.viewTypeRepr loc) $ do
+  withKnownNat (V.viewTypeRepr loc) $ do
     randomBV <- liftIO (DA.arbitrary g)
     return (k randomBV)

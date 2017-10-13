@@ -18,7 +18,7 @@ import           Text.Printf ( printf )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Constraints as C
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
@@ -87,7 +87,7 @@ mainWithOptions opt = do
   let cfg = IOR.LearningConfig { IOR.lcIORelationDirectory = oRelDir opt
                                , IOR.lcNumThreads = oNumThreads opt
                                , IOR.lcAssemble = PPC.assembleInstruction
-                               , IOR.lcTestGen = CS.randomState (Proxy @PPC32.PPC) gen
+                               , IOR.lcTestGen = AC.randomState (Proxy @PPC32.PPC) gen
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
                                , IOR.lcTestRunner = CE.runRemote (Just (oRemoteRunner opt)) (oRemoteHost opt) PPC32.testSerializer
                                , IOR.lcLog = logChan

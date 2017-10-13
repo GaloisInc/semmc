@@ -21,6 +21,7 @@ import           SemMC.Architecture.PPC64 ( PPC )
 class (F.BuildOperandList PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
 instance (F.BuildOperandList PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
 
+
 allOpcodeInfo :: [Some (DT.CaptureInfo BuildAndUnfold (PPC.Opcode PPC.Operand))]
 allOpcodeInfo = $(DT.captureInfo (const True) ''PPC.Opcode)
 

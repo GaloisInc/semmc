@@ -40,7 +40,8 @@ import           Lang.Crucible.Solver.SimpleBuilder
 import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Location as L
+import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Instantiate as FI
 import qualified SemMC.Util as U
@@ -50,7 +51,7 @@ data EquivalenceResult arch ex
   = Equivalent
     -- ^ The two formulas are equivalent (or, if you want to be pedantic,
     -- equisatisfiable).
-  | DifferentBehavior (A.ArchState arch ex)
+  | DifferentBehavior (L.ArchState arch ex)
     -- ^ The two formulas are non-trivially different, i.e., the SAT solver was
     -- needed to show difference. The 'ArchState' is a machine state that is a
     -- counterexample to their equivalence.
@@ -76,12 +77,12 @@ formulasEquivConcrete :: forall arch t.
                       => SimpleBackend t
                       -> F.Formula (SimpleBackend t) arch
                       -> F.Formula (SimpleBackend t) arch
-                      -> IO (EquivalenceResult arch CS.Value)
+                      -> IO (EquivalenceResult arch V.Value)
 formulasEquivConcrete =
-  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (CS.Value tp)
+  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (V.Value tp)
       eval (GroundEvalFn evalFn) e =
         case S.exprType e of
-          BaseBVRepr w -> withKnownNat w (CS.ValueBV . fromInteger <$> evalFn e)
+          BaseBVRepr w -> withKnownNat w (V.ValueBV . fromInteger <$> evalFn e)
           _ -> error "formulasEquivConcrete: only BVs supported"
   in formulasEquiv eval
 

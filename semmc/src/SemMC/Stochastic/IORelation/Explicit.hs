@@ -28,7 +28,8 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 
 import           SemMC.Stochastic.IORelation.Shared
@@ -38,10 +39,10 @@ import           SemMC.Stochastic.IORelation.Types
 --
 -- This could be made more efficient - right now, it just tries to generate
 -- random instructions until it gets a match.
-generateExplicitInstruction :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+generateExplicitInstruction :: (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                             => Proxy arch
                             -> A.Opcode arch (A.Operand arch) sh
-                            -> [Some (CS.View arch)]
+                            -> [Some (V.View arch)]
                             -> Learning arch (A.Instruction arch)
 generateExplicitInstruction proxy op implicitOperands = do
   g <- askGen
@@ -57,7 +58,7 @@ generateExplicitInstruction proxy op implicitOperands = do
 -- | Generate test cases and send them off to the remote runner.  Collect and
 -- interpret the results to create an IORelation that describes the explicit
 -- operands of the instruction.
-classifyExplicitOperands :: (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+classifyExplicitOperands :: (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                          => A.Opcode arch (A.Operand arch) sh
                          -> SL.ShapedList (A.Operand arch) sh
                          -> Learning arch (IORelation arch sh)
@@ -71,11 +72,11 @@ classifyExplicitOperands op explicitOperands = do
 
 -- | For all of the explicit operands, map the results of tests to deductions
 -- (forming an 'IORelation')
-computeIORelation :: (CS.ConcreteArchitecture arch)
+computeIORelation :: (AC.ConcreteArchitecture arch)
                   => A.Opcode arch (A.Operand arch) sh
                   -> SL.ShapedList (A.Operand arch) sh
                   -> [TestBundle (TestCase arch) (ExplicitFact arch)]
-                  -> CE.ResultIndex (CS.ConcreteState arch)
+                  -> CE.ResultIndex (V.ConcreteState arch)
                   -> Learning arch (IORelation arch sh)
 computeIORelation opcode operands bundles idx =
   F.foldlM (buildIORelation opcode operands idx) mempty bundles
@@ -92,10 +93,10 @@ computeIORelation opcode operands bundles idx =
 --    don't know, so don't conclude anything.  Future tests will figure out if
 --    it is an output.
 buildIORelation :: forall arch sh
-                 . (CS.ConcreteArchitecture arch)
+                 . (AC.ConcreteArchitecture arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> SL.ShapedList (A.Operand arch) sh
-                -> CE.ResultIndex (CS.ConcreteState arch)
+                -> CE.ResultIndex (V.ConcreteState arch)
                 -> IORelation arch sh
                 -> TestBundle (TestCase arch) (ExplicitFact arch)
                 -> Learning arch (IORelation arch sh)
@@ -121,11 +122,11 @@ buildIORelation op explicitOperands ri iorel tb = do
 -- | For the given test case, look up the results and compare them to the input
 --
 -- If the test failed, return an empty set.
-collectExplicitLocations :: (CS.ConcreteArchitecture arch)
+collectExplicitLocations :: (AC.ConcreteArchitecture arch)
                          => SL.Index sh tp
                          -> SL.ShapedList (A.Operand arch) sh
                          -> [IndexedSemanticView arch sh]
-                         -> CE.ResultIndex (CS.ConcreteState arch)
+                         -> CE.ResultIndex (V.ConcreteState arch)
                          -> TestCase arch
                          -> Learning arch (S.Set (Some (SL.Index sh)))
 collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
@@ -133,10 +134,10 @@ collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
     Nothing -> return S.empty
     Just res -> F.foldrM (addLocIfDifferent (CE.resultContext res)) S.empty explicitLocs
   where
-    addLocIfDifferent resCtx (IndexedSemanticView idx (CS.SemanticView { CS.semvView = opView })) s
+    addLocIfDifferent resCtx (IndexedSemanticView idx (V.SemanticView { V.semvView = opView })) s
       | Just P.Refl <- P.testEquality alteredIndex idx = return s
-      | output <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS resCtx opView)
-      , input <- NR.withKnownNat (CS.viewTypeRepr opView) (CS.peekMS (CE.testContext tc) opView) = do
+      | output <- NR.withKnownNat (V.viewTypeRepr opView) (V.peekMS resCtx opView)
+      , input <- NR.withKnownNat (V.viewTypeRepr opView) (V.peekMS (CE.testContext tc) opView) = do
           case input /= output of
             True -> return (S.insert (Some idx) s)
             False -> return s
@@ -155,10 +156,10 @@ collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
 -- We learn the *outputs* set by comparing the tweaked input vs the output from
 -- that test vector: all modified registers are in the output set.
 generateExplicitTestVariants :: forall arch
-                              . (CS.ConcreteArchitecture arch)
+                              . (AC.ConcreteArchitecture arch)
                              => A.Instruction arch
-                             -> CS.ConcreteState arch
-                             -> Learning arch [TestBundle (CS.ConcreteState arch) (ExplicitFact arch)]
+                             -> V.ConcreteState arch
+                             -> Learning arch [TestBundle (V.ConcreteState arch) (ExplicitFact arch)]
 generateExplicitTestVariants i s0 =
   case i of
     D.Instruction opcode operands -> do
@@ -167,8 +168,8 @@ generateExplicitTestVariants i s0 =
     genVar :: forall sh
             . A.Opcode arch (A.Operand arch) sh
            -> IndexedSemanticView arch sh
-           -> Learning arch (TestBundle (CS.ConcreteState arch) (ExplicitFact arch))
-    genVar opcode (IndexedSemanticView ix (CS.SemanticView { CS.semvView = view })) = do
+           -> Learning arch (TestBundle (V.ConcreteState arch) (ExplicitFact arch))
+    genVar opcode (IndexedSemanticView ix (V.SemanticView { V.semvView = view })) = do
       cases <- generateVariantsFor s0 opcode ix (Some view)
       return TestBundle { tbTestCases = cases
                         , tbTestBase = s0
@@ -188,26 +189,26 @@ generateExplicitTestVariants i s0 =
 -- interesting once we start dealing with floats.  Note that we could just
 -- generate random bitvectors for floats, too, but we would probably want to
 -- tweak the distribution to generate interesting types of floats.
-generateVariantsFor :: (CS.ConcreteArchitecture arch)
-                    => CS.ConcreteState arch
+generateVariantsFor :: (AC.ConcreteArchitecture arch)
+                    => V.ConcreteState arch
                     -> A.Opcode arch (A.Operand arch) sh
                     -> SL.Index sh tp
-                    -> Some (CS.View arch)
-                    -> Learning arch [CS.ConcreteState arch]
+                    -> Some (V.View arch)
+                    -> Learning arch [V.ConcreteState arch]
 generateVariantsFor s0 _opcode _ix (Some v) = do
-  replicateM 20 (withGeneratedValueForLocation v (\x -> CS.pokeMS s0 v x))
+  replicateM 20 (withGeneratedValueForLocation v (\x -> V.pokeMS s0 v x))
 
-matchesOperand :: (CS.ConcreteArchitecture arch)
+matchesOperand :: (AC.ConcreteArchitecture arch)
                => Proxy arch
-               -> [Some (CS.View arch)]
+               -> [Some (V.View arch)]
                -> SL.Index sh tp
                -> A.Operand arch tp
-               -> (Bool, S.Set (Some (CS.View arch)))
-               -> (Bool, S.Set (Some (CS.View arch)))
+               -> (Bool, S.Set (Some (V.View arch)))
+               -> (Bool, S.Set (Some (V.View arch)))
 matchesOperand proxy implicits _ix operand (matches, sops) =
-  case CS.operandToSemanticView proxy operand of
+  case AC.operandToSemanticView proxy operand of
     Nothing -> (matches, sops)
-    Just (CS.SemanticView { CS.semvView = view }) ->
+    Just (V.SemanticView { V.semvView = view }) ->
       (matches || any (== (Some view)) implicits, S.insert (Some view) sops)
 
 {- Note [Test Form]

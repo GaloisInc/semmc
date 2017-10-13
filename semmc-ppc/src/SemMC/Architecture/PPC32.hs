@@ -53,7 +53,9 @@ import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
@@ -487,23 +489,23 @@ operandTypePPC o =
     PPC.U7imm {}             -> knownRepr
     PPC.U8imm {}             -> knownRepr
 
-registerizeInstructionPPC :: CS.RegisterizedInstruction PPC
-                          -> CS.ConcreteState PPC
-                          -> (A.Instruction PPC, CS.ConcreteState PPC)
+registerizeInstructionPPC :: AC.RegisterizedInstruction PPC
+                          -> V.ConcreteState PPC
+                          -> (A.Instruction PPC, V.ConcreteState PPC)
 registerizeInstructionPPC ri s =
   case ri of
-    CS.RI { CS.riOpcode = opc
-          , CS.riOperands = ops
-          , CS.riLiteralLocs = lls
+    AC.RI { AC.riOpcode = opc
+          , AC.riOperands = ops
+          , AC.riLiteralLocs = lls
           } ->
       case MapF.foldrWithKey replaceLiterals (ops, s) lls of
         (ops', s') -> (D.Instruction opc ops', s')
 
-replaceLiterals :: CS.LiteralRef PPC sh s
+replaceLiterals :: AC.LiteralRef PPC sh s
                 -> Location PPC s
-                -> (SL.ShapedList PPC.Operand sh, CS.ConcreteState PPC)
-                -> (SL.ShapedList PPC.Operand sh, CS.ConcreteState PPC)
-replaceLiterals (CS.LiteralRef ix) loc (ops, s) =
+                -> (SL.ShapedList PPC.Operand sh, V.ConcreteState PPC)
+                -> (SL.ShapedList PPC.Operand sh, V.ConcreteState PPC)
+replaceLiterals (AC.LiteralRef ix) loc (ops, s) =
   case MapF.lookup loc s of
     Nothing -> L.error ("Location not defined in state: " ++ showF loc)
     Just val ->
@@ -511,13 +513,13 @@ replaceLiterals (CS.LiteralRef ix) loc (ops, s) =
       in (SL.updateShapedList ops ix (const op'), MapF.insert loc clampedValue s)
 
 -- | Replace the value in the given immediate operand with the value in a
--- 'CS.Value', truncating it if necessary.  The truncated value is returned so
+-- 'V.Value', truncating it if necessary.  The truncated value is returned so
 -- that the test case can be updated.
 --
 -- Note that this function calls error on operands that are not immediates.
 truncateValue :: PPC.Operand s
-              -> CS.Value (A.OperandType PPC s)
-              -> (CS.Value (A.OperandType PPC s), PPC.Operand s)
+              -> V.Value (A.OperandType PPC s)
+              -> (V.Value (A.OperandType PPC s), PPC.Operand s)
 truncateValue op v =
   case op of
     PPC.I1imm {}             -> PPCS.withTruncIVal v (W.w 0x1) PPC.I1imm
@@ -555,7 +557,7 @@ truncateValue op v =
     PPC.Calltarget {}        ->  L.error "Control flow transfer instructions unsupported"
     PPC.Abscalltarget {}     ->  L.error "Control flow transfer instructions unsupported"
 
-instance CS.ConcreteArchitecture PPC where
+instance AC.ConcreteArchitecture PPC where
   operandToSemanticView _proxy = operandToSemanticViewPPC
   registerizeInstruction = registerizeInstructionPPC
   operandType _proxy = operandTypePPC
@@ -564,19 +566,19 @@ instance CS.ConcreteArchitecture PPC where
   serialize _proxy = PPCS.serialize
   deserialize _proxy = PPCS.deserialize
   heuristicallyInterestingStates _proxy = PPCS.interestingStates
-  readView = P.parseMaybe (CS.parseView parseLocation)
-  showView = CS.printView show
+  readView = P.parseMaybe (V.parseView parseLocation)
+  showView = V.printView show
 
-testSerializer :: CE.TestSerializer (CS.ConcreteState PPC) (A.Instruction PPC)
+testSerializer :: CE.TestSerializer (V.ConcreteState PPC) (A.Instruction PPC)
 testSerializer = CE.TestSerializer { CE.flattenMachineState = PPCS.serialize
                                    , CE.parseMachineState = PPCS.deserialize
                                    , CE.flattenProgram = mconcat . map PPC.assembleInstruction
                                    }
 
-vsrLowerHalf :: CS.Slice 64 128
-vsrLowerHalf = CS.Slice knownNat knownNat (knownNat @0) (knownNat @64)
+vsrLowerHalf :: V.Slice 64 128
+vsrLowerHalf = V.Slice knownNat knownNat (knownNat @0) (knownNat @64)
 
-operandToSemanticViewPPC :: PPC.Operand s -> Maybe (CS.SemanticView PPC)
+operandToSemanticViewPPC :: PPC.Operand s -> Maybe (V.SemanticView PPC)
 operandToSemanticViewPPC op =
   case op of
     PPC.F4rc fr -> frSemanticView fr
@@ -589,34 +591,34 @@ operandToSemanticViewPPC op =
     PPC.Vssrc vsr -> vsrSemanticView vsr
     _ -> Nothing
   where frSemanticView (PPC.FR rno) =
-          Just $ CS.SemanticView { CS.semvView = frView rno
-                                 , CS.semvCongruentViews = [ frView rno' | rno' <- [0..31], rno' /= rno ]
-                                 , CS.semvDiff = CS.diffFloat
+          Just $ V.SemanticView { V.semvView = frView rno
+                                 , V.semvCongruentViews = [ frView rno' | rno' <- [0..31], rno' /= rno ]
+                                 , V.semvDiff = V.diffFloat
                                  }
-        frView rno = CS.View vsrLowerHalf (LocVSR (PPC.VSReg rno))
+        frView rno = V.View vsrLowerHalf (LocVSR (PPC.VSReg rno))
 
         gprSemanticView (PPC.GPR rno) =
-          Just $ CS.SemanticView { CS.semvView = gprView rno
-                                 , CS.semvCongruentViews = [ gprView rno' | rno' <- [0..31], rno' /= rno ]
-                                 , CS.semvDiff = CS.diffInt
+          Just $ V.SemanticView { V.semvView = gprView rno
+                                 , V.semvCongruentViews = [ gprView rno' | rno' <- [0..31], rno' /= rno ]
+                                 , V.semvDiff = V.diffInt
                                  }
-        gprView rno = CS.trivialView Proxy (LocGPR (PPC.GPR rno))
+        gprView rno = V.trivialView Proxy (LocGPR (PPC.GPR rno))
 
         vrSemanticView (PPC.VR rno) =
-          Just $ CS.SemanticView { CS.semvView = vrView rno
-                                 , CS.semvCongruentViews = [ vrView rno' | rno' <- [0..31], rno' /= rno ]
+          Just $ V.SemanticView { V.semvView = vrView rno
+                                 , V.semvCongruentViews = [ vrView rno' | rno' <- [0..31], rno' /= rno ]
                                  -- FIXME: we'll have to decide the diff function based on opcode
-                                 , CS.semvDiff = CS.diffInt
+                                 , V.semvDiff = V.diffInt
                                  }
-        vrView rno = CS.trivialView Proxy (LocVSR (PPC.VSReg (rno + 32)))
+        vrView rno = V.trivialView Proxy (LocVSR (PPC.VSReg (rno + 32)))
 
         vsrSemanticView (PPC.VSReg rno) =
-          Just $ CS.SemanticView { CS.semvView = vsrView rno
-                                 , CS.semvCongruentViews = [ vsrView rno' | rno' <- [0..63], rno' /= rno ]
+          Just $ V.SemanticView { V.semvView = vsrView rno
+                                 , V.semvCongruentViews = [ vsrView rno' | rno' <- [0..63], rno' /= rno ]
                                  -- FIXME: we'll have to decide the diff function based on opcode
-                                 , CS.semvDiff = CS.diffInt
+                                 , V.semvDiff = V.diffInt
                                  }
-        vsrView rno = CS.trivialView Proxy (LocVSR (PPC.VSReg rno))
+        vsrView rno = V.trivialView Proxy (LocVSR (PPC.VSReg rno))
 
 
 type instance Pseudo PPC = PPCP.PseudoOpcode

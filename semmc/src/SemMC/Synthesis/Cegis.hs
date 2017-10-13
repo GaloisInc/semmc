@@ -36,6 +36,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import           Dismantle.Instruction
 
 import           SemMC.Architecture
+import qualified SemMC.Architecture.Location as L
 import           SemMC.Formula
 import           SemMC.Synthesis.Template
 
@@ -100,8 +101,8 @@ evalExpression vars state expr = do
 -- machine state, returning the transformed machine state.
 evalFormula :: (Architecture arch)
             => Formula (S.SimpleBuilder t st) arch
-            -> ArchState arch (S.Elt t)
-            -> Cegis (S.SimpleBuilder t st) arch (ArchState arch (S.Elt t))
+            -> L.ArchState arch (S.Elt t)
+            -> Cegis (S.SimpleBuilder t st) arch (L.ArchState arch (S.Elt t))
 evalFormula (Formula vars defs) input =
   traverseF (evalExpression vars input) defs
 

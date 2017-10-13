@@ -52,8 +52,9 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
 import           SemMC.Architecture ( Instruction, Opcode, Operand )
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Concrete.State as C
 import qualified SemMC.Stochastic.CandidateProgram as CP
 import           SemMC.Stochastic.Monad
 import           SemMC.Stochastic.Pseudo
@@ -71,11 +72,11 @@ import qualified SemMC.Util as U
 --
 -- This function can loop forever, and should be called under a timeout
 synthesize :: (SynC arch, U.HasCallStack)
-           => C.RegisterizedInstruction arch
+           => AC.RegisterizedInstruction arch
            -> Syn t arch (CP.CandidateProgram t arch)
 synthesize target = do
   case target of
-    C.RI { C.riInstruction = i0 } ->
+    AC.RI { AC.riInstruction = i0 } ->
       U.logM U.Info $ printf "Attempting to synthesize a program for %s" (show i0)
   (numRounds, candidate) <- parallelSynthOne target -- mcmcSynthesizeOne target
   U.logM U.Info $ printf "found candidate after %i rounds" numRounds
@@ -96,7 +97,7 @@ instance (Typeable arch, SynC arch) => C.Exception (SynthesisException arch)
 
 parallelSynthOne :: forall arch t
                   . (SynC arch, HasCallStack)
-                 => C.RegisterizedInstruction arch
+                 => AC.RegisterizedInstruction arch
                  -> Syn t arch (Integer, Candidate arch)
 parallelSynthOne target = do
   nThreads <- askParallelSynth
@@ -107,7 +108,7 @@ parallelSynthOne target = do
       case asyncs of
         [] -> do
           U.logM U.Warn "All synthesis threads failed with exceptions"
-          MC.throwM (AllSynthesisThreadsFailed (Proxy @arch) (C.riInstruction target))
+          MC.throwM (AllSynthesisThreadsFailed (Proxy @arch) (AC.riInstruction target))
         _ -> do
           (firstAsync, res) <- liftIO (A.waitAnyCatch asyncs)
           case res of
@@ -125,12 +126,12 @@ parallelSynthOne target = do
 -- the registerization process.  The tests are paired with a unique ID that can
 -- be used to correlate the tests with runs on candidate programs.
 computeTargetResults :: (SynC arch)
-                     => C.RegisterizedInstruction arch
-                     -> [C.ConcreteState arch]
-                     -> Syn t arch ([CE.TestCase (C.ConcreteState arch) (Instruction arch)],
-                                    (CE.ResultIndex (C.ConcreteState arch)))
+                     => AC.RegisterizedInstruction arch
+                     -> [V.ConcreteState arch]
+                     -> Syn t arch ([CE.TestCase (V.ConcreteState arch) (Instruction arch)],
+                                    (CE.ResultIndex (V.ConcreteState arch)))
 computeTargetResults target tests = do
-  let registerizedInsns = map (C.registerizeInstruction target) tests
+  let registerizedInsns = map (AC.registerizeInstruction target) tests
   tcs <- mapM (\(insn, t) -> mkTestCase t [insn]) registerizedInsns
   resultIndex <- runConcreteTests tcs
   return (tcs, resultIndex)
@@ -147,9 +148,9 @@ computeTargetResults target tests = do
 -- which we can use to look up results in the relevant result indexes.
 computeCandidateResults :: (SynC arch)
                         => Candidate arch
-                        -> [CE.TestCase (C.ConcreteState arch) (Instruction arch)]
-                        -> Syn t arch ([(CE.TestCase (C.ConcreteState arch) (Instruction arch), CE.TestCase (C.ConcreteState arch) (Instruction arch))],
-                                       (CE.ResultIndex (C.ConcreteState arch)))
+                        -> [CE.TestCase (V.ConcreteState arch) (Instruction arch)]
+                        -> Syn t arch ([(CE.TestCase (V.ConcreteState arch) (Instruction arch), CE.TestCase (V.ConcreteState arch) (Instruction arch))],
+                                       (CE.ResultIndex (V.ConcreteState arch)))
 computeCandidateResults candidate tests = do
   indexedTests <- mapM (\tc -> (tc,) <$> mkTestCase (CE.testContext tc) (candidateInstructions candidate)) tests
   resultIndex <- runConcreteTests (map snd indexedTests)
@@ -157,7 +158,7 @@ computeCandidateResults candidate tests = do
 
 mcmcSynthesizeOne :: forall arch t
                    . (SynC arch, U.HasCallStack)
-                  => C.RegisterizedInstruction arch
+                  => AC.RegisterizedInstruction arch
                   -> Syn t arch (Integer, Candidate arch)
 mcmcSynthesizeOne target = do
   -- Max length of candidate programs. Can make it a parameter if
@@ -213,9 +214,9 @@ prettyCandidate = unlines . map (("    "++) . show) . catMaybes . F.toList
 -- the cost of the new candidate incrementally and stop as soon as
 -- we know it's too expensive [STOKE Section 4.5].
 chooseNextCandidate :: (SynC arch, U.HasCallStack)
-                    => C.RegisterizedInstruction arch
-                    -> [CE.TestCase (C.ConcreteState arch) (Instruction arch)]
-                    -> CE.ResultIndex (C.ConcreteState arch)
+                    => AC.RegisterizedInstruction arch
+                    -> [CE.TestCase (V.ConcreteState arch) (Instruction arch)]
+                    -> CE.ResultIndex (V.ConcreteState arch)
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
@@ -254,13 +255,13 @@ chooseNextCandidate target targetTests targetResults candidate cost candidate' =
 -- be rejected.
 compareTargetToCandidate :: forall arch t.
                             SynC arch
-                         => C.RegisterizedInstruction arch
-                         -> CE.ResultIndex (C.ConcreteState arch)
-                         -> CE.ResultIndex (C.ConcreteState arch)
-                         -> (CE.TestCase (C.ConcreteState arch) (Instruction arch), CE.TestCase (C.ConcreteState arch) (Instruction arch))
+                         => AC.RegisterizedInstruction arch
+                         -> CE.ResultIndex (V.ConcreteState arch)
+                         -> CE.ResultIndex (V.ConcreteState arch)
+                         -> (CE.TestCase (V.ConcreteState arch) (Instruction arch), CE.TestCase (V.ConcreteState arch) (Instruction arch))
                          -> Syn t arch Double
 compareTargetToCandidate target targetResultIndex candidateResultIndex (targetTest, candidateTest) = do
-  let (target', _test') = C.registerizeInstruction target (CE.testContext targetTest)
+  let (target', _test') = AC.registerizeInstruction target (CE.testContext targetTest)
   !liveOut     <- getOutMasks target'
   let targetRes = M.lookup (CE.testNonce targetTest) (CE.riSuccesses targetResultIndex)
       candidateRes = M.lookup (CE.testNonce candidateTest) (CE.riSuccesses candidateResultIndex)
@@ -302,7 +303,7 @@ instance C.Exception ComparisonError
 --
 -- We could cache this since the target instruction is fixed.
 getOutMasks :: forall arch t. SynC arch
-            => Instruction arch -> Syn t arch [C.SemanticView arch]
+            => Instruction arch -> Syn t arch [V.SemanticView arch]
 getOutMasks (D.Instruction opcode operands) = do
   Just ioRel <- opcodeIORelation opcode
   let outputs = Set.toList $ I.outputs ioRel
@@ -313,36 +314,36 @@ getOutMasks (D.Instruction opcode operands) = do
   let semViews = map operandToSemView outputs''
   return semViews
   where
-    operandToSemView :: Some (Operand arch) -> C.SemanticView arch
+    operandToSemView :: Some (Operand arch) -> V.SemanticView arch
     operandToSemView (Some operand) = desc
-      where Just desc = C.operandToSemanticView (Proxy :: Proxy arch) operand
+      where Just desc = AC.operandToSemanticView (Proxy :: Proxy arch) operand
 
 -- Sum the weights of all test outputs.
 compareTargetOutToCandidateOut :: forall arch.
                                   SynC arch
-                               => [C.SemanticView arch]
-                               -> C.ConcreteState arch
-                               -> C.ConcreteState arch
+                               => [V.SemanticView arch]
+                               -> V.ConcreteState arch
+                               -> V.ConcreteState arch
                                -> Double
 compareTargetOutToCandidateOut descs targetSt candidateSt =
-  sum [ NR.withKnownNat (C.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
-      | desc@(C.SemanticView { C.semvView = view }) <- descs
+  sum [ NR.withKnownNat (V.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
+      | desc@(V.SemanticView { V.semvView = view }) <- descs
       ]
 
 -- Find the number-of-bits error in the best match, penalizing matches
 -- that are in the wrong location.
 weighBestMatch :: forall arch.
                   (SynC arch)
-               => C.SemanticView arch
-               -> C.ConcreteState arch
-               -> C.ConcreteState arch
+               => V.SemanticView arch
+               -> V.ConcreteState arch
+               -> V.ConcreteState arch
                -> Double
-weighBestMatch (C.SemanticView view@(C.View _ _) congruentViews diff) targetSt candidateSt =
-  minimum $ [ weigh (C.peekMS candidateSt view) ] ++
-            [ weigh (C.peekMS candidateSt view') + wrongLocationPenalty
+weighBestMatch (V.SemanticView view@(V.View _ _) congruentViews diff) targetSt candidateSt =
+  minimum $ [ weigh (V.peekMS candidateSt view) ] ++
+            [ weigh (V.peekMS candidateSt view') + wrongLocationPenalty
             | view' <- congruentViews ]
   where
-    targetVal = C.peekMS targetSt view
+    targetVal = V.peekMS targetSt view
     weigh candidateVal = fromIntegral $ diff targetVal candidateVal
 
 -- | The penalty used in 'weighBestMatch' when looking for a candidate

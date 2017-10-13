@@ -37,7 +37,7 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Instruction as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
 import           SemMC.Symbolic ( Sym )
@@ -120,7 +120,7 @@ strataOne op = do
 
 strataOneLoop :: (SynC arch)
               => A.Opcode arch (A.Operand arch) sh
-              -> CS.RegisterizedInstruction arch
+              -> AC.RegisterizedInstruction arch
               -> C.EquivalenceClasses (CP.CandidateProgram t arch)
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOneLoop op instr eqclasses = do
@@ -148,7 +148,7 @@ strataOneLoop op instr eqclasses = do
 
 finishStrataOne :: (SynC arch)
                 => A.Opcode arch (A.Operand arch) sh
-                -> CS.RegisterizedInstruction arch
+                -> AC.RegisterizedInstruction arch
                 -> C.EquivalenceClasses (CP.CandidateProgram t arch)
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 finishStrataOne op instr eqclasses = do
@@ -162,12 +162,12 @@ finishStrataOne op instr eqclasses = do
 -- We pass in the opcode because we need the shape of the opcode in the type signature.
 buildFormula :: (SynC arch)
              => A.Opcode arch (A.Operand arch) sh
-             -> CS.RegisterizedInstruction arch
+             -> AC.RegisterizedInstruction arch
              -> F.Formula (Sym t) arch
              -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 buildFormula o i progFormula = do
   Just iorel <- opcodeIORelation o
-  case CS.riInstruction i of
+  case AC.riInstruction i of
     D.Instruction opcode operands
       | Just MapF.Refl <- MapF.testEquality opcode o -> do
           -- Now, for all of the outputs (implicit and explicit) in the target

@@ -18,7 +18,6 @@ module SemMC.Architecture (
   Architecture(..),
   Location,
   IsLocation(..),
-  ArchState,
   module SemMC.Architecture.Internal
   ) where
 
@@ -36,8 +35,6 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula ( LocationFuncInterp )
-
-type ArchState arch ex = MapF.MapF (Location arch) ex
 
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.

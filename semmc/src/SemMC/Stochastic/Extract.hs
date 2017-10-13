@@ -26,8 +26,9 @@ import qualified Lang.Crucible.Solver.Interface as C
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.BoundVar as BV
-import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
 import           SemMC.Symbolic ( Sym )
@@ -40,7 +41,7 @@ import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 -- 'F.ParameterizedFormula' that has holes for the given 'Opcode'.
 extractFormula :: forall arch t sh
                 . (SynC arch)
-               => CS.RegisterizedInstruction arch
+               => AC.RegisterizedInstruction arch
                -> A.Opcode arch (A.Operand arch) sh
                -> SL.ShapedList (A.Operand arch) sh
                -> F.Formula (Sym t) arch
@@ -57,7 +58,7 @@ extractFormula ri opc ops progForm iorel = do
       renameVariables ops pf0
     go acc (out:rest) =
       case out of
-        ImplicitOperand (Some (CS.View _ loc)) ->
+        ImplicitOperand (Some (V.View _ loc)) ->
           let Just expr = MapF.lookup loc (F.formDefs progForm)
           in go (defineLocation progForm loc expr acc) rest
         OperandRef (Some idx) -> do
@@ -110,7 +111,7 @@ renameVariables oplist pf0 = do
                                  -> IO (VarPair (BV.BoundVar (Sym t) arch) (BV.BoundVar (Sym t) arch) tp)
     allocateSensibleVariableName sym ix bv = do
       let operand = SL.indexShapedList oplist ix
-      fresh <- C.freshBoundVar sym (U.makeSymbol ("operand" ++ show (SL.indexAsInt ix))) (CS.operandType (Proxy @arch) operand)
+      fresh <- C.freshBoundVar sym (U.makeSymbol ("operand" ++ show (SL.indexAsInt ix))) (AC.operandType (Proxy @arch) operand)
       return (VarPair bv (BV.BoundVar fresh))
 
     -- Given a correspondence between and old var and a new var, create a pair
@@ -136,7 +137,7 @@ secondVar (VarPair _ v) = v
 --
 -- The intermediate f0 is invalid, but we use 'F.copyFormula' to create a fresh
 -- set of bound variables that are unique.
-makeFreshFormula :: (CS.ConcreteArchitecture arch)
+makeFreshFormula :: (AC.ConcreteArchitecture arch)
                  => MapF.MapF (A.Location arch) (C.SymExpr (Sym t))
                  -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t))
                  -> Syn t arch (F.Formula (Sym t) arch)
@@ -149,7 +150,7 @@ makeFreshFormula exprs vars = withSymBackend $ \sym -> do
 -- a 'MapF.MapF' instead of a 'F.Formula' so that we don't have a very invalid
 -- formula lying around.
 defineLocation :: forall t arch tp
-                . (CS.ConcreteArchitecture arch)
+                . (AC.ConcreteArchitecture arch)
                => F.Formula (Sym t) arch
                -> A.Location arch tp
                -> SB.Elt t tp
@@ -172,17 +173,17 @@ collectVars frm expr m = MapF.union m neededVars
 -- a boundvar and substitute them for the corresponding expressions in formulas.
 --
 -- For operands not backed by a location, we expect a corresponding index in the
--- 'CS.RegisterizedInstruction', which will tell us the mapping to another
+-- 'AC.RegisterizedInstruction', which will tell us the mapping to another
 -- location that represents the immediate.  We can use the variable representing
 -- that location as the hole for the immediate.
 parameterizeFormula :: forall arch sh t
-                     . (CS.ConcreteArchitecture arch)
-                    => CS.RegisterizedInstruction arch
+                     . (AC.ConcreteArchitecture arch)
+                    => AC.RegisterizedInstruction arch
                     -> A.Opcode arch (A.Operand arch) sh
                     -> SL.ShapedList (A.Operand arch) sh
                     -> F.Formula (Sym t) arch
                     -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
-parameterizeFormula ri@CS.RI { CS.riLiteralLocs = regLitLocs } opcode oplist f = do
+parameterizeFormula ri@AC.RI { AC.riLiteralLocs = regLitLocs } opcode oplist f = do
   -- The pfLiteralVars are the parameters from the original formula not
   -- corresponding to any parameters
   let litVars = U.filterMapF (keepNonParams paramLocs) (F.formParamVars f)
@@ -225,7 +226,7 @@ parameterizeFormula ri@CS.RI { CS.riLiteralLocs = regLitLocs } opcode oplist f =
     paramLocs = naturalParamLocs `S.union` registerizedParamLocs
 
 collectUses :: forall arch sh a b
-             . (CS.ConcreteArchitecture arch)
+             . (AC.ConcreteArchitecture arch)
             => SL.ShapedList (A.Operand arch) sh
             -> MapF.MapF (A.Location arch) a
             -> MapF.MapF (F.Parameter arch sh) b
@@ -240,23 +241,23 @@ collectUses opVars litVars defs =
     collectKeys k _ = S.insert (Some k)
     wrapLocations loc _ = S.insert (Some (F.Literal loc))
     wrapIndexes :: forall tp . SL.Index sh tp -> A.Operand arch tp -> S.Set (Some (F.Parameter arch sh)) -> S.Set (Some (F.Parameter arch sh))
-    wrapIndexes ix op = S.insert (Some (F.Operand (CS.operandType (Proxy @arch) op) ix))
+    wrapIndexes ix op = S.insert (Some (F.Operand (AC.operandType (Proxy @arch) op) ix))
 
 -- | Given an operand, find the 'BV.BoundVar' the represents it.
 --
 -- For operands with 'A.Location's (e.g., registers), this can be found in the
 -- given 'MapF.MapF'.  For operands without 'A.Location's (i.e., immediates), we
--- have to look up the corresponding mapping in the 'CS.RegisterizedInstruction'
+-- have to look up the corresponding mapping in the 'AC.RegisterizedInstruction'
 -- that records which 'A.Location' is standing in for the immediate.
 findVarForOperand :: forall arch sh tp t
-                   . (CS.ConcreteArchitecture arch)
+                   . (AC.ConcreteArchitecture arch)
                   => A.Opcode arch (A.Operand arch) sh
-                  -> CS.RegisterizedInstruction arch
+                  -> AC.RegisterizedInstruction arch
                   -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t))
                   -> SL.Index sh tp
                   -> A.Operand arch tp
                   -> Syn t arch (BV.BoundVar (Sym t) arch tp)
-findVarForOperand opc (CS.RI { CS.riLiteralLocs = lls, CS.riOpcode = rop }) formulaBindings ix op
+findVarForOperand opc (AC.RI { AC.riLiteralLocs = lls, AC.riOpcode = rop }) formulaBindings ix op
   | Just P.Refl <- P.testEquality rop opc =
     case A.operandToLocation (Proxy @arch) op of
       Just loc ->
@@ -273,7 +274,7 @@ findVarForOperand opc (CS.RI { CS.riLiteralLocs = lls, CS.riOpcode = rop }) form
         -- In this case, we are dealing with an immediate operand (since it
         -- doesn't have a location representation).  We can find the corresponding
         -- location in the RegisterizedInstruction.
-        case MapF.lookup (CS.LiteralRef ix) lls of
+        case MapF.lookup (AC.LiteralRef ix) lls of
           Just loc ->
             case MapF.lookup loc formulaBindings of
               Just bv -> return (BV.BoundVar bv)
@@ -291,7 +292,7 @@ liftImplicitLocations loc expr = MapF.insert (F.Literal loc) expr
 keepNonParams :: (P.OrdF f) => S.Set (Some f) -> f tp -> g tp -> Bool
 keepNonParams paramLocs loc _ = S.notMember (Some loc) paramLocs
 
-collectParamLocs :: (CS.ConcreteArchitecture arch)
+collectParamLocs :: (AC.ConcreteArchitecture arch)
                  => proxy arch
                  -> A.Operand arch tp
                  -> S.Set (Some (A.Location arch))
@@ -315,7 +316,7 @@ collectParamLocs proxy op s =
 -- FIXME: Do we need to pass in the IORelation so that we are sure we are only
 -- defining output registers?  Or is that not a concern because we already used
 -- IORelations to limit the formula we are generalizing.
-replaceParameters :: (CS.ConcreteArchitecture arch)
+replaceParameters :: (AC.ConcreteArchitecture arch)
                   => proxy arch
                   -> SL.Index sh tp
                   -> A.Operand arch tp

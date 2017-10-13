@@ -31,8 +31,8 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Concrete.State as CS
 import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
 import           SemMC.Stochastic.IORelation ( IORelation )
@@ -87,7 +87,7 @@ data SynEnv t arch =
          -- ^ All opcodes with known formulas with operands of a given shape
          , seWorklist :: STM.TVar (WL.Worklist (Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch)))))
          -- ^ Work items
-         , seTestCases :: STM.TVar [CS.ConcreteState arch]
+         , seTestCases :: STM.TVar [V.ConcreteState arch]
          -- ^ All of the test cases we have accumulated.  This includes a set of
          -- initial heuristically interesting tests, as well as a set of ~1000
          -- random tests.  It also includes counterexamples learned during
@@ -110,9 +110,9 @@ loadInitialState :: forall arch t
                   . (SynC arch, L.HasLogCfg)
                  => Config arch
                  -> Sym t
-                 -> IO (CS.ConcreteState arch)
+                 -> IO (V.ConcreteState arch)
                  -- ^ A generator of random test cases
-                 -> [CS.ConcreteState arch]
+                 -> [V.ConcreteState arch]
                  -- ^ Heuristically-interesting test cases
                  -> [Some (Witness (F.BuildOperandList arch) ((A.Opcode arch) (A.Operand arch)))]
                  -- ^ All possible opcodes. These are used to guess

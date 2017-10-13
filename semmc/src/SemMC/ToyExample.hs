@@ -34,7 +34,7 @@ import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
 import           Data.Word ( Word32 )
 import qualified GHC.Err.Located as L
-import           GHC.TypeLits ( KnownSymbol, Symbol, sameSymbol )
+import           GHC.TypeLits ( KnownSymbol, Nat, Symbol, sameSymbol )
 
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
@@ -53,7 +53,9 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as C
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.Pseudo as P
@@ -230,11 +232,11 @@ type Instruction = D.GenericInstruction Opcode Operand
 ----------------------------------------------------------------
 -- * Virtual Machine / Concrete Evaluation
 
-type MachineState = C.ConcreteState Toy
+type MachineState = V.ConcreteState Toy
 
 initialMachineState :: MachineState
 initialMachineState = MapF.fromList
-  [ MapF.Pair (RegLoc r) (C.ValueBV 0)
+  [ MapF.Pair (RegLoc r) (V.ValueBV 0)
   | r <- [Reg1, Reg2, Reg3] ]
 
 -- | The value type of a symbol, e.g. @"R32"@ registers are 32 bits.
@@ -242,18 +244,18 @@ type family Value (s :: Symbol) :: *
 type instance Value "R32" = Word32
 type instance Value "I32" = Word32
 
-type family   BitWidth (s :: Symbol) :: C.Nat
+type family   BitWidth (s :: Symbol) :: Nat
 type instance BitWidth "R32" = 32
 type instance BitWidth "I32" = 32
 
 -- | Get the value of an operand in a machine state.
-getOperand :: MachineState -> Operand s -> C.Value (BaseBVType (BitWidth s))
-getOperand ms (R32 r) = C.peekMS ms (regView r)
-getOperand _ (I32 x) = C.ValueBV (fromIntegral x)
+getOperand :: MachineState -> Operand s -> V.Value (BaseBVType (BitWidth s))
+getOperand ms (R32 r) = V.peekMS ms (regView r)
+getOperand _ (I32 x) = V.ValueBV (fromIntegral x)
 
 -- | Update the value of an operand in a machine state.
-putOperand :: MachineState -> Operand s -> C.Value (BaseBVType (BitWidth s)) -> MachineState
-putOperand ms (R32 r) x = C.pokeMS ms (regView r) x
+putOperand :: MachineState -> Operand s -> V.Value (BaseBVType (BitWidth s)) -> MachineState
+putOperand ms (R32 r) x = V.pokeMS ms (regView r) x
 putOperand _ I32{} _ = L.error "putOperand: putting an immediate does not make sense!"
 
 -- | Evaluate an instruction, updating the machine state.
@@ -262,14 +264,14 @@ evalInstruction ms (D.Instruction op args) = case (op, args) of
   (AddRr, r1 :> r2 :> Nil) ->
     let x1 = getOperand ms r1
         x2 = getOperand ms r2
-    in putOperand ms r1 (C.liftValueBV2 (+) x1 x2)
+    in putOperand ms r1 (V.liftValueBV2 (+) x1 x2)
   (SubRr, r1 :> r2 :> Nil) ->
     let x1 = getOperand ms r1
         x2 = getOperand ms r2
-    in putOperand ms r1 (C.liftValueBV2 (-) x1 x2)
+    in putOperand ms r1 (V.liftValueBV2 (-) x1 x2)
   (NegR, r1 :> Nil) ->
     let x1 = getOperand ms r1
-    in putOperand ms r1 (C.liftValueBV1 negate x1)
+    in putOperand ms r1 (V.liftValueBV1 negate x1)
   (MovRi, r1 :> i1 :> Nil) ->
     let x1 = getOperand ms i1
     in putOperand ms r1 x1
@@ -379,28 +381,28 @@ interestingStates =
     i32Min = minBound
     i32Max :: Int32
     i32Max = maxBound
-    values = [ C.ValueBV (W.w 0)
-             , C.ValueBV (W.w 1)
-             , C.ValueBV (W.w (fromIntegral i32Min))
-             , C.ValueBV (W.w (fromIntegral i32Max))
+    values = [ V.ValueBV (W.w 0)
+             , V.ValueBV (W.w 1)
+             , V.ValueBV (W.w (fromIntegral i32Min))
+             , V.ValueBV (W.w (fromIntegral i32Max))
              ]
 
     mkState r1 v1 r2 v2 = MapF.insert r1 v1 $ MapF.insert r2 v2 initialMachineState
 
 -- If we got rid of the 'NatRepr' / 'knownNat' stuff we could make
 -- this a pattern synonym.
-regView :: Reg -> C.View Toy 32
-regView r = C.trivialView (Proxy :: Proxy Toy) (RegLoc r)
+regView :: Reg -> V.View Toy 32
+regView r = V.trivialView (Proxy :: Proxy Toy) (RegLoc r)
 
-operandToSemanticViewImpl :: Operand sh -> Maybe (C.SemanticView Toy)
+operandToSemanticViewImpl :: Operand sh -> Maybe (V.SemanticView Toy)
 operandToSemanticViewImpl (R32 r) =
-  Just $ C.SemanticView { C.semvView = regView r
-                        , C.semvCongruentViews = [ regView r' | r' <- [Reg1, Reg2, Reg3], r /= r' ]
-                        , C.semvDiff = C.diffInt
+  Just $ V.SemanticView { V.semvView = regView r
+                        , V.semvCongruentViews = [ regView r' | r' <- [Reg1, Reg2, Reg3], r /= r' ]
+                        , V.semvDiff = V.diffInt
                         }
 operandToSemanticViewImpl (I32 _) = Nothing
 
-randomStateImpl :: D.Gen -> IO (C.ConcreteState Toy)
+randomStateImpl :: D.Gen -> IO (V.ConcreteState Toy)
 randomStateImpl gen = do
   pairs <- forM [Reg1, Reg2, Reg3] $ \r -> do
     value <- D.arbitrary gen
@@ -416,12 +418,12 @@ toyOperandType o =
 -- | This is trivial for the Toy architecture, since it doesn't have any opcodes
 -- with immediates.  If we add opcodes with immediates, they will need to be
 -- patched up here.
-toyRegisterizeInstruction :: C.RegisterizedInstruction Toy
-                          -> C.ConcreteState Toy
-                          -> (A.Instruction Toy, C.ConcreteState Toy)
-toyRegisterizeInstruction ri cs = (C.riInstruction ri, cs)
+toyRegisterizeInstruction :: AC.RegisterizedInstruction Toy
+                          -> V.ConcreteState Toy
+                          -> (A.Instruction Toy, V.ConcreteState Toy)
+toyRegisterizeInstruction ri cs = (AC.riInstruction ri, cs)
 
-instance C.ConcreteArchitecture Toy where
+instance AC.ConcreteArchitecture Toy where
   operandToSemanticView _ = operandToSemanticViewImpl
   zeroState _ = initialMachineState
   randomState _ = randomStateImpl

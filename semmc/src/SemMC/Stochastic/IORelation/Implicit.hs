@@ -27,7 +27,9 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 
 import           SemMC.Stochastic.IORelation.Shared
@@ -43,7 +45,7 @@ import           Debug.Trace
 -- For this, we will want to focus on generating values that trigger edge cases
 -- to make sure we can deal with flags registers.
 findImplicitOperands :: forall arch sh
-                      . (CS.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+                      . (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                      => A.Opcode arch (A.Operand arch) sh
                      -> Learning arch (IORelation arch sh)
 findImplicitOperands op = do
@@ -64,10 +66,10 @@ findImplicitOperands op = do
 -- The fact records all of the explicit locations.  We just need to look at all
 -- of the *other* (unmentioned) locations to find any changes.  Any changed
 -- locations are implicit outputs.
-computeImplicitOperands :: (CS.ConcreteArchitecture arch)
+computeImplicitOperands :: (AC.ConcreteArchitecture arch)
                         => A.Opcode arch (A.Operand arch) sh
                         -> [TestBundle (TestCase arch) (ImplicitFact arch)]
-                        -> CE.ResultIndex (CS.ConcreteState arch)
+                        -> CE.ResultIndex (V.ConcreteState arch)
                         -> Learning arch (IORelation arch sh)
 computeImplicitOperands op tests idx =
   F.foldlM (buildImplicitRelation op idx) mempty tests
@@ -75,9 +77,9 @@ computeImplicitOperands op tests idx =
 -- |
 --
 -- Note that the operand isn't used - it is acting like a proxy for the @sh@ parameter.
-buildImplicitRelation :: (CS.ConcreteArchitecture arch)
+buildImplicitRelation :: (AC.ConcreteArchitecture arch)
                       => A.Opcode arch (A.Operand arch) sh
-                      -> CE.ResultIndex (CS.ConcreteState arch)
+                      -> CE.ResultIndex (V.ConcreteState arch)
                       -> IORelation arch sh
                       -> TestBundle (TestCase arch) (ImplicitFact arch)
                       -> Learning arch (IORelation arch sh)
@@ -97,10 +99,10 @@ buildImplicitRelation op rix iorel tb = do
           return iorel
 
 collectImplicitOutputLocations :: forall arch sh
-                                . (CS.ConcreteArchitecture arch)
+                                . (AC.ConcreteArchitecture arch)
                                => A.Opcode arch (A.Operand arch) sh
-                               -> CE.ResultIndex (CS.ConcreteState arch)
-                               -> CE.TestResult (CS.ConcreteState arch)
+                               -> CE.ResultIndex (V.ConcreteState arch)
+                               -> CE.TestResult (V.ConcreteState arch)
                                -> ImplicitFact arch
                                -> TestCase arch
                                -> Learning arch (IORelation arch sh)
@@ -114,17 +116,17 @@ collectImplicitOutputLocations _op rix baseRes f tc =
                      } -> do
           F.foldrM (addLocIfImplicitAndDifferent loc0 explicitOperands) mempty (MapF.toList (CE.resultContext res))
   where
-    addLocIfImplicitAndDifferent :: Some (CS.View arch)
-                                 -> S.Set (Some (CS.View arch))
-                                 -> MapF.Pair (A.Location arch) CS.Value
+    addLocIfImplicitAndDifferent :: Some (V.View arch)
+                                 -> S.Set (Some (V.View arch))
+                                 -> MapF.Pair (A.Location arch) V.Value
                                  -> IORelation arch sh
                                  -> Learning arch (IORelation arch sh)
     addLocIfImplicitAndDifferent loc0 explicitOperands (MapF.Pair loc postVal) s =
       let proxy = Proxy :: Proxy arch
       in case A.locationType loc of
         BaseBVRepr nr ->
-          case withKnownNat nr (let tv = CS.trivialView proxy loc
-                                in (CS.peekMS (CE.testContext tc) tv, CS.peekMS (CE.resultContext baseRes) tv,tv)) of
+          case withKnownNat nr (let tv = V.trivialView proxy loc
+                                in (V.peekMS (CE.testContext tc) tv, V.peekMS (CE.resultContext baseRes) tv,tv)) of
             (_preVal, baseResVal, tv) ->
               case () of
                 () | Some baseResVal == Some postVal -> return s
@@ -145,26 +147,26 @@ collectImplicitOutputLocations _op rix baseRes f tc =
 --
 -- Repeat for a number of random instructions
 generateImplicitTests :: forall arch
-                       . (CS.ConcreteArchitecture arch)
+                       . (AC.ConcreteArchitecture arch)
                       => A.Instruction arch
-                      -> CS.ConcreteState arch
-                      -> Learning arch [TestBundle (CS.ConcreteState arch) (ImplicitFact arch)]
+                      -> V.ConcreteState arch
+                      -> Learning arch [TestBundle (V.ConcreteState arch) (ImplicitFact arch)]
 generateImplicitTests i s0 = do
   let allLocs = testCaseLocations (Proxy :: Proxy arch) s0
   mapM (genTestForLoc i s0) allLocs
 
 genTestForLoc :: forall arch
-               . (CS.ConcreteArchitecture arch)
+               . (AC.ConcreteArchitecture arch)
               => A.Instruction arch
-              -> CS.ConcreteState arch
-              -> Some (CS.View arch)
-              -> Learning arch (TestBundle (CS.ConcreteState arch) (ImplicitFact arch))
+              -> V.ConcreteState arch
+              -> Some (V.View arch)
+              -> Learning arch (TestBundle (V.ConcreteState arch) (ImplicitFact arch))
 genTestForLoc i s0 (Some loc0) = do
-  testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (CS.pokeMS s0 loc0))
+  testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (V.pokeMS s0 loc0))
   case i of
     D.Instruction _ ops -> do
-      let explicits = [ CS.someTrivialView (Proxy @arch) (Some loc)
-                      | IndexedSemanticView _ (CS.SemanticView { CS.semvView = CS.View _ loc })
+      let explicits = [ V.someTrivialView (Proxy @arch) (Some loc)
+                      | IndexedSemanticView _ (V.SemanticView { V.semvView = V.View _ loc })
                           <- instructionRegisterOperands (Proxy :: Proxy arch) ops
                       ]
       return TestBundle { tbTestCases = testStates

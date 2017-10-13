@@ -41,7 +41,7 @@ import qualified Data.Word.Indexed as W
 import           Lang.Crucible.BaseTypes ( BaseBVType, NatRepr, knownNat )
 
 import qualified Dismantle.PPC as PPC
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Value as V
 
 -- Type Reprs
 
@@ -54,35 +54,35 @@ repr64 = knownNat
 repr128 :: NatRepr 128
 repr128 = knownNat
 
-extendBV :: CS.Value (BaseBVType 64) -> CS.Value (BaseBVType 128)
-extendBV (CS.ValueBV (W.unW -> n)) = CS.ValueBV (W.w n)
+extendBV :: V.Value (BaseBVType 64) -> V.Value (BaseBVType 128)
+extendBV (V.ValueBV (W.unW -> n)) = V.ValueBV (W.w n)
 
 withTruncI16Val :: (KnownNat n)
-                => CS.Value (BaseBVType n)
+                => V.Value (BaseBVType n)
                 -> Word16
                 -> (Int16 -> PPC.Operand s)
-                -> (CS.Value (BaseBVType n), PPC.Operand s)
-withTruncI16Val (CS.ValueBV w) mask con =
+                -> (V.Value (BaseBVType n), PPC.Operand s)
+withTruncI16Val (V.ValueBV w) mask con =
   let w' = W.unW w .&. fromIntegral mask
-  in (CS.ValueBV (W.w w'), con (fromIntegral w'))
+  in (V.ValueBV (W.w w'), con (fromIntegral w'))
 
 withTruncIVal :: (KnownNat n)
-             => CS.Value (BaseBVType n)
+             => V.Value (BaseBVType n)
              -> W.W n
              -> (I.I n' -> PPC.Operand s)
-             -> (CS.Value (BaseBVType n), PPC.Operand s)
-withTruncIVal (CS.ValueBV w) mask con =
+             -> (V.Value (BaseBVType n), PPC.Operand s)
+withTruncIVal (V.ValueBV w) mask con =
   let w' = w .&. mask
-  in (CS.ValueBV w', con (I.I (fromIntegral (W.unW w'))))
+  in (V.ValueBV w', con (I.I (fromIntegral (W.unW w'))))
 
 withTruncWVal :: (KnownNat n, KnownNat n')
-              => CS.Value (BaseBVType n)
+              => V.Value (BaseBVType n)
               -> W.W n
               -> (W.W n' -> PPC.Operand s)
-              -> (CS.Value (BaseBVType n), PPC.Operand s)
-withTruncWVal (CS.ValueBV w) mask con =
+              -> (V.Value (BaseBVType n), PPC.Operand s)
+withTruncWVal (V.ValueBV w) mask con =
   let w' = w .&. mask
-  in (CS.ValueBV w', con (W.w (fromIntegral (W.unW w'))))
+  in (V.ValueBV w', con (W.w (fromIntegral (W.unW w'))))
 
 -- Serialization
 
@@ -93,10 +93,10 @@ serializeVec i = B.word64BE w1 <> B.word64BE w2
     w1 = fromInteger i
     w2 = fromInteger (i `shiftR` 64)
 
-serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> CS.Value (BaseBVType n) -> B.Builder
+serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> V.Value (BaseBVType n) -> B.Builder
 serializeSymVal toBuilder sv =
   case sv of
-    CS.ValueBV (W.unW -> w) -> toBuilder (toInteger w)
+    V.ValueBV (W.unW -> w) -> toBuilder (toInteger w)
 
 data HighBits = IgnoreHighBits
               | KeepHighBits
@@ -112,8 +112,8 @@ getWord128be hb = do
 getValue :: (Integral w, KnownNat n)
          => G.Get w
          -> NatRepr n
-         -> G.Get (CS.Value (BaseBVType n))
-getValue g _ = (CS.ValueBV . W.w . fromIntegral) <$> g
+         -> G.Get (V.Value (BaseBVType n))
+getValue g _ = (V.ValueBV . W.w . fromIntegral) <$> g
 
 -- Parsing
 

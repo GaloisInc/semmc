@@ -35,12 +35,12 @@ import           Lang.Crucible.BaseTypes
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC
 
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Value as V
 
 import qualified SemMC.Architecture.PPC.Shared as PPCS
 import           SemMC.Architecture.PPC.Location
 
-type ConcreteState ppc = MapF.MapF (Location ppc) CS.Value
+type ConcreteState ppc = MapF.MapF (Location ppc) V.Value
 
 -- | FIXME: Does not include memory
 randomState :: (KnownNat (ArchRegWidth ppc), ArchRegWidth ppc ~ 32) => DA.Gen -> IO (ConcreteState ppc)
@@ -51,25 +51,25 @@ randomState gen = St.execStateT randomize MapF.empty
       mapM_ addRandomBV64 frs
       mapM_ addRandomBV vrs
       mapM_ addZeroBV specialRegs
---      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
+--      St.modify' $ MapF.insert LocMem (V.ValueMem (B.replicate 64 0))
 
     -- | Create a random 128 bit bitvector with the high 64 bits as zero.  We
     -- want this for the FRs, which would normally overlap with the VSRs.  If we
     -- had the VSRs, then we would want to generate full 128 bit values instead.
     addRandomBV64 :: Location ppc (BaseBVType 128) -> St.StateT (ConcreteState ppc) IO ()
     addRandomBV64 loc = do
-      bv :: CS.Value (BaseBVType 64)
-         <- CS.ValueBV <$> liftIO (DA.arbitrary gen)
+      bv :: V.Value (BaseBVType 64)
+         <- V.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc (PPCS.extendBV bv)
 
     addRandomBV :: (KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
     addRandomBV loc = do
-      bv <- CS.ValueBV <$> liftIO (DA.arbitrary gen)
+      bv <- V.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc bv
 
     addZeroBV :: (KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
     addZeroBV loc = do
-      let bv = CS.ValueBV (W.w 0)
+      let bv = V.ValueBV (W.w 0)
       St.modify' $ MapF.insert loc bv
 
 -- | States that include (pairs of) registers with interesting bit patterns.
@@ -84,10 +84,10 @@ interestingStates = gprStates -- ++ fprStates
     i32Min = minBound
     i32Max :: Int32
     i32Max = maxBound
-    bvVals = [ CS.ValueBV (W.w 0)
-             , CS.ValueBV (W.w 1)
-             , CS.ValueBV (W.w (fromIntegral i32Min))
-             , CS.ValueBV (W.w (fromIntegral i32Max))
+    bvVals = [ V.ValueBV (W.w 0)
+             , V.ValueBV (W.w 1)
+             , V.ValueBV (W.w (fromIntegral i32Min))
+             , V.ValueBV (W.w (fromIntegral i32Max))
              ]
     gprStates = [ mkState r1 v1 r2 v2
                 | r1 <- gprs
@@ -104,12 +104,12 @@ zeroState :: (KnownNat (ArchRegWidth ppc), ArchRegWidth ppc ~ 32) => ConcreteSta
 zeroState = St.execState addZeros MapF.empty
   where
     addZero :: KnownNat n => Location ppc (BaseBVType n) -> St.State (ConcreteState ppc) ()
-    addZero loc = St.modify' $ MapF.insert loc (CS.ValueBV (W.w 0))
+    addZero loc = St.modify' $ MapF.insert loc (V.ValueBV (W.w 0))
     addZeros = do
       mapM_ addZero gprs
       mapM_ addZero vsrs
       mapM_ addZero specialRegs
---      St.modify' $ MapF.insert LocMem (CS.ValueMem (B.replicate 64 0))
+--      St.modify' $ MapF.insert LocMem (V.ValueMem (B.replicate 64 0))
 
 -- | Convert a machine state to the wire protocol.
 --
@@ -128,14 +128,14 @@ serialize s = LB.toStrict (B.toLazyByteString b)
 --                , mconcat (map serializeMem (extractLocs s [LocMem]))
                 ]
 
-serializeMem :: CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> B.Builder
+serializeMem :: V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> B.Builder
 serializeMem val =
   case val of
-    CS.ValueMem bs -> B.byteString bs
+    V.ValueMem bs -> B.byteString bs
 
 extractLocs :: ConcreteState ppc
             -> [Location ppc tp]
-            -> [CS.Value tp]
+            -> [V.Value tp]
 extractLocs s locs = map extractLoc locs
   where
     extractLoc l =
@@ -165,7 +165,7 @@ getArchState = do
 --  mem' <- getBS
   return (St.execState (addLocs gprs' spregs' ({-frs' ++-} vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
-    addLoc :: forall tp . (Location ppc tp, CS.Value tp) -> St.State (ConcreteState ppc) ()
+    addLoc :: forall tp . (Location ppc tp, V.Value tp) -> St.State (ConcreteState ppc) ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
 
     addLocs gprs' spregs' vsrs' = do
@@ -173,15 +173,15 @@ getArchState = do
       mapM_ addLoc spregs'
       mapM_ addLoc vsrs'
 
-getWith :: G.Get (CS.Value tp)
+getWith :: G.Get (V.Value tp)
         -> Location ppc tp
-        -> G.Get (Location ppc tp, CS.Value tp)
+        -> G.Get (Location ppc tp, V.Value tp)
 getWith g loc = do
   w <- g
   return (loc, w)
 
-getBS :: G.Get (CS.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
-getBS = CS.ValueMem <$> G.getBytes 64
+getBS :: G.Get (V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
+getBS = V.ValueMem <$> G.getBytes 64
 
 gprs :: [Location ppc (BaseBVType (ArchRegWidth ppc))]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]

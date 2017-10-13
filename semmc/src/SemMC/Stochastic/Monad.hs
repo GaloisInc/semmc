@@ -82,6 +82,7 @@ import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Seq as SeqF
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Formula as F
 import           SemMC.Symbolic ( Sym )
 import qualified SemMC.Util as U
@@ -89,7 +90,6 @@ import qualified SemMC.Worklist as WL
 
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Concrete.Execution.SSH as SSH
-import qualified SemMC.Concrete.State as CS
 import           SemMC.Stochastic.Constraints ( SynC )
 import           SemMC.Stochastic.IORelation ( IORelation )
 import           SemMC.Stochastic.Initialize ( Config(..), SynEnv(..), mkFormulaFilename )
@@ -108,8 +108,8 @@ data LocalSynEnv t arch =
               , seRandomGen :: DA.Gen
               , seNonceSource :: IORef Word64
               -- ^ Nonces for test cases sent to the remote runner.
-              , seTestChan :: C.Chan (Maybe [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)])
-              , seResChan :: C.Chan (CE.ResultOrError (CS.ConcreteState arch))
+              , seTestChan :: C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
+              , seResChan :: C.Chan (CE.ResultOrError (V.ConcreteState arch))
               }
 
 -- | A monad for the stochastic synthesis code.  It maintains the necessary
@@ -138,7 +138,7 @@ instance U.MonadUnliftIO (Syn t arch) where
 
 -- | This is the exception that is thrown if the synthesis times out waiting for
 -- a result from the remote test runner.
-data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
+data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)]
 
 instance (SynC arch) => Show (RemoteRunnerTimeout arch) where
   show (RemoteRunnerTimeout _ tcs) = unwords [ "RemoteRunnerTimeout", show tcs ]
@@ -257,11 +257,11 @@ withStats k = do
   st <- R.asks (statsThread . seConfig . seGlobalEnv)
   liftIO (k st)
 
-askTestCases :: Syn t arch [CS.ConcreteState arch]
+askTestCases :: Syn t arch [V.ConcreteState arch]
 askTestCases = R.asks (seTestCases . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Add a counterexample test case to the set of tests
-addTestCase :: CS.ConcreteState arch -> Syn t arch ()
+addTestCase :: V.ConcreteState arch -> Syn t arch ()
 addTestCase tc = do
   testref <- R.asks (seTestCases . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' testref (tc:)
@@ -312,9 +312,9 @@ opcodeIORelation op = do
 
 -- | Wrap a test vector + test program into a form suitable for the test runners
 -- (see 'runConcreteTest' and 'runConcreteTests').
-mkTestCase :: CS.ConcreteState arch
+mkTestCase :: V.ConcreteState arch
            -> [A.Instruction arch]
-           -> Syn t arch (CE.TestCase (CS.ConcreteState arch) (A.Instruction arch))
+           -> Syn t arch (CE.TestCase (V.ConcreteState arch) (A.Instruction arch))
 mkTestCase s0 prog = do
   nref <- R.asks seNonceSource
   nonce <- liftIO $ readIORef nref
@@ -333,8 +333,8 @@ mkTestCase s0 prog = do
 -- by the configured timeout ('remoteRunnerTimeoutSeconds').
 runConcreteTests :: forall t arch
                   . (SynC arch)
-                 => [CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)]
-                 -> Syn t arch (CE.ResultIndex (CS.ConcreteState arch))
+                 => [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)]
+                 -> Syn t arch (CE.ResultIndex (V.ConcreteState arch))
 runConcreteTests tests = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
@@ -351,8 +351,8 @@ runConcreteTests tests = do
 -- Calls 'L.error' if more than one result is returned.
 runConcreteTest :: forall t arch
                  . (SynC arch)
-                => CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
-                -> Syn t arch (CE.ResultOrError (CS.ConcreteState arch))
+                => CE.TestCase (V.ConcreteState arch) (A.Instruction arch)
+                -> Syn t arch (CE.ResultOrError (V.ConcreteState arch))
 runConcreteTest tc = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan

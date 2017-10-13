@@ -28,7 +28,8 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.View as V
 
 import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 import           SemMC.Stochastic.Monad
@@ -53,7 +54,7 @@ import           SemMC.Stochastic.Monad
 instantiateInstruction :: forall arch sh t
                         . (SynC arch)
                        => A.Opcode arch (A.Operand arch) sh
-                       -> Syn t arch (CS.RegisterizedInstruction arch)
+                       -> Syn t arch (AC.RegisterizedInstruction arch)
 instantiateInstruction op = do
   gen <- askGen
   miorel <- opcodeIORelation op
@@ -63,7 +64,7 @@ instantiateInstruction op = do
   where
     -- Generate random instructions until we get one with explicit operands that
     -- do not overlap with implicit operands.
-    go :: DA.Gen -> S.Set (Some (CS.View arch)) -> IO (CS.RegisterizedInstruction arch)
+    go :: DA.Gen -> S.Set (Some (V.View arch)) -> IO (AC.RegisterizedInstruction arch)
     go gen implicitOps = do
       target <- D.randomInstruction gen (NES.singleton (Some op))
       case target of
@@ -79,17 +80,17 @@ instantiateInstruction op = do
                 let s0 = (MapF.empty, A.registerizationLocations @(A.Location arch))
                 let usedLocs = S.union (S.map liftSomeView implicitOps) (S.foldr (liftSomeOperand (Proxy @arch)) S.empty explicitLocs)
                 let (litLocs, _) = SL.foldrFCIndexed (assignLiterals op' usedLocs) s0 ops
-                return CS.RI { CS.riInstruction = target
-                             , CS.riOpcode = op'
-                             , CS.riOperands = ops
-                             , CS.riLiteralLocs = litLocs
+                return AC.RI { AC.riInstruction = target
+                             , AC.riOpcode = op'
+                             , AC.riOperands = ops
+                             , AC.riLiteralLocs = litLocs
                              }
           | otherwise -> L.error ("Invalid opcode: " ++ P.showF op ++ " vs " ++ P.showF op')
 
-liftSomeView :: Some (CS.View arch) -> Some (A.Location arch)
-liftSomeView (Some (CS.View _ loc)) = Some loc
+liftSomeView :: Some (V.View arch) -> Some (A.Location arch)
+liftSomeView (Some (V.View _ loc)) = Some loc
 
-liftSomeOperand :: (CS.ConcreteArchitecture arch)
+liftSomeOperand :: (AC.ConcreteArchitecture arch)
                 => proxy arch
                 -> Some (A.Operand arch)
                 -> S.Set (Some (A.Location arch))
@@ -109,21 +110,21 @@ liftSomeOperand proxy (Some op) s =
 -- the literals.  That seems extremely unlikely, but is something to potentially
 -- watch out for.
 assignLiterals :: forall arch sh tp
-                . (CS.ConcreteArchitecture arch)
+                . (AC.ConcreteArchitecture arch)
                => A.Opcode arch (A.Operand arch) sh
                -> S.Set (Some (A.Location arch))
                -> SL.Index sh tp
                -> A.Operand arch tp
-               -> (MapF.MapF (CS.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
-               -> (MapF.MapF (CS.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
+               -> (MapF.MapF (AC.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
+               -> (MapF.MapF (AC.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
 assignLiterals opc usedLocs ix op acc@(m, locs) =
   case A.operandToLocation (Proxy @arch) op of
     Just _ -> acc
     Nothing ->
       let (locs', loc) = findUnusedLocation opc (Proxy @arch) usedLocs op locs
-      in (MapF.insert (CS.LiteralRef ix) loc m, locs')
+      in (MapF.insert (AC.LiteralRef ix) loc m, locs')
 
-findUnusedLocation :: (CS.ConcreteArchitecture arch)
+findUnusedLocation :: (AC.ConcreteArchitecture arch)
                    => A.Opcode arch (A.Operand arch) sh
                    -> proxy arch
                    -> S.Set (Some (A.Location arch))
@@ -134,23 +135,23 @@ findUnusedLocation opc proxy usedLocs op locs =
   case locs of
     [] -> L.error ("Not enough locations to find a virtual literal location for " ++ P.showF opc)
     (Some loc : rest)
-      | Just P.Refl <- P.testEquality (A.locationType loc) (CS.operandType proxy op)
+      | Just P.Refl <- P.testEquality (A.locationType loc) (AC.operandType proxy op)
       , not (S.member (Some loc) usedLocs) -> (rest, loc)
       | otherwise -> findUnusedLocation opc proxy usedLocs op rest
 
 isImplicitOrReusedOperand :: (SynC arch)
                           => Proxy arch
-                          -> S.Set (Some (CS.View arch))
+                          -> S.Set (Some (V.View arch))
                           -> A.Operand arch tp
                           -> (Bool, S.Set (Some (A.Operand arch)))
                           -> (Bool, S.Set (Some (A.Operand arch)))
 isImplicitOrReusedOperand proxy implicitViews operand (isIorR, seen)
   | isIorR || S.member (Some operand) seen = (True, seen)
-  | Just (CS.SemanticView { CS.semvView = view }) <- CS.operandToSemanticView proxy operand
+  | Just (V.SemanticView { V.semvView = view }) <- AC.operandToSemanticView proxy operand
   , S.member (Some view) implicitViews = (True, seen)
   | otherwise = (isIorR, S.insert (Some operand) seen)
 
-implicitOperands :: (CS.ConcreteArchitecture arch) => IORelation arch sh -> S.Set (Some (CS.View arch))
+implicitOperands :: (AC.ConcreteArchitecture arch) => IORelation arch sh -> S.Set (Some (V.View arch))
 implicitOperands iorel =
   F.foldl' addImplicitLoc S.empty (inputs iorel <> outputs iorel)
   where

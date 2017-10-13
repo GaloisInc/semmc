@@ -16,11 +16,13 @@ import qualified Data.Parameterized.Map as MapF
 import Lang.Crucible.BaseTypes ( BaseBVType )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.PPC as PPC
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import SemMC.Architecture.PPC32
 
-type PPCState = CS.ConcreteState PPC
+type PPCState = V.ConcreteState PPC
 
 main :: IO ()
 main = do
@@ -81,7 +83,7 @@ testVector1 =
   where
     i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:> PPC.Gprc r17 PPC.:> PPC.Gprc r25 PPC.:> PPC.Nil)
 
-sbase :: MapF.MapF (Location PPC) CS.Value
+sbase :: MapF.MapF (Location PPC) V.Value
 sbase = toState [ 1228099099
                 , 1418706367
                 , 1088784811
@@ -116,7 +118,7 @@ sbase = toState [ 1228099099
                 , 1933312003
                 ]
 
-smod :: MapF.MapF (Location PPC) CS.Value
+smod :: MapF.MapF (Location PPC) V.Value
 smod = toState [ 1228099099
                , 1418706367
                , 1088784811
@@ -151,16 +153,16 @@ smod = toState [ 1228099099
                , 1933312003
                ]
 
-toState :: [Integer] -> MapF.MapF (Location PPC) CS.Value
-toState vals = foldr poke (CS.zeroState (Proxy @PPC)) (zip gprviews vals)
+toState :: [Integer] -> MapF.MapF (Location PPC) V.Value
+toState vals = foldr poke (AC.zeroState (Proxy @PPC)) (zip gprviews vals)
   where
-    poke (v, val) ctx = CS.pokeMS ctx v (CS.ValueBV (W.w val))
+    poke (v, val) ctx = V.pokeMS ctx v (V.ValueBV (W.w val))
 
 gprs :: [Location PPC (BaseBVType 32)]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]
 
-gprviews :: [CS.View PPC 32]
-gprviews = fmap (CS.trivialView (Proxy @PPC)) gprs
+gprviews :: [V.View PPC 32]
+gprviews = fmap (V.trivialView (Proxy @PPC)) gprs
 
 
 r17 :: PPC.GPR
@@ -176,9 +178,9 @@ testVector2 = testVector1 { CE.testNonce = 22
                           , CE.testProgram = [i]
                           }
   where
-    -- ctx0 = CS.zeroState (Proxy @PPC)
-    -- ctx1 = CS.pokeMS ctx0 v2 (CS.ValueBV (W.W 1))
-    -- ctx2 = CS.pokeMS ctx1 v3 (CS.ValueBV (W.W 5))
+    -- ctx0 = V.zeroState (Proxy @PPC)
+    -- ctx1 = V.pokeMS ctx0 v2 (V.ValueBV (W.W 1))
+    -- ctx2 = V.pokeMS ctx1 v3 (V.ValueBV (W.W 5))
     i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:> PPC.Gprc r17 PPC.:> PPC.Gprc r25 PPC.:> PPC.Nil)
 
 printLogMessages :: C.Chan CE.LogMessage -> IO ()

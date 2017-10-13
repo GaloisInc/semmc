@@ -53,16 +53,16 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as DA
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Log as L
 import qualified SemMC.Worklist as WL
 
-type TestCase arch       = CE.TestCase (CS.ConcreteState arch) (A.Instruction arch)
-type TestResult arch     = CE.TestResult (CS.ConcreteState arch)
-type ResultOrError arch  = CE.ResultOrError (CS.ConcreteState arch)
-type TestSerializer arch = CE.TestSerializer (CS.ConcreteState arch) (A.Instruction arch)
-type TestRunner arch     = CE.TestRunner (CS.ConcreteState arch) (A.Instruction arch)
+type TestCase arch       = CE.TestCase (V.ConcreteState arch) (A.Instruction arch)
+type TestResult arch     = CE.TestResult (V.ConcreteState arch)
+type ResultOrError arch  = CE.ResultOrError (V.ConcreteState arch)
+type TestSerializer arch = CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
+type TestRunner arch     = CE.TestRunner (V.ConcreteState arch) (A.Instruction arch)
 
 data GlobalLearningEnv arch =
   GlobalLearningEnv { assemble :: A.Instruction arch -> LBS.ByteString
@@ -81,9 +81,9 @@ data GlobalLearningEnv arch =
 data LocalLearningEnv arch =
   LocalLearningEnv { globalLearningEnv :: GlobalLearningEnv arch
                    , testChan :: C.Chan (Maybe [TestCase arch])
-                   , resChan :: C.Chan (CE.ResultOrError (CS.ConcreteState arch))
+                   , resChan :: C.Chan (CE.ResultOrError (V.ConcreteState arch))
                    , gen :: DA.Gen
-                   , testGen :: IO (CS.ConcreteState arch)
+                   , testGen :: IO (V.ConcreteState arch)
                    -- ^ The test generator is part of local state because it
                    -- might not be thread safe.  Be sure to allocate one per
                    -- runner.
@@ -98,7 +98,7 @@ recordFailure op sigNum = do
 askTestChan :: Learning arch (C.Chan (Maybe [TestCase arch]))
 askTestChan = Rd.asks testChan
 
-askResultChan :: Learning arch (C.Chan (CE.ResultOrError (CS.ConcreteState arch)))
+askResultChan :: Learning arch (C.Chan (CE.ResultOrError (V.ConcreteState arch)))
 askResultChan = Rd.asks resChan
 
 askGen :: Learning arch DA.Gen
@@ -132,13 +132,13 @@ nextOpcode = do
         STM.writeTVar wlref wl'
         return (Just op)
 
-mkRandomTest :: Learning arch (CS.ConcreteState arch)
+mkRandomTest :: Learning arch (V.ConcreteState arch)
 mkRandomTest = liftIO =<< Rd.asks testGen
 
 askAssembler :: Learning arch (A.Instruction arch -> LBS.ByteString)
 askAssembler = Rd.asks (assemble . globalLearningEnv)
 
-data OperandRef arch sh = ImplicitOperand (Some (CS.View arch))
+data OperandRef arch sh = ImplicitOperand (Some (V.View arch))
                         -- ^ A location that is implicitly read from or written to by an instruction
                         | OperandRef (Some (SL.Index sh))
                         -- ^ An index into an operand list
@@ -165,7 +165,7 @@ data ExplicitFact arch =
   forall sh tp n . ExplicitFact { lOpcode :: A.Opcode arch (A.Operand arch) sh
                                 , lIndex :: SL.Index sh tp
                                 -- ^ The index into the operand list of the location we are watching
-                                , lLocation :: CS.View arch n
+                                , lLocation :: V.View arch n
                                 -- ^ The location we are watching
                                 , lInstruction :: A.Instruction arch
                                 }
@@ -174,8 +174,8 @@ data ExplicitFact arch =
 -- state variables that are not explicitly mentioned in the operand list
 -- indicate implicit operands.
 data ImplicitFact arch =
-  ImplicitFact { ifExplicits :: S.Set (Some (CS.View arch))
-               , ifLocation :: Some (CS.View arch)
+  ImplicitFact { ifExplicits :: S.Set (Some (V.View arch))
+               , ifLocation :: Some (V.View arch)
                -- ^ The location that was modified for this test
                , ifInstruction :: A.Instruction arch
                }

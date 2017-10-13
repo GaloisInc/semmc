@@ -18,9 +18,11 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC
                        SemMC.Architecture
+                       SemMC.Architecture.Concrete
                        SemMC.Architecture.Location
+                       SemMC.Architecture.Value
+                       SemMC.Architecture.View
                        SemMC.BoundVar
-                       SemMC.Concrete.State
                        SemMC.Concrete.Execution
                        SemMC.Concrete.Execution.SSH
                        SemMC.Constraints

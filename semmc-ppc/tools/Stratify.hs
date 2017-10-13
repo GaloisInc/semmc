@@ -24,7 +24,7 @@ import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Constraints as C
 import qualified SemMC.Log as L
@@ -144,11 +144,11 @@ mainWithOptions opts = do
   iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
 
   rng <- DA.createGen
-  let testGenerator = CS.randomState (Proxy @PPC32.PPC) rng
+  let testGenerator = AC.randomState (Proxy @PPC32.PPC) rng
   Some ng <- N.newIONonceGenerator
   sym <- SB.newSimpleBackend ng
-  let serializer = CE.TestSerializer { CE.flattenMachineState = CS.serialize (Proxy @PPC32.PPC)
-                                     , CE.parseMachineState = CS.deserialize (Proxy @PPC32.PPC)
+  let serializer = CE.TestSerializer { CE.flattenMachineState = AC.serialize (Proxy @PPC32.PPC)
+                                     , CE.parseMachineState = AC.deserialize (Proxy @PPC32.PPC)
                                      , CE.flattenProgram = mconcat . map PPC.assembleInstruction
                                      }
 
@@ -196,4 +196,4 @@ mainWithOptions opts = do
 
   return ()
   where
-    initialTestCases = CS.heuristicallyInterestingStates (Proxy @PPC32.PPC)
+    initialTestCases = AC.heuristicallyInterestingStates (Proxy @PPC32.PPC)

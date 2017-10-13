@@ -12,7 +12,7 @@ import qualified Data.Parameterized.ShapedList as SL
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Concrete.State as CS
+import qualified SemMC.Architecture.Concrete as CS
 import qualified SemMC.Stochastic.Pseudo as P
 
 -- | Synthesis constraints.
