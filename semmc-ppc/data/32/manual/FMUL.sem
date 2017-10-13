@@ -1,0 +1,8 @@
+;; Floating Multiply (A-form)
+((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc))) 
+  (in (frB frA))
+  (defs 
+    ((frT 
+       (concat 
+         #x0000000000000000
+         ((_ call "fp.mul64") ((_ extract 127 64) frA) ((_ extract 127 64) frB)))))))

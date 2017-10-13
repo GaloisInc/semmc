@@ -1,0 +1,15 @@
+;; Floating Negative Multiply-Add Single (A-form)
+((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc) (frC . 'Fprc))) 
+  (in (frC frB frA))
+  (defs 
+    ((frT 
+       (concat 
+         #x000000000000000000000000
+         ((_ call "fp.negate32") 
+           ((_ extract 127 96) 
+             (concat 
+               #x000000000000000000000000
+               ((_ call "fp.muladd32") 
+                 ((_ extract 127 96) frA)
+                 ((_ extract 127 96) frB)
+                 ((_ extract 127 96) frC))))))))))

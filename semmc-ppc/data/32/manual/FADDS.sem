@@ -1,0 +1,8 @@
+;; Floating Add Single (A-form)
+((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc))) 
+  (in (frB frA))
+  (defs 
+    ((frT 
+       (concat 
+         #x000000000000000000000000
+         ((_ call "fp.add32") ((_ extract 127 96) frA) ((_ extract 127 96) frB)))))))

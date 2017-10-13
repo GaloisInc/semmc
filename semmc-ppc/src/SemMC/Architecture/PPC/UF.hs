@@ -43,6 +43,18 @@ uninterpretedFunctions _ =
   , ("fp.div32",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+  , ("fp.muladd64",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("fp.muladd32",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+  , ("fp.negate64",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("fp.negate32",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
   , ("ppc.is_r0",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType (ArchRegWidth ppc))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))

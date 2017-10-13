@@ -39,6 +39,7 @@ module SemMC.Architecture.PPC.Base.Core (
   dform,
   iform,
   aform,
+  aform4,
   -- * Shared
   naturalLitBV,
   cmpImm,
@@ -235,6 +236,17 @@ aform = do
   input frA
   input frB
   return (frT, frA, frB)
+
+aform4 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+aform4 = do
+  frT <- param "frT" fprc (EBV 128)
+  frA <- param "frA" fprc (EBV 128)
+  frB <- param "frB" fprc (EBV 128)
+  frC <- param "frC" fprc (EBV 128)
+  input frA
+  input frB
+  input frC
+  return (frT, frA, frB, frC)
 
 -- Helpers
 
