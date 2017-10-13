@@ -149,10 +149,10 @@ paramToLocation :: forall arch sh tp.
                 => ShapedList (A.Operand arch) sh
                 -> Parameter arch sh tp
                 -> Maybe (A.Location arch tp)
-paramToLocation opVals (Operand _ idx) =
-  A.operandToLocation (Proxy @arch) $ indexShapedList opVals idx
-paramToLocation _ (Literal loc) = Just loc
-paramToLocation opVals (Function fnName wo rep) =
+paramToLocation opVals (OperandParameter _ idx) =
+ A.operandToLocation (Proxy @arch) $ indexShapedList opVals idx
+paramToLocation _ (LiteralParameter loc) = Just loc
+paramToLocation opVals (FunctionParameter fnName wo rep) =
   case fnName `lookup` A.locationFuncInterpretation (Proxy @arch) of
     Nothing -> error ("No function interpretation for " ++ show fnName)
     Just (LocationFuncInterp fn) -> Just (fn opVals wo rep)
@@ -203,7 +203,6 @@ instantiateFormula
                       , opAssnVars = opVarsAssn
                       , opAssnBareExprs = opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
-
     let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (A.Location arch tp, S.Elt t tp)
         instantiateDefn definingParam definition = do
           definingLoc <- case paramToLocation opVals definingParam of

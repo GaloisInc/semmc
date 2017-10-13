@@ -8,8 +8,7 @@ module SemMC.Architecture.PPC.Base.Core (
   -- * PPC Types
   gprc,
   gprc_nor0,
-  f8rc,
-  f4rc,
+  fprc,
   crrc,
   s16imm,
   s16imm64,
@@ -39,8 +38,7 @@ module SemMC.Architecture.PPC.Base.Core (
   xform2,
   dform,
   iform,
-  aform8,
-  aform4,
+  aform,
   -- * Shared
   naturalLitBV,
   cmpImm,
@@ -98,11 +96,8 @@ gprc = "Gprc"
 gprc_nor0 :: String
 gprc_nor0 = "Gprc_nor0"
 
-f8rc :: String
-f8rc = "F8rc"
-
-f4rc :: String
-f4rc = "F4rc"
+fprc :: String
+fprc = "Fprc"
 
 absdirectbrtarget :: String
 absdirectbrtarget = "Absdirectbrtarget"
@@ -227,20 +222,16 @@ iform tag = do
   input target
   return target
 
-aform8 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-aform8 = do
-  frT <- param "frT" f8rc (EBV 64)
-  frA <- param "frA" f8rc (EBV 64)
-  frB <- param "frB" f8rc (EBV 64)
-  input frA
-  input frB
-  return (frT, frA, frB)
-
-aform4 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-aform4 = do
-  frT <- param "frT" f8rc (EBV 32)
-  frA <- param "frA" f8rc (EBV 32)
-  frB <- param "frB" f8rc (EBV 32)
+-- Our floating point registers are considered as 128 bit registers, as they are
+-- actually backed by the 128 bit vector registers.
+--
+-- It is the job of each semantics definition to extract the necessary parts of
+-- the registers.
+aform :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+aform = do
+  frT <- param "frT" fprc (EBV 128)
+  frA <- param "frA" fprc (EBV 128)
+  frB <- param "frB" fprc (EBV 128)
   input frA
   input frB
   return (frT, frA, frB)

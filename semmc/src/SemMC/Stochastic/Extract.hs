@@ -239,9 +239,9 @@ collectUses opVars litVars defs =
     opUses = SL.foldrFCIndexed wrapIndexes S.empty opVars
 
     collectKeys k _ = S.insert (Some k)
-    wrapLocations loc _ = S.insert (Some (F.Literal loc))
+    wrapLocations loc _ = S.insert (Some (F.LiteralParameter loc))
     wrapIndexes :: forall tp . SL.Index sh tp -> A.Operand arch tp -> S.Set (Some (F.Parameter arch sh)) -> S.Set (Some (F.Parameter arch sh))
-    wrapIndexes ix op = S.insert (Some (F.Operand (AC.operandType (Proxy @arch) op) ix))
+    wrapIndexes ix op = S.insert (Some (F.OperandParameter (AC.operandType (Proxy @arch) op) ix))
 
 -- | Given an operand, find the 'BV.BoundVar' the represents it.
 --
@@ -287,7 +287,7 @@ liftImplicitLocations :: (P.OrdF (A.Location arch))
                       -> C.SymExpr (Sym t) tp
                       -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t))
                       -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t))
-liftImplicitLocations loc expr = MapF.insert (F.Literal loc) expr
+liftImplicitLocations loc expr = MapF.insert (F.LiteralParameter loc) expr
 
 keepNonParams :: (P.OrdF f) => S.Set (Some f) -> f tp -> g tp -> Bool
 keepNonParams paramLocs loc _ = S.notMember (Some loc) paramLocs
@@ -298,9 +298,9 @@ collectParamLocs :: (AC.ConcreteArchitecture arch)
                  -> S.Set (Some (A.Location arch))
                  -> S.Set (Some (A.Location arch))
 collectParamLocs proxy op s =
-  case A.operandToLocation proxy op of
+  case AC.operandToSemanticView proxy op of
     Nothing -> s
-    Just loc -> S.insert (Some loc) s
+    Just (V.SemanticView { V.semvView = V.View _ loc }) -> S.insert (Some loc) s
 
 
 -- | For locations referenced in an operand list *and* defined by a formula (the
@@ -331,4 +331,4 @@ replaceParameters proxy ix op (defs, m) =
           -- This lookup would fail on a purely input operand that had no
           -- definition in the final formula
           (defs, m)
-        Just expr -> (MapF.delete loc defs, MapF.insert (F.Operand (A.locationType loc) ix) expr m)
+        Just expr -> (MapF.delete loc defs, MapF.insert (F.OperandParameter (A.locationType loc) ix) expr m)

@@ -89,8 +89,10 @@ type instance A.OperandType PPC "Crbitm" = BaseBVType 3
 type instance A.OperandType PPC "Crbitrc" = BaseBVType 5
 type instance A.OperandType PPC "Crrc" = BaseBVType 3
 type instance A.OperandType PPC "Directbrtarget" = BaseBVType 24
-type instance A.OperandType PPC "F4rc" = BaseBVType 128
-type instance A.OperandType PPC "F8rc" = BaseBVType 128
+-- The floating point registers are logically 64 bits, but are actually backed
+-- by 128 bit vector registers (where the extra bits are probably left
+-- undefined during non-vector operations).
+type instance A.OperandType PPC "Fprc" = BaseBVType 128
 type instance A.OperandType PPC "Gprc" = BaseBVType 32
 type instance A.OperandType PPC "Gprc_nor0" = BaseBVType 32
 type instance A.OperandType PPC "I1imm" = BaseBVType 1
@@ -170,11 +172,8 @@ symbolicTemplatedOperand Proxy signed name constr =
           let recover evalFn = constr <$> evalFn v
           return (extended, T.WrappedRecoverOperandFn recover)
 
-instance T.TemplatableOperand PPC "F4rc" where
-  opTemplates = concreteTemplatedOperand (PPC.F4rc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
-
-instance T.TemplatableOperand PPC "F8rc" where
-  opTemplates = concreteTemplatedOperand (PPC.F8rc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
+instance T.TemplatableOperand PPC "Fprc" where
+  opTemplates = concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
 
 instance T.TemplatableOperand PPC "Gprc" where
   opTemplates = concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
@@ -316,8 +315,7 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Directbrtarget (PPC.BT off)) =
           S.bvLit sym knownNat (toInteger off)
-        operandValue' (PPC.F4rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
-        operandValue' (PPC.F8rc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
+        operandValue' (PPC.Fprc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
         operandValue' (PPC.Gprc gpr) = locLookup (LocGPR gpr)
         operandValue' (PPC.Gprc_nor0 (PPC.GPR gpr)) =
           if gpr /= 0
@@ -386,8 +384,7 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
 
 
 operandToLocation :: PPC.Operand s -> Maybe (Location PPC (A.OperandType PPC s))
-operandToLocation (PPC.F4rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
-operandToLocation (PPC.F8rc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
+operandToLocation (PPC.Fprc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Gprc_nor0 gpr) = Just (LocGPR gpr)
 operandToLocation (PPC.Vrrc (PPC.VR vr)) = Just $ LocVSR (PPC.VSReg (vr + 32))
@@ -451,8 +448,7 @@ loadBaseSet baseSetDir sym opcodes = do
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
   case o of
-    PPC.F4rc {}              -> knownRepr
-    PPC.F8rc {}              -> knownRepr
+    PPC.Fprc {}              -> knownRepr
     PPC.Gprc {}              -> knownRepr
     PPC.Gprc_nor0 {}         -> knownRepr
     PPC.Vrrc {}              -> knownRepr
@@ -548,8 +544,7 @@ truncateValue op v =
     PPC.Vssrc {}             -> L.error "Unexpected non-literal operand"
     PPC.Gprc_nor0 {}         -> L.error "Unexpected non-literal operand"
     PPC.Gprc {}              -> L.error "Unexpected non-literal operand"
-    PPC.F4rc {}              -> L.error "Unexpected non-literal operand"
-    PPC.F8rc {}              -> L.error "Unexpected non-literal operand"
+    PPC.Fprc {}              -> L.error "Unexpected non-literal operand"
     PPC.Abscondbrtarget {}   -> L.error "Control flow transfer instructions unsupported"
     PPC.Absdirectbrtarget {} ->  L.error "Control flow transfer instructions unsupported"
     PPC.Condbrtarget {}      ->  L.error "Control flow transfer instructions unsupported"
@@ -558,13 +553,13 @@ truncateValue op v =
     PPC.Abscalltarget {}     ->  L.error "Control flow transfer instructions unsupported"
 
 instance AC.ConcreteArchitecture PPC where
-  operandToSemanticView _proxy = operandToSemanticViewPPC
   registerizeInstruction = registerizeInstructionPPC
   operandType _proxy = operandTypePPC
   zeroState _proxy = PPCS.zeroState
   randomState _proxy = PPCS.randomState
   serialize _proxy = PPCS.serialize
   deserialize _proxy = PPCS.deserialize
+  operandToSemanticView _proxy = operandToSemanticViewPPC
   heuristicallyInterestingStates _proxy = PPCS.interestingStates
   readView = P.parseMaybe (V.parseView parseLocation)
   showView = V.printView show
@@ -581,8 +576,7 @@ vsrLowerHalf = V.Slice knownNat knownNat (knownNat @0) (knownNat @64)
 operandToSemanticViewPPC :: PPC.Operand s -> Maybe (V.SemanticView PPC)
 operandToSemanticViewPPC op =
   case op of
-    PPC.F4rc fr -> frSemanticView fr
-    PPC.F8rc fr -> frSemanticView fr
+    PPC.Fprc fr -> frSemanticView fr
     PPC.Gprc gpr -> gprSemanticView gpr
     PPC.Gprc_nor0 gpr -> gprSemanticView gpr
     PPC.Vrrc vr -> vrSemanticView vr

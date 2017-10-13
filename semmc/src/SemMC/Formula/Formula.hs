@@ -53,11 +53,11 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   -- | A parameter that will be filled in at instantiation time. For example, if
   -- you have the x86 opcode @call r32@, an 'Operand' would be used to represent
   -- the @r32@ hole. It could also represent an immediate.
-  Operand :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> Parameter arch sh (A.OperandType arch s)
+  OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> Parameter arch sh (A.OperandType arch s)
   -- | A parameter that always represents a particular machine location. For
-  -- example, if you have the x86 opcode @call r32@, a 'Literal' would be used
+  -- example, if you have the x86 opcode @call r32@, a 'LiteralParameter' would be used
   -- to represent the implicit @esp@ register used.
-  Literal :: L.Location arch tp -> Parameter arch sh tp
+  LiteralParameter :: L.Location arch tp -> Parameter arch sh tp
   -- | A function from one location to another.  The string specifies the name
   -- of the function, which is interpreted on a per-architecture basis.
   --
@@ -67,23 +67,23 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   -- offset.  In some instructions, we have to define a part of the @memri@ (the
   -- base register) as part of the semantics of an instruction, so we need a way
   -- to refer to part of the parameter.
-  Function :: String
-           -- ^ The name of the uninterpreted function
-           -> WrappedOperand arch sh s
-           -- ^ The operand we are calling the function on (this is a newtype so
-           -- we don't need an extra typerepr)
-           -> BaseTypeRepr tp
-           -- ^ The typerepr for the return type of the function
-           -> Parameter arch sh tp
+  FunctionParameter :: String
+                    -- ^ The name of the uninterpreted function
+                    -> WrappedOperand arch sh s
+                    -- ^ The operand we are calling the function on (this is a newtype so
+                    -- we don't need an extra typerepr)
+                    -> BaseTypeRepr tp
+                    -- ^ The typerepr for the return type of the function
+                    -> Parameter arch sh tp
 
 -- | This is a wrapper around the contents of an 'Operand' parameter that is
--- embedded in a 'Function' parameter.  Functions are only allowed to be called
+-- embedded in a 'FunctionParameter' parameter.  Functions are only allowed to be called
 -- on Operands.  The new type here helps avoid an extra 'BaseTypeRepr' in
--- 'Function'.
+-- 'FunctionParameter'.
 data WrappedOperand arch sh s where
   WrappedOperand :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> WrappedOperand arch sh s
 
--- | A wrapper around a function that can be called to simplify a 'Function'
+-- | A wrapper around a function that can be called to simplify a 'FunctionParameter'
 -- parameter into a 'L.Location'.  These are defined per-architecture and are
 -- invoked by 'paramToLocation' during formula instantiation.
 data LocationFuncInterp arch where
@@ -91,9 +91,9 @@ data LocationFuncInterp arch where
                      -> LocationFuncInterp arch
 
 instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where
-  show (Operand repr idx) = printf "Operand (%s) (%s)" (show repr) (show idx)
-  show (Literal var) = unwords ["Literal", showF var]
-  show (Function fnName (WrappedOperand rep ix) _) =
+  show (OperandParameter repr idx) = printf "OperandParameter (%s) (%s)" (show repr) (show idx)
+  show (LiteralParameter var) = unwords ["LiteralParameter", showF var]
+  show (FunctionParameter fnName (WrappedOperand rep ix) _) =
     printf "%s(operand %s@%s)" fnName (show rep) (show ix)
 
 instance (ShowF (L.Location arch)) => ShowF (Parameter arch sh)
@@ -115,9 +115,9 @@ instance OrdF (WrappedOperand arch sh) where
         EQF -> EQF
 
 instance TestEquality (L.Location arch) => TestEquality (Parameter arch sh) where
-  Operand _ idx1 `testEquality` Operand _ idx2 = (\Refl -> Refl) <$> testEquality idx1 idx2
-  Literal   var1 `testEquality` Literal   var2 = (\Refl -> Refl) <$> testEquality var1 var2
-  Function fname1 wo1 r1 `testEquality` Function fname2 wo2 r2 = do
+  OperandParameter _ idx1 `testEquality` OperandParameter _ idx2 = (\Refl -> Refl) <$> testEquality idx1 idx2
+  LiteralParameter   var1 `testEquality` LiteralParameter   var2 = (\Refl -> Refl) <$> testEquality var1 var2
+  FunctionParameter fname1 wo1 r1 `testEquality` FunctionParameter fname2 wo2 r2 = do
     guard (fname1 == fname2)
     Refl <- testEquality wo1 wo2
     Refl <- testEquality r1 r2
@@ -125,26 +125,26 @@ instance TestEquality (L.Location arch) => TestEquality (Parameter arch sh) wher
   _              `testEquality`              _ = Nothing
 
 instance (Eq (L.Location arch tp), TestEquality (L.Location arch)) => Eq (Parameter arch sh tp) where
-  Operand _ idx1 == Operand _ idx2 = isJust $ testEquality idx1 idx2
-  Literal   var1 == Literal   var2 = var1 == var2
+  OperandParameter _ idx1 == OperandParameter _ idx2 = isJust $ testEquality idx1 idx2
+  LiteralParameter   var1 == LiteralParameter   var2 = var1 == var2
   -- NOTE: This isn't quite true - they could be equal after normalization.  Be careful...
   --
   -- It isn't clear when this might be used in practice, and if such a
   -- difference will matter.  Given that we can't evaluate the function until we
   -- instantiate a formula, it is only the case that a function parameter /MAY/
   -- equal another parameter after normalization.
-  f1@(Function {}) == f2@(Function {}) =
+  f1@(FunctionParameter {}) == f2@(FunctionParameter {}) =
     isJust (testEquality f1 f2)
   _              ==              _ = False
 
 instance OrdF (L.Location arch) => OrdF (Parameter arch sh) where
-  Function {} `compareF` Literal {} = LTF
-  Literal {} `compareF` Function {} = GTF
-  Function  {}`compareF` Operand {} = LTF
-  Operand {} `compareF` Function {} = GTF
-  Operand _ _ `compareF` Literal   _ = LTF
-  Literal   _ `compareF` Operand _ _ = GTF
-  Function fnName1 wo1 r1 `compareF` Function fnName2 wo2 r2 =
+  FunctionParameter {} `compareF` LiteralParameter {} = LTF
+  LiteralParameter {} `compareF` FunctionParameter {} = GTF
+  FunctionParameter  {}`compareF` OperandParameter {} = LTF
+  OperandParameter {} `compareF` FunctionParameter {} = GTF
+  OperandParameter _ _ `compareF` LiteralParameter   _ = LTF
+  LiteralParameter   _ `compareF` OperandParameter _ _ = GTF
+  FunctionParameter fnName1 wo1 r1 `compareF` FunctionParameter fnName2 wo2 r2 =
     case fnName1 `compare` fnName2 of
       LT -> LTF
       GT -> GTF
@@ -157,12 +157,12 @@ instance OrdF (L.Location arch) => OrdF (Parameter arch sh) where
                    GTF -> GTF
                    EQF -> EQF
 
-  Operand _ idx1 `compareF` Operand _ idx2 =
+  OperandParameter _ idx1 `compareF` OperandParameter _ idx2 =
     case idx1 `compareF` idx2 of
       LTF -> LTF
       EQF -> EQF
       GTF -> GTF
-  Literal var1 `compareF` Literal var2 =
+  LiteralParameter var1 `compareF` LiteralParameter var2 =
     case var1 `compareF` var2 of
       LTF -> LTF
       EQF -> EQF
@@ -171,9 +171,9 @@ instance OrdF (L.Location arch) => OrdF (Parameter arch sh) where
 -- | Get a representation of the 'BaseType' this formula parameter is
 -- type-parameterized over.
 paramType :: (L.IsLocation (L.Location arch)) => Parameter arch sh tp -> BaseTypeRepr tp
-paramType (Operand repr _) = repr
-paramType (Literal loc) = L.locationType loc
-paramType (Function _ _ repr) = repr
+paramType (OperandParameter repr _) = repr
+paramType (LiteralParameter loc) = L.locationType loc
+paramType (FunctionParameter _ _ repr) = repr
 
 -- | A "parameterized" formula, i.e., a formula that has holes for operands that
 -- need to be filled in before it represents an actual concrete instruction.

@@ -83,17 +83,17 @@ convertParameter :: (ShowF (A.Location arch))
                  => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
                  -> Parameter arch sh tp
                  -> SC.SExpr Atom
-convertParameter opVars (Operand _ idx) = ident name
+convertParameter opVars (OperandParameter _ idx) = ident name
   where name = varName (indexShapedList opVars idx)
-convertParameter _ (Literal loc) = quoted (showF loc)
-convertParameter opVars (Function fnName (WrappedOperand orep oix) _) =
+convertParameter _ (LiteralParameter loc) = quoted (showF loc)
+convertParameter opVars (FunctionParameter fnName (WrappedOperand orep oix) _) =
   SC.SCons uf (SC.SCons args SC.SNil)
   where
     uf = SC.SCons (SC.SAtom (AIdent "_"))
                   (SC.SCons (SC.SAtom (AIdent "call"))
                             (SC.SCons (SC.SAtom (AString fnName))
                                                 SC.SNil))
-    args = SC.SCons (convertParameter opVars (Operand orep oix)) SC.SNil
+    args = SC.SCons (convertParameter opVars (OperandParameter orep oix)) SC.SNil
 
 -- | Used for substituting in the result expression when a variable is
 -- encountered in a definition.

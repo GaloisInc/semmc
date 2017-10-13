@@ -96,9 +96,9 @@ liftSomeOperand :: (AC.ConcreteArchitecture arch)
                 -> S.Set (Some (A.Location arch))
                 -> S.Set (Some (A.Location arch))
 liftSomeOperand proxy (Some op) s =
-  case A.operandToLocation proxy op of
+  case AC.operandToSemanticView proxy op of
     Nothing -> s
-    Just loc -> S.insert (Some loc) s
+    Just (V.SemanticView { V.semvView = V.View _ loc }) -> S.insert (Some loc) s
 
 -- | For each literal, assign a location in the machine state to stand in for
 -- it.
@@ -118,7 +118,7 @@ assignLiterals :: forall arch sh tp
                -> (MapF.MapF (AC.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
                -> (MapF.MapF (AC.LiteralRef arch sh) (A.Location arch), [Some (A.Location arch)])
 assignLiterals opc usedLocs ix op acc@(m, locs) =
-  case A.operandToLocation (Proxy @arch) op of
+  case AC.operandToSemanticView (Proxy @arch) op of
     Just _ -> acc
     Nothing ->
       let (locs', loc) = findUnusedLocation opc (Proxy @arch) usedLocs op locs

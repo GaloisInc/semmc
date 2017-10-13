@@ -170,9 +170,9 @@ unTemplateUnsafe :: ParameterizedFormula sym (TemplatedArch arch) sh
 unTemplateUnsafe = unsafeCoerce
 
 coerceParameter :: Parameter (TemplatedArch arch) sh tp -> Parameter arch sh tp
-coerceParameter (Operand tp idx) = Operand tp idx
-coerceParameter (Literal loc) = Literal loc
-coerceParameter (Function name (WrappedOperand orep oix) r) = Function name (WrappedOperand orep oix) r
+coerceParameter (OperandParameter tp idx) = OperandParameter tp idx
+coerceParameter (LiteralParameter loc) = LiteralParameter loc
+coerceParameter (FunctionParameter name (WrappedOperand orep oix) r) = FunctionParameter name (WrappedOperand orep oix) r
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using a manual mapping.
@@ -286,11 +286,11 @@ templatedInputs (TemplatedInstruction _ pf oplist) =
   mconcat (map paramUses (Set.toList (pfUses pf)))
   where paramUses (Some param) =
           case param of
-            Operand _ idx ->
+            OperandParameter _ idx ->
               let TemplatedOperand _ uses _ = indexShapedList oplist idx
               in uses
-            Literal loc -> Set.singleton (Some loc)
-            Function {} -> error "Function parameters are not actually inputs: they can only be defined"
+            LiteralParameter loc -> Set.singleton (Some loc)
+            FunctionParameter {} -> error "Function parameters are not actually inputs: they can only be defined"
 
 -- | Get the set of locations that a 'TemplatedInstruction' defines.
 templatedOutputs :: (OrdF (Location arch))
@@ -300,11 +300,11 @@ templatedOutputs (TemplatedInstruction _ pf oplist) =
   mconcat (map paramDefs (MapF.keys (pfDefs pf)))
   where paramDefs (Some param) =
           case param of
-            Operand _ idx ->
+            OperandParameter _ idx ->
               case indexShapedList oplist idx of
                 TemplatedOperand (Just loc) _ _ -> Set.singleton (Some loc)
                 _ -> Set.empty
-            Literal loc -> Set.singleton (Some loc)
+            LiteralParameter loc -> Set.singleton (Some loc)
 
 templatedInstructions :: (TemplateConstraints arch)
                       => BaseSet sym arch

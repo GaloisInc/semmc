@@ -87,11 +87,11 @@ data RegisterizedInstruction arch =
 
 -- | An architecture with certain operations needed for concrete work.
 class (A.Architecture arch) => ConcreteArchitecture arch where
-  -- | Convert an operand to the corresponding view, if any.
+  -- | Convert an operand into a *view* onto the underlying location that holds
+  -- it (if any).
   --
-  -- Useful for perturbing a machine state when computing the IO
-  -- relation for an instruction?
-  operandToSemanticView :: proxy arch -> A.Operand arch sh -> Maybe (SemanticView arch)
+  -- The view is a slice of the backing location.
+  operandToSemanticView :: proxy arch -> A.Operand arch s -> Maybe (SemanticView arch)
 
   -- | Obtain the type of an operand (even an operand with no associated location)
   operandType :: proxy arch -> A.Operand arch s -> BaseTypeRepr (A.OperandType arch s)

@@ -332,6 +332,8 @@ instance A.Architecture Toy where
   operandToLocation _ (R32 reg) = Just (RegLoc reg)
   operandToLocation _ (I32 _) = Nothing
 
+  locationFuncInterpretation _ = []
+
 ----------------------------------------------------------------
 -- ** Locations
 
@@ -424,12 +426,13 @@ toyRegisterizeInstruction :: AC.RegisterizedInstruction Toy
 toyRegisterizeInstruction ri cs = (AC.riInstruction ri, cs)
 
 instance AC.ConcreteArchitecture Toy where
-  operandToSemanticView _ = operandToSemanticViewImpl
   zeroState _ = initialMachineState
   randomState _ = randomStateImpl
 
   operandType _ = toyOperandType
   registerizeInstruction = toyRegisterizeInstruction
+
+  operandToSemanticView _ = operandToSemanticViewImpl
 
   heuristicallyInterestingStates _proxy = interestingStates
 

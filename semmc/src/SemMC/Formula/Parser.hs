@@ -210,11 +210,11 @@ readParameter oplist atom =
   readRawParameter atom >>= \case
     RawOperand op ->
       maybe (E.throwError $ printf "couldn't find operand %s" op)
-            (viewSome (\(IndexWithType tpRepr idx) -> return $ Some (Operand tpRepr idx)))
+            (viewSome (\(IndexWithType tpRepr idx) -> return $ Some (OperandParameter tpRepr idx)))
             (findOpListIndex op oplist)
     RawLiteral lit ->
       maybe (E.throwError $ printf "%s is an invalid literal for this arch" lit)
-            (return . viewSome (Some . Literal))
+            (return . viewSome (Some . LiteralParameter))
             (A.readLocation lit)
 
 -- | Parses the input list, e.g., @(ra rb 'ca)@
@@ -606,9 +606,9 @@ readExpr (SC.SAtom paramRaw) = do
            } <- MR.ask
   param <- readParameter opNames paramRaw
   case param of
-    Some (Operand _ idx) -> return . Some . S.varExpr sym . BV.unBoundVar $ indexShapedList opVars idx
-    Some (Literal lit) -> maybe (E.throwError "not declared as input") (return . Some) $ litLookup lit
-    Some (Function fname _ _) -> E.throwError ("Functions cannot appear as atoms: " ++ fname)
+    Some (OperandParameter _ idx) -> return . Some . S.varExpr sym . BV.unBoundVar $ indexShapedList opVars idx
+    Some (LiteralParameter lit) -> maybe (E.throwError "not declared as input") (return . Some) $ litLookup lit
+    Some (FunctionParameter fname _ _) -> E.throwError ("Functions cannot appear as atoms: " ++ fname)
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
   args <- readExprs argsRaw
@@ -680,10 +680,10 @@ readDefs (SC.SCons (SC.SCons (SC.SCons mUF (SC.SCons (SC.SAtom p) SC.SNil)) (SC.
                   testEquality rep (S.exprType def)
         rest' <- readDefs rest
         case param of
-          Literal {} -> E.throwError "Literals are not allowed as arguments to parameter functions"
-          Function {} -> E.throwError "Nested parameter functions are not allowed"
-          Operand orep oix ->
-            return $ MapF.insert (Function funcName (WrappedOperand orep oix) rep) def rest'
+          LiteralParameter {} -> E.throwError "Literals are not allowed as arguments to parameter functions"
+          FunctionParameter {} -> E.throwError "Nested parameter functions are not allowed"
+          OperandParameter orep oix ->
+            return $ MapF.insert (FunctionParameter funcName (WrappedOperand orep oix) rep) def rest'
       _ -> E.throwError ("Missing type repr for uninterpreted function " ++ show funcName)
 readDefs _ = E.throwError "invalid defs structure"
 
@@ -755,9 +755,9 @@ readFormula' sym env text = do
       buildLitVarMap :: Some (Parameter arch sh)
                      -> MapF.MapF (A.Location arch) (S.BoundVar sym)
                      -> m (MapF.MapF (A.Location arch) (S.BoundVar sym))
-      buildLitVarMap (Some (Literal loc)) m = (\v -> MapF.insert loc v m) <$> mkLiteralVar (A.locationType loc) loc
-      buildLitVarMap (Some (Operand _ _))        m = return m
-      buildLitVarMap (Some (Function {}))        m = return m
+      buildLitVarMap (Some (LiteralParameter loc)) m = (\v -> MapF.insert loc v m) <$> mkLiteralVar (A.locationType loc) loc
+      buildLitVarMap (Some (OperandParameter _ _))        m = return m
+      buildLitVarMap (Some (FunctionParameter {}))        m = return m
 
   litVars :: MapF.MapF (A.Location arch) (S.BoundVar sym)
     <- foldrM buildLitVarMap MapF.empty inputs

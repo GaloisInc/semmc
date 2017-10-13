@@ -24,7 +24,6 @@ module SemMC.Architecture (
 import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )

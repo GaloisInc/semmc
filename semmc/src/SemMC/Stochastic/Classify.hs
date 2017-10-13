@@ -504,7 +504,7 @@ mergeClasses = F.foldr mappend Seq.empty
 --
 -- We pass in the environment so that we can access the IORelation for the
 -- current target instruction
-testEquivalence :: (P.ArchitectureWithPseudo arch)
+testEquivalence :: (P.ArchitectureWithPseudo arch, AC.ConcreteArchitecture arch)
                 => ClassifyEnv arch sh
                 -> CP.CandidateProgram t arch
                 -> CP.CandidateProgram t arch
@@ -522,7 +522,7 @@ testEquivalence env p representative = do
 -- | Using the operand list and IORelation from the environment, project out all
 -- of the relevant locations defined by the formula.
 projectRelevantLocations :: forall t arch sh
-                          . (A.Architecture arch)
+                          . (AC.ConcreteArchitecture arch)
                          => ClassifyEnv arch sh
                          -> F.Formula (Sym t) arch
                          -> F.Formula (Sym t) arch
@@ -546,7 +546,10 @@ projectRelevantLocations env f0 =
     refToLoc oref =
       case oref of
         IOR.ImplicitOperand (Some (V.View _ loc)) -> Just (Some loc)
-        IOR.OperandRef (Some ix) -> Some <$> A.operandToLocation (Proxy @arch) (SL.indexShapedList (operandList env) ix)
+        IOR.OperandRef (Some ix) -> do
+          sv <- AC.operandToSemanticView (Proxy @arch) (SL.indexShapedList (operandList env) ix)
+          case sv of
+            V.SemanticView { V.semvView = V.View _ loc } -> return (Some loc)
 
 -- Monad definition
 
