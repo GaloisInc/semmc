@@ -60,6 +60,12 @@ fnegate64 = uf (EBV 64) "fp.negate64" . ((:[]) . Some)
 fnegate32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 fnegate32 = uf (EBV 32) "fp.negate32" . ((:[]) . Some)
 
+froundsingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+froundsingle = uf (EBV 32) "fp.round_single" . ((:[]) . Some)
+
+fabs :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+fabs = uf (EBV 64) "fp.abs" . ((:[]) . Some)
+
 -- | Extract the single-precision part of a vector register
 extractSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 extractSingle = lowBits128 32
@@ -213,3 +219,31 @@ floatingPoint = do
     let frB' = liftSingle1 fnegate32 (Loc frB)
     let nres = liftSingle3 fmuladd32 (Loc frA) frB' (Loc frC)
     defLoc frT (liftSingle1 fnegate32 nres)
+
+  defineOpcode "FRSP" $ do
+    comment "Floating Round to Single-Precision (X-form)"
+    (frT, frB) <- xform2f
+    defLoc frT (extendSingle (froundsingle (extractDouble (Loc frB))))
+
+  defineOpcode "FNEG" $ do
+    comment "Floating Negate (X-form)"
+    comment "There is no single-precision form of this because"
+    comment "the sign bit is always in the same place (MSB)"
+    (frT, frB) <- xform2f
+    defLoc frT (extendDouble (fnegate64 (extractDouble (Loc frB))))
+
+  defineOpcode "FMR" $ do
+    comment "Floating Move Register (X-form)"
+    (frT, frB) <- xform2f
+    defLoc frT (Loc frB)
+
+  defineOpcode "FABS" $ do
+    comment "Floating Absolute Value (X-form)"
+    (frT, frB) <- xform2f
+    defLoc frT (extendDouble (fabs (extractDouble (Loc frB))))
+
+  defineOpcode "FNABS" $ do
+    comment "Floating Negative Absolute Value (X-form)"
+    (frT, frB) <- xform2f
+    let av = fabs (extractDouble (Loc frB))
+    defLoc frT (extendDouble (fnegate64 av))
