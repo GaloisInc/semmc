@@ -1,0 +1,8 @@
+;; Floating Round to Single-Precision (X-form)
+((operands ((frT . 'Fprc) (frB . 'Fprc))) 
+  (in (frB))
+  (defs 
+    ((frT 
+       (concat 
+         #x000000000000000000000000
+         ((_ call "fp.round_single") ((_ extract 127 64) frB)))))))

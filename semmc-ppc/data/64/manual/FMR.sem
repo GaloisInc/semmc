@@ -1,0 +1,2 @@
+;; Floating Move Register (X-form)
+((operands ((frT . 'Fprc) (frB . 'Fprc))) (in (frB)) (defs ((frT frB))))
