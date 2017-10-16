@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -56,13 +58,11 @@ import qualified GHC.Stack as Ghc
 
 import qualified Control.Concurrent as Cc
 import           Control.Concurrent.Async ( Async )
-import qualified Control.Concurrent.Async as Cc
 import qualified Control.Exception as Cc
 
 import qualified UnliftIO as U
 
 import qualified Control.Concurrent.STM as Stm
-import qualified Control.Monad as Cm
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as Map
