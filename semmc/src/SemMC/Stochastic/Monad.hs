@@ -67,7 +67,7 @@ import qualified Data.Time.Clock as TM
 import           Data.Typeable ( Typeable )
 import           Data.Word ( Word64 )
 import qualified System.Timeout as IO
-
+import           Text.Printf (printf)
 import qualified UnliftIO as U
 
 import qualified Data.Parameterized.Classes as P
@@ -141,7 +141,10 @@ instance U.MonadUnliftIO (Syn t arch) where
 data RemoteRunnerTimeout arch = RemoteRunnerTimeout (Proxy arch) [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)]
 
 instance (SynC arch) => Show (RemoteRunnerTimeout arch) where
-  show (RemoteRunnerTimeout _ tcs) = unwords [ "RemoteRunnerTimeout", show tcs ]
+  show (RemoteRunnerTimeout _ tcs) =
+    -- Printing full test case list results in lines 6 million
+    -- characters long in the log output.
+    printf "RemoteRunnerTimeout <%i test cases, omitted>" (length tcs)
 
 instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
 
