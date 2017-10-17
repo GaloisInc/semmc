@@ -4,8 +4,11 @@
 -- | Evaluators for location functions in formula definitions (e.g., memri_reg)
 module SemMC.Architecture.PPC.Eval (
   interpMemriReg,
+  interpMemriRegExtractor,
   interpMemrixReg,
-  interpMemrrBase
+  interpMemrixRegExtractor,
+  interpMemrrBase,
+  interpMemrrBaseExtractor
   ) where
 
 import           Data.Parameterized.Classes
@@ -36,6 +39,9 @@ interpMemriReg operands (F.WrappedOperand _orep ix) rep =
     PPC.Memri (PPC.MemRI Nothing _) -> error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
 
+interpMemriRegExtractor :: PPC.MemRI -> Maybe PPC.GPR
+interpMemriRegExtractor (PPC.MemRI mgpr _) = mgpr
+
 interpMemrixReg :: forall sh s ppc tp
                  . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
                 => SL.ShapedList PPC.Operand sh
@@ -53,6 +59,9 @@ interpMemrixReg operands (F.WrappedOperand _orep ix) rep =
     PPC.Memrix (PPC.MemRIX Nothing _) -> error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
 
+interpMemrixRegExtractor :: PPC.MemRIX -> Maybe PPC.GPR
+interpMemrixRegExtractor (PPC.MemRIX mgpr _) = mgpr
+
 interpMemrrBase :: forall sh s ppc tp
                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
                => SL.ShapedList PPC.Operand sh
@@ -69,3 +78,6 @@ interpMemrrBase operands (F.WrappedOperand _orep ix) rep =
           | otherwise -> error ("Invalid return type for location function 'memrr_base' at index " ++ show ix)
     PPC.Memrr (PPC.MemRR Nothing _) -> error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
+
+interpMemrrBaseExtractor :: PPC.MemRR -> Maybe PPC.GPR
+interpMemrrBaseExtractor (PPC.MemRR mgpr _) = mgpr

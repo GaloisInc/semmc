@@ -30,6 +30,7 @@ library
                        SemMC.Formula
                        SemMC.Formula.Env
                        SemMC.Formula.Equivalence
+                       SemMC.Formula.Eval
                        SemMC.Formula.Formula
                        SemMC.Formula.Instantiate
                        SemMC.Formula.Load
@@ -73,6 +74,7 @@ library
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
                        template-haskell,
+                       ghc-prim,
                        containers >= 0.5.8,
                        bytestring,
                        binary,

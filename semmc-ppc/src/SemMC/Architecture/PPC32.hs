@@ -8,6 +8,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -401,11 +402,17 @@ instance A.Architecture PPC where
   uninterpretedFunctions = UF.uninterpretedFunctions
   locationFuncInterpretation _proxy = locationFuncInterpretation
 
-locationFuncInterpretation :: [(String, F.LocationFuncInterp PPC)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC)]
 locationFuncInterpretation =
-  [ ("ppc.memri_reg", F.LocationFuncInterp interpMemriReg)
-  , ("ppc.memrix_reg", F.LocationFuncInterp interpMemrixReg)
-  , ("ppc.memrr_base", F.LocationFuncInterp interpMemrrBase)
+  [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemriReg
+                                               , A.exprInterpName = 'interpMemriRegExtractor
+                                               })
+  , ("ppc.memrix_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrixReg
+                                                , A.exprInterpName = 'interpMemrixRegExtractor
+                                                })
+  , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrBase
+                                                , A.exprInterpName = 'interpMemrrBaseExtractor
+                                                })
   ]
 
 opcodeToVoid :: ((o == PPC.Operand) ~ 'False) => PPC.Opcode o sh -> Void
