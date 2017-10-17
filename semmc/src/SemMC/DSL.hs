@@ -69,50 +69,20 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Text.Printf ( printf )
 
-import           Data.Parameterized.Classes ( ShowF(..) )
 import           Data.Parameterized.Some ( Some(..) )
 
-data ExprTag = TBool
-              | TBV
-              | TInt
-              | TFloat
-              | TDouble
-              | TMemory
-              | TMemRef
+import           SemMC.DSL.Internal
 
-data ExprType tp where
-  -- | A type of bitvectors of a fixed width
-  EBV :: Int -> ExprType 'TBV
-  EInt :: ExprType 'TInt
-  EFloat :: ExprType 'TFloat
-  EDouble :: ExprType 'TDouble
-  EBool :: ExprType 'TBool
-  EMemory :: ExprType 'TMemory
-  EMemRef :: ExprType 'TMemRef
 
-deriving instance Eq (ExprType tp)
-deriving instance Show (ExprType tp)
 
-instance ShowF ExprType
 
--- | An expression representing an SMT formula.  It can reference parameters
---
--- Note that there are some GADT type tags -- unlike crucible, we never need to
--- recover those.  They are only there to guard term construction.
-data Expr (tp :: ExprTag) where
-  LitBV :: Int -> Integer -> Expr 'TBV
-  LitInt :: Integer -> Expr 'TInt
-  Loc :: Location tp -> Expr tp
-  -- | Built-in operations (e.g., bitvector ops)
-  Builtin :: ExprType tp -> String -> [Some Expr] -> Expr tp
-  -- | Functions provided by theory backends that are called with the underscore
-  -- syntax in smt (e.g., extract and extend)
-  TheoryFunc :: ExprType tp -> String -> [Some Expr] -> [Some Expr] -> Expr tp
-  -- | User-defined uninterpreted functions called with the @call@ SMTLib
-  -- primitive
-  UninterpretedFunc :: ExprType tp -> String -> [Some Expr] -> Expr tp
 
-deriving instance Show (Expr tp)
+locationType :: Location tp -> ExprType tp
+locationType loc =
+  case loc of
+    ParamLoc p -> pExprType p
+    LiteralLoc ll -> lExprType ll
+    LocationFunc t _ _ -> t
 
 exprType :: Expr tp -> ExprType tp
 exprType e =
@@ -136,34 +106,6 @@ exprBVSize e =
     TheoryFunc (EBV w) _ _ _ -> w
     UninterpretedFunc (EBV w) _ _ -> w
 
--- | A parameter and its type
---
--- The type is a string corresponding to an operand type from the architecture
--- (e.g., Gprc), rather than an 'ExprType'.
-data Parameter tp = Parameter { pName :: String
-                              , pType :: String
-                              , pExprType :: ExprType tp
-                              }
-               deriving (Show)
-
-data Literal tp = Literal { lName :: String
-                          , lExprType :: ExprType tp
-                          }
-               deriving (Show)
-
-data Location tp where
-  ParamLoc :: Parameter tp -> Location tp
-  LiteralLoc :: Literal tp -> Location tp
-  LocationFunc :: ExprType tp -> String -> Location tp' -> Location tp
-
-deriving instance Show (Location tp)
-
-locationType :: Location tp -> ExprType tp
-locationType loc =
-  case loc of
-    ParamLoc p -> pExprType p
-    LiteralLoc ll -> lExprType ll
-    LocationFunc t _ _ -> t
 
 data Formula = Formula { fName :: String
                        , fOperands :: Seq.Seq (Some Parameter)
@@ -173,11 +115,6 @@ data Formula = Formula { fName :: String
                        -- ^ Comments stored as individual lines
                        }
              deriving (Show)
-
-instance ShowF Parameter
-instance ShowF Literal
-instance ShowF Location
-instance ShowF Expr
 
 -- | The state component of the monad is a Formula that is built up during a
 -- single definition; after the definition, it is added to the output sequence.
@@ -256,8 +193,11 @@ input loc = RWS.modify' $ \f -> f { fInputs = Some loc : fInputs f }
 -- | Define a location as an expression
 defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemM 'Def ()
 defLoc loc e
-  | locationType loc == exprType e =
-    RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
+  | locationType loc == exprType e = do
+      curDefs <- RWS.gets fDefs
+      case lookup (Some loc) curDefs of
+        Nothing -> RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
+        Just _ -> error (printf "Location is already defined: %s" (show loc))
   | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
 
 -- | Allow for user-defined functions over expressions

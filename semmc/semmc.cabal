@@ -69,6 +69,7 @@ library
                        Data.Parameterized.Seq
                        Data.Parameterized.Unfold
   other-modules:       SemMC.Architecture.Internal
+                       SemMC.DSL.Internal
   -- other-extensions:    
   build-depends:       base >=4.9 && <5,
                        template-haskell,
