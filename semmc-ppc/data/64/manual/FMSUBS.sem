@@ -1,6 +1,6 @@
 ;; Floating Multiply-Subtract Single (A-form)
 ((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc) (frC . 'Fprc))) 
-  (in (frC frB frA))
+  (in (frC frB frA 'IP))
   (defs 
     ((frT 
        (concat 
@@ -11,4 +11,4 @@
              (concat 
                #x000000000000000000000000
                ((_ call "fp.negate32") ((_ extract 127 96) frB))))
-           ((_ extract 127 96) frC)))))))
+           ((_ extract 127 96) frC)))) ('IP (bvadd 'IP #x0000000000000004)))))

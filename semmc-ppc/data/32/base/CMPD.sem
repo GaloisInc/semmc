@@ -1,7 +1,7 @@
 ;; Compare (X-form)
 ;; Compare double word where L=1
 ((operands ((fld . 'Crrc) (rA . 'Gprc) (rB . 'Gprc))) 
-  (in ('XER 'CR rB rA))
+  (in ('XER 'CR rB rA 'IP))
   (defs 
     (('CR 
        (bvor 
@@ -11,4 +11,4 @@
              (concat 
                (ite (bvslt rB rA) #b100 (ite (bvsgt rB rA) #b010 #b001))
                ((_ extract 0 0) 'XER)))
-           (bvmul ((_ zero_extend 29) fld) #x00000004)))))))
+           (bvmul ((_ zero_extend 29) fld) #x00000004)))) ('IP (bvadd 'IP #x00000004)))))

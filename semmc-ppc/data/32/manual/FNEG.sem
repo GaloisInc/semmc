@@ -2,7 +2,7 @@
 ;; There is no single-precision form of this because
 ;; the sign bit is always in the same place (MSB)
 ((operands ((frT . 'Fprc) (frB . 'Fprc))) 
-  (in (frB))
+  (in (frB 'IP))
   (defs 
     ((frT 
-       (concat #x0000000000000000 ((_ call "fp.negate64") ((_ extract 127 64) frB)))))))
+       (concat #x0000000000000000 ((_ call "fp.negate64") ((_ extract 127 64) frB)))) ('IP (bvadd 'IP #x00000004)))))

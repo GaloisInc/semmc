@@ -1,7 +1,7 @@
 ;; Compare Logical Immediate (D-form)
 ;; This variant is the double word variant (where L=0)
 ((operands ((fld . 'Crrc) (imm . 'U16imm) (rA . 'Gprc))) 
-  (in ('XER 'CR rA imm))
+  (in ('XER 'CR rA imm 'IP))
   (defs 
     (('CR 
        (bvor 
@@ -21,4 +21,4 @@
                    #b010
                    #b001))
                ((_ extract 32 32) 'XER)))
-           (bvmul ((_ zero_extend 29) fld) #x00000004)))))))
+           (bvmul ((_ zero_extend 29) fld) #x00000004)))) ('IP (bvadd 'IP #x0000000000000004)))))

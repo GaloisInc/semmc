@@ -132,117 +132,117 @@ liftSingle1 operation op =
 -- FIXME: None of these are defining the status or control registers yet
 floatingPoint :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPoint = do
-  defineOpcode "FADD" $ do
+  defineOpcodeWithIP "FADD" $ do
     comment "Floating Add (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftDouble2 fadd64 (Loc frA) (Loc frB))
 
-  defineOpcode "FADDS" $ do
+  defineOpcodeWithIP "FADDS" $ do
     comment "Floating Add Single (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftSingle2 fadd32 (Loc frA) (Loc frB))
 
-  defineOpcode "FSUB" $ do
+  defineOpcodeWithIP "FSUB" $ do
     comment "Floating Subtract (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftDouble2 fsub64 (Loc frA) (Loc frB))
 
-  defineOpcode "FSUBS" $ do
+  defineOpcodeWithIP "FSUBS" $ do
     comment "Floating Subtract Single (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftSingle2 fsub32 (Loc frA) (Loc frB))
 
-  defineOpcode "FMUL" $ do
+  defineOpcodeWithIP "FMUL" $ do
     comment "Floating Multiply (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftDouble2 fmul64 (Loc frA) (Loc frB))
 
-  defineOpcode "FMULS" $ do
+  defineOpcodeWithIP "FMULS" $ do
     comment "Floating Multiply Single (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftSingle2 fmul32 (Loc frA) (Loc frB))
 
-  defineOpcode "FDIV" $ do
+  defineOpcodeWithIP "FDIV" $ do
     comment "Floating Divide (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftDouble2 fdiv64 (Loc frA) (Loc frB))
 
-  defineOpcode "FDIVS" $ do
+  defineOpcodeWithIP "FDIVS" $ do
     comment "Floating Divide Single (A-form)"
     (frT, frA, frB) <- aform
     defLoc frT (liftSingle2 fdiv32 (Loc frA) (Loc frB))
 
-  defineOpcode "FMADD" $ do
+  defineOpcodeWithIP "FMADD" $ do
     comment "Floating Multiply-Add (A-form)"
     (frT, frA, frB, frC) <- aform4
     defLoc frT (liftDouble3 fmuladd64 (Loc frA) (Loc frB) (Loc frC))
 
-  defineOpcode "FMADDS" $ do
+  defineOpcodeWithIP "FMADDS" $ do
     comment "Floating Multiply-Add Single (A-form)"
     (frT, frA, frB, frC) <- aform4
     defLoc frT (liftSingle3 fmuladd32 (Loc frA) (Loc frB) (Loc frC))
 
-  defineOpcode "FMSUB" $ do
+  defineOpcodeWithIP "FMSUB" $ do
     comment "Floating Multiply-Subtract (A-form)"
     (frT, frA, frB, frC) <- aform4
     let frB' = liftDouble1 fnegate64 (Loc frB)
     defLoc frT (liftDouble3 fmuladd64 (Loc frA) frB' (Loc frC))
 
-  defineOpcode "FMSUBS" $ do
+  defineOpcodeWithIP "FMSUBS" $ do
     comment "Floating Multiply-Subtract Single (A-form)"
     (frT, frA, frB, frC) <- aform4
     let frB' = liftSingle1 fnegate32 (Loc frB)
     defLoc frT (liftSingle3 fmuladd32 (Loc frA) frB' (Loc frC))
 
-  defineOpcode "FNMADD" $ do
+  defineOpcodeWithIP "FNMADD" $ do
     comment "Floating Negative Multiply-Add (A-form)"
     (frT, frA, frB, frC) <- aform4
     let nres = liftDouble3 fmuladd64 (Loc frA) (Loc frB) (Loc frC)
     defLoc frT (liftDouble1 fnegate64 nres)
 
-  defineOpcode "FNMADDS" $ do
+  defineOpcodeWithIP "FNMADDS" $ do
     comment "Floating Negative Multiply-Add Single (A-form)"
     (frT, frA, frB, frC) <- aform4
     let nres = liftSingle3 fmuladd32 (Loc frA) (Loc frB) (Loc frC)
     defLoc frT (liftSingle1 fnegate32 nres)
 
-  defineOpcode "FNMSUB" $ do
+  defineOpcodeWithIP "FNMSUB" $ do
     comment "Floating Negative Multiply-Subtract (A-form)"
     (frT, frA, frB, frC) <- aform4
     let frB' = liftDouble1 fnegate64 (Loc frB)
     let nres = liftDouble3 fmuladd64 (Loc frA) frB' (Loc frC)
     defLoc frT (liftDouble1 fnegate64 nres)
 
-  defineOpcode "FNMSUBS" $ do
+  defineOpcodeWithIP "FNMSUBS" $ do
     comment "Floating Negative Multiply-Subtract Single (A-form)"
     (frT, frA, frB, frC) <- aform4
     let frB' = liftSingle1 fnegate32 (Loc frB)
     let nres = liftSingle3 fmuladd32 (Loc frA) frB' (Loc frC)
     defLoc frT (liftSingle1 fnegate32 nres)
 
-  defineOpcode "FRSP" $ do
+  defineOpcodeWithIP "FRSP" $ do
     comment "Floating Round to Single-Precision (X-form)"
     (frT, frB) <- xform2f
     defLoc frT (extendSingle (froundsingle (extractDouble (Loc frB))))
 
-  defineOpcode "FNEG" $ do
+  defineOpcodeWithIP "FNEG" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
     comment "the sign bit is always in the same place (MSB)"
     (frT, frB) <- xform2f
     defLoc frT (extendDouble (fnegate64 (extractDouble (Loc frB))))
 
-  defineOpcode "FMR" $ do
+  defineOpcodeWithIP "FMR" $ do
     comment "Floating Move Register (X-form)"
     (frT, frB) <- xform2f
     defLoc frT (Loc frB)
 
-  defineOpcode "FABS" $ do
+  defineOpcodeWithIP "FABS" $ do
     comment "Floating Absolute Value (X-form)"
     (frT, frB) <- xform2f
     defLoc frT (extendDouble (fabs (extractDouble (Loc frB))))
 
-  defineOpcode "FNABS" $ do
+  defineOpcodeWithIP "FNABS" $ do
     comment "Floating Negative Absolute Value (X-form)"
     (frT, frB) <- xform2f
     let av = fabs (extractDouble (Loc frB))

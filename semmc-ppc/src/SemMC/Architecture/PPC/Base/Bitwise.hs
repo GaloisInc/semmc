@@ -11,62 +11,62 @@ import SemMC.Architecture.PPC.Base.Core
 
 baseBitwise :: (?bitSize :: BitSize) => SemM 'Top ()
 baseBitwise = do
-  defineOpcode "XOR" $ do
+  defineOpcodeWithIP "XOR" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvxor (Loc rS) (Loc rB))
-  defineOpcode "OR" $ do
+  defineOpcodeWithIP "OR" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvor (Loc rS) (Loc rB))
-  defineOpcode "AND" $ do
+  defineOpcodeWithIP "AND" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvand (Loc rS) (Loc rB))
-  defineOpcode "NAND" $ do
+  defineOpcodeWithIP "NAND" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvnot (bvand (Loc rS) (Loc rB)))
-  defineOpcode "NOR" $ do
+  defineOpcodeWithIP "NOR" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvnot (bvor (Loc rS) (Loc rB)))
-  defineOpcode "EQV" $ do
+  defineOpcodeWithIP "EQV" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvnot (bvxor (Loc rS) (Loc rB)))
-  defineOpcode "ANDC" $ do
+  defineOpcodeWithIP "ANDC" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvand (Loc rS) (bvnot (Loc rB)))
-  defineOpcode "ORC" $ do
+  defineOpcodeWithIP "ORC" $ do
     (rA, rS, rB) <- xform3
     defLoc rA (bvor (Loc rS) (bvnot (Loc rB)))
-  defineOpcode "EXTSB" $ do
+  defineOpcodeWithIP "EXTSB" $ do
     comment "Extend Sign Byte (X-form)"
     (rA, rS) <- xform2
     defLoc rA (sext (lowBits 8 (Loc rS)))
-  defineOpcode "EXTSH" $ do
+  defineOpcodeWithIP "EXTSH" $ do
     comment "Extend Sign Halfword (X-form)"
     (rA, rS) <- xform2
     defLoc rA (sext (lowBits 16 (Loc rS)))
-  defineOpcode "SLW" $ do
+  defineOpcodeWithIP "SLW" $ do
     comment "Shift Left Word (X-form)"
     (rA, rS, rB) <- xform3
     let n = zext' 32 (lowBits 5 (Loc rB))
     let w = lowBits 32 (Loc rS)
     defLoc rA (zext (bvshl w n))
-  defineOpcode "SRW" $ do
+  defineOpcodeWithIP "SRW" $ do
     comment "Shift Right Word (X-form)"
     (rA, rS, rB) <- xform3
     let n = zext' 32 (lowBits 5 (Loc rB))
     let w = lowBits 32 (Loc rS)
     defLoc rA (zext (bvlshr w n))
   when (?bitSize == Size64) $ do
-    defineOpcode "SLD" $ do
+    defineOpcodeWithIP "SLD" $ do
       comment "Shift Left Doubleword (X-form)"
       (rA, rS, rB) <- xform3
       let n = zext (lowBits 6 (Loc rB))
       defLoc rA  (bvshl (Loc rS) n)
-    defineOpcode "SRD" $ do
+    defineOpcodeWithIP "SRD" $ do
       comment "Shift Right Doubleword (X-form)"
       (rA, rS, rB) <- xform3
       let n = zext (lowBits64 6 (Loc rB))
       defLoc rA (bvlshr (Loc rS) n)
-    defineOpcode "EXTSW" $ do
+    defineOpcodeWithIP "EXTSW" $ do
       comment "Extend Sign Word (X-form)"
       (rA, rS) <- xform2
       defLoc rA (sext (lowBits 32 (Loc rS)))

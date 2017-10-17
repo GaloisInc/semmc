@@ -31,6 +31,8 @@ module SemMC.Architecture.PPC.Base.Core (
   cr,
   xer,
   memory,
+  -- * IP Wrapper
+  defineOpcodeWithIP,
   -- * Forms
   naturalBV,
   xoform3,
@@ -178,6 +180,18 @@ memory :: Location 'TMemory
 memory = LiteralLoc Literal { lName = "Mem"
                             , lExprType = EMemory
                             }
+
+-- IP Helper Wrapper
+
+-- | A wrapper around 'defineOpcode' that updates the IP after the instruction
+-- executes (simply by adding 4).
+defineOpcodeWithIP :: (?bitSize :: BitSize) => String -> SemM 'Def () -> SemM 'Top ()
+defineOpcodeWithIP name def =
+  defineOpcode name $ do
+    input ip
+    defLoc ip (bvadd (Loc ip) (naturalLitBV 0x4))
+    def
+
 
 -- Form helpers
 

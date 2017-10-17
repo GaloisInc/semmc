@@ -1,7 +1,7 @@
 ;; Compare Logical (X-form)
 ;; Compare word (where L=0)
 ((operands ((fld . 'Crrc) (rA . 'Gprc) (rB . 'Gprc))) 
-  (in ('XER 'CR rB rA))
+  (in ('XER 'CR rB rA 'IP))
   (defs 
     (('CR 
        (bvor 
@@ -21,4 +21,4 @@
                    #b010
                    #b001))
                ((_ extract 32 32) 'XER)))
-           (bvmul ((_ zero_extend 29) fld) #x00000004)))))))
+           (bvmul ((_ zero_extend 29) fld) #x00000004)))) ('IP (bvadd 'IP #x0000000000000004)))))

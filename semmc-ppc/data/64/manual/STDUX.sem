@@ -1,6 +1,6 @@
 ;; Store Doubleword with Update Indexed (X-form)
 ((operands ((memref . 'Memrr) (rS . 'Gprc))) 
-  (in ('Mem memref rS))
+  (in ('Mem memref rS 'IP))
   (defs 
     ((((_ call "ppc.memrr_base") memref) 
        (bvadd ((_ call "ppc.memrr_base") memref) ((_ call "ppc.memrr_offset") memref))) 
@@ -10,4 +10,5 @@
           (bvadd 
             ((_ call "ppc.memrr_base") memref)
             ((_ call "ppc.memrr_offset") memref))
-          rS)))))
+          rS))
+      ('IP (bvadd 'IP #x0000000000000004)))))

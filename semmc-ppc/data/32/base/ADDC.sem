@@ -1,6 +1,6 @@
 ;; Add Carrying (XO-form)
 ((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
-  (in ('XER rB rA))
+  (in ('XER rB rA 'IP))
   (defs 
     (('XER 
        (concat 
@@ -8,4 +8,5 @@
          (concat 
            ((_ extract 0 0) (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB)))
            ((_ extract 31 3) 'XER)))) 
-      (rT ((_ extract 32 1) (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB)))))))
+      (rT ((_ extract 32 1) (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB))))
+      ('IP (bvadd 'IP #x00000004)))))

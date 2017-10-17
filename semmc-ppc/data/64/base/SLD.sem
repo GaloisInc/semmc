@@ -1,4 +1,5 @@
 ;; Shift Left Doubleword (X-form)
 ((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) 
-  (in (rB rS))
-  (defs ((rA (bvshl rS ((_ zero_extend 58) ((_ extract 63 58) rB)))))))
+  (in (rB rS 'IP))
+  (defs 
+    ((rA (bvshl rS ((_ zero_extend 58) ((_ extract 63 58) rB)))) ('IP (bvadd 'IP #x0000000000000004)))))

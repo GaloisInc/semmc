@@ -1,6 +1,6 @@
 ;; Load Halfword Algebraic with Update (D-form)
 ((operands ((rT . 'Gprc) (memref . 'Memri))) 
-  (in (memref 'Mem))
+  (in (memref 'Mem 'IP))
   (defs 
     ((((_ call "ppc.memri_reg") memref) 
        (bvadd 
@@ -12,4 +12,5 @@
             'Mem
             (bvadd 
               ((_ call "ppc.memri_reg") memref)
-              ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))))))))
+              ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref))))))
+      ('IP (bvadd 'IP #x0000000000000004)))))

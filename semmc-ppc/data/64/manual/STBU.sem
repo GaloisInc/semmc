@@ -1,6 +1,6 @@
 ;; Store Byte with Update (D-form)
 ((operands ((memref . 'Memri) (rS . 'Gprc))) 
-  (in ('Mem memref rS))
+  (in ('Mem memref rS 'IP))
   (defs 
     ((((_ call "ppc.memri_reg") memref) 
        (bvadd 
@@ -12,4 +12,5 @@
           (bvadd 
             ((_ call "ppc.memri_reg") memref)
             ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))
-          ((_ extract 63 56) rS))))))
+          ((_ extract 63 56) rS)))
+      ('IP (bvadd 'IP #x0000000000000004)))))

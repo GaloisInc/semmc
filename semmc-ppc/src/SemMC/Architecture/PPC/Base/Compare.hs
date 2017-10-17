@@ -10,7 +10,7 @@ import SemMC.Architecture.PPC.Base.Core
 
 baseCompare :: (?bitSize :: BitSize) => SemM 'Top ()
 baseCompare = do
-  defineOpcode "CMPDI" $ do
+  defineOpcodeWithIP "CMPDI" $ do
     comment "Compare Immediate (D-form)"
     comment "This variant is the double word variant (where L=1)"
     fld <- param "fld" crrc (EBV 3)
@@ -23,7 +23,7 @@ baseCompare = do
     let ximm = sext (Loc imm)
     let newCR = cmpImm bvslt bvsgt (Loc fld) ximm (Loc rA)
     defLoc cr newCR
-  defineOpcode "CMPWI" $ do
+  defineOpcodeWithIP "CMPWI" $ do
     comment "Compare Immediate (D-form)"
     comment "This variant is the double word variant (where L=0)"
     fld <- param "fld" crrc (EBV 3)
@@ -37,7 +37,7 @@ baseCompare = do
     let lowreg = lowBits 32 (Loc rA)
     let newCR = cmpImm bvslt bvsgt (Loc fld) ximm (sext lowreg)
     defLoc cr newCR
-  defineOpcode "CMPD" $ do
+  defineOpcodeWithIP "CMPD" $ do
     comment "Compare (X-form)"
     comment "Compare double word where L=1"
     fld <- param "fld" crrc (EBV 3)
@@ -49,7 +49,7 @@ baseCompare = do
     input xer
     let newCR = cmpImm bvslt bvsgt (Loc fld) (Loc rA) (Loc rB)
     defLoc cr newCR
-  defineOpcode "CMPLW" $ do
+  defineOpcodeWithIP "CMPLW" $ do
     comment "Compare (X-form)"
     comment "Compare word (where L=0)"
     fld <- param "fld" crrc (EBV 3)
@@ -63,7 +63,7 @@ baseCompare = do
     let lowb = lowBits 32 (Loc rB)
     let newCR = cmpImm bvslt bvsgt (Loc fld) (zext lowa) (zext lowb)
     defLoc cr newCR
-  defineOpcode "CMPLDI" $ do
+  defineOpcodeWithIP "CMPLDI" $ do
     comment "Compare Logical Immediate (D-form)"
     comment "This variant is the double word variant (where L=1)"
     fld <- param "fld" crrc (EBV 3)
@@ -76,7 +76,7 @@ baseCompare = do
     let ximm = zext (Loc imm)
     let newCR = cmpImm bvult bvugt (Loc fld) ximm (Loc rA)
     defLoc cr newCR
-  defineOpcode "CMPLWI" $ do
+  defineOpcodeWithIP "CMPLWI" $ do
     comment "Compare Logical Immediate (D-form)"
     comment "This variant is the double word variant (where L=0)"
     fld <- param "fld" crrc (EBV 3)
@@ -90,7 +90,7 @@ baseCompare = do
     let lowreg = lowBits 32 (Loc rA)
     let newCR = cmpImm bvult bvugt (Loc fld) ximm (zext lowreg)
     defLoc cr newCR
-  defineOpcode "CMPLD" $ do
+  defineOpcodeWithIP "CMPLD" $ do
     comment "Compare Logical (X-form)"
     comment "Compare double word (where L=1)"
     fld <- param "fld" crrc (EBV 3)
@@ -102,7 +102,7 @@ baseCompare = do
     input xer
     let newCR = cmpImm bvult bvugt (Loc fld) (Loc rA) (Loc rB)
     defLoc cr newCR
-  defineOpcode "CMPLW" $ do
+  defineOpcodeWithIP "CMPLW" $ do
     comment "Compare Logical (X-form)"
     comment "Compare word (where L=0)"
     fld <- param "fld" crrc (EBV 3)

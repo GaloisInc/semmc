@@ -1,6 +1,6 @@
 ;; Store Doubleword (DS-form)
 ((operands ((memref . 'Memrix) (rS . 'Gprc))) 
-  (in ('Mem memref rS))
+  (in ('Mem memref rS 'IP))
   (defs 
     (('Mem 
        ((_ call "write_mem.64") 
@@ -11,4 +11,4 @@
              #x0000000000000000
              ((_ call "ppc.memrix_reg") memref))
            ((_ sign_extend 48) (concat ((_ call "ppc.memrix_offset") memref) #b00)))
-         rS)))))
+         rS)) ('IP (bvadd 'IP #x0000000000000004)))))

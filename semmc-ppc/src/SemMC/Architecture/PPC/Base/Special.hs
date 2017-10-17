@@ -10,7 +10,7 @@ import SemMC.Architecture.PPC.Base.Core
 
 baseSpecial :: (?bitSize :: BitSize) => SemM 'Top ()
 baseSpecial = do
-  defineOpcode "MFCR" $ do
+  defineOpcodeWithIP "MFCR" $ do
     rT <- param "rT" gprc naturalBV
     input cr
     defLoc rT (zext (Loc cr))

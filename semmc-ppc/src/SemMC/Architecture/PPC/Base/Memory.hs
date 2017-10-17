@@ -17,135 +17,135 @@ manualMemory = do
 
 defineStores :: (?bitSize :: BitSize) => SemM 'Top ()
 defineStores = do
-  defineOpcode "STB" $ do
+  defineOpcodeWithIP "STB" $ do
     comment "Store Byte (D-form)"
     store 1
-  defineOpcode "STBU" $ do
+  defineOpcodeWithIP "STBU" $ do
     comment "Store Byte with Update (D-form)"
     storeWithUpdate 1
-  defineOpcode "STBX" $ do
+  defineOpcodeWithIP "STBX" $ do
     comment "Store Byte Indexed (X-form)"
     storeIndexed 1
-  defineOpcode "STBUX" $ do
+  defineOpcodeWithIP "STBUX" $ do
     comment "Store Byte with Update Indexed (X-form)"
     storeWithUpdateIndexed 1
 
-  defineOpcode "STH" $ do
+  defineOpcodeWithIP "STH" $ do
     comment "Store Halfword (D-form)"
     store 2
-  defineOpcode "STHU" $ do
+  defineOpcodeWithIP "STHU" $ do
     comment "Store Halfword with Update (D-form)"
     storeWithUpdate 2
-  defineOpcode "STHX" $ do
+  defineOpcodeWithIP "STHX" $ do
     comment "Store Halfword Indexed (X-form)"
     storeIndexed 2
-  defineOpcode "STHUX" $ do
+  defineOpcodeWithIP "STHUX" $ do
     comment "Store Halfword with Update Indexed (X-form)"
     storeWithUpdateIndexed 2
 
-  defineOpcode "STW" $ do
+  defineOpcodeWithIP "STW" $ do
     comment "Store Word (D-form)"
     store 4
-  defineOpcode "STWU" $ do
+  defineOpcodeWithIP "STWU" $ do
     comment "Store Word with Update (D-form)"
     storeWithUpdate 4
-  defineOpcode "STWX" $ do
+  defineOpcodeWithIP "STWX" $ do
     comment "Store Word Indexed (X-form)"
     storeIndexed 4
-  defineOpcode "STWUX" $ do
+  defineOpcodeWithIP "STWUX" $ do
     comment "Store Word with Update Indexed (X-form)"
     storeWithUpdateIndexed 4
 
   when (?bitSize == Size64) $ do
-    defineOpcode "STD"$ do
+    defineOpcodeWithIP "STD"$ do
       comment "Store Doubleword (DS-form)"
       storeDS 8
-    defineOpcode "STDU" $ do
+    defineOpcodeWithIP "STDU" $ do
       comment "Store Doubleword with Update (DS-form)"
       storeWithUpdateDS 8
-    defineOpcode "STDX" $ do
+    defineOpcodeWithIP "STDX" $ do
       comment "Store Doubleword Indexed (X-form)"
       storeIndexed 8
-    defineOpcode "STDUX" $ do
+    defineOpcodeWithIP "STDUX" $ do
       comment "Store Doubleword with Update Indexed (X-form)"
       storeWithUpdateIndexed 8
 
 defineLoads :: (?bitSize :: BitSize) => SemM 'Top ()
 defineLoads = do
-  defineOpcode "LBZ" $ do
+  defineOpcodeWithIP "LBZ" $ do
     comment "Load Byte and Zero (D-form)"
     loadAndExtend 1 zext
-  defineOpcode "LBZU" $ do
+  defineOpcodeWithIP "LBZU" $ do
     comment "Load Byte and Zero with Update (D-form)"
     loadAndUpdate 1 zext
-  defineOpcode "LBZX" $ do
+  defineOpcodeWithIP "LBZX" $ do
     comment "Load Byte and Zero Indexed (X-form)"
     loadIndexed 1 zext
-  defineOpcode "LBZUX" $ do
+  defineOpcodeWithIP "LBZUX" $ do
     comment "Load Byte and Zero with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 1 zext
 
-  defineOpcode "LHZ" $ do
+  defineOpcodeWithIP "LHZ" $ do
     comment "Load Halfword and Zero (D-form)"
     loadAndExtend 2 zext
-  defineOpcode "LHZU" $ do
+  defineOpcodeWithIP "LHZU" $ do
     comment "Load Halfword and Zero with Update (D-form)"
     loadAndUpdate 2 zext
-  defineOpcode "LHZX" $ do
+  defineOpcodeWithIP "LHZX" $ do
     comment "Load Halfword and Zero Indexed (X-form)"
     loadIndexed 2 zext
-  defineOpcode "LHZUX" $ do
+  defineOpcodeWithIP "LHZUX" $ do
     comment "Load Halfword and Zero with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 2 zext
 
-  defineOpcode "LHAU" $ do
+  defineOpcodeWithIP "LHAU" $ do
     comment "Load Halfword Algebraic with Update (D-form)"
     loadAndUpdate 2 sext
-  defineOpcode "LHA" $ do
+  defineOpcodeWithIP "LHA" $ do
     comment "Load Halfword Algebraic (D-form)"
     loadAndExtend 2 sext
-  defineOpcode "LHAX" $ do
+  defineOpcodeWithIP "LHAX" $ do
     comment "Load Halfword Algebraic Indexed (X-form)"
     loadIndexed 2 sext
-  defineOpcode "LHAUX" $ do
+  defineOpcodeWithIP "LHAUX" $ do
     comment "Load Halfword Algebraic with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 2 sext
 
-  defineOpcode "LWZ" $ do
+  defineOpcodeWithIP "LWZ" $ do
     comment "Load Word and Zero (D-form)"
     loadAndExtend 4 zext
-  defineOpcode "LWZU" $ do
+  defineOpcodeWithIP "LWZU" $ do
     comment "Load Word and Zero with Update (D-form)"
     loadAndUpdate 4 zext
-  defineOpcode "LWZX" $ do
+  defineOpcodeWithIP "LWZX" $ do
     comment "Load Word and Zero Indexed (X-form)"
     loadIndexed 4 zext
-  defineOpcode "LWZUX" $ do
+  defineOpcodeWithIP "LWZUX" $ do
     comment "Load Word and Zero with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 4 zext
 
-  defineOpcode "LWA" $ do
+  defineOpcodeWithIP "LWA" $ do
     comment "Load Word Algebraic (DS-form)"
     loadAndExtendDS 4 sext
-  defineOpcode "LWAX" $ do
+  defineOpcodeWithIP "LWAX" $ do
     comment "Load Word Algebraic Indexed (X-form)"
     loadIndexed 4 sext
-  defineOpcode "LWAUX" $ do
+  defineOpcodeWithIP "LWAUX" $ do
     comment "Load Word Algebraic with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 4 sext
 
   -- The 64 bit variants never need extension, so we use id for the extension function.
   when (?bitSize == Size64) $ do
-    defineOpcode "LD" $ do
+    defineOpcodeWithIP "LD" $ do
       comment "Load Doubleword (DS-form)"
       loadAndExtendDS 8 id
-    defineOpcode "LDU" $ do
+    defineOpcodeWithIP "LDU" $ do
       comment "Load Doubleword with Update (DS-form)"
       loadAndUpdateDS 8 id
-    defineOpcode "LDX" $ do
+    defineOpcodeWithIP "LDX" $ do
       comment "Load Doubleword Indexed (X-form)"
       loadIndexed 8 id
-    defineOpcode "LDUX" $ do
+    defineOpcodeWithIP "LDUX" $ do
       comment "Load Doubleword and Update Indexed (X-form)"
       loadAndExtendWithUpdateIndexed 8 id
 

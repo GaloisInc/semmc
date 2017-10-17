@@ -1,6 +1,6 @@
 ;; Store Doubleword with Update (DS-form)
 ((operands ((memref . 'Memrix) (rS . 'Gprc))) 
-  (in ('Mem memref rS))
+  (in ('Mem memref rS 'IP))
   (defs 
     ((((_ call "ppc.memrix_reg") memref) 
        (bvadd 
@@ -12,4 +12,5 @@
           (bvadd 
             ((_ call "ppc.memrix_reg") memref)
             ((_ sign_extend 48) (concat ((_ call "ppc.memrix_offset") memref) #b00)))
-          rS)))))
+          rS))
+      ('IP (bvadd 'IP #x0000000000000004)))))
