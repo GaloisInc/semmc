@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- | Evaluators for location functions in formula definitions (e.g., memri_reg)
@@ -116,5 +117,14 @@ interpMemrrBaseExtractor (PPC.MemRR mgpr _) = mgpr
 interpMemrrOffsetExtractor :: PPC.MemRR -> PPC.GPR
 interpMemrrOffsetExtractor (PPC.MemRR _ gpr) = gpr
 
-interpIsR0 :: PPC.GPR -> Bool
-interpIsR0 (PPC.GPR rnum) = rnum == 0
+class InterpIsR0 a where
+  interpIsR0 :: a -> Bool
+
+instance InterpIsR0 PPC.GPR where
+  interpIsR0 (PPC.GPR rnum) = rnum == 0
+
+instance InterpIsR0 (Maybe PPC.GPR) where
+  interpIsR0 mr =
+    case mr of
+      Nothing -> True
+      Just r -> interpIsR0 r
