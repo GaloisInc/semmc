@@ -397,7 +397,7 @@ instance A.Architecture PPC where
   operandValue _ = operandValue
   operandToLocation _ = operandToLocation
   uninterpretedFunctions = UF.uninterpretedFunctions
-  locationFuncInterpretation _proxy = locationFuncInterpretation
+  locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC)]
 locationFuncInterpretation =
@@ -410,6 +410,14 @@ locationFuncInterpretation =
   , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrBase
                                                 , A.exprInterpName = 'interpMemrrBaseExtractor
                                                 })
+  , ("ppc.memrr_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemrrOffsetExtractor
+                                                  })
+  , ("ppc.memrix_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemrixOffsetExtractor
+                                                   })
+  , ("ppc.memri_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemriOffsetExtractor
+                                                  })
+  , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
+                                           })
   ]
 
 opcodeToVoid :: ((o == PPC.Operand) ~ 'False) => PPC.Opcode o sh -> Void

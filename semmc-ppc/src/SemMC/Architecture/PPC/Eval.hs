@@ -5,12 +5,18 @@
 module SemMC.Architecture.PPC.Eval (
   interpMemriReg,
   interpMemriRegExtractor,
+  interpMemriOffsetExtractor,
   interpMemrixReg,
   interpMemrixRegExtractor,
+  interpMemrixOffsetExtractor,
   interpMemrrBase,
-  interpMemrrBaseExtractor
+  interpMemrrBaseExtractor,
+  interpMemrrOffsetExtractor,
+  interpIsR0,
+  createSymbolicEntries
   ) where
 
+import           Data.Int ( Int16 )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.ShapedList as SL
 import           Lang.Crucible.BaseTypes
@@ -21,6 +27,25 @@ import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula as F
 
 import           SemMC.Architecture.PPC.Location
+
+-- | Uninterpreted function names are mangled in SimpleBuilder, so we need to
+-- create extra entries to match their mangled names.
+--
+-- In particular, periods in names are converted to underscores.
+--
+-- This function creates copies of entries with periods in their names with the
+-- escaped version as it appears in a SimpleBuilder symbolic function.  For
+-- example, if there is an entry with the name @ppc.foo@, this function retains
+-- that entry in the input list and adds an additional entry under @ppc_foo@.
+createSymbolicEntries :: [(String, a)] -> [(String, a)]
+createSymbolicEntries = foldr duplicateIfDotted []
+  where
+    duplicateIfDotted elt@(s, e) acc =
+      case '.' `elem` s of
+        False -> acc
+        True ->
+          let newElt = (map (\c -> if c == '.' then '_' else c) s, e)
+          in newElt : elt : acc
 
 interpMemriReg :: forall sh s ppc tp
                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
@@ -42,6 +67,9 @@ interpMemriReg operands (F.WrappedOperand _orep ix) rep =
 interpMemriRegExtractor :: PPC.MemRI -> Maybe PPC.GPR
 interpMemriRegExtractor (PPC.MemRI mgpr _) = mgpr
 
+interpMemriOffsetExtractor :: PPC.MemRI -> Int16
+interpMemriOffsetExtractor (PPC.MemRI _ off) = off
+
 interpMemrixReg :: forall sh s ppc tp
                  . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
                 => SL.ShapedList PPC.Operand sh
@@ -62,6 +90,9 @@ interpMemrixReg operands (F.WrappedOperand _orep ix) rep =
 interpMemrixRegExtractor :: PPC.MemRIX -> Maybe PPC.GPR
 interpMemrixRegExtractor (PPC.MemRIX mgpr _) = mgpr
 
+interpMemrixOffsetExtractor :: PPC.MemRIX -> Int16
+interpMemrixOffsetExtractor (PPC.MemRIX _ off) = off
+
 interpMemrrBase :: forall sh s ppc tp
                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
                => SL.ShapedList PPC.Operand sh
@@ -81,3 +112,9 @@ interpMemrrBase operands (F.WrappedOperand _orep ix) rep =
 
 interpMemrrBaseExtractor :: PPC.MemRR -> Maybe PPC.GPR
 interpMemrrBaseExtractor (PPC.MemRR mgpr _) = mgpr
+
+interpMemrrOffsetExtractor :: PPC.MemRR -> PPC.GPR
+interpMemrrOffsetExtractor (PPC.MemRR _ gpr) = gpr
+
+interpIsR0 :: PPC.GPR -> Bool
+interpIsR0 (PPC.GPR rnum) = rnum == 0
