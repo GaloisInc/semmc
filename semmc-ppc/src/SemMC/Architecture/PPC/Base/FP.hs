@@ -225,7 +225,14 @@ floatingPoint = do
     (frT, frB) <- xform2f
     defLoc frT (extendSingle (froundsingle (extractDouble (Loc frB))))
 
-  defineOpcodeWithIP "FNEG" $ do
+  defineOpcodeWithIP "FNEGD" $ do
+    comment "Floating Negate (X-form)"
+    comment "There is no single-precision form of this because"
+    comment "the sign bit is always in the same place (MSB)"
+    (frT, frB) <- xform2f
+    defLoc frT (extendDouble (fnegate64 (extractDouble (Loc frB))))
+
+  defineOpcodeWithIP "FNEGS" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
     comment "the sign bit is always in the same place (MSB)"
@@ -237,13 +244,40 @@ floatingPoint = do
     (frT, frB) <- xform2f
     defLoc frT (Loc frB)
 
-  defineOpcodeWithIP "FABS" $ do
+  -- See Note [FABS]
+  defineOpcodeWithIP "FABSD" $ do
     comment "Floating Absolute Value (X-form)"
     (frT, frB) <- xform2f
     defLoc frT (extendDouble (fabs (extractDouble (Loc frB))))
 
-  defineOpcodeWithIP "FNABS" $ do
+  defineOpcodeWithIP "FNABSD" $ do
     comment "Floating Negative Absolute Value (X-form)"
     (frT, frB) <- xform2f
     let av = fabs (extractDouble (Loc frB))
     defLoc frT (extendDouble (fnegate64 av))
+
+  defineOpcodeWithIP "FABSS" $ do
+    comment "Floating Absolute Value (X-form)"
+    (frT, frB) <- xform2f
+    defLoc frT (extendDouble (fabs (extractDouble (Loc frB))))
+
+  defineOpcodeWithIP "FNABSS" $ do
+    comment "Floating Negative Absolute Value (X-form)"
+    (frT, frB) <- xform2f
+    let av = fabs (extractDouble (Loc frB))
+    defLoc frT (extendDouble (fnegate64 av))
+
+
+{- Note [FABS and FNEG]
+
+There is actually only one FABS instruction on PPC: the 64 bit FABS.  The
+operation happens to have the same effect on single and double precision values,
+so only one instruction is necessary.
+
+The LLVM tablegen data includes a single and double precision version,
+presumably to simplify code generation.  We specify semantics here for both to
+mirror LLVM.
+
+The same is true of FNEG
+
+-}
