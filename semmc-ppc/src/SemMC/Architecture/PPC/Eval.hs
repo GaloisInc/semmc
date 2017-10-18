@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -18,6 +19,7 @@ module SemMC.Architecture.PPC.Eval (
   ) where
 
 import           Data.Int ( Int16 )
+import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.ShapedList as SL
 import           Lang.Crucible.BaseTypes
@@ -91,7 +93,7 @@ interpMemrixReg operands (F.WrappedOperand _orep ix) rep =
 interpMemrixRegExtractor :: PPC.MemRIX -> Maybe PPC.GPR
 interpMemrixRegExtractor (PPC.MemRIX mgpr _) = mgpr
 
-interpMemrixOffsetExtractor :: PPC.MemRIX -> Int16
+interpMemrixOffsetExtractor :: PPC.MemRIX -> I.I 14
 interpMemrixOffsetExtractor (PPC.MemRIX _ off) = off
 
 interpMemrrBase :: forall sh s ppc tp

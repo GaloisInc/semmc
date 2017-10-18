@@ -332,14 +332,14 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           base <- case gpr of
                     Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
-          offset' <- S.bvLit sym knownNat (toInteger offset)
+          offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
           S.bvAdd sym base offset'
         operandValue' (PPC.Memrix16 (PPC.MemRIX gpr offset)) = do
           -- ?
           base <- case gpr of
                     Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
-          offset' <- S.bvLit sym knownNat (toInteger offset)
+          offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
           S.bvAdd sym base offset'
         operandValue' (PPC.Memrr (PPC.MemRR gpr1 gpr2)) = do
           gpr1Val <- case gpr1 of
