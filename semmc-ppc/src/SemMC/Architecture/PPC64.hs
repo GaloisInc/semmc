@@ -420,19 +420,6 @@ locationFuncInterpretation =
                                            })
   ]
 
-opcodeToVoid :: ((o == PPC.Operand) ~ 'False) => PPC.Opcode o sh -> Void
-opcodeToVoid x = case x of {}
-
--- This is a hack.
-instance OrdF (PPC.Opcode (T.TemplatedOperand PPC)) where
-  compareF = absurd . opcodeToVoid
-
-instance ShowF (PPC.Opcode (T.TemplatedOperand PPC))
-
-instance EnumF (PPC.Opcode (T.TemplatedOperand PPC)) where
-  enumF = absurd . opcodeToVoid
-  congruentF = absurd . opcodeToVoid
-
 class (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 instance (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
