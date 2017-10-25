@@ -105,11 +105,10 @@ runRemote mexe hostName ts testCases testResults logMessages = do
     Right sshHdl -> do
       logger <- A.async (logRemoteStderr logMessages hostName (SSH.sshStderr sshHdl))
       sendCases <- A.async (sendTestCases ts testCases (SSH.sshStdin sshHdl))
-      recvResults <- A.async (recvTestResults ts testResults (SSH.sshStdout sshHdl))
       -- We only want to end when the receive end finishes (i.e., when the
       -- receive handle is closed due to running out of input).  If we end when
       -- the send end finishes, we might miss some results.
-      _ <- A.wait recvResults
+      recvTestResults ts testResults (SSH.sshStdout sshHdl)
       A.cancel logger
       A.cancel sendCases
       SSH.killConnection sshHdl
