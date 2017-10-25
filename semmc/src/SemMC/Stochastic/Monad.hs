@@ -182,6 +182,7 @@ newLocalEnv env0 = do
   tChan <- C.newChan
   rChan <- C.newChan
   runner <- A.async $ testRunner (seConfig env0) tChan rChan (remoteRunnerOutputChannel (seConfig env0))
+  A.link runner
   let newEnv = LocalSynEnv { seGlobalEnv = env0
                            , seRandomGen = gen
                            , seNonceSource = nonceRef

@@ -20,8 +20,8 @@ module SemMC.Concrete.Execution (
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Exception as E
-import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Control.Monad ( replicateM )
+import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
@@ -135,6 +135,7 @@ sendTestCases ts c h = do
       mtc <- C.readChan c
       case mtc of
         Nothing -> do
+          -- Here 1 means "no more work items" to the remote runner.
           B.hPutBuilder h (B.word8 1)
           IO.hFlush h
         Just tcs -> do -- convert to binary
