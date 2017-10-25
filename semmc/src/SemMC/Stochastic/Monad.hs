@@ -342,7 +342,7 @@ runConcreteTests tests = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
   us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
-  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan tests return
+  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan tests
   case mresults of
     Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) tests
     Just results -> return (CE.indexResults results)
@@ -360,7 +360,7 @@ runConcreteTest tc = do
   tChan <- R.asks seTestChan
   rChan <- R.asks seResChan
   us <- timeoutMicroseconds remoteRunnerTimeoutSeconds
-  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan [tc] return
+  mresults <- liftIO $ IO.timeout us $ CE.withTestResults tChan rChan [tc]
   case mresults of
     Just [result] -> return result
     Nothing -> liftIO $ C.throwIO $ RemoteRunnerTimeout (Proxy @arch) [tc]

@@ -260,9 +260,7 @@ withTestResults :: (MonadIO m)
                 => C.Chan (Maybe [TestCase c i])
                 -> C.Chan (ResultOrError c)
                 -> [TestCase c i]
-                -> ([ResultOrError c] -> m a)
-                -> m a
-withTestResults testChan resChan tests k = do
+                -> m [ResultOrError c]
+withTestResults testChan resChan tests = do
   liftIO (C.writeChan testChan (Just tests))
-  results <- liftIO $ replicateM (length tests) $ C.readChan resChan
-  k results
+  liftIO $ replicateM (length tests) $ C.readChan resChan
