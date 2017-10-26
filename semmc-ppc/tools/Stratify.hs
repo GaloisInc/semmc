@@ -5,7 +5,7 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
-import           Control.Monad ( when )
+import           Control.Monad
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Constraint as C
@@ -32,6 +32,7 @@ import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
 
 import qualified SemMC.Architecture.PPC32 as PPC32
+import qualified SemMC.Util as U
 
 import qualified Logging as L
 import qualified OpcodeLists as OL
@@ -152,14 +153,12 @@ mainWithOptions opts = do
   lcfg <- L.mkLogCfg "main"
   let ?logCfg = lcfg
   logChan <- C.newChan
-  logger <- case oPrintLog opts of
-    Verbose -> A.async (L.printLogMessages lcfg logChan)
-    Quiet -> A.async (L.dumpRemoteRunnerLog logChan)
-  A.link logger
+  void $ case oPrintLog opts of
+    Verbose -> U.asyncLinked (L.printLogMessages lcfg logChan)
+    Quiet -> U.asyncLinked (L.dumpRemoteRunnerLog logChan)
   logThread <- case oLogFile opts of
-    Nothing -> A.async (L.stdErrLogEventConsumer lcfg)
-    Just logFile -> A.async (L.fileLogEventConsumer logFile lcfg)
-  A.link logThread
+    Nothing -> U.asyncLinked (L.stdErrLogEventConsumer lcfg)
+    Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile lcfg)
 
   stThread <- SST.newStatisticsThread (oStatisticsFile opts)
 
@@ -190,7 +189,5 @@ mainWithOptions opts = do
   A.wait logThread
 
   SST.terminateStatisticsThread stThread
-
-  return ()
   where
     initialTestCases = AC.heuristicallyInterestingStates (Proxy @PPC32.PPC)

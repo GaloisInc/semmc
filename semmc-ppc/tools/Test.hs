@@ -32,12 +32,7 @@ main = do
   resChan <- C.newChan
   _ <- C.forkIO (printLogMessages logChan)
   _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- CE.runRemote (Just "remote-runner.ppc32") hostname testSerializer caseChan resChan logChan
-  case merr of
-    Just err -> do
-      IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)
-      IO.exitFailure
-    Nothing -> return ()
+  CE.runRemote (Just "remote-runner.ppc32") hostname testSerializer caseChan resChan logChan
 
 testRunner :: C.Chan (Maybe [CE.TestCase PPCState PPC.Instruction])
            -> C.Chan (CE.ResultOrError PPCState)

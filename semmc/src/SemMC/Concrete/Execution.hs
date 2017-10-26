@@ -1,3 +1,4 @@
+{-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE FlexibleContexts #-}
 -- | A module implementing communication with a remote oracle for machine
 -- instructions
@@ -18,7 +19,6 @@ module SemMC.Concrete.Execution (
   ) where
 
 import qualified Control.Concurrent as C
-import qualified Control.Concurrent.Async as A
 import qualified Control.Exception as E
 import           Control.Monad ( replicateM )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
@@ -35,6 +35,7 @@ import           Data.Word ( Word8, Word16, Word64 )
 import qualified System.IO as IO
 
 import qualified SemMC.Concrete.Execution.SSH as SSH
+import qualified SemMC.Util as U
 
 -- | Functions for converting a 'TestCase' to binary and parsing
 -- binary machine state.
@@ -66,6 +67,9 @@ data LogMessage = LogMessage { lmTime :: T.UTCTime
 -- | The 'runRemote' below provides the main implementation of
 -- 'TestRunner'. The Toy architecture uses a simpler 'TestRunner',
 -- that does everything locally.
+--
+-- The test runner may raise exceptions, e.g. related to failed SSH
+-- connections.
 type TestRunner c i
   =  C.Chan (Maybe [TestCase c i])
   -- ^ A channel with test cases to be run; a 'Nothing' indicates that
@@ -77,9 +81,7 @@ type TestRunner c i
   -- output from the runner process (there shouldn't really be much, but
   -- it is better to collect it than discard it or just dump it to
   -- stderr)
-  -> IO (Maybe SSH.SSHError)
-  -- ^ Errors raised by SSH. Not meaningful for test runners that
-  -- don't use SSH, e.g. Toy arch test runner.
+  -> IO ()
 
 -- | Spawn threads to manage a remote test runner.
 --
@@ -99,20 +101,15 @@ runRemote :: Maybe FilePath
           -- ^ Functions for converting to and from machine states
           -> TestRunner c i
 runRemote mexe hostName ts testCases testResults logMessages = do
-  ehdl <- SSH.ssh SSH.defaultSSHConfig hostName [fromMaybe "remote-runner" mexe]
-  case ehdl of
-    Left err -> return (Just err)
-    Right sshHdl -> do
-      logger <- A.async (logRemoteStderr logMessages hostName (SSH.sshStderr sshHdl))
-      sendCases <- A.async (sendTestCases ts testCases (SSH.sshStdin sshHdl))
-      -- We only want to end when the receive end finishes (i.e., when the
-      -- receive handle is closed due to running out of input).  If we end when
-      -- the send end finishes, we might miss some results.
-      recvTestResults ts testResults (SSH.sshStdout sshHdl)
-      A.cancel logger
-      A.cancel sendCases
-      SSH.killConnection sshHdl
-      return Nothing
+  sshHdl <- SSH.ssh SSH.defaultSSHConfig hostName [fromMaybe "remote-runner" mexe]
+  let logger = logRemoteStderr logMessages hostName (SSH.sshStderr sshHdl)
+  let sendCases = sendTestCases ts testCases (SSH.sshStdin sshHdl)
+  U.withAsyncLinked logger $ \_ -> do
+  U.withAsyncLinked sendCases $ \_ -> do
+  -- We only want to end when the receive end finishes (i.e., when the
+  -- receive handle is closed due to running out of input).  If we end when
+  -- the send end finishes, we might miss some results.
+  recvTestResults ts testResults (SSH.sshStdout sshHdl)
 
 logRemoteStderr :: C.Chan LogMessage -> String -> IO.Handle -> IO ()
 logRemoteStderr logMessages host h = do

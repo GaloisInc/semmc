@@ -217,7 +217,7 @@ toyTestRunnerBackend :: arch ~ Toy => Integer -> I.TestRunner arch
 toyTestRunnerBackend !i tChan rChan _logChan = do
   maybeTests <- C.readChan tChan
   case maybeTests of
-    Nothing -> return Nothing
+    Nothing -> return ()
     Just tests -> do
       i' <- F.foldlM evaluateTest i tests
       toyTestRunnerBackend i' tChan rChan _logChan

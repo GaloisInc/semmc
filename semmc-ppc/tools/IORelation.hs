@@ -4,7 +4,7 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
-import           Control.Monad ( when, unless )
+import           Control.Monad
 import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import           Data.Monoid
@@ -24,6 +24,7 @@ import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Log as L
+import qualified SemMC.Util as U
 
 import qualified Logging as L
 import qualified OpcodeLists as OL
@@ -94,12 +95,10 @@ mainWithOptions opt = do
                                , IOR.lcLogCfg = logCfg
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
-  logger <- case oPrintLog opt of
-    Verbose -> A.async (L.printLogMessages logCfg logChan)
-    Quiet -> A.async (L.dumpRemoteRunnerLog logChan)
-  A.link logger
-  logThread <- A.async (L.stdErrLogEventConsumer logCfg)
-  A.link logThread
+  void $ case oPrintLog opt of
+    Verbose -> U.asyncLinked (L.printLogMessages logCfg logChan)
+    Quiet -> U.asyncLinked (L.dumpRemoteRunnerLog logChan)
+  logThread <- U.asyncLinked (L.stdErrLogEventConsumer logCfg)
 
   (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC32.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
   unless (F.null failures) $ do
@@ -108,6 +107,3 @@ mainWithOptions opt = do
 
   L.logEndWith logCfg
   A.wait logThread
-
-  return ()
-

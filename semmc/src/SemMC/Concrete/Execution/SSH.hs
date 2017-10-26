@@ -8,22 +8,20 @@ module SemMC.Concrete.Execution.SSH (
   SSHConfig(..),
   SSHHandle(..),
   ssh,
-  killConnection,
-  SSHError(..),
   SSHException(..)
   ) where
 
 import qualified Control.Exception as E
-import qualified System.IO.Error as E
 import qualified System.Exit as E
 
-import qualified Control.Concurrent.Async as A
 import           Control.Monad
 import           Data.Maybe ( fromMaybe )
 import           Data.Word ( Word16 )
 import qualified System.IO as IO
 import qualified System.Process as P
 import           Text.Printf ( printf )
+
+import qualified SemMC.Util as U
 
 data SSHConfig =
   SSHConfig { sshLoginName :: Maybe String
@@ -58,9 +56,6 @@ data SSHHandle = SSHHandle { sshStdout :: IO.Handle
 instance Show SSHHandle where
   show (SSHHandle {}) = "SSHHandle <handles omitted>"
 
-data SSHError = SSHError E.IOError
-  deriving (Eq, Show)
-
 -- | Exception raised when SSH subcommand -- e.g. the @ls@ in @ssh ls@
 -- -- fails at runtime. This exception is distinct from 'SSHError'
 -- which is returned (not raised) when the SSH connection itself
@@ -73,28 +68,24 @@ instance E.Exception SSHException
 
 -- | Run a command over SSH.
 --
--- Returns an 'SSHError' if creating the SSH connection itself fails,
--- and raises 'SSHException' later if the command exits non-zero.
+-- This will raise an 'IOError' if creating the SSH connection itself
+-- fails, and will raise an 'SSHException' if the SSH connection
+-- succeeds but the command run remotely over SSH exits non-zero.
 ssh :: SSHConfig
     -- ^ SSH configuration options
     -> String
     -- ^ Hostname to SSH to
     -> [String]
     -- ^ A command to run; this can be empty -- good luck
-    -> IO (Either SSHError SSHHandle)
+    -> IO SSHHandle
 ssh cfg host command = do
-  errOrHdl <- E.tryIOError $ do
-    (Just hin, Just hout, Just herr, ph) <- P.createProcess p'
-    return SSHHandle { sshStdout = hout
-                     , sshStderr = herr
-                     , sshStdin = hin
-                     , sshProcHandle = ph
-                     }
-  case errOrHdl of
-    Right hdl -> do
-      forkExitFailureWatchDog (sshProcHandle hdl)
-      return (Right hdl)
-    Left ioerr -> return (Left (SSHError ioerr))
+  (Just hin, Just hout, Just herr, ph) <- P.createProcess p'
+  forkExitFailureWatchDog ph
+  return SSHHandle { sshStdout = hout
+                   , sshStderr = herr
+                   , sshStdin = hin
+                   , sshProcHandle = ph
+                   }
   where
     p = P.proc (fromMaybe "ssh" (sshExecutablePath cfg)) (makeCommandLine cfg host command)
     p' = p { P.std_in = P.CreatePipe
@@ -105,11 +96,10 @@ ssh cfg host command = do
     -- Monitor the SSH process and raise an exception if it exits
     -- non-zero.
     forkExitFailureWatchDog ph = do
-      exitFailureWatchDogThread <- A.async $ do
+      void $ U.asyncLinked $ do
         exitCode <- P.waitForProcess ph
         when (exitCode /= E.ExitSuccess) $ do
           E.throwIO (SSHException command exitCode)
-      A.link exitFailureWatchDogThread
 
 makeCommandLine :: SSHConfig -> String -> [String] -> [String]
 makeCommandLine cfg host args =
@@ -131,9 +121,3 @@ applyArg (ms, p) acc =
   case ms of
     Nothing -> acc
     Just a -> p : a : acc
-
--- | Terminate the SSH process
---
--- This is not guaranteed to work at all.
-killConnection :: SSHHandle -> IO ()
-killConnection hdl = P.terminateProcess (sshProcHandle hdl)

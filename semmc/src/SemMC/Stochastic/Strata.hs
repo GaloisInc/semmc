@@ -24,10 +24,11 @@ module SemMC.Stochastic.Strata (
 
 import qualified GHC.Err.Located as L
 
-import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import           Text.Printf ( printf )
+
+import           UnliftIO as U
 
 import           Data.Parameterized.Classes ( showF )
 import qualified Data.Parameterized.Map as MapF
@@ -66,9 +67,8 @@ stratifiedSynthesis :: forall arch t
                     => SynEnv t arch
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
-  A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $ do
-    (localEnv, testRunner') <- newLocalEnv env0
-    runSyn localEnv strata `C.finally` A.cancel testRunner'
+  A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $
+    runSynInNewLocalEnv env0 strata
   STM.readTVarIO (seFormulas env0)
 
 strata :: (SynC arch)
@@ -83,11 +83,12 @@ processWorklist = do
     Nothing -> return ()
     Just (Some (Witness so)) -> do
       -- Catch all exceptions in the stratification process.
-      (res, strataTime) <- timeSyn (tryEither (strataOne so))
+      (res, strataTime) <- timeSyn (U.tryAny (strataOne so))
       case res of
         Left err -> do
           -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
           L.logM L.Error $ printf "Error while processing opcode %s: %s" (showF so) (show err)
+          throwIO err
         -- Timeout, so we can't learn it yet.  Come back later
         Right Nothing -> do
           L.logM L.Info $ printf "Timeout while processing opcode %s" (showF so)

@@ -19,11 +19,10 @@ module SemMC.Stochastic.Monad (
   SynC,
   LocalSynEnv(..),
   runSyn,
-  tryEither,
-  newLocalEnv,
-  asyncWithIsolatedEnv,
+  runSynInNewLocalEnv,
   -- * Environment queries
   askGen,
+  askGlobalEnv,
   askBaseSet,
   askConfig,
   askParallelSynth,
@@ -54,13 +53,12 @@ module SemMC.Stochastic.Monad (
 import qualified GHC.Err.Located as L
 
 import qualified Control.Concurrent as C
-import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as C
 import qualified Control.Monad.Catch as MC
 import qualified Control.Monad.Reader as R
 import           Control.Monad.Trans ( MonadIO, liftIO )
-import           Data.IORef ( IORef, readIORef, modifyIORef', newIORef )
+import           Data.IORef ( IORef, readIORef, modifyIORef' )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text.IO as T
 import qualified Data.Time.Clock as TM
@@ -89,7 +87,6 @@ import qualified SemMC.Util as U
 import qualified SemMC.Worklist as WL
 
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Concrete.Execution.SSH as SSH
 import           SemMC.Stochastic.Constraints ( SynC )
 import           SemMC.Stochastic.IORelation ( IORelation )
 import           SemMC.Stochastic.Initialize ( Config(..), SynEnv(..), mkFormulaFilename )
@@ -155,10 +152,6 @@ instance (SynC arch, Typeable arch) => C.Exception (RemoteRunnerTimeout arch)
 runSyn :: forall arch t a. LocalSynEnv t arch -> Syn t arch a -> IO a
 runSyn e a = R.runReaderT (unSyn a) e
 
--- | Run a 'Syn' action, returning thrown exceptions as a 'Left'
-tryEither :: Syn t arch a -> Syn t arch (Either C.SomeException a)
-tryEither = U.tryAny
-
 -- | Run a computation under the general timeout for the maximum operation
 -- length for any synthesis operation
 withTimeout :: Syn t arch a -> Syn t arch (Maybe a, TM.NominalDiffTime)
@@ -175,28 +168,24 @@ timeSyn action = do
   end <- liftIO TM.getCurrentTime
   return (res, TM.diffUTCTime end start)
 
-newLocalEnv :: SynEnv t arch -> IO (LocalSynEnv t arch, A.Async (Maybe SSH.SSHError))
-newLocalEnv env0 = do
-  nonceRef <- newIORef 0
-  gen <- DA.createGen
-  tChan <- C.newChan
-  rChan <- C.newChan
-  runner <- A.async $ testRunner (seConfig env0) tChan rChan (remoteRunnerOutputChannel (seConfig env0))
-  A.link runner
+-- | Run a 'Syn' computation in a new local env with a new test
+-- runner, and clean up the test runner at the end.
+runSynInNewLocalEnv :: (U.MonadIO m, U.MonadUnliftIO m)
+                    => SynEnv t arch -> Syn t arch a -> m a
+runSynInNewLocalEnv env0 action = do
+  nonceRef <- U.newIORef 0
+  gen <- liftIO $ DA.createGen
+  tChan <- U.newChan
+  rChan <- U.newChan
+  runner <- U.asyncLinked $ liftIO $
+    testRunner (seConfig env0) tChan rChan (remoteRunnerOutputChannel (seConfig env0))
   let newEnv = LocalSynEnv { seGlobalEnv = env0
                            , seRandomGen = gen
                            , seNonceSource = nonceRef
                            , seTestChan = tChan
                            , seResChan = rChan
                            }
-  return (newEnv, runner)
-
-asyncWithIsolatedEnv :: Syn t arch a -> Syn t arch (A.Async a)
-asyncWithIsolatedEnv act = do
-  env0 <- R.ask
-  (loc, runner) <- liftIO $ newLocalEnv (seGlobalEnv env0)
-  a <- liftIO $ A.async (runSyn loc act `C.finally` A.cancel runner)
-  return a
+  liftIO $ runSyn newEnv action `U.finally` U.cancel runner
 
 -- | Record a learned formula for the opcode in the state
 recordLearnedFormula :: (SynC arch, F.ConvertShape sh)
@@ -235,6 +224,9 @@ addWork op = do
 
 askConfig :: Syn t arch (Config arch)
 askConfig = R.asks (seConfig . seGlobalEnv)
+
+askGlobalEnv :: Syn t arch (SynEnv t arch)
+askGlobalEnv = R.asks seGlobalEnv
 
 askGen :: Syn t arch DA.Gen
 askGen = R.asks seRandomGen
