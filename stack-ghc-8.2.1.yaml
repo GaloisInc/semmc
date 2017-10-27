@@ -1,9 +1,6 @@
 resolver: nightly-2017-09-05
 
 packages:
-#- submodules/dismantle/dismantle-arm
-#- submodules/dismantle/dismantle-ppc
-- submodules/dismantle/dismantle-tablegen
 - semmc
 - semmc-ppc
 - semmc-x86_64
@@ -17,7 +14,11 @@ packages:
   extra-dep: true
 - location: submodules/parameterized-utils
   extra-dep: true
+- location: submodules/dismantle/dismantle-tablegen
+  extra-dep: true
 - location: submodules/dismantle/dismantle-ppc
+  extra-dep: true
+- location: submodules/dismantle/dismantle-arm
   extra-dep: true
 - location:
     git: git@github.com:GaloisInc/elf-edit
@@ -27,9 +28,7 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- crucible-0.3.1
 - located-base-0.1.1.1
-- parameterized-utils-0.1.9
 - regex-1.0.0.0
 - s-cargot-0.1.2.0
 - time-locale-compat-0.1.1.3
