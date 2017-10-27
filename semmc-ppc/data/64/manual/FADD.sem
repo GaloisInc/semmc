@@ -1,8 +1,8 @@
 ;; Floating Add (A-form)
 ((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc))) 
-  (in (frB frA))
+  (in (frB frA 'IP))
   (defs 
     ((frT 
        (concat 
          #x0000000000000000
-         ((_ call "fp.add64") ((_ extract 127 64) frA) ((_ extract 127 64) frB)))))))
+         ((_ call "fp.add64") ((_ extract 127 64) frA) ((_ extract 127 64) frB)))) ('IP (bvadd 'IP #x0000000000000004)))))

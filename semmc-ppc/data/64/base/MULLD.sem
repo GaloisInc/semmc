@@ -1,5 +1,5 @@
 ((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
-  (in (rB rA))
+  (in (rB rA 'IP))
   (defs 
     ((rT 
-       ((_ extract 127 64) (bvmul ((_ sign_extend 64) rA) ((_ sign_extend 64) rB)))))))
+       ((_ extract 127 64) (bvmul ((_ sign_extend 64) rA) ((_ sign_extend 64) rB)))) ('IP (bvadd 'IP #x0000000000000004)))))

@@ -1,6 +1,6 @@
 ;; Store Word (D-form)
 ((operands ((memref . 'Memri) (rS . 'Gprc))) 
-  (in ('Mem memref rS))
+  (in ('Mem memref rS 'IP))
   (defs 
     (('Mem 
        ((_ call "write_mem.32") 
@@ -11,4 +11,4 @@
              #x0000000000000000
              ((_ call "ppc.memri_reg") memref))
            ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))
-         ((_ extract 63 32) rS))))))
+         ((_ extract 63 32) rS))) ('IP (bvadd 'IP #x0000000000000004)))))

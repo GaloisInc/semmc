@@ -8,6 +8,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -331,14 +332,14 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           base <- case gpr of
                     Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
-          offset' <- S.bvLit sym knownNat (toInteger offset)
+          offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
           S.bvAdd sym base offset'
         operandValue' (PPC.Memrix16 (PPC.MemRIX gpr offset)) = do
           -- ?
           base <- case gpr of
                     Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
-          offset' <- S.bvLit sym knownNat (toInteger offset)
+          offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
           S.bvAdd sym base offset'
         operandValue' (PPC.Memrr (PPC.MemRR gpr1 gpr2)) = do
           gpr1Val <- case gpr1 of
@@ -396,27 +397,28 @@ instance A.Architecture PPC where
   operandValue _ = operandValue
   operandToLocation _ = operandToLocation
   uninterpretedFunctions = UF.uninterpretedFunctions
-  locationFuncInterpretation _proxy = locationFuncInterpretation
+  locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
 
-locationFuncInterpretation :: [(String, F.LocationFuncInterp PPC)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC)]
 locationFuncInterpretation =
-  [ ("ppc.memri_reg", F.LocationFuncInterp interpMemriReg)
-  , ("ppc.memrix_reg", F.LocationFuncInterp interpMemrixReg)
-  , ("ppc.memrr_base", F.LocationFuncInterp interpMemrrBase)
+  [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemriReg
+                                               , A.exprInterpName = 'interpMemriRegExtractor
+                                               })
+  , ("ppc.memrix_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrixReg
+                                                , A.exprInterpName = 'interpMemrixRegExtractor
+                                                })
+  , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrBase
+                                                , A.exprInterpName = 'interpMemrrBaseExtractor
+                                                })
+  , ("ppc.memrr_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemrrOffsetExtractor
+                                                  })
+  , ("ppc.memrix_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemrixOffsetExtractor
+                                                   })
+  , ("ppc.memri_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemriOffsetExtractor
+                                                  })
+  , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
+                                           })
   ]
-
-opcodeToVoid :: ((o == PPC.Operand) ~ 'False) => PPC.Opcode o sh -> Void
-opcodeToVoid x = case x of {}
-
--- This is a hack.
-instance OrdF (PPC.Opcode (T.TemplatedOperand PPC)) where
-  compareF = absurd . opcodeToVoid
-
-instance ShowF (PPC.Opcode (T.TemplatedOperand PPC))
-
-instance EnumF (PPC.Opcode (T.TemplatedOperand PPC)) where
-  enumF = absurd . opcodeToVoid
-  congruentF = absurd . opcodeToVoid
 
 class (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 instance (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh

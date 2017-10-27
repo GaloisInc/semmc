@@ -18,7 +18,13 @@ module SemMC.Architecture (
   Architecture(..),
   Location,
   IsLocation(..),
-  module SemMC.Architecture.Internal
+  FunctionInterpretation(..),
+  Instruction,
+  Operand,
+  IsOperand,
+  Opcode,
+  IsOpcode,
+  OperandType
   ) where
 
 import           Data.EnumF
@@ -27,6 +33,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
+import qualified Language.Haskell.TH as TH
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
@@ -34,6 +41,7 @@ import qualified Lang.Crucible.Solver.Interface as S
 import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula ( LocationFuncInterp )
+import           SemMC.Formula.Eval ( Evaluator )
 
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.
@@ -79,5 +87,20 @@ class (IsOperand (Operand arch),
   -- | Functions used to simplify defined locations in parameterized formulas
   -- that are defined as functions of an input parameter into a concrete
   -- location
-  locationFuncInterpretation :: proxy arch -> [(String, LocationFuncInterp arch)]
+  locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t arch)]
+
+data FunctionInterpretation t arch =
+  FunctionInterpretation { locationInterp :: LocationFuncInterp arch
+                         -- ^ The function interpretation to apply to functions
+                         -- appearing in location definition contexts (i.e., the
+                         -- 'F.Parameter' function type).
+                         , exprInterpName :: TH.Name
+                         -- ^ The (template haskell) 'TH.Name' of the function
+                         -- to apply statically during formula translation (at
+                         -- the value level) to eliminate an uninterpreted
+                         -- function appearing in a semantics expression.
+                         , exprInterp :: Evaluator t
+                         -- ^ The evaluator to apply to uninterpreted functions
+                         -- during formula instantiation (in Formula.Instantiate)
+                         }
 

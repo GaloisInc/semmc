@@ -74,19 +74,19 @@ manual bitSize = runSem $ do
   manualBranch
   manualMemory
   floatingPoint
-  defineOpcode "MTLR" $ do
+  defineOpcodeWithIP "MTLR" $ do
     rA <- param "rA" gprc naturalBV
     input rA
     defLoc lnk (Loc rA)
-  defineOpcode "MFLR" $ do
+  defineOpcodeWithIP "MFLR" $ do
     rA <- param "rA" gprc naturalBV
     input lnk
     defLoc rA (Loc lnk)
-  defineOpcode "MTCTR" $ do
+  defineOpcodeWithIP "MTCTR" $ do
     rA <- param "rA" gprc naturalBV
     input rA
     defLoc ctr (Loc rA)
-  defineOpcode "MFCTR" $ do
+  defineOpcodeWithIP "MFCTR" $ do
     rA <- param "rA" gprc naturalBV
     input ctr
     defLoc rA (Loc ctr)

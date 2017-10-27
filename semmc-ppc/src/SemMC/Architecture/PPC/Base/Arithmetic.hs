@@ -12,24 +12,24 @@ import SemMC.Architecture.PPC.Base.Core
 
 baseArithmetic :: (?bitSize :: BitSize) => SemM 'Top ()
 baseArithmetic = do
-  defineOpcode "ADD4" $ do
+  defineOpcodeWithIP "ADD4" $ do
     (rT, rA, rB) <- xoform3
     defLoc rT (bvadd (Loc rA) (Loc rB))
-  defineOpcode "SUBF" $ do
+  defineOpcodeWithIP "SUBF" $ do
     (rT, rA, rB) <- xoform3
     defLoc rT (bvsub (Loc rB) (Loc rA))
-  defineOpcode "NEG" $ do
+  defineOpcodeWithIP "NEG" $ do
     rT <- param "rT" gprc naturalBV
     rA <- param "rA" gprc naturalBV
     input rA
     defLoc rT (bvadd (bvnot (Loc rA)) (naturalLitBV 0x1))
-  defineOpcode "MULLW" $ do
+  defineOpcodeWithIP "MULLW" $ do
     (rT, rA, rB) <- xoform3
     let lhs = sext' 64 (lowBits 32 (Loc rA))
     let rhs = sext' 64 (lowBits 32 (Loc rB))
     let prod = bvmul lhs rhs
     defLoc rT (zext (lowBits64 32 prod))
-  defineOpcode "MULHW" $ do
+  defineOpcodeWithIP "MULHW" $ do
     comment "Multiply High Word (XO-form)"
     comment "Multiply the low 32 bits of two registers, producing a 64 bit result."
     comment "Save the high 32 bits of the result into the output register"
@@ -45,14 +45,14 @@ baseArithmetic = do
     -- NOTE: the high bits are technically undefined.  How do we want to
     -- represent that?
     defLoc rT (zext (highBits64 32 prod))
-  defineOpcode "MULHWU" $ do
+  defineOpcodeWithIP "MULHWU" $ do
     comment "Multiply High Word Unsigned (XO-form)"
     (rT, rA, rB) <- xoform3
     let lhs = zext' 64 (lowBits 32 (Loc rA))
     let rhs = zext' 64 (lowBits 32 (Loc rB))
     let prod = bvmul lhs rhs
     defLoc rT (zext (highBits64 32 prod))
-  defineOpcode "ADDI" $ do
+  defineOpcodeWithIP "ADDI" $ do
     comment "Add Immediate (D-form)"
     comment "We hand wrote this formula because it is one of the few that"
     comment "have special treatment of r0"
@@ -63,7 +63,7 @@ baseArithmetic = do
     input si
     let lhs = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
     defLoc rT (bvadd lhs (sext (Loc si)))
-  defineOpcode "ADDIS" $ do
+  defineOpcodeWithIP "ADDIS" $ do
     comment "Add Immediate Shifted (D-form)"
     comment "Like 'ADDI', we hand wrote this formula because it is one of the few that"
     comment "have special treatment of r0"
@@ -76,7 +76,7 @@ baseArithmetic = do
     let imm = concat (Loc si) (LitBV 16 0x0)
     defLoc rT (bvadd lhs (sext imm))
 
-  defineOpcode "ADDC" $ do
+  defineOpcodeWithIP "ADDC" $ do
     comment "Add Carrying (XO-form)"
     (rT, rA, rB) <- xoform3
     input xer
@@ -84,7 +84,7 @@ baseArithmetic = do
     let eres = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (Loc rB))
     defLoc rT (lowBits' len eres)
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
-  defineOpcode "SUBFC" $ do
+  defineOpcodeWithIP "SUBFC" $ do
     comment "Subtract From Carrying (XO-form)"
     (rT, rA, rB) <- xoform3
     input xer
@@ -93,7 +93,7 @@ baseArithmetic = do
     let eres1 = bvadd eres0 (LitBV (len + 1) 0x1)
     defLoc rT (lowBits' len eres1)
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
-  defineOpcode "ADDE" $ do
+  defineOpcodeWithIP "ADDE" $ do
     comment "Add Extended (XO-form)"
     (rT, rA, rB) <- xoform3
     input xer
@@ -102,7 +102,7 @@ baseArithmetic = do
     let eres1 = bvadd eres0 (zext' (len + 1) (xerBit CA (Loc xer)))
     defLoc rT (lowBits' len eres1)
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
-  defineOpcode "SUBFE" $ do
+  defineOpcodeWithIP "SUBFE" $ do
     comment "Subtract From Extended (XO-form)"
     (rT, rA, rB) <- xoform3
     input xer
@@ -114,15 +114,15 @@ baseArithmetic = do
 
   when (?bitSize == Size64) $ do
     -- Not valid in 32 bit mode
-    defineOpcode "MULLD" $ do
+    defineOpcodeWithIP "MULLD" $ do
       (rT, rA, rB) <- xoform3
       let prod = bvmul (sext' 128 (Loc rA)) (sext' 128 (Loc rB))
       defLoc rT (lowBits128 64 prod)
-    defineOpcode "MULHD" $ do
+    defineOpcodeWithIP "MULHD" $ do
       (rT, rA, rB) <- xoform3
       let prod = bvmul (sext' 128 (Loc rA)) (sext' 128 (Loc rB))
       defLoc rT (highBits128 64 prod)
-    defineOpcode "MULHDU" $ do
+    defineOpcodeWithIP "MULHDU" $ do
       (rT, rA, rB) <- xoform3
       let prod = bvmul (zext' 128 (Loc rA)) (zext' 128 (Loc rB))
       defLoc rT (highBits128 64 prod)

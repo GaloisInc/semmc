@@ -1,8 +1,8 @@
 ;; Floating Multiply Single (A-form)
 ((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc))) 
-  (in (frB frA))
+  (in (frB frA 'IP))
   (defs 
     ((frT 
        (concat 
          #x000000000000000000000000
-         ((_ call "fp.mul32") ((_ extract 127 96) frA) ((_ extract 127 96) frB)))))))
+         ((_ call "fp.mul32") ((_ extract 127 96) frA) ((_ extract 127 96) frB)))) ('IP (bvadd 'IP #x00000004)))))

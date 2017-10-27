@@ -1,2 +1,5 @@
 ;; Extend Sign Word (X-form)
-((operands ((rA . 'Gprc) (rS . 'Gprc))) (in (rS)) (defs ((rA ((_ sign_extend 32) ((_ extract 63 32) rS))))))
+((operands ((rA . 'Gprc) (rS . 'Gprc))) 
+  (in (rS 'IP))
+  (defs 
+    ((rA ((_ sign_extend 32) ((_ extract 63 32) rS))) ('IP (bvadd 'IP #x0000000000000004)))))

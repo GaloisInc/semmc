@@ -1,6 +1,6 @@
 ;; Floating Multiply-Add (A-form)
 ((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc) (frC . 'Fprc))) 
-  (in (frC frB frA))
+  (in (frC frB frA 'IP))
   (defs 
     ((frT 
        (concat 
@@ -8,4 +8,4 @@
          ((_ call "fp.muladd64") 
            ((_ extract 127 64) frA)
            ((_ extract 127 64) frB)
-           ((_ extract 127 64) frC)))))))
+           ((_ extract 127 64) frC)))) ('IP (bvadd 'IP #x0000000000000004)))))

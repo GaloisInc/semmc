@@ -18,6 +18,7 @@ library
                        SemMC.Architecture.PPC64
                        SemMC.Architecture.PPC64.Opcodes
                        SemMC.Architecture.PPC.Base
+                       SemMC.Architecture.PPC.Eval
                        SemMC.Architecture.PPC.Location
   other-modules:       SemMC.Architecture.PPC32.ConcreteState
                        SemMC.Architecture.PPC64.ConcreteState
@@ -31,7 +32,6 @@ library
                        SemMC.Architecture.PPC.Base.FP
                        SemMC.Architecture.PPC.Base.Memory
                        SemMC.Architecture.PPC.Base.Special
-                       SemMC.Architecture.PPC.Eval
                        SemMC.Architecture.PPC.Pseudo
                        SemMC.Architecture.PPC.Shared
                        SemMC.Architecture.PPC.UF
