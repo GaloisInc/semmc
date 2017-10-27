@@ -177,8 +177,7 @@ runSynInNewLocalEnv env0 action = do
   gen <- liftIO $ DA.createGen
   tChan <- U.newChan
   rChan <- U.newChan
-  runner <- U.asyncLinked $ liftIO $
-    testRunner (seConfig env0) tChan rChan (remoteRunnerOutputChannel (seConfig env0))
+  runner <- U.asyncLinked $ liftIO $ testRunner (seConfig env0) tChan rChan
   let newEnv = LocalSynEnv { seGlobalEnv = env0
                            , seRandomGen = gen
                            , seNonceSource = nonceRef

@@ -57,6 +57,12 @@ import qualified GHC.Stack as Ghc
 import qualified Control.Concurrent as Cc
 import qualified Control.Exception as Cc
 
+import qualified Data.Time.Clock as T
+import qualified Data.Time.Format as T
+
+import qualified System.IO as IO
+import qualified System.IO.Unsafe as IO
+
 import qualified UnliftIO as U
 
 import qualified Control.Concurrent.STM as Stm
@@ -64,8 +70,6 @@ import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as Map
 import           System.Directory ( createDirectoryIfMissing )
-import qualified System.IO as IO
-import qualified System.IO.Unsafe as IO
 import           Text.Printf ( printf )
 
 ----------------------------------------------------------------
@@ -294,6 +298,7 @@ data LogEvent = LogEvent
   , leMsg      :: LogMsg
   , leThreadId :: ThreadId
     -- ^ ID of thread that generated the event.
+  , leTime     :: T.UTCTime
   }
 
 -- | Logging configuration.
@@ -314,9 +319,11 @@ data LogCfg = LogCfg
 -- | Format a log event.
 prettyLogEvent :: LogEvent -> String
 prettyLogEvent le =
-  printf "[%s][%s][%s]\n%s"
-    (show $ leLevel le) location (leThreadId le) (leMsg le)
+  printf "[%s][%s][%s][%s]\n%s"
+    (show $ leLevel le) time location (leThreadId le) (leMsg le)
   where
+    time :: String
+    time = T.formatTime T.defaultTimeLocale "%T" (leTime le)
     location :: String
     location = printf "%s:%s"
       (prettyFun maybeFun) (Ghc.prettySrcLoc srcLoc)
@@ -346,13 +353,15 @@ writeLogEvent :: LogCfg -> Ghc.CallStack -> LogLevel -> LogMsg -> IO ()
 writeLogEvent cfg cs level msg = do
   tid <- show <$> Cc.myThreadId
   ptid <- prettyThreadId cfg tid
-  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event ptid))
+  time <- T.getCurrentTime
+  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event ptid time))
   where
-    event tid = LogEvent
+    event tid time = LogEvent
       { leCallSite = callSite
       , leLevel = level
       , leMsg = msg
       , leThreadId = tid
+      , leTime = time
       }
     -- | The call stack has the most recent call first. Assuming
     -- 'writeLogEvent' is always called in a logging function with a

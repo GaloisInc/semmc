@@ -13,13 +13,13 @@ module SemMC.Concrete.Execution (
   ResultOrError(..),
   RunnerResultError(..),
   asResultOrError,
-  LogMessage(..),
   TestSerializer(..),
   TestRunner
   ) where
 
 import qualified Control.Concurrent as C
 import qualified Control.Exception as E
+import           Control.Monad
 import           Control.Monad ( replicateM )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.Binary.Get as G
@@ -30,9 +30,9 @@ import qualified Data.Foldable as F
 import           Data.Int ( Int32 )
 import qualified Data.Map.Strict as M
 import           Data.Maybe ( fromMaybe )
-import qualified Data.Time.Clock as T
 import           Data.Word ( Word8, Word16, Word64 )
 import qualified System.IO as IO
+import           Text.Printf
 
 import qualified SemMC.Concrete.Execution.SSH as SSH
 import qualified SemMC.Util as U
@@ -58,12 +58,6 @@ data TestResult c =
              }
   deriving (Show)
 
-data LogMessage = LogMessage { lmTime :: T.UTCTime
-                             , lmHost :: String
-                             , lmMessage :: String
-                             }
-                deriving (Eq, Ord, Show)
-
 -- | The 'runRemote' below provides the main implementation of
 -- 'TestRunner'. The Toy architecture uses a simpler 'TestRunner',
 -- that does everything locally.
@@ -76,11 +70,6 @@ type TestRunner c i
   -- the stream should be terminated.
   -> C.Chan (ResultOrError c)
   -- ^ The channel that results are written to (can include error cases)
-  -> C.Chan LogMessage
-  -- ^ A channel to record log messages on; these include the stderr
-  -- output from the runner process (there shouldn't really be much, but
-  -- it is better to collect it than discard it or just dump it to
-  -- stderr)
   -> IO ()
 
 -- | Spawn threads to manage a remote test runner.
@@ -93,16 +82,17 @@ type TestRunner c i
 -- is expected to be in the @PATH@, and password-less auth is assumed.  It is
 -- also assumed that the @remote-runner@ executable is in the @PATH@ on the
 -- remote machine.
-runRemote :: Maybe FilePath
+runRemote :: (U.HasLogCfg)
+          => Maybe FilePath
           -- ^ Optionally, a different name for the remote runner executable
           -> String
           -- ^ The hostname to run test cases on
           -> TestSerializer c i
           -- ^ Functions for converting to and from machine states
           -> TestRunner c i
-runRemote mexe hostName ts testCases testResults logMessages = do
+runRemote mexe hostName ts testCases testResults = do
   sshHdl <- SSH.ssh SSH.defaultSSHConfig hostName [fromMaybe "remote-runner" mexe]
-  let logger = logRemoteStderr logMessages hostName (SSH.sshStderr sshHdl)
+  let logger = logRemoteStderr hostName (SSH.sshStderr sshHdl)
   let sendCases = sendTestCases ts testCases (SSH.sshStdin sshHdl)
   U.withAsyncLinked logger $ \_ -> do
   U.withAsyncLinked sendCases $ \_ -> do
@@ -111,16 +101,12 @@ runRemote mexe hostName ts testCases testResults logMessages = do
   -- the send end finishes, we might miss some results.
   recvTestResults ts testResults (SSH.sshStdout sshHdl)
 
-logRemoteStderr :: C.Chan LogMessage -> String -> IO.Handle -> IO ()
-logRemoteStderr logMessages host h = do
+-- | Log the stderr output of the remote runner.
+logRemoteStderr :: (U.HasLogCfg) => String -> IO.Handle -> IO ()
+logRemoteStderr host h = forever $ do
   l <- IO.hGetLine h
-  t <- T.getCurrentTime
-  let lm = LogMessage { lmTime = t
-                      , lmHost = host
-                      , lmMessage = l
-                      }
-  C.writeChan logMessages lm
-  logRemoteStderr logMessages host h
+  let msg = printf "remote runner stderr @%s: %s" host l
+  U.logIO U.Warn msg
 
 sendTestCases :: TestSerializer c i -> C.Chan (Maybe [TestCase c i]) -> IO.Handle -> IO ()
 sendTestCases ts c h = do

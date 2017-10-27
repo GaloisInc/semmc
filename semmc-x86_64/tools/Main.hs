@@ -3,7 +3,6 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Data.ByteString.Lazy as LB
-import qualified Data.Time.Format as T
 import qualified Data.Vector.Sized as V
 import qualified System.Environment as E
 import qualified System.Exit as IO
@@ -17,12 +16,12 @@ import           SemMC.X86 ( Instruction, MachineState(..), testSerializer, YMM(
 main :: IO ()
 main = do
   [hostname] <- E.getArgs
-  logChan <- C.newChan
   caseChan <- C.newChan
   resChan <- C.newChan
-  U.withAsyncLinked (printLogMessages logChan) $ \_ -> do
+  lcfg <- U.mkLogCfg "main"
+  U.withLogCfg lcfg $ do
   U.withAsyncLinked (testRunner caseChan resChan) $ \_ -> do
-  CE.runRemote Nothing hostname testSerializer caseChan resChan logChan
+  CE.runRemote Nothing hostname testSerializer caseChan resChan
 
 testRunner :: C.Chan (Maybe [CE.TestCase MachineState Instruction])
            -> C.Chan (CE.ResultOrError MachineState)
@@ -85,10 +84,3 @@ testVector2 = testVector1 { CE.testNonce = 22
                           , 99, 0, 0, 0, 0, 0
                           , 0, 0, 0, 0, 0
                           ]
-
-printLogMessages :: C.Chan CE.LogMessage -> IO ()
-printLogMessages c = do
-  msg <- C.readChan c
-  let fmtTime = T.formatTime T.defaultTimeLocale "%T" (CE.lmTime msg)
-  IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (CE.lmHost msg) (CE.lmMessage msg)
-  printLogMessages c

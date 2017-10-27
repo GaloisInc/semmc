@@ -1,8 +1,8 @@
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 -- | A tool for learning IORelations of PPC instructions
 module Main ( main ) where
 
-import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import           Control.Monad
 import qualified Data.Constraint as C
@@ -26,18 +26,14 @@ import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Log as L
 import qualified SemMC.Util as U
 
-import qualified Logging as L
 import qualified OpcodeLists as OL
 import qualified Util as U
-
-data Logging = Verbose | Quiet
 
 data Options = Options { oRelDir :: FilePath
                        , oNumThreads :: Int
                        , oTimeoutSeconds :: Int
                        , oRemoteRunner :: FilePath
                        , oRemoteHost :: String
-                       , oPrintLog :: Logging
                        }
 
 optionsParser :: O.Parser Options
@@ -61,9 +57,6 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
                                         <> O.help "The host to run the remote work on" )
-                        <*> O.flag Quiet Verbose ( O.long "verbose"
-                                                 <> O.short 'V'
-                                                 <> O.help "Print log messages from the remote runner" )
 
 main :: IO ()
 main = O.execParser optParser >>= mainWithOptions
@@ -82,22 +75,19 @@ mainWithOptions opt = do
     IO.hPutStr IO.stderr $ printf "Invalid timeout: %d\n" (oNumThreads opt)
     IO.exitFailure
 
-  logChan <- C.newChan
   gen <- A.createGen
   logCfg <- L.mkLogCfg "main"
+  L.withLogCfg logCfg $ do
   let cfg = IOR.LearningConfig { IOR.lcIORelationDirectory = oRelDir opt
                                , IOR.lcNumThreads = oNumThreads opt
                                , IOR.lcAssemble = PPC.assembleInstruction
                                , IOR.lcTestGen = AC.randomState (Proxy @PPC32.PPC) gen
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
-                               , IOR.lcTestRunner = CE.runRemote (Just (oRemoteRunner opt)) (oRemoteHost opt) PPC32.testSerializer
-                               , IOR.lcLog = logChan
+                               , IOR.lcTestRunner =
+                                   CE.runRemote (Just (oRemoteRunner opt)) (oRemoteHost opt) PPC32.testSerializer
                                , IOR.lcLogCfg = logCfg
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
-  void $ case oPrintLog opt of
-    Verbose -> U.asyncLinked (L.printLogMessages logCfg logChan)
-    Quiet -> U.asyncLinked (L.dumpRemoteRunnerLog logChan)
   logThread <- U.asyncLinked (L.stdErrLogEventConsumer logCfg)
 
   (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC32.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)

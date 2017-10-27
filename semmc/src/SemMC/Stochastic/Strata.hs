@@ -88,6 +88,7 @@ processWorklist = do
         Left err -> do
           -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
           L.logM L.Error $ printf "Error while processing opcode %s: %s" (showF so) (show err)
+          -- And then die, since errors are bugs at this point.
           throwIO err
         -- Timeout, so we can't learn it yet.  Come back later
         Right Nothing -> do

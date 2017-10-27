@@ -1,9 +1,8 @@
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
 
-import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import           Control.Monad
 import           Data.Monoid
@@ -34,11 +33,8 @@ import qualified SemMC.Stochastic.Strata as SST
 import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Util as U
 
-import qualified Logging as L
 import qualified OpcodeLists as OL
 import qualified Util as Util
-
-data Logging = Verbose | Quiet
 
 data Options = Options { oRelDir :: FilePath
                        , oBaseDir :: FilePath
@@ -54,7 +50,6 @@ data Options = Options { oRelDir :: FilePath
                        , oRemoteTimeoutSeconds :: Int
                        , oRemoteRunner :: FilePath
                        , oRemoteHost :: String
-                       , oPrintLog :: Logging
                        }
 
 optionsParser :: O.Parser Options
@@ -121,9 +116,6 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
                                         <> O.help "The host to run the remote work on" )
-                        <*> O.flag Quiet Verbose ( O.long "verbose"
-                                                 <> O.short 'V'
-                                                 <> O.help "Print log messages from the remote runner" )
 
 main :: IO ()
 main = O.execParser optParser >>= mainWithOptions
@@ -151,11 +143,7 @@ mainWithOptions opts = do
                                      }
 
   lcfg <- L.mkLogCfg "main"
-  let ?logCfg = lcfg
-  logChan <- C.newChan
-  void $ case oPrintLog opts of
-    Verbose -> U.asyncLinked (L.printLogMessages lcfg logChan)
-    Quiet -> U.asyncLinked (L.dumpRemoteRunnerLog logChan)
+  L.withLogCfg lcfg $ do
   logThread <- case oLogFile opts of
     Nothing -> U.asyncLinked (L.stdErrLogEventConsumer lcfg)
     Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile lcfg)
@@ -173,7 +161,6 @@ mainWithOptions opts = do
                        , SST.parallelOpcodes = oParallelOpcodes opts
                        , SST.parallelSynth = oParallelSynth opts
                        , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) serializer
-                       , SST.remoteRunnerOutputChannel = logChan
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
                        }

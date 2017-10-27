@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- | An interface on top of the command line @ssh@ binary
 --
 -- Clients can connect to remote machines and execute commands.  The interface

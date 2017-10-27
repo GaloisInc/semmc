@@ -49,7 +49,6 @@ import qualified Dismantle.Instruction.Random as D
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.View as V
-import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Log as L
 import qualified SemMC.Worklist as WL
 
@@ -69,7 +68,6 @@ data LearningConfig arch =
                  , lcTestGen :: IO (V.ConcreteState arch)
                  , lcTimeoutSeconds :: Int
                  , lcTestRunner :: TestRunner arch
-                 , lcLog :: C.Chan CE.LogMessage
                  , lcLogCfg :: L.LogCfg
                  }
 
@@ -130,7 +128,7 @@ learnIORelations cfg proxy toFP ops = do
   A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
     rChan <- C.newChan
-    void $ U.asyncLinked $ lcTestRunner cfg tChan rChan (lcLog cfg)
+    void $ U.asyncLinked $ lcTestRunner cfg tChan rChan
     nref <- STM.newTVarIO 0
     agen <- DA.createGen
     let lle = LocalLearningEnv { globalLearningEnv = glv
