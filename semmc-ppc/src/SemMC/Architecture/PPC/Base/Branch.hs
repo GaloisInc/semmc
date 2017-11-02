@@ -56,6 +56,9 @@ branchUnconditional aa lk target = do
     input ip
     defLoc lnk (bvadd (Loc ip) (naturalLitBV 0x4))
 
+-- | Logic for implementing the conditional branch instruction.
+--
+-- See Note [Branch Conditional] for details
 branchConditional :: (?bitSize :: BitSize)
                   => AA
                   -> LK
@@ -70,3 +73,31 @@ branchConditional aa lk bo bi target = do
   when (lk == Link) $ do
     input ip
     defLoc lnk (bvadd (Loc ip) (naturalLitBV 0x4))
+
+{- Note [Branch Conditional]
+
+There are some minor discrepancies between our representation (based on the
+tablegen data) and what is in the PowerPC manual.  It isn't incorrect, but the
+mapping between the two is less than obvious.
+
+First, the ~BC~ instruction in the manual has an additional BO field that our
+~BC~ instruction lacks.  This is because our representation has a separate
+instruction for each value of the BO field.  For example, BDNZ corresponds to
+~BC~ with BO=1a00t, where a and t are used as hints to the branch predictor.
+Our ~BC~ instruction corresponds to the case where BO=011at (branch if CR_BI=1).
+That seems to correspond to the instruction that is sometimes called ~BT~
+(Branch if True).  Note that we don't have all of the variants available,
+presumably because clang never generates them.  We may have to fill those gaps
+in the disassembler by hand.
+
+| Our Insn | Mnemonic | BO    |
+|----------+----------+-------|
+| BC       | BT       | 011at |
+| BDNZ     | BDNZ     | 1a00t |
+| BDZ      | BDZ      | 1a01t |
+
+
+There are corresponding variants to branch through the CTR or LR instead of to a
+known offset.
+
+-}
