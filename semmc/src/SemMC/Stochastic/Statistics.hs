@@ -21,7 +21,6 @@ module SemMC.Stochastic.Statistics (
   recordCounterexample
   ) where
 
-import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as E
 import           Control.Monad ( forever )
@@ -37,6 +36,7 @@ import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import           Data.Parameterized.Some ( Some(..) )
 
 import           SemMC.Architecture ( Opcode, Operand )
+import qualified SemMC.Util as U
 
 data StatisticsRecord arch = Terminate
                            -- ^ Tell the thread to terminate
@@ -89,7 +89,7 @@ newStatisticsThread statsFile = do
                             , stTerm = term
                             , stConn = conn
                             }
-  _a <- A.async (loop (processStatistic st) `E.finally` SQL.close conn)
+  _a <- U.asyncLinked (loop (processStatistic st) `E.finally` SQL.close conn)
   return st
 
 processStatistic :: forall arch

@@ -24,10 +24,11 @@ module SemMC.Stochastic.Strata (
 
 import qualified GHC.Err.Located as L
 
-import qualified Control.Exception as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
 import           Text.Printf ( printf )
+
+import           UnliftIO as U
 
 import           Data.Parameterized.Classes ( showF )
 import qualified Data.Parameterized.Map as MapF
@@ -66,16 +67,15 @@ stratifiedSynthesis :: forall arch t
                     => SynEnv t arch
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
-  A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $ do
-    (localEnv, testRunner') <- newLocalEnv env0
-    runSyn localEnv strata `C.finally` A.cancel testRunner'
+  A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $
+    runSynInNewLocalEnv env0 strata
   STM.readTVarIO (seFormulas env0)
 
 strata :: (SynC arch)
        => Syn t arch (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 strata = processWorklist >> generalize
 
-processWorklist :: (SynC arch)
+processWorklist :: (SynC arch, L.HasCallStack)
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
@@ -83,11 +83,13 @@ processWorklist = do
     Nothing -> return ()
     Just (Some (Witness so)) -> do
       -- Catch all exceptions in the stratification process.
-      (res, strataTime) <- timeSyn (tryEither (strataOne so))
+      (res, strataTime) <- timeSyn (U.tryAny (strataOne so))
       case res of
         Left err -> do
           -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
           L.logM L.Error $ printf "Error while processing opcode %s: %s" (showF so) (show err)
+          -- And then die, since errors are bugs at this point.
+          throwIO err
         -- Timeout, so we can't learn it yet.  Come back later
         Right Nothing -> do
           L.logM L.Info $ printf "Timeout while processing opcode %s" (showF so)
@@ -104,7 +106,7 @@ processWorklist = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we time out trying to find a formula
-strataOne :: (SynC arch)
+strataOne :: (SynC arch, L.HasCallStack)
           => A.Opcode arch (A.Operand arch) sh
           -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 strataOne op = do
@@ -118,7 +120,7 @@ strataOne op = do
       withStats $ S.recordSynthesizeSuccess (Some op) synDuration
       strataOneLoop op instr (C.equivalenceClasses prog)
 
-strataOneLoop :: (SynC arch)
+strataOneLoop :: (SynC arch, L.HasCallStack)
               => A.Opcode arch (A.Operand arch) sh
               -> AC.RegisterizedInstruction arch
               -> C.EquivalenceClasses (CP.CandidateProgram t arch)
@@ -146,7 +148,7 @@ strataOneLoop op instr eqclasses = do
               L.logM L.Info $ printf "Currently have %d candidate programs, need %d" (C.countPrograms eqclasses') (programCountThreshold cfg)
               strataOneLoop op instr eqclasses'
 
-finishStrataOne :: (SynC arch)
+finishStrataOne :: (SynC arch, L.HasCallStack)
                 => A.Opcode arch (A.Operand arch) sh
                 -> AC.RegisterizedInstruction arch
                 -> C.EquivalenceClasses (CP.CandidateProgram t arch)

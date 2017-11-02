@@ -4,6 +4,8 @@ It is meant to be run via SSH.  Test vectors consist of initial register values,
 
 For an example of using this code, see ``semmc-x86_64/tools/Main.hs``.
 
+After cross compilation and copying to the remote PPC machine ``helium.proj.galois.com``, this program is the ``--remote-runner EXE`` argument to ``semmc-ppc-stratify`` (see ``semmc-ppc/README.md``).
+
 Limitations:
 
 * Test programs are limited to 4kb

@@ -66,7 +66,8 @@ classifyExplicitOperands op explicitOperands = do
   t0 <- mkRandomTest
   tests <- generateExplicitTestVariants insn t0
   tests' <- mapM (wrapTestBundle insn) tests
-  withTestResults op tests' $ computeIORelation op explicitOperands tests'
+  results <- withTestResults op tests'
+  computeIORelation op explicitOperands tests' results
   where
     insn = D.Instruction op explicitOperands
 

@@ -27,10 +27,8 @@ module SemMC.Stochastic.Synthesize
 
 import           GHC.Stack ( HasCallStack )
 
-import qualified Control.Concurrent.Async as A
 import qualified Control.Exception as C
 import           Control.Monad ( join, replicateM )
-import qualified Control.Monad.Catch as MC
 import           Control.Monad.Trans ( liftIO )
 import qualified Data.Foldable as F
 import qualified Data.Map as M
@@ -66,6 +64,7 @@ import           SemMC.Stochastic.Pseudo
                  )
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Util as U
+import qualified UnliftIO as U
 
 -- | Attempt to stochastically find a program in terms of the base set that has
 -- the same semantics as the given instruction.
@@ -101,24 +100,10 @@ parallelSynthOne :: forall arch t
                  -> Syn t arch (Integer, Candidate arch)
 parallelSynthOne target = do
   nThreads <- askParallelSynth
-  asyncs <- replicateM nThreads (asyncWithIsolatedEnv (mcmcSynthesizeOne target))
-  waitForCompletion asyncs
-  where
-    waitForCompletion asyncs =
-      case asyncs of
-        [] -> do
-          U.logM U.Warn "All synthesis threads failed with exceptions"
-          MC.throwM (AllSynthesisThreadsFailed (Proxy @arch) (AC.riInstruction target))
-        _ -> do
-          (firstAsync, res) <- liftIO (A.waitAnyCatch asyncs)
-          case res of
-            Left exn -> do
-              U.logM U.Info $ printf "Async synthesis thread failed with error '%s'" (show exn)
-              waitForCompletion (filter (/= firstAsync) asyncs)
-            Right success -> do
-              let rest = filter (/= firstAsync) asyncs
-              mapM_ (liftIO . A.cancel) rest
-              return success
+  env <- askGlobalEnv
+  asyncs <- replicateM nThreads
+    (U.async $ runSynInNewLocalEnv env (mcmcSynthesizeOne target))
+  snd <$> U.waitAnyCancel asyncs
 
 -- | Get concrete execution results for the tests on a target program.
 --

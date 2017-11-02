@@ -1,31 +1,27 @@
+{-# LANGUAGE NondecreasingIndentation #-}
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
 import qualified Data.ByteString.Lazy as LB
-import qualified Data.Time.Format as T
 import qualified Data.Vector.Sized as V
 import qualified System.Environment as E
 import qualified System.Exit as IO
 import qualified System.IO as IO
-import Text.Printf ( printf )
+import           Text.Printf ( printf )
 
 import qualified SemMC.Concrete.Execution as CE
-import SemMC.X86 ( Instruction, MachineState(..), testSerializer, YMM(..) )
+import qualified SemMC.Util as U
+import           SemMC.X86 ( Instruction, MachineState(..), testSerializer, YMM(..) )
 
 main :: IO ()
 main = do
   [hostname] <- E.getArgs
-  logChan <- C.newChan
   caseChan <- C.newChan
   resChan <- C.newChan
-  _ <- C.forkIO (printLogMessages logChan)
-  _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- CE.runRemote Nothing hostname testSerializer caseChan resChan logChan
-  case merr of
-    Just err -> do
-      IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)
-      IO.exitFailure
-    Nothing -> return ()
+  lcfg <- U.mkLogCfg "main"
+  U.withLogCfg lcfg $ do
+  U.withAsyncLinked (testRunner caseChan resChan) $ \_ -> do
+  CE.runRemote Nothing hostname testSerializer caseChan resChan
 
 testRunner :: C.Chan (Maybe [CE.TestCase MachineState Instruction])
            -> C.Chan (CE.ResultOrError MachineState)
@@ -88,10 +84,3 @@ testVector2 = testVector1 { CE.testNonce = 22
                           , 99, 0, 0, 0, 0, 0
                           , 0, 0, 0, 0, 0
                           ]
-
-printLogMessages :: C.Chan CE.LogMessage -> IO ()
-printLogMessages c = do
-  msg <- C.readChan c
-  let fmtTime = T.formatTime T.defaultTimeLocale "%T" (CE.lmTime msg)
-  IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (CE.lmHost msg) (CE.lmMessage msg)
-  printLogMessages c

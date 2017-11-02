@@ -34,20 +34,19 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import           SemMC.Stochastic.IORelation.Types
 
-withTestResults :: forall a f arch sh
+withTestResults :: forall f arch sh
                  . (A.Architecture arch)
                 => A.Opcode arch (A.Operand arch) sh
                 -> [TestBundle (TestCase arch) f]
-                -> (CE.ResultIndex (V.ConcreteState arch) -> Learning arch a)
-                -> Learning arch a
-withTestResults op tests k = do
+                -> Learning arch (CE.ResultIndex (V.ConcreteState arch))
+withTestResults op tests = do
   tchan <- askTestChan
   rchan <- askResultChan
   let remoteTestCases = map tbTestBase tests ++ concatMap tbTestCases tests
-  mresults <- timeout $ CE.withTestResults tchan rchan remoteTestCases return
+  mresults <- timeout $ CE.withTestResults tchan rchan remoteTestCases
   case mresults of
     Nothing -> liftIO $ E.throwM (LearningTimeout (Proxy @arch) (Some op))
-    Just results -> k (CE.indexResults results)
+    Just results -> return $ CE.indexResults results
 
 -- | Given a bundle of tests, wrap all of the contained raw test cases with nonces.
 wrapTestBundle :: (A.Architecture arch)

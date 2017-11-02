@@ -13,7 +13,6 @@ module SemMC.Stochastic.Initialize (
   BuildAndConvert
   ) where
 
-import qualified Control.Concurrent as C
 import qualified Control.Concurrent.STM as STM
 import           Control.Monad ( replicateM )
 import qualified Data.Constraint as C
@@ -32,7 +31,6 @@ import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.View as V
-import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
 import           SemMC.Stochastic.IORelation ( IORelation )
@@ -61,8 +59,6 @@ data Config arch =
          , parallelSynth :: Int
          -- ^ The number of threads to run in parallel to try to synthesize
          -- candidate programs for *each* opcode.
-         , remoteRunnerOutputChannel :: C.Chan CE.LogMessage
-         -- ^ The channel to send log messages to from the remote runner
          , remoteRunnerTimeoutSeconds :: Int
          -- ^ The number of seconds to wait for a response from the remote
          -- runner after sending a batch of tests
@@ -107,7 +103,7 @@ class (F.BuildOperandList arch sh, F.ConvertShape sh) => BuildAndConvert arch sh
 instance (F.BuildOperandList arch sh, F.ConvertShape sh) => BuildAndConvert arch sh
 
 loadInitialState :: forall arch t
-                  . (SynC arch, L.HasLogCfg)
+                  . (SynC arch, L.HasLogCfg, L.HasCallStack)
                  => Config arch
                  -> Sym t
                  -> IO (V.ConcreteState arch)

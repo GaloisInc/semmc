@@ -4,40 +4,35 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
-import Control.Monad ( replicateM_, when )
-import Data.Proxy ( Proxy(..) )
-import qualified Data.Time.Format as T
+import           Control.Monad ( replicateM_, when )
+import           Data.Proxy ( Proxy(..) )
 import qualified System.Environment as E
 import qualified System.Exit as IO
 import qualified System.IO as IO
-import Text.Printf ( printf )
+import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Map as MapF
-import Lang.Crucible.BaseTypes ( BaseBVType )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.PPC as PPC
+import           Lang.Crucible.BaseTypes ( BaseBVType )
 import qualified SemMC.Architecture.Concrete as AC
+import           SemMC.Architecture.PPC32
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
-import SemMC.Architecture.PPC32
+import qualified SemMC.Log as L
 
 type PPCState = V.ConcreteState PPC
 
 main :: IO ()
 main = do
   [hostname] <- E.getArgs
-  logChan <- C.newChan
   caseChan <- C.newChan
   resChan <- C.newChan
-  _ <- C.forkIO (printLogMessages logChan)
   _ <- C.forkIO (testRunner caseChan resChan)
-  merr <- CE.runRemote (Just "remote-runner.ppc32") hostname testSerializer caseChan resChan logChan
-  case merr of
-    Just err -> do
-      IO.hPutStrLn IO.stderr $ printf "SSH Error: %s" (show err)
-      IO.exitFailure
-    Nothing -> return ()
+  logCfg <- L.mkLogCfg "main"
+  L.withLogCfg logCfg $
+    CE.runRemote (Just "remote-runner.ppc32") hostname testSerializer caseChan resChan
 
 testRunner :: C.Chan (Maybe [CE.TestCase PPCState PPC.Instruction])
            -> C.Chan (CE.ResultOrError PPCState)
@@ -182,10 +177,3 @@ testVector2 = testVector1 { CE.testNonce = 22
     -- ctx1 = V.pokeMS ctx0 v2 (V.ValueBV (W.W 1))
     -- ctx2 = V.pokeMS ctx1 v3 (V.ValueBV (W.W 5))
     i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:> PPC.Gprc r17 PPC.:> PPC.Gprc r25 PPC.:> PPC.Nil)
-
-printLogMessages :: C.Chan CE.LogMessage -> IO ()
-printLogMessages c = do
-  msg <- C.readChan c
-  let _fmtTime = T.formatTime T.defaultTimeLocale "%T" (CE.lmTime msg)
-  -- IO.hPutStrLn IO.stderr $ printf "%s[%s]: %s" fmtTime (R.lmHost msg) (R.lmMessage msg)
-  printLogMessages c

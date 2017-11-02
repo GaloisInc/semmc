@@ -9,7 +9,8 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 module SemMC.Util
-  ( groundValToExpr
+  ( -- * Misc
+    groundValToExpr
   , makeSymbol
   , mapFReverse
   , sequenceMaybes
@@ -17,6 +18,10 @@ module SemMC.Util
   , extractUsedLocs
   , mapFMapBothM
   , filterMapF
+    -- * Async
+  , asyncLinked
+  , withAsyncLinked
+    -- * Reexports
   , module SemMC.Log
   ) where
 
@@ -28,6 +33,9 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Set as Set
 import           Text.Printf ( printf )
 
+import qualified UnliftIO as U
+import qualified Control.Exception as E
+
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import qualified Lang.Crucible.Utils.Hashable as Hash
@@ -36,6 +44,36 @@ import qualified Lang.Crucible.Solver.SimpleBackend.GroundEval as GE
 import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
 
 import SemMC.Log
+
+----------------------------------------------------------------
+-- * Async
+
+-- | Fork an async action that is linked to the parent thread, but can
+-- be safely 'U.cancel'd without also killing the parent thread.
+--
+-- Note that if your async doesn't return unit, then you probably want
+-- to 'U.wait' for it instead, which eliminates the need for linking
+-- it. Also, if you plan to cancel the async near where you fork it,
+-- then 'withAsyncLinked' is a better choice than using this function
+-- and subsequently canceling, since it ensures cancellation.
+--
+-- See https://github.com/simonmar/async/issues/25 for a perhaps more
+-- robust, but also harder to use version of this. The linked version
+-- is harder to use because it requires a special version of @cancel@.
+asyncLinked :: (U.MonadUnliftIO m) => m () -> m (U.Async ())
+asyncLinked action = do
+  a <- U.async $ U.handle (\E.ThreadKilled -> return ()) action
+  U.link a
+  return a
+
+-- | A version of 'U.withAsync' that safely links the child. See
+-- 'asyncLinked'.
+withAsyncLinked :: (U.MonadUnliftIO m) => m () -> (U.Async () -> m a) -> m a
+withAsyncLinked child parent = do
+  U.withAsync (U.handle (\E.ThreadKilled -> return ()) $ child) parent
+
+----------------------------------------------------------------
+-- * Uncategorized
 
 -- | Try converting any 'String' into a 'SolverSymbol'. If it is an invalid
 -- symbol, then error.

@@ -5,17 +5,17 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main ( main ) where
 
+import           Control.Monad
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as BSHex
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.UTF8 as BS8
-import qualified Data.ByteString.Base16 as BSHex
-import qualified Data.Functor.Identity as I
 import qualified Data.Foldable as F
+import qualified Data.Functor.Identity as I
 import           Data.Monoid
 import           Data.Word ( Word32 )
 import qualified Options.Applicative as O
 import           Text.Printf ( printf )
-import qualified Control.Concurrent.Async as C
 
 import qualified Data.ElfEdit as E
 
@@ -158,8 +158,7 @@ main :: IO ()
 main = do
   logCfg <- U.mkLogCfg "main"
   let ?logCfg = logCfg
-  loggerThread <- C.async $ U.stdErrLogEventConsumer logCfg
-  C.link loggerThread
+  void $ U.asyncLinked $ U.stdErrLogEventConsumer logCfg
 
   N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
   where

@@ -9,7 +9,7 @@ import           Prelude hiding ( log )
 import           SemMC.Log
 
 import           Control.Concurrent
-import           Control.Concurrent.Async ( wait )
+import           Control.Concurrent.Async ( async, wait )
 import           Control.Exception ( evaluate )
 import           Control.Monad
 import           Control.Monad.IO.Class ( MonadIO )
@@ -60,7 +60,7 @@ test_pureLoop n = logTrace Debug (printf "Adding n = %i" n) $
   n + test_pureLoop (n-1)
 
 test_asyncNamed :: (HasLogCfg) => IO ()
-test_asyncNamed = void . wait =<< asyncNamed getLogCfg "test_asyncNamed" (test_IOLoop 3)
+test_asyncNamed = void . wait =<< async (named getLogCfg "test_asyncNamed" (test_IOLoop 3))
 
 ----------------------------------------------------------------
 

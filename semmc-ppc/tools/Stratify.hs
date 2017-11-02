@@ -1,18 +1,16 @@
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
 
-import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
-import           Control.Monad ( when )
+import           Control.Monad
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Constraint as C
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
-import qualified System.IO as IO
 import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Nonce as N
@@ -33,12 +31,10 @@ import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
 
 import qualified SemMC.Architecture.PPC32 as PPC32
+import qualified SemMC.Util as U
 
-import qualified Logging as L
 import qualified OpcodeLists as OL
 import qualified Util as Util
-
-data Logging = Verbose | Quiet
 
 data Options = Options { oRelDir :: FilePath
                        , oBaseDir :: FilePath
@@ -54,7 +50,6 @@ data Options = Options { oRelDir :: FilePath
                        , oRemoteTimeoutSeconds :: Int
                        , oRemoteRunner :: FilePath
                        , oRemoteHost :: String
-                       , oPrintLog :: Logging
                        }
 
 optionsParser :: O.Parser Options
@@ -116,14 +111,11 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.help "The number of seconds to wait for all responses from the remote runner" )
                         <*> O.strOption ( O.long "remote-runner"
                                         <> O.metavar "EXE"
-                                        <> O.help "The name of the remote runner executable (remote-runner.ppc32 or remote-runner.ppc64" )
+                                        <> O.help "The name of the remote runner executable (remote-runner.ppc32 or remote-runner.ppc64)" )
                         <*> O.strOption ( O.long "remote-host"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
                                         <> O.help "The host to run the remote work on" )
-                        <*> O.flag Quiet Verbose ( O.long "verbose"
-                                                 <> O.short 'V'
-                                                 <> O.help "Print log messages from the remote runner" )
 
 main :: IO ()
 main = O.execParser optParser >>= mainWithOptions
@@ -131,15 +123,13 @@ main = O.execParser optParser >>= mainWithOptions
    optParser = O.info (optionsParser O.<**> O.helper)
      ( O.fullDesc
      <> O.progDesc "Learn semantics for PPC instructions"
-     <> O.header "semmc-ppc-stratify - learn semantics for each instruction")
-
-die :: String -> IO a
-die msg = IO.hPutStr IO.stderr msg >> IO.exitFailure
+     <> O.header "semmc-ppc-stratify - learn semantics for each instruction"
+     <> O.footer "See semmc-ppc/README.md for a detailed usage example.")
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   when (oParallelOpcodes opts < 1 || oParallelSynth opts < 1) $ do
-    die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
+    IO.die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
 
   iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
 
@@ -153,16 +143,10 @@ mainWithOptions opts = do
                                      }
 
   lcfg <- L.mkLogCfg "main"
-  let ?logCfg = lcfg
-  logChan <- C.newChan
-  logger <- case oPrintLog opts of
-    Verbose -> A.async (L.printLogMessages lcfg logChan)
-    Quiet -> A.async (L.dumpRemoteRunnerLog logChan)
-  A.link logger
+  L.withLogCfg lcfg $ do
   logThread <- case oLogFile opts of
-    Nothing -> A.async (L.stdErrLogEventConsumer lcfg)
-    Just logFile -> A.async (L.fileLogEventConsumer logFile lcfg)
-  A.link logThread
+    Nothing -> U.asyncLinked (L.stdErrLogEventConsumer lcfg)
+    Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile lcfg)
 
   stThread <- SST.newStatisticsThread (oStatisticsFile opts)
 
@@ -177,7 +161,6 @@ mainWithOptions opts = do
                        , SST.parallelOpcodes = oParallelOpcodes opts
                        , SST.parallelSynth = oParallelSynth opts
                        , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) serializer
-                       , SST.remoteRunnerOutputChannel = logChan
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
                        }
@@ -193,7 +176,5 @@ mainWithOptions opts = do
   A.wait logThread
 
   SST.terminateStatisticsThread stThread
-
-  return ()
   where
     initialTestCases = AC.heuristicallyInterestingStates (Proxy @PPC32.PPC)

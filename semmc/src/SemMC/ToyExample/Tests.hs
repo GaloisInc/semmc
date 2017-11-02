@@ -214,13 +214,13 @@ generateTestCases p gen = do
 
 -- | Test runner backend for Toy arch.
 toyTestRunnerBackend :: arch ~ Toy => Integer -> I.TestRunner arch
-toyTestRunnerBackend !i tChan rChan _logChan = do
+toyTestRunnerBackend !i tChan rChan = do
   maybeTests <- C.readChan tChan
   case maybeTests of
-    Nothing -> return Nothing
+    Nothing -> return ()
     Just tests -> do
       i' <- F.foldlM evaluateTest i tests
-      toyTestRunnerBackend i' tChan rChan _logChan
+      toyTestRunnerBackend i' tChan rChan
   where
     _debug i msg = traceIO $ "toyTestRunnerBackend: "++show i++": "++msg
     evaluateTest ix test = do
@@ -251,7 +251,6 @@ runSynToy :: (U.HasLogCfg)
           -> IO a
 runSynToy dataRoot action = do
   stThread <- newStatisticsThread (dataRoot </> "stats.sqlite")
-  logChan <- C.newChan
   let cfg :: Config Toy
       cfg = Config
         { baseSetDir = dataRoot </> "base"
@@ -264,7 +263,6 @@ runSynToy dataRoot action = do
         , parallelOpcodes = 1
         , parallelSynth = 1
         , testRunner = toyTestRunnerBackend 0 :: I.TestRunner Toy
-        , remoteRunnerOutputChannel = logChan
         , logConfig = getLogCfg
         , statsThread = stThread
         }
@@ -313,8 +311,7 @@ runSynToy dataRoot action = do
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe [I.TestCase Toy]))
   rChan <- C.newChan
-  testRunnerThread <- C.async $
-    testRunner cfg tChan rChan logChan
+  testRunnerThread <- C.async $ testRunner cfg tChan rChan
   C.link testRunnerThread
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv

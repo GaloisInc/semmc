@@ -24,6 +24,7 @@ import qualified GHC.Err.Located as L
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as A
 import qualified Control.Concurrent.STM as STM
+import           Control.Monad
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Foldable as F
 import           Data.Monoid
@@ -48,7 +49,6 @@ import qualified Dismantle.Instruction.Random as D
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.View as V
-import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Log as L
 import qualified SemMC.Worklist as WL
 
@@ -59,6 +59,8 @@ import           SemMC.Stochastic.IORelation.Implicit ( findImplicitOperands )
 import           SemMC.Stochastic.IORelation.Parser
 import           SemMC.Stochastic.IORelation.Types
 
+import qualified SemMC.Util as U
+
 data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
@@ -66,7 +68,6 @@ data LearningConfig arch =
                  , lcTestGen :: IO (V.ConcreteState arch)
                  , lcTimeoutSeconds :: Int
                  , lcTestRunner :: TestRunner arch
-                 , lcLog :: C.Chan CE.LogMessage
                  , lcLogCfg :: L.LogCfg
                  }
 
@@ -113,8 +114,7 @@ learnIORelations cfg proxy toFP ops = do
   lrref <- STM.newTVarIO rels0
   errref <- STM.newTVarIO S.empty
   serializeChan <- C.newChan
-  serializer <- A.async $ (serializeLearnedRelations (lcIORelationDirectory cfg) toFP serializeChan)
-  A.link serializer
+  serializer <- U.asyncLinked $ (serializeLearnedRelations (lcIORelationDirectory cfg) toFP serializeChan)
   let glv = GlobalLearningEnv { assemble = lcAssemble cfg
                               , resWaitSeconds = lcTimeoutSeconds cfg
                               , worklist = wlref
@@ -128,8 +128,7 @@ learnIORelations cfg proxy toFP ops = do
   A.replicateConcurrently_ (lcNumThreads cfg) $ do
     tChan <- C.newChan
     rChan <- C.newChan
-    testRunner <- A.async $ lcTestRunner cfg tChan rChan (lcLog cfg)
-    A.link testRunner
+    void $ U.asyncLinked $ lcTestRunner cfg tChan rChan
     nref <- STM.newTVarIO 0
     agen <- DA.createGen
     let lle = LocalLearningEnv { globalLearningEnv = glv

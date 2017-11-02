@@ -53,7 +53,8 @@ findImplicitOperands op = do
   -- We generate 20 random instruction instances with this opcode (and for each
   -- random instruction instance, generate many test vectors).
   tests <- concat <$> replicateM 20 (genTestSet g)
-  withTestResults op tests $ computeImplicitOperands op tests
+  results <- withTestResults op tests
+  computeImplicitOperands op tests results
   where
     genTestSet g = do
       t0 <- mkRandomTest
