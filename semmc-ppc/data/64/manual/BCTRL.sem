@@ -1,0 +1,11 @@
+;; BCTR : BCCTR (XL-form, LK=0)
+;; This is a specialized unconditional BCCTR
+((operands ()) 
+  (in ('IP 'CTR))
+  (defs 
+    (('LNK (bvadd 'IP #x0000000000000004)) 
+      ('IP 
+        (ite 
+          (bveq #b0 #b0)
+          (concat ((_ extract 61 0) 'CTR) #b00)
+          (bvadd 'IP #x0000000000000004))))))

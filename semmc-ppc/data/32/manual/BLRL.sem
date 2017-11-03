@@ -1,0 +1,11 @@
+;; BLRL : BCLR (XL-form, LK=1)
+;; This is a specialized unconditional BCLR
+((operands ()) 
+  (in ('IP 'LNK))
+  (defs 
+    (('LNK (bvadd 'IP #x00000004)) 
+      ('IP 
+        (ite 
+          (andp (bveq #b0 #b0) (bveq #b0 #b0))
+          (concat ((_ extract 29 0) 'LNK) #b00)
+          (bvadd 'IP #x00000004))))))

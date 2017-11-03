@@ -1,0 +1,10 @@
+;; BCLR (XL-form, LK=1)
+((operands ((bi . 'Crbitrc))) 
+  (in ('CR 'IP 'LNK))
+  (defs 
+    (('LNK (bvadd 'IP #x00000004)) 
+      ('IP 
+        (ite 
+          (andp (bveq ((_ call "extract_dynamic") bi bi 'CR) #b0) (bveq #b0 #b0))
+          (concat ((_ extract 29 0) 'LNK) #b00)
+          (bvadd 'IP #x00000004))))))

@@ -1,0 +1,10 @@
+;; BCCTR (XL-form, LK=0)
+;; This variant has BO=01100, branch when the CR bit is 1
+((operands ((bi . 'Crbitrc))) 
+  (in ('CR 'IP 'CTR))
+  (defs 
+    (('IP 
+       (ite 
+         (bveq ((_ call "extract_dynamic") bi bi 'CR) #b0)
+         (concat ((_ extract 29 0) 'CTR) #b00)
+         (bvadd 'IP #x00000004))))))
