@@ -206,10 +206,10 @@ branchConditional aa lk bo bi target = do
   when (lk == Link) $ defLoc lnk nextInsn
 
 truePred :: Expr 'TBool
-truePred = bveq (LitBV 1 0x0) (LitBV 1 0x0)
+truePred = LitBool True
 
 falsePred :: Expr 'TBool
-falsePred = bvne (LitBV 1 0x0) (LitBV 1 0x0)
+falsePred = LitBool False
 
 cond_ok :: W 5 -> Expr 'TBV -> Expr 'TBool
 cond_ok bo bi =

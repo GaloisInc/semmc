@@ -116,6 +116,7 @@ instance TestEquality Location where
 -- Note that there are some GADT type tags -- unlike crucible, we never need to
 -- recover those.  They are only there to guard term construction.
 data Expr (tp :: ExprTag) where
+  LitBool :: Bool -> Expr 'TBool
   LitBV :: Int -> Integer -> Expr 'TBV
   LitInt :: Integer -> Expr 'TInt
   Loc :: Location tp -> Expr tp

@@ -95,6 +95,7 @@ locationType loc =
 exprType :: Expr tp -> ExprType tp
 exprType e =
   case e of
+    LitBool _ -> EBool
     LitBV w _ -> EBV w
     LitInt _ -> EInt
     Loc ll -> locationType ll
@@ -271,13 +272,29 @@ bvne :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 bvne = binTestBuiltin "bvne"
 
 notp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool
-notp e = Builtin EBool "notp" [Some e]
+notp e =
+  case e of
+    LitBool True -> LitBool False
+    LitBool False -> LitBool True
+    _ -> Builtin EBool "notp" [Some e]
 
 andp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
-andp = boolBinopBuiltin "andp"
+andp e1 e2 =
+  case (e1, e2) of
+    (LitBool True, _) -> e2
+    (_, LitBool True) -> e1
+    (LitBool False, _) -> LitBool False
+    (_, LitBool False) -> LitBool False
+    _ -> boolBinopBuiltin "andp" e1 e2
 
 orp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
-orp = boolBinopBuiltin "orp"
+orp e1 e2 =
+  case (e1, e2) of
+    (LitBool True, _) -> LitBool True
+    (_, LitBool True) -> LitBool True
+    (LitBool False, _) -> e2
+    (_, LitBool False) -> e2
+    _ -> boolBinopBuiltin "orp" e1 e2
 
 xorp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
 xorp = boolBinopBuiltin "xorp"
@@ -286,9 +303,12 @@ boolBinopBuiltin :: (HasCallStack) => String -> Expr 'TBool -> Expr 'TBool -> Ex
 boolBinopBuiltin s e1 e2 = Builtin EBool  s [Some e1, Some e2]
 
 ite :: (HasCallStack) => Expr 'TBool -> Expr tp -> Expr tp -> Expr tp
-ite b t e
-  | t1 == t2 && tc == EBool = Builtin t1 "ite" [Some b, Some t, Some e]
-  | otherwise = error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show t1) (show t2) (show tc))
+ite b t e =
+  case b of
+    LitBool True -> t
+    LitBool False -> e
+    _ | t1 == t2 && tc == EBool -> Builtin t1 "ite" [Some b, Some t, Some e]
+      | otherwise -> error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show t1) (show t2) (show tc))
   where
     t1 = exprType t
     t2 = exprType e
@@ -405,6 +425,8 @@ extractSExpr operands inputs defs =
 convertExpr :: Some Expr -> SC.SExpr FAtom
 convertExpr (Some e) =
   case e of
+    LitBool True -> convertExpr (Some (bveq (LitBV 1 0x0) (LitBV 1 0x0)))
+    LitBool False -> convertExpr (Some (bvne (LitBV 1 0x0) (LitBV 1 0x0)))
     LitInt i -> int i
     LitBV w val -> SC.SAtom (ABV w val)
     Loc loc -> convertLoc loc
