@@ -220,8 +220,8 @@ cond_ok bo bi =
   -- Otherwise, we have to check the CR field (the BI'th bit of the CR).  The CR
   -- is always 32 bits, and BI is wide enough to address any of them.
   else if testBit bo 1
-       then bveq (extractDynamic 1 bi bi (Loc cr)) (LitBV 1 0x1)
-       else bveq (extractDynamic 1 bi bi (Loc cr)) (LitBV 1 0x0)
+       then testBitDynamic (zext' 32 bi) (Loc cr)
+       else notp (testBitDynamic (zext' 32 bi) (Loc cr))
 
 ctr_ok :: (?bitSize :: BitSize) => W 5 -> Expr 'TBool
 ctr_ok bo =

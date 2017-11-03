@@ -12,7 +12,7 @@ module SemMC.DSL (
   defLoc,
   comment,
   -- * Operations
-  extractDynamic,
+  testBitDynamic,
   extract,
   zeroExtend,
   signExtend,
@@ -334,20 +334,12 @@ binTestBuiltin s e1 e2
     t1 = exprType e1
     t2 = exprType e2
 
--- | Like extract, but where the indexes to extract are only known dynamically
--- (i.e., at instruction instantiation time).  The other version, 'extract',
--- requires the indexes to be known statically.
---
--- This is meant to be instantiated as a normal 'extract' when the instruction
--- is instantiated.
-extractDynamic :: (HasCallStack)
-               => Int -- ^ Result size
-               -> Expr 'TBV -- ^ i
-               -> Expr 'TBV -- ^ j
-               -> Expr 'TBV -- ^ A bitvector
+-- | Test a dynamically-chosen bit number
+testBitDynamic :: (HasCallStack)
+               => Expr 'TBV -- ^ Bit number to test
                -> Expr 'TBV
-extractDynamic rsize i j e =
-  uf (EBV rsize) "extract_dynamic" [Some i, Some j, Some e]
+               -> Expr 'TBool
+testBitDynamic bitNum e = uf EBool "test_bit_dynamic" [Some bitNum, Some e]
 
 -- | The extract operation defined on bitvectors in SMTLib
 --

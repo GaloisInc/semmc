@@ -4,6 +4,6 @@
   (defs 
     (('IP 
        (ite 
-         (bveq ((_ call "extract_dynamic") bi bi 'CR) #b0)
+         (notp ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR))
          (concat ((_ extract 29 0) 'LNK) #b00)
          (bvadd 'IP #x00000004))))))
