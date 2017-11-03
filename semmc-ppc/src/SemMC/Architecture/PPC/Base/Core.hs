@@ -10,6 +10,7 @@ module SemMC.Architecture.PPC.Base.Core (
   gprc_nor0,
   fprc,
   crrc,
+  crbitrc,
   s16imm,
   s16imm64,
   s17imm,
@@ -22,6 +23,7 @@ module SemMC.Architecture.PPC.Base.Core (
   memrr,
   directbrtarget,
   absdirectbrtarget,
+  condbrtarget,
   calltarget,
   abscalltarget,
   -- * Registers
@@ -115,8 +117,14 @@ abscalltarget = "Abscalltarget"
 calltarget :: String
 calltarget = "Calltarget"
 
+condbrtarget :: String
+condbrtarget = "Condbrtarget"
+
 crrc :: String
 crrc = "Crrc"
+
+crbitrc :: String
+crbitrc = "Crbitrc"
 
 s16imm :: String
 s16imm = "S16imm"

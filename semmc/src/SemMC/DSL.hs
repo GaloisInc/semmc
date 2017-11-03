@@ -12,6 +12,7 @@ module SemMC.DSL (
   defLoc,
   comment,
   -- * Operations
+  extractDynamic,
   extract,
   zeroExtend,
   signExtend,
@@ -19,6 +20,11 @@ module SemMC.DSL (
   ite,
   uf,
   locUF,
+  -- * Logical operations
+  andp,
+  orp,
+  xorp,
+  notp,
   -- ** Arithmetic bitvector ops
   bvadd,
   bvsub,
@@ -39,6 +45,8 @@ module SemMC.DSL (
   bvslt,
   bvsge,
   bvsgt,
+  bveq,
+  bvne,
   -- * Expressions
   Expr(..),
   ExprTag(..),
@@ -256,6 +264,27 @@ bvsgt = binTestBuiltin "bvsgt"
 bvsge :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 bvsge = binTestBuiltin "bvsge"
 
+bveq :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bveq = binTestBuiltin "bveq"
+
+bvne :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+bvne = binTestBuiltin "bvne"
+
+notp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool
+notp e = Builtin EBool "notp" [Some e]
+
+andp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
+andp = boolBinopBuiltin "andp"
+
+orp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
+orp = boolBinopBuiltin "orp"
+
+xorp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
+xorp = boolBinopBuiltin "xorp"
+
+boolBinopBuiltin :: (HasCallStack) => String -> Expr 'TBool -> Expr 'TBool -> Expr 'TBool
+boolBinopBuiltin s e1 e2 = Builtin EBool  s [Some e1, Some e2]
+
 ite :: (HasCallStack) => Expr 'TBool -> Expr tp -> Expr tp -> Expr tp
 ite b t e
   | t1 == t2 && tc == EBool = Builtin t1 "ite" [Some b, Some t, Some e]
@@ -284,6 +313,21 @@ binTestBuiltin s e1 e2
   where
     t1 = exprType e1
     t2 = exprType e2
+
+-- | Like extract, but where the indexes to extract are only known dynamically
+-- (i.e., at instruction instantiation time).  The other version, 'extract',
+-- requires the indexes to be known statically.
+--
+-- This is meant to be instantiated as a normal 'extract' when the instruction
+-- is instantiated.
+extractDynamic :: (HasCallStack)
+               => Int -- ^ Result size
+               -> Expr 'TBV -- ^ i
+               -> Expr 'TBV -- ^ j
+               -> Expr 'TBV -- ^ A bitvector
+               -> Expr 'TBV
+extractDynamic rsize i j e =
+  uf (EBV rsize) "extract_dynamic" [Some i, Some j, Some e]
 
 -- | The extract operation defined on bitvectors in SMTLib
 --

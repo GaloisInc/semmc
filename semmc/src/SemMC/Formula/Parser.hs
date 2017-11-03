@@ -50,6 +50,7 @@ import           Data.Parameterized.ShapedList ( ShapedList(..), Index(..), inde
 import           Data.Parameterized.TraversableFC ( traverseFC )
 import qualified Data.Parameterized.Map as MapF
 import           Lang.Crucible.BaseTypes
+import qualified Lang.Crucible.Solver.BoolInterface as S
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.Symbol ( userSymbol )
 
@@ -264,6 +265,15 @@ getBVProof expr =
     BaseBVRepr n -> return $ BVProof n
     t -> E.throwError $ printf "expected BV, found %s" (show t)
 
+data BoolProof tp where
+  BoolProof :: BoolProof BaseBoolType
+
+getBoolProof :: (S.IsExpr ex, E.MonadError String m) => ex tp -> m (BoolProof tp)
+getBoolProof  expr =
+  case S.exprType expr of
+    BaseBoolRepr -> return BoolProof
+    t -> E.throwError $ printf "expected a bool type, found %s" (show t)
+
 -- | Type of the various different handlers for building up expressions formed
 -- by applying arguments to some function.
 --
@@ -395,8 +405,10 @@ readBVUnop _ _ = return Nothing
 data BVBinop sym where
   -- | Binop with a bitvector return type, e.g., addition or bitwise operations.
   BinopBV :: (forall w . (1 <= w) => sym -> S.SymBV sym w -> S.SymBV sym w -> IO (S.SymBV sym w)) -> BVBinop sym
-  -- | Binop with a boolean return type, i.e., comparison operators.
-  BinopBool :: (forall w . (1 <= w) => sym -> S.SymBV sym w -> S.SymBV sym w -> IO (S.Pred sym)) -> BVBinop sym
+  -- | Bitvector binop with a boolean return type, i.e., comparison operators.
+  BinopBoolBV :: (forall w . (1 <= w) => sym -> S.SymBV sym w -> S.SymBV sym w -> IO (S.Pred sym)) -> BVBinop sym
+  -- | A binary operator of booleans
+--  BinopBool :: sym -> S.Pred sym -> S.Pred sym -> BVBinop
 
 -- | Look up a binary bitvector operation by name.
 bvBinop :: (S.IsExprBuilder sym) => String -> Maybe (BVBinop sym)
@@ -417,15 +429,37 @@ bvBinop "bvsdiv" = Just $ BinopBV S.bvSdiv
 bvBinop "bvsrem" = Just $ BinopBV S.bvSrem
 bvBinop "bvsmod" = error "bvsmod is not implemented"
 bvBinop "bvashr" = Just $ BinopBV S.bvAshr
-bvBinop "bvult"  = Just $ BinopBool S.bvUlt
-bvBinop "bvule"  = Just $ BinopBool S.bvUle
-bvBinop "bvugt"  = Just $ BinopBool S.bvUgt
-bvBinop "bvuge"  = Just $ BinopBool S.bvUge
-bvBinop "bvslt"  = Just $ BinopBool S.bvSlt
-bvBinop "bvsle"  = Just $ BinopBool S.bvSle
-bvBinop "bvsgt"  = Just $ BinopBool S.bvSgt
-bvBinop "bvsge"  = Just $ BinopBool S.bvSge
+bvBinop "bvult"  = Just $ BinopBoolBV S.bvUlt
+bvBinop "bvule"  = Just $ BinopBoolBV S.bvUle
+bvBinop "bvugt"  = Just $ BinopBoolBV S.bvUgt
+bvBinop "bvuge"  = Just $ BinopBoolBV S.bvUge
+bvBinop "bvslt"  = Just $ BinopBoolBV S.bvSlt
+bvBinop "bvsle"  = Just $ BinopBoolBV S.bvSle
+bvBinop "bvsgt"  = Just $ BinopBoolBV S.bvSgt
+bvBinop "bvsge"  = Just $ BinopBoolBV S.bvSge
+bvBinop "bveq"   = Just $ BinopBoolBV S.bvEq
+bvBinop "bvne"   = Just $ BinopBoolBV S.bvNe
 bvBinop        _ = Nothing
+
+data BoolBinop sym where
+  BoolBinop :: (sym -> S.Pred sym -> S.Pred sym -> IO (S.Pred sym)) -> BoolBinop sym
+
+boolBinop :: (S.IsBoolExprBuilder sym) => String -> Maybe (BoolBinop sym)
+boolBinop s =
+  case s of
+    "andp" -> Just $ BoolBinop S.andPred
+    "orp"  -> Just $ BoolBinop S.orPred
+    "xorp" -> Just $ BoolBinop S.xorPred
+    _ -> Nothing
+
+data BoolUnop sym where
+  BoolUnop :: (sym -> S.Pred sym -> IO (S.Pred sym)) -> BoolUnop sym
+
+boolUnop :: (S.IsBoolExprBuilder sym) => String -> Maybe (BoolUnop sym)
+boolUnop s =
+  case s of
+    "notp" -> Just $ BoolUnop S.notPred
+    _ -> Nothing
 
 -- | Parse an expression of the form @(f x y)@, where @f@ is a binary operation
 -- on bitvectors.
@@ -443,7 +477,7 @@ readBVBinop (SC.SAtom (AIdent ident)) args
           Just Refl -> liftIO $ Just <$>
             case op of
               BinopBV op' -> Some <$> op' sym arg1 arg2
-              BinopBool op' -> Some <$> op' sym arg1 arg2
+              BinopBoolBV op' -> Some <$> op' sym arg1 arg2
           Nothing -> E.throwError $ printf "arguments to %s must be the same length, \
                                          \but arg 1 has length %s \
                                          \and arg 2 has length %s"
@@ -451,6 +485,32 @@ readBVBinop (SC.SAtom (AIdent ident)) args
                                          (show m)
                                          (show n)
 readBVBinop _ _ = return Nothing
+
+readBoolBinop :: forall sym arch sh m . ExprParser sym arch sh m
+readBoolBinop (SC.SAtom (AIdent ident)) args
+  | Just (op :: BoolBinop sym) <- boolBinop ident =
+      prefixError (printf "in reading %s expression: " ident) $ do
+        when (length args /= 2) (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
+        sym <- MR.reader getSym
+        Some arg1 <- return (args !! 0)
+        Some arg2 <- return (args !! 1)
+        BoolProof <- prefixError "in arg1: " $ getBoolProof arg1
+        BoolProof <- prefixError "in arg2: " $ getBoolProof arg2
+        case op of
+          BoolBinop op' -> liftIO (Just <$> Some <$> op' sym arg1 arg2)
+readBoolBinop _ _ = return Nothing
+
+readBoolUnop :: forall sym arch sh m . ExprParser sym arch sh m
+readBoolUnop (SC.SAtom (AIdent ident)) args
+  | Just (op :: BoolUnop sym) <- boolUnop ident =
+      prefixError (printf "in reading %s expression: " ident) $ do
+        when (length args /= 2) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
+        sym <- MR.reader getSym
+        Some arg1 <- return (args !! 0)
+        BoolProof <- prefixError "in arg1: " $ getBoolProof arg1
+        case op of
+          BoolUnop op' -> liftIO (Just <$> Some <$> op' sym arg1)
+readBoolUnop _ _ = return Nothing
 
 -- | Parse an expression of the form @(= x y)@.
 readEq :: ExprParser sym arch sh m
@@ -618,6 +678,8 @@ readExpr (SC.SCons opRaw argsRaw) = do
     , readExtend
     , readBVUnop
     , readBVBinop
+    , readBoolUnop
+    , readBoolBinop
     , readEq
     , readIte
     , readSelect
