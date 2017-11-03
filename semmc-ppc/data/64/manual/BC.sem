@@ -5,6 +5,6 @@
   (defs 
     (('IP 
        (ite 
-         (andp (bveq ((_ call "extract_dynamic") bi bi 'CR) #b1) (bveq #b0 #b0))
+         (bveq ((_ call "extract_dynamic") bi bi 'CR) #b1)
          (bvadd ((_ sign_extend 48) (concat target #b00)) 'IP)
          (bvadd 'IP #x0000000000000004))))))

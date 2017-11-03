@@ -3,6 +3,6 @@
   (defs 
     (('IP 
        (ite 
-         (andp (bveq #b0 #b0) (xorp (bveq 'CTR #x00000000) (bvne #b0 #b0)))
+         (xorp (bveq 'CTR #x00000000) (bvne #b0 #b0))
          (bvadd ((_ sign_extend 16) (concat target #b00)) 'IP)
          (bvadd 'IP #x00000004))) ('CTR (bvsub 'CTR #x00000001)))))
