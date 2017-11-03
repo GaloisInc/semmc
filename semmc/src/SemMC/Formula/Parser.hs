@@ -504,7 +504,7 @@ readBoolUnop :: forall sym arch sh m . ExprParser sym arch sh m
 readBoolUnop (SC.SAtom (AIdent ident)) args
   | Just (op :: BoolUnop sym) <- boolUnop ident =
       prefixError (printf "in reading %s expression: " ident) $ do
-        when (length args /= 2) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
+        when (length args /= 1) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
         sym <- MR.reader getSym
         Some arg1 <- return (args !! 0)
         BoolProof <- prefixError "in arg1: " $ getBoolProof arg1
