@@ -90,6 +90,17 @@ manual bitSize = runSem $ do
     rA <- param "rA" gprc naturalBV
     input ctr
     defLoc rA (Loc ctr)
+  defineOpcodeWithIP "LI" $ do
+    rA <- param "rA" gprc naturalBV
+    imm <- param "imm" s16imm (EBV 16)
+    input rA
+    input imm
+    defLoc rA (sext (Loc imm))
+  defineOpcodeWithIP "LIS" $ do
+    rT <- param "rT" gprc naturalBV
+    imm <- param "imm" s17imm (EBV 16)
+    input imm
+    defLoc rT (sext (concat (Loc imm) (LitBV 16 0x0)))
   return ()
 
 
