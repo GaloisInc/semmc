@@ -106,6 +106,7 @@ manual bitSize = runSem $ do
     imm <- param "imm" s17imm (EBV 16)
     input imm
     defLoc rT (sext (concat (Loc imm) (LitBV 16 0x0)))
+  defineOpcodeWithIP "NOP" $ return ()
   return ()
 
 
