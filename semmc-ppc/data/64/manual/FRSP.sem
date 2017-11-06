@@ -5,4 +5,4 @@
     ((frT 
        (concat 
          #x000000000000000000000000
-         ((_ call "fp.round_single") ((_ extract 127 64) frB)))) ('IP (bvadd 'IP #x0000000000000004)))))
+         ((_ call "fp.round_single") ((_ extract 63 0) frB)))) ('IP (bvadd 'IP #x0000000000000004)))))

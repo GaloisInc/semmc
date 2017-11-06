@@ -5,4 +5,4 @@
     ((frT 
        (concat 
          #x000000000000000000000000
-         ((_ call "fp.sub32") ((_ extract 127 96) frA) ((_ extract 127 96) frB)))) ('IP (bvadd 'IP #x0000000000000004)))))
+         ((_ call "fp.sub32") ((_ extract 31 0) frA) ((_ extract 31 0) frB)))) ('IP (bvadd 'IP #x0000000000000004)))))

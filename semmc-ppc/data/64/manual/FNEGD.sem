@@ -4,5 +4,4 @@
 ((operands ((frT . 'Fprc) (frB . 'Fprc))) 
   (in (frB 'IP))
   (defs 
-    ((frT 
-       (concat #x0000000000000000 ((_ call "fp.negate64") ((_ extract 127 64) frB)))) ('IP (bvadd 'IP #x0000000000000004)))))
+    ((frT (concat #x0000000000000000 ((_ call "fp.negate64") ((_ extract 63 0) frB)))) ('IP (bvadd 'IP #x0000000000000004)))))

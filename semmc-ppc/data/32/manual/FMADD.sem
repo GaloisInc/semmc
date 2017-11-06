@@ -5,7 +5,4 @@
     ((frT 
        (concat 
          #x0000000000000000
-         ((_ call "fp.muladd64") 
-           ((_ extract 127 64) frA)
-           ((_ extract 127 64) frB)
-           ((_ extract 127 64) frC)))) ('IP (bvadd 'IP #x00000004)))))
+         ((_ call "fp.muladd64") ((_ extract 63 0) frA) ((_ extract 63 0) frB) ((_ extract 63 0) frC)))) ('IP (bvadd 'IP #x00000004)))))

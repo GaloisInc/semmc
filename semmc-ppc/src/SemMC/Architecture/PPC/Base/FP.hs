@@ -68,7 +68,7 @@ fabs = uf (EBV 64) "fp.abs" . ((:[]) . Some)
 
 -- | Extract the single-precision part of a vector register
 extractSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-extractSingle = lowBits128 32
+extractSingle = highBits128 32
 
 -- | Extend a single-precision value out to 128 bits
 extendSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
@@ -76,7 +76,7 @@ extendSingle = concat (LitBV 96 0x0)
 
 -- | Extract the double-precision part of a vector register
 extractDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-extractDouble = lowBits128 64
+extractDouble = highBits128 64
 
 -- | Extend a double-precision value out to 128 bits
 extendDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV

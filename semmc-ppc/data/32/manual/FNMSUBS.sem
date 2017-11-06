@@ -6,13 +6,13 @@
        (concat 
          #x000000000000000000000000
          ((_ call "fp.negate32") 
-           ((_ extract 127 96) 
+           ((_ extract 31 0) 
              (concat 
                #x000000000000000000000000
                ((_ call "fp.muladd32") 
-                 ((_ extract 127 96) frA)
-                 ((_ extract 127 96) 
+                 ((_ extract 31 0) frA)
+                 ((_ extract 31 0) 
                    (concat 
                      #x000000000000000000000000
-                     ((_ call "fp.negate32") ((_ extract 127 96) frB))))
-                 ((_ extract 127 96) frC))))))) ('IP (bvadd 'IP #x00000004)))))
+                     ((_ call "fp.negate32") ((_ extract 31 0) frB))))
+                 ((_ extract 31 0) frC))))))) ('IP (bvadd 'IP #x00000004)))))
