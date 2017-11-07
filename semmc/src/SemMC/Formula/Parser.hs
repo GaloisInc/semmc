@@ -609,7 +609,7 @@ exprAssignment' (Ctx.view -> Ctx.AssignEmpty) [] = return Ctx.empty
 exprAssignment' (Ctx.view -> Ctx.AssignExtend restTps tp) (Some e : restExprs) = do
   Refl <- case testEquality tp (S.exprType e) of
             Just pf -> return pf
-            Nothing -> E.throwError "unexpected type"
+            Nothing -> E.throwError ("unexpected type: " ++ show tp ++ " and " ++ show (S.exprType e))
   restAssn <- exprAssignment' restTps restExprs
   return $ restAssn Ctx.%> e
 exprAssignment' _ _ = E.throwError "mismatching numbers of arguments"

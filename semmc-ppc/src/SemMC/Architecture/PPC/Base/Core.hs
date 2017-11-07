@@ -16,6 +16,7 @@ module SemMC.Architecture.PPC.Base.Core (
   s17imm,
   u2imm,
   u4imm,
+  u5imm,
   u16imm,
   u16imm64,
   memrix,
@@ -140,6 +141,9 @@ u2imm = "U2imm"
 
 u4imm :: String
 u4imm = "U4imm"
+
+u5imm :: String
+u5imm = "U5imm"
 
 u16imm :: String
 u16imm = "U16imm"

@@ -75,6 +75,14 @@ manualBranch = do
     crbit <- param "bi" crbitrc (EBV 5)
     branchConditionalCTR Link 0b01100 (Loc crbit)
 
+  defineOpcode "GBC" $ do
+    comment "GBC (B-form, AA=0, LK=0)"
+    comment "Generic branch conditional with arbitrary BO"
+    target <- param "target" condbrtarget (EBV 14)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditional Relative NoLink (Loc bo) (Loc crbit) (Loc target)
+
   defineOpcode "BC" $ do
     comment "BC (B-form, AA=0, LK=0)"
     comment "This form is actually equivalent to BT, which has the BO field=01100"
@@ -205,11 +213,44 @@ branchConditional aa lk bo bi target = do
   -- link register, which depends on the current IP.
   when (lk == Link) $ defLoc lnk nextInsn
 
+-- | 'branchConditional' where the BO bits are dynamic
+genericBranchConditional :: (?bitSize :: BitSize)
+                         => AA
+                         -> LK
+                         -> Expr 'TBV
+                         -> Expr 'TBV
+                         -> Expr 'TBV
+                         -> SemM 'Def ()
+genericBranchConditional aa lk bo bi target = do
+  input ctr
+  input cr
+  when (lk == Link || aa == Relative) $ input ip
+
+  let isCtrDec = notp (testBitDynamic (LitBV 32 0x2) (zext' 32 bo))
+  let newCtr = ite isCtrDec (bvsub (Loc ctr) (naturalLitBV 0x1)) (Loc ctr)
+  defLoc ctr newCtr
+
+  let xtarget = sext (concat target (LitBV 2 0x0))
+  let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
+  let brEA = if aa == Absolute
+             then xtarget
+             else bvadd xtarget (Loc ip)
+  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo)) brEA nextInsn)
+  when (lk == Link) $ defLoc lnk nextInsn
+
 truePred :: Expr 'TBool
 truePred = LitBool True
 
 falsePred :: Expr 'TBool
 falsePred = LitBool False
+
+generic_cond_ok :: Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+generic_cond_ok bo bi =
+  ite (testBitDynamic (LitBV 32 0x0) (zext' 32 bo))
+      truePred
+      (ite (testBitDynamic (LitBV 32 0x1) (zext' 32 bo))
+           (testBitDynamic (zext' 32 bi) (Loc cr))
+           (notp (testBitDynamic (zext' 32 bi) (Loc cr))))
 
 cond_ok :: W 5 -> Expr 'TBV -> Expr 'TBool
 cond_ok bo bi =
@@ -222,6 +263,16 @@ cond_ok bo bi =
   else if testBit bo 1
        then testBitDynamic (zext' 32 bi) (Loc cr)
        else notp (testBitDynamic (zext' 32 bi) (Loc cr))
+
+generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBool
+generic_ctr_ok bo =
+  ite (testBitDynamic (LitBV 32 0x2) (zext' 32 bo))
+      truePred
+      (ite (testBitDynamic (LitBV 32 0x3) (zext' 32 bo))
+           (xorp ctr_ne_zero truePred)
+           (xorp ctr_ne_zero falsePred))
+  where
+    ctr_ne_zero = bveq (Loc ctr) (naturalLitBV 0x0)
 
 ctr_ok :: (?bitSize :: BitSize) => W 5 -> Expr 'TBool
 ctr_ok bo =
