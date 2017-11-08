@@ -236,7 +236,9 @@ bvand :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 bvand = binBVBuiltin "bvand"
 
 bvshl :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-bvshl = binBVBuiltin "bvshl"
+bvshl bv n
+  | LitBV _ 0 <- n = bv
+  | otherwise = binBVBuiltin "bvshl" bv n
 
 bvlshr :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 bvlshr = binBVBuiltin "bvlshr"

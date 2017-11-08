@@ -70,3 +70,13 @@ baseBitwise = do
       comment "Extend Sign Word (X-form)"
       (rA, rS) <- xform2
       defLoc rA (sext (lowBits 32 (Loc rS)))
+
+
+    defineOpcodeWithIP "RLDICR" $ do
+      (rA, sh, mb, rS) <- mdform4
+      -- n = sh
+      -- b = mb
+      let k = 64
+      let r = rotl k (Loc rS) (zext (Loc sh))
+      let m = mask 64 (LitBV k 0) (zext (Loc mb))
+      defLoc rA (bvand r m)

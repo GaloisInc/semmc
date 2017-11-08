@@ -38,6 +38,7 @@ module SemMC.Architecture.PPC.Base.Core (
   defineOpcodeWithIP,
   -- * Forms
   naturalBV,
+  mdform4,
   xoform3,
   xform3,
   xform2,
@@ -66,6 +67,8 @@ module SemMC.Architecture.PPC.Base.Core (
   sext',
   zext,
   zext',
+  rotl,
+  mask,
   -- * Uninterpreted Functions
   isR0,
   memriReg,
@@ -145,6 +148,9 @@ u4imm = "U4imm"
 u5imm :: String
 u5imm = "U5imm"
 
+u6imm ::  String
+u6imm = "U6imm"
+
 u16imm :: String
 u16imm = "U16imm"
 
@@ -209,6 +215,17 @@ defineOpcodeWithIP name def =
 
 naturalBV :: (?bitSize :: BitSize) => ExprType 'TBV
 naturalBV = EBV (bitSizeValue ?bitSize)
+
+mdform4 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+mdform4 = do
+  rA <- param "rA" gprc naturalBV
+  sh <- param "sh" u6imm (EBV 6)
+  mb <- param "mb" u6imm (EBV 6)
+  rS <- param "rS" gprc naturalBV
+  input rS
+  input sh
+  input mb
+  return (rA, sh, mb, rS)
 
 xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xoform3 = do
@@ -336,6 +353,38 @@ zext' fullWidth e
   | otherwise = zeroExtend extendBy e
   where
     extendBy = fullWidth - exprBVSize e
+
+-- | Rotate a K bit value left
+--
+-- > rotl[k](v, n)
+--
+-- rotates the K bit bitvector @v@ left by @n@ bits.
+--
+-- All of the inputs are expected to be the same size
+rotl :: (HasCallStack, ?bitSize :: BitSize)
+     => Int
+     -> Expr 'TBV
+     -> Expr 'TBV
+     -> Expr 'TBV
+rotl k v n =
+  let w1 = bvshl v n
+      w2 = bvlshr v (bvsub (LitBV k (toInteger k)) n)
+  in bvor w1 w2
+
+-- | Generate a mask of all ones from b0 to b1
+--
+-- > mask b0 b1
+mask :: (HasCallStack, ?bitSize :: BitSize)
+     => Int
+     -> Expr 'TBV
+     -> Expr 'TBV
+     -> Expr 'TBV
+mask k b0 b1 =
+  let allOnes = sext' k (LitBV 1 0x1)
+      clearLeft = bvlshr (bvshl allOnes b0) b0
+      shmax = LitBV k (toInteger (k - 1))
+      shr = bvsub shmax b1
+  in bvshl (bvlshr clearLeft shr) shr
 
 -- Helpers for endianness isolation
 
