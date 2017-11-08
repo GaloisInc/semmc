@@ -73,6 +73,7 @@ baseBitwise = do
 
 
     defineOpcodeWithIP "RLDICR" $ do
+      comment "Rotate Left Doubleword Immediate then Clear Right (MD-form)"
       (rA, sh, mb, rS) <- mdform4
       -- n = sh
       -- b = mb

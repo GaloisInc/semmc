@@ -1,3 +1,4 @@
+;; Rotate Left Doubleword Immediate then Clear Right (MD-form)
 ((operands ((rA . 'Gprc) (sh . 'U6imm) (mb . 'U6imm) (rS . 'Gprc))) 
   (in (mb sh rS 'IP))
   (defs 
