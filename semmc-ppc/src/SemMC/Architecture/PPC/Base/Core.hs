@@ -39,6 +39,9 @@ module SemMC.Architecture.PPC.Base.Core (
   -- * Forms
   naturalBV,
   mdform4,
+  mdsform4,
+  mform5i,
+  mform5r,
   xoform3,
   xform3,
   xform2,
@@ -216,6 +219,34 @@ defineOpcodeWithIP name def =
 naturalBV :: (?bitSize :: BitSize) => ExprType 'TBV
 naturalBV = EBV (bitSizeValue ?bitSize)
 
+-- | The M-form for RLWINM with three 5 bit immediates
+mform5i :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+mform5i = do
+  rA <- param "rA" gprc naturalBV
+  sh <- param "sh" u5imm (EBV 5)
+  mb <- param "mb" u5imm (EBV 5)
+  me <- param "me" u5imm (EBV 5)
+  rS <- param "rS" gprc naturalBV
+  input sh
+  input mb
+  input me
+  input rS
+  return (rA, sh, mb, me, rS)
+
+mform5r :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+mform5r = do
+  rA <- param "rA" gprc naturalBV
+  mb <- param "mb" u5imm (EBV 5)
+  me <- param "me" u5imm (EBV 5)
+  rS <- param "rS" gprc naturalBV
+  rB <- param "rB" gprc naturalBV
+  input rB
+  input mb
+  input me
+  input rS
+  return (rA, mb, me, rS, rB)
+
+
 mdform4 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
 mdform4 = do
   rA <- param "rA" gprc naturalBV
@@ -226,6 +257,17 @@ mdform4 = do
   input sh
   input mb
   return (rA, sh, mb, rS)
+
+mdsform4 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+mdsform4 = do
+  rA <- param "rA" gprc naturalBV
+  mb <- param "mb" u6imm (EBV 6)
+  rS <- param "rS" gprc naturalBV
+  rB <- param "rB" gprc naturalBV
+  input mb
+  input rS
+  input rB
+  return (rA, mb, rS, rB)
 
 xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xoform3 = do

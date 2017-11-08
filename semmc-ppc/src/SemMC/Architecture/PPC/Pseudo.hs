@@ -103,7 +103,6 @@ ppcAssemblePseudo _proxy opcode oplist =
                                           PPC.U5imm (n' * 8) :>
                                           PPC.U5imm (n' * 8) :>
                                           source :>
-                                          source :>
                                           Nil
                                         )
              ]
