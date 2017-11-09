@@ -56,6 +56,26 @@ baseBitwise = do
     let w = lowBits 32 (Loc rS)
     defLoc rA (zext (bvlshr w n))
 
+  rotates
+
+  when (?bitSize == Size64) $ do
+    defineOpcodeWithIP "SLD" $ do
+      comment "Shift Left Doubleword (X-form)"
+      (rA, rS, rB) <- xform3
+      let n = zext (lowBits 6 (Loc rB))
+      defLoc rA  (bvshl (Loc rS) n)
+    defineOpcodeWithIP "SRD" $ do
+      comment "Shift Right Doubleword (X-form)"
+      (rA, rS, rB) <- xform3
+      let n = zext (lowBits64 6 (Loc rB))
+      defLoc rA (bvlshr (Loc rS) n)
+    defineOpcodeWithIP "EXTSW" $ do
+      comment "Extend Sign Word (X-form)"
+      (rA, rS) <- xform2
+      defLoc rA (sext (lowBits 32 (Loc rS)))
+
+rotates :: (?bitSize :: BitSize) => SemM 'Top ()
+rotates = do
   defineOpcodeWithIP "RLWINM" $ do
     comment "Rotate Left Word Immediate then AND with Mask (M-form)"
     (rA, sh, mb, me, rS) <- mform5i
@@ -86,21 +106,6 @@ baseBitwise = do
     defLoc rA (zext (bvor (bvand r m) (bvand (lowBits 32 (Loc rA)) (bvnot m))))
 
   when (?bitSize == Size64) $ do
-    defineOpcodeWithIP "SLD" $ do
-      comment "Shift Left Doubleword (X-form)"
-      (rA, rS, rB) <- xform3
-      let n = zext (lowBits 6 (Loc rB))
-      defLoc rA  (bvshl (Loc rS) n)
-    defineOpcodeWithIP "SRD" $ do
-      comment "Shift Right Doubleword (X-form)"
-      (rA, rS, rB) <- xform3
-      let n = zext (lowBits64 6 (Loc rB))
-      defLoc rA (bvlshr (Loc rS) n)
-    defineOpcodeWithIP "EXTSW" $ do
-      comment "Extend Sign Word (X-form)"
-      (rA, rS) <- xform2
-      defLoc rA (sext (lowBits 32 (Loc rS)))
-
 
     defineOpcodeWithIP "RLDICR" $ do
       comment "Rotate Left Doubleword Immediate then Clear Right (MD-form)"
