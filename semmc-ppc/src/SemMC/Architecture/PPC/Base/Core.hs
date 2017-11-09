@@ -47,6 +47,7 @@ module SemMC.Architecture.PPC.Base.Core (
   xform2,
   xform2f,
   dform,
+  dformu,
   iform,
   aform,
   aform4,
@@ -309,6 +310,16 @@ dform = do
   input rA
   input si
   return (rT, rA, si)
+
+-- | The unsigned immediate version of the dform
+dformu :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+dformu = do
+  rT <- param "rT" gprc naturalBV
+  ui <- param "ui" u16imm (EBV 16)
+  rA <- param "rA" gprc naturalBV
+  input rA
+  input ui
+  return (rT, rA, ui)
 
 iform :: (?bitSize :: BitSize) => String -> SemM 'Def (Location 'TBV)
 iform tag = do

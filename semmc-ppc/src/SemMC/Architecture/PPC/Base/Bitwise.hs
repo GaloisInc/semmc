@@ -57,6 +57,7 @@ baseBitwise = do
     defLoc rA (zext (bvlshr w n))
 
   rotates
+  temporary
 
   when (?bitSize == Size64) $ do
     defineOpcodeWithIP "SLD" $ do
@@ -73,6 +74,17 @@ baseBitwise = do
       comment "Extend Sign Word (X-form)"
       (rA, rS) <- xform2
       defLoc rA (sext (lowBits 32 (Loc rS)))
+
+-- | Operations we are temporarily defining, but would like to eventually learn
+temporary :: (?bitSize :: BitSize) => SemM 'Top ()
+temporary = do
+  defineOpcodeWithIP "ORI" $ do
+    (rT, rA, ui) <- dformu
+    defLoc rT (bvor (Loc rA) (zext (Loc ui)))
+
+  defineOpcodeWithIP "ORIS" $ do
+    (rT, rA, ui) <- dformu
+    defLoc rT (bvor (Loc rA) (zext (concat (Loc ui) (LitBV 16 0x0))))
 
 rotates :: (?bitSize :: BitSize) => SemM 'Top ()
 rotates = do
