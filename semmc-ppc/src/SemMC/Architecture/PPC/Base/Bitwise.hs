@@ -55,6 +55,10 @@ baseBitwise = do
     let n = zext' 32 (lowBits 5 (Loc rB))
     let w = lowBits 32 (Loc rS)
     defLoc rA (zext (bvlshr w n))
+  defineOpcodeWithIP "CNTLZW" $ do
+    comment "Count Leading Zeros Word (X-form)"
+    (rA, rS) <- xform2
+    defLoc rA (zext (bvclz (lowBits 32 (Loc rS))))
 
   rotates
   temporary
@@ -74,6 +78,10 @@ baseBitwise = do
       comment "Extend Sign Word (X-form)"
       (rA, rS) <- xform2
       defLoc rA (sext (lowBits 32 (Loc rS)))
+    defineOpcodeWithIP "CNTLZD" $ do
+      comment "Count Leading Zeros Doubleword (X-form)"
+      (rA, rS) <- xform2
+      defLoc rA (bvclz (Loc rS))
 
 -- | Operations we are temporarily defining, but would like to eventually learn
 temporary :: (?bitSize :: BitSize) => SemM 'Top ()

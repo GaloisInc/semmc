@@ -36,6 +36,7 @@ module SemMC.DSL (
   bvshl,
   bvlshr,
   bvnot,
+  bvclz,
   -- ** Bitwise bitvector comparisons
   bvule,
   bvult,
@@ -319,6 +320,12 @@ ite b t e =
 -- | Bitwise not (complement)
 bvnot :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 bvnot e = Builtin (exprType e) "bvnot" [Some e]
+
+-- | Count leading zeros
+bvclz :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+bvclz e =
+  case exprType e of
+    EBV n -> uf (exprType e) (printf "clz.%d" n) [ Some e ]
 
 binBVBuiltin :: (HasCallStack) => String -> Expr tp1 -> Expr tp1 -> Expr tp1
 binBVBuiltin s e1 e2
