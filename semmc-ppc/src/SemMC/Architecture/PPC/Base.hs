@@ -25,6 +25,7 @@ import SemMC.Architecture.PPC.Base.Compare
 import SemMC.Architecture.PPC.Base.FP
 import SemMC.Architecture.PPC.Base.Memory
 import SemMC.Architecture.PPC.Base.Special
+import SemMC.Architecture.PPC.Base.Sync
 
 -- Defs
 
@@ -35,6 +36,7 @@ base bitSize = runSem $ do
   baseBitwise
   baseCompare
   baseSpecial
+  baseSync
 
 pseudo :: BitSize -> [(String, Definition)]
 pseudo bitSize = runSem $ do

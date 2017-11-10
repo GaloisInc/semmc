@@ -1,0 +1,14 @@
+;; Load Doubleword and Reserve Indexed (X-form)
+;; This is basically LDX with additional memory synchronization semantics
+((operands ((rT . 'Gprc) (memref . 'Memrr))) 
+  (in ('Mem memref 'IP))
+  (defs 
+    ((rT 
+       ((_ call "read_mem.64") 
+         'Mem
+         (bvadd 
+           (ite 
+             ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+             #x0000000000000000
+             ((_ call "ppc.memrr_base") memref))
+           ((_ call "ppc.memrr_offset") memref)))) ('IP (bvadd 'IP #x0000000000000004)))))
