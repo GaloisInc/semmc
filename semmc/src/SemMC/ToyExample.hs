@@ -451,9 +451,11 @@ instance AC.ConcreteArchitecture Toy where
 -- [-16..16] and powers of 2.
 instance D.Arbitrary (Operand "I32") where
   arbitrary gen = I32 <$> D.choose
-    (NES.fromList 0 $ [-16..16] ++
+    (NES.fromList 0 $ bitCast <$> [-16..16] ++
                       concat [[2^k, -(2^k)] | k <- [(5::Integer)..31]])
     gen
+    where
+    bitCast = fromIntegral :: Int32 -> Word32
 
 instance D.Arbitrary (Operand "R32") where
   arbitrary gen = R32 <$> D.choose (NES.fromList Reg1 [Reg2, Reg3]) gen
