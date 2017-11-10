@@ -35,6 +35,11 @@ baseArithmetic = do
     defLoc rT res
     defineRCVariant "NEGo" res $ do
       comment "Negate (XO-form, RC=1)"
+  defineOpcodeWithIP "MULLI" $ do
+    comment "Multiply Low Immediate (D-form)"
+    (rT, rA, si) <- dformr0
+    let prod = bvmul (Loc rA) (sext (Loc si))
+    defLoc rT prod
   defineOpcodeWithIP "MULLW" $ do
     comment "Multiply Low Word (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3

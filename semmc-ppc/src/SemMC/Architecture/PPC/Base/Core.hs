@@ -48,6 +48,7 @@ module SemMC.Architecture.PPC.Base.Core (
   xform2,
   xform2f,
   dform,
+  dformr0,
   dformu,
   iform,
   aform,
@@ -321,6 +322,16 @@ dform = do
   rT <- param "rT" gprc naturalBV
   si <- param "si" s16imm (EBV 16)
   rA <- param "rA" gprc_nor0 naturalBV
+  input rA
+  input si
+  return (rT, rA, si)
+
+-- | D-form instructions where the operand is allowed to contain r0
+dformr0 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+dformr0 = do
+  rT <- param "rT" gprc naturalBV
+  si <- param "si" s16imm (EBV 16)
+  rA <- param "rA" gprc naturalBV
   input rA
   input si
   return (rT, rA, si)
