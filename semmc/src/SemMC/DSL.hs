@@ -7,6 +7,7 @@
 module SemMC.DSL (
   -- * Definitions
   defineOpcode,
+  forkDefinition,
   param,
   input,
   defLoc,
@@ -178,6 +179,33 @@ defineOpcode name (SemM def) = do
   newFormula <- RWS.get
   RWS.tell (Seq.singleton newFormula)
   return ()
+
+-- | Fork a definition into a second definition under a different name
+--
+-- This is designed to allow defining an instruction that is a strict extension
+-- of another instruction.  Note that comments are not preserved, and the new
+-- definition is given a new name.
+--
+-- > defineOpcode "OP1" $ do
+-- >   comment ...
+-- >   x <- param ...
+-- >   defLoc x ...
+-- >
+-- >   forkDefinition "OP1'" $ do
+-- >     comment ...
+-- >     defLoc eflags ...
+forkDefinition :: String -> SemM 'Def () -> SemM 'Def ()
+forkDefinition name (SemM def) = do
+  origFormula <- RWS.get
+  let modFormula = origFormula { fName = name
+                               , fComment = Seq.empty
+                               }
+  RWS.put modFormula
+  SemM def
+  forkedFormula <- RWS.get
+  RWS.tell (Seq.singleton forkedFormula)
+  -- Restore the original formula so that 'definOpcode' can finish it off
+  RWS.put origFormula
 
 -- | Add a descriptive comment to the output file
 --

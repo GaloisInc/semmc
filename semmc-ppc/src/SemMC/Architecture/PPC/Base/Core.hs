@@ -36,6 +36,7 @@ module SemMC.Architecture.PPC.Base.Core (
   memory,
   -- * IP Wrapper
   defineOpcodeWithIP,
+  defineRCVariant,
   -- * Forms
   naturalBV,
   mdform4,
@@ -214,6 +215,19 @@ defineOpcodeWithIP name def =
     defLoc ip (bvadd (Loc ip) (naturalLitBV 0x4))
     def
 
+-- | Fork the definition and define a variant that implements the behavior of
+-- RC=1 in instructions
+--
+-- The CR0 register is set as if the given value is compared against zero as in
+-- compare with immediate.  The low three bits of CR0 are set by comparison
+-- against zero and the fourth bit is copied from XER.
+defineRCVariant :: (?bitSize :: BitSize) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
+defineRCVariant newName modifiedReg def = do
+  forkDefinition newName $ do
+    input cr
+    input xer
+    defLoc cr (cmpImm bvslt bvsgt (LitBV 3 0x0) (naturalLitBV 0x0) modifiedReg)
+    def
 
 -- Form helpers
 

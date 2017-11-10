@@ -13,24 +13,40 @@ import SemMC.Architecture.PPC.Base.Core
 baseArithmetic :: (?bitSize :: BitSize) => SemM 'Top ()
 baseArithmetic = do
   defineOpcodeWithIP "ADD4" $ do
+    comment "ADD (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
-    defLoc rT (bvadd (Loc rA) (Loc rB))
+    let val = bvadd (Loc rA) (Loc rB)
+    defLoc rT val
+    defineRCVariant "ADD4o" val $ do
+      comment "ADD. (XO-form, RC=1)"
   defineOpcodeWithIP "SUBF" $ do
+    comment "SUBF (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
-    defLoc rT (bvsub (Loc rB) (Loc rA))
+    let val = bvsub (Loc rB) (Loc rA)
+    defLoc rT val
+    defineRCVariant "SUBFo" val $ do
+      comment "SUBF. (XO-form, RC=1)"
   defineOpcodeWithIP "NEG" $ do
+    comment "Negate (XO-form, RC=0)"
     rT <- param "rT" gprc naturalBV
     rA <- param "rA" gprc naturalBV
     input rA
-    defLoc rT (bvadd (bvnot (Loc rA)) (naturalLitBV 0x1))
+    let res = bvadd (bvnot (Loc rA)) (naturalLitBV 0x1)
+    defLoc rT res
+    defineRCVariant "NEGo" res $ do
+      comment "Negate (XO-form, RC=1)"
   defineOpcodeWithIP "MULLW" $ do
+    comment "Multiply Low Word (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
     let lhs = sext' 64 (lowBits 32 (Loc rA))
     let rhs = sext' 64 (lowBits 32 (Loc rB))
     let prod = bvmul lhs rhs
-    defLoc rT (zext (lowBits64 32 prod))
+    let res = zext (lowBits64 32 prod)
+    defLoc rT res
+    defineRCVariant "MULLWo" res $ do
+      comment "Multiply Low Word (XO-form, RC=1)"
   defineOpcodeWithIP "MULHW" $ do
-    comment "Multiply High Word (XO-form)"
+    comment "Multiply High Word (XO-form, RC=0)"
     comment "Multiply the low 32 bits of two registers, producing a 64 bit result."
     comment "Save the high 32 bits of the result into the output register"
     (rT, rA, rB) <- xoform3
@@ -44,14 +60,20 @@ baseArithmetic = do
     --
     -- NOTE: the high bits are technically undefined.  How do we want to
     -- represent that?
-    defLoc rT (zext (highBits64 32 prod))
+    let res = zext (highBits64 32 prod)
+    defLoc rT res
+    defineRCVariant "MULHWo" res $ do
+      comment "Multiply High Word (XO-form, RC=1)"
   defineOpcodeWithIP "MULHWU" $ do
-    comment "Multiply High Word Unsigned (XO-form)"
+    comment "Multiply High Word Unsigned (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
     let lhs = zext' 64 (lowBits 32 (Loc rA))
     let rhs = zext' 64 (lowBits 32 (Loc rB))
     let prod = bvmul lhs rhs
-    defLoc rT (zext (highBits64 32 prod))
+    let res = zext (highBits64 32 prod)
+    defLoc rT res
+    defineRCVariant "MULHWUo" res $ do
+      comment "Multiply High Word Unsigned (XO-form, RC=1)"
   defineOpcodeWithIP "ADDI" $ do
     comment "Add Immediate (D-form)"
     comment "We hand wrote this formula because it is one of the few that"
@@ -77,52 +99,76 @@ baseArithmetic = do
     defLoc rT (bvadd lhs (sext imm))
 
   defineOpcodeWithIP "ADDC" $ do
-    comment "Add Carrying (XO-form)"
+    comment "Add Carrying (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
     input xer
     let len = bitSizeValue ?bitSize
     let eres = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (Loc rB))
-    defLoc rT (lowBits' len eres)
+    let res = lowBits' len eres
+    defLoc rT res
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
+    defineRCVariant "ADDCo" res $ do
+      comment "Add Carrying (XO-form, RC=1)"
   defineOpcodeWithIP "SUBFC" $ do
-    comment "Subtract From Carrying (XO-form)"
+    comment "Subtract From Carrying (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
     input xer
     let len = bitSizeValue ?bitSize
     let eres0 = bvadd (bvnot (zext' (len + 1) (Loc rA))) (zext' (len + 1) (Loc rB))
     let eres1 = bvadd eres0 (LitBV (len + 1) 0x1)
-    defLoc rT (lowBits' len eres1)
+    let res = lowBits' len eres1
+    defLoc rT res
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
+    defineRCVariant "SUBFCo" res $ do
+      comment "Subtract From Carrying (XO-form, RC=1)"
   defineOpcodeWithIP "ADDE" $ do
-    comment "Add Extended (XO-form)"
+    comment "Add Extended (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
     input xer
     let len = bitSizeValue ?bitSize
     let eres0 = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (Loc rB))
     let eres1 = bvadd eres0 (zext' (len + 1) (xerBit CA (Loc xer)))
-    defLoc rT (lowBits' len eres1)
+    let res = lowBits' len eres1
+    defLoc rT res
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
+    defineRCVariant "ADDEo" res $ do
+      comment "Add Extended (XO-form, RC=1)"
   defineOpcodeWithIP "SUBFE" $ do
-    comment "Subtract From Extended (XO-form)"
+    comment "Subtract From Extended (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
     input xer
     let len = bitSizeValue ?bitSize
     let eres0 = bvadd (bvnot (zext' (len + 1) (Loc rA))) (zext' (len + 1) (Loc rB))
     let eres1 = bvadd eres0 (zext' (len + 1) (xerBit CA (Loc xer)))
-    defLoc rT (lowBits' len eres1)
+    let res = lowBits' len eres1
+    defLoc rT res
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
+    defineRCVariant "SUBFEo" res $ do
+      comment "Subtract From Extended (XO-form, RC=1)"
 
   when (?bitSize == Size64) $ do
     -- Not valid in 32 bit mode
     defineOpcodeWithIP "MULLD" $ do
+      comment "Multiply Low Doubleword (XO-form, RC=0)"
       (rT, rA, rB) <- xoform3
       let prod = bvmul (sext' 128 (Loc rA)) (sext' 128 (Loc rB))
-      defLoc rT (lowBits128 64 prod)
+      let res = lowBits128 64 prod
+      defLoc rT res
+      defineRCVariant "MULLDo" res $ do
+        comment "Multiply Low Doubleword (XO-form, RC=1)"
     defineOpcodeWithIP "MULHD" $ do
+      comment "Multiply High Doubleword (XO-form, RC=0)"
       (rT, rA, rB) <- xoform3
       let prod = bvmul (sext' 128 (Loc rA)) (sext' 128 (Loc rB))
-      defLoc rT (highBits128 64 prod)
+      let res = highBits128 64 prod
+      defLoc rT res
+      defineRCVariant "MULHDo" res $ do
+        comment "Multiply High Doubleword (XO-form, RC=1)"
     defineOpcodeWithIP "MULHDU" $ do
+      comment "Multiply High Doubleword Unsigned (XO-form, RC=0)"
       (rT, rA, rB) <- xoform3
       let prod = bvmul (zext' 128 (Loc rA)) (zext' 128 (Loc rB))
-      defLoc rT (highBits128 64 prod)
+      let res = highBits128 64 prod
+      defLoc rT res
+      defineRCVariant "MULHDUo" res $ do
+        comment "Multiply High Doubleword Unsigned (XO-form, RC=1)"
