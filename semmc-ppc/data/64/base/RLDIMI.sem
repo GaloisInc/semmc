@@ -1,4 +1,4 @@
-;; Rotate Left Doubleword Immediate then Mask Insert (MD-form)
+;; Rotate Left Doubleword Immediate then Mask Insert (MD-form, RC=0)
 ((operands ((rA . 'Gprc) (sh . 'U6imm) (mb . 'U6imm) (rS . 'Gprc))) 
   (in (rA mb sh rS 'IP))
   (defs 

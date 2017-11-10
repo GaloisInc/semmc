@@ -1,4 +1,4 @@
-;; Multiply High Word Unsigned (XO-form)
+;; Multiply High Word Unsigned (XO-form, RC=0)
 ((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
   (in (rB rA 'IP))
   (defs 

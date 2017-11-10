@@ -1,0 +1,19 @@
+;; AND Immediate (D-form)
+((operands ((rT . 'Gprc) (ui . 'U16imm) (rA . 'Gprc))) 
+  (in ('XER 'CR ui rA 'IP))
+  (defs 
+    (('CR 
+       (bvor 
+         'CR
+         (bvshl 
+           ((_ zero_extend 28) 
+             (concat 
+               (ite 
+                 (bvslt (bvand rA ((_ zero_extend 48) ui)) #x0000000000000000)
+                 #b100
+                 (ite 
+                   (bvsgt (bvand rA ((_ zero_extend 48) ui)) #x0000000000000000)
+                   #b010
+                   #b001))
+               ((_ extract 32 32) 'XER)))
+           (bvmul ((_ zero_extend 29) #b000) #x00000004)))) (rT (bvand rA ((_ zero_extend 48) ui))) ('IP (bvadd 'IP #x0000000000000004)))))

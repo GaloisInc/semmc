@@ -1,0 +1,25 @@
+;; Shift Left Doubleword (x-form, RC=1)
+((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) 
+  (in ('XER 'CR rB rS 'IP))
+  (defs 
+    (('CR 
+       (bvor 
+         'CR
+         (bvshl 
+           ((_ zero_extend 28) 
+             (concat 
+               (ite 
+                 (bvslt 
+                   (bvshl rS ((_ zero_extend 58) ((_ extract 63 58) rB)))
+                   #x0000000000000000)
+                 #b100
+                 (ite 
+                   (bvsgt 
+                     (bvshl rS ((_ zero_extend 58) ((_ extract 63 58) rB)))
+                     #x0000000000000000)
+                   #b010
+                   #b001))
+               ((_ extract 32 32) 'XER)))
+           (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
+      (rA (bvshl rS ((_ zero_extend 58) ((_ extract 63 58) rB))))
+      ('IP (bvadd 'IP #x0000000000000004)))))

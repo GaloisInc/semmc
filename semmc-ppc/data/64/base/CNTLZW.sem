@@ -1,4 +1,4 @@
-;; Count Leading Zeros Word (X-form)
+;; Count Leading Zeros Word (X-form, RC=0)
 ((operands ((rA . 'Gprc) (rS . 'Gprc))) 
   (in (rS 'IP))
   (defs 

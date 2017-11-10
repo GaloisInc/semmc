@@ -1,1 +1,2 @@
+;; AND (X-form, RC=0)
 ((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) (in (rB rS 'IP)) (defs ((rA (bvand rS rB)) ('IP (bvadd 'IP #x00000004)))))

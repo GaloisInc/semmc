@@ -1,4 +1,4 @@
-;; Add Carrying (XO-form)
+;; Add Carrying (XO-form, RC=0)
 ((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
   (in ('XER rB rA 'IP))
   (defs 

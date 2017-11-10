@@ -1,4 +1,4 @@
-;; Rotate Left Word then AND with Mask (M-form)
+;; Rotate Left Word then AND with Mask (M-form, RC=0)
 ((operands ((rA . 'Gprc) (mb . 'U5imm) (me . 'U5imm) (rS . 'Gprc) (rB . 'Gprc))) 
   (in (rS me mb rB 'IP))
   (defs 
