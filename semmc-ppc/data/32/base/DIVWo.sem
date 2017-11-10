@@ -1,0 +1,16 @@
+;; Divide Word (XO-form, RC=1)
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
+  (in ('XER 'CR rB rA 'IP))
+  (defs 
+    (('CR 
+       (bvor 
+         'CR
+         (bvshl 
+           ((_ zero_extend 28) 
+             (concat 
+               (ite 
+                 (bvslt (bvsdiv rA rB) #x00000000)
+                 #b100
+                 (ite (bvsgt (bvsdiv rA rB) #x00000000) #b010 #b001))
+               ((_ extract 0 0) 'XER)))
+           (bvmul ((_ zero_extend 29) #b000) #x00000004)))) (rT (bvsdiv rA rB)) ('IP (bvadd 'IP #x00000004)))))

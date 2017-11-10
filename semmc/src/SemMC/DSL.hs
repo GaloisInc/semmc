@@ -30,6 +30,8 @@ module SemMC.DSL (
   bvadd,
   bvsub,
   bvmul,
+  bvsdiv,
+  bvudiv,
   -- ** Bitwise bitvector ops
   bvxor,
   bvor,
@@ -254,6 +256,12 @@ bvsub = binBVBuiltin "bvsub"
 
 bvmul :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 bvmul = binBVBuiltin "bvmul"
+
+bvudiv :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvudiv = binBVBuiltin "bvudiv"
+
+bvsdiv :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvsdiv = binBVBuiltin "bvsdiv"
 
 bvxor :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 bvxor = binBVBuiltin "bvxor"

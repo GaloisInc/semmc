@@ -79,6 +79,20 @@ baseArithmetic = do
     defLoc rT res
     defineRCVariant "MULHWUo" res $ do
       comment "Multiply High Word Unsigned (XO-form, RC=1)"
+  defineOpcodeWithIP "DIVW" $ do
+    comment "Divide Word (XO-form, RC=0)"
+    (rT, rA, rB) <- xoform3
+    let res = bvsdiv (sext (lowBits 32 (Loc rA))) (sext (lowBits 32 (Loc rB)))
+    defLoc rT res
+    defineRCVariant "DIVWo" res $ do
+      comment "Divide Word (XO-form, RC=1)"
+  defineOpcodeWithIP "DIVWU" $ do
+    comment "Divide Word Unsigned (XO-form, RC=0)"
+    (rT, rA, rB) <- xoform3
+    let res = bvudiv (sext (lowBits 32 (Loc rA))) (sext (lowBits 32 (Loc rB)))
+    defLoc rT res
+    defineRCVariant "DIVWUo" res $ do
+      comment "Divide Word Unsigned (XO-form, RC=1)"
   defineOpcodeWithIP "ADDI" $ do
     comment "Add Immediate (D-form)"
     comment "We hand wrote this formula because it is one of the few that"
@@ -177,3 +191,17 @@ baseArithmetic = do
       defLoc rT res
       defineRCVariant "MULHDUo" res $ do
         comment "Multiply High Doubleword Unsigned (XO-form, RC=1)"
+    defineOpcodeWithIP "DIVD" $ do
+      comment "Divide Doubleword Signed (XO-form, RC=0)"
+      (rT, rA, rB) <- xoform3
+      let res = bvsdiv (Loc rA) (Loc rB)
+      defLoc rT res
+      defineRCVariant "DIVDo" res $ do
+        comment "Divide Doubleword Signed (XO-form, RC=1)"
+    defineOpcodeWithIP "DIVDU" $ do
+      comment "Divide Doubleword Unsigned (XO-form, RC=0)"
+      (rT, rA, rB) <- xoform3
+      let res = bvudiv (Loc rA) (Loc rB)
+      defLoc rT res
+      defineRCVariant "DIVDUo" res $ do
+        comment "Divide Doubleword Unsigned (XO-form, RC=1)"
