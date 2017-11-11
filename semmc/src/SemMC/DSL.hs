@@ -40,6 +40,7 @@ module SemMC.DSL (
   bvlshr,
   bvnot,
   bvclz,
+  bvpopcnt,
   -- ** Bitwise bitvector comparisons
   bvule,
   bvult,
@@ -362,6 +363,12 @@ bvclz :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 bvclz e =
   case exprType e of
     EBV n -> uf (exprType e) (printf "clz.%d" n) [ Some e ]
+
+-- | Population count (count number of bits set)
+bvpopcnt :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+bvpopcnt e =
+  case exprType e of
+    EBV n -> uf (exprType e) (printf "popcnt.%d" n) [ Some e ]
 
 binBVBuiltin :: (HasCallStack) => String -> Expr tp1 -> Expr tp1 -> Expr tp1
 binBVBuiltin s e1 e2

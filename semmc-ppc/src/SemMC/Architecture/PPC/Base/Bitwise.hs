@@ -122,6 +122,15 @@ baseBitwise = do
     defLoc rA res
     defineRCVariant "CNTLZWo" res $ do
       comment "Count Leading Zeros Word (X-form, RC=1)"
+  defineOpcodeWithIP "POPCNTW" $ do
+    comment "Population Count Words (X-form)"
+    (rA, rS) <- xform2
+    let lowRes = bvpopcnt (lowBits 32 (Loc rS))
+    case ?bitSize of
+      Size32 -> defLoc rA lowRes
+      Size64 -> do
+        let highRes = bvpopcnt (highBits 32 (Loc rS))
+        defLoc rA (concat highRes lowRes)
 
   rotates
   temporary
@@ -157,6 +166,11 @@ baseBitwise = do
       defLoc rA res
       defineRCVariant "CNTLZDo" res $ do
         comment "Count Leading Zeros Doubleword (X-form, RC=1)"
+
+    defineOpcodeWithIP "POPCNTD" $ do
+      comment "Population Count Doubleword (X-form)"
+      (rA, rS) <- xform2
+      defLoc rA (bvpopcnt (Loc rS))
 
 -- | Operations we are temporarily defining, but would like to eventually learn
 temporary :: (?bitSize :: BitSize) => SemM 'Top ()

@@ -11,6 +11,7 @@ module SemMC.Architecture.PPC.Base.Core (
   fprc,
   crrc,
   crbitrc,
+  crbitm,
   s16imm,
   s16imm64,
   s17imm,
@@ -135,6 +136,9 @@ crrc = "Crrc"
 
 crbitrc :: String
 crbitrc = "Crbitrc"
+
+crbitm :: String
+crbitm = "Crbitm"
 
 s16imm :: String
 s16imm = "S16imm"
