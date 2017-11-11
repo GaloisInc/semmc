@@ -117,9 +117,9 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
   , ("popcnt.32",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32 Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
   , ("popcnt.64",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
   ]
