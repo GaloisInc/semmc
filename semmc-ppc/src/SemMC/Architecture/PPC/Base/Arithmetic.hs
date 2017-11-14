@@ -139,6 +139,15 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
     defineRCVariant "ADDICo" res $ do
       comment "Add Immediate Carrying and Record (D-form)"
+  defineOpcodeWithIP "SUBFIC" $ do
+    comment "Subtract From Immediate Carrying (D-form)"
+    (rT, rA, si) <- dformr0
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres = bvsub (zext' (len + 1) (Loc rA)) (concat (LitBV 1 0x0) (sext (Loc si)))
+    let res = lowBits' len eres
+    defLoc rT res
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
   defineOpcodeWithIP "SUBFC" $ do
     comment "Subtract From Carrying (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3
