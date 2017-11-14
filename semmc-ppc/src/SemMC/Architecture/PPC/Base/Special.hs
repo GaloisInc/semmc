@@ -43,3 +43,21 @@ baseSpecial = do
     let res = ite (bveq check (LitBV 32 0x1)) newCR (LitBV 32 0x0)
     defLoc cr res
 
+  defineOpcodeWithIP "MFOCRF" $ do
+    comment "Move From One Condition Register Field (XFX-form)"
+    rT <- param "rT" gprc naturalBV
+    crbit <- param "FXM" crbitm (EBV 8)
+    input crbit
+    -- FIXME: The other bits of rT are actually undefined - we need a way to
+    -- talk about undefined bits
+    input rT
+    input cr
+
+    let check = bvpopcnt (zext' 32 (Loc crbit))
+    let fldIdx = bvclz (zext' 32 (Loc crbit))
+    let fieldBitStart = bvmul fldIdx (LitBV 32 0x4)
+    let fieldMask = mask 32 fieldBitStart (bvadd fieldBitStart (LitBV 32 0x3))
+    let crmask = bvnot fieldMask
+    let newRT = bvand crmask (Loc cr)
+    let res = ite (bveq check (LitBV 32 0x1)) newRT (LitBV 32 0x0)
+    defLoc rT (zext res)
