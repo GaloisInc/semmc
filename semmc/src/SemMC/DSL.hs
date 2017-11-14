@@ -37,6 +37,7 @@ module SemMC.DSL (
   bvor,
   bvand,
   bvshl,
+  bvashr,
   bvlshr,
   bvnot,
   bvclz,
@@ -279,7 +280,14 @@ bvshl bv n
   | otherwise = binBVBuiltin "bvshl" bv n
 
 bvlshr :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-bvlshr = binBVBuiltin "bvlshr"
+bvlshr bv n
+  | LitBV _ 0 <- n = bv
+  | otherwise = binBVBuiltin "bvlshr" bv n
+
+bvashr :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvashr bv n
+  | LitBV _ 0 <- n = bv
+  | otherwise = binBVBuiltin "bvashr" bv n
 
 bvult :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 bvult = binTestBuiltin "bvult"
