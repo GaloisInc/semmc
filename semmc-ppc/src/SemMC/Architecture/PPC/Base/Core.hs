@@ -45,6 +45,7 @@ module SemMC.Architecture.PPC.Base.Core (
   mform5i,
   mform5r,
   xoform3,
+  xoform2,
   xform3,
   xform2,
   xform2f,
@@ -297,6 +298,13 @@ xoform3 = do
   input rA
   input rB
   return (rT, rA, rB)
+
+xoform2 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
+xoform2 = do
+  rT <- param "rT" gprc naturalBV
+  rA <- param "rA" gprc naturalBV
+  input rA
+  return (rT, rA)
 
 xform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xform3 = do

@@ -184,6 +184,22 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     defineRCVariant "SUBFEo" res $ do
       comment "Subtract From Extended (XO-form, RC=1)"
+  defineOpcodeWithIP "ADDZE" $ do
+    comment "Add to Zero Extended (XO-form, RC=0)"
+    (rT, rA) <- xoform2
+    input xer
+    let res = bvadd (Loc rA) (zext (xerBit CA (Loc xer)))
+    defLoc rT res
+    defineRCVariant "ADDZEo" res $ do
+      comment "Add to Zero Extended (XO-form, RC=1)"
+  defineOpcodeWithIP "SUBFZE" $ do
+    comment "Subtract From Zero Extended (XO-form, RC=0)"
+    (rT, rA) <- xoform2
+    input xer
+    let res = bvadd (bvnot (Loc rA)) (zext (xerBit CA (Loc xer)))
+    defLoc rT res
+    defineRCVariant "SUBFZEo" res $ do
+      comment "Subtract From Zero Extended (XO-form, RC=1)"
 
   when (?bitSize == Size64) $ do
     -- Not valid in 32 bit mode
