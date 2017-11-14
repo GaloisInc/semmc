@@ -1,0 +1,4 @@
+;; XOR Immediate (D-form)
+((operands ((rT . 'Gprc) (ui . 'U16imm) (rA . 'Gprc))) 
+  (in (ui rA 'IP))
+  (defs ((rT (bvxor rA ((_ zero_extend 16) ui))) ('IP (bvadd 'IP #x00000004)))))

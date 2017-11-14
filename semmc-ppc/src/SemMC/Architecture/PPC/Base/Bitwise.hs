@@ -183,6 +183,16 @@ temporary = do
     (rT, rA, ui) <- dformu
     defLoc rT (bvor (Loc rA) (zext (concat (Loc ui) (LitBV 16 0x0))))
 
+  defineOpcodeWithIP "XORI" $ do
+    comment "XOR Immediate (D-form)"
+    (rT, rA, ui) <- dformu
+    defLoc rT (bvxor (Loc rA) (zext (Loc ui)))
+
+  defineOpcodeWithIP "XORIS" $ do
+    comment "XOR Immediate Shifted (D-form)"
+    (rT, rA, ui) <- dformu
+    defLoc rT (bvxor (Loc rA) (zext (concat (Loc ui) (LitBV 16 0x0))))
+
 rotates :: (?bitSize :: BitSize) => SemM 'Top ()
 rotates = do
   defineOpcodeWithIP "RLWINM" $ do
