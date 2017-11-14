@@ -115,24 +115,9 @@ baseBitwise = do
     defLoc rA res
     defineRCVariant "SRWo" res $ do
       comment "Shift Right Word (X-form, RC=1)"
-  defineOpcodeWithIP "CNTLZW" $ do
-    comment "Count Leading Zeros Word (X-form, RC=0)"
-    (rA, rS) <- xform2
-    let res = zext (bvclz (lowBits 32 (Loc rS)))
-    defLoc rA res
-    defineRCVariant "CNTLZWo" res $ do
-      comment "Count Leading Zeros Word (X-form, RC=1)"
-  defineOpcodeWithIP "POPCNTW" $ do
-    comment "Population Count Words (X-form)"
-    (rA, rS) <- xform2
-    let lowRes = bvpopcnt (lowBits 32 (Loc rS))
-    case ?bitSize of
-      Size32 -> defLoc rA lowRes
-      Size64 -> do
-        let highRes = bvpopcnt (highBits 32 (Loc rS))
-        defLoc rA (concat highRes lowRes)
 
   rotates
+  special
   temporary
 
   when (?bitSize == Size64) $ do
@@ -159,6 +144,27 @@ baseBitwise = do
       defLoc rA res
       defineRCVariant "EXTSWo" res $ do
         comment "Extend Sign Word (X-form, RC=1)"
+
+special :: (?bitSize :: BitSize) => SemM 'Top ()
+special = do
+  defineOpcodeWithIP "CNTLZW" $ do
+    comment "Count Leading Zeros Word (X-form, RC=0)"
+    (rA, rS) <- xform2
+    let res = zext (bvclz (lowBits 32 (Loc rS)))
+    defLoc rA res
+    defineRCVariant "CNTLZWo" res $ do
+      comment "Count Leading Zeros Word (X-form, RC=1)"
+  defineOpcodeWithIP "POPCNTW" $ do
+    comment "Population Count Words (X-form)"
+    (rA, rS) <- xform2
+    let lowRes = bvpopcnt (lowBits 32 (Loc rS))
+    case ?bitSize of
+      Size32 -> defLoc rA lowRes
+      Size64 -> do
+        let highRes = bvpopcnt (highBits 32 (Loc rS))
+        defLoc rA (concat highRes lowRes)
+
+  when (?bitSize == Size64) $ do
     defineOpcodeWithIP "CNTLZD" $ do
       comment "Count Leading Zeros Doubleword (X-form, RC=0)"
       (rA, rS) <- xform2
