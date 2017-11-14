@@ -26,7 +26,7 @@ defineStores = do
     storeWithUpdate 1
   defineOpcodeWithIP "STBX" $ do
     comment "Store Byte Indexed (X-form)"
-    storeIndexed 1
+    storeIndexed 1 id
   defineOpcodeWithIP "STBUX" $ do
     comment "Store Byte with Update Indexed (X-form)"
     storeWithUpdateIndexed 1
@@ -39,10 +39,13 @@ defineStores = do
     storeWithUpdate 2
   defineOpcodeWithIP "STHX" $ do
     comment "Store Halfword Indexed (X-form)"
-    storeIndexed 2
+    storeIndexed 2 id
   defineOpcodeWithIP "STHUX" $ do
     comment "Store Halfword with Update Indexed (X-form)"
     storeWithUpdateIndexed 2
+  defineOpcodeWithIP "STHBRX" $ do
+    comment "Store Halfword Byte-Reverse Indexed (X-form)"
+    storeIndexed 2 reverseBytes
 
   defineOpcodeWithIP "STW" $ do
     comment "Store Word (D-form)"
@@ -52,10 +55,13 @@ defineStores = do
     storeWithUpdate 4
   defineOpcodeWithIP "STWX" $ do
     comment "Store Word Indexed (X-form)"
-    storeIndexed 4
+    storeIndexed 4 id
   defineOpcodeWithIP "STWUX" $ do
     comment "Store Word with Update Indexed (X-form)"
     storeWithUpdateIndexed 4
+  defineOpcodeWithIP "STWBRX" $ do
+    comment "Store Word Byte-Reverse Indexed (X-form)"
+    storeIndexed 4 reverseBytes
 
   when (?bitSize == Size64) $ do
     defineOpcodeWithIP "STD"$ do
@@ -66,10 +72,13 @@ defineStores = do
       storeWithUpdateDS 8
     defineOpcodeWithIP "STDX" $ do
       comment "Store Doubleword Indexed (X-form)"
-      storeIndexed 8
+      storeIndexed 8 id
     defineOpcodeWithIP "STDUX" $ do
       comment "Store Doubleword with Update Indexed (X-form)"
       storeWithUpdateIndexed 8
+    defineOpcodeWithIP "STDBRX" $ do
+      comment "Store Doubleword Byte-Reverse Indexed (X-form)"
+      storeIndexed 8 reverseBytes
 
 defineLoads :: (?bitSize :: BitSize) => SemM 'Top ()
 defineLoads = do
@@ -81,7 +90,7 @@ defineLoads = do
     loadAndUpdate 1 zext
   defineOpcodeWithIP "LBZX" $ do
     comment "Load Byte and Zero Indexed (X-form)"
-    loadIndexed 1 zext
+    loadIndexed 1 id zext
   defineOpcodeWithIP "LBZUX" $ do
     comment "Load Byte and Zero with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 1 zext
@@ -94,7 +103,7 @@ defineLoads = do
     loadAndUpdate 2 zext
   defineOpcodeWithIP "LHZX" $ do
     comment "Load Halfword and Zero Indexed (X-form)"
-    loadIndexed 2 zext
+    loadIndexed 2 id zext
   defineOpcodeWithIP "LHZUX" $ do
     comment "Load Halfword and Zero with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 2 zext
@@ -107,10 +116,13 @@ defineLoads = do
     loadAndExtend 2 sext
   defineOpcodeWithIP "LHAX" $ do
     comment "Load Halfword Algebraic Indexed (X-form)"
-    loadIndexed 2 sext
+    loadIndexed 2 id sext
   defineOpcodeWithIP "LHAUX" $ do
     comment "Load Halfword Algebraic with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 2 sext
+  defineOpcodeWithIP "LHBRX" $ do
+    comment "Load Halfword Byte-Reverse Indexed (X-form)"
+    loadIndexed 2 reverseBytes zext
 
   defineOpcodeWithIP "LWZ" $ do
     comment "Load Word and Zero (D-form)"
@@ -120,17 +132,20 @@ defineLoads = do
     loadAndUpdate 4 zext
   defineOpcodeWithIP "LWZX" $ do
     comment "Load Word and Zero Indexed (X-form)"
-    loadIndexed 4 zext
+    loadIndexed 4 id zext
   defineOpcodeWithIP "LWZUX" $ do
     comment "Load Word and Zero with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 4 zext
+  defineOpcodeWithIP "LWBRX" $ do
+    comment "Load Word Byte-Reverse Indexed (X-form)"
+    loadIndexed 4 reverseBytes zext
 
   defineOpcodeWithIP "LWA" $ do
     comment "Load Word Algebraic (DS-form)"
     loadAndExtendDS 4 sext
   defineOpcodeWithIP "LWAX" $ do
     comment "Load Word Algebraic Indexed (X-form)"
-    loadIndexed 4 sext
+    loadIndexed 4 id sext
   defineOpcodeWithIP "LWAUX" $ do
     comment "Load Word Algebraic with Update Indexed (X-form)"
     loadAndExtendWithUpdateIndexed 4 sext
@@ -145,8 +160,11 @@ defineLoads = do
       loadAndUpdateDS 8 id
     defineOpcodeWithIP "LDX" $ do
       comment "Load Doubleword Indexed (X-form)"
-      loadIndexed 8 id
+      loadIndexed 8 id id
     defineOpcodeWithIP "LDUX" $ do
       comment "Load Doubleword and Update Indexed (X-form)"
       loadAndExtendWithUpdateIndexed 8 id
+    defineOpcodeWithIP "LDBRX" $ do
+      comment "Load Doubleword Byte-Reverse Indexed (X-form)"
+      loadIndexed 8 reverseBytes zext
 

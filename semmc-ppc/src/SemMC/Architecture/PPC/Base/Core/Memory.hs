@@ -18,11 +18,12 @@ module SemMC.Architecture.PPC.Base.Core.Memory (
   storeWithUpdate,
   storeWithUpdateDS,
   storeIndexed,
-  storeWithUpdateIndexed
+  storeWithUpdateIndexed,
+  reverseBytes
   ) where
 
+import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat )
-import Control.Monad ( when )
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
@@ -69,11 +70,15 @@ loadAndExtendDS nBytes extend = do
 --
 -- This is listed as X-form, but uses different variable names.  Also, dismantle
 -- groups the second two operands into a single @Memrr@
+--
+-- Also specify a transformation (the @xform@ parameter) that is applied to the
+-- value pre-extension before it is loaded.
 loadIndexed :: (?bitSize :: BitSize)
             => Int
             -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+            -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
             -> SemM 'Def ()
-loadIndexed nBytes ext = do
+loadIndexed nBytes xform ext = do
   rT <- param "rT" gprc naturalBV
   memref <- param "memref" memrr EMemRef
   input memref
@@ -82,7 +87,7 @@ loadIndexed nBytes ext = do
   let rB = memrrOffsetReg (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b rB
-  defLoc rT (ext (readMem (Loc memory) ea nBytes))
+  defLoc rT (ext (xform (readMem (Loc memory) ea nBytes)))
 
 -- | This is separate from 'loadIndexed' because it doesn't have special
 -- treatment of the case where rA is r0.
@@ -199,10 +204,14 @@ storeWithUpdateDS nBytes = do
   defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
   defLoc rA ea
 
+-- | Store indexed (the inverse of 'loadIndexed').  As with 'loadIndexed', a
+-- transformation is applied to the bitvector before it is stored.  This
+-- transformation is used to accommodate the "reversed" variants of store.
 storeIndexed :: (?bitSize :: BitSize)
              => Int
+             -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
              -> SemM 'Def ()
-storeIndexed nBytes = do
+storeIndexed nBytes xform = do
   memref <- param "memref" memrr EMemRef
   rS <- param "rS" gprc naturalBV
   input rS
@@ -212,7 +221,7 @@ storeIndexed nBytes = do
   let rB = memrrOffsetReg (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b rB
-  defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
+  defLoc memory (storeMem (Loc memory) ea nBytes (xform (lowBits (8 * nBytes) (Loc rS))))
 
 storeWithUpdateIndexed :: (?bitSize :: BitSize)
                        => Int
@@ -228,3 +237,20 @@ storeWithUpdateIndexed nBytes = do
   let ea = bvadd (Loc rA) rB
   defLoc memory (storeMem (Loc memory) ea nBytes (lowBits (8 * nBytes) (Loc rS)))
   defLoc rA ea
+
+-- | Given an @N@ byte word, reverse the bytes contained in the word
+--
+-- @N@ does not need to be specified.  It is inferred from the length of the
+-- input bit vector.  The function raises an error if the bit size is not
+-- divisible by 8.
+reverseBytes :: (HasCallStack, ?bitSize :: BitSize)
+             => Expr 'TBV
+             -> Expr 'TBV
+reverseBytes e
+  | remBits /= 0 = error ("Bit size " ++ show (exprBVSize e) ++ " is not divisible by 8")
+  | otherwise = foldr1 concat (go [] 0)
+  where
+    (nBytes, remBits) = exprBVSize e `divMod` 8
+    go acc lowIdx
+      | lowIdx >= nBytes * 8 = reverse acc
+      | otherwise = go (extract (lowIdx + 7) lowIdx e : acc) (lowIdx + 8)
