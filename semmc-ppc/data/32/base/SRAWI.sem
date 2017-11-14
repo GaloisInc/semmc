@@ -1,0 +1,17 @@
+;; Shift Right Algebraic Word Immediate (X-form, RC=0)
+((operands ((rA . 'Gprc) (sh . 'U5imm) (rS . 'Gprc))) 
+  (in ('XER rS sh 'IP))
+  (defs 
+    (('XER 
+       (concat 
+         ((_ extract 1 0) 'XER)
+         (concat 
+           (ite 
+             (bvne 
+               (bvlshr 
+                 (bvshl rS (bvsub #x00000020 ((_ zero_extend 27) sh)))
+                 (bvsub #x00000020 ((_ zero_extend 27) sh)))
+               #x00000000)
+             ((_ extract 0 0) (bvashr rS ((_ zero_extend 27) sh)))
+             #b0)
+           ((_ extract 31 3) 'XER)))) (rA (bvashr rS ((_ zero_extend 27) sh))) ('IP (bvadd 'IP #x00000004)))))

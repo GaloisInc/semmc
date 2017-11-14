@@ -18,6 +18,7 @@ module SemMC.Architecture.PPC.Base.Core (
   u2imm,
   u4imm,
   u5imm,
+  u6imm,
   u16imm,
   u16imm64,
   memrix,

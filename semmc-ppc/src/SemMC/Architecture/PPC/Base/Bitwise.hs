@@ -115,6 +115,39 @@ baseBitwise = do
     defLoc rA res
     defineRCVariant "SRWo" res $ do
       comment "Shift Right Word (X-form, RC=1)"
+  defineOpcodeWithIP "SRAWI" $ do
+    comment "Shift Right Algebraic Word Immediate (X-form, RC=0)"
+    rA <- param "rA" gprc naturalBV
+    sh <- param "sh" u5imm (EBV 5)
+    rS <- param "rS" gprc naturalBV
+    input sh
+    input rS
+    input xer
+    let w = lowBits 32 (Loc rS)
+    let res = sext (bvashr w (zext' 32 (Loc sh)))
+    let nShiftedOutBits = bvsub (LitBV 32 32) (zext' 32 (Loc sh))
+    let shiftedOutBits = bvlshr (bvshl w nShiftedOutBits) nShiftedOutBits
+    let hasShiftedOutOnes = bvne shiftedOutBits (LitBV 32 0x0)
+    let s = highBits 1 res
+    defLoc rA res
+    defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
+    defineRCVariant "SRAWIo" res $ do
+      comment "Shift Right Algebraic Word Immediate (X-form, RC=1)"
+  defineOpcodeWithIP "SRAW" $ do
+    comment "Shift Right Algebraic Word (X-form, RC=0)"
+    (rA, rS, rB) <- xform3
+    input xer
+    let n = lowBits 5 (Loc rB)
+    let w = lowBits 32 (Loc rS)
+    let r = sext (bvashr w (zext' 32 n))
+    let s = highBits 1 w
+    let nShiftedOutBits = bvsub (LitBV 32 32) (zext' 32 n)
+    let shiftedOutBits = bvlshr (bvshl w nShiftedOutBits) nShiftedOutBits
+    let hasShiftedOutOnes = bvne shiftedOutBits (LitBV 32 0x0)
+    defLoc rA r
+    defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
+    defineRCVariant "SRAWo" r $ do
+      comment "Shift Right Algebraic Word (X-form, RC=1)"
 
   rotates
   special
@@ -137,6 +170,39 @@ baseBitwise = do
       defLoc rA res
       defineRCVariant "SRDo" res $ do
         comment "Shift Right Doubleword (X-form, RC=1)"
+    defineOpcodeWithIP "SRADI" $ do
+      comment "Shift Right Algebraic Doubleword Immediate (XS-form, RC=0)"
+      rA <- param "rA" gprc naturalBV
+      sh <- param "sh" u6imm (EBV 6)
+      rS <- param "rS" gprc naturalBV
+      input sh
+      input rS
+      input xer
+      let w = Loc rS
+      let res = sext (bvashr w (zext (Loc sh)))
+      let nShiftedOutBits = bvsub (LitBV 64 64) (zext (Loc sh))
+      let shiftedOutBits = bvlshr (bvshl w nShiftedOutBits) nShiftedOutBits
+      let hasShiftedOutOnes = bvne shiftedOutBits (naturalLitBV 0x0)
+      let s = highBits 1 res
+      defLoc rA res
+      defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
+      defineRCVariant "SRADIo" res $ do
+        comment "Shift Right Algebraic Doubleword Immediate (XS-form, RC=1)"
+    defineOpcodeWithIP "SRAD" $ do
+      comment "Shift Right Algebraic Doubleword (X-form, RC=0)"
+      (rA, rS, rB) <- xform3
+      input xer
+      let n = lowBits 6 (Loc rB)
+      let w = Loc rS
+      let r = sext (bvashr w (zext n))
+      let s = highBits 1 w
+      let nShiftedOutBits = bvsub (LitBV 64 64) (zext n)
+      let shiftedOutBits = bvlshr (bvshl w nShiftedOutBits) nShiftedOutBits
+      let hasShiftedOutOnes = bvne shiftedOutBits (naturalLitBV 0x0)
+      defLoc rA r
+      defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
+      defineRCVariant "SRADo" r $ do
+        comment "Shift Right Algebraic Doubleword (X-form, RC=1)"
     defineOpcodeWithIP "EXTSW" $ do
       comment "Extend Sign Word (X-form, RC=0)"
       (rA, rS) <- xform2
@@ -144,6 +210,8 @@ baseBitwise = do
       defLoc rA res
       defineRCVariant "EXTSWo" res $ do
         comment "Extend Sign Word (X-form, RC=1)"
+
+
 
 special :: (?bitSize :: BitSize) => SemM 'Top ()
 special = do
