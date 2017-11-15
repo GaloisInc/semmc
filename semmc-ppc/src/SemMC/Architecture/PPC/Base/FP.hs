@@ -274,11 +274,11 @@ floatingPoint = do
     defLoc frT (extendDouble (fnegate64 av))
 
 -- | Define a load and double conversion of a single floating-point (D-form)
-loadFloatAndConvert :: (?bitSize :: BitSize)
-                    => Int
-                    -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
-                    -> SemM 'Def ()
-loadFloatAndConvert nBytes convert = do
+loadFloat :: (?bitSize :: BitSize)
+          => Int
+          -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+          -> SemM 'Def ()
+loadFloat nBytes convert = do
   frT <- param "frT" fprc (EBV 64)
   memref <- param "memref" memri EMemRef
   input memref
@@ -289,14 +289,77 @@ loadFloatAndConvert nBytes convert = do
   let ea = bvadd b (sext disp)
   defLoc frT (convert (readMem (Loc memory) ea nBytes))
 
+loadFloatAndUpdate :: (?bitSize :: BitSize)
+                   => Int
+                   -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                   -> SemM 'Def ()
+loadFloatAndUpdate nBytes convert = do
+  frT <- param "frT" fprc (EBV 64)
+  memref <- param "memref" memri EMemRef
+  input memory
+  input memref
+  let rA = memriReg memref
+  let disp = memriOffset 16 (Loc memref)
+  let ea = bvadd (Loc rA) (sext disp)
+  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+  defLoc rA ea
+
+loadFloatIndexed :: (?bitSize :: BitSize)
+                 => Int
+                 -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                 -> SemM 'Def ()
+loadFloatIndexed nBytes convert = do
+  frT <- param "rT" fprc (EBV 64)
+  memref <- param "memref" memrr EMemRef
+  input memref
+  input memory
+  let rA = memrrBaseReg memref
+  let rB = memrrOffsetReg (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b rB
+  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+
+loadFloatAndUpdateIndexed :: (?bitSize :: BitSize)
+                          => Int
+                          -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                          -> SemM 'Def ()
+loadFloatAndUpdateIndexed nBytes convert = do
+  frT <- param "frT" fprc (EBV 64)
+  memref <- param "memref" memrr EMemRef
+  input memref
+  input memory
+  let rA = memrrBaseReg memref
+  let rB = memrrOffsetReg (Loc memref)
+  let ea = bvadd (Loc rA) rB
+  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+  defLoc rA ea
+
 floatingPointLoads :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPointLoads = do
   defineOpcodeWithIP "LFS" $ do
     comment "Load Floating-Point Single (D-form)"
-    loadFloatAndConvert 4 fsingletodouble
+    loadFloat 4 fsingletodouble
+  defineOpcodeWithIP "LFSX" $ do
+    comment "Load Floating-Point Single Indexed (X-form)"
+    loadFloatIndexed 4 fsingletodouble
+  defineOpcodeWithIP "LFSU" $ do
+    comment "Load Floating-Point Single with Update (D-form)"
+    loadFloatAndUpdate 4 fsingletodouble
+  defineOpcodeWithIP "LFSUX" $ do
+    comment "Load Floating-Point Single with Update Indexed (X-form)"
+    loadFloatAndUpdateIndexed 4 fsingletodouble
   defineOpcodeWithIP "LFD" $ do
     comment "Load Floating-Point Double (D-form)"
-    loadFloatAndConvert 8 id
+    loadFloat 8 id
+  defineOpcodeWithIP "LFDX" $ do
+    comment "Load Floating-Point Double Indexed (X-form)"
+    loadFloatIndexed 8 id
+  defineOpcodeWithIP "LFDU" $ do
+    comment "Load Floating-Point Double with Update (D-form)"
+    loadFloatAndUpdate 8 id
+  defineOpcodeWithIP "LFDUX" $ do
+    comment "Load Floating-Point Single with Update Indexed (X-form)"
+    loadFloatAndUpdateIndexed 8 id
   return ()
 
 floatingPointStores :: (?bitSize :: BitSize) => SemM 'Top ()

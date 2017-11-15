@@ -1,0 +1,14 @@
+;; Load Floating-Point Single with Update Indexed (X-form)
+((operands ((frT . 'Fprc) (memref . 'Memrr))) 
+  (in ('Mem memref 'IP))
+  (defs 
+    ((((_ call "ppc.memrr_base") memref) 
+       (bvadd ((_ call "ppc.memrr_base") memref) ((_ call "ppc.memrr_offset") memref))) 
+      (frT 
+        ((_ call "fp.single_to_double") 
+          ((_ call "read_mem.32") 
+            'Mem
+            (bvadd 
+              ((_ call "ppc.memrr_base") memref)
+              ((_ call "ppc.memrr_offset") memref)))))
+      ('IP (bvadd 'IP #x00000004)))))
