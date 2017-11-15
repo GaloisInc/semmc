@@ -1,7 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE RankNTypes #-}
 module SemMC.Architecture.PPC.Base.FP (
-  floatingPoint
+  floatingPoint,
+  floatingPointLoads,
+  floatingPointStores
   ) where
 
 import GHC.Stack ( HasCallStack )
@@ -62,6 +65,9 @@ fnegate32 = uf (EBV 32) "fp.negate32" . ((:[]) . Some)
 
 froundsingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 froundsingle = uf (EBV 32) "fp.round_single" . ((:[]) . Some)
+
+fsingletodouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+fsingletodouble = uf (EBV 64) "fp.single_to_double" . ((:[]) . Some)
 
 fabs :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 fabs = uf (EBV 64) "fp.abs" . ((:[]) . Some)
@@ -266,6 +272,36 @@ floatingPoint = do
     (frT, frB) <- xform2f
     let av = fabs (extractDouble (Loc frB))
     defLoc frT (extendDouble (fnegate64 av))
+
+-- | Define a load and double conversion of a single floating-point (D-form)
+loadFloatAndConvert :: (?bitSize :: BitSize)
+                    => Int
+                    -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                    -> SemM 'Def ()
+loadFloatAndConvert nBytes convert = do
+  frT <- param "frT" fprc (EBV 64)
+  memref <- param "memref" memri EMemRef
+  input memref
+  input memory
+  let rA = memriReg memref
+  let disp = memriOffset 16 (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b (sext disp)
+  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+
+floatingPointLoads :: (?bitSize :: BitSize) => SemM 'Top ()
+floatingPointLoads = do
+  defineOpcodeWithIP "LFS" $ do
+    comment "Load Floating-Point Single (D-form)"
+    loadFloatAndConvert 4 fsingletodouble
+  defineOpcodeWithIP "LFD" $ do
+    comment "Load Floating-Point Double (D-form)"
+    loadFloatAndConvert 8 id
+  return ()
+
+floatingPointStores :: (?bitSize :: BitSize) => SemM 'Top ()
+floatingPointStores = do
+  return ()
 
 
 {- Note [FABS and FNEG]

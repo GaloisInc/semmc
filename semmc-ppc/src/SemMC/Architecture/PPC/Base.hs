@@ -76,6 +76,8 @@ manual bitSize = runSem $ do
   manualBranch
   manualMemory
   floatingPoint
+  floatingPointLoads
+  floatingPointStores
   defineOpcodeWithIP "MTLR" $ do
     rA <- param "rA" gprc naturalBV
     input rA

@@ -59,6 +59,10 @@ uninterpretedFunctions _ =
   , ("fp.round_single",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+  -- Convert a single precision floating point value to double precision
+  , ("fp.single_to_double",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
   , ("fp.abs",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
