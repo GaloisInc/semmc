@@ -279,7 +279,7 @@ loadFloat :: (?bitSize :: BitSize)
           -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
           -> SemM 'Def ()
 loadFloat nBytes convert = do
-  frT <- param "frT" fprc (EBV 64)
+  frT <- param "frT" fprc (EBV 128)
   memref <- param "memref" memri EMemRef
   input memref
   input memory
@@ -287,21 +287,21 @@ loadFloat nBytes convert = do
   let disp = memriOffset 16 (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b (sext disp)
-  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+  defLoc frT (extendDouble (convert (readMem (Loc memory) ea nBytes)))
 
-loadFloatAndUpdate :: (?bitSize :: BitSize)
+loadFloatWithUpdate :: (?bitSize :: BitSize)
                    => Int
                    -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
                    -> SemM 'Def ()
-loadFloatAndUpdate nBytes convert = do
-  frT <- param "frT" fprc (EBV 64)
+loadFloatWithUpdate nBytes convert = do
+  frT <- param "frT" fprc (EBV 128)
   memref <- param "memref" memri EMemRef
   input memory
   input memref
   let rA = memriReg memref
   let disp = memriOffset 16 (Loc memref)
   let ea = bvadd (Loc rA) (sext disp)
-  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+  defLoc frT (extendDouble (convert (readMem (Loc memory) ea nBytes)))
   defLoc rA ea
 
 loadFloatIndexed :: (?bitSize :: BitSize)
@@ -309,7 +309,7 @@ loadFloatIndexed :: (?bitSize :: BitSize)
                  -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
                  -> SemM 'Def ()
 loadFloatIndexed nBytes convert = do
-  frT <- param "rT" fprc (EBV 64)
+  frT <- param "rT" fprc (EBV 128)
   memref <- param "memref" memrr EMemRef
   input memref
   input memory
@@ -317,21 +317,21 @@ loadFloatIndexed nBytes convert = do
   let rB = memrrOffsetReg (Loc memref)
   let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
   let ea = bvadd b rB
-  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+  defLoc frT (extendDouble (convert (readMem (Loc memory) ea nBytes)))
 
-loadFloatAndUpdateIndexed :: (?bitSize :: BitSize)
+loadFloatWithUpdateIndexed :: (?bitSize :: BitSize)
                           => Int
                           -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
                           -> SemM 'Def ()
-loadFloatAndUpdateIndexed nBytes convert = do
-  frT <- param "frT" fprc (EBV 64)
+loadFloatWithUpdateIndexed nBytes convert = do
+  frT <- param "frT" fprc (EBV 128)
   memref <- param "memref" memrr EMemRef
   input memref
   input memory
   let rA = memrrBaseReg memref
   let rB = memrrOffsetReg (Loc memref)
   let ea = bvadd (Loc rA) rB
-  defLoc frT (convert (readMem (Loc memory) ea nBytes))
+  defLoc frT (extendDouble (convert (readMem (Loc memory) ea nBytes)))
   defLoc rA ea
 
 floatingPointLoads :: (?bitSize :: BitSize) => SemM 'Top ()
@@ -344,10 +344,10 @@ floatingPointLoads = do
     loadFloatIndexed 4 fsingletodouble
   defineOpcodeWithIP "LFSU" $ do
     comment "Load Floating-Point Single with Update (D-form)"
-    loadFloatAndUpdate 4 fsingletodouble
+    loadFloatWithUpdate 4 fsingletodouble
   defineOpcodeWithIP "LFSUX" $ do
     comment "Load Floating-Point Single with Update Indexed (X-form)"
-    loadFloatAndUpdateIndexed 4 fsingletodouble
+    loadFloatWithUpdateIndexed 4 fsingletodouble
   defineOpcodeWithIP "LFD" $ do
     comment "Load Floating-Point Double (D-form)"
     loadFloat 8 id
@@ -356,14 +356,104 @@ floatingPointLoads = do
     loadFloatIndexed 8 id
   defineOpcodeWithIP "LFDU" $ do
     comment "Load Floating-Point Double with Update (D-form)"
-    loadFloatAndUpdate 8 id
+    loadFloatWithUpdate 8 id
   defineOpcodeWithIP "LFDUX" $ do
     comment "Load Floating-Point Single with Update Indexed (X-form)"
-    loadFloatAndUpdateIndexed 8 id
+    loadFloatWithUpdateIndexed 8 id
   return ()
+
+
+
+storeFloat :: (?bitSize :: BitSize)
+           => Int
+           -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+           -> SemM 'Def ()
+storeFloat nBytes convert = do
+  memref <- param "memref" memri EMemRef
+  frS <- param "frS" fprc (EBV 128)
+  input frS
+  input memref
+  input memory
+  let rA = memriReg memref
+  let disp = memriOffset 16 (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b (sext disp)
+  defLoc memory (storeMem (Loc memory) ea nBytes (convert (extractDouble (Loc frS))))
+
+storeFloatWithUpdate :: (?bitSize :: BitSize)
+                     => Int
+                     -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                     -> SemM 'Def ()
+storeFloatWithUpdate nBytes convert = do
+  memref <- param "memref" memri EMemRef
+  frS <- param "frS" fprc (EBV 128)
+  input frS
+  input memref
+  input memory
+  let rA = memriReg memref
+  let disp = memriOffset 16 (Loc memref)
+  let ea = bvadd (Loc rA) (sext disp)
+  defLoc memory (storeMem (Loc memory) ea nBytes (convert (extractDouble (Loc frS))))
+  defLoc rA ea
+
+storeFloatIndexed :: (?bitSize :: BitSize)
+                  => Int
+                  -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                  -> SemM 'Def ()
+storeFloatIndexed nBytes convert = do
+  memref <- param "memref" memrr EMemRef
+  frS <- param "frS" fprc (EBV 128)
+  input frS
+  input memref
+  input memory
+  let rA = memrrBaseReg memref
+  let rB = memrrOffsetReg (Loc memref)
+  let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
+  let ea = bvadd b rB
+  defLoc memory (storeMem (Loc memory) ea nBytes (convert (extractDouble (Loc frS))))
+
+storeFloatWithUpdateIndexed :: (?bitSize :: BitSize)
+                            => Int
+                            -> ((?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV)
+                            -> SemM 'Def ()
+storeFloatWithUpdateIndexed nBytes convert = do
+  memref <- param "memref" memrr EMemRef
+  frS <- param "frS" fprc (EBV 128)
+  input frS
+  input memref
+  input memory
+  let rA = memrrBaseReg memref
+  let rB = memrrOffsetReg (Loc memref)
+  let ea = bvadd (Loc rA) rB
+  defLoc memory (storeMem (Loc memory) ea nBytes (convert (extractDouble (Loc frS))))
+  defLoc rA ea
 
 floatingPointStores :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPointStores = do
+  defineOpcodeWithIP "STFS" $ do
+    comment "Store Floating-Point Single (D-form)"
+    storeFloat 4 froundsingle
+  defineOpcodeWithIP "STFSU" $ do
+    comment "Store Floating-Point Single with Update (D-form)"
+    storeFloatWithUpdate 4 froundsingle
+  defineOpcodeWithIP "STFSX" $ do
+    comment "Store Floating-Point Single Indexed (X-form)"
+    storeFloatIndexed 4 froundsingle
+  defineOpcodeWithIP "STFSUX" $ do
+    comment "Store Floating-Point Single with Update Indexed (X-form)"
+    storeFloatWithUpdateIndexed 4 froundsingle
+  defineOpcodeWithIP "STFD" $ do
+    comment "Store Floating-Point Double (D-form)"
+    storeFloat 8 id
+  defineOpcodeWithIP "STFD" $ do
+    comment "Store Floating-Point Double with Update (D-form)"
+    storeFloatWithUpdate 8 id
+  defineOpcodeWithIP "STFDX" $ do
+    comment "Store Floating-Point Double Indexed (X-form)"
+    storeFloatIndexed 8 id
+  defineOpcodeWithIP "STFDUX" $ do
+    comment "Store Floating-Point Double with Update Indexed (X-form)"
+    storeFloatWithUpdateIndexed 8 id
   return ()
 
 

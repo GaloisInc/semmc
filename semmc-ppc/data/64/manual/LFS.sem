@@ -3,12 +3,14 @@
   (in ('Mem memref 'IP))
   (defs 
     ((frT 
-       ((_ call "fp.single_to_double") 
-         ((_ call "read_mem.32") 
-           'Mem
-           (bvadd 
-             (ite 
-               ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
-               #x0000000000000000
-               ((_ call "ppc.memri_reg") memref))
-             ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))))) ('IP (bvadd 'IP #x0000000000000004)))))
+       (concat 
+         #x0000000000000000
+         ((_ call "fp.single_to_double") 
+           ((_ call "read_mem.32") 
+             'Mem
+             (bvadd 
+               (ite 
+                 ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
+                 #x0000000000000000
+                 ((_ call "ppc.memri_reg") memref))
+               ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref))))))) ('IP (bvadd 'IP #x0000000000000004)))))
