@@ -1,0 +1,16 @@
+;; Store Floating-Point Single with Update (D-form)
+((operands ((memref . 'Memri) (frS . 'Fprc))) 
+  (in ('Mem memref frS 'IP))
+  (defs 
+    ((((_ call "ppc.memri_reg") memref) 
+       (bvadd 
+         ((_ call "ppc.memri_reg") memref)
+         ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))) 
+      ('Mem 
+        ((_ call "write_mem.32") 
+          'Mem
+          (bvadd 
+            ((_ call "ppc.memri_reg") memref)
+            ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))
+          ((_ call "fp.round_single") ((_ extract 63 0) frS))))
+      ('IP (bvadd 'IP #x0000000000000004)))))
