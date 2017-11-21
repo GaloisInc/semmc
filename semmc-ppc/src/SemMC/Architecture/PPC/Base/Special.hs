@@ -15,17 +15,20 @@ baseSpecial = do
     -- Even though SPR is a 10-bit field, it gets decoded into a 32-bit field by
     -- dismantle. This is an artifact of the tablegen data; for whatever reason, this
     -- is how it handles SPR.
-    sprbits <- param "SPR" "I32imm" (EBV 32)
     rS      <- param "rS"  gprc     naturalBV
+    sprbits <- param "SPR" "I32imm" (EBV 32)
     input rS
     input sprbits
     input cr
     input xer
     input lnk
 
-    let xerRes = ite (bveq (Loc sprbits) (LitBV 32 0x1)) (Loc rS) (Loc xer)
-    let crRes  = ite (bveq (Loc sprbits) (LitBV 32 0x8)) (lowBits' 32 (Loc rS)) (Loc cr)
-    let lnkRes = ite (bveq (Loc sprbits) (LitBV 32 0x9)) (Loc rS) (Loc lnk)
+    -- let xerRes = ite (bveq (Loc sprbits) (LitBV 32 0x1)) (Loc rS) (Loc xer)
+    -- let crRes  = ite (bveq (Loc sprbits) (LitBV 32 0x8)) (lowBits' 32 (Loc rS)) (Loc cr)
+    -- let lnkRes = ite (bveq (Loc sprbits) (LitBV 32 0x9)) (Loc rS) (Loc lnk)
+    let crRes = Loc cr
+    let lnkRes = Loc lnk
+    let xerRes = Loc xer
     defLoc cr  crRes
     defLoc xer xerRes
     defLoc lnk lnkRes

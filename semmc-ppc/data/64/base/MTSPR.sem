@@ -1,0 +1,4 @@
+;; Move To Special Purpose Register (XFX-form)
+((operands ((rS . 'Gprc) (SPR . 'I32imm))) 
+  (in ('LNK 'XER 'CR SPR rS 'IP))
+  (defs (('LNK 'LNK) ('XER 'XER) ('CR 'CR) ('IP (bvadd 'IP #x0000000000000004)))))
