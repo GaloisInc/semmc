@@ -19,17 +19,17 @@ baseSpecial = do
     sprbits <- param "SPR" "I32imm" (EBV 32)
     input rS
     input sprbits
-    input cr
+    input ctr
     input xer
     input lnk
 
-    -- let xerRes = ite (bveq (Loc sprbits) (LitBV 32 0x1)) (Loc rS) (Loc xer)
-    -- let crRes  = ite (bveq (Loc sprbits) (LitBV 32 0x8)) (lowBits' 32 (Loc rS)) (Loc cr)
-    -- let lnkRes = ite (bveq (Loc sprbits) (LitBV 32 0x9)) (Loc rS) (Loc lnk)
-    let crRes = Loc cr
-    let lnkRes = Loc lnk
-    let xerRes = Loc xer
-    defLoc cr  crRes
+    let xerRes = ite (bveq (Loc sprbits) (LitBV 32 0x1)) (Loc rS) (Loc xer)
+    let ctrRes = ite (bveq (Loc sprbits) (LitBV 32 0x8)) (Loc rS) (Loc ctr)
+    let lnkRes = ite (bveq (Loc sprbits) (LitBV 32 0x9)) (Loc rS) (Loc lnk)
+    -- let ctrRes = Loc ctr
+    -- let lnkRes = Loc lnk
+    -- let xerRes = Loc xer
+    defLoc ctr ctrRes
     defLoc xer xerRes
     defLoc lnk lnkRes
 
