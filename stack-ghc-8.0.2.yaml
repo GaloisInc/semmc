@@ -1,13 +1,16 @@
 resolver: lts-9.3
 
 packages:
-#- submodules/dismantle/dismantle-arm
-#- submodules/dismantle/dismantle-ppc
 - submodules/dismantle/dismantle-tablegen
 - semmc
 - semmc-ppc
 - semmc-x86_64
 - semmc-arm
+- location: submodules/dismantle/dismantle-arm
+- location: submodules/dismantle/dismantle-aarch64
+- location: submodules/dismantle/dismantle-ppc
+- location: submodules/dismantle/dismantle-tablegen
+- location: submodules/dismantle/dismantle-thumb
 - location: submodules/crucible
   subdirs:
   - crucible
@@ -16,8 +19,6 @@ packages:
   # needed as a dependency, and don't load it into GHCi.
   extra-dep: true
 - location: submodules/parameterized-utils
-  extra-dep: true
-- location: submodules/dismantle/dismantle-ppc
   extra-dep: true
 - location:
     git: git@github.com:GaloisInc/elf-edit
