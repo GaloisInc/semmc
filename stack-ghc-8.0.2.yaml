@@ -1,7 +1,6 @@
 resolver: lts-9.3
 
 packages:
-- submodules/dismantle/dismantle-tablegen
 - semmc
 - semmc-ppc
 - semmc-x86_64
