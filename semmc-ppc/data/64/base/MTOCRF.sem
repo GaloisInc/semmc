@@ -45,4 +45,4 @@
                    (bvmul ((_ call "clz.32") ((_ zero_extend 24) FXM)) #x00000004)
                    #x00000003)))
              ((_ extract 63 32) rS)))
-         #x00000000)) ('IP (bvadd 'IP #x0000000000000004)))))
+         ((_ call "undefined") #x00000020))) ('IP (bvadd 'IP #x0000000000000004)))))
