@@ -10,6 +10,46 @@ import SemMC.Architecture.PPC.Base.Core
 
 baseSpecial :: (?bitSize :: BitSize) => SemM 'Top ()
 baseSpecial = do
+  defineOpcodeWithIP "MTSPR" $ do
+    comment "Move To Special Purpose Register (XFX-form)"
+    -- Even though SPR is a 10-bit field, it gets decoded into a 32-bit field by
+    -- dismantle. This is an artifact of the tablegen data; for whatever reason, this
+    -- is how it handles SPR.
+    rS      <- param "rS"  gprc     naturalBV
+    sprbits <- param "SPR" "I32imm" (EBV 32)
+    input rS
+    input sprbits
+    input ctr
+    input xer
+    input lnk
+
+    let xerRes = ite (bveq (Loc sprbits) (LitBV 32 0x1)) (Loc rS) (Loc xer)
+    let ctrRes = ite (bveq (Loc sprbits) (LitBV 32 0x8)) (Loc rS) (Loc ctr)
+    let lnkRes = ite (bveq (Loc sprbits) (LitBV 32 0x9)) (Loc rS) (Loc lnk)
+    defLoc ctr ctrRes
+    defLoc xer xerRes
+    defLoc lnk lnkRes
+
+  defineOpcodeWithIP "MFSPR" $ do
+    comment "Move From Special Purpose Register (XFX-form)"
+    -- Even though SPR is a 10-bit field, it gets decoded into a 32-bit field by
+    -- dismantle. This is an artifact of the tablegen data; for whatever reason, this
+    -- is how it handles SPR.
+    rT      <- param "rT"  gprc     naturalBV
+    sprbits <- param "SPR" "I32imm" (EBV 32)
+
+    input sprbits
+    input ctr
+    input xer
+    input lnk
+
+    defLoc rT (ite (bveq (Loc sprbits) (LitBV 32 0x1))
+               (Loc xer)
+               (ite (bveq (Loc sprbits) (LitBV 32 0x8))
+                (Loc lnk)
+                -- FIXME: add one more check for equality to 9 and exception
+                (Loc ctr)))
+
   defineOpcodeWithIP "MFCR" $ do
     comment "Move From Condition Register"
     rT <- param "rT" gprc naturalBV

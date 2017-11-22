@@ -1,13 +1,15 @@
 resolver: lts-9.3
 
 packages:
-#- submodules/dismantle/dismantle-arm
-#- submodules/dismantle/dismantle-ppc
-- submodules/dismantle/dismantle-tablegen
 - semmc
 - semmc-ppc
 - semmc-x86_64
 - semmc-arm
+- location: submodules/dismantle/dismantle-arm
+- location: submodules/dismantle/dismantle-aarch64
+- location: submodules/dismantle/dismantle-ppc
+- location: submodules/dismantle/dismantle-tablegen
+- location: submodules/dismantle/dismantle-thumb
 - location: submodules/crucible
   subdirs:
   - crucible
@@ -16,8 +18,6 @@ packages:
   # needed as a dependency, and don't load it into GHCi.
   extra-dep: true
 - location: submodules/parameterized-utils
-  extra-dep: true
-- location: submodules/dismantle/dismantle-ppc
   extra-dep: true
 - location:
     git: git@github.com:GaloisInc/elf-edit
@@ -28,10 +28,8 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - containers-0.5.10.2
-- crucible-0.3.1
 - located-base-0.1.1.1
 - megaparsec-6.0.2
-- parameterized-utils-0.1.11
 - s-cargot-0.1.2.0
 - smtLib-1.0.8
 - time-locale-compat-0.1.1.3

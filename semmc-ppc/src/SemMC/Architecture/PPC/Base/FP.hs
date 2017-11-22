@@ -445,7 +445,7 @@ floatingPointStores = do
   defineOpcodeWithIP "STFD" $ do
     comment "Store Floating-Point Double (D-form)"
     storeFloat 8 id
-  defineOpcodeWithIP "STFD" $ do
+  defineOpcodeWithIP "STFDU" $ do
     comment "Store Floating-Point Double with Update (D-form)"
     storeFloatWithUpdate 8 id
   defineOpcodeWithIP "STFDX" $ do
