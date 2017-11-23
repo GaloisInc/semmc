@@ -53,6 +53,8 @@ module SemMC.DSL (
   bvsgt,
   bveq,
   bvne,
+  -- * Special values
+  undefinedBV,
   -- * Expressions
   Expr(..),
   ExprTag(..),
@@ -249,6 +251,11 @@ uf = UninterpretedFunc
 -- | Allow for user-defined functions over locations
 locUF :: ExprType tp -> String -> Location tp' -> Location tp
 locUF = LocationFunc
+
+-- | Create an expression of bitvector type that represents an undefined value
+-- of the given size
+undefinedBV :: (HasCallStack) => Int -> Expr 'TBV
+undefinedBV size = uf (EBV size) "undefined" [ Some (LitBV 32 (toInteger size)) ]
 
 bvadd :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 bvadd = binBVBuiltin "bvadd"

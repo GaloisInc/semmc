@@ -9,6 +9,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -39,12 +40,13 @@ import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 import qualified Data.Set as Set
-import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal )
+import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal, KnownNat )
 import           Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..), mapSome, viewSome )
 import           Data.Parameterized.ShapedList ( ShapedList(..), Index(..), indexShapedList )
 import           Data.Parameterized.TraversableFC ( traverseFC )
@@ -621,6 +623,40 @@ exprAssignment :: (E.MonadError String m,
                -> m (Ctx.Assignment ex ctx)
 exprAssignment tpAssn exs = exprAssignment' tpAssn (reverse exs)
 
+-- | Parse an expression of the form:
+--
+-- > ((_ call "undefined") "bv" size)
+--
+-- This has to be separate from the normal uninterpreted functions because the
+-- type is determined by the arguments.
+readUndefined :: forall sym arch sh m . ExprParser sym arch sh m
+readUndefined (SC.SCons (SC.SAtom (AIdent "_"))
+                (SC.SCons (SC.SAtom (AIdent "call"))
+                  (SC.SCons (SC.SAtom (AString "undefined"))
+                    SC.SNil))) args =
+  case args of
+    [Some ex] ->
+      case S.exprType ex of
+        BaseBVRepr {}
+          | Just size <- S.asUnsignedBV ex -> do
+              sym <- MR.reader getSym
+              case NR.someNat (fromIntegral size) of
+                Just (Some nr) -> NR.withKnownNat nr (mkUndefined nr sym)
+                Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" size
+        ety -> E.throwError $ printf "Invalid expr type: %s" (show ety)
+    _ -> E.throwError $ printf "Invalid argument list for undefined"
+  where
+    mkUndefined :: forall n . (KnownNat n) => NR.NatRepr n -> sym -> m (Maybe (Some (S.SymExpr sym)))
+    mkUndefined nr sym = do
+      case NR.testLeq (knownNat @1) nr of
+        Just NR.LeqProof -> do
+          let rty = knownRepr :: BaseTypeRepr (BaseBVType n)
+          fn <- liftIO (S.freshTotalUninterpFn sym (U.makeSymbol "undefined") Ctx.empty rty)
+          assn <- exprAssignment (S.fnArgTypes fn) []
+          (Just . Some) <$> liftIO (S.applySymFn sym fn assn)
+        Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" (NR.widthVal nr)
+readUndefined _ _ = return Nothing
+
 -- | Parse an expression of the form @((_ call "foo") x y ...)@
 readCall :: ExprParser sym arch sh m
 readCall (SC.SCons (SC.SAtom (AIdent "_"))
@@ -684,6 +720,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
     , readIte
     , readSelect
     , readStore
+    , readUndefined
     , readCall
     ]
   case parseAttempt of

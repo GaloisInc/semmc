@@ -80,7 +80,7 @@ baseSpecial = do
     -- Save the low bits in a word with the target and high bits cleared (via shifting)
     -- Shift the new field into place and OR everything together
     let newCR = bvor (bvand crmask (Loc cr)) (bvand fieldMask regContents)
-    let res = ite (bveq check (LitBV 32 0x1)) newCR (LitBV 32 0x0)
+    let res = ite (bveq check (LitBV 32 0x1)) newCR (undefinedBV 32)
     defLoc cr res
 
   defineOpcodeWithIP "MFOCRF" $ do
