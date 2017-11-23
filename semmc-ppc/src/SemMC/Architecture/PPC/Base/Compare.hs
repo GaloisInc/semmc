@@ -82,6 +82,16 @@ baseCompare = do
     let newCR = cmpImm bvult bvugt (Loc fld) (zext lowa) (zext lowb)
     defLoc cr newCR
 
+  defineOpcodeWithIP "CMPB" $ do
+    comment "Compare Bytes (X-form)"
+    (rA, rS, rB) <- xform3
+    let extractByte n bv = extract (8 * n + 7) (8 * n) bv
+    let compareByte n = ite (bveq (extractByte n (Loc rS)) (extractByte n (Loc rB))) (LitBV 8 0xff) (LitBV 8 0x0)
+    let high = concat (compareByte 0) (concat (compareByte 1) (concat (compareByte 2) (compareByte 3)))
+    let low = concat (compareByte 4) (concat (compareByte 5) (concat (compareByte 6) (compareByte 7)))
+    let res = if ?bitSize == Size32 then high else concat high low
+    defLoc rA res
+
   when (?bitSize == Size64) $ do
     defineOpcodeWithIP "CMPLD" $ do
       comment "Compare Logical (X-form)"
