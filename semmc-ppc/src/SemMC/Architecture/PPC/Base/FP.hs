@@ -4,7 +4,8 @@
 module SemMC.Architecture.PPC.Base.FP (
   floatingPoint,
   floatingPointLoads,
-  floatingPointStores
+  floatingPointStores,
+  floatingPointCompare
   ) where
 
 import GHC.Stack ( HasCallStack )
@@ -72,6 +73,12 @@ fsingletodouble = uf (EBV 64) "fp.single_to_double" . ((:[]) . Some)
 fabs :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 fabs = uf (EBV 64) "fp.abs" . ((:[]) . Some)
 
+fissnan32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
+fissnan32 = uf EBool "fp.is_snan32" . ((:[]) . Some)
+
+fissnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
+fissnan64 = uf EBool "fp.is_snan64" . ((:[]) . Some)
+
 -- | Extract the single-precision part of a vector register
 extractSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 extractSingle = highBits128 32
@@ -132,6 +139,31 @@ liftDouble1 operation op =
 liftSingle1 :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV) -> Expr 'TBV -> Expr 'TBV
 liftSingle1 operation op =
   extendSingle (operation (extractSingle op))
+
+-- | Floating point comparison definitions
+--
+floatingPointCompare :: (?bitSize :: BitSize) => SemM 'Top ()
+floatingPointCompare = do
+  defineOpcodeWithIP "FCMPUS" $ do
+    comment "Floating Compare Unordered (X-form)"
+    bf  <- param "bf" crrc (EBV 3)
+    frA <- param "frA" fprc (EBV 128)
+    frB <- param "frB" fprc (EBV 128)
+    input frA
+    input frB
+    input fpscr
+    let sNaN = orp (fissnan32 (extractSingle (Loc frA))) (fissnan32 (extractSingle (Loc frB)))
+    defLoc fpscr (ite sNaN (bvor (Loc fpscr) (LitBV 32 0x00000080)) (Loc fpscr))
+  defineOpcodeWithIP "FCMPUD" $ do
+    comment "Floating Compare Unordered (X-form)"
+    bf  <- param "bf" crrc (EBV 3)
+    frA <- param "frA" fprc (EBV 128)
+    frB <- param "frB" fprc (EBV 128)
+    input frA
+    input frB
+    input fpscr
+    let sNaN = orp (fissnan64 (extractDouble (Loc frA))) (fissnan64 (extractDouble (Loc frB)))
+    defLoc fpscr (ite sNaN (bvor (Loc fpscr) (LitBV 32 0x00000080)) (Loc fpscr))
 
 -- | Floating point operation definitions
 --

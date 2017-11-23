@@ -78,6 +78,7 @@ manual bitSize = runSem $ do
   floatingPoint
   floatingPointLoads
   floatingPointStores
+  floatingPointCompare
   defineOpcodeWithIP "MTLR" $ do
     rA <- param "rA" gprc naturalBV
     input rA

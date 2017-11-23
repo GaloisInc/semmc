@@ -66,6 +66,12 @@ uninterpretedFunctions _ =
   , ("fp.abs",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  , ("fp.is_snan32",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
+  , ("fp.is_snan64",
+     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64)),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
   , ("ppc.is_r0",
      Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType (ArchRegWidth ppc))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))

@@ -34,6 +34,7 @@ module SemMC.Architecture.PPC.Base.Core (
   lnk,
   ctr,
   cr,
+  fpscr,
   xer,
   memory,
   -- * IP Wrapper
@@ -200,6 +201,12 @@ cr :: Location 'TBV
 cr = LiteralLoc Literal { lName = "CR"
                         , lExprType = EBV 32
                         }
+
+-- | The FPSCR is always 32 bits
+fpscr :: Location 'TBV
+fpscr = LiteralLoc Literal { lName = "FPSCR"
+                           , lExprType = EBV 32
+                           }
 
 xer :: (?bitSize :: BitSize) => Location 'TBV
 xer = LiteralLoc Literal { lName = "XER"

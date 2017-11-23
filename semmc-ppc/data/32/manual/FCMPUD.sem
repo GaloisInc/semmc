@@ -1,0 +1,11 @@
+;; Floating Compare Unordered (X-form)
+((operands ((bf . 'Crrc) (frA . 'Fprc) (frB . 'Fprc))) 
+  (in ('FPSCR frB frA 'IP))
+  (defs 
+    (('FPSCR 
+       (ite 
+         (orp 
+           ((_ call "fp.is_snan64") ((_ extract 63 0) frA))
+           ((_ call "fp.is_snan64") ((_ extract 63 0) frB)))
+         (bvor 'FPSCR #x00000080)
+         'FPSCR)) ('IP (bvadd 'IP #x00000004)))))

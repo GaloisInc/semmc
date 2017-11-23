@@ -622,55 +622,6 @@ type instance Pseudo PPC = PPCP.PseudoOpcode
 instance ArchitectureWithPseudo PPC where
   assemblePseudo _ = PPCP.ppcAssemblePseudo (Proxy @PPC)
 
--- data Location :: BaseType -> * where
---   LocGPR :: PPC.GPR -> Location (BaseBVType 32)
---   LocIP :: Location (BaseBVType 32)
---   LocMSR :: Location (BaseBVType 32)
---   LocCTR :: Location (BaseBVType 32)
---   LocLNK :: Location (BaseBVType 32)
---   LocXER :: Location (BaseBVType 64)
---   LocCR :: Location (BaseBVType 32)
---   LocVSR :: PPC.VSReg -> Location (BaseBVType 128)
---   LocFPSCR :: Location (BaseBVType 32)
---   LocMem :: Location (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
-
--- instance Show (Location tp) where
---   show (LocGPR gpr) = show (pPrint gpr)
---   show LocIP = "IP"
---   show LocMSR = "MSR"
---   show LocCTR = "CTR"
---   show LocLNK = "LNK"
---   show LocXER = "XER"
---   show LocCR = "CR"
---   show (LocVSR vsr) = show (pPrint vsr)
---   show LocFPSCR = "FPSCR"
---   show LocMem = "Mem"
--- instance ShowF Location
-
--- $(return [])
-
--- fakeTestEq :: (Eq a) => a -> a -> Maybe (a :~: a)
--- fakeTestEq x y = if x == y
---                  then Just Refl
---                  else Nothing
-
--- instance TestEquality Location where
---   testEquality = $(structuralTypeEquality [t|Location|]
---                    [ (ConType [t|PPC.GPR|], [|fakeTestEq|])
---                    , (ConType [t|PPC.VSReg|], [|fakeTestEq|])
---                    ]
---                   )
-
--- fakeCompareF :: (Ord a) => a -> a -> OrderingF a a
--- fakeCompareF x y = fromOrdering (compare x y)
-
--- instance OrdF Location where
---   compareF = $(structuralTypeOrd [t|Location|]
---                [ (ConType [t|PPC.GPR|], [|fakeCompareF|])
---                , (ConType [t|PPC.VSReg|], [|fakeCompareF|])
---                ]
---               )
-
 instance A.IsLocation (Location PPC) where
   readLocation = P.parseMaybe parseLocation
 
