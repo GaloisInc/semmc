@@ -115,9 +115,7 @@ type instance A.OperandType PPC "U6imm" = BaseBVType 6
 type instance A.OperandType PPC "U7imm" = BaseBVType 7
 type instance A.OperandType PPC "U8imm" = BaseBVType 8
 type instance A.OperandType PPC "Vrrc" = BaseBVType 128
-type instance A.OperandType PPC "Vsfrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsrc" = BaseBVType 128
-type instance A.OperandType PPC "Vssrc" = BaseBVType 128
 
 type instance ArchRegWidth PPC = 64
 
@@ -377,18 +375,14 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.U8imm (W.unW ->  w8)) =
           S.bvLit sym knownNat (toInteger w8)
         operandValue' (PPC.Vrrc (PPC.VR vr)) = locLookup (LocVSR (PPC.VSReg (vr + 32)))
-        operandValue' (PPC.Vsfrc vsr) = locLookup (LocVSR vsr)
         operandValue' (PPC.Vsrc vsr) = locLookup (LocVSR vsr)
-        operandValue' (PPC.Vssrc vsr) = locLookup (LocVSR vsr)
 
 operandToLocation :: PPC.Operand s -> Maybe (Location PPC (A.OperandType PPC s))
 operandToLocation (PPC.Fprc (PPC.FR fr)) = Just $ LocVSR (PPC.VSReg fr)
 operandToLocation (PPC.Gprc gpr) = Just $ LocGPR gpr
 operandToLocation (PPC.Gprc_nor0 gpr) = Just (LocGPR gpr)
 operandToLocation (PPC.Vrrc (PPC.VR vr)) = Just $ LocVSR (PPC.VSReg (vr + 32))
-operandToLocation (PPC.Vsfrc vr) = Just $ LocVSR vr
 operandToLocation (PPC.Vsrc vr) = Just $ LocVSR vr
-operandToLocation (PPC.Vssrc vr) = Just $ LocVSR vr
 operandToLocation _ = Nothing
 
 instance A.Architecture PPC where
@@ -451,9 +445,7 @@ operandTypePPC o =
     PPC.Gprc {}              -> knownRepr
     PPC.Gprc_nor0 {}         -> knownRepr
     PPC.Vrrc {}              -> knownRepr
-    PPC.Vsfrc {}             -> knownRepr
     PPC.Vsrc {}              -> knownRepr
-    PPC.Vssrc {}             -> knownRepr
     PPC.Abscalltarget {}     -> knownRepr
     PPC.Abscondbrtarget {}   -> knownRepr
     PPC.Absdirectbrtarget {} -> knownRepr
@@ -538,9 +530,7 @@ truncateValue op v =
     PPC.Memrix {}            -> L.error "Unexpected non-literal operand"
     PPC.Memrix16 {}          -> L.error "Unexpected non-literal operand"
     PPC.Vrrc {}              -> L.error "Unexpected non-literal operand"
-    PPC.Vsfrc {}             -> L.error "Unexpected non-literal operand"
     PPC.Vsrc {}              -> L.error "Unexpected non-literal operand"
-    PPC.Vssrc {}             -> L.error "Unexpected non-literal operand"
     PPC.Gprc_nor0 {}         -> L.error "Unexpected non-literal operand"
     PPC.Gprc {}              -> L.error "Unexpected non-literal operand"
     PPC.Fprc {}              -> L.error "Unexpected non-literal operand"
@@ -579,9 +569,7 @@ operandToSemanticViewPPC op =
     PPC.Gprc gpr -> gprSemanticView gpr
     PPC.Gprc_nor0 gpr -> gprSemanticView gpr
     PPC.Vrrc vr -> vrSemanticView vr
-    PPC.Vsfrc vsr -> vsrSemanticView vsr
     PPC.Vsrc vsr -> vsrSemanticView vsr
-    PPC.Vssrc vsr -> vsrSemanticView vsr
     _ -> Nothing
   where frSemanticView (PPC.FR rno) =
           Just $ V.SemanticView { V.semvView = frView rno
