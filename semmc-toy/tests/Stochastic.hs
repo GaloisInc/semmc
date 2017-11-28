@@ -6,7 +6,7 @@ import qualified Data.Maybe as D
 import qualified Test.Tasty as T
 import qualified Test.Tasty.HUnit as T
 
-import qualified SemMC.ToyExample.Tests as TT
+import qualified SemMC.Toy.Tests as TT
 import qualified SemMC.Util as U
 
 tests :: U.HasLogCfg => T.TestTree

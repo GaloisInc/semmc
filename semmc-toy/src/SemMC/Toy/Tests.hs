@@ -11,7 +11,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
-module SemMC.ToyExample.Tests where
+module SemMC.Toy.Tests where
 
 import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
@@ -52,7 +52,7 @@ import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.Synthesize as S
 import           SemMC.Synthesis
 import           SemMC.Synthesis.Template
-import           SemMC.ToyExample as T
+import           SemMC.Toy as T
 import           SemMC.Util as U
 
 import           Debug.Trace

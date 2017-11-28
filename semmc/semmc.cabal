@@ -63,8 +63,6 @@ library
                        SemMC.Synthesis.Template
                        SemMC.Symbolic
                        SemMC.TH
-                       SemMC.ToyExample
-                       SemMC.ToyExample.Tests
                        SemMC.Util
                        SemMC.Worklist
                        Data.Parameterized.Seq
@@ -105,19 +103,3 @@ library
   ghc-options:         -Wall
   if impl(ghc >= 8.1)
      ghc-options: -Wno-simplifiable-class-constraints
-
-test-suite semmc-tests
-  default-language: Haskell2010
-  type: exitcode-stdio-1.0
-  ghc-options: -Wall -rtsopts
-  hs-source-dirs: tests
-  main-is: Main.hs
-  other-modules: Formula
-               , Stochastic
-  build-depends:   semmc
-                 , base
-                 , containers
-                 , tasty >= 0.10 && < 0.12
-                 , tasty-hunit
-                 , async
-                 , directory
