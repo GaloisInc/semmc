@@ -9,6 +9,8 @@ module SemMC.Architecture.PPC.Base.Core (
   gprc,
   gprc_nor0,
   fprc,
+  vrrc,
+  vsrc,
   crrc,
   crbitrc,
   crbitm,
@@ -42,6 +44,7 @@ module SemMC.Architecture.PPC.Base.Core (
   defineRCVariant,
   -- * Forms
   naturalBV,
+  vectorBV,
   mdform4,
   mdsform4,
   mform5i,
@@ -57,6 +60,12 @@ module SemMC.Architecture.PPC.Base.Core (
   iform,
   aform,
   aform4,
+  vxform3,
+  vxform3u,
+  vxform2s,
+  vxform2,
+  vaform,
+  vaform4u,
   -- * Shared
   naturalLitBV,
   cmpImm,
@@ -119,6 +128,12 @@ gprc_nor0 = "Gprc_nor0"
 fprc :: String
 fprc = "Fprc"
 
+vrrc :: String
+vrrc = "Vrrc"
+
+vsrc :: String
+vsrc = "Vsrc"
+
 absdirectbrtarget :: String
 absdirectbrtarget = "Absdirectbrtarget"
 
@@ -142,6 +157,9 @@ crbitrc = "Crbitrc"
 
 crbitm :: String
 crbitm = "Crbitm"
+
+s5imm :: String
+s5imm = "S5imm"
 
 s16imm :: String
 s16imm = "S16imm"
@@ -248,6 +266,9 @@ defineRCVariant newName modifiedReg def = do
 naturalBV :: (?bitSize :: BitSize) => ExprType 'TBV
 naturalBV = EBV (bitSizeValue ?bitSize)
 
+vectorBV :: ExprType 'TBV
+vectorBV = EBV 128
+
 -- | The M-form for RLWINM with three 5 bit immediates
 mform5i :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
 mform5i = do
@@ -306,6 +327,57 @@ xoform3 = do
   input rA
   input rB
   return (rT, rA, rB)
+
+vxform2s :: SemM 'Def (Location 'TBV, Location 'TBV)
+vxform2s = do
+  vrT <- param "vrT" vrrc vectorBV
+  sim <- param "sim" s5imm (EBV 5)
+  return (vrT, sim)
+
+vxform3u :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+vxform3u = do
+  vrT <- param "vrT" vrrc vectorBV
+  vrB <- param "vrB" vrrc vectorBV
+  uim <- param "uim" u5imm (EBV 5)
+  input vrB
+  return (vrT, vrB, uim)
+
+vxform3 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+vxform3 = do
+  vrT <- param "vrT" vrrc vectorBV
+  vrA <- param "vrA" vrrc vectorBV
+  vrB <- param "vrB" vrrc vectorBV
+  input vrA
+  input vrB
+  return (vrT, vrA, vrB)
+
+vxform2 :: SemM 'Def (Location 'TBV, Location 'TBV)
+vxform2 = do
+  vrT <- param "vrT" vrrc vectorBV
+  vrB <- param "vrB" vrrc vectorBV
+  input vrB
+  return (vrT, vrB)
+
+vaform :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+vaform = do
+  vrT <- param "vrT" vrrc vectorBV
+  vrA <- param "vrA" vrrc vectorBV
+  vrB <- param "vrB" vrrc vectorBV
+  vrC <- param "vrC" vrrc vectorBV
+  input vrA
+  input vrB
+  input vrC
+  return (vrT, vrA, vrB, vrC)
+
+vaform4u :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+vaform4u = do
+  vrT <- param "vrT" vrrc vectorBV
+  shb <- param "shb" u5imm (EBV 5)
+  vrA <- param "vrA" vrrc vectorBV
+  vrB <- param "vrB" vrrc vectorBV
+  input vrA
+  input vrB
+  return (vrT, shb, vrA, vrB)
 
 xoform2 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
 xoform2 = do
