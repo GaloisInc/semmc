@@ -1,0 +1,4 @@
+;; VSX Scalar Round to Double-Precision Integer using Round Toward -Infinity (XX2-form)
+((operands ((xT . 'Vsrc) (xB . 'Vsrc))) 
+  (in (xB 'IP))
+  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))

@@ -1,0 +1,4 @@
+;; VSX Scalar Multiply Single-Precision (XX3-form)
+((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc))) 
+  (in (xB xA 'IP))
+  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))

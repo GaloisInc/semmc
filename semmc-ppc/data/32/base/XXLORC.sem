@@ -1,0 +1,2 @@
+;; VSX Logical OR with Complement (XX3-form)
+((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc))) (in (xB xA 'IP)) (defs ((xT (bvor xA (bvnot xB))) ('IP (bvadd 'IP #x00000004)))))
