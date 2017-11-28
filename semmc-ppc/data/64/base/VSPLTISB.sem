@@ -1,0 +1,4 @@
+;; Vector Splat Immediate Signed Byte (VX-form)
+((operands ((vrT . 'Vrrc) (sim . 'S5imm))) 
+  (in ('IP))
+  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))
