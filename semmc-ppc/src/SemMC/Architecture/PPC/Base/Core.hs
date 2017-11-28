@@ -42,6 +42,7 @@ module SemMC.Architecture.PPC.Base.Core (
   -- * IP Wrapper
   defineOpcodeWithIP,
   defineRCVariant,
+  defineVRCVariant,
   -- * Forms
   naturalBV,
   vectorBV,
@@ -259,6 +260,18 @@ defineRCVariant newName modifiedReg def = do
     input cr
     input xer
     defLoc cr (cmpImm bvslt bvsgt (LitBV 3 0x0) (naturalLitBV 0x0) modifiedReg)
+    def
+
+-- | Like 'defineRCVariant', but for vector instructions, which modify CR6
+-- instead of CR0.
+--
+-- FIXME: Right now, we clobber the entire CR with undefined bits.
+defineVRCVariant :: (?bitSize :: BitSize) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
+defineVRCVariant newName _modifiedReg def = do
+  forkDefinition newName $ do
+    input cr
+    input xer
+    defLoc cr (undefinedBV 32)
     def
 
 -- Form helpers

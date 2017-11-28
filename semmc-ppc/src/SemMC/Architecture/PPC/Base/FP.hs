@@ -7,6 +7,7 @@ module SemMC.Architecture.PPC.Base.FP (
   floatingPointStores,
   floatingPointCompare,
   -- * Primitives
+  froundsingle,
   fsingletodouble
   ) where
 
