@@ -73,11 +73,26 @@ fsingletodouble = uf (EBV 64) "fp.single_to_double" . ((:[]) . Some)
 fabs :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 fabs = uf (EBV 64) "fp.abs" . ((:[]) . Some)
 
+flt :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+flt e1 e2 = uf EBool "fp.lt" [ Some e1, Some e2 ]
+
+fisqnan32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
+fisqnan32 = uf EBool "fp.is_qnan32" . ((:[]) . Some)
+
+fisqnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
+fisqnan64 = uf EBool "fp.is_qnan64" . ((:[]) . Some)
+
 fissnan32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
 fissnan32 = uf EBool "fp.is_snan32" . ((:[]) . Some)
 
 fissnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
 fissnan64 = uf EBool "fp.is_snan64" . ((:[]) . Some)
+
+fisnan32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
+fisnan32 e = orp (fisqnan32 e) (fissnan32 e)
+
+fisnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
+fisnan64 e = orp (fisqnan64 e) (fissnan64 e)
 
 -- | Extract the single-precision part of a vector register
 extractSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
@@ -142,8 +157,44 @@ liftSingle1 operation op =
 
 -- | Floating point comparison definitions
 --
+fcbits :: (HasCallStack, ?bitSize :: BitSize)
+       => Expr 'TBV
+       -- ^ The first operand
+       -> Expr 'TBV
+       -- ^ the second operand
+       -> Expr 'TBV
+fcbits opa opb = LitBV 4 0x0000 -- c
+                 -- FIXME
+  where
+    c = ite (orp (fisnan64 opa) (fisnan64 opb)) (LitBV 4 0x0001)
+        (ite (flt opa opb) (LitBV 4 0x1000)
+         (ite (flt opb opa) (LitBV 4 0x0100) (LitBV 4 0x0010)))
+
+fcmp :: (HasCallStack, ?bitSize :: BitSize)
+     => Expr 'TBV
+     -- ^ The crrc field
+     -> Expr 'TBV
+     -- ^ The first operand
+     -> Expr 'TBV
+     -- ^ The second operand
+     -> Expr 'TBV
+fcmp fld opa opb =
+  bvor crFld0 shiftedNibble
+  where
+    c = fcbits opa opb
+    shiftedNibble = bvshl (zext' 32 c) (bvmul (zext' 32 fld) (LitBV 32 0x4))
+    crFld0 = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fld) (LitBV 32 0x4))))
+
 floatingPointCompare :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPointCompare = do
+  -- For some reason, Dismantle disassembles the FCMPU instruction in two
+  -- variants. There really is no difference between the two.
+
+  -- FIXME:
+  -- Here, we are either setting or unsetting the FPCC and VXSNAN fields (either 0 or
+  -- 1), but we are not unsetting the FX field if VXSNAN gets set to 0. I'm not sure
+  -- if this is the correct behavior; something to look into.
+
   defineOpcodeWithIP "FCMPUS" $ do
     comment "Floating Compare Unordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
@@ -151,9 +202,28 @@ floatingPointCompare = do
     frB <- param "frB" fprc (EBV 128)
     input frA
     input frB
+    input cr
     input fpscr
-    let sNaN = orp (fissnan32 (extractSingle (Loc frA))) (fissnan32 (extractSingle (Loc frB)))
-    defLoc fpscr (ite sNaN (bvor (Loc fpscr) (LitBV 32 0x00000080)) (Loc fpscr))
+
+    let lowA = extractDouble (Loc frA)
+    let lowB = extractDouble (Loc frB)
+
+    let c     = fcbits lowA lowB
+    let newCR = fcmp (Loc bf) lowA lowB
+
+    let snan = orp (fissnan64 lowA) (fissnan64 lowB)
+
+    -- zero out the FPCC and VXSNAN bits
+    let fpscrFld0 = bvand (Loc fpscr) (LitBV 32 0xfff0ff7f)
+
+    let snanMask = ite snan (LitBV 32 0x00000080) (LitBV 32 0x00000000)
+    let fpccMask = bvshl (zext' 32 c) (LitBV 32 0x00000010)
+    let fxMask   = ite snan (LitBV 32 0x00000001) (LitBV 32 0x00000000)
+
+    defLoc cr newCR
+    defLoc fpscr (bvor snanMask
+                  (bvor fpccMask
+                   (bvor fxMask fpscrFld0)))
   defineOpcodeWithIP "FCMPUD" $ do
     comment "Floating Compare Unordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
@@ -161,9 +231,28 @@ floatingPointCompare = do
     frB <- param "frB" fprc (EBV 128)
     input frA
     input frB
+    input cr
     input fpscr
-    let sNaN = orp (fissnan64 (extractDouble (Loc frA))) (fissnan64 (extractDouble (Loc frB)))
-    defLoc fpscr (ite sNaN (bvor (Loc fpscr) (LitBV 32 0x00000080)) (Loc fpscr))
+
+    let lowA = extractDouble (Loc frA)
+    let lowB = extractDouble (Loc frB)
+
+    let c     = fcbits lowA lowB
+    let newCR = fcmp (Loc bf) lowA lowB
+
+    let snan = orp (fissnan64 lowA) (fissnan64 lowB)
+
+    -- zero out the FPCC and VXSNAN bits
+    let fpscrFld0 = bvand (Loc fpscr) (LitBV 32 0xfff0ff7f)
+
+    let snanMask = ite snan (LitBV 32 0x00000080) (LitBV 32 0x00000000)
+    let fpccMask = bvshl (zext' 32 c) (LitBV 32 0x00000010)
+    let fxMask   = ite snan (LitBV 32 0x00000001) (LitBV 32 0x00000000)
+
+    defLoc cr newCR
+    defLoc fpscr (bvor snanMask
+                  (bvor fpccMask
+                   (bvor fxMask fpscrFld0)))
 
 -- | Floating point operation definitions
 --

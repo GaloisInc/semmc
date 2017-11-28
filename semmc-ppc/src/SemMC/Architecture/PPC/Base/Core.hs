@@ -412,7 +412,7 @@ cmpImm :: (HasCallStack, ?bitSize :: BitSize)
        -- ^ The register expression
        -> Expr 'TBV
 cmpImm lt gt fld ximm reg =
-  bvor (Loc cr) shiftedNibble
+  bvor crFld0 shiftedNibble
   where
     c = ite (lt reg ximm)
             (LitBV 3 0b100)
@@ -421,6 +421,7 @@ cmpImm lt gt fld ximm reg =
                  (LitBV 3 0b001))
     crnibble = concat c (xerBit SO (Loc xer))
     shiftedNibble = bvshl (zext' 32 crnibble) (bvmul (zext' 32 fld) (LitBV 32 0x4))
+    crFld0 = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fld) (LitBV 32 0x4))))
 
 -- Common operations
 
