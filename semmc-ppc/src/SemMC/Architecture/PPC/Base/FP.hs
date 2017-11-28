@@ -5,7 +5,9 @@ module SemMC.Architecture.PPC.Base.FP (
   floatingPoint,
   floatingPointLoads,
   floatingPointStores,
-  floatingPointCompare
+  floatingPointCompare,
+  -- * Primitives
+  fsingletodouble
   ) where
 
 import GHC.Stack ( HasCallStack )
