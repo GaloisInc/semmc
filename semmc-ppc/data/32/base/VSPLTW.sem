@@ -1,0 +1,4 @@
+;; Vector Splat Word (VX-form)
+((operands ((vrT . 'Vrrc) (vrB . 'Vrrc) (uim . 'U5imm))) 
+  (in (vrB 'IP))
+  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
