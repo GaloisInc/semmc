@@ -311,8 +311,7 @@ runSynToy dataRoot action = do
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe [I.TestCase Toy]))
   rChan <- C.newChan
-  testRunnerThread <- C.async $ testRunner cfg tChan rChan
-  C.link testRunnerThread
+  testRunnerThread <- U.asyncLinked $ testRunner cfg tChan rChan
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv
         , seRandomGen = gen
