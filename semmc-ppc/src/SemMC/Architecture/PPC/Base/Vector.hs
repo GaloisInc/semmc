@@ -33,31 +33,6 @@ baseVector = do
     (vrT, _, _, _) <- vaform
     defLoc vrT (undefinedBV 128)
 
-  defineOpcodeWithIP "VSL" $ do
-    comment "Vector Shift Left (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
-
-  defineOpcodeWithIP "VSLO" $ do
-    comment "Vector Shift Left by Octet (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
-
-  defineOpcodeWithIP "VSLDOI" $ do
-    comment "Vector Shift Left Double by Octet Immediate (VA-form)"
-    (vrT, _, _, _) <- vaform4u
-    defLoc vrT (undefinedBV 128)
-
-  defineOpcodeWithIP "VSR" $ do
-    comment "Vector Shift Right (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
-
-  defineOpcodeWithIP "VSRO" $ do
-    comment "Vector Shift Right by Octet (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
-
   return ()
 
 vecArith :: (?bitSize :: BitSize) => SemM 'Top ()
@@ -178,6 +153,91 @@ vecBitwise = do
     comment "Vector Logical XOR (VX-form)"
     (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvxor (Loc vrA) (Loc vrB))
+
+  defineOpcodeWithIP "VSL" $ do
+    comment "Vector Shift Left (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSLDOI" $ do
+    comment "Vector Shift Left Double by Octet Immediate (VA-form)"
+    (vrT, _, _, _) <- vaform4u
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSLO" $ do
+    comment "Vector Shift Left by Octet (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSR" $ do
+    comment "Vector Shift Right (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRO" $ do
+    comment "Vector Shift Right by Octet (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSLB" $ do
+    comment "Vector Shift Left Byte (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSLH" $ do
+    comment "Vector Shift Left Halfword (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSLW" $ do
+    comment "Vector Shift Left Word (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSLD" $ do
+    comment "Vector Shift Left Doubleword (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRB" $ do
+    comment "Vector Shift Right Byte (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRH" $ do
+    comment "Vector Shift Right Halfword (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRW" $ do
+    comment "Vector Shift Right Word (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRD" $ do
+    comment "Vector Shift Right Doubleword (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRAB" $ do
+    comment "Vector Shift Right Algebraic Byte (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRAH" $ do
+    comment "Vector Shift Right Algebraic Halfword (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRAW" $ do
+    comment "Vector Shift Right Algebraic Word (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VSRAD" $ do
+    comment "Vector Shift Right Algebraic Doubleword (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
 
 vecMerge :: (?bitSize :: BitSize) => SemM 'Top ()
 vecMerge = do
