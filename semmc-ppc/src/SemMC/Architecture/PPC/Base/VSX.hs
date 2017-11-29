@@ -437,6 +437,63 @@ vsxBitwise = do
     (xT, xA, xB) <- xx3form
     defLoc xT (bvxor (Loc xA) (Loc xB))
 
+  defineOpcodeWithIP "XXMRGHW" $ do
+    comment "VSX Merge High Word (XX3-form)"
+    (xT, _xA, _xB) <- xx3form
+    defLoc xT (undefinedBV 128)
+
+  defineOpcodeWithIP "XXMRGLW" $ do
+    comment "VSX Merge Low Word (XX3-form)"
+    (xT, _xA, _xB) <- xx3form
+    defLoc xT (undefinedBV 128)
+
+  defineOpcodeWithIP "XXPERMDI" $ do
+    comment "VSX Permute Doubleword Immediate (XX3-form)"
+    xT <- param "xT" vsrc vectorBV
+    dm <- param "DM" u2imm (EBV 2)
+    xA <- param "xA" vsrc vectorBV
+    xB <- param "xB" vsrc vectorBV
+    input dm
+    input xA
+    input xB
+    defLoc xT (undefinedBV 128)
+
+  defineOpcodeWithIP "XXSEL" $ do
+    comment "VSX Select (XX4-form)"
+    (xT, _xA, _xB, _xC) <- xx4form
+    defLoc xT (undefinedBV 128)
+
+  defineOpcodeWithIP "XXSLDWI" $ do
+    comment "VSX Shift Left Double by Word Immediate (XX3-form)"
+    xT <- param "xT" vsrc vectorBV
+    shw <- param "SHW" u2imm (EBV 2)
+    xA <- param "xA" vsrc vectorBV
+    xB <- param "xB" vsrc vectorBV
+    input shw
+    input xA
+    input xB
+    defLoc xT (undefinedBV 128)
+
+  defineOpcodeWithIP "XXSPLTW" $ do
+    comment "VSX Splat Word (XX2-form)"
+    xT <- param "xT" vsrc vectorBV
+    uim <- param "UIM" u2imm (EBV 2)
+    xB <- param "xB" vsrc vectorBV
+    input uim
+    input xB
+    defLoc xT (undefinedBV 128)
+
+xx4form :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
+xx4form = do
+  xT <- param "xT" vsrc vectorBV
+  xA <- param "xA" vsrc vectorBV
+  xB <- param "xB" vsrc vectorBV
+  xC <- param "xC" vsrc vectorBV
+  input xA
+  input xB
+  input xC
+  return (xT, xA, xB, xC)
+
 xx3form :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xx3form = do
   xT <- param "xT" vsrc vectorBV

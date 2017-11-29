@@ -16,10 +16,12 @@ import SemMC.Architecture.PPC.Base.Core
 baseVector :: (?bitSize :: BitSize) => SemM 'Top ()
 baseVector = do
   vecMerge
-  vecSplit
+  vecSplat
   vecPack
   vecLoad
   vecStore
+  vecArith
+  vecBitwise
 
   defineOpcodeWithIP "VPERM" $ do
     comment "Vector Permute (VA-form)"
@@ -57,6 +59,125 @@ baseVector = do
     defLoc vrT (undefinedBV 128)
 
   return ()
+
+vecArith :: (?bitSize :: BitSize) => SemM 'Top ()
+vecArith = do
+  defineOpcodeWithIP "VADDCUW" $ do
+    comment "Vector Add and Write Carry-Out Unsigned Word (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDSBS" $ do
+    comment "Vector Add Signed Byte Saturate (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDSHS" $ do
+    comment "Vector Add Signed Halfword Saturate (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDSWS" $ do
+    comment "Vector Add Signed Word Saturate (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUBM" $ do
+    comment "Vector Add Unsigned Byte Modulo (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUDM" $ do
+    comment "Vector Add Unsigned Doubleword Modulo (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUHM" $ do
+    comment "Vector Add Unsigned Halfword Modulo (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUWM" $ do
+    comment "Vector Add Unsigned Word Modulo (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUBS" $ do
+    comment "Vector Add Unsigned Byte Saturate (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUHS" $ do
+    comment "Vector Add Unsigned Halfword Saturate (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUWS" $ do
+    comment "Vector Add Unsigned Word Saturate (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDUQM" $ do
+    comment "Vector Add Unsigned Quadword Modulo (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDEUQM" $ do
+    comment "Vector Add Extended Unsigned Quadword Modulo (VA-form)"
+    (vrT, _, _, _) <- vaform
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDCUQ" $ do
+    comment "Vector Add & Write Carry Unsigned Quadword (VX-form)"
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VADDECUQ" $ do
+    comment "Vector Add Extended & Write Carry Unsigned Quadword (VA-form)"
+    (vrT, _, _, _) <- vaform
+    defLoc vrT (undefinedBV 128)
+
+vecBitwise :: (?bitSize :: BitSize) => SemM 'Top ()
+vecBitwise = do
+  defineOpcodeWithIP "VAND" $ do
+    comment "Vector Logical AND (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvand (Loc vrA) (Loc vrB))
+
+  defineOpcodeWithIP "VANDC" $ do
+    comment "Vector Logical AND with Complement (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvand (Loc vrA) (bvnot (Loc vrB)))
+
+  defineOpcodeWithIP "VEQV" $ do
+    comment "Vector Logical Equivalent (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvnot (bvxor (Loc vrA) (Loc vrB)))
+
+  defineOpcodeWithIP "VNAND" $ do
+    comment "Vector Logical NAND (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvnot (bvand (Loc vrA) (Loc vrB)))
+
+  defineOpcodeWithIP "VORC" $ do
+    comment "Vector Logical OR with Complement (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvor (Loc vrA) (bvnot (Loc vrB)))
+
+  defineOpcodeWithIP "VNOR" $ do
+    comment "Vector Logical NOR (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvnot (bvor (Loc vrA) (Loc vrB)))
+
+  defineOpcodeWithIP "VOR" $ do
+    comment "Vector Logical OR (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvor (Loc vrA) (Loc vrB))
+
+  defineOpcodeWithIP "VXOR" $ do
+    comment "Vector Logical XOR (VX-form)"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvxor (Loc vrA) (Loc vrB))
 
 vecMerge :: (?bitSize :: BitSize) => SemM 'Top ()
 vecMerge = do
@@ -100,8 +221,8 @@ vecMerge = do
     (vrT, _, _) <- vxform3
     defLoc vrT (undefinedBV 128)
 
-vecSplit :: (?bitSize :: BitSize) => SemM 'Top ()
-vecSplit = do
+vecSplat :: (?bitSize :: BitSize) => SemM 'Top ()
+vecSplat = do
   defineOpcodeWithIP "VSPLTB" $ do
     comment "Vector Splat Byte (VX-form)"
     (vrT, _, _) <- vxform3u
@@ -307,6 +428,22 @@ vecLoad = do
     let b = ite (isR0 (Loc rA)) (naturalLitBV 0x0) (Loc rA)
     let ea = bvand memMask (bvadd rB b)
     defLoc vrT (readMem (Loc memory) ea 16)
+
+  defineOpcodeWithIP "LVSL" $ do
+    comment "Load Vector for Shift Left Indexed (X-form)"
+    vrT <- param "vrT" vrrc vectorBV
+    memref <- param "memrr" memrr EMemRef
+    input memref
+    input memory
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "LVSR" $ do
+    comment "Load Vector for Shift Right Indexed (X-form)"
+    vrT <- param "vrT" vrrc vectorBV
+    memref <- param "memrr" memrr EMemRef
+    input memref
+    input memory
+    defLoc vrT (undefinedBV 128)
 
 vecStore :: (?bitSize :: BitSize) => SemM 'Top ()
 vecStore = do
