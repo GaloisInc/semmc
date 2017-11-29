@@ -89,6 +89,8 @@ module SemMC.Architecture.PPC.Base.Core (
   zext',
   rotl,
   mask,
+  crField,
+  updateCRField,
   -- * Uninterpreted Functions
   isR0,
   memriReg,
@@ -506,6 +508,33 @@ cmpImm lt gt fld ximm reg =
                  (LitBV 3 0b001))
     crnibble = concat c (xerBit SO (Loc xer))
     shiftedNibble = bvshl (zext' 32 crnibble) (bvmul (zext' 32 fld) (LitBV 32 0x4))
+
+-- | Produce an expression that extracts the given field from the CR as a four
+-- bit bitvector
+crField :: Expr 'TBV
+        -- ^ The field number to extract from the CR (should be a 3 bit crrc value)
+        -> Expr 'TBV
+crField fldNum = lowBits' 4 shiftedCR
+  where
+    shiftedCR = bvlshr (Loc cr) (bvmul (zext' 32 fldNum) (LitBV 32 0x4))
+
+-- | Update the named CR field with the given four bit value; returns a new CR value
+--
+-- The field is named by a 3 bit crrc value.
+--
+-- Generates a mask of four ones shifted to the field slot, then negates the
+-- mask to clear that field.  Shifts the new field into the correct slot and
+-- does an or.
+updateCRField :: Expr 'TBV
+              -- ^ A three bit crrc value naming the field to update
+              -> Expr 'TBV
+              -- ^ A four bit replacement field value
+              -> Expr 'TBV
+updateCRField fldNum newFldVal = bvor clearedCR shiftedVal
+  where
+    fieldMask = bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fldNum) (LitBV 32 0x4)))
+    clearedCR = bvand (Loc cr) fieldMask
+    shiftedVal = bvshl (zext' 32 newFldVal) (bvmul (zext' 32 fldNum) (LitBV 32 0x4))
 
 -- Common operations
 

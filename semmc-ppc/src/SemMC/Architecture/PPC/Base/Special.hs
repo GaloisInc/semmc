@@ -50,6 +50,16 @@ baseSpecial = do
                 -- FIXME: add one more check for equality to 9 and exception
                 (Loc ctr)))
 
+  defineOpcodeWithIP "MCRF" $ do
+    comment "Move Condition Register Field (XL-form)"
+    bf <- param "BF" crrc (EBV 3)
+    bfa <- param "BFA" crrc (EBV 3)
+    input bf
+    input bfa
+    input cr
+    let selField = crField (Loc bfa)
+    defLoc cr (updateCRField (Loc bf) selField)
+
   defineOpcodeWithIP "MFCR" $ do
     comment "Move From Condition Register"
     rT <- param "rT" gprc naturalBV
