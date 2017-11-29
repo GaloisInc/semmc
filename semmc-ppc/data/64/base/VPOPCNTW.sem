@@ -1,0 +1,4 @@
+;; Vector Population Count Word (VX-form)
+((operands ((vrT . 'Vrrc) (vrB . 'Vrrc))) 
+  (in (vrB 'IP))
+  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))

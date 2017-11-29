@@ -1,0 +1,5 @@
+;; Vector Compare Equal To Unsigned Doubleword (VC-form, RC=1)
+((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc))) 
+  (in ('XER 'CR vrB vrA 'IP))
+  (defs 
+    (('CR ((_ call "undefined") #x00000020)) (vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))

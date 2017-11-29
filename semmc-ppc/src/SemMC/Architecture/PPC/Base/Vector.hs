@@ -22,6 +22,7 @@ baseVector = do
   vecStore
   vecArith
   vecBitwise
+  vecCompare
 
   defineOpcodeWithIP "VPERM" $ do
     comment "Vector Permute (VA-form)"
@@ -34,6 +35,92 @@ baseVector = do
     defLoc vrT (undefinedBV 128)
 
   return ()
+
+vecCompare :: (?bitSize :: BitSize) => SemM 'Top ()
+vecCompare = do
+  defineOpcodeWithIP "VCMPEQUB" $ do
+    comment "Vector Compare Equal To Unsigned Byte (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPEQUBo" (undefinedBV 128) $ do
+      comment "Vector Compare Equal To Unsigned Byte (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPEQUH" $ do
+    comment "Vector Compare Equal To Unsigned Halfword (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPEQUHo" (undefinedBV 128) $ do
+      comment "Vector Compare Equal To Unsigned Halfword (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPEQUW" $ do
+    comment "Vector Compare Equal To Unsigned Word (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPEQUWo" (undefinedBV 128) $ do
+      comment "Vector Compare Equal To Unsigned Word (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPEQUD" $ do
+    comment "Vector Compare Equal To Unsigned Doubleword (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPEQUDo" (undefinedBV 128) $ do
+      comment "Vector Compare Equal To Unsigned Doubleword (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTSB" $ do
+    comment "Vector Compare Greater Than Signed Byte (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTSBo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Signed Byte (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTSH" $ do
+    comment "Vector Compare Greater Than Signed Halfword (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTSHo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Signed Halfword (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTSW" $ do
+    comment "Vector Compare Greater Than Signed Word (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTSWo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Signed Word (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTSD" $ do
+    comment "Vector Compare Greater Than Signed Doubleword (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTSDo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Signed Doubleword (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTUB" $ do
+    comment "Vector Compare Greater Than Unsigned Byte (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTUBo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Unsigned Byte (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTUH" $ do
+    comment "Vector Compare Greater Than Unsigned Halfword (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTUHo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Unsigned Halfword (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTUW" $ do
+    comment "Vector Compare Greater Than Unsigned Word (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTUWo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Unsigned Word (VC-form, RC=1)"
+
+  defineOpcodeWithIP "VCMPGTUD" $ do
+    comment "Vector Compare Greater Than Unsigned Doubleword (VC-form, RC=0)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+    defineVRCVariant "VCMPGTUDo" (undefinedBV 128) $ do
+      comment "Vector Compare Greater Than Unsigned Doubleword (VC-form, RC=1)"
 
 vecArith :: (?bitSize :: BitSize) => SemM 'Top ()
 vecArith = do
@@ -236,6 +323,56 @@ vecBitwise = do
 
   defineOpcodeWithIP "VSRAD" $ do
     comment "Vector Shift Right Algebraic Doubleword (VX-form)"
+    (vrT, _vrA, _vrB) <- vxform3
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VGBBD" $ do
+    comment "Vector Gather Bits by Bytes by Doubleword (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VCLZB" $ do
+    comment "Vector Count Leading Zeros Byte (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VCLZH" $ do
+    comment "Vector Count Leading Zeros Halfword (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VCLZW" $ do
+    comment "Vector Count Leading Zeros Word (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VCLZD" $ do
+    comment "Vector Count Leading Zeros Doubleword (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VPOPCNTB" $ do
+    comment "Vector Population Count Byte (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VPOPCNTH" $ do
+    comment "Vector Population Count Halfword (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VPOPCNTW" $ do
+    comment "Vector Population Count Word (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VPOPCNTD" $ do
+    comment "Vector Population Count Doubleword (VX-form)"
+    (vrT, _vrB) <- vxform2
+    defLoc vrT (undefinedBV 128)
+
+  defineOpcodeWithIP "VBPERMQ" $ do
+    comment "Vector Bit Permute Quadword (VX-form)"
     (vrT, _vrA, _vrB) <- vxform3
     defLoc vrT (undefinedBV 128)
 

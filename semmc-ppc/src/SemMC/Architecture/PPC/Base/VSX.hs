@@ -9,6 +9,7 @@ module SemMC.Architecture.PPC.Base.VSX (
   ) where
 
 import Prelude hiding ( concat )
+import Control.Monad ( when )
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 import SemMC.Architecture.PPC.Base.FP
@@ -510,6 +511,13 @@ xx2form = do
   input xB
   return (xT, xB)
 
+xx1form :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
+xx1form = do
+  xT <- param "xT" vsrc vectorBV
+  rA <- param "rA" gprc naturalBV
+  input xT
+  return (xT, rA)
+
 effectiveAddress :: (?bitSize :: BitSize) => Location 'TMemRef -> Expr 'TBV
 effectiveAddress memref =
   let rA = memrrBaseReg memref
@@ -568,6 +576,35 @@ loadForm = do
 
 vsxLoad :: (?bitSize :: BitSize) => SemM 'Top ()
 vsxLoad = do
+  when (?bitSize == Size64) $ do
+    defineOpcodeWithIP "MTVSRD" $ do
+      comment "Move To VSR Doubleword (XX1-form)"
+      (xT, rA) <- xx1form
+      defLoc xT (concat (Loc rA) (undefinedBV 64))
+
+    defineOpcodeWithIP "MFVSRD" $ do
+      comment "Move From VSR Doubleword (XX1-form)"
+      rA <- param "rA" gprc naturalBV
+      xS <- param "xS" vsrc vectorBV
+      input xS
+      defLoc rA (highBits128 64 (Loc xS))
+
+  defineOpcodeWithIP "MTVSRWA" $ do
+    comment "Move To VSR Word Algebraic (XX1-form)"
+    (xT, rA) <- xx1form
+    defLoc xT (concat (sext' 64 (lowBits' 32 (Loc rA))) (undefinedBV 64))
+
+  defineOpcodeWithIP "MTVSRWZ" $ do
+    comment "Move To VSR Word Zero (XX1-form)"
+    (xT, rA) <- xx1form
+    defLoc xT (concat (zext' 64 (lowBits' 32 (Loc rA))) (undefinedBV 64))
+
+  defineOpcodeWithIP "MFVSRWZ" $ do
+    comment "Move From VSR Word and Zero (XX1-form)"
+    rA <- param "rA" gprc naturalBV
+    xS <- param "xS" vsrc vectorBV
+    defLoc rA (zext (highBits128 32 (Loc xS)))
+
   defineOpcodeWithIP "LXSDX" $ do
     comment "Load VSX Scalar Doubleword Indexed (XX1-form)"
     (xT, memref) <- loadForm

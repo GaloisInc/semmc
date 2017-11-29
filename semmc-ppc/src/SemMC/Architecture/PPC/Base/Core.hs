@@ -257,7 +257,7 @@ defineOpcodeWithIP name def =
 -- The CR0 register is set as if the given value is compared against zero as in
 -- compare with immediate.  The low three bits of CR0 are set by comparison
 -- against zero and the fourth bit is copied from XER.
-defineRCVariant :: (?bitSize :: BitSize) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
+defineRCVariant :: (?bitSize :: BitSize, HasCallStack) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
 defineRCVariant newName modifiedReg def = do
   forkDefinition newName $ do
     input cr
@@ -269,7 +269,7 @@ defineRCVariant newName modifiedReg def = do
 -- instead of CR0.
 --
 -- FIXME: Right now, we clobber the entire CR with undefined bits.
-defineVRCVariant :: (?bitSize :: BitSize) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
+defineVRCVariant :: (?bitSize :: BitSize, HasCallStack) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
 defineVRCVariant newName _modifiedReg def = do
   forkDefinition newName $ do
     input cr
