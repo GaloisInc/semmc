@@ -1,0 +1,4 @@
+;; VSX Select (XX4-form)
+((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc) (xC . 'Vsrc))) 
+  (in (xC xB xA 'IP))
+  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))
