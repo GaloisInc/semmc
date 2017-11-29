@@ -62,9 +62,18 @@ import SemMC.Log
 -- is harder to use because it requires a special version of @cancel@.
 asyncLinked :: (U.MonadUnliftIO m) => m () -> m (U.Async ())
 asyncLinked action = do
-  a <- U.async $ U.handle (\E.ThreadKilled -> return ()) action
+  a <- U.async $ handleUnliftIO (\E.ThreadKilled -> return ()) action
   U.link a
   return a
+  where
+    -- The 'U.handle' doesn't catch async exceptions, because the
+    -- @unliftio@ library uses the @safe-execeptions@ library, not
+    -- @base@, for it exception handling primitives. This is very
+    -- confusing if you're not expecting it!
+    handleUnliftIO :: (U.MonadUnliftIO m, U.Exception e)
+                   => (e -> m a) -> m a -> m a
+    handleUnliftIO h a = U.withUnliftIO $ \u ->
+      E.handle (U.unliftIO u . h) (U.unliftIO u a)
 
 -- | A version of 'U.withAsync' that safely links the child. See
 -- 'asyncLinked'.
