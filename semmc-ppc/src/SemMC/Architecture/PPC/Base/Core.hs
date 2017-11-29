@@ -46,6 +46,7 @@ module SemMC.Architecture.PPC.Base.Core (
   -- * Forms
   naturalBV,
   vectorBV,
+  xlformcr,
   mdform4,
   mdsform4,
   mform5i,
@@ -283,6 +284,17 @@ naturalBV = EBV (bitSizeValue ?bitSize)
 
 vectorBV :: ExprType 'TBV
 vectorBV = EBV 128
+
+-- | The XL-form for the CR logical operations
+xlformcr :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
+xlformcr = do
+  bt <- param "BT" crbitrc (EBV 5)
+  ba <- param "BA" crbitrc (EBV 5)
+  bb <- param "BB" crbitrc (EBV 5)
+  input ba
+  input bb
+  input cr
+  return (bt, ba, bb)
 
 -- | The M-form for RLWINM with three 5 bit immediates
 mform5i :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)

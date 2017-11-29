@@ -151,6 +151,7 @@ baseBitwise = do
 
   rotates
   special
+  crOps
   temporary
 
   when (?bitSize == Size64) $ do
@@ -211,7 +212,50 @@ baseBitwise = do
       defineRCVariant "EXTSWo" res $ do
         comment "Extend Sign Word (X-form, RC=1)"
 
+crbitOperation :: (?bitSize :: BitSize) => (Expr 'TBV -> Expr 'TBV -> Expr 'TBV) -> SemM 'Def ()
+crbitOperation op = do
+  (bt, ba, bb) <- xlformcr
+  let extractBit n = highBits' 1 (bvshl (Loc cr) (zext' 32 n))
+  let abit = extractBit (Loc ba)
+  let bbit = extractBit (Loc bb)
+  let clearedCR = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0x1) (bvsub (LitBV 32 31) (zext' 32 (Loc bt)))))
+  let res = bvor clearedCR (bvshl (zext' 32 (op abit bbit)) (zext' 32 (Loc bt)))
+  defLoc cr res
 
+-- | Bitwise operations over CR bits
+crOps :: (?bitSize :: BitSize) => SemM 'Top ()
+crOps = do
+  defineOpcodeWithIP "CRAND" $ do
+    comment "Condition Register AND (XL-form)"
+    crbitOperation bvand
+
+  defineOpcodeWithIP "CRXOR" $ do
+    comment "Condition Register XOR (XL-form)"
+    crbitOperation bvxor
+
+  defineOpcodeWithIP "CROR" $ do
+    comment "Condition Register OR (XL-form)"
+    crbitOperation bvor
+
+  defineOpcodeWithIP "CRNAND" $ do
+    comment "Condition Register NAND (XL-form)"
+    crbitOperation (\a b -> bvnot (bvand a b))
+
+  defineOpcodeWithIP "CRNOR" $ do
+    comment "Condition Register NOR (XL-form)"
+    crbitOperation (\a b -> bvnot (bvor a b))
+
+  defineOpcodeWithIP "CREQV" $ do
+    comment "Condition Register Equivalent (XL-form)"
+    crbitOperation (\a b -> bvnot (bvxor a b))
+
+  defineOpcodeWithIP "CRANDC" $ do
+    comment "Condition Register AND with Complement (XL-form)"
+    crbitOperation (\a b -> bvand a (bvnot b))
+
+  defineOpcodeWithIP "CRORC" $ do
+    comment "Condition Register OR with Complement (XL-form)"
+    crbitOperation (\a b -> bvor a (bvnot b))
 
 special :: (?bitSize :: BitSize) => SemM 'Top ()
 special = do
