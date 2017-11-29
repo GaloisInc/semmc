@@ -74,8 +74,7 @@ baseSpecial = do
     input crbit
     input cr
     -- Check the number of bits set in the field; if it is 1, then we set that
-    -- field.  Otherwise, we are undefined.  FIXME: We don't have a great way to
-    -- set something undefined for now...
+    -- field.  Otherwise, we are undefined.
     let check = bvpopcnt (zext' 32 (Loc crbit))
     let fldIdx = bvclz (zext' 32 (Loc crbit))
     let regContents = lowBits 32 (Loc rS)
