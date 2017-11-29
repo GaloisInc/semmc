@@ -1,0 +1,41 @@
+;; Move To Condition Register Fields (XFX-form)
+((operands ((rS . 'Gprc) (FXM . 'I32imm))) 
+  (in ('CR rS 'IP))
+  (defs 
+    (('CR 
+       (bvor 
+         (bvand 
+           rS
+           (concat 
+             ((_ sign_extend 3) ((_ extract 0 0) FXM))
+             (concat 
+               ((_ sign_extend 3) ((_ extract 1 1) FXM))
+               (concat 
+                 ((_ sign_extend 3) ((_ extract 2 2) FXM))
+                 (concat 
+                   ((_ sign_extend 3) ((_ extract 3 3) FXM))
+                   (concat 
+                     ((_ sign_extend 3) ((_ extract 4 4) FXM))
+                     (concat 
+                       ((_ sign_extend 3) ((_ extract 5 5) FXM))
+                       (concat 
+                         ((_ sign_extend 3) ((_ extract 6 6) FXM))
+                         ((_ sign_extend 3) ((_ extract 7 7) FXM))))))))))
+         (bvand 
+           'CR
+           (bvnot 
+             (concat 
+               ((_ sign_extend 3) ((_ extract 0 0) FXM))
+               (concat 
+                 ((_ sign_extend 3) ((_ extract 1 1) FXM))
+                 (concat 
+                   ((_ sign_extend 3) ((_ extract 2 2) FXM))
+                   (concat 
+                     ((_ sign_extend 3) ((_ extract 3 3) FXM))
+                     (concat 
+                       ((_ sign_extend 3) ((_ extract 4 4) FXM))
+                       (concat 
+                         ((_ sign_extend 3) ((_ extract 5 5) FXM))
+                         (concat 
+                           ((_ sign_extend 3) ((_ extract 6 6) FXM))
+                           ((_ sign_extend 3) ((_ extract 7 7) FXM))))))))))))) ('IP (bvadd 'IP #x00000004)))))

@@ -66,6 +66,22 @@ baseSpecial = do
     input cr
     defLoc rT (zext (Loc cr))
 
+  defineOpcodeWithIP "MTCRF" $ do
+    comment "Move To Condition Register Fields (XFX-form)"
+    rS <- param "rS" gprc naturalBV
+    fxm <- param "FXM" "I32imm" (EBV 8)
+    input rS
+    input cr
+    let mkFldMask n = sext' 4 (extract n n (Loc fxm))
+    let crMask = concat (mkFldMask 0)
+                        (concat (mkFldMask 1)
+                                (concat (mkFldMask 2)
+                                        (concat (mkFldMask 3)
+                                                (concat (mkFldMask 4)
+                                                        (concat (mkFldMask 5)
+                                                                (concat (mkFldMask 6) (mkFldMask 7)))))))
+    defLoc cr (bvor (bvand (lowBits 32 (Loc rS)) crMask) (bvand (Loc cr) (bvnot crMask)))
+
   defineOpcodeWithIP "MTOCRF" $ do
     comment "Move To One Condition Register Field (XFX-form)"
     crbit <- param "FXM" crbitm (EBV 8)
