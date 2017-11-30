@@ -1,3 +1,4 @@
+{-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -62,24 +63,35 @@ import SemMC.Log
 -- is harder to use because it requires a special version of @cancel@.
 asyncLinked :: (U.MonadUnliftIO m) => m () -> m (U.Async ())
 asyncLinked action = do
-  a <- U.async $ handleUnliftIO (\E.ThreadKilled -> return ()) action
+  -- We use 'U.mask' to avoid a race condition between starting the
+  -- async and running @action@. Without 'U.mask' here, an async
+  -- exception (e.g. via 'U.cancel') could arrive after
+  -- @handleUnliftIO@ starts to run but before @action@ starts.
+  U.mask $ \restore -> do
+  a <- U.async $ handleUnliftIO (\E.ThreadKilled -> return ()) (restore action)
+  restore $ do
   U.link a
   return a
-  where
-    -- The 'U.handle' doesn't catch async exceptions, because the
-    -- @unliftio@ library uses the @safe-execeptions@ library, not
-    -- @base@, for it exception handling primitives. This is very
-    -- confusing if you're not expecting it!
-    handleUnliftIO :: (U.MonadUnliftIO m, U.Exception e)
-                   => (e -> m a) -> m a -> m a
-    handleUnliftIO h a = U.withUnliftIO $ \u ->
-      E.handle (U.unliftIO u . h) (U.unliftIO u a)
 
 -- | A version of 'U.withAsync' that safely links the child. See
 -- 'asyncLinked'.
 withAsyncLinked :: (U.MonadUnliftIO m) => m () -> (U.Async () -> m a) -> m a
 withAsyncLinked child parent = do
-  U.withAsync (U.handle (\E.ThreadKilled -> return ()) $ child) parent
+  U.mask $ \restore -> do
+  U.withAsync (handleUnliftIO (\E.ThreadKilled -> return ()) $ restore child) $ \a -> restore $ do
+  U.link a
+  parent a
+
+-- A 'U.MonadUnliftIO' version of 'Control.Exception.handle'.
+--
+-- The 'U.handle' doesn't catch async exceptions, because the
+-- @unliftio@ library uses the @safe-execeptions@ library, not
+-- @base@, for it exception handling primitives. This is very
+-- confusing if you're not expecting it!
+handleUnliftIO :: (U.MonadUnliftIO m, U.Exception e)
+               => (e -> m a) -> m a -> m a
+handleUnliftIO h a = U.withUnliftIO $ \u ->
+  E.handle (U.unliftIO u . h) (U.unliftIO u a)
 
 ----------------------------------------------------------------
 -- * Uncategorized
