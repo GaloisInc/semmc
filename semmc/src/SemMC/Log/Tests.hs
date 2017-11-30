@@ -2,6 +2,12 @@
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+-- | Description: Tests for SemMC.Log
+--
+-- Tests for 'SemMC.Log'. The results of these tests are not checked
+-- automatically right now, but they could be by independently
+-- computing the expected log messages and checking that they agree
+-- with the actual log messages.
 module SemMC.Log.Tests where
 
 import           Prelude hiding ( log )
