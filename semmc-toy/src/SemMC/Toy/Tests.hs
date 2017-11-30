@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
+{-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE BangPatterns #-}
@@ -13,7 +14,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module SemMC.Toy.Tests where
 
-import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
 import qualified Data.Foldable as F
 import           Data.IORef ( newIORef )
@@ -311,7 +311,7 @@ runSynToy dataRoot action = do
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe [I.TestCase Toy]))
   rChan <- C.newChan
-  testRunnerThread <- U.asyncLinked $ testRunner cfg tChan rChan
+  U.withAsyncLinked (testRunner cfg tChan rChan) $ const $ do
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv
         , seRandomGen = gen
