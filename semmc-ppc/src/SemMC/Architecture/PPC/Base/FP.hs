@@ -257,6 +257,60 @@ floatingPointCompare = do
                   (bvor fpccMask
                    (bvor fxMask fpscrFld0)))
 
+  defineOpcodeWithIP "MFFS" $ do
+    comment "Move From FPSCR (X-form, RC=0)"
+    frT <- param "FRT" fprc vectorBV
+    input fpscr
+    defLoc frT (concat (Loc fpscr) (undefinedBV 96))
+    forkDefinition "MFFSo" $ do
+      comment "Move From FPSCR (X-form, RC=1)"
+      defLoc cr (undefinedBV 32)
+
+  defineOpcodeWithIP "MCRFS" $ do
+    comment "Move to Condition Register from FPSCR (X-form)"
+    _bf <- param "BF" crrc (EBV 3)
+    _bfa <- param "BFA" crrc (EBV 3)
+    defLoc cr (undefinedBV 32)
+    defLoc fpscr (undefinedBV 32)
+
+  defineOpcodeWithIP "MTFSFI" $ do
+    comment "Move to FPSCR Field Immediate (X-form, RC=0)"
+    _bf <- param "BF" crrc (EBV 3)
+    _u <- param "U" "I32imm" (EBV 4)
+    _w <- param "W" "I32imm" (EBV 1)
+    defLoc fpscr (undefinedBV 32)
+    forkDefinition "MTFSFIo" $ do
+      comment "Move to FPSCR Field Immediate (X-form, RC=1)"
+      defLoc cr (undefinedBV 32)
+
+  defineOpcodeWithIP "MTFSF" $ do
+    comment "Move to FPSCR Fields (XFL-form, RC=0)"
+    _flm <- param "FLM" "I32imm" (EBV 8)
+    _l <- param "L" "I32imm" (EBV 1)
+    _frB <- param "frB" fprc vectorBV
+    _w <- param "W" "I32imm" (EBV 1)
+    defLoc fpscr (undefinedBV 32)
+    forkDefinition "MTFSFo" $ do
+      comment "Move to FPSCR Fields (XFL-form, RC=1)"
+      defLoc cr (undefinedBV 32)
+
+  defineOpcodeWithIP "MTFSB0" $ do
+    comment "Move to FPSCR Bit 0 (X-form, RC=0)"
+    _bt <- param "BT" u5imm (EBV 5)
+    defLoc fpscr (undefinedBV 32)
+    forkDefinition "MTFSB0o" $ do
+      comment "Move to FPSCR Bit 0 (X-form, RC=1)"
+      defLoc cr (undefinedBV 32)
+
+  defineOpcodeWithIP "MTFSB1" $ do
+    comment "Move to FPSCR Bit 1 (X-form, RC=0)"
+    _bt <- param "BT" u5imm (EBV 5)
+    defLoc fpscr (undefinedBV 32)
+    forkDefinition "MTFSB1o" $ do
+      comment "Move to FPSCR Bit 1 (X-form, RC=1)"
+      defLoc cr (undefinedBV 32)
+
+
 -- | Floating point operation definitions
 --
 -- FIXME: None of these are defining the status or control registers yet
