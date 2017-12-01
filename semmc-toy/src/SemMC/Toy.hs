@@ -24,7 +24,7 @@
 -- possibilities for how an instruction interacts with a bit of
 -- machine state: 1) modifies it in a deterministic way; 2) modifies
 -- it in an undefined way; 3) does not modify it).
-module SemMC.ToyExample where
+module SemMC.Toy where
 
 import           Control.Monad
 import           Data.EnumF ( congruentF, EnumF, enumF )

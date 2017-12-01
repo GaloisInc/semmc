@@ -77,7 +77,7 @@ synthesize target = do
   case target of
     AC.RI { AC.riInstruction = i0 } ->
       U.logM U.Info $ printf "Attempting to synthesize a program for %s" (show i0)
-  (numRounds, candidate) <- parallelSynthOne target -- mcmcSynthesizeOne target
+  (numRounds, candidate) <- parallelSynthOne target
   U.logM U.Info $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . F.toList $ candidate
   U.logM U.Debug $ printf "candidate:\n%s" (unlines . map show $ candidateWithoutNops)
@@ -160,7 +160,9 @@ mcmcSynthesizeOne target = do
   where
     -- | Evolve the candidate until it agrees with the target on the
     -- tests.
-    evolve k  0    _ _ candidate = return (k, candidate)
+    evolve k  0    _ _ candidate = do
+      U.logM U.Debug "done evolving!"
+      return (k, candidate)
     evolve !k cost targetTests targetResults candidate = do
       candidate' <- perturb candidate
       if candidate == candidate'

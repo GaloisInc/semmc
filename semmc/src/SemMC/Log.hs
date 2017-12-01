@@ -3,6 +3,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE NondecreasingIndentation #-}
 -- | Description: Log msgs via a synchronized channel
 --
 -- Log msgs via a synchronized channel.
@@ -42,6 +43,7 @@ module SemMC.Log (
   -- * Configuration
   LogCfg,
   mkLogCfg,
+  withLogging,
   -- * Log consumers
   stdErrLogEventConsumer,
   fileLogEventConsumer,
@@ -217,6 +219,22 @@ mkLogCfg threadName = do
   lcThreadMap <- Stm.newTVarIO threadMap
   return $ LogCfg { lcChan = lcChan
                   , lcThreadMap = lcThreadMap }
+
+-- | Run an action with the given log event consumer.
+--
+-- In particular this provides an easy way to run one-off computations
+-- that assume logging, e.g. in GHCi. Spawns the log even consumer
+-- before running the action and cleans up the log event consumer
+-- afterwards.
+withLogging :: (U.MonadUnliftIO m, MonadIO m)
+            => String -> (LogCfg -> IO ()) -> (HasLogCfg => m a) -> m a
+withLogging threadName logEventConsumer action = do
+  cfg <- liftIO $ mkLogCfg threadName
+  U.withAsync (liftIO $ logEventConsumer cfg) $ \a -> do
+  x <- withLogCfg cfg action
+  liftIO $ logEndWith cfg
+  U.wait a
+  return x
 
 ----------------------------------------------------------------
 -- ** Log event consumers

@@ -2,6 +2,7 @@ resolver: nightly-2017-09-05
 
 packages:
 - semmc
+- semmc-toy
 - semmc-ppc
 - semmc-x86_64
 - semmc-arm

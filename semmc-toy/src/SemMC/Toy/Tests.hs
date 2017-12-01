@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
+{-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE BangPatterns #-}
@@ -11,9 +12,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
-module SemMC.ToyExample.Tests where
+module SemMC.Toy.Tests where
 
-import qualified Control.Concurrent.Async as C
 import qualified Control.Concurrent.Chan as C
 import qualified Data.Foldable as F
 import           Data.IORef ( newIORef )
@@ -52,7 +52,7 @@ import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.Synthesize as S
 import           SemMC.Synthesis
 import           SemMC.Synthesis.Template
-import           SemMC.ToyExample as T
+import           SemMC.Toy as T
 import           SemMC.Util as U
 
 import           Debug.Trace
@@ -311,8 +311,7 @@ runSynToy dataRoot action = do
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe [I.TestCase Toy]))
   rChan <- C.newChan
-  testRunnerThread <- C.async $ testRunner cfg tChan rChan
-  C.link testRunnerThread
+  U.withAsyncLinked (testRunner cfg tChan rChan) $ const $ do
   let localSynEnv = LocalSynEnv
         { seGlobalEnv = synEnv
         , seRandomGen = gen

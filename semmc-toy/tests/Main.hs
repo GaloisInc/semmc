@@ -6,10 +6,12 @@ import qualified Control.Exception as CE
 
 import qualified SemMC.Util as U
 
-import Util
+import Formula
+import Stochastic
 
 allTests :: (U.HasLogCfg) => T.TestTree
-allTests = T.testGroup "SemMC" [ Util.tests ]
+allTests = T.testGroup "SemMC.Toy" [ Formula.tests
+                                   , Stochastic.tests ]
 
 main :: IO ()
 main = do

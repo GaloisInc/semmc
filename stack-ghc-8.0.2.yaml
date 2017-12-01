@@ -2,6 +2,7 @@ resolver: lts-9.3
 
 packages:
 - semmc
+- semmc-toy
 - semmc-ppc
 - semmc-x86_64
 - semmc-arm

@@ -5,3 +5,4 @@ cabal.project
 dist-newstyle
 *.hi
 *.o
+cabal.project.local
