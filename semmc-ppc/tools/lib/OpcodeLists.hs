@@ -32,14 +32,12 @@ instance (F.BuildOperandList PPC64.PPC sh, F.ConvertShape sh, U.UnfoldShape sh) 
 
 allOpcodes32 :: [Some (Witness BuildAndUnfold32 (PPC.Opcode PPC.Operand))]
 allOpcodes32 = [Some (Witness PPC.ADD4), Some (Witness PPC.ADD4o)]
-  -- $(DT.captureDictionaries U.matchConstructor ''PPC.Opcode)
 
 pseudoOps32 :: [Some (Witness (F.BuildOperandList PPC32.PPC) ((P.Pseudo PPC32.PPC) PPC.Operand))]
 pseudoOps32 = $(DT.captureDictionaries (const True) ''PPC32.PseudoOpcode)
 
 allOpcodes64 :: [Some (Witness BuildAndUnfold64 (PPC.Opcode PPC.Operand))]
 allOpcodes64 = [Some (Witness PPC.OR), Some (Witness PPC.ORI)]
-  -- $(DT.captureDictionaries U.matchConstructor ''PPC.Opcode)
 
 pseudoOps64 :: [Some (Witness (F.BuildOperandList PPC64.PPC) ((P.Pseudo PPC64.PPC) PPC.Operand))]
 pseudoOps64 = $(DT.captureDictionaries (const True) ''PPC64.PseudoOpcode)

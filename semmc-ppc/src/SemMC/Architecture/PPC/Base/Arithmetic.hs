@@ -172,6 +172,18 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     defineRCVariant "ADDEo" res $ do
       comment "Add Extended (XO-form, RC=1)"
+  defineOpcodeWithIP "ADDME" $ do
+    comment "Add to Minus One Extended (XO-form, RC=0)"
+    (rT, rA) <- xoform2
+    input xer
+    let len = bitSizeValue ?bitSize
+    let eres0 = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (xerBit CA (Loc xer)))
+    let eres1 = bvsub eres0 (LitBV (len + 1) 0x1)
+    let res = lowBits' len eres1
+    defLoc rT res
+    defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
+    defineRCVariant "ADDMEo" res $ do
+      comment "Add to Minus One Extended (XO-form, RC=1)"
   defineOpcodeWithIP "SUBFE" $ do
     comment "Subtract From Extended (XO-form, RC=0)"
     (rT, rA, rB) <- xoform3

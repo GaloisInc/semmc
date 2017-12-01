@@ -51,6 +51,24 @@ manualBranch = do
     crbit <- param "bi" crbitrc (EBV 5)
     branchConditionalLNK Link 0b01100 (Loc crbit)
 
+  defineOpcode "GBCLR" $ do
+    comment "BCLR (XL-form, LK=0, AA=0)"
+    comment "Generic branch conditional to LR with arbitrary BO field"
+    -- bh is the branch hint, which we aren't using
+    _bh <- param "bh" "I32imm" (EBV 2)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditionalLNK NoLink (Loc bo) (Loc crbit)
+
+  defineOpcode "GBCLRL" $ do
+    comment "BCLR (XL-form, LK=1, AA=0)"
+    comment "Generic branch conditional to LR with arbitrary BO field"
+    -- bh is the branch hint, which we aren't using
+    _bh <- param "bh" "I32imm" (EBV 2)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditionalLNK Link (Loc bo) (Loc crbit)
+
   defineOpcode "BCTR" $ do
     comment "BCTR : BCCTR (XL-form, LK=1)"
     comment "This is a specialized unconditional BCCTR"
@@ -75,6 +93,22 @@ manualBranch = do
     crbit <- param "bi" crbitrc (EBV 5)
     branchConditionalCTR Link 0b01100 (Loc crbit)
 
+  defineOpcode "GBCCTR" $ do
+    comment "BCCTR (XL-form, LK=0)"
+    comment "This is a generic version of BCCTR"
+    _bh <- param "bh" "I32imm" (EBV 2)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditionalCTR NoLink (Loc bo) (Loc crbit)
+
+  defineOpcode "GBCCTRL" $ do
+    comment "BCCTR (XL-form, LK=1)"
+    comment "This is a generic version of BCCTR"
+    _bh <- param "bh" "I32imm" (EBV 2)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditionalCTR Link (Loc bo) (Loc crbit)
+
   defineOpcode "GBC" $ do
     comment "GBC (B-form, AA=0, LK=0)"
     comment "Generic branch conditional with arbitrary BO"
@@ -82,6 +116,30 @@ manualBranch = do
     crbit <- param "bi" crbitrc (EBV 5)
     bo <- param "bo" u5imm (EBV 5)
     genericBranchConditional Relative NoLink (Loc bo) (Loc crbit) (Loc target)
+
+  defineOpcode "GBCL" $ do
+    comment "GBC (B-form, AA=0, LK=1)"
+    comment "Generic branch conditional with arbitrary BO"
+    target <- param "target" condbrtarget (EBV 14)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditional Relative Link (Loc bo) (Loc crbit) (Loc target)
+
+  defineOpcode "GBCA" $ do
+    comment "GBC (B-form, AA=1, LK=0)"
+    comment "Generic branch conditional with arbitrary BO"
+    target <- param "target" "Abscondbrtarget" (EBV 14)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditional Absolute NoLink (Loc bo) (Loc crbit) (Loc target)
+
+  defineOpcode "GBCLA" $ do
+    comment "GBC (B-form, AA=1, LK=1)"
+    comment "Generic branch conditional with arbitrary BO"
+    target <- param "target" "Abscondbrtarget" (EBV 14)
+    crbit <- param "bi" crbitrc (EBV 5)
+    bo <- param "bo" u5imm (EBV 5)
+    genericBranchConditional Absolute Link (Loc bo) (Loc crbit) (Loc target)
 
   defineOpcode "BC" $ do
     comment "BC (B-form, AA=0, LK=0)"
@@ -159,6 +217,24 @@ branchConditionalCTR lk bo bi = do
   when (lk == Link) $ do
     defLoc lnk nextInsn
 
+genericBranchConditionalCTR :: (?bitSize :: BitSize)
+                            => LK
+                            -> Expr 'TBV
+                            -> Expr 'TBV
+                            -> SemM 'Def ()
+genericBranchConditionalCTR lk bo bi = do
+  input ctr
+  input lnk
+  input ip
+  input cr
+
+  let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc ctr)) (LitBV 2 0x0)
+  let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
+  defLoc ip (ite (generic_cond_ok bo bi) target nextInsn)
+
+  when (lk == Link) $ do
+    defLoc lnk nextInsn
+
 -- | Conditional branch through the LNK register
 branchConditionalLNK :: (?bitSize :: BitSize)
                      => LK
@@ -174,6 +250,25 @@ branchConditionalLNK lk bo bi = do
   let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc lnk)) (LitBV 2 0x0)
 
   defLoc ip (ite (andp (cond_ok bo bi) (ctr_ok bo)) target nextInsn)
+
+  when (lk == Link) $ do
+    defLoc lnk nextInsn
+
+genericBranchConditionalLNK :: (?bitSize :: BitSize)
+                            => LK
+                            -> Expr 'TBV
+                            -> Expr 'TBV
+                            -> SemM 'Def ()
+genericBranchConditionalLNK lk bo bi = do
+  input lnk
+  input ip
+  input ctr
+  input cr
+
+  let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
+  let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc lnk)) (LitBV 2 0x0)
+
+  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo)) target nextInsn)
 
   when (lk == Link) $ do
     defLoc lnk nextInsn
@@ -224,7 +319,7 @@ genericBranchConditional :: (?bitSize :: BitSize)
 genericBranchConditional aa lk bo bi target = do
   input ctr
   input cr
-  when (lk == Link || aa == Relative) $ input ip
+  input ip
 
   let isCtrDec = notp (testBitDynamic (LitBV 32 0x2) (zext' 32 bo))
   let newCtr = ite isCtrDec (bvsub (Loc ctr) (naturalLitBV 0x1)) (Loc ctr)

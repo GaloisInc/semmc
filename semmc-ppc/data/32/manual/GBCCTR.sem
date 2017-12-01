@@ -1,0 +1,16 @@
+;; BCCTR (XL-form, LK=0)
+;; This is a generic version of BCCTR
+((operands ((bh . 'I32imm) (bi . 'Crbitrc) (bo . 'U5imm))) 
+  (in ('CR 'IP 'LNK 'CTR))
+  (defs 
+    (('IP 
+       (ite 
+         (ite 
+           ((_ call "test_bit_dynamic") #x00000000 ((_ zero_extend 27) bo))
+           (bveq #b0 #b0)
+           (ite 
+             ((_ call "test_bit_dynamic") #x00000001 ((_ zero_extend 27) bo))
+             ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR)
+             (notp ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR))))
+         (concat ((_ extract 29 0) 'CTR) #b00)
+         (bvadd 'IP #x00000004))))))

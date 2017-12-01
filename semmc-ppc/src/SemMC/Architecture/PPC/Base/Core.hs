@@ -5,57 +5,17 @@
 module SemMC.Architecture.PPC.Base.Core (
   BitSize(..),
   bitSizeValue,
-  -- * PPC Types
-  gprc,
-  gprc_nor0,
-  fprc,
-  crrc,
-  crbitrc,
-  crbitm,
-  s16imm,
-  s16imm64,
-  s17imm,
-  u2imm,
-  u4imm,
-  u5imm,
-  u6imm,
-  u16imm,
-  u16imm64,
-  memrix,
-  memri,
-  memrr,
-  directbrtarget,
-  absdirectbrtarget,
-  condbrtarget,
-  calltarget,
-  abscalltarget,
+  naturalBV,
+  -- * Operand Classes
+  module SemMC.Architecture.PPC.Base.Core.OperandClasses,
   -- * Registers
-  ip,
-  lnk,
-  ctr,
-  cr,
-  xer,
-  memory,
+  module SemMC.Architecture.PPC.Base.Core.Registers,
   -- * IP Wrapper
   defineOpcodeWithIP,
   defineRCVariant,
+  defineVRCVariant,
   -- * Forms
-  naturalBV,
-  mdform4,
-  mdsform4,
-  mform5i,
-  mform5r,
-  xoform3,
-  xoform2,
-  xform3,
-  xform2,
-  xform2f,
-  dform,
-  dformr0,
-  dformu,
-  iform,
-  aform,
-  aform4,
+  module SemMC.Architecture.PPC.Base.Core.Forms,
   -- * Shared
   naturalLitBV,
   cmpImm,
@@ -78,6 +38,8 @@ module SemMC.Architecture.PPC.Base.Core (
   zext',
   rotl,
   mask,
+  crField,
+  updateCRField,
   -- * Uninterpreted Functions
   isR0,
   memriReg,
@@ -98,118 +60,11 @@ import Prelude hiding ( concat )
 import Text.Printf ( printf )
 import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
+import SemMC.Architecture.PPC.Base.Core.BitSize
+import SemMC.Architecture.PPC.Base.Core.Forms
+import SemMC.Architecture.PPC.Base.Core.OperandClasses
+import SemMC.Architecture.PPC.Base.Core.Registers
 
-data BitSize = Size32
-             | Size64
-             deriving (Eq, Show, Read)
-
-bitSizeValue :: BitSize -> Int
-bitSizeValue Size32 = 32
-bitSizeValue Size64 = 64
-
--- PPC Types
-
-gprc :: String
-gprc = "Gprc"
-
-gprc_nor0 :: String
-gprc_nor0 = "Gprc_nor0"
-
-fprc :: String
-fprc = "Fprc"
-
-absdirectbrtarget :: String
-absdirectbrtarget = "Absdirectbrtarget"
-
-directbrtarget :: String
-directbrtarget = "Directbrtarget"
-
-abscalltarget :: String
-abscalltarget = "Abscalltarget"
-
-calltarget :: String
-calltarget = "Calltarget"
-
-condbrtarget :: String
-condbrtarget = "Condbrtarget"
-
-crrc :: String
-crrc = "Crrc"
-
-crbitrc :: String
-crbitrc = "Crbitrc"
-
-crbitm :: String
-crbitm = "Crbitm"
-
-s16imm :: String
-s16imm = "S16imm"
-
-s17imm :: String
-s17imm = "S17imm"
-
-s16imm64 :: String
-s16imm64 = "S16imm64"
-
-u2imm :: String
-u2imm = "U2imm"
-
-u4imm :: String
-u4imm = "U4imm"
-
-u5imm :: String
-u5imm = "U5imm"
-
-u6imm ::  String
-u6imm = "U6imm"
-
-u16imm :: String
-u16imm = "U16imm"
-
-u16imm64 :: String
-u16imm64 = "U16imm64"
-
-memrix :: String
-memrix = "Memrix"
-
-memri :: String
-memri = "Memri"
-
-memrr :: String
-memrr = "Memrr"
-
--- Registers
-
-ip :: (?bitSize :: BitSize) => Location 'TBV
-ip = LiteralLoc Literal { lName = "IP"
-                        , lExprType = naturalBV
-                        }
-
-lnk :: (?bitSize :: BitSize) => Location 'TBV
-lnk = LiteralLoc Literal { lName = "LNK"
-                         , lExprType = naturalBV
-                         }
-
-ctr :: (?bitSize :: BitSize) => Location 'TBV
-ctr = LiteralLoc Literal { lName = "CTR"
-                         , lExprType = naturalBV
-                         }
-
--- | The CR is always 32 bits
-cr :: Location 'TBV
-cr = LiteralLoc Literal { lName = "CR"
-                        , lExprType = EBV 32
-                        }
-
-xer :: (?bitSize :: BitSize) => Location 'TBV
-xer = LiteralLoc Literal { lName = "XER"
-                         , lExprType = naturalBV
-                         }
-
-memory :: Location 'TMemory
-memory = LiteralLoc Literal { lName = "Mem"
-                            , lExprType = EMemory
-                            }
 
 -- IP Helper Wrapper
 
@@ -228,7 +83,7 @@ defineOpcodeWithIP name def =
 -- The CR0 register is set as if the given value is compared against zero as in
 -- compare with immediate.  The low three bits of CR0 are set by comparison
 -- against zero and the fourth bit is copied from XER.
-defineRCVariant :: (?bitSize :: BitSize) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
+defineRCVariant :: (?bitSize :: BitSize, HasCallStack) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
 defineRCVariant newName modifiedReg def = do
   forkDefinition newName $ do
     input cr
@@ -236,159 +91,19 @@ defineRCVariant newName modifiedReg def = do
     defLoc cr (cmpImm bvslt bvsgt (LitBV 3 0x0) (naturalLitBV 0x0) modifiedReg)
     def
 
--- Form helpers
-
-naturalBV :: (?bitSize :: BitSize) => ExprType 'TBV
-naturalBV = EBV (bitSizeValue ?bitSize)
-
--- | The M-form for RLWINM with three 5 bit immediates
-mform5i :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
-mform5i = do
-  rA <- param "rA" gprc naturalBV
-  sh <- param "sh" u5imm (EBV 5)
-  mb <- param "mb" u5imm (EBV 5)
-  me <- param "me" u5imm (EBV 5)
-  rS <- param "rS" gprc naturalBV
-  input sh
-  input mb
-  input me
-  input rS
-  return (rA, sh, mb, me, rS)
-
-mform5r :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
-mform5r = do
-  rA <- param "rA" gprc naturalBV
-  mb <- param "mb" u5imm (EBV 5)
-  me <- param "me" u5imm (EBV 5)
-  rS <- param "rS" gprc naturalBV
-  rB <- param "rB" gprc naturalBV
-  input rB
-  input mb
-  input me
-  input rS
-  return (rA, mb, me, rS, rB)
-
-
-mdform4 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
-mdform4 = do
-  rA <- param "rA" gprc naturalBV
-  sh <- param "sh" u6imm (EBV 6)
-  mb <- param "mb" u6imm (EBV 6)
-  rS <- param "rS" gprc naturalBV
-  input rS
-  input sh
-  input mb
-  return (rA, sh, mb, rS)
-
-mdsform4 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
-mdsform4 = do
-  rA <- param "rA" gprc naturalBV
-  mb <- param "mb" u6imm (EBV 6)
-  rS <- param "rS" gprc naturalBV
-  rB <- param "rB" gprc naturalBV
-  input mb
-  input rS
-  input rB
-  return (rA, mb, rS, rB)
-
-xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-xoform3 = do
-  rT <- param "rT" gprc naturalBV
-  rA <- param "rA" gprc naturalBV
-  rB <- param "rB" gprc naturalBV
-  input rA
-  input rB
-  return (rT, rA, rB)
-
-xoform2 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
-xoform2 = do
-  rT <- param "rT" gprc naturalBV
-  rA <- param "rA" gprc naturalBV
-  input rA
-  return (rT, rA)
-
-xform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-xform3 = do
-  rA <- param "rA" gprc naturalBV
-  rS <- param "rS" gprc naturalBV
-  rB <- param "rB" gprc naturalBV
-  input rS
-  input rB
-  return (rA, rS, rB)
-
-xform2 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
-xform2 = do
-  rA <- param "rA" gprc naturalBV
-  rS <- param "rS" gprc naturalBV
-  input rS
-  return (rA, rS)
-
-xform2f :: SemM 'Def (Location 'TBV, Location 'TBV)
-xform2f = do
-  frT <- param "frT" fprc (EBV 128)
-  frB <- param "frB" fprc (EBV 128)
-  input frB
-  return (frT, frB)
-
-dform :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-dform = do
-  rT <- param "rT" gprc naturalBV
-  si <- param "si" s16imm (EBV 16)
-  rA <- param "rA" gprc_nor0 naturalBV
-  input rA
-  input si
-  return (rT, rA, si)
-
--- | D-form instructions where the operand is allowed to contain r0
-dformr0 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-dformr0 = do
-  rT <- param "rT" gprc naturalBV
-  si <- param "si" s16imm (EBV 16)
-  rA <- param "rA" gprc naturalBV
-  input rA
-  input si
-  return (rT, rA, si)
-
--- | The unsigned immediate version of the dform
-dformu :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-dformu = do
-  rT <- param "rT" gprc naturalBV
-  ui <- param "ui" u16imm (EBV 16)
-  rA <- param "rA" gprc naturalBV
-  input rA
-  input ui
-  return (rT, rA, ui)
-
-iform :: (?bitSize :: BitSize) => String -> SemM 'Def (Location 'TBV)
-iform tag = do
-  target <- param "target" tag (EBV 24)
-  input target
-  return target
-
--- Our floating point registers are considered as 128 bit registers, as they are
--- actually backed by the 128 bit vector registers.
+-- | Like 'defineRCVariant', but for vector instructions, which modify CR6
+-- instead of CR0.
 --
--- It is the job of each semantics definition to extract the necessary parts of
--- the registers.
-aform :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-aform = do
-  frT <- param "frT" fprc (EBV 128)
-  frA <- param "frA" fprc (EBV 128)
-  frB <- param "frB" fprc (EBV 128)
-  input frA
-  input frB
-  return (frT, frA, frB)
+-- FIXME: Right now, we clobber the entire CR with undefined bits.
+defineVRCVariant :: (?bitSize :: BitSize, HasCallStack) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
+defineVRCVariant newName _modifiedReg def = do
+  forkDefinition newName $ do
+    input cr
+    input xer
+    defLoc cr (undefinedBV 32)
+    def
 
-aform4 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
-aform4 = do
-  frT <- param "frT" fprc (EBV 128)
-  frA <- param "frA" fprc (EBV 128)
-  frB <- param "frB" fprc (EBV 128)
-  frC <- param "frC" fprc (EBV 128)
-  input frA
-  input frB
-  input frC
-  return (frT, frA, frB, frC)
+-- Form helpers
 
 -- Helpers
 
@@ -405,7 +120,7 @@ cmpImm :: (HasCallStack, ?bitSize :: BitSize)
        -- ^ The register expression
        -> Expr 'TBV
 cmpImm lt gt fld ximm reg =
-  bvor (Loc cr) shiftedNibble
+  bvor crFld0 shiftedNibble
   where
     c = ite (lt reg ximm)
             (LitBV 3 0b100)
@@ -414,6 +129,34 @@ cmpImm lt gt fld ximm reg =
                  (LitBV 3 0b001))
     crnibble = concat c (xerBit SO (Loc xer))
     shiftedNibble = bvshl (zext' 32 crnibble) (bvmul (zext' 32 fld) (LitBV 32 0x4))
+    crFld0 = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fld) (LitBV 32 0x4))))
+
+-- | Produce an expression that extracts the given field from the CR as a four
+-- bit bitvector
+crField :: Expr 'TBV
+        -- ^ The field number to extract from the CR (should be a 3 bit crrc value)
+        -> Expr 'TBV
+crField fldNum = lowBits' 4 shiftedCR
+  where
+    shiftedCR = bvlshr (Loc cr) (bvmul (zext' 32 fldNum) (LitBV 32 0x4))
+
+-- | Update the named CR field with the given four bit value; returns a new CR value
+--
+-- The field is named by a 3 bit crrc value.
+--
+-- Generates a mask of four ones shifted to the field slot, then negates the
+-- mask to clear that field.  Shifts the new field into the correct slot and
+-- does an or.
+updateCRField :: Expr 'TBV
+              -- ^ A three bit crrc value naming the field to update
+              -> Expr 'TBV
+              -- ^ A four bit replacement field value
+              -> Expr 'TBV
+updateCRField fldNum newFldVal = bvor clearedCR shiftedVal
+  where
+    fieldMask = bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fldNum) (LitBV 32 0x4)))
+    clearedCR = bvand (Loc cr) fieldMask
+    shiftedVal = bvshl (zext' 32 newFldVal) (bvmul (zext' 32 fldNum) (LitBV 32 0x4))
 
 -- Common operations
 

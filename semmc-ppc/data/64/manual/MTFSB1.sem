@@ -1,0 +1,5 @@
+;; Move to FPSCR Bit 1 (X-form, RC=0)
+((operands ((BT . 'U5imm))) 
+  (in ('IP))
+  (defs 
+    (('FPSCR ((_ call "undefined") #x00000020)) ('IP (bvadd 'IP #x0000000000000004)))))

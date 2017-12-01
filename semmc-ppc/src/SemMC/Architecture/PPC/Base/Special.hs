@@ -50,11 +50,37 @@ baseSpecial = do
                 -- FIXME: add one more check for equality to 9 and exception
                 (Loc ctr)))
 
+  defineOpcodeWithIP "MCRF" $ do
+    comment "Move Condition Register Field (XL-form)"
+    bf <- param "BF" crrc (EBV 3)
+    bfa <- param "BFA" crrc (EBV 3)
+    input bf
+    input bfa
+    input cr
+    let selField = crField (Loc bfa)
+    defLoc cr (updateCRField (Loc bf) selField)
+
   defineOpcodeWithIP "MFCR" $ do
     comment "Move From Condition Register"
     rT <- param "rT" gprc naturalBV
     input cr
     defLoc rT (zext (Loc cr))
+
+  defineOpcodeWithIP "MTCRF" $ do
+    comment "Move To Condition Register Fields (XFX-form)"
+    rS <- param "rS" gprc naturalBV
+    fxm <- param "FXM" "I32imm" (EBV 8)
+    input rS
+    input cr
+    let mkFldMask n = sext' 4 (extract n n (Loc fxm))
+    let crMask = concat (mkFldMask 0)
+                        (concat (mkFldMask 1)
+                                (concat (mkFldMask 2)
+                                        (concat (mkFldMask 3)
+                                                (concat (mkFldMask 4)
+                                                        (concat (mkFldMask 5)
+                                                                (concat (mkFldMask 6) (mkFldMask 7)))))))
+    defLoc cr (bvor (bvand (lowBits 32 (Loc rS)) crMask) (bvand (Loc cr) (bvnot crMask)))
 
   defineOpcodeWithIP "MTOCRF" $ do
     comment "Move To One Condition Register Field (XFX-form)"
@@ -64,8 +90,7 @@ baseSpecial = do
     input crbit
     input cr
     -- Check the number of bits set in the field; if it is 1, then we set that
-    -- field.  Otherwise, we are undefined.  FIXME: We don't have a great way to
-    -- set something undefined for now...
+    -- field.  Otherwise, we are undefined.
     let check = bvpopcnt (zext' 32 (Loc crbit))
     let fldIdx = bvclz (zext' 32 (Loc crbit))
     let regContents = lowBits 32 (Loc rS)

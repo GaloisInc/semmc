@@ -1,0 +1,4 @@
+;; VSX Scalar Negate Double-Precision (XX2-form)
+((operands ((xT . 'Vsrc) (xB . 'Vsrc))) 
+  (in (xB 'IP))
+  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))

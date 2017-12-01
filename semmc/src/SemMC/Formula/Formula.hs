@@ -68,12 +68,12 @@ data Parameter arch (sh :: [Symbol]) (tp :: BaseType) where
   -- base register) as part of the semantics of an instruction, so we need a way
   -- to refer to part of the parameter.
   FunctionParameter :: String
-                    -- ^ The name of the uninterpreted function
+                    -- The name of the uninterpreted function
                     -> WrappedOperand arch sh s
-                    -- ^ The operand we are calling the function on (this is a newtype so
+                    -- The operand we are calling the function on (this is a newtype so
                     -- we don't need an extra typerepr)
                     -> BaseTypeRepr tp
-                    -- ^ The typerepr for the return type of the function
+                    -- The typerepr for the return type of the function
                     -> Parameter arch sh tp
 
 -- | This is a wrapper around the contents of an 'Operand' parameter that is

@@ -409,7 +409,7 @@ data BVBinop sym where
   BinopBV :: (forall w . (1 <= w) => sym -> S.SymBV sym w -> S.SymBV sym w -> IO (S.SymBV sym w)) -> BVBinop sym
   -- | Bitvector binop with a boolean return type, i.e., comparison operators.
   BinopBoolBV :: (forall w . (1 <= w) => sym -> S.SymBV sym w -> S.SymBV sym w -> IO (S.Pred sym)) -> BVBinop sym
-  -- | A binary operator of booleans
+  -- A binary operator of booleans
 --  BinopBool :: sym -> S.Pred sym -> S.Pred sym -> BVBinop
 
 -- | Look up a binary bitvector operation by name.

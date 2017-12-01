@@ -1,0 +1,4 @@
+;; Vector Add Unsigned Byte Saturate (VX-form)
+((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc))) 
+  (in (vrB vrA 'IP))
+  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))

@@ -39,7 +39,7 @@ import qualified SemMC.Util as U
 
 -- | Functions for converting a 'TestCase' to binary and parsing
 -- binary machine state.
-data TestSerializer c{-^machine state/context-} i{-^instruction-} =
+data TestSerializer c i =
   TestSerializer { flattenMachineState :: c -> B.ByteString
                  , parseMachineState :: B.ByteString -> Maybe c
                  , flattenProgram :: [i] -> LB.ByteString -- ^ This means assemble in practice.
