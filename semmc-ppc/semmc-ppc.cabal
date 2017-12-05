@@ -146,6 +146,7 @@ executable semmc-ppc-synthdemo
                  , elf-edit
                  , optparse-applicative
                  , async
+                 , unliftio
 
 executable semmc-ppc-genbase
   default-language: Haskell2010
