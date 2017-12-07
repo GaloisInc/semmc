@@ -14,7 +14,8 @@ module SemMC.Stochastic.Initialize (
   ) where
 
 import qualified Control.Concurrent.STM as STM
-import           Control.Monad ( replicateM )
+import qualified Control.Exception as CE
+import           Control.Monad
 import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import qualified Data.Functor.Identity as I
@@ -125,17 +126,21 @@ loadInitialState :: forall arch t
 loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
   let load dir = F.loadFormulasFromFiles sym (mkFormulaFilename dir) (C.Sub C.Dict) allOpcodes
   baseSet <- dropKeyWitnesses <$> load (baseSetDir cfg)
-  L.logIOWith (logConfig cfg) L.Info "Finished loading the base set"
+  L.logIO L.Info "Finished loading the base set"
   learnedSet <- dropKeyWitnesses <$> load (learnedSetDir cfg)
-  L.logIOWith (logConfig cfg) L.Info "Finished loading learned set"
+  L.logIO L.Info "Finished loading learned set"
   let initialFormulas = MapF.union baseSet learnedSet
   pseudoSet <- dropKeyWitnesses <$> F.loadFormulasFromFiles sym (mkFormulaFilename (pseudoSetDir cfg)) (C.Sub C.Dict) pseudoOpcodes
-  L.logIOWith (logConfig cfg) L.Info "Finished loading pseudo ops"
+  L.logIO L.Info "Finished loading pseudo ops"
   let congruentOps' = MapF.foldrWithKey (addCongruentOp . P.RealOpcode) MapF.empty initialFormulas
       congruentOps = MapF.foldrWithKey (addCongruentOp . P.PseudoOpcode) congruentOps' pseudoSet
   fref <- STM.newTVarIO initialFormulas
   congruentRef <- STM.newTVarIO congruentOps
-  wlref <- STM.newTVarIO (makeWorklist targetOpcodes initialFormulas)
+  let worklist = makeWorklist targetOpcodes initialFormulas
+  when (WL.null worklist) $ do
+    L.logIO L.Error "Empty worklist!"
+    CE.throwIO $ userError ("loadInitialState: empty worklist!")
+  wlref <- STM.newTVarIO worklist
   randomTests <- replicateM (randomTestCount cfg) genTest
   testref <- STM.newTVarIO (interestingTests ++ randomTests)
   symVar <- STM.newTMVarIO sym
