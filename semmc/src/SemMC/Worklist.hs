@@ -2,17 +2,23 @@
 module SemMC.Worklist (
   Worklist,
   fromList,
+  null,
   takeWork,
   putWork
   ) where
 
 import qualified Data.Sequence as Seq
 
+import Prelude hiding ( null )
+
 newtype Worklist a =
   Worklist { unWorklist :: Seq.Seq a }
 
 fromList :: [a] -> Worklist a
 fromList = Worklist . Seq.fromList
+
+null :: Worklist a -> Bool
+null (Worklist s) = Seq.null s
 
 -- | Take an item off of the front of the worklist
 takeWork :: Worklist a -> Maybe (a, Worklist a)
