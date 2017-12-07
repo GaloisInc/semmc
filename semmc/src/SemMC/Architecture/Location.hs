@@ -33,6 +33,8 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   -- are not valid.  Also, on some architectures r0 is special and not allowable
   -- for holding data.
   registerizationLocations :: [Some a]
+  -- | A predicate to test if a location represents memory
+  isMemoryLocation :: a tp -> Bool
 
 -- | Represents the different registers, flags, and (eventually) memory a given
 -- architecture has.
