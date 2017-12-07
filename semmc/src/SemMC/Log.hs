@@ -50,6 +50,7 @@ module SemMC.Log (
   tmpFileLogEventConsumer,
   -- * Named threads
   named,
+  namedIO,
   namedM
   ) where
 
@@ -287,6 +288,11 @@ named cfg threadName action = do
 
     remove tid Nothing        = modify $ Map.delete tid
     remove tid (Just oldName) = modify $ Map.insert tid oldName
+
+-- | Version of 'named' for implicit log cfg.
+namedIO :: (HasLogCfg, U.MonadUnliftIO m, MonadIO m)
+        => String -> m a -> m a
+namedIO threadName action = named ?logCfg threadName action
 
 -- | Version of 'named' for 'MonadHasLogCfg' monads.
 namedM :: (MonadHasLogCfg m, U.MonadUnliftIO m, MonadIO m)
