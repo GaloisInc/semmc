@@ -6,6 +6,8 @@
 module Main ( main ) where
 
 import           Control.Monad
+import           Control.Concurrent
+import qualified Control.Concurrent.Async as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BSHex
 import qualified Data.ByteString.Lazy as BSL
@@ -16,6 +18,7 @@ import           Data.Monoid
 import           Data.Word ( Word32 )
 import qualified Options.Applicative as O
 import           Text.Printf ( printf )
+import qualified UnliftIO as U
 
 import qualified Data.ElfEdit as E
 
@@ -158,9 +161,10 @@ main :: IO ()
 main = do
   logCfg <- U.mkLogCfg "main"
   let ?logCfg = logCfg
-  void $ U.asyncLinked $ U.stdErrLogEventConsumer logCfg
-
+  logThread <- U.asyncLinked (U.stdErrLogEventConsumer logCfg)
   N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
+  U.logEndWith logCfg
+  A.wait logThread
   where
     opts = O.info (O.helper <*> options) components
     components = mconcat [ O.fullDesc
