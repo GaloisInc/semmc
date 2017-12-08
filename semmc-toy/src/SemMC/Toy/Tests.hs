@@ -304,7 +304,7 @@ runSynToy dataRoot action = do
                    , -} Some (Witness NegR)
                    , Some (Witness SubRr) ]
   let pseudoOpcodes = pseudoOpcodesWitnessingBuildOperandList
-  let targetOpcodes = L.error "targetOpcodes"
+  let targetOpcodes = [ Some (Witness AddRr) ]
 
   synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
 
