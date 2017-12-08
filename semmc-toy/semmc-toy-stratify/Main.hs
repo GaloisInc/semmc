@@ -5,6 +5,7 @@ module Main ( main ) where
 
 import qualified Control.Concurrent as CC
 import qualified Control.Concurrent.Async as CC
+import qualified Control.Exception as CC
 import           Control.Monad
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
@@ -134,7 +135,16 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                         <> O.help "The host to run the remote work on" )
 
 main :: IO ()
-main = O.execParser optParser >>= mainWithOptions
+main = do
+  opts <- O.execParser optParser
+
+  lcfg <- L.mkLogCfg "main"
+  logThread <- case oLogFile opts of
+    Nothing -> U.asyncLinked (L.stdErrLogEventConsumer lcfg)
+    Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile lcfg)
+  let shutdownLogger = L.logEndWith lcfg >> CC.wait logThread
+
+  L.withLogCfg lcfg (mainWithOptions opts) `CC.finally` shutdownLogger
  where
    optParser = O.info (optionsParser O.<**> O.helper)
      ( O.fullDesc
@@ -142,7 +152,7 @@ main = O.execParser optParser >>= mainWithOptions
      <> O.header "semmc-toy-stratify - learn semantics for each instruction"
      <> O.footer "See semmc-toy/README.md for a detailed usage example.")
 
-mainWithOptions :: Options -> IO ()
+mainWithOptions :: (L.HasLogCfg) => Options -> IO ()
 mainWithOptions opts = do
   when (oParallelOpcodes opts < 1 || oParallelSynth opts < 1) $ do
     IO.die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
@@ -160,12 +170,6 @@ mainWithOptions opts = do
                                      , CE.flattenProgram = mconcat . map Toy.assembleInstruction
                                      }
   -}
-
-  lcfg <- L.mkLogCfg "main"
-  L.withLogCfg lcfg $ do
-  logThread <- case oLogFile opts of
-    Nothing -> U.asyncLinked (L.stdErrLogEventConsumer lcfg)
-    Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile lcfg)
 
   stThread <- SST.newStatisticsThread (oStatisticsFile opts)
 
@@ -188,7 +192,7 @@ mainWithOptions opts = do
                        , SST.parallelSynth = oParallelSynth opts
                        -- , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) serializer
                        , SST.testRunner = Toy.toyTestRunnerBackend 0
-                       , SST.logConfig = lcfg
+                       , SST.logConfig = L.getLogCfg
                        , SST.statsThread = stThread
                        }
   -- Next three copied from SemMC.Toy.Tests.
@@ -210,9 +214,6 @@ mainWithOptions opts = do
 -}
   senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes pseudoOpcodes targetOpcodes iorels
   _ <- SST.stratifiedSynthesis senv
-
-  L.logEndWith lcfg
-  CC.wait logThread
 
   SST.terminateStatisticsThread stThread
   where
