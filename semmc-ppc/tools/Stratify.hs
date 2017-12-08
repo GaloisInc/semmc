@@ -165,7 +165,15 @@ mainWithOptions opts = do
                        , SST.statsThread = stThread
                        }
   let opcodes :: [Some (Witness (F.BuildOperandList PPC32.PPC) (PPC.Opcode PPC.Operand))]
-      opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32
+      -- In production we want to know and target as many opcodes as
+      -- possible, but while developing mcmc synthesis it's simpler to
+      -- only consider a few instructions at a time. At least some of
+      -- the targets should be expressible in terms of the base set
+      -- (@opcodes@) and the pseudo ops, but I'm not sure if that's
+      -- true right now.
+
+      -- opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32
+      opcodes = [ Some (Witness PPC.ADD4) ]
       targets :: [Some (Witness (SST.BuildAndConvert PPC32.PPC) (PPC.Opcode PPC.Operand))]
       -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
       targets = [ Some (Witness PPC.ADD4o) ]
