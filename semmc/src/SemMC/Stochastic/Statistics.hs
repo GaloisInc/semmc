@@ -23,7 +23,7 @@ module SemMC.Stochastic.Statistics (
 
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as E
-import           Control.Monad ( forever )
+import           Control.Monad
 import qualified Control.Monad.Except as ME
 import           Control.Monad.Trans ( liftIO )
 import           Data.Proxy ( Proxy(..) )
@@ -31,6 +31,7 @@ import qualified Data.Time.Clock as TM
 import qualified Database.SQLite.Simple as SQL
 import qualified Database.SQLite.Simple.FromField as SQL
 import qualified Database.SQLite.Simple.ToField as SQL
+import qualified System.Directory as Dir
 
 import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import           Data.Parameterized.Some ( Some(..) )
@@ -65,7 +66,7 @@ opcodeId :: (ShowF (Opcode arch (Operand arch)))
          -> Some (Opcode arch (Operand arch))
          -> IO OpcodeId
 opcodeId _ conn (Some opc) = do
-  res <- SQL.query conn "SELECT opid FROM opcodes WHERE name = ?" (SQL.Only (showF opc))
+  res <- SQL.query conn "SELECT rowid FROM opcodes WHERE name = ?" (SQL.Only (showF opc))
   case res of
     [SQL.Only r] -> return r
     [] -> do
@@ -83,6 +84,11 @@ newStatisticsThread :: (OrdF (Opcode arch (Operand arch)), ShowF (Opcode arch (O
 newStatisticsThread statsFile = do
   chan <- STM.newTChanIO
   term <- STM.newTChanIO
+  -- Delete any existing stats file, so that DB schema changes will be
+  -- applied. In production, we may want to preserve the stats DB
+  -- across runs.
+  exists <- Dir.doesFileExist statsFile
+  when exists $ Dir.removeFile statsFile
   conn <- SQL.open statsFile
   initializeSchema conn
   let st = StatisticsThread { stMsgs = chan
@@ -199,27 +205,34 @@ insertRemovedCandidates :: SQL.Connection -> OpcodeId -> Int -> IO ()
 insertRemovedCandidates conn oid nRemoved =
   SQL.execute conn "INSERT INTO removed_candidate_programs VALUES(?,?);" (oid, nRemoved)
 
+-- | Statistics DB schema.
+--
+-- According to https://www.sqlite.org/lang_createtable.html#rowid,
+-- all tables have an implicit integer primary key column called
+-- @rowid@.
+--
+-- We use @IF NOT EXISTS@ here, but 'newStatisticsThread' also deletes
+-- any existing DB on start up.
 schema :: [SQL.Query]
-schema = [ "CREATE TABLE IF NOT EXISTS opcodes(opid INTEGER PRIMARY KEY,\
-                                              \name TEXT NOT NULL UNIQUE);"
+schema = [ "CREATE TABLE IF NOT EXISTS opcodes(name TEXT NOT NULL UNIQUE);"
          , "CREATE TABLE IF NOT EXISTS strata_timeouts(strata_timeout_opid INTEGER NOT NULL,\
-                                                      \FOREIGN KEY(strata_timeout_opid) REFERENCES opcodes(opid));"
+                                                      \FOREIGN KEY(strata_timeout_opid) REFERENCES opcodes(rowid));"
          , "CREATE TABLE IF NOT EXISTS solver_invocation_success(solver_invocation_opid INTEGER NOT NULL,\
                                                                 \success_seconds REAL NOT NULL,\
-                                                                \FOREIGN KEY(solver_invocation_opid) REFERENCES opcodes(opid));"
+                                                                \FOREIGN KEY(solver_invocation_opid) REFERENCES opcodes(rowid));"
          , "CREATE TABLE IF NOT EXISTS solver_invocation_timeout(solver_invocation_opid INTEGER NOT NULL,\
-                                                                \FOREIGN KEY(solver_invocation_opid) REFERENCES opcodes(opid));"
+                                                                \FOREIGN KEY(solver_invocation_opid) REFERENCES opcodes(rowid));"
          , "CREATE TABLE IF NOT EXISTS removed_candidate_programs(remove_candidate_programs_opid INTEGER NOT NULL,\
                                                                  \num_removed INTEGER NOT NULL,\
-                                                                 \FOREIGN KEY(remove_candidate_programs_opid) REFERENCES opcodes(opid));"
+                                                                 \FOREIGN KEY(remove_candidate_programs_opid) REFERENCES opcodes(rowid));"
          , "CREATE TABLE IF NOT EXISTS counterexample_found(counterexample_found_opid INTEGER NOT NULL,\
-                                                           \FOREIGN KEY(counterexample_found_opid) REFERENCES opcodes(opid));"
+                                                           \FOREIGN KEY(counterexample_found_opid) REFERENCES opcodes(rowid));"
          , "CREATE TABLE IF NOT EXISTS strata_success(strata_success_opid INTEGER NOT NULL,\
                                                      \strata_seconds REAL NOT NULL,\
-                                                     \FOREIGN KEY(strata_success_opid) REFERENCES opcodes(opid));"
+                                                     \FOREIGN KEY(strata_success_opid) REFERENCES opcodes(rowid));"
          , "CREATE TABLE IF NOT EXISTS synthesize_success(synthesize_success_opid INTEGER NOT NULL,\
                                                          \synthesize_seconds REAL NOT NULL,\
-                                                         \FOREIGN KEY(synthesize_success_opid) REFERENCES opcodes(opid));"
+                                                         \FOREIGN KEY(synthesize_success_opid) REFERENCES opcodes(rowid));"
          ]
 
 -- Control helpers
