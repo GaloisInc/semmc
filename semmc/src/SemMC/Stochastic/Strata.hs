@@ -63,12 +63,12 @@ caller controls the number and placement of threads.
 -}
 
 stratifiedSynthesis :: forall arch t
-                     . (SynC arch)
+                     . (SynC arch, L.HasCallStack, L.HasLogCfg)
                     => SynEnv t arch
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $
-    runSynInNewLocalEnv env0 strata
+    (L.namedIO "strata" $ runSynInNewLocalEnv env0 strata)
   STM.readTVarIO (seFormulas env0)
 
 strata :: (SynC arch)
@@ -80,8 +80,11 @@ processWorklist :: (SynC arch, L.HasCallStack)
 processWorklist = do
   mwork <- takeWork
   case mwork of
-    Nothing -> return ()
+    Nothing -> do
+      L.logM L.Info "No more work items, exiting!"
+      return ()
     Just (Some (Witness so)) -> do
+      L.logM L.Info "Processing a work item."
       -- Catch all exceptions in the stratification process.
       (res, strataTime) <- timeSyn (U.tryAny (strataOne so))
       case res of
