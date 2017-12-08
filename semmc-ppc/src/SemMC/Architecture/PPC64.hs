@@ -608,6 +608,11 @@ instance ArchitectureWithPseudo PPC where
   assemblePseudo _ = PPCP.ppcAssemblePseudo (Proxy @PPC)
 
 instance A.IsLocation (Location PPC) where
+  isMemoryLocation l =
+    case l of
+      LocMem -> True
+      _ -> False
+
   readLocation = P.parseMaybe parseLocation
 
   locationType (LocGPR _) = knownRepr
