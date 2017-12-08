@@ -3,10 +3,12 @@
 {-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
 
-import qualified Control.Concurrent.Async as A
+import qualified Control.Concurrent as CC
+import qualified Control.Concurrent.Async as CC
 import           Control.Monad
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
+-- Do we actually care about this for Toy arch?
 import qualified Data.Constraint as C
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
@@ -20,22 +22,36 @@ import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 
 import qualified Dismantle.Arbitrary as DA
-import qualified Dismantle.PPC as PPC
-import           Dismantle.PPC.Random ()
+-- import qualified Dismantle.PPC as PPC
+-- import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Constraints as C
 import qualified SemMC.Log as L
 import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.IORelation as IOR
+import qualified SemMC.Stochastic.IORelation.Types as IOR
 import qualified SemMC.Stochastic.Strata as SST
 
-import qualified SemMC.Architecture.PPC32 as PPC32
+import qualified SemMC.Toy as Toy
+import qualified SemMC.Toy.Tests as Toy
+-- import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Util as U
 
-import qualified OpcodeLists as OL
-import qualified Util as Util
+-- import qualified OpcodeLists as OL
+-- import qualified Util as Util
 
+-- TODO(conathan): I copied the source for @semmc-ppc-stratify@ to
+-- create @semmc-toy-stratify@ (this file), and it probably makes
+-- sense to factor out common stuff into @semmc@. For example, the
+-- option parsing should be mostly the same for all arch specific
+-- stratifiers (but e.g. for the Toy arch we may not want to specify a
+-- remote runner, or if we do actually implement a remote runner for
+-- Toy, we'll also want a way to ignore it and use an in process fast
+-- path when our goal isn't testing the remote runner code).
+--
+-- Look into this deduplication after @semmc-toy-stratify@ is working,
+-- so that we have at least two examples to generalize from.
 data Options = Options { oRelDir :: FilePath
                        , oBaseDir :: FilePath
                        , oPseudoDir :: FilePath
@@ -111,7 +127,7 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                             <> O.help "The number of seconds to wait for all responses from the remote runner" )
                         <*> O.strOption ( O.long "remote-runner"
                                         <> O.metavar "EXE"
-                                        <> O.help "The name of the remote runner executable (remote-runner.ppc32 or remote-runner.ppc64)" )
+                                        <> O.help "The name of the remote runner executable (TODO(conathan) remote-runner.ppc32 or remote-runner.ppc64)" )
                         <*> O.strOption ( O.long "remote-host"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
@@ -122,25 +138,28 @@ main = O.execParser optParser >>= mainWithOptions
  where
    optParser = O.info (optionsParser O.<**> O.helper)
      ( O.fullDesc
-     <> O.progDesc "Learn semantics for PPC instructions"
-     <> O.header "semmc-ppc-stratify - learn semantics for each instruction"
-     <> O.footer "See semmc-ppc/README.md for a detailed usage example.")
+     <> O.progDesc "Learn semantics for Toy instructions"
+     <> O.header "semmc-toy-stratify - learn semantics for each instruction"
+     <> O.footer "See semmc-toy/README.md for a detailed usage example.")
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   when (oParallelOpcodes opts < 1 || oParallelSynth opts < 1) $ do
     IO.die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
 
-  iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
+  -- iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
 
   rng <- DA.createGen
-  let testGenerator = AC.randomState (Proxy @PPC32.PPC) rng
+  let testGenerator = AC.randomState (Proxy @Toy.Toy) rng
   Some ng <- N.newIONonceGenerator
   sym <- SB.newSimpleBackend ng
-  let serializer = CE.TestSerializer { CE.flattenMachineState = AC.serialize (Proxy @PPC32.PPC)
-                                     , CE.parseMachineState = AC.deserialize (Proxy @PPC32.PPC)
-                                     , CE.flattenProgram = mconcat . map PPC.assembleInstruction
+  -- No serializer for Toy arch.
+  {-
+  let serializer = CE.TestSerializer { CE.flattenMachineState = AC.serialize (Proxy @Toy.Toy)
+                                     , CE.parseMachineState = AC.deserialize (Proxy @Toy.Toy)
+                                     , CE.flattenProgram = mconcat . map Toy.assembleInstruction
                                      }
+  -}
 
   lcfg <- L.mkLogCfg "main"
   L.withLogCfg lcfg $ do
@@ -149,6 +168,13 @@ mainWithOptions opts = do
     Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile lcfg)
 
   stThread <- SST.newStatisticsThread (oStatisticsFile opts)
+
+{-
+  -- Copied from SemMC.Toy.Tests
+  tChan <- CC.newChan :: IO (CC.Chan (Maybe [IOR.TestCase Toy.Toy]))
+  rChan <- CC.newChan
+  U.withAsyncLinked (Toy.testRunner cfg tChan rChan) $ const $ do
+-}
 
   DIR.createDirectoryIfMissing True (oLearnedDir opts)
   let cfg = SST.Config { SST.baseSetDir = oBaseDir opts
@@ -160,21 +186,34 @@ mainWithOptions opts = do
                        , SST.opcodeTimeoutSeconds = oOpcodeTimeoutSeconds opts
                        , SST.parallelOpcodes = oParallelOpcodes opts
                        , SST.parallelSynth = oParallelSynth opts
-                       , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) serializer
+                       -- , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) serializer
+                       , SST.testRunner = Toy.toyTestRunnerBackend 0
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
                        }
-  let opcodes :: [Some (Witness (F.BuildOperandList PPC32.PPC) (PPC.Opcode PPC.Operand))]
+  -- Next three copied from SemMC.Toy.Tests.
+  --
+  -- TODO(conathan): what is the 'C.weakenConstraints' for?
+  let opcodes :: [Some (Witness (F.BuildOperandList Toy.Toy) (Toy.Opcode Toy.Operand))]
+      opcodes = [ Some (Witness Toy.NegR)
+                , Some (Witness Toy.SubRr) ]
+  let pseudoOpcodes = Toy.pseudoOpcodesWitnessingBuildOperandList
+  let targetOpcodes = [ Some (Witness Toy.AddRr) ]
+  let iorels = Toy.ioRelations
+{-
+  -- Need allOpcodes and pseudoOps. Can capture these or hard code them.
+  -- See the Toy tests for common code.
       opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32
-      targets :: [Some (Witness (SST.BuildAndConvert PPC32.PPC) (PPC.Opcode PPC.Operand))]
+      targets :: [Some (Witness (SST.BuildAndConvert Toy.Toy) (Toy.Opcode Toy.Operand))]
       -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
-      targets = [ Some (Witness PPC.ADD4o) ]
-  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps32 targets iorels
+      targets = [ Some (Witness Toy.AddRr) ]
+-}
+  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes pseudoOpcodes targetOpcodes iorels
   _ <- SST.stratifiedSynthesis senv
 
   L.logEndWith lcfg
-  A.wait logThread
+  CC.wait logThread
 
   SST.terminateStatisticsThread stThread
   where
-    initialTestCases = AC.heuristicallyInterestingStates (Proxy @PPC32.PPC)
+    initialTestCases = AC.heuristicallyInterestingStates (Proxy @Toy.Toy)
