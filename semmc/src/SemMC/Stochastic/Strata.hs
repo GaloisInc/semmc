@@ -5,7 +5,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
--- | This is the main entry point to the stochastic synthesis
+-- | This is the main entry point to the stochastic synthesis (SS)
 --
 -- Client code should only need to import this module in order to run the
 -- stochastic synthesis.
@@ -62,83 +62,116 @@ caller controls the number and placement of threads.
 
 -}
 
+-- | Run many threads of stratified synthesis (SS) concurrently.
+--
+-- The different synthesis threads are independent, except that they
+-- all draw work (opcodes to synthesize semantics for) from the same
+-- shared work list.
 stratifiedSynthesis :: forall arch t
                      . (SynC arch, L.HasCallStack, L.HasLogCfg)
                     => SynEnv t arch
                     -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $
-    (L.namedIO "strata" $ runSynInNewLocalEnv env0 strata)
+    (L.namedIO "strata" $ runSynInNewLocalEnv env0 go)
   STM.readTVarIO (seFormulas env0)
+  where
+    go = processWorklist >> generalize
 
-strata :: (SynC arch)
-       => Syn t arch (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
-strata = processWorklist >> generalize
-
+-- | Synthesize semantics for single opcodes until there are no more
+-- left.
+--
+-- In practice, most runs of SS should timeout with a non-empty work
+-- list, because some instructions can't be learned effectively
+-- yet. This "timing out" is handled by the orchestration code (not in
+-- this module) that calls 'stratifiedSynthesis' itself.
 processWorklist :: (SynC arch, L.HasCallStack)
                 => Syn t arch ()
 processWorklist = do
   mwork <- takeWork
   case mwork of
-    Nothing -> do
-      L.logM L.Info "No more work items, exiting!"
-      return ()
-    Just (Some (Witness so)) -> do
-      L.logM L.Info "Processing a work item."
-      -- Catch all exceptions in the stratification process.
-      (res, strataTime) <- timeSyn (U.tryAny (strataOne so))
-      case res of
-        Left err -> do
-          -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
-          L.logM L.Error $ printf "Error while processing opcode %s: %s" (showF so) (show err)
-          -- And then die, since errors are bugs at this point.
-          throwIO err
-        -- Timeout, so we can't learn it yet.  Come back later
-        Right Nothing -> do
-          L.logM L.Info $ printf "Timeout while processing opcode %s" (showF so)
-          withStats $ S.recordStrataTimeout (Some so)
-          addWork (Some (Witness so))
-        -- Success, record the formula
-        Right (Just formula) -> do
-          L.logM L.Info $ printf "Learned a formula for %s in %s seconds" (showF so) (show strataTime)
-          withStats $ S.recordStrataSuccess (Some so) strataTime
-          L.logM L.Info $ printf "  parameterized formula = %s" (show formula)
-          recordLearnedFormula so formula
+    Nothing -> L.logM L.Info "No more work items, exiting!"
+    Just (Some (Witness op)) -> do
+      L.logM L.Info $ printf "Processing work item '%s'" (showF op)
+      processOpcode op
       processWorklist
+
+-- | Process a single opcode, requeueing it on the work list if
+-- synthesis times out.
+processOpcode :: (SynC arch, L.HasCallStack, F.ConvertShape sh)
+              => A.Opcode arch (A.Operand arch) sh -> Syn t arch ()
+processOpcode op = do
+  rinstr <- instantiateInstruction op
+  let instr = AC.riInstruction rinstr
+  L.logM L.Info $ printf "Beginning MC search with instantiation '%s'" (show instr)
+  -- Catch all exceptions in the stratification process.
+  (res, strataTime) <- timeSyn (U.tryAny (strataOne op rinstr))
+  case res of
+    Left err -> do
+      -- If we got an actual error, don't retry the opcode.  We'll log it for later analysis
+      L.logM L.Error $ printf "Error while processing instruction '%s': %s" (show instr) (show err)
+      -- And then die, since errors are bugs at this point.
+      throwIO err
+    -- Timeout, so we can't learn it yet.  Come back later
+    Right Nothing -> do
+      L.logM L.Info $ printf "Timeout while processing opcode '%s'" (show instr)
+      withStats $ S.recordStrataTimeout (Some op)
+      -- Would it make more sense to put this in a different queue
+      -- that corresponds to opcodes that timed out in the current
+      -- round, instead of requeuing?
+      addWork (Some (Witness op))
+    -- Success, record the formula
+    Right (Just formula) -> do
+      L.logM L.Info $ unlines
+        [ printf "Learned a formula for '%s' in %s seconds" (show instr) (show strataTime)
+        , printf "Parameterized formula = %s" (show formula) ]
+      withStats $ S.recordStrataSuccess (Some op) strataTime
+      recordLearnedFormula op formula
+
 
 -- | Attempt to learn a formula for the given opcode
 --
--- Return 'Nothing' if we time out trying to find a formula
+-- Return 'Nothing' if we timed out before learning any candidates.
 strataOne :: (SynC arch, L.HasCallStack)
           => A.Opcode arch (A.Operand arch) sh
-          -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
-strataOne op = do
-  L.logM L.Info $ printf "Beginning stratification for opcode %s" (showF op)
-  instr <- instantiateInstruction op
-  (mprog, synDuration) <- withTimeout (L.namedM "synthesize" $ synthesize instr)
-  case mprog of
-    Nothing -> return Nothing
-    Just prog -> do
-      L.logM L.Info $ printf "Synthesis success for %s in %s seconds" (showF op) (show synDuration)
-      withStats $ S.recordSynthesizeSuccess (Some op) synDuration
-      strataOneLoop op instr (C.equivalenceClasses prog)
+          -> AC.RegisterizedInstruction arch
+          -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh ))
+strataOne op rinstr = strataOneLoop op rinstr (C.emptyEquivalenceClasses)
 
+-- | Main loop of stratified synthesis for a single instruction.
 strataOneLoop :: (SynC arch, L.HasCallStack)
               => A.Opcode arch (A.Operand arch) sh
               -> AC.RegisterizedInstruction arch
               -> C.EquivalenceClasses (CP.CandidateProgram t arch)
               -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
-strataOneLoop op instr eqclasses = do
+strataOneLoop op rinstr eqclasses = do
+  let instr = AC.riInstruction rinstr
   cfg <- askConfig
-  (mprog, synDuration) <- withTimeout (synthesize instr)
+  (mprog, synDuration) <- withTimeout (L.namedM "synthesize" $ synthesize rinstr)
   case mprog of
     Nothing -> do
-      -- We hit a timeout, so just try to build a formula based on what we have
-      Just <$> finishStrataOne op instr eqclasses
+      L.logM L.Info $ printf "Synthesis of a single candidate for '%s' timed out." (show instr)
+      -- If we already learned at least one candidate then we assume
+      -- the timeout is bad luck and keep going. On the other hand, if
+      -- the first attempt times out, then we give up, assuming that
+      -- we'll always fail.
+      --
+      -- An alternative approach would be to keep trying in any
+      -- case. That would allow us to learn more formulas in the
+      -- current round if we get unlucky the first time, but otherwise
+      -- will waste resources as we continue in vain.
+      if C.countPrograms eqclasses == 0
+        then return Nothing
+        else strataOneLoop op rinstr eqclasses
     Just prog -> do
-      L.logM L.Info $ printf "Synthesis success for %s in %s seconds" (showF op) (show synDuration)
+      L.logM L.Info $ unlines
+        [ printf "Synthesis found another candidate for '%s' in %s seconds."
+          (show instr) (show synDuration)
+        , printf "We've found %i candidates so far. The current candidate:"
+          (C.countPrograms eqclasses)
+        , show prog ]
       withStats $ S.recordSynthesizeSuccess (Some op) synDuration
-      meqclasses' <- C.classify instr prog eqclasses
+      meqclasses' <- C.classify rinstr prog eqclasses
       case meqclasses' of
         Nothing -> do
           L.logM L.Info "No equivalence classes left after counterexample"
@@ -146,21 +179,28 @@ strataOneLoop op instr eqclasses = do
         Just eqclasses'
           | C.countPrograms eqclasses' > programCountThreshold cfg -> do
               L.logM L.Info "Found enough candidate programs, finishing with formula extraction"
-              Just <$> finishStrataOne op instr eqclasses'
+              finishStrataOne op rinstr eqclasses'
           | otherwise -> do
-              L.logM L.Info $ printf "Currently have %d candidate programs, need %d" (C.countPrograms eqclasses') (programCountThreshold cfg)
-              strataOneLoop op instr eqclasses'
+              L.logM L.Info $ printf "Currently have %d candidate programs, need %d"
+                (C.countPrograms eqclasses') (programCountThreshold cfg)
+              strataOneLoop op rinstr eqclasses'
 
+-- | Choose the best candidate and return its formula.
+--
+-- Returns 'Nothing' if there are no candidates in the eqclasses.
 finishStrataOne :: (SynC arch, L.HasCallStack)
                 => A.Opcode arch (A.Operand arch) sh
                 -> AC.RegisterizedInstruction arch
                 -> C.EquivalenceClasses (CP.CandidateProgram t arch)
-                -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
+                -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
 finishStrataOne op instr eqclasses = do
   L.logM L.Info ("Equivalence classes: " ++ show eqclasses)
-  bestClass <- C.chooseClass eqclasses
-  prog <- C.chooseProgram bestClass
-  buildFormula op instr (CP.cpFormula prog)
+  mBestClass <- C.chooseClass eqclasses
+  case mBestClass of
+    Nothing -> return Nothing
+    Just bestClass -> do
+      prog <- C.chooseProgram bestClass
+      Just <$> buildFormula op instr (CP.cpFormula prog)
 
 -- | Construct a formula for the given instruction based on the selected representative program.
 --
