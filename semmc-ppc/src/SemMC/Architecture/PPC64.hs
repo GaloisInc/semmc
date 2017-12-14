@@ -32,7 +32,7 @@ import qualified Data.Functor.Identity as I
 import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
@@ -490,14 +490,14 @@ registerizeInstructionPPC ri s =
 
 replaceLiterals :: AC.LiteralRef PPC sh s
                 -> Location PPC s
-                -> (SL.ShapedList PPC.Operand sh, V.ConcreteState PPC)
-                -> (SL.ShapedList PPC.Operand sh, V.ConcreteState PPC)
+                -> (SL.List PPC.Operand sh, V.ConcreteState PPC)
+                -> (SL.List PPC.Operand sh, V.ConcreteState PPC)
 replaceLiterals (AC.LiteralRef ix) loc (ops, s) =
   case MapF.lookup loc s of
     Nothing -> L.error ("Location not defined in state: " ++ showF loc)
     Just val ->
-      let (clampedValue, op') = truncateValue (SL.indexShapedList ops ix) val
-      in (SL.updateShapedList ops ix (const op'), MapF.insert loc clampedValue s)
+      let (clampedValue, op') = truncateValue (ops SL.!! ix) val
+      in (SL.update ops ix (const op'), MapF.insert loc clampedValue s)
 
 -- | Replace the value in the given immediate operand with the value in a
 -- 'V.Value', truncating it if necessary.  The truncated value is returned so

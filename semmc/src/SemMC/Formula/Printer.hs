@@ -20,7 +20,7 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair
 import           Data.Parameterized.Some ( Some(..), viewSome )
-import           Data.Parameterized.ShapedList ( indexShapedList, ShapedList(..) )
+import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -74,17 +74,17 @@ sexprConvert (ParameterizedFormula { pfUses = uses
                 ]
 
 convertUses :: (ShowF (A.Location arch))
-            => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
+            => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
             -> Set.Set (Some (Parameter arch sh))
             -> SC.SExpr Atom
 convertUses oplist = fromFoldable (viewSome (convertParameter oplist))
 
 convertParameter :: (ShowF (A.Location arch))
-                 => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
+                 => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
                  -> Parameter arch sh tp
                  -> SC.SExpr Atom
 convertParameter opVars (OperandParameter _ idx) = ident name
-  where name = varName (indexShapedList opVars idx)
+  where name = varName (opVars SL.!! idx)
 convertParameter _ (LiteralParameter loc) = quoted (showF loc)
 convertParameter opVars (FunctionParameter fnName (WrappedOperand orep oix) _) =
   SC.SCons uf (SC.SCons args SC.SNil)
@@ -101,7 +101,7 @@ type ParamLookup t = forall tp. S.SimpleBoundVar t tp -> Maybe (SC.SExpr Atom)
 
 convertDefs :: forall t st arch sh.
                (ShowF (A.Location arch))
-            => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
+            => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
             -> MapF.MapF (A.Location arch) (S.SimpleBoundVar t)
             -> MapF.MapF (Parameter arch sh) (S.Elt t)
             -> SC.SExpr Atom
@@ -116,15 +116,15 @@ convertLocation :: (ShowF loc) => loc tp -> SC.SExpr Atom
 convertLocation = SC.SAtom . AQuoted . showF
 
 -- | For use in the parameter lookup function.
-buildOpMapping :: ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
+buildOpMapping :: SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
                -> Map.Map (Some (S.SimpleBoundVar t)) (SC.SExpr Atom)
-buildOpMapping Nil = Map.empty
-buildOpMapping (var :> rest) =
+buildOpMapping SL.Nil = Map.empty
+buildOpMapping (var SL.:< rest) =
   Map.insert (Some (BV.unBoundVar var)) (ident name) $ buildOpMapping rest
   where name = varName var
 
 convertDef :: (ShowF (A.Location arch))
-           => ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh
+           => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
            -> ParamLookup t
            -> Pair (Parameter arch sh) (S.Elt t)
            -> SC.SExpr Atom
@@ -229,15 +229,15 @@ int = SC.SAtom . AInt
 -- This is at the bottom of the file so as to not screw up code formatting for
 -- the rest (due to haskell-mode not behaving nicely with TypeOperators).
 class ConvertShape (sh :: [Symbol]) where
-  -- | Convert the 'ShapedList' of variables into the serialized s-expression
+  -- | Convert the 'SL.List' of variables into the serialized s-expression
   -- form, e.g. @((ra . 'Gprc) (imm . 'I32))@.
-  convertOperandVars :: ShapedList (BV.BoundVar (S.SimpleBuilder t st) arch) sh -> SC.SExpr Atom
+  convertOperandVars :: SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh -> SC.SExpr Atom
 
 instance ConvertShape '[] where
-  convertOperandVars Nil = SC.SNil
+  convertOperandVars SL.Nil = SC.SNil
 
 instance (KnownSymbol s, ConvertShape sh) => ConvertShape (s ': sh) where
-  convertOperandVars (var :> rest) =
+  convertOperandVars (var SL.:< rest) =
     SC.SCons (SC.SCons nameExpr typeExpr) (convertOperandVars rest)
     where nameExpr = ident (varName var)
           typeExpr = quoted (symbolVal (Proxy :: Proxy s))

@@ -26,7 +26,8 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Seq as SeqF
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 
@@ -80,7 +81,7 @@ data SynEnv t arch =
          -- ^ All of the known formulas (base set + learned set) for real opcodes
          , sePseudoFormulas :: MapF.MapF ((P.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch)
          -- ^ Formulas for all pseudo opcodes
-         , seKnownCongruentOps :: STM.TVar (MapF.MapF SL.ShapeRepr (SeqF.SeqF (P.SynthOpcode arch)))
+         , seKnownCongruentOps :: STM.TVar (MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF (P.SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
          , seWorklist :: STM.TVar (WL.Worklist (Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch)))))
          -- ^ Work items
@@ -184,9 +185,9 @@ dropKeyWitnesses = I.runIdentity . U.mapFMapBothM f
     f :: Witness c a sh -> v sh -> I.Identity (a sh, v sh)
     f (Witness a) v = return (a, v)
 
-addCongruentOp :: (HR.HasRepr a SL.ShapeRepr)
+addCongruentOp :: (HR.HasRepr a (SL.List SR.SymbolRepr))
                => a sh
                -> v
-               -> MapF.MapF SL.ShapeRepr (SeqF.SeqF a)
-               -> MapF.MapF SL.ShapeRepr (SeqF.SeqF a)
+               -> MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF a)
+               -> MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF a)
 addCongruentOp op _ = MapF.insertWith (SeqF.><) (HR.typeRepr op) (SeqF.singleton op)

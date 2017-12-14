@@ -21,7 +21,7 @@ import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.ShapedList ( ShapedList )
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF
 import qualified Data.Set as Set
@@ -44,7 +44,7 @@ import           SemMC.Synthesis.Template
 -- constraints of a templatable opcode available.
 data TemplatableInstruction (arch :: *) where
   TemplatableInstruction :: TemplatableOpcode arch sh
-                         -> ShapedList (Operand arch) sh
+                         -> SL.List (Operand arch) sh
                          -> TemplatableInstruction arch
 
 -- | Disregard the constraints.

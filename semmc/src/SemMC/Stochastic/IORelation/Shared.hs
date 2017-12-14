@@ -22,7 +22,7 @@ import           Data.Proxy ( Proxy(..) )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr ( withKnownNat )
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import qualified Lang.Crucible.BaseTypes as S
 
 import qualified Dismantle.Arbitrary as DA
@@ -81,10 +81,10 @@ data IndexedSemanticView arch sh where
 instructionRegisterOperands :: forall arch sh proxy
                              . (AC.ConcreteArchitecture arch)
                             => proxy arch
-                            -> SL.ShapedList (A.Operand arch) sh
+                            -> SL.List (A.Operand arch) sh
                             -> [IndexedSemanticView arch sh]
 instructionRegisterOperands proxy operands =
-  SL.foldrFCIndexed collectLocations [] operands
+  SL.ifoldr collectLocations [] operands
   where
     collectLocations :: forall tp
                       . SL.Index sh tp

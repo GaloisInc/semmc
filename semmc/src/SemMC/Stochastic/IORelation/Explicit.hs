@@ -21,7 +21,7 @@ import           Text.Printf ( printf )
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.NatRepr as NR
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Instruction as D
@@ -49,7 +49,7 @@ generateExplicitInstruction proxy op implicitOperands = do
   insn <- liftIO $ D.randomInstruction g (NES.singleton (Some op))
   case insn of
     D.Instruction _ ops ->
-      case SL.foldrFCIndexed (matchesOperand proxy implicitOperands) (False, S.empty) ops of
+      case SL.ifoldr (matchesOperand proxy implicitOperands) (False, S.empty) ops of
         (False, sops)
           -- The operands are all distinct and no operands are implicit
           | S.size sops == length (instructionRegisterOperands proxy ops) -> return insn
@@ -60,7 +60,7 @@ generateExplicitInstruction proxy op implicitOperands = do
 -- operands of the instruction.
 classifyExplicitOperands :: (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                          => A.Opcode arch (A.Operand arch) sh
-                         -> SL.ShapedList (A.Operand arch) sh
+                         -> SL.List (A.Operand arch) sh
                          -> Learning arch (IORelation arch sh)
 classifyExplicitOperands op explicitOperands = do
   t0 <- mkRandomTest
@@ -75,7 +75,7 @@ classifyExplicitOperands op explicitOperands = do
 -- (forming an 'IORelation')
 computeIORelation :: (AC.ConcreteArchitecture arch)
                   => A.Opcode arch (A.Operand arch) sh
-                  -> SL.ShapedList (A.Operand arch) sh
+                  -> SL.List (A.Operand arch) sh
                   -> [TestBundle (TestCase arch) (ExplicitFact arch)]
                   -> CE.ResultIndex (V.ConcreteState arch)
                   -> Learning arch (IORelation arch sh)
@@ -96,7 +96,7 @@ computeIORelation opcode operands bundles idx =
 buildIORelation :: forall arch sh
                  . (AC.ConcreteArchitecture arch)
                 => A.Opcode arch (A.Operand arch) sh
-                -> SL.ShapedList (A.Operand arch) sh
+                -> SL.List (A.Operand arch) sh
                 -> CE.ResultIndex (V.ConcreteState arch)
                 -> IORelation arch sh
                 -> TestBundle (TestCase arch) (ExplicitFact arch)
@@ -125,7 +125,7 @@ buildIORelation op explicitOperands ri iorel tb = do
 -- If the test failed, return an empty set.
 collectExplicitLocations :: (AC.ConcreteArchitecture arch)
                          => SL.Index sh tp
-                         -> SL.ShapedList (A.Operand arch) sh
+                         -> SL.List (A.Operand arch) sh
                          -> [IndexedSemanticView arch sh]
                          -> CE.ResultIndex (V.ConcreteState arch)
                          -> TestCase arch

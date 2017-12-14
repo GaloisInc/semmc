@@ -27,7 +27,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Ctx
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
-import           Data.Parameterized.ShapedList ( indexShapedList, ShapedList(..) )
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF
 import           Data.Proxy ( Proxy(..) )
@@ -54,13 +54,13 @@ type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
   ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> A.OperandType arch s
 
 data OperandAssignment sym arch sh =
-  OperandAssignment { opAssnTaggedExprs :: ShapedList (A.TaggedExpr arch sym) sh
+  OperandAssignment { opAssnTaggedExprs :: SL.List (A.TaggedExpr arch sym) sh
                     -- ^ The raw values obtained by calling 'operandValue' on
                     -- each of the operands.
                     , opAssnVars :: Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh)
                     -- ^ The original bound variables associated with each
                     -- operand, but turned into 'Ctx.Assignment' form instead of
-                    -- a 'ShapedList'.
+                    -- a 'SL.List'.
                     , opAssnBareExprs :: Ctx.Assignment (S.SymExpr sym) (ShapeCtx arch sh)
                     -- ^ The bare 'S.SymExpr's corresponding to each
                     -- 'TaggedExpr', but in 'Ctx.Assignment' form.
@@ -72,9 +72,9 @@ extendAssn :: (A.Architecture arch)
            -> OperandAssignment sym arch sh
            -> OperandAssignment sym arch (s ': sh)
 extendAssn newExpr newVar oldAssn =
-  OperandAssignment { opAssnTaggedExprs = newExpr :> opAssnTaggedExprs oldAssn
-                    , opAssnVars = opAssnVars oldAssn Ctx.%> newVar
-                    , opAssnBareExprs = opAssnBareExprs oldAssn Ctx.%> A.unTagged newExpr
+  OperandAssignment { opAssnTaggedExprs = newExpr SL.:< opAssnTaggedExprs oldAssn
+                    , opAssnVars = opAssnVars oldAssn Ctx.:> newVar
+                    , opAssnBareExprs = opAssnBareExprs oldAssn Ctx.:> A.unTagged newExpr
                     }
 
 -- | For a given pair of bound variables and operands, build up:
@@ -89,13 +89,13 @@ buildOpAssignment :: forall sym arch sh.
                 -- ^ Symbolic expression builder
                 -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
                 -- ^ Lookup for expression variables from a part of state name ("r2", "memory", etc.)
-                -> ShapedList (BV.BoundVar sym arch) sh
+                -> SL.List (BV.BoundVar sym arch) sh
                 -- ^ List of variables corresponding to each operand
-                -> ShapedList (A.Operand arch) sh
+                -> SL.List (A.Operand arch) sh
                 -- ^ List of operand values corresponding to each operand
                 -> IO (OperandAssignment sym arch sh)
-buildOpAssignment _ _ Nil Nil = return (OperandAssignment Nil Ctx.empty Ctx.empty)
-buildOpAssignment sym newVars ((BV.BoundVar var) :> varsRest) (val :> valsRest) =
+buildOpAssignment _ _ SL.Nil SL.Nil = return (OperandAssignment SL.Nil Ctx.empty Ctx.empty)
+buildOpAssignment sym newVars ((BV.BoundVar var) SL.:< varsRest) (val SL.:< valsRest) =
   extendAssn <$> A.operandValue (Proxy @arch) sym newVars val
              <*> pure var
              <*> buildOpAssignment sym newVars varsRest valsRest
@@ -115,7 +115,7 @@ buildLitAssignment :: forall m proxy sym loc
                    -> m (SomeVarAssignment sym)
 buildLitAssignment _ exprLookup = foldlM f (MapF.Pair Ctx.empty Ctx.empty) . MapF.toList
   where f (Pair varAssn exprAssn) (Pair loc var) =
-          fmap (\expr -> Pair (varAssn Ctx.%> var) (exprAssn Ctx.%> expr))
+          fmap (\expr -> Pair (varAssn Ctx.:> var) (exprAssn Ctx.:> expr))
                (exprLookup loc)
 
 -- | Replace all the variables in the given 'SomeVarAssignment' with their
@@ -146,11 +146,11 @@ replaceLitVars sym newExprs oldVars expr = do
 -- to one.
 paramToLocation :: forall arch sh tp.
                    (A.Architecture arch)
-                => ShapedList (A.Operand arch) sh
+                => SL.List (A.Operand arch) sh
                 -> Parameter arch sh tp
                 -> Maybe (A.Location arch tp)
 paramToLocation opVals (OperandParameter _ idx) =
- A.operandToLocation (Proxy @arch) $ indexShapedList opVals idx
+ A.operandToLocation (Proxy @arch) (opVals SL.!! idx)
 paramToLocation _ (LiteralParameter loc) = Just loc
 paramToLocation opVals (FunctionParameter fnName wo rep) =
   case fnName `lookup` A.locationFuncInterpretation (Proxy @arch) of
@@ -184,8 +184,8 @@ instantiateFormula :: forall arch t st sh.
                       (A.Architecture arch)
                    => SB t st
                    -> ParameterizedFormula (SB t st) arch sh
-                   -> ShapedList (A.Operand arch) sh
-                   -> IO (ShapedList (A.TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
+                   -> SL.List (A.Operand arch) sh
+                   -> IO (SL.List (A.TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
 instantiateFormula
   sym
   (ParameterizedFormula { pfOperandVars = opVars

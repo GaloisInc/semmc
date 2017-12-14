@@ -22,7 +22,7 @@ import qualified Text.Parsec.Text as P
 import           Text.Read ( readMaybe )
 
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 
 import qualified Data.Parameterized.Unfold as U
 import qualified SemMC.Architecture as A

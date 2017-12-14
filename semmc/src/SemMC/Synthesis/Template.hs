@@ -53,7 +53,7 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
-import           Data.Parameterized.ShapedList ( ShapedList(..), indexShapedList )
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
@@ -211,7 +211,7 @@ unTemplate = unTemplateSafe
 -- | 'Formula' along with the expressions that correspond to each operand (for
 -- pulling out the values of immediates after solving, primarily).
 data TemplatedFormula sym arch sh =
-  TemplatedFormula { tfOperandExprs :: ShapedList (TaggedExpr (TemplatedArch arch) sym) sh
+  TemplatedFormula { tfOperandExprs :: SL.List (TaggedExpr (TemplatedArch arch) sym) sh
                    , tfFormula :: Formula sym (TemplatedArch arch)
                    }
 deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (TemplatedFormula sym arch sh)
@@ -228,15 +228,15 @@ class TemplatableOperand (arch :: *) (s :: Symbol) where
 -- | The only way to define structure-dependent operations on type-level lists...
 class TemplatableOperands arch sh where
   -- | For a given shape, generate all possible templated operand lists.
-  makeTemplatedOpLists :: [ShapedList (TemplatedOperand arch) sh]
+  makeTemplatedOpLists :: [SL.List (TemplatedOperand arch) sh]
   -- | Recover the resulting concrete operands once the SMT solver has run.
   recoverOperands :: (forall tp. S.SymExpr sym tp -> IO (GroundValue tp))
-                  -> ShapedList (TaggedExpr (TemplatedArch arch) sym) sh
-                  -> IO (ShapedList (Operand arch) sh)
+                  -> SL.List (TaggedExpr (TemplatedArch arch) sym) sh
+                  -> IO (SL.List (Operand arch) sh)
 
 instance TemplatableOperands arch '[] where
-  makeTemplatedOpLists = [Nil]
-  recoverOperands _ Nil = return Nil
+  makeTemplatedOpLists = [SL.Nil]
+  recoverOperands _ SL.Nil = return SL.Nil
 
 instance (Architecture arch,
           TemplatableOperand arch s,
@@ -244,13 +244,13 @@ instance (Architecture arch,
          TemplatableOperands arch (s ': sh) where
   makeTemplatedOpLists =
     -- We're in the List applicative.
-    (:>) <$> opTemplates
-         <*> makeTemplatedOpLists
+    (SL.:<) <$> opTemplates
+            <*> makeTemplatedOpLists
 
-  recoverOperands evalFn (TaggedExpr _ (WrappedRecoverOperandFn recover) :> restExprs) =
+  recoverOperands evalFn (TaggedExpr _ (WrappedRecoverOperandFn recover) SL.:< restExprs) =
     -- Now we're in IO.
-    (:>) <$> recover evalFn
-         <*> recoverOperands evalFn restExprs
+    (SL.:<) <$> recover evalFn
+            <*> recoverOperands evalFn restExprs
 
 type TemplatableOpcode arch = Witness (TemplatableOperands arch) ((Opcode arch) (Operand arch))
 
@@ -260,12 +260,12 @@ data TemplatedInstruction sym arch sh where
   TemplatedInstruction :: (TemplatableOperands arch sh)
                        => (Opcode arch) (Operand arch) sh
                        -> ParameterizedFormula sym (TemplatedArch arch) sh
-                       -> ShapedList (TemplatedOperand arch) sh
+                       -> SL.List (TemplatedOperand arch) sh
                        -> TemplatedInstruction sym arch sh
 
 deriving instance (Show ((Opcode arch) (Operand arch) sh),
                    Show (ParameterizedFormula sym (TemplatedArch arch) sh),
-                   Show (ShapedList (TemplatedOperand arch) sh))
+                   Show (SL.List (TemplatedOperand arch) sh))
   => Show (TemplatedInstruction sym arch sh)
 
 instance (ShowF ((Opcode arch) (Operand arch)),
@@ -275,7 +275,7 @@ instance (ShowF ((Opcode arch) (Operand arch)),
   withShow (_ :: p (TemplatedInstruction sym arch)) (_ :: q sh) x =
     withShow (Proxy @((Opcode arch) (Operand arch))) (Proxy @sh) $
       withShow (Proxy @(ParameterizedFormula sym (TemplatedArch arch ))) (Proxy @sh) $
-        withShow (Proxy @(ShapedList (TemplatedOperand arch))) (Proxy @sh) $
+        withShow (Proxy @(SL.List (TemplatedOperand arch))) (Proxy @sh) $
           x
 
 -- | Get the set of locations that a 'TemplatedInstruction' uses.
@@ -287,7 +287,7 @@ templatedInputs (TemplatedInstruction _ pf oplist) =
   where paramUses (Some param) =
           case param of
             OperandParameter _ idx ->
-              let TemplatedOperand _ uses _ = indexShapedList oplist idx
+              let TemplatedOperand _ uses _ = oplist SL.!! idx
               in uses
             LiteralParameter loc -> Set.singleton (Some loc)
             FunctionParameter {} -> error "Function parameters are not actually inputs: they can only be defined"
@@ -301,7 +301,7 @@ templatedOutputs (TemplatedInstruction _ pf oplist) =
   where paramDefs (Some param) =
           case param of
             OperandParameter _ idx ->
-              case indexShapedList oplist idx of
+              case oplist SL.!! idx of
                 TemplatedOperand (Just loc) _ _ -> Set.singleton (Some loc)
                 _ -> Set.empty
             LiteralParameter loc -> Set.singleton (Some loc)

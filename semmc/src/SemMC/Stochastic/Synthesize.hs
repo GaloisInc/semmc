@@ -44,7 +44,9 @@ import qualified Data.Set.NonEmpty as NES
 import           Data.Parameterized.HasRepr ( HasRepr )
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.NatRepr as NR
-import           Data.Parameterized.ShapedList ( lengthFC, traverseFCIndexed, indexAsInt, indexShapedList, ShapeRepr )
+import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.SymbolRepr as SR
+import qualified Data.Parameterized.TraversableFC as FC
 import           Dismantle.Arbitrary as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
@@ -297,7 +299,7 @@ getOutMasks (D.Instruction opcode operands) = do
   -- Ignore implicit operands for now.
   -- TODO: handle implicits.
   let outputs' = [ s | I.OperandRef s <- outputs ]
-  let outputs'' = [ Some (indexShapedList operands i) | Some i <- outputs' ]
+  let outputs'' = [ Some (operands SL.!! i) | Some i <- outputs' ]
   let semViews = map operandToSemView outputs''
   return semViews
   where
@@ -375,8 +377,8 @@ perturb candidate = do
 
 -- | Replace the opcode of the given instruction with a random one of the same
 -- shape.
-randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) ShapeRepr,
-                    HasRepr (Pseudo arch (Operand arch)) ShapeRepr)
+randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) (SL.List SR.SymbolRepr),
+                    HasRepr (Pseudo arch (Operand arch)) (SL.List SR.SymbolRepr))
                 => SynthInstruction arch
                 -> Syn t arch (SynthInstruction arch)
 randomizeOpcode (SynthInstruction oldOpcode operands) = do
@@ -398,12 +400,12 @@ randomizeOperand :: (D.ArbitraryOperand (Operand arch))
                  -> SynthInstruction arch
                  -> IO (SynthInstruction arch)
 randomizeOperand gen (SynthInstruction op os) = do
-  updateAt <- D.uniformR (0, (lengthFC os - 1)) gen
-  os' <- traverseFCIndexed (f' updateAt gen) os
+  updateAt <- D.uniformR (0 :: Int, fromIntegral (FC.lengthFC os - 1)) gen
+  os' <- SL.itraverse (f' (toInteger updateAt) gen) os
   return (SynthInstruction op os')
   where
     f' target g ix o
-      | indexAsInt ix == target = D.arbitraryOperand g o
+      | SL.indexValue ix == target = D.arbitraryOperand g o
       | otherwise = return o
 
 -- | Generate a random instruction

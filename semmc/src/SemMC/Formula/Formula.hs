@@ -38,7 +38,7 @@ import           Text.Printf ( printf )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 import           Lang.Crucible.BaseTypes
@@ -87,7 +87,7 @@ data WrappedOperand arch sh s where
 -- parameter into a 'L.Location'.  These are defined per-architecture and are
 -- invoked by 'paramToLocation' during formula instantiation.
 data LocationFuncInterp arch where
-  LocationFuncInterp :: ( forall sh s tp . SL.ShapedList (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> L.Location arch tp)
+  LocationFuncInterp :: ( forall sh s tp . SL.List (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> L.Location arch tp)
                      -> LocationFuncInterp arch
 
 instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where
@@ -183,7 +183,7 @@ data ParameterizedFormula sym arch (sh :: [Symbol]) =
                        -- might ask, "aren't all parameters used, lest they be
                        -- useless?" No -- some parameters may be only used as
                        -- outputs (locations being defined).
-                       , pfOperandVars :: SL.ShapedList (BV.BoundVar sym arch) sh
+                       , pfOperandVars :: SL.List (BV.BoundVar sym arch) sh
                        -- ^ Bound variables for each of the operands; used in
                        -- the expressions of the definitions.
                        , pfLiteralVars :: MapF.MapF (L.Location arch) (S.BoundVar sym)

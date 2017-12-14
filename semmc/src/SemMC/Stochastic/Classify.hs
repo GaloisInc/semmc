@@ -36,7 +36,7 @@ import           Text.Printf ( printf )
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Lang.Crucible.Solver.Interface as S
@@ -547,7 +547,7 @@ projectRelevantLocations env f0 =
       case oref of
         IOR.ImplicitOperand (Some (V.View _ loc)) -> Just (Some loc)
         IOR.OperandRef (Some ix) -> do
-          sv <- AC.operandToSemanticView (Proxy @arch) (SL.indexShapedList (operandList env) ix)
+          sv <- AC.operandToSemanticView (Proxy @arch) (operandList env SL.!! ix)
           case sv of
             V.SemanticView { V.semvView = V.View _ loc } -> return (Some loc)
 
@@ -567,7 +567,7 @@ data ClassifyState t arch =
 -- equality on the locations that are actually relevant for our target
 -- instruction (the search is free to use all other locations as scratch space).
 data ClassifyEnv arch sh =
-  ClassifyEnv { operandList :: SL.ShapedList (A.Operand arch) sh
+  ClassifyEnv { operandList :: SL.List (A.Operand arch) sh
               , iorelation :: IOR.IORelation arch sh
               }
 

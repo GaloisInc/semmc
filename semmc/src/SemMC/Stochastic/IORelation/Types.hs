@@ -48,7 +48,7 @@ import qualified System.Timeout as T
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as P
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as DA
 
