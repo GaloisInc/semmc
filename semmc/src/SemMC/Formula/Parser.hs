@@ -40,7 +40,8 @@ import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 import qualified Data.Set as Set
-import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal, KnownNat )
+import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal, KnownNat, SomeSymbol(..), someSymbolVal )
+import           Unsafe.Coerce ( unsafeCoerce )
 import           Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Ctx as Ctx
@@ -49,8 +50,10 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..), mapSome, viewSome )
 import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.TraversableFC ( traverseFC )
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.HasRepr as HR
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.BoolInterface as S
 import qualified Lang.Crucible.Solver.Interface as S
@@ -128,6 +131,38 @@ fromMaybeError err = maybe (E.throwError err) return
 -- | Data about the operands pertinent after parsing: their name and their type.
 data OpData (arch :: *) (s :: Symbol) where
   OpData :: String -> BaseTypeRepr (A.OperandType arch s) -> OpData arch s
+
+withKnownSymbol :: forall s r . SR.SymbolRepr s -> (KnownSymbol s => r) -> r
+withKnownSymbol sr v =
+  case someSymbolVal (T.unpack (SR.symbolRepr sr)) of
+    SomeSymbol (Proxy :: Proxy s') ->
+      case unsafeCoerce (Refl :: "" :~: "") :: s :~: s' of
+        Refl -> v
+
+buildOperandList' :: forall arch tps
+                   . (HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr))
+                  => SL.List SR.SymbolRepr tps
+                  -> SC.SExpr Atom
+                  -> Maybe (SL.List (OpData arch) tps)
+buildOperandList' rep atm =
+  case rep of
+    SL.Nil ->
+      case atm of
+        SC.SNil -> Just SL.Nil
+        _ -> Nothing
+    ((r :: SR.SymbolRepr tp) SL.:< rep') ->
+      case atm of
+        SC.SNil -> Nothing
+        SC.SAtom _ -> Nothing
+        SC.SCons s rest -> do
+          -- This is in the Maybe monad.
+          let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
+          when (SR.symbolRepr r /= T.pack ty) Nothing
+          withKnownSymbol r $ do
+            rest' <- buildOperandList' rep' rest
+            let repr = knownRepr :: BaseTypeRepr (A.OperandType arch tp)
+            return $ (OpData operand repr) SL.:< rest'
+
 
 -- | How to parse an operand list for a given architecture and shape. The
 -- architecture is necessary in order to know how to map a symbol representing
