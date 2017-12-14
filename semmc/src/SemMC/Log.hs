@@ -240,33 +240,46 @@ withLogging threadName logEventConsumer action = do
 ----------------------------------------------------------------
 -- ** Log event consumers
 
-consumeUntilEnd :: (LogEvent -> IO ()) -> LogCfg -> IO ()
-consumeUntilEnd k cfg = do
+-- | Consume a log channel until it receives a shutdown message
+-- (i.e. a 'Nothing').
+--
+-- Only messages that satisfy the predicate will be passed to the
+-- continuation. For example, using @const True@ will process all log
+-- messages, and using @(>= Info) . leLevel@ will only process
+-- messsages with 'LogLevel' equal to 'Info' or higher, ignoring
+-- 'Debug' level messages.
+consumeUntilEnd ::
+  (LogEvent -> Bool) -> (LogEvent -> IO ()) -> LogCfg -> IO ()
+consumeUntilEnd pred k cfg = do
   mevent <- Stm.atomically $ Stm.readTChan (lcChan cfg)
   case mevent of
-    Nothing -> return ()
-    Just event -> k event >> consumeUntilEnd k cfg
+    Just event | pred event ->
+                 k event >> consumeUntilEnd pred k cfg
+    _ -> return ()
 
 -- | A log event consumer that prints formatted log events to stderr.
-stdErrLogEventConsumer :: LogCfg -> IO ()
-stdErrLogEventConsumer = consumeUntilEnd (IO.hPutStrLn IO.stderr . prettyLogEvent)
+stdErrLogEventConsumer :: (LogEvent -> Bool) -> LogCfg -> IO ()
+stdErrLogEventConsumer pred =
+  consumeUntilEnd pred (IO.hPutStrLn IO.stderr . prettyLogEvent)
 
 -- | A logger that writes to a user-specified file
 --
 -- Note that logs are opened in the 'w' mode (i.e., overwrite).  Callers should
 -- preserve old log files if they really want.
-fileLogEventConsumer :: FilePath -> LogCfg -> IO ()
-fileLogEventConsumer fp cfg = IO.withFile fp IO.WriteMode $ \h -> do
-  consumeUntilEnd (\e -> IO.hPutStrLn h (prettyLogEvent e) >> IO.hFlush h) cfg
+fileLogEventConsumer :: FilePath -> (LogEvent -> Bool) -> LogCfg -> IO ()
+fileLogEventConsumer fp pred cfg = IO.withFile fp IO.WriteMode $ \h -> do
+  let k e = IO.hPutStrLn h (prettyLogEvent e) >> IO.hFlush h
+  consumeUntilEnd pred k cfg
 
 -- | A log event consumer that writes formatted log events to a tmp
 -- file.
-tmpFileLogEventConsumer :: LogCfg -> IO ()
-tmpFileLogEventConsumer cfg = do
+tmpFileLogEventConsumer :: (LogEvent -> Bool) -> LogCfg -> IO ()
+tmpFileLogEventConsumer pred cfg = do
   createDirectoryIfMissing True "/tmp/brittle"
   (tmpFilePath, tmpFile) <- IO.openTempFile "/tmp/brittle" "log.txt"
   printf "\n\nWriting logs to %s\n\n" tmpFilePath
-  consumeUntilEnd (\e -> IO.hPutStrLn tmpFile (prettyLogEvent e) >> IO.hFlush tmpFile) cfg
+  let k e = IO.hPutStrLn tmpFile (prettyLogEvent e) >> IO.hFlush tmpFile
+  consumeUntilEnd pred k cfg
 
 ----------------------------------------------------------------
 -- ** Named threads

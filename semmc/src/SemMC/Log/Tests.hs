@@ -76,7 +76,7 @@ test_asyncNamed = void . wait =<< async (named getLogCfg "test_asyncNamed" (test
 main :: IO ()
 main = do
   cfg <- mkLogCfg "main"
-  _ <- forkIO $ stdErrLogEventConsumer cfg
+  _ <- forkIO $ stdErrLogEventConsumer (const True) cfg
   
   withLogCfg cfg $ do
     runM getLogCfg $ test_monadicLoop 3

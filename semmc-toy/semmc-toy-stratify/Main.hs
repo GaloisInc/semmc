@@ -140,8 +140,8 @@ main = do
 
   lcfg <- L.mkLogCfg "main"
   logThread <- case oLogFile opts of
-    Nothing -> U.asyncLinked (L.stdErrLogEventConsumer lcfg)
-    Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile lcfg)
+    Nothing -> U.asyncLinked (L.stdErrLogEventConsumer (const True) lcfg)
+    Just logFile -> U.asyncLinked (L.fileLogEventConsumer logFile (const True) lcfg)
   let shutdownLogger = L.logEndWith lcfg >> CC.wait logThread
 
   L.withLogCfg lcfg (mainWithOptions opts) `CC.finally` shutdownLogger

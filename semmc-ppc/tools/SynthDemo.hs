@@ -161,7 +161,7 @@ main :: IO ()
 main = do
   logCfg <- U.mkLogCfg "main"
   let ?logCfg = logCfg
-  logThread <- U.asyncLinked (U.stdErrLogEventConsumer logCfg)
+  logThread <- U.asyncLinked (U.stdErrLogEventConsumer (const True) logCfg)
   N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
   U.logEndWith logCfg
   A.wait logThread

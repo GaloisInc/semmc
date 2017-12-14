@@ -88,7 +88,7 @@ mainWithOptions opt = do
                                , IOR.lcLogCfg = logCfg
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
-  logThread <- U.asyncLinked (L.stdErrLogEventConsumer logCfg)
+  logThread <- U.asyncLinked (L.stdErrLogEventConsumer (const True) logCfg)
 
   (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC32.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
   unless (F.null failures) $ do
