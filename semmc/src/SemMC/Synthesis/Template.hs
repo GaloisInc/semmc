@@ -31,8 +31,8 @@ module SemMC.Synthesis.Template
   , TemplatedArch
   , TemplatedFormula(..)
   , TemplatableOperand(..)
-  , TemplatableOperands
-  , TemplatableOpcode
+--  , TemplatableOperands
+--  , TemplatableOpcode
   , TemplatedInstruction(..)
   , TemplatedInstructionFormula(..)
   , tifFormula
@@ -50,14 +50,13 @@ module SemMC.Synthesis.Template
 
 import           Data.EnumF
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
-import qualified Data.Parameterized.Unfold as U
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Typeable
@@ -134,6 +133,8 @@ type instance Location (TemplatedArch arch) = Location arch
 -- | Necessary constraints for 'TemplatedArch' to be valid.
 type TemplateConstraints arch = (Architecture arch,
                                  Typeable arch,
+                                 TemplatableOperand arch,
+                                 HR.HasRepr (Opcode arch (TemplatedOperand arch)) (SL.List SR.SymbolRepr),
                                  OrdF ((Opcode arch) (TemplatedOperand arch)),
                                  ShowF ((Opcode arch) (TemplatedOperand arch)),
                                  EnumF ((Opcode arch) (TemplatedOperand arch)))
@@ -223,18 +224,31 @@ instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr 
   showF = show
 
 -- | A specific type of operand of which you can generate templates.
-class TemplatableOperand (arch :: *) (s :: Symbol) where
+class TemplatableOperand (arch :: *) where
   -- | All possible templates of an operand. In a nutshell, fill in register
   -- parts, leave immediate parts symbolic.
-  opTemplates :: [TemplatedOperand arch s]
+  opTemplates :: SR.SymbolRepr s -> [TemplatedOperand arch s]
 
-makeTemplatedOpLists' :: SL.List SR.SymbolRepr sh
+makeTemplatedOpLists :: (TemplatableOperand arch)
+                     => SL.List SR.SymbolRepr sh
                      -> [SL.List (TemplatedOperand arch) sh]
-makeTemplatedOpLists' rep0 =
+makeTemplatedOpLists rep0 =
   case rep0 of
     SL.Nil -> [SL.Nil]
-    _rep SL.:< reps -> (SL.:<) <$> opTemplates <*> makeTemplatedOpLists' reps
+    rep SL.:< reps -> (SL.:<) <$> opTemplates rep <*> makeTemplatedOpLists reps
 
+recoverOperands :: SL.List SR.SymbolRepr sh
+                -> (forall tp . S.SymExpr sym tp -> IO (GroundValue tp))
+                -> SL.List (TaggedExpr (TemplatedArch arch) sym) sh
+                -> IO (SL.List (Operand arch) sh)
+recoverOperands rep0 evalFn taggedExprs =
+  case rep0 of
+    SL.Nil -> return SL.Nil
+    _rep SL.:< reps ->
+      case taggedExprs of
+        TaggedExpr _ (WrappedRecoverOperandFn recover) SL.:< restExprs ->
+          (SL.:<) <$> recover evalFn <*> recoverOperands reps evalFn restExprs
+{-
 -- | The only way to define structure-dependent operations on type-level lists...
 class TemplatableOperands arch sh where
   -- | For a given shape, generate all possible templated operand lists.
@@ -261,14 +275,12 @@ instance (Architecture arch,
     -- Now we're in IO.
     (SL.:<) <$> recover evalFn
             <*> recoverOperands evalFn restExprs
+-}
 
-type TemplatableOpcode arch = Witness (TemplatableOperands arch) ((Opcode arch) (Operand arch))
-
-type BaseSet sym arch = MapF.MapF (TemplatableOpcode arch) (ParameterizedFormula sym (TemplatedArch arch))
+type BaseSet sym arch = MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym (TemplatedArch arch))
 
 data TemplatedInstruction sym arch sh where
-  TemplatedInstruction :: (TemplatableOperands arch sh)
-                       => (Opcode arch) (Operand arch) sh
+  TemplatedInstruction :: (Opcode arch) (Operand arch) sh
                        -> ParameterizedFormula sym (TemplatedArch arch) sh
                        -> SL.List (TemplatedOperand arch) sh
                        -> TemplatedInstruction sym arch sh
@@ -320,8 +332,8 @@ templatedInstructions :: (TemplateConstraints arch)
                       => BaseSet sym arch
                       -> [Some (TemplatedInstruction sym arch)]
 templatedInstructions baseSet = do
-  Pair (Witness opcode) pf <- MapF.toList baseSet
-  oplist <- makeTemplatedOpLists
+  Pair opcode pf <- MapF.toList baseSet
+  oplist <- makeTemplatedOpLists (HR.typeRepr opcode)
   return . Some $! TemplatedInstruction opcode pf oplist
 
 -- | An opcode along with a 'TemplatedFormula' that implements it for specific

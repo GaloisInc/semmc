@@ -289,21 +289,25 @@ instance A.IsOperand Operand
 
 instance A.IsOpcode Opcode
 
-instance TemplatableOperand Toy "R32" where
-  opTemplates = mkTemplate <$> [Reg1, Reg2, Reg3]
-    where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) (Set.singleton (Some (RegLoc reg))) mkTemplate' :: TemplatedOperand Toy "R32"
-            where mkTemplate' :: TemplatedOperandFn Toy "R32"
-                  mkTemplate' _ locLookup = do
-                    expr <- locLookup (RegLoc reg)
-                    return (expr, WrappedRecoverOperandFn $ const (return (R32 reg)))
-
-instance TemplatableOperand Toy "I32" where
-  opTemplates = [TemplatedOperand Nothing Set.empty mkConst]
-    where mkConst :: TemplatedOperandFn Toy "I32"
-          mkConst sym _ = do
-            v <- S.freshConstant sym (makeSymbol "I32") knownRepr
-            let recover evalFn = I32 . fromInteger <$> evalFn v
-            return (v, WrappedRecoverOperandFn recover)
+instance TemplatableOperand Toy where
+  opTemplates sr =
+    case SR.symbolRepr sr of
+      "R32"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"R32") ->
+          mkTemplate <$> [Reg1, Reg2, Reg3]
+            where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) (Set.singleton (Some (RegLoc reg))) mkTemplate' :: TemplatedOperand Toy "R32"
+                    where mkTemplate' :: TemplatedOperandFn Toy "R32"
+                          mkTemplate' _ locLookup = do
+                            expr <- locLookup (RegLoc reg)
+                            return (expr, WrappedRecoverOperandFn $ const (return (R32 reg)))
+      "I32"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"I32") ->
+            [TemplatedOperand Nothing Set.empty mkConst]
+              where mkConst :: TemplatedOperandFn Toy "I32"
+                    mkConst sym _ = do
+                      v <- S.freshConstant sym (makeSymbol "I32") knownRepr
+                      let recover evalFn = I32 . fromInteger <$> evalFn v
+                      return (v, WrappedRecoverOperandFn recover)
 
 type instance A.Operand Toy = Operand
 type instance A.Opcode Toy = Opcode

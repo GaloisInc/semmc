@@ -5,8 +5,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main ( main ) where
 
-import           Control.Monad
-import           Control.Concurrent
 import qualified Control.Concurrent.Async as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BSHex
@@ -18,31 +16,25 @@ import           Data.Monoid
 import           Data.Word ( Word32 )
 import qualified Options.Applicative as O
 import           Text.Printf ( printf )
-import qualified UnliftIO as U
 
 import qualified Data.ElfEdit as E
 
 import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as N
-import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
-import qualified Dismantle.Tablegen.TH.Capture as DT
 import qualified Dismantle.PPC as DPPC
 
 import           SemMC.Architecture ( Architecture, Instruction, Location, Opcode, Operand )
 import qualified SemMC.Formula as F
-import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, TemplatableOpcode, unTemplate )
+import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, unTemplate )
 import qualified SemMC.Synthesis as SemMC
 import qualified SemMC.Synthesis.Core as SemMC
 import qualified SemMC.Util as U
 
 import qualified SemMC.Architecture.PPC32 as PPC32
-
-import           Util ( matchConstructor )
 
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
@@ -91,11 +83,11 @@ makePlain :: forall arch sym
           -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
 makePlain = MapF.foldrWithKey f MapF.empty
   where f :: forall sh
-           . TemplatableOpcode arch sh
+           . Opcode arch (Operand arch) sh
           -> F.ParameterizedFormula sym (TemplatedArch arch) sh
           -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
           -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
-        f (Witness op) pf = MapF.insert op (unTemplate pf)
+        f op pf = MapF.insert op (unTemplate pf)
 
 instantiateFormula' :: (Architecture arch)
                     => SB.SimpleBuilder t st

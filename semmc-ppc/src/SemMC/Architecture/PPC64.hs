@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -19,9 +20,7 @@ module SemMC.Architecture.PPC64
   ( PPC
   , Location(..)
   , testSerializer
---  , loadBaseSet
   , PPCP.PseudoOpcode(..)
---  , BuildableAndTemplatable
   ) where
 
 import qualified GHC.Err.Located as L
@@ -34,7 +33,7 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Type.Equality ( type (==) )
@@ -169,9 +168,13 @@ symbolicTemplatedOperand Proxy signed name constr =
           let recover evalFn = constr <$> evalFn v
           return (extended, T.WrappedRecoverOperandFn recover)
 
-instance T.TemplatableOperand PPC "Fprc" where
-  opTemplates = concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
-
+instance T.TemplatableOperand PPC where
+  opTemplates sr =
+    case SR.symbolRepr sr of
+      "Fprc"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"Fprc") ->
+            concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
+{-
 instance T.TemplatableOperand PPC "Gprc" where
   opTemplates = concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
 
@@ -282,7 +285,7 @@ instance T.TemplatableOperand PPC "I32imm" where
             v <- S.freshConstant sym (U.makeSymbol "I32imm") knownRepr
             let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
             return (v, T.WrappedRecoverOperandFn recover)
-
+-}
 type instance A.Location PPC = Location PPC
 
 operandValue :: forall sym s.
@@ -413,31 +416,7 @@ locationFuncInterpretation =
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
                                            })
   ]
-{-
-class ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
-instance ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
-weakenConstraint :: MapF.MapF (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand)) v
-                 -> MapF.MapF (Witness (T.TemplatableOperands PPC) (PPC.Opcode PPC.Operand)) v
-weakenConstraint = I.runIdentity . U.mapFMapBothM f
-  where
-    f :: Witness BuildableAndTemplatable a sh -> v sh -> I.Identity (Witness (T.TemplatableOperands PPC) a sh, v sh)
-    f (Witness a) v = return (Witness a, v)
-
-loadBaseSet :: forall sym.
-               ( S.IsExprBuilder sym
-               , S.IsSymInterface sym
-               , U.HasLogCfg )
-            => FilePath
-            -> sym
-            -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
-            -> IO (T.BaseSet sym PPC)
-loadBaseSet baseSetDir sym opcodes = do
-  weakenConstraint <$> F.loadFormulasFromFiles sym toFP opcodes
-  where
-    toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
-    toFP op = baseSetDir </> showF op <.> "sem"
--}
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
   case o of

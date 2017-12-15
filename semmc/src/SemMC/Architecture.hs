@@ -31,6 +31,8 @@ import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
@@ -53,6 +55,7 @@ class (IsOperand (Operand arch),
        ShowF (Operand arch),
        Typeable arch,
        ShowF (Operand arch),
+       HR.HasRepr (Opcode arch (Operand arch)) (SL.List SR.SymbolRepr),
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),
        EnumF (Opcode arch (Operand arch)))
