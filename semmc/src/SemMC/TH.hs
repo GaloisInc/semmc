@@ -25,7 +25,6 @@ import qualified System.IO.Unsafe as IO
 
 import           Data.Parameterized.Lift ( LiftF(..) )
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
 
 
 -- | Given a list of opcodes and a function for turning each opcode into a file
@@ -33,9 +32,9 @@ import           Data.Parameterized.Witness ( Witness(..) )
 -- is found, pair the original opcode with a bytestring containing the file's
 -- contents.
 attachSemantics :: (LiftF a)
-                => (Some (Witness c a) -> FilePath)
+                => (Some a -> FilePath)
                 -- ^ A function to convert opcodes to filenames
-                -> [Some (Witness c a)]
+                -> [Some a]
                 -- ^ A list of opcodes
                 -> [FilePath]
                 -- ^ A list of directories to search for the produced filenames
@@ -44,16 +43,16 @@ attachSemantics toFP elts dirs = do
   ops <- catMaybes <$> mapM (findCorrespondingFile toFP dirs) elts
   listE (map toOpcodePair ops)
 
-toOpcodePair :: (LiftF a) => (Some (Witness c a), BS.ByteString) -> ExpQ
-toOpcodePair (Some (Witness o), bs) = tupE [ [| Some (Witness $(liftF o)) |], bsE]
+toOpcodePair :: (LiftF a) => (Some a, BS.ByteString) -> ExpQ
+toOpcodePair (Some o, bs) = tupE [ [| Some $(liftF o) |], bsE]
   where
     len = BS.length bs
     bsE = [| IO.unsafePerformIO (UBS.unsafePackAddressLen len $(litE (StringPrimL (BS.unpack bs)))) |]
 
-findCorrespondingFile :: (Some (Witness c a)  -> FilePath)
+findCorrespondingFile :: (Some a  -> FilePath)
                       -> [FilePath]
-                      -> Some (Witness c a)
-                      -> Q (Maybe (Some (Witness c a), BS.ByteString))
+                      -> Some a
+                      -> Q (Maybe (Some a, BS.ByteString))
 findCorrespondingFile toFP dirs elt = go files
   where
     files = [ dir </> toFP elt | dir <- dirs ]

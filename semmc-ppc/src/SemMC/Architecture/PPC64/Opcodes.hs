@@ -16,7 +16,6 @@ import           System.FilePath ( (<.>) )
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.PPC as PPC
 import qualified Dismantle.Tablegen.TH.Capture as DT
-import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.TH as STH
 

@@ -25,7 +25,6 @@ library
                        SemMC.BoundVar
                        SemMC.Concrete.Execution
                        SemMC.Concrete.Execution.SSH
-                       SemMC.Constraints
                        SemMC.DSL
                        SemMC.Formula
                        SemMC.Formula.Env
@@ -100,7 +99,6 @@ library
                        mtl >= 2.2 && < 2.3,
                        hashtables >= 1.2 && < 1.3,
                        transformers >= 0.5.2 && < 0.6,
-                       constraints >= 0.9 && < 0.10,
                        sqlite-simple >= 0.4 && < 0.5,
                        directory,
                        unliftio

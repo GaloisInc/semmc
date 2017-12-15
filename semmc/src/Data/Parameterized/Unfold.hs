@@ -5,60 +5,20 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 module Data.Parameterized.Unfold (
-  UnfoldShape(..),
-  RecShape
+  unfoldShape
   ) where
 
-import GHC.TypeLits ( Symbol, KnownSymbol )
-import Control.Monad.Catch ( MonadThrow )
-import Data.Proxy ( Proxy(..) )
+import           Control.Monad.Catch ( MonadThrow )
+import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.SymbolRepr as SR
 
--- | The constraints required for unfolding shapes recursively
-type RecShape tp tps' tps = (UnfoldShape tps', tps ~ (tp ': tps'))
-
--- | Based on a shape (a type-level list of elements of some kind @k@), unfold a
--- plain value (of kind '*') to produce a value that has the required shape.
---
--- The entire process is in 'E.MonadThrow' to allow for reporting detailed
--- failures.  It can easily be instantiated with 'Maybe', 'Either', or 'IO'.
-class UnfoldShape (tps :: [Symbol]) where
-  unfoldShape :: (MonadThrow m)
-              => (a -> m (b '[]))
-              -- ^ Produce the value associated with the empty list (e.g., an HList nil)
-              -> (forall tp tps' . (RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> a -> m (b tps))
-              -- ^ Recursively process a smaller part of the shape and then
-              -- augment the resulting value with the current element (almost
-              -- certainly requires a recursive call to 'unfoldShape')
-              -> a
-              -- ^ The seed of the unfold
-              -> m (b tps)
-
-instance UnfoldShape '[] where
-  unfoldShape nil _elt a = nil a
-
-instance (UnfoldShape tps, KnownSymbol tp) => UnfoldShape (tp ': tps) where
-  unfoldShape _nil elt a = elt (Proxy :: Proxy tp) (Proxy :: Proxy tps) a
-
-{-
-
-data Free (a :: *) (b :: k) = Free { unFree :: a }
-
-buildOperandList :: (UnfoldShape tps) => SC.SExpr Atom -> Maybe (D.OperandList (Free Int) tps)
-buildOperandList = unfoldShape nilOp eltOp
-
-nilOp :: SC.SExpr t -> Maybe (D.OperandList a '[])
-nilOp SC.SNil = Just D.Nil
-nilOp _ = Nothing
-
-eltOp :: (RecShape tp tps' tps)
-      => Proxy tp
-      -> Proxy tps'
-      -> SC.SExpr Atom
-      -> Maybe (D.OperandList (Free Int) tps)
-eltOp _ _ SC.SNil = Nothing
-eltOp _ _ (SC.SAtom _) = Nothing
-eltOp _ _ (SC.SCons _s rest) = do
-  rest' <- unfoldShape nilOp eltOp rest
-  return ((Free 1) D.:> rest')
-
--}
+unfoldShape :: (MonadThrow m)
+            => SL.List SR.SymbolRepr sh
+            -> (a -> m (b '[]))
+            -> (forall tp tps . (sh ~ (tp ': tps)) => SR.SymbolRepr tp -> SL.List SR.SymbolRepr tps -> a -> m (b sh))
+            -> a
+            -> m (b sh)
+unfoldShape rep0 nil elt a =
+  case rep0 of
+    SL.Nil -> nil a
+    rep SL.:< reps -> elt rep reps a

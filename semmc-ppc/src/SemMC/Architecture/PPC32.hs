@@ -20,9 +20,7 @@ module SemMC.Architecture.PPC32
   ( PPC
   , Location(..)
   , testSerializer
---  , loadBaseSet
   , PPCP.PseudoOpcode(..)
---  , BuildableAndTemplatable
   ) where
 
 import qualified GHC.Err.Located as L
@@ -127,50 +125,110 @@ type instance A.OperandType PPC "Vsrc" = BaseBVType 128
 shapeReprType :: forall tp . SR.SymbolRepr tp -> BaseTypeRepr (A.OperandType PPC tp)
 shapeReprType sr =
   case SR.symbolRepr sr of
-    "Gprc"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Gprc")
     "Abscalltarget"
       | Just Refl <- testEquality sr (SR.knownSymbol @"Abscalltarget") ->
         knownRepr :: BaseTypeRepr (A.OperandType PPC "Abscalltarget")
-{-
-type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 14
-type instance A.OperandType PPC "Absdirectbrtarget" = BaseBVType 24
-type instance A.OperandType PPC "Calltarget" = BaseBVType 24
-type instance A.OperandType PPC "Condbrtarget" = BaseBVType 14
-type instance A.OperandType PPC "Crbitm" = BaseBVType 8
-type instance A.OperandType PPC "Crbitrc" = BaseBVType 5
-type instance A.OperandType PPC "Crrc" = BaseBVType 3
-type instance A.OperandType PPC "Directbrtarget" = BaseBVType 24
--- The floating point registers are logically 64 bits, but are actually backed
--- by 128 bit vector registers (where the extra bits are probably left
--- undefined during non-vector operations).
-type instance A.OperandType PPC "Fprc" = BaseBVType 128
-type instance A.OperandType PPC "Gprc" = BaseBVType 32
-type instance A.OperandType PPC "Gprc_nor0" = BaseBVType 32
-type instance A.OperandType PPC "I1imm" = BaseBVType 1
-type instance A.OperandType PPC "I32imm" = BaseBVType 32
-type instance A.OperandType PPC "Memri" = BaseBVType 32
-type instance A.OperandType PPC "Memrix" = BaseBVType 32
-type instance A.OperandType PPC "Memrix16" = BaseBVType 32
-type instance A.OperandType PPC "Memrr" = BaseBVType 32
-type instance A.OperandType PPC "S16imm" = BaseBVType 16
-type instance A.OperandType PPC "S16imm64" = BaseBVType 16
-type instance A.OperandType PPC "S17imm" = BaseBVType 16
-type instance A.OperandType PPC "S5imm" = BaseBVType 5
-type instance A.OperandType PPC "U10imm" = BaseBVType 10
-type instance A.OperandType PPC "U16imm" = BaseBVType 16
-type instance A.OperandType PPC "U16imm64" = BaseBVType 16
-type instance A.OperandType PPC "U1imm" = BaseBVType 1
-type instance A.OperandType PPC "U2imm" = BaseBVType 2
-type instance A.OperandType PPC "U4imm" = BaseBVType 4
-type instance A.OperandType PPC "U5imm" = BaseBVType 5
-type instance A.OperandType PPC "U6imm" = BaseBVType 6
-type instance A.OperandType PPC "U7imm" = BaseBVType 7
-type instance A.OperandType PPC "U8imm" = BaseBVType 8
-type instance A.OperandType PPC "Vrrc" = BaseBVType 128
-type instance A.OperandType PPC "Vsrc" = BaseBVType 128
--}
+    "Abscondbrtarget"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Abscondbrtarget") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Abscondbrtarget")
+    "Absdirectbrtarget"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Absdirectbrtarget") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Absdirectbrtarget")
+    "Calltarget"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Calltarget") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Calltarget")
+    "Condbrtarget"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Condbrtarget") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Condbrtarget")
+    "Crbitm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Crbitm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Crbitm")
+    "Crbitrc"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Crbitrc") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Crbitrc")
+    "Crrc"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Crrc") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Crrc")
+    "Directbrtarget"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Directbrtarget") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Directbrtarget")
+    "Fprc"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Fprc") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Fprc")
+    "Gprc"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Gprc")
+    "Vrrc"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Vrrc") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Vrrc")
+    "Vsrc"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Vsrc") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Vsrc")
+    "Gprc_nor0"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc_nor0") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Gprc_nor0")
+    "I1imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"I1imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "I1imm")
+    "I32imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"I32imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "I32imm")
+    "Memri"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Memri") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memri")
+    "Memrix"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Memrix") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memrix")
+    "Memrix16"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Memrix16") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memrix16")
+    "Memrr"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Memrr") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memrr")
+    "S16imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"S16imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "S16imm")
+    "S16imm64"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"S16imm64") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "S16imm64")
+    "S17imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"S17imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "S17imm")
+    "S5imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"S5imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "S5imm")
+    "U10imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U10imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U10imm")
+    "U16imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U16imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U16imm")
+    "U16imm64"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U16imm64") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U16imm64")
+    "U1imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U1imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U1imm")
+    "U2imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U2imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U2imm")
+    "U4imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U4imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U4imm")
+    "U5imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U5imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U5imm")
+    "U6imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U6imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U6imm")
+    "U7imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U7imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U7imm")
+    "U8imm"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"U8imm") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "U8imm")
+
+
 type instance ArchRegWidth PPC = 32
 
 instance ArchRepr PPC where
@@ -447,6 +505,7 @@ instance A.Architecture PPC where
   operandToLocation _ = operandToLocation
   uninterpretedFunctions = UF.uninterpretedFunctions
   locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
+  shapeReprToTypeRepr _proxy = shapeReprType
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC)]
 locationFuncInterpretation =
@@ -468,31 +527,7 @@ locationFuncInterpretation =
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
                                            })
   ]
-{-
-class ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
-instance ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
-weakenConstraint :: MapF.MapF (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand)) v
-                 -> MapF.MapF (Witness (T.TemplatableOperands PPC) (PPC.Opcode PPC.Operand)) v
-weakenConstraint = I.runIdentity . U.mapFMapBothM f
-  where
-    f :: Witness BuildableAndTemplatable a sh -> v sh -> I.Identity (Witness (T.TemplatableOperands PPC) a sh, v sh)
-    f (Witness a) v = return (Witness a, v)
-
-loadBaseSet :: forall sym.
-               ( S.IsExprBuilder sym
-               , S.IsSymInterface sym
-               , U.HasLogCfg )
-            => FilePath
-            -> sym
-            -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
-            -> IO (T.BaseSet sym PPC)
-loadBaseSet baseSetDir sym opcodes = do
-  weakenConstraint <$> F.loadFormulasFromFiles sym toFP opcodes
-  where
-    toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
-    toFP op = baseSetDir </> showF op <.> "sem"
--}
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
   case o of

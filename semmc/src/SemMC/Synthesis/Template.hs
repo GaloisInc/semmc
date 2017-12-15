@@ -54,8 +54,10 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
 import           Data.Parameterized.Witness ( Witness(..) )
+import qualified Data.Parameterized.Unfold as U
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Typeable
@@ -225,6 +227,13 @@ class TemplatableOperand (arch :: *) (s :: Symbol) where
   -- | All possible templates of an operand. In a nutshell, fill in register
   -- parts, leave immediate parts symbolic.
   opTemplates :: [TemplatedOperand arch s]
+
+makeTemplatedOpLists' :: SL.List SR.SymbolRepr sh
+                     -> [SL.List (TemplatedOperand arch) sh]
+makeTemplatedOpLists' rep0 =
+  case rep0 of
+    SL.Nil -> [SL.Nil]
+    _rep SL.:< reps -> (SL.:<) <$> opTemplates <*> makeTemplatedOpLists' reps
 
 -- | The only way to define structure-dependent operations on type-level lists...
 class TemplatableOperands arch sh where

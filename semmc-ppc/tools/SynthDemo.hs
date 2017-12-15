@@ -118,8 +118,8 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
-allOps :: [Some (Witness PPC32.BuildableAndTemplatable (DPPC.Opcode DPPC.Operand))]
-allOps = $(DT.captureDictionaries matchConstructor ''DPPC.Opcode)
+-- allOps :: [Some (Witness PPC32.BuildableAndTemplatable (DPPC.Opcode DPPC.Operand))]
+allOps = undefined -- $(DT.captureDictionaries matchConstructor ''DPPC.Opcode)
 
 loadBaseSet :: U.HasLogCfg
             => FilePath
@@ -127,7 +127,7 @@ loadBaseSet :: U.HasLogCfg
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC32.PPC),
                    SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC32.PPC)
 loadBaseSet baseDir sym = do
-  baseSet <- PPC32.loadBaseSet baseDir sym allOps
+  baseSet <- undefined -- PPC32.loadBaseSet baseDir sym allOps
   let plainBaseSet = makePlain baseSet
   let synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)

@@ -36,11 +36,12 @@ import qualified System.IO.Error as IOE
 import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Classes as P
+import qualified Data.Parameterized.HasRepr as HR
+import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as P
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
-import qualified Data.Parameterized.Unfold as U
+import qualified Data.Parameterized.SymbolRepr as SR
 
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
@@ -72,17 +73,18 @@ data LearningConfig arch =
                  }
 
 loadIORelations :: forall arch
-                 . (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+                 . (AC.ConcreteArchitecture arch,
+                    HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr),
+                    D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                 => Proxy arch
                 -> FilePath
                 -> (forall sh . A.Opcode arch (A.Operand arch) sh -> FilePath)
-                -> [Some (Witness U.UnfoldShape (A.Opcode arch (A.Operand arch)))]
+                -> [Some (A.Opcode arch (A.Operand arch))]
                 -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch))
 loadIORelations proxy relDir toFP ops = do
-  F.foldlM (\m (Some (Witness oc)) -> IOE.catchIOError (addIfJust m oc) (\_ -> return m)) MapF.empty ops
+  F.foldlM (\m (Some oc) -> IOE.catchIOError (addIfJust m oc) (\_ -> return m)) MapF.empty ops
   where
-    addIfJust :: (U.UnfoldShape sh)
-              => MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
+    addIfJust :: MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
               -> A.Opcode arch (A.Operand arch) sh
               -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch))
     addIfJust m oc = do
@@ -98,18 +100,19 @@ loadIORelations proxy relDir toFP ops = do
 --
 -- Note that this function assumes that the lcIORelationDirectory already exists
 learnIORelations :: forall arch
-                  . (AC.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+                  . (AC.ConcreteArchitecture arch,
+                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr),
+                     D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                  => LearningConfig arch
                  -> Proxy arch
                  -> (forall sh . (A.Opcode arch (A.Operand arch)) sh -> FilePath)
-                 -> [Some (Witness U.UnfoldShape (A.Opcode arch (A.Operand arch)))]
+                 -> [Some (A.Opcode arch (A.Operand arch))]
                  -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch),
                         S.Set (Some (A.Opcode arch (A.Operand arch)), Maybe Int))
 learnIORelations cfg proxy toFP ops = do
   rels0 <- loadIORelations proxy (lcIORelationDirectory cfg) toFP ops
   -- Remove IORelations we already have before we construct the worklist
-  let someOps = map (unWitness (Proxy @arch)) ops
-      opsWithoutRels = filter (\(Some op) -> MapF.notMember op rels0) someOps
+  let opsWithoutRels = filter (\(Some op) -> MapF.notMember op rels0) ops
   wlref <- STM.newTVarIO (WL.fromList opsWithoutRels)
   lrref <- STM.newTVarIO rels0
   errref <- STM.newTVarIO S.empty
@@ -146,9 +149,6 @@ learnIORelations cfg proxy toFP ops = do
   () <- A.wait serializer
 
   (,) <$> STM.readTVarIO lrref <*> STM.readTVarIO errref
-  where
-    unWitness :: proxy arch -> Some (Witness U.UnfoldShape (A.Opcode arch (A.Operand arch))) -> Some (A.Opcode arch (A.Operand arch))
-    unWitness _ (Some (Witness o)) = Some o
 
 serializeLearnedRelations :: (AC.ConcreteArchitecture arch)
                           => FilePath

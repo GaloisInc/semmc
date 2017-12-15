@@ -12,6 +12,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE PolyKinds #-}
 module SemMC.Toy.Tests where
 
 import qualified Control.Concurrent.Chan as C
@@ -27,13 +28,12 @@ import           System.FilePath
 import qualified GHC.Err.Located as L
 
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
-import           Data.Parameterized.ShapedList ( ShapedList(..) )
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.Unfold as U
-import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
@@ -57,14 +57,14 @@ import           SemMC.Util as U
 
 import           Debug.Trace
 
-allOperands :: [Some (Witness U.UnfoldShape (T.Opcode T.Operand))]
+allOperands :: [Some (T.Opcode T.Operand)]
 allOperands = $(captureDictionaries (const True) ''T.Opcode)
 
 readBinOp :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "R32"]))
-readBinOp sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("toy-semantics" </> fp)
+readBinOp sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) (HR.typeRepr AddRr) ("toy-semantics" </> fp)
 
 readBinOp' :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "I32"]))
-readBinOp' sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) ("toy-semantics" </> fp)
+readBinOp' sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) (HR.typeRepr MovRi) ("toy-semantics" </> fp)
 
 doThing :: IO ()
 doThing = do
@@ -73,9 +73,9 @@ doThing = do
   Right add <- readBinOp sym "AddRr.sem"
   Right sub <- readBinOp sym "SubRr.sem"
   Right movi <- readBinOp' sym "MovRi.sem"
-  let opcodes = MapF.insert (Witness AddRr) add
-              $ MapF.insert (Witness SubRr) sub
-              $ MapF.insert (Witness MovRi) movi
+  let opcodes = MapF.insert AddRr add
+              $ MapF.insert SubRr sub
+              $ MapF.insert MovRi movi
               $ MapF.empty
   -- print =<< instantiateFormula sym pf (R32 Reg1 :> R32 Reg3 :> Nil)
   let templated = templatedInstructions opcodes
@@ -141,9 +141,9 @@ doThing2 = do
   Right add <- readBinOp sym "AddRr.sem"
   Right sub <- readBinOp sym "SubRr.sem"
   Right movi <- readBinOp' sym "MovRi.sem"
-  let baseset = MapF.insert (Witness AddRr) add
-              $ MapF.insert (Witness SubRr) sub
-              $ MapF.insert (Witness MovRi) movi
+  let baseset = MapF.insert AddRr add
+              $ MapF.insert SubRr sub
+              $ MapF.insert MovRi movi
               $ MapF.empty
   -- target <- fooFormula sym
   target <- independentFormula sym
@@ -167,9 +167,9 @@ doThing4 = do
   print add
   Right sub <- readBinOp sym "SubRr.sem"
   Right movi <- readBinOp' sym "MovRi.sem"
-  let baseset = MapF.insert (Witness AddRr) add
-              $ MapF.insert (Witness SubRr) sub
-              $ MapF.insert (Witness MovRi) movi
+  let baseset = MapF.insert AddRr add
+              $ MapF.insert SubRr sub
+              $ MapF.insert MovRi movi
               $ MapF.empty
 
   ind <- independentFormula sym
@@ -301,10 +301,10 @@ runSynToy dataRoot action = do
   --
   -- let allOpcodes = opcodesWitnessingBuildOperandList
   let allOpcodes = [ {- Some (Witness AddRr)
-                   , -} Some (Witness NegR)
-                   , Some (Witness SubRr) ]
+                   , -} Some NegR
+                   , Some SubRr ]
   let pseudoOpcodes = pseudoOpcodesWitnessingBuildOperandList
-  let targetOpcodes = [ Some (Witness AddRr) ]
+  let targetOpcodes = [ Some AddRr ]
 
   synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
 
@@ -336,7 +336,7 @@ runSynToy dataRoot action = do
 test_synthesizeCandidate :: (U.HasLogCfg)
                          => IO (Maybe [P.SynthInstruction Toy])
 test_synthesizeCandidate = do
-  let ops = (R32 Reg1 :> R32 Reg2 :> Nil)
+  let ops = (R32 Reg1 SL.:< R32 Reg2 SL.:< SL.Nil)
   let instruction = AC.RI { AC.riInstruction = D.Instruction AddRr ops
                          , AC.riOpcode = AddRr
                          , AC.riOperands = ops
@@ -367,12 +367,12 @@ test_rightValueWrongPlace = do
   where
     -- Add r1 and r2 and store the result in *r3*.
     candidate = S.fromList $ map (Just . P.actualInsnToSynth) $
-      [ D.Instruction SubRr (R32 Reg3 :> R32 Reg3 :> Nil)
-      , D.Instruction AddRr (R32 Reg3 :> R32 Reg1 :> Nil)
-      , D.Instruction AddRr (R32 Reg3 :> R32 Reg2 :> Nil) ]
+      [ D.Instruction SubRr (R32 Reg3 SL.:< R32 Reg3 SL.:< SL.Nil)
+      , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg1 SL.:< SL.Nil)
+      , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg2 SL.:< SL.Nil) ]
 
     -- Add r1 and r2 and store the result in *r1*.
-    ops = (R32 Reg1 :> R32 Reg2 :> Nil)
+    ops = (R32 Reg1 SL.:< R32 Reg2 SL.:< SL.Nil)
     target =  AC.RI { AC.riInstruction = D.Instruction AddRr ops
                    , AC.riOpcode = AddRr
                    , AC.riOperands = ops
