@@ -13,7 +13,6 @@ module SemMC.Formula.Load (
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
-import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import qualified Data.Map.Strict as Map
 import           Data.Proxy ( Proxy(..) )
@@ -22,9 +21,11 @@ import qualified System.Directory as S
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.HasRepr as HR
+import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Lang.Crucible.BaseTypes
 
 import qualified Lang.Crucible.Solver.Interface as CRU
@@ -62,28 +63,28 @@ instance E.Exception FormulaParseError
 -- | Load formulas when formula contents are already held in memory.
 --
 -- This will throw an exception if any of the formula strings is malformed
-loadFormulas :: forall sym c arch a
+loadFormulas :: forall sym arch a
               . (CRU.IsExprBuilder sym,
                  CRU.IsSymInterface sym,
                  A.Architecture arch,
+                 HR.HasRepr a (SL.List SR.SymbolRepr),
                  ShowF a,
                  OrdF a)
              => sym
-             -> (forall sh . c sh C.:- FP.BuildOperandList arch sh)
-             -> [(Some (Witness c a), BS.ByteString)]
-             -> IO (MapF.MapF (Witness c a) (F.ParameterizedFormula sym arch))
-loadFormulas sym impl contents = do
+             -> [(Some a, BS.ByteString)]
+             -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
+loadFormulas sym contents = do
   env <- formulaEnv (Proxy @arch) sym
   F.foldlM (parseFormulaBS env) MapF.empty contents
   where
     parseFormulaBS :: FE.FormulaEnv sym arch
-                   -> MapF.MapF (Witness c a) (F.ParameterizedFormula sym arch)
-                   -> (Some (Witness c a), BS.ByteString)
-                   -> IO (MapF.MapF (Witness c a) (F.ParameterizedFormula sym arch))
-    parseFormulaBS env m (Some (w@(Witness op) :: Witness c a sh), bs) = do
-      ef <- FP.readFormula sym env (T.decodeUtf8 bs) C.\\ impl @sh
+                   -> MapF.MapF a (F.ParameterizedFormula sym arch)
+                   -> (Some a, BS.ByteString)
+                   -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
+    parseFormulaBS env m (Some (op :: a sh), bs) = do
+      ef <- FP.readFormula sym env (HR.typeRepr op) (T.decodeUtf8 bs)
       case ef of
-        Right f -> return (MapF.insert w f m)
+        Right f -> return (MapF.insert op f m)
         Left e -> E.throwIO (FormulaParseError (showF op) e)
 
 -- | Load formulas from disk
@@ -100,33 +101,32 @@ loadFormulas sym impl contents = do
 -- skip it. So, the list of shapes can simply be all possible opcodes,
 -- and what files actually exist on disk determine what we actually
 -- load.
-loadFormulasFromFiles :: forall sym c arch a
+loadFormulasFromFiles :: forall sym arch a
                        . ( CRU.IsExprBuilder sym
                          , CRU.IsSymInterface sym
                          , A.Architecture arch
+                         , HR.HasRepr a (SL.List SR.SymbolRepr)
                          , MapF.OrdF a
                          , U.HasCallStack
                          , L.HasLogCfg )
                       => sym
                       -> (forall sh' . a sh' -> FilePath)
-                      -> (forall sh . c sh C.:- FP.BuildOperandList arch sh)
-                      -> [Some (Witness c a)]
-                      -> IO (MapF.MapF (Witness c a) (F.ParameterizedFormula sym arch))
-loadFormulasFromFiles sym toFP impl shapes = do
+                      -> [Some a]
+                      -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
+loadFormulasFromFiles sym toFP shapes = do
   env <- formulaEnv (Proxy @arch) sym
-  F.foldlM (\m (Some (w@(Witness _op) :: Witness c a sh)) -> addIfJust (readFormulaForOpcode env) m w C.\\ impl @sh) MapF.empty shapes
+  F.foldlM (\m (Some (op :: a sh)) -> addIfJust (readFormulaForOpcode env) m op) MapF.empty shapes
   where
-    readFormulaForOpcode :: (FP.BuildOperandList arch sh)
-                         => FE.FormulaEnv sym arch
-                         -> Witness c a sh
+    readFormulaForOpcode :: FE.FormulaEnv sym arch
+                         -> a sh
                          -> IO (Maybe (F.ParameterizedFormula sym arch sh))
-    readFormulaForOpcode env (Witness a) = do
+    readFormulaForOpcode env a = do
       file <- S.canonicalizePath $ toFP a
       fileExists <- S.doesFileExist file
       if fileExists
       then do
         U.logIO U.Info $ "loading file: "++file
-        ef <- FP.readFormulaFromFile sym env file
+        ef <- FP.readFormulaFromFile sym env (HR.typeRepr a) file
         case ef of
           Left err -> do
             L.logIO L.Error ("Failed to parse " ++ file ++ ": " ++ err)

@@ -15,12 +15,9 @@ import qualified Data.Parameterized.Unfold as U
 import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Dismantle.PPC as PPC
 import qualified Dismantle.Tablegen.TH.Capture as DT
-import qualified SemMC.Formula as F
-import           SemMC.Architecture.PPC64 ( PPC )
 
-class (F.BuildOperandList PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
-instance (F.BuildOperandList PPC sh, F.ConvertShape sh, U.UnfoldShape sh) => BuildAndUnfold sh
-
+class ({-F.BuildOperandList PPC sh, F.ConvertShape sh,-} U.UnfoldShape sh) => BuildAndUnfold sh
+instance ({-F.BuildOperandList PPC sh, F.ConvertShape sh,-} U.UnfoldShape sh) => BuildAndUnfold sh
 
 allOpcodeInfo :: [Some (DT.CaptureInfo BuildAndUnfold (PPC.Opcode PPC.Operand))]
 allOpcodeInfo = $(DT.captureInfo (const True) ''PPC.Opcode)

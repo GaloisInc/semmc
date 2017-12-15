@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -19,9 +20,9 @@ module SemMC.Architecture.PPC32
   ( PPC
   , Location(..)
   , testSerializer
-  , loadBaseSet
+--  , loadBaseSet
   , PPCP.PseudoOpcode(..)
-  , BuildableAndTemplatable
+--  , BuildableAndTemplatable
   ) where
 
 import qualified GHC.Err.Located as L
@@ -34,13 +35,15 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
+import qualified Data.Text as T
 import           Data.Type.Equality ( type (==) )
 import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
-import           GHC.TypeLits ( KnownNat, Nat )
+import           GHC.TypeLits ( KnownNat, Nat, SomeSymbol(..), KnownSymbol, someSymbolVal, sameSymbol )
 import           System.FilePath ( (</>), (<.>) )
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
@@ -69,6 +72,8 @@ import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
 import qualified SemMC.Architecture.PPC.UF as UF
+
+import           Unsafe.Coerce ( unsafeCoerce )
 
 data PPC
 
@@ -119,6 +124,53 @@ type instance A.OperandType PPC "U8imm" = BaseBVType 8
 type instance A.OperandType PPC "Vrrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsrc" = BaseBVType 128
 
+shapeReprType :: forall tp . SR.SymbolRepr tp -> BaseTypeRepr (A.OperandType PPC tp)
+shapeReprType sr =
+  case SR.symbolRepr sr of
+    "Gprc"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Gprc")
+    "Abscalltarget"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"Abscalltarget") ->
+        knownRepr :: BaseTypeRepr (A.OperandType PPC "Abscalltarget")
+{-
+type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 14
+type instance A.OperandType PPC "Absdirectbrtarget" = BaseBVType 24
+type instance A.OperandType PPC "Calltarget" = BaseBVType 24
+type instance A.OperandType PPC "Condbrtarget" = BaseBVType 14
+type instance A.OperandType PPC "Crbitm" = BaseBVType 8
+type instance A.OperandType PPC "Crbitrc" = BaseBVType 5
+type instance A.OperandType PPC "Crrc" = BaseBVType 3
+type instance A.OperandType PPC "Directbrtarget" = BaseBVType 24
+-- The floating point registers are logically 64 bits, but are actually backed
+-- by 128 bit vector registers (where the extra bits are probably left
+-- undefined during non-vector operations).
+type instance A.OperandType PPC "Fprc" = BaseBVType 128
+type instance A.OperandType PPC "Gprc" = BaseBVType 32
+type instance A.OperandType PPC "Gprc_nor0" = BaseBVType 32
+type instance A.OperandType PPC "I1imm" = BaseBVType 1
+type instance A.OperandType PPC "I32imm" = BaseBVType 32
+type instance A.OperandType PPC "Memri" = BaseBVType 32
+type instance A.OperandType PPC "Memrix" = BaseBVType 32
+type instance A.OperandType PPC "Memrix16" = BaseBVType 32
+type instance A.OperandType PPC "Memrr" = BaseBVType 32
+type instance A.OperandType PPC "S16imm" = BaseBVType 16
+type instance A.OperandType PPC "S16imm64" = BaseBVType 16
+type instance A.OperandType PPC "S17imm" = BaseBVType 16
+type instance A.OperandType PPC "S5imm" = BaseBVType 5
+type instance A.OperandType PPC "U10imm" = BaseBVType 10
+type instance A.OperandType PPC "U16imm" = BaseBVType 16
+type instance A.OperandType PPC "U16imm64" = BaseBVType 16
+type instance A.OperandType PPC "U1imm" = BaseBVType 1
+type instance A.OperandType PPC "U2imm" = BaseBVType 2
+type instance A.OperandType PPC "U4imm" = BaseBVType 4
+type instance A.OperandType PPC "U5imm" = BaseBVType 5
+type instance A.OperandType PPC "U6imm" = BaseBVType 6
+type instance A.OperandType PPC "U7imm" = BaseBVType 7
+type instance A.OperandType PPC "U8imm" = BaseBVType 8
+type instance A.OperandType PPC "Vrrc" = BaseBVType 128
+type instance A.OperandType PPC "Vsrc" = BaseBVType 128
+-}
 type instance ArchRegWidth PPC = 32
 
 instance ArchRepr PPC where
@@ -416,9 +468,9 @@ locationFuncInterpretation =
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
                                            })
   ]
-
-class (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
-instance (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+{-
+class ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+instance ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
 weakenConstraint :: MapF.MapF (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand)) v
                  -> MapF.MapF (Witness (T.TemplatableOperands PPC) (PPC.Opcode PPC.Operand)) v
@@ -436,11 +488,11 @@ loadBaseSet :: forall sym.
             -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
             -> IO (T.BaseSet sym PPC)
 loadBaseSet baseSetDir sym opcodes = do
-  weakenConstraint <$> F.loadFormulasFromFiles sym toFP (C.Sub C.Dict) opcodes
+  weakenConstraint <$> F.loadFormulasFromFiles sym toFP opcodes
   where
     toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
     toFP op = baseSetDir </> showF op <.> "sem"
-
+-}
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
   case o of

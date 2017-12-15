@@ -31,6 +31,7 @@ import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
 import qualified Language.Haskell.TH as TH
@@ -88,6 +89,8 @@ class (IsOperand (Operand arch),
   -- that are defined as functions of an input parameter into a concrete
   -- location
   locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t arch)]
+
+  shapeReprToTypeRepr :: proxy arch -> SR.SymbolRepr s -> BaseTypeRepr (OperandType arch s)
 
 data FunctionInterpretation t arch =
   FunctionInterpretation { locationInterp :: LocationFuncInterp arch

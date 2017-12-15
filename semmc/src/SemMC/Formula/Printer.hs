@@ -10,7 +10,6 @@
 {-# LANGUAGE TypeOperators #-}
 module SemMC.Formula.Printer
   ( printFormula
-  , ConvertShape
   ) where
 
 import qualified Data.Map as Map
@@ -20,11 +19,10 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair
 import           Data.Parameterized.Some ( Some(..), viewSome )
+import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Parameterized.List as SL
-import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal )
 import           Text.Printf ( printf )
 
 import qualified Data.SCargot as SC
@@ -42,11 +40,11 @@ import           SemMC.Formula.Parser ( Atom(..) )
 -- This file is organized top-down, i.e., from high-level to low-level.
 
 -- | Serialize a 'ParameterizedFormula' into its textual s-expression form.
-printFormula :: (ShowF (A.Location arch),
-                 ConvertShape sh)
-             => ParameterizedFormula (S.SimpleBuilder t st) arch sh
+printFormula :: (ShowF (A.Location arch))
+             => SL.List SR.SymbolRepr sh
+             -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
              -> T.Text
-printFormula = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert
+printFormula rep = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert rep
 
 printAtom :: Atom -> T.Text
 printAtom (AIdent s) = T.pack s
@@ -59,16 +57,16 @@ printAtom (ABV sz val) = T.pack (prefix ++ printf fmt val)
           | otherwise = ("#b", "%0" ++ show sz ++ "b")
 
 -- | Intermediate serialization.
-sexprConvert :: (ShowF (A.Location arch),
-                 ConvertShape sh)
-             => ParameterizedFormula (S.SimpleBuilder t st) arch sh
+sexprConvert :: (ShowF (A.Location arch))
+             => SL.List SR.SymbolRepr sh
+             -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
              -> SC.SExpr Atom
-sexprConvert (ParameterizedFormula { pfUses = uses
-                                   , pfOperandVars = opVars
-                                   , pfLiteralVars = litVars
-                                   , pfDefs = defs
-                                   }) =
-  fromFoldable' [ SC.SCons (SC.SAtom (AIdent "operands")) (SC.SCons (convertOperandVars opVars) SC.SNil)
+sexprConvert rep (ParameterizedFormula { pfUses = uses
+                                       , pfOperandVars = opVars
+                                       , pfLiteralVars = litVars
+                                       , pfDefs = defs
+                                       }) =
+  fromFoldable' [ SC.SCons (SC.SAtom (AIdent "operands")) (SC.SCons (convertOperandVars rep opVars) SC.SNil)
                 , SC.SCons (SC.SAtom (AIdent "in")) (SC.SCons (convertUses opVars uses) SC.SNil)
                 , SC.SCons (SC.SAtom (AIdent "defs")) (SC.SCons (convertDefs opVars litVars defs) SC.SNil)
                 ]
@@ -224,20 +222,31 @@ quoted = SC.SAtom . AQuoted
 int :: Integer -> SC.SExpr Atom
 int = SC.SAtom . AInt
 
--- | Class for shape-dependent operations.
---
--- This is at the bottom of the file so as to not screw up code formatting for
--- the rest (due to haskell-mode not behaving nicely with TypeOperators).
-class ConvertShape (sh :: [Symbol]) where
-  -- | Convert the 'SL.List' of variables into the serialized s-expression
-  -- form, e.g. @((ra . 'Gprc) (imm . 'I32))@.
-  convertOperandVars :: SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh -> SC.SExpr Atom
+convertOperandVars :: SL.List SR.SymbolRepr sh
+                   -> SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
+                   -> SC.SExpr Atom
+convertOperandVars rep l =
+  case (rep, l) of
+    (SL.Nil, SL.Nil) -> SC.SNil
+    (r SL.:< rep', var SL.:< rest) ->
+      let nameExpr = ident (varName var)
+          typeExpr = quoted (T.unpack (SR.symbolRepr r))
+      in SC.SCons (SC.SCons nameExpr typeExpr) (convertOperandVars rep' rest)
 
-instance ConvertShape '[] where
-  convertOperandVars SL.Nil = SC.SNil
+-- -- | Class for shape-dependent operations.
+-- --
+-- -- This is at the bottom of the file so as to not screw up code formatting for
+-- -- the rest (due to haskell-mode not behaving nicely with TypeOperators).
+-- class ConvertShape (sh :: [Symbol]) where
+--   -- | Convert the 'SL.List' of variables into the serialized s-expression
+--   -- form, e.g. @((ra . 'Gprc) (imm . 'I32))@.
+--   convertOperandVars :: SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh -> SC.SExpr Atom
 
-instance (KnownSymbol s, ConvertShape sh) => ConvertShape (s ': sh) where
-  convertOperandVars (var SL.:< rest) =
-    SC.SCons (SC.SCons nameExpr typeExpr) (convertOperandVars rest)
-    where nameExpr = ident (varName var)
-          typeExpr = quoted (symbolVal (Proxy :: Proxy s))
+-- instance ConvertShape '[] where
+--   convertOperandVars SL.Nil = SC.SNil
+
+-- instance (KnownSymbol s, ConvertShape sh) => ConvertShape (s ': sh) where
+--   convertOperandVars (var SL.:< rest) =
+--     SC.SCons (SC.SCons nameExpr typeExpr) (convertOperandVars rest)
+--     where nameExpr = ident (varName var)
+--           typeExpr = quoted (symbolVal (Proxy :: Proxy s))

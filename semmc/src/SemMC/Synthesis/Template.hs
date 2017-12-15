@@ -150,6 +150,7 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
     uncurry TaggedExpr <$> f sym locLookup
 
   operandToLocation _ (TemplatedOperand loc _ _) = loc
+  shapeReprToTypeRepr _ = shapeReprToTypeRepr (Proxy @arch)
   locationFuncInterpretation _ = error "locationFuncInterpretation shouldn't need to be used from a TemplatedArch"
 
 instance Show (S.SymExpr sym (OperandType arch s)) => Show (TaggedExpr (TemplatedArch arch) sym s) where

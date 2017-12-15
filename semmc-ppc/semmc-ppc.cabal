@@ -51,6 +51,7 @@ library
                      , dismantle-tablegen
                      , dismantle-ppc
                      , pretty
+                     , text
                      , bytestring
                      , cereal
                      , containers

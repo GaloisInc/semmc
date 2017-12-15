@@ -18,7 +18,7 @@
 -- | A parser for an s-expression representation of formulas
 module SemMC.Formula.Parser
   ( Atom(..)
-  , BuildOperandList
+--  , BuildOperandList
   , operandVarPrefix
   , literalVarPrefix
   , readFormula
@@ -40,8 +40,7 @@ import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 import qualified Data.Set as Set
-import           GHC.TypeLits ( KnownSymbol, Symbol, symbolVal, KnownNat, SomeSymbol(..), someSymbolVal )
-import           Unsafe.Coerce ( unsafeCoerce )
+import           GHC.TypeLits ( Symbol, KnownNat )
 import           Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Ctx as Ctx
@@ -53,7 +52,6 @@ import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.TraversableFC ( traverseFC )
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.HasRepr as HR
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.BoolInterface as S
 import qualified Lang.Crucible.Solver.Interface as S
@@ -132,15 +130,8 @@ fromMaybeError err = maybe (E.throwError err) return
 data OpData (arch :: *) (s :: Symbol) where
   OpData :: String -> BaseTypeRepr (A.OperandType arch s) -> OpData arch s
 
-withKnownSymbol :: forall s r . SR.SymbolRepr s -> (KnownSymbol s => r) -> r
-withKnownSymbol sr v =
-  case someSymbolVal (T.unpack (SR.symbolRepr sr)) of
-    SomeSymbol (Proxy :: Proxy s') ->
-      case unsafeCoerce (Refl :: "" :~: "") :: s :~: s' of
-        Refl -> v
-
 buildOperandList' :: forall arch tps
-                   . (HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr))
+                   . (A.Architecture arch)
                   => SL.List SR.SymbolRepr tps
                   -> SC.SExpr Atom
                   -> Maybe (SL.List (OpData arch) tps)
@@ -150,7 +141,7 @@ buildOperandList' rep atm =
       case atm of
         SC.SNil -> Just SL.Nil
         _ -> Nothing
-    ((r :: SR.SymbolRepr tp) SL.:< rep') ->
+    r SL.:< rep' ->
       case atm of
         SC.SNil -> Nothing
         SC.SAtom _ -> Nothing
@@ -158,11 +149,11 @@ buildOperandList' rep atm =
           -- This is in the Maybe monad.
           let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
           when (SR.symbolRepr r /= T.pack ty) Nothing
-          withKnownSymbol r $ do
-            rest' <- buildOperandList' rep' rest
-            let repr = knownRepr :: BaseTypeRepr (A.OperandType arch tp)
-            return $ (OpData operand repr) SL.:< rest'
+          rest' <- buildOperandList' rep' rest
+          let tyRepr = A.shapeReprToTypeRepr (Proxy @arch) r
+          return $ (OpData operand tyRepr) SL.:< rest'
 
+{-
 
 -- | How to parse an operand list for a given architecture and shape. The
 -- architecture is necessary in order to know how to map a symbol representing
@@ -201,6 +192,7 @@ instance (KnownSymbol tp,
     rest' <- buildOperandList rest
     let repr = knownRepr :: BaseTypeRepr (A.OperandType arch tp)
     return $ (OpData operand repr) SL.:< rest'
+-}
 
 -- ** Parsing parameters
 --
@@ -837,13 +829,13 @@ readFormula' :: forall sym arch sh m.
                  S.IsSymInterface sym,
                  E.MonadError String m,
                  MonadIO m,
-                 A.Architecture arch,
-                 BuildOperandList arch sh)
+                 A.Architecture arch)
              => sym
              -> FormulaEnv sym arch
+             -> SL.List SR.SymbolRepr sh
              -> T.Text
              -> m (ParameterizedFormula sym arch sh)
-readFormula' sym env text = do
+readFormula' sym env repr text = do
   sexpr <- case parseLL text of
              Left err -> E.throwError err
              Right res -> return res
@@ -863,7 +855,7 @@ readFormula' sym env text = do
   -- Build the operand list from the given s-expression, validating that it
   -- matches the correct shape as we go.
   operands :: SL.List (OpData arch) sh
-    <- fromMaybeError "invalid operand structure" (buildOperandList opsRaw)
+    <- fromMaybeError "invalid operand structure" (buildOperandList' repr opsRaw)
 
   inputs :: [Some (Parameter arch sh)]
     <- readInputs operands inputsRaw
@@ -914,21 +906,21 @@ readFormula' sym env text = do
 -- | Parse the definition of a templated formula.
 readFormula :: (S.IsExprBuilder sym,
                 S.IsSymInterface sym,
-                A.Architecture arch,
-                BuildOperandList arch sh)
+                A.Architecture arch)
             => sym
             -> FormulaEnv sym arch
+            -> SL.List SR.SymbolRepr sh
             -> T.Text
             -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormula sym env text = E.runExceptT $ readFormula' sym env text
+readFormula sym env repr text = E.runExceptT $ readFormula' sym env repr text
 
 -- | Read a templated formula definition from file, then parse it.
 readFormulaFromFile :: (S.IsExprBuilder sym,
                         S.IsSymInterface sym,
-                        A.Architecture arch,
-                        BuildOperandList arch sh)
+                        A.Architecture arch)
                     => sym
                     -> FormulaEnv sym arch
+                    -> SL.List SR.SymbolRepr sh
                     -> FilePath
                     -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormulaFromFile sym env fp = readFormula sym env =<< T.readFile fp
+readFormulaFromFile sym env repr fp = readFormula sym env repr =<< T.readFile fp

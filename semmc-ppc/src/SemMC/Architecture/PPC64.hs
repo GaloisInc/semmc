@@ -19,9 +19,9 @@ module SemMC.Architecture.PPC64
   ( PPC
   , Location(..)
   , testSerializer
-  , loadBaseSet
+--  , loadBaseSet
   , PPCP.PseudoOpcode(..)
-  , BuildableAndTemplatable
+--  , BuildableAndTemplatable
   ) where
 
 import qualified GHC.Err.Located as L
@@ -413,9 +413,9 @@ locationFuncInterpretation =
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
                                            })
   ]
-
-class (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
-instance (F.BuildOperandList (T.TemplatedArch PPC) sh, T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+{-
+class ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
+instance ({-F.BuildOperandList (T.TemplatedArch PPC) sh,-} T.TemplatableOperands PPC sh) => BuildableAndTemplatable sh
 
 weakenConstraint :: MapF.MapF (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand)) v
                  -> MapF.MapF (Witness (T.TemplatableOperands PPC) (PPC.Opcode PPC.Operand)) v
@@ -433,11 +433,11 @@ loadBaseSet :: forall sym.
             -> [Some (Witness BuildableAndTemplatable (PPC.Opcode PPC.Operand))]
             -> IO (T.BaseSet sym PPC)
 loadBaseSet baseSetDir sym opcodes = do
-  weakenConstraint <$> F.loadFormulasFromFiles sym toFP (C.Sub C.Dict) opcodes
+  weakenConstraint <$> F.loadFormulasFromFiles sym toFP opcodes
   where
     toFP :: forall sh . PPC.Opcode PPC.Operand sh -> FilePath
     toFP op = baseSetDir </> showF op <.> "sem"
-
+-}
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
   case o of
