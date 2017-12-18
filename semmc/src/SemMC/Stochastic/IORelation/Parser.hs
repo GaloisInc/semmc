@@ -1,10 +1,12 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 module SemMC.Stochastic.IORelation.Parser (
   readIORelation,
   printIORelation
@@ -21,6 +23,7 @@ import qualified Text.Parsec as P
 import qualified Text.Parsec.Text as P
 import           Text.Read ( readMaybe )
 
+import qualified Data.Parameterized.HasRepr as HR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.List as SL
 
@@ -105,7 +108,9 @@ deriving instance (A.Architecture arch) => Show (IORelationParseError arch)
 instance (A.Architecture arch) => E.Exception (IORelationParseError arch)
 
 readIORelation :: forall arch m sh
-                . (E.MonadThrow m, AC.ConcreteArchitecture arch, U.UnfoldShape sh)
+                . (E.MonadThrow m,
+                   AC.ConcreteArchitecture arch,
+                   A.ArchRepr arch)
                => Proxy arch
                -> T.Text
                -> A.Opcode arch (A.Operand arch) sh
@@ -124,7 +129,9 @@ readIORelation p t op = do
   return IORelation { inputs = S.fromList ins, outputs = S.fromList outs }
 
 parseRelationList :: forall m sh arch
-                   . (E.MonadThrow m, U.UnfoldShape sh, AC.ConcreteArchitecture arch)
+                   . (E.MonadThrow m,
+                      AC.ConcreteArchitecture arch,
+                      A.ArchRepr arch)
                   => Proxy arch
                   -> A.Opcode arch (A.Operand arch) sh
                   -> SC.SExpr Atom
@@ -147,22 +154,25 @@ parseRelationList proxy opcode s0 =
 -- appropriate index into the operand list of the given opcode.
 --
 -- This involves traversing the type level operand list via 'U.unfoldShape'
-mkOperandRef :: forall m arch sh . (E.MonadThrow m, U.UnfoldShape sh, A.Architecture arch)
+mkOperandRef :: forall m arch sh
+              . (E.MonadThrow m,
+                 A.Architecture arch,
+                 A.ArchRepr arch)
              => Proxy arch
              -> A.Opcode arch (A.Operand arch) sh
              -> Word
              -> m (OperandRef arch sh)
-mkOperandRef proxy op w0 = U.unfoldShape nil elt w0
+mkOperandRef proxy op w0 = U.unfoldShape (HR.typeRepr op) nil elt w0
   where
     -- We got to the end of the type level list without finding our index, so it
     -- was out of bounds
     nil :: Word -> m (OperandRef arch '[])
     nil _ = E.throwM (InvalidIndex proxy (Some op) w0)
 
-    elt :: forall tp tps' tps . (U.RecShape tp tps' tps) => Proxy tp -> Proxy tps' -> Word -> m (OperandRef arch tps)
-    elt _ _ w =
+    elt :: forall tp tps' tps . (tps ~ (tp ': tps')) => A.OperandTypeRepr arch  tp -> A.ShapeRepr arch tps' -> Word -> m (OperandRef arch tps)
+    elt _ reps w =
       case w of
         0 -> return (OperandRef (Some SL.IndexHere))
         _ -> do
-          OperandRef (Some ix) <- U.unfoldShape nil elt (w - 1)
+          OperandRef (Some ix) <- U.unfoldShape reps nil elt (w - 1)
           return (OperandRef (Some (SL.IndexThere ix)))

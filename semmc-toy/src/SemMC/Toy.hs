@@ -8,8 +8,10 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 -- | Description: A toy example architecture.
 --
 -- A toy example architecture and end-to-end semantic synthesis
@@ -32,16 +34,17 @@ import           Data.Int ( Int32 )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
+import qualified Data.Text as T
 import           Data.Word ( Word32 )
 import qualified GHC.Err.Located as L
 import           GHC.TypeLits ( KnownSymbol, Nat, Symbol, sameSymbol )
 
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
-import           Data.Parameterized.Witness ( Witness(..) )
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.ShapedList ( ShapedList(Nil, (:>)), Index(IndexHere, IndexThere), ShapeRepr )
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Word.Indexed as W
 
 import qualified Dismantle.Instruction as D
@@ -56,7 +59,6 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
-import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.Pseudo as P
 import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
@@ -154,12 +156,12 @@ opcodes = Set.fromList
 
 -- | For use with @loadInitialState@
 opcodesWitnessingBuildOperandList ::
-  [Some (Witness (F.BuildOperandList Toy) (Opcode Operand))]
+  [Some (Opcode Operand)]
 opcodesWitnessingBuildOperandList =
-  [ Some (Witness AddRr)
-  , Some (Witness SubRr)
-  , Some (Witness NegR)
-  , Some (Witness MovRi) ]
+  [ Some AddRr
+  , Some SubRr
+  , Some NegR
+  , Some MovRi ]
 
 -- | The map of 'IORelation's for all opcodes.
 --
@@ -179,8 +181,8 @@ ioRelations = MapF.fromList
       { I.inputs = Set.fromList [o0, o1]
       , I.outputs = Set.fromList [o0] } ]
   where
-    o0 = I.OperandRef (Some IndexHere)
-    o1 = I.OperandRef (Some (IndexThere IndexHere))
+    o0 = I.OperandRef (Some SL.IndexHere)
+    o1 = I.OperandRef (Some (SL.IndexThere SL.IndexHere))
 
 instance ShowF (Opcode o) where
   showF = show
@@ -221,7 +223,7 @@ instance OrdF (Opcode o) where
   MovRi `compareF`  NegR = GTF
   MovRi `compareF` MovRi = EQF
 
-instance HasRepr (Opcode Operand) ShapeRepr where
+instance HasRepr (Opcode Operand) (SL.List SR.SymbolRepr) where
   typeRepr AddRr = knownRepr
   typeRepr SubRr = knownRepr
   typeRepr NegR  = knownRepr
@@ -261,18 +263,18 @@ putOperand _ I32{} _ = L.error "putOperand: putting an immediate does not make s
 -- | Evaluate an instruction, updating the machine state.
 evalInstruction :: MachineState -> Instruction -> MachineState
 evalInstruction ms (D.Instruction op args) = case (op, args) of
-  (AddRr, r1 :> r2 :> Nil) ->
+  (AddRr, r1 SL.:< r2 SL.:< SL.Nil) ->
     let x1 = getOperand ms r1
         x2 = getOperand ms r2
     in putOperand ms r1 (V.liftValueBV2 (+) x1 x2)
-  (SubRr, r1 :> r2 :> Nil) ->
+  (SubRr, r1 SL.:< r2 SL.:< SL.Nil) ->
     let x1 = getOperand ms r1
         x2 = getOperand ms r2
     in putOperand ms r1 (V.liftValueBV2 (-) x1 x2)
-  (NegR, r1 :> Nil) ->
+  (NegR, r1 SL.:< SL.Nil) ->
     let x1 = getOperand ms r1
     in putOperand ms r1 (V.liftValueBV1 negate x1)
-  (MovRi, r1 :> i1 :> Nil) ->
+  (MovRi, r1 SL.:< i1 SL.:< SL.Nil) ->
     let x1 = getOperand ms i1
     in putOperand ms r1 x1
 
@@ -288,21 +290,29 @@ instance A.IsOperand Operand
 
 instance A.IsOpcode Opcode
 
-instance TemplatableOperand Toy "R32" where
-  opTemplates = mkTemplate <$> [Reg1, Reg2, Reg3]
-    where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) (Set.singleton (Some (RegLoc reg))) mkTemplate' :: TemplatedOperand Toy "R32"
-            where mkTemplate' :: TemplatedOperandFn Toy "R32"
-                  mkTemplate' _ locLookup = do
-                    expr <- locLookup (RegLoc reg)
-                    return (expr, WrappedRecoverOperandFn $ const (return (R32 reg)))
+instance A.IsOperandTypeRepr Toy where
+  type OperandTypeRepr Toy = SR.SymbolRepr
+  operandTypeReprSymbol _ = T.unpack . SR.symbolRepr
 
-instance TemplatableOperand Toy "I32" where
-  opTemplates = [TemplatedOperand Nothing Set.empty mkConst]
-    where mkConst :: TemplatedOperandFn Toy "I32"
-          mkConst sym _ = do
-            v <- S.freshConstant sym (makeSymbol "I32") knownRepr
-            let recover evalFn = I32 . fromInteger <$> evalFn v
-            return (v, WrappedRecoverOperandFn recover)
+instance TemplatableOperand Toy where
+  opTemplates sr =
+    case SR.symbolRepr sr of
+      "R32"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"R32") ->
+          mkTemplate <$> [Reg1, Reg2, Reg3]
+            where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) (Set.singleton (Some (RegLoc reg))) mkTemplate' :: TemplatedOperand Toy "R32"
+                    where mkTemplate' :: TemplatedOperandFn Toy "R32"
+                          mkTemplate' _ locLookup = do
+                            expr <- locLookup (RegLoc reg)
+                            return (expr, WrappedRecoverOperandFn $ const (return (R32 reg)))
+      "I32"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"I32") ->
+            [TemplatedOperand Nothing Set.empty mkConst]
+              where mkConst :: TemplatedOperandFn Toy "I32"
+                    mkConst sym _ = do
+                      v <- S.freshConstant sym (makeSymbol "I32") knownRepr
+                      let recover evalFn = I32 . fromInteger <$> evalFn v
+                      return (v, WrappedRecoverOperandFn recover)
 
 type instance A.Operand Toy = Operand
 type instance A.Opcode Toy = Opcode
@@ -319,6 +329,17 @@ valueToOperand val
       L.error "can't get register operand from value"
   | otherwise = undefined
 
+shapeReprType :: forall tp . SR.SymbolRepr tp -> BaseTypeRepr (A.OperandType Toy tp)
+shapeReprType sr =
+  case SR.symbolRepr sr of
+    "R32"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"R32") ->
+        knownRepr :: BaseTypeRepr (A.OperandType Toy "R32")
+    "I32"
+      | Just Refl <- testEquality sr (SR.knownSymbol @"I32") ->
+        knownRepr :: BaseTypeRepr (A.OperandType Toy "I32")
+    _ -> error ("Unhandled shape repr: " ++ show sr)
+
 instance A.Architecture Toy where
   data TaggedExpr Toy sym s = TaggedExpr { unTaggedExpr :: S.SymExpr sym (A.OperandType Toy s) }
 
@@ -333,6 +354,8 @@ instance A.Architecture Toy where
   operandToLocation _ (I32 _) = Nothing
 
   locationFuncInterpretation _ = []
+
+  shapeReprToTypeRepr _proxy = shapeReprType
 
 ----------------------------------------------------------------
 -- ** Locations
@@ -367,6 +390,8 @@ instance A.IsLocation Location where
 
   allLocations = map (Some . RegLoc) [Reg1, Reg2, Reg3]
   registerizationLocations = A.allLocations
+
+  isMemoryLocation _ = False
 
 interestingStates :: [MachineState]
 interestingStates =
@@ -487,5 +512,5 @@ instance P.ArchitectureWithPseudo Toy where
   assemblePseudo _ = P.pseudoAbsurd
 
 pseudoOpcodesWitnessingBuildOperandList ::
-  [Some (Witness (F.BuildOperandList Toy) ((P.Pseudo Toy) Operand))]
+  [Some ((P.Pseudo Toy) Operand)]
 pseudoOpcodesWitnessingBuildOperandList = []

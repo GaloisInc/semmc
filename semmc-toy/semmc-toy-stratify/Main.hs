@@ -3,14 +3,12 @@
 {-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
 
-import qualified Control.Concurrent as CC
 import qualified Control.Concurrent.Async as CC
 import qualified Control.Exception as CC
 import           Control.Monad
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
 -- Do we actually care about this for Toy arch?
-import qualified Data.Constraint as C
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
@@ -18,29 +16,18 @@ import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 
 import qualified Dismantle.Arbitrary as DA
--- import qualified Dismantle.PPC as PPC
--- import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture.Concrete as AC
-import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Constraints as C
 import qualified SemMC.Log as L
-import qualified SemMC.Formula as F
-import qualified SemMC.Stochastic.IORelation as IOR
-import qualified SemMC.Stochastic.IORelation.Types as IOR
 import qualified SemMC.Stochastic.Strata as SST
 
 import qualified SemMC.Toy as Toy
 import qualified SemMC.Toy.Tests as Toy
--- import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Util as U
 
--- import qualified OpcodeLists as OL
--- import qualified Util as Util
 
 -- TODO(conathan): I copied the source for @semmc-ppc-stratify@ to
 -- create @semmc-toy-stratify@ (this file), and it probably makes
@@ -198,11 +185,11 @@ mainWithOptions opts = do
   -- Next three copied from SemMC.Toy.Tests.
   --
   -- TODO(conathan): what is the 'C.weakenConstraints' for?
-  let opcodes :: [Some (Witness (F.BuildOperandList Toy.Toy) (Toy.Opcode Toy.Operand))]
-      opcodes = [ Some (Witness Toy.NegR)
-                , Some (Witness Toy.SubRr) ]
+  let opcodes :: [Some (Toy.Opcode Toy.Operand)]
+      opcodes = [ Some Toy.NegR
+                , Some Toy.SubRr ]
   let pseudoOpcodes = Toy.pseudoOpcodesWitnessingBuildOperandList
-  let targetOpcodes = [ Some (Witness Toy.AddRr) ]
+  let targetOpcodes = [ Some Toy.AddRr ]
   let iorels = Toy.ioRelations
 {-
   -- Need allOpcodes and pseudoOps. Can capture these or hard code them.

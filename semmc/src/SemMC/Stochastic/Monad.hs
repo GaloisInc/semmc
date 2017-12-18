@@ -71,11 +71,8 @@ import qualified UnliftIO as U
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( mapSome, Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
 
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
-import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Dismantle.Arbitrary as DA
 import qualified Data.Set.NonEmpty as NES
 
@@ -188,7 +185,7 @@ runSynInNewLocalEnv env0 action = do
   liftIO $ runSyn newEnv action `U.finally` U.cancel runner
 
 -- | Record a learned formula for the opcode in the state
-recordLearnedFormula :: (SynC arch, F.ConvertShape sh)
+recordLearnedFormula :: (SynC arch)
                      => A.Opcode arch (A.Operand arch) sh
                      -> F.ParameterizedFormula (Sym t) arch sh
                      -> Syn t arch ()
@@ -199,13 +196,13 @@ recordLearnedFormula op f = do
 
   let opShape = typeRepr op
       newOps = SeqF.singleton (RealOpcode op)
-  liftIO $ T.writeFile (mkFormulaFilename learnedDir op) (F.printFormula f)
+  liftIO $ T.writeFile (mkFormulaFilename learnedDir op) (F.printFormula opShape f)
   liftIO $ STM.atomically $ do
     STM.modifyTVar' formulasRef (MapF.insert op f)
     STM.modifyTVar' congruentRef (MapF.insertWith (SeqF.><) opShape newOps)
 
 -- | Take an opcode off of the worklist
-takeWork :: Syn t arch (Maybe (Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch)))))
+takeWork :: Syn t arch (Maybe (Some (A.Opcode arch (A.Operand arch))))
 takeWork = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
   liftIO $ STM.atomically $ do
@@ -217,7 +214,7 @@ takeWork = do
         return (Just work)
 
 -- | Add an opcode back to into the worklist
-addWork :: Some (Witness F.ConvertShape (A.Opcode arch (A.Operand arch))) -> Syn t arch ()
+addWork :: Some (A.Opcode arch (A.Operand arch)) -> Syn t arch ()
 addWork op = do
   wlref <- R.asks (seWorklist . seGlobalEnv)
   liftIO $ STM.atomically $ STM.modifyTVar' wlref (WL.putWork op)
@@ -272,7 +269,7 @@ askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
 askParallelSynth :: Syn t arch Int
 askParallelSynth = R.asks (parallelSynth . seConfig . seGlobalEnv)
 
-askKnownCongruentOps :: Syn t arch (MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF (SynthOpcode arch)))
+askKnownCongruentOps :: Syn t arch (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (SynthOpcode arch)))
 askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.

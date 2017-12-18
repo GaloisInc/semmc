@@ -17,9 +17,7 @@ module SemMC.Stochastic.Strata (
   -- * Statistics
   S.StatisticsThread,
   S.newStatisticsThread,
-  S.terminateStatisticsThread,
-  -- * Classes
-  BuildAndConvert
+  S.terminateStatisticsThread
   ) where
 
 import qualified GHC.Err.Located as L
@@ -33,7 +31,6 @@ import           UnliftIO as U
 import           Data.Parameterized.Classes ( showF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Dismantle.Instruction as D
 
@@ -48,7 +45,7 @@ import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
-import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..), BuildAndConvert )
+import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..) )
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Stochastic.Synthesize ( synthesize )
@@ -83,7 +80,7 @@ processWorklist = do
     Nothing -> do
       L.logM L.Info "No more work items, exiting!"
       return ()
-    Just (Some (Witness so)) -> do
+    Just (Some so) -> do
       L.logM L.Info "Processing a work item."
       -- Catch all exceptions in the stratification process.
       (res, strataTime) <- timeSyn (U.tryAny (strataOne so))
@@ -97,7 +94,7 @@ processWorklist = do
         Right Nothing -> do
           L.logM L.Info $ printf "Timeout while processing opcode %s" (showF so)
           withStats $ S.recordStrataTimeout (Some so)
-          addWork (Some (Witness so))
+          addWork (Some so)
         -- Success, record the formula
         Right (Just formula) -> do
           L.logM L.Info $ printf "Learned a formula for %s in %s seconds" (showF so) (show strataTime)

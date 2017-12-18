@@ -7,8 +7,6 @@ module SemMC.Stochastic.Constraints (
 import qualified Data.EnumF as E
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.HasRepr as H
-import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 
 import qualified Dismantle.Instruction.Random as D
 
@@ -25,8 +23,8 @@ type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
                  , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
                  , D.ArbitraryOperands (P.Pseudo arch) (A.Operand arch)
                  , E.EnumF (A.Opcode arch (A.Operand arch))
-                 , H.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr)
-                 , H.HasRepr (P.Pseudo arch (A.Operand arch)) (SL.List SR.SymbolRepr)
+                 , H.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch)
+                 , H.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch)
                  , CS.ConcreteArchitecture arch
                  , P.ArchitectureWithPseudo arch
                  )
