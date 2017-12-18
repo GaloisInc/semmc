@@ -82,7 +82,7 @@ footprintFilter target candidate =
   in candInputs `Set.isSubsetOf` targetInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
 
-instantiate :: (TemplateConstraints arch)
+instantiate :: (TemplateConstraints arch, ArchRepr arch)
             => Formula (S.SimpleBackend t) arch
             -> [Some (TemplatedInstruction (S.SimpleBackend t) arch)]
             -> Synth (S.SimpleBackend t) arch (Maybe [Instruction arch])
@@ -118,6 +118,7 @@ instantiate target trial
 
 synthesizeFormula' :: (Architecture arch,
                        TemplatableOperand arch,
+                       ArchRepr arch,
                        Architecture (TemplatedArch arch))
                    => Formula (S.SimpleBackend t) arch
                    -> Synth (S.SimpleBackend t) arch (Maybe [Instruction arch])
@@ -143,6 +144,7 @@ synthesizeFormula' target = do
 synthesizeFormula :: forall t arch.
                      (Architecture arch,
                       TemplatableOperand arch,
+                      ArchRepr arch,
                       Architecture (TemplatedArch arch),
                       Typeable arch)
                   => SynthesisParams (S.SimpleBackend t) arch

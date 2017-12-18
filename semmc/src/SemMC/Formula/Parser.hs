@@ -18,7 +18,6 @@
 -- | A parser for an s-expression representation of formulas
 module SemMC.Formula.Parser
   ( Atom(..)
---  , BuildOperandList
   , operandVarPrefix
   , literalVarPrefix
   , readFormula
@@ -49,7 +48,6 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..), mapSome, viewSome )
 import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.TraversableFC ( traverseFC )
 import qualified Data.Parameterized.Map as MapF
 import           Lang.Crucible.BaseTypes
@@ -132,7 +130,7 @@ data OpData (arch :: *) (s :: Symbol) where
 
 buildOperandList' :: forall arch tps
                    . (A.Architecture arch)
-                  => SL.List SR.SymbolRepr tps
+                  => A.ShapeRepr arch tps
                   -> SC.SExpr Atom
                   -> Maybe (SL.List (OpData arch) tps)
 buildOperandList' rep atm =
@@ -148,51 +146,10 @@ buildOperandList' rep atm =
         SC.SCons s rest -> do
           -- This is in the Maybe monad.
           let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
-          when (SR.symbolRepr r /= T.pack ty) Nothing
+          when (A.operandTypeReprSymbol (Proxy @arch) r /= ty) Nothing
           rest' <- buildOperandList' rep' rest
           let tyRepr = A.shapeReprToTypeRepr (Proxy @arch) r
           return $ (OpData operand tyRepr) SL.:< rest'
-
-{-
-
--- | How to parse an operand list for a given architecture and shape. The
--- architecture is necessary in order to know how to map a symbol representing
--- operand type to a Crucible expression type.
---
--- This isn't intended to have any implementers outside the following two, so it
--- isn't exported. However, it is required on the signature of 'parseFormula',
--- so GHC has to be able to match the shape to the given instances.
-class BuildOperandList (arch :: *) (tps :: [Symbol]) where
-  -- | Parses the operands part of the semantics definition. Each operand has both
-  -- a name and a (quoted) type in a dotted pair. For example:
-  --
-  -- > ((ra . 'Gprc)
-  -- >  (n . 'Imm16)
-  -- >  (rt . 'Gprc))
-  --
-  buildOperandList :: SC.SExpr Atom -> Maybe (SL.List (OpData arch) tps)
-
--- nil case...
-instance BuildOperandList arch '[] where
-  buildOperandList SC.SNil = Just SL.Nil
-  buildOperandList       _ = Nothing
-
--- ...and cons case. Sorry for the type operator screwing up indentation for the
--- rest of the file.
-instance (KnownSymbol tp,
-          KnownRepr BaseTypeRepr (A.OperandType arch tp),
-          BuildOperandList arch tps)
-       => BuildOperandList arch (tp ': tps) where
-  buildOperandList SC.SNil = Nothing
-  buildOperandList (SC.SAtom _) = Nothing
-  buildOperandList (SC.SCons s rest) = do
-    -- This is in the Maybe monad.
-    let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
-    when (symbolVal (Proxy :: Proxy tp) /= ty) Nothing
-    rest' <- buildOperandList rest
-    let repr = knownRepr :: BaseTypeRepr (A.OperandType arch tp)
-    return $ (OpData operand repr) SL.:< rest'
--}
 
 -- ** Parsing parameters
 --
@@ -832,7 +789,7 @@ readFormula' :: forall sym arch sh m.
                  A.Architecture arch)
              => sym
              -> FormulaEnv sym arch
-             -> SL.List SR.SymbolRepr sh
+             -> A.ShapeRepr arch sh
              -> T.Text
              -> m (ParameterizedFormula sym arch sh)
 readFormula' sym env repr text = do
@@ -909,7 +866,7 @@ readFormula :: (S.IsExprBuilder sym,
                 A.Architecture arch)
             => sym
             -> FormulaEnv sym arch
-            -> SL.List SR.SymbolRepr sh
+            -> A.ShapeRepr arch sh
             -> T.Text
             -> IO (Either String (ParameterizedFormula sym arch sh))
 readFormula sym env repr text = E.runExceptT $ readFormula' sym env repr text
@@ -920,7 +877,7 @@ readFormulaFromFile :: (S.IsExprBuilder sym,
                         A.Architecture arch)
                     => sym
                     -> FormulaEnv sym arch
-                    -> SL.List SR.SymbolRepr sh
+                    -> A.ShapeRepr arch sh
                     -> FilePath
                     -> IO (Either String (ParameterizedFormula sym arch sh))
 readFormulaFromFile sym env repr fp = readFormula sym env repr =<< T.readFile fp

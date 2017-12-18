@@ -26,7 +26,6 @@ import           Text.Read ( readMaybe )
 import qualified Data.Parameterized.HasRepr as HR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 
 import qualified Data.Parameterized.Unfold as U
 import qualified SemMC.Architecture as A
@@ -111,7 +110,7 @@ instance (A.Architecture arch) => E.Exception (IORelationParseError arch)
 readIORelation :: forall arch m sh
                 . (E.MonadThrow m,
                    AC.ConcreteArchitecture arch,
-                   HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr))
+                   A.ArchRepr arch)
                => Proxy arch
                -> T.Text
                -> A.Opcode arch (A.Operand arch) sh
@@ -132,7 +131,7 @@ readIORelation p t op = do
 parseRelationList :: forall m sh arch
                    . (E.MonadThrow m,
                       AC.ConcreteArchitecture arch,
-                      HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr))
+                      A.ArchRepr arch)
                   => Proxy arch
                   -> A.Opcode arch (A.Operand arch) sh
                   -> SC.SExpr Atom
@@ -158,7 +157,7 @@ parseRelationList proxy opcode s0 =
 mkOperandRef :: forall m arch sh
               . (E.MonadThrow m,
                  A.Architecture arch,
-                 HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr))
+                 A.ArchRepr arch)
              => Proxy arch
              -> A.Opcode arch (A.Operand arch) sh
              -> Word
@@ -170,7 +169,7 @@ mkOperandRef proxy op w0 = U.unfoldShape (HR.typeRepr op) nil elt w0
     nil :: Word -> m (OperandRef arch '[])
     nil _ = E.throwM (InvalidIndex proxy (Some op) w0)
 
-    elt :: forall tp tps' tps . (tps ~ (tp ': tps')) => SR.SymbolRepr tp -> SL.List SR.SymbolRepr tps' -> Word -> m (OperandRef arch tps)
+    elt :: forall tp tps' tps . (tps ~ (tp ': tps')) => A.OperandTypeRepr arch  tp -> A.ShapeRepr arch tps' -> Word -> m (OperandRef arch tps)
     elt _ reps w =
       case w of
         0 -> return (OperandRef (Some SL.IndexHere))

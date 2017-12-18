@@ -22,10 +22,8 @@ import qualified System.Directory as S
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
-import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.SymbolRepr as SR
 import           Lang.Crucible.BaseTypes
 
 import qualified Lang.Crucible.Solver.Interface as CRU
@@ -67,7 +65,7 @@ loadFormulas :: forall sym arch a
               . (CRU.IsExprBuilder sym,
                  CRU.IsSymInterface sym,
                  A.Architecture arch,
-                 HR.HasRepr a (SL.List SR.SymbolRepr),
+                 HR.HasRepr a (A.ShapeRepr arch),
                  ShowF a,
                  OrdF a)
              => sym
@@ -105,7 +103,7 @@ loadFormulasFromFiles :: forall sym arch a
                        . ( CRU.IsExprBuilder sym
                          , CRU.IsSymInterface sym
                          , A.Architecture arch
-                         , HR.HasRepr a (SL.List SR.SymbolRepr)
+                         , HR.HasRepr a (A.ShapeRepr arch)
                          , MapF.OrdF a
                          , U.HasCallStack
                          , L.HasLogCfg )

@@ -41,17 +41,17 @@ import qualified GHC.Err.Located as L
 import           Text.Printf
 
 import qualified Data.Set.NonEmpty as NES
+import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr )
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Parameterized.TraversableFC as FC
 import           Dismantle.Arbitrary as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Instruction as D
 
-import           SemMC.Architecture ( Instruction, Opcode, Operand )
+import           SemMC.Architecture ( Instruction, Opcode, Operand, ShapeRepr, OperandTypeRepr )
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
@@ -377,8 +377,9 @@ perturb candidate = do
 
 -- | Replace the opcode of the given instruction with a random one of the same
 -- shape.
-randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) (SL.List SR.SymbolRepr),
-                    HasRepr (Pseudo arch (Operand arch)) (SL.List SR.SymbolRepr))
+randomizeOpcode :: (HasRepr (Opcode arch (Operand arch)) (ShapeRepr arch),
+                    HasRepr (Pseudo arch (Operand arch)) (ShapeRepr arch),
+                    OrdF (OperandTypeRepr arch))
                 => SynthInstruction arch
                 -> Syn t arch (SynthInstruction arch)
 randomizeOpcode (SynthInstruction oldOpcode operands) = do

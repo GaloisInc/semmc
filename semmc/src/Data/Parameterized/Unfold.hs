@@ -10,12 +10,11 @@ module Data.Parameterized.Unfold (
 
 import           Control.Monad.Catch ( MonadThrow )
 import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 
 unfoldShape :: (MonadThrow m)
-            => SL.List SR.SymbolRepr sh
+            => SL.List r sh
             -> (a -> m (b '[]))
-            -> (forall tp tps . (sh ~ (tp ': tps)) => SR.SymbolRepr tp -> SL.List SR.SymbolRepr tps -> a -> m (b sh))
+            -> (forall tp tps . (sh ~ (tp ': tps)) => r tp -> SL.List r tps -> a -> m (b sh))
             -> a
             -> m (b sh)
 unfoldShape rep0 nil elt a =

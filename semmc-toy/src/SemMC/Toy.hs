@@ -34,6 +34,7 @@ import           Data.Int ( Int32 )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Set.NonEmpty as NES
+import qualified Data.Text as T
 import           Data.Word ( Word32 )
 import qualified GHC.Err.Located as L
 import           GHC.TypeLits ( KnownSymbol, Nat, Symbol, sameSymbol )
@@ -288,6 +289,10 @@ data Toy = Toy
 instance A.IsOperand Operand
 
 instance A.IsOpcode Opcode
+
+instance A.IsOperandTypeRepr Toy where
+  type OperandTypeRepr Toy = SR.SymbolRepr
+  operandTypeReprSymbol _ = T.unpack . SR.symbolRepr
 
 instance TemplatableOperand Toy where
   opTemplates sr =

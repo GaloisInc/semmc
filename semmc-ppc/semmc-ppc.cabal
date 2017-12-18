@@ -55,7 +55,6 @@ library
                      , bytestring
                      , cereal
                      , containers
-                     , constraints
                      , located-base
                      , filepath
                      , megaparsec >= 6 && < 7
@@ -74,7 +73,6 @@ library
   build-depends: base,
                  time,
                  regex >= 1 && < 2,
-                 constraints,
                  parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc,
@@ -106,7 +104,6 @@ executable semmc-ppc-iorels
                  async,
                  semmc,
                  semmc-ppc,
-                 constraints,
                  parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc,
@@ -121,7 +118,6 @@ executable semmc-ppc-stratify
                  directory,
                  async,
                  optparse-applicative,
-                 constraints,
                  parameterized-utils,
                  crucible,
                  semmc,

@@ -258,3 +258,4 @@ coerceFormula f =
   Formula { formParamVars = formParamVars f
           , formDefs = formDefs f
           }
+

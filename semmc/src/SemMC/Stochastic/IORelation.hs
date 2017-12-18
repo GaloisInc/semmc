@@ -36,12 +36,9 @@ import qualified System.IO.Error as IOE
 import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Classes as P
-import qualified Data.Parameterized.HasRepr as HR
-import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as P
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.SymbolRepr as SR
 
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D
@@ -74,7 +71,7 @@ data LearningConfig arch =
 
 loadIORelations :: forall arch
                  . (AC.ConcreteArchitecture arch,
-                    HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr),
+                    A.ArchRepr arch,
                     D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                 => Proxy arch
                 -> FilePath
@@ -101,7 +98,7 @@ loadIORelations proxy relDir toFP ops = do
 -- Note that this function assumes that the lcIORelationDirectory already exists
 learnIORelations :: forall arch
                   . (AC.ConcreteArchitecture arch,
-                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (SL.List SR.SymbolRepr),
+                     A.ArchRepr arch,
                      D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
                  => LearningConfig arch
                  -> Proxy arch

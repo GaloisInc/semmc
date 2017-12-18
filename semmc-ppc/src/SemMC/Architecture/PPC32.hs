@@ -25,24 +25,17 @@ module SemMC.Architecture.PPC32
 
 import qualified GHC.Err.Located as L
 
-import qualified Data.Constraint as C
-import           Data.EnumF ( EnumF(..) )
-import qualified Data.Functor.Identity as I
 import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.SymbolRepr as SR
-import           Data.Parameterized.Witness ( Witness(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import           Data.Type.Equality ( type (==) )
-import           Data.Void ( absurd, Void )
 import qualified Data.Word.Indexed as W
-import           GHC.TypeLits ( KnownNat, Nat, SomeSymbol(..), KnownSymbol, someSymbolVal, sameSymbol )
-import           System.FilePath ( (</>), (<.>) )
+import           GHC.TypeLits ( KnownNat, Nat )
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 
@@ -70,8 +63,6 @@ import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
 import qualified SemMC.Architecture.PPC.UF as UF
-
-import           Unsafe.Coerce ( unsafeCoerce )
 
 data PPC
 
@@ -399,6 +390,10 @@ instance T.TemplatableOperand PPC where
                       return (v, T.WrappedRecoverOperandFn recover)
 
 type instance A.Location PPC = Location PPC
+
+instance A.IsOperandTypeRepr PPC where
+  type OperandTypeRepr PPC = SR.SymbolRepr
+  operandTypeReprSymbol _ = T.unpack . SR.symbolRepr
 
 operandValue :: forall sym s.
                 (S.IsSymInterface sym,

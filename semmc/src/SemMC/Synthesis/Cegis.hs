@@ -20,10 +20,9 @@ import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
-import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
+import qualified Data.Parameterized.HasRepr as HR
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF
 import qualified Data.Set as Set
@@ -185,7 +184,7 @@ buildEqualityTests form tests = do
 -- | Given a concrete model from the SMT solver, extract concrete instructions
 -- from the templated instructions, so that all of the initially templated
 -- operands are filled in concretely.
-extractConcreteInstructions :: (HR.HasRepr (Opcode arch (Operand arch)) (SL.List SR.SymbolRepr))
+extractConcreteInstructions :: (ArchRepr arch)
                             => GroundEvalFn t
                             -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                             -> IO [TemplatableInstruction arch]
@@ -196,7 +195,7 @@ extractConcreteInstructions (GroundEvalFn evalFn) = mapM f
 -- | Meant to be used as the callback in a check SAT operation. If the result is
 -- Sat, it pulls out concrete instructions corresponding to the SAT model.
 -- Otherwise, it returns Nothing.
-tryExtractingConcrete :: (HR.HasRepr (Opcode arch (Operand arch)) (SL.List SR.SymbolRepr))
+tryExtractingConcrete :: (ArchRepr arch)
                       => [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                       -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))
                       -> IO (Maybe [TemplatableInstruction arch])
@@ -232,7 +231,7 @@ data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- of the candidate instructions given, has the same
                           -- behavior as the target formula.
 
-cegis' :: (Architecture arch)
+cegis' :: (Architecture arch, ArchRepr arch)
        => [TemplatedInstructionFormula (S.SimpleBackend t) arch]
        -- ^ The trial instructions.
        -> Formula (S.SimpleBackend t) arch
@@ -269,7 +268,7 @@ cegis' trial trialFormula tests = do
           cegis' trial trialFormula (newTest : tests)
     Nothing -> return (CegisUnmatchable tests)
 
-cegis :: (Architecture arch)
+cegis :: (Architecture arch, ArchRepr arch)
       => CegisParams (S.SimpleBackend t) arch
       -- ^ Parameters not specific to the candidate. See 'CegisParams' for
       -- details.

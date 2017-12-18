@@ -40,7 +40,7 @@ import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend
 
-import           SemMC.Architecture
+import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
 import           SemMC.Formula
 import qualified SemMC.Concrete.Execution as CE
@@ -60,25 +60,26 @@ import           Debug.Trace
 allOperands :: [Some (T.Opcode T.Operand)]
 allOperands = $(captureDictionaries (const True) ''T.Opcode)
 
-readBinOp :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "R32"]))
-readBinOp sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) (HR.typeRepr AddRr) ("toy-semantics" </> fp)
-
-readBinOp' :: forall t. SimpleBackend t -> FilePath -> IO (Either String (ParameterizedFormula (SimpleBackend t) (TemplatedArch Toy) '["R32", "I32"]))
-readBinOp' sym fp = readFormulaFromFile sym (FormulaEnv Map.empty undefined) (HR.typeRepr MovRi) ("toy-semantics" </> fp)
+readBinOpc :: SimpleBackend t
+           -> Opcode Operand sh
+           -> IO (Either String (ParameterizedFormula (SimpleBackend t) Toy sh))
+readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semantics" </> show opc <.> "sem")
+  where
+    env = FormulaEnv Map.empty undefined
 
 doThing :: IO ()
 doThing = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
-  Right add <- readBinOp sym "AddRr.sem"
-  Right sub <- readBinOp sym "SubRr.sem"
-  Right movi <- readBinOp' sym "MovRi.sem"
+  Right add <- readBinOpc sym AddRr
+  Right sub <- readBinOpc sym SubRr
+  Right movi <- readBinOpc sym MovRi
   let opcodes = MapF.insert AddRr add
               $ MapF.insert SubRr sub
               $ MapF.insert MovRi movi
               $ MapF.empty
   -- print =<< instantiateFormula sym pf (R32 Reg1 :> R32 Reg3 :> Nil)
-  let templated = templatedInstructions opcodes
+  let templated = templatedInstructions (toBaseSet opcodes)
   mapM_ print templated
   -- (f1 : f2 : _) <- templatizeFormula' sym pf
   -- print =<< sequenceFormulas sym (tfFormula f1) (tfFormula f2)
@@ -91,7 +92,7 @@ doThing = do
 --
 fooFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 fooFormula sym = do
-  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (locationType (RegLoc Reg1))
+  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
   twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
   reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg2Def <- S.bvAdd sym reg1TimesTwo twoLit
@@ -103,8 +104,8 @@ fooFormula sym = do
 
 independentFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 independentFormula sym = do
-  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (locationType (RegLoc Reg1))
-  reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (locationType (RegLoc Reg2))
+  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
+  reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (A.locationType (RegLoc Reg2))
   twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
   -- reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg1Def <- S.bvMul sym (S.varExpr sym reg1) twoLit
@@ -120,8 +121,8 @@ independentFormula sym = do
 
 dependentFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 dependentFormula sym = do
-  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (locationType (RegLoc Reg1))
-  -- reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (locationType (RegLoc Reg2))
+  reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
+  -- reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (A.locationType (RegLoc Reg2))
   twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
   reg1TimesTwo <- S.bvMul sym twoLit (S.varExpr sym reg1)
   reg1Def <- S.bvAdd sym reg1TimesTwo twoLit
@@ -138,9 +139,9 @@ doThing2 :: IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
-  Right add <- readBinOp sym "AddRr.sem"
-  Right sub <- readBinOp sym "SubRr.sem"
-  Right movi <- readBinOp' sym "MovRi.sem"
+  Right add <- readBinOpc sym AddRr
+  Right sub <- readBinOpc sym SubRr
+  Right movi <- readBinOpc sym MovRi
   let baseset = MapF.insert AddRr add
               $ MapF.insert SubRr sub
               $ MapF.insert MovRi movi
@@ -148,7 +149,7 @@ doThing2 = do
   -- target <- fooFormula sym
   target <- independentFormula sym
 
-  let env = setupEnvironment sym baseset
+  let env = setupEnvironment sym (toBaseSet baseset)
   print =<< mcSynth env target
   print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
@@ -156,24 +157,24 @@ doThing3 :: IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
-  Right add <- readBinOp sym "AddRr.sem"
-  putStrLn $ T.unpack $ printFormula add
+  Right add <- readBinOpc sym AddRr
+  putStrLn $ T.unpack $ printFormula (HR.typeRepr AddRr) add
 
 doThing4 :: IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
-  Right add <- readBinOp sym "AddRr.sem"
+  Right add <- readBinOpc sym AddRr
   print add
-  Right sub <- readBinOp sym "SubRr.sem"
-  Right movi <- readBinOp' sym "MovRi.sem"
+  Right sub <- readBinOpc sym SubRr
+  Right movi <- readBinOpc sym MovRi
   let baseset = MapF.insert AddRr add
               $ MapF.insert SubRr sub
               $ MapF.insert MovRi movi
               $ MapF.empty
 
   ind <- independentFormula sym
-  let env = setupEnvironment sym baseset
+  let env = setupEnvironment sym (toBaseSet baseset)
   print =<< mcSynth env ind
 
 ----------------------------------------------------------------

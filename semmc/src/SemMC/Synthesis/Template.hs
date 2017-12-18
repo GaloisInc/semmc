@@ -31,13 +31,9 @@ module SemMC.Synthesis.Template
   , TemplatedArch
   , TemplatedFormula(..)
   , TemplatableOperand(..)
---  , TemplatableOperands
---  , TemplatableOpcode
   , TemplatedInstruction(..)
   , TemplatedInstructionFormula(..)
   , tifFormula
-  -- , templatizeFormula
-  -- , templatizeFormula'
   , templatedInstructions
   , templatedInputs
   , templatedOutputs
@@ -46,6 +42,7 @@ module SemMC.Synthesis.Template
   , unTemplateUnsafe
   , unTemplateSafe
   , unTemplate
+  , toBaseSet
   ) where
 
 import           Data.EnumF
@@ -55,7 +52,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
@@ -129,12 +125,15 @@ type instance Operand (TemplatedArch arch) = TemplatedOperand arch
 type instance Opcode (TemplatedArch arch) = Opcode arch
 type instance OperandType (TemplatedArch arch) s = OperandType arch s
 type instance Location (TemplatedArch arch) = Location arch
+instance (IsOperandTypeRepr arch) => IsOperandTypeRepr (TemplatedArch arch) where
+  type OperandTypeRepr (TemplatedArch arch) = OperandTypeRepr arch
+  operandTypeReprSymbol _ = operandTypeReprSymbol (Proxy @arch)
 
 -- | Necessary constraints for 'TemplatedArch' to be valid.
 type TemplateConstraints arch = (Architecture arch,
                                  Typeable arch,
                                  TemplatableOperand arch,
-                                 HR.HasRepr (Opcode arch (TemplatedOperand arch)) (SL.List SR.SymbolRepr),
+                                 IsOperandTypeRepr (TemplatedArch arch),
                                  OrdF ((Opcode arch) (TemplatedOperand arch)),
                                  ShowF ((Opcode arch) (TemplatedOperand arch)),
                                  EnumF ((Opcode arch) (TemplatedOperand arch)))
@@ -178,6 +177,11 @@ coerceParameter (OperandParameter tp idx) = OperandParameter tp idx
 coerceParameter (LiteralParameter loc) = LiteralParameter loc
 coerceParameter (FunctionParameter name (WrappedOperand orep oix) r) = FunctionParameter name (WrappedOperand orep oix) r
 
+uncoerceParameter :: Parameter arch sh tp -> Parameter (TemplatedArch arch) sh tp
+uncoerceParameter (OperandParameter tp idx) = OperandParameter tp idx
+uncoerceParameter (LiteralParameter loc) = LiteralParameter loc
+uncoerceParameter (FunctionParameter name (WrappedOperand orep oix) r) = FunctionParameter name (WrappedOperand orep oix) r
+
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
 -- to the base architecture, using a manual mapping.
 --
@@ -200,6 +204,26 @@ unTemplateSafe (ParameterizedFormula { pfUses = uses
         newOpVars = fmapFC coerceBoundVar opVars
         newDefs = MapF.foldrWithKey (MapF.insert . coerceParameter) MapF.empty defs
         coerceBoundVar :: forall op. BV.BoundVar sym (TemplatedArch arch) op -> BV.BoundVar sym arch op
+        coerceBoundVar (BV.BoundVar var) = BV.BoundVar var
+
+templateSafe :: forall arch sym sh
+              . (OrdF (Location arch))
+             => ParameterizedFormula sym arch sh
+             -> ParameterizedFormula sym (TemplatedArch arch) sh
+templateSafe ParameterizedFormula { pfUses = uses
+                                  , pfOperandVars = opVars
+                                  , pfLiteralVars = litVars
+                                  , pfDefs = defs
+                                  } =
+  ParameterizedFormula { pfUses = newUses
+                       , pfOperandVars = newOpVars
+                       , pfLiteralVars = litVars
+                       , pfDefs = newDefs
+                       }
+  where newUses = Set.map (mapSome uncoerceParameter) uses
+        newOpVars = fmapFC coerceBoundVar opVars
+        newDefs = MapF.foldrWithKey (MapF.insert . uncoerceParameter) MapF.empty defs
+        coerceBoundVar :: forall op. BV.BoundVar sym arch op -> BV.BoundVar sym (TemplatedArch arch) op
         coerceBoundVar (BV.BoundVar var) = BV.BoundVar var
 
 -- | Convert a 'ParameterizedFormula' that was created using a 'TemplatedArch'
@@ -227,17 +251,17 @@ instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr 
 class TemplatableOperand (arch :: *) where
   -- | All possible templates of an operand. In a nutshell, fill in register
   -- parts, leave immediate parts symbolic.
-  opTemplates :: SR.SymbolRepr s -> [TemplatedOperand arch s]
+  opTemplates :: OperandTypeRepr arch s -> [TemplatedOperand arch s]
 
 makeTemplatedOpLists :: (TemplatableOperand arch)
-                     => SL.List SR.SymbolRepr sh
+                     => ShapeRepr arch sh
                      -> [SL.List (TemplatedOperand arch) sh]
 makeTemplatedOpLists rep0 =
   case rep0 of
     SL.Nil -> [SL.Nil]
     rep SL.:< reps -> (SL.:<) <$> opTemplates rep <*> makeTemplatedOpLists reps
 
-recoverOperands :: SL.List SR.SymbolRepr sh
+recoverOperands :: ShapeRepr arch sh
                 -> (forall tp . S.SymExpr sym tp -> IO (GroundValue tp))
                 -> SL.List (TaggedExpr (TemplatedArch arch) sym) sh
                 -> IO (SL.List (Operand arch) sh)
@@ -248,36 +272,15 @@ recoverOperands rep0 evalFn taggedExprs =
       case taggedExprs of
         TaggedExpr _ (WrappedRecoverOperandFn recover) SL.:< restExprs ->
           (SL.:<) <$> recover evalFn <*> recoverOperands reps evalFn restExprs
-{-
--- | The only way to define structure-dependent operations on type-level lists...
-class TemplatableOperands arch sh where
-  -- | For a given shape, generate all possible templated operand lists.
-  makeTemplatedOpLists :: [SL.List (TemplatedOperand arch) sh]
-  -- | Recover the resulting concrete operands once the SMT solver has run.
-  recoverOperands :: (forall tp. S.SymExpr sym tp -> IO (GroundValue tp))
-                  -> SL.List (TaggedExpr (TemplatedArch arch) sym) sh
-                  -> IO (SL.List (Operand arch) sh)
-
-instance TemplatableOperands arch '[] where
-  makeTemplatedOpLists = [SL.Nil]
-  recoverOperands _ SL.Nil = return SL.Nil
-
-instance (Architecture arch,
-          TemplatableOperand arch s,
-          TemplatableOperands arch sh) =>
-         TemplatableOperands arch (s ': sh) where
-  makeTemplatedOpLists =
-    -- We're in the List applicative.
-    (SL.:<) <$> opTemplates
-            <*> makeTemplatedOpLists
-
-  recoverOperands evalFn (TaggedExpr _ (WrappedRecoverOperandFn recover) SL.:< restExprs) =
-    -- Now we're in IO.
-    (SL.:<) <$> recover evalFn
-            <*> recoverOperands evalFn restExprs
--}
 
 type BaseSet sym arch = MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym (TemplatedArch arch))
+
+toBaseSet :: (OrdF (Opcode arch (Operand arch)), OrdF (Location arch))
+          => MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym arch)
+          -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym (TemplatedArch arch))
+toBaseSet m = MapF.fromList [ MapF.Pair o (templateSafe pf)
+                            | MapF.Pair o pf <- MapF.toList m
+                            ]
 
 data TemplatedInstruction sym arch sh where
   TemplatedInstruction :: (Opcode arch) (Operand arch) sh
@@ -328,7 +331,7 @@ templatedOutputs (TemplatedInstruction _ pf oplist) =
                 _ -> Set.empty
             LiteralParameter loc -> Set.singleton (Some loc)
 
-templatedInstructions :: (TemplateConstraints arch)
+templatedInstructions :: (TemplateConstraints arch, ArchRepr arch)
                       => BaseSet sym arch
                       -> [Some (TemplatedInstruction sym arch)]
 templatedInstructions baseSet = do

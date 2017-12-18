@@ -5,6 +5,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -24,7 +25,10 @@ module SemMC.Architecture (
   IsOperand,
   Opcode,
   IsOpcode,
-  OperandType
+  OperandType,
+  IsOperandTypeRepr(..),
+  ArchRepr,
+  ShapeRepr
   ) where
 
 import           Data.EnumF
@@ -33,7 +37,6 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
-import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
 import qualified Language.Haskell.TH as TH
@@ -46,16 +49,21 @@ import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula ( LocationFuncInterp )
 import           SemMC.Formula.Eval ( Evaluator )
 
+type ShapeRepr arch = SL.List (OperandTypeRepr arch)
+
+type ArchRepr arch = (HR.HasRepr (Opcode arch (Operand arch)) (ShapeRepr arch))
+
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.
 class (IsOperand (Operand arch),
        IsOpcode (Opcode arch),
        IsLocation (Location arch),
+       IsOperandTypeRepr arch,
        Show (Instruction arch),
        ShowF (Operand arch),
        Typeable arch,
+       OrdF (OperandTypeRepr arch),
        ShowF (Operand arch),
-       HR.HasRepr (Opcode arch (Operand arch)) (SL.List SR.SymbolRepr),
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),
        EnumF (Opcode arch (Operand arch)))
@@ -93,7 +101,7 @@ class (IsOperand (Operand arch),
   -- location
   locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t arch)]
 
-  shapeReprToTypeRepr :: proxy arch -> SR.SymbolRepr s -> BaseTypeRepr (OperandType arch s)
+  shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
 
 data FunctionInterpretation t arch =
   FunctionInterpretation { locationInterp :: LocationFuncInterp arch

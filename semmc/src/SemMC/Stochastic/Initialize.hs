@@ -4,6 +4,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 module SemMC.Stochastic.Initialize (
   Config(..),
@@ -16,6 +18,7 @@ import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as CE
 import           Control.Monad
 import qualified Data.Foldable as F
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import           System.FilePath ( (</>), (<.>) )
 
@@ -23,8 +26,6 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Seq as SeqF
-import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Parameterized.Some ( Some(..) )
 
 import qualified SemMC.Architecture as A
@@ -76,7 +77,7 @@ data SynEnv t arch =
          -- ^ All of the known formulas (base set + learned set) for real opcodes
          , sePseudoFormulas :: MapF.MapF ((P.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch)
          -- ^ Formulas for all pseudo opcodes
-         , seKnownCongruentOps :: STM.TVar (MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF (P.SynthOpcode arch)))
+         , seKnownCongruentOps :: STM.TVar (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (P.SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
          , seWorklist :: STM.TVar (WL.Worklist (Some (A.Opcode arch (A.Operand arch))))
          -- ^ Work items
@@ -97,7 +98,9 @@ data SynEnv t arch =
          }
 
 loadInitialState :: forall arch t
-                  . (SynC arch, L.HasLogCfg, L.HasCallStack)
+                  . (SynC arch, L.HasLogCfg, L.HasCallStack,
+                    HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
+                    HR.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
                  => Config arch
                  -> Sym t
                  -> IO (V.ConcreteState arch)
@@ -125,8 +128,8 @@ loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targe
   let initialFormulas = MapF.union baseSet learnedSet
   pseudoSet <- F.loadFormulasFromFiles sym (mkFormulaFilename (pseudoSetDir cfg)) pseudoOpcodes
   L.logIO L.Info "Finished loading pseudo ops"
-  let congruentOps' = MapF.foldrWithKey (addCongruentOp . P.RealOpcode) MapF.empty initialFormulas
-      congruentOps = MapF.foldrWithKey (addCongruentOp . P.PseudoOpcode) congruentOps' pseudoSet
+  let congruentOps' = MapF.foldrWithKey (addCongruentOp (Proxy @arch). P.RealOpcode) MapF.empty initialFormulas
+      congruentOps = MapF.foldrWithKey (addCongruentOp (Proxy @arch) . P.PseudoOpcode) congruentOps' pseudoSet
   fref <- STM.newTVarIO initialFormulas
   congruentRef <- STM.newTVarIO congruentOps
   let worklist = makeWorklist targetOpcodes initialFormulas
@@ -171,9 +174,11 @@ makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
         Nothing -> s
         Just _ -> S.delete sop s
 
-addCongruentOp :: (HR.HasRepr a (SL.List SR.SymbolRepr))
-               => a sh
+addCongruentOp :: (HR.HasRepr a rep,
+                   MapF.OrdF rep)
+               => proxy arch
+               -> a sh
                -> v
-               -> MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF a)
-               -> MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF a)
-addCongruentOp op _ = MapF.insertWith (SeqF.><) (HR.typeRepr op) (SeqF.singleton op)
+               -> MapF.MapF rep (SeqF.SeqF a)
+               -> MapF.MapF rep (SeqF.SeqF a)
+addCongruentOp _ op _ = MapF.insertWith (SeqF.><) (HR.typeRepr op) (SeqF.singleton op)

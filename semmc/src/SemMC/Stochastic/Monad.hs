@@ -73,8 +73,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( mapSome, Some(..) )
 
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
-import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Dismantle.Arbitrary as DA
 import qualified Data.Set.NonEmpty as NES
 
@@ -271,7 +269,7 @@ askPseudoFormulas = R.asks (sePseudoFormulas . seGlobalEnv)
 askParallelSynth :: Syn t arch Int
 askParallelSynth = R.asks (parallelSynth . seConfig . seGlobalEnv)
 
-askKnownCongruentOps :: Syn t arch (MapF.MapF (SL.List SR.SymbolRepr) (SeqF.SeqF (SynthOpcode arch)))
+askKnownCongruentOps :: Syn t arch (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (SynthOpcode arch)))
 askKnownCongruentOps = R.asks (seKnownCongruentOps . seGlobalEnv) >>= (liftIO . STM.readTVarIO)
 
 -- | Return the set of opcodes with known semantics.
