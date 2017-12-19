@@ -72,7 +72,7 @@ import qualified Control.Concurrent.STM as Stm
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as Map
-import           System.Directory ( createDirectoryIfMissing )
+import           System.Directory ( createDirectoryIfMissing, getTemporaryDirectory )
 import           Text.Printf ( printf )
 
 ----------------------------------------------------------------
@@ -275,8 +275,9 @@ fileLogEventConsumer fp pred cfg = IO.withFile fp IO.WriteMode $ \h -> do
 -- file.
 tmpFileLogEventConsumer :: (LogEvent -> Bool) -> LogCfg -> IO ()
 tmpFileLogEventConsumer pred cfg = do
-  createDirectoryIfMissing True "/tmp/brittle"
-  (tmpFilePath, tmpFile) <- IO.openTempFile "/tmp/brittle" "log.txt"
+  tmpdir <- (++ "/brittle") <$> getTemporaryDirectory
+  createDirectoryIfMissing True tmpdir
+  (tmpFilePath, tmpFile) <- IO.openTempFile tmpdir "log.txt"
   printf "\n\nWriting logs to %s\n\n" tmpFilePath
   let k e = IO.hPutStrLn tmpFile (prettyLogEvent e) >> IO.hFlush tmpFile
   consumeUntilEnd pred k cfg
