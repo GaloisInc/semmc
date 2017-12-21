@@ -197,22 +197,7 @@ instance TestEquality (Opcode o) where
   testEquality     _     _ = Nothing
 
 instance OrdF (Opcode o) where
-  AddRr `compareF` AddRr = EQF
-  AddRr `compareF` SubRr = LTF
-  AddRr `compareF`  NegR = LTF
-  AddRr `compareF` MovRi = LTF
-  SubRr `compareF` AddRr = GTF
-  SubRr `compareF` SubRr = EQF
-  SubRr `compareF`  NegR = LTF
-  SubRr `compareF` MovRi = LTF
-  NegR  `compareF` AddRr = GTF
-  NegR  `compareF` SubRr = GTF
-  NegR  `compareF`  NegR = EQF
-  NegR  `compareF` MovRi = LTF
-  MovRi `compareF` AddRr = GTF
-  MovRi `compareF` SubRr = GTF
-  MovRi `compareF`  NegR = GTF
-  MovRi `compareF` MovRi = EQF
+  compareF = enumCompareF
 
 instance HasRepr (Opcode Operand) (SL.List SR.SymbolRepr) where
   typeRepr AddRr = knownRepr
