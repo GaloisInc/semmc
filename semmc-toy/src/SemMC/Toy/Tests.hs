@@ -357,15 +357,22 @@ test_rightValueWrongPlace = do
           S.wrongLocationPenalty * fromIntegral (length tests)
     return (expectedWeight, weight)
   where
-    -- Add r1 and r2 and store the result in *r3*.
+    -- Add r1 and r2 and store the result in *r3*, and then set r1 to
+    -- a value as different as possible from r3, i.e. the complement.
     candidate = S.fromList $ map (Just . P.actualInsnToSynth) $
+      -- Add r1 and r2 and store in r3.
       [ D.Instruction SubRr (R32 Reg3 SL.:< R32 Reg3 SL.:< SL.Nil)
       , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg1 SL.:< SL.Nil)
-      , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg2 SL.:< SL.Nil) ]
+      , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg2 SL.:< SL.Nil)
+
+      -- Set r1 to xthe complement of r3!
+      , D.Instruction MovRi (R32 Reg1 SL.:< I32 0 SL.:< SL.Nil)
+      , D.Instruction AddRr (R32 Reg1 SL.:< R32 Reg3 SL.:< SL.Nil)
+      , D.Instruction NotR  (R32 Reg1 SL.:< SL.Nil) ]
 
     -- Add r1 and r2 and store the result in *r1*.
     ops = (R32 Reg1 SL.:< R32 Reg2 SL.:< SL.Nil)
-    target =  AC.RI { AC.riInstruction = D.Instruction AddRr ops
+    target = AC.RI { AC.riInstruction = D.Instruction AddRr ops
                    , AC.riOpcode = AddRr
                    , AC.riOperands = ops
                    , AC.riLiteralLocs = MapF.empty
