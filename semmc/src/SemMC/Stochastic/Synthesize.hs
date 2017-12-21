@@ -53,6 +53,7 @@ import qualified Dismantle.Instruction as D
 
 import           SemMC.Architecture ( Instruction, Opcode, Operand, ShapeRepr, OperandTypeRepr )
 import qualified SemMC.Architecture.Concrete as AC
+import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Stochastic.CandidateProgram as CP
@@ -296,18 +297,30 @@ getOutMasks :: forall arch t. SynC arch
 getOutMasks (D.Instruction opcode operands) = do
   Just ioRel <- opcodeIORelation opcode
   let outputs = Set.toList $ I.outputs ioRel
-  -- Ignore implicit operands for now.
-  -- TODO: handle implicits.
-  let outputs' = [ s | I.OperandRef s <- outputs ]
-  let outputs'' = [ Some (operands SL.!! i) | Some i <- outputs' ]
-  let semViews = map operandToSemView outputs''
+  let outputToSemView (I.ImplicitOperand i) = implicitOperandToSemView i
+      outputToSemView (I.OperandRef o)      = operandRefToSemView operands o
+  let semViews = map outputToSemView outputs
   return semViews
   where
-    operandToSemView :: Some (Operand arch) -> V.SemanticView arch
-    operandToSemView (Some operand) = desc
-      where Just desc = AC.operandToSemanticView (Proxy :: Proxy arch) operand
+    operandRefToSemView :: SL.List (Operand arch) sh -> Some (SL.Index sh) -> V.SemanticView arch
+    operandRefToSemView operands' (Some index) = desc
+      where
+        operand = operands' SL.!! index
+        Just desc = AC.operandToSemanticView (Proxy :: Proxy arch) operand
 
--- Sum the weights of all test outputs.
+    -- Warning: here we assume that implicit operands have no
+    -- congruent views, and that they always compare as ints (i.e. as
+    -- vanilla bit vectors). This should be correct for the most
+    -- common implicit, the flag register (XER on PPC), but could be
+    -- overly restrictive for a floating point implicit.
+    implicitOperandToSemView :: Some (V.View arch) -> V.SemanticView arch
+    implicitOperandToSemView (Some view) = V.SemanticView
+      { V.semvView = view
+      , V.semvCongruentViews = []
+      , V.semvDiff = V.diffInt
+      }
+
+-- | Sum the weights of all test outputs.
 compareTargetOutToCandidateOut :: forall arch.
                                   SynC arch
                                => [V.SemanticView arch]
@@ -319,7 +332,7 @@ compareTargetOutToCandidateOut descs targetSt candidateSt =
       | desc@(V.SemanticView { V.semvView = view }) <- descs
       ]
 
--- Find the number-of-bits error in the best match, penalizing matches
+-- | Find the number-of-bits error in the best match, penalizing matches
 -- that are in the wrong location.
 weighBestMatch :: forall arch.
                   (SynC arch)
