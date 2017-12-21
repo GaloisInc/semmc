@@ -20,7 +20,6 @@ import qualified Data.Foldable as F
 import           Data.IORef ( newIORef )
 import qualified Data.Map as Map
 import           Data.Maybe
-import           Data.Proxy
 import qualified Data.Sequence as S
 import qualified Data.Text as T
 import           System.FilePath
@@ -285,30 +284,22 @@ runSynToy dataRoot action = do
         , seConfig = cfg
         }
   -}
-  Some r <- newIONonceGenerator
-  sym <- newSimpleBackend r
 
-  gen <- A.createGen
-  let p = Proxy :: Proxy Toy
-  let genTest = AC.randomState p gen
-
-  -- TODO: heuristic tests.
-  let interestingTests = []
   -- The way the opcode list and semantic files on disk interact is a
   -- little weird: the opcode list bounds the possible semantic files
   -- we look for. I.e., the instructions with known semantics are the
   -- intersection of the opcode lists here and the semantic files on
   -- disk.
   --
-  -- let allOpcodes = opcodesWitnessingBuildOperandList
+  -- let allOpcodes = opcodes
   let allOpcodes = [ {- Some (Witness AddRr)
                    , -} Some NegR
                    , Some SubRr ]
-  let pseudoOpcodes = pseudoOpcodesWitnessingBuildOperandList
+  let pseudoOpcodes = allPseudoOpcodes
   let targetOpcodes = [ Some AddRr ]
 
-  synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
-
+  withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes ioRelations $ \synEnv -> do
+  gen <- A.createGen
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe [I.TestCase Toy]))
   rChan <- C.newChan

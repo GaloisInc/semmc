@@ -12,7 +12,7 @@
 module SemMC.Stochastic.Strata (
   SynEnv,
   Config(..),
-  loadInitialState,
+  withInitialState,
   stratifiedSynthesis,
   -- * Statistics
   S.StatisticsThread,
@@ -45,7 +45,7 @@ import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
-import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..) )
+import           SemMC.Stochastic.Initialize ( withInitialState, Config(..), SynEnv(..) )
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Stochastic.Synthesize ( synthesize )

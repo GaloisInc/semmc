@@ -7,20 +7,14 @@ import qualified Control.Concurrent.Async as CC
 import qualified Control.Exception as CC
 import           Control.Monad
 import           Data.Monoid
-import           Data.Proxy ( Proxy(..) )
 -- Do we actually care about this for Toy arch?
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
 import           Text.Printf ( printf )
 
-import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some(..) )
 
-import qualified Lang.Crucible.Solver.SimpleBackend as SB
-
-import qualified Dismantle.Arbitrary as DA
-import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Log as L
 import qualified SemMC.Stochastic.Strata as SST
 
@@ -40,7 +34,7 @@ import qualified SemMC.Util as U
 --
 -- Look into this deduplication after @semmc-toy-stratify@ is working,
 -- so that we have at least two examples to generalize from.
-data Options = Options { oRelDir :: FilePath
+data Options = Options { _oRelDir :: FilePath
                        , oBaseDir :: FilePath
                        , oPseudoDir :: FilePath
                        , oLearnedDir :: FilePath
@@ -52,8 +46,8 @@ data Options = Options { oRelDir :: FilePath
                        , oParallelSynth :: Int
                        , oOpcodeTimeoutSeconds :: Int
                        , oRemoteTimeoutSeconds :: Int
-                       , oRemoteRunner :: FilePath
-                       , oRemoteHost :: String
+                       , _oRemoteRunner :: FilePath
+                       , _oRemoteHost :: String
                        }
 
 optionsParser :: O.Parser Options
@@ -146,12 +140,9 @@ mainWithOptions opts = do
 
   -- iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
 
-  rng <- DA.createGen
-  let testGenerator = AC.randomState (Proxy @Toy.Toy) rng
-  Some ng <- N.newIONonceGenerator
-  sym <- SB.newSimpleBackend ng
-  -- No serializer for Toy arch.
+  -- No serializer for Toy arch at this time.
   {-
+  import qualified SemMC.Architecture.Concrete as AC
   let serializer = CE.TestSerializer { CE.flattenMachineState = AC.serialize (Proxy @Toy.Toy)
                                      , CE.parseMachineState = AC.deserialize (Proxy @Toy.Toy)
                                      , CE.flattenProgram = mconcat . map Toy.assembleInstruction
@@ -159,13 +150,6 @@ mainWithOptions opts = do
   -}
 
   stThread <- SST.newStatisticsThread (oStatisticsFile opts)
-
-{-
-  -- Copied from SemMC.Toy.Tests
-  tChan <- CC.newChan :: IO (CC.Chan (Maybe [IOR.TestCase Toy.Toy]))
-  rChan <- CC.newChan
-  U.withAsyncLinked (Toy.testRunner cfg tChan rChan) $ const $ do
--}
 
   DIR.createDirectoryIfMissing True (oLearnedDir opts)
   let cfg = SST.Config { SST.baseSetDir = oBaseDir opts
@@ -182,26 +166,13 @@ mainWithOptions opts = do
                        , SST.logConfig = L.getLogCfg
                        , SST.statsThread = stThread
                        }
-  -- Next three copied from SemMC.Toy.Tests.
-  --
-  -- TODO(conathan): what is the 'C.weakenConstraints' for?
   let opcodes :: [Some (Toy.Opcode Toy.Operand)]
       opcodes = [ Some Toy.NegR
                 , Some Toy.SubRr ]
-  let pseudoOpcodes = Toy.pseudoOpcodesWitnessingBuildOperandList
+  let pseudoOpcodes = Toy.allPseudoOpcodes
   let targetOpcodes = [ Some Toy.AddRr ]
   let iorels = Toy.ioRelations
-{-
-  -- Need allOpcodes and pseudoOps. Can capture these or hard code them.
-  -- See the Toy tests for common code.
-      opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32
-      targets :: [Some (Witness (SST.BuildAndConvert Toy.Toy) (Toy.Opcode Toy.Operand))]
-      -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
-      targets = [ Some (Witness Toy.AddRr) ]
--}
-  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes pseudoOpcodes targetOpcodes iorels
-  _ <- SST.stratifiedSynthesis senv
 
+  SST.withInitialState cfg opcodes pseudoOpcodes targetOpcodes iorels $ \senv -> do
+  _ <- SST.stratifiedSynthesis senv
   SST.terminateStatisticsThread stThread
-  where
-    initialTestCases = AC.heuristicallyInterestingStates (Proxy @Toy.Toy)

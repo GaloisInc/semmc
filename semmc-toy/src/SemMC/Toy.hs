@@ -146,22 +146,13 @@ deriving instance Ord (Opcode o sh)
 
 -- | The set of all opcodes, e.g. for use with
 -- 'D.Random.randomInstruction'.
-opcodes :: Set.Set (Some (Opcode Operand))
-opcodes = Set.fromList
+allOpcodes :: Set.Set (Some (Opcode Operand))
+allOpcodes = Set.fromList
   [ Some AddRr
   , Some SubRr
   , Some NegR
   , Some MovRi
   ]
-
--- | For use with @loadInitialState@
-opcodesWitnessingBuildOperandList ::
-  [Some (Opcode Operand)]
-opcodesWitnessingBuildOperandList =
-  [ Some AddRr
-  , Some SubRr
-  , Some NegR
-  , Some MovRi ]
 
 -- | The map of 'IORelation's for all opcodes.
 --
@@ -511,6 +502,6 @@ type instance P.Pseudo Toy = P.EmptyPseudo
 instance P.ArchitectureWithPseudo Toy where
   assemblePseudo _ = P.pseudoAbsurd
 
-pseudoOpcodesWitnessingBuildOperandList ::
+allPseudoOpcodes ::
   [Some ((P.Pseudo Toy) Operand)]
-pseudoOpcodesWitnessingBuildOperandList = []
+allPseudoOpcodes = []

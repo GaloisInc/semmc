@@ -12,12 +12,8 @@ import qualified System.Directory as DIR
 import qualified System.Exit as IO
 import           Text.Printf ( printf )
 
-import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some(..) )
 
-import qualified Lang.Crucible.Solver.SimpleBackend as SB
-
-import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture.Concrete as AC
@@ -129,10 +125,6 @@ mainWithOptions opts = do
 
   iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP OL.allOpcodes32
 
-  rng <- DA.createGen
-  let testGenerator = AC.randomState (Proxy @PPC32.PPC) rng
-  Some ng <- N.newIONonceGenerator
-  sym <- SB.newSimpleBackend ng
   let serializer = CE.TestSerializer { CE.flattenMachineState = AC.serialize (Proxy @PPC32.PPC)
                                      , CE.parseMachineState = AC.deserialize (Proxy @PPC32.PPC)
                                      , CE.flattenProgram = mconcat . map PPC.assembleInstruction
@@ -173,12 +165,10 @@ mainWithOptions opts = do
       targets :: [Some (PPC.Opcode PPC.Operand)]
       -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
       targets = [ Some PPC.ADD4o ]
-  senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps32 targets iorels
+  SST.withInitialState cfg opcodes OL.pseudoOps32 targets iorels $ \senv -> do
   _ <- SST.stratifiedSynthesis senv
 
   L.logEndWith lcfg
   A.wait logThread
 
   SST.terminateStatisticsThread stThread
-  where
-    initialTestCases = AC.heuristicallyInterestingStates (Proxy @PPC32.PPC)
