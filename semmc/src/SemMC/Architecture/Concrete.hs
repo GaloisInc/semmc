@@ -9,7 +9,7 @@ module SemMC.Architecture.Concrete (
 import qualified Data.ByteString as B
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 import           Lang.Crucible.BaseTypes
 
@@ -81,7 +81,7 @@ data RegisterizedInstruction arch =
   forall sh .
   RI { riInstruction :: A.Instruction arch
      , riOpcode :: A.Opcode arch (A.Operand arch) sh
-     , riOperands :: SL.ShapedList (A.Operand arch) sh
+     , riOperands :: SL.List (A.Operand arch) sh
      , riLiteralLocs :: MapF.MapF (LiteralRef arch sh) (L.Location arch)
      }
 

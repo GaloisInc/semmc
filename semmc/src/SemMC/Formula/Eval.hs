@@ -25,7 +25,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HashTable as PH
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import qualified Lang.Crucible.Solver.Interface as SI
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
@@ -39,7 +39,7 @@ data Evaluator t = Evaluator (forall tp . S.NonceApp t (S.Elt t) tp -> IO (S.Elt
 
 evaluateFunctions :: Sym t st
                   -> ParameterizedFormula (Sym t st) arch sh
-                  -> SL.ShapedList (A.Operand arch) sh
+                  -> SL.List (A.Operand arch) sh
                   -> S.Elt t ret
                   -> [(String, Evaluator t)]
                   -> IO (S.Elt t ret)
@@ -51,15 +51,15 @@ evaluateFunctions sym pf operands e0 rewriters = do
                             }
   evaluateFunctions' tbls operandIndex sym e0
   where
-    operandIndex = SL.foldrFCIndexed (indexOperands operands) MapF.empty (pfOperandVars pf)
+    operandIndex = SL.ifoldr (indexOperands operands) MapF.empty (pfOperandVars pf)
 
 indexOperands :: (OrdF (SI.BoundVar (Sym t st)))
-              => SL.ShapedList (A.Operand arch) sh
+              => SL.List (A.Operand arch) sh
               -> SL.Index sh tp
               -> BV.BoundVar (Sym t st) arch tp
               -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
               -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
-indexOperands operands ix opVar = MapF.insert opVar (SL.indexShapedList operands ix)
+indexOperands operands ix opVar = MapF.insert opVar (operands SL.!! ix)
 
 data CachedSymFn t c where
   CachedSymFn :: (c ~ (a Ctx.::> r)) => CachedSymFn Bool (S.SimpleSymFn t a r)

@@ -18,7 +18,7 @@ import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 
 import qualified Data.Parameterized.Classes as P
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC ( foldrFC )
@@ -79,7 +79,7 @@ instantiateInstruction op = do
                 -- immediate(s).
                 let s0 = (MapF.empty, A.registerizationLocations @(A.Location arch))
                 let usedLocs = S.union (S.map liftSomeView implicitOps) (S.foldr (liftSomeOperand (Proxy @arch)) S.empty explicitLocs)
-                let (litLocs, _) = SL.foldrFCIndexed (assignLiterals op' usedLocs) s0 ops
+                let (litLocs, _) = SL.ifoldr (assignLiterals op' usedLocs) s0 ops
                 return AC.RI { AC.riInstruction = target
                              , AC.riOpcode = op'
                              , AC.riOperands = ops

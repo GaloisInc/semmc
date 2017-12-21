@@ -32,6 +32,8 @@ import           SemMC.Synthesis.Template
 
 setupEnvironment :: (Architecture arch,
                      Architecture (TemplatedArch arch),
+                     ArchRepr arch,
+                     TemplatableOperand arch,
                      Typeable arch)
                  => S.SimpleBackend t
                  -> BaseSet (S.SimpleBackend t) arch
@@ -45,6 +47,8 @@ setupEnvironment sym baseSet =
 
 mcSynth :: (Architecture arch,
             Architecture (TemplatedArch arch),
+            ArchRepr arch,
+            TemplatableOperand arch,
             Typeable arch)
         => SynthesisEnvironment (S.SimpleBackend t) arch
         -> Formula (S.SimpleBackend t) arch

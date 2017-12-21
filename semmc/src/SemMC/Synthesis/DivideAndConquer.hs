@@ -70,6 +70,8 @@ enumerateSplits form = mapMaybe (makeSplit form)
                      $ splits (MapF.keys (formDefs form))
 
 divideAndConquer :: (Architecture arch,
+                     TemplatableOperand arch,
+                     ArchRepr arch,
                      Architecture (TemplatedArch arch),
                      Typeable arch)
                  => SynthesisParams (S.SimpleBackend t) arch

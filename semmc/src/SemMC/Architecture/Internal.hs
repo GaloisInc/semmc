@@ -8,7 +8,8 @@ module SemMC.Architecture.Internal (
   IsOperand,
   Opcode,
   IsOpcode,
-  OperandType
+  OperandType,
+  IsOperandTypeRepr(..)
   ) where
 
 import           GHC.TypeLits ( Symbol )
@@ -35,3 +36,7 @@ class IsOpcode (op :: (Symbol -> *) -> [Symbol] -> *)
 -- operand should generate.
 type family OperandType (arch :: *) (op :: Symbol) :: BaseType
 
+-- | The shape representative for the given architecture
+class IsOperandTypeRepr arch where
+  type OperandTypeRepr (arch :: *) :: Symbol -> *
+  operandTypeReprSymbol :: proxy arch -> OperandTypeRepr arch s -> String

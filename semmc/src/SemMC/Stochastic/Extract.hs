@@ -21,7 +21,7 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC ( fmapFC, foldrFC, traverseFC )
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import qualified Lang.Crucible.Solver.Interface as C
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
@@ -43,7 +43,7 @@ extractFormula :: forall arch t sh
                 . (SynC arch)
                => AC.RegisterizedInstruction arch
                -> A.Opcode arch (A.Operand arch) sh
-               -> SL.ShapedList (A.Operand arch) sh
+               -> SL.List (A.Operand arch) sh
                -> F.Formula (Sym t) arch
                -> IORelation arch sh
                -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
@@ -62,7 +62,7 @@ extractFormula ri opc ops progForm iorel = do
           let Just expr = MapF.lookup loc (F.formDefs progForm)
           in go (defineLocation progForm loc expr acc) rest
         OperandRef (Some idx) -> do
-          let operand = SL.indexShapedList ops idx
+          let operand = ops SL.!! idx
               Just loc = A.operandToLocation (Proxy @arch) operand
               Just expr = MapF.lookup loc (F.formDefs progForm)
           go (defineLocation progForm loc expr acc) rest
@@ -79,7 +79,7 @@ extractFormula ri opc ops progForm iorel = do
 -- replaced list with 'S.replaceVars' to update 'pfDefs'.
 renameVariables :: forall arch sh t
                  . (SynC arch)
-                => SL.ShapedList (A.Operand arch) sh
+                => SL.List (A.Operand arch) sh
                 -> F.ParameterizedFormula (Sym t) arch sh
                 -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 renameVariables oplist pf0 = do
@@ -93,13 +93,13 @@ renameVariables oplist pf0 = do
     doReplace sym sva _k v = F.replaceVars sym sva v
 
     buildRenameList :: Sym t
-                    -> SL.ShapedList (BV.BoundVar (Sym t) arch) sh
-                    -> IO (Pair (Ctx.Assignment (C.BoundVar (Sym t))) (Ctx.Assignment (C.SymExpr (Sym t))), SL.ShapedList (BV.BoundVar (Sym t) arch) sh)
+                    -> SL.List (BV.BoundVar (Sym t) arch) sh
+                    -> IO (Pair (Ctx.Assignment (C.BoundVar (Sym t))) (Ctx.Assignment (C.SymExpr (Sym t))), SL.List (BV.BoundVar (Sym t) arch) sh)
     buildRenameList sym opVarList = do
       -- A shaped list with the same shape, but with pairs where the first is
       -- the original name and the second is the newly-allocated variable (with
       -- a more sensible name) that will be used as a replacement.
-      opVarListRenames <- SL.traverseFCIndexed (allocateSensibleVariableName sym) opVarList
+      opVarListRenames <- SL.itraverse (allocateSensibleVariableName sym) opVarList
       varExprPairs <- traverseFC convertToVarExprPair opVarListRenames
       let sva = foldrFC addToAssignmentPair (Pair Ctx.empty Ctx.empty) varExprPairs
       return (sva, fmapFC secondVar opVarListRenames)
@@ -110,8 +110,8 @@ renameVariables oplist pf0 = do
                                  -> BV.BoundVar (Sym t) arch tp
                                  -> IO (VarPair (BV.BoundVar (Sym t) arch) (BV.BoundVar (Sym t) arch) tp)
     allocateSensibleVariableName sym ix bv = do
-      let operand = SL.indexShapedList oplist ix
-      fresh <- C.freshBoundVar sym (U.makeSymbol ("operand" ++ show (SL.indexAsInt ix))) (AC.operandType (Proxy @arch) operand)
+      let operand = oplist SL.!! ix
+      fresh <- C.freshBoundVar sym (U.makeSymbol ("operand" ++ show (SL.indexValue ix))) (AC.operandType (Proxy @arch) operand)
       return (VarPair bv (BV.BoundVar fresh))
 
     -- Given a correspondence between and old var and a new var, create a pair
@@ -180,7 +180,7 @@ parameterizeFormula :: forall arch sh t
                      . (AC.ConcreteArchitecture arch)
                     => AC.RegisterizedInstruction arch
                     -> A.Opcode arch (A.Operand arch) sh
-                    -> SL.ShapedList (A.Operand arch) sh
+                    -> SL.List (A.Operand arch) sh
                     -> F.Formula (Sym t) arch
                     -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
 parameterizeFormula ri@AC.RI { AC.riLiteralLocs = regLitLocs } opcode oplist f = do
@@ -188,7 +188,7 @@ parameterizeFormula ri@AC.RI { AC.riLiteralLocs = regLitLocs } opcode oplist f =
   -- corresponding to any parameters
   let litVars = U.filterMapF (keepNonParams paramLocs) (F.formParamVars f)
   L.logM L.Info ("litVars = " ++ show litVars)
-  let (nonParamDefs, paramDefs) = SL.foldrFCIndexed (replaceParameters (Proxy @arch)) (F.formDefs f, MapF.empty) oplist
+  let (nonParamDefs, paramDefs) = SL.ifoldr (replaceParameters (Proxy @arch)) (F.formDefs f, MapF.empty) oplist
       defs = MapF.foldrWithKey liftImplicitLocations paramDefs nonParamDefs
   L.logM L.Info ("nonParamDefs = " ++ show nonParamDefs)
   L.logM L.Info ("paramDefs = " ++ show paramDefs)
@@ -203,7 +203,7 @@ parameterizeFormula ri@AC.RI { AC.riLiteralLocs = regLitLocs } opcode oplist f =
   --
   -- FIXME: Do we really need variables for output-only locations?  It seems to
   -- produce formulas that reference useless variables
-  opVars <- SL.traverseFCIndexed (findVarForOperand opcode ri (F.formParamVars f)) oplist
+  opVars <- SL.itraverse (findVarForOperand opcode ri (F.formParamVars f)) oplist
   L.logM L.Info ("opVars = " ++ show opVars)
 
   -- Uses are:
@@ -227,7 +227,7 @@ parameterizeFormula ri@AC.RI { AC.riLiteralLocs = regLitLocs } opcode oplist f =
 
 collectUses :: forall arch sh a b
              . (AC.ConcreteArchitecture arch)
-            => SL.ShapedList (A.Operand arch) sh
+            => SL.List (A.Operand arch) sh
             -> MapF.MapF (A.Location arch) a
             -> MapF.MapF (F.Parameter arch sh) b
             -> S.Set (Some (F.Parameter arch sh))
@@ -236,7 +236,7 @@ collectUses opVars litVars defs =
   where
     defUses = MapF.foldrWithKey collectKeys S.empty defs
     litUses = MapF.foldrWithKey wrapLocations S.empty litVars
-    opUses = SL.foldrFCIndexed wrapIndexes S.empty opVars
+    opUses = SL.ifoldr wrapIndexes S.empty opVars
 
     collectKeys k _ = S.insert (Some k)
     wrapLocations loc _ = S.insert (Some (F.LiteralParameter loc))

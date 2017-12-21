@@ -21,7 +21,8 @@ import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.ShapedList ( ShapedList )
+import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.HasRepr as HR
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF
 import qualified Data.Set as Set
@@ -32,7 +33,6 @@ import qualified Lang.Crucible.Solver.SimpleBackend as S
 import           Lang.Crucible.Solver.SimpleBackend.GroundEval
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-import           Data.Parameterized.Witness ( Witness(..) )
 import           Dismantle.Instruction
 
 import           SemMC.Architecture
@@ -43,13 +43,13 @@ import           SemMC.Synthesis.Template
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.
 data TemplatableInstruction (arch :: *) where
-  TemplatableInstruction :: TemplatableOpcode arch sh
-                         -> ShapedList (Operand arch) sh
+  TemplatableInstruction :: Opcode arch (Operand arch) sh
+                         -> SL.List (Operand arch) sh
                          -> TemplatableInstruction arch
 
 -- | Disregard the constraints.
 templInsnToDism :: TemplatableInstruction arch -> Instruction arch
-templInsnToDism (TemplatableInstruction (Witness op) oplist) = Instruction op oplist
+templInsnToDism (TemplatableInstruction op oplist) = Instruction op oplist
 
 type LocExprs sym loc = MapF.MapF loc (S.SymExpr sym)
 
@@ -184,17 +184,19 @@ buildEqualityTests form tests = do
 -- | Given a concrete model from the SMT solver, extract concrete instructions
 -- from the templated instructions, so that all of the initially templated
 -- operands are filled in concretely.
-extractConcreteInstructions :: GroundEvalFn t
+extractConcreteInstructions :: (ArchRepr arch)
+                            => GroundEvalFn t
                             -> [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                             -> IO [TemplatableInstruction arch]
 extractConcreteInstructions (GroundEvalFn evalFn) = mapM f
   where f (TemplatedInstructionFormula (TemplatedInstruction op _ _) tf) =
-          TemplatableInstruction (Witness op) <$> recoverOperands evalFn (tfOperandExprs tf)
+          TemplatableInstruction op <$> recoverOperands (HR.typeRepr op) evalFn (tfOperandExprs tf)
 
 -- | Meant to be used as the callback in a check SAT operation. If the result is
 -- Sat, it pulls out concrete instructions corresponding to the SAT model.
 -- Otherwise, it returns Nothing.
-tryExtractingConcrete :: [TemplatedInstructionFormula (S.SimpleBackend t) arch]
+tryExtractingConcrete :: (ArchRepr arch)
+                      => [TemplatedInstructionFormula (S.SimpleBackend t) arch]
                       -> SatResult (GroundEvalFn t, Maybe (EltRangeBindings t))
                       -> IO (Maybe [TemplatableInstruction arch])
 tryExtractingConcrete insns (Sat (evalFn, _)) = Just <$> extractConcreteInstructions evalFn insns
@@ -229,7 +231,7 @@ data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- of the candidate instructions given, has the same
                           -- behavior as the target formula.
 
-cegis' :: (Architecture arch)
+cegis' :: (Architecture arch, ArchRepr arch)
        => [TemplatedInstructionFormula (S.SimpleBackend t) arch]
        -- ^ The trial instructions.
        -> Formula (S.SimpleBackend t) arch
@@ -266,7 +268,7 @@ cegis' trial trialFormula tests = do
           cegis' trial trialFormula (newTest : tests)
     Nothing -> return (CegisUnmatchable tests)
 
-cegis :: (Architecture arch)
+cegis :: (Architecture arch, ArchRepr arch)
       => CegisParams (S.SimpleBackend t) arch
       -- ^ Parameters not specific to the candidate. See 'CegisParams' for
       -- details.

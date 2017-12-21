@@ -45,16 +45,16 @@ library
                        SemMC.Architecture.PPC.UF
   build-depends:       base >= 4.9 && < 5
                      , mtl
-                     , parameterized-utils >= 0.1.10 && < 0.2
+                     , parameterized-utils >= 1 && < 2
                      , crucible == 0.3.1
                      , semmc
                      , dismantle-tablegen
                      , dismantle-ppc
                      , pretty
+                     , text
                      , bytestring
                      , cereal
                      , containers
-                     , constraints
                      , located-base
                      , filepath
                      , megaparsec >= 6 && < 7
@@ -73,7 +73,6 @@ library
   build-depends: base,
                  time,
                  regex >= 1 && < 2,
-                 constraints,
                  parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc,
@@ -105,7 +104,6 @@ executable semmc-ppc-iorels
                  async,
                  semmc,
                  semmc-ppc,
-                 constraints,
                  parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc,
@@ -120,7 +118,6 @@ executable semmc-ppc-stratify
                  directory,
                  async,
                  optparse-applicative,
-                 constraints,
                  parameterized-utils,
                  crucible,
                  semmc,

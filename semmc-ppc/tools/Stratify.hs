@@ -7,7 +7,6 @@ import qualified Control.Concurrent.Async as A
 import           Control.Monad
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
-import qualified Data.Constraint as C
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR
 import qualified System.Exit as IO
@@ -15,7 +14,6 @@ import           Text.Printf ( printf )
 
 import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 
@@ -24,9 +22,7 @@ import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Constraints as C
 import qualified SemMC.Log as L
-import qualified SemMC.Formula as F
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Stochastic.Strata as SST
 
@@ -131,7 +127,7 @@ mainWithOptions opts = do
   when (oParallelOpcodes opts < 1 || oParallelSynth opts < 1) $ do
     IO.die $ printf "Invalid thread count: %d / %d\n" (oParallelOpcodes opts) (oParallelSynth opts)
 
-  iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
+  iorels <- IOR.loadIORelations (Proxy @PPC32.PPC) (oRelDir opts) Util.toIORelFP OL.allOpcodes32
 
   rng <- DA.createGen
   let testGenerator = AC.randomState (Proxy @PPC32.PPC) rng
@@ -164,7 +160,7 @@ mainWithOptions opts = do
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
                        }
-  let opcodes :: [Some (Witness (F.BuildOperandList PPC32.PPC) (PPC.Opcode PPC.Operand))]
+  let opcodes :: [Some (PPC.Opcode PPC.Operand)]
       -- In production we want to know and target as many opcodes as
       -- possible, but while developing mcmc synthesis it's simpler to
       -- only consider a few instructions at a time. At least some of
@@ -173,10 +169,10 @@ mainWithOptions opts = do
       -- true right now.
 
       -- opcodes = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32
-      opcodes = [ Some (Witness PPC.ADD4) ]
-      targets :: [Some (Witness (SST.BuildAndConvert PPC32.PPC) (PPC.Opcode PPC.Operand))]
+      opcodes = [ Some PPC.ADD4 ]
+      targets :: [Some (PPC.Opcode PPC.Operand)]
       -- targets = C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes
-      targets = [ Some (Witness PPC.ADD4o) ]
+      targets = [ Some PPC.ADD4o ]
   senv <- SST.loadInitialState cfg sym testGenerator initialTestCases opcodes OL.pseudoOps32 targets iorels
   _ <- SST.stratifiedSynthesis senv
 

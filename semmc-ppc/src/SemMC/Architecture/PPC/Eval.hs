@@ -21,7 +21,7 @@ module SemMC.Architecture.PPC.Eval (
 import           Data.Int ( Int16 )
 import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.ShapedList as SL
+import qualified Data.Parameterized.List as SL
 import           Lang.Crucible.BaseTypes
 
 import qualified Dismantle.PPC as PPC
@@ -52,12 +52,12 @@ createSymbolicEntries = foldr duplicateIfDotted []
 
 interpMemriReg :: forall sh s ppc tp
                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
-               => SL.ShapedList PPC.Operand sh
+               => SL.List PPC.Operand sh
                -> F.WrappedOperand ppc sh s
                -> BaseTypeRepr tp
                -> L.Location ppc tp
 interpMemriReg operands (F.WrappedOperand _orep ix) rep =
-  case SL.indexShapedList operands ix of
+  case operands SL.!! ix of
     PPC.Memri (PPC.MemRI (Just base) _) ->
       let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
           loc = LocGPR base
@@ -75,12 +75,12 @@ interpMemriOffsetExtractor (PPC.MemRI _ off) = off
 
 interpMemrixReg :: forall sh s ppc tp
                  . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
-                => SL.ShapedList PPC.Operand sh
+                => SL.List PPC.Operand sh
                 -> F.WrappedOperand ppc sh s
                 -> BaseTypeRepr tp
                 -> L.Location ppc tp
 interpMemrixReg operands (F.WrappedOperand _orep ix) rep =
-  case SL.indexShapedList operands ix of
+  case operands SL.!! ix of
     PPC.Memrix (PPC.MemRIX (Just base) _) ->
       let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
           loc = LocGPR base
@@ -98,12 +98,12 @@ interpMemrixOffsetExtractor (PPC.MemRIX _ off) = off
 
 interpMemrrBase :: forall sh s ppc tp
                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
-               => SL.ShapedList PPC.Operand sh
+               => SL.List PPC.Operand sh
                -> F.WrappedOperand ppc sh s
                -> BaseTypeRepr tp
                -> L.Location ppc tp
 interpMemrrBase operands (F.WrappedOperand _orep ix) rep =
-  case SL.indexShapedList operands ix of
+  case operands SL.!! ix of
     PPC.Memrr (PPC.MemRR (Just base) _) ->
       let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
           loc = LocGPR base

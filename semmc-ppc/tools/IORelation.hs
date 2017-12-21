@@ -5,7 +5,6 @@ module Main ( main ) where
 
 import qualified Control.Concurrent.Async as A
 import           Control.Monad
-import qualified Data.Constraint as C
 import qualified Data.Foldable as F
 import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
@@ -19,7 +18,6 @@ import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified SemMC.Architecture.Concrete as AC
-import qualified SemMC.Constraints as C
 import qualified SemMC.Stochastic.IORelation as IOR
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Architecture.PPC32 as PPC32
@@ -90,7 +88,7 @@ mainWithOptions opt = do
   DIR.createDirectoryIfMissing True (oRelDir opt)
   logThread <- U.asyncLinked (L.stdErrLogEventConsumer (const True) logCfg)
 
-  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC32.PPC) U.toIORelFP (C.weakenConstraints (C.Sub C.Dict) OL.allOpcodes32)
+  (_iorels, failures) <- IOR.learnIORelations cfg (Proxy @PPC32.PPC) U.toIORelFP OL.allOpcodes32
   unless (F.null failures) $ do
     putStrLn "Failed opcodes:"
     putStrLn (unlines (map show (F.toList failures)))

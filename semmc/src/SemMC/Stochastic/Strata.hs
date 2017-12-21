@@ -17,9 +17,7 @@ module SemMC.Stochastic.Strata (
   -- * Statistics
   S.StatisticsThread,
   S.newStatisticsThread,
-  S.terminateStatisticsThread,
-  -- * Classes
-  BuildAndConvert
+  S.terminateStatisticsThread
   ) where
 
 import qualified GHC.Err.Located as L
@@ -33,7 +31,6 @@ import           UnliftIO as U
 import           Data.Parameterized.Classes ( showF )
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Witness ( Witness(..) )
 
 import qualified Dismantle.Instruction as D
 
@@ -48,7 +45,7 @@ import qualified SemMC.Stochastic.Classify as C
 import           SemMC.Stochastic.Extract ( extractFormula )
 import           SemMC.Stochastic.Generalize ( generalize )
 import           SemMC.Stochastic.Instantiate ( instantiateInstruction )
-import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..), BuildAndConvert )
+import           SemMC.Stochastic.Initialize ( loadInitialState, Config(..), SynEnv(..) )
 import           SemMC.Stochastic.Monad
 import qualified SemMC.Stochastic.Statistics as S
 import           SemMC.Stochastic.Synthesize ( synthesize )
@@ -91,14 +88,14 @@ processWorklist = do
   mwork <- takeWork
   case mwork of
     Nothing -> L.logM L.Info "No more work items, exiting!"
-    Just (Some (Witness op)) -> do
+    Just (Some op) -> do
       L.logM L.Info $ printf "Processing work item '%s'" (showF op)
       processOpcode op
       processWorklist
 
 -- | Process a single opcode, requeueing it on the work list if
 -- synthesis times out.
-processOpcode :: (SynC arch, L.HasCallStack, F.ConvertShape sh)
+processOpcode :: (SynC arch, L.HasCallStack)
               => A.Opcode arch (A.Operand arch) sh -> Syn t arch ()
 processOpcode op = do
   rinstr <- instantiateInstruction op
@@ -119,7 +116,7 @@ processOpcode op = do
       -- Would it make more sense to put this in a different queue
       -- that corresponds to opcodes that timed out in the current
       -- round, instead of requeuing?
-      addWork (Some (Witness op))
+      addWork (Some op)
     -- Success, record the formula
     Right (Just formula) -> do
       L.logM L.Info $ unlines

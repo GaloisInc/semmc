@@ -76,7 +76,7 @@ testVector1 =
               , CE.testContext = sbase
              }
   where
-    i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:> PPC.Gprc r17 PPC.:> PPC.Gprc r25 PPC.:> PPC.Nil)
+    i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:< PPC.Gprc r17 PPC.:< PPC.Gprc r25 PPC.:< PPC.Nil)
 
 sbase :: MapF.MapF (Location PPC) V.Value
 sbase = toState [ 1228099099
@@ -176,4 +176,4 @@ testVector2 = testVector1 { CE.testNonce = 22
     -- ctx0 = V.zeroState (Proxy @PPC)
     -- ctx1 = V.pokeMS ctx0 v2 (V.ValueBV (W.W 1))
     -- ctx2 = V.pokeMS ctx1 v3 (V.ValueBV (W.W 5))
-    i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:> PPC.Gprc r17 PPC.:> PPC.Gprc r25 PPC.:> PPC.Nil)
+    i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:< PPC.Gprc r17 PPC.:< PPC.Gprc r25 PPC.:< PPC.Nil)

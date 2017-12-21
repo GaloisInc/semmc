@@ -15,7 +15,6 @@ import qualified Data.Sequence as Seq
 
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
-import qualified Data.Parameterized.ShapedList as SL
 
 import qualified Data.Parameterized.Seq as SeqF
 import qualified SemMC.Architecture as A
@@ -65,8 +64,9 @@ lookupFormula :: (ArchitectureWithPseudo arch)
 lookupFormula (RealOpcode op) = MapF.lookup op <$> askFormulas
 lookupFormula (PseudoOpcode pseudo) = MapF.lookup pseudo <$> askPseudoFormulas
 
-lookupCongruentOpcodes :: (HasRepr (A.Opcode arch (A.Operand arch)) SL.ShapeRepr,
-                           HasRepr (Pseudo arch (A.Operand arch)) SL.ShapeRepr)
+lookupCongruentOpcodes :: (HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
+                           HasRepr (Pseudo arch (A.Operand arch)) (A.ShapeRepr arch),
+                           MapF.OrdF (A.OperandTypeRepr arch))
                        => SynthOpcode arch sh
                        -> Syn t arch (Seq.Seq (SynthOpcode arch sh))
 lookupCongruentOpcodes op = maybe Seq.empty SeqF.unSeqF . MapF.lookup (typeRepr op) <$> askKnownCongruentOps

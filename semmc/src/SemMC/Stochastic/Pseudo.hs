@@ -28,8 +28,8 @@ module SemMC.Stochastic.Pseudo
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
-import           Data.Parameterized.ShapedList ( ShapedList, ShapeRepr )
-import           Data.Parameterized.SymbolRepr ( SymbolRepr )
+import qualified Data.Parameterized.SymbolRepr as SR
+import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
 import           GHC.TypeLits ( Symbol )
 import           Text.Printf ( printf )
@@ -54,12 +54,12 @@ class (A.Architecture arch,
        ShowF (Pseudo arch (A.Operand arch)),
        TestEquality (Pseudo arch (A.Operand arch)),
        OrdF (Pseudo arch (A.Operand arch)),
-       HasRepr (Pseudo arch (A.Operand arch)) ShapeRepr,
+       HasRepr (Pseudo arch (A.Operand arch)) (A.ShapeRepr arch),
        D.ArbitraryOperands (Pseudo arch) (A.Operand arch)) =>
       ArchitectureWithPseudo arch where
   -- | Turn a given pseudo-op with parameters into a series of actual,
   -- machine-level instructions.
-  assemblePseudo :: proxy arch -> Pseudo arch o sh -> ShapedList o sh -> [A.Instruction arch]
+  assemblePseudo :: proxy arch -> Pseudo arch o sh -> SL.List o sh -> [A.Instruction arch]
 
 ----------------------------------------------------------------
 -- * Helper type for arches with no pseudo ops
@@ -79,9 +79,6 @@ pseudoAbsurd = \case
 instance D.ArbitraryOperands EmptyPseudo o where
   arbitraryOperands _gen = pseudoAbsurd
 
-instance HasRepr (EmptyPseudo o) ShapeRepr where
-  typeRepr = pseudoAbsurd
-
 instance ShowF (EmptyPseudo o) where
   showF = pseudoAbsurd
 
@@ -90,6 +87,9 @@ instance TestEquality (EmptyPseudo o) where
 
 instance OrdF (EmptyPseudo o) where
   compareF = pseudoAbsurd
+
+instance HasRepr (EmptyPseudo o) (SL.List SR.SymbolRepr) where
+  typeRepr = pseudoAbsurd
 
 ----------------------------------------------------------------
 
@@ -154,9 +154,10 @@ instance (OrdF (A.Opcode arch (A.Operand arch)),
          Ord (SynthOpcode arch sh) where
   compare op1 op2 = toOrdering (compareF op1 op2)
 
-instance (HasRepr ((A.Opcode arch) (A.Operand arch)) ShapeRepr,
-          HasRepr ((Pseudo arch) (A.Operand arch)) ShapeRepr) =>
-  HasRepr (SynthOpcode arch) (ShapedList SymbolRepr) where
+instance (rep ~ A.ShapeRepr arch,
+          HasRepr ((A.Opcode arch) (A.Operand arch)) rep,
+          HasRepr ((Pseudo arch) (A.Operand arch)) rep) =>
+  HasRepr (SynthOpcode arch) rep where
   typeRepr (RealOpcode op) = typeRepr op
   typeRepr (PseudoOpcode op) = typeRepr op
 
@@ -165,13 +166,13 @@ synthArbitraryOperands :: (D.ArbitraryOperands (A.Opcode arch) (A.Operand arch),
                            D.ArbitraryOperands (Pseudo arch) (A.Operand arch))
                        => DA.Gen
                        -> SynthOpcode arch sh
-                       -> IO (ShapedList (A.Operand arch) sh)
+                       -> IO (SL.List (A.Operand arch) sh)
 synthArbitraryOperands gen (RealOpcode opcode) = D.arbitraryOperands gen opcode
 synthArbitraryOperands gen (PseudoOpcode opcode) = D.arbitraryOperands gen opcode
 
 -- | Like 'D.GenericInstruction', but can have either a real or a pseudo-opcode.
 data SynthInstruction arch =
-  forall sh . SynthInstruction (SynthOpcode arch sh) (ShapedList (A.Operand arch) sh)
+  forall sh . SynthInstruction (SynthOpcode arch sh) (SL.List (A.Operand arch) sh)
 
 instance (TestEquality (A.Opcode arch (A.Operand arch)),
           TestEquality (Pseudo arch (A.Operand arch)),
