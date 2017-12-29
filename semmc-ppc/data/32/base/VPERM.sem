@@ -1,4 +1,7 @@
 ;; Vector Permute (VA-form)
 ((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc) (vrC . 'Vrrc))) 
-  (in (vrC vrB vrA 'IP))
-  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
+  (in ('FPSCR vrC vrB vrA 'IP))
+  (defs 
+    (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec3") vrA vrB vrC 'FPSCR))) 
+      (vrT ((_ extract 127 0) ((_ call "ppc.vec3") vrA vrB vrC 'FPSCR)))
+      ('IP (bvadd 'IP #x00000004)))))

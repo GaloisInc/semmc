@@ -5,9 +5,39 @@ module SemMC.Architecture.PPC.Base.Vector (
   baseVector
   ) where
 
+import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat )
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
+
+import Data.Parameterized.Some
+
+ppcvec1 :: (HasCallStack)
+        => String
+        -> Expr 'TBV
+        -> Expr 'TBV
+        -> Expr 'TBV
+ppcvec1 name vr1 vfpscr =
+  uf (EBV 160) "ppc.vec1" [ Some vr1, Some vfpscr ]
+
+ppcvec2 :: (HasCallStack)
+        => String
+        -> Expr 'TBV
+        -> Expr 'TBV
+        -> Expr 'TBV
+        -> Expr 'TBV
+ppcvec2 name vr1 vr2 vfpscr =
+  uf (EBV 160) "ppc.vec2" [ Some vr1, Some vr2, Some vfpscr ]
+
+ppcvec3 :: (HasCallStack)
+        => String
+        -> Expr 'TBV
+        -> Expr 'TBV
+        -> Expr 'TBV
+        -> Expr 'TBV
+        -> Expr 'TBV
+ppcvec3 name vr1 vr2 vr3 vfpscr =
+  uf (EBV 160) "ppc.vec3" [ Some vr1, Some vr2, Some vr3, Some vfpscr ]
 
 -- | Definitions of vector instructions
 --
@@ -26,14 +56,19 @@ baseVector = do
 
   defineOpcodeWithIP "VPERM" $ do
     comment "Vector Permute (VA-form)"
-    (vrT, _, _, _) <- vaform
-    defLoc vrT (undefinedBV 128)
+    (vrT, vrA, vrB, vrC) <- vaform
+    input fpscr
+    let res = ppcvec3 "VPERM" (Loc vrA) (Loc vrB) (Loc vrC) (Loc fpscr)
+    defLoc vrT (highBits' 128 res)
+    defLoc fpscr (lowBits' 32 res)
 
   defineOpcodeWithIP "VSEL" $ do
     comment "Vector Select (VA-form)"
-    (vrT, _, _, _) <- vaform
-    defLoc vrT (undefinedBV 128)
-
+    (vrT, vrA, vrB, vrC) <- vaform
+    input fpscr
+    let res = ppcvec3 "VSEL" (Loc vrA) (Loc vrB) (Loc vrC) (Loc fpscr)
+    defLoc vrT (highBits' 128 res)
+    defLoc fpscr (lowBits' 32 res)
   return ()
 
 vecCompare :: (?bitSize :: BitSize) => SemM 'Top ()
