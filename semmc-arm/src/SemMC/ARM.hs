@@ -1,10 +1,14 @@
 -- | Representations of the ARM architecture for semantics learning
 {-# LANGUAGE DataKinds #-}
-module SemMC.ARM (
-  MachineState(..),
-  Instruction,
-  testSerializer
-  ) where
+{-# LANGUAGE ScopedTypeVariables #-}
+
+module SemMC.ARM
+    ( ARM
+    , MachineState(..)
+    , Instruction
+    , testSerializer
+    )
+    where
 
 import Control.Monad ( replicateM )
 import qualified Data.Binary.Get as G
@@ -15,6 +19,11 @@ import qualified Data.Vector.Sized as V
 import Data.Word ( Word8, Word32, Word64 )
 
 import qualified SemMC.Concrete.Execution as CE
+
+-- | Define the arch type for this processor.  There are no
+-- inhabitants, but this is used as a phantom type selector.
+data ARM  -- arch type
+
 
 data MachineState =
   MachineState { gprs :: V.Vector 16 Word32
