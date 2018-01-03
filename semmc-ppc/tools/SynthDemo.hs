@@ -6,6 +6,7 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent.Async as A
+import           Data.Bool ( bool )
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as BSHex
 import qualified Data.ByteString.Lazy as BSL
@@ -22,12 +23,15 @@ import qualified Data.ElfEdit as E
 import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as N
+import           Data.Parameterized.Some ( Some (..) )
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
 import qualified Dismantle.PPC as DPPC
 
 import           SemMC.Architecture ( Architecture, Instruction, Location, Opcode, Operand )
+import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
+import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
 import qualified SemMC.Formula as F
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, unTemplate )
 import qualified SemMC.Synthesis as SemMC
@@ -39,7 +43,7 @@ import qualified SemMC.Architecture.PPC32 as PPC32
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
                        , oOriginalWithReturn :: Maybe FilePath
-                       , oBaseSetDir :: FilePath
+                       , oBaseArch :: String
                        , oAppendReturn :: Bool
                        }
 
@@ -53,10 +57,10 @@ options = Options <$> O.strArgument ( O.metavar "FILE"
                   <*> O.optional ( O.strOption ( O.long "with-return"
                                                <> O.metavar "FILE"
                                                <> O.help "The file to save the original program with a return instruction appended" ))
-                  <*> O.strOption ( O.long "base-set"
-                                  <> O.short 'b'
-                                  <> O.metavar "DIR"
-                                  <> O.help "The directory containing the base set" )
+                  <*> O.strOption ( O.long "arch"
+                                  <> O.short 'a'
+                                  <> O.metavar "ARCH"
+                                  <> O.help "The architecture of instructions to disassemble (PPC32 or PPC64)" )
                   <*> O.switch ( O.long "append-return"
                                <> O.short 'r'
                                <> O.help "Append a return instruction to the synthesized program" )
@@ -110,18 +114,15 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
--- allOps :: [Some (Witness PPC32.BuildableAndTemplatable (DPPC.Opcode DPPC.Operand))]
-allOps = undefined -- $(DT.captureDictionaries matchConstructor ''DPPC.Opcode)
-
 loadBaseSet :: U.HasLogCfg
-            => FilePath
+            => [(Some (DPPC.Opcode DPPC.Operand), BS8.ByteString)]
             -> SB.SimpleBuilder t SB.SimpleBackendState
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.SimpleBuilder t SB.SimpleBackendState) PPC32.PPC),
                    SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC32.PPC)
-loadBaseSet baseDir sym = do
-  baseSet <- undefined -- PPC32.loadBaseSet baseDir sym allOps
+loadBaseSet ops sym = do
+  baseSet <- F.loadFormulas sym ops
   let plainBaseSet = makePlain baseSet
-  let synthEnv = SemMC.setupEnvironment sym baseSet
+      synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
 
 symbolicallyExecute :: (Architecture arch, Traversable t)
@@ -179,7 +180,8 @@ mainWith r opts = do
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
   sym <- SB.newSimpleBackend r
-  (plainBaseSet, synthEnv) <- loadBaseSet (oBaseSetDir opts) sym
+  let semantics = bool PPC32.allSemantics PPC64.allSemantics (oBaseArch opts == "PPC64")
+  (plainBaseSet, synthEnv) <- loadBaseSet semantics sym
 
   -- Turn it into a formula
   formula <- symbolicallyExecute sym plainBaseSet insns
