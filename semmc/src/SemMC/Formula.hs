@@ -42,6 +42,7 @@ module SemMC.Formula
   , readFormulaFromFile
 
     -- * SemMC.Formula.Printer
+  , printFormula
   , printParameterizedFormula
   ) where
 
@@ -67,7 +68,7 @@ import SemMC.Formula.Instantiate ( instantiateFormula,
                                  )
 import SemMC.Formula.Load ( loadFormulas, loadFormulasFromFiles )
 import SemMC.Formula.Parser ( readFormula, readFormulaFromFile )
-import SemMC.Formula.Printer ( printParameterizedFormula )
+import SemMC.Formula.Printer ( printParameterizedFormula, printFormula )
 import SemMC.Formula.Equivalence ( EquivalenceResult(..),
                                    formulasEquiv,
                                    formulasEquivConcrete,

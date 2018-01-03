@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeOperators #-}
 module SemMC.Formula.Printer
   ( printParameterizedFormula
+  , printFormula
   ) where
 
 import qualified Data.Map as Map
@@ -49,7 +50,13 @@ printParameterizedFormula :: (A.Architecture arch)
                           => A.ShapeRepr arch sh
                           -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
                           -> T.Text
-printParameterizedFormula rep = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert rep
+printParameterizedFormula rep =
+  SC.encodeOne (SC.basicPrint printAtom) . sexprConvertParameterized rep
+
+printFormula :: (ShowF (A.Location arch))
+             => Formula (S.SimpleBuilder t st) arch
+             -> T.Text
+printFormula = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert
 
 printAtom :: Atom -> T.Text
 printAtom (AIdent s) = T.pack s
@@ -61,12 +68,32 @@ printAtom (ABV sz val) = T.pack (prefix ++ printf fmt val)
           | sz `rem` 4 == 0 = ("#x", "%0" ++ show (sz `div` 4) ++ "x")
           | otherwise = ("#b", "%0" ++ show sz ++ "b")
 
--- | Intermediate serialization.
-sexprConvert :: (A.Architecture arch)
-             => A.ShapeRepr arch sh
-             -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
+sexprConvert :: forall t st arch
+              . (ShowF (A.Location arch))
+             => Formula (S.SimpleBuilder t st) arch
              -> SC.SExpr Atom
-sexprConvert rep (ParameterizedFormula { pfUses = uses
+sexprConvert f =
+  fromFoldable' (ident "defs" : map (convertSimpleDef (Proxy @arch) (formParamVars f)) (MapF.toList (formDefs f)))
+
+convertSimpleDef :: forall arch proxy t
+                  . (ShowF (A.Location arch))
+                 => proxy arch
+                 -> MapF.MapF (A.Location arch) (S.SimpleBoundVar t)
+                 -> MapF.Pair (A.Location arch) (S.Elt t)
+                 -> SC.SExpr Atom
+convertSimpleDef _ paramVars (MapF.Pair loc elt) =
+  SC.SCons (convertLocation loc) (convertElt paramLookup elt)
+  where
+    tbl = Map.fromList [ (Some bv, convertLocation l) | MapF.Pair l bv <- MapF.toList paramVars ]
+    paramLookup :: forall tp . S.SimpleBoundVar t tp -> Maybe (SC.SExpr Atom)
+    paramLookup bv = Map.lookup (Some bv) tbl
+
+-- | Intermediate serialization.
+sexprConvertParameterized :: (A.Architecture arch)
+                          => A.ShapeRepr arch sh
+                          -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
+                          -> SC.SExpr Atom
+sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
                                        , pfOperandVars = opVars
                                        , pfLiteralVars = litVars
                                        , pfDefs = defs
