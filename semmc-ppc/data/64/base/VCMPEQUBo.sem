@@ -1,5 +1,7 @@
 ;; Vector Compare Equal To Unsigned Byte (VC-form, RC=1)
 ((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc))) 
-  (in ('XER 'CR vrB vrA 'IP))
+  (in ('XER 'CR 'FPSCR vrB vrA 'IP))
   (defs 
-    (('CR ((_ call "undefined") #x00000020)) (vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))
+    (('CR ((_ call "undefined") #x00000020)) 
+      (vrT ((_ extract 127 0) ((_ call "ppc.vec2") (VCMPEQUB) vrA vrB 'FPSCR)))
+      ('IP (bvadd 'IP #x0000000000000004)))))

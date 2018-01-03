@@ -2,6 +2,6 @@
 ((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc) (vrC . 'Vrrc))) 
   (in ('FPSCR vrC vrB vrA 'IP))
   (defs 
-    (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec3") vrA vrB vrC 'FPSCR))) 
-      (vrT ((_ extract 127 0) ((_ call "ppc.vec3") vrA vrB vrC 'FPSCR)))
+    (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec3") (VSEL) vrA vrB vrC 'FPSCR))) 
+      (vrT ((_ extract 127 0) ((_ call "ppc.vec3") (VSEL) vrA vrB vrC 'FPSCR)))
       ('IP (bvadd 'IP #x0000000000000004)))))

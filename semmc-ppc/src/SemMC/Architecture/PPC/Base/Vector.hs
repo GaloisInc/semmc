@@ -12,13 +12,21 @@ import SemMC.Architecture.PPC.Base.Core
 
 import Data.Parameterized.Some
 
+-- | This is a cheap way to encode strings in our DSL in order to pass along a little
+-- extra information with an uninterpreted function -- in this case, our UFs are the
+-- ppcvec functions, but we also would like to pass the *name* of the particular
+-- operation we are considering so that the backend has that information as well. The
+-- type of the expression is a boolean because we didn't have a unit.
+vecFn :: String -> Expr 'TBool
+vecFn s = Builtin EBool s []
+
 ppcvec1 :: (HasCallStack)
         => String
         -> Expr 'TBV
         -> Expr 'TBV
         -> Expr 'TBV
 ppcvec1 name vr1 vfpscr =
-  uf (EBV 160) "ppc.vec1" [ Some vr1, Some vfpscr ]
+  uf (EBV 160) "ppc.vec1" [ Some (vecFn name), Some vr1, Some vfpscr ]
 
 ppcvec2 :: (HasCallStack)
         => String
@@ -27,7 +35,7 @@ ppcvec2 :: (HasCallStack)
         -> Expr 'TBV
         -> Expr 'TBV
 ppcvec2 name vr1 vr2 vfpscr =
-  uf (EBV 160) "ppc.vec2" [ Some vr1, Some vr2, Some vfpscr ]
+  uf (EBV 160) "ppc.vec2" [ Some (vecFn name), Some vr1, Some vr2, Some vfpscr ]
 
 ppcvec3 :: (HasCallStack)
         => String
@@ -37,7 +45,7 @@ ppcvec3 :: (HasCallStack)
         -> Expr 'TBV
         -> Expr 'TBV
 ppcvec3 name vr1 vr2 vr3 vfpscr =
-  uf (EBV 160) "ppc.vec3" [ Some vr1, Some vr2, Some vr3, Some vfpscr ]
+  uf (EBV 160) "ppc.vec3" [ Some (vecFn name), Some vr1, Some vr2, Some vr3, Some vfpscr ]
 
 -- | Definitions of vector instructions
 --
@@ -75,8 +83,11 @@ vecCompare :: (?bitSize :: BitSize) => SemM 'Top ()
 vecCompare = do
   defineOpcodeWithIP "VCMPEQUB" $ do
     comment "Vector Compare Equal To Unsigned Byte (VC-form, RC=0)"
-    (vrT, _vrA, _vrB) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    (vrT, vrA, vrB) <- vxform3
+    input fpscr
+    let res = ppcvec2 "VCMPEQUB" (Loc vrA) (Loc vrB) (Loc fpscr)
+    defLoc vrT (highBits' 128 res)
+--    defLoc vrT (undefinedBV 128)
     defineVRCVariant "VCMPEQUBo" (undefinedBV 128) $ do
       comment "Vector Compare Equal To Unsigned Byte (VC-form, RC=1)"
 
@@ -161,8 +172,12 @@ vecArith :: (?bitSize :: BitSize) => SemM 'Top ()
 vecArith = do
   defineOpcodeWithIP "VADDCUW" $ do
     comment "Vector Add and Write Carry-Out Unsigned Word (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    -- (vrT, _, _) <- vxform3
+    (vrT, vrA, vrB) <- vxform3
+    input fpscr
+    let res = ppcvec2 "VPERM" (Loc vrA) (Loc vrB) (Loc fpscr)
+    defLoc vrT (highBits' 128 res)
+    defLoc fpscr (lowBits' 32 res)
 
   defineOpcodeWithIP "VADDSBS" $ do
     comment "Vector Add Signed Byte Saturate (VX-form)"
