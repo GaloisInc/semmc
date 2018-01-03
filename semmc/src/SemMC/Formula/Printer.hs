@@ -10,16 +10,19 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 module SemMC.Formula.Printer
-  ( printFormula
+  ( printParameterizedFormula
   ) where
 
 import qualified Data.Map as Map
 import           Data.Maybe ( fromJust )
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Pair
 import           Data.Parameterized.Some ( Some(..), viewSome )
+import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
@@ -32,6 +35,7 @@ import qualified Data.SCargot.Repr as SC
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import qualified Lang.Crucible.Solver.Symbol as S
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.BoundVar as BV
@@ -41,11 +45,11 @@ import           SemMC.Formula.Parser ( Atom(..) )
 -- This file is organized top-down, i.e., from high-level to low-level.
 
 -- | Serialize a 'ParameterizedFormula' into its textual s-expression form.
-printFormula :: (A.Architecture arch)
-             => A.ShapeRepr arch sh
-             -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
-             -> T.Text
-printFormula rep = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert rep
+printParameterizedFormula :: (A.Architecture arch)
+                          => A.ShapeRepr arch sh
+                          -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
+                          -> T.Text
+printParameterizedFormula rep = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert rep
 
 printAtom :: Atom -> T.Text
 printAtom (AIdent s) = T.pack s
@@ -141,8 +145,25 @@ convertElt _ (S.SemiRingLiteral S.SemiRingInt _ _) = error "IntElt not supported
 convertElt _ (S.SemiRingLiteral S.SemiRingReal _ _) = error "RatElt not supported"
 convertElt _ (S.BVElt sz val _) = SC.SAtom (ABV (widthVal sz) val)
 convertElt paramLookup (S.AppElt appElt) = convertAppElt paramLookup appElt
-convertElt _ (S.NonceAppElt _) = error "NonceAppElt not supported"
+convertElt paramLookup (S.NonceAppElt nae) =
+  case S.nonceEltApp nae of
+    S.FnApp fn args -> convertFnApp paramLookup fn args
+    S.Forall {} -> error "Forall NonceAppElt not supported"
+    S.Exists {} -> error "Exists NonceAppElt not supported"
+    S.ArrayFromFn {} -> error "ArrayFromFn NonceAppElt not supported"
+    S.MapOverArrays {} -> error "MapOverArrays NonceAppElt not supported"
+    S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppElt not supported"
 convertElt paramLookup (S.BoundVarElt var) = fromJust $ paramLookup var
+
+convertFnApp :: ParamLookup t -> S.SimpleSymFn t args ret -> Ctx.Assignment (S.Elt t) args -> SC.SExpr Atom
+convertFnApp paramLookup fn args
+  | S.solverSymbolAsText (S.symFnName fn) == "undefined"
+  , BaseBVRepr nr <- S.fnReturnType fn =
+      let call = fromFoldable' [ ident "_", ident "call", quoted "undefined" ]
+      in fromFoldable' [ call, int (NR.natValue nr) ]
+  | otherwise =
+    let call = fromFoldable' [ ident "_", ident "call", quoted (T.unpack (S.solverSymbolAsText (S.symFnName fn))) ]
+    in fromFoldable' (call : FC.toListFC (convertElt paramLookup) args)
 
 convertAppElt :: ParamLookup t -> S.AppElt t tp -> SC.SExpr Atom
 convertAppElt paramLookup = convertApp paramLookup . S.appEltApp
