@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -18,6 +19,7 @@ module SemMC.Stochastic.IORelation.Shared (
 import qualified Control.Monad.Catch as E
 import           Control.Monad.Trans ( liftIO )
 import           Data.Proxy ( Proxy(..) )
+import           GHC.TypeLits (type (<=))
 
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr ( withKnownNat )
@@ -107,8 +109,8 @@ testCaseLocations proxy = MapF.foldrWithKey getKeys []
     getKeys :: forall a s . A.Location arch s -> a s -> [Some (V.View arch)] -> [Some (V.View arch)]
     getKeys k _ acc = V.someTrivialView proxy (Some k) : acc
 
-withGeneratedValueForLocation :: forall arch n a
-                               . (A.Architecture arch)
+withGeneratedValueForLocation :: forall arch n a .
+                                 (1 <= n, A.Architecture arch)
                               => V.View arch n
                               -> (V.Value (S.BaseBVType n) -> a)
                               -> Learning arch a
