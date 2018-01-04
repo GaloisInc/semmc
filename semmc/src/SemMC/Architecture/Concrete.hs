@@ -41,7 +41,7 @@ instance P.OrdF (LiteralRef arch sh) where
       P.EQF -> P.EQF
 
 
--- | A wrapper around an instruction that notes part of the machine
+-- | A wrapper around an instruction that notes the part of the machine
 -- state that will be used to represent immediate operands.
 --
 -- The extra map indicates which literals in the instruction are
@@ -60,7 +60,7 @@ instance P.OrdF (LiteralRef arch sh) where
 -- Before sending the test, we would need to rewrite the test
 -- instruction to use the immediate in r15 as its value.  This
 -- effectively lets us pretend that an instruction like @ADDI r1, r2,
--- imm@ is actually @ADDI r1, r2, r3@ where @r3@ happens to hold our
+-- imm@ is actually @ADDI r1, r2, r15@ where @r15@ happens to hold our
 -- immediate value.  The one difficulty here is that we need to ensure
 -- that the value is in range for the literal in question.
 --
