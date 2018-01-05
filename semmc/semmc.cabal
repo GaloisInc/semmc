@@ -19,6 +19,7 @@ library
   exposed-modules:     SemMC
                        SemMC.Architecture
                        SemMC.Architecture.Concrete
+                       SemMC.Architecture.Evaluate
                        SemMC.Architecture.Location
                        SemMC.Architecture.Value
                        SemMC.Architecture.View
