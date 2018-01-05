@@ -101,7 +101,7 @@ interestingStates = gprStates -- ++ fprStates
       MapF.insert r1 v1 $ MapF.insert r2 v2 zeroState
 
 -- | FIXME: Does not include memory
-zeroState :: (KnownNat (ArchRegWidth ppc)) => ConcreteState ppc
+zeroState :: (1 <= ArchRegWidth ppc, KnownNat (ArchRegWidth ppc)) => ConcreteState ppc
 zeroState = St.execState addZeros MapF.empty
   where
     addZero :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.State (ConcreteState ppc) ()
