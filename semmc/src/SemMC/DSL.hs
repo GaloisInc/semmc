@@ -106,6 +106,7 @@ exprType e =
     LitBool _ -> EBool
     LitBV w _ -> EBV w
     LitInt _ -> EInt
+    LitString _ -> EString
     Loc ll -> locationType ll
     Builtin t _ _ -> t
     TheoryFunc t _ _ _ -> t
@@ -481,12 +482,14 @@ extractSExpr operands inputs defs =
                 , SC.SCons (SC.SAtom (AIdent "defs")) (SC.SCons (convertDefs defs) SC.SNil)
                 ]
 
+-- TODO: add a case for LitString
 convertExpr :: Some Expr -> SC.SExpr FAtom
 convertExpr (Some e) =
   case e of
     LitBool True -> convertExpr (Some (bveq (LitBV 1 0x0) (LitBV 1 0x0)))
     LitBool False -> convertExpr (Some (bvne (LitBV 1 0x0) (LitBV 1 0x0)))
     LitInt i -> int i
+    LitString s -> string s
     LitBV w val -> SC.SAtom (ABV w val)
     Loc loc -> convertLoc loc
     Builtin _ name params ->

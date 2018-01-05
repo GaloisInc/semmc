@@ -17,8 +17,8 @@ import Data.Parameterized.Some
 -- ppcvec functions, but we also would like to pass the *name* of the particular
 -- operation we are considering so that the backend has that information as well. The
 -- type of the expression is a boolean because we didn't have a unit.
-vecFn :: String -> Expr 'TBool
-vecFn s = Builtin EBool s []
+vecFn :: String -> Expr 'TString
+vecFn s = LitString s
 
 ppcvec1 :: (HasCallStack)
         => String
@@ -84,10 +84,7 @@ vecCompare = do
   defineOpcodeWithIP "VCMPEQUB" $ do
     comment "Vector Compare Equal To Unsigned Byte (VC-form, RC=0)"
     (vrT, vrA, vrB) <- vxform3
-    input fpscr
-    let res = ppcvec2 "VCMPEQUB" (Loc vrA) (Loc vrB) (Loc fpscr)
-    defLoc vrT (highBits' 128 res)
---    defLoc vrT (undefinedBV 128)
+    defLoc vrT (undefinedBV 128)
     defineVRCVariant "VCMPEQUBo" (undefinedBV 128) $ do
       comment "Vector Compare Equal To Unsigned Byte (VC-form, RC=1)"
 
@@ -172,12 +169,8 @@ vecArith :: (?bitSize :: BitSize) => SemM 'Top ()
 vecArith = do
   defineOpcodeWithIP "VADDCUW" $ do
     comment "Vector Add and Write Carry-Out Unsigned Word (VX-form)"
-    -- (vrT, _, _) <- vxform3
-    (vrT, vrA, vrB) <- vxform3
-    input fpscr
-    let res = ppcvec2 "VPERM" (Loc vrA) (Loc vrB) (Loc fpscr)
-    defLoc vrT (highBits' 128 res)
-    defLoc fpscr (lowBits' 32 res)
+    (vrT, _, _) <- vxform3
+    defLoc vrT (undefinedBV 128)
 
   defineOpcodeWithIP "VADDSBS" $ do
     comment "Vector Add Signed Byte Saturate (VX-form)"

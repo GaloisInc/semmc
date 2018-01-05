@@ -107,17 +107,20 @@ uninterpretedFunctions _ =
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth ppc))))
   , ("ppc.vec1",
      Some (knownRepr :: Assignment BaseTypeRepr ( EmptyCtx
+                                                  ::> BaseStructType EmptyCtx
                                                   ::> BaseBVType 128
                                                   ::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 160)))
   , ("ppc.vec2",
      Some (knownRepr :: Assignment BaseTypeRepr ( EmptyCtx
+                                                  ::> BaseStructType EmptyCtx
                                                   ::> BaseBVType 128
                                                   ::> BaseBVType 128
                                                   ::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 160)))
   , ("ppc.vec3",
      Some (knownRepr :: Assignment BaseTypeRepr ( EmptyCtx
+                                                  ::> BaseStructType EmptyCtx
                                                   ::> BaseBVType 128
                                                   ::> BaseBVType 128
                                                   ::> BaseBVType 128
