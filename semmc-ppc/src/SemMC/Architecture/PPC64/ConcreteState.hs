@@ -16,7 +16,7 @@ module SemMC.Architecture.PPC64.ConcreteState (
   ) where
 
 import Data.Proxy
-import           GHC.TypeLits ( KnownNat )
+import           GHC.TypeLits
 
 import           Control.Monad.Trans ( liftIO )
 import qualified Control.Monad.State.Strict as St
@@ -43,7 +43,7 @@ import           SemMC.Architecture.PPC.Location
 type ConcreteState ppc = MapF.MapF (Location ppc) V.Value
 
 -- | FIXME: Does not include memory
-randomState :: (KnownNat (ArchRegWidth ppc)) => DA.Gen -> IO (ConcreteState ppc)
+randomState :: (1 <= ArchRegWidth ppc, KnownNat (ArchRegWidth ppc)) => DA.Gen -> IO (ConcreteState ppc)
 randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
@@ -63,12 +63,12 @@ randomState gen = St.execStateT randomize MapF.empty
          <- V.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc (PPCS.extendBV bv)
 
-    addRandomBV :: (KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
+    addRandomBV :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
     addRandomBV loc = do
       bv <- V.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc bv
 
-    addZeroBV :: (KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
+    addZeroBV :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
     addZeroBV loc = do
       let bv = V.ValueBV (W.w 0)
       St.modify' $ MapF.insert loc bv
@@ -78,7 +78,7 @@ randomState gen = St.execStateT randomize MapF.empty
 -- chosen.  The other registers all have zeros.
 --
 -- FIXME: Doesn't include FP registers yet.  We'll want NaN and INF values there
-interestingStates :: (KnownNat (ArchRegWidth ppc)) => [ConcreteState ppc]
+interestingStates :: (1 <= ArchRegWidth ppc, KnownNat (ArchRegWidth ppc)) => [ConcreteState ppc]
 interestingStates = gprStates -- ++ fprStates
   where
     i64Min :: Int64
@@ -104,7 +104,7 @@ interestingStates = gprStates -- ++ fprStates
 zeroState :: (KnownNat (ArchRegWidth ppc)) => ConcreteState ppc
 zeroState = St.execState addZeros MapF.empty
   where
-    addZero :: KnownNat n => Location ppc (BaseBVType n) -> St.State (ConcreteState ppc) ()
+    addZero :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.State (ConcreteState ppc) ()
     addZero loc = St.modify' $ MapF.insert loc (V.ValueBV (W.w 0))
     addZeros = do
       mapM_ addZero gprs
@@ -144,6 +144,7 @@ extractLocs s locs = map extractLoc locs
 
 deserialize :: ( ArchRepr ppc
                , KnownNat (ArchRegWidth ppc)
+               , 1 <= ArchRegWidth ppc
                ) => B.ByteString -> Maybe (ConcreteState ppc)
 deserialize bs =
   case G.runGet getArchState bs of
@@ -152,6 +153,7 @@ deserialize bs =
 
 getArchState :: forall ppc . ( ArchRepr ppc
                              , KnownNat (ArchRegWidth ppc)
+                             , 1 <= ArchRegWidth ppc
                              ) => G.Get (ConcreteState ppc)
 getArchState = do
   gprs' <- mapM (getWith (PPCS.getValue G.getWord32be (regWidthRepr (Proxy @ppc)))) gprs
