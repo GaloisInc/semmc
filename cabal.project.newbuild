@@ -1,5 +1,6 @@
 packages:
   semmc/
+  semmc-fuzzer/
   semmc-ppc/
   semmc-x86_64/
   semmc-arm/

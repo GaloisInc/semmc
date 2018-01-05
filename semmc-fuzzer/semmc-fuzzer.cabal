@@ -1,0 +1,29 @@
+name:                semmc-fuzzer
+version:             0.1
+synopsis:            Fuzzer for SemMC architectures
+license:             BSD3
+license-file:        LICENSE
+author:              Jonathan Daugherty
+maintainer:          jtd@galois.com
+category:            Testing
+build-type:          Simple
+extra-source-files:  ChangeLog.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  ghc-options:         -Wall
+  default-language:    Haskell2010
+  -- exposed-modules:
+  build-depends:       base >=4.9 && <4.10
+
+executable semmc-fuzzer
+  main-is:             FuzzerMain.hs
+  hs-source-dirs:      programs
+  ghc-options:         -Wall
+  default-language:    Haskell2010
+  build-depends:       base >=4.9 && <4.10,
+                       semmc,
+                       semmc-ppc,
+                       semmc-arm,
+                       semmc-x8664
