@@ -28,6 +28,7 @@ import           Control.Applicative ( (<|>) )
 import           Control.Monad ( guard )
 import           Data.Bits
 import           Data.Maybe ( fromJust, fromMaybe )
+import           Data.Monoid ((<>))
 import           Data.Proxy ( Proxy(..) )
 import           Numeric.Natural ( Natural )
 import qualified Text.Megaparsec as P
@@ -91,7 +92,7 @@ data Slice (m :: Nat) (n :: Nat) where
 --
 -- The @s@ parameter is the start bit of the slice.
 data View arch (m :: Nat) where
-  View :: (KnownNat n, KnownNat m) => Slice m n -> L.Location arch (BaseBVType n) -> View arch m
+  View :: (1 <= n, 1 <= m, KnownNat n, KnownNat m) => Slice m n -> L.Location arch (BaseBVType n) -> View arch m
 
 viewTypeRepr :: View arch n -> NR.NatRepr n
 viewTypeRepr (View (Slice repr _ _ _) _) = repr
@@ -122,7 +123,7 @@ onesMask :: (Integral a, Bits b, Num b) => a -> b
 onesMask sz = shiftL 1 (fromIntegral sz) - 1
 
 -- | Read sliced bits.
-peekSlice :: (KnownNat m) => Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m)
+peekSlice :: (1 <= m, KnownNat m) => Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m)
 peekSlice (Slice _ _ (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> val)) =
   (ValueBV . W.w) ((val .&. onesMask b) `shiftR` a)
 
@@ -141,9 +142,8 @@ pokeSlice (Slice _ _ (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> x
 type ConcreteState arch = L.ArchState arch Value
 
 -- | Read machine states.
-peekMS :: (P.OrdF (L.Location arch), KnownNat n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
-peekMS = flip peekMS'
-  where peekMS' (View sl loc) = peekSlice sl . fromJust . MapF.lookup loc
+peekMS :: (P.OrdF (L.Location arch), 1 <= n, KnownNat n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
+peekMS cs (View sl loc) = peekSlice sl $ fromJust $ MapF.lookup loc cs
 
 -- | Write machine states.
 --
@@ -201,11 +201,17 @@ parseSlicedView (Some loc) = do
       withUnknownNat m $ \(mrepr :: NR.NatRepr m) ->
           case L.locationType loc of
             BaseBVRepr nrepr ->
-              case brepr `NR.testLeq` nrepr of
+              case NR.knownNat @1 `NR.testLeq` nrepr of
+                Nothing -> fail $ "Invalid slice n-value " <> show nrepr
                 Just NR.LeqProof ->
-                  case U.unsafeCoerce (P.Refl :: 0 P.:~: 0) :: (b P.:~: (a + m)) of
-                    P.Refl -> return (NR.withKnownNat nrepr (Some (View (Slice mrepr nrepr arepr brepr) loc)))
-                Nothing -> fail "Invalid slice"
+                  case NR.knownNat @1 `NR.testLeq` mrepr of
+                    Nothing -> fail $ "Invalid slice m-value " <> show mrepr
+                    Just NR.LeqProof ->
+                      case brepr `NR.testLeq` nrepr of
+                        Just NR.LeqProof ->
+                          case U.unsafeCoerce (P.Refl :: 0 P.:~: 0) :: (b P.:~: (a + m)) of
+                            P.Refl -> return (NR.withKnownNat nrepr (Some (View (Slice mrepr nrepr arepr brepr) loc)))
+                        Nothing -> fail "Invalid slice"
             lt -> fail ("Unsupported location type: " ++ show lt)
 
 printView :: (forall tp . L.Location arch tp -> String) -> View arch m -> String

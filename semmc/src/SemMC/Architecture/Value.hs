@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -13,7 +14,7 @@ module SemMC.Architecture.Value (
   diffFloat
   ) where
 
-import           GHC.TypeLits ( KnownNat )
+import           GHC.TypeLits
 import           Data.Bits
 import qualified Data.ByteString as B
 import           Data.Maybe ( isJust )
@@ -26,7 +27,7 @@ import qualified Dismantle.Arbitrary as DA
 
 -- | Type of concrete values.
 data Value tp where
-  ValueBV :: (KnownNat n) => W.W n -> Value (BaseBVType n)
+  ValueBV :: (1 <= n, KnownNat n) => W.W n -> Value (BaseBVType n)
   ValueMem :: B.ByteString -> Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
 -- | Lift a bitvector computation to a value computation.
@@ -71,7 +72,8 @@ deriving instance Ord (Value tp)
 
 instance P.ShowF Value
 
-instance (KnownNat n) => DA.Arbitrary (Value (BaseBVType n)) where
+
+instance (1 <= n, KnownNat n) => DA.Arbitrary (Value (BaseBVType n)) where
   arbitrary gen = ValueBV <$> DA.arbitrary gen
 
 instance P.TestEquality Value where

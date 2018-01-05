@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -10,7 +11,7 @@
 module SemMC.Stochastic.Initialize (
   Config(..),
   SynEnv(..),
-  loadInitialState,
+  withInitialState,
   mkFormulaFilename
   ) where
 
@@ -25,10 +26,16 @@ import           System.FilePath ( (</>), (<.>) )
 import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.Nonce as N
 import qualified Data.Parameterized.Seq as SeqF
 import           Data.Parameterized.Some ( Some(..) )
 
+import qualified Dismantle.Arbitrary as DA
+
+import qualified Lang.Crucible.Solver.SimpleBackend as SB
+
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Formula as F
 import qualified SemMC.Log as L
@@ -97,7 +104,54 @@ data SynEnv t arch =
          -- ^ The initial configuration
          }
 
-loadInitialState :: forall arch t
+-- | Construct an initial state ('SynEnv') and pass it to the given
+-- continuation.
+--
+-- This is a "with" function, vs just returning the the constructed
+-- 'SynEnv', because of the existential @t@ param in @Sym t@.
+withInitialState :: forall arch a
+                  . (SynC arch, L.HasLogCfg, L.HasCallStack,
+                    HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
+                    HR.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
+                 => Config arch
+                 -> [Some ((A.Opcode arch) (A.Operand arch))]
+                 -- ^ All possible opcodes. These are used to guess
+                 -- the names of opcode semantics files to attempt to
+                 -- read from disk.
+                 -> [Some ((P.Pseudo arch) (A.Operand arch))]
+                 -- ^ All pseudo opcodes
+                 -> [Some ((A.Opcode arch) (A.Operand arch))]
+                 -- ^ The opcodes we want to learn formulas for (could
+                 -- be all, but could omit instructions e.g., jumps)
+                 -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
+                 -- ^ IORelations
+                 -> (forall t. SynEnv t arch -> IO a)
+                 -- ^ Computation to pass run with access to the 'SynEnv'
+                 -> IO a
+withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
+  Some ng <- N.newIONonceGenerator
+  sym <- SB.newSimpleBackend ng
+
+  rng <- DA.createGen
+  let genTest = AC.randomState (Proxy @arch) rng
+
+  let interestingTests = AC.heuristicallyInterestingStates (Proxy @arch)
+
+  synEnv <- loadInitialStateExplicit cfg sym genTest interestingTests
+    allOpcodes pseudoOpcodes targetOpcodes iorels
+  k synEnv
+
+-- | A version of 'withInitialState' that returns the constructed
+-- state and makes several implicit parameters explicit.
+--
+-- Prefer 'withInitialState' when possible.
+--
+-- In 'withInitialState', the implicit parameters come from class
+-- instances. Here we make them explicit so they can be
+-- overridden. Also, in 'withInitialState' the symbolic backend
+-- ('Sym') is constructed locally, which introduces an existentially
+-- bound param which is explicit here.
+loadInitialStateExplicit :: forall arch t
                   . (SynC arch, L.HasLogCfg, L.HasCallStack,
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
                     HR.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
@@ -119,7 +173,7 @@ loadInitialState :: forall arch t
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
                  -> IO (SynEnv t arch)
-loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
+loadInitialStateExplicit cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
   let load dir = F.loadFormulasFromFiles sym (mkFormulaFilename dir) allOpcodes
   baseSet <- load (baseSetDir cfg)
   L.logIO L.Info "Finished loading the base set"

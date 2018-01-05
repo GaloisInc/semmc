@@ -162,7 +162,7 @@ genTestForLoc :: forall arch
               -> V.ConcreteState arch
               -> Some (V.View arch)
               -> Learning arch (TestBundle (V.ConcreteState arch) (ImplicitFact arch))
-genTestForLoc i s0 (Some loc0) = do
+genTestForLoc i s0 (Some loc0@(V.View {})) = do
   testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (V.pokeMS s0 loc0))
   case i of
     D.Instruction _ ops -> do

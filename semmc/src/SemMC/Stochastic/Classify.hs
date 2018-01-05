@@ -13,7 +13,7 @@ module SemMC.Stochastic.Classify (
   chooseClass,
   chooseProgram,
   EquivalenceClasses,
-  equivalenceClasses,
+  emptyEquivalenceClasses,
   EquivalenceClass,
   countPrograms
   ) where
@@ -97,9 +97,9 @@ equivalenceClassFromListMay cmp s =
     Seq.EmptyL -> Nothing
     p1 Seq.:< rest -> Just (equivalenceClassFromList cmp p1 rest)
 
--- | Construct an initial set of equivalence classes with a single program
-equivalenceClasses :: CP.CandidateProgram t arch -> EquivalenceClasses (CP.CandidateProgram t arch)
-equivalenceClasses p = EquivalenceClasses (Seq.singleton (equivalenceClass p))
+-- | Construct an initial empty set of equivalence classes with no programs.
+emptyEquivalenceClasses :: EquivalenceClasses (CP.CandidateProgram t arch)
+emptyEquivalenceClasses = EquivalenceClasses Seq.empty
 
 -- | Count the total number of programs in the set of equivalence classes
 countPrograms :: EquivalenceClasses (CP.CandidateProgram t arch) -> Int
@@ -389,13 +389,14 @@ makeAndIndexTest cx (pix, cp) (cases, idx) = do
 
 -- | Heuristically-choose the best equivalence class
 --
--- It prefers classes with more examples and fewer uninterpreted functions
+-- It prefers classes with more examples and fewer uninterpreted
+-- functions. Returns 'Nothing' if all classes are empty.
 chooseClass :: EquivalenceClasses (CP.CandidateProgram t arch)
-            -> Syn t arch (EquivalenceClass (CP.CandidateProgram t arch))
+            -> Syn t arch (Maybe (EquivalenceClass (CP.CandidateProgram t arch)))
 chooseClass (EquivalenceClasses klasses) =
   case Seq.viewl klasses of
-    Seq.EmptyL -> L.error "Empty equivalence class set"
-    k1 Seq.:< rest -> F.foldlM bestClass k1 rest
+    Seq.EmptyL -> return Nothing
+    k1 Seq.:< rest -> Just <$> F.foldlM bestClass k1 rest
 
 bestClass :: EquivalenceClass (CP.CandidateProgram t arch)
           -> EquivalenceClass (CP.CandidateProgram t arch)

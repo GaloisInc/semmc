@@ -29,7 +29,8 @@
 module SemMC.Toy where
 
 import           Control.Monad
-import           Data.EnumF ( congruentF, EnumF, enumF )
+import           Data.Bits ( complement )
+import           Data.EnumF ( congruentF, EnumF, enumF, enumCompareF )
 import           Data.Int ( Int32 )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
@@ -128,17 +129,17 @@ instance OrdF Operand where
 --
 -- Q: So, why is 'D.GenericInstruction' expect an indexed first arg?
 data Opcode (o :: Symbol -> *) (sh :: [Symbol]) where
-  -- Three instructions for my simplest example.
   AddRr :: Opcode Operand '["R32", "R32"]
   SubRr :: Opcode Operand '["R32", "R32"]
   NegR  :: Opcode Operand '["R32"]
-
+  -- Bitwise complement.
+  NotR  :: Opcode Operand '["R32"]
+  -- Set register to immediate value.
   MovRi :: Opcode Operand '["R32", "I32"]
 {-
   -- A few more to add once the first example is working.
   AddRi :: Opcode Operand '["R32","I32"]
   SubRi :: Opcode Operand '["R32","I32"]
-  SetRi :: Opcode Operand '["R32","I32"]
 -}
 deriving instance Show (Opcode o sh)
 deriving instance Eq (Opcode o sh)
@@ -146,22 +147,14 @@ deriving instance Ord (Opcode o sh)
 
 -- | The set of all opcodes, e.g. for use with
 -- 'D.Random.randomInstruction'.
-opcodes :: Set.Set (Some (Opcode Operand))
-opcodes = Set.fromList
+allOpcodes :: Set.Set (Some (Opcode Operand))
+allOpcodes = Set.fromList
   [ Some AddRr
   , Some SubRr
   , Some NegR
+  , Some NotR
   , Some MovRi
   ]
-
--- | For use with @loadInitialState@
-opcodesWitnessingBuildOperandList ::
-  [Some (Opcode Operand)]
-opcodesWitnessingBuildOperandList =
-  [ Some AddRr
-  , Some SubRr
-  , Some NegR
-  , Some MovRi ]
 
 -- | The map of 'IORelation's for all opcodes.
 --
@@ -175,6 +168,9 @@ ioRelations = MapF.fromList
       { I.inputs = Set.fromList [o0, o1]
       , I.outputs = Set.fromList [o0] }
   , MapF.Pair NegR $ I.IORelation
+      { I.inputs = Set.fromList [o0]
+      , I.outputs = Set.fromList [o0] }
+  , MapF.Pair NotR $ I.IORelation
       { I.inputs = Set.fromList [o0]
       , I.outputs = Set.fromList [o0] }
   , MapF.Pair MovRi $ I.IORelation
@@ -191,42 +187,31 @@ instance EnumF (Opcode o) where
   enumF AddRr = 0
   enumF SubRr = 1
   enumF NegR = 2
-  enumF MovRi = 3
+  enumF NotR = 3
+  enumF MovRi = 4
 
   congruentF AddRr = NES.fromList AddRr [AddRr, SubRr]
   congruentF SubRr = NES.fromList SubRr [AddRr, SubRr]
-  congruentF NegR  = NES.fromList NegR [NegR]
+  congruentF NegR  = NES.fromList NegR [NegR, NotR]
+  congruentF NotR  = NES.fromList NotR [NegR, NotR]
   congruentF MovRi = NES.fromList MovRi [MovRi]
 
 instance TestEquality (Opcode o) where
   testEquality AddRr AddRr = Just Refl
   testEquality SubRr SubRr = Just Refl
-  testEquality  NegR  NegR = Just Refl
+  testEquality NegR  NegR  = Just Refl
+  testEquality NotR  NotR  = Just Refl
   testEquality MovRi MovRi = Just Refl
   testEquality     _     _ = Nothing
 
 instance OrdF (Opcode o) where
-  AddRr `compareF` AddRr = EQF
-  AddRr `compareF` SubRr = LTF
-  AddRr `compareF`  NegR = LTF
-  AddRr `compareF` MovRi = LTF
-  SubRr `compareF` AddRr = GTF
-  SubRr `compareF` SubRr = EQF
-  SubRr `compareF`  NegR = LTF
-  SubRr `compareF` MovRi = LTF
-  NegR  `compareF` AddRr = GTF
-  NegR  `compareF` SubRr = GTF
-  NegR  `compareF`  NegR = EQF
-  NegR  `compareF` MovRi = LTF
-  MovRi `compareF` AddRr = GTF
-  MovRi `compareF` SubRr = GTF
-  MovRi `compareF`  NegR = GTF
-  MovRi `compareF` MovRi = EQF
+  compareF = enumCompareF
 
 instance HasRepr (Opcode Operand) (SL.List SR.SymbolRepr) where
   typeRepr AddRr = knownRepr
   typeRepr SubRr = knownRepr
   typeRepr NegR  = knownRepr
+  typeRepr NotR  = knownRepr
   typeRepr MovRi = knownRepr
 
 type Instruction = D.GenericInstruction Opcode Operand
@@ -274,6 +259,9 @@ evalInstruction ms (D.Instruction op args) = case (op, args) of
   (NegR, r1 SL.:< SL.Nil) ->
     let x1 = getOperand ms r1
     in putOperand ms r1 (V.liftValueBV1 negate x1)
+  (NotR, r1 SL.:< SL.Nil) ->
+    let x1 = getOperand ms r1
+    in putOperand ms r1 (V.liftValueBV1 complement x1)
   (MovRi, r1 SL.:< i1 SL.:< SL.Nil) ->
     let x1 = getOperand ms i1
     in putOperand ms r1 x1
@@ -313,6 +301,7 @@ instance TemplatableOperand Toy where
                       v <- S.freshConstant sym (makeSymbol "I32") knownRepr
                       let recover evalFn = I32 . fromInteger <$> evalFn v
                       return (v, WrappedRecoverOperandFn recover)
+      r -> error $ "opTemplates: unexpected symbolRepr: "++show r
 
 type instance A.Operand Toy = Operand
 type instance A.Opcode Toy = Opcode
@@ -499,6 +488,7 @@ instance D.ArbitraryOperands Opcode Operand where
     AddRr -> D.arbitraryShapedList gen
     SubRr -> D.arbitraryShapedList gen
     NegR  -> D.arbitraryShapedList gen
+    NotR  -> D.arbitraryShapedList gen
     MovRi -> D.arbitraryShapedList gen
 
 ----------------------------------------------------------------
@@ -511,6 +501,6 @@ type instance P.Pseudo Toy = P.EmptyPseudo
 instance P.ArchitectureWithPseudo Toy where
   assemblePseudo _ = P.pseudoAbsurd
 
-pseudoOpcodesWitnessingBuildOperandList ::
+allPseudoOpcodes ::
   [Some ((P.Pseudo Toy) Operand)]
-pseudoOpcodesWitnessingBuildOperandList = []
+allPseudoOpcodes = []

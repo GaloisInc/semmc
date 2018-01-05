@@ -20,7 +20,6 @@ import qualified Data.Foldable as F
 import           Data.IORef ( newIORef )
 import qualified Data.Map as Map
 import           Data.Maybe
-import           Data.Proxy
 import qualified Data.Sequence as S
 import qualified Data.Text as T
 import           System.FilePath
@@ -158,7 +157,7 @@ doThing3 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
   Right add <- readBinOpc sym AddRr
-  putStrLn $ T.unpack $ printFormula (HR.typeRepr AddRr) add
+  putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
 doThing4 :: IO ()
 doThing4 = do
@@ -285,30 +284,22 @@ runSynToy dataRoot action = do
         , seConfig = cfg
         }
   -}
-  Some r <- newIONonceGenerator
-  sym <- newSimpleBackend r
 
-  gen <- A.createGen
-  let p = Proxy :: Proxy Toy
-  let genTest = AC.randomState p gen
-
-  -- TODO: heuristic tests.
-  let interestingTests = []
   -- The way the opcode list and semantic files on disk interact is a
   -- little weird: the opcode list bounds the possible semantic files
   -- we look for. I.e., the instructions with known semantics are the
   -- intersection of the opcode lists here and the semantic files on
   -- disk.
   --
-  -- let allOpcodes = opcodesWitnessingBuildOperandList
+  -- let allOpcodes = opcodes
   let allOpcodes = [ {- Some (Witness AddRr)
                    , -} Some NegR
                    , Some SubRr ]
-  let pseudoOpcodes = pseudoOpcodesWitnessingBuildOperandList
+  let pseudoOpcodes = allPseudoOpcodes
   let targetOpcodes = [ Some AddRr ]
 
-  synEnv <- loadInitialState cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes ioRelations
-
+  withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes ioRelations $ \synEnv -> do
+  gen <- A.createGen
   nref <- newIORef 0
   tChan <- C.newChan :: IO (C.Chan (Maybe [I.TestCase Toy]))
   rChan <- C.newChan
@@ -366,15 +357,22 @@ test_rightValueWrongPlace = do
           S.wrongLocationPenalty * fromIntegral (length tests)
     return (expectedWeight, weight)
   where
-    -- Add r1 and r2 and store the result in *r3*.
+    -- Add r1 and r2 and store the result in *r3*, and then set r1 to
+    -- a value as different as possible from r3, i.e. the complement.
     candidate = S.fromList $ map (Just . P.actualInsnToSynth) $
+      -- Add r1 and r2 and store in r3.
       [ D.Instruction SubRr (R32 Reg3 SL.:< R32 Reg3 SL.:< SL.Nil)
       , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg1 SL.:< SL.Nil)
-      , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg2 SL.:< SL.Nil) ]
+      , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg2 SL.:< SL.Nil)
+
+      -- Set r1 to xthe complement of r3!
+      , D.Instruction MovRi (R32 Reg1 SL.:< I32 0 SL.:< SL.Nil)
+      , D.Instruction AddRr (R32 Reg1 SL.:< R32 Reg3 SL.:< SL.Nil)
+      , D.Instruction NotR  (R32 Reg1 SL.:< SL.Nil) ]
 
     -- Add r1 and r2 and store the result in *r1*.
     ops = (R32 Reg1 SL.:< R32 Reg2 SL.:< SL.Nil)
-    target =  AC.RI { AC.riInstruction = D.Instruction AddRr ops
+    target = AC.RI { AC.riInstruction = D.Instruction AddRr ops
                    , AC.riOpcode = AddRr
                    , AC.riOperands = ops
                    , AC.riLiteralLocs = MapF.empty

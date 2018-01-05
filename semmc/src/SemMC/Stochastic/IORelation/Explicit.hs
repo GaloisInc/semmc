@@ -135,7 +135,7 @@ collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
     Nothing -> return S.empty
     Just res -> F.foldrM (addLocIfDifferent (CE.resultContext res)) S.empty explicitLocs
   where
-    addLocIfDifferent resCtx (IndexedSemanticView idx (V.SemanticView { V.semvView = opView })) s
+    addLocIfDifferent resCtx (IndexedSemanticView idx (V.SemanticView { V.semvView = opView@(V.View {}) })) s
       | Just P.Refl <- P.testEquality alteredIndex idx = return s
       | output <- NR.withKnownNat (V.viewTypeRepr opView) (V.peekMS resCtx opView)
       , input <- NR.withKnownNat (V.viewTypeRepr opView) (V.peekMS (CE.testContext tc) opView) = do
@@ -196,7 +196,7 @@ generateVariantsFor :: (AC.ConcreteArchitecture arch)
                     -> SL.Index sh tp
                     -> Some (V.View arch)
                     -> Learning arch [V.ConcreteState arch]
-generateVariantsFor s0 _opcode _ix (Some v) = do
+generateVariantsFor s0 _opcode _ix (Some v@(V.View {})) = do
   replicateM 20 (withGeneratedValueForLocation v (\x -> V.pokeMS s0 v x))
 
 matchesOperand :: (AC.ConcreteArchitecture arch)
