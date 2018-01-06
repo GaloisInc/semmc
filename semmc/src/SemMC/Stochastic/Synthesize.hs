@@ -44,7 +44,6 @@ import qualified Data.Set.NonEmpty as NES
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr )
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.TraversableFC as FC
 import           Dismantle.Arbitrary as D
@@ -328,8 +327,8 @@ compareTargetOutToCandidateOut :: forall arch.
                                -> V.ConcreteState arch
                                -> Double
 compareTargetOutToCandidateOut descs targetSt candidateSt =
-  sum [ NR.withKnownNat (V.viewTypeRepr view) $ weighBestMatch desc targetSt candidateSt
-      | desc@(V.SemanticView { V.semvView = view }) <- descs
+  sum [ weighBestMatch desc targetSt candidateSt
+      | desc@(V.SemanticView {}) <- descs
       ]
 
 -- | Find the number-of-bits error in the best match, penalizing matches

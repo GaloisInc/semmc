@@ -125,9 +125,9 @@ collectImplicitOutputLocations _op rix baseRes f tc =
     addLocIfImplicitAndDifferent loc0 explicitOperands (MapF.Pair loc postVal) s =
       let proxy = Proxy :: Proxy arch
       in case A.locationType loc of
-        BaseBVRepr nr ->
-          case withKnownNat nr (let tv = V.trivialView proxy loc
-                                in (V.peekMS (CE.testContext tc) tv, V.peekMS (CE.resultContext baseRes) tv,tv)) of
+        BaseBVRepr _nr ->
+          case (let tv = V.trivialView proxy loc
+                 in (V.peekMS (CE.testContext tc) tv, V.peekMS (CE.resultContext baseRes) tv,tv)) of
             (_preVal, baseResVal, tv) ->
               case () of
                 () | Some baseResVal == Some postVal -> return s

@@ -20,7 +20,6 @@ import           Text.Printf ( printf )
 
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Classes as P
-import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 
@@ -137,8 +136,8 @@ collectExplicitLocations alteredIndex _opList explicitLocs ri tc = do
   where
     addLocIfDifferent resCtx (IndexedSemanticView idx (V.SemanticView { V.semvView = opView@(V.View {}) })) s
       | Just P.Refl <- P.testEquality alteredIndex idx = return s
-      | output <- NR.withKnownNat (V.viewTypeRepr opView) (V.peekMS resCtx opView)
-      , input <- NR.withKnownNat (V.viewTypeRepr opView) (V.peekMS (CE.testContext tc) opView) = do
+      | output <- V.peekMS resCtx opView
+      , input <- V.peekMS (CE.testContext tc) opView = do
           case input /= output of
             True -> return (S.insert (Some idx) s)
             False -> return s
