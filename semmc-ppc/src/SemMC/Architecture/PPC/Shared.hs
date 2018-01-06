@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeOperators #-}
 -- | Definitions common to PPC32 and PPC64
 module SemMC.Architecture.PPC.Shared (
   -- * Type reprs
@@ -23,7 +24,7 @@ module SemMC.Architecture.PPC.Shared (
   parsePrefixedRegister
   ) where
 
-import           GHC.TypeLits ( KnownNat )
+import           GHC.TypeLits
 
 import           Data.Bits ( shiftR, shiftL, (.|.), (.&.) )
 import qualified Data.ByteString.Builder as B
@@ -109,7 +110,7 @@ getWord128be hb = do
     IgnoreHighBits -> return (fromIntegral w1)
     KeepHighBits -> return ((fromIntegral w2 `shiftL` 64) .|. fromIntegral w1)
 
-getValue :: (Integral w, KnownNat n)
+getValue :: (1 <= n, Integral w, KnownNat n)
          => G.Get w
          -> NatRepr n
          -> G.Get (V.Value (BaseBVType n))
