@@ -153,7 +153,7 @@ testRunner proxy opcodes caseChan resChan nonceGen = do
 
   where
     doTest mr vec = do
-      -- Write a test case
+      -- Send a test case
       C.writeChan caseChan (Just [vec])
       -- Get the result
       res <- C.readChan resChan
