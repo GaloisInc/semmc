@@ -21,16 +21,47 @@ module Main where
 
 -- Generation of random instructions:
 --   Dismantle.Instruction.Random.randomInstruction
+--     randomInstruction :: (ArbitraryOperands c o, OrdF (c o))
+--                       => A.Gen
+--                       -> NES.Set (Some (c o))
+--                       -> IO (I.GenericInstruction c o)
 --   example: SemMC.Stochastic.Instantiate
 --
 -- Generation of random tests:
---   SemMC.Architecture.Concrete, randomState
+--   SemMC.Architecture.Concrete, randomState method of Architecture class
+--     randomState :: proxy arch -> DA.Gen -> IO (ConcreteState arch)
 --   see also serialize/deserialize class methods
+--     serialize :: proxy arch -> ConcreteState arch -> B.ByteString
+--     deserialize :: proxy arch -> B.ByteString -> Maybe (ConcreteState arch)
 --
 -- Running on remote hosts:
 --   SemMC.Concrete.Execution, runRemote
+--     Make a remote runner for a given host:
+--     runRemote :: (U.HasLogCfg)
+--               => Maybe FilePath
+--               -- ^ Optionally, a different name for the remote runner executable
+--               -> String
+--               -- ^ The hostname to run test cases on
+--               -> TestSerializer c i
+--               -- ^ Functions for converting to and from machine states
+--               -> TestRunner c i
+--
+--    Returns a TestRunner, so we have to then bind a
+--      Chan (Maybe [TestCase c i])
+--    to send it test cases (Nothing means stop) and then bind a
+--      Chan (ResultOrError c)
+--    to get results from it.
+--    The 'c' is a machine state.
+--    The 'i' is an instruction.
+--
+--    Seems to raise an exception if for some reason the connection to
+--    the remote host (or invocation of the runner) fails.
 --
 -- Remote runner: semmc/tools/remote-runner.c
+--   Needs to be built on each remote host and needs to be in the PATH
+--   of the account used for testing
+--   Note: defaults to $USER on remote host and defaults to using a
+--   local SSH key + remote authorized_keys to authenticate.
 --
 -- Helpers:
 --   SemMC.Stochastic.Monad.runConcreteTests (interacts with remote-runner)
