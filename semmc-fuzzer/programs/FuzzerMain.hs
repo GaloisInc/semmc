@@ -116,21 +116,21 @@ doTesting = do
           IO.exitFailure
 
   void $ C.forkIO $
-      N.withIONonceGenerator $ \nonceGen ->
-          testRunner nonceGen (Proxy @PPCS.PPC) opcodes caseChan resChan
+      N.withIONonceGenerator $
+          testRunner (Proxy @PPCS.PPC) opcodes caseChan resChan
 
   L.withLogCfg logCfg $
     CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
 
 testRunner :: forall proxy arch s .
               (A.Architecture arch, C.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
-           => N.NonceGenerator IO s
-           -> proxy arch
+           => proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
+           -> N.NonceGenerator IO s
            -> IO ()
-testRunner nonceGen proxy opcodes caseChan resChan = do
+testRunner proxy opcodes caseChan resChan nonceGen = do
   gen <- DA.createGen
 
   inst <- D.randomInstruction gen opcodes
