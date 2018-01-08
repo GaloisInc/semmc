@@ -8,6 +8,7 @@ import qualified Control.Concurrent as C
 import           Control.Monad (when, void)
 import qualified Data.Set.NonEmpty as NES
 import           Data.Proxy (Proxy(Proxy))
+import           Text.Printf (printf)
 import qualified System.Exit as IO
 import qualified System.IO as IO
 
@@ -117,7 +118,8 @@ doTesting = do
 
   void $ C.forkIO $
       N.withIONonceGenerator $
-          testRunner (Proxy @PPCS.PPC) opcodes caseChan resChan
+          L.withLogCfg logCfg $
+              testRunner (Proxy @PPCS.PPC) opcodes caseChan resChan
 
   L.withLogCfg logCfg $
     CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
@@ -126,6 +128,7 @@ testRunner :: forall proxy arch s .
               ( A.Architecture arch
               , C.ConcreteArchitecture arch
               , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
+              , L.HasLogCfg
               )
            => proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
@@ -157,22 +160,22 @@ testRunner proxy opcodes caseChan resChan nonceGen = do
 
       case res of
         CE.InvalidTag t -> do
-          -- IO.hPutStrLn IO.stderr $ printf "Invalid tag: %d" t
+          L.logIO L.Error $ printf "Invalid tag: %d" t
           IO.exitFailure
         CE.TestContextParseFailure -> do
-          -- IO.hPutStrLn IO.stderr "Test context parse failure"
+          L.logIO L.Error "Test context parse failure"
           IO.exitFailure
         CE.TestSignalError nonce sig -> do
-          -- IO.hPutStrLn IO.stderr $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
+          L.logIO L.Error $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
           IO.exitFailure
         CE.TestReadError tag -> do
-          -- IO.hPutStrLn IO.stderr $ printf "Failed with a read error (%d)" tag
+          L.logIO L.Error $ printf "Failed with a read error (%d)" tag
           IO.exitFailure
         CE.TestSuccess tr -> do
           case mr of
             Just oldRes -> do
               when (oldRes /= CE.resultContext tr) $ do
-                IO.hPutStrLn IO.stderr "ERROR: Context mismatch"
+                L.logIO L.Error "ERROR: Context mismatch"
             Nothing -> return ()
 
           return (CE.resultContext tr)
