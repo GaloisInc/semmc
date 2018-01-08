@@ -29,4 +29,6 @@ executable semmc-fuzzer
                        dismantle-tablegen,
                        dismantle-ppc,
                        dismantle-arm,
-                       parameterized-utils
+                       parameterized-utils,
+                       crucible,
+                       utf8-string
