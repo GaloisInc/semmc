@@ -123,7 +123,10 @@ doTesting = do
     CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
 
 testRunner :: forall proxy arch s .
-              (A.Architecture arch, C.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+              ( A.Architecture arch
+              , C.ConcreteArchitecture arch
+              , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
+              )
            => proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
