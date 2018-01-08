@@ -26,5 +26,6 @@ executable semmc-fuzzer
                        semmc,
                        semmc-ppc,
                        semmc-arm,
+                       dismantle-tablegen,
                        dismantle-ppc,
                        dismantle-arm
