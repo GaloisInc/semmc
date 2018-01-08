@@ -3,8 +3,6 @@ module Main where
 -- TODO:
 --
 -- Command line options type
--- Configuration type
--- List of architectures
 --
 -- How do tests get spread over remote hosts? Need remote host list for
 -- each ISA. Probably want to have one worker thread per host, with a
@@ -69,6 +67,33 @@ module Main where
 --
 -- Instantiating semantics:
 --   semmc-ppc/tools/SynthDemo.hs
+
+data FuzzerConfiguration =
+    FuzzerConfiguration { fuzzerArchitectures :: [FuzzerArchConfig]
+                        , fuzzerOutputDirectory :: FilePath
+                        }
+                        deriving (Show)
+
+data FuzzerArchConfig =
+    FuzzerArchConfig { fuzzerArchName :: String
+                     , fuzzerArchTestingHosts :: [FuzzerTestHost]
+                     }
+                     deriving (Show)
+
+data FuzzerTestHost =
+    FuzzerTestHost { fuzzerTestHostname :: String
+                   , fuzzerTestRunners :: Int
+                   , fuzzerTestChunkSize :: Int
+                   }
+                   deriving (Show)
+
+-- Need a list of known architectures. What do we need for each?
+--  * Something from dismantle
+--  * Something from semmc
+-- knownArchitectures :: []
+-- knownArchitectures =
+--     [
+--     ]
 
 main :: IO ()
 main = putStrLn "Hello, Haskell!"
