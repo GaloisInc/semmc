@@ -16,10 +16,7 @@ import           Lang.Crucible.BaseTypes
 import           SemMC.Architecture.ARM.Location
 
 
-uninterpretedFunctions :: -- forall proxy arm
-                        -- . (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm)
-                       -- =>
-                       proxy arm
+uninterpretedFunctions :: proxy arm
                        -> [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
 uninterpretedFunctions _ =
   [ ("fp.add64",
