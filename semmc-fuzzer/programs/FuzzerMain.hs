@@ -1,4 +1,30 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
+
+import qualified Control.Concurrent as C
+import           Control.Monad (when, void)
+import qualified Data.Set.NonEmpty as NES
+import           Data.Proxy (Proxy(Proxy))
+import qualified System.Exit as IO
+import qualified System.IO as IO
+
+import           Data.Parameterized.Some ( Some(..) )
+
+import qualified Dismantle.Arbitrary as DA
+import qualified Dismantle.Instruction.Random as D
+
+import qualified SemMC.Log as L
+import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Concrete as C
+import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Architecture.View as V
+import qualified SemMC.Architecture.PPC32 as PPCS
+import           SemMC.Architecture.PPC32.Opcodes as PPCS
+
+type PPCState = V.ConcreteState PPCS.PPC
 
 -- TODO:
 --
@@ -87,11 +113,6 @@ data FuzzerTestHost =
                    }
                    deriving (Show)
 
--- import qualified Dismantle.Arbitrary as DA
--- gen <- DA.createGen
--- let op = an opcode
--- inst <- D.randomInstruction gen (NES.singleton (Some op))
-
 -- Need a list of known architectures. What do we need for each?
 --  * Something from dismantle
 --  * Something from semmc
@@ -107,40 +128,45 @@ ppcRunnerFilename = "remote-runner.ppc32"
 hostname :: String
 hostname = "helium.proj.galois.com"
 
-import qualified Control.Concurrent as C
-import qualified System.Exit as IO
-import qualified System.IO as IO
-
-import qualified Dismantle.PPC as PPC
-import           SemMC.Architecture.PPC32 as PPCS
-
-import qualified SemMC.Concrete.Execution as CE
-
 doTesting :: IO ()
 doTesting = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
   logCfg <- L.mkLogCfg "main"
-  void $ C.forkIO $ stdErrLogEventConsumer (const True) logCfg
+  void $ C.forkIO $ L.stdErrLogEventConsumer (const True) logCfg
 
-  void $ C.forkIO $ testRunner caseChan resChan
+  opcodes <- case PPCS.allOpcodes of
+      (o:os) -> return $ NES.fromList o os
+      _ -> do
+          IO.hPutStrLn IO.stderr "Bug: empty opcodes list"
+          IO.exitFailure
+
+  void $ C.forkIO $ testRunner (Proxy @PPCS.PPC) opcodes caseChan resChan
+  -- N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
 
   L.withLogCfg logCfg $
     CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
 
-testRunner :: C.Chan (Maybe [CE.TestCase PPCS.PPCState PPC.Instruction])
-           -> C.Chan (CE.ResultOrError PPCS.PPCState)
+testRunner :: forall proxy arch .
+              (A.Architecture arch, C.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
+           => proxy arch
+           -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
+           -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
+           -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner caseChan resChan = do
-   let i = PPC.Instruction PPC.ADD4 (PPC.Gprc r28 PPC.:< PPC.Gprc r17 PPC.:< PPC.Gprc r25 PPC.:< PPC.Nil)
-       testVector1 :: CE.TestCase PPCS.PPCState PPC.Instruction
-       testVector1 = CE.TestCase { CE.testNonce = 11
-                                 , CE.testProgram = [i]
-                                 , CE.testContext = sbase
-                                 }
+testRunner proxy opcodes caseChan resChan = do
+  gen <- DA.createGen
 
-  doTest Nothing testVector1
+  inst <- D.randomInstruction gen opcodes
+  state <- C.randomState proxy gen
+
+  let testCase = CE.TestCase { CE.testNonce = 11
+                             , CE.testProgram = [inst]
+                             , CE.testContext = state
+                             }
+
+  void $ doTest Nothing testCase
   C.writeChan caseChan Nothing
 
   where
@@ -152,16 +178,16 @@ testRunner caseChan resChan = do
 
       case res of
         CE.InvalidTag t -> do
-          IO.hPutStrLn IO.stderr $ printf "Invalid tag: %d" t
+          -- IO.hPutStrLn IO.stderr $ printf "Invalid tag: %d" t
           IO.exitFailure
         CE.TestContextParseFailure -> do
-          IO.hPutStrLn IO.stderr "Test context parse failure"
+          -- IO.hPutStrLn IO.stderr "Test context parse failure"
           IO.exitFailure
         CE.TestSignalError nonce sig -> do
-          IO.hPutStrLn IO.stderr $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
+          -- IO.hPutStrLn IO.stderr $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
           IO.exitFailure
         CE.TestReadError tag -> do
-          IO.hPutStrLn IO.stderr $ printf "Failed with a read error (%d)" tag
+          -- IO.hPutStrLn IO.stderr $ printf "Failed with a read error (%d)" tag
           IO.exitFailure
         CE.TestSuccess tr -> do
           case mr of
