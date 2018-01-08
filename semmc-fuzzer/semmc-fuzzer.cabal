@@ -26,4 +26,5 @@ executable semmc-fuzzer
                        semmc,
                        semmc-ppc,
                        semmc-arm,
-                       semmc-x8664
+                       dismantle-ppc,
+                       dismantle-arm
