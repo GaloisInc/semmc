@@ -24,6 +24,7 @@ data ExprTag = TBool
               | TDouble
               | TMemory
               | TMemRef
+              | TString
 
 data ExprType tp where
   -- | A type of bitvectors of a fixed width
@@ -34,6 +35,7 @@ data ExprType tp where
   EBool :: ExprType 'TBool
   EMemory :: ExprType 'TMemory
   EMemRef :: ExprType 'TMemRef
+  EString :: ExprType 'TString
 
 deriving instance Eq (ExprType tp)
 deriving instance Show (ExprType tp)
@@ -119,6 +121,7 @@ data Expr (tp :: ExprTag) where
   LitBool :: Bool -> Expr 'TBool
   LitBV :: Int -> Integer -> Expr 'TBV
   LitInt :: Integer -> Expr 'TInt
+  LitString :: String -> Expr 'TString
   Loc :: Location tp -> Expr tp
   -- | Built-in operations (e.g., bitvector ops)
   Builtin :: ExprType tp -> String -> [Some Expr] -> Expr tp

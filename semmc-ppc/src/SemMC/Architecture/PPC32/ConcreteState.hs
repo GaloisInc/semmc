@@ -16,7 +16,7 @@ module SemMC.Architecture.PPC32.ConcreteState (
   ) where
 
 import Data.Proxy
-import           GHC.TypeLits ( KnownNat )
+import           GHC.TypeLits
 
 import           Control.Monad.Trans ( liftIO )
 import qualified Control.Monad.State.Strict as St
@@ -62,12 +62,12 @@ randomState gen = St.execStateT randomize MapF.empty
          <- V.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc (PPCS.extendBV bv)
 
-    addRandomBV :: (KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
+    addRandomBV :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
     addRandomBV loc = do
       bv <- V.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc bv
 
-    addZeroBV :: (KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
+    addZeroBV :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
     addZeroBV loc = do
       let bv = V.ValueBV (W.w 0)
       St.modify' $ MapF.insert loc bv
@@ -103,7 +103,7 @@ interestingStates = gprStates -- ++ fprStates
 zeroState :: (KnownNat (ArchRegWidth ppc), ArchRegWidth ppc ~ 32) => ConcreteState ppc
 zeroState = St.execState addZeros MapF.empty
   where
-    addZero :: KnownNat n => Location ppc (BaseBVType n) -> St.State (ConcreteState ppc) ()
+    addZero :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.State (ConcreteState ppc) ()
     addZero loc = St.modify' $ MapF.insert loc (V.ValueBV (W.w 0))
     addZeros = do
       mapM_ addZero gprs

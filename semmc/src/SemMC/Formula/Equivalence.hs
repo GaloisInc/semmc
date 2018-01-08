@@ -21,11 +21,11 @@ import           Data.Foldable ( foldrM )
 import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.NatRepr ( withKnownNat )
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF ( traverseF )
 import qualified Data.Set as Set
+import qualified Data.Word.Indexed as W
 import qualified System.IO as IO
 
 import           Lang.Crucible.BaseTypes
@@ -82,7 +82,7 @@ formulasEquivConcrete =
   let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (V.Value tp)
       eval (GroundEvalFn evalFn) e =
         case S.exprType e of
-          BaseBVRepr w -> withKnownNat w (V.ValueBV . fromInteger <$> evalFn e)
+          BaseBVRepr w -> V.ValueBV . W.wRep w <$> evalFn e
           _ -> error "formulasEquivConcrete: only BVs supported"
   in formulasEquiv eval
 

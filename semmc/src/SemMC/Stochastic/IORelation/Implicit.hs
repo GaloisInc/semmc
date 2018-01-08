@@ -125,9 +125,9 @@ collectImplicitOutputLocations _op rix baseRes f tc =
     addLocIfImplicitAndDifferent loc0 explicitOperands (MapF.Pair loc postVal) s =
       let proxy = Proxy :: Proxy arch
       in case A.locationType loc of
-        BaseBVRepr nr ->
-          case withKnownNat nr (let tv = V.trivialView proxy loc
-                                in (V.peekMS (CE.testContext tc) tv, V.peekMS (CE.resultContext baseRes) tv,tv)) of
+        BaseBVRepr _nr ->
+          case (let tv = V.trivialView proxy loc
+                 in (V.peekMS (CE.testContext tc) tv, V.peekMS (CE.resultContext baseRes) tv,tv)) of
             (_preVal, baseResVal, tv) ->
               case () of
                 () | Some baseResVal == Some postVal -> return s
@@ -162,7 +162,7 @@ genTestForLoc :: forall arch
               -> V.ConcreteState arch
               -> Some (V.View arch)
               -> Learning arch (TestBundle (V.ConcreteState arch) (ImplicitFact arch))
-genTestForLoc i s0 (Some loc0) = do
+genTestForLoc i s0 (Some loc0@(V.View {})) = do
   testStates <- replicateM 20 (withGeneratedValueForLocation loc0 (V.pokeMS s0 loc0))
   case i of
     D.Instruction _ ops -> do

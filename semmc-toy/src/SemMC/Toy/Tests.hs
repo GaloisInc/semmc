@@ -157,7 +157,7 @@ doThing3 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
   Right add <- readBinOpc sym AddRr
-  putStrLn $ T.unpack $ printFormula (HR.typeRepr AddRr) add
+  putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
 doThing4 :: IO ()
 doThing4 = do
