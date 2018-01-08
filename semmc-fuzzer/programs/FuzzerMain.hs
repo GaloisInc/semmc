@@ -12,6 +12,7 @@ import qualified System.Exit as IO
 import qualified System.IO as IO
 
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.Nonce as N
 
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction.Random as D
@@ -142,26 +143,29 @@ doTesting = do
           IO.hPutStrLn IO.stderr "Bug: empty opcodes list"
           IO.exitFailure
 
-  void $ C.forkIO $ testRunner (Proxy @PPCS.PPC) opcodes caseChan resChan
-  -- N.withIONonceGenerator $ \r -> (O.execParser opts >>= mainWith r)
+  void $ C.forkIO $
+      N.withIONonceGenerator $ \nonceGen ->
+          testRunner nonceGen (Proxy @PPCS.PPC) opcodes caseChan resChan
 
   L.withLogCfg logCfg $
     CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
 
-testRunner :: forall proxy arch .
+testRunner :: forall proxy arch s .
               (A.Architecture arch, C.ConcreteArchitecture arch, D.ArbitraryOperands (A.Opcode arch) (A.Operand arch))
-           => proxy arch
+           => N.NonceGenerator IO s
+           -> proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner proxy opcodes caseChan resChan = do
+testRunner nonceGen proxy opcodes caseChan resChan = do
   gen <- DA.createGen
 
   inst <- D.randomInstruction gen opcodes
   state <- C.randomState proxy gen
+  nonce <- N.indexValue <$> N.freshNonce nonceGen
 
-  let testCase = CE.TestCase { CE.testNonce = 11
+  let testCase = CE.TestCase { CE.testNonce = nonce
                              , CE.testProgram = [inst]
                              , CE.testContext = state
                              }
