@@ -12,3 +12,4 @@ optional-packages:
   submodules/parameterized-utils
   submodules/elf-edit/
   submodules/dismantle/dismantle-ppc/
+  submodules/dismantle/dismantle-arm/
