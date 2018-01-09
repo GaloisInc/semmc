@@ -260,7 +260,9 @@ consumeUntilEnd pred k cfg = do
 -- | A log event consumer that prints formatted log events to stderr.
 stdErrLogEventConsumer :: (LogEvent -> Bool) -> LogCfg -> IO ()
 stdErrLogEventConsumer pred =
-  consumeUntilEnd pred (IO.hPutStrLn IO.stderr . prettyLogEvent)
+  consumeUntilEnd pred $ \e -> do
+      IO.hPutStrLn IO.stderr $ prettyLogEvent e
+      IO.hFlush IO.stderr
 
 -- | A logger that writes to a user-specified file
 --
