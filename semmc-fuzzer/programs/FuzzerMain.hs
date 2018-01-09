@@ -5,10 +5,12 @@
 module Main where
 
 import qualified Control.Concurrent as C
-import           Control.Monad (void, replicateM_)
+import           Control.Monad (void, replicateM_, forM)
 import qualified Control.Exception as E
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
+import qualified Data.Map as M
+import           Data.Maybe (catMaybes)
 import           Data.EnumF (EnumF)
 import           Data.Proxy (Proxy(Proxy))
 import           Text.Printf (printf)
@@ -188,6 +190,7 @@ testRunner proxy opcodes semantics caseChan resChan = do
     let chunkSize = 10000
 
     N.withIONonceGenerator $ \nonceGen -> do
+      gen <- DA.createGen
       sym :: SB.SimpleBackend s
           <- SB.newSimpleBackend nonceGen
 
@@ -195,9 +198,9 @@ testRunner proxy opcodes semantics caseChan resChan = do
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
 
-      -- Submit the test cases
-      replicateM_ chunkSize $ do
-          gen <- DA.createGen
+      mCases <- forM [0..chunkSize-1] $ \(i::Int) -> do
+          L.logIO L.Info $ printf "Generating test case %d" i
+
           inst <- D.randomInstruction gen opcodes
           initialState <- C.randomState proxy gen
           nonce <- N.indexValue <$> N.freshNonce nonceGen
@@ -207,23 +210,35 @@ testRunner proxy opcodes semantics caseChan resChan = do
               Left err -> do
                   L.logIO L.Error $
                       printf "Error evaluating instruction %s: %s" (show inst) err
+                  return Nothing
 
               Right finalState -> do
-                  let testCase = CE.TestCase { CE.testNonce = nonce
-                                             , CE.testProgram = [inst]
-                                             , CE.testContext = initialState
-                                             }
+                  return $ Just $
+                      ( CE.TestCase { CE.testNonce = nonce
+                                    , CE.testProgram = [inst]
+                                    , CE.testContext = initialState
+                                    }
+                      , finalState
+                      )
 
-                  doTest testCase finalState
+      L.logIO L.Info "Done generating cases"
 
+      let cases = catMaybes mCases
+          caseMap = M.fromList [ (CE.testNonce (fst c), snd c) | c <- cases ]
+
+      L.logIO L.Info $ printf "Sending %d test cases" (length cases)
+
+      -- Send test cases
+      C.writeChan caseChan (Just $ fst <$> cases)
       C.writeChan caseChan Nothing
+
+      -- Process results
+      replicateM_ (length cases) (handleResult caseMap)
+
       L.logIO L.Info "Runner done"
 
       where
-        doTest tc expectedFinal = do
-          -- Send a test case
-          C.writeChan caseChan (Just [tc])
-          -- Get the result
+        handleResult caseMap = do
           res <- C.readChan resChan
 
           case res of
@@ -236,6 +251,7 @@ testRunner proxy opcodes semantics caseChan resChan = do
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
             CE.TestSuccess tr -> do
+              let Just expectedFinal = M.lookup (CE.resultNonce tr) caseMap
               if (expectedFinal /= CE.resultContext tr)
                  then L.logIO L.Error $ printf "ERROR: Context mismatch: expected %s, got %s" (show expectedFinal) (show $ CE.resultContext tr)
                  else L.logIO L.Info "SUCCESS"
