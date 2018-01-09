@@ -177,17 +177,17 @@ testRunner proxy opcodes semantics caseChan resChan =
 
       gen <- DA.createGen
       inst <- D.randomInstruction gen opcodes
-      state <- C.randomState proxy gen
+      initialState <- C.randomState proxy gen
       nonce <- N.indexValue <$> N.freshNonce nonceGen
 
-      expectedFinalState <- evaluateInstruction sym plainBaseSet inst state
+      finalState <- evaluateInstruction sym plainBaseSet inst initialState
 
       let testCase = CE.TestCase { CE.testNonce = nonce
                                  , CE.testProgram = [inst]
-                                 , CE.testContext = state
+                                 , CE.testContext = initialState
                                  }
 
-      void $ doTest testCase expectedFinalState
+      void $ doTest testCase finalState
       C.writeChan caseChan Nothing
 
       where
