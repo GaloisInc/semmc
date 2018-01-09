@@ -46,7 +46,7 @@ evaluateInstruction sb semMap inst initialState =
     case inst of
         I.Instruction opc operands ->
             case MapF.lookup opc semMap of
-                Nothing -> return $ Left "Opcode not found in semantics"
+                Nothing -> return $ Left $ "Opcode not found in semantics: " <> showF opc
                 Just paramFormula -> do
                     (_, formula) <- F.instantiateFormula sb paramFormula operands
                     Right <$> evaluateFormula sb formula initialState
@@ -74,11 +74,10 @@ evaluateFormula sb formula initialState =
             -- Make another sequence of the same shape with the concrete
             -- values for each location (taken from the initial concrete
             -- state)
-            let bindMatchingLocation :: forall b tp . PairF (A.Location arch) b tp -> IO (S.Elt t tp)
-                bindMatchingLocation (PairF loc _) =
+            let bindMatchingLocation :: forall tp . PairF (A.Location arch) (S.SimpleBoundVar t) tp -> IO (S.Elt t tp)
+                bindMatchingLocation (PairF loc bv) =
                     case MapF.lookup loc initialState of
-                        Nothing ->
-                            error $ "BUG: architecture state missing location " <> showF loc
+                        Nothing -> return $ S.BoundVarElt bv
                         Just val -> valueToCrucibleElt val
                 vars = fmapFC sndPairF assignment0'
 
@@ -101,7 +100,7 @@ evaluateFormula sb formula initialState =
                     case A.locationType loc of
                         BT.BaseBVRepr (repr::BT.NatRepr n) ->
                             withKnownNat repr $ case SI.asUnsignedBV expr of
-                                Nothing -> error $ "BUG: asUnsignedBV returned Nothing for " <> showF expr
+                                Nothing -> m
                                 Just val ->
                                     let wVal :: W.W n
                                         wVal = W.w val
