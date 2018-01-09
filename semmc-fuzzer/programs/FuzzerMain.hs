@@ -182,7 +182,7 @@ testRunner :: forall proxy arch .
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
 testRunner proxy opcodes semantics caseChan resChan = do
-    let chunkSize = 10000
+    let chunkSize = 100
 
     N.withIONonceGenerator $ \nonceGen -> do
       gen <- DA.createGen
