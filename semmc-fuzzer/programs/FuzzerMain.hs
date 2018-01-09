@@ -6,12 +6,10 @@ module Main where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
-import           Control.Monad (void, replicateM_, forM)
-import qualified Control.Exception as E
+import           Control.Monad (replicateM_, forM)
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Map as M
-import           Data.Maybe (catMaybes)
 import           Data.EnumF (EnumF)
 import           Data.Proxy (Proxy(Proxy))
 import           Text.Printf (printf)
@@ -195,33 +193,29 @@ testRunner proxy opcodes semantics caseChan resChan = do
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
 
-      mCases <- forM [0..chunkSize-1] $ \(i::Int) -> do
+      cases <- forM [0..chunkSize-1] $ \(i::Int) -> do
           L.logIO L.Info $ printf "Generating test case %d" i
 
-          inst <- D.randomInstruction gen opcodes
-          initialState <- C.randomState proxy gen
-          nonce <- N.indexValue <$> N.freshNonce nonceGen
-          evalResult <- evaluateInstruction sym plainBaseSet inst initialState
+          let go = do
+                inst <- D.randomInstruction gen opcodes
+                initialState <- C.randomState proxy gen
+                nonce <- N.indexValue <$> N.freshNonce nonceGen
+                evalResult <- evaluateInstruction sym plainBaseSet inst initialState
 
-          case evalResult of
-              Left err -> do
-                  L.logIO L.Error $
-                      printf "Error evaluating instruction %s: %s" (show inst) err
-                  return Nothing
-
-              Right finalState -> do
-                  return $ Just $
-                      ( CE.TestCase { CE.testNonce = nonce
-                                    , CE.testProgram = [inst]
-                                    , CE.testContext = initialState
-                                    }
-                      , finalState
-                      )
+                case evalResult of
+                    Left _ -> go
+                    Right finalState -> do
+                        return ( CE.TestCase { CE.testNonce = nonce
+                                             , CE.testProgram = [inst]
+                                             , CE.testContext = initialState
+                                             }
+                               , finalState
+                               )
+          go
 
       L.logIO L.Info "Done generating cases"
 
-      let cases = catMaybes mCases
-          caseMap = M.fromList [ (CE.testNonce (fst c), snd c) | c <- cases ]
+      let caseMap = M.fromList [ (CE.testNonce (fst c), snd c) | c <- cases ]
 
       L.logIO L.Info $ printf "Sending %d test cases" (length cases)
 
