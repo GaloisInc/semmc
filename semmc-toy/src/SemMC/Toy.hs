@@ -421,7 +421,7 @@ operandToSemanticViewImpl (I32 _) = Nothing
 randomStateImpl :: D.Gen -> IO (V.ConcreteState Toy)
 randomStateImpl gen = do
   pairs <- forM [Reg1, Reg2, Reg3] $ \r -> do
-    value <- D.arbitrary gen
+    value <- V.arbitraryBV gen knownNat
     return $ MapF.Pair (RegLoc r) value
   return $ MapF.fromList pairs
 

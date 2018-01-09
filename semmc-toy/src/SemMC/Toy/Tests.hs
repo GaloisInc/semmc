@@ -350,11 +350,9 @@ test_rightValueWrongPlace = do
   runSynToy "tests/data/test_rightValueWrongPlace" $ do
     tests <- askTestCases
     (targetTests, targetResults) <- S.computeTargetResults target tests
-    (testPairs, candidateResults) <- S.computeCandidateResults candidate targetTests
-    weight <- sum <$>
-      mapM (S.compareTargetToCandidate target targetResults candidateResults) testPairs
+    weight <- S.weighCandidate target targetTests targetResults candidate
     let expectedWeight =
-          S.wrongLocationPenalty * fromIntegral (length tests)
+          S.wrongPlacePenalty * fromIntegral (length tests)
     return (expectedWeight, weight)
   where
     -- Add r1 and r2 and store the result in *r3*, and then set r1 to

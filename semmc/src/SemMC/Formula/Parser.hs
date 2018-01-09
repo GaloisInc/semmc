@@ -821,7 +821,7 @@ readFormula' sym env repr text = do
   -- Build the operand list from the given s-expression, validating that it
   -- matches the correct shape as we go.
   operands :: SL.List (OpData arch) sh
-    <- fromMaybeError "invalid operand structure" (buildOperandList' repr opsRaw)
+    <- fromMaybeError ("invalid operand structure: " ++ show opsRaw) (buildOperandList' repr opsRaw)
 
   inputs :: [Some (Parameter arch sh)]
     <- readInputs operands inputsRaw

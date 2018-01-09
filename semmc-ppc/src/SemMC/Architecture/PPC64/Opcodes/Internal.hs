@@ -21,3 +21,37 @@ allOpcodes :: [Some (PPC.Opcode PPC.Operand)]
 allOpcodes = map (mapSome DT.capturedOpcode) allOpcodeInfo
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

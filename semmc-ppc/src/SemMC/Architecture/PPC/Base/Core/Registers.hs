@@ -6,6 +6,7 @@ module SemMC.Architecture.PPC.Base.Core.Registers (
   ctr,
   cr,
   fpscr,
+  vscr,
   xer,
   memory
   ) where
@@ -41,6 +42,12 @@ fpscr :: Location 'TBV
 fpscr = LiteralLoc Literal { lName = "FPSCR"
                            , lExprType = EBV 32
                            }
+
+-- | The VSCR is always 32 bits
+vscr :: Location 'TBV
+vscr = LiteralLoc Literal { lName = "VSCR"
+                          , lExprType = EBV 32
+                          }
 
 xer :: (?bitSize :: BitSize) => Location 'TBV
 xer = LiteralLoc Literal { lName = "XER"

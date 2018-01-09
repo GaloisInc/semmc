@@ -616,6 +616,7 @@ instance A.IsLocation (Location PPC) where
   locationType LocCR = knownRepr
   locationType (LocVSR _) = knownRepr
   locationType LocFPSCR = knownRepr
+  locationType LocVSCR = knownRepr
   locationType LocMem = knownRepr
 
   defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
@@ -627,6 +628,7 @@ instance A.IsLocation (Location PPC) where
   defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
   defaultLocationExpr sym (LocVSR _) = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocVSCR = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocMem =
     S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
@@ -640,6 +642,7 @@ instance A.IsLocation (Location PPC) where
       , Some LocXER
       , Some LocCR
       , Some LocFPSCR
+      , Some LocVSCR
       , Some LocMem
       ]
     ]
@@ -662,4 +665,5 @@ parseLocation = do
                        , Some LocMem <$ P.string "Mem"
                        ]
     'F' -> Some LocFPSCR <$ P.string "FPSCR"
+    'V' -> Some LocVSCR <$ P.string "VSCR"
     _ -> fail ("Unexpected location prefix character: " ++ (c :[]))
