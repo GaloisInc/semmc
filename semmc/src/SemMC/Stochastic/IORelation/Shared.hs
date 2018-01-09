@@ -22,12 +22,9 @@ import           Data.Proxy ( Proxy(..) )
 import           GHC.TypeLits (type (<=))
 
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.NatRepr ( withKnownNat )
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.List as SL
 import qualified Lang.Crucible.BaseTypes as S
-
-import qualified Dismantle.Arbitrary as DA
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
@@ -114,8 +111,7 @@ withGeneratedValueForLocation :: forall arch n a .
                               => V.View arch n
                               -> (V.Value (S.BaseBVType n) -> a)
                               -> Learning arch a
-withGeneratedValueForLocation loc k = do
+withGeneratedValueForLocation v k = do
   g <- askGen
-  withKnownNat (V.viewTypeRepr loc) $ do
-    randomBV <- liftIO (DA.arbitrary g)
-    return (k randomBV)
+  randomBV <- liftIO (V.arbitraryBV g (V.viewTypeRepr v))
+  return (k randomBV)

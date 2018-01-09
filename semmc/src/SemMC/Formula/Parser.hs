@@ -39,7 +39,7 @@ import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 import qualified Data.Set as Set
-import           GHC.TypeLits ( Symbol, KnownNat )
+import           GHC.TypeLits ( Symbol )
 import           Data.Proxy ( Proxy(..) )
 
 import qualified Data.Parameterized.Ctx as Ctx
@@ -543,9 +543,9 @@ data ArrayJudgment :: BaseType -> BaseType -> * where
 
 expectArrayWithIndex :: (E.MonadError String m) => BaseTypeRepr tp1 -> BaseTypeRepr tp2 -> m (ArrayJudgment tp1 tp2)
 expectArrayWithIndex dimRepr (BaseArrayRepr idxTpReprs resRepr) =
-  case Ctx.view idxTpReprs of
+  case Ctx.viewAssign idxTpReprs of
     Ctx.AssignExtend rest idxTpRepr ->
-      case Ctx.view rest of
+      case Ctx.viewAssign rest of
         Ctx.AssignEmpty ->
           case testEquality idxTpRepr dimRepr of
             Just Refl -> return $ ArraySingleDim resRepr
@@ -591,8 +591,8 @@ exprAssignment' :: (E.MonadError String m,
                 => Ctx.Assignment BaseTypeRepr ctx
                 -> [Some ex]
                 -> m (Ctx.Assignment ex ctx)
-exprAssignment' (Ctx.view -> Ctx.AssignEmpty) [] = return Ctx.empty
-exprAssignment' (Ctx.view -> Ctx.AssignExtend restTps tp) (Some e : restExprs) = do
+exprAssignment' (Ctx.viewAssign -> Ctx.AssignEmpty) [] = return Ctx.empty
+exprAssignment' (Ctx.viewAssign -> Ctx.AssignExtend restTps tp) (Some e : restExprs) = do
   Refl <- case testEquality tp (S.exprType e) of
             Just pf -> return pf
             Nothing -> E.throwError ("unexpected type: " ++ show tp ++ " and " ++ show (S.exprType e))
@@ -625,16 +625,16 @@ readUndefined (SC.SCons (SC.SAtom (AIdent "_"))
           | Just size <- S.asUnsignedBV ex -> do
               sym <- MR.reader getSym
               case NR.someNat (fromIntegral size) of
-                Just (Some nr) -> NR.withKnownNat nr (mkUndefined nr sym)
+                Just (Some nr) -> mkUndefined nr sym
                 Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" size
         ety -> E.throwError $ printf "Invalid expr type: %s" (show ety)
     _ -> E.throwError $ printf "Invalid argument list for undefined"
   where
-    mkUndefined :: forall n . (KnownNat n) => NR.NatRepr n -> sym -> m (Maybe (Some (S.SymExpr sym)))
+    mkUndefined :: forall n . NR.NatRepr n -> sym -> m (Maybe (Some (S.SymExpr sym)))
     mkUndefined nr sym = do
       case NR.testLeq (knownNat @1) nr of
         Just NR.LeqProof -> do
-          let rty = knownRepr :: BaseTypeRepr (BaseBVType n)
+          let rty = BaseBVRepr nr
           fn <- liftIO (S.freshTotalUninterpFn sym (U.makeSymbol "undefined") Ctx.empty rty)
           assn <- exprAssignment (S.fnArgTypes fn) []
           (Just . Some) <$> liftIO (S.applySymFn sym fn assn)
