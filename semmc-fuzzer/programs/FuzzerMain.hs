@@ -6,10 +6,12 @@ module Main where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
-import           Control.Monad (replicateM_, replicateM)
+import           Control.Monad (replicateM_, replicateM, forM_)
 import qualified Control.Exception as E
+import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
+import           Data.Maybe (catMaybes)
 import qualified Data.Map as M
 import           Data.EnumF (EnumF)
 import           Data.Proxy (Proxy(Proxy))
@@ -72,12 +74,18 @@ data FuzzerConfiguration =
 data OpcodeMatch =
     AllOpcodes
     | SpecificOpcodes [String]
-    deriving (Show)
+    deriving (Show, Eq)
+
+data TestStrategy =
+    RoundRobin
+    | Randomized
+    deriving (Show, Eq)
 
 data FuzzerArchConfig =
     FuzzerArchConfig { fuzzerArchName :: String
                      , fuzzerArchTestingHosts :: [FuzzerTestHost]
                      , fuzzerTestOpcodes :: OpcodeMatch
+                     , fuzzerTestStrategy :: TestStrategy
                      }
                      deriving (Show)
 
@@ -128,8 +136,8 @@ doTesting = do
 
   L.withLogCfg logCfg $ L.logIO L.Info $ printf "Starting up"
 
-  let -- oMatch = AllOpcodes
-      oMatch = SpecificOpcodes ["MULHW"]
+  let oMatch = AllOpcodes
+      strat = RoundRobin
       matched = filterOpcodes (Proxy @PPCS.PPC) oMatch PPCS.allOpcodes
 
   opcodes <- case matched of
@@ -140,7 +148,7 @@ doTesting = do
 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
-          testRunner (Proxy @PPCS.PPC) opcodes PPCS.allSemantics caseChan resChan
+          testRunner (Proxy @PPCS.PPC) opcodes strat PPCS.allSemantics caseChan resChan
 
   CA.link runThread
 
@@ -179,12 +187,20 @@ testRunner :: forall proxy arch .
               )
            => proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
+           -> TestStrategy
            -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner proxy opcodes semantics caseChan resChan = do
+testRunner proxy inputOpcodes strat semantics caseChan resChan = do
     let chunkSize = 100
+        opcodeSetSequence = case strat of
+            Randomized ->
+                -- Just use all opcodes on each chunk iteration.
+                repeat inputOpcodes
+            RoundRobin ->
+                -- Make a list of singleton sets, one for each opcode.
+                concat $ repeat (NES.singleton <$> F.toList inputOpcodes)
 
     N.withIONonceGenerator $ \nonceGen -> do
       gen <- DA.createGen
@@ -194,42 +210,62 @@ testRunner proxy opcodes semantics caseChan resChan = do
       baseSet <- F.loadFormulas sym semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
-          generateTestCase = go
+
+          generateTestCase fromOpcodes = go
               where
                   go = do
-                    inst <- D.randomInstruction gen opcodes
+                    inst <- D.randomInstruction gen fromOpcodes
                     initialState <- C.randomState proxy gen
                     nonce <- N.indexValue <$> N.freshNonce nonceGen
                     evalResult <- E.try $ evaluateInstruction sym plainBaseSet inst initialState
 
                     case evalResult of
                         Left (e::E.SomeException) -> do
+                            -- If we get an exception and we're in
+                            -- RoundRobin mode, we can't recover!
                             L.logIO L.Error $ printf "Exception evaluating instruction %s: %s" (show inst) (show e)
-                            go
+                            if strat == RoundRobin
+                               then return Nothing
+                               else do
+                                   L.logIO L.Error $ printf "Exception evaluating instruction %s: %s" (show inst) (show e)
+                                   go
                         Right (Left e) -> do
                             L.logIO L.Error $ printf "Error evaluating instruction %s: %s" (show inst) (show e)
                             go
                         Right (Right finalState) -> do
-                            return ( CE.TestCase { CE.testNonce = nonce
-                                                 , CE.testProgram = [inst]
-                                                 , CE.testContext = initialState
-                                                 }
-                                   , finalState
-                                   )
+                            return $ Just ( CE.TestCase { CE.testNonce = nonce
+                                                        , CE.testProgram = [inst]
+                                                        , CE.testContext = initialState
+                                                        }
+                                          , inst
+                                          , finalState
+                                          )
 
-      L.logIO L.Info $ printf "Generating %d test cases" chunkSize
-      cases <- replicateM chunkSize generateTestCase
+      forM_ opcodeSetSequence $ \opcodes -> do
+          L.logIO L.Info $ printf "Generating %d test cases" chunkSize
+          mCases <- replicateM chunkSize (generateTestCase opcodes)
 
-      let caseMap = M.fromList [ (CE.testNonce (fst c), snd c) | c <- cases ]
+          let caseMap = M.fromList [ (CE.testNonce tc, (inst, fs)) | (tc, inst, fs) <- cases ]
+              cases = catMaybes mCases
 
-      -- Send test cases
-      L.logIO L.Info $ printf "Sending %d test cases to remote host" chunkSize
-      C.writeChan caseChan (Just $ fst <$> cases)
+          case null cases of
+              True -> do
+                  -- In RoundRobin mode, we might hit an opcode for
+                  -- which we are unable to ever generate test cases
+                  -- (due to semantics issues or evaluator bugs). When
+                  -- that happens, cases will be empty and we need to
+                  -- just skip that opcode.
+                  L.logIO L.Info $ printf "Skipped opcode sequence %s, could not generate any test cases" (show opcodes)
+              False -> do
+                  -- Send test cases
+                  L.logIO L.Info $ printf "Sending %d test cases to remote host" chunkSize
+                  C.writeChan caseChan (Just $ (\(tc, _, _) -> tc) <$> cases)
+
+                  -- Process results
+                  L.logIO L.Info "Processing test results"
+                  replicateM_ (length cases) (handleResult caseMap)
+
       C.writeChan caseChan Nothing
-
-      -- Process results
-      L.logIO L.Info "Processing test results"
-      replicateM_ (length cases) (handleResult caseMap)
 
       where
         handleResult caseMap = do
@@ -245,9 +281,10 @@ testRunner proxy opcodes semantics caseChan resChan = do
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
             CE.TestSuccess tr -> do
-              let Just expectedFinal = M.lookup (CE.resultNonce tr) caseMap
+              let Just (inst, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
               if (expectedFinal /= CE.resultContext tr)
-                 then L.logIO L.Error $ printf "ERROR: Context mismatch: expected %s, got %s" (show expectedFinal) (show $ CE.resultContext tr)
+                 then L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: expected %s, got %s"
+                          (show inst) (show expectedFinal) (show $ CE.resultContext tr)
                  else L.logIO L.Info "SUCCESS"
 
 main :: IO ()
