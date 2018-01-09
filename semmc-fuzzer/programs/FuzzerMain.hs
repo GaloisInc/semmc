@@ -68,9 +68,15 @@ data FuzzerConfiguration =
                         }
                         deriving (Show)
 
+data OpcodeTestMode =
+    AllOpcodes
+    | SpecificOpcodes [String]
+    deriving (Show)
+
 data FuzzerArchConfig =
     FuzzerArchConfig { fuzzerArchName :: String
                      , fuzzerArchTestingHosts :: [FuzzerTestHost]
+                     , fuzzerTestOpcodes :: OpcodeTestMode
                      }
                      deriving (Show)
 
@@ -108,10 +114,17 @@ doTesting = do
 
   L.withLogCfg logCfg $ L.logIO L.Info $ printf "Starting up"
 
-  opcodes <- case PPCS.allOpcodes of
+  let -- oTest = AllOpcodes
+      oTest = SpecificOpcodes ["MULHW"]
+      found = filter matcher PPCS.allOpcodes
+      matcher = case oTest of
+          AllOpcodes -> const True
+          SpecificOpcodes os -> ((`elem` os) . show)
+
+  opcodes <- case found of
       (o:os) -> return $ NES.fromList o os
       _ -> do
-          IO.hPutStrLn IO.stderr "Bug: empty opcodes list"
+          IO.hPutStrLn IO.stderr "BUG: empty opcode list"
           IO.exitFailure
 
   runThread <- CA.async $ do
