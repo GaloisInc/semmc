@@ -161,9 +161,9 @@ getArchState = do
   -- Get a padding word
   _ <- G.getWord32be
 --  frs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.IgnoreHighBits) PPCS.repr128)) frs
-  vrs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.KeepHighBits) PPCS.repr128)) vrs
+  vsrs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.KeepHighBits) PPCS.repr128)) vsrs
 --  mem' <- getBS
-  return (St.execState (addLocs gprs' spregs' ({-frs' ++-} vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
+  return (St.execState (addLocs gprs' spregs' ({-frs' ++-} vsrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
     addLoc :: forall tp . (Location ppc tp, V.Value tp) -> St.State (ConcreteState ppc) ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
