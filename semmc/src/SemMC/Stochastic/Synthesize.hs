@@ -28,6 +28,7 @@ module SemMC.Stochastic.Synthesize
 
 import           GHC.Stack ( HasCallStack )
 
+import           Control.Applicative
 import qualified Control.Exception as C
 import           Control.Monad
 import           Control.Monad.Trans ( liftIO )
@@ -78,8 +79,11 @@ synthesize :: (SynC arch, U.HasCallStack)
            -> Syn t arch (CP.CandidateProgram t arch)
 synthesize target = do
   case target of
-    AC.RI { AC.riInstruction = i0 } ->
-      U.logM U.Info $ printf "Attempting to synthesize a program for %s" (show i0)
+    AC.RI { AC.riInstruction = i0 } -> do
+      nThreads <- askParallelSynth
+      U.logM U.Info $
+        printf "Attempting to synthesize a program for %s using %i threads"
+        (show i0) nThreads
   (numRounds, candidate) <- parallelSynthOne target
   U.logM U.Info $ printf "found candidate after %i rounds" numRounds
   let candidateWithoutNops = catMaybes . F.toList $ candidate
@@ -161,24 +165,45 @@ mcmcSynthesizeOne target = do
   (targetTests, targetResults) <- computeTargetResults target tests
   cost0 <- weighCandidate target targetTests targetResults candidate
   let round0 = 0
-  evolve round0 cost0 targetTests targetResults candidate
+  let mCanOpt0 = Nothing
+  evolve round0 cost0 mCanOpt0 targetTests targetResults candidate
   where
     -- | Evolve the candidate until it agrees with the target on the
     -- tests.
-    evolve k  0    _ _ candidate = do
+    evolve k 0 mCanOpt _ _ candidate = do
       U.logM U.Debug "done evolving!"
+      let (optRound, numRvwps) = case mCanOpt of
+            -- If the rvwp optimization never applied, then say it
+            -- applied with no right values in the wrong place in the
+            -- same round that that we found a candidate. This lets us
+            -- compute stats related to the benefit of the
+            -- optimization without having to consider separate cases
+            -- for when it did and did not apply.
+            Nothing -> (k, 0)
+            Just (o, n) -> (o, n)
+      U.logM U.Info $ unlines
+        [ printf "rvwp stats (num rvwps, opt round, non-opt round): (%i, %i, %i)"
+          numRvwps optRound k
+        , printf "rvwp speedup is %.2f."
+          (fromIntegral k / fromIntegral optRound :: Double) ]
       return (k, candidate)
-    evolve !k cost targetTests targetResults candidate = do
+    evolve !k cost mCanOpt targetTests targetResults candidate = do
       candidate' <- perturb candidate
       if candidate == candidate'
-      then evolve (k+1) cost targetTests targetResults candidate
+      then evolve (k+1) cost mCanOpt targetTests targetResults candidate
       else do
         U.logM U.Debug $ "candidate:\n"++prettyCandidate candidate
         U.logM U.Debug $ "candidate':\n"++prettyCandidate candidate'
         U.logM U.Debug $ "cost = " ++ show cost
         -- liftIO $ showDiff candidate candidate'
-        (cost'', candidate'') <- chooseNextCandidate @arch target targetTests targetResults candidate cost candidate'
-        evolve (k+1) cost'' targetTests targetResults candidate''
+        (cost'', mNumRvwps, candidate'') <-
+          chooseNextCandidate target targetTests targetResults
+            candidate cost candidate'
+        -- Compute @Just (round, numRvwps)@ for the min round where
+        -- the rvwp optimization applies.
+        let mCanOpt' = (k+1,) <$> mNumRvwps
+        let !mCanOpt'' = mCanOpt <|> mCanOpt'
+        evolve (k+1) cost'' mCanOpt'' targetTests targetResults candidate''
 {-
 import qualified Data.List as L
 import Control.Monad
@@ -244,7 +269,7 @@ chooseNextCandidate :: (SynC arch, U.HasCallStack)
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
-                    -> Syn t arch (Double, Candidate arch)
+                    -> Syn t arch (Double, Maybe Int, Candidate arch)
 chooseNextCandidate target targetTests targetResults oldCandidate oldCost newCandidate = do
   gen <- askGen
   threshold <- liftIO $ D.uniformR (0::Double, 1) gen
@@ -259,16 +284,16 @@ chooseNextCandidate target targetTests targetResults oldCandidate oldCost newCan
         -- of costs in the exponent, not a *ratio* of costs.
         | newCost >= oldCost - log threshold/beta = do
             U.logM U.Debug "reject"
-            return (oldCost, oldCandidate)
+            return (oldCost, Nothing, oldCandidate)
         | [] <- testPairs = do
             U.logM U.Debug "accept"
-            checkIfRvwpOptimizationApplies rvwpss
-            return (newCost, newCandidate)
+            let mNumRvwps = checkIfRvwpOptimizationApplies rvwpss
+            return (newCost, mNumRvwps, newCandidate)
         | (testPair:testPairs') <- testPairs = do
             -- U.logM U.Debug $ printf "%f %f" cost threshold
             mRvwps <- compareTargetToCandidate targetResults newCandidateResults outMasks testPair
             case mRvwps of
-              Nothing -> return (oldCost, oldCandidate)
+              Nothing -> return (oldCost, Nothing, oldCandidate)
               Just rvwps -> do
                 -- U.logM U.Debug (show dcost)
                 let newCost' = newCost + sum (map rdWeight rvwps)
@@ -422,23 +447,20 @@ combineDeltas = foldr1 (zipWith combineRvwp)
       { rdWeight = rdWeight r1 + rdWeight r2
       , rdRvwpPlaces = zipWith (&&) (rdRvwpPlaces r1) (rdRvwpPlaces r2) }
 
--- | Check if the unimplemented rvwp optimization applies and if yes
--- kill the program.
+-- | Check if the unimplemented rvwp optimization applies.
 --
--- So that we can see how often the optimization applies. We could
--- also determine how much time would be saved by the optimization
--- when it applies by tracking what round the optimization applies in
--- vs what round we find a correct candidate without the optimization.
+-- Returns 'Nothing' if the optimization does not apply. When the
+-- optimization does apply, returns @Just k@ for @k@ the number of
+-- values that occur in the wrong places.
 checkIfRvwpOptimizationApplies :: U.HasCallStack
-                               => [[RvwpDelta arch]] -> Syn t arch ()
+                               => [[RvwpDelta arch]] -> Maybe Int
 checkIfRvwpOptimizationApplies rvwpss =
-  when rvwpOptimizationApllies $ do
-    let msg = printf "rvwp optimization applies with %i rvs in the wp!" numRvwps
-    U.logM U.Warn msg
-    liftIO $ ioError (userError msg)
+  if rvwpOptimizationApplies
+  then Just numRvwps
+  else Nothing
   where
     rvwps = combineDeltas rvwpss
-    rvwpOptimizationApllies = allRightValuesAvailable &&
+    rvwpOptimizationApplies = allRightValuesAvailable &&
                               someRightValueInTheWrongPlace
     allRightValuesAvailable = or [ rdWeight == 0 || or rdRvwpPlaces
                                  | RvwpDelta{..} <- rvwps ]
