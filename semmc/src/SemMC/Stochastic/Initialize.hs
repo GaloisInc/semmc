@@ -187,9 +187,7 @@ loadInitialStateExplicit cfg sym genTest interestingTests allOpcodes pseudoOpcod
   fref <- STM.newTVarIO initialFormulas
   congruentRef <- STM.newTVarIO congruentOps
   let worklist = makeWorklist targetOpcodes initialFormulas
-  when (WL.null worklist) $ do
-    L.logIO L.Error "Empty worklist!"
-    CE.throwIO $ userError ("loadInitialState: empty worklist!")
+  when (WL.null worklist) $ L.logIO L.Warn "Empty worklist!"
   wlref <- STM.newTVarIO worklist
   randomTests <- replicateM (randomTestCount cfg) genTest
   testref <- STM.newTVarIO (interestingTests ++ randomTests)

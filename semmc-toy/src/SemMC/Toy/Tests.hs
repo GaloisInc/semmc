@@ -21,6 +21,7 @@ import           Data.IORef ( newIORef )
 import qualified Data.Map as Map
 import           Data.Maybe
 import qualified Data.Sequence as S
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import           System.FilePath
 
@@ -238,6 +239,26 @@ toyTestRunnerBackend !i tChan rChan = do
   C.link loggerThread
 -}
 
+-- | Configuration for 'runSynToy'.
+--
+-- E.g. limit the 'opcodes' to speed up the search.
+data RunSynToyCfg =
+  RunSynToyCfg
+  { rstOpcodes :: [ Some (Opcode Operand) ]
+    -- ^ Known opcodes. Use 'Toy.allOpcodes' if you want them all.
+  , rstPseudoOpcodes :: [ Some (P.Pseudo Toy Operand) ]
+    -- ^ Psuedo opcodes. Use 'Toy.allPseudoOpcodes' if you want them all.
+  , rstTargetOpcodes :: [ Some (Opcode Operand) ]
+    -- ^ Opcodes to learn semantics for.
+  }
+-- | Default value for 'RunSyntoyCfg'.
+defaultRunSynToyCfg :: RunSynToyCfg
+defaultRunSynToyCfg = RunSynToyCfg
+  { rstOpcodes = Set.toList T.allOpcodes
+  , rstPseudoOpcodes = T.allPseudoOpcodes
+  , rstTargetOpcodes = []
+  }
+
 -- | Initialize a 'LocalSynEnv' for the toy arch and run a toy 'Syn'
 -- action in it.
 --
@@ -246,10 +267,11 @@ toyTestRunnerBackend !i tChan rChan = do
 -- effects, e.g. writing a file. If we want on disk side effects, then
 -- we should change this to set up the on-disk test env in a tmp dir.
 runSynToy :: (U.HasLogCfg)
-          => FilePath -- ^ Root dir for test data, e.g. semantics.
+          => RunSynToyCfg
+          -> FilePath -- ^ Root dir for test data, e.g. semantics.
           -> (forall t. Syn t Toy a)
           -> IO a
-runSynToy dataRoot action = do
+runSynToy rstCfg dataRoot action = do
   stThread <- newStatisticsThread (dataRoot </> "stats.sqlite")
   let cfg :: Config Toy
       cfg = Config
@@ -290,13 +312,9 @@ runSynToy dataRoot action = do
   -- we look for. I.e., the instructions with known semantics are the
   -- intersection of the opcode lists here and the semantic files on
   -- disk.
-  --
-  -- let allOpcodes = opcodes
-  let allOpcodes = [ {- Some (Witness AddRr)
-                   , -} Some NegR
-                   , Some SubRr ]
-  let pseudoOpcodes = allPseudoOpcodes
-  let targetOpcodes = [ Some AddRr ]
+  let allOpcodes = rstOpcodes rstCfg
+  let pseudoOpcodes = rstPseudoOpcodes rstCfg
+  let targetOpcodes = rstTargetOpcodes rstCfg
 
   withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes ioRelations $ \synEnv -> do
   gen <- A.createGen
@@ -334,8 +352,12 @@ test_synthesizeCandidate = do
                          , AC.riOperands = ops
                          , AC.riLiteralLocs = MapF.empty
                          }
-  -- let instruction = D.Instruction SubRr (R32 Reg1 :> R32 Reg2 :> Nil)
-  runSynToy "tests/data/test_synthesizeCandidate" $ do
+  let rstCfg = defaultRunSynToyCfg
+        { rstOpcodes = [ Some SubRr
+                       , Some NegR ]
+        , rstPseudoOpcodes = []
+        , rstTargetOpcodes = [ Some AddRr ] }
+  runSynToy rstCfg "tests/data/test_synthesizeCandidate" $ do
     (res, _) <- withTimeout (S.synthesize instruction)
     return (fmap CP.cpInstructions res)
 
@@ -347,7 +369,7 @@ test_synthesizeCandidate = do
 -- Returns @(<expected weight>, <actual weight>)@.
 test_rightValueWrongPlace :: (U.HasLogCfg) => IO (Double, Double)
 test_rightValueWrongPlace = do
-  runSynToy "tests/data/test_rightValueWrongPlace" $ do
+  runSynToy defaultRunSynToyCfg "tests/data/test_rightValueWrongPlace" $ do
     tests <- askTestCases
     (targetTests, targetResults) <- S.computeTargetResults target tests
     weight <- S.weighCandidate target targetTests targetResults candidate
