@@ -5,7 +5,8 @@
 module Main where
 
 import qualified Control.Concurrent as C
-import           Control.Monad (when, void)
+import           Control.Monad (void)
+import qualified Control.Exception as E
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
 import           Data.EnumF (EnumF)
@@ -131,12 +132,17 @@ doTesting = do
           IO.hPutStrLn IO.stderr "Bug: empty opcodes list"
           IO.exitFailure
 
+  runnerMVar <- C.newEmptyMVar
+
   void $ C.forkIO $
-      L.withLogCfg logCfg $
-          testRunner (Proxy @PPCS.PPC) opcodes PPCS.allSemantics caseChan resChan
+      (L.withLogCfg logCfg $
+          testRunner (Proxy @PPCS.PPC) opcodes PPCS.allSemantics caseChan resChan) `E.finally`
+      (C.putMVar runnerMVar ())
 
   L.withLogCfg logCfg $
     CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
+
+  C.takeMVar runnerMVar
 
 makePlain :: forall arch sym
            . (MapF.OrdF (A.Opcode arch (A.Operand arch)),
@@ -194,8 +200,10 @@ testRunner proxy opcodes semantics caseChan resChan = do
       evalResult <- evaluateInstruction sym plainBaseSet inst initialState
 
       case evalResult of
-          Left err ->
+          Left err -> do
               L.logIO L.Error $ printf "Error evaluating instruction: %s" err
+              C.writeChan caseChan Nothing
+
           Right finalState -> do
               let testCase = CE.TestCase { CE.testNonce = nonce
                                          , CE.testProgram = [inst]
@@ -204,7 +212,7 @@ testRunner proxy opcodes semantics caseChan resChan = do
 
               L.logIO L.Info $ printf "Submitting test case"
 
-              void $ doTest testCase finalState
+              doTest testCase finalState
               C.writeChan caseChan Nothing
 
       where
@@ -221,21 +229,16 @@ testRunner proxy opcodes semantics caseChan resChan = do
           case res of
             CE.InvalidTag t -> do
               L.logIO L.Error $ printf "Invalid tag: %d" t
-              IO.exitFailure
             CE.TestContextParseFailure -> do
               L.logIO L.Error "Test context parse failure"
-              IO.exitFailure
             CE.TestSignalError nonce sig -> do
               L.logIO L.Error $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
-              IO.exitFailure
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
-              IO.exitFailure
             CE.TestSuccess tr -> do
-              when (expectedFinal /= CE.resultContext tr) $ do
-                L.logIO L.Error "ERROR: Context mismatch"
-
-              return (CE.resultContext tr)
+              if (expectedFinal /= CE.resultContext tr)
+                 then L.logIO L.Error "ERROR: Context mismatch"
+                 else L.logIO L.Info "SUCCESS"
 
 main :: IO ()
 main = doTesting
