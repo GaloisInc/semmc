@@ -5,6 +5,7 @@
 module Main where
 
 import qualified Control.Concurrent as C
+import qualified Control.Concurrent.Async as CA
 import           Control.Monad (void, replicateM_, forM)
 import qualified Control.Exception as E
 import qualified Data.ByteString.UTF8 as BS8
@@ -114,16 +115,10 @@ data FuzzerTestHost =
 --
 
 ppcRunnerFilename :: FilePath
-ppcRunnerFilename = "remote-runner.ppc32"
+ppcRunnerFilename = "/home/cygnus/bin/remote-runner.ppc32"
 
 hostname :: String
 hostname = "helium.proj.galois.com"
-
-startThread :: IO () -> IO (IO ())
-startThread body = do
-    mv <- C.newEmptyMVar
-    void $ C.forkIO $ body `E.finally` (C.putMVar mv ())
-    return $ C.takeMVar mv
 
 doTesting :: IO ()
 doTesting = do
@@ -132,7 +127,7 @@ doTesting = do
 
   logCfg <- L.mkLogCfg "main"
 
-  logWaiter <- startThread $ do
+  logThread <- CA.async $ do
       L.stdErrLogEventConsumer (const True) logCfg
 
   L.withLogCfg logCfg $ L.logIO L.Info $ printf "Starting up"
@@ -143,17 +138,19 @@ doTesting = do
           IO.hPutStrLn IO.stderr "Bug: empty opcodes list"
           IO.exitFailure
 
-  runnerWaiter <- startThread $ do
+  runThread <- CA.async $ do
       L.withLogCfg logCfg $
           testRunner (Proxy @PPCS.PPC) opcodes PPCS.allSemantics caseChan resChan
+
+  CA.link runThread
 
   L.withLogCfg logCfg $
       CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
 
-  runnerWaiter
+  CA.wait runThread
 
   L.logEndWith logCfg
-  logWaiter
+  CA.wait logThread
 
 makePlain :: forall arch sym
            . (MapF.OrdF (A.Opcode arch (A.Operand arch)),

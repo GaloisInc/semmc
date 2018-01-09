@@ -32,4 +32,5 @@ executable semmc-fuzzer
                        parameterized-utils,
                        crucible,
                        utf8-string,
-                       containers
+                       containers,
+                       async
