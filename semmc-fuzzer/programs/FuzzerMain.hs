@@ -5,7 +5,7 @@
 module Main where
 
 import qualified Control.Concurrent as C
-import           Control.Monad (void)
+import           Control.Monad (void, replicateM_)
 import qualified Control.Exception as E
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
@@ -183,56 +183,45 @@ testRunner :: forall proxy arch .
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
 testRunner proxy opcodes semantics caseChan resChan = do
-    L.logIO L.Info $ printf "testRunner running"
-    N.withIONonceGenerator $ \nonceGen -> do
-      L.logIO L.Info $ printf "Making symbolic backend"
+    let chunkSize = 10000
 
+    N.withIONonceGenerator $ \nonceGen -> do
       sym :: SB.SimpleBackend s
           <- SB.newSimpleBackend nonceGen
-
-      L.logIO L.Info $ printf "Loading semantics"
 
       baseSet <- F.loadFormulas sym semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
 
-      L.logIO L.Info $ printf "Generating test case"
+      -- Submit the test cases
+      replicateM_ chunkSize $ do
+          gen <- DA.createGen
+          inst <- D.randomInstruction gen opcodes
+          initialState <- C.randomState proxy gen
+          nonce <- N.indexValue <$> N.freshNonce nonceGen
+          evalResult <- evaluateInstruction sym plainBaseSet inst initialState
 
-      gen <- DA.createGen
-      inst <- D.randomInstruction gen opcodes
-      initialState <- C.randomState proxy gen
-      nonce <- N.indexValue <$> N.freshNonce nonceGen
+          case evalResult of
+              Left err -> do
+                  L.logIO L.Error $ printf "Error evaluating instruction: %s" err
 
-      L.logIO L.Info $ printf "Evaluating instruction"
+              Right finalState -> do
+                  let testCase = CE.TestCase { CE.testNonce = nonce
+                                             , CE.testProgram = [inst]
+                                             , CE.testContext = initialState
+                                             }
 
-      evalResult <- evaluateInstruction sym plainBaseSet inst initialState
+                  doTest testCase finalState
 
-      case evalResult of
-          Left err -> do
-              L.logIO L.Error $ printf "Error evaluating instruction: %s" err
-              C.writeChan caseChan Nothing
-
-          Right finalState -> do
-              let testCase = CE.TestCase { CE.testNonce = nonce
-                                         , CE.testProgram = [inst]
-                                         , CE.testContext = initialState
-                                         }
-
-              L.logIO L.Info $ printf "Submitting test case"
-
-              doTest testCase finalState
-              C.writeChan caseChan Nothing
+      C.writeChan caseChan Nothing
+      L.logIO L.Info "Runner done"
 
       where
         doTest tc expectedFinal = do
           -- Send a test case
-          L.logIO L.Info $ printf "Sending test case"
           C.writeChan caseChan (Just [tc])
           -- Get the result
-          L.logIO L.Info $ printf "Waiting for result"
           res <- C.readChan resChan
-
-          L.logIO L.Info $ printf "Got result"
 
           case res of
             CE.InvalidTag t -> do
@@ -245,7 +234,7 @@ testRunner proxy opcodes semantics caseChan resChan = do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
             CE.TestSuccess tr -> do
               if (expectedFinal /= CE.resultContext tr)
-                 then L.logIO L.Error "ERROR: Context mismatch"
+                 then L.logIO L.Error $ printf "ERROR: Context mismatch: expected %s, got %s" (show expectedFinal) (show $ CE.resultContext tr)
                  else L.logIO L.Info "SUCCESS"
 
 main :: IO ()
