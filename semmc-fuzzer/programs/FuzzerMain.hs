@@ -6,7 +6,8 @@ module Main where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
-import           Control.Monad (replicateM_, forM)
+import           Control.Monad (replicateM_, replicateM)
+import qualified Control.Exception as E
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Map as M
@@ -169,32 +170,30 @@ testRunner proxy opcodes semantics caseChan resChan = do
       baseSet <- F.loadFormulas sym semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
+          generateTestCase = go
+              where
+                  go = do
+                    inst <- D.randomInstruction gen opcodes
+                    initialState <- C.randomState proxy gen
+                    nonce <- N.indexValue <$> N.freshNonce nonceGen
+                    evalResult <- E.try $ evaluateInstruction sym plainBaseSet inst initialState
 
-      cases <- forM [0..chunkSize-1] $ \(i::Int) -> do
-          L.logIO L.Info $ printf "Generating test case %d" i
+                    case evalResult of
+                        Left (e::E.SomeException) -> do
+                            L.logIO L.Error $ printf "Exception evaluating instruction %s: %s" (show inst) (show e)
+                            go
+                        Right (Left _) -> go
+                        Right (Right finalState) -> do
+                            return ( CE.TestCase { CE.testNonce = nonce
+                                                 , CE.testProgram = [inst]
+                                                 , CE.testContext = initialState
+                                                 }
+                                   , finalState
+                                   )
 
-          let go = do
-                inst <- D.randomInstruction gen opcodes
-                initialState <- C.randomState proxy gen
-                nonce <- N.indexValue <$> N.freshNonce nonceGen
-                evalResult <- evaluateInstruction sym plainBaseSet inst initialState
-
-                case evalResult of
-                    Left _ -> go
-                    Right finalState -> do
-                        return ( CE.TestCase { CE.testNonce = nonce
-                                             , CE.testProgram = [inst]
-                                             , CE.testContext = initialState
-                                             }
-                               , finalState
-                               )
-          go
-
-      L.logIO L.Info "Done generating cases"
+      cases <- replicateM chunkSize generateTestCase
 
       let caseMap = M.fromList [ (CE.testNonce (fst c), snd c) | c <- cases ]
-
-      L.logIO L.Info $ printf "Sending %d test cases" (length cases)
 
       -- Send test cases
       C.writeChan caseChan (Just $ fst <$> cases)
@@ -202,8 +201,6 @@ testRunner proxy opcodes semantics caseChan resChan = do
 
       -- Process results
       replicateM_ (length cases) (handleResult caseMap)
-
-      L.logIO L.Info "Runner done"
 
       where
         handleResult caseMap = do
