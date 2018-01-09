@@ -18,7 +18,6 @@ import qualified Data.Word.Indexed as W
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
 import qualified Data.Parameterized.List as SL
-import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Parameterized.TH.GADT as TH
 
 import qualified Dismantle.Instruction.Random as D
@@ -66,7 +65,7 @@ instance TestEquality (PseudoOpcode op) where
 instance OrdF (PseudoOpcode op) where
   compareF = $(TH.structuralTypeOrd [t| PseudoOpcode |] [])
 
-instance HasRepr (PseudoOpcode op) (SL.List SR.SymbolRepr) where
+instance HasRepr (PseudoOpcode op) (SL.List PPC.OperandRepr) where
   typeRepr ReplaceByteGPR = knownRepr
   typeRepr ExtractByteGPR = knownRepr
   typeRepr ReplaceWordVR = knownRepr
