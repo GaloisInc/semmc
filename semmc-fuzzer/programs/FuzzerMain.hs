@@ -123,6 +123,8 @@ doTesting = do
   logCfg <- L.mkLogCfg "main"
   void $ C.forkIO $ L.stdErrLogEventConsumer (const True) logCfg
 
+  L.withLogCfg logCfg $ L.logIO L.Info $ printf "Starting up"
+
   opcodes <- case PPCS.allOpcodes of
       (o:os) -> return $ NES.fromList o os
       _ -> do
@@ -166,36 +168,55 @@ testRunner :: forall proxy arch .
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner proxy opcodes semantics caseChan resChan =
+testRunner proxy opcodes semantics caseChan resChan = do
+    L.logIO L.Info $ printf "testRunner running"
     N.withIONonceGenerator $ \nonceGen -> do
+      L.logIO L.Info $ printf "Making symbolic backend"
+
       sym :: SB.SimpleBackend s
           <- SB.newSimpleBackend nonceGen
+
+      L.logIO L.Info $ printf "Loading semantics"
 
       baseSet <- F.loadFormulas sym semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
+
+      L.logIO L.Info $ printf "Generating test case"
 
       gen <- DA.createGen
       inst <- D.randomInstruction gen opcodes
       initialState <- C.randomState proxy gen
       nonce <- N.indexValue <$> N.freshNonce nonceGen
 
-      finalState <- evaluateInstruction sym plainBaseSet inst initialState
+      L.logIO L.Info $ printf "Evaluating instruction"
 
-      let testCase = CE.TestCase { CE.testNonce = nonce
-                                 , CE.testProgram = [inst]
-                                 , CE.testContext = initialState
-                                 }
+      evalResult <- evaluateInstruction sym plainBaseSet inst initialState
 
-      void $ doTest testCase finalState
-      C.writeChan caseChan Nothing
+      case evalResult of
+          Left err ->
+              L.logIO L.Error $ printf "Error evaluating instruction: %s" err
+          Right finalState -> do
+              let testCase = CE.TestCase { CE.testNonce = nonce
+                                         , CE.testProgram = [inst]
+                                         , CE.testContext = initialState
+                                         }
+
+              L.logIO L.Info $ printf "Submitting test case"
+
+              void $ doTest testCase finalState
+              C.writeChan caseChan Nothing
 
       where
         doTest tc expectedFinal = do
           -- Send a test case
+          L.logIO L.Info $ printf "Sending test case"
           C.writeChan caseChan (Just [tc])
           -- Get the result
+          L.logIO L.Info $ printf "Waiting for result"
           res <- C.readChan resChan
+
+          L.logIO L.Info $ printf "Got result"
 
           case res of
             CE.InvalidTag t -> do
