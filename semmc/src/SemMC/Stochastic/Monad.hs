@@ -196,7 +196,7 @@ recordLearnedFormula op f = do
 
   let opShape = typeRepr op
       newOps = SeqF.singleton (RealOpcode op)
-  liftIO $ T.writeFile (mkFormulaFilename learnedDir op) (F.printFormula opShape f)
+  liftIO $ T.writeFile (mkFormulaFilename learnedDir op) (F.printParameterizedFormula opShape f)
   liftIO $ STM.atomically $ do
     STM.modifyTVar' formulasRef (MapF.insert op f)
     STM.modifyTVar' congruentRef (MapF.insertWith (SeqF.><) opShape newOps)

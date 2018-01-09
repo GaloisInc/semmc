@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -10,10 +11,12 @@ module SemMC.Architecture.Value (
   -- * Differences between 'Value's
   Diff,
   diffInt,
-  diffFloat
+  diffFloat,
+  -- * Arbitrary
+  arbitraryBV
   ) where
 
-import           GHC.TypeLits ( KnownNat )
+import           GHC.TypeLits
 import           Data.Bits
 import qualified Data.ByteString as B
 import           Data.Maybe ( isJust )
@@ -26,7 +29,7 @@ import qualified Dismantle.Arbitrary as DA
 
 -- | Type of concrete values.
 data Value tp where
-  ValueBV :: (KnownNat n) => W.W n -> Value (BaseBVType n)
+  ValueBV :: (1 <= n) => W.W n -> Value (BaseBVType n)
   ValueMem :: B.ByteString -> Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
 -- | Lift a bitvector computation to a value computation.
@@ -71,17 +74,17 @@ deriving instance Ord (Value tp)
 
 instance P.ShowF Value
 
-instance (KnownNat n) => DA.Arbitrary (Value (BaseBVType n)) where
-  arbitrary gen = ValueBV <$> DA.arbitrary gen
+arbitraryBV :: (1 <= n) => DA.Gen -> NR.NatRepr n -> IO (Value (BaseBVType n))
+arbitraryBV gen nr = ValueBV <$> DA.arbitraryWord gen nr
 
 instance P.TestEquality Value where
   testEquality bv1 bv2 =
     case bv1 of
       ValueBV (w1 :: W.W n1) ->
-        let repr1 = NR.knownNat :: NR.NatRepr n1
+        let repr1 = W.rep w1
         in case bv2 of
           ValueBV (w2 :: W.W n2) ->
-            let repr2 = NR.knownNat :: NR.NatRepr n2
+            let repr2 = W.rep w2
             in case P.testEquality repr1 repr2 of
               Just P.Refl
                 | w1 == w2 -> Just P.Refl
