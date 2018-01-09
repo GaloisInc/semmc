@@ -61,29 +61,6 @@ type PPCState = V.ConcreteState PPCS.PPC
 --     Emit chunk result summary to event log
 --       (coalesce successes)
 
--- Generation of random tests:
---   SemMC.Architecture.Concrete, randomState method of Architecture class
---     randomState :: proxy arch -> DA.Gen -> IO (ConcreteState arch)
---   see also serialize/deserialize class methods
---     serialize :: proxy arch -> ConcreteState arch -> B.ByteString
---     deserialize :: proxy arch -> B.ByteString -> Maybe (ConcreteState arch)
---
---    Seems to raise an exception if for some reason the connection to
---    the remote host (or invocation of the runner) fails.
---
--- Remote runner: semmc/tools/remote-runner.c
---   Needs to be built on each remote host and needs to be in the PATH
---   of the account used for testing
---   Note: defaults to $USER on remote host and defaults to using a
---   local SSH key + remote authorized_keys to authenticate.
---
--- Helpers:
---   SemMC.Stochastic.Monad.runConcreteTests (interacts with remote-runner)
---   semmc/semmc-ppc/tools/Test.hs
---
--- Instantiating semantics:
---   semmc-ppc/tools/SynthDemo.hs
-
 data FuzzerConfiguration =
     FuzzerConfiguration { fuzzerArchitectures :: [FuzzerArchConfig]
                         , fuzzerOutputDirectory :: FilePath
