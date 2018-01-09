@@ -116,13 +116,21 @@ ppcRunnerFilename = "remote-runner.ppc32"
 hostname :: String
 hostname = "helium.proj.galois.com"
 
+startThread :: IO () -> IO (IO ())
+startThread body = do
+    mv <- C.newEmptyMVar
+    void $ C.forkIO $ body `E.finally` (C.putMVar mv ())
+    return $ C.takeMVar mv
+
 doTesting :: IO ()
 doTesting = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
   logCfg <- L.mkLogCfg "main"
-  void $ C.forkIO $ L.stdErrLogEventConsumer (const True) logCfg
+
+  logWaiter <- startThread $ do
+      L.stdErrLogEventConsumer (const True) logCfg
 
   L.withLogCfg logCfg $ L.logIO L.Info $ printf "Starting up"
 
@@ -132,17 +140,17 @@ doTesting = do
           IO.hPutStrLn IO.stderr "Bug: empty opcodes list"
           IO.exitFailure
 
-  runnerMVar <- C.newEmptyMVar
-
-  void $ C.forkIO $
-      (L.withLogCfg logCfg $
-          testRunner (Proxy @PPCS.PPC) opcodes PPCS.allSemantics caseChan resChan) `E.finally`
-      (C.putMVar runnerMVar ())
+  runnerWaiter <- startThread $ do
+      L.withLogCfg logCfg $
+          testRunner (Proxy @PPCS.PPC) opcodes PPCS.allSemantics caseChan resChan
 
   L.withLogCfg logCfg $
-    CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
+      CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
 
-  C.takeMVar runnerMVar
+  runnerWaiter
+
+  L.logEndWith logCfg
+  logWaiter
 
 makePlain :: forall arch sym
            . (MapF.OrdF (A.Opcode arch (A.Operand arch)),
