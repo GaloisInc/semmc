@@ -79,16 +79,15 @@ vec3op name = do
 -- Uses VA-form (4u)
 vec3op4u :: String -> SemM 'Def ()
 vec3op4u name = do
-  (vrT, vrA, vrB, vrC) <- vaform4u
+  (vrT, shb, vrA, vrB) <- vaform4u
+  -- shb is a 5-bit unsigned immediate, so we extend to a 128-bit vector operand.
+  let shb_ext = zext' 128 (Loc shb)
   input vscr
-  let res = ppcvec3 name (Loc vrA) (Loc vrB) (Loc vrC) (Loc vscr)
+  let res = ppcvec3 name shb_ext (Loc vrA) (Loc vrB) (Loc vscr)
   defLoc vrT (highBits' 128 res)
   defLoc vscr (lowBits' 32 res)
 
 -- | Definitions of vector instructions
---
--- FIXME: For now, these are all stubs that leave their destination register as
--- undefined.
 baseVector :: (?bitSize :: BitSize) => SemM 'Top ()
 baseVector = do
   vecMerge
@@ -249,35 +248,43 @@ vecBitwise :: (?bitSize :: BitSize) => SemM 'Top ()
 vecBitwise = do
   defineOpcodeWithIP "VAND" $ do
     comment "Vector Logical AND (VX-form)"
-    vec2op "VAND"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvand (Loc vrA) (Loc vrB))
 
   defineOpcodeWithIP "VANDC" $ do
     comment "Vector Logical AND with Complement (VX-form)"
-    vec2op "VANDC"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvand (Loc vrA) (bvnot (Loc vrB)))
 
   defineOpcodeWithIP "VEQV" $ do
     comment "Vector Logical Equivalent (VX-form)"
-    vec2op "VEQV"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvnot (bvxor (Loc vrA) (Loc vrB)))
 
   defineOpcodeWithIP "VNAND" $ do
     comment "Vector Logical NAND (VX-form)"
-    vec2op "VNAND"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvnot (bvand (Loc vrA) (Loc vrB)))
 
   defineOpcodeWithIP "VORC" $ do
     comment "Vector Logical OR with Complement (VX-form)"
-    vec2op "VORC"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvor (Loc vrA) (bvnot (Loc vrB)))
 
   defineOpcodeWithIP "VNOR" $ do
     comment "Vector Logical NOR (VX-form)"
-    vec2op "VNOR"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvnot (bvor (Loc vrA) (Loc vrB)))
 
   defineOpcodeWithIP "VOR" $ do
     comment "Vector Logical OR (VX-form)"
-    vec2op "VOR"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvor (Loc vrA) (Loc vrB))
 
   defineOpcodeWithIP "VXOR" $ do
     comment "Vector Logical XOR (VX-form)"
-    vec2op "VXOR"
+    (vrT, vrA, vrB) <- vxform3
+    defLoc vrT (bvxor (Loc vrA) (Loc vrB))
 
   defineOpcodeWithIP "VSL" $ do
     comment "Vector Shift Left (VX-form)"
