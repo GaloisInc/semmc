@@ -24,6 +24,7 @@ import qualified Data.Parameterized.List as L
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 
 import qualified Dismantle.Arbitrary as DA
+import           Dismantle.Instruction (GenericInstruction)
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Log as L
@@ -173,6 +174,7 @@ testRunner :: forall proxy arch .
               , L.HasLogCfg
               , MapF.OrdF (A.Opcode arch (TemplatedOperand arch))
               , MapF.ShowF (A.Opcode arch (TemplatedOperand arch))
+              , Show (GenericInstruction (A.Opcode arch) (A.Operand arch))
               , EnumF (A.Opcode arch (TemplatedOperand arch))
               , HasRepr (A.Opcode arch (A.Operand arch)) (L.List (A.OperandTypeRepr arch))
               )
@@ -203,7 +205,8 @@ testRunner proxy opcodes semantics caseChan resChan = do
 
           case evalResult of
               Left err -> do
-                  L.logIO L.Error $ printf "Error evaluating instruction: %s" err
+                  L.logIO L.Error $
+                      printf "Error evaluating instruction %s: %s" (show inst) err
 
               Right finalState -> do
                   let testCase = CE.TestCase { CE.testNonce = nonce
