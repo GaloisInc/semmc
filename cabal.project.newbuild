@@ -3,6 +3,7 @@ packages:
   semmc-ppc/
   semmc-x86_64/
   semmc-arm/
+  semmc-toy/
   submodules/dismantle/dismantle-tablegen/
 
 optional-packages:
@@ -11,3 +12,4 @@ optional-packages:
   submodules/parameterized-utils
   submodules/elf-edit/
   submodules/dismantle/dismantle-ppc/
+  submodules/dismantle/dismantle-arm/
