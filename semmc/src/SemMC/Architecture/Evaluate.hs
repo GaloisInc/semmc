@@ -9,9 +9,8 @@ module SemMC.Architecture.Evaluate (
   ) where
 
 import           Data.Monoid ((<>))
-import qualified Data.Map as Map
 import           Data.Parameterized.Classes (ShowF(showF))
-import           Data.Parameterized.Some (Some(Some), viewSome)
+import           Data.Parameterized.Some (Some(Some))
 import           Data.Parameterized.NatRepr (knownNat, withKnownNat)
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Context as Ctx
@@ -42,16 +41,15 @@ evaluateInstruction :: (A.Architecture arch, MapF.OrdF (A.Opcode arch (A.Operand
                     -- ^ The instruction being tested
                     -> V.ConcreteState arch
                     -- ^ The initial state
-                    -> IO (V.ConcreteState arch)
+                    -> IO (Either String (V.ConcreteState arch))
 evaluateInstruction sb semMap inst initialState =
     case inst of
         I.Instruction opc operands ->
             case MapF.lookup opc semMap of
-                Nothing -> return undefined
+                Nothing -> return $ Left "Opcode not found in semantics"
                 Just paramFormula -> do
                     (_, formula) <- F.instantiateFormula sb paramFormula operands
-                    -- return $ F.evaluateFormula formula initialState
-                    return undefined
+                    Right <$> evaluateFormula sb formula initialState
 
 data PairF a b tp = PairF (a tp) (b tp)
 
@@ -108,5 +106,6 @@ evaluateFormula sb formula initialState =
                                     let wVal :: W.W n
                                         wVal = W.w val
                                     in MapF.insert loc (AV.ValueBV wVal) m
+                        _ -> error $ "BUG: unhandled case: " <> show (A.locationType loc)
 
             return $ MapF.foldrWithKey f initialState newFormDefs
