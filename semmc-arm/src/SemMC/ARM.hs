@@ -25,8 +25,6 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.SymbolRepr as SR
-import qualified Data.Text as T
 import qualified Data.Vector.Sized as V
 import           Data.Word ( Word8, Word32 )
 import qualified Dismantle.ARM as ARM
@@ -122,8 +120,8 @@ type instance A.OperandType ARM "GPR" = BaseBVType 32
 
 
 instance A.IsOperandTypeRepr ARM where
-    type OperandTypeRepr ARM = SR.SymbolRepr
-    operandTypeReprSymbol _ = T.unpack . SR.symbolRepr
+    type OperandTypeRepr ARM = ARM.OperandRepr
+    operandTypeReprSymbol _ = ARM.operandReprString
 
 
 operandValue :: forall sym s.
@@ -191,18 +189,16 @@ instance A.Architecture ARM where
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
     locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
-    -- shapeReprTypeRepr _proxy = shapeReprType
+    shapeReprToTypeRepr _proxy = shapeReprType
 
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
 locationFuncInterpretation = []
 
-shapeReprType :: forall tp . SR.SymbolRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
-shapeReprType sr =
-  case SR.symbolRepr sr of
-    "GPR"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"GPR") ->
-        knownRepr :: BaseTypeRepr (A.OperandType ARM "GPR")
+shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
+shapeReprType orep =
+  case orep of
+    ARM.GPRRepr -> knownRepr
     -- "Imm0_15"
     --   | Just Refl <- testEquality sr (SR.knownSymbol @"Imm0_15") ->
     --     knownRepr :: BaseTypeRepr (A.OperandType ARM "Imm0_15")
