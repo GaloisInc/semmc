@@ -669,15 +669,15 @@ readExpr :: (S.IsExprBuilder sym,
          -> m (Some (S.SymExpr sym))
 readExpr SC.SNil = E.throwError "found nil where expected an expression"
 readExpr (SC.SAtom (AInt _)) = E.throwError "found int where expected an expression; perhaps you wanted a bitvector?"
-readExpr (SC.SAtom (AString op)) = do
-  -- This is an uninterpreted function.
-  sym <- MR.reader getSym
-  case userSymbol op of
-    Right opSym -> do
-      e <- liftIO $ S.freshTotalUninterpFn sym opSym Ctx.empty (BaseStructRepr Ctx.empty)
-      f <- liftIO $ S.applySymFn sym e Ctx.empty
-      return $ Some f
-    Left _ -> E.throwError $ printf "couldn't parse expression %s" (show op)
+-- readExpr (SC.SAtom (AString op)) = do
+--   -- This is an uninterpreted function.
+--   sym <- MR.reader getSym
+--   case userSymbol op of
+--     Right opSym -> do
+--       e <- liftIO $ S.freshTotalUninterpFn sym opSym Ctx.empty (BaseStructRepr Ctx.empty)
+--       f <- liftIO $ S.applySymFn sym e Ctx.empty
+--       return $ Some f
+--     Left _ -> E.throwError $ printf "couldn't parse expression %s" (show op)
 readExpr (SC.SAtom (ABV len val)) = do
   -- This is a bitvector literal.
   sym <- MR.reader getSym
@@ -821,7 +821,7 @@ readFormula' sym env repr text = do
   -- Build the operand list from the given s-expression, validating that it
   -- matches the correct shape as we go.
   operands :: SL.List (OpData arch) sh
-    <- fromMaybeError "invalid operand structure" (buildOperandList' repr opsRaw)
+    <- fromMaybeError ("invalid operand structure: " ++ show opsRaw) (buildOperandList' repr opsRaw)
 
   inputs :: [Some (Parameter arch sh)]
     <- readInputs operands inputsRaw

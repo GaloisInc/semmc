@@ -207,5 +207,6 @@ specialRegs = [ LocCTR
               , LocLNK
               , LocCR
               , LocFPSCR
+              , LocVSCR
               , LocXER
               ]

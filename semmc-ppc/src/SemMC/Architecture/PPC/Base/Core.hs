@@ -93,14 +93,12 @@ defineRCVariant newName modifiedReg def = do
 
 -- | Like 'defineRCVariant', but for vector instructions, which modify CR6
 -- instead of CR0.
---
--- FIXME: Right now, we clobber the entire CR with undefined bits.
-defineVRCVariant :: (?bitSize :: BitSize, HasCallStack) => String -> Expr 'TBV -> SemM 'Def () ->  SemM 'Def ()
-defineVRCVariant newName _modifiedReg def = do
+defineVRCVariant :: (?bitSize :: BitSize, HasCallStack) => String -> SemM 'Def () ->  SemM 'Def ()
+defineVRCVariant newName def = do
   forkDefinition newName $ do
     input cr
     input xer
-    defLoc cr (undefinedBV 32)
+    defLoc cr (updateCRField (LitBV 3 0b110) (undefinedBV 4)) -- update CR6
     def
 
 -- Form helpers

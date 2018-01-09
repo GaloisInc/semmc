@@ -1,4 +1,7 @@
 ;; Vector Count Leading Zeros Byte (VX-form)
 ((operands ((vrT . 'Vrrc) (vrB . 'Vrrc))) 
   (in (vrB 'IP))
-  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))
+  (defs 
+    (('VSCR ((_ extract 159 128) ((_ call "undefined") #x000000a0))) 
+      (vrT ((_ extract 127 0) ((_ call "undefined") #x000000a0)))
+      ('IP (bvadd 'IP #x0000000000000004)))))

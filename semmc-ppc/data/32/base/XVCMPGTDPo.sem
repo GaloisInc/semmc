@@ -2,4 +2,11 @@
 ((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc))) 
   (in ('XER 'CR xB xA 'IP))
   (defs 
-    (('CR ((_ call "undefined") #x00000020)) (xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
+    (('CR 
+       (bvor 
+         (bvand 
+           'CR
+           (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b110) #x00000004))))
+         (bvshl 
+           ((_ zero_extend 28) ((_ call "undefined") #x00000004))
+           (bvmul ((_ zero_extend 29) #b110) #x00000004)))) (xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))

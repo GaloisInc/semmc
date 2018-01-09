@@ -1,4 +1,7 @@
 ;; Vector Shift Right Byte (VX-form)
 ((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc))) 
   (in (vrB vrA 'IP))
-  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
+  (defs 
+    (('VSCR ((_ extract 159 128) ((_ call "undefined") #x000000a0))) 
+      (vrT ((_ extract 127 0) ((_ call "undefined") #x000000a0)))
+      ('IP (bvadd 'IP #x00000004)))))
