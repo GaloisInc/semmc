@@ -18,6 +18,7 @@ import qualified System.Exit as IO
 import qualified System.IO as IO
 
 import           Data.Parameterized.Some (Some(..))
+import           Data.Parameterized.Classes (ShowF(..))
 import qualified Data.Parameterized.Nonce as N
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.HasRepr (HasRepr)
@@ -68,7 +69,7 @@ data FuzzerConfiguration =
                         }
                         deriving (Show)
 
-data OpcodeTestMode =
+data OpcodeMatch =
     AllOpcodes
     | SpecificOpcodes [String]
     deriving (Show)
@@ -76,7 +77,7 @@ data OpcodeTestMode =
 data FuzzerArchConfig =
     FuzzerArchConfig { fuzzerArchName :: String
                      , fuzzerArchTestingHosts :: [FuzzerTestHost]
-                     , fuzzerTestOpcodes :: OpcodeTestMode
+                     , fuzzerTestOpcodes :: OpcodeMatch
                      }
                      deriving (Show)
 
@@ -102,6 +103,19 @@ ppcRunnerFilename = "/home/cygnus/bin/remote-runner.ppc32"
 hostname :: String
 hostname = "helium.proj.galois.com"
 
+filterOpcodes :: forall proxy arch .
+                 (ShowF (A.Opcode arch (A.Operand arch)))
+              => proxy arch
+              -> OpcodeMatch
+              -> [Some ((A.Opcode arch) (A.Operand arch))]
+              -> [Some ((A.Opcode arch) (A.Operand arch))]
+filterOpcodes _ m os = found
+    where
+        found = filter matcher os
+        matcher = case m of
+            AllOpcodes -> const True
+            SpecificOpcodes whitelist -> ((`elem` whitelist) . show)
+
 doTesting :: IO ()
 doTesting = do
   caseChan <- C.newChan
@@ -114,14 +128,11 @@ doTesting = do
 
   L.withLogCfg logCfg $ L.logIO L.Info $ printf "Starting up"
 
-  let -- oTest = AllOpcodes
-      oTest = SpecificOpcodes ["MULHW"]
-      found = filter matcher PPCS.allOpcodes
-      matcher = case oTest of
-          AllOpcodes -> const True
-          SpecificOpcodes os -> ((`elem` os) . show)
+  let -- oMatch = AllOpcodes
+      oMatch = SpecificOpcodes ["MULHW"]
+      matched = filterOpcodes (Proxy @PPCS.PPC) oMatch PPCS.allOpcodes
 
-  opcodes <- case found of
+  opcodes <- case matched of
       (o:os) -> return $ NES.fromList o os
       _ -> do
           IO.hPutStrLn IO.stderr "BUG: empty opcode list"
