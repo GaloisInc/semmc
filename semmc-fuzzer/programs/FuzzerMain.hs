@@ -195,7 +195,9 @@ testRunner proxy opcodes semantics caseChan resChan = do
                         Left (e::E.SomeException) -> do
                             L.logIO L.Error $ printf "Exception evaluating instruction %s: %s" (show inst) (show e)
                             go
-                        Right (Left _) -> go
+                        Right (Left e) -> do
+                            L.logIO L.Error $ printf "Error evaluating instruction %s: %s" (show inst) (show e)
+                            go
                         Right (Right finalState) -> do
                             return ( CE.TestCase { CE.testNonce = nonce
                                                  , CE.testProgram = [inst]
@@ -204,15 +206,18 @@ testRunner proxy opcodes semantics caseChan resChan = do
                                    , finalState
                                    )
 
+      L.logIO L.Info $ printf "Generating %d test cases" chunkSize
       cases <- replicateM chunkSize generateTestCase
 
       let caseMap = M.fromList [ (CE.testNonce (fst c), snd c) | c <- cases ]
 
       -- Send test cases
+      L.logIO L.Info $ printf "Sending %d test cases to remote host" chunkSize
       C.writeChan caseChan (Just $ fst <$> cases)
       C.writeChan caseChan Nothing
 
       -- Process results
+      L.logIO L.Info "Processing test results"
       replicateM_ (length cases) (handleResult caseMap)
 
       where
