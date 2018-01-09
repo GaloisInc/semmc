@@ -59,6 +59,15 @@ vec1op name = do
   defLoc vrT (highBits' 128 res)
   defLoc vscr (lowBits' 32 res)
 
+vec1ops :: String -> SemM 'Def ()
+vec1ops name = do
+  (vrT, sim) <- vxform2s
+  input vscr
+  let sim_ext = sext' 128 (Loc sim)
+  let res = ppcvec1 name sim_ext (Loc vscr)
+  defLoc vrT (highBits' 128 res)
+  defLoc vscr (lowBits' 32 res)
+
 vec2op :: String -> SemM 'Def ()
 vec2op name = do
   (vrT, vrA, vrB) <- vxform3
@@ -67,7 +76,15 @@ vec2op name = do
   defLoc vrT (highBits' 128 res)
   defLoc vscr (lowBits' 32 res)
 
--- Uses VA-form
+vec2opu :: String -> SemM 'Def ()
+vec2opu name = do
+  (vrT, vrB, uim) <- vxform3u
+  let uim_ext = zext' 128 (Loc uim)
+  input vscr
+  let res = ppcvec2 name uim_ext (Loc vrB) (Loc vscr)
+  defLoc vrT (highBits' 128 res)
+  defLoc vscr (lowBits' 32 res)
+
 vec3op :: String -> SemM 'Def ()
 vec3op name = do
   (vrT, vrA, vrB, vrC) <- vaform
@@ -76,9 +93,8 @@ vec3op name = do
   defLoc vrT (highBits' 128 res)
   defLoc vscr (lowBits' 32 res)
 
--- Uses VA-form (4u)
-vec3op4u :: String -> SemM 'Def ()
-vec3op4u name = do
+vec3opu :: String -> SemM 'Def ()
+vec3opu name = do
   (vrT, shb, vrA, vrB) <- vaform4u
   -- shb is a 5-bit unsigned immediate, so we extend to a 128-bit vector operand.
   let shb_ext = zext' 128 (Loc shb)
@@ -292,7 +308,7 @@ vecBitwise = do
 
   defineOpcodeWithIP "VSLDOI" $ do
     comment "Vector Shift Left Double by Octet Immediate (VA-form)"
-    vec3op4u "VSLDOI"
+    vec3opu "VSLDOI"
 
   defineOpcodeWithIP "VSLO" $ do
     comment "Vector Shift Left by Octet (VX-form)"
@@ -398,182 +414,147 @@ vecMerge :: (?bitSize :: BitSize) => SemM 'Top ()
 vecMerge = do
   defineOpcodeWithIP "VMRGHB" $ do
     comment "Vector Merge High Byte (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGHB"
 
   defineOpcodeWithIP "VMRGLB" $ do
     comment "Vector Merge Low Byte (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGLB"
 
   defineOpcodeWithIP "VMRGHH" $ do
     comment "Vector Merge High Halfword (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGHH"
 
   defineOpcodeWithIP "VMRGLH" $ do
     comment "Vector Merge Low Halfword (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGLH"
 
   defineOpcodeWithIP "VMRGHW" $ do
     comment "Vector Merge High Word (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGHW"
 
   defineOpcodeWithIP "VMRGLW" $ do
     comment "Vector Merge Low Word (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGLW"
 
   defineOpcodeWithIP "VMRGEW" $ do
     comment "Vector Merge Even Word (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGEW"
 
   defineOpcodeWithIP "VMRGOW" $ do
     comment "Vector Merge Odd Word (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VMRGOW"
 
 vecSplat :: (?bitSize :: BitSize) => SemM 'Top ()
 vecSplat = do
   defineOpcodeWithIP "VSPLTB" $ do
     comment "Vector Splat Byte (VX-form)"
-    (vrT, _, _) <- vxform3u
-    defLoc vrT (undefinedBV 128)
+    vec2opu "VSPLTB"
 
   defineOpcodeWithIP "VSPLTH" $ do
     comment "Vector Splat Halfword (VX-form)"
-    (vrT, _, _) <- vxform3u
-    defLoc vrT (undefinedBV 128)
+    vec2opu "VSPLTH"
 
   defineOpcodeWithIP "VSPLTW" $ do
     comment "Vector Splat Word (VX-form)"
-    (vrT, _, _) <- vxform3u
-    defLoc vrT (undefinedBV 128)
+    vec2opu "VSPLTW"
 
   defineOpcodeWithIP "VSPLTISB" $ do
     comment "Vector Splat Immediate Signed Byte (VX-form)"
-    (vrT, _) <- vxform2s
-    defLoc vrT (undefinedBV 128)
+    vec1ops "VSPLTISB"
 
   defineOpcodeWithIP "VSPLTISH" $ do
     comment "Vector Splat Immediate Signed Halfword (VX-form)"
-    (vrT, _) <- vxform2s
-    defLoc vrT (undefinedBV 128)
+    vec1ops "VSPLTISH"
 
   defineOpcodeWithIP "VSPLTISW" $ do
     comment "Vector Splat Immediate Signed Word (VX-form)"
-    (vrT, _) <- vxform2s
-    defLoc vrT (undefinedBV 128)
+    vec1ops "VSPLTISW"
 
 vecPack :: (?bitSize :: BitSize) => SemM 'Top ()
 vecPack = do
   defineOpcodeWithIP "VPKPX" $ do
     comment "Vector Pack Pixel (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKPX"
 
   defineOpcodeWithIP "VPKSDSS" $ do
     comment "Vector Pack Signed Doubleword Signed Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKSDSS"
 
   defineOpcodeWithIP "VPKSDUS" $ do
     comment "Vector Pack Signed Doubleword Unsigned Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKSDUS"
 
   defineOpcodeWithIP "VPKSHSS" $ do
     comment "Vector Pack Signed Halfword Signed Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKSHSS"
 
   defineOpcodeWithIP "VPKSHUS" $ do
     comment "Vector Pack Signed Halfword Unsigned Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKSHUS"
 
   defineOpcodeWithIP "VPKSWSS" $ do
     comment "Vector Pack Signed Word Signed Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKSWSS"
 
   defineOpcodeWithIP "VPKSWUS" $ do
     comment "Vector Pack Signed Word Unsigned Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKSWUS"
 
   defineOpcodeWithIP "VPKUDUS" $ do
     comment "Vector Pack Unsigned Doubleword Unsigned Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKUDUS"
 
   defineOpcodeWithIP "VPKUDUM" $ do
     comment "Vector Pack Unsigned Doubleword Unsigned Modulo (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKUDUM"
 
   defineOpcodeWithIP "VPKUHUM" $ do
     comment "Vector Pack Unsigned Halfword Unsigned Modulo (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKUHUM"
 
   defineOpcodeWithIP "VPKUHUS" $ do
     comment "Vector Pack Unsigned Halfword Unsigned Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKUHUS"
 
   defineOpcodeWithIP "VPKUWUS" $ do
     comment "Vector Pack Unsigned Word Unsigned Saturate (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKUWUS"
 
   defineOpcodeWithIP "VPKUWUM" $ do
     comment "Vector Pack Unsigned Word Unsigned Modulo (VX-form)"
-    (vrT, _, _) <- vxform3
-    defLoc vrT (undefinedBV 128)
+    vec2op "VPKUWUM"
 
   defineOpcodeWithIP "VUPKHPX" $ do
     comment "Vector Unpack High Pixel (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKHPX"
 
   defineOpcodeWithIP "VUPKLPX" $ do
     comment "Vector Unpack Low Pixel (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKLPX"
 
   defineOpcodeWithIP "VUPKHSB" $ do
     comment "Vector Unpack High Signed Byte (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKHSB"
 
   defineOpcodeWithIP "VUPKLSB" $ do
     comment "Vector Unpack Low Signed Byte (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKLSB"
 
   defineOpcodeWithIP "VUPKHSH" $ do
     comment "Vector Unpack High Signed Halfword (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKHSH"
 
   defineOpcodeWithIP "VUPKLSH" $ do
     comment "Vector Unpack Low Signed Halfword (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKLSH"
 
   defineOpcodeWithIP "VUPKHSW" $ do
     comment "Vector Unpack High Signed Word (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKHSW"
 
   defineOpcodeWithIP "VUPKLSW" $ do
     comment "Vector Unpack Low Signed Word (VX-form)"
-    (vrT, _) <- vxform2
-    defLoc vrT (undefinedBV 128)
+    vec1op "VUPKLSW"
 
 -- | The mask to clear the low bit of the effective address to ensure aligned
 -- loads of larger-than-byte values into vector registers.
