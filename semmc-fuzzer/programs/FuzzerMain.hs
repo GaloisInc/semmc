@@ -70,6 +70,7 @@ data FuzzerConfig =
                  , fuzzerArchTestingHosts :: [FuzzerTestHost]
                  , fuzzerTestOpcodes :: OpcodeMatch
                  , fuzzerTestStrategy :: TestStrategy
+                 , fuzzerMaximumLogLevel :: L.LogLevel
                  }
                  deriving (Show)
 
@@ -88,6 +89,7 @@ data Arg =
     | Host String
     | OpcodeList String
     | ChunkSize String
+    | LogLevelStr String
     deriving (Eq, Show)
 
 arguments :: [OptDescr Arg]
@@ -118,7 +120,19 @@ arguments =
 
     , Option "o" ["opcodes"] (ReqArg OpcodeList "OPCODES")
       "A comma-separated list of opcodes to test (default: test all known opcodes)"
+
+    , Option "L" ["log-level"] (ReqArg LogLevelStr "LEVEL")
+      ("Maximum log verbosity level (choices: " <> allLogLevels <>
+      ", default: " <> show (configLogLevel defaultConfig) <> ")")
     ]
+
+allLogLevels :: String
+allLogLevels = intercalate ", " $ show <$> levels
+    where levels = [ L.Debug
+                   , L.Info
+                   , L.Warn
+                   , L.Error
+                   ]
 
 data Config =
     Config { configPath       :: Maybe FilePath
@@ -129,6 +143,20 @@ data Config =
            , configOpcodes    :: OpcodeMatch
            , configStrategy   :: TestStrategy
            , configChunkSize  :: Int
+           , configLogLevel   :: L.LogLevel
+           }
+
+defaultConfig :: Config
+defaultConfig =
+    Config { configPath       = Nothing
+           , configShowHelp   = False
+           , configArchName   = Nothing
+           , configHost       = Nothing
+           , configBinaryPath = Nothing
+           , configOpcodes    = AllOpcodes
+           , configStrategy   = Randomized
+           , configChunkSize  = 1000
+           , configLogLevel   = L.Info
            }
 
 data ArchImpl where
@@ -206,6 +234,9 @@ configFromArgs = do
                 OpcodeList s -> do
                     let os = T.unpack <$> T.splitOn "," (T.pack s)
                     return $ c { configOpcodes = SpecificOpcodes os }
+                LogLevelStr s -> do
+                    l <- readMaybe s
+                    return $ c { configLogLevel = l }
                 Strategy s ->
                     if | s == "random" ->
                            return $ c { configStrategy = Randomized }
@@ -218,18 +249,6 @@ configFromArgs = do
         Nothing -> usage >> IO.exitFailure
         Just c -> return c
 
-defaultConfig :: Config
-defaultConfig =
-    Config { configPath       = Nothing
-           , configShowHelp   = False
-           , configArchName   = Nothing
-           , configHost       = Nothing
-           , configBinaryPath = Nothing
-           , configOpcodes    = AllOpcodes
-           , configStrategy   = Randomized
-           , configChunkSize  = 1000
-           }
-
 simpleFuzzerConfig :: Config -> Maybe FuzzerConfig
 simpleFuzzerConfig cfg =
     FuzzerConfig <$> configArchName cfg
@@ -237,6 +256,7 @@ simpleFuzzerConfig cfg =
                                                <*> (pure $ configChunkSize cfg)))
                  <*> (pure $ configOpcodes cfg)
                  <*> (pure $ configStrategy cfg)
+                 <*> (pure $ configLogLevel cfg)
 
 mkFuzzerConfig :: Config -> IO FuzzerConfig
 mkFuzzerConfig cfg = do
@@ -261,8 +281,10 @@ main = do
     atc <- mkFuzzerConfig cfg
 
     logCfg <- L.mkLogCfg "main"
+
+    let logFilter = (>= (configLogLevel cfg)) . L.leLevel
     logThread <- CA.async $ do
-        L.stdErrLogEventConsumer (const True) logCfg
+        L.stdErrLogEventConsumer logFilter logCfg
 
     startHostThreads logCfg atc
 
