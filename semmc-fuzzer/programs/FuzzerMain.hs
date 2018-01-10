@@ -76,15 +76,6 @@ data FuzzerTestHost =
                    }
                    deriving (Show)
 
--- Need a list of known architectures. What do we need for each?
---  * Something from dismantle
---  * Something from semmc
--- knownArchitectures :: []
--- knownArchitectures =
---     [
---     ]
---
-
 ppcRunnerFilename :: FilePath
 ppcRunnerFilename = "/home/cygnus/bin/remote-runner.ppc32"
 
