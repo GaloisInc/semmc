@@ -141,7 +141,12 @@ data ArchData where
              -> ArchData
 
 ppc32Arch :: ArchData
-ppc32Arch = ArchData "ppc32" (Proxy @PPCS.PPC) PPCS.allOpcodes PPCS.allSemantics PPCS.testSerializer
+ppc32Arch =
+    ArchData "ppc32"
+             (Proxy @PPCS.PPC)
+             PPCS.allOpcodes
+             PPCS.allSemantics
+             PPCS.testSerializer
 
 knownArchs :: [ArchData]
 knownArchs =
