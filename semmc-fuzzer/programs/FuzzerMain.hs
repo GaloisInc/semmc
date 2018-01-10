@@ -14,6 +14,7 @@ import qualified Control.Exception as E
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
+import           Data.List (intercalate)
 import           Data.Maybe (catMaybes)
 import           Data.Monoid ((<>))
 import qualified Data.Map as M
@@ -98,7 +99,8 @@ arguments =
       "Load the specified configuration"
 
     , Option "a" ["arch"] (ReqArg Arch "ARCHNAME")
-      ("The name of the architecture to test (choices: " <> "TODO" <> ")")
+      ("The name of the architecture to test (choices: " <>
+      intercalate ", " allArchNames <> ")")
 
     , Option "H" ["host"] (ReqArg Host "HOSTNAME")
       "The host on which to run tests"
@@ -145,6 +147,12 @@ knownArchs :: [ArchData]
 knownArchs =
     [ ppc32Arch
     ]
+
+allArchNames :: [String]
+allArchNames = archDataName <$> knownArchs
+
+archDataName :: ArchData -> String
+archDataName (ArchData n _ _ _ _) = n
 
 usage :: IO ()
 usage = do
