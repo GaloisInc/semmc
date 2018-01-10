@@ -20,6 +20,7 @@ import           Data.EnumF (EnumF)
 import           Data.Proxy (Proxy(Proxy))
 import qualified Data.Text as T
 import           Text.Printf (printf)
+import           Text.Read (readMaybe)
 import qualified System.Exit as IO
 import qualified System.Environment as IO
 import qualified System.IO as IO
@@ -90,6 +91,7 @@ data Arg =
     | Arch String
     | Host String
     | OpcodeList String
+    | ChunkSize String
     deriving (Eq, Show)
 
 arguments :: [OptDescr Arg]
@@ -110,6 +112,10 @@ arguments =
       ("The path to the test runner binary on the remote host (default: " <>
       defaultRunnerPath <> ")")
 
+    , Option "n" ["chunk-size"] (ReqArg ChunkSize "NUM")
+      ("The number of test cases to generate in each batch (default: " <>
+      show (configChunkSize defaultConfig) <> ")")
+
     , Option "s" ["strategy"] (ReqArg Strategy "TYPE")
       "The testing strategy to use (choices: random, roundrobin; default: random)"
 
@@ -125,6 +131,7 @@ data Config =
            , configBinaryPath :: Maybe FilePath
            , configOpcodes    :: Maybe [String]
            , configStrategy   :: TestStrategy
+           , configChunkSize  :: Int
            }
 
 usage :: IO ()
@@ -155,6 +162,9 @@ configFromArgs = do
                     return $ c { configBinaryPath = Just p }
                 Arch a ->
                     return $ c { configArchName = Just a }
+                ChunkSize s -> do
+                    sz <- readMaybe s
+                    return $ c { configChunkSize = sz }
                 OpcodeList s -> do
                     let os = T.unpack <$> T.splitOn "," (T.pack s)
                     return $ c { configOpcodes = Just os }
@@ -179,6 +189,7 @@ defaultConfig =
            , configBinaryPath = Nothing
            , configOpcodes    = Nothing
            , configStrategy   = Randomized
+           , configChunkSize  = 1000
            }
 
 main :: IO ()
