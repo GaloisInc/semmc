@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
 module Main where
 
 import qualified Control.Concurrent as C
@@ -127,6 +128,23 @@ data Config =
            , configStrategy   :: TestStrategy
            , configChunkSize  :: Int
            }
+
+data ArchData where
+    ArchData :: forall proxy arch . (A.Architecture arch)
+             => String
+             -> proxy arch
+             -> [Some ((A.Opcode arch) (A.Operand arch))]
+             -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
+             -> CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
+             -> ArchData
+
+ppc32Arch :: ArchData
+ppc32Arch = ArchData "ppc32" (Proxy @PPCS.PPC) PPCS.allOpcodes PPCS.allSemantics PPCS.testSerializer
+
+knownArchs :: [ArchData]
+knownArchs =
+    [ ppc32Arch
+    ]
 
 usage :: IO ()
 usage = do
