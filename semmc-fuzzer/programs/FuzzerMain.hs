@@ -73,7 +73,6 @@ data FuzzerConfig =
 
 data FuzzerTestHost =
     FuzzerTestHost { fuzzerTestHostname :: String
-                   , fuzzerTestRunners :: Int
                    , fuzzerTestChunkSize :: Int
                    }
                    deriving (Show)
@@ -190,9 +189,8 @@ defaultConfig =
 simpleFuzzerConfig :: Config -> Maybe FuzzerConfig
 simpleFuzzerConfig cfg =
     FuzzerConfig <$> configArchName cfg
-                 <*> ((:[]) <$> (FuzzerTestHost <$> (configHost cfg)
-                                                <*> (pure 1)
-                                                <*> (pure $ configChunkSize cfg)))
+                 <*> (pure <$> (FuzzerTestHost <$> (configHost cfg)
+                                               <*> (pure $ configChunkSize cfg)))
                  <*> (pure $ configOpcodes cfg)
                  <*> (pure $ configStrategy cfg)
 
