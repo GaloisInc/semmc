@@ -280,9 +280,17 @@ filterOpcodes _ m os = found
             AllOpcodes -> const True
             SpecificOpcodes whitelist -> ((`elem` whitelist) . show)
 
+findArch :: String -> Maybe ArchData
+findArch n =
+    case filter ((== n) . archDataName) knownArchs of
+        [a] -> return a
+        _ -> Nothing
+
 doTesting :: FuzzerConfig -> IO ()
-doTesting _fc = do
-  runTests ppc32Arch
+doTesting fc = do
+  case findArch (fuzzerArchName fc) of
+      Nothing -> usage >> IO.exitFailure
+      Just arch -> runTests arch
 
 runTests :: ArchData -> IO ()
 runTests (ArchData _ proxy allOpcodes allSemantics testSerializer) = do
