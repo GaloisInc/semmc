@@ -49,7 +49,7 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as C
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Architecture.PPC32 as PPCS
-import           SemMC.Architecture.PPC32.Opcodes as PPCS
+import qualified SemMC.Architecture.PPC32.Opcodes as PPCS
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
                                           , unTemplate, TemplatableOperand
                                           , TemplatedOperand
@@ -132,7 +132,17 @@ data Config =
            }
 
 data ArchData where
-    ArchData :: forall proxy arch . (A.Architecture arch)
+    ArchData :: forall proxy arch .
+                ( TemplatableOperand arch
+                , A.Architecture arch
+                , C.ConcreteArchitecture arch
+                , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
+                , MapF.OrdF (A.Opcode arch (TemplatedOperand arch))
+                , MapF.ShowF (A.Opcode arch (TemplatedOperand arch))
+                , Show (GenericInstruction (A.Opcode arch) (A.Operand arch))
+                , EnumF (A.Opcode arch (TemplatedOperand arch))
+                , HasRepr (A.Opcode arch (A.Operand arch)) (L.List (A.OperandTypeRepr arch))
+                )
              => String
              -> proxy arch
              -> [Some ((A.Opcode arch) (A.Operand arch))]
@@ -272,6 +282,10 @@ filterOpcodes _ m os = found
 
 doTesting :: FuzzerConfig -> IO ()
 doTesting _fc = do
+  runTests ppc32Arch
+
+runTests :: ArchData -> IO ()
+runTests (ArchData _ proxy allOpcodes allSemantics testSerializer) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
@@ -284,7 +298,7 @@ doTesting _fc = do
 
   let oMatch = AllOpcodes
       strat = RoundRobin
-      matched = filterOpcodes (Proxy @PPCS.PPC) oMatch PPCS.allOpcodes
+      matched = filterOpcodes proxy oMatch allOpcodes
 
   opcodes <- case matched of
       (o:os) -> return $ NES.fromList o os
@@ -294,12 +308,12 @@ doTesting _fc = do
 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
-          testRunner (Proxy @PPCS.PPC) opcodes strat PPCS.allSemantics caseChan resChan
+          testRunner proxy opcodes strat allSemantics caseChan resChan
 
   CA.link runThread
 
   L.withLogCfg logCfg $
-      CE.runRemote (Just defaultRunnerPath) hostname PPCS.testSerializer caseChan resChan
+      CE.runRemote (Just defaultRunnerPath) hostname testSerializer caseChan resChan
 
   CA.wait runThread
 
