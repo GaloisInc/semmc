@@ -77,6 +77,7 @@ data FuzzerConfig =
 data FuzzerTestHost =
     FuzzerTestHost { fuzzerTestHostname :: String
                    , fuzzerTestChunkSize :: Int
+                   , fuzzerRunnerPath :: FilePath
                    }
                    deriving (Show)
 
@@ -109,7 +110,7 @@ arguments =
 
     , Option "r" ["runner-path"] (ReqArg RunnerPath "PATH")
       ("The path to the test runner binary on the remote host (default: " <>
-      defaultRunnerPath <> ")")
+      (show $ configBinaryPath defaultConfig) <> ")")
 
     , Option "n" ["chunk-size"] (ReqArg ChunkSize "NUM")
       ("The number of test cases to generate in each batch (default: " <>
@@ -139,7 +140,7 @@ data Config =
            , configShowHelp   :: Bool
            , configArchName   :: Maybe String
            , configHost       :: Maybe String
-           , configBinaryPath :: Maybe FilePath
+           , configBinaryPath :: FilePath
            , configOpcodes    :: OpcodeMatch
            , configStrategy   :: TestStrategy
            , configChunkSize  :: Int
@@ -152,7 +153,7 @@ defaultConfig =
            , configShowHelp   = False
            , configArchName   = Nothing
            , configHost       = Nothing
-           , configBinaryPath = Nothing
+           , configBinaryPath = defaultRunnerPath
            , configOpcodes    = AllOpcodes
            , configStrategy   = Randomized
            , configChunkSize  = 1000
@@ -225,7 +226,7 @@ configFromArgs = do
                 Host h ->
                     return $ c { configHost = Just h }
                 RunnerPath p ->
-                    return $ c { configBinaryPath = Just p }
+                    return $ c { configBinaryPath = p }
                 Arch a ->
                     return $ c { configArchName = Just a }
                 ChunkSize s -> do
@@ -253,7 +254,8 @@ simpleFuzzerConfig :: Config -> Maybe FuzzerConfig
 simpleFuzzerConfig cfg =
     FuzzerConfig <$> configArchName cfg
                  <*> (pure <$> (FuzzerTestHost <$> (configHost cfg)
-                                               <*> (pure $ configChunkSize cfg)))
+                                               <*> (pure $ configChunkSize cfg)
+                                               <*> (pure $ configBinaryPath cfg)))
                  <*> (pure $ configOpcodes cfg)
                  <*> (pure $ configStrategy cfg)
                  <*> (pure $ configLogLevel cfg)
@@ -291,7 +293,7 @@ main = do
     CA.wait logThread
 
 defaultRunnerPath :: FilePath
-defaultRunnerPath = "/home/cygnus/bin/remote-runner.ppc32"
+defaultRunnerPath = "remote-runner"
 
 filterOpcodes :: forall proxy arch .
                  (ShowF (A.Opcode arch (A.Operand arch)))
@@ -348,7 +350,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   CA.link runThread
 
   L.withLogCfg logCfg $
-      CE.runRemote (Just defaultRunnerPath) (fuzzerTestHostname hostConfig)
+      CE.runRemote (Just $ fuzzerRunnerPath hostConfig) (fuzzerTestHostname hostConfig)
                    testSerializer caseChan resChan
 
   CA.wait runThread
