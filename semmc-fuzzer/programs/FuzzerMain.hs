@@ -131,7 +131,7 @@ data Config =
 usage :: IO ()
 usage = do
     pn <- IO.getProgName
-    putStrLn $ "Usage: " <> pn
+    putStrLn $ "Usage: " <> pn <> " [options]"
     putStrLn $ usageInfo "" arguments
 
 configFromArgs :: IO Config
