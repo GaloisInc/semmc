@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE KindSignatures #-}
@@ -42,10 +43,11 @@ import           GHC.TypeLits ( KnownSymbol, Nat, Symbol, sameSymbol )
 
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
-import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.SymbolRepr as SR
+import qualified Data.Parameterized.TH.GADT as TH
 import qualified Data.Word.Indexed as W
 
 import qualified Dismantle.Instruction as D
@@ -493,14 +495,44 @@ instance D.ArbitraryOperands Opcode Operand where
 
 ----------------------------------------------------------------
 -- * Pseudo Ops
---
--- We need to define a pseudo op type, even if it's empty.
 
-type instance P.Pseudo Toy = P.EmptyPseudo
+data PseudoOpcode :: (Symbol -> *) -> [Symbol] -> * where
+  -- | The @MovRr dst src@ copies the value of @src@ into @dst@.
+  MovRr :: PseudoOpcode Operand '["R32", "R32"]
+
+deriving instance Show (PseudoOpcode op sh)
+
+instance ShowF (PseudoOpcode op)
+
+-- Eliminate
+--
+--   'PseudoOpcode' is not in the type environment at a reify
+--
+-- error. No idea why this helps; copied from
+-- 'SemMC.Architecture.PPC.Pseudo'.
+$(return [])
+
+instance TestEquality (PseudoOpcode op) where
+  testEquality = $(TH.structuralTypeEquality [t| PseudoOpcode |] [])
+
+instance OrdF (PseudoOpcode op) where
+  compareF = $(TH.structuralTypeOrd [t| PseudoOpcode |] [])
+
+instance HasRepr (PseudoOpcode op) (SL.List SR.SymbolRepr) where
+  typeRepr MovRr = knownRepr
+
+instance D.ArbitraryOperands PseudoOpcode Operand where
+  arbitraryOperands gen op = case op of
+    MovRr -> D.arbitraryShapedList gen
+
+type instance P.Pseudo Toy = PseudoOpcode
 
 instance P.ArchitectureWithPseudo Toy where
-  assemblePseudo _ = P.pseudoAbsurd
+  assemblePseudo _proxy opcode oplist = case opcode of
+    MovRr -> case oplist of
+      (dst SL.:< src SL.:< SL.Nil) ->
+        [ D.Instruction MovRi (dst SL.:< I32 0 SL.:< SL.Nil)
+        , D.Instruction AddRr (dst SL.:< src SL.:< SL.Nil) ]
 
-allPseudoOpcodes ::
-  [Some ((P.Pseudo Toy) Operand)]
-allPseudoOpcodes = []
+allPseudoOpcodes :: [Some ((P.Pseudo Toy) Operand)]
+allPseudoOpcodes = [ Some MovRr ]

@@ -385,7 +385,7 @@ test_rightValueWrongPlace = do
       , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg1 SL.:< SL.Nil)
       , D.Instruction AddRr (R32 Reg3 SL.:< R32 Reg2 SL.:< SL.Nil)
 
-      -- Set r1 to xthe complement of r3!
+      -- Set r1 to the complement of r3!
       , D.Instruction MovRi (R32 Reg1 SL.:< I32 0 SL.:< SL.Nil)
       , D.Instruction AddRr (R32 Reg1 SL.:< R32 Reg3 SL.:< SL.Nil)
       , D.Instruction NotR  (R32 Reg1 SL.:< SL.Nil) ]
