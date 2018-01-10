@@ -9,7 +9,7 @@ module Main where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
-import           Control.Monad (replicateM_, replicateM, forM_, when)
+import           Control.Monad (replicateM_, replicateM, forM_, when, forM)
 import qualified Control.Exception as E
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
@@ -259,13 +259,17 @@ main = do
         usage >> IO.exitFailure
 
     atc <- mkFuzzerConfig cfg
-    doTesting atc
+
+    logCfg <- L.mkLogCfg "main"
+    logThread <- CA.async $ do
+        L.stdErrLogEventConsumer (const True) logCfg
+
+    doTesting logCfg atc
+
+    CA.wait logThread
 
 defaultRunnerPath :: FilePath
 defaultRunnerPath = "/home/cygnus/bin/remote-runner.ppc32"
-
-hostname :: String
-hostname = "helium.proj.galois.com"
 
 filterOpcodes :: forall proxy arch .
                  (ShowF (A.Opcode arch (A.Operand arch)))
@@ -286,27 +290,25 @@ findArch n =
         [a] -> return a
         _ -> Nothing
 
-doTesting :: FuzzerConfig -> IO ()
-doTesting fc = do
+doTesting :: L.LogCfg -> FuzzerConfig -> IO ()
+doTesting logCfg fc = do
   case findArch (fuzzerArchName fc) of
       Nothing -> usage >> IO.exitFailure
-      Just arch -> runTests arch
+      Just arch -> do
+          hostThreads <- forM (fuzzerArchTestingHosts fc) $ \hostConfig ->
+              CA.async $ runTests logCfg fc hostConfig arch
 
-runTests :: ArchImpl -> IO ()
-runTests (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do
+          mapM_ CA.wait hostThreads
+
+runTests :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
+runTests logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
-  logCfg <- L.mkLogCfg "main"
+  L.withLogCfg logCfg $ L.logIO L.Info $
+      printf "Starting up for host %s" (fuzzerTestHostname hostConfig)
 
-  logThread <- CA.async $ do
-      L.stdErrLogEventConsumer (const True) logCfg
-
-  L.withLogCfg logCfg $ L.logIO L.Info $ printf "Starting up"
-
-  let oMatch = AllOpcodes
-      strat = RoundRobin
-      matched = filterOpcodes proxy oMatch allOpcodes
+  let matched = filterOpcodes proxy (fuzzerTestOpcodes mainConfig) allOpcodes
 
   opcodes <- case matched of
       (o:os) -> return $ NES.fromList o os
@@ -316,17 +318,18 @@ runTests (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do
 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
-          testRunner proxy opcodes strat allSemantics caseChan resChan
+          testRunner hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
+                     allSemantics caseChan resChan
 
   CA.link runThread
 
   L.withLogCfg logCfg $
-      CE.runRemote (Just defaultRunnerPath) hostname testSerializer caseChan resChan
+      CE.runRemote (Just defaultRunnerPath) (fuzzerTestHostname hostConfig)
+                   testSerializer caseChan resChan
 
   CA.wait runThread
 
   L.logEndWith logCfg
-  CA.wait logThread
 
 makePlain :: forall arch sym
            . (MapF.OrdF (A.Opcode arch (A.Operand arch)),
@@ -353,15 +356,16 @@ testRunner :: forall proxy arch .
               , EnumF (A.Opcode arch (TemplatedOperand arch))
               , HasRepr (A.Opcode arch (A.Operand arch)) (L.List (A.OperandTypeRepr arch))
               )
-           => proxy arch
+           => FuzzerTestHost
+           -> proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> TestStrategy
            -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner proxy inputOpcodes strat semantics caseChan resChan = do
-    let chunkSize = 100
+testRunner hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
+    let chunkSize = fuzzerTestChunkSize hostConfig
         opcodeSetSequence = case strat of
             Randomized ->
                 -- Just use all opcodes on each chunk iteration.
