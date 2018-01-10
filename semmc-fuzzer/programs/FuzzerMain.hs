@@ -132,7 +132,10 @@ usage :: IO ()
 usage = do
     pn <- IO.getProgName
     putStrLn $ "Usage: " <> pn <> " [options]"
-    putStrLn $ usageInfo "" arguments
+    let msg = unlines [ "\nAt a minimum, specify either a configuration file or the hostname "
+                      , "and architecture name options."
+                      ]
+    putStrLn $ usageInfo msg arguments
 
 configFromArgs :: IO Config
 configFromArgs = do
