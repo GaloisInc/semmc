@@ -131,8 +131,8 @@ data Config =
            , configChunkSize  :: Int
            }
 
-data ArchData where
-    ArchData :: forall proxy arch .
+data ArchImpl where
+    ArchImpl :: forall proxy arch .
                 ( TemplatableOperand arch
                 , A.Architecture arch
                 , C.ConcreteArchitecture arch
@@ -148,26 +148,26 @@ data ArchData where
              -> [Some ((A.Opcode arch) (A.Operand arch))]
              -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
              -> CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
-             -> ArchData
+             -> ArchImpl
 
-ppc32Arch :: ArchData
+ppc32Arch :: ArchImpl
 ppc32Arch =
-    ArchData "ppc32"
+    ArchImpl "ppc32"
              (Proxy @PPCS.PPC)
              PPCS.allOpcodes
              PPCS.allSemantics
              PPCS.testSerializer
 
-knownArchs :: [ArchData]
+knownArchs :: [ArchImpl]
 knownArchs =
     [ ppc32Arch
     ]
 
 allArchNames :: [String]
-allArchNames = archDataName <$> knownArchs
+allArchNames = archImplName <$> knownArchs
 
-archDataName :: ArchData -> String
-archDataName (ArchData n _ _ _ _) = n
+archImplName :: ArchImpl -> String
+archImplName (ArchImpl n _ _ _ _) = n
 
 usage :: IO ()
 usage = do
@@ -280,9 +280,9 @@ filterOpcodes _ m os = found
             AllOpcodes -> const True
             SpecificOpcodes whitelist -> ((`elem` whitelist) . show)
 
-findArch :: String -> Maybe ArchData
+findArch :: String -> Maybe ArchImpl
 findArch n =
-    case filter ((== n) . archDataName) knownArchs of
+    case filter ((== n) . archImplName) knownArchs of
         [a] -> return a
         _ -> Nothing
 
@@ -292,8 +292,8 @@ doTesting fc = do
       Nothing -> usage >> IO.exitFailure
       Just arch -> runTests arch
 
-runTests :: ArchData -> IO ()
-runTests (ArchData _ proxy allOpcodes allSemantics testSerializer) = do
+runTests :: ArchImpl -> IO ()
+runTests (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
