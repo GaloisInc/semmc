@@ -111,7 +111,7 @@ arguments =
       defaultRunnerPath <> ")")
 
     , Option "s" ["strategy"] (ReqArg Strategy "TYPE")
-      "The testing strategy to use (choices: random, roundrobin, default: random)"
+      "The testing strategy to use (choices: random, roundrobin; default: random)"
 
     , Option "o" ["opcodes"] (ReqArg OpcodeList "OPCODES")
       "A comma-separated list of opcodes to test (default: test all known opcodes)"
