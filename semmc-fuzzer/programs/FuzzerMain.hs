@@ -63,18 +63,13 @@ data TestStrategy =
     | Randomized
     deriving (Show, Eq)
 
-data FuzzerConfiguration =
-    FuzzerConfiguration { fuzzerArchConfig :: FuzzerArchConfig
-                        }
-                        deriving (Show)
-
-data FuzzerArchConfig =
-    FuzzerArchConfig { fuzzerArchName :: String
-                     , fuzzerArchTestingHosts :: [FuzzerTestHost]
-                     , fuzzerTestOpcodes :: OpcodeMatch
-                     , fuzzerTestStrategy :: TestStrategy
-                     }
-                     deriving (Show)
+data FuzzerConfig =
+    FuzzerConfig { fuzzerArchName :: String
+                 , fuzzerArchTestingHosts :: [FuzzerTestHost]
+                 , fuzzerTestOpcodes :: OpcodeMatch
+                 , fuzzerTestStrategy :: TestStrategy
+                 }
+                 deriving (Show)
 
 data FuzzerTestHost =
     FuzzerTestHost { fuzzerTestHostname :: String
@@ -129,7 +124,7 @@ data Config =
            , configArchName   :: Maybe String
            , configHost       :: Maybe String
            , configBinaryPath :: Maybe FilePath
-           , configOpcodes    :: Maybe [String]
+           , configOpcodes    :: OpcodeMatch
            , configStrategy   :: TestStrategy
            , configChunkSize  :: Int
            }
@@ -167,7 +162,7 @@ configFromArgs = do
                     return $ c { configChunkSize = sz }
                 OpcodeList s -> do
                     let os = T.unpack <$> T.splitOn "," (T.pack s)
-                    return $ c { configOpcodes = Just os }
+                    return $ c { configOpcodes = SpecificOpcodes os }
                 Strategy s ->
                     if | s == "random" ->
                            return $ c { configStrategy = Randomized }
@@ -187,10 +182,32 @@ defaultConfig =
            , configArchName   = Nothing
            , configHost       = Nothing
            , configBinaryPath = Nothing
-           , configOpcodes    = Nothing
+           , configOpcodes    = AllOpcodes
            , configStrategy   = Randomized
            , configChunkSize  = 1000
            }
+
+simpleFuzzerConfig :: Config -> Maybe FuzzerConfig
+simpleFuzzerConfig cfg =
+    FuzzerConfig <$> configArchName cfg
+                 <*> ((:[]) <$> (FuzzerTestHost <$> (configHost cfg)
+                                                <*> (pure 1)
+                                                <*> (pure $ configChunkSize cfg)))
+                 <*> (pure $ configOpcodes cfg)
+                 <*> (pure $ configStrategy cfg)
+
+mkFuzzerConfig :: Config -> IO FuzzerConfig
+mkFuzzerConfig cfg = do
+    -- Either load a configuration file from disk or build a simple one
+    -- from command line arguments.
+    case configPath cfg of
+        Nothing -> case simpleFuzzerConfig cfg of
+            Nothing -> usage >> IO.exitFailure
+            Just fc -> return fc
+        Just _path -> do
+            -- Load a configuration from the specified path, then build
+            -- a fuzzer config from that.
+            error "TODO"
 
 main :: IO ()
 main = do
@@ -199,7 +216,8 @@ main = do
     when (configShowHelp cfg) $
         usage >> IO.exitFailure
 
-    doTesting
+    atc <- mkFuzzerConfig cfg
+    doTesting atc
 
 defaultRunnerPath :: FilePath
 defaultRunnerPath = "/home/cygnus/bin/remote-runner.ppc32"
@@ -220,8 +238,8 @@ filterOpcodes _ m os = found
             AllOpcodes -> const True
             SpecificOpcodes whitelist -> ((`elem` whitelist) . show)
 
-doTesting :: IO ()
-doTesting = do
+doTesting :: FuzzerConfig -> IO ()
+doTesting _fc = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
