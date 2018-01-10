@@ -25,6 +25,7 @@
 module SemMC.Log (
   -- * Misc
   LogLevel(..),
+  LogEvent(..),
   LogMsg,
   Ghc.HasCallStack,
   -- * Implicit param logger interface
