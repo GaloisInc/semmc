@@ -264,7 +264,7 @@ main = do
     logThread <- CA.async $ do
         L.stdErrLogEventConsumer (const True) logCfg
 
-    doTesting logCfg atc
+    startHostThreads logCfg atc
 
     CA.wait logThread
 
@@ -290,20 +290,20 @@ findArch n =
         [a] -> return a
         _ -> Nothing
 
-doTesting :: L.LogCfg -> FuzzerConfig -> IO ()
-doTesting logCfg fc = do
+startHostThreads :: L.LogCfg -> FuzzerConfig -> IO ()
+startHostThreads logCfg fc = do
   case findArch (fuzzerArchName fc) of
       Nothing -> usage >> IO.exitFailure
       Just arch -> do
           hostThreads <- forM (fuzzerArchTestingHosts fc) $ \hostConfig -> do
-              a <- CA.async $ runTests logCfg fc hostConfig arch
+              a <- CA.async $ testHost logCfg fc hostConfig arch
               CA.link a
               return a
 
           mapM_ CA.wait hostThreads
 
-runTests :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
-runTests logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do
+testHost :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
+testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
