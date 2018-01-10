@@ -83,7 +83,7 @@ data LogLevel = Debug -- ^ Fine details
               | Info  -- ^ Tracking progress
               | Warn  -- ^ Something notable or suspicious
               | Error -- ^ Something bad
-              deriving (Show, Eq, Ord)
+              deriving (Show, Eq, Ord, Read)
 
 type LogMsg = String
 
