@@ -48,23 +48,6 @@ import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
 
 type PPCState = V.ConcreteState PPCS.PPC
 
--- TODO:
---
--- Command line options type
---
--- How do tests get spread over remote hosts? Need remote host list for
--- each ISA. Probably want to have one worker thread per host, with a
--- manager thread per ISA giving out work to do.
---
--- Testing loop:
---   Inputs: ISA, N, list of opcodes (or all) OS
---   For each opcode O in OS:
---     Generate a chunk of N pairs of (random initial state, random instruction for O)
---     Submit chunk to remote host for execution
---     Evaluate chunk final states and evaluate instructions against semantics and initial states, compare results
---     Emit chunk result summary to event log
---       (coalesce successes)
-
 data FuzzerConfiguration =
     FuzzerConfiguration { fuzzerArchitectures :: [FuzzerArchConfig]
                         , fuzzerOutputDirectory :: FilePath
