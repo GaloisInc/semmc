@@ -46,14 +46,6 @@ import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
                                           , TemplatedOperand
                                           )
 
-type PPCState = V.ConcreteState PPCS.PPC
-
-data FuzzerConfiguration =
-    FuzzerConfiguration { fuzzerArchitectures :: [FuzzerArchConfig]
-                        , fuzzerOutputDirectory :: FilePath
-                        }
-                        deriving (Show)
-
 data OpcodeMatch =
     AllOpcodes
     | SpecificOpcodes [String]
@@ -63,6 +55,11 @@ data TestStrategy =
     RoundRobin
     | Randomized
     deriving (Show, Eq)
+
+data FuzzerConfiguration =
+    FuzzerConfiguration { fuzzerArchConfig :: FuzzerArchConfig
+                        }
+                        deriving (Show)
 
 data FuzzerArchConfig =
     FuzzerArchConfig { fuzzerArchName :: String
