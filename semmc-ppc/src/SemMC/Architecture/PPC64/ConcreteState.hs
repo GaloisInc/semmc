@@ -49,7 +49,7 @@ randomState gen = St.execStateT randomize MapF.empty
     randomize = do
       mapM_ addRandomBV gprs
       mapM_ addRandomBV64 frs
-      mapM_ addRandomBV vrs
+      mapM_ addRandomBV vsrs
       mapM_ addZeroBV specialRegs32
       mapM_ addZeroBV specialRegs64
 --      St.modify' $ MapF.insert LocMem (V.ValueMem (B.replicate 64 0))
@@ -160,9 +160,9 @@ getArchState = do
   spregs32' <- mapM (getWith (PPCS.getValue G.getWord32be PPCS.repr32)) specialRegs32
   spregs64' <- mapM (getWith (PPCS.getValue G.getWord64be (regWidthRepr (Proxy @ppc)))) specialRegs64
   frs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.IgnoreHighBits) PPCS.repr128)) frs
-  vrs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.KeepHighBits) PPCS.repr128)) vrs
+  vsrs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.KeepHighBits) PPCS.repr128)) vsrs
 --  mem' <- getBS
-  return (St.execState (addLocs gprs' spregs32' spregs64' (frs' ++ vrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
+  return (St.execState (addLocs gprs' spregs32' spregs64' (frs' ++ vsrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
   where
     addLoc :: forall tp . (Location ppc tp, V.Value tp) -> St.State (ConcreteState ppc) ()
     addLoc (loc, v) = St.modify' $ MapF.insert loc v
