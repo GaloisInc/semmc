@@ -2,22 +2,28 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
-import           Control.Monad (replicateM_, replicateM, forM_)
+import           Control.Monad (replicateM_, replicateM, forM_, when)
 import qualified Control.Exception as E
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
 import           Data.Maybe (catMaybes)
+import           Data.Monoid ((<>))
 import qualified Data.Map as M
 import           Data.EnumF (EnumF)
 import           Data.Proxy (Proxy(Proxy))
+import qualified Data.Text as T
 import           Text.Printf (printf)
 import qualified System.Exit as IO
+import qualified System.Environment as IO
 import qualified System.IO as IO
+import           System.Console.GetOpt
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.Classes (ShowF(..))
@@ -76,8 +82,116 @@ data FuzzerTestHost =
                    }
                    deriving (Show)
 
-ppcRunnerFilename :: FilePath
-ppcRunnerFilename = "/home/cygnus/bin/remote-runner.ppc32"
+data Arg =
+    ConfigPath FilePath
+    | Help
+    | Strategy String
+    | RunnerPath FilePath
+    | Arch String
+    | Host String
+    | OpcodeList String
+    deriving (Eq, Show)
+
+arguments :: [OptDescr Arg]
+arguments =
+    [ Option "h" ["help"] (NoArg Help)
+      "Show this help"
+
+    , Option "c" ["config-path"] (ReqArg ConfigPath "PATH")
+      "Load the specified configuration"
+
+    , Option "a" ["arch"] (ReqArg Arch "ARCHNAME")
+      ("The name of the architecture to test (choices: " <> "TODO" <> ")")
+
+    , Option "H" ["host"] (ReqArg Host "HOSTNAME")
+      "The host on which to run tests"
+
+    , Option "r" ["runner-path"] (ReqArg RunnerPath "PATH")
+      ("The path to the test runner binary on the remote host (default: " <>
+      defaultRunnerPath <> ")")
+
+    , Option "s" ["strategy"] (ReqArg Strategy "TYPE")
+      "The testing strategy to use (choices: random, roundrobin, default: random)"
+
+    , Option "o" ["opcodes"] (ReqArg OpcodeList "OPCODES")
+      "A comma-separated list of opcodes to test (default: test all known opcodes)"
+    ]
+
+data Config =
+    Config { configPath       :: Maybe FilePath
+           , configShowHelp   :: Bool
+           , configArchName   :: Maybe String
+           , configHost       :: Maybe String
+           , configBinaryPath :: Maybe FilePath
+           , configOpcodes    :: Maybe [String]
+           , configStrategy   :: TestStrategy
+           }
+
+usage :: IO ()
+usage = do
+    pn <- IO.getProgName
+    putStrLn $ "Usage: " <> pn
+    putStrLn $ usageInfo "" arguments
+
+configFromArgs :: IO Config
+configFromArgs = do
+    stringArgs <- IO.getArgs
+    let (args, rest, errs) = getOpt Permute arguments stringArgs
+
+    when (not $ null $ errs <> rest) $ do
+        usage
+        IO.exitFailure
+
+    let processArg _ Nothing = Nothing
+        processArg arg (Just c) =
+            case arg of
+                Help ->
+                    return $ c { configShowHelp = True }
+                ConfigPath p ->
+                    return $ c { configPath = Just p }
+                Host h ->
+                    return $ c { configHost = Just h }
+                RunnerPath p ->
+                    return $ c { configBinaryPath = Just p }
+                Arch a ->
+                    return $ c { configArchName = Just a }
+                OpcodeList s -> do
+                    let os = T.unpack <$> T.splitOn "," (T.pack s)
+                    return $ c { configOpcodes = Just os }
+                Strategy s ->
+                    if | s == "random" ->
+                           return $ c { configStrategy = Randomized }
+                       | s == "roundrobin" ->
+                           return $ c { configStrategy = RoundRobin }
+                       | otherwise ->
+                           Nothing
+
+    case foldr processArg (Just defaultConfig) args of
+        Nothing -> usage >> IO.exitFailure
+        Just c -> return c
+
+defaultConfig :: Config
+defaultConfig =
+    Config { configPath       = Nothing
+           , configShowHelp   = False
+           , configArchName   = Nothing
+           , configHost       = Nothing
+           , configBinaryPath = Nothing
+           , configOpcodes    = Nothing
+           , configStrategy   = Randomized
+           }
+
+main :: IO ()
+main = do
+    cfg <- configFromArgs
+
+    when (configShowHelp cfg) $
+        usage >> IO.exitFailure
+
+    doTesting
+
+defaultRunnerPath :: FilePath
+defaultRunnerPath = "/home/cygnus/bin/remote-runner.ppc32"
 
 hostname :: String
 hostname = "helium.proj.galois.com"
@@ -124,7 +238,7 @@ doTesting = do
   CA.link runThread
 
   L.withLogCfg logCfg $
-      CE.runRemote (Just ppcRunnerFilename) hostname PPCS.testSerializer caseChan resChan
+      CE.runRemote (Just defaultRunnerPath) hostname PPCS.testSerializer caseChan resChan
 
   CA.wait runThread
 
@@ -257,6 +371,3 @@ testRunner proxy inputOpcodes strat semantics caseChan resChan = do
                  then L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: expected %s, got %s"
                           (show inst) (show expectedFinal) (show $ CE.resultContext tr)
                  else L.logIO L.Info "SUCCESS"
-
-main :: IO ()
-main = doTesting
