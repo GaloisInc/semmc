@@ -541,8 +541,13 @@ allPseudoOpcodes = [ Some MovRr ]
 ----------------------------------------------------------------
 -- Rvwp optimization support
 
+-- Disable opt until pseudo instruction formula compilation is implemented.
+disableRvwpOpt :: Bool
+disableRvwpOpt = True
+
 instance R.RvwpOptimization Toy where
-  rvwpMov (V.View dstSlice (RegLoc dst)) (V.View srcSlice (RegLoc src)) = do
+  rvwpMov (V.View dstSlice (RegLoc dst)) (V.View srcSlice (RegLoc src)) | disableRvwpOpt = Nothing
+                                                                        | otherwise = do
     guard $ dst /= src
     when (not (isTrivialR32Slice dstSlice) || not (isTrivialR32Slice srcSlice)) $
       error "Toy.rvwpMov: needs to be updated for new cases that aren't handled."
