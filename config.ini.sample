@@ -1,0 +1,8 @@
+[fuzzer]
+arch = ppc32
+opcodes = SpecificOpcodes ["ADD4"]
+strategy = RoundRobin
+
+[host:helium.proj.galois.com]
+runner-path = /home/cygnus/bin/remote-runner.ppc32
+chunk-size = 10
