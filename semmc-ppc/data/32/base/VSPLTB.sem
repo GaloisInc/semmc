@@ -1,4 +1,9 @@
 ;; Vector Splat Byte (VX-form)
 ((operands ((vrT . 'Vrrc) (vrB . 'Vrrc) (uim . 'U5imm))) 
-  (in (vrB 'IP))
-  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
+  (in ('VSCR vrB 'IP))
+  (defs 
+    (('VSCR 
+       ((_ extract 159 128) ((_ call "ppc.vec2") "VSPLTB" ((_ zero_extend 123) uim) vrB 'VSCR))) 
+      (vrT 
+        ((_ extract 127 0) ((_ call "ppc.vec2") "VSPLTB" ((_ zero_extend 123) uim) vrB 'VSCR)))
+      ('IP (bvadd 'IP #x00000004)))))
