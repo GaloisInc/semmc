@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -172,6 +174,11 @@ data SemanticView arch =
                           -- distance between two values of this semantic view.
                           }
 
+instance (P.ShowF (L.Location arch), P.ShowF (View arch)) => Show (SemanticView arch) where
+  show SemanticView{..} =
+    -- We can't show the 'Diff' function.
+    printf "SemanticView { semvView = %s, semvCongruentViews = %s }"
+    (show semvView) (show semvCongruentViews)
 
 type Parser = P.Parsec String String
 
