@@ -1,5 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ParallelListComp #-}
 -- | Description: Right-value-wrong-place (rvwp) optimization support.
 --
 -- This module implements the generic parts of the
@@ -47,15 +46,15 @@ fixRvwps numRvwps outMasks rvwps
     let msg = printf "fixRvpws: numRvwps > 1 is not supported; numRvwps = %i." numRvwps
     in U.logTrace U.Error msg $ error msg
   | otherwise = do
-      let (mask, rvwp) = head [ (mask', rvwp')
-                              | mask' <- outMasks
-                              | rvwp' <- rvwps, rdWeight rvwp' /= 0 ]
+      let (mask, rvwp) = head [ (m, r)
+                              | (m, r) <- zip outMasks rvwps
+                              , rdWeight r /= 0 ]
       case mask of
         V.SemanticView{..} -> do
           let dst = semvView
           let src = head [ view
-                         | view <- semvCongruentViews
-                         | isRvwpPlace <- rdRvwpPlaces rvwp
+                         | (view, isRvwpPlace) <-
+                             zip semvCongruentViews (rdRvwpPlaces rvwp)
                          , isRvwpPlace ]
           rvwpMov dst src
 
