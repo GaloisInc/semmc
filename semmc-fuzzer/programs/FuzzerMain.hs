@@ -461,7 +461,7 @@ testRunner hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
                 repeat inputOpcodes
             RoundRobin ->
                 -- Make a list of singleton sets, one for each opcode.
-                concat $ repeat (NES.singleton <$> F.toList inputOpcodes)
+                cycle (NES.singleton <$> F.toList inputOpcodes)
 
     N.withIONonceGenerator $ \nonceGen -> do
       gen <- DA.createGen
