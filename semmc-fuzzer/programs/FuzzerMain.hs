@@ -80,6 +80,7 @@ data FuzzerTestHost =
     FuzzerTestHost { fuzzerTestHostname :: String
                    , fuzzerTestChunkSize :: Int
                    , fuzzerRunnerPath :: FilePath
+                   , fuzzerTestThreads :: Int
                    }
                    deriving (Show)
 
@@ -93,6 +94,7 @@ data Arg =
     | OpcodeList String
     | ChunkSize String
     | LogLevelStr String
+    | NumThreads String
     deriving (Eq, Show)
 
 arguments :: [OptDescr Arg]
@@ -106,6 +108,10 @@ arguments =
     , Option "a" ["arch"] (ReqArg Arch "ARCHNAME")
       ("The name of the architecture to test (choices: " <>
       intercalate ", " allArchNames <> ")")
+
+    , Option "t" ["threads"] (ReqArg Arch "NUM")
+      ("The number of local testing threads to run against the remote host (default: " <>
+      (show $ configNumThreads defaultConfig) <> ")")
 
     , Option "H" ["host"] (ReqArg Host "HOSTNAME")
       "The host on which to run tests"
@@ -147,6 +153,7 @@ data Config =
            , configStrategy   :: TestStrategy
            , configChunkSize  :: Int
            , configLogLevel   :: L.LogLevel
+           , configNumThreads :: Int
            }
 
 defaultConfig :: Config
@@ -160,6 +167,7 @@ defaultConfig =
            , configStrategy   = Randomized
            , configChunkSize  = 1000
            , configLogLevel   = L.Info
+           , configNumThreads = 1
            }
 
 loadConfig :: FilePath -> IO (Either String FuzzerConfig)
@@ -187,6 +195,7 @@ parser = do
         FuzzerTestHost (T.unpack hostname)
             <$> CI.fieldDefOf "chunk-size" CI.readable (configChunkSize defaultConfig)
             <*> (T.unpack <$> CI.fieldDef "runner-path" (T.pack $ configBinaryPath defaultConfig))
+            <*> (CI.fieldDefOf "threads" CI.readable (configNumThreads defaultConfig))
 
     return FuzzerConfig { fuzzerArchName = arch
                         , fuzzerArchTestingHosts = F.toList hosts
@@ -267,6 +276,9 @@ configFromArgs = do
                 ChunkSize s -> do
                     sz <- readMaybe s
                     return $ c { configChunkSize = sz }
+                NumThreads s -> do
+                    t <- readMaybe s
+                    return $ c { configNumThreads = t }
                 OpcodeList s -> do
                     let os = T.unpack <$> T.splitOn "," (T.pack s)
                     return $ c { configOpcodes = SpecificOpcodes os }
@@ -290,7 +302,8 @@ simpleFuzzerConfig cfg =
     FuzzerConfig <$> configArchName cfg
                  <*> (pure <$> (FuzzerTestHost <$> (configHost cfg)
                                                <*> (pure $ configChunkSize cfg)
-                                               <*> (pure $ configBinaryPath cfg)))
+                                               <*> (pure $ configBinaryPath cfg)
+                                               <*> (pure $ configNumThreads cfg)))
                  <*> (pure $ configOpcodes cfg)
                  <*> (pure $ configStrategy cfg)
                  <*> (pure $ configLogLevel cfg)
@@ -369,11 +382,12 @@ startHostThreads logCfg fc = do
       Nothing -> usage >> IO.exitFailure
       Just arch -> do
           hostThreads <- forM (fuzzerArchTestingHosts fc) $ \hostConfig -> do
-              a <- CA.async $ testHost logCfg fc hostConfig arch
-              CA.link a
-              return a
+              replicateM (fuzzerTestThreads hostConfig) $ do
+                  a <- CA.async $ testHost logCfg fc hostConfig arch
+                  CA.link a
+                  return a
 
-          mapM_ CA.wait hostThreads
+          mapM_ CA.wait (concat hostThreads)
 
 testHost :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
 testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do

@@ -6,3 +6,4 @@ strategy = RoundRobin
 [host:helium.proj.galois.com]
 runner-path = /home/cygnus/bin/remote-runner.ppc32
 chunk-size = 10
+threads = 2
