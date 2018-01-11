@@ -16,7 +16,6 @@ module SemMC.Stochastic.Initialize (
   ) where
 
 import qualified Control.Concurrent.STM as STM
-import qualified Control.Exception as CE
 import           Control.Monad
 import qualified Data.Foldable as F
 import           Data.Proxy ( Proxy(..) )

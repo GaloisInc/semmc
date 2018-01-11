@@ -74,7 +74,7 @@ data RvwpDelta arch = RvwpDelta
     -- test.
   , rdWeight :: Double
     -- ^ Weight of candidate on the test.
-  }
+  } deriving Show
 
 -- | Combine the per test deltas for each out mask into a cumulative
 -- delta for each out mask.
