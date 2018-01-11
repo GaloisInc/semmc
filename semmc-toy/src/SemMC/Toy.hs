@@ -64,6 +64,7 @@ import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.Pseudo as P
+import qualified SemMC.Stochastic.RvwpOptimization as R
 import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
 import           SemMC.Util ( makeSymbol )
 
@@ -536,3 +537,18 @@ instance P.ArchitectureWithPseudo Toy where
 
 allPseudoOpcodes :: [Some ((P.Pseudo Toy) Operand)]
 allPseudoOpcodes = [ Some MovRr ]
+
+----------------------------------------------------------------
+-- Rvwp optimization support
+
+instance R.RvwpOptimization Toy where
+  rvwpMov (V.View dstSlice (RegLoc dst)) (V.View srcSlice (RegLoc src)) = do
+    guard $ dst /= src
+    when (not (isTrivialR32Slice dstSlice) || not (isTrivialR32Slice srcSlice)) $
+      error "Toy.rvwpMov: needs to be updated for new cases that aren't handled."
+    return [ P.SynthInstruction (P.PseudoOpcode MovRr) (R32 dst SL.:< R32 src SL.:< SL.Nil) ]
+    where
+      -- | Returns true iff the slice is the whole 32 bit register.
+      isTrivialR32Slice :: V.Slice m n -> Bool
+      isTrivialR32Slice (V.Slice m n a b) =
+        natValue m == 32 && natValue n == 32 && natValue a == 0 && natValue b == 32
