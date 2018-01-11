@@ -7,10 +7,12 @@
 {-# LANGUAGE GADTs #-}
 module Main where
 
+import           Control.Applicative ((<|>))
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
 import           Control.Monad (replicateM_, replicateM, forM_, when, forM)
 import qualified Control.Exception as E
+import qualified Data.Ini.Config.Raw as CI
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set.NonEmpty as NES
@@ -21,6 +23,8 @@ import qualified Data.Map as M
 import           Data.EnumF (EnumF)
 import           Data.Proxy (Proxy(Proxy))
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import qualified Data.Sequence as Seq
 import           Text.Printf (printf)
 import           Text.Read (readMaybe)
 import qualified System.Exit as IO
@@ -58,12 +62,12 @@ import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
 data OpcodeMatch =
     AllOpcodes
     | SpecificOpcodes [String]
-    deriving (Show, Eq)
+    deriving (Show, Eq, Read)
 
 data TestStrategy =
     RoundRobin
     | Randomized
-    deriving (Show, Eq)
+    deriving (Show, Eq, Read)
 
 data FuzzerConfig =
     FuzzerConfig { fuzzerArchName :: String
@@ -159,6 +163,88 @@ defaultConfig =
            , configChunkSize  = 1000
            , configLogLevel   = L.Info
            }
+
+loadConfig :: FilePath -> Config -> IO (Either String FuzzerConfig)
+loadConfig cfgPath baseConfig = do
+    txt <- T.readFile cfgPath
+    case CI.parseRawIni txt of
+        Left e -> return $ Left e
+        Right raw -> return $ rawConfigToFuzzerConfig baseConfig raw
+
+getSection :: CI.RawIni -> T.Text -> Either String CI.IniSection
+getSection ini name =
+    case CI.lookupSection name ini of
+        s | Seq.null s -> Left $ show name <> " section missing"
+          | Seq.length s /= 1 -> Left $ show name <> " section duplicated"
+          | otherwise -> Right $ Seq.index s 0
+
+getSingleValue :: CI.RawIni -> T.Text -> T.Text -> Either String T.Text
+getSingleValue ini sect name =
+    case CI.lookupInSection sect name ini of
+        s | Seq.length s == 0 ->
+            Left $ show name <> " key in section " <> (show sect) <> " missing"
+          | Seq.length s > 1 ->
+            Left $ show name <> " key in section " <> (show sect) <> " has too many values"
+          | otherwise -> Right $ T.strip $ Seq.index s 0
+
+parse :: (Read a) => T.Text -> (T.Text -> Either String T.Text) -> Either String a
+parse name getVal = do
+    val <- getVal name
+    case readMaybe (T.unpack val) of
+        Nothing -> Left $ "Could not parse " <> (T.unpack name) <> " field"
+        Just v -> Right v
+
+hostSectionPrefix :: T.Text
+hostSectionPrefix = "host:"
+
+findHostSectionNames :: CI.RawIni -> Seq.Seq T.Text
+findHostSectionNames ini =
+    let isHostSection = (hostSectionPrefix `T.isPrefixOf`)
+        secNames = CI.normalizedText <$> fst <$> CI.fromRawIni ini
+    in Seq.filter isHostSection secNames
+
+parseHostSection :: Config -> CI.RawIni -> T.Text -> Either String FuzzerTestHost
+parseHostSection baseConfig rawIni sec = do
+    csz <- (parse "chunk-size" $ getSingleValue rawIni sec) <|>
+           (Right $ configChunkSize baseConfig)
+
+    rPath <- (T.unpack <$> getSingleValue rawIni sec "runner-path") <|>
+             (Right $ configBinaryPath baseConfig)
+
+    return $ FuzzerTestHost { fuzzerTestHostname = T.unpack $ T.drop (T.length hostSectionPrefix) sec
+                            , fuzzerTestChunkSize = csz
+                            , fuzzerRunnerPath = rPath
+                            }
+
+rawConfigToFuzzerConfig :: Config -> CI.RawIni -> Either String FuzzerConfig
+rawConfigToFuzzerConfig baseConfig rawIni = do
+    let mainSection = "fuzzer"
+
+    arch <- T.unpack <$> getSingleValue rawIni mainSection "arch"
+
+    when (not $ arch `elem` allArchNames) $
+        fail $ "Invalid architecture name: " <> arch
+
+    opcodes <- (parse "opcodes" $ getSingleValue rawIni mainSection) <|>
+               (Right $ configOpcodes baseConfig)
+
+    strat <- (parse "strategy" $ getSingleValue rawIni mainSection) <|>
+             (Right $ configStrategy baseConfig)
+
+    level <- (parse "log-level" $ getSingleValue rawIni mainSection) <|>
+             (Right $ configLogLevel baseConfig)
+
+    -- Get all the "host:..." sections and parse those.
+    let hostSectionNames = findHostSectionNames rawIni
+
+    hosts <- mapM (parseHostSection baseConfig rawIni) hostSectionNames
+
+    return FuzzerConfig { fuzzerArchName = arch
+                        , fuzzerArchTestingHosts = F.toList hosts
+                        , fuzzerTestOpcodes = opcodes
+                        , fuzzerTestStrategy = strat
+                        , fuzzerMaximumLogLevel = level
+                        }
 
 data ArchImpl where
     ArchImpl :: forall proxy arch .
@@ -261,17 +347,31 @@ simpleFuzzerConfig cfg =
                  <*> (pure $ configLogLevel cfg)
 
 mkFuzzerConfig :: Config -> IO FuzzerConfig
-mkFuzzerConfig cfg = do
+mkFuzzerConfig cfg =
     -- Either load a configuration file from disk or build a simple one
     -- from command line arguments.
     case configPath cfg of
         Nothing -> case simpleFuzzerConfig cfg of
             Nothing -> usage >> IO.exitFailure
             Just fc -> return fc
-        Just _path -> do
+        Just path -> do
             -- Load a configuration from the specified path, then build
             -- a fuzzer config from that.
-            error "TODO"
+            result <- E.try $ loadConfig path defaultConfig
+            case result of
+                Left (e::E.SomeException) -> do
+                    putStrLn $ "Error loading config " <> show path <> ": " <> show e
+                    IO.exitFailure
+                Right (Left e) -> do
+                    putStrLn $ "Error loading config " <> show path <> ": " <> e
+                    IO.exitFailure
+                Right (Right fc) -> do
+                    -- The config must specify at least one host.
+                    when (null $ fuzzerArchTestingHosts fc) $ do
+                        putStrLn $ "Error loading config " <> show path <> ": no hosts specified"
+                        IO.exitFailure
+
+                    return fc
 
 main :: IO ()
 main = do
