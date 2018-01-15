@@ -1,0 +1,25 @@
+{
+  "fuzzer-host": "x",
+  "fuzzer-user": "y",
+  "testing-host": "helium",
+  "arch": "ppc32",
+  "entries": [
+    {
+      "type": "success",
+      "opcode": "ADD4",
+      "count": 12
+    },
+    {
+      "type": "failure",
+      "opcode": "ADD4",
+      "operands": "",
+      "state": [
+        {
+          "location": "r1",
+          "expected": "ex",
+          "actual": "ac"
+        }
+      ]
+    }
+  ]
+}
