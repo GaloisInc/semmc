@@ -256,8 +256,9 @@ consumeUntilEnd ::
 consumeUntilEnd pred k cfg = do
   mevent <- BC.readChan (lcChan cfg)
   case mevent of
-    Just event | pred event ->
-                 k event >> consumeUntilEnd pred k cfg
+    Just event -> do
+        when (pred event) $ k event
+        consumeUntilEnd pred k cfg
     _ -> return ()
 
 -- | A log event consumer that prints formatted log events to stderr.
