@@ -48,7 +48,7 @@ randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprs
-      mapM_ addRandomBV64 frs
+      -- mapM_ addRandomBV64 frs
       mapM_ addRandomBV vsrs
       mapM_ addZeroBV specialRegs
 --      St.modify' $ MapF.insert LocMem (V.ValueMem (B.replicate 64 0))
