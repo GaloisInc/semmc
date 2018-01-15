@@ -38,9 +38,7 @@ class Migration(migrations.Migration):
             name='TestFailure',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('location', models.CharField(max_length=128)),
-                ('expected_value', models.CharField(max_length=256)),
-                ('actual_value', models.CharField(max_length=256)),
+                ('opcode', models.CharField(max_length=128)),
                 ('batch', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='main.Batch')),
             ],
         ),

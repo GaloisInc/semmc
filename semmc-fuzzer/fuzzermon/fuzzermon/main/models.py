@@ -22,10 +22,9 @@ class TestSuccess(models.Model):
 class TestFailure(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
     opcode = models.CharField(max_length=128)
-    arguments = models.TextField()
 
-class TestFailure(models.Model):
-    batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
+class TestFailureState(models.Model):
+    test_failure = models.ForeignKey(TestFailure, on_delete=models.CASCADE)
     location = models.CharField(max_length=128)
     expected_value = models.CharField(max_length=256)
     actual_value = models.CharField(max_length=256)
