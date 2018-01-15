@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TupleSections #-}
 module Main where
 
 import qualified Control.Concurrent as C
@@ -14,6 +15,7 @@ import qualified Control.Exception as E
 import qualified Data.Ini.Config as CI
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
+import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 import           Data.List (intercalate)
 import           Data.Maybe (catMaybes)
@@ -51,6 +53,7 @@ import           SemMC.Architecture.Evaluate (evaluateInstruction)
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as C
 import qualified SemMC.Architecture.View as V
+import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.PPC32 as PPCS
 import qualified SemMC.Architecture.PPC32.Opcodes as PPCS
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
@@ -546,6 +549,27 @@ testRunner hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
             CE.TestSuccess tr -> do
               let Just (inst, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
               if (expectedFinal /= CE.resultContext tr)
-                 then L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: expected %s, got %s"
-                          (show inst) (show expectedFinal) (show $ CE.resultContext tr)
+                 then L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: diff: %s"
+                          (show inst) (show $ stateDiff proxy expectedFinal (CE.resultContext tr))
                  else L.logIO L.Info "SUCCESS"
+
+stateDiff :: (A.Architecture arch)
+          => proxy arch
+          -> V.ConcreteState arch
+          -> V.ConcreteState arch
+          -> [(Some (A.Location arch), (Maybe (Some V.Value), Maybe (Some V.Value)))]
+stateDiff _ a b =
+    let aKeys = S.fromList $ MapF.keys a
+        bKeys = S.fromList $ MapF.keys b
+        allKeys = S.union aKeys bKeys
+        pairs = [ (k,) <$>
+                  case k of
+                    Some v ->
+                      let aVal = MapF.lookup v a
+                          bVal = MapF.lookup v b
+                      in if aVal == bVal
+                         then Nothing
+                         else Just (Some <$> aVal, Some <$> bVal)
+                | k <- S.toList allKeys
+                ]
+    in catMaybes pairs
