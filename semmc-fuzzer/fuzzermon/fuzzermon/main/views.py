@@ -3,11 +3,14 @@ from django.http import JsonResponse
 from django.shortcuts import render
 import json
 
-class Batch(object):
+from main.models import *
+
+class BatchData(object):
     def __init__(self):
         self.fuzzer_host = None
         self.fuzzer_user = None
         self.testing_host = None
+        self.arch = None
         self.entries = []
 
     def __str__(self):
@@ -29,11 +32,12 @@ class StateValue(object):
 
 def parse_batch_json(body):
     raw = json.loads(body)
-    b = Batch()
+    b = BatchData()
 
     b.fuzzer_host = raw['fuzzer-host']
     b.fuzzer_user = raw['fuzzer-user']
     b.testing_host = raw['testing-host']
+    b.arch = raw['arch']
 
     b.entries = []
     for entry in raw['entries']:
@@ -59,7 +63,61 @@ def upload_batch(request):
     success = True
 
     try:
+        # Parse the uploaded test result batch.
         batch = parse_batch_json(request.body.decode('utf-8'))
+
+        # Insert the batch data into the database.
+        # Create/load arch
+        try:
+            arch = Arch.objects.get(name=batch.arch)
+        except Arch.DoesNotExist:
+            arch = Arch(name=batch.arch)
+            arch.save()
+
+        # Create/load host
+        try:
+            host = Host.objects.get(hostname=batch.testing_host)
+        except Host.DoesNotExist:
+            host = Host(hostname=batch.testing_host, arch=arch)
+            host.save()
+
+        # Create/load user
+        try:
+            user = User.objects.get(username=batch.fuzzer_user)
+        except User.DoesNotExist:
+            user = User(username=batch.fuzzer_user)
+            user.save()
+
+        # Create batch
+        b = Batch()
+        b.user = user
+        b.host = host
+        b.save()
+
+        # Add entries
+        for entry in batch.entries:
+            if entry.type == 'success':
+                e = TestSuccess()
+                e.count = entry.count
+                e.opcode = entry.opcode
+                e.batch = b
+                e.save()
+            elif entry.type == 'failure':
+                e = TestFailure()
+                e.opcode = entry.opcode
+                e.batch = b
+                e.save()
+
+                for sve in entry.state_values:
+                    sv = TestFailureState()
+                    sv.test_failure = e
+                    sv.location = sve.location
+                    sv.expected_value = sve.expected
+                    sv.actual_value = sve.actual
+                    sv.save()
+            else:
+                raise Exception("BUG: Invalid entry type %s" % (entry.type,))
+
     except TypeError as e:
         msg = "Type error: %s" % (e,)
         success = False
