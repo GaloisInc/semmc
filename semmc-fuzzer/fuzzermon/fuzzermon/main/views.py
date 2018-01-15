@@ -69,6 +69,9 @@ def upload_batch(request):
     except ValueError as e:
         msg = "Invalid value: %s" % (e,)
         success = False
+    except Exception as e:
+        msg = "Error: %s" % (e,)
+        success = False
 
     resp = {}
     if success:
