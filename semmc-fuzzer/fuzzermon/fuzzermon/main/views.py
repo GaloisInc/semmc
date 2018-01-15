@@ -3,13 +3,6 @@ from django.http import JsonResponse
 from django.shortcuts import render
 import json
 
-class BatchParseError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-
-    def __str__(self):
-        return self.msg
-
 class Batch(object):
     def __init__(self):
         self.fuzzer_host = None
@@ -75,9 +68,6 @@ def upload_batch(request):
         success = False
     except ValueError as e:
         msg = "Invalid value: %s" % (e,)
-        success = False
-    except BatchParseError as e:
-        msg = "Error: %s" % (e,)
         success = False
 
     resp = {}
