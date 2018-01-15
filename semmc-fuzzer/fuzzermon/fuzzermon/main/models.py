@@ -18,6 +18,7 @@ class Batch(models.Model):
 class TestSuccess(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
     opcode = models.CharField(max_length=128)
+    count = models.IntegerField()
 
 class TestFailure(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
