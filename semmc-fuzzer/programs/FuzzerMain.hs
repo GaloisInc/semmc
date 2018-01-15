@@ -38,6 +38,7 @@ import           Data.Parameterized.HasRepr (HasRepr)
 import qualified Data.Parameterized.List as L
 
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
+import qualified Lang.Crucible.Solver.Interface as SB
 
 import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction)
@@ -467,6 +468,7 @@ testRunner hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
       gen <- DA.createGen
       sym :: SB.SimpleBackend s
           <- SB.newSimpleBackend nonceGen
+      SB.stopCaching sym
 
       baseSet <- F.loadFormulas sym semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
