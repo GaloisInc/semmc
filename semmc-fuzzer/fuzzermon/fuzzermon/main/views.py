@@ -148,3 +148,10 @@ def index(request):
             }
 
     return render(request, 'main/index.html', context)
+
+def view_batch(request, batch_id):
+    b = Batch.objects.get(pk=batch_id)
+    context = {
+            'batch': b
+            }
+    return render(request, 'main/view_batch.html', context)

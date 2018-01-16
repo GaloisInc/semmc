@@ -1,22 +1,18 @@
 {% extends "main/site.html" %}
 
 {% block body %}
-<h1>Fuzzermon Status</h1>
+<h1>Batch View</h1>
 
 <div id="batchList">
     <div>
-        <span class="viewLink">&nbsp;
-        </span><span class="fuzzHost">Fuzzer Host
+        <span class="fuzzHost">Fuzzer Host
         </span><span class="testHost">Testing Host
         </span><span class="arch">Arch
         </span><span class="user">User
         </span><span class="uploadTime">Uploaded At</span>
     </div>
-    {% for batch in batches %}
     <div>
-        <span class="viewLink">
-            <a href="/batch/{{ batch.id }}/">View</a>
-        </span><span class="fuzzHost">
+        <span class="fuzzHost">
             {{ batch.fuzzer_host }}
         </span><span class="testHost">
             {{ batch.testing_host.hostname }}
@@ -26,8 +22,28 @@
             {{ batch.user.username }}
         </span><span class="uploadTime">
             {{ batch.submitted_at }}
-        </span>
     </div>
-    {% endfor %}
 </div>
+
+<h2>Passing Tests</h2>
+
+{% for entry in batch.testsuccess_set.all %}
+<li>{{ entry.opcode }} (successes: {{ entry.count }}) </li>
+{% endfor %}
+
+<h2>Failing Tests</h2>
+
+{% for entry in batch.testfailure_set.all %}
+<div>
+    <div>
+        {{ entry.opcode }} (operands: {{ entry.arguments }})
+    </div>
+    <ul>
+        {% for st in entry.testfailurestate_set.all %}
+        <li>{{ st.location }}: expected {{ st.expected_value }}, got {{ st.expected_value }}</li>
+        {% endfor %}
+    </ul>
+<div>
+{% endfor %}
+
 {% endblock %}
