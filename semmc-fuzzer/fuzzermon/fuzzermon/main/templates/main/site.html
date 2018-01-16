@@ -4,6 +4,11 @@
         <link rel="stylesheet" type="text/css" href="{% static 'main/style.css' %}" />
     </head>
     <body>
+        <div id="nav">
+        {% block nav %}Nav{% endblock %}
+        </div>
+        <div id="main">
         {% block body %}Body{% endblock %}
+        </div>
     </body>
 </html>

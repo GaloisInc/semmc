@@ -1,4 +1,22 @@
 body {
+    padding: 0;
+    margin: 0;
+}
+
+#main {
+    padding: 0.75em;
+}
+
+#nav {
+    background: #7acaff;
+    color: black;
+    padding: 0.5em;
+    font-size: 24px;
+    border-bottom: 1px solid black;
+}
+
+#nav a {
+    color: black;
 }
 
 #batchList span {
@@ -7,7 +25,7 @@ body {
     text-align: center;
     background: #eee;
     margin: 0px;
-    border-bottom: 1px solid #ccc;
+    border: 1px solid #ccc;
 }
 
 #batchList span.viewLink {
