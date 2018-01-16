@@ -1,9 +1,10 @@
 [fuzzer]
 arch = ppc32
-opcodes = SpecificOpcodes ["ADD4"]
-strategy = RoundRobin
+opcodes = AllOpcodes
+strategy = Randomized
+report-url = http://127.0.0.1:8000
 
 [host:helium.proj.galois.com]
 runner-path = /home/cygnus/bin/remote-runner.ppc32
-chunk-size = 10
-threads = 2
+chunk-size = 100
+threads = 1
