@@ -36,4 +36,8 @@ executable semmc-fuzzer
                        containers,
                        async,
                        config-ini >= 0.2.2,
-                       aeson
+                       aeson,
+                       unix,
+                       hostname,
+                       HTTP,
+                       bytestring

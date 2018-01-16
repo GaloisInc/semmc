@@ -11,12 +11,13 @@ module Main where
 import           Control.Applicative ((<|>))
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
-import           Control.Monad (replicateM_, replicateM, forM_, when, forM)
+import           Control.Monad (replicateM, forM_, when, forM)
 import qualified Control.Exception as E
 import qualified Data.Ini.Config as CI
 import qualified Data.Aeson as AE
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
+import qualified Data.ByteString.Lazy.Char8 as BSC8
 import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 import           Data.List (intercalate)
@@ -33,6 +34,9 @@ import qualified System.Exit as IO
 import qualified System.Environment as IO
 import qualified System.IO as IO
 import           System.Console.GetOpt
+import           System.Posix.User (getLoginName)
+import           Network.HostName (getHostName)
+import qualified Network.HTTP as H
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.Classes (ShowF(..))
@@ -45,7 +49,7 @@ import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Lang.Crucible.Solver.Interface as SB
 
 import qualified Dismantle.Arbitrary as DA
-import           Dismantle.Instruction (GenericInstruction)
+import           Dismantle.Instruction (GenericInstruction(Instruction))
 import qualified Dismantle.Instruction.Random as D
 
 import qualified SemMC.Log as L
@@ -426,7 +430,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
-          testRunner hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
+          testRunner mainConfig hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
                      allSemantics caseChan resChan
 
   CA.link runThread
@@ -461,10 +465,12 @@ testRunner :: forall proxy arch .
               , MapF.OrdF (A.Opcode arch (TemplatedOperand arch))
               , MapF.ShowF (A.Opcode arch (TemplatedOperand arch))
               , Show (GenericInstruction (A.Opcode arch) (A.Operand arch))
+              , ShowF (A.Opcode arch (A.Operand arch))
               , EnumF (A.Opcode arch (TemplatedOperand arch))
               , HasRepr (A.Opcode arch (A.Operand arch)) (L.List (A.OperandTypeRepr arch))
               )
-           => FuzzerTestHost
+           => FuzzerConfig
+           -> FuzzerTestHost
            -> proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> TestStrategy
@@ -472,7 +478,10 @@ testRunner :: forall proxy arch .
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
+testRunner mainConfig hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
+    user <- getLoginName
+    hostname <- getHostName
+
     let chunkSize = fuzzerTestChunkSize hostConfig
         opcodeSetSequence = case strat of
             Randomized ->
@@ -544,7 +553,34 @@ testRunner hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
 
                   -- Process results
                   L.logIO L.Info "Processing test results"
-                  replicateM_ (length cases) (handleResult caseMap)
+                  entries <- replicateM (length cases) (handleResult caseMap)
+
+                  -- If a report URL is configured, construct a batch of
+                  -- results and upload it to the reporting service.
+                  L.logIO L.Info $ "Report URL: " <> show (fuzzerReportURL mainConfig)
+                  case fuzzerReportURL mainConfig of
+                      Nothing -> return ()
+                      Just reportURL -> do
+                          let b = Batch { batchFuzzerHost = fuzzerTestHostname hostConfig
+                                        , batchFuzzerUser = user
+                                        , batchTestingHost = hostname
+                                        , batchArch = fuzzerArchName mainConfig
+                                        , batchEntries = catMaybes entries
+                                        }
+
+                          -- Submit batch to report URL
+                          let url = reportURL <> "/upload_batch"
+                              req = H.postRequestWithBody url "application/json" $
+                                    BSC8.unpack $ AE.encode b
+                          L.logIO L.Info $ "Request: " <> show req
+                          result <- E.try $ H.simpleHTTP req
+                          case result of
+                              Left (e::E.SomeException) ->
+                                  L.logIO L.Error $ "HTTP exception: " <> show e
+                              Right (Left e) ->
+                                  L.logIO L.Error $ "HTTP error: " <> show e
+                              Right (Right resp) ->
+                                  L.logIO L.Debug $ "HTTP response: " <> show resp
 
       C.writeChan caseChan Nothing
 
@@ -555,18 +591,44 @@ testRunner hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
           case res of
             CE.InvalidTag t -> do
               L.logIO L.Error $ printf "Invalid tag: %d" t
+              return Nothing
             CE.TestContextParseFailure -> do
               L.logIO L.Error "Test context parse failure"
+              return Nothing
             CE.TestSignalError nonce sig -> do
               L.logIO L.Error $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
+              return Nothing
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
-            CE.TestSuccess tr -> do
+              return Nothing
+            CE.TestSuccess tr ->
               let Just (inst, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
-              if (expectedFinal /= CE.resultContext tr)
-                 then L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: diff: %s"
-                          (show inst) (show $ stateDiff proxy expectedFinal (CE.resultContext tr))
-                 else L.logIO L.Info "SUCCESS"
+              in case inst of
+                  Instruction opcode operands ->
+                      if (expectedFinal /= CE.resultContext tr)
+                         then do
+                             let sd = stateDiff proxy expectedFinal (CE.resultContext tr)
+                                 mkState (loc, (Just expected, Just actual)) =
+                                     TestFailureState { testFailureLocation = show loc
+                                                      , testFailureExpected = show expected
+                                                      , testFailureActual = show actual
+                                                      }
+                                 mkState t =
+                                     error $ "BUG: mkState got invalid tuple " <> show t
+                             L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: diff: %s"
+                                  (show inst) (show sd)
+
+                             return $ Just $ Failure $
+                                 TestFailure { testFailureOpcode = showF opcode
+                                             , testFailureOperands = show operands
+                                             , testFailureStates = mkState <$> sd
+                                             }
+                         else do
+                             L.logIO L.Info "SUCCESS"
+                             return $ Just $ Success $
+                                 TestSuccess { testSuccessOpcode = showF opcode
+                                             , testSuccessCount = 1
+                                             }
 
 stateDiff :: (A.Architecture arch)
           => proxy arch
