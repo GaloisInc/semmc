@@ -19,6 +19,7 @@ from django.urls import path
 from main import views
 
 urlpatterns = [
+    path('', views.index),
     path('upload_batch', views.upload_batch),
     # path('admin/', admin.site.urls),
 ]

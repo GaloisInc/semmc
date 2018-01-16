@@ -139,3 +139,11 @@ def upload_batch(request):
         resp['message'] = msg
 
     return JsonResponse(resp)
+
+def index(request):
+    allBatches = Batch.objects.all()
+    context = {
+            'batches': allBatches,
+            }
+
+    return render(request, 'main/index.html', context)
