@@ -589,6 +589,9 @@ stateDiff _ a b =
                 ]
     in catMaybes pairs
 
+-- Note: the JSON encodings of the types below must match the decoder
+-- implementation in the 'fuzzermon' web service.
+
 data Batch =
     Batch { batchFuzzerHost :: String
           , batchFuzzerUser :: String
