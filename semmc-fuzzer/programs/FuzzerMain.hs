@@ -13,6 +13,7 @@ import qualified Control.Concurrent.Async as CA
 import           Control.Monad (replicateM_, replicateM, forM_, when, forM)
 import qualified Control.Exception as E
 import qualified Data.Ini.Config as CI
+import qualified Data.Aeson as AE
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.Set as S
@@ -573,3 +574,66 @@ stateDiff _ a b =
                 | k <- S.toList allKeys
                 ]
     in catMaybes pairs
+
+data Batch =
+    Batch { batchFuzzerHost :: String
+          , batchFuzzerUser :: String
+          , batchTestingHost :: String
+          , batchArch :: String
+          , batchEntries :: [BatchEntry]
+          }
+
+instance AE.ToJSON Batch where
+    toJSON b =
+        AE.object [ "fuzzer-host" AE..= batchFuzzerHost b
+                  , "fuzzer-user" AE..= batchFuzzerUser b
+                  , "testing-host" AE..= batchTestingHost b
+                  , "arch" AE..= batchArch b
+                  , "entries" AE..= batchEntries b
+                  ]
+
+data BatchEntry = Success TestSuccess
+                | Failure TestFailure
+
+instance AE.ToJSON BatchEntry where
+    toJSON (Success s) = AE.toJSON s
+    toJSON (Failure f) = AE.toJSON f
+
+data TestSuccess =
+    TestSuccess { testSuccessOpcode :: String
+                , testSuccessCount :: Int
+                }
+
+instance AE.ToJSON TestSuccess where
+    toJSON s =
+        AE.object [ "type" AE..= ("success"::T.Text)
+                  , "opcode" AE..= testSuccessOpcode s
+                  , "count" AE..= testSuccessCount s
+                  ]
+
+data TestFailure =
+    TestFailure { testFailureOpcode :: String
+                , testFailureOperands :: String
+                , testFailureStates :: [TestFailureState]
+                }
+
+instance AE.ToJSON TestFailure where
+    toJSON s =
+        AE.object [ "type" AE..= ("failure"::T.Text)
+                  , "opcode" AE..= testFailureOpcode s
+                  , "operands" AE..= testFailureOperands s
+                  , "state" AE..= testFailureStates s
+                  ]
+
+data TestFailureState =
+    TestFailureState { testFailureLocation :: String
+                     , testFailureExpected :: String
+                     , testFailureActual :: String
+                     }
+
+instance AE.ToJSON TestFailureState where
+    toJSON s =
+        AE.object [ "location" AE..= testFailureLocation s
+                  , "expected" AE..= testFailureExpected s
+                  , "actual" AE..= testFailureActual s
+                  ]
