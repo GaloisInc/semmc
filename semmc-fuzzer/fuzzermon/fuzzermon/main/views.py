@@ -76,10 +76,10 @@ def upload_batch(request):
 
         # Create/load host
         try:
-            host = Host.objects.get(hostname=batch.testing_host)
+            testing_host = Host.objects.get(hostname=batch.testing_host)
         except Host.DoesNotExist:
-            host = Host(hostname=batch.testing_host, arch=arch)
-            host.save()
+            testing_host = Host(hostname=batch.testing_host, arch=arch)
+            testing_host.save()
 
         # Create/load user
         try:
@@ -90,8 +90,9 @@ def upload_batch(request):
 
         # Create batch
         b = Batch()
+        b.testing_host = testing_host
+        b.fuzzer_host = batch.fuzzer_host
         b.user = user
-        b.host = host
         b.save()
 
         # Add entries
@@ -105,12 +106,12 @@ def upload_batch(request):
             elif entry.type == 'failure':
                 e = TestFailure()
                 e.opcode = entry.opcode
+                e.arguments = entry.operands
                 e.batch = b
                 e.save()
 
                 for sve in entry.state_values:
                     sv = TestFailureState()
-                    sv.arguments = sve.operands
                     sv.test_failure = e
                     sv.location = sve.location
                     sv.expected_value = sve.expected
