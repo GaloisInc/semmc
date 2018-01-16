@@ -347,16 +347,17 @@ test_synthesizeCandidate :: (U.HasLogCfg)
                          => IO (Maybe [P.SynthInstruction Toy])
 test_synthesizeCandidate = do
   let ops = (R32 Reg1 SL.:< R32 Reg2 SL.:< SL.Nil)
-  let instruction = AC.RI { AC.riInstruction = D.Instruction AddRr ops
-                         , AC.riOpcode = AddRr
+  let instruction = AC.RI { AC.riInstruction = D.Instruction SubRr ops
+                         , AC.riOpcode = SubRr
                          , AC.riOperands = ops
                          , AC.riLiteralLocs = MapF.empty
                          }
   let rstCfg = defaultRunSynToyCfg
-        { rstOpcodes = [ Some SubRr
-                       , Some NegR ]
+        { rstOpcodes = [ Some AddRr
+                       , Some NegR
+                       , Some MovRi ]
         , rstPseudoOpcodes = []
-        , rstTargetOpcodes = [ Some AddRr ] }
+        , rstTargetOpcodes = [ Some SubRr ] }
   runSynToy rstCfg "tests/data/test_synthesizeCandidate" $ do
     (res, _) <- withTimeout (S.synthesize instruction)
     return (fmap CP.cpInstructions res)
