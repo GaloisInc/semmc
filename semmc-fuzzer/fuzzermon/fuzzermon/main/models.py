@@ -13,7 +13,7 @@ class Host(models.Model):
 class Batch(models.Model):
     host = models.ForeignKey(Host, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    submitted_at = models.DateField(auto_now_add=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
 
 class TestSuccess(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
