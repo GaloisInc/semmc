@@ -11,7 +11,8 @@ class Host(models.Model):
     arch = models.ForeignKey(Arch, on_delete=models.CASCADE)
 
 class Batch(models.Model):
-    host = models.ForeignKey(Host, on_delete=models.CASCADE)
+    fuzzer_host = models.CharField(max_length=128)
+    testing_host = models.ForeignKey(Host, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     submitted_at = models.DateTimeField(auto_now_add=True)
 
