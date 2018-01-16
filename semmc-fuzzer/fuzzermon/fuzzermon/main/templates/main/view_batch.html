@@ -34,6 +34,9 @@
     <div>
         {{ entry.opcode }} (operands: {{ entry.arguments }})
     </div>
+    <div>
+        {{ entry.pretty }}
+    </div>
     <ul>
         {% for st in entry.testfailurestate_set.all %}
         <li>{{ st.location }}: expected {{ st.expected_value }}, got {{ st.expected_value }}</li>

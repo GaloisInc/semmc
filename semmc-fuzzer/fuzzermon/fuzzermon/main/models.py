@@ -24,6 +24,7 @@ class TestSuccess(models.Model):
 class TestFailure(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
     opcode = models.CharField(max_length=128)
+    pretty = models.CharField(max_length=256)
     arguments = models.TextField()
 
 class TestFailureState(models.Model):

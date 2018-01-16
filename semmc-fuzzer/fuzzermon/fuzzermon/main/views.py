@@ -21,6 +21,7 @@ class BatchEntry(object):
         self.type = None
         self.count = None
         self.opcode = None
+        self.pretty = None
         self.operands = None
         self.state_values = []
 
@@ -48,7 +49,8 @@ def parse_batch_json(body):
         if be.type == 'success':
             be.count = int(entry['count'])
         elif be.type == 'failure':
-            be.operands = entry['operands']
+            be.operands = entry['raw-operands']
+            be.pretty = entry['pretty']
 
             for sval in entry['state']:
                 be.state_values.append(StateValue(sval['location'], sval['expected'], sval['actual']))
@@ -106,6 +108,7 @@ def upload_batch(request):
             elif entry.type == 'failure':
                 e = TestFailure()
                 e.opcode = entry.opcode
+                e.pretty = entry.pretty
                 e.arguments = entry.operands
                 e.batch = b
                 e.save()

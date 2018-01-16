@@ -40,4 +40,5 @@ executable semmc-fuzzer
                        unix,
                        hostname,
                        HTTP,
-                       bytestring
+                       bytestring,
+                       pretty

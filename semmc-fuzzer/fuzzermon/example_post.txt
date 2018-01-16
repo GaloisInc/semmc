@@ -12,7 +12,8 @@
     {
       "type": "failure",
       "opcode": "ADD4",
-      "operands": "",
+      "raw-operands": "",
+      "pretty-print": "",
       "state": [
         {
           "location": "r1",

@@ -37,6 +37,7 @@ import           System.Console.GetOpt
 import           System.Posix.User (getLoginName)
 import           Network.HostName (getHostName)
 import qualified Network.HTTP as H
+import           Text.PrettyPrint.HughesPJ (render, Doc)
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.Classes (ShowF(..))
@@ -51,6 +52,7 @@ import qualified Lang.Crucible.Solver.Interface as SB
 import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction(Instruction))
 import qualified Dismantle.Instruction.Random as D
+import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Log as L
 import qualified SemMC.Formula as F
@@ -241,6 +243,7 @@ data ArchImpl where
              -> [Some ((A.Opcode arch) (A.Operand arch))]
              -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
              -> CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
+             -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
              -> ArchImpl
 
 ppc32Arch :: ArchImpl
@@ -250,6 +253,7 @@ ppc32Arch =
              PPCS.allOpcodes
              PPCS.allSemantics
              PPCS.testSerializer
+             PPC.ppInstruction
 
 knownArchs :: [ArchImpl]
 knownArchs =
@@ -260,7 +264,7 @@ allArchNames :: [String]
 allArchNames = archImplName <$> knownArchs
 
 archImplName :: ArchImpl -> String
-archImplName (ArchImpl n _ _ _ _) = n
+archImplName (ArchImpl n _ _ _ _ _) = n
 
 usage :: IO ()
 usage = do
@@ -413,7 +417,7 @@ startHostThreads logCfg fc = do
           mapM_ CA.wait (concat hostThreads)
 
 testHost :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
-testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer) = do
+testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer ppInst) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
@@ -431,7 +435,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
           testRunner mainConfig hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
-                     allSemantics caseChan resChan
+                     allSemantics ppInst caseChan resChan
 
   CA.link runThread
 
@@ -475,10 +479,11 @@ testRunner :: forall proxy arch .
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> TestStrategy
            -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
+           -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner mainConfig hostConfig proxy inputOpcodes strat semantics caseChan resChan = do
+testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseChan resChan = do
     user <- getLoginName
     hostname <- getHostName
 
@@ -620,7 +625,8 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics caseChan res
 
                              return $ Just $ Failure $
                                  TestFailure { testFailureOpcode = showF opcode
-                                             , testFailureOperands = show operands
+                                             , testFailureRawOperands = show operands
+                                             , testFailurePretty = render $ ppInst inst
                                              , testFailureStates = mkState <$> sd
                                              }
                          else do
@@ -692,7 +698,8 @@ instance AE.ToJSON TestSuccess where
 
 data TestFailure =
     TestFailure { testFailureOpcode :: String
-                , testFailureOperands :: String
+                , testFailureRawOperands :: String
+                , testFailurePretty :: String
                 , testFailureStates :: [TestFailureState]
                 }
 
@@ -700,7 +707,8 @@ instance AE.ToJSON TestFailure where
     toJSON s =
         AE.object [ "type" AE..= ("failure"::T.Text)
                   , "opcode" AE..= testFailureOpcode s
-                  , "operands" AE..= testFailureOperands s
+                  , "raw-operands" AE..= testFailureRawOperands s
+                  , "pretty" AE..= testFailurePretty s
                   , "state" AE..= testFailureStates s
                   ]
 
