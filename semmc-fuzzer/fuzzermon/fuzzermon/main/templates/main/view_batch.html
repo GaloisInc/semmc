@@ -25,12 +25,6 @@
     </div>
 </div>
 
-<h2>Passing Tests</h2>
-
-{% for entry in batch.testsuccess_set.all %}
-<li>{{ entry.opcode }} (successes: {{ entry.count }}) </li>
-{% endfor %}
-
 <h2>Failing Tests</h2>
 
 {% for entry in batch.testfailure_set.all %}
@@ -44,6 +38,12 @@
         {% endfor %}
     </ul>
 <div>
+{% endfor %}
+
+<h2>Passing Tests</h2>
+
+{% for entry in batch.testsuccess_set.all %}
+<li>{{ entry.opcode }} (successes: {{ entry.count }}) </li>
 {% endfor %}
 
 {% endblock %}
