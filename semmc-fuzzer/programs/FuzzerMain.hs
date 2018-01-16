@@ -8,6 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 module Main where
 
+import           Control.Applicative ((<|>))
 import qualified Control.Concurrent as C
 import qualified Control.Concurrent.Async as CA
 import           Control.Monad (replicateM_, replicateM, forM_, when, forM)
@@ -78,6 +79,7 @@ data FuzzerConfig =
                  , fuzzerTestOpcodes :: OpcodeMatch
                  , fuzzerTestStrategy :: TestStrategy
                  , fuzzerMaximumLogLevel :: L.LogLevel
+                 , fuzzerReportURL :: Maybe String
                  }
                  deriving (Show)
 
@@ -94,6 +96,7 @@ data Arg =
     | Help
     | Strategy String
     | RunnerPath FilePath
+    | ReportURL String
     | Arch String
     | Host String
     | OpcodeList String
@@ -113,6 +116,9 @@ arguments =
     , Option "a" ["arch"] (ReqArg Arch "ARCHNAME")
       ("The name of the architecture to test (choices: " <>
       intercalate ", " allArchNames <> ")")
+
+    , Option "u" ["report-url"] (ReqArg ReportURL "URL")
+      "The base URL of a Fuzzermon instance to use for reporting results"
 
     , Option "t" ["threads"] (ReqArg Arch "NUM")
       ("The number of local testing threads to run against the remote host (default: " <>
@@ -159,6 +165,7 @@ data Config =
            , configChunkSize  :: Int
            , configLogLevel   :: L.LogLevel
            , configNumThreads :: Int
+           , configReportURL  :: Maybe String
            }
 
 defaultConfig :: Config
@@ -173,6 +180,7 @@ defaultConfig =
            , configChunkSize  = 1000
            , configLogLevel   = L.Info
            , configNumThreads = 1
+           , configReportURL  = Nothing
            }
 
 loadConfig :: FilePath -> IO (Either String FuzzerConfig)
@@ -185,12 +193,14 @@ hostSectionPrefix = "host:"
 
 parser :: CI.IniParser FuzzerConfig
 parser = do
-    (arch, op, strat, ll) <- CI.section "fuzzer" $ do
+    (arch, op, strat, ll, url) <- CI.section "fuzzer" $ do
         arch  <- T.unpack <$> CI.field "arch"
         op    <- CI.fieldDefOf "opcodes" CI.readable (configOpcodes defaultConfig)
         strat <- CI.fieldDefOf "strategy" CI.readable (configStrategy defaultConfig)
+        url   <- (Just <$> CI.field "report-url") <|>
+                 (return $ T.pack <$> configReportURL defaultConfig)
         ll    <- CI.fieldDefOf "log-level" CI.readable (configLogLevel defaultConfig)
-        return (arch, op, strat, ll)
+        return (arch, op, strat, ll, url)
 
     when (not $ arch `elem` allArchNames) $
         fail $ "Invalid architecture name: " <> arch
@@ -207,6 +217,7 @@ parser = do
                         , fuzzerTestOpcodes = op
                         , fuzzerTestStrategy = strat
                         , fuzzerMaximumLogLevel = ll
+                        , fuzzerReportURL = T.unpack <$> url
                         }
 
 data ArchImpl where
@@ -276,6 +287,8 @@ configFromArgs = do
                     return $ c { configHost = Just h }
                 RunnerPath p ->
                     return $ c { configBinaryPath = p }
+                ReportURL u ->
+                    return $ c { configReportURL = Just u }
                 Arch a ->
                     return $ c { configArchName = Just a }
                 ChunkSize s -> do
@@ -312,6 +325,7 @@ simpleFuzzerConfig cfg =
                  <*> (pure $ configOpcodes cfg)
                  <*> (pure $ configStrategy cfg)
                  <*> (pure $ configLogLevel cfg)
+                 <*> (pure $ configReportURL cfg)
 
 mkFuzzerConfig :: Config -> IO FuzzerConfig
 mkFuzzerConfig cfg =
