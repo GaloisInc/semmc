@@ -3,24 +3,31 @@
 {% block body %}
 <h1>Fuzzermon Status</h1>
 
-<table border="1">
-    <tr>
-        <th>&nbsp;</th>
-        <th>Fuzzer Host</th>
-        <th>Testing Host</th>
-        <th>Arch</th>
-        <th>User</th>
-        <th>Uploaded At</th>
-    </tr>
+<div id="batchList">
+    <div>
+        <span class="viewLink">&nbsp;
+        </span><span class="fuzzHost">Fuzzer Host
+        </span><span class="testHost">Testing Host
+        </span><span class="arch">Arch
+        </span><span class="user">User
+        </span><span class="uploadTime">Uploaded At</span>
+    </div>
     {% for batch in batches %}
-    <tr>
-        <td><a href="">View</a></td>
-        <td><tt>{{ batch.fuzzer_host }}</tt></td>
-        <td><tt>{{ batch.testing_host.hostname }}</tt></td>
-        <td><tt>{{ batch.testing_host.arch.name }}</tt></td>
-        <td><tt>{{ batch.user.username }}</tt></td>
-        <td><tt>{{ batch.submitted_at }}</tt></td>
-    </tr>
+    <div>
+        <span class="viewLink">
+            <a href="">View</a>
+        </span><span class="fuzzHost">
+            {{ batch.fuzzer_host }}
+        </span><span class="testHost">
+            {{ batch.testing_host.hostname }}
+        </span><span class="arch">
+            {{ batch.testing_host.arch.name }}
+        </span><span class="user">
+            {{ batch.user.username }}
+        </span><span class="uploadTime">
+            {{ batch.submitted_at }}
+        </span>
+    </div>
     {% endfor %}
-</table>
+</div>
 {% endblock %}

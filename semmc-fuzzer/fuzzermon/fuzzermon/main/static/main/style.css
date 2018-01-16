@@ -1,2 +1,35 @@
 body {
 }
+
+#batchList span {
+    display: inline-block;
+    padding: 0.5em;
+    text-align: center;
+    background: #eee;
+    margin: 0px;
+    border-bottom: 1px solid #ccc;
+}
+
+#batchList span.viewLink {
+    width: 3em;
+}
+
+#batchList span.testHost {
+    width: 13em;
+}
+
+#batchList span.fuzzHost {
+    width: 13em;
+}
+
+#batchList span.arch {
+    width: 4em;
+}
+
+#batchList span.user {
+    width: 10em;
+}
+
+#batchList span.uploadTime {
+    width: 13em;
+}
