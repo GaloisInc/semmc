@@ -110,6 +110,7 @@ def upload_batch(request):
 
                 for sve in entry.state_values:
                     sv = TestFailureState()
+                    sv.arguments = sve.operands
                     sv.test_failure = e
                     sv.location = sve.location
                     sv.expected_value = sve.expected
