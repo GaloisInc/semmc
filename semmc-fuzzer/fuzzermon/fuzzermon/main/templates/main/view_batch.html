@@ -32,7 +32,7 @@
 {% for entry in batch.testfailure_set.all %}
 <div>
     <div>
-        {{ entry.opcode }} (operands: {{ entry.arguments }})
+        {{ entry.opcode.name }} (operands: {{ entry.arguments }})
     </div>
     <div>
         {{ entry.pretty }}
@@ -48,7 +48,7 @@
 <h2>Passing Tests</h2>
 
 {% for entry in batch.testsuccess_set.all %}
-<li>{{ entry.opcode }} (successes: {{ entry.count }}) </li>
+<li>{{ entry.opcode.name }} (successes: {{ entry.count }}) </li>
 {% endfor %}
 
 {% endblock %}

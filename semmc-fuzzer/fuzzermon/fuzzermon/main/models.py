@@ -16,14 +16,18 @@ class Batch(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     submitted_at = models.DateTimeField(auto_now_add=True)
 
+class Opcode(models.Model):
+    name = models.CharField(max_length=128)
+    arch = models.ForeignKey(Arch, on_delete=models.CASCADE)
+
 class TestSuccess(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
-    opcode = models.CharField(max_length=128)
+    opcode = models.ForeignKey(Opcode, on_delete=models.CASCADE)
     count = models.IntegerField()
 
 class TestFailure(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
-    opcode = models.CharField(max_length=128)
+    opcode = models.ForeignKey(Opcode, on_delete=models.CASCADE)
     pretty = models.CharField(max_length=256)
     arguments = models.TextField()
 

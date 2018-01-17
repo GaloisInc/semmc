@@ -99,15 +99,23 @@ def upload_batch(request):
 
         # Add entries
         for entry in batch.entries:
+            try:
+                opcode = Opcode.objects.get(name=entry.opcode, arch=arch)
+            except Opcode.DoesNotExist:
+                opcode = Opcode()
+                opcode.name = entry.opcode
+                opcode.arch = arch
+                opcode.save()
+
             if entry.type == 'success':
                 e = TestSuccess()
                 e.count = entry.count
-                e.opcode = entry.opcode
+                e.opcode = opcode
                 e.batch = b
                 e.save()
             elif entry.type == 'failure':
                 e = TestFailure()
-                e.opcode = entry.opcode
+                e.opcode = opcode
                 e.pretty = entry.pretty
                 e.arguments = entry.operands
                 e.batch = b
