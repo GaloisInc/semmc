@@ -566,9 +566,9 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                   case fuzzerReportURL mainConfig of
                       Nothing -> return ()
                       Just reportURL -> do
-                          let b = Batch { batchFuzzerHost = fuzzerTestHostname hostConfig
+                          let b = Batch { batchFuzzerHost = hostname
                                         , batchFuzzerUser = user
-                                        , batchTestingHost = hostname
+                                        , batchTestingHost = fuzzerTestHostname hostConfig
                                         , batchArch = fuzzerArchName mainConfig
                                         , batchEntries = catMaybes entries
                                         }
