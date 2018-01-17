@@ -1,7 +1,7 @@
 {% extends "main/site.html" %}
 
 {% block nav %}
-Fuzzermon
+<a href="/">Fuzzermon</a>
 {% endblock %}
 
 {% block body %}
@@ -12,13 +12,15 @@ Fuzzermon
     </tr>
     {% for arch in archs %}
     <tr>
-        <td>
-            <a href="">{{ arch.name }}</a>
+        <td valign="top">
+            <span class="mono">
+                <a href="/arch/{{ arch.id }}/">{{ arch.name }}</a>
+            </span>
         </td>
         <td>
             <ul>
                 {% for host in arch.host_set.all %}
-                <li>{{ host.hostname }}</li>
+                <li><span class="mono">{{ host.hostname }}</span></li>
                 {% endfor %}
             </ul>
         </td>

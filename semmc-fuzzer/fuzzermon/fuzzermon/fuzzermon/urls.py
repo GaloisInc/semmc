@@ -20,6 +20,8 @@ from main import views
 
 urlpatterns = [
     path('', views.arch_list),
+    path('arch/<int:arch_id>/', views.view_arch),
+    path('opcode/<int:opcode_id>/', views.view_opcode),
     path('upload_batch', views.upload_batch),
     # path('admin/', admin.site.urls),
 ]

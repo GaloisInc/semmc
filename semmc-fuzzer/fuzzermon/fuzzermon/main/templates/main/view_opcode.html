@@ -1,0 +1,41 @@
+{% extends "main/site.html" %}
+
+{% block nav %}
+<a href="/">Fuzzermon</a>
+  &raquo; <span class="mono"><a href="/arch/{{ opcode.arch.id }}/">{{ opcode.arch.name }}</a></span>
+  &raquo; <span class="mono"><a href="/opcode/{{ opcode.id }}/">{{ opcode.name }}</a></span>
+{% endblock %}
+
+{% block body %}
+<h1>Opcode: <span class="mono">{{ opcode.name }}</span></h1>
+
+<table>
+    <tr>
+        <th>Instruction</th>
+        <th>State Mismatches</th>
+    </tr>
+    {% for failure in failures %}
+    <tr>
+        <td valign="top">
+            <span class="mono">{{ failure.pretty }}</span>
+        </td>
+        <td>
+            <table>
+                <tr>
+                    <th>Location</th>
+                    <th>Expected</th>
+                    <th>Actual</th>
+                </tr>
+                {% for state in failure.testfailurestate_set.all %}
+                <tr>
+                    <td><span class="mono">{{ state.location }}</span></td>
+                    <td>{{ state.expected_value }}</td>
+                    <td>{{ state.actual_value }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </td>
+    <tr>
+    {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "main/site.html" %}
+
+{% block nav %}
+<a href="/">Fuzzermon</a>
+  &raquo; <span class="mono"><a href="/arch/{{ arch.id }}/">{{ arch.name }}</a></span>
+{% endblock %}
+
+{% block body %}
+<h1>Opcode Tests</h1>
+
+<table>
+    <tr>
+        <th>Opcode</th>
+        <th>Failures</th>
+        <th>Successes</th>
+    </tr>
+    {% for status in opcode_statuses %}
+    <tr>
+        <td>
+            <span class="mono">
+                <a href="/opcode/{{ status.opcode.id }}/">{{ status.opcode.name }}</a>
+            </span>
+        </td>
+        <td>
+            {{ status.num_failures }}
+        </td>
+        <td>
+            {{ status.num_successes }}
+        </td>
+    <tr>
+    {% endfor %}
+</table>
+{% endblock %}

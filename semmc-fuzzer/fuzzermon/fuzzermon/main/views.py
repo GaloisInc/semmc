@@ -167,3 +167,39 @@ def arch_list(request):
             'archs': al
             }
     return render(request, 'main/index.html', context)
+
+def view_arch(request, arch_id):
+    a = Arch.objects.get(pk=arch_id)
+
+    opcodes = Opcode.objects.filter(arch__id=arch_id).order_by('name')
+    opcode_results = []
+
+    for opcode in opcodes:
+        num_failures = TestFailure.objects.filter(opcode__id=opcode.id).count()
+        num_successes = TestSuccess.objects.filter(opcode__id=opcode.id).count()
+
+        results = {
+                'opcode': opcode,
+                'num_failures': num_failures,
+                'num_successes': num_successes,
+                }
+        opcode_results.append(results)
+
+    context = {
+            'arch': a,
+            'opcode_statuses': opcode_results,
+            }
+
+    return render(request, 'main/view_arch.html', context)
+
+def view_opcode(request, opcode_id):
+    o = Opcode.objects.get(pk=opcode_id)
+
+    failures = TestFailure.objects.filter(opcode__id=o.id)
+
+    context = {
+            'opcode': o,
+            'failures': failures,
+            }
+
+    return render(request, 'main/view_opcode.html', context)
