@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -50,7 +52,7 @@ import SemMC.Architecture.Value
 --
 -- A
 --
--- > Slice a b :: Slice m n
+-- > Slice m n a b :: Slice m n
 --
 -- is a view into the @m@ contiguous bits in the range @[a,b)@ in an
 -- @n@-bit bit vector. This is a little endian view, in that the bits
@@ -59,13 +61,13 @@ import SemMC.Architecture.Value
 --
 -- For example
 --
--- > Slice 1 3 :: Slice 2 5
+-- > Slice 2 5 1 3 :: Slice 2 5
 --
 -- refers to bits 1 and 2 in a 5-bit bv with little-endian bits 0, 1,
 -- 2, 3, and 4. So,
 --
 -- > :set -XBinaryLiterals
--- > peekSlice (Slice (knownNat :: NatRepr 1) (knownNat :: NatRepr 3) :: Slice 2 5) (ValueBV (0b00010 :: W.W 4))
+-- > peekSlice (Slice knownNat knownNat (knownNat :: NatRepr 1) (knownNat :: NatRepr 3) :: Slice 2 5) (ValueBV (0b00010 :: W.W 4))
 -- > == ValueBV (0b01 :: W.W 2)
 --
 -- whereas a big-endian slice would have value @0b00@ here.
@@ -79,7 +81,7 @@ data Slice (m :: Nat) (n :: Nat) where
 --
 -- E.g.
 --
--- > pattern F12 = View (Slice 0 64 :: Slice 64) VSX12 :: View PPC 64
+-- > pattern F12 = View (Slice 64 64 0 64 :: Slice 64 64) VSX12 :: View PPC 64
 --
 -- Note that (non-immediate) operands are like 'View's, not
 -- 'Location's.
@@ -172,6 +174,11 @@ data SemanticView arch =
                           -- distance between two values of this semantic view.
                           }
 
+instance (P.ShowF (L.Location arch), P.ShowF (View arch)) => Show (SemanticView arch) where
+  show SemanticView{..} =
+    -- We can't show the 'Diff' function.
+    printf "SemanticView { semvView = %s, semvCongruentViews = %s }"
+    (show semvView) (show semvCongruentViews)
 
 type Parser = P.Parsec String String
 

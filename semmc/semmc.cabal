@@ -52,6 +52,7 @@ library
                        SemMC.Stochastic.Instantiate
                        SemMC.Stochastic.Monad
                        SemMC.Stochastic.Pseudo
+                       SemMC.Stochastic.RvwpOptimization
                        SemMC.Stochastic.Statistics
                        SemMC.Stochastic.Strata
                        SemMC.Stochastic.Synthesize

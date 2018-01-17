@@ -122,6 +122,10 @@ prefixError prefix act = E.catchError act (E.throwError . mappend prefix)
 fromMaybeError :: (E.MonadError e m) => e -> Maybe a -> m a
 fromMaybeError err = maybe (E.throwError err) return
 
+-- | Utility function for lifting an 'Either.Left' into a 'MonadError'
+fromLeftError :: (E.MonadError String m) => String -> Either String a -> m a
+fromLeftError err = either (E.throwError . (++) err . (++) " :: ") return
+
 -- ** Parsing operands
 
 -- | Data about the operands pertinent after parsing: their name and their type.
@@ -132,21 +136,21 @@ buildOperandList' :: forall arch tps
                    . (A.Architecture arch)
                   => A.ShapeRepr arch tps
                   -> SC.SExpr Atom
-                  -> Maybe (SL.List (OpData arch) tps)
+                  -> Either String (SL.List (OpData arch) tps)
 buildOperandList' rep atm =
   case rep of
     SL.Nil ->
       case atm of
-        SC.SNil -> Just SL.Nil
-        _ -> Nothing
+        SC.SNil -> Right SL.Nil
+        _ -> Left $ "Expected Nil but got " ++ show atm
     r SL.:< rep' ->
       case atm of
-        SC.SNil -> Nothing
-        SC.SAtom _ -> Nothing
+        SC.SNil -> Left $ "Expected entry but got Nil"
+        SC.SAtom _ -> Left $ "Expected SCons but got SAtom: " ++ show atm
         SC.SCons s rest -> do
-          -- This is in the Maybe monad.
+          -- This is in the Either monad.
           let SC.SCons (SC.SAtom (AIdent operand)) (SC.SAtom (AQuoted ty)) = s
-          when (A.operandTypeReprSymbol (Proxy @arch) r /= ty) Nothing
+          when (A.operandTypeReprSymbol (Proxy @arch) r /= ty) $ Left $ "unknown reference: " ++ show ty
           rest' <- buildOperandList' rep' rest
           let tyRepr = A.shapeReprToTypeRepr (Proxy @arch) r
           return $ (OpData operand tyRepr) SL.:< rest'
@@ -820,8 +824,10 @@ readFormula' sym env repr text = do
 
   -- Build the operand list from the given s-expression, validating that it
   -- matches the correct shape as we go.
+  let strShape = A.showShapeRepr (Proxy @arch) repr
   operands :: SL.List (OpData arch) sh
-    <- fromMaybeError ("invalid operand structure: " ++ show opsRaw) (buildOperandList' repr opsRaw)
+    <- fromLeftError ("invalid operand structure (expected " ++ strShape ++ ") from " ++ show opsRaw)
+                    (buildOperandList' repr opsRaw)
 
   inputs :: [Some (Parameter arch sh)]
     <- readInputs operands inputsRaw

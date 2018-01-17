@@ -21,7 +21,7 @@ module SemMC.Stochastic.Synthesize
   ( -- * API
     synthesize
     -- * Exports for testing
-  , computeTargetResults
+  , mkTargetData
   , wrongPlacePenalty
   , weighCandidate
   ) where
@@ -67,6 +67,7 @@ import           SemMC.Stochastic.Pseudo
                  , synthInsnToActual
                  )
 import qualified SemMC.Stochastic.IORelation as I
+import qualified SemMC.Stochastic.RvwpOptimization as R
 import qualified SemMC.Util as U
 import qualified UnliftIO as U
 
@@ -148,6 +149,31 @@ computeCandidateResults candidate tests = do
   resultIndex <- runConcreteTests (map snd indexedTests)
   return (indexedTests, resultIndex)
 
+-- | Common data for the STOKE target instruction.
+--
+-- This is essentially reader state for STOKE, but we pass it
+-- explicitly.
+data TargetData arch = TargetData
+  { tdTarget :: AC.RegisterizedInstruction arch
+  , tdOutMasks :: [V.SemanticView arch]
+  , tdTargetTests :: [CE.TestCase (V.ConcreteState arch) (Instruction arch)]
+  , tdTargetResults :: CE.ResultIndex (V.ConcreteState arch)
+  }
+
+-- | Initialize the target data for the given target instruction.
+mkTargetData :: SynC arch
+             => AC.RegisterizedInstruction arch -> Syn t arch (TargetData arch)
+mkTargetData target = do
+  tests <- askTestCases
+  (targetTests, targetResults) <- computeTargetResults target tests
+  outMasks <- getOutMasks (AC.riInstruction target)
+  let td = TargetData { tdTarget = target
+                      , tdOutMasks = outMasks
+                      , tdTargetTests = targetTests
+                      , tdTargetResults = targetResults }
+  return td
+
+-- | STOKE.
 mcmcSynthesizeOne :: forall arch t
                    . (SynC arch, U.HasCallStack)
                   => AC.RegisterizedInstruction arch
@@ -160,17 +186,15 @@ mcmcSynthesizeOne target = do
   let progLen = 8
   candidate <- emptyCandidate progLen
   -- let candidate = fromList [Just $ actualInsnToSynth @arch target]
-
-  tests <- askTestCases
-  (targetTests, targetResults) <- computeTargetResults target tests
-  cost0 <- weighCandidate target targetTests targetResults candidate
+  td <- mkTargetData target
+  cost0 <- weighCandidate td candidate
   let round0 = 0
   let mCanOpt0 = Nothing
-  evolve round0 cost0 mCanOpt0 targetTests targetResults candidate
+  evolve td round0 cost0 mCanOpt0 candidate
   where
     -- | Evolve the candidate until it agrees with the target on the
     -- tests.
-    evolve k 0 mCanOpt _ _ candidate = do
+    evolve _ k 0 mCanOpt candidate = do
       U.logM U.Debug "done evolving!"
       let (optRound, numRvwps) = case mCanOpt of
             -- If the rvwp optimization never applied, then say it
@@ -187,23 +211,65 @@ mcmcSynthesizeOne target = do
         , printf "rvwp speedup is %.2f."
           (fromIntegral k / fromIntegral optRound :: Double) ]
       return (k, candidate)
-    evolve !k cost mCanOpt targetTests targetResults candidate = do
+    evolve td@TargetData{..} !k cost mCanOpt candidate = do
       candidate' <- perturb candidate
       if candidate == candidate'
-      then evolve (k+1) cost mCanOpt targetTests targetResults candidate
-      else do
+        then evolve td (k+1) cost mCanOpt candidate
+        else do
         U.logM U.Debug $ "candidate:\n"++prettyCandidate candidate
         U.logM U.Debug $ "candidate':\n"++prettyCandidate candidate'
         U.logM U.Debug $ "cost = " ++ show cost
         -- liftIO $ showDiff candidate candidate'
-        (cost'', mNumRvwps, candidate'') <-
-          chooseNextCandidate target targetTests targetResults
-            candidate cost candidate'
+        (cost'', mRvwpss, candidate'') <-
+          chooseNextCandidate td candidate cost candidate'
+
+        let mRvwps = R.combineDeltas <$> mRvwpss
+        let mNumRvwps = R.checkIfRvwpOptimizationApplies =<< mRvwps
+
         -- Compute @Just (round, numRvwps)@ for the min round where
-        -- the rvwp optimization applies.
+        -- the rvwp optimization applies. This is just for the
+        -- purposes of collecting statistics about when the
+        -- optimization applies and how much it buys us. If we are
+        -- actually applying the optimization, then this value won't
+        -- be very useful, since we'll just finish the first time the
+        -- optimization applies.
         let mCanOpt' = (k+1,) <$> mNumRvwps
         let !mCanOpt'' = mCanOpt <|> mCanOpt'
-        evolve (k+1) cost'' mCanOpt'' targetTests targetResults candidate''
+
+        (cost''', candidate''') <- case mNumRvwps of
+          Just 1 -> do
+            let Just rvwps = mRvwps
+            logCfg <- U.getLogCfgM
+            let mEpilogue = U.withLogCfg logCfg $ R.fixRvwps 1 tdOutMasks rvwps
+            case mEpilogue of
+              Nothing -> return (cost'', candidate'')
+              Just epilogue -> do
+                -- Although this fixed candidate is longer than
+                -- @progLen@, none of the code that manipulates
+                -- candidates is actually aware of the fixed
+                -- size @progLen@.
+                let fixedCandidate = candidate'' S.>< S.fromList (map Just epilogue)
+                fixedCost <- weighCandidate td fixedCandidate
+                when (fixedCost /= 0) $ do
+                  let msg = unlines
+                        [ "The rvwp optimization failed!"
+                        , printf "Cost unfixed = %f" cost''
+                        , printf "Cost fixed = %f" fixedCost
+                        , printf "Out masks: %s" (show tdOutMasks)
+                        , printf "Rvwp deltas: %s" (show rvwps)
+                        , printf "Target: %s" (show $ AC.riInstruction target)
+                        , printf "Rvwp candidate: %s" (show candidate'')
+                        , printf "Fixed candidate: %s" (show fixedCandidate) ]
+                  U.logM U.Error msg
+                  U.throwIO (userError msg)
+                return (fixedCost, fixedCandidate)
+          Just numRvwps -> do
+            U.logM U.Warn $
+              printf "The rvwp optimization applies with %i > 1 rvwps!" numRvwps
+            return (cost'', candidate'')
+          _ -> return (cost'', candidate'')
+
+        evolve td (k+1) cost''' mCanOpt'' candidate'''
 {-
 import qualified Data.List as L
 import Control.Monad
@@ -224,22 +290,19 @@ import Control.Monad
 --
 -- Returns infinity if the candidate crashes any tests.
 weighCandidate :: SynC arch
-               => AC.RegisterizedInstruction arch
-               -> [CE.TestCase (V.ConcreteState arch) (Instruction arch)]
-               -> CE.ResultIndex (V.ConcreteState arch)
+               => TargetData arch
                -> Candidate arch
                -> Syn t arch Double
-weighCandidate target targetTests targetResults candidate = do
-  (testPairs, candidateResults) <- computeCandidateResults candidate targetTests
-  outMasks <- getOutMasks (AC.riInstruction target)
+weighCandidate td@TargetData{..} candidate = do
+  (testPairs, candidateResults) <- computeCandidateResults candidate tdTargetTests
   -- The @sequence@ collapses the 'Maybe's.
   mRvwpss <- sequence <$>
-    mapM (compareTargetToCandidate targetResults candidateResults outMasks) testPairs
+    mapM (compareTargetToCandidate td candidateResults) testPairs
   let weight = case mRvwpss of
         -- Infinity. A candidate that causes test failures is
         -- undesirable.
         Nothing -> 1 / 0
-        Just rvwpss -> sum $ map rdWeight $ combineDeltas rvwpss
+        Just rvwpss -> sum $ map R.rdWeight $ R.combineDeltas rvwpss
   return weight
 
 prettyCandidate :: Show (SynthInstruction arch)
@@ -263,19 +326,16 @@ prettyCandidate = unlines . map (("    "++) . show) . catMaybes . F.toList
 -- Without the dubious optimization, this function would basically
 -- just be a call to 'weighCandidate' and then a random choice.
 chooseNextCandidate :: (SynC arch, U.HasCallStack)
-                    => AC.RegisterizedInstruction arch
-                    -> [CE.TestCase (V.ConcreteState arch) (Instruction arch)]
-                    -> CE.ResultIndex (V.ConcreteState arch)
+                    => TargetData arch
                     -> Candidate arch
                     -> Double
                     -> Candidate arch
-                    -> Syn t arch (Double, Maybe Int, Candidate arch)
-chooseNextCandidate target targetTests targetResults oldCandidate oldCost newCandidate = do
+                    -> Syn t arch (Double, Maybe [[R.RvwpDelta arch]], Candidate arch)
+chooseNextCandidate td@TargetData{..} oldCandidate oldCost newCandidate = do
   gen <- askGen
   threshold <- liftIO $ D.uniformR (0::Double, 1) gen
   U.logM U.Debug $ printf "threshold = %f" threshold
-  (testPairs0, newCandidateResults) <- computeCandidateResults newCandidate targetTests
-  !outMasks <- getOutMasks (AC.riInstruction target)
+  (testPairs0, newCandidateResults) <- computeCandidateResults newCandidate tdTargetTests
   let newCost0 = 0
   let rvwpss0 = []
   let go newCost rvwpss testPairs
@@ -287,16 +347,15 @@ chooseNextCandidate target targetTests targetResults oldCandidate oldCost newCan
             return (oldCost, Nothing, oldCandidate)
         | [] <- testPairs = do
             U.logM U.Debug "accept"
-            let mNumRvwps = checkIfRvwpOptimizationApplies rvwpss
-            return (newCost, mNumRvwps, newCandidate)
+            return (newCost, Just rvwpss, newCandidate)
         | (testPair:testPairs') <- testPairs = do
             -- U.logM U.Debug $ printf "%f %f" cost threshold
-            mRvwps <- compareTargetToCandidate targetResults newCandidateResults outMasks testPair
+            mRvwps <- compareTargetToCandidate td newCandidateResults testPair
             case mRvwps of
               Nothing -> return (oldCost, Nothing, oldCandidate)
               Just rvwps -> do
                 -- U.logM U.Debug (show dcost)
-                let newCost' = newCost + sum (map rdWeight rvwps)
+                let newCost' = newCost + sum (map R.rdWeight rvwps)
                 let rvwpss' = rvwps : rvwpss
                 go newCost' rvwpss' testPairs'
   go newCost0 rvwpss0 testPairs0
@@ -313,15 +372,14 @@ chooseNextCandidate target targetTests targetResults oldCandidate oldCost newCan
 -- then the sum of the weights of the deltas.
 compareTargetToCandidate :: forall arch t.
                             SynC arch
-                         => CE.ResultIndex (V.ConcreteState arch)
+                         => TargetData arch
                          -> CE.ResultIndex (V.ConcreteState arch)
-                         -> [V.SemanticView arch]
                          -> ( CE.TestCase (V.ConcreteState arch) (Instruction arch)
                             , CE.TestCase (V.ConcreteState arch) (Instruction arch) )
-                         -> Syn t arch (Maybe ([RvwpDelta arch]))
-compareTargetToCandidate targetResultIndex candidateResultIndex outMasks (targetTest, candidateTest) = do
-  let targetRes = M.lookup (CE.testNonce targetTest) (CE.riSuccesses targetResultIndex)
-      candidateRes = M.lookup (CE.testNonce candidateTest) (CE.riSuccesses candidateResultIndex)
+                         -> Syn t arch (Maybe ([R.RvwpDelta arch]))
+compareTargetToCandidate TargetData{..} candidateResults (targetTest, candidateTest) = do
+  let targetRes = M.lookup (CE.testNonce targetTest) (CE.riSuccesses tdTargetResults)
+      candidateRes = M.lookup (CE.testNonce candidateTest) (CE.riSuccesses candidateResults)
   eitherWeight <- liftIO (doComparison targetRes candidateRes `C.catches` handlers)
   case eitherWeight of
     Left e -> do
@@ -346,7 +404,8 @@ compareTargetToCandidate targetResultIndex candidateResultIndex outMasks (target
         Just CE.TestResult { CE.resultContext = targetSt } ->
           case mCandidateRes of
             Just CE.TestResult { CE.resultContext = candidateSt } ->
-              Right <$> C.evaluate (map (compareTargetOutToCandidateOut targetSt candidateSt) outMasks)
+              Right <$> C.evaluate
+              (map (compareTargetOutToCandidateOut targetSt candidateSt) tdOutMasks)
             Nothing -> C.throwIO NoCandidateResult
         Nothing -> C.throwIO NoTargetResult
 
@@ -398,11 +457,11 @@ compareTargetOutToCandidateOut :: forall arch.
                                => V.ConcreteState arch
                                -> V.ConcreteState arch
                                -> V.SemanticView arch
-                               -> RvwpDelta arch
+                               -> R.RvwpDelta arch
 compareTargetOutToCandidateOut targetSt candidateSt
  -- Pattern match on 'V.View' to learn 'KnownNat n'.
  V.SemanticView{ semvView = semvView@(V.View _ _), ..} =
-  RvwpDelta{..}
+  R.RvwpDelta{..}
   where
     rightPlaceWeight = weigh (V.peekMS candidateSt semvView)
     wrongPlaceWeights = [ weight
@@ -418,56 +477,6 @@ compareTargetOutToCandidateOut targetSt candidateSt
 -- wrong location.
 wrongPlacePenalty :: Double
 wrongPlacePenalty = 3 -- STOKE Figure 10.
-
-----------------------------------------------------------------
-
--- | Right value/wrong place (rvwp) info.
---
--- We compute these separately for each test and then combine them
--- using 'combineDeltas'. When deltas are combined, the fields below
--- become cumulative instead of per test.
-data RvwpDelta arch = RvwpDelta
-  { rdRvwpPlaces :: [Bool]
-    -- ^ Booleans indicating whether the corresponding (by position)
-    -- congruent view had the right value in the wrong place on the
-    -- test.
-  , rdWeight :: Double
-    -- ^ Weight of candidate on the test.
-  }
-
--- | Combine the per test deltas for each out mask into a cumulative
--- delta for each out mask.
-combineDeltas :: [[RvwpDelta arch]] -> [RvwpDelta arch]
--- Note that in the @[[RvwpDelta arch]]@ input the outer list is per
--- test and the inner list is per out mask. So, we combine the outer
--- list by combining its inner lists pointwise.
-combineDeltas = foldr1 (zipWith combineRvwp)
-  where
-    r1 `combineRvwp` r2 = RvwpDelta
-      { rdWeight = rdWeight r1 + rdWeight r2
-      , rdRvwpPlaces = zipWith (&&) (rdRvwpPlaces r1) (rdRvwpPlaces r2) }
-
--- | Check if the unimplemented rvwp optimization applies.
---
--- Returns 'Nothing' if the optimization does not apply. When the
--- optimization does apply, returns @Just k@ for @k@ the number of
--- values that occur in the wrong places.
-checkIfRvwpOptimizationApplies :: U.HasCallStack
-                               => [[RvwpDelta arch]] -> Maybe Int
-checkIfRvwpOptimizationApplies rvwpss =
-  if rvwpOptimizationApplies
-  then Just numRvwps
-  else Nothing
-  where
-    rvwps = combineDeltas rvwpss
-    rvwpOptimizationApplies = allRightValuesAvailable &&
-                              someRightValueInTheWrongPlace
-    allRightValuesAvailable = or [ rdWeight == 0 || or rdRvwpPlaces
-                                 | RvwpDelta{..} <- rvwps ]
-    someRightValueInTheWrongPlace = numRvwps > 0
-    -- Checking for non-zero weight is only sound when
-    -- 'allRightValuesAvailable' is true.
-    numRvwps = length [ () | r <- rvwps , rdWeight r /= 0 ]
 
 ----------------------------------------------------------------
 

@@ -13,6 +13,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module SemMC.Architecture (
@@ -28,7 +29,8 @@ module SemMC.Architecture (
   OperandType,
   IsOperandTypeRepr(..),
   ArchRepr,
-  ShapeRepr
+  ShapeRepr,
+  showShapeRepr
   ) where
 
 import           Data.EnumF
@@ -37,6 +39,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
+import           Data.Proxy ( Proxy(..) )
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
 import qualified Language.Haskell.TH as TH
@@ -102,6 +105,15 @@ class (IsOperand (Operand arch),
   locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t arch)]
 
   shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
+
+
+showShapeRepr :: forall arch sh. (IsOperandTypeRepr arch) => Proxy arch -> ShapeRepr arch sh -> String
+showShapeRepr _ rep =
+    case rep of
+      SL.Nil -> ""
+      (r SL.:< rep') -> let showr = operandTypeReprSymbol (Proxy @arch) r
+                       in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
+
 
 data FunctionInterpretation t arch =
   FunctionInterpretation { locationInterp :: LocationFuncInterp arch

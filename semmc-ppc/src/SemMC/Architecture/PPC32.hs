@@ -52,6 +52,7 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
+import qualified SemMC.Stochastic.RvwpOptimization as R
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 
@@ -669,3 +670,8 @@ parseLocation = do
     'F' -> Some LocFPSCR <$ P.string "FPSCR"
     'V' -> Some LocVSCR <$ P.string "VSCR"
     _ -> fail ("Unexpected location prefix character: " ++ (c :[]))
+
+----------------------------------------------------------------
+
+instance R.RvwpOptimization PPC where
+  rvwpMov _ _ = Nothing -- TODO. Was needed to compile semmc-ppc.
