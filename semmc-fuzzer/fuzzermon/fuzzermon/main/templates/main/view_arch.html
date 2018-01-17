@@ -13,6 +13,7 @@
         <th>Opcode</th>
         <th>Failures</th>
         <th>Successes</th>
+        <th>% Failing</th>
     </tr>
     {% for status in opcode_statuses %}
     <tr>
@@ -26,6 +27,9 @@
         </td>
         <td>
             {{ status.num_successes }}
+        </td>
+        <td>
+            {{ status.percent_failing }}
         </td>
     <tr>
     {% endfor %}

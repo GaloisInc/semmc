@@ -198,6 +198,7 @@ def view_arch(request, arch_id):
                 'opcode': opcode,
                 'num_failures': num_failures,
                 'num_successes': num_successes,
+                'percent_failing': 100.0 * (num_failures / (num_failures + num_successes)),
                 }
         opcode_results.append(results)
 
