@@ -161,9 +161,9 @@ def index(request):
 
     return render(request, 'main/index.html', context)
 
-def view_batch(request, batch_id):
-    b = Batch.objects.get(pk=batch_id)
+def arch_list(request):
+    al = Arch.objects.all()
     context = {
-            'batch': b
+            'archs': al
             }
-    return render(request, 'main/view_batch.html', context)
+    return render(request, 'main/index.html', context)

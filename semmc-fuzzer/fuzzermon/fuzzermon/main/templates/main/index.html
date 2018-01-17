@@ -5,31 +5,24 @@ Fuzzermon
 {% endblock %}
 
 {% block body %}
-<div id="batchList">
-    <div>
-        <span class="viewLink">&nbsp;
-        </span><span class="fuzzHost">Fuzzer Host
-        </span><span class="testHost">Testing Host
-        </span><span class="arch">Arch
-        </span><span class="user">User
-        </span><span class="uploadTime">Uploaded At</span>
-    </div>
-    {% for batch in batches %}
-    <div>
-        <span class="viewLink">
-            <a href="/batch/{{ batch.id }}/">View</a>
-        </span><span class="fuzzHost">
-            {{ batch.fuzzer_host }}
-        </span><span class="testHost">
-            {{ batch.testing_host.hostname }}
-        </span><span class="arch">
-            {{ batch.testing_host.arch.name }}
-        </span><span class="user">
-            {{ batch.user.username }}
-        </span><span class="uploadTime">
-            {{ batch.submitted_at }}
-        </span>
-    </div>
-    {% endfor %}
-</div>
+<table>
+    <tr>
+        <th>Architecture</th>
+        <th>Hosts</th>
+    </tr>
+    {% for arch in archs %}
+    <tr>
+        <td>
+            <a href="">{{ arch.name }}</a>
+        </td>
+        <td>
+            <ul>
+                {% for host in arch.host_set.all %}
+                <li>{{ host.hostname }}</li>
+                {% endfor %}
+            </ul>
+        </td>
+    </tr>
+{% endfor %}
+</table>
 {% endblock %}
