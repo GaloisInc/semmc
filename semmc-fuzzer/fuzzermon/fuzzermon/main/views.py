@@ -162,9 +162,25 @@ def index(request):
     return render(request, 'main/index.html', context)
 
 def arch_list(request):
-    al = Arch.objects.all()
+    archs = Arch.objects.all()
+    results = []
+
+    for arch in archs:
+        host_data = []
+        for h in arch.host_set.all():
+            host_data.append({
+                'host': h,
+                'num_failures': TestFailure.objects.filter(batch__testing_host__id=h.id).count(),
+                'num_successes': TestSuccess.objects.filter(batch__testing_host__id=h.id).count(),
+                })
+
+        results.append({
+            'arch': arch,
+            'hosts': host_data,
+                })
+
     context = {
-            'archs': al
+            'archs': results
             }
     return render(request, 'main/index.html', context)
 

@@ -5,22 +5,24 @@
 {% endblock %}
 
 {% block body %}
-<table>
+<h1>Architecture Listing</h1>
+
+<table id="archList">
     <tr>
-        <th>Architecture</th>
-        <th>Hosts</th>
+        <th id="archCol">Architecture</th>
+        <th id="hostCol">Hosts</th>
     </tr>
     {% for arch in archs %}
     <tr>
         <td valign="top">
             <span class="mono">
-                <a href="/arch/{{ arch.id }}/">{{ arch.name }}</a>
+                <a href="/arch/{{ arch.arch.id }}/">{{ arch.arch.name }}</a>
             </span>
         </td>
         <td>
             <ul>
-                {% for host in arch.host_set.all %}
-                <li><span class="mono">{{ host.hostname }}</span></li>
+                {% for host in arch.hosts %}
+                <li><span class="mono">{{ host.host.hostname }}</span> (Failures: {{ host.num_failures }}, Successes: {{ host.num_successes }})</li>
                 {% endfor %}
             </ul>
         </td>

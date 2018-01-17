@@ -17,7 +17,12 @@
     {% for failure in failures %}
     <tr>
         <td valign="top">
-            <span class="mono">{{ failure.pretty }}</span>
+            <div>
+                <span class="mono">{{ failure.pretty }}</span>
+            </div>
+            <div>
+                (Host: <span class="mono">{{ failure.batch.testing_host.hostname }}</span>)
+            </div>
         </td>
         <td>
             <table>
