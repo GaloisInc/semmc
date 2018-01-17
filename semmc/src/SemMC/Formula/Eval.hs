@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
@@ -17,31 +19,39 @@ module SemMC.Formula.Eval (
   evaluateFunctions
   ) where
 
-import           GHC.Prim ( RealWorld )
-import           Control.Monad.ST ( stToIO )
+import           GHC.Prim                           ( RealWorld )
+import           Control.Monad.ST                   ( stToIO )
 
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.HashTable as PH
-import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.Nonce as PN
-import qualified Data.Parameterized.List as SL
-import qualified Lang.Crucible.Solver.Interface as SI
+import qualified Data.Parameterized.Context         as Ctx
+import qualified Data.Parameterized.HashTable       as PH
+import qualified Data.Parameterized.List            as SL
+import qualified Data.Parameterized.Map             as MapF
+import qualified Data.Parameterized.Nonce           as PN
+import qualified Lang.Crucible.Solver.Interface     as SI
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import           Lang.Crucible.Types
 
-import qualified SemMC.Architecture.Internal as A
-import qualified SemMC.BoundVar as BV
+import qualified SemMC.Architecture.Internal        as A
+import qualified SemMC.BoundVar                     as BV
 import           SemMC.Formula.Formula
 
 type Sym t st = S.SimpleBuilder t st
 
-data Evaluator t = Evaluator (forall tp . S.NonceApp t (S.Elt t) tp -> IO (S.Elt t tp))
+data Evaluator arch t =
+  Evaluator (forall tp u st sh
+               . Sym t st
+              -> ParameterizedFormula (Sym t st) arch sh
+              -> SL.List (A.Operand arch) sh
+              -> Ctx.Assignment (S.Elt t) u
+              -> BaseTypeRepr tp
+              -> IO (S.Elt t tp))
 
 evaluateFunctions :: Sym t st
                   -> ParameterizedFormula (Sym t st) arch sh
                   -> SL.List (A.Operand arch) sh
                   -> S.Elt t ret
-                  -> [(String, Evaluator t)]
+                  -> [(String, Evaluator arch t)]
                   -> IO (S.Elt t ret)
 evaluateFunctions sym pf operands e0 rewriters = do
   tbl <- stToIO (PH.newSized 100)

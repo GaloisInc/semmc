@@ -1,19 +1,20 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE ViewPatterns          #-}
+{-# LANGUAGE EmptyCase             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 module SemMC.Architecture.PPC64
@@ -210,6 +211,90 @@ symbolicTemplatedOperand Proxy signed name constr =
 instance T.TemplatableOperand PPC where
   opTemplates sr =
     case sr of
+      PPC.VsrcRepr -> concreteTemplatedOperand (PPC.Vsrc . PPC.VSReg) (LocVSR . PPC.VSReg) <$> [0..31]
+      PPC.MemrrRepr ->
+        mkTemplate <$> [0..31]
+            where mkTemplate gprNum =
+                      T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: T.TemplatedOperand PPC "Memrr"
+                    where mkTemplate' :: T.TemplatedOperandFn PPC "Memrr"
+                          mkTemplate' sym locLookup = do
+                            base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
+                            offset <- S.freshConstant sym (U.makeSymbol "Memrr_off") knownRepr
+                            expr <- S.bvAdd sym base offset
+                            let recover evalFn = do
+                                       offsetVal <- PPC.GPR . fromIntegral <$> evalFn offset
+                                       let gpr | gprNum /= 0 = Just (PPC.GPR gprNum)
+                                               | otherwise = Nothing
+                                       return $ PPC.Memrr $ PPC.MemRR gpr offsetVal
+                            return (expr, T.WrappedRecoverOperandFn recover)
+
+      PPC.MemrixRepr ->
+         mkTemplate <$> [0..31]
+            where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: T.TemplatedOperand PPC "Memrix"
+                    where mkTemplate' :: T.TemplatedOperandFn PPC "Memrix"
+                          mkTemplate' sym locLookup = do
+                            base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
+                            offset <- S.freshConstant sym (U.makeSymbol "Memrix_off") knownRepr
+                            expr <- S.bvAdd sym base offset
+                            let recover evalFn = do
+                                  offsetVal <- fromInteger <$> evalFn offset
+                                  let gpr
+                                        | gprNum /= 0 = Just (PPC.GPR gprNum)
+                                        | otherwise = Nothing
+                                  return $ PPC.Memrix $ PPC.MemRIX gpr offsetVal
+                            return (expr, T.WrappedRecoverOperandFn recover)
+
+      PPC.Memrix16Repr ->
+         mkTemplate <$> [0..31]
+            where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: T.TemplatedOperand PPC "Memrix16"
+                    where mkTemplate' :: T.TemplatedOperandFn PPC "Memrix16"
+                          mkTemplate' sym locLookup = do
+                            base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
+                            offset <- S.freshConstant sym (U.makeSymbol "Memrix16_off") knownRepr
+                            expr <- S.bvAdd sym base offset
+                            let recover evalFn = do
+                                  offsetVal <- fromInteger <$> evalFn offset
+                                  let gpr
+                                        | gprNum /= 0 = Just (PPC.GPR gprNum)
+                                        | otherwise = Nothing
+                                  return $ PPC.Memrix16 $ PPC.MemRIX gpr offsetVal
+                            return (expr, T.WrappedRecoverOperandFn recover)
+      PPC.S17imm64Repr -> [symbolicTemplatedOperand (Proxy @16) True "S17imm64" (PPC.S17imm64 . fromInteger)]
+      PPC.VrrcRepr -> concreteTemplatedOperand (PPC.Vrrc . PPC.VR) (LocVSR . PPC.VSReg) <$> [0..31]
+      PPC.U4immRepr -> [symbolicTemplatedOperand (Proxy @4) True "U4imm" (PPC.U4imm . fromInteger)]
+      PPC.U7immRepr -> [symbolicTemplatedOperand (Proxy @7) True "U7imm" (PPC.U7imm . fromInteger)]
+      PPC.U8immRepr -> [symbolicTemplatedOperand (Proxy @8) True "U8imm" (PPC.U8imm . fromInteger)]
+      PPC.U10immRepr->  [symbolicTemplatedOperand (Proxy @10) True "U10imm" (PPC.U10imm . fromInteger)]
+      PPC.S5immRepr -> [symbolicTemplatedOperand (Proxy @5) True "S5imm" (PPC.S5imm . fromInteger)]
+      PPC.U1immRepr -> [symbolicTemplatedOperand (Proxy @1) True "U1imm" (PPC.U1imm . fromInteger)]
+      PPC.U2immRepr ->  [symbolicTemplatedOperand (Proxy @2) True "U2imm" (PPC.U2imm . fromInteger)]
+      PPC.AbscondbrtargetRepr ->
+         [T.TemplatedOperand Nothing Set.empty mkDirect]
+              where mkDirect :: T.TemplatedOperandFn PPC "Abscondbrtarget"
+                    mkDirect sym _ = do
+                      offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscondbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
+                      let recover evalFn =
+                            PPC.Abscondbrtarget . PPC.mkAbsCondBranchTarget . fromInteger <$> evalFn offsetRaw
+                      return (offsetRaw, T.WrappedRecoverOperandFn recover)
+      PPC.CondbrtargetRepr ->
+            [T.TemplatedOperand Nothing Set.empty mkDirect]
+              where mkDirect :: T.TemplatedOperandFn PPC "Condbrtarget"
+                    mkDirect sym _locLookup = do
+                      offsetRaw <- S.freshConstant sym (U.makeSymbol "Condbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
+                      let recover evalFn =
+                            PPC.Condbrtarget . PPC.mkCondBranchTarget . fromInteger <$> evalFn offsetRaw
+                      return (offsetRaw, T.WrappedRecoverOperandFn recover)
+
+      PPC.CrbitmRepr ->
+        [T.TemplatedOperand Nothing Set.empty mkDirect]
+               where mkDirect :: T.TemplatedOperandFn PPC "Crbitm"
+                     mkDirect sym _ = do
+                       crrc <- S.freshConstant sym (U.makeSymbol "Crbitm") (knownRepr :: BaseTypeRepr (BaseBVType 8))
+                       let recover evalFn =
+                             PPC.Crbitm . PPC.CRBitM . fromInteger <$> evalFn crrc
+                       return (crrc, T.WrappedRecoverOperandFn recover)
+      PPC.I1immRepr ->
+        [symbolicTemplatedOperand (Proxy @1) True "I1imm" (PPC.I1imm . fromInteger)]
       PPC.FprcRepr -> concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
       PPC.GprcRepr -> concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
       PPC.Gprc_nor0Repr -> concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
@@ -410,25 +495,36 @@ instance A.Architecture PPC where
   locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
   shapeReprToTypeRepr _proxy = shapeReprType
 
-locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC sh)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemriReg
                                                , A.exprInterpName = 'interpMemriRegExtractor
+                                               , A.exprInterp = undefined
                                                })
   , ("ppc.memrix_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrixReg
                                                 , A.exprInterpName = 'interpMemrixRegExtractor
+                                               , A.exprInterp = undefined
                                                 })
   , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrBase
                                                 , A.exprInterpName = 'interpMemrrBaseExtractor
+                                               , A.exprInterp = undefined
                                                 })
   , ("ppc.memrr_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemrrOffsetExtractor
+                                               , A.exprInterp = undefined
+                                               , A.locationInterp = undefined
                                                   })
   , ("ppc.memrix_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemrixOffsetExtractor
+                                               , A.exprInterp = undefined
+                                               , A.locationInterp = undefined
                                                    })
   , ("ppc.memri_offset", A.FunctionInterpretation { A.exprInterpName = 'interpMemriOffsetExtractor
+                                               , A.exprInterp = undefined
+                                               , A.locationInterp = undefined
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
-                                           })
+                                               , A.exprInterp = undefined
+                                               , A.locationInterp = undefined
+                                               })
   ]
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
@@ -529,11 +625,15 @@ truncateValue op v =
     PPC.Gprc {}              -> L.error "Unexpected non-literal operand"
     PPC.Fprc {}              -> L.error "Unexpected non-literal operand"
     PPC.Abscondbrtarget {}   -> L.error "Control flow transfer instructions unsupported"
-    PPC.Absdirectbrtarget {} ->  L.error "Control flow transfer instructions unsupported"
-    PPC.Condbrtarget {}      ->  L.error "Control flow transfer instructions unsupported"
-    PPC.Directbrtarget {}    ->  L.error "Control flow transfer instructions unsupported"
-    PPC.Calltarget {}        ->  L.error "Control flow transfer instructions unsupported"
-    PPC.Abscalltarget {}     ->  L.error "Control flow transfer instructions unsupported"
+    PPC.Absdirectbrtarget {} -> L.error "Control flow transfer instructions unsupported"
+    PPC.Condbrtarget {}      -> L.error "Control flow transfer instructions unsupported"
+    PPC.Directbrtarget {}    -> L.error "Control flow transfer instructions unsupported"
+    PPC.Calltarget {}        -> L.error "Control flow transfer instructions unsupported"
+    PPC.Abscalltarget {}     -> L.error "Control flow transfer instructions unsupported"
+    PPC.Crbitm {}            -> L.error "Control flow transfer instructions unsupported"
+    PPC.Crbitrc {}           -> L.error "Control flow transfer instructions unsupported"
+    PPC.Crrc {}              -> L.error "Control flow transfer instructions unsupported"
+    PPC.S17imm64 {}          -> L.error "Control flow transfer instructions unsupported"
 
 instance AC.ConcreteArchitecture PPC where
   registerizeInstruction = registerizeInstructionPPC

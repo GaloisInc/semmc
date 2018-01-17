@@ -102,7 +102,7 @@ class (IsOperand (Operand arch),
   -- | Functions used to simplify defined locations in parameterized formulas
   -- that are defined as functions of an input parameter into a concrete
   -- location
-  locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t arch)]
+  locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t arch sh)]
 
   shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
 
@@ -115,7 +115,7 @@ showShapeRepr _ rep =
                        in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
 
 
-data FunctionInterpretation t arch =
+data FunctionInterpretation t arch sh =
   FunctionInterpretation { locationInterp :: LocationFuncInterp arch
                          -- ^ The function interpretation to apply to functions
                          -- appearing in location definition contexts (i.e., the
@@ -125,7 +125,7 @@ data FunctionInterpretation t arch =
                          -- to apply statically during formula translation (at
                          -- the value level) to eliminate an uninterpreted
                          -- function appearing in a semantics expression.
-                         , exprInterp :: Evaluator t
+                         , exprInterp :: Evaluator arch t
                          -- ^ The evaluator to apply to uninterpreted functions
                          -- during formula instantiation (in Formula.Instantiate)
                          }

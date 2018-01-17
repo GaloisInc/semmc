@@ -138,7 +138,7 @@ rewriteElfText :: E.ElfSection w -> E.Elf 32 -> [DPPC.Instruction] -> BSL.ByteSt
 rewriteElfText textSection elf newInsns =
   E.renderElf newElf
   where
-    newInsnBytes = BSL.toStrict (mconcat (map DPPC.assembleInstruction newInsns))
+    newInsnBytes = BSL.toStrict (foldMap DPPC.assembleInstruction newInsns)
     newElf = I.runIdentity (E.updateSections upd elf)
     upd sect
       | E.elfSectionIndex sect == E.elfSectionIndex textSection =
