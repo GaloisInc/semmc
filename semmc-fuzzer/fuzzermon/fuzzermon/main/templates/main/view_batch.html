@@ -39,7 +39,7 @@
     </div>
     <ul>
         {% for st in entry.testfailurestate_set.all %}
-        <li>{{ st.location }}: expected {{ st.expected_value }}, got {{ st.expected_value }}</li>
+        <li>{{ st.location }}: expected {{ st.expected_value }}, got {{ st.actual_value }}</li>
         {% endfor %}
     </ul>
 <div>
