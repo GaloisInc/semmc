@@ -1,5 +1,7 @@
 ;; Floating Absolute Value (X-form)
 ((operands ((frT . 'Fprc) (frB . 'Fprc))) 
-  (in (frB 'IP))
+  (in ('FPSCR frB 'IP))
   (defs 
-    ((frT (concat #x0000000000000000 ((_ call "fp.abs") ((_ extract 63 0) frB)))) ('IP (bvadd 'IP #x00000004)))))
+    (('FPSCR ((_ extract 159 128) ((_ call "ppc.fp1") "FABSD" frB 'FPSCR))) 
+      (frT ((_ extract 127 0) ((_ call "ppc.fp1") "FABSD" frB 'FPSCR)))
+      ('IP (bvadd 'IP #x00000004)))))

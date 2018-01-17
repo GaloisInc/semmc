@@ -105,6 +105,27 @@ uninterpretedFunctions _ =
   , ("ppc.memrr_offset",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth ppc))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth ppc))))
+  , ("ppc.fp1",
+     Some (knownRepr :: Assignment BaseTypeRepr ( EmptyCtx
+                                                  ::> BaseStructType EmptyCtx
+                                                  ::> BaseBVType 128
+                                                  ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 160)))
+  , ("ppc.fp2",
+     Some (knownRepr :: Assignment BaseTypeRepr ( EmptyCtx
+                                                  ::> BaseStructType EmptyCtx
+                                                  ::> BaseBVType 128
+                                                  ::> BaseBVType 128
+                                                  ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 160)))
+  , ("ppc.fp3",
+     Some (knownRepr :: Assignment BaseTypeRepr ( EmptyCtx
+                                                  ::> BaseStructType EmptyCtx
+                                                  ::> BaseBVType 128
+                                                  ::> BaseBVType 128
+                                                  ::> BaseBVType 128
+                                                  ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 160)))
   , ("ppc.vec1",
      Some (knownRepr :: Assignment BaseTypeRepr ( EmptyCtx
                                                   ::> BaseStructType EmptyCtx

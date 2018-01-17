@@ -18,54 +18,35 @@ import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
-fbinop :: (HasCallStack) => Int -> String -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fbinop sz name e1 e2 =
-  uf (EBV sz) name [ Some e1, Some e2 ]
+fpFn :: String -> Expr 'TString
+fpFn s = LitString s
 
-ftrop :: (HasCallStack) => Int
-      -> String
-      -> Expr 'TBV
-      -> Expr 'TBV
-      -> Expr 'TBV
-      -> Expr 'TBV
-ftrop sz name e1 e2 e3 =
-  uf (EBV sz) name [ Some e1, Some e2, Some e3 ]
+fp1 :: (HasCallStack)
+    => String
+    -> Expr 'TBV
+    -> Expr 'TBV
+    -> Expr 'TBV
+fp1 name fr1 ffpscr =
+  uf (EBV 160) "ppc.fp1" [ Some (fpFn name), Some fr1, Some ffpscr]
 
-fadd64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fadd64 = fbinop 64 "fp.add64"
+fp2 :: (HasCallStack)
+    => String
+    -> Expr 'TBV
+    -> Expr 'TBV
+    -> Expr 'TBV
+    -> Expr 'TBV
+fp2 name fr1 fr2 ffpscr =
+  uf (EBV 160) "ppc.fp2" [ Some (fpFn name), Some fr1, Some fr2, Some ffpscr]
 
-fadd32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fadd32 = fbinop 32 "fp.add32"
-
-fsub64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fsub64 = fbinop 64 "fp.sub64"
-
-fsub32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fsub32 = fbinop 32 "fp.sub32"
-
-fmul64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fmul64 = fbinop 64 "fp.mul64"
-
-fmul32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fmul32 = fbinop 32 "fp.mul32"
-
-fdiv64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fdiv64 = fbinop 64 "fp.div64"
-
-fdiv32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fdiv32 = fbinop 32 "fp.div32"
-
-fmuladd64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fmuladd64 = ftrop 64 "fp.muladd64"
-
-fmuladd32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-fmuladd32 = ftrop 32 "fp.muladd32"
-
-fnegate64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-fnegate64 = uf (EBV 64) "fp.negate64" . ((:[]) . Some)
-
-fnegate32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-fnegate32 = uf (EBV 32) "fp.negate32" . ((:[]) . Some)
+fp3 :: (HasCallStack)
+    => String
+    -> Expr 'TBV
+    -> Expr 'TBV
+    -> Expr 'TBV
+    -> Expr 'TBV
+    -> Expr 'TBV
+fp3 name fr1 fr2 fr3 ffpscr =
+  uf (EBV 160) "ppc.fp3" [ Some (fpFn name), Some fr1, Some fr2, Some fr3, Some ffpscr]
 
 froundsingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 froundsingle = uf (EBV 32) "fp.round_single" . ((:[]) . Some)
@@ -73,37 +54,17 @@ froundsingle = uf (EBV 32) "fp.round_single" . ((:[]) . Some)
 fsingletodouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 fsingletodouble = uf (EBV 64) "fp.single_to_double" . ((:[]) . Some)
 
-fabs :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-fabs = uf (EBV 64) "fp.abs" . ((:[]) . Some)
-
 flt :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 flt e1 e2 = uf EBool "fp.lt" [ Some e1, Some e2 ]
-
-fisqnan32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
-fisqnan32 = uf EBool "fp.is_qnan32" . ((:[]) . Some)
 
 fisqnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
 fisqnan64 = uf EBool "fp.is_qnan64" . ((:[]) . Some)
 
-fissnan32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
-fissnan32 = uf EBool "fp.is_snan32" . ((:[]) . Some)
-
 fissnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
 fissnan64 = uf EBool "fp.is_snan64" . ((:[]) . Some)
 
-fisnan32 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
-fisnan32 e = orp (fisqnan32 e) (fissnan32 e)
-
 fisnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
 fisnan64 e = orp (fisqnan64 e) (fissnan64 e)
-
--- | Extract the single-precision part of a vector register
-extractSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-extractSingle = highBits128 32
-
--- | Extend a single-precision value out to 128 bits
-extendSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-extendSingle = concat (LitBV 96 0x0)
 
 -- | Extract the double-precision part of a vector register
 extractDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
@@ -112,51 +73,6 @@ extractDouble = highBits128 64
 -- | Extend a double-precision value out to 128 bits
 extendDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 extendDouble = concat (LitBV 64 0x0)
-
--- | Lift a two-operand operation to single-precision values
---
--- Or maybe better thought of as lifting a single precision operation onto 128
--- bit registers.
-liftSingle2 :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV -> Expr 'TBV)
-            -- ^ An operation over 32 bit (single-precision) floats
-            -> Expr 'TBV
-            -- ^ 128 bit operand 1
-            -> Expr 'TBV
-            -- ^ 128-bit operand 2
-            -> Expr 'TBV
-liftSingle2 operation op1 op2 = do
-  extendSingle (operation (extractSingle op1) (extractSingle op2))
-
-liftDouble2 :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV -> Expr 'TBV)
-            -> Expr 'TBV
-            -> Expr 'TBV
-            -> Expr 'TBV
-liftDouble2 operation op1 op2 = do
-  extendDouble (operation (extractDouble op1) (extractDouble op2))
-
-liftSingle3 :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV)
-            -> Expr 'TBV
-            -> Expr 'TBV
-            -> Expr 'TBV
-            -> Expr 'TBV
-liftSingle3 operation op1 op2 op3 =
-  extendSingle (operation (extractSingle op1) (extractSingle op2) (extractSingle op3))
-
-liftDouble3 :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV)
-            -> Expr 'TBV
-            -> Expr 'TBV
-            -> Expr 'TBV
-            -> Expr 'TBV
-liftDouble3 operation op1 op2 op3 =
-  extendDouble (operation (extractDouble op1) (extractDouble op2) (extractDouble op3))
-
-liftDouble1 :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV) -> Expr 'TBV -> Expr 'TBV
-liftDouble1 operation op =
-  extendDouble (operation (extractDouble op))
-
-liftSingle1 :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV) -> Expr 'TBV -> Expr 'TBV
-liftSingle1 operation op =
-  extendSingle (operation (extractSingle op))
 
 -- | Floating point comparison definitions
 --
@@ -310,6 +226,29 @@ floatingPointCompare = do
       comment "Move to FPSCR Bit 1 (X-form, RC=1)"
       defLoc cr (undefinedBV 32)
 
+fp1op :: String -> SemM 'Def ()
+fp1op name = do
+  (frT, frB) <- xform2f
+  input fpscr
+  let res = fp1 name (Loc frB) (Loc fpscr)
+  defLoc frT (highBits' 128 res)
+  defLoc fpscr (lowBits' 32 res)
+
+fp2op :: String -> SemM 'Def ()
+fp2op name = do
+  (frT, frA, frB) <- aform
+  input fpscr
+  let res = fp2 name (Loc frA) (Loc frB) (Loc fpscr)
+  defLoc frT (highBits' 128 res)
+  defLoc fpscr (lowBits' 32 res)
+
+fp3op :: String -> SemM 'Def ()
+fp3op name = do
+  (frT, frA, frB, frC) <- aform4
+  input fpscr
+  let res = fp3 name (Loc frA) (Loc frB) (Loc frC) (Loc fpscr)
+  defLoc frT (highBits' 128 res)
+  defLoc fpscr (lowBits' 32 res)
 
 -- | Floating point operation definitions
 --
@@ -318,138 +257,107 @@ floatingPoint :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPoint = do
   defineOpcodeWithIP "FADD" $ do
     comment "Floating Add (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftDouble2 fadd64 (Loc frA) (Loc frB))
+    fp2op "FADD"
 
   defineOpcodeWithIP "FADDS" $ do
     comment "Floating Add Single (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftSingle2 fadd32 (Loc frA) (Loc frB))
+    fp2op "FADDS"
 
   defineOpcodeWithIP "FSUB" $ do
     comment "Floating Subtract (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftDouble2 fsub64 (Loc frA) (Loc frB))
+    fp2op "FSUB"
 
   defineOpcodeWithIP "FSUBS" $ do
     comment "Floating Subtract Single (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftSingle2 fsub32 (Loc frA) (Loc frB))
+    fp2op "FSUBS"
 
   defineOpcodeWithIP "FMUL" $ do
     comment "Floating Multiply (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftDouble2 fmul64 (Loc frA) (Loc frB))
+    fp2op "FMUL"
 
   defineOpcodeWithIP "FMULS" $ do
     comment "Floating Multiply Single (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftSingle2 fmul32 (Loc frA) (Loc frB))
+    fp2op "FMULS"
 
   defineOpcodeWithIP "FDIV" $ do
     comment "Floating Divide (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftDouble2 fdiv64 (Loc frA) (Loc frB))
+    fp2op "FDIV"
 
   defineOpcodeWithIP "FDIVS" $ do
     comment "Floating Divide Single (A-form)"
-    (frT, frA, frB) <- aform
-    defLoc frT (liftSingle2 fdiv32 (Loc frA) (Loc frB))
+    fp2op "FDIVS"
 
   defineOpcodeWithIP "FMADD" $ do
     comment "Floating Multiply-Add (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    defLoc frT (liftDouble3 fmuladd64 (Loc frA) (Loc frB) (Loc frC))
+    fp3op "FMADD"
 
   defineOpcodeWithIP "FMADDS" $ do
     comment "Floating Multiply-Add Single (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    defLoc frT (liftSingle3 fmuladd32 (Loc frA) (Loc frB) (Loc frC))
+    fp3op "FMADDS"
 
+  -- NOTE: This functions were previously defined in terms of lower-level operations
+  -- like negation and multiply-add, but our new encoding just pushes the opcode
+  -- through for consistency.
   defineOpcodeWithIP "FMSUB" $ do
     comment "Floating Multiply-Subtract (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    let frB' = liftDouble1 fnegate64 (Loc frB)
-    defLoc frT (liftDouble3 fmuladd64 (Loc frA) frB' (Loc frC))
+    fp3op "FMSUB"
 
   defineOpcodeWithIP "FMSUBS" $ do
     comment "Floating Multiply-Subtract Single (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    let frB' = liftSingle1 fnegate32 (Loc frB)
-    defLoc frT (liftSingle3 fmuladd32 (Loc frA) frB' (Loc frC))
+    fp3op "FMSUBS"
 
   defineOpcodeWithIP "FNMADD" $ do
     comment "Floating Negative Multiply-Add (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    let nres = liftDouble3 fmuladd64 (Loc frA) (Loc frB) (Loc frC)
-    defLoc frT (liftDouble1 fnegate64 nres)
+    fp3op "FNMADD"
 
   defineOpcodeWithIP "FNMADDS" $ do
     comment "Floating Negative Multiply-Add Single (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    let nres = liftSingle3 fmuladd32 (Loc frA) (Loc frB) (Loc frC)
-    defLoc frT (liftSingle1 fnegate32 nres)
+    fp3op "FNMADDS"
 
   defineOpcodeWithIP "FNMSUB" $ do
     comment "Floating Negative Multiply-Subtract (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    let frB' = liftDouble1 fnegate64 (Loc frB)
-    let nres = liftDouble3 fmuladd64 (Loc frA) frB' (Loc frC)
-    defLoc frT (liftDouble1 fnegate64 nres)
+    fp3op "FNMSUB"
 
   defineOpcodeWithIP "FNMSUBS" $ do
     comment "Floating Negative Multiply-Subtract Single (A-form)"
-    (frT, frA, frB, frC) <- aform4
-    let frB' = liftSingle1 fnegate32 (Loc frB)
-    let nres = liftSingle3 fmuladd32 (Loc frA) frB' (Loc frC)
-    defLoc frT (liftSingle1 fnegate32 nres)
+    fp3op "FNMSUBS"
 
   defineOpcodeWithIP "FRSP" $ do
     comment "Floating Round to Single-Precision (X-form)"
-    (frT, frB) <- xform2f
-    defLoc frT (extendSingle (froundsingle (extractDouble (Loc frB))))
+    fp1op "FRSP"
 
   defineOpcodeWithIP "FNEGD" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
     comment "the sign bit is always in the same place (MSB)"
-    (frT, frB) <- xform2f
-    defLoc frT (extendDouble (fnegate64 (extractDouble (Loc frB))))
+    fp1op "FNEGD"
 
   defineOpcodeWithIP "FNEGS" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
     comment "the sign bit is always in the same place (MSB)"
-    (frT, frB) <- xform2f
-    defLoc frT (extendDouble (fnegate64 (extractDouble (Loc frB))))
+    fp1op "FNEGS"
 
   defineOpcodeWithIP "FMR" $ do
     comment "Floating Move Register (X-form)"
-    (frT, frB) <- xform2f
-    defLoc frT (Loc frB)
+    fp1op "FMR"
 
   -- See Note [FABS]
   defineOpcodeWithIP "FABSD" $ do
     comment "Floating Absolute Value (X-form)"
-    (frT, frB) <- xform2f
-    defLoc frT (extendDouble (fabs (extractDouble (Loc frB))))
+    fp1op "FABSD"
 
   defineOpcodeWithIP "FNABSD" $ do
     comment "Floating Negative Absolute Value (X-form)"
-    (frT, frB) <- xform2f
-    let av = fabs (extractDouble (Loc frB))
-    defLoc frT (extendDouble (fnegate64 av))
+    fp1op "FNABSD"
 
   defineOpcodeWithIP "FABSS" $ do
     comment "Floating Absolute Value (X-form)"
-    (frT, frB) <- xform2f
-    defLoc frT (extendDouble (fabs (extractDouble (Loc frB))))
+    fp1op "FABSS"
 
   defineOpcodeWithIP "FNABSS" $ do
     comment "Floating Negative Absolute Value (X-form)"
-    (frT, frB) <- xform2f
-    let av = fabs (extractDouble (Loc frB))
-    defLoc frT (extendDouble (fnegate64 av))
+    fp1op "FNABSS"
 
 -- | Define a load and double conversion of a single floating-point (D-form)
 loadFloat :: (?bitSize :: BitSize)
