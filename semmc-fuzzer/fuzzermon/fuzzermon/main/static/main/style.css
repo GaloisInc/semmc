@@ -22,3 +22,12 @@ body {
 .mono {
     font-family: monospace;
 }
+
+table {
+    border-collapse: collapse;
+}
+
+table td, table th {
+    border: 1px solid #aaa;
+    padding: 0.2em;
+}
