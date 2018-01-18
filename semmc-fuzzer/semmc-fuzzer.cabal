@@ -14,8 +14,17 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall
   default-language:    Haskell2010
-  -- exposed-modules:
-  build-depends:       base >=4.9 && <4.10
+  exposed-modules:     SemMC.Fuzzer.Types
+
+  build-depends:       base >=4.9 && <4.10,
+                       bytestring,
+                       semmc,
+                       text,
+                       parameterized-utils,
+                       pretty,
+                       dismantle-tablegen,
+                       utf8-string,
+                       aeson
 
 executable semmc-fuzzer
   main-is:             FuzzerMain.hs
@@ -24,6 +33,7 @@ executable semmc-fuzzer
   default-language:    Haskell2010
   build-depends:       base >=4.9 && <4.10,
                        semmc,
+                       semmc-fuzzer,
                        semmc-ppc,
                        semmc-arm,
                        dismantle-tablegen,

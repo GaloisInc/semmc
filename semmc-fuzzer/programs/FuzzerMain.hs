@@ -1,11 +1,11 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import           Control.Applicative ((<|>))
@@ -20,7 +20,6 @@ import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSC8
 import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
-import           Data.Int (Int32)
 import qualified Data.Word.Indexed as W
 import           Data.List (intercalate)
 import           Data.Maybe (catMaybes)
@@ -56,6 +55,8 @@ import           Dismantle.Instruction (GenericInstruction(Instruction))
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
 
+import           SemMC.Fuzzer.Types
+
 import qualified SemMC.Log as L
 import qualified SemMC.Formula as F
 import qualified SemMC.Concrete.Execution as CE
@@ -70,34 +71,6 @@ import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
                                           , unTemplate, TemplatableOperand
                                           , TemplatedOperand
                                           )
-
-data OpcodeMatch =
-    AllOpcodes
-    | SpecificOpcodes [String]
-    deriving (Show, Eq, Read)
-
-data TestStrategy =
-    RoundRobin
-    | Randomized
-    deriving (Show, Eq, Read)
-
-data FuzzerConfig =
-    FuzzerConfig { fuzzerArchName :: String
-                 , fuzzerArchTestingHosts :: [FuzzerTestHost]
-                 , fuzzerTestOpcodes :: OpcodeMatch
-                 , fuzzerTestStrategy :: TestStrategy
-                 , fuzzerMaximumLogLevel :: L.LogLevel
-                 , fuzzerReportURL :: Maybe String
-                 }
-                 deriving (Show)
-
-data FuzzerTestHost =
-    FuzzerTestHost { fuzzerTestHostname :: String
-                   , fuzzerTestChunkSize :: Int
-                   , fuzzerRunnerPath :: FilePath
-                   , fuzzerTestThreads :: Int
-                   }
-                   deriving (Show)
 
 data Arg =
     ConfigPath FilePath
@@ -228,27 +201,6 @@ parser = do
                         , fuzzerReportURL = T.unpack <$> url
                         }
 
-data ArchImpl where
-    ArchImpl :: forall proxy arch .
-                ( TemplatableOperand arch
-                , A.Architecture arch
-                , C.ConcreteArchitecture arch
-                , D.ArbitraryOperands (A.Opcode arch) (A.Operand arch)
-                , MapF.OrdF (A.Opcode arch (TemplatedOperand arch))
-                , MapF.ShowF (A.Opcode arch (TemplatedOperand arch))
-                , Show (GenericInstruction (A.Opcode arch) (A.Operand arch))
-                , EnumF (A.Opcode arch (TemplatedOperand arch))
-                , HasRepr (A.Opcode arch (A.Operand arch)) (L.List (A.OperandTypeRepr arch))
-                )
-             => String
-             -> proxy arch
-             -> [Some ((A.Opcode arch) (A.Operand arch))]
-             -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
-             -> CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
-             -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
-             -> (Some ((A.Opcode arch) (A.Operand arch)) -> Bool)
-             -> ArchImpl
-
 ppc32Arch :: ArchImpl
 ppc32Arch =
     ArchImpl "ppc32"
@@ -273,9 +225,6 @@ knownArchs =
 
 allArchNames :: [String]
 allArchNames = archImplName <$> knownArchs
-
-archImplName :: ArchImpl -> String
-archImplName (ArchImpl n _ _ _ _ _ _) = n
 
 usage :: IO ()
 usage = do
@@ -678,87 +627,3 @@ stateDiff _ a b =
                 | k <- S.toList allKeys
                 ]
     in catMaybes pairs
-
--- Note: the JSON encodings of the types below must match the decoder
--- implementation in the 'fuzzermon' web service.
-
-data Batch =
-    Batch { batchFuzzerHost :: String
-          , batchFuzzerUser :: String
-          , batchTestingHost :: String
-          , batchArch :: String
-          , batchEntries :: [BatchEntry]
-          }
-
-instance AE.ToJSON Batch where
-    toJSON b =
-        AE.object [ "fuzzer-host" AE..= batchFuzzerHost b
-                  , "fuzzer-user" AE..= batchFuzzerUser b
-                  , "testing-host" AE..= batchTestingHost b
-                  , "arch" AE..= batchArch b
-                  , "entries" AE..= batchEntries b
-                  ]
-
-data BatchEntry = Success TestSuccess
-                | Failure TestFailure
-                | UnexpectedSignal TestSignalError
-
-instance AE.ToJSON BatchEntry where
-    toJSON (Success s) = AE.toJSON s
-    toJSON (Failure f) = AE.toJSON f
-    toJSON (UnexpectedSignal s) = AE.toJSON s
-
-data TestSuccess =
-    TestSuccess { testSuccessOpcode :: String
-                , testSuccessCount :: Int
-                }
-
-instance AE.ToJSON TestSuccess where
-    toJSON s =
-        AE.object [ "type" AE..= ("success"::T.Text)
-                  , "opcode" AE..= testSuccessOpcode s
-                  , "count" AE..= testSuccessCount s
-                  ]
-
-data TestSignalError =
-    TestSignalError { testSignalOpcode :: String
-                    , testSignalPretty :: String
-                    , testSignalNum :: Int32
-                    }
-
-instance AE.ToJSON TestSignalError where
-    toJSON s =
-        AE.object [ "type" AE..= ("unexpectedSignal"::T.Text)
-                  , "opcode" AE..= testSignalOpcode s
-                  , "pretty" AE..= testSignalPretty s
-                  , "signal" AE..= testSignalNum s
-                  ]
-
-data TestFailure =
-    TestFailure { testFailureOpcode :: String
-                , testFailureRawOperands :: String
-                , testFailurePretty :: String
-                , testFailureStates :: [TestFailureState]
-                }
-
-instance AE.ToJSON TestFailure where
-    toJSON s =
-        AE.object [ "type" AE..= ("failure"::T.Text)
-                  , "opcode" AE..= testFailureOpcode s
-                  , "raw-operands" AE..= testFailureRawOperands s
-                  , "pretty" AE..= testFailurePretty s
-                  , "state" AE..= testFailureStates s
-                  ]
-
-data TestFailureState =
-    TestFailureState { testFailureLocation :: String
-                     , testFailureExpected :: String
-                     , testFailureActual :: String
-                     }
-
-instance AE.ToJSON TestFailureState where
-    toJSON s =
-        AE.object [ "location" AE..= testFailureLocation s
-                  , "expected" AE..= testFailureExpected s
-                  , "actual" AE..= testFailureActual s
-                  ]
