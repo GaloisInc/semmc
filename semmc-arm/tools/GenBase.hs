@@ -6,6 +6,7 @@ import qualified Data.Text.IO as TIO
 import qualified Options.Applicative as O
 import qualified Options.Applicative.Help as OH
 import qualified SemMC.Architecture.ARM.BaseSemantics as B
+import           SemMC.Architecture.ARM.Opcodes ( allOpcodes )
 import qualified SemMC.DSL as DSL
 import qualified System.Directory as D
 import           System.FilePath ( (<.>), (</>) )
@@ -68,10 +69,22 @@ mainWithOptions opts = do
       bdir = oRootDir opts </> oBaseDir opts
       pdir = oRootDir opts </> oPseudoDir opts
       genTo d l = do
-        D.createDirectoryIfMissing True d
-        F.forM_ l $ \(opName, def) ->
-            TIO.writeFile (d </> opName <.> "sem") (DSL.printDefinition def)
-        putStrLn $ "Wrote " <> (show $ length l) <> " files to " <> d
+        (s, e) <- genOpDefs d l
+        putStrLn $ "Wrote " <> (show s) <> " files to " <> d <>
+                       (if 0 == e then "" else " (" <> show e <> " errors!)")
+  F.mapM_ (D.createDirectoryIfMissing True) [ mdir, bdir, pdir ]
   genTo mdir B.manual
   genTo bdir B.base
   genTo pdir B.pseudo
+
+
+genOpDefs :: FilePath -> [(String, DSL.Definition)] -> IO (Int, Int)
+genOpDefs d l = F.foldlM writeDef (0, 0) l
+    where writeDef (s,e) (opName, def) =
+              if opName `elem` opcodes
+              then do TIO.writeFile (d </> opName <.> "sem") (DSL.printDefinition def)
+                      return (s+1, e)
+              else do putStrLn $ "ERR: ignoring unknown DSL defined opcode \"" <>
+                               opName <> "\" (-> " <> d <> ")"
+                      return (s, e+1)
+          opcodes = map show allOpcodes

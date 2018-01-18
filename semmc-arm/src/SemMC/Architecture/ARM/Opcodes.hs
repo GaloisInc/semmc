@@ -3,6 +3,7 @@
 module SemMC.Architecture.ARM.Opcodes
     ( allSemantics
     , allOpcodeInfo
+    , allOpcodes
     )
     where
 
