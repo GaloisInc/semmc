@@ -223,11 +223,19 @@ def view_arch(request, arch_id):
 
     flipdir = 'asc' if sort_dir == 'desc' else 'desc'
 
+    columns = [
+            { 'name': 'opcode', 'display_name': 'Opcode', },
+            { 'name': 'num_failures', 'display_name': '# Failures', },
+            { 'name': 'num_successes', 'display_name': '# Successes', },
+            { 'name': 'percent_failing', 'display_name': '% Failing', },
+            ]
+
     context = {
             'arch': a,
             'opcode_statuses': opcode_results,
             'flipdir': flipdir,
             'sort_order': sort_order,
+            'cols': columns,
             }
 
     return render(request, 'main/view_arch.html', context)
