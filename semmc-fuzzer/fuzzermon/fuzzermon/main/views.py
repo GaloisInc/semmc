@@ -221,9 +221,7 @@ def view_arch(request, arch_id):
     if sort_dir == 'desc':
         opcode_results.reverse()
 
-    print(sort_dir)
     flipdir = 'asc' if sort_dir == 'desc' else 'desc'
-    print(flipdir)
 
     context = {
             'arch': a,
@@ -242,8 +240,6 @@ def view_opcode(request, opcode_id):
         display_mode = display_modes[0]
 
     request.session['numeric_display'] = display_mode
-
-    print(display_mode)
 
     o = Opcode.objects.get(pk=opcode_id)
 
