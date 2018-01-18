@@ -57,4 +57,5 @@ div.testValue {
 span.typeTag {
     display: inline-block;
     float: left;
+    margin-right: 1em;
 }
