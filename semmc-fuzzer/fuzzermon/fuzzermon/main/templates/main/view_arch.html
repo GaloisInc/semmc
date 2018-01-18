@@ -13,7 +13,7 @@
     <tr>
         {% for col in cols %}
         <th>
-            <a href="/arch/{{ arch.id }}/?sort={{ col.name }}{% if sort_order == col.name %}&dir={{ flipdir }}{% endif %}">
+            <a href="?sort={{ col.name }}{% if sort_order == col.name %}&dir={{ flipdir }}{% endif %}">
                 {{ col.display_name }}</a>
         </th>
         {% endfor %}
