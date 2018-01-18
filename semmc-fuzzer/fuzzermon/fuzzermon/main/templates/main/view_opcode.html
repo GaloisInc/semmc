@@ -25,7 +25,7 @@
                 <span class="mono">{{ failure.pretty }}</span>
             </div>
             <div>
-                <span class="lighthost"><span class="mono">{{ failure.batch.testing_host.hostname }}</span></span>
+                <span class="lighthost mono">{{ failure.batch.testing_host.hostname }}</span>
             </div>
         </td>
         {% for state in failure.testfailurestate_set.all %}
