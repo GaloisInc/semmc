@@ -16,4 +16,4 @@ virtualenv $ENV
 source $ENV/bin/activate
 
 # Install python dependencies:
-pip install Django psycopg2
+pip install Django psycopg2 gunicorn
