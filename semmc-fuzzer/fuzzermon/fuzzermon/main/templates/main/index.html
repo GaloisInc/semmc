@@ -1,4 +1,5 @@
 {% extends "main/site.html" %}
+{% load main_helpers %}
 
 {% block nav %}
 <a href="/">Fuzzermon</a>
@@ -15,14 +16,12 @@
     {% for arch in archs %}
     <tr>
         <td valign="top">
-            <span class="mono">
-                <a href="/arch/{{ arch.arch.id }}/">{{ arch.arch.name }}</a>
-            </span>
+            <a href="/arch/{{ arch.arch.id }}/">{{ arch.arch.name|mono }}</a>
         </td>
         <td>
             <ul>
                 {% for host in arch.hosts %}
-                <li><span class="mono">{{ host.host.hostname }}</span> (Failures: {{ host.num_failures }}, Successes: {{ host.num_successes }})</li>
+                <li>{{ host.host.hostname|mono }} (Failures: {{ host.num_failures }}, Successes: {{ host.num_successes }})</li>
                 {% endfor %}
             </ul>
         </td>

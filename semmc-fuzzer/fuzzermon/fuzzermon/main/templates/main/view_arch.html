@@ -1,12 +1,13 @@
 {% extends "main/site.html" %}
+{% load main_helpers %}
 
 {% block nav %}
 <a href="/">Fuzzermon</a>
-  &raquo; <span class="mono"><a href="/arch/{{ arch.id }}/">{{ arch.name }}</a></span>
+  &raquo; <a href="/arch/{{ arch.id }}/">{{ arch.name|mono }}</span>
 {% endblock %}
 
 {% block body %}
-<h1>Opcode Listing for <span class="mono">{{ arch.name }}</span></h1>
+<h1>Opcode Listing for {{ arch.name|mono }}</h1>
 
 <table>
     <tr>
@@ -20,9 +21,7 @@
     {% for status in opcode_statuses %}
     <tr>
         <td>
-            <span class="mono">
-                <a href="/opcode/{{ status.opcode.id }}/">{{ status.opcode.name }}</a>
-            </span>
+            <a href="/opcode/{{ status.opcode.id }}/">{{ status.opcode.name|mono }}</a>
         </td>
         <td>
             {{ status.num_failures }}

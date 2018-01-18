@@ -3,12 +3,12 @@
 
 {% block nav %}
 <a href="/">Fuzzermon</a>
-  &raquo; <span class="mono"><a href="/arch/{{ opcode.arch.id }}/">{{ opcode.arch.name }}</a></span>
-  &raquo; <span class="mono"><a href="/opcode/{{ opcode.id }}/">{{ opcode.name }}</a></span>
+  &raquo; <a href="/arch/{{ opcode.arch.id }}/">{{ opcode.arch.name|mono }}</a>
+  &raquo; <a href="/opcode/{{ opcode.id }}/">{{ opcode.name|mono }}</a>
 {% endblock %}
 
 {% block body %}
-<h1>Test Failures for <span class="mono">{{ opcode.name }}</span></h1>
+<h1>Test Failures for {{ opcode.name|mono }}</h1>
 
 <form id="numTyForm" action="">
     Numeric display mode:
@@ -32,15 +32,15 @@
     <tr>
         <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
             <div>
-                <span class="mono">{{ failure.pretty }}</span>
+                {{ failure.pretty|mono }}
             </div>
             <div>
-                <span class="lighthost mono">{{ failure.batch.testing_host.hostname }}</span>
+                <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
             </div>
         </td>
         {% for state in failure.testfailurestate_set.all %}
         {% if forloop.counter0 > 0 %}<tr>{% endif %}
-            <td><span class="mono">{{ state.location }}</span></td>
+            <td>{{ state.location|mono }}</td>
             <td>
                 <div class="testValue">
                     <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
