@@ -28,6 +28,11 @@
         <th>Location</th>
         <th>(S)emantics vs. (H)ardware</th>
     </tr>
+    {% if failures|length == 0 %}
+    <tr>
+        <td colspan="3">No test failures.</td>
+    </tr>
+    {% endif %}
     {% for failure in failures %}
     <tr>
         <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
@@ -61,6 +66,11 @@
         <th>Instruction</th>
         <th>Signal</th>
     </tr>
+    {% if signal_errors|length == 0 %}
+    <tr>
+        <td colspan="2">No test failures due to unexpected signals.</td>
+    </tr>
+    {% endif %}
     {% for error in signal_errors %}
     <tr>
         <td>
