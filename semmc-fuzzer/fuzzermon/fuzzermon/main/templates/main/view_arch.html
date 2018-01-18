@@ -24,16 +24,16 @@
             <a href="/opcode/{{ status.opcode.id }}/">{{ status.opcode.name|mono }}</a>
         </td>
         <td>
-            {{ status.num_failures }}
+            {{ status.num_failures|mono }}
         </td>
         <td>
-            {{ status.num_signal_errors }}
+            {{ status.num_signal_errors|mono }}
         </td>
         <td>
-            {{ status.num_successes }}
+            {{ status.num_successes|mono }}
         </td>
         <td>
-            {{ status.percent_failing }}
+            {{ status.percent_failing|mono }}
         </td>
     <tr>
     {% endfor %}
