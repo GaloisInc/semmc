@@ -45,3 +45,6 @@ sudo -i -u fuzzermon semmc/semmc-fuzzer/fuzzermon/setup.sh
 # Install bashrc
 sudo cp $HERE/fuzzermon_bashrc ~fuzzermon/.bashrc
 sudo chown fuzzermon: ~fuzzermon/.bashrc
+
+# Set up database
+sudo -i -u fuzzermon semmc/semmc-fuzzer/fuzzermon/setup_database.sh
