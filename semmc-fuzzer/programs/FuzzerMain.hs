@@ -431,7 +431,9 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   opcodes <- case matched of
       (o:os) -> return $ NES.fromList o os
       _ -> do
-          IO.hPutStrLn IO.stderr "BUG: empty opcode list"
+          IO.hPutStrLn IO.stderr $
+              "Error: no opcodes in list were found in the ISA for architecture " <>
+              show (fuzzerArchName mainConfig)
           IO.exitFailure
 
   runThread <- CA.async $ do
