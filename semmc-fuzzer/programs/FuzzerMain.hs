@@ -272,7 +272,8 @@ usage = do
     pn <- IO.getProgName
     putStrLn $ "Usage: " <> pn <> " [options]"
     let msg = unlines [ "\nAt a minimum, specify either a configuration file or the hostname "
-                      , "and architecture name options."
+                      , "and architecture name options. Command line options are ignored if "
+                      , "'-c' is specified."
                       ]
     putStrLn $ usageInfo msg arguments
 
