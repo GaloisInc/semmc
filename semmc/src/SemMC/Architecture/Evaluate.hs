@@ -105,6 +105,11 @@ evaluateFormula sb formula initialState =
                                     let wVal :: W.W n
                                         wVal = W.w val
                                     in MapF.insert loc (AV.ValueBV wVal) m
-                        _ -> error $ "BUG: unhandled case: " <> show (A.locationType loc)
+                        _ ->
+                            -- FIXME one day: we aren't currently
+                            -- handling memory locations, which are the
+                            -- only other kind of thing we could expect
+                            -- here.
+                            m
 
             return $ MapF.foldrWithKey f initialState newFormDefs
