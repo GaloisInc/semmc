@@ -24,6 +24,7 @@ class BatchEntry(object):
         self.pretty = None
         self.operands = None
         self.state_values = []
+        self.signal_num = None
 
 class StateValue(object):
     def __init__(self, loc, exp, act):
@@ -54,6 +55,9 @@ def parse_batch_json(body):
 
             for sval in entry['state']:
                 be.state_values.append(StateValue(sval['location'], sval['expected'], sval['actual']))
+        elif be.type == 'unexpectedSignal':
+            be.pretty = entry['pretty']
+            be.signal_num = entry['signal']
         else:
             raise ValueError("Invalid batch entry type: %s" % (be.type,))
 
@@ -111,6 +115,13 @@ def upload_batch(request):
                 e = TestSuccess()
                 e.count = entry.count
                 e.opcode = opcode
+                e.batch = b
+                e.save()
+            elif entry.type == 'unexpectedSignal':
+                e = TestSignalError()
+                e.opcode = opcode
+                e.pretty = entry.pretty
+                e.signal = entry.signal_num
                 e.batch = b
                 e.save()
             elif entry.type == 'failure':
@@ -187,7 +198,9 @@ def arch_list(request):
 def view_arch(request, arch_id):
     sort_orders = {
             'opcode': lambda r: r['opcode'].name,
+            'opcode': lambda r: r['opcode'].name,
             'num_failures': lambda r: r['num_failures'],
+            'num_signal_errors': lambda r: r['num_signal_errors'],
             'num_successes': lambda r: r['num_successes'],
             'percent_failing': lambda r: r['percent_failing'],
             }
@@ -207,12 +220,20 @@ def view_arch(request, arch_id):
     for opcode in opcodes:
         num_failures = TestFailure.objects.filter(opcode__id=opcode.id).count()
         num_successes = TestSuccess.objects.filter(opcode__id=opcode.id).count()
+        num_signal_errors = TestSignalError.objects.filter(opcode__id=opcode.id).count()
+
+        denom = num_failures + num_successes
+        if denom == 0:
+            percent = 100
+        else:
+            percent = round(100.0 * (num_failures / denom), 2)
 
         results = {
                 'opcode': opcode,
                 'num_failures': num_failures,
                 'num_successes': num_successes,
-                'percent_failing': round(100.0 * (num_failures / (num_failures + num_successes)), 2),
+                'num_signal_errors': num_signal_errors,
+                'percent_failing': percent,
                 }
         opcode_results.append(results)
 
@@ -226,6 +247,7 @@ def view_arch(request, arch_id):
     columns = [
             { 'name': 'opcode', 'display_name': 'Opcode', },
             { 'name': 'num_failures', 'display_name': '# Failures', },
+            { 'name': 'num_signal_errors', 'display_name': '# Signal Errors', },
             { 'name': 'num_successes', 'display_name': '# Successes', },
             { 'name': 'percent_failing', 'display_name': '% Failing', },
             ]
@@ -252,10 +274,12 @@ def view_opcode(request, opcode_id):
     o = Opcode.objects.get(pk=opcode_id)
 
     failures = TestFailure.objects.filter(opcode__id=o.id)
+    signal_errors = TestSignalError.objects.filter(opcode__id=o.id)
 
     context = {
             'opcode': o,
             'failures': failures,
+            'signal_errors': signal_errors,
             'numty': display_mode,
             }
 

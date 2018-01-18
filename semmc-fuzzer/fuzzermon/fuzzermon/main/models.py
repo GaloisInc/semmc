@@ -1,4 +1,5 @@
 from django.db import models
+import signal
 
 class User(models.Model):
     username = models.CharField(max_length=64, unique=True)
@@ -30,6 +31,18 @@ class TestFailure(models.Model):
     opcode = models.ForeignKey(Opcode, on_delete=models.CASCADE)
     pretty = models.CharField(max_length=256)
     arguments = models.TextField()
+
+class TestSignalError(models.Model):
+    batch = models.ForeignKey(Batch, on_delete=models.CASCADE)
+    opcode = models.ForeignKey(Opcode, on_delete=models.CASCADE)
+    pretty = models.CharField(max_length=256)
+    signal = models.IntegerField()
+
+    def signame(self):
+        try:
+            return signal.Signals(self.signal).name
+        except ValueError:
+            return "unknown"
 
 class TestFailureState(models.Model):
     test_failure = models.ForeignKey(TestFailure, on_delete=models.CASCADE)

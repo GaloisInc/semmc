@@ -20,6 +20,7 @@ import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSC8
 import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
+import           Data.Int (Int32)
 import qualified Data.Word.Indexed as W
 import           Data.List (intercalate)
 import           Data.Maybe (catMaybes)
@@ -615,7 +616,14 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
               return Nothing
             CE.TestSignalError nonce sig -> do
               L.logIO L.Error $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
-              return Nothing
+              let Just (inst, _) = M.lookup nonce caseMap
+              case inst of
+                  Instruction opcode _ ->
+                      return $ Just $ UnexpectedSignal $
+                          TestSignalError { testSignalNum = sig
+                                          , testSignalOpcode = showF opcode
+                                          , testSignalPretty = render $ ppInst inst
+                                          }
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
               return Nothing
@@ -693,10 +701,12 @@ instance AE.ToJSON Batch where
 
 data BatchEntry = Success TestSuccess
                 | Failure TestFailure
+                | UnexpectedSignal TestSignalError
 
 instance AE.ToJSON BatchEntry where
     toJSON (Success s) = AE.toJSON s
     toJSON (Failure f) = AE.toJSON f
+    toJSON (UnexpectedSignal s) = AE.toJSON s
 
 data TestSuccess =
     TestSuccess { testSuccessOpcode :: String
@@ -708,6 +718,20 @@ instance AE.ToJSON TestSuccess where
         AE.object [ "type" AE..= ("success"::T.Text)
                   , "opcode" AE..= testSuccessOpcode s
                   , "count" AE..= testSuccessCount s
+                  ]
+
+data TestSignalError =
+    TestSignalError { testSignalOpcode :: String
+                    , testSignalPretty :: String
+                    , testSignalNum :: Int32
+                    }
+
+instance AE.ToJSON TestSignalError where
+    toJSON s =
+        AE.object [ "type" AE..= ("unexpectedSignal"::T.Text)
+                  , "opcode" AE..= testSignalOpcode s
+                  , "pretty" AE..= testSignalPretty s
+                  , "signal" AE..= testSignalNum s
                   ]
 
 data TestFailure =

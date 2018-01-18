@@ -53,4 +53,28 @@
         {% endfor %}
     {% endfor %}
 </table>
+
+<h1>Test Signal Errors for {{ opcode.name|mono }}</h1>
+
+<table>
+    <tr>
+        <th>Instruction</th>
+        <th>Signal</th>
+    </tr>
+    {% for error in signal_errors %}
+    <tr>
+        <td>
+            <div>
+                {{ error.pretty|mono }}
+            </div>
+            <div>
+                <span class="lighthost">{{ error.batch.testing_host.hostname|mono }}</span>
+            </div>
+        </td>
+        <td>
+            {{ error.signal|mono }} ({{ error.signame|mono }})
+        </td>
+    </tr>
+    {% endfor %}
+</table>
 {% endblock %}
