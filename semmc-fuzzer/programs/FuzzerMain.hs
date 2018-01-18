@@ -20,6 +20,7 @@ import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSC8
 import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
+import qualified Data.Word.Indexed as W
 import           Data.List (intercalate)
 import           Data.Maybe (catMaybes)
 import           Data.Monoid ((<>))
@@ -613,10 +614,11 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                       if (expectedFinal /= CE.resultContext tr)
                          then do
                              let sd = stateDiff proxy expectedFinal (CE.resultContext tr)
-                                 mkState (loc, (Just expected, Just actual)) =
+                                 mkState :: (Some (A.Location arch), (Maybe (Some V.Value), Maybe (Some V.Value))) -> TestFailureState
+                                 mkState (loc, (Just (Some (V.ValueBV expected)), Just (Some (V.ValueBV actual)))) =
                                      TestFailureState { testFailureLocation = show loc
-                                                      , testFailureExpected = show expected
-                                                      , testFailureActual = show actual
+                                                      , testFailureExpected = show $ W.unW expected
+                                                      , testFailureActual = show $ W.unW actual
                                                       }
                                  mkState t =
                                      error $ "BUG: mkState got invalid tuple " <> show t
