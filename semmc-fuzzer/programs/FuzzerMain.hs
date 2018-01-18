@@ -18,7 +18,6 @@ import qualified Data.Aeson as AE
 import qualified Data.Foldable as F
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSC8
-import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Word.Indexed as W
 import           Data.List (intercalate)
@@ -56,6 +55,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
 
 import           SemMC.Fuzzer.Types
+import           SemMC.Fuzzer.Util
 
 import qualified SemMC.Log as L
 import qualified SemMC.Formula as F
@@ -67,8 +67,7 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.PPC32 as PPCS
 import qualified SemMC.Architecture.PPC32.Opcodes as PPCS
-import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
-                                          , unTemplate, TemplatableOperand
+import           SemMC.Synthesis.Template ( TemplatableOperand
                                           , TemplatedOperand
                                           )
 
@@ -411,19 +410,6 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
 
   L.logEndWith logCfg
 
-makePlain :: forall arch sym
-           . (MapF.OrdF (A.Opcode arch (A.Operand arch)),
-              MapF.OrdF (A.Location arch))
-          => BaseSet sym arch
-          -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula sym arch)
-makePlain = MapF.foldrWithKey f MapF.empty
-  where f :: forall sh
-           . A.Opcode arch (A.Operand arch) sh
-          -> F.ParameterizedFormula sym (TemplatedArch arch) sh
-          -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula sym arch)
-          -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula sym arch)
-        f op pf = MapF.insert op (unTemplate pf)
-
 testRunner :: forall proxy arch .
               ( TemplatableOperand arch
               , A.Architecture arch
@@ -607,23 +593,3 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                                              , testSuccessCount = 1
                                              }
 
-stateDiff :: (A.Architecture arch)
-          => proxy arch
-          -> V.ConcreteState arch
-          -> V.ConcreteState arch
-          -> [(Some (A.Location arch), (Maybe (Some V.Value), Maybe (Some V.Value)))]
-stateDiff _ a b =
-    let aKeys = S.fromList $ MapF.keys a
-        bKeys = S.fromList $ MapF.keys b
-        allKeys = S.union aKeys bKeys
-        pairs = [ (k,) <$>
-                  case k of
-                    Some v ->
-                      let aVal = MapF.lookup v a
-                          bVal = MapF.lookup v b
-                      in if aVal == bVal
-                         then Nothing
-                         else Just (Some <$> aVal, Some <$> bVal)
-                | k <- S.toList allKeys
-                ]
-    in catMaybes pairs
