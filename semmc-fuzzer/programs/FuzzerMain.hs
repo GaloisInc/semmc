@@ -245,6 +245,7 @@ data ArchImpl where
              -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
              -> CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
              -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
+             -> (Some ((A.Opcode arch) (A.Operand arch)) -> Bool)
              -> ArchImpl
 
 ppc32Arch :: ArchImpl
@@ -255,6 +256,14 @@ ppc32Arch =
              PPCS.allSemantics
              PPCS.testSerializer
              PPC.ppInstruction
+             ppc32OpcodeFilter
+
+ppc32OpcodeFilter :: Some (PPC.Opcode PPC.Operand) -> Bool
+ppc32OpcodeFilter o =
+    not $ show o `elem` blacklist
+    where
+        blacklist = [ "BCL"
+                    ]
 
 knownArchs :: [ArchImpl]
 knownArchs =
@@ -265,7 +274,7 @@ allArchNames :: [String]
 allArchNames = archImplName <$> knownArchs
 
 archImplName :: ArchImpl -> String
-archImplName (ArchImpl n _ _ _ _ _) = n
+archImplName (ArchImpl n _ _ _ _ _ _) = n
 
 usage :: IO ()
 usage = do
@@ -419,14 +428,12 @@ startHostThreads logCfg fc = do
           mapM_ CA.wait (concat hostThreads)
 
 testHost :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
-testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer ppInst) = do
+testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer ppInst opcodeFilter) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
-  L.withLogCfg logCfg $ L.logIO L.Info $
-      printf "Starting up for host %s" (fuzzerTestHostname hostConfig)
-
-  let matched = filterOpcodes proxy (fuzzerTestOpcodes mainConfig) allOpcodes
+  let matched = filter opcodeFilter $
+                filterOpcodes proxy (fuzzerTestOpcodes mainConfig) allOpcodes
 
   opcodes <- case matched of
       (o:os) -> return $ NES.fromList o os
@@ -435,6 +442,9 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
               "Error: no opcodes in list were found in the ISA for architecture " <>
               show (fuzzerArchName mainConfig)
           IO.exitFailure
+
+  L.withLogCfg logCfg $ L.logIO L.Info $
+      printf "Starting up for host %s" (fuzzerTestHostname hostConfig)
 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
