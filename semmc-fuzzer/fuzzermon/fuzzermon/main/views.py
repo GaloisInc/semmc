@@ -185,9 +185,23 @@ def arch_list(request):
     return render(request, 'main/index.html', context)
 
 def view_arch(request, arch_id):
+    sort_orders = {
+            'opcode': lambda r: r['opcode'].name,
+            'num_failures': lambda r: r['num_failures'],
+            'num_successes': lambda r: r['num_successes'],
+            'percent_failing': lambda r: r['percent_failing'],
+            }
+    sort_dir = request.GET.get('dir') or 'asc'
+
+    sort_order = request.GET.get('sort')
+    if sort_order not in sort_orders:
+        sort_order = 'opcode'
+
+    sort_order_func = sort_orders[sort_order]
+
     a = Arch.objects.get(pk=arch_id)
 
-    opcodes = Opcode.objects.filter(arch__id=arch_id).order_by('name')
+    opcodes = Opcode.objects.filter(arch__id=arch_id)
     opcode_results = []
 
     for opcode in opcodes:
@@ -198,13 +212,24 @@ def view_arch(request, arch_id):
                 'opcode': opcode,
                 'num_failures': num_failures,
                 'num_successes': num_successes,
-                'percent_failing': 100.0 * (num_failures / (num_failures + num_successes)),
+                'percent_failing': round(100.0 * (num_failures / (num_failures + num_successes)), 2),
                 }
         opcode_results.append(results)
+
+    opcode_results.sort(key=sort_order_func)
+
+    if sort_dir == 'desc':
+        opcode_results.reverse()
+
+    print(sort_dir)
+    flipdir = 'asc' if sort_dir == 'desc' else 'desc'
+    print(flipdir)
 
     context = {
             'arch': a,
             'opcode_statuses': opcode_results,
+            'flipdir': flipdir,
+            'sort_order': sort_order,
             }
 
     return render(request, 'main/view_arch.html', context)

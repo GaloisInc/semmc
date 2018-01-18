@@ -10,10 +10,22 @@
 
 <table>
     <tr>
-        <th>Opcode</th>
-        <th>Failures</th>
-        <th>Successes</th>
-        <th>% Failing</th>
+        <th>
+            <a href="/arch/{{ arch.id }}/?sort=opcode{% if sort_order == 'opcode' %}&dir={{ flipdir }}{% endif %}">
+                Opcode</a>
+        </th>
+        <th>
+            <a href="/arch/{{ arch.id }}/?sort=num_failures{% if sort_order == 'num_failures' %}&dir={{ flipdir }}{% endif %}">
+                Failures</a>
+        </th>
+        <th>
+            <a href="/arch/{{ arch.id }}/?sort=num_successes{% if sort_order == 'num_successes' %}&dir={{ flipdir }}{% endif %}">
+                Successes</a>
+        </th>
+        <th>
+            <a href="/arch/{{ arch.id }}/?sort=percent_failing{% if sort_order == 'percent_failing' %}&dir={{ flipdir }}{% endif %}">
+                % Failing</a>
+        </th>
     </tr>
     {% for status in opcode_statuses %}
     <tr>
