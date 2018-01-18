@@ -17,9 +17,15 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC.ARM
+                     , SemMC.Architecture.ARM.BaseSemantics
                      , SemMC.Architecture.ARM.Location
                      , SemMC.Architecture.ARM.Opcodes
-  other-modules:       SemMC.Architecture.ARM.Components
+  other-modules:       SemMC.Architecture.ARM.BaseSemantics.Helpers
+                     , SemMC.Architecture.ARM.BaseSemantics.Memory
+                     , SemMC.Architecture.ARM.BaseSemantics.Base
+                     , SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+                     , SemMC.Architecture.ARM.BaseSemantics.Registers
+                     , SemMC.Architecture.ARM.Components
                      , SemMC.Architecture.ARM.Eval
                      , SemMC.Architecture.ARM.Opcodes.Internal
                      , SemMC.Architecture.ARM.UF
@@ -40,6 +46,20 @@ library
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
+
+
+executable semmc-arm-genbase
+  default-language: Haskell2010
+  hs-source-dirs:   tools
+  main-is:          GenBase.hs
+  ghc-options:      -Wall -rtsopts
+  build-depends: base
+               , directory
+               , filepath
+               , optparse-applicative
+               , semmc
+               , semmc-arm
+               , text
 
 executable semmc-arm-test
   default-language: Haskell2010
