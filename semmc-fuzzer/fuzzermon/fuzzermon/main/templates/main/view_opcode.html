@@ -1,4 +1,5 @@
 {% extends "main/site.html" %}
+{% load main_helpers %}
 
 {% block nav %}
 <a href="/">Fuzzermon</a>
@@ -8,6 +9,15 @@
 
 {% block body %}
 <h1>Test Failures for <span class="mono">{{ opcode.name }}</span></h1>
+
+<form id="numTyForm" action="">
+    Numeric display mode:
+    <select name="numeric_display" onChange="document.getElementById('numTyForm').submit();">
+        <option {% if numty == "dec" %}selected{% endif %} value="dec">Decimal</option>
+        <option {% if numty == "bin" %}selected{% endif %} value="bin">Binary</option>
+        <option {% if numty == "hex" %}selected{% endif %} value="hex">Hex</option>
+    </select>
+</form>
 
 <table>
     <tr>
@@ -32,10 +42,10 @@
         <td><span class="mono">{{ state.location }}</span></td>
         <td>
             <div class="testValue">
-                <span class="typeTag">S:</span>{{ state.expected_value }}
+                <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
             </div>
             <div class="testValue">
-                <span class="typeTag">H:</span>{{ state.actual_value }}
+                <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
             </div>
         </td>
         {% endfor %}

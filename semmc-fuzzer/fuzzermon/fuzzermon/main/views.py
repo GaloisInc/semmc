@@ -235,6 +235,16 @@ def view_arch(request, arch_id):
     return render(request, 'main/view_arch.html', context)
 
 def view_opcode(request, opcode_id):
+    display_mode = request.GET.get('numeric_display') or request.session.get('numeric_display')
+    display_modes = ['dec', 'bin', 'hex']
+
+    if display_mode not in display_modes:
+        display_mode = display_modes[0]
+
+    request.session['numeric_display'] = display_mode
+
+    print(display_mode)
+
     o = Opcode.objects.get(pk=opcode_id)
 
     failures = TestFailure.objects.filter(opcode__id=o.id)
@@ -242,6 +252,7 @@ def view_opcode(request, opcode_id):
     context = {
             'opcode': o,
             'failures': failures,
+            'numty': display_mode,
             }
 
     return render(request, 'main/view_opcode.html', context)
