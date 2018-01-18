@@ -592,4 +592,3 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                                  TestSuccess { testSuccessOpcode = showF opcode
                                              , testSuccessCount = 1
                                              }
-
