@@ -546,9 +546,11 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   /* checkedPtrace(PTRACE_GETVSRREGS, childPid, 0, (void *) &vsrhalves); */
 
   /* // Copy in the other halves of the low VSR regs */
-  /* for (int i = 0; i < SEM_NFPRS; i++) { */
-  /*   rs->vsrs[i].chunks[1] = vsrhalves[i]; */
-  /* } */
+  for (int i = 0; i < SEM_NFPRS; i++) {
+    /* rs->vsrs[i].chunks[1] = vsrhalves[i]; */
+    /* NB: we don't use these yet so we fill them with zeros for now. */
+    rs->vsrs[i].chunks[1] = 0;
+  }
 
   // Anonymous struct to ensure proper alignment
   struct {
