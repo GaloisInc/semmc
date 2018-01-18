@@ -581,7 +581,6 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                           let url = reportURL <> "/upload_batch"
                               req = H.postRequestWithBody url "application/json" $
                                     BSC8.unpack $ AE.encode b
-                          L.logIO L.Info $ "Request: " <> show req
                           result <- E.try $ H.simpleHTTP req
                           case result of
                               Left (e::E.SomeException) ->
