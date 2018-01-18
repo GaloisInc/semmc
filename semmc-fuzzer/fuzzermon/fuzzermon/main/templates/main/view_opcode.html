@@ -11,8 +11,12 @@
 
 <table>
     <tr>
-        <th>Instruction</th>
-        <th>State Mismatches</th>
+        <th rowspan="2">Instruction</th>
+        <th colspan="2">State Mismatches</th>
+    </tr>
+    <tr>
+        <th>Location</th>
+        <th>(S)emantics vs. (H)ardware</th>
     </tr>
     {% for failure in failures %}
     <tr>
@@ -21,25 +25,20 @@
                 <span class="mono">{{ failure.pretty }}</span>
             </div>
             <div>
-                (Host: <span class="mono">{{ failure.batch.testing_host.hostname }}</span>)
+                <span class="lighthost"><span class="mono">{{ failure.batch.testing_host.hostname }}</span></span>
             </div>
         </td>
+        {% for state in failure.testfailurestate_set.all %}
+        <td><span class="mono">{{ state.location }}</span></td>
         <td>
-            <table>
-                <tr>
-                    <th>Location</th>
-                    <th>Expected</th>
-                    <th>Actual</th>
-                </tr>
-                {% for state in failure.testfailurestate_set.all %}
-                <tr>
-                    <td><span class="mono">{{ state.location }}</span></td>
-                    <td>{{ state.expected_value }}</td>
-                    <td>{{ state.actual_value }}</td>
-                </tr>
-                {% endfor %}
-            </table>
+            <div class="testValue">
+                <span class="typeTag">S:</span>{{ state.expected_value }}
+            </div>
+            <div class="testValue">
+                <span class="typeTag">H:</span>{{ state.actual_value }}
+            </div>
         </td>
+        {% endfor %}
     <tr>
     {% endfor %}
 </table>

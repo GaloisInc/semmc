@@ -44,3 +44,17 @@ td ul {
 #archList #hostCol {
     width: 400px;
 }
+
+span.lighthost {
+    color: #aaa;
+}
+
+div.testValue {
+    text-align: right;
+    font-family: monospace;
+}
+
+span.typeTag {
+    display: inline-block;
+    float: left;
+}
