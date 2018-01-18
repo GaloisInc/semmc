@@ -30,7 +30,7 @@
     </tr>
     {% for failure in failures %}
     <tr>
-        <td valign="top">
+        <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
             <div>
                 <span class="mono">{{ failure.pretty }}</span>
             </div>
@@ -39,17 +39,18 @@
             </div>
         </td>
         {% for state in failure.testfailurestate_set.all %}
-        <td><span class="mono">{{ state.location }}</span></td>
-        <td>
-            <div class="testValue">
-                <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
-            </div>
-            <div class="testValue">
-                <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
-            </div>
-        </td>
+        {% if forloop.counter0 > 0 %}<tr>{% endif %}
+            <td><span class="mono">{{ state.location }}</span></td>
+            <td>
+                <div class="testValue">
+                    <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
+                </div>
+                <div class="testValue">
+                    <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
+                </div>
+            </td>
+        </tr>
         {% endfor %}
-    <tr>
     {% endfor %}
 </table>
 {% endblock %}
