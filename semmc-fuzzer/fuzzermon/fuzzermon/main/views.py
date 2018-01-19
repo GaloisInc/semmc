@@ -164,14 +164,6 @@ def upload_batch(request):
 
     return JsonResponse(resp)
 
-def index(request):
-    allBatches = Batch.objects.all()
-    context = {
-            'batches': allBatches,
-            }
-
-    return render(request, 'main/index.html', context)
-
 def arch_list(request):
     archs = Arch.objects.all()
     results = []
