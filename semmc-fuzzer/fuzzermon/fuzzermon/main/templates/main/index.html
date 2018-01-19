@@ -21,7 +21,10 @@
         <td>
             <ul>
                 {% for host in arch.hosts %}
-                <li>{{ host.host.hostname|mono }} (Failures: {{ host.num_failures }}, Successes: {{ host.num_successes }})</li>
+                <li>
+                    {{ host.host.hostname|mono }} (Failures: {{ host.num_failures }}, Successes: {{ host.num_successes }})<br/>
+                    Last activity: {{ host.last_batch_time|mono }}
+                </li>
                 {% endfor %}
             </ul>
         </td>
