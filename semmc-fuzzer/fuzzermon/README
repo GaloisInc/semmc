@@ -6,6 +6,10 @@ This is the fuzzermon web application. It is written using the Python
 Django web framework and its purpose is to accept test result reports
 from semmc-fuzzer and let users look at the results in a web browser.
 
+For more information on Django, see:
+
+  https://docs.djangoproject.com/en/2.0/
+
 Uploading new data
 ==================
 
