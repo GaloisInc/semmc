@@ -24,7 +24,7 @@
     <tr>
         <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
             <div>
-                <a href="/test_failure/{{ failure.id }}/">{{ failure.pretty|mono }}</a>
+                {{ failure.pretty|mono }}
             </div>
             <div>
                 <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
