@@ -1,0 +1,69 @@
+
+fuzzermon
+=========
+
+This is the fuzzermon web application. It is written using the Python
+Django web framework and its purpose is to accept test result reports
+from semmc-fuzzer and let users look at the results in a web browser.
+
+Development
+===========
+
+To set up an Ubuntu Xenial development system:
+
+ 0) cd semmc/semmc-fuzzer/fuzzermon
+ 1) ./setup_dev.sh
+
+This will install system packages and set up the python sandbox.
+
+It may be desirable to switch to Sqlite for development; there are
+Sqlite settings commented out in fuzzermon/settings.py. To set up a
+database schema,
+
+ 0) cd fuzzermon
+ 1) python manage.py migrate
+
+Production deployment
+=====================
+
+This directory contains scripts and configuration files necessary to
+completely deploy fuzzermon on an Ubuntu Xenial installation. To do so,
+go to the target host:
+
+ 0) Log into account with sudo privilege
+ 1) git clone git@github.com:GaloisInc/semmc
+ 2) cd semmc/semmc-fuzzer/fuzzermon
+ 3) ./setup_production.sh
+
+After the last step has finished and assuming all goes well, a new
+account, 'fuzzermon', will be created and will run the fuzzermon web
+service. It runs the service using the Python "gunicorn" WSGI server,
+which in turn is proxied to by Apache. See the configuration files in
+this directory in addition to setup_production.sh for details on how the
+system is configured.
+
+In particular, you'll probably want to add SSH public keys to the
+authorized_keys file of the new 'fuzzermon' account to permit users to
+log in and manage the fuzzermon instance.
+
+Fuzzermon assumes a Postgres database in a production deployment,
+and the setup script mentioned above also takes care of creating the
+database and initializing its schema. The setup process also equips the
+'fuzzermon' account with shell configuration to ensure that the python
+environment necessary for running and working with the service is active
+in the shell upon login.
+
+Migrating the database
+======================
+
+In production:
+
+ 0) Log into the 'fuzzermon' account on the deployment system
+ 1) cd semmc/semmc-fuzzer/fuzzermon/fuzzermon
+ 2) git pull
+ 3) python manage.py migrate
+ 4) sudo systemctl restart gunicorn.service
+
+In development:
+
+ 0) python manage.py migrate
