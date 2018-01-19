@@ -48,3 +48,22 @@ sudo chown fuzzermon: ~fuzzermon/.bashrc
 
 # Set up database
 sudo -i -u fuzzermon semmc/semmc-fuzzer/fuzzermon/setup_database.sh
+
+# Enable proxying
+sudo a2enmod proxy_http
+
+sudo cp -f $HERE/apache.config /etc/apache2/sites-available/fuzzermon.conf
+
+if [ ! -f /etc/apache2/sites-enabled/fuzzermon.conf ]
+then
+    sudo ln -s /etc/apache2/sites-available/fuzzermon.conf /etc/apache2/sites-enabled/
+fi
+
+sudo /etc/init.d/apache2 restart
+
+# Install scripts to deal with gunicorn invocation
+sudo cp -f gunicorn.service /etc/systemd/system/
+sudo cp -f gunicorn.socket /etc/systemd/system/
+sudo cp -f gunicorn.conf /etc/tmpfiles.d/
+sudo systemctl enable gunicorn.socket
+sudo systemctl start gunicorn.socket
