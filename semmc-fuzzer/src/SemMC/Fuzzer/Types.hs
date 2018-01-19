@@ -107,8 +107,11 @@ archImplName (ArchImpl n _ _ _ _ _ _) = n
 
 data Batch =
     Batch { batchFuzzerHost :: String
+          -- ^ The host running the semmc-fuzzer program.
           , batchFuzzerUser :: String
+          -- ^ The user running the semmc-fuzzer program.
           , batchTestingHost :: String
+          -- ^ The architecture-specific hardware used to run the test case.
           , batchArch :: String
           , batchEntries :: [BatchEntry]
           }
