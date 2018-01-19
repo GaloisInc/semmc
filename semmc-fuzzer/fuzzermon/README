@@ -6,6 +6,16 @@ This is the fuzzermon web application. It is written using the Python
 Django web framework and its purpose is to accept test result reports
 from semmc-fuzzer and let users look at the results in a web browser.
 
+Uploading new data
+==================
+
+The web application exposes an endpoint, /upload_batch, to which the
+semmc-fuzzer tool issues an HTTP POST request. The body of the POST must
+be a JSON-encoded batch of test results, and the format of the JSON
+data must match the JSON serialization in SemMC.Fuzzer.Types for the
+'Batch' data type. The corresponding decoder lives in views.py in this
+web application.
+
 Development
 ===========
 
