@@ -10,15 +10,7 @@ set -e
 
 HERE=$(cd `dirname $0`; pwd)
 
-# Core dependencies:
-sudo apt-get install --yes python3-pip
-
-# Only because we use an SQLite database and you may want to connect
-# manually:
-sudo apt-get install --yes sqlite3
-
-# Virtualenv so we can isolate the installation:
-sudo pip3 install virtualenv
+$HERE/setup_common.sh
 
 # Install Postgres and Apache
 sudo apt-get install --yes postgresql apache2
