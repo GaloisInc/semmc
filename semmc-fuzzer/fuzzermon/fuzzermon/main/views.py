@@ -173,7 +173,8 @@ def arch_list(request):
         for h in arch.host_set.all():
             host_data.append({
                 'host': h,
-                'num_failures': TestFailure.objects.filter(batch__testing_host__id=h.id).count(),
+                'num_failures': TestFailure.objects.filter(batch__testing_host__id=h.id).count() +
+                                TestSignalError.objects.filter(batch__testing_host__id=h.id).count(),
                 'num_successes': TestSuccess.objects.filter(batch__testing_host__id=h.id).count(),
                 })
 
@@ -214,11 +215,11 @@ def view_arch(request, arch_id):
         num_successes = TestSuccess.objects.filter(opcode__id=opcode.id).count()
         num_signal_errors = TestSignalError.objects.filter(opcode__id=opcode.id).count()
 
-        denom = num_failures + num_successes
+        denom = num_failures + num_successes + num_signal_errors
         if denom == 0:
             percent = 100
         else:
-            percent = round(100.0 * (num_failures / denom), 2)
+            percent = round(100.0 * ((num_failures + num_signal_errors) / denom), 2)
 
         results = {
                 'opcode': opcode,
