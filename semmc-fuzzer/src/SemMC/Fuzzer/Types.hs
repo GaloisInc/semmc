@@ -12,6 +12,7 @@ module SemMC.Fuzzer.Types
   , TestSignalError(..)
   , TestFailure(..)
   , TestFailureState(..)
+  , TestInput(..)
 
   , FuzzerConfig(..)
   , FuzzerTestHost(..)
@@ -150,6 +151,7 @@ data TestSignalError =
     TestSignalError { testSignalOpcode :: String
                     , testSignalPretty :: String
                     , testSignalNum :: Int32
+                    , testSignalInputs :: [TestInput]
                     }
 
 instance AE.ToJSON TestSignalError where
@@ -158,6 +160,18 @@ instance AE.ToJSON TestSignalError where
                   , "opcode" AE..= testSignalOpcode s
                   , "pretty" AE..= testSignalPretty s
                   , "signal" AE..= testSignalNum s
+                  , "inputs" AE..= testSignalInputs s
+                  ]
+
+data TestInput =
+    TestInput { testInputLocation :: String
+              , testInputValue :: String
+              }
+
+instance AE.ToJSON TestInput where
+    toJSON i =
+        AE.object [ "location" AE..= testInputLocation i
+                  , "value" AE..= testInputValue i
                   ]
 
 data TestFailure =
@@ -165,6 +179,7 @@ data TestFailure =
                 , testFailureRawOperands :: String
                 , testFailurePretty :: String
                 , testFailureStates :: [TestFailureState]
+                , testFailureInputs :: [TestInput]
                 }
 
 instance AE.ToJSON TestFailure where
@@ -174,6 +189,7 @@ instance AE.ToJSON TestFailure where
                   , "raw-operands" AE..= testFailureRawOperands s
                   , "pretty" AE..= testFailurePretty s
                   , "state" AE..= testFailureStates s
+                  , "inputs" AE..= testFailureInputs s
                   ]
 
 data TestFailureState =

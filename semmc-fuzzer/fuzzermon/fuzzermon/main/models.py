@@ -32,6 +32,11 @@ class TestFailure(models.Model):
     pretty = models.CharField(max_length=256)
     arguments = models.TextField()
 
+class TestFailureInput(models.Model):
+    test_failure = models.ForeignKey(TestFailure, on_delete=models.CASCADE, db_index=True)
+    location = models.CharField(max_length=128)
+    value = models.CharField(max_length=256)
+
 class TestSignalError(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, db_index=True)
     opcode = models.ForeignKey(Opcode, on_delete=models.CASCADE, db_index=True)
@@ -43,6 +48,11 @@ class TestSignalError(models.Model):
             return signal.Signals(self.signal).name
         except ValueError:
             return "unknown"
+
+class TestSignalErrorInput(models.Model):
+    test_signal_error = models.ForeignKey(TestSignalError, on_delete=models.CASCADE, db_index=True)
+    location = models.CharField(max_length=128)
+    value = models.CharField(max_length=256)
 
 class TestFailureState(models.Model):
     test_failure = models.ForeignKey(TestFailure, on_delete=models.CASCADE, db_index=True)

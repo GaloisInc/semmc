@@ -1,9 +1,11 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 module SemMC.Fuzzer.Util
   ( stateDiff
+  , statePairs
   , makePlain
   )
 where
@@ -13,6 +15,7 @@ import           Data.Maybe (catMaybes)
 
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Word.Indexed as W
 
 import qualified SemMC.Formula as F
 import qualified SemMC.Architecture as A
@@ -21,6 +24,15 @@ import qualified SemMC.Architecture.Value as V
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch
                                           , unTemplate
                                           )
+
+statePairs :: (A.Architecture arch, MapF.ShowF (A.Location arch))
+          => proxy arch
+          -> V.ConcreteState arch
+          -> [(String, String)]
+statePairs _ s =
+    let showValue (V.ValueBV v) = show $ W.unW v
+        showValue other = show other
+    in [ (MapF.showF k, showValue v) | MapF.Pair k v <- MapF.toList s ]
 
 stateDiff :: (A.Architecture arch)
           => proxy arch

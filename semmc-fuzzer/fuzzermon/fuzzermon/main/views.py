@@ -25,12 +25,18 @@ class BatchEntry(object):
         self.operands = None
         self.state_values = []
         self.signal_num = None
+        self.inputs = []
 
 class StateValue(object):
     def __init__(self, loc, exp, act):
         self.location = loc
         self.expected = exp
         self.actual = act
+
+class Input(object):
+    def __init__(self, loc, val):
+        self.location = loc
+        self.value = val
 
 def parse_batch_json(body):
     raw = json.loads(body)
@@ -55,9 +61,16 @@ def parse_batch_json(body):
 
             for sval in entry['state']:
                 be.state_values.append(StateValue(sval['location'], sval['expected'], sval['actual']))
+
+            for ival in entry['inputs']:
+                be.inputs.append(Input(ival['location'], ival['value']))
+
         elif be.type == 'unexpectedSignal':
             be.pretty = entry['pretty']
             be.signal_num = entry['signal']
+
+            for ival in entry['inputs']:
+                be.inputs.append(Input(ival['location'], ival['value']))
         else:
             raise ValueError("Invalid batch entry type: %s" % (be.type,))
 
@@ -124,6 +137,10 @@ def upload_batch(request):
                 e.signal = entry.signal_num
                 e.batch = b
                 e.save()
+
+                TestSignalErrorInput.objects.bulk_create([
+                    TestSignalErrorInput(test_signal_error=e, location=i.location, value=i.value)
+                    for i in entry.inputs ])
             elif entry.type == 'failure':
                 e = TestFailure()
                 e.opcode = opcode
@@ -132,13 +149,13 @@ def upload_batch(request):
                 e.batch = b
                 e.save()
 
-                for sve in entry.state_values:
-                    sv = TestFailureState()
-                    sv.test_failure = e
-                    sv.location = sve.location
-                    sv.expected_value = sve.expected
-                    sv.actual_value = sve.actual
-                    sv.save()
+                TestFailureState.objects.bulk_create([
+                    TestFailureState(test_failure=e, location=sve.location, expected_value=sve.expected, actual_value=sve.actual)
+                    for sve in entry.state_values ])
+
+                TestFailureInput.objects.bulk_create([
+                    TestFailureInput(test_failure=e, location=i.location, value=i.value)
+                    for i in entry.inputs ])
             else:
                 raise Exception("BUG: Invalid entry type %s" % (entry.type,))
 
@@ -258,14 +275,7 @@ def view_arch(request, arch_id):
     return render(request, 'main/view_arch.html', context)
 
 def view_opcode(request, opcode_id):
-    display_mode = request.GET.get('numeric_display') or request.session.get('numeric_display')
-    display_modes = ['dec', 'bin', 'hex']
-
-    if display_mode not in display_modes:
-        display_mode = display_modes[0]
-
-    request.session['numeric_display'] = display_mode
-
+    set_display_mode(request)
     o = Opcode.objects.get(pk=opcode_id)
 
     failures = TestFailure.objects.filter(opcode__id=o.id)
@@ -275,7 +285,40 @@ def view_opcode(request, opcode_id):
             'opcode': o,
             'failures': failures,
             'signal_errors': signal_errors,
-            'numty': display_mode,
+            'numty': request.session['numeric_display'],
             }
 
     return render(request, 'main/view_opcode.html', context)
+
+def view_test_failure(request, test_failure_id):
+    set_display_mode(request)
+    tf = TestFailure.objects.get(pk=test_failure_id)
+
+    context = {
+            'failure': tf,
+            'numty': request.session['numeric_display'],
+            'inputs': tf.testfailureinput_set.all(),
+            }
+
+    return render(request, 'main/view_test_failure.html', context)
+
+def view_test_signal_error(request, test_signal_error_id):
+    set_display_mode(request)
+    ts = TestSignalError.objects.get(pk=test_signal_error_id)
+
+    context = {
+            'signal_error': ts,
+            'numty': request.session['numeric_display'],
+            'inputs': ts.testsignalerrorinput_set.all(),
+            }
+
+    return render(request, 'main/view_test_signal_error.html', context)
+
+def set_display_mode(request):
+    display_mode = request.GET.get('numeric_display') or request.session.get('numeric_display')
+    display_modes = ['dec', 'bin', 'hex']
+
+    if display_mode not in display_modes:
+        display_mode = display_modes[0]
+
+    request.session['numeric_display'] = display_mode

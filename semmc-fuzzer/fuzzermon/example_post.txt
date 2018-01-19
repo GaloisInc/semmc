@@ -20,6 +20,19 @@
           "expected": "ex",
           "actual": "ac"
         }
+      ],
+      "inputs": [
+        { "location": "r1", "value": "123" }
+      ]
+    },
+    {
+      "type": "unexpectedSignal",
+      "opcode": "ADD4",
+      "pretty-print": "...",
+      "signal": 4
+      ],
+      "inputs": [
+        { "location": "r1", "value": "123" }
       ]
     }
   ]

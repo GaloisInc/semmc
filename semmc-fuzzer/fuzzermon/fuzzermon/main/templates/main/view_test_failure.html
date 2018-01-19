@@ -3,12 +3,12 @@
 
 {% block nav %}
 <a href="/">Fuzzermon</a>
-  &raquo; <a href="/arch/{{ opcode.arch.id }}/">{{ opcode.arch.name|mono }}</a>
-  &raquo; <a href="/opcode/{{ opcode.id }}/">{{ opcode.name|mono }}</a>
+  &raquo; <a href="/arch/{{ failure.opcode.arch.id }}/">{{ failure.opcode.arch.name|mono }}</a>
+  &raquo; <a href="/opcode/{{ failure.opcode.id }}/">{{ failure.opcode.name|mono }}</a>
 {% endblock %}
 
 {% block body %}
-<h1>Test Failures for {{ opcode.name|mono }}</h1>
+<h1>Test Failure for {{ failure.opcode.name|mono }}</h1>
 
 {% include "main/display_mode.html" %}
 
@@ -21,12 +21,6 @@
         <th>Location</th>
         <th>(S)emantics vs. (H)ardware</th>
     </tr>
-    {% if failures|length == 0 %}
-    <tr>
-        <td colspan="3">No test failures.</td>
-    </tr>
-    {% endif %}
-    {% for failure in failures %}
     <tr>
         <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
             <div>
@@ -49,34 +43,19 @@
             </td>
         </tr>
         {% endfor %}
-    {% endfor %}
 </table>
 
-<h1>Test Signal Errors for {{ opcode.name|mono }}</h1>
+<h2>Test Inputs</h2>
 
 <table>
     <tr>
-        <th>Instruction</th>
-        <th>Signal</th>
+        <th>Location</th>
+        <th>Initial Value</th>
     </tr>
-    {% if signal_errors|length == 0 %}
+    {% for input in inputs %}
     <tr>
-        <td colspan="2">No test failures due to unexpected signals.</td>
-    </tr>
-    {% endif %}
-    {% for error in signal_errors %}
-    <tr>
-        <td>
-            <div>
-                <a href="/test_signal_error/{{ error.id }}/">{{ error.pretty|mono }}</a>
-            </div>
-            <div>
-                <span class="lighthost">{{ error.batch.testing_host.hostname|mono }}</span>
-            </div>
-        </td>
-        <td>
-            {{ error.signal|mono }} ({{ error.signame|mono }})
-        </td>
+        <td>{{ input.location|mono }}</td>
+        <td><div class="testValue">{{ input.value|num:numty }}</div></td>
     </tr>
     {% endfor %}
 </table>

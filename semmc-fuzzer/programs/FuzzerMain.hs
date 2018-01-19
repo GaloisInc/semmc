@@ -483,6 +483,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                                                         , CE.testContext = initialState
                                                         }
                                           , inst
+                                          , initialState
                                           , finalState
                                           )
 
@@ -490,7 +491,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
           L.logIO L.Info $ printf "Generating %d test cases" chunkSize
           mCases <- replicateM chunkSize (generateTestCase opcodes)
 
-          let caseMap = M.fromList [ (CE.testNonce tc, (inst, fs)) | (tc, inst, fs) <- cases ]
+          let caseMap = M.fromList [ (CE.testNonce tc, (inst, is, fs)) | (tc, inst, is, fs) <- cases ]
               cases = catMaybes mCases
 
           case null cases of
@@ -504,7 +505,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
               False -> do
                   -- Send test cases
                   L.logIO L.Info $ printf "Sending %d test cases to remote host" chunkSize
-                  C.writeChan caseChan (Just $ (\(tc, _, _) -> tc) <$> cases)
+                  C.writeChan caseChan (Just $ (\(tc, _, _, _) -> tc) <$> cases)
 
                   -- Process results
                   L.logIO L.Info "Processing test results"
@@ -551,19 +552,21 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
               return Nothing
             CE.TestSignalError nonce sig -> do
               L.logIO L.Error $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
-              let Just (inst, _) = M.lookup nonce caseMap
+              let Just (inst, initialState, _) = M.lookup nonce caseMap
               case inst of
-                  Instruction opcode _ ->
+                  Instruction opcode _ -> do
+                      let inputs = uncurry TestInput <$> statePairs proxy initialState
                       return $ Just $ UnexpectedSignal $
                           TestSignalError { testSignalNum = sig
                                           , testSignalOpcode = showF opcode
                                           , testSignalPretty = render $ ppInst inst
+                                          , testSignalInputs = inputs
                                           }
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
               return Nothing
             CE.TestSuccess tr ->
-              let Just (inst, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
+              let Just (inst, initialState, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
               in case inst of
                   Instruction opcode operands ->
                       if (expectedFinal /= CE.resultContext tr)
@@ -580,11 +583,13 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                              L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: diff: %s"
                                   (show inst) (show sd)
 
+                             let inputs = uncurry TestInput <$> statePairs proxy initialState
                              return $ Just $ Failure $
                                  TestFailure { testFailureOpcode = showF opcode
                                              , testFailureRawOperands = show operands
                                              , testFailurePretty = render $ ppInst inst
                                              , testFailureStates = mkState <$> sd
+                                             , testFailureInputs = inputs
                                              }
                          else do
                              L.logIO L.Info "SUCCESS"
