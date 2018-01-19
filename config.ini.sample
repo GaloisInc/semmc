@@ -2,7 +2,7 @@
 arch = ppc32
 opcodes = AllOpcodes
 strategy = Randomized
-report-url = http://127.0.0.1:8000
+report-url = http://192.168.52.210
 
 [host:helium.proj.galois.com]
 runner-path = /home/cygnus/bin/remote-runner.ppc32
