@@ -1,0 +1,62 @@
+{% extends "main/site.html" %}
+{% load main_helpers %}
+
+{% block nav %}
+<a href="/">Fuzzermon</a>
+  &raquo; <a href="/arch/{{ failure.opcode.arch.id }}/">{{ failure.opcode.arch.name|mono }}</a>
+  &raquo; <a href="/opcode/{{ failure.opcode.id }}/">{{ failure.opcode.name|mono }}</a>
+{% endblock %}
+
+{% block body %}
+<h1>Test Failure for {{ failure.opcode.name|mono }}</h1>
+
+{% include "main/display_mode.html" %}
+
+<table>
+    <tr>
+        <th rowspan="2">Instruction</th>
+        <th colspan="2">State Mismatches</th>
+    </tr>
+    <tr>
+        <th>Location</th>
+        <th>(S)emantics vs. (H)ardware</th>
+    </tr>
+    <tr>
+        <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
+            <div>
+                {{ failure.pretty|mono }}
+            </div>
+            <div>
+                <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
+            </div>
+        </td>
+        {% for state in failure.testfailurestate_set.all %}
+        {% if forloop.counter0 > 0 %}<tr>{% endif %}
+            <td>{{ state.location|mono }}</td>
+            <td>
+                <div class="testValue">
+                    <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
+                </div>
+                <div class="testValue">
+                    <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+</table>
+
+<h2>Test Inputs</h2>
+
+<table>
+    <tr>
+        <th>Location</th>
+        <th>Initial Value</th>
+    </tr>
+    {% for input in inputs %}
+    <tr>
+        <td>{{ input.location|mono }}</td>
+        <td><div class="testValue">{{ input.value|num:numty }}</div></td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

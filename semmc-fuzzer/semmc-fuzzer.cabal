@@ -1,0 +1,56 @@
+name:                semmc-fuzzer
+version:             0.1
+synopsis:            Fuzzer for SemMC architectures
+license:             BSD3
+license-file:        LICENSE
+author:              Jonathan Daugherty
+maintainer:          jtd@galois.com
+category:            Testing
+build-type:          Simple
+extra-source-files:  ChangeLog.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  ghc-options:         -Wall
+  default-language:    Haskell2010
+  exposed-modules:     SemMC.Fuzzer.Types
+                       SemMC.Fuzzer.Util
+
+  build-depends:       base >=4.9 && <4.10,
+                       bytestring,
+                       semmc,
+                       text,
+                       parameterized-utils,
+                       pretty,
+                       containers,
+                       dismantle-tablegen,
+                       utf8-string,
+                       aeson
+
+executable semmc-fuzzer
+  main-is:             FuzzerMain.hs
+  hs-source-dirs:      programs
+  ghc-options:         -Wall -threaded
+  default-language:    Haskell2010
+  build-depends:       base >=4.9 && <4.10,
+                       semmc,
+                       semmc-fuzzer,
+                       semmc-ppc,
+                       semmc-arm,
+                       dismantle-tablegen,
+                       dismantle-ppc,
+                       dismantle-arm,
+                       parameterized-utils,
+                       crucible,
+                       utf8-string,
+                       text,
+                       containers,
+                       async,
+                       config-ini >= 0.2.2,
+                       aeson,
+                       unix,
+                       hostname,
+                       HTTP,
+                       bytestring,
+                       pretty

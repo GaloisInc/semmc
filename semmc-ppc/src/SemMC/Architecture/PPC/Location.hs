@@ -30,6 +30,9 @@ class ArchRepr arch where
   regWidthRepr :: proxy arch -> NatRepr (ArchRegWidth arch)
 
 data Location ppc :: BaseType -> * where
+  -- NOTE: If you add new constructors here, you also need to update:
+  -- * the PPC state serializer / deserializer functions
+  -- * the remote-runner.c program's PPC32 state struct definition
   LocGPR :: PPC.GPR -> Location ppc (BaseBVType (ArchRegWidth ppc))
   LocIP :: Location ppc (BaseBVType (ArchRegWidth ppc))
   LocMSR :: Location ppc (BaseBVType 32)

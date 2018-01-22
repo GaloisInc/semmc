@@ -19,7 +19,7 @@ module SemMC.Concrete.Execution (
 
 import qualified Control.Concurrent as C
 import qualified Control.Exception as E
-import           Control.Monad
+import qualified System.IO.Error as E
 import           Control.Monad ( replicateM )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.Binary.Get as G
@@ -103,10 +103,19 @@ runRemote mexe hostName ts testCases testResults = do
 
 -- | Log the stderr output of the remote runner.
 logRemoteStderr :: (U.HasLogCfg) => String -> IO.Handle -> IO ()
-logRemoteStderr host h = forever $ do
-  l <- IO.hGetLine h
-  let msg = printf "remote runner stderr @%s: %s" host l
-  U.logIO U.Warn msg
+logRemoteStderr host h =
+    let go = do
+          l <- E.try $ IO.hGetLine h
+          case l of
+              Right line -> do
+                  let msg = printf "remote runner stderr @%s: %s" host line
+                  U.logIO U.Warn msg
+                  go
+              Left e
+                  | E.isEOFError e -> return ()
+                  | otherwise ->
+                      U.logIO U.Error $ printf "exception when reading from runner stderr: %s" (show e)
+    in go
 
 sendTestCases :: TestSerializer c i -> C.Chan (Maybe [TestCase c i]) -> IO.Handle -> IO ()
 sendTestCases ts c h = do

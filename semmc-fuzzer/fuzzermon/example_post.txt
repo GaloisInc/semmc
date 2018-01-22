@@ -1,0 +1,39 @@
+{
+  "fuzzer-host": "x",
+  "fuzzer-user": "y",
+  "testing-host": "helium",
+  "arch": "ppc32",
+  "entries": [
+    {
+      "type": "success",
+      "opcode": "ADD4",
+      "count": 12
+    },
+    {
+      "type": "failure",
+      "opcode": "ADD4",
+      "raw-operands": "",
+      "pretty-print": "",
+      "state": [
+        {
+          "location": "r1",
+          "expected": "ex",
+          "actual": "ac"
+        }
+      ],
+      "inputs": [
+        { "location": "r1", "value": "123" }
+      ]
+    },
+    {
+      "type": "unexpectedSignal",
+      "opcode": "ADD4",
+      "pretty-print": "...",
+      "signal": 4
+      ],
+      "inputs": [
+        { "location": "r1", "value": "123" }
+      ]
+    }
+  ]
+}
