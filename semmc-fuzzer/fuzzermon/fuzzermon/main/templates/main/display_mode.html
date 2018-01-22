@@ -1,0 +1,8 @@
+<form id="numTyForm" action="">
+    Numeric display mode:
+    <select name="numeric_display" onChange="document.getElementById('numTyForm').submit();">
+        <option {% if numty == "dec" %}selected{% endif %} value="dec">Decimal</option>
+        <option {% if numty == "bin" %}selected{% endif %} value="bin">Binary</option>
+        <option {% if numty == "hex" %}selected{% endif %} value="hex">Hex</option>
+    </select>
+</form>

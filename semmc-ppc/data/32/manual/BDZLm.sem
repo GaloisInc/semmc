@@ -1,0 +1,13 @@
+;; BDZL - Branch Conditional and Link after decrementing CTR and CTR is 0 (with BH=0b10)
+((operands ((target . 'Condbrtarget))) 
+  (in ('IP 'CR 'CTR))
+  (defs 
+    (('LNK (bvadd 'IP #x00000004)) 
+      ('IP 
+        (ite 
+          (andp 
+            ((_ call "test_bit_dynamic") ((_ zero_extend 27) #b00000) 'CR)
+            (xorp (bveq 'CTR #x00000000) (bveq #b0 #b0)))
+          (bvadd ((_ sign_extend 16) (concat target #b00)) 'IP)
+          (bvadd 'IP #x00000004)))
+      ('CTR (bvsub 'CTR #x00000001)))))

@@ -1,3 +1,4 @@
+;; BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero
 ((operands ((target . 'Condbrtarget))) 
   (in ('IP 'CTR))
   (defs 

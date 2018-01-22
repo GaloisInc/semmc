@@ -1,0 +1,34 @@
+{% extends "main/site.html" %}
+{% load main_helpers %}
+
+{% block nav %}
+<a href="/">Fuzzermon</a>
+{% endblock %}
+
+{% block body %}
+<h1>Architecture Listing</h1>
+
+<table id="archList">
+    <tr>
+        <th id="archCol">Architecture</th>
+        <th id="hostCol">Hosts</th>
+    </tr>
+    {% for arch in archs %}
+    <tr>
+        <td valign="top">
+            <a href="/arch/{{ arch.arch.id }}/">{{ arch.arch.name|mono }}</a>
+        </td>
+        <td>
+            <ul>
+                {% for host in arch.hosts %}
+                <li>
+                    {{ host.host.hostname|mono }} (Failures: {{ host.num_failures }}, Successes: {{ host.num_successes }})<br/>
+                    Last activity: {{ host.last_batch_time|mono }}
+                </li>
+                {% endfor %}
+            </ul>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

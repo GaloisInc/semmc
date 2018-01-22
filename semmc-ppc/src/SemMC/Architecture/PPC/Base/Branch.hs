@@ -156,22 +156,64 @@ manualBranch = do
     branchConditional Relative Link 0b00110 (Loc crbit) (Loc target)
 
   defineOpcode "BDZ" $ do
+    comment "BDZ - Branch Conditional after decrementing CTR and CTR is 0"
     target <- param "target" condbrtarget (EBV 14)
     -- The BO_0 bit is set, so the CR is ignored -- we pass in bit 0 for the CR
     -- to just have something
     branchConditional Relative NoLink 0b01001 (LitBV 5 0x0) (Loc target)
 
+  defineOpcode "BDZp" $ do
+    comment "BDZ - Branch Conditional after decrementing CTR and CTR is 0 (with BH=0b11)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative NoLink 0b11011 (LitBV 5 0x0) (Loc target)
+
+  defineOpcode "BDZm" $ do
+    comment "BDZ - Branch Conditional after decrementing CTR and CTR is 0 (with BH=0b10)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative NoLink 0b11010 (LitBV 5 0x0) (Loc target)
+
   defineOpcode "BDZL" $ do
     target <- param "target" condbrtarget (EBV 14)
     branchConditional Relative Link 0b01001 (LitBV 5 0x0) (Loc target)
 
+  defineOpcode "BDZLp" $ do
+    comment "BDZL - Branch Conditional and Link after decrementing CTR and CTR is 0 (with BH=0b11)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative Link 0b11011 (LitBV 5 0x0) (Loc target)
+
+  defineOpcode "BDZLm" $ do
+    comment "BDZL - Branch Conditional and Link after decrementing CTR and CTR is 0 (with BH=0b10)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative Link 0b11010 (LitBV 5 0x0) (Loc target)
+
   defineOpcode "BDNZ" $ do
+    comment "BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero"
     target <- param "target" condbrtarget (EBV 14)
     branchConditional Relative NoLink 0b00001 (LitBV 5 0x0) (Loc target)
+
+  defineOpcode "BDNZp" $ do
+    comment "BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero (with BH=0b11)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative NoLink 0b10011 (LitBV 5 0x0) (Loc target)
+
+  defineOpcode "BDNZm" $ do
+    comment "BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero (with BH=0b10)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative NoLink 0b00011 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDNZL" $ do
     target <- param "target" condbrtarget (EBV 14)
     branchConditional Relative Link 0b00001 (LitBV 5 0x0) (Loc target)
+
+  defineOpcode "BDNZLp" $ do
+    comment "BDNZ - Branch Conditional and Link after decrementing CTR and CTR is non-zero (with BH=0b11)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative Link 0b10011 (LitBV 5 0x0) (Loc target)
+
+  defineOpcode "BDNZLm" $ do
+    comment "BDNZ - Branch Conditional and Link after decrementing CTR and CTR is non-zero (with BH=0b10)"
+    target <- param "target" condbrtarget (EBV 14)
+    branchConditional Relative Link 0b00011 (LitBV 5 0x0) (Loc target)
 
 data AA = Absolute | Relative
   deriving (Eq, Show)

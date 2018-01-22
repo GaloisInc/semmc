@@ -25,6 +25,7 @@
 module SemMC.Log (
   -- * Misc
   LogLevel(..),
+  LogEvent(..),
   LogMsg,
   Ghc.HasCallStack,
   -- * Implicit param logger interface
@@ -59,6 +60,7 @@ import qualified GHC.Stack as Ghc
 
 import qualified Control.Concurrent as Cc
 import qualified Control.Exception as Cc
+import           Control.Monad (when)
 
 import qualified Data.Time.Clock as T
 import qualified Data.Time.Format as T
@@ -69,6 +71,7 @@ import qualified System.IO.Unsafe as IO
 import qualified UnliftIO as U
 
 import qualified Control.Concurrent.STM as Stm
+import qualified Control.Concurrent.BoundedChan as BC
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Data.Map.Strict ( Map )
 import qualified Data.Map.Strict as Map
@@ -83,7 +86,7 @@ data LogLevel = Debug -- ^ Fine details
               | Info  -- ^ Tracking progress
               | Warn  -- ^ Something notable or suspicious
               | Error -- ^ Something bad
-              deriving (Show, Eq, Ord)
+              deriving (Show, Eq, Ord, Read)
 
 type LogMsg = String
 
@@ -195,7 +198,7 @@ logM level msg = do
 -- logger has finished logging and has successfully flushed all log messages
 -- before terminating it.
 logEndWith :: LogCfg -> IO ()
-logEndWith cfg = Stm.atomically $ Stm.writeTChan (lcChan cfg) Nothing
+logEndWith cfg = BC.writeChan (lcChan cfg) Nothing
 
 ----------------------------------------------------------------
 -- ** Initialization
@@ -213,7 +216,7 @@ logEndWith cfg = Stm.atomically $ Stm.writeTChan (lcChan cfg) Nothing
 -- the log events.
 mkLogCfg :: String -> IO LogCfg
 mkLogCfg threadName = do
-  lcChan <- Stm.newTChanIO
+  lcChan <- BC.newBoundedChan 100
   threadMap <- do
     tid <- show <$> Cc.myThreadId
     return $ Map.fromList [ (tid, threadName) ]
@@ -251,16 +254,19 @@ withLogging threadName logEventConsumer action = do
 consumeUntilEnd ::
   (LogEvent -> Bool) -> (LogEvent -> IO ()) -> LogCfg -> IO ()
 consumeUntilEnd pred k cfg = do
-  mevent <- Stm.atomically $ Stm.readTChan (lcChan cfg)
+  mevent <- BC.readChan (lcChan cfg)
   case mevent of
-    Just event | pred event ->
-                 k event >> consumeUntilEnd pred k cfg
+    Just event -> do
+        when (pred event) $ k event
+        consumeUntilEnd pred k cfg
     _ -> return ()
 
 -- | A log event consumer that prints formatted log events to stderr.
 stdErrLogEventConsumer :: (LogEvent -> Bool) -> LogCfg -> IO ()
 stdErrLogEventConsumer pred =
-  consumeUntilEnd pred (IO.hPutStrLn IO.stderr . prettyLogEvent)
+  consumeUntilEnd pred $ \e -> do
+      IO.hPutStrLn IO.stderr $ prettyLogEvent e
+      IO.hFlush IO.stderr
 
 -- | A logger that writes to a user-specified file
 --
@@ -341,7 +347,7 @@ data LogEvent = LogEvent
 
 -- | Logging configuration.
 data LogCfg = LogCfg
-  { lcChan :: Stm.TChan (Maybe LogEvent)
+  { lcChan :: BC.BoundedChan (Maybe LogEvent)
   , lcThreadMap :: Stm.TVar (Map ThreadId String)
     -- ^ User friendly names for threads. See 'asyncNamed'.
 
@@ -392,7 +398,7 @@ writeLogEvent cfg cs level msg = do
   tid <- show <$> Cc.myThreadId
   ptid <- prettyThreadId cfg tid
   time <- T.getCurrentTime
-  Stm.atomically $ Stm.writeTChan (lcChan cfg) (Just (event ptid time))
+  BC.writeChan (lcChan cfg) (Just (event ptid time))
   where
     event tid time = LogEvent
       { leCallSite = callSite

@@ -1,10 +1,13 @@
 packages:
   semmc/
+  semmc-fuzzer/
   semmc-ppc/
   semmc-x86_64/
   semmc-arm/
   semmc-toy/
   submodules/dismantle/dismantle-tablegen/
+  submodules/dismantle/dismantle-arm/
+  submodules/dismantle/dismantle-ppc/
 
 optional-packages:
   submodules/crucible/crucible
