@@ -29,14 +29,19 @@ class ArchRepr arch where
 
 -- ----------------------------------------------------------------------
 
+-- note: R13 = SP, R14 = LR, and R15 = usually PC
+--
+-- SP and LR are just referenced as R13 and R14 respectively so that
+-- their values do not have to be synchronously maintained, but since
+-- R15 is sometimes not the PC value, it is separately managed.
+
 data Location arm :: BaseType -> * where
-  -- LocGPR :: ARM.GPR x -> Location arm (BaseBVType (ArchRegWidth arm))
   LocGPR :: ARMOprnds.GPR -> Location arm (BaseBVType (ArchRegWidth arm))
-  LocIP :: Location arm (BaseBVType (ArchRegWidth arm))
+  LocPC :: Location arm (BaseBVType (ArchRegWidth arm))
 
 instance Show (Location arm tp) where
   show (LocGPR gpr) = show (pPrint gpr)
-  show LocIP = "IP"
+  show LocPC = "PC"
 
 instance ShowF (Location arm)
 

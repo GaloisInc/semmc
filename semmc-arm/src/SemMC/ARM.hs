@@ -140,6 +140,7 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
 
 
 operandToLocation :: ARM.Operand s -> Maybe (Location ARM (A.OperandType ARM s))
+operandToLocation (ARM.GPR gpr) = Just $ LocGPR gpr
 operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
@@ -152,15 +153,15 @@ instance A.IsLocation (Location ARM) where
 
   readLocation = P.parseMaybe parseLocation
 
-  -- locationType (LocGPR _) = knownRepr
-  locationType LocIP = knownRepr
+  locationType (LocGPR _) = knownRepr
+  locationType LocPC = knownRepr
 
-  -- defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocIP = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocPC = S.bvLit sym knownNat 0
 
   allLocations = concat
-    [ -- map (Some . LocGPR . ARM.GPR) [0..31],
-      [ Some LocIP
+    [ map (Some . LocGPR . ARMOperands.gpr) [0..15],
+      [ Some LocPC
       ]
     ]
 
@@ -170,7 +171,17 @@ parseLocation :: ARMComp.Parser (Some (Location ARM))
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
-    'I' -> Some LocIP <$ P.string "IP"
+    'R' -> parsePrefixedRegister (Some . LocGPR . ARMOperands.gpr) 'R'
+    _ -> error $ "parse got unexpected: " <> show c
+
+
+parsePrefixedRegister :: (Integral a, Show a) => (a -> b) -> Char -> ARMComp.Parser b
+parsePrefixedRegister f c = do
+  _ <- P.char c
+  n <- P.decimal
+  case n >= 0 && n <= 15 of
+    True -> return (f n)
+    False -> fail ("Register number out of range: " ++ show n)
 
 -- ----------------------------------------------------------------------
 
