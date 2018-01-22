@@ -117,6 +117,8 @@ instance A.IsOperand ARM.Operand
 instance A.IsOpcode  ARM.Opcode
 
 type instance A.OperandType ARM "GPR" = BaseBVType 32
+type instance A.OperandType ARM "Pred" = BaseBVType 4
+type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 12
 
 
 instance A.IsOperandTypeRepr ARM where
@@ -131,12 +133,12 @@ operandValue :: forall sym s.
              -> (forall tp. Location ARM tp -> IO (S.SymExpr sym tp))
              -> ARM.Operand s
              -> IO (A.TaggedExpr ARM sym s)
-operandValue sym locLookup op = TaggedExpr <$> operandValue' op
-  where operandValue' :: ARM.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
-        operandValue' (ARM.GPR gpr) = locLookup (LocGPR gpr)
-        -- operandValue' (ARM.DBG
-        -- operandValue' (ARM.Imm0_15 (ARM.DBG absTarget)) =
-        --   S.bvLit sym knownNat (toInteger absTarget)
+operandValue sym locLookup op = TaggedExpr <$> opV op
+  where opV :: ARM.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
+        opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
+        opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
+        -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
 
 operandToLocation :: ARM.Operand s -> Maybe (Location ARM (A.OperandType ARM s))
@@ -212,6 +214,9 @@ shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType A
 shapeReprType orep =
   case orep of
     ARM.GPRRepr -> knownRepr
+    ARM.PredRepr -> knownRepr
+    ARM.Addrmode_imm12_preRepr -> knownRepr
+    _ -> error $ "Unknown OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- "Imm0_15"
     --   | Just Refl <- testEquality sr (SR.knownSymbol @"Imm0_15") ->
     --     knownRepr :: BaseTypeRepr (A.OperandType ARM "Imm0_15")
