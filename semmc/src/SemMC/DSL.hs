@@ -424,9 +424,9 @@ testBitDynamic bitNum e = uf EBool "test_bit_dynamic" [Some bitNum, Some e]
 -- >    - n = i - j + 1
 extract :: (HasCallStack)
         => Int
-        -- ^ i
+        -- ^ i (the highest bit number in the range to extract, inclusive)
         -> Int
-        -- ^ j
+        -- ^ j (the lowest bit number in the range to extract, inclusive)
         -> Expr 'TBV
         -- ^ A bitvector expression
         -> Expr 'TBV
