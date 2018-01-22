@@ -11,7 +11,6 @@ module SemMC.Architecture.Evaluate (
 import           Data.Monoid ((<>))
 import           Data.Parameterized.Classes (ShowF(showF))
 import           Data.Parameterized.Some (Some(Some))
-import           Data.Parameterized.NatRepr (knownNat, withKnownNat)
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.TraversableFC (traverseFC, fmapFC)
@@ -87,7 +86,7 @@ evaluateFormula sb formula initialState =
                         AV.ValueMem _ -> error "ValueMem not supported by valueToCrucibleElt"
                         AV.ValueBV (wordValue :: W.W n) ->
                             let w = W.unW wordValue
-                            in SI.bvLit sb (knownNat @n) w
+                            in SI.bvLit sb (W.rep wordValue) w
 
             substitutions <- traverseFC bindMatchingLocation assignment0'
 
@@ -99,11 +98,11 @@ evaluateFormula sb formula initialState =
                 f loc expr m =
                     case A.locationType loc of
                         BT.BaseBVRepr (repr::BT.NatRepr n) ->
-                            withKnownNat repr $ case SI.asUnsignedBV expr of
+                            case SI.asUnsignedBV expr of
                                 Nothing -> m
                                 Just val ->
                                     let wVal :: W.W n
-                                        wVal = W.w val
+                                        wVal = W.wRep repr val
                                     in MapF.insert loc (AV.ValueBV wVal) m
                         _ ->
                             -- FIXME one day: we aren't currently

@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -50,7 +52,7 @@ import SemMC.Architecture.Value
 --
 -- A
 --
--- > Slice a b :: Slice m n
+-- > Slice m n a b :: Slice m n
 --
 -- is a view into the @m@ contiguous bits in the range @[a,b)@ in an
 -- @n@-bit bit vector. This is a little endian view, in that the bits
@@ -59,20 +61,18 @@ import SemMC.Architecture.Value
 --
 -- For example
 --
--- > Slice 1 3 :: Slice 2 5
+-- > Slice 2 5 1 3 :: Slice 2 5
 --
 -- refers to bits 1 and 2 in a 5-bit bv with little-endian bits 0, 1,
 -- 2, 3, and 4. So,
 --
 -- > :set -XBinaryLiterals
--- > peekSlice (Slice (knownNat :: NatRepr 1) (knownNat :: NatRepr 3) :: Slice 2 5) (ValueBV (0b00010 :: W.W 4))
+-- > peekSlice (Slice knownNat knownNat (knownNat :: NatRepr 1) (knownNat :: NatRepr 3) :: Slice 2 5) (ValueBV (0b00010 :: W.W 4))
 -- > == ValueBV (0b01 :: W.W 2)
 --
 -- whereas a big-endian slice would have value @0b00@ here.
 data Slice (m :: Nat) (n :: Nat) where
-  Slice :: ( KnownNat m
-           , KnownNat n
-           , (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
+  Slice :: ( (a+m) ~ b  -- The last bit (b) and length of slice (m) are consistent
            , b <= n     -- The last bit (b) doesn't run off the end of the location (n)
            )
         => NR.NatRepr m -> NR.NatRepr n -> NR.NatRepr a -> NR.NatRepr b -> Slice m n
@@ -81,7 +81,7 @@ data Slice (m :: Nat) (n :: Nat) where
 --
 -- E.g.
 --
--- > pattern F12 = View (Slice 0 64 :: Slice 64) VSX12 :: View PPC 64
+-- > pattern F12 = View (Slice 64 64 0 64 :: Slice 64 64) VSX12 :: View PPC 64
 --
 -- Note that (non-immediate) operands are like 'View's, not
 -- 'Location's.
@@ -92,22 +92,23 @@ data Slice (m :: Nat) (n :: Nat) where
 --
 -- The @s@ parameter is the start bit of the slice.
 data View arch (m :: Nat) where
-  View :: (1 <= n, 1 <= m, KnownNat n, KnownNat m) => Slice m n -> L.Location arch (BaseBVType n) -> View arch m
+  View :: (1 <= n, 1 <= m) => Slice m n -> L.Location arch (BaseBVType n) -> View arch m
 
 viewTypeRepr :: View arch n -> NR.NatRepr n
 viewTypeRepr (View (Slice repr _ _ _) _) = repr
 
 -- | Produce a view of an entire location
 trivialView :: forall proxy arch n
-             . (KnownNat n,
-                1 <= n)
+             . (L.IsLocation (L.Location arch), 1 <= n)
             => proxy arch
             -> L.Location arch (BaseBVType n)
             -> View arch n
-trivialView _ loc = View s loc
-  where
-    s :: Slice n n
-    s = Slice (NR.knownNat @n) (NR.knownNat @n) (NR.knownNat @0) (NR.knownNat @n)
+trivialView _ loc =
+  case L.locationType loc of
+    BaseBVRepr nr ->
+      let s :: Slice n n
+          s = Slice nr nr (NR.knownNat @0) nr
+      in View s loc
 
 someTrivialView :: (L.IsLocation (L.Location arch))
                 => proxy arch
@@ -115,7 +116,7 @@ someTrivialView :: (L.IsLocation (L.Location arch))
                 -> Some (View arch)
 someTrivialView proxy (Some loc) =
   case L.locationType loc of
-    BaseBVRepr nr -> NR.withKnownNat nr (Some (trivialView proxy loc))
+    BaseBVRepr _nr -> Some (trivialView proxy loc)
     lt -> error ("Unsupported location type: " ++ show lt)
 
 
@@ -123,17 +124,17 @@ onesMask :: (Integral a, Bits b, Num b) => a -> b
 onesMask sz = shiftL 1 (fromIntegral sz) - 1
 
 -- | Read sliced bits.
-peekSlice :: (1 <= m, KnownNat m) => Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m)
-peekSlice (Slice _ _ (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> val)) =
-  (ValueBV . W.w) ((val .&. onesMask b) `shiftR` a)
+peekSlice :: (1 <= m) => Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m)
+peekSlice (Slice r _ (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> val)) =
+  (ValueBV . W.wRep r) ((val .&. onesMask b) `shiftR` a)
 
 -- | Write sliced bits.
 pokeSlice :: Slice m n -> Value (BaseBVType n) -> Value (BaseBVType m) -> Value (BaseBVType n)
-pokeSlice (Slice _ _ (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> x)) (ValueBV (W.unW -> y)) =
+pokeSlice (Slice _ r (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> x)) (ValueBV (W.unW -> y)) =
   let shiftedY = y `shiftL` a
       clearLower nLower val = (val `shiftR` nLower) `shiftL` nLower
       xMask = complement (clearLower a (onesMask b))
-  in (ValueBV . W.w) (shiftedY .|. (x .&. xMask))
+  in (ValueBV . W.wRep r) (shiftedY .|. (x .&. xMask))
 
 -- | Concrete machine state.
 --
@@ -142,7 +143,7 @@ pokeSlice (Slice _ _ (NR.widthVal -> a) (NR.widthVal -> b)) (ValueBV (W.unW -> x
 type ConcreteState arch = L.ArchState arch Value
 
 -- | Read machine states.
-peekMS :: (P.OrdF (L.Location arch), 1 <= n, KnownNat n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
+peekMS :: (P.OrdF (L.Location arch), 1 <= n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
 peekMS cs (View sl loc) = peekSlice sl $ fromJust $ MapF.lookup loc cs
 
 -- | Write machine states.
@@ -173,6 +174,11 @@ data SemanticView arch =
                           -- distance between two values of this semantic view.
                           }
 
+instance (P.ShowF (L.Location arch), P.ShowF (View arch)) => Show (SemanticView arch) where
+  show SemanticView{..} =
+    -- We can't show the 'Diff' function.
+    printf "SemanticView { semvView = %s, semvCongruentViews = %s }"
+    (show semvView) (show semvCongruentViews)
 
 type Parser = P.Parsec String String
 
@@ -210,7 +216,7 @@ parseSlicedView (Some loc) = do
                       case brepr `NR.testLeq` nrepr of
                         Just NR.LeqProof ->
                           case U.unsafeCoerce (P.Refl :: 0 P.:~: 0) :: (b P.:~: (a + m)) of
-                            P.Refl -> return (NR.withKnownNat nrepr (Some (View (Slice mrepr nrepr arepr brepr) loc)))
+                            P.Refl -> return (Some (View (Slice mrepr nrepr arepr brepr) loc))
                         Nothing -> fail "Invalid slice"
             lt -> fail ("Unsupported location type: " ++ show lt)
 

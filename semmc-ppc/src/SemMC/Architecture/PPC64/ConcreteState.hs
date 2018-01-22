@@ -198,6 +198,7 @@ vrs = fmap (LocVSR . PPC.VSReg) [32..63]
 specialRegs32 :: [Location ppc (BaseBVType 32)]
 specialRegs32 = [ LocFPSCR
                 , LocCR
+                , LocVSCR
                   -- Lets not randomly generate an MSR.  That would
                   -- be problematic (e.g., it would switch endianness)
                   --

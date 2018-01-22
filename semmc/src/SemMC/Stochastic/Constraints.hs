@@ -13,6 +13,7 @@ import qualified Dismantle.Instruction.Random as D
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as CS
 import qualified SemMC.Stochastic.Pseudo as P
+import qualified SemMC.Stochastic.RvwpOptimization as R
 
 -- | Synthesis constraints.
 type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
@@ -27,4 +28,5 @@ type SynC arch = ( P.OrdF (A.Opcode arch (A.Operand arch))
                  , H.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch)
                  , CS.ConcreteArchitecture arch
                  , P.ArchitectureWithPseudo arch
+                 , R.RvwpOptimization arch
                  )

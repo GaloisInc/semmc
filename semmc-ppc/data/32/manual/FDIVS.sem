@@ -1,8 +1,7 @@
 ;; Floating Divide Single (A-form)
 ((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc))) 
-  (in (frB frA 'IP))
+  (in ('FPSCR frB frA 'IP))
   (defs 
-    ((frT 
-       (concat 
-         #x000000000000000000000000
-         ((_ call "fp.div32") ((_ extract 31 0) frA) ((_ extract 31 0) frB)))) ('IP (bvadd 'IP #x00000004)))))
+    (('FPSCR ((_ extract 159 128) ((_ call "ppc.fp2") "FDIVS" frA frB 'FPSCR))) 
+      (frT ((_ extract 127 0) ((_ call "ppc.fp2") "FDIVS" frA frB 'FPSCR)))
+      ('IP (bvadd 'IP #x00000004)))))

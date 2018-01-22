@@ -343,42 +343,42 @@ vsxFloat = do
     comment "VSX Vector Compare Equal To Double-Precision (XX3-form)"
     (xT, _xA, _xB) <- xx3form
     defLoc xT (undefinedBV 128)
-    defineVRCVariant "XVCMPEQDPo" (undefinedBV 128) $ do
+    defineVRCVariant "XVCMPEQDPo" $ do
       comment "VSX Vector Compare Equal To Double-Precision & Record (XX3-form)"
 
   defineOpcodeWithIP "XVCMPEQSP" $ do
     comment "VSX Vector Compare Equal To Single-Precision (XX3-form)"
     (xT, _xA, _xB) <- xx3form
     defLoc xT (undefinedBV 128)
-    defineVRCVariant "XVCMPEQSPo" (undefinedBV 128) $ do
+    defineVRCVariant "XVCMPEQSPo" $ do
       comment "VSX Vector Compare Equal To Single-Precision & Record (XX3-form)"
 
   defineOpcodeWithIP "XVCMPGEDP" $ do
     comment "VSX Vector Compare Greater Than or Equal To Double-Precision (XX3-form)"
     (xT, _xA, _xB) <- xx3form
     defLoc xT (undefinedBV 128)
-    defineVRCVariant "XVCMPGEDPo" (undefinedBV 128) $ do
+    defineVRCVariant "XVCMPGEDPo" $ do
       comment "VSX Vector Compare Greater Than or Equal To Double-Precision & Record (XX3-form)"
 
   defineOpcodeWithIP "XVCMPGESP" $ do
     comment "VSX Vector Compare Greater Than or Equal To Single-Precision (XX3-form)"
     (xT, _xA, _xB) <- xx3form
     defLoc xT (undefinedBV 128)
-    defineVRCVariant "XVCMPGESPo" (undefinedBV 128) $ do
+    defineVRCVariant "XVCMPGESPo" $ do
       comment "VSX Vector Compare Greater Than or Equal To Single-Precision & Record (XX3-form)"
 
   defineOpcodeWithIP "XVCMPGTDP" $ do
     comment "VSX Vector Compare Greater Than To Double-Precision (XX3-form)"
     (xT, _xA, _xB) <- xx3form
     defLoc xT (undefinedBV 128)
-    defineVRCVariant "XVCMPGTDPo" (undefinedBV 128) $ do
+    defineVRCVariant "XVCMPGTDPo" $ do
       comment "VSX Vector Compare Greater Than To Double-Precision & Record (XX3-form)"
 
   defineOpcodeWithIP "XVCMPGTSP" $ do
     comment "VSX Vector Compare Greater Than To Single-Precision (XX3-form)"
     (xT, _xA, _xB) <- xx3form
     defLoc xT (undefinedBV 128)
-    defineVRCVariant "XVCMPGTSPo" (undefinedBV 128) $ do
+    defineVRCVariant "XVCMPGTSPo" $ do
       comment "VSX Vector Compare Greater Than To Single-Precision & Record (XX3-form)"
 
   defineOpcodeWithIP "XVCPSGNDP" $ do

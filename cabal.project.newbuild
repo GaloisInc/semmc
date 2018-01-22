@@ -4,6 +4,7 @@ packages:
   semmc-ppc/
   semmc-x86_64/
   semmc-arm/
+  semmc-toy/
   submodules/dismantle/dismantle-tablegen/
   submodules/dismantle/dismantle-arm/
   submodules/dismantle/dismantle-ppc/
@@ -13,3 +14,5 @@ optional-packages:
   submodules/crucible/galois-matlab
   submodules/parameterized-utils
   submodules/elf-edit/
+  submodules/dismantle/dismantle-ppc/
+  submodules/dismantle/dismantle-arm/

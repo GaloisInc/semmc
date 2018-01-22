@@ -425,11 +425,8 @@ typedef struct {
   uint32_t link;
   uint32_t cr;
   uint32_t fpscr;
+  uint32_t vscr;
   uint32_t xer;
-  // The dummy word is padding to maintain alignment.  If we didn't include it,
-  // we would have this padding anyway, but including it makes things explicit
-  // so that we can match up the serializer and deserializer.
-  uint32_t dummy;
   VR vsrs[SEM_NVSRS];
   /* uint8_t mem1[MEM_REGION_BYTES]; */
   /* uint8_t mem2[MEM_REGION_BYTES]; */
@@ -487,6 +484,8 @@ void setupRegisterState(pid_t childPid, uint8_t *programSpace, uint8_t *memSpace
   }
   fpregs[SEM_NFPRS] = rs->fpscr;
 
+  // FIXME: deal with vscr field in state structure
+
   checkedPtrace(PTRACE_SETFPREGS, childPid, 0, (void *) &fpregs);
 
   // Our processor doesn't support VSX registers
@@ -539,6 +538,7 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
   for (int i = 0; i < SEM_NFPRS; i++) {
     rs->vsrs[i].chunks[0] = fpregs[i];
   }
+  // FIXME: deal with vscr field in state structure
   rs->fpscr = fpregs[SEM_NFPRS];
 
   /* uint64_t vsrhalves[SEM_NFPRS]; */

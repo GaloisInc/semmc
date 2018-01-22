@@ -30,10 +30,8 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.SymbolRepr as SR
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
-import qualified Data.Text as T
 import qualified Data.Word.Indexed as W
 import           GHC.TypeLits ( KnownNat, Nat )
 import qualified Text.Megaparsec as P
@@ -54,6 +52,7 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
 import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
+import qualified SemMC.Stochastic.RvwpOptimization as R
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 
@@ -75,8 +74,8 @@ type instance A.Opcode PPC = PPC.Opcode
 instance A.IsOpcode PPC.Opcode
 
 instance A.IsOperandTypeRepr PPC where
-  type OperandTypeRepr PPC = SR.SymbolRepr
-  operandTypeReprSymbol _ = T.unpack . SR.symbolRepr
+  type OperandTypeRepr PPC = PPC.OperandRepr
+  operandTypeReprSymbol _ = PPC.operandReprString
 
 type instance A.OperandType PPC "Abscalltarget" = BaseBVType 24
 type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 14
@@ -101,6 +100,7 @@ type instance A.OperandType PPC "Memrr" = BaseBVType 64
 type instance A.OperandType PPC "S16imm" = BaseBVType 16
 type instance A.OperandType PPC "S16imm64" = BaseBVType 16
 type instance A.OperandType PPC "S17imm" = BaseBVType 16
+type instance A.OperandType PPC "S17imm64" = BaseBVType 16
 type instance A.OperandType PPC "S5imm" = BaseBVType 5
 type instance A.OperandType PPC "U10imm" = BaseBVType 10
 type instance A.OperandType PPC "U16imm" = BaseBVType 16
@@ -115,111 +115,44 @@ type instance A.OperandType PPC "U8imm" = BaseBVType 8
 type instance A.OperandType PPC "Vrrc" = BaseBVType 128
 type instance A.OperandType PPC "Vsrc" = BaseBVType 128
 
-shapeReprType :: forall tp . SR.SymbolRepr tp -> BaseTypeRepr (A.OperandType PPC tp)
+shapeReprType :: forall tp . PPC.OperandRepr tp -> BaseTypeRepr (A.OperandType PPC tp)
 shapeReprType sr =
-  case SR.symbolRepr sr of
-    "Abscalltarget"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Abscalltarget") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Abscalltarget")
-    "Abscondbrtarget"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Abscondbrtarget") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Abscondbrtarget")
-    "Absdirectbrtarget"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Absdirectbrtarget") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Absdirectbrtarget")
-    "Calltarget"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Calltarget") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Calltarget")
-    "Condbrtarget"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Condbrtarget") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Condbrtarget")
-    "Crbitm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Crbitm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Crbitm")
-    "Crbitrc"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Crbitrc") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Crbitrc")
-    "Crrc"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Crrc") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Crrc")
-    "Directbrtarget"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Directbrtarget") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Directbrtarget")
-    "Fprc"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Fprc") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Fprc")
-    "Gprc"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Gprc")
-    "Vrrc"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Vrrc") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Vrrc")
-    "Vsrc"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Vsrc") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Vsrc")
-    "Gprc_nor0"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc_nor0") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Gprc_nor0")
-    "I1imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"I1imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "I1imm")
-    "I32imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"I32imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "I32imm")
-    "Memri"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Memri") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memri")
-    "Memrix"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Memrix") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memrix")
-    "Memrix16"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Memrix16") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memrix16")
-    "Memrr"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"Memrr") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "Memrr")
-    "S16imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"S16imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "S16imm")
-    "S16imm64"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"S16imm64") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "S16imm64")
-    "S17imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"S17imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "S17imm")
-    "S5imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"S5imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "S5imm")
-    "U10imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U10imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U10imm")
-    "U16imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U16imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U16imm")
-    "U16imm64"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U16imm64") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U16imm64")
-    "U1imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U1imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U1imm")
-    "U2imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U2imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U2imm")
-    "U4imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U4imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U4imm")
-    "U5imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U5imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U5imm")
-    "U6imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U6imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U6imm")
-    "U7imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U7imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U7imm")
-    "U8imm"
-      | Just Refl <- testEquality sr (SR.knownSymbol @"U8imm") ->
-        knownRepr :: BaseTypeRepr (A.OperandType PPC "U8imm")
+  case sr of
+    PPC.AbscalltargetRepr -> knownRepr
+    PPC.AbscondbrtargetRepr -> knownRepr
+    PPC.AbsdirectbrtargetRepr -> knownRepr
+    PPC.CalltargetRepr -> knownRepr
+    PPC.CondbrtargetRepr -> knownRepr
+    PPC.CrbitmRepr -> knownRepr
+    PPC.CrbitrcRepr -> knownRepr
+    PPC.CrrcRepr -> knownRepr
+    PPC.DirectbrtargetRepr -> knownRepr
+    PPC.FprcRepr -> knownRepr
+    PPC.GprcRepr -> knownRepr
+    PPC.VrrcRepr -> knownRepr
+    PPC.VsrcRepr -> knownRepr
+    PPC.Gprc_nor0Repr -> knownRepr
+    PPC.I1immRepr -> knownRepr
+    PPC.I32immRepr -> knownRepr
+    PPC.MemriRepr -> knownRepr
+    PPC.MemrixRepr -> knownRepr
+    PPC.Memrix16Repr -> knownRepr
+    PPC.MemrrRepr -> knownRepr
+    PPC.S16immRepr -> knownRepr
+    PPC.S16imm64Repr -> knownRepr
+    PPC.S17immRepr -> knownRepr
+    PPC.S17imm64Repr -> knownRepr
+    PPC.S5immRepr -> knownRepr
+    PPC.U10immRepr -> knownRepr
+    PPC.U16immRepr -> knownRepr
+    PPC.U16imm64Repr -> knownRepr
+    PPC.U1immRepr -> knownRepr
+    PPC.U2immRepr -> knownRepr
+    PPC.U4immRepr -> knownRepr
+    PPC.U5immRepr -> knownRepr
+    PPC.U6immRepr -> knownRepr
+    PPC.U7immRepr -> knownRepr
+    PPC.U8immRepr -> knownRepr
 
 type instance ArchRegWidth PPC = 64
 
@@ -275,30 +208,15 @@ symbolicTemplatedOperand Proxy signed name constr =
 
 instance T.TemplatableOperand PPC where
   opTemplates sr =
-    case SR.symbolRepr sr of
-      "Fprc"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Fprc") ->
-          concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
-      "Gprc"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc") ->
-          concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
-      "Gprc_nor0"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Gprc_nor0") ->
-            concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
-      "S16imm"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"S16imm") ->
-            [symbolicTemplatedOperand (Proxy @16) True "S16imm" (PPC.S16imm . fromInteger)]
-      "S16imm64"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"S16imm64") ->
-            [symbolicTemplatedOperand (Proxy @16) True "S16imm64" (PPC.S16imm64 . fromInteger)]
-      "U16imm"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"U16imm") ->
-            [symbolicTemplatedOperand (Proxy @16) True "U16imm" (PPC.U16imm . fromInteger)]
-      "U16imm64"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"U16imm64") ->
-            [symbolicTemplatedOperand (Proxy @16) True "U16imm64" (PPC.U16imm64 . fromInteger)]
-      "Memri"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Memri") ->
+    case sr of
+      PPC.FprcRepr -> concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
+      PPC.GprcRepr -> concreteTemplatedOperand PPC.Gprc LocGPR . PPC.GPR <$> [0..31]
+      PPC.Gprc_nor0Repr -> concreteTemplatedOperand PPC.Gprc_nor0 LocGPR . PPC.GPR <$> [0..31]
+      PPC.S16immRepr -> [symbolicTemplatedOperand (Proxy @16) True "S16imm" (PPC.S16imm . fromInteger)]
+      PPC.S16imm64Repr -> [symbolicTemplatedOperand (Proxy @16) True "S16imm64" (PPC.S16imm64 . fromInteger)]
+      PPC.U16immRepr -> [symbolicTemplatedOperand (Proxy @16) False "U16imm" (PPC.U16imm . fromInteger)]
+      PPC.U16imm64Repr -> [symbolicTemplatedOperand (Proxy @16) False "U16imm64" (PPC.U16imm64 . fromInteger)]
+      PPC.MemriRepr ->
           mkTemplate <$> [0..31]
             where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: T.TemplatedOperand PPC "Memri"
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memri"
@@ -313,8 +231,7 @@ instance T.TemplatableOperand PPC where
                                         | otherwise = Nothing
                                   return $ PPC.Memri $ PPC.MemRI gpr offsetVal
                             return (expr, T.WrappedRecoverOperandFn recover)
-      "Directbrtarget"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Directbrtarget") ->
+      PPC.DirectbrtargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Directbrtarget"
                     mkDirect sym _locLookup = do
@@ -322,22 +239,16 @@ instance T.TemplatableOperand PPC where
                       let recover evalFn =
                             PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
                       return (offsetRaw, T.WrappedRecoverOperandFn recover)
-      "U5imm"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"U5imm") ->
-            [symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
-      "U6imm"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"U6imm") ->
-            [symbolicTemplatedOperand (Proxy @6) False "U6imm" (PPC.U6imm . fromInteger)]
-      "S17imm"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"S17imm") ->
-            [T.TemplatedOperand Nothing Set.empty mkImm]
+      PPC.U5immRepr -> [symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
+      PPC.U6immRepr -> [symbolicTemplatedOperand (Proxy @6) False "U6imm" (PPC.U6imm . fromInteger)]
+      PPC.S17immRepr ->
+                    [T.TemplatedOperand Nothing Set.empty mkImm]
               where mkImm :: T.TemplatedOperandFn PPC "S17imm"
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
                       let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
                       return (v, T.WrappedRecoverOperandFn recover)
-      "Absdirectbrtarget"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Absdirectbrtarget") ->
+      PPC.AbsdirectbrtargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Absdirectbrtarget"
                     mkDirect sym _ = do
@@ -345,8 +256,7 @@ instance T.TemplatableOperand PPC where
                       let recover evalFn =
                             PPC.Absdirectbrtarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
                       return (offsetRaw, T.WrappedRecoverOperandFn recover)
-      "Calltarget"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Calltarget") ->
+      PPC.CalltargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Calltarget"
                     mkDirect sym _locLookup = do
@@ -354,8 +264,7 @@ instance T.TemplatableOperand PPC where
                       let recover evalFn =
                             PPC.Calltarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
                       return (offsetRaw, T.WrappedRecoverOperandFn recover)
-      "Abscalltarget"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Abscalltarget") ->
+      PPC.AbscalltargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
                where mkDirect :: T.TemplatedOperandFn PPC "Abscalltarget"
                      mkDirect sym _ = do
@@ -363,8 +272,7 @@ instance T.TemplatableOperand PPC where
                        let recover evalFn =
                              PPC.Abscalltarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
                        return (offsetRaw, T.WrappedRecoverOperandFn recover)
-      "Crrc"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Crrc") ->
+      PPC.CrrcRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Crrc"
                     mkDirect sym _ = do
@@ -372,8 +280,7 @@ instance T.TemplatableOperand PPC where
                       let recover evalFn =
                             PPC.Crrc . PPC.CRRC . fromInteger <$> evalFn crrc
                       return (crrc, T.WrappedRecoverOperandFn recover)
-      "Crbitrc"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"Crbitrc") ->
+      PPC.CrbitrcRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
                where mkDirect :: T.TemplatedOperandFn PPC "Crbitrc"
                      mkDirect sym _ = do
@@ -381,15 +288,13 @@ instance T.TemplatableOperand PPC where
                        let recover evalFn =
                              PPC.Crbitrc . PPC.CRBitRC . fromInteger <$> evalFn crrc
                        return (crrc, T.WrappedRecoverOperandFn recover)
-      "I32imm"
-        | Just Refl <- testEquality sr (SR.knownSymbol @"I32imm") ->
+      PPC.I32immRepr ->
             [T.TemplatedOperand Nothing Set.empty mkImm]
               where mkImm :: T.TemplatedOperandFn PPC "I32imm"
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "I32imm") knownRepr
                       let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
                       return (v, T.WrappedRecoverOperandFn recover)
-
 
 type instance A.Location PPC = Location PPC
 
@@ -460,6 +365,8 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
           -- 16 bits in the instruction, but is interpreted as shifted left by
           -- 16 bits.  We handle that correction in the semantics, so we just
           -- treat s17imm as a plain 16 bit value.
+          S.bvLit sym knownNat (toInteger i16)
+        operandValue' (PPC.S17imm64 i16) =
           S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S5imm (I.I i5)) = S.bvLit sym knownNat (toInteger i5)
         operandValue' (PPC.U10imm (W.unW ->  w10)) =
@@ -549,6 +456,7 @@ operandTypePPC o =
     PPC.S16imm {}            -> knownRepr
     PPC.S16imm64 {}          -> knownRepr
     PPC.S17imm {}            -> knownRepr
+    PPC.S17imm64 {}          -> knownRepr
     PPC.S5imm {}             -> knownRepr
     PPC.U10imm {}            -> knownRepr
     PPC.U16imm {}            -> knownRepr
@@ -709,6 +617,7 @@ instance A.IsLocation (Location PPC) where
   locationType LocCR = knownRepr
   locationType (LocVSR _) = knownRepr
   locationType LocFPSCR = knownRepr
+  locationType LocVSCR = knownRepr
   locationType LocMem = knownRepr
 
   defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
@@ -720,6 +629,7 @@ instance A.IsLocation (Location PPC) where
   defaultLocationExpr sym LocCR = S.bvLit sym knownNat 0
   defaultLocationExpr sym (LocVSR _) = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocFPSCR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocVSCR = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocMem =
     S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
@@ -733,6 +643,7 @@ instance A.IsLocation (Location PPC) where
       , Some LocXER
       , Some LocCR
       , Some LocFPSCR
+      , Some LocVSCR
       , Some LocMem
       ]
     ]
@@ -755,4 +666,10 @@ parseLocation = do
                        , Some LocMem <$ P.string "Mem"
                        ]
     'F' -> Some LocFPSCR <$ P.string "FPSCR"
+    'V' -> Some LocVSCR <$ P.string "VSCR"
     _ -> fail ("Unexpected location prefix character: " ++ (c :[]))
+
+----------------------------------------------------------------
+
+instance R.RvwpOptimization PPC where
+  rvwpMov _ _ = Nothing -- TODO. Was not needed to compile semmc-ppc.

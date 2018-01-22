@@ -1,18 +1,7 @@
 ;; Floating Negative Multiply-Subtract Single (A-form)
 ((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc) (frC . 'Fprc))) 
-  (in (frC frB frA 'IP))
+  (in ('FPSCR frC frB frA 'IP))
   (defs 
-    ((frT 
-       (concat 
-         #x000000000000000000000000
-         ((_ call "fp.negate32") 
-           ((_ extract 31 0) 
-             (concat 
-               #x000000000000000000000000
-               ((_ call "fp.muladd32") 
-                 ((_ extract 31 0) frA)
-                 ((_ extract 31 0) 
-                   (concat 
-                     #x000000000000000000000000
-                     ((_ call "fp.negate32") ((_ extract 31 0) frB))))
-                 ((_ extract 31 0) frC))))))) ('IP (bvadd 'IP #x00000004)))))
+    (('FPSCR ((_ extract 159 128) ((_ call "ppc.fp3") "FNMSUBS" frA frB frC 'FPSCR))) 
+      (frT ((_ extract 127 0) ((_ call "ppc.fp3") "FNMSUBS" frA frB frC 'FPSCR)))
+      ('IP (bvadd 'IP #x00000004)))))

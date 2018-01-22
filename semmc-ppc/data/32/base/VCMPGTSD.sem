@@ -1,4 +1,7 @@
 ;; Vector Compare Greater Than Signed Doubleword (VC-form, RC=0)
 ((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc))) 
-  (in (vrB vrA 'IP))
-  (defs ((vrT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
+  (in ('VSCR vrB vrA 'IP))
+  (defs 
+    (('VSCR ((_ extract 159 128) ((_ call "ppc.vec2") "VCMPGTSD" vrA vrB 'VSCR))) 
+      (vrT ((_ extract 127 0) ((_ call "ppc.vec2") "VCMPGTSD" vrA vrB 'VSCR)))
+      ('IP (bvadd 'IP #x00000004)))))

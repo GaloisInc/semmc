@@ -10,3 +10,4 @@ dist-newstyle
 dist
 result
 cabal.project.local
+*~
