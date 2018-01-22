@@ -1,9 +1,14 @@
 -- | Evaluators for location functions in formula definitions (e.g., memri_reg)
 
+{-# LANGUAGE FlexibleInstances #-}
+
 module SemMC.Architecture.ARM.Eval
     ( createSymbolicEntries
+    , interpIsR15
     )
     where
+
+import qualified Dismantle.ARM.Operands as ARMOperands
 
 
 -- | Uninterpreted function names are mangled in SimpleBuilder, so we need to
@@ -24,3 +29,18 @@ createSymbolicEntries = foldr duplicateIfDotted []
         True ->
           let newElt = (map (\c -> if c == '.' then '_' else c) s, e)
           in newElt : elt : acc
+
+
+
+
+class InterpIsR15 a where
+  interpIsR15 :: a -> Bool
+
+instance InterpIsR15 ARMOperands.GPR where
+    interpIsR15 gprReg = ARMOperands.unGPR gprReg == 15
+
+instance InterpIsR15 (Maybe ARMOperands.GPR) where
+  interpIsR15 mr =
+    case mr of
+      Nothing -> True
+      Just r -> interpIsR15 r

@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -9,17 +10,27 @@ module SemMC.Architecture.ARM.UF
     )
     where
 
-import qualified Data.Parameterized.Context as Ctx
-import           Data.Parameterized.Some ( Some(..) )
-import           GHC.TypeLits
-import           Lang.Crucible.BaseTypes
-import           SemMC.Architecture.ARM.Location
+import Data.Parameterized.Context
+import Data.Parameterized.Some ( Some(..) )
+import GHC.TypeLits
+import Lang.Crucible.BaseTypes
+import SemMC.Architecture.ARM.Location
 
 
-uninterpretedFunctions :: proxy arm
-                       -> [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
+uninterpretedFunctions :: forall proxy arm. (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
+                         proxy arm
+                       -> [(String, Some (Assignment BaseTypeRepr), Some BaseTypeRepr)]
 uninterpretedFunctions _ =
-  [ ("fp.add64",
-     Some (knownRepr :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> BaseBVType 64 Ctx.::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
+  [ ("arm.is_r15",
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
+  , ("arm.memri12_reg", -- reference to register by register number from an addrmode_imm12_pre operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+  , ("arm.memri12_imm", -- reference to immediate value from an addrmode_imm12_pre operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+  , ("arm.memri12_add", -- reference to U flag bit from an addrmode_imm12_pre operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
   ]

@@ -193,7 +193,9 @@ instance A.Architecture ARM where
 
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
-locationFuncInterpretation = []
+locationFuncInterpretation = [
+   ("arm.is_r15", A.FunctionInterpretation { A.exprInterpName = 'interpIsR15
+                                           })]
 
 shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
 shapeReprType orep =
