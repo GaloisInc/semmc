@@ -18,35 +18,29 @@ import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
-fpFn :: String -> Expr 'TString
-fpFn s = LitString s
+fp1op :: String -> SemM 'Def ()
+fp1op name = do
+  (frT, frB) <- xform2f
+  input fpscr
+  let res = ppcvec1 name (Loc frB) (Loc fpscr)
+  defLoc frT (highBits' 128 res)
+  defLoc fpscr (lowBits' 32 res)
 
-fp1 :: (HasCallStack)
-    => String
-    -> Expr 'TBV
-    -> Expr 'TBV
-    -> Expr 'TBV
-fp1 name fr1 ffpscr =
-  uf (EBV 160) "ppc.fp1" [ Some (fpFn name), Some fr1, Some ffpscr]
+fp2op :: String -> SemM 'Def ()
+fp2op name = do
+  (frT, frA, frB) <- aform
+  input fpscr
+  let res = ppcvec2 name (Loc frA) (Loc frB) (Loc fpscr)
+  defLoc frT (highBits' 128 res)
+  defLoc fpscr (lowBits' 32 res)
 
-fp2 :: (HasCallStack)
-    => String
-    -> Expr 'TBV
-    -> Expr 'TBV
-    -> Expr 'TBV
-    -> Expr 'TBV
-fp2 name fr1 fr2 ffpscr =
-  uf (EBV 160) "ppc.fp2" [ Some (fpFn name), Some fr1, Some fr2, Some ffpscr]
-
-fp3 :: (HasCallStack)
-    => String
-    -> Expr 'TBV
-    -> Expr 'TBV
-    -> Expr 'TBV
-    -> Expr 'TBV
-    -> Expr 'TBV
-fp3 name fr1 fr2 fr3 ffpscr =
-  uf (EBV 160) "ppc.fp3" [ Some (fpFn name), Some fr1, Some fr2, Some fr3, Some ffpscr]
+fp3op :: String -> SemM 'Def ()
+fp3op name = do
+  (frT, frA, frB, frC) <- aform4
+  input fpscr
+  let res = ppcvec3 name (Loc frA) (Loc frB) (Loc frC) (Loc fpscr)
+  defLoc frT (highBits' 128 res)
+  defLoc fpscr (lowBits' 32 res)
 
 froundsingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 froundsingle = uf (EBV 32) "fp.round_single" . ((:[]) . Some)
@@ -225,30 +219,6 @@ floatingPointCompare = do
     forkDefinition "MTFSB1o" $ do
       comment "Move to FPSCR Bit 1 (X-form, RC=1)"
       defLoc cr (undefinedBV 32)
-
-fp1op :: String -> SemM 'Def ()
-fp1op name = do
-  (frT, frB) <- xform2f
-  input fpscr
-  let res = fp1 name (Loc frB) (Loc fpscr)
-  defLoc frT (highBits' 128 res)
-  defLoc fpscr (lowBits' 32 res)
-
-fp2op :: String -> SemM 'Def ()
-fp2op name = do
-  (frT, frA, frB) <- aform
-  input fpscr
-  let res = fp2 name (Loc frA) (Loc frB) (Loc fpscr)
-  defLoc frT (highBits' 128 res)
-  defLoc fpscr (lowBits' 32 res)
-
-fp3op :: String -> SemM 'Def ()
-fp3op name = do
-  (frT, frA, frB, frC) <- aform4
-  input fpscr
-  let res = fp3 name (Loc frA) (Loc frB) (Loc frC) (Loc fpscr)
-  defLoc frT (highBits' 128 res)
-  defLoc fpscr (lowBits' 32 res)
 
 -- | Floating point operation definitions
 --

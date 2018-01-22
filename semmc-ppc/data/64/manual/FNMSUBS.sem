@@ -2,6 +2,6 @@
 ((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc) (frC . 'Fprc))) 
   (in ('FPSCR frC frB frA 'IP))
   (defs 
-    (('FPSCR ((_ extract 159 128) ((_ call "ppc.fp3") "FNMSUBS" frA frB frC 'FPSCR))) 
-      (frT ((_ extract 127 0) ((_ call "ppc.fp3") "FNMSUBS" frA frB frC 'FPSCR)))
+    (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec3") "FNMSUBS" frA frB frC 'FPSCR))) 
+      (frT ((_ extract 127 0) ((_ call "ppc.vec3") "FNMSUBS" frA frB frC 'FPSCR)))
       ('IP (bvadd 'IP #x0000000000000004)))))
