@@ -7,8 +7,11 @@ import qualified Options.Applicative as O
 import qualified System.Directory as D
 import           System.FilePath ( (<.>), (</>) )
 
-import qualified SemMC.DSL as DSL
 import qualified SemMC.Architecture.PPC.Base as B
+import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
+import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
+import qualified SemMC.DSL as DSL
+
 
 data Options = Options { oManualDir :: FilePath
                        , oBaseDir :: FilePath
@@ -48,9 +51,24 @@ mainWithOptions opts = do
   D.createDirectoryIfMissing True (oManualDir opts)
   D.createDirectoryIfMissing True (oBaseDir opts)
   D.createDirectoryIfMissing True (oPseudoDir opts)
-  F.forM_ (B.manual (oBitSize opts)) $ \(opName, def) -> do
-    TIO.writeFile (oManualDir opts </> opName <.> "sem") (DSL.printDefinition def)
-  F.forM_ (B.base (oBitSize opts)) $ \(opName, def) -> do
-    TIO.writeFile (oBaseDir opts </> opName <.> "sem") (DSL.printDefinition def)
-  F.forM_ (B.pseudo (oBitSize opts)) $ \(opName, def) -> do
-    TIO.writeFile (oPseudoDir opts </> opName <.> "sem") (DSL.printDefinition def)
+  let sz = oBitSize opts
+  genTo (oManualDir opts) sz (B.manual sz)
+  genTo (oBaseDir   opts) sz (B.base   sz)
+  genTo (oPseudoDir opts) sz (B.pseudo sz)
+      where genTo d sz l = do (s, e) <- genOpDefs d sz l
+                              putStrLn $ "Wrote " <> show s <> " files to " <> d <>
+                                           (if 0 == e then "" else " (" <> show e <> " errors!)")
+
+genOpDefs :: FilePath -> B.BitSize -> [(String, DSL.Definition)] -> IO (Int, Int)
+genOpDefs d sz l = F.foldlM writeDef (0, 0) l
+    where writeDef (s,e) (opName, def) =
+              if opName `elem` opcodes
+              then do TIO.writeFile (d </> opName <.> "sem") (DSL.printDefinition def)
+                      return (s+1, e)
+              else do putStrLn $ "Warning: unknown DSL defined opcode \"" <>
+                               opName <> "\" (-> " <> d <> ")"
+                      TIO.writeFile (d </> opName <.> "sem") (DSL.printDefinition def)
+                      return (s+1, e+1)
+          opcodes = map show $ case sz of
+                                 B.Size32 -> PPC32.allOpcodes
+                                 B.Size64 -> PPC64.allOpcodes
