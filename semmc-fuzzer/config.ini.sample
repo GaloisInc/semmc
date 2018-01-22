@@ -2,7 +2,7 @@
 arch = ppc32
 opcodes = AllOpcodes
 strategy = Randomized
-report-url = http://192.168.52.210
+report-url = http://fuzzermon.dev.galois.com
 
 [host:helium.proj.galois.com]
 runner-path = /home/cygnus/bin/remote-runner.ppc32
