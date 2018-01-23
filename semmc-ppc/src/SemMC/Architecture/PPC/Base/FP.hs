@@ -167,6 +167,7 @@ floatingPointCompare = do
                   (bvor fpccMask
                    (bvor fxMask fpscrFld0)))
 
+  -- FIXME: CR is left undefined here
   defineOpcodeWithIP "MFFS" $ do
     comment "Move From FPSCR (X-form, RC=0)"
     frT <- param "FRT" fprc vectorBV
