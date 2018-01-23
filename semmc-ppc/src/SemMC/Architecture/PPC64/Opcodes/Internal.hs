@@ -19,4 +19,3 @@ allOpcodeInfo = $(DT.captureInfo (const True) ''PPC.Opcode)
 -- | All opcodes known for the architecture
 allOpcodes :: [Some (PPC.Opcode PPC.Operand)]
 allOpcodes = map (mapSome DT.capturedOpcode) allOpcodeInfo
-
