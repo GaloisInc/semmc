@@ -5,8 +5,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -25,9 +27,14 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Proxy ( Proxy(..) )
+import           Data.Semigroup ((<>))
+import qualified Data.Set as Set
 import qualified Data.Vector.Sized as V
 import           Data.Word ( Word8, Word32 )
 import qualified Dismantle.ARM as ARM
+import qualified Dismantle.ARM.Operands as ARMOperands
+import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified SemMC.Architecture as A
@@ -36,8 +43,11 @@ import           SemMC.Architecture.ARM.Eval
 import           SemMC.Architecture.ARM.Location
 import qualified SemMC.Architecture.ARM.UF as UF
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Synthesis.Template as T
+import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
+import qualified Text.Megaparsec.Char.Lexer as P
 
 
 -- | Define the arch type for this processor.  There are no
@@ -122,7 +132,7 @@ instance A.IsOpcode  ARM.Opcode
 
 type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
-type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 12
+type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32  -- 12?
 
 
 instance A.IsOperandTypeRepr ARM where
@@ -224,3 +234,79 @@ shapeReprType orep =
     -- "Imm0_15"
     --   | Just Refl <- testEquality sr (SR.knownSymbol @"Imm0_15") ->
     --     knownRepr :: BaseTypeRepr (A.OperandType ARM "Imm0_15")
+
+
+-- ----------------------------------------------------------------------
+
+data Signed = Signed | Unsigned deriving (Eq, Show)
+
+instance T.TemplatableOperand ARM where
+  opTemplates sr =
+    case sr of
+      ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..31]
+      ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
+      ARM.Addrmode_imm12_preRepr -> undefined
+          {-
+          -- TBD: the following is speculative, based on the PPC Memri, but incomplete and probably incorrect
+          mkTemplate <$> [0..15]
+            where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (ARMOperands.gpr gprNum)))) mkTemplate' :: T.TemplatedOperand ARM "Addrmode_imm12_pre"
+                    where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12_pre"
+                          mkTemplate' sym locLookup = do
+                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (undefined) -- (ARM.Addrmode_imm12_pre gprNum)
+                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre") knownRepr
+                            expr <- S.bvAdd sym base offset
+                            let recover evalFn = do
+                                  offsetVal <- fromInteger <$> evalFn offset
+                                  let gpr = Just (ARMOperands.gpr gprNum)
+                                  return $ undefined -- ARM.Addrmode_imm12_pre gpr offsetVal
+                            return (expr, T.WrappedRecoverOperandFn recover)
+          -}
+
+
+concreteTemplatedOperand :: forall arch s a.
+                            (A.Architecture arch)
+                         => (a -> A.Operand arch s)
+                         -> (a -> A.Location arch (A.OperandType arch s))
+                         -> a
+                         -> T.TemplatedOperand arch s
+concreteTemplatedOperand op loc x =
+  T.TemplatedOperand { T.templOpLocation = Just (loc x)
+                     , T.templUsedLocations = Set.singleton (Some (loc x))
+                     , T.templOpFn = mkTemplate'
+                     }
+  where mkTemplate' :: T.TemplatedOperandFn arch s
+        mkTemplate' sym locLookup = do
+          expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
+          return (expr, T.WrappedRecoverOperandFn $ const (return (op x)))
+
+
+symbolicTemplatedOperand :: forall arch s (bits :: Nat) extended
+                          . (A.OperandType arch s ~ BaseBVType extended,
+                             KnownNat bits,
+                             KnownNat extended,
+                             1 <= bits,
+                             bits <= extended)
+                         => Proxy bits
+                         -> Signed
+                         -> String
+                         -> (Integer -> A.Operand arch s)
+                         -> T.TemplatedOperand arch s
+symbolicTemplatedOperand Proxy signed name constr =
+  T.TemplatedOperand { T.templOpLocation = Nothing
+                     , T.templUsedLocations = Set.empty
+                     , T.templOpFn = mkTemplate'
+                     }
+  where mkTemplate' :: T.TemplatedOperandFn arch s
+        mkTemplate' sym _ = do
+          v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
+          let bitsRepr = knownNat @bits
+              extendedRepr = knownNat @extended
+          extended <- case testNatCases bitsRepr extendedRepr of
+            NatCaseLT LeqProof ->
+              case signed of
+                Signed   -> S.bvSext sym knownNat v
+                Unsigned -> S.bvZext sym knownNat v
+            NatCaseEQ -> return v
+            NatCaseGT LeqProof -> error "impossible"
+          let recover evalFn = constr <$> evalFn v
+          return (extended, T.WrappedRecoverOperandFn recover)
