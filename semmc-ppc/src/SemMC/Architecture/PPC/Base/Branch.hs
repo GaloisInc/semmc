@@ -291,7 +291,7 @@ branchConditionalLNK lk bo bi = do
   let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
   let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc lnk)) (LitBV 2 0x0)
 
-  defLoc ip (ite (andp (cond_ok bo bi) (ctr_ok bo)) target nextInsn)
+  defLoc ip (ite (andp (cond_ok bo bi) (ctr_ok bo (Loc ctr))) target nextInsn)
 
   when (lk == Link) $ do
     defLoc lnk nextInsn
@@ -310,7 +310,7 @@ genericBranchConditionalLNK lk bo bi = do
   let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
   let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc lnk)) (LitBV 2 0x0)
 
-  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo)) target nextInsn)
+  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo (Loc ctr))) target nextInsn)
 
   when (lk == Link) $ do
     defLoc lnk nextInsn
@@ -344,7 +344,7 @@ branchConditional aa lk bo bi target = do
   let brEA = if aa == Absolute
              then xtarget
              else bvadd xtarget (Loc ip)
-  defLoc ip (ite (andp (cond_ok bo bi) (ctr_ok bo)) brEA nextInsn)
+  defLoc ip (ite (andp (cond_ok bo bi) (ctr_ok bo newCtr)) brEA nextInsn)
 
   -- The IP is still an input even with an absolute jump if we are setting the
   -- link register, which depends on the current IP.
@@ -372,7 +372,7 @@ genericBranchConditional aa lk bo bi target = do
   let brEA = if aa == Absolute
              then xtarget
              else bvadd xtarget (Loc ip)
-  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo)) brEA nextInsn)
+  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo newCtr)) brEA nextInsn)
   when (lk == Link) $ defLoc lnk nextInsn
 
 truePred :: Expr 'TBool
@@ -401,18 +401,18 @@ cond_ok bo bi =
        then testBitDynamic (zext' 32 bi) (Loc cr)
        else notp (testBitDynamic (zext' 32 bi) (Loc cr))
 
-generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBool
-generic_ctr_ok bo =
+generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+generic_ctr_ok bo newCtr =
   ite (testBitDynamic (LitBV 32 0x2) (zext' 32 bo))
       truePred
       (ite (testBitDynamic (LitBV 32 0x3) (zext' 32 bo))
            (xorp ctr_ne_zero truePred)
            (xorp ctr_ne_zero falsePred))
   where
-    ctr_ne_zero = bveq (Loc ctr) (naturalLitBV 0x0)
+    ctr_ne_zero = notp (bveq newCtr (naturalLitBV 0x0))
 
-ctr_ok :: (?bitSize :: BitSize) => W 5 -> Expr 'TBool
-ctr_ok bo =
+ctr_ok :: (?bitSize :: BitSize) => W 5 -> Expr 'TBV -> Expr 'TBool
+ctr_ok bo newCtr =
    if testBit bo 2
    -- If bit 2 is set, we don't check the CTR at all, so ctr_ok is trivially true
    then truePred
@@ -424,7 +424,7 @@ ctr_ok bo =
         then xorp ctr_ne_zero truePred
         else xorp ctr_ne_zero falsePred
   where
-    ctr_ne_zero = bveq (Loc ctr) (naturalLitBV 0x0)
+    ctr_ne_zero = notp (bveq newCtr (naturalLitBV 0x0))
 
 {- Note [Branch Conditional]
 

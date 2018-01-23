@@ -18,7 +18,7 @@
              (bveq #b0 #b0)
              (ite 
                ((_ call "test_bit_dynamic") #x00000003 ((_ zero_extend 27) bo))
-               (xorp (bveq 'CTR #x0000000000000000) (bveq #b0 #b0))
-               (xorp (bveq 'CTR #x0000000000000000) (bvne #b0 #b0)))))
+               (xorp (notp (bveq 'CTR #x0000000000000000)) (bveq #b0 #b0))
+               (xorp (notp (bveq 'CTR #x0000000000000000)) (bvne #b0 #b0)))))
          (concat ((_ extract 61 0) 'LNK) #b00)
          (bvadd 'IP #x0000000000000004))))))
