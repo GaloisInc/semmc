@@ -34,6 +34,7 @@ import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.Context
 import           Data.Parameterized.TraversableFC
+import           Data.Parameterized.NatRepr
 import           Data.Proxy ( Proxy(..) )
 import           Data.Maybe
 import           Data.List
@@ -502,36 +503,73 @@ instance A.Architecture PPC where
   locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
   shapeReprToTypeRepr _proxy = shapeReprType
 
-evalMemriReg :: E.Evaluator PPC t
-evalMemriReg = E.Evaluator $ \sym pf operands assignment bv ->
+type IsOffset = Bool
+
+evalMemReg :: IsOffset -> E.Evaluator PPC t
+evalMemReg isOffset = E.Evaluator (handler isOffset)
+
+handler
+  :: forall t st sh u tp . Bool
+  -> S.SimpleBuilder t st
+  -> F.ParameterizedFormula (S.SimpleBuilder t st) PPC sh
+  -> PPC.List (A.Operand PPC) sh
+  -> Assignment (S.Elt t) u
+  -> BaseTypeRepr tp
+  -> IO (S.Elt t tp)
+handler isOffset sym pf operands assignment bv =
   case assignment of
     Empty :> S.BoundVarElt b ->
       case Some b `boundVarElemIndex` stripped pf of
         Nothing -> error "BoundVar not present in ParameterizedFormula"
         Just index ->
           case findOperandByIndex index operands of
-            Some (PPC.Memri (PPC.MemRI maybeBase _)) ->
-              case maybeBase of
-                Nothing ->
-                  findAtRegister 0x0 (U.makeSymbol "r0")
-                Just (PPC.GPR base) ->
-                  findAtRegister base $ U.makeSymbol $ "r" ++ show base
-            Some _ -> error "Found incorrect operand type"
+            Some reg ->
+              case reg of
+                PPC.Memri (PPC.MemRI maybeBase offset) ->
+                  if isOffset
+                    then handleOffset (fromIntegral offset) (knownNat :: NatRepr 16)
+                    else handleBase maybeBase
+                PPC.Memrix (PPC.MemRIX maybeBase (I.I offset)) ->
+                  if isOffset
+                    then handleOffset (fromIntegral offset) (knownNat :: NatRepr 14)
+                    else handleBase maybeBase
+                PPC.Memrr (PPC.MemRR maybeBase offset) ->
+                  if isOffset
+                    then handleBase (Just offset)
+                    else handleBase maybeBase
+                _ -> error "Unexpected operand type"
          where
+           handleOffset
+             :: ( KnownNat n
+                , 1 <= n
+                ) => Integer
+                  -> NatRepr n
+                  -> IO (S.Elt t tp)
+           handleOffset offset natRepr = do
+             s <- S.bvLit sym natRepr offset
+             case S.exprType s `testEquality` bv of
+               Just Refl -> pure s
+               Nothing -> error "Couldn't unify offset types"
+           handleBase maybeBase =
+             case maybeBase of
+               Nothing ->
+                 findAtRegister 0x0 (U.makeSymbol "r0")
+               Just (PPC.GPR base) ->
+                 findAtRegister base $ U.makeSymbol $ "r" ++ show base
            findAtRegister reg symbol =
              case MapF.lookup (LocGPR (PPC.GPR reg)) (F.pfLiteralVars pf) of
                Nothing ->
                  case findReg reg operands pf of
                    Just (Some (BoundVar.BoundVar k)) ->
                      case testEquality bv (S.bvarType k) of
-                       Just Refl -> pure (S.BoundVarElt k)
-                       _ -> error "Type witness failure"
+                       Just Refl -> pure $ S.varExpr sym k
+                       _ -> error "Type equality failure"
                    Nothing ->
                      S.BoundVarElt <$>
                        S.freshBoundVar sym symbol bv
                Just k ->
                  case testEquality bv (S.bvarType k) of
-                   Just Refl -> pure (S.BoundVarElt k)
+                   Just Refl -> pure $ S.varExpr sym k
                    _ -> error "Type equality failure"
 
 stripped
@@ -544,7 +582,7 @@ findOperandByIndex
   -> PPC.List PPC.Operand sh
   -> Some PPC.Operand
 findOperandByIndex index list =
-  fromMaybe (error "Not found") $
+  fromMaybe (error "Find operand by index") $
     lookup index $
       Prelude.zip [0..] (toListFC Some list)
 
@@ -581,27 +619,27 @@ locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC sh)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemriReg
                                                , A.exprInterpName = 'interpMemriRegExtractor
-                                               , A.exprInterp = evalMemriReg
+                                               , A.exprInterp = evalMemReg False
                                                })
   , ("ppc.memrix_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrixReg
                                                 , A.exprInterpName = 'interpMemrixRegExtractor
-                                                , A.exprInterp = undefined
+                                                , A.exprInterp = evalMemReg False
                                                 })
   , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrBase
                                                 , A.exprInterpName = 'interpMemrrBaseExtractor
-                                                , A.exprInterp = undefined
+                                                , A.exprInterp = evalMemReg False
                                                 })
-  , ("ppc.memrr_offset", A.FunctionInterpretation { A.locationInterp = undefined
+  , ("ppc.memrr_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrOffset
                                                   , A.exprInterpName = 'interpMemrrOffsetExtractor
-                                                  , A.exprInterp = undefined
+                                                  , A.exprInterp = evalMemReg True
                                                   })
-  , ("ppc.memrix_offset", A.FunctionInterpretation { A.locationInterp = undefined
+  , ("ppc.memrix_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp undefined
                                                    , A.exprInterpName = 'interpMemrixOffsetExtractor
-                                                   , A.exprInterp = undefined
+                                                   , A.exprInterp = evalMemReg True
                                                    })
   , ("ppc.memri_offset", A.FunctionInterpretation { A.locationInterp = undefined
                                                   , A.exprInterpName = 'interpMemriOffsetExtractor
-                                                  , A.exprInterp = undefined
+                                                  , A.exprInterp = evalMemReg True
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
                                            , A.exprInterp = undefined

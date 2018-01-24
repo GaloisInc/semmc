@@ -12,6 +12,7 @@ module SemMC.Architecture.PPC.Eval (
   interpMemrixRegExtractor,
   interpMemrixOffsetExtractor,
   interpMemrrBase,
+  interpMemrrOffset,
   interpMemrrBaseExtractor,
   interpMemrrOffsetExtractor,
   interpIsR0,
@@ -111,6 +112,22 @@ interpMemrrBase operands (F.WrappedOperand _orep ix) rep =
         _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
           | otherwise -> error ("Invalid return type for location function 'memrr_base' at index " ++ show ix)
     PPC.Memrr (PPC.MemRR Nothing _) -> error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
+    _ -> error ("Invalid operand type at index " ++ show ix)
+
+interpMemrrOffset
+  :: forall sh s ppc tp . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
+  => SL.List PPC.Operand sh
+  -> F.WrappedOperand ppc sh s
+  -> BaseTypeRepr tp
+  -> L.Location ppc tp
+interpMemrrOffset operands (F.WrappedOperand _orep ix) rep =
+  case operands SL.!! ix of
+    PPC.Memrr (PPC.MemRR _ offset) ->
+      let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
+          loc = LocGPR offset
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+          | otherwise -> error ("Invalid return type for location function 'memrr_offset' at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
 interpMemrrBaseExtractor :: PPC.MemRR -> Maybe PPC.GPR
