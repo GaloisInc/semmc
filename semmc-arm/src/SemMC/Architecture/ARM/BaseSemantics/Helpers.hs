@@ -9,13 +9,24 @@ import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 
 
--- | A wrapper around 'defineOpcode' that updates the PC after the instruction
--- executes to the next instruction (simply by adding 4).
+-- | A wrapper around 'defineOpcode' that updates the PC after the
+-- instruction executes (by 4 if A32 or 2 if T32).  Do not use for
+-- branches or any operation that might update R15/PC.
 defineLinearOpcode :: String -> SemM 'Def () -> SemM 'Top ()
 defineLinearOpcode name def =
   defineOpcode name $ do
     input pc
-    defLoc pc (bvadd (Loc pc) (naturalLitBV 0x4))
+    input cpsr
+    let pcAdd = ite isA32 (naturalLitBV 0x4)
+                (ite isT32 (naturalLitBV 0x2)
+                     (naturalLitBV 0)) -- unsupported!
+        cpsr_j = testBitDynamic (LitBV 32 24) (Loc cpsr)
+        cpsr_t = testBitDynamic (LitBV 32 5) (Loc cpsr)
+        isT32 = andp cpsr_t (notp cpsr_j)
+        isA32 = andp (notp cpsr_t) (notp cpsr_j)
+        -- isJazelle = andp (notp cpsr_t) cpsr_j
+        -- isT32EE = andp cpsr_t cpsr_j
+    defLoc pc (bvadd (Loc pc) pcAdd)
     def
 
 
