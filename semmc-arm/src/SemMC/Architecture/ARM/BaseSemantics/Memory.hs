@@ -63,3 +63,18 @@ storeMem mem ea nBytes val
   | otherwise = error ("Invalid byte count to store value " ++ show val)
   where
     funcName = "write_mem." <> show (nBytes * 8)
+
+
+-- | Performs an assignment for a conditional Opcode when the target
+-- is a memory location.
+defMemWhen :: Expr 'TBool -- ^ is store enabled? (result of condPassed check)
+           -> Location 'TMemory -- ^ The memory target
+           -> Expr 'TBV -- ^ The effective address to store at
+           -> Int -- ^ The number of bytes to store
+           -> Expr 'TBV -- ^ The bitvector value to store (size is checked)
+           -> SemM 'Def ()
+defMemWhen isOK memloc addr nBytes expr =
+    let origval = readMem (Loc memloc) addr nBytes
+        updval = ite isOK expr origval
+    in defLoc memloc (storeMem (Loc memloc) addr nBytes updval)
+
