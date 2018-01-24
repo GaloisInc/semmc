@@ -13,34 +13,13 @@ import           System.FilePath ( (<.>), (</>) )
 
 
 data Options = Options { oRootDir   :: FilePath
-                       , oManualDir :: FilePath
-                       , oBaseDir   :: FilePath
-                       , oPseudoDir :: FilePath
                        }
 
 optionsParser :: O.Parser Options
 optionsParser = Options
                 <$> O.strArgument ( O.metavar "ROOTDIR"
-                                  <> O.help "Root directory under which output files will be generated.")
-                <*> O.strOption ( O.long "manual"
-                                <> O.short 'M'
-                                <> O.metavar "DIR"
-                                <> O.showDefault <> O.value "manual"
-                                <> O.help ("The directory to store manual formulas in.  If this is not an\
-                                           \ absolute path then it will be relative to the BASEDIR."))
-                <*> O.strOption ( O.long "base"
-                                <> O.short 'B'
-                                <> O.metavar "DIR"
-                                <> O.showDefault <> O.value "base"
-                                <> O.help ("The directory to store base formulas in.  If this is not an\
-                                           \ absolute path then it will be relative to the BASEDIR."))
-                <*> O.strOption ( O.long "pseudo"
-                                <> O.short 'P'
-                                <> O.metavar "DIR"
-                                <> O.showDefault <> O.value "pseudo"
-                                <> O.help ("The directory to store pseudo-operation formulas in.\
-                                           \ If this is not an absolute path then it will be relative\
-                                           \ to the BASEDIR."))
+                                  <> O.help "Root directory under which output files will be \
+                                            \ generated (\"data/sem\" is recommended).")
 
 
 main :: IO ()
@@ -65,17 +44,13 @@ main = O.execParser optParser >>= mainWithOptions
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
-  let mdir = oRootDir opts </> oManualDir opts
-      bdir = oRootDir opts </> oBaseDir opts
-      pdir = oRootDir opts </> oPseudoDir opts
-      genTo d l = do
+  let odir = oRootDir opts
+      genTo d (t,l) = do
         (s, e) <- genOpDefs d l
-        putStrLn $ "Wrote " <> (show s) <> " files to " <> d <>
+        putStrLn $ "Wrote " <> (show s) <> " " <> t <> " semantics files to " <> d <>
                        (if 0 == e then "" else " (" <> show e <> " errors!)")
-  F.mapM_ (D.createDirectoryIfMissing True) [ mdir, bdir, pdir ]
-  genTo mdir B.manual
-  genTo bdir B.base
-  genTo pdir B.pseudo
+  D.createDirectoryIfMissing True odir
+  F.mapM_ (genTo odir) B.semdefs
 
 
 genOpDefs :: FilePath -> [(String, DSL.Definition)] -> IO (Int, Int)

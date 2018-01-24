@@ -1,7 +1,5 @@
 module SemMC.Architecture.ARM.BaseSemantics
-    ( base
-    , pseudo
-    , manual
+    ( semdefs
     )
     where
 
@@ -9,15 +7,11 @@ import SemMC.Architecture.ARM.BaseSemantics.Memory
 import SemMC.DSL
 
 
-base :: [(String, Definition)]
-base = runSem $ do
-         return ()
+semdefs :: [ (String, [(String, Definition)]) ]
+semdefs = [ ("memory", memory)
+          ]
 
-pseudo :: [(String, Definition)]
-pseudo = runSem $ do
-           return ()
-
-manual :: [(String, Definition)]
-manual = runSem $ do
-           manualMemory
-           return ()
+memory :: [(String, Definition)]
+memory = runSem $ do
+            manualMemory
+            return ()
