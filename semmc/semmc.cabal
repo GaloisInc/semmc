@@ -19,6 +19,7 @@ library
   exposed-modules:     SemMC
                        SemMC.Architecture
                        SemMC.Architecture.Concrete
+                       SemMC.Architecture.Evaluate
                        SemMC.Architecture.Location
                        SemMC.Architecture.Value
                        SemMC.Architecture.View
@@ -84,6 +85,7 @@ library
                        binary,
                        filepath,
                        stm,
+                       BoundedChan,
                        located-base,
                        text >= 1 && < 2,
                        mwc-random >= 0.13 && < 0.14,

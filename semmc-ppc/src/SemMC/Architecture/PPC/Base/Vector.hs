@@ -12,45 +12,6 @@ import SemMC.Architecture.PPC.Base.Core
 
 import Data.Parameterized.Some
 
--- | This is a cheap way to encode strings in our DSL in order to pass along a little
--- extra information with an uninterpreted function -- in this case, our UFs are the
--- ppcvec functions, but we also would like to pass the *name* of the particular
--- operation we are considering so that the backend has that information as well. The
--- type of the expression is a boolean because we didn't have a unit.
-vecFn :: String -> Expr 'TString
-vecFn s = LitString s
-
--- | These encode various architecture-specific vector functions by storing the
--- string along with the opcodes. The result is a 160-bit vector; the high 128 bits
--- are used for the target register and the remaining 32 bits are stored in the
--- VSCR.
-ppcvec1 :: (HasCallStack)
-        => String
-        -> Expr 'TBV
-        -> Expr 'TBV
-        -> Expr 'TBV
-ppcvec1 name vr1 vvscr =
-  uf (EBV 160) "ppc.vec1" [ Some (vecFn name), Some vr1, Some vvscr ]
-
-ppcvec2 :: (HasCallStack)
-        => String
-        -> Expr 'TBV
-        -> Expr 'TBV
-        -> Expr 'TBV
-        -> Expr 'TBV
-ppcvec2 name vr1 vr2 vvscr =
-  uf (EBV 160) "ppc.vec2" [ Some (vecFn name), Some vr1, Some vr2, Some vvscr ]
-
-ppcvec3 :: (HasCallStack)
-        => String
-        -> Expr 'TBV
-        -> Expr 'TBV
-        -> Expr 'TBV
-        -> Expr 'TBV
-        -> Expr 'TBV
-ppcvec3 name vr1 vr2 vr3 vvscr =
-  uf (EBV 160) "ppc.vec3" [ Some (vecFn name), Some vr1, Some vr2, Some vr3, Some vvscr ]
-
 vec1op :: String -> SemM 'Def ()
 vec1op name = do
   (vrT, vrA) <- vxform2

@@ -1,0 +1,19 @@
+[Unit]
+Description=gunicorn daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+PIDFile=/run/gunicorn/pid
+User=fuzzermon
+Group=fuzzermon
+RuntimeDirectory=gunicorn
+WorkingDirectory=/home/fuzzermon/semmc/semmc-fuzzer/fuzzermon/fuzzermon/
+ExecStart=/home/fuzzermon/semmc/semmc-fuzzer/fuzzermon/ENV/bin/gunicorn --pid /run/gunicorn/pid   \
+          --bind unix:/run/gunicorn/socket fuzzermon.wsgi
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,68 @@
+
+semmc-fuzzer
+============
+
+This package provides a fuzzing tool for semmc-supported architectures.
+At a high level, it generates random machine states and instructions,
+submits them for testing on real hardware, and logs the results. It can
+also optionally upload the results to a running 'fuzzermon' web service
+instance for more user-friendly or long-term reporting. For details on
+the Fuzzermon web service, see fuzzermon/README.
+
+The output of 'semmc-fuzzer --help' shows default values for many
+configuration settings.
+
+semmc-fuzzer works as follows:
+
+ * The user specifies command line arguments to indicate either a
+   configuration file or specific configuration options to control
+   testing behavior
+
+ * The fuzzer starts threads to test remote hosts, in which it
+   connects to the remote hosts using SSH (assuming the presence of
+   an authorized_keys entry on the remote host, and assuming that the
+   connection will be made as $USER)
+
+ * The fuzzer generates random machine instructions and random starting
+   register state in batches. Each batch is submitted to the remote
+   host, and once the results for the entire batch have been returned,
+   the results are logged and optionally uploaded to the specified
+   Fuzzermon instance.
+
+The '-c' command-line option allows the user to specify a configuration
+file for the fuzzer. The file should be an INI-style configuration file
+with the following sections and fields. Optional fields default to the
+values shown by 'semmc-fuzzer --help'.
+
+ * Section "fuzzer":
+   * field "arch": required, must be the name of an architecture that
+     semmc-fuzzer knows about.
+   * field "opcodes": optional, either 'AllOpcodes' or 'SpecificOpcodes
+     ["op1", ...]'
+   * field "strategy": optional, either 'Randomized' or 'RoundRobin'
+   * field "report-url", optional, the base URL for a Fuzzermon instance
+
+The configuration file must specify at least one testing host in a
+section named "host:<hostname>", e.g., "host:example.com". Its fields
+are as follows:
+
+  * Section "host:<hostname>":
+    * field "runner-path", optional, the path on the remote host to the
+      remote-runner executable
+    * field "chunk-size", optional, the number of tests per batch
+    * field "threads", optional, the number of local threads to run
+      against this host
+
+Testing Strategies
+==================
+
+The fuzzer supports two settings that control how testing proceeds:
+
+ * The opcode selection (see 'opcodes' above):
+   * 'AllOpcodes': test all opcodes in the ISA.
+   * 'SpecificOpcodes [...]': test only the listed opcodes.
+ * The test generation tactic (see 'strategy' above):
+   * 'Randomized': choose from the opcode list randomly.
+   * 'RoundRobin': cycle through the opcode list, generating a batch of
+     'chunk-size' tests for each opcode before starting over at the
+     beginning of the list.
