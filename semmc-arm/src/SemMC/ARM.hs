@@ -65,8 +65,8 @@ data MachineState =
                -- , gprs_mask :: V.Vector 16 Word32
                -- , fprs :: V.Vector 32 Word32
                -- -- ^ 32 32-bit locations
-               -- , cpsr :: Word32
-               -- -- ^ Current program status register (CPSR)
+               , cpsr :: Word32
+               -- ^ Current program status register (CPSR)
                -- , mem1 :: V.Vector 32 Word8
                -- -- ^ 32 bytes
                -- , mem2 :: V.Vector 32 Word8
@@ -90,7 +90,7 @@ toBS ms = LB.toStrict (B.toLazyByteString bld)
                   , B.word32LE (pctr ms)
                   -- , mconcat (map B.word32LE (V.toList (gprs_mask ms)))
                   -- , mconcat (map B.word32LE (V.toList (fprs ms)))
-                  -- , B.word32LE (cpsr ms)
+                  , B.word32LE (cpsr ms)
                   -- , mconcat (map B.word8 (V.toList (mem1 ms)))
                   -- , mconcat (map B.word8 (V.toList (mem2 ms)))
                   ]
@@ -110,14 +110,14 @@ getMachineState = do
   -- -- here.
   -- Just grs_mask <- V.fromList <$> replicateM 16 G.getWord32le
   -- Just frs <- V.fromList <$> replicateM 32 G.getWord32le
-  -- cpsr_reg <- G.getWord32le
+  cpsr_reg <- G.getWord32le
   -- Just m1 <- V.fromList <$> replicateM 32 G.getWord8
   -- Just m2 <- V.fromList <$> replicateM 32 G.getWord8
   return MachineState { gprs = grs
                       , pctr = pcv
                       -- , gprs_mask = grs_mask
                       -- , fprs = frs
-                      -- , cpsr = cpsr_reg
+                      , cpsr = cpsr_reg
                       -- , mem1 = m1
                       -- , mem2 = m2
                       }
@@ -164,21 +164,27 @@ operandToLocation _ = Nothing
 
 instance A.IsLocation (Location ARM) where
 
-  isMemoryLocation l = case l of
-                         -- LocMem -> True
-                         _ -> False
+  isMemoryLocation LocMem = True
+  isMemoryLocation _ = False
 
   readLocation = P.parseMaybe parseLocation
 
   locationType (LocGPR _) = knownRepr
   locationType LocPC = knownRepr
+  locationType LocCPSR = knownRepr
+  locationType LocMem = knownRepr
 
   defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocPC = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocCPSR = S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocMem =
+      S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
   allLocations = concat
     [ map (Some . LocGPR . ARMOperands.gpr) [0..15],
       [ Some LocPC
+      , Some LocCPSR
+      , Some LocMem
       ]
     ]
 
@@ -188,6 +194,9 @@ parseLocation :: ARMComp.Parser (Some (Location ARM))
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
+    'C' -> Some LocCPSR <$ P.string "CPSR"
+    'M' -> Some LocMem <$ P.string "Mem"
+    'P' -> Some LocPC <$ P.string "PC"
     'R' -> parsePrefixedRegister (Some . LocGPR . ARMOperands.gpr) 'R'
     _ -> P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 

@@ -27,3 +27,12 @@ sp :: Location 'TBV
 sp = LiteralLoc Literal { lName = "R13"  -- the Stack Pointer
                         , lExprType = naturalBV
                         }
+
+-- | CPSR (Current Program State Register) maintains the condition
+-- codes and other execution status registers (see Notes and (G1.9.3,
+-- G1-3422).  This is a system register that is only accessible via
+-- specific operations and not one of the general purpose registers.
+cpsr :: Location 'TBV
+cpsr = LiteralLoc Literal { lName = "CPSR"
+                          , lExprType = naturalBV
+                          }

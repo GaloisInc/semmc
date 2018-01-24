@@ -13,6 +13,7 @@ module SemMC.Architecture.ARM.Location
     where
 
 import           Data.Parameterized.Classes
+import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
 import qualified Dismantle.ARM as ARM
@@ -38,10 +39,14 @@ class ArchRepr arch where
 data Location arm :: BaseType -> * where
   LocGPR :: ARMOprnds.GPR -> Location arm (BaseBVType (ArchRegWidth arm))
   LocPC :: Location arm (BaseBVType (ArchRegWidth arm))
+  LocCPSR :: Location arm (BaseBVType (ArchRegWidth arm))
+  LocMem :: Location ppc (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth ppc))) (BaseBVType 8))
 
 instance Show (Location arm tp) where
   show (LocGPR gpr) = show (pPrint gpr)
   show LocPC = "PC"
+  show LocCPSR = "CPSR"
+  show LocMem = "Mem"
 
 instance ShowF (Location arm)
 
