@@ -71,7 +71,9 @@ readMem mem ea nBytes =
     funcName :: String
     funcName = "read_mem." <> show (nBytes * 8)
 
--- | Define a write to memory; it takes a memory and returns a whole new memory.
+
+-- | Base operation to semantically write to memory; it takes a memory
+-- and returns a whole new memory.
 storeMem :: Expr 'TMemory -- ^ The memory
          -> Expr 'TBV -- ^ The effective address to store at
          -> Int -- ^ The number of bytes to store
