@@ -39,6 +39,7 @@ import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified SemMC.Architecture as A
+import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR )
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
 import           SemMC.Architecture.ARM.Location
@@ -181,7 +182,7 @@ instance A.IsLocation (Location ARM) where
       S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
   allLocations = concat
-    [ map (Some . LocGPR . ARMOperands.gpr) [0..15],
+    [ map (Some . LocGPR . ARMOperands.gpr) [0..numGPR-1],
       [ Some LocPC
       , Some LocCPSR
       , Some LocMem
@@ -200,14 +201,14 @@ parseLocation = do
     'R' -> parsePrefixedRegister (Some . LocGPR . ARMOperands.gpr) 'R'
     _ -> P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
-parsePrefixedRegister :: (Integral a, Show a) => (a -> b) -> Char -> ARMComp.Parser b
+parsePrefixedRegister :: (Word8 -> b) -> Char -> ARMComp.Parser b
 parsePrefixedRegister f c = do
   _ <- P.char c
   n <- P.decimal
-  case n >= 0 && n <= 15 of
+  case n >= 0 && n <= (numGPR-1) of
     True -> return (f n)
     False -> P.failure (Just $ P.Tokens $ fromList $ show n)
-                      (Set.fromList $ [ P.Label $ fromList "Register number 0-15" ])
+                      (Set.fromList $ [ P.Label $ fromList $ "Register number 0-" <> show (numGPR-1) ])
 
 -- ----------------------------------------------------------------------
 
@@ -253,7 +254,7 @@ data Signed = Signed | Unsigned deriving (Eq, Show)
 instance T.TemplatableOperand ARM where
   opTemplates sr =
     case sr of
-      ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..31]
+      ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
       ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
       ARM.Addrmode_imm12_preRepr -> undefined
           {-

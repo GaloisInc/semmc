@@ -5,6 +5,11 @@ module SemMC.Architecture.ARM.BaseSemantics.Registers
 
 import SemMC.DSL
 import SemMC.Architecture.ARM.BaseSemantics.Base
+import Data.Word ( Word8 )
+
+
+numGPR :: Word8
+numGPR = 16
 
 -- | The PC (Program Counter).  This is roughly analagous to R15, but
 -- there is a distinction between R15 and the PC and while R15 is
