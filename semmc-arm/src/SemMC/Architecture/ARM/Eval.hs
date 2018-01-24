@@ -1,14 +1,31 @@
 -- | Evaluators for location functions in formula definitions (e.g., memri_reg)
 
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module SemMC.Architecture.ARM.Eval
     ( createSymbolicEntries
     , interpIsR15
+    , interpImm12Reg
+    , interpImm12RegExtractor
+    , interpImm12OffsetExtractor
+    , interpImm12AddFlgExtractor
     )
     where
 
+import           Data.Int ( Int16, Int8 )
+import qualified Data.Parameterized.List as PL
+import           Data.Word
+import qualified Dismantle.ARM as ARM
 import qualified Dismantle.ARM.Operands as ARMOperands
+import           Lang.Crucible.BaseTypes
+import           SemMC.Architecture.ARM.Location
+import qualified SemMC.Architecture.Location as L
+import qualified SemMC.Formula as F
 
 
 -- | Uninterpreted function names are mangled in SimpleBuilder, so we need to
@@ -31,6 +48,32 @@ createSymbolicEntries = foldr duplicateIfDotted []
           in newElt : elt : acc
 
 
+-- | Extract the register value from an addrmode_imm12[_pre] via
+-- the arm.imm12_reg user function.
+interpImm12Reg :: forall sh s arm tp
+                   . (L.IsLocation (Location arm), L.Location arm ~ Location arm)
+                   => PL.List ARM.Operand sh
+                 -> F.WrappedOperand arm sh s
+                 -> BaseTypeRepr tp
+                 -> L.Location arm tp
+interpImm12Reg operands (F.WrappedOperand _orep ix) rep =
+  case operands PL.!! ix of
+    ARM.Addrmode_imm12_pre oprnd ->
+      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
+          loc = LocGPR $ ARMOperands.addrModeImm12Register oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+          | otherwise -> error ("Invalid return type for location function 'imm12_reg' at index " ++ show ix)
+    _ -> error ("Invalid operand type at index " ++ show ix)
+
+interpImm12RegExtractor :: ARMOperands.AddrModeImm12 -> ARMOperands.GPR
+interpImm12RegExtractor = ARMOperands.addrModeImm12Register
+
+interpImm12OffsetExtractor :: ARMOperands.AddrModeImm12 -> Int16
+interpImm12OffsetExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12Immediate
+
+interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Int8
+interpImm12AddFlgExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12Add
 
 
 class InterpIsR15 a where

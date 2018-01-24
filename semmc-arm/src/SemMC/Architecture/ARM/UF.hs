@@ -24,13 +24,13 @@ uninterpretedFunctions _ =
   [ ("arm.is_r15",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
-  , ("arm.memri12_reg", -- reference to register by register number from an addrmode_imm12_pre operand
+  , ("arm.imm12_reg", -- reference to register by register number from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
-  , ("arm.memri12_imm", -- reference to immediate value from an addrmode_imm12_pre operand
+  , ("arm.imm12_imm", -- reference to immediate value from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
-  , ("arm.memri12_add", -- reference to U flag bit from an addrmode_imm12_pre operand
+  , ("arm.imm12_add", -- reference to U flag bit from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
   ]

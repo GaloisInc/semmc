@@ -45,6 +45,7 @@ import           SemMC.Architecture.ARM.Eval
 import           SemMC.Architecture.ARM.Location
 import qualified SemMC.Architecture.ARM.UF as UF
 import qualified SemMC.Concrete.Execution as CE
+import qualified SemMC.Formula as F
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
@@ -231,9 +232,14 @@ instance A.Architecture ARM where
 
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
-locationFuncInterpretation = [
-   ("arm.is_r15", A.FunctionInterpretation { A.exprInterpName = 'interpIsR15
-                                           })]
+locationFuncInterpretation =
+    [ ("arm.is_r15", A.FunctionInterpretation { A.exprInterpName = 'interpIsR15 })
+    , ("arm.imm12_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpImm12Reg
+                                                 , A.exprInterpName = 'interpImm12RegExtractor
+                                                 })
+    , ("arm.imm12_off", A.FunctionInterpretation { A.exprInterpName = 'interpImm12OffsetExtractor })
+    , ("arm.imm12_add", A.FunctionInterpretation { A.exprInterpName = 'interpImm12AddFlgExtractor })
+    ]
 
 shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
 shapeReprType orep =
@@ -256,22 +262,23 @@ instance T.TemplatableOperand ARM where
     case sr of
       ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
       ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
-      ARM.Addrmode_imm12_preRepr -> undefined
-          {-
-          -- TBD: the following is speculative, based on the PPC Memri, but incomplete and probably incorrect
-          mkTemplate <$> [0..15]
-            where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (ARMOperands.gpr gprNum)))) mkTemplate' :: T.TemplatedOperand ARM "Addrmode_imm12_pre"
+      ARM.Addrmode_imm12_preRepr ->
+          mkTemplate <$> [0..numGPR-1]
+            where mkTemplate gprNum = T.TemplatedOperand Nothing
+                                      (Set.singleton (Some (LocGPR (ARMOperands.gpr gprNum)))) mkTemplate'
+                                          :: T.TemplatedOperand ARM "Addrmode_imm12_pre"
                     where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12_pre"
                           mkTemplate' sym locLookup = do
-                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (undefined) -- (ARM.Addrmode_imm12_pre gprNum)
-                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre") knownRepr
+                            let gprN = ARMOperands.gpr gprNum
+                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (ARM.GPR $ gprN)
+                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
+                            addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
                             expr <- S.bvAdd sym base offset
                             let recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
-                                  let gpr = Just (ARMOperands.gpr gprNum)
-                                  return $ undefined -- ARM.Addrmode_imm12_pre gpr offsetVal
+                                  addflagVal <- fromInteger <$> evalFn addflag
+                                  return $ ARM.Addrmode_imm12_pre $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                             return (expr, T.WrappedRecoverOperandFn recover)
-          -}
 
 
 concreteTemplatedOperand :: forall arch s a.
