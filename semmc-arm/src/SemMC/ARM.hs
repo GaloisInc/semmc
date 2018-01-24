@@ -25,6 +25,7 @@ import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
+import           Data.List.NonEmpty ( NonEmpty(..), fromList )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
@@ -188,8 +189,7 @@ parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
     'R' -> parsePrefixedRegister (Some . LocGPR . ARMOperands.gpr) 'R'
-    _ -> error $ "parse got unexpected: " <> show c
-
+    _ -> P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
 parsePrefixedRegister :: (Integral a, Show a) => (a -> b) -> Char -> ARMComp.Parser b
 parsePrefixedRegister f c = do
@@ -197,7 +197,8 @@ parsePrefixedRegister f c = do
   n <- P.decimal
   case n >= 0 && n <= 15 of
     True -> return (f n)
-    False -> fail ("Register number out of range: " ++ show n)
+    False -> P.failure (Just $ P.Tokens $ fromList $ show n)
+                      (Set.fromList $ [ P.Label $ fromList "Register number 0-15" ])
 
 -- ----------------------------------------------------------------------
 
