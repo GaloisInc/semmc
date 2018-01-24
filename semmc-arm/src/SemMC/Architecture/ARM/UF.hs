@@ -24,6 +24,17 @@ uninterpretedFunctions _ =
   [ ("arm.is_r15",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
+
+  , ("arm.conditionPassed",  -- can execute instr?  inputs are Pred and CCR
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 4
+                                                         ::> BaseBVType 4)),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
+
+  , ("test_bit_dynamic",
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32
+                                                         ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
+
   , ("arm.imm12_reg", -- reference to register by register number from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
