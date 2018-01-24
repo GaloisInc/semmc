@@ -9,10 +9,11 @@ module SemMC.Architecture.ARM.BaseSemantics.Memory
 
 import Data.Monoid
 import Data.Parameterized.Some ( Some(..) )
-import Prelude hiding ( concat )
+import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 
 
@@ -27,7 +28,27 @@ defineLoads = do
 
 defineStores :: SemM 'Top ()
 defineStores = do
-  return ()
+  defineLinearOpcode "STR_PRE_IMM" $ do
+    comment "Store Register, Pre-indexed (P=1, W=1), immediate  (A32)"
+    comment "doc: F7.1.217, page F7-2880"
+    comment "see also PUSH, F7.1.138, page F7-2760" -- TBD: if add && rN=SP && imm.imm=4 [A1 v.s. A2 form]"
+    ok <- condPassed
+    -- TBD: EncodingSpecificOperations()
+    imm12 <- param "imm" addrmode_imm12_pre EMemRef
+    rT <- param "gpr" gpr naturalBV
+    input rT
+    input imm12
+    input memory
+    let rN = imm12Reg imm12
+        imm12arg = [Some $ Loc imm12]
+        imm = imm12Imm imm12arg
+        add = imm12Add imm12arg
+        addr = ite add (bvadd (Loc rN) imm) (bvsub (Loc rN) imm)
+        nBytes = 4
+    -- TBD: next use PCStoreValue() of rT == r15 instead of (Loc rT)
+    defMemWhen ok memory addr nBytes (Loc rT)
+    -- TBD: if rN == r15 or rN == rT then UNPREDICTABLE
+    defRegWhen ok rN addr
 
 
 -- ----------------------------------------------------------------------
