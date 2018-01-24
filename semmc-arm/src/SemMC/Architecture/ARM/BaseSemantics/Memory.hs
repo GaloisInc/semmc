@@ -60,7 +60,9 @@ memory = LiteralLoc Literal { lName = "Mem"
                             , lExprType = EMemory
                             }
 
--- | Read from the pseudo-location "Memory"
+
+-- | Base operation to semantically read from the pseudo-location
+-- "Memory"
 readMem :: Expr 'TMemory -- ^ The memory
         -> Expr 'TBV -- ^ The effective address to load
         -> Int -- ^ The number of bytes
