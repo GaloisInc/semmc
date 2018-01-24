@@ -26,6 +26,7 @@ module SemMC.Architecture.PPC32
 import qualified GHC.Err.Located as L
 
 import qualified Data.Int.Indexed as I
+import qualified Data.List.NonEmpty as NEL
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
@@ -669,7 +670,8 @@ parseLocation = do
                        ]
     'F' -> Some LocFPSCR <$ P.string "FPSCR"
     'V' -> Some LocVSCR <$ P.string "VSCR"
-    _ -> fail ("Unexpected location prefix character: " ++ (c :[]))
+    _ -> P.failure (Just $ P.Tokens $ c NEL.:| [])
+                (Set.fromList $ [ P.Label $ NEL.fromList "Location" ])
 
 ----------------------------------------------------------------
 

@@ -29,8 +29,10 @@ import           GHC.TypeLits
 import           Data.Bits ( shiftR, shiftL, (.|.), (.&.) )
 import qualified Data.ByteString.Builder as B
 import           Data.Int ( Int16 )
+import qualified Data.List.NonEmpty as NEL
 import           Data.Monoid ( (<>) )
 import qualified Data.Serialize.Get as G
+import qualified Data.Set as S
 import           Data.Word ( Word16 )
 import           Numeric.Natural ( Natural )
 import qualified Text.Megaparsec as P
@@ -129,4 +131,5 @@ parsePrefixedRegister f c = do
   n <- P.decimal
   case n >= 0 && n <= 31 of
     True -> return (f n)
-    False -> fail ("Register number out of range: " ++ show n)
+    False -> P.failure (Just $ P.Tokens $ NEL.fromList $ show n)
+                      (S.fromList $ [ P.Label $ NEL.fromList "Register number 0-31" ])
