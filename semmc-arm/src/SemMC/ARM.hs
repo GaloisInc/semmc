@@ -39,7 +39,7 @@ import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified SemMC.Architecture as A
-import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR )
+import           SemMC.Architecture.ARM.BaseSemantics ( numGPR )
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
 import           SemMC.Architecture.ARM.Location
