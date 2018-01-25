@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -59,7 +60,7 @@ evaluateFunctions sym pf operands e0 rewriters = do
   let tbls = EvalHashTables { eltTable = tbl
                             , fnTable = fnTab
                             }
-  evaluateFunctions' tbls operandIndex sym e0
+  evaluateFunctions' tbls operandIndex sym e0 rewriters
   where
     operandIndex = SL.ifoldr (indexOperands operands) MapF.empty (pfOperandVars pf)
 
@@ -83,9 +84,25 @@ evaluateFunctions' :: EvalHashTables t
                    -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
                    -> Sym t st
                    -> S.Elt t ret
+                   -> [(String, Evaluator arch t)]
                    -> IO (S.Elt t ret)
-evaluateFunctions' tbls operandIndex sym e0 =
+evaluateFunctions' EvalHashTables {..} operandIndex sym e0 rewriters =
   case e0 of
     S.SemiRingLiteral {} -> return e0
-    S.BVElt {} -> return e0
+    S.BVElt {}           -> return e0
+    S.AppElt {}          -> return e0
+    S.NonceAppElt {}     -> return e0
+    S.BoundVarElt {}     -> return e0
     _ -> undefined
+
+
+-- type Sym t (st :: * -> *) = S.SimpleBuilder t st
+
+-- newtype BV.BoundVar sym arch (op :: Symbol)
+   -- = BV.BoundVar {BV.unBoundVar :: SI.BoundVar
+
+-- data EvalHashTables t
+--   = EvalHashTables {
+--       eltTable :: PH.HashTable RealWorld (S.Elt t) (S.Elt t),
+--       fnTable :: PH.HashTable RealWorld (PN.Nonce t) (CachedSymFn t)
+-- }

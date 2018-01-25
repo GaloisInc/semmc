@@ -25,7 +25,6 @@ module SemMC.Architecture.PPC32
   ) where
 
 import qualified GHC.Err.Located as L
-
 import qualified Data.Int.Indexed as I
 import qualified Data.List.NonEmpty as NEL
 import           Data.Parameterized.Classes
@@ -36,7 +35,6 @@ import           Data.Parameterized.Context
 import           Data.Parameterized.TraversableFC
 import           Data.Parameterized.NatRepr
 import           Data.Proxy ( Proxy(..) )
-import           Data.Maybe
 import           Data.List
 import qualified Data.Set as Set
 import           Data.Word
@@ -508,6 +506,42 @@ type IsOffset = Bool
 evalMemReg :: IsOffset -> E.Evaluator PPC t
 evalMemReg isOffset = E.Evaluator (handler isOffset)
 
+isR0
+  :: forall t st sh u tp
+   . S.SimpleBuilder t st
+  -> F.ParameterizedFormula (S.SimpleBuilder t st) PPC sh
+  -> PPC.List (A.Operand PPC) sh
+  -> Assignment (S.Elt t) u
+  -> BaseTypeRepr tp
+  -> IO (S.Elt t tp)
+isR0 sym pf operands assignment bv =
+  case assignment of
+    Empty :> S.BoundVarElt b ->
+      case Some b `boundVarElemIndex` stripped pf of
+        Nothing -> do
+          case MapF.lookup (LocGPR (PPC.GPR 0x0)) (F.pfLiteralVars pf) of
+            Nothing -> error "Index not present in operands list"
+            Just b' -> returnElt $
+              case testEquality b b' of
+                Just Refl -> S.TrueBool
+                Nothing -> S.FalseBool
+        Just index ->
+          case findOperandByIndex index operands of
+            Just (Some g@(PPC.Gprc _)) -> returnElt $
+              case testEquality g (PPC.Gprc (PPC.GPR 0x0)) of
+                Just Refl -> S.TrueBool
+                Nothing -> S.FalseBool
+            Just x -> error $ "Expected a GPRC but got: " ++ show x
+            Nothing -> error "Index out of range in operandVars"
+   where
+     returnElt
+       :: S.App (S.Elt t) BaseBoolType
+       -> IO (S.Elt t tp)
+     returnElt b' =
+       case testEquality (S.appType b') bv of
+         Just Refl -> S.sbMakeElt sym b'
+         Nothing -> error "Failed type equality in isR0"
+
 handler
   :: forall t st sh u tp . Bool
   -> S.SimpleBuilder t st
@@ -523,8 +557,8 @@ handler isOffset sym pf operands assignment bv =
         Nothing -> error "BoundVar not present in ParameterizedFormula"
         Just index ->
           case findOperandByIndex index operands of
-            Some reg ->
-              case reg of
+            Just (Some op) ->
+              case op of
                 PPC.Memri (PPC.MemRI maybeBase offset) ->
                   if isOffset
                     then handleOffset (fromIntegral offset) (knownNat :: NatRepr 16)
@@ -538,6 +572,9 @@ handler isOffset sym pf operands assignment bv =
                     then handleBase (Just offset)
                     else handleBase maybeBase
                 _ -> error "Unexpected operand type"
+            Nothing ->
+              error "Index not present in operands list"
+
          where
            handleOffset
              :: ( KnownNat n
@@ -580,11 +617,10 @@ stripped pf = toListFC Some (F.pfOperandVars pf)
 findOperandByIndex
   :: Int
   -> PPC.List PPC.Operand sh
-  -> Some PPC.Operand
+  -> Maybe (Some PPC.Operand)
 findOperandByIndex index list =
-  fromMaybe (error "Find operand by index") $
-    lookup index $
-      Prelude.zip [0..] (toListFC Some list)
+  lookup index $
+    Prelude.zip [0..] (toListFC Some list)
 
 findReg
   :: (FoldableFC t, TestEquality (S.BoundVar sym))
@@ -642,12 +678,10 @@ locationFuncInterpretation =
                                                   , A.exprInterp = evalMemReg True
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
-                                           , A.exprInterp = undefined
+                                           , A.exprInterp = E.Evaluator isR0
                                            , A.locationInterp = undefined
                                            })
     ]
-
--- , pfOperandVars :: SL.List (BV.BoundVar sym arch) sh
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =
