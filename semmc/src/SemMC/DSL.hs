@@ -360,15 +360,18 @@ boolBinopBuiltin s e1 e2 = Builtin EBool  s [Some e1, Some e2]
 
 ite :: (HasCallStack) => Expr 'TBool -> Expr tp -> Expr tp -> Expr tp
 ite b t e =
-  case b of
-    LitBool True -> t
-    LitBool False -> e
-    _ | t1 == t2 && tc == EBool -> Builtin t1 "ite" [Some b, Some t, Some e]
-      | otherwise -> error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show t1) (show t2) (show tc))
+  if (e2txt t) == (e2txt e)
+  then t
+  else case b of
+             LitBool True -> t
+             LitBool False -> e
+             _ | t1 == t2 && tc == EBool -> Builtin t1 "ite" [Some b, Some t, Some e]
+               | otherwise -> error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show t1) (show t2) (show tc))
   where
     t1 = exprType t
     t2 = exprType e
     tc = exprType b
+    e2txt = SC.encodeOne (SC.basicPrint printAtom) . convertExpr . Some
 
 -- | Bitwise not (complement)
 bvnot :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
