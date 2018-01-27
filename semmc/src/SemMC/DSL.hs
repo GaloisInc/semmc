@@ -349,7 +349,7 @@ orp e1 e2 =
     (LitBool True, _) -> LitBool True
     (_, LitBool True) -> LitBool True
     (LitBool False, _) -> e2
-    (_, LitBool False) -> e2
+    (_, LitBool False) -> e1
     _ -> boolBinopBuiltin "orp" e1 e2
 
 xorp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
