@@ -112,15 +112,15 @@ sext' fullWidth e
 -- contained in the register referenced by the addrmode_imm12_[pre].
 -- During the Eval stage this will perform the actual extraction of the value.
 imm12Reg :: Location 'TMemRef -> Location 'TBV
-imm12Reg = locUF naturalBV "arm.imm12_reg"
+imm12Reg = locUF naturalBV "a32.imm12_reg"
 
 -- | Returns the immediate value in the addrmode_imm12_[pre]
 imm12Imm :: [Some Expr] -> Expr 'TBV
-imm12Imm = uf naturalBV "arm.imm12_imm"
+imm12Imm = uf naturalBV "a32.imm12_imm"
 
 -- | Returns the addition flag in the addrmode_imm12_[pre]
 imm12Add :: [Some Expr] -> Expr 'TBool
-imm12Add = uf EBool "arm.imm12_add"
+imm12Add = uf EBool "a32.imm12_add"
 
 -- ----------------------------------------------------------------------
 

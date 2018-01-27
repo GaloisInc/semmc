@@ -1,4 +1,14 @@
--- | Representations of the ARM architecture for semantics learning
+-- | Representations of the ARM architecture for semantics learning.
+--
+-- There are two operational modes for ARM: A32 and T32 (i.e. Thumb).
+-- The current mode is dictated by the ISETSETATE register in the
+-- processor, and the low-bit of the PC (0 for A32, 1 for T32,
+-- although this low-bit is not expressed for instruction fetches).
+--
+-- There are separate dismantle definitions for A32 (called ARM) and
+-- T32 (called Thumb), and these are treated as parallel instruction
+-- sets.  The rest of the architecture (e.g. register definitions,
+-- etc.) are common between the two.
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -234,11 +244,11 @@ instance A.Architecture ARM where
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
 locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation { A.exprInterpName = 'interpIsR15 })
-    , ("arm.imm12_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpImm12Reg
+    , ("a32.imm12_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpImm12Reg
                                                  , A.exprInterpName = 'interpImm12RegExtractor
                                                  })
-    , ("arm.imm12_off", A.FunctionInterpretation { A.exprInterpName = 'interpImm12OffsetExtractor })
-    , ("arm.imm12_add", A.FunctionInterpretation { A.exprInterpName = 'interpImm12AddFlgExtractor })
+    , ("a32.imm12_off", A.FunctionInterpretation { A.exprInterpName = 'interpImm12OffsetExtractor })
+    , ("a32.imm12_add", A.FunctionInterpretation { A.exprInterpName = 'interpImm12AddFlgExtractor })
     ]
 
 shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)

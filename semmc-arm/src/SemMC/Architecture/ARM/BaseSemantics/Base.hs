@@ -6,6 +6,9 @@ module SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.DSL
 
 
+data ArchSubtype = InstrSet_A32 | InstrSet_T32 | InstrSet_Jazelle | InstrSet_T32EE
+                 deriving (Eq, Show)
+
 naturalBitSize :: Int
 naturalBitSize = 32
 
