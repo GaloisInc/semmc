@@ -3,12 +3,13 @@
 module SemMC.Architecture.ARM.BaseSemantics.Helpers
     where
 
-import Prelude hiding ( pred )
-import SemMC.DSL
+import Data.Bits
 import Data.Parameterized.Some ( Some(..) )
+import Prelude hiding ( pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
-import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import SemMC.Architecture.ARM.BaseSemantics.Registers
+import SemMC.DSL
 
 
 -- | A wrapper around 'defineOpcode' that updates the PC after the
@@ -155,6 +156,15 @@ lowBits32 n = extract 31 (31 - n + 1)
 
 lowBits128 :: Int -> Expr 'TBV -> Expr 'TBV
 lowBits128 n = extract 127 (127 - n + 1)
+
+
+-- | Set bits, specifying the list of bit numbers to set (0-based)
+bvset :: [Int] -> Expr 'TBV -> Expr 'TBV
+bvset bitnums = bvor (naturalLitBV $ toInteger $ foldl setBit naturalZero bitnums)
+
+-- | Clear bits, specifying the list of bit numbers to clear (0-based)
+bvclr :: [Int] -> Expr 'TBV -> Expr 'TBV
+bvclr bitnums = bvand (naturalLitBV $ toInteger $ complement $ foldl setBit naturalZero bitnums)
 
 -- | Can be used to flag unpredictable expressions
 unpredictable :: Expr a -> Expr a

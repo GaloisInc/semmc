@@ -3,6 +3,8 @@
 module SemMC.Architecture.ARM.BaseSemantics.Base
     where
 
+import Data.Bits
+import Data.Word
 import SemMC.DSL
 
 
@@ -11,6 +13,9 @@ data ArchSubtype = InstrSet_A32 | InstrSet_T32 | InstrSet_Jazelle | InstrSet_T32
 
 naturalBitSize :: Int
 naturalBitSize = 32
+
+naturalZero :: Word32
+naturalZero = zeroBits
 
 naturalBV :: ExprType 'TBV
 naturalBV = EBV naturalBitSize
