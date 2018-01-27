@@ -155,3 +155,16 @@ lowBits32 n = extract 31 (31 - n + 1)
 
 lowBits128 :: Int -> Expr 'TBV -> Expr 'TBV
 lowBits128 n = extract 127 (127 - n + 1)
+
+-- | Can be used to flag unpredictable expressions
+unpredictable :: Expr a -> Expr a
+unpredictable = id
+
+
+sameLocation :: Location tp -> Location tp -> Expr 'TBool
+sameLocation l = LitBool . maybe False (const True) . testEquality l
+
+
+-- | Is the current register R15 (aka PC)?
+isR15 :: Location 'TBV -> Expr 'TBool
+isR15 = uf EBool "arm.is_r15" . ((:[]) . Some) . Loc
