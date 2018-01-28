@@ -2,12 +2,26 @@
 {-# LANGUAGE DataKinds #-}
 
 module SemMC.Architecture.ARM.BaseSemantics.Helpers
+    ( defineA32Opcode
+    , defineA32OpcodeNoPred
+    , defineT32Opcode
+    , instrSetState
+    , defReg
+    , zext, zext'
+    , sext, sext'
+    , imm12Reg, imm12Imm, imm12Add
+    , bvset, bvclr
+    , unpredictable
+    , sameLocation
+    , isR15
+    )
     where
 
 import Data.Bits
+import Data.Maybe
 import Data.Parameterized.Classes
 import Data.Parameterized.Some ( Some(..) )
-import Data.Maybe
+import Data.Semigroup
 import GHC.Stack ( HasCallStack )
 import Prelude hiding ( pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
