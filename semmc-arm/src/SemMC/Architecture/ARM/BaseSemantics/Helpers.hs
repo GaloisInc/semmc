@@ -8,6 +8,7 @@ import Data.Bits
 import Data.Parameterized.Classes
 import Data.Parameterized.Some ( Some(..) )
 import Data.Maybe
+import GHC.Stack ( HasCallStack )
 import Prelude hiding ( pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
@@ -18,7 +19,7 @@ import SemMC.DSL
 -- | A wrapper around 'defineOpcode' that sets A32 mode and updates
 -- the PC after the instruction executes (by 4 if A32 or 2 if T32).
 -- Do not use for branches or any operation that might update R15/PC.
-defineA32Opcode :: String -> SemARM 'Def () -> SemARM 'Top ()
+defineA32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
 defineA32Opcode name def =
   defineA32OpcodeNoPred name $ do
     testForConditionPassed
@@ -26,7 +27,7 @@ defineA32Opcode name def =
 
 -- | An alternative version of 'defineA32Opcode' for opcodes which do
 -- not have a Pred operand that controls the expression of the opcode.
-defineA32OpcodeNoPred :: String -> SemARM 'Def () -> SemARM 'Top ()
+defineA32OpcodeNoPred :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
 defineA32OpcodeNoPred name def =
   defineOpcode name $ do
     subarch InstrSet_A32
@@ -37,7 +38,7 @@ defineA32OpcodeNoPred name def =
 -- | A wrapper around 'defineOpcode' that sets A32 mode and updates
 -- the PC after the instruction executes (by 4 if A32 or 2 if T32).
 -- Do not use for branches or any operation that might update R15/PC.
-defineT32Opcode :: String -> SemARM 'Def () -> SemARM 'Top ()
+defineT32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
 defineT32Opcode name def =
   defineOpcode name $ do
     subarch InstrSet_T32
