@@ -12,6 +12,10 @@ module SemMC.DSL (
   input,
   defLoc,
   comment,
+  -- * Architecture-specific Data support
+  getArchData,
+  setArchData,
+  modifyArchData,
   -- * Operations
   testBitDynamic,
   extract,
@@ -65,6 +69,7 @@ module SemMC.DSL (
   Literal(..),
   -- * Monad
   SemM,
+  SemMD,
   Phase(..),
   runSem,
   Parameter,
@@ -125,26 +130,76 @@ exprBVSize e =
     UninterpretedFunc (EBV w) _ _ -> w
 
 
-data Formula = Formula { fName :: String
-                       , fOperands :: Seq.Seq (Some Parameter)
-                       , fInputs :: [Some Location]
-                       , fDefs :: [(Some Location, Some Expr)]
-                       , fComment :: Seq.Seq String
-                       -- ^ Comments stored as individual lines
-                       }
-             deriving (Show)
+-- | The definition of the Formula that semantically describes the
+-- functionality of an architecture's opcode.
+--
+-- Each opcode has a name (which is used to match the Dismantle
+-- Instruction), a declaration of the operands (which should match the
+-- instruction in type and ordering), the set inputs to consider for
+-- this formula, and the actual definitions set by this formula
+-- (i.e. changes to memory, register value, processor state, etc.)
+-- There can also be comments for this formula (suggestions are
+-- document references and further identifying information beyond just
+-- the name of the opcode).
+--
+-- The SemM monad below defines a context in which a DSL for creating
+-- the formula can be expressed.  The Formula is then written to a
+-- descriptive semantics file as an S-expression; this S-expression
+-- can be read in later to perform evaluation of the formula to
+-- compute results (often symbolically).
+--
+-- The 'd' type argument is an extension type for additional data
+-- maintained by the architecture-specific implementation of this
+-- monad DSL.  This specifies the type of additional data that can be
+-- kept in the state and used for processing; it is ignored for the
+-- generation of the final S-Expression.
+data Formula d = Formula { fName :: String
+                         , fOperands :: Seq.Seq (Some Parameter)
+                         , fInputs :: [Some Location]
+                         , fDefs :: [(Some Location, Some Expr)]
+                         , fComment :: Seq.Seq String
+                         -- ^ Comments stored as individual lines
+                         , fArchData :: Maybe d
+                         }
+    -- n.b. it could be convenient to automatically derive a Show
+    -- instance for Formula, but this would require a Show d
+    -- constraint here and in all the DSL function declarations, which
+    -- would be annoying.  Feel free to create an explicit show
+    -- instance that shows everything but the archData.
+
+
+-- | Generate a new, blank formula with the specified name (opcode)
+newFormula :: String -> Formula d
+newFormula name = Formula { fName = name
+                          , fComment = Seq.empty
+                          , fOperands = Seq.empty
+                          , fInputs = []
+                          , fDefs = []
+                          , fArchData = Nothing
+                          }
 
 -- | The state component of the monad is a Formula that is built up during a
 -- single definition; after the definition, it is added to the output sequence.
 --
+-- It is actually possible to generate several formulas during the
+-- execution of this monad (see 'forkDefinition' below).  The writer
+-- portion is used to store these completed formulas.
+--
 -- The @t@ is a phantom parameter to ensure that nesting definitions is
 -- impossible.
-newtype SemM (t :: Phase) a = SemM { unSem :: RWS.RWS () (Seq.Seq Formula) Formula a }
-  deriving (Functor,
-            Applicative,
-            Monad,
-            RWS.MonadWriter (Seq.Seq Formula),
-            RWS.MonadState Formula)
+--
+newtype SemMD (t :: Phase) d a =
+    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (Formula d) a }
+          deriving (Functor,
+                    Applicative,
+                    Monad,
+                    RWS.MonadWriter (Seq.Seq (Formula d)),
+                    RWS.MonadState (Formula d))
+
+
+-- | Simpler form of 'SemMD' for for architectures that do not need
+-- any architectore-specific data maintained.
+type SemM (t :: Phase) a = SemMD t () a
 
 -- | Tags used as phantom types to prevent nested opcode definitions
 data Phase = Top | Def
@@ -156,35 +211,23 @@ data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
 --
 -- The result is an association list from opcode name to the s-expression
 -- representing it.
-runSem :: SemM 'Top () -> [(String, Definition)]
-runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () badFormula))
-  where
-    -- This is a dummy formula that is never used.  It is just a standin until
+runSem :: SemMD 'Top d () -> [(String, Definition)]
+runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () (newFormula "")))
+    -- The initial dummy formula here is never used.  It is just a standin until
     -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
     -- this will never be used since 'defineOpcode' handles adding the result to
     -- the writer output.
-    badFormula = Formula { fName = ""
-                         , fComment = Seq.empty
-                         , fOperands = Seq.empty
-                         , fInputs = []
-                         , fDefs = []
-                         }
+
 
 -- | Define an opcode with a given name.
 --
 -- The body is executed to produce a definition.
-defineOpcode :: String -> SemM 'Def () -> SemM 'Top ()
+defineOpcode :: String -> SemMD 'Def d () -> SemMD 'Top d ()
 defineOpcode name (SemM def) = do
-  let freshFormula = Formula { fName = name
-                             , fComment = Seq.empty
-                             , fOperands = Seq.empty
-                             , fInputs = []
-                             , fDefs = []
-                             }
-  RWS.put freshFormula
+  RWS.put $ newFormula name
   SemM def
-  newFormula <- RWS.get
-  RWS.tell (Seq.singleton newFormula)
+  formula <- RWS.get
+  RWS.tell (Seq.singleton formula)
   return ()
 
 -- | Fork a definition into a second definition under a different name
@@ -201,7 +244,7 @@ defineOpcode name (SemM def) = do
 -- >   forkDefinition "OP1'" $ do
 -- >     comment ...
 -- >     defLoc eflags ...
-forkDefinition :: String -> SemM 'Def () -> SemM 'Def ()
+forkDefinition :: String -> SemMD 'Def d () -> SemMD 'Def d ()
 forkDefinition name (SemM def) = do
   origFormula <- RWS.get
   let modFormula = origFormula { fName = name
@@ -218,11 +261,11 @@ forkDefinition name (SemM def) = do
 --
 -- Each call appends a new comment line.  Individual calls to comment should not
 -- contain newlines.
-comment :: String -> SemM 'Def ()
+comment :: String -> SemMD 'Def d ()
 comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
 
 -- | Declare a named parameter; the string provided is used in the produced formula
-param :: String -> String -> ExprType tp -> SemM 'Def (Location tp)
+param :: String -> String -> ExprType tp -> SemMD 'Def d (Location tp)
 param name ty ety = do
   let p = Parameter { pName = name
                     , pType = ty
@@ -232,11 +275,11 @@ param name ty ety = do
   return (ParamLoc p)
 
 -- | Mark a parameter as an input
-input :: Location tp -> SemM 'Def ()
+input :: Location tp -> SemMD 'Def d ()
 input loc = RWS.modify' $ \f -> f { fInputs = Some loc : fInputs f }
 
 -- | Define a location as an expression
-defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemM 'Def ()
+defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemMD 'Def d ()
 defLoc loc e
   | locationType loc == exprType e = do
       curDefs <- RWS.gets fDefs
@@ -244,6 +287,25 @@ defLoc loc e
         Nothing -> RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
         Just _ -> error (printf "Location is already defined: %s" (show loc))
   | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
+
+
+-- | Get the current architecture-specific data in the DSL computation
+getArchData :: SemMD t d (Maybe d)
+getArchData = fArchData <$> RWS.get
+
+
+-- | Set the current architecture-specific data in the DSL computation
+setArchData :: Maybe d -> SemMD t d ()
+setArchData m'ad = RWS.modify (\s -> s { fArchData = m'ad })
+
+
+-- | Modify the current architecture-specific data in the DSL computation
+modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
+modifyArchData adf = RWS.modify (\s -> s { fArchData = adf (fArchData s) })
+
+
+-- ----------------------------------------------------------------------
+-- Expressions
 
 -- | Allow for user-defined functions over expressions
 uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
@@ -470,12 +532,14 @@ concat e1 e2 =
   case (exprType e1, exprType e2) of
     (EBV w1, EBV w2) -> Builtin (EBV (w1 + w2)) "concat" [Some e1, Some e2]
 
+
+-- ----------------------------------------------------------------------
 -- SExpression conversion
 
-mkSExprs :: Seq.Seq Formula -> [(String, Definition)]
+mkSExprs :: Seq.Seq (Formula d) -> [(String, Definition)]
 mkSExprs = map toSExpr . F.toList
 
-toSExpr :: Formula -> (String, Definition)
+toSExpr :: (Formula d) -> (String, Definition)
 toSExpr f = (fName f, Definition (fComment f) (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
 
 extractSExpr :: [Some Parameter] -> [Some Location] -> [(Some Location, Some Expr)] -> SC.SExpr FAtom
