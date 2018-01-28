@@ -15,14 +15,30 @@ data ArchSubtype = InstrSet_A32 | InstrSet_T32 | InstrSet_Jazelle | InstrSet_T32
                  deriving (Eq, Show)
 
 
--- | The 'fArchData' field of the current DSL state is used to specify
--- the current instruction set being semantically defined.  This can
--- be done because the Dismantle ARM Opcodes (A32) are distinct from
--- the Dismantle Thumbe Opcodes (T32), so the current instruction set
--- is deterministically known.  By encoding it into the DSL state,
--- additional validation and optimizations can be performed.
-data SemM_ARMData = SemM_ARMData { subArch :: ArchSubtype
-                                 }
+-- | The 'fArchData' field of the current DSL state is used to contain
+-- values used in the Semantics definitions of opcodes.
+
+data SemM_ARMData = SemM_ARMData
+    { subArch :: ArchSubtype
+      -- ^ specifies the current instruction set being semantically
+      -- defined.  This can be done because the Dismantle ARM Opcodes
+      -- (A32) are distinct from the Dismantle Thumb Opcodes (T32), so
+      -- the current instruction set is deterministically known.  By
+      -- encoding it into the DSL state, additional validation and
+      -- optimizations can be performed.
+
+    , condPassed :: Expr 'TBool
+      -- ^ stores the ConditionPassed expression for the current
+      -- Opcode to be used for enabling defLoc updates.
+    }
+
+
+newARMData :: SemM_ARMData
+newARMData = SemM_ARMData
+             { subArch = InstrSet_Jazelle -- not supported: force error if not updated to actual
+             , condPassed = LitBool False
+             }
+
 
 type SemARM t a = SemMD t SemM_ARMData a
 

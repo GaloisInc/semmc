@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 
 module SemMC.Architecture.ARM.BaseSemantics.Helpers
@@ -19,6 +20,14 @@ import SemMC.DSL
 -- Do not use for branches or any operation that might update R15/PC.
 defineA32Opcode :: String -> SemARM 'Def () -> SemARM 'Top ()
 defineA32Opcode name def =
+  defineA32OpcodeNoPred name $ do
+    testForConditionPassed
+    def
+
+-- | An alternative version of 'defineA32Opcode' for opcodes which do
+-- not have a Pred operand that controls the expression of the opcode.
+defineA32OpcodeNoPred :: String -> SemARM 'Def () -> SemARM 'Top ()
+defineA32OpcodeNoPred name def =
   defineOpcode name $ do
     subarch InstrSet_A32
     def
@@ -44,7 +53,7 @@ defineT32Opcode name def =
 subarch :: ArchSubtype -> SemARM t ()
 subarch sa =
     modifyArchData (\m'ad -> case m'ad of
-                              Nothing -> Just $ SemM_ARMData { subArch = sa }
+                              Nothing -> Just $ newARMData { subArch = sa }
                               Just ad -> Just $ ad { subArch = sa })
 
 
@@ -90,52 +99,45 @@ updatePC = do
 
 -- ----------------------------------------------------------------------
 
--- | A32 instructions encode a predicate value as their high bits, and
--- this value is compared to the corresponding condition codes in the
--- CPSR register to determine if the execution can be performed.  This
--- check is called 'ConditionPassed' in the ARM documentation, and is
--- reproduced here by this DSL operation.
-condPassed :: SemMD 'Def d (Expr 'TBool)
-condPassed = do
-    predV <- param "cond" pred (EBV 4)
-    -- Assumed: input cpsr
-    let canExec = conditionPassed [ Some (Loc predV)
-                                  , Some (extract 31 28 (Loc cpsr))]
-    return canExec
+-- | Stores the expression that calculates the ConditionPassed result
+-- (see the ARM documentation pseudocode) for the current instruction
+-- so that subsequent defLoc operations can use this to determine if
+-- they are enabled to effect the changes from the Opcode.
+testForConditionPassed :: SemARM 'Def ()
+testForConditionPassed = do
+    predV <- param "predBits" pred (EBV 4)
+    input cpsr
+    let pstate_n = extract 31 31 (Loc cpsr)  -- (E1.2.4, E1-2297)
+        pstate_z = extract 30 30 (Loc cpsr)
+        pstate_c = extract 29 29 (Loc cpsr)
+        pstate_v = extract 28 28 (Loc cpsr)
+        cond_3_1 = extract 3 1 (Loc predV)
+        cond_0   = extract 0 0 (Loc predV)
+        isBitSet = bveq (LitBV 1 0b1)
+        -- ConditionHolds (F2.3.1, F2-2417):
+        result = ite (bveq cond_3_1 (LitBV 3 0b000)) (isBitSet pstate_z) -- EQ or NE
+                 (ite (bveq cond_3_1 (LitBV 3 0b001)) (isBitSet pstate_c) -- CS or CC
+                  (ite (bveq cond_3_1 (LitBV 3 0b010)) (isBitSet pstate_n) -- MI or PL
+                   (ite (bveq cond_3_1 (LitBV 3 0b011)) (isBitSet pstate_v) -- VS or VC
+                    (ite (bveq cond_3_1 (LitBV 3 0b100)) (andp (isBitSet pstate_c)
+                                                               (notp $ isBitSet pstate_z)) -- HI or LS
+                     (ite (bveq cond_3_1 (LitBV 3 0b101)) (bveq pstate_n pstate_v)  -- GE or LT
+                      (ite (bveq cond_3_1 (LitBV 3 0b110)) (andp (bveq pstate_n pstate_v)
+                                                                 (notp $ isBitSet pstate_z)) -- GT or LE
+                       {- (bveq cond_3_1 (LitBV 3 0b111)) -} (LitBool True))))))) -- AL
+        result' = ite (andp (isBitSet cond_0)
+                            (bvne (Loc predV) (LitBV 4 0b1111))) (notp result) result
+    modifyArchData (\m'ad -> case m'ad of
+                              Nothing -> Just $ newARMData { condPassed = result' }
+                              Just ad -> Just $ ad { condPassed = result' })
 
-
-{-
--- conditionHolds :: BV 4 -> Bool
-ConditionHolds cond =
-    let r = case (extract cond "3:1") of
-              0 -> PSTATE.Z == 1
-              1 -> PSTATE.C == 1
-              2 -> PSTATE.N == 1
-              3 -> PSTATE.V == 1
-              4 -> PSTATE.C == 1 && PSTATE.Z == 0
-              5 -> PSTATE.N == PSTATE.V
-              6 -> PSTATE.N == PSTATE.V && PSTATE.Z == 0
-              7 -> True
-        i = extract cond 0
-    in if i == 1 and cond /= 0b1111 then not r else r
--}
-
-
--- | Performs an assignment for a conditional Opcode to the target
--- 'loc'.  Used in conjunction with the condPassed result to either
--- store 'expr' if the condPassed result was true (via 'isOK'), or not
--- perform the operation if the condPassed did not pass.
---
--- Because symbolic execution only has an ife (i.e. no ifthen), the
--- else case must have a value, which is the co-operation to the
--- store, and is passed as 'nodefExpr'.
-defLocWhen :: Expr 'TBool -> Location a -> Expr a -> Expr a -> SemMD 'Def d ()
-defLocWhen isOK loc expr nodefExpr = defLoc loc (ite isOK expr nodefExpr)
 
 -- | Performs an assignment for a conditional Opcode when the target
 -- is a register location.
-defRegWhen :: Expr 'TBool -> Location a -> Expr a -> SemMD 'Def d ()
-defRegWhen isOK loc expr = defLocWhen isOK loc expr (Loc loc)
+defReg :: Location a -> Expr a -> SemARM 'Def ()
+defReg loc expr = do
+  isOK <- (condPassed . fromJust) <$> getArchData
+  defLoc loc $ ite isOK expr (Loc loc)
 
 
 -- ----------------------------------------------------------------------
@@ -184,13 +186,6 @@ imm12Add :: [Some Expr] -> Expr 'TBool
 imm12Add = uf EBool "a32.imm12_add"
 
 -- ----------------------------------------------------------------------
-
--- | Each instruction contains a predicate field that is compared to
--- the CPSR to see if that instruction can be executed  (F2.3.1, F2-2417).
-conditionPassed :: [Some Expr] -- ^ [CPSR, Pred operand]
-                -> Expr 'TBool  -- ^ True if this instruction can be executed
-conditionPassed = uf EBool "arm.conditionPassed"
-
 
 memriOffset :: Int
             -- ^ The number of bits of the offset

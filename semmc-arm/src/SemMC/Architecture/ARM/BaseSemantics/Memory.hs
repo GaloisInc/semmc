@@ -7,8 +7,9 @@ module SemMC.Architecture.ARM.BaseSemantics.Memory
     )
     where
 
-import Data.Monoid
+import Data.Maybe
 import Data.Parameterized.Some ( Some(..) )
+import Data.Semigroup
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
@@ -32,8 +33,6 @@ defineStores = do
     comment "Store Register, Pre-indexed (P=1, W=1), immediate  (A32)"
     comment "doc: F7.1.217, page F7-2880"
     comment "see also PUSH, F7.1.138, page F7-2760" -- TBD: if add && rN=SP && imm.imm=4 [A1 v.s. A2 form]"
-    ok <- condPassed
-    -- TBD: EncodingSpecificOperations()
     imm12 <- param "imm" addrmode_imm12_pre EMemRef
     rT <- param "gpr" gpr naturalBV
     input rT
@@ -45,10 +44,9 @@ defineStores = do
         add = imm12Add imm12arg
         addr = ite add (bvadd (Loc rN) imm) (bvsub (Loc rN) imm)
         nBytes = 4
-    -- TBD: next use PCStoreValue() of rT == r15 instead of (Loc rT)
-    defMemWhen ok memory addr nBytes (Loc rT)
-    -- TBD: if rN == r15 or rN == rT then UNPREDICTABLE
-    defRegWhen ok rN addr
+        sameRegs = sameLocation rT rN
+    defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
+    defReg rN (ite (orp (isR15 rN) sameRegs) (unpredictable addr) addr)
 
 
 -- ----------------------------------------------------------------------
@@ -92,14 +90,15 @@ storeMem mem ea nBytes val
 
 -- | Performs an assignment for a conditional Opcode when the target
 -- is a memory location.
-defMemWhen :: Expr 'TBool -- ^ is store enabled? (result of condPassed check)
-           -> Location 'TMemory -- ^ The memory target
-           -> Expr 'TBV -- ^ The effective address to store at
-           -> Int -- ^ The number of bytes to store
-           -> Expr 'TBV -- ^ The bitvector value to store (size is checked)
-           -> SemMD 'Def d ()
-defMemWhen isOK memloc addr nBytes expr =
+defMem :: Location 'TMemory -- ^ The memory target
+       -> Expr 'TBV -- ^ The effective address to store at
+       -> Int -- ^ The number of bytes to store
+       -> Expr 'TBV -- ^ The bitvector value to store (size is checked)
+       -> SemARM 'Def ()
+defMem memloc addr nBytes expr = do
+    isOK <- (condPassed . fromJust) <$> getArchData
     let origval = readMem (Loc memloc) addr nBytes
         updval = ite isOK expr origval
-    in defLoc memloc (storeMem (Loc memloc) addr nBytes updval)
+    defLoc memloc (storeMem (Loc memloc) addr nBytes updval)
+
 
