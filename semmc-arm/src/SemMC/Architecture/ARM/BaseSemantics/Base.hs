@@ -8,20 +8,39 @@ import Data.Word
 import SemMC.DSL
 
 
+-- | The ARM processor has 4 processing modes.  Current semantics
+-- support is only defined for A32 and T32, but the others are defined
+-- here for completeness.
 data ArchSubtype = InstrSet_A32 | InstrSet_T32 | InstrSet_Jazelle | InstrSet_T32EE
                  deriving (Eq, Show)
 
+
+-- | The 'fArchData' field of the current DSL state is used to specify
+-- the current instruction set being semantically defined.  This can
+-- be done because the Dismantle ARM Opcodes (A32) are distinct from
+-- the Dismantle Thumbe Opcodes (T32), so the current instruction set
+-- is deterministically known.  By encoding it into the DSL state,
+-- additional validation and optimizations can be performed.
+data SemM_ARMData = SemM_ARMData { subArch :: ArchSubtype
+                                 }
+
+type SemARM t a = SemMD t SemM_ARMData a
+
+-- | All ARM registers are 32-bits wide for both A32 and T32.
 naturalBitSize :: Int
 naturalBitSize = 32
 
+-- | A zero value of the full register width
 naturalZero :: Word32
 naturalZero = zeroBits
 
-naturalBV :: ExprType 'TBV
-naturalBV = EBV naturalBitSize
-
+-- | A literal value bitvector of the full register width
 naturalLitBV :: Integer -> Expr 'TBV
 naturalLitBV n = LitBV naturalBitSize n
+
+-- | A value as a bitvector of the full register width
+naturalBV :: ExprType 'TBV
+naturalBV = EBV naturalBitSize
 
 
 -- Note: all ARM documentation references are to:

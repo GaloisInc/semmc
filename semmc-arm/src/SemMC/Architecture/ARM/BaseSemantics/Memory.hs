@@ -17,18 +17,18 @@ import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 
 
-manualMemory :: SemM 'Top ()
+manualMemory :: SemARM 'Top ()
 manualMemory = do
   defineLoads
   defineStores
 
-defineLoads :: SemM 'Top ()
+defineLoads :: SemARM 'Top ()
 defineLoads = do
   return ()
 
-defineStores :: SemM 'Top ()
+defineStores :: SemARM 'Top ()
 defineStores = do
-  defineLinearOpcode "STR_PRE_IMM" $ do
+  defineA32Opcode "STR_PRE_IMM" $ do
     comment "Store Register, Pre-indexed (P=1, W=1), immediate  (A32)"
     comment "doc: F7.1.217, page F7-2880"
     comment "see also PUSH, F7.1.138, page F7-2760" -- TBD: if add && rN=SP && imm.imm=4 [A1 v.s. A2 form]"
@@ -97,7 +97,7 @@ defMemWhen :: Expr 'TBool -- ^ is store enabled? (result of condPassed check)
            -> Expr 'TBV -- ^ The effective address to store at
            -> Int -- ^ The number of bytes to store
            -> Expr 'TBV -- ^ The bitvector value to store (size is checked)
-           -> SemM 'Def ()
+           -> SemMD 'Def d ()
 defMemWhen isOK memloc addr nBytes expr =
     let origval = readMem (Loc memloc) addr nBytes
         updval = ite isOK expr origval

@@ -4,7 +4,9 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     where
 
 import Data.Bits
+import Data.Parameterized.Classes
 import Data.Parameterized.Some ( Some(..) )
+import Data.Maybe
 import Prelude hiding ( pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
@@ -12,30 +14,88 @@ import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 
 
--- | A wrapper around 'defineOpcode' that updates the PC after the
--- instruction executes (by 4 if A32 or 2 if T32).  Do not use for
--- branches or any operation that might update R15/PC.
-defineLinearOpcode :: String -> SemM 'Def () -> SemM 'Top ()
-defineLinearOpcode name def =
+-- | A wrapper around 'defineOpcode' that sets A32 mode and updates
+-- the PC after the instruction executes (by 4 if A32 or 2 if T32).
+-- Do not use for branches or any operation that might update R15/PC.
+defineA32Opcode :: String -> SemARM 'Def () -> SemARM 'Top ()
+defineA32Opcode name def =
   defineOpcode name $ do
-    input pc
-    input cpsr
-    let pcAdd = ite isA32 (naturalLitBV 0x4)
-                (ite isT32 (naturalLitBV 0x2)
-                     (naturalLitBV 0)) -- unsupported!
-        cpsr_j = testBitDynamic (LitBV 32 24) (Loc cpsr)
-        cpsr_t = testBitDynamic (LitBV 32 5) (Loc cpsr)
-        isT32 = andp cpsr_t (notp cpsr_j)
-        isA32 = andp (notp cpsr_t) (notp cpsr_j)
-        -- isJazelle = andp (notp cpsr_t) cpsr_j
-        -- isT32EE = andp cpsr_t cpsr_j
-    defLoc pc (bvadd (Loc pc) pcAdd)
+    subarch InstrSet_A32
     def
+    updatePC
+
+
+-- | A wrapper around 'defineOpcode' that sets A32 mode and updates
+-- the PC after the instruction executes (by 4 if A32 or 2 if T32).
+-- Do not use for branches or any operation that might update R15/PC.
+defineT32Opcode :: String -> SemARM 'Def () -> SemARM 'Top ()
+defineT32Opcode name def =
+  defineOpcode name $ do
+    subarch InstrSet_T32
+    def
+    updatePC
 
 
 -- ----------------------------------------------------------------------
 
-condPassed :: SemM 'Def (Expr 'TBool)
+-- | As described for the 'SemM_ARMData' datatype, the DSL state is
+-- used to store the current instruction set type (normally A32 or
+-- T32).
+subarch :: ArchSubtype -> SemARM t ()
+subarch sa =
+    modifyArchData (\m'ad -> case m'ad of
+                              Nothing -> Just $ SemM_ARMData { subArch = sa }
+                              Just ad -> Just $ ad { subArch = sa })
+
+
+-- | The processor mode can be determined by examining the ISETSTATE
+-- execution state register, which is embedded in the CPSR (as 'J' at
+-- bit 24 and 'T' at bit 5).  The following can be used to read the
+-- current processor mode.  This is not normally used however because
+-- the current instruction set (arch subtype) is set in the DSL state
+-- (see 'SemM_ARMData').  [If this function becomes useful, add the
+-- ArchSubtype to the ExprTag in the DSL definition to return the
+-- value directly instead of returning the string form.]
+instrSetState :: Location 'TBV -> Expr 'TString
+instrSetState cpsReg =
+    let cpsr_j = testBitDynamic (LitBV 32 24) (Loc cpsReg)
+        cpsr_t = testBitDynamic (LitBV 32 5) (Loc cpsReg)
+        isT32 = andp cpsr_t (notp cpsr_j)
+        isA32 = andp (notp cpsr_t) (notp cpsr_j)
+        -- isJazelle = andp (notp cpsr_t) cpsr_j
+        isT32EE = andp cpsr_t cpsr_j
+        toRet = LitString . show
+    in ite isA32 (toRet InstrSet_A32)
+           (ite isT32 (toRet InstrSet_T32)
+            (ite isT32EE (toRet InstrSet_T32EE) (toRet InstrSet_Jazelle)))
+
+
+
+-- | Update the PC to the next instruction.  The PC always points to
+-- the current instruction (plus an offset), so the update should be
+-- done as the final step of the semantic modifications for each
+-- instruction.  The mode is always known here, as initially set by
+-- 'defineA32Opcode' or 'defineT32Opcode' and possibly updated during
+-- instruction execution.
+updatePC :: SemARM 'Def ()
+updatePC = do
+  input pc
+  instrSet <- (subArch . fromJust) <$> getArchData
+  let updPCVal = case instrSet of
+                   InstrSet_A32 -> bvadd (Loc pc) (naturalLitBV 4)
+                   InstrSet_T32 -> bvadd (Loc pc) (naturalLitBV 2)
+                   _ -> error "Execution PC update not currently supported for this arch subtype"
+  defLoc pc updPCVal
+
+
+-- ----------------------------------------------------------------------
+
+-- | A32 instructions encode a predicate value as their high bits, and
+-- this value is compared to the corresponding condition codes in the
+-- CPSR register to determine if the execution can be performed.  This
+-- check is called 'ConditionPassed' in the ARM documentation, and is
+-- reproduced here by this DSL operation.
+condPassed :: SemMD 'Def d (Expr 'TBool)
 condPassed = do
     predV <- param "cond" pred (EBV 4)
     -- Assumed: input cpsr
@@ -69,12 +129,12 @@ ConditionHolds cond =
 -- Because symbolic execution only has an ife (i.e. no ifthen), the
 -- else case must have a value, which is the co-operation to the
 -- store, and is passed as 'nodefExpr'.
-defLocWhen :: Expr 'TBool -> Location a -> Expr a -> Expr a -> SemM 'Def ()
+defLocWhen :: Expr 'TBool -> Location a -> Expr a -> Expr a -> SemMD 'Def d ()
 defLocWhen isOK loc expr nodefExpr = defLoc loc (ite isOK expr nodefExpr)
 
 -- | Performs an assignment for a conditional Opcode when the target
 -- is a register location.
-defRegWhen :: Expr 'TBool -> Location a -> Expr a -> SemM 'Def ()
+defRegWhen :: Expr 'TBool -> Location a -> Expr a -> SemMD 'Def d ()
 defRegWhen isOK loc expr = defLocWhen isOK loc expr (Loc loc)
 
 
