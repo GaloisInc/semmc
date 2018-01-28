@@ -35,18 +35,24 @@ import SemMC.DSL
 -- Do not use for branches or any operation that might update R15/PC.
 defineA32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
 defineA32Opcode name def =
-  defineA32OpcodeNoPred name $ do
-    testForConditionPassed
-    def
+    if a32OpcodeNameLooksValid name
+    then defineOpcode name $ do
+      subarch InstrSet_A32
+      testForConditionPassed
+      def
+      updatePC
+    else error $ "Opcode " <> name <> " does not look like a valid A32 ARM opcode"
 
 -- | An alternative version of 'defineA32Opcode' for opcodes which do
 -- not have a Pred operand that controls the expression of the opcode.
 defineA32OpcodeNoPred :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
 defineA32OpcodeNoPred name def =
-  defineOpcode name $ do
-    subarch InstrSet_A32
-    def
-    updatePC
+    if a32OpcodeNameLooksValid name
+    then defineOpcode name $ do
+      subarch InstrSet_A32
+      def
+      updatePC
+    else error $ "Opcode " <> name <> " does not look like a valid A32 ARM opcode"
 
 
 -- | A wrapper around 'defineOpcode' that sets A32 mode and updates
@@ -54,10 +60,23 @@ defineA32OpcodeNoPred name def =
 -- Do not use for branches or any operation that might update R15/PC.
 defineT32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
 defineT32Opcode name def =
-  defineOpcode name $ do
-    subarch InstrSet_T32
-    def
-    updatePC
+    if t32OpcodeNameLooksValid name
+    then defineOpcode name $ do
+      subarch InstrSet_T32
+      def
+      updatePC
+    else error $ "Opcode " <> name <> " does not look like a valid T32 ARM opcode"
+
+
+a32OpcodeNameLooksValid :: String -> Bool
+a32OpcodeNameLooksValid name =
+    take 1 name /= "T" ||
+    take 3 name == "TEQ" ||
+    take 4 name == "TRAP" ||
+    take 3 name == "TST"
+
+t32OpcodeNameLooksValid :: String -> Bool
+t32OpcodeNameLooksValid name = take 1 name == "T"
 
 
 -- ----------------------------------------------------------------------
