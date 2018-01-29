@@ -1,0 +1,293 @@
+* Registers
+
+
+ *  R0-R12 :: general purpose registers
+       * R8-R14 are "high registers", not typically accessible by 16-bit T32 opcodes
+ *  R13 = SP :: stack pointer
+ *  R14 = LR :: link register  (both an Exception Link Register (ELR) and a procedure link register)
+ *  R15 = PC :: program counter
+
+                Writing to R15 (LDR instr) can cause a branch, but it
+                can also be used as a GPR (not recommended).  See
+                E1-2296 for details.
+
+**  System registers:
+
+** CPSR :: Current Program State Register (Processing Element (PE) state)
+
+   * The actual system register holding the APSR, ISETSTATE, ITSTATE,
+     and ENDIANSTATE aliases.
+
+   * Much of the documentation will refer to APSR, and sometimes the
+     other aliased registers.  Since actual operator access to
+     APSR/CPSR is controlled by a few instructions, the semantics will
+     primarily use CPSR, and ensure that opcode access to APSR values
+     are appropriately masked and controlled.
+
+   * APSR :: Application Program Status Register (E1.2.4, E1-2297)
+             Program status: N[31], Z[30], C[29], V[28], Q[27] bits,
+             greater-than equal GE[19:16], and RAZ/SBZP[26:24].
+
+             Accessible by using MRS and MSR instructions to exchange
+             this with a GPR.  System software can use CPS instruction
+             to change the CSPR versions of these.
+
+             Software can use MSR instructions that write the top byte
+             of the APSR without using a read,modify,write sequence.
+             If it does this, it must write zeros to bits [26:24].
+
+             In A32 state, APSR == CPSR, but the APSR can only be used
+             for the above.  See PSRs at G1.9.3, G1-3422.
+
+   * ESRs :: Execution state registers
+
+      * In A32, the ESRs are part of the CPSR.  See PSRs at G1.9.3, G1-3422.
+
+      * No direct access to ESRs from app level instrs, but can be changed by side-effects.
+
+      * ISETSTATE :: Whether instructions are interpreted as a T32 or
+                     A32 instruction (page E1-2298)
+
+                       | J[1], CPSR bit24 | T[0] CPSR bit5 | State                     |
+                       |------------------+----------------+---------------------------|
+                       |                0 |              0 | A32                       |
+                       |                0 |              1 | T32                       |
+                       |                1 |              0 | Jazelle state (pre ARMv8) |
+                       |                1 |              1 | T32EE state (pre ARMv8)   |
+
+      * ITSTATE [7:0] :: In T32 state, the condition codes that apply
+                         to the next 1-4 instructions (page E1-2300)
+
+            * ISTATE[7:2] is CPSR[15:10], and ISTATE[1:0] is CPSR[26:25]
+
+            * Holds If-Then state bits for T32 IT instruction that
+              applies to the next 1-4 instructions.
+
+            * IT[7:5] base condition for current block (top 3 bits of
+              IT instr <firstcond>)
+
+            * IT[4:0] is size of IT block (# instrs), or b00000 when
+              no IT block is active.
+
+            * An instruction that might branch is only allowed as the
+              last instr in an IT block.
+
+      * ENDIANSTATE [1], CPSR bit 9 :: Whether data is interpreted as big-endian
+           or little-endian (ENDIANSTATE, page E1-2302)
+
+            * SETEND BE / SETEND LE change this value (A32 and T32)
+
+            * 0 = little endian, 1 = big endian
+
+** Other
+
+ * GSCR :: General System Control Register(s)
+ * Debug registers
+ * Generic timer registers
+ * Performance Monitor registers (optional)
+ * Trace registers (optional)
+ * GIC :: Generic Interrupt Controller CPU interface registers (optional)
+
+
+* Addressing modes (F1.5.5, F1-2393)
+
+  * offset addressing :: memory addr is formed by adding or subtracting offset from base register value
+         #+BEGIN_EXAMPLE
+         [Rn, offset]
+         #+END_EXAMPLE
+  * postIndexed :: memory addr is the base register value, offset added to or subtracted from base register val after op
+         #+BEGIN_EXAMPLE
+         [Rn], offset
+         #+END_EXAMPLE
+  * preIndexed :: memory addr formed same as for offset addressing, but memory addr is also written back to the base reg
+         #+BEGIN_EXAMPLE
+         [Rn, offset]!
+         #+END_EXAMPLE
+
+  * offset may be imm8, imm12, Rm, or shifted Rm
+
+  * immediate value: encoded directly in the instruction
+
+  * UNK : field contains unknown value.  HW must implement bit as 0 read (or all 0s), but SW must not rely on this
+
+* Memory access  (E2.1, page E2-2334)
+
+  * invalid address access generates MMU fault
+
+  * address calculations are UNKNOWN on 32-bit underflow or overflow
+
+  * memory accesses are 'MemA[]' (aligned), 'MemU[]' (unaligned), and 'MemU_unpriv[]' (unaligned, unprivileged)
+      MemA[] is Atomic
+
+  * AccTypes:
+
+    | Type                              | Description                    |
+    |-----------------------------------+--------------------------------|
+    | AccType_NORMAL, AccType_VEC       | normal loads and stores        |
+    | AccType_STREAM, AccType_VECSTREAM | streaming loads and stores     |
+    | AccType_ATOMIC                    | atomic loads and stores        |
+    | AccType_ORDERED                   | Load-Acquire and Store-Release |
+    | AccType_UNPRIV                    | load and store unprivileged    |
+    | AccType_IFETCH                    | instruction fetch              |
+    | AccType_PTW                       | page table walk                |
+    | AccType_DC                        | data cache maintenance         |
+    | AccType_IC                        | instruction cache maintenance  |
+    | AccType_AT                        | address translation            |
+    |                                   |                                |
+
+  * A32 instructions are word-aligned  (E2.4, E2-2341)
+  * T32 instructions are halfword-aligned
+
+  * ARMv8-A instruction memory is always little-endian
+
+  * CSPR.E determines data endianness
+
+  * 32-bit virtual addressing, Translation Control Register (TCR) determines supported VA range.
+      - EL0 and EL1 can split the VA range into two subranges, each with its own translation controls
+
+  * Synchronization instructions, E2.10, E2-2369
+
+* Exceptions:
+
+  * An exception causes entry into EL1, EL2, or EL3.
+  * Exceptions: reset, interrupts, memory system aborts, undefined instrs, supervisor calls (SVCs),
+                  Secure Monitor calls (SMCs), and Hypervisor Calls (HVCs)
+  * SMC and HVC only valid at EL1 or higher
+  * _ELx indicates lowest exception level that can access the register (AArch64) of 0, 1, 2, or 3.
+
+  * WFI (Wait-For-Interrupt) or WFE (Wait-For-Event) may enter low-power state until:
+       interrupt or another WFI wake-up event
+       SEV instr-generated event or another WFE wake-up event occurs
+
+  * Security model describing EL0, EL1, EL2, and EL3: (G1.7.1, G1-3407)
+
+* Assembler syntax:
+    
+  * ~<C>~  :: condition for execution (defaults to AL)
+  * ~<q>~  :: qualifiers:  .N = narrow (must be 16-bit encoding), .W = wide (must be 32-bit encoding), default=unrestricted
+
+  * References to "PSTATE" in pseudo-code are a holdover from AArch64
+    where that is an actual register.  For A32/T32, PSTATE references
+    CPSR (techically APSR, see note above under registers).
+
+** Condition codes
+
+   * CurrentCond() returns 4-bit condition specifier   (F2.3.1, F2-2417)
+         A32: bits 31:28 of instr
+         T1 & T3 branch instr: cond field of encoding
+         T32:  if ITSTATE.IT<3:0> != '0000', ret ITSTATE.IT<7:4>
+               if ITSTATE.IT<7:0> == '00000000' ret '1110'
+               else UNPREDICTABLE
+    
+      Register shifting (2 type bits, 5 immediate bits):
+      t=0b00 imm=0   no shift
+      t=0b00 imm=n   LSL #n  logical shift left 1 <= n <= 31, 0 fill, shifter_carry_out = last bit shifted off right
+      t=0b01 imm=n   LSR #n  logical shift right 1 <= n <= 32  (imm=0 if #n is 32), 0 fill, shifter_carry_out = last bit shifted off right
+      t=0b10 imm=n   ASR #n  arith shift right 1 <= n = 32  (imm=0 if #n is 32)  (copies of leftmost bit pushed @ left, shifter_carry_out = last bit shifted off right
+      t=0b11 imm=n   ROR #n  rotate right 1 <= n <= 31, shifter_carry_out = last bit shifted off right
+      t=0b11 imm=0   RRX     rotate right 1 bit w/xtend.  bit[0] -> shifter_carry_out, bit[31:1] shifted right, Carry->bit[31]
+      Rm is register shifted, Rs is amount if not imm op
+    
+   * ConditionPassed() = ConditionHolds(AArch32.CurrentCond()  (F2.3.1, F2-2417)
+
+   * ConditionHolds(cond :: bit4) is true iff cond holds  (F2.3.1, F2-2417)
+
+** AddWithCarry
+
+   AddWithCarry addition and subtraction documented at F2-2423
+
+* Example
+
+** STR_PRE_IMM
+
+*** Tablegen
+
+#+BEGIN_EXAMPLE
+def STR_PRE_IMM {	// Instruction InstTemplate Encoding InstARM I AI2ldstidx _PRE_IMM
+  field bits<32> Inst = { p{3}, p{2}, p{1}, p{0}, 0, 1, 0, 1, addr{12}, 0, 1, 0, addr{16}, addr{15}, addr{14}, addr{13}, Rt{3}, Rt{2}, Rt{1}, Rt{0}, addr{11}, addr{10}, addr{9}, addr{8}, addr{7}, addr{6}, addr{5}, addr{4}, addr{3}, addr{2}, addr{1}, addr{0} };
+  field bits<32> Unpredictable = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+  field bits<32> SoftFail = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+  string Namespace = "ARM";
+  dag OutOperandList = (outs GPR:$Rn_wb);
+  dag InOperandList = (ins GPR:$Rt, addrmode_imm12_pre:$addr, pred:$p);
+  string AsmString = "str${p}	$Rt, $addr!";
+#+END_EXAMPLE
+
+*** Dismantle
+
+#+BEGIN_EXAMPLE
+e5 2d b0 04    str    fp, [sp, #-4]!
+
+II: Instruction STR_PRE_IMM
+    (Pred (Pred {unPred = 14})
+    :< Addrmode_imm12_pre (AddrModeImm12 {addrModeImm12Register = GPR {unGPR = 13}, addrModeImm12Immediate = 4, addrModeImm12Add = 0})
+    :< GPR (GPR {unGPR = 11}) 
+    :< Nil)
+#+END_EXAMPLE
+
+*** Documented (F7.1.217, page F7-2880)
+
+    | word hex |  bits | name | hex val | binary val | dec val | deciphered |
+    |----------+-------+------+---------+------------+---------+------------|
+    |      0xe | 31:28 | cond |     0xe |       1110 |      14 | AL         |
+    |----------+-------+------+---------+------------+---------+------------|
+    |          | 27:25 | 010  |       4 |        010 |         |            |
+    |        5 |    24 | P    |       1 |          1 |         | index      |
+    |----------+-------+------+---------+------------+---------+------------|
+    |          |    23 | U    |       0 |          0 |         | !add (sub) |
+    |          |    22 | 0    |       0 |          0 |         |            |
+    |        2 |    21 | W    |       1 |          1 |         | wback      |
+    |          |    20 | 0    |       0 |          0 |         |            |
+    |----------+-------+------+---------+------------+---------+------------|
+    |      0xd | 19:16 | Rn   |     0xd |       1101 |      13 | R13        |
+    |----------+-------+------+---------+------------+---------+------------|
+    |      0xb | 15:12 | Rt   |     0xb |       1011 |      11 | R11        |
+    |----------+-------+------+---------+------------+---------+------------|
+    |        4 |  11:0 | imm  |       4 |       1000 |       4 |            |
+    |----------+-------+------+---------+------------+---------+------------|
+
+   Per pseudo-code that page, the above indicates "SEE PUSH"
+
+   PUSH (F7.1.138, page F7-2760)  encoding A2, just one register
+
+   t = UInt(rt); registers=zeros(16); registers[t] = 1, unalignedAllowed=True
+
+   (ARMv8-A removes UNPREDICTABLE for R13)
+
+   Equivalent ASM encodings:
+
+   #+BEGIN_EXAMPLE
+   e5 2d b0 04    str    fp, [sp, #-4]!
+   e5 2d b0 04    push   {fp}
+   #+END_EXAMPLE
+
+
+
+
+
+src/Data/Macaw/ARM/Semantics/ARMSemantics.hs:27:21: error:
+    • Illegal variable name: ‘ARM_PC’
+      When splicing a TH expression:
+        \ipVal_0 (i_1@(Dismantle.Instruction.Instruction opcode_2
+                       operands_3)) -> 
+           case Data.Macaw.ARM.Arch.armInstructionMatcher i_1 of
+                    GHC.Base.Just action_4 -> GHC.Base.Just action_4
+                    GHC.Base.Nothing -> 
+                       case opcode_2 of
+                         Dismantle.ARM.STR_PRE_IMM -> 
+                           case operands_3 of
+                                        Pred pred0 Data.Parameterized.List.:<
+                                        (Addrmode_imm12_pre addrmode_imm12_pre1 Data.Parameterized.List.:<
+                                        (GPR gpr2 Data.Parameterized.List.:< 
+                                        Data.Parameterized.List.Nil)) -> 
+                                   GHC.Base.Just (do {_regs_5 <- Data.Macaw.SemMC.Generator.getRegs;
+                                      val_6 <- Data.Macaw.SemMC.Operands.extractValue addrmode_imm12_pre1;
+                                      val_7 <- Data.Macaw.SemMC.Generator.addExpr GHC.Base.=<< GHC.Base.return (Data.Macaw.SemMC.Generator.AppExpr (Data.Macaw.CFG.App.UExt val_6 (Data.Parameterized.NatRepr.knownNat :: Data.Parameterized.NatRepr.NatRepr 32)));
+                                      val_8 <- Data.Macaw.SemMC.Generator.addExpr GHC.Base.=<< GHC.Base.return (Data.Macaw.SemMC.Generator.AppExpr (Data.Macaw.CFG.App.SExt val_6 (Data.Parameterized.NatRepr.knownNat :: Data.Parameterized.NatRepr.NatRepr 32)));
+                                      val_9 <- Data.Macaw.SemMC.Generator.addExpr GHC.Base.=<< GHC.Base.return (Data.Macaw.SemMC.Generator.AppExpr (Data.Macaw.CFG.App.BVAdd (Data.Parameterized.NatRepr.knownNat :: Data.Parameterized.NatRepr.NatRepr 32) val_7 val_8));
+                                                          Data.Macaw.SemMC.Generator.setRegVal (Data.Macaw.SemMC.Operands.toRegister gpr2) val_9;
+                                      val_10 <- GHC.Base.return (Data.Macaw.CFG.Core.BVValue (Data.Parameterized.NatRepr.knownNat :: Data.Parameterized.NatRepr.NatRepr 32) 4);
+                                      val_11 <- GHC.Base.return (_regs_5 Control.Lens.Getter.^. Data.Macaw.CFG.Core.boundValue ARM_PC);
+                                      val_12 <- Data.Macaw.SemMC.Generator.addExpr GHC.Base.=<< GHC.Base.return (Data.Macaw.SemMC.Generator.AppExpr (Data.Macaw.CFG.App.BVAdd (Data.Parameterized.NatRepr.knownNat :: Data.Parameterized.NatRepr.NatRepr 32) val_10 val_11));
+                                                          Data.Macaw.SemMC.Generator.setRegVal ARM_PC val_12})
+                             _ -> GHC.Err.error ("Unimplemented instruction: " GHC.Base.++ GHC.Show.show opcode_2)
