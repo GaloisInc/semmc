@@ -1,4 +1,4 @@
--- | Defines the local operand references (used in the SemMC DSL
+-- | Defines the ARM local operand references (used in the SemMC DSL
 -- specification of operands) and the corresponding operand names in
 -- Dismantle.
 
