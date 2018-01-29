@@ -6,7 +6,7 @@ import qualified Data.Text.IO as TIO
 import qualified Options.Applicative as O
 import qualified Options.Applicative.Help as OH
 import qualified SemMC.Architecture.ARM.BaseSemantics as B
-import           SemMC.Architecture.ARM.Opcodes ( allOpcodes )
+import           SemMC.Architecture.ARM.Opcodes ( allA32Opcodes, allT32Opcodes )
 import qualified SemMC.DSL as DSL
 import qualified System.Directory as D
 import           System.FilePath ( (<.>), (</>) )
@@ -62,4 +62,4 @@ genOpDefs d l = F.foldlM writeDef (0, 0) l
               else do putStrLn $ "ERR: ignoring unknown DSL defined opcode \"" <>
                                opName <> "\" (-> " <> d <> ")"
                       return (s, e+1)
-          opcodes = map show allOpcodes
+          opcodes = map show allA32Opcodes ++ map show allT32Opcodes

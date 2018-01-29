@@ -27,7 +27,8 @@ library
                      , SemMC.Architecture.ARM.BaseSemantics.Registers
                      , SemMC.Architecture.ARM.Components
                      , SemMC.Architecture.ARM.Eval
-                     , SemMC.Architecture.ARM.Opcodes.Internal
+                     , SemMC.Architecture.ARM.Opcodes.InternalA32
+                     , SemMC.Architecture.ARM.Opcodes.InternalT32
                      , SemMC.Architecture.ARM.UF
   -- other-extensions:
   build-depends:       base >=4 && <5
@@ -37,6 +38,7 @@ library
                      , crucible
                      , dismantle-arm
                      , dismantle-tablegen
+                     , dismantle-thumb
                      , filepath
                      , megaparsec
                      , parameterized-utils
@@ -56,6 +58,8 @@ executable semmc-arm-genbase
   ghc-options:      -Wall -rtsopts
   build-depends: base
                , directory
+               , dismantle-arm
+               , dismantle-thumb
                , filepath
                , optparse-applicative
                , semmc
