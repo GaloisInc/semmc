@@ -622,7 +622,7 @@ data FAtom = AIdent String
 
 printDefinition :: Definition -> T.Text
 printDefinition (Definition mc sexpr) =
-  formatComment mc <> SC.encodeOne (SC.basicPrint printAtom) sexpr
+  formatComment mc <> SC.encodeOne (SC.setIndentAmount 1 $ SC.basicPrint printAtom) sexpr
 
 formatComment :: Seq.Seq String -> T.Text
 formatComment c
