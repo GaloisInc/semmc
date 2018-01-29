@@ -2,19 +2,35 @@
 {-# LANGUAGE DataKinds #-}
 
 module SemMC.Architecture.ARM.BaseSemantics.Helpers
-    ( defineA32Opcode
+    ( -- * Opcode definition assistance
+      defineA32Opcode
     , defineA32OpcodeNoPred
     , defineA32Branch
     , defineT32Opcode
     , defineT32Branch
+    -- * Arch subtype (Instruction Set) handling
     , instrSetState
+    , selectInstrSet
+    , selectInstrSet'
+    -- CPSR (APSR) management
+    , cpsrNZCV
+    -- * PC management
+    , aluWritePC
+    , loadWritePC
+    , branchWritePC
+    , bxWritePC
+    -- * Result definition via instruction predicate control
     , defReg
+    -- * Manipulation of bit values (BV)
     , zext, zext'
     , sext, sext'
+    , bvset, bvclr, tstBit
+    -- * Opcode unpacking
     , imm12Reg, imm12Imm, imm12Add
     , blxtgt_S, blxtgt_imm10H, blxtgt_imm10L, blxtgt_J1, blxtgt_J2
-    , bvset, bvclr
+      -- * Miscellaneous common functionality
     , unpredictable
+    , constrainUnpredictable
     , sameLocation
     , isR15
     )
@@ -57,9 +73,9 @@ defineOpcode'A32 noPred isBranch name def =
     if a32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_A32
+      input cpsr
       unless (noPred) $ do
         predV <- param "predBits" pred (EBV 4)  -- CurrentCond() (F2.3.1, F2-2417)
-        input cpsr
         testForConditionPassed (Loc predV)
       def
       unless isBranch updatePC
@@ -126,14 +142,19 @@ subarch sa =
                               Just ad -> Just $ ad { subArch = sa })
 
 
+-- ----------------------------------------------------------------------
+-- CPSR (APSR) management
+
 -- | The processor mode can be determined by examining the ISETSTATE
 -- execution state register, which is embedded in the CPSR (as 'J' at
 -- bit 24 and 'T' at bit 5).  The following can be used to read the
--- current processor mode.  This is not normally used however because
--- the current instruction set (arch subtype) is set in the DSL state
--- (see 'SemM_ARMData').  [If this function becomes useful, add the
--- ArchSubtype to the ExprTag in the DSL definition to return the
--- value directly instead of returning the string form.]
+-- current processor mode.
+--
+-- This is not normally used however because the current instruction
+-- set (arch subtype) is set in the DSL state (see 'SemM_ARMData').
+-- [If this function becomes useful, add the ArchSubtype to the
+-- ExprTag in the DSL definition to return the value directly instead
+-- of returning the string form.]
 instrSetState :: Location 'TBV -> Expr 'TString
 instrSetState cpsReg =
     let cpsr_j = testBitDynamic (LitBV 32 24) (Loc cpsReg)
@@ -148,6 +169,77 @@ instrSetState cpsReg =
             (ite isT32EE (toRet InstrSet_T32EE) (toRet InstrSet_Jazelle)))
 
 
+-- | Update the CPSR to set to either the A32 or T32 target instruction set as
+-- indicated by the expression (E1.2.3, E1-2300)
+selectInstrSet :: Expr 'TBool -> Expr 'TBool -> SemARM 'Def ()
+selectInstrSet isEnabled toT32 = do
+    setT32 <- cpsrT32
+    setA32 <- cpsrA32
+    defReg cpsr (ite isEnabled (ite toT32 setT32 setA32) (Loc cpsr))
+
+
+-- | Update the CPSR to set to the known concrete target instruction set.
+-- (E1.2.3, E1-2300)
+selectInstrSet' :: ArchSubtype -> SemARM 'Def ()
+selectInstrSet' tgtarch =
+    case tgtarch of
+      InstrSet_A32 -> defReg cpsr =<< cpsrA32
+      InstrSet_T32 -> defReg cpsr =<< cpsrT32
+      InstrSet_T32EE -> defReg cpsr =<< cpsrT32EE
+      InstrSet_Jazelle -> defReg cpsr =<< cpsrJazelle
+
+
+cpsrA32, cpsrT32, cpsrT32EE, cpsrJazelle :: SemARM 'Def (Expr 'TBV)
+cpsrA32 = do
+    curarch <- (subArch . fromJust) <$> getArchData
+    if curarch == InstrSet_A32
+    then return $ Loc cpsr
+    else if curarch == InstrSet_T32EE
+         then error "Invalid INSTRSET change T32EE->A32"
+         else return $ cpsr_jt $ arch_jt InstrSet_A32
+
+cpsrT32 = do
+    curarch <- (subArch . fromJust) <$> getArchData
+    if curarch == InstrSet_T32
+    then return $ Loc cpsr
+    else return $ cpsr_jt $ arch_jt InstrSet_T32
+
+cpsrT32EE = do
+    curarch <- (subArch . fromJust) <$> getArchData
+    if curarch == InstrSet_T32EE
+    then return $ Loc cpsr
+    else if curarch == InstrSet_A32
+         then error "Invalid INSTRSET change A32->T32EE"
+         else return $ cpsr_jt $ arch_jt InstrSet_T32
+
+cpsrJazelle = error "Jazelle instruction set not currently supported"
+
+cpsr_jt :: (Int, Int) -> Expr 'TBV
+cpsr_jt (j, t) =
+    let updJ = if j == 1 then bvset [24] else bvclr [24]
+        updT = if t == 1 then bvset [5] else bvclr [5]
+    in updJ $ updT $ Loc cpsr
+
+arch_jt :: ArchSubtype -> (Int, Int)
+arch_jt tgtarch =
+    case tgtarch of
+      InstrSet_A32 -> (0, 0)
+      InstrSet_T32 -> (0, 1)
+      InstrSet_T32EE -> (1, 1)
+      InstrSet_Jazelle -> (1, 0)
+
+
+-- Updates the N[31], Z[30], C[29], and V[28] condition code bits in
+-- the CPSR (aka. the APSR)
+cpsrNZCV :: HasCallStack => Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
+cpsrNZCV isEnabled nzcv =
+    let cpsr' = concat nzcv (extract 27 0 (Loc cpsr))
+    in defReg cpsr (ite isEnabled cpsr' (Loc cpsr))
+
+
+
+-- ----------------------------------------------------------------------
+-- PC management
 
 -- | Update the PC to the next instruction.  The PC always points to
 -- the current instruction (plus an offset), so the update should be
@@ -165,6 +257,16 @@ updatePC = do
                    _ -> error "Execution PC update not currently supported for this arch subtype"
   defLoc pc updPCVal
 
+
+
+-- | BranchWritePC pseudocode.  (E1.2.3, E1-2296)
+branchWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
+branchWritePC tgtRegIsPC addr = do
+    curarch <- (subArch . fromJust) <$> getArchData
+    let address = if curarch == InstrSet_A32
+                  then bvclr [0,1] addr
+                  else bvclr [1] addr
+    defReg pc (ite tgtRegIsPC address (Loc pc))
 
 -- ----------------------------------------------------------------------
 
@@ -237,6 +339,19 @@ sext' fullWidth e
     extendBy = fullWidth - exprBVSize e
 
 
+-- | Set bits, specifying the list of bit numbers to set (0-based)
+bvset :: [Int] -> Expr 'TBV -> Expr 'TBV
+bvset bitnums = bvor (naturalLitBV $ toInteger $ foldl setBit naturalZero bitnums)
+
+-- | Clear bits, specifying the list of bit numbers to clear (0-based)
+bvclr :: [Int] -> Expr 'TBV -> Expr 'TBV
+bvclr bitnums = bvand (naturalLitBV $ toInteger $ complement $ foldl setBit naturalZero bitnums)
+
+-- | Test if a specific bit is set
+tstBit :: Int -> Expr 'TBV -> Expr 'TBool
+tstBit n = bveq (LitBV 1 0) . extract n n
+
+
 -- ----------------------------------------------------------------------
 -- Opcode unpacking
 
@@ -303,19 +418,27 @@ lowBits128 :: Int -> Expr 'TBV -> Expr 'TBV
 lowBits128 n = extract 127 (127 - n + 1)
 
 
--- | Set bits, specifying the list of bit numbers to set (0-based)
-bvset :: [Int] -> Expr 'TBV -> Expr 'TBV
-bvset bitnums = bvor (naturalLitBV $ toInteger $ foldl setBit naturalZero bitnums)
+-- ----------------------------------------------------------------------
+-- Miscellaneous common functionality
 
--- | Clear bits, specifying the list of bit numbers to clear (0-based)
-bvclr :: [Int] -> Expr 'TBV -> Expr 'TBV
-bvclr bitnums = bvand (naturalLitBV $ toInteger $ complement $ foldl setBit naturalZero bitnums)
-
--- | Can be used to flag unpredictable expressions
+-- | Can be used to flag unpredictable expressions.  For now, this
+-- doesn't do much, but it is an abstraction point that allows future
+-- focus and refinement on these areas.
 unpredictable :: Expr a -> Expr a
 unpredictable = id
 
 
+-- | In some cases, the implementation of the chip is allowed to
+-- decide if unpredictable behavior should be avoided.  For example,
+-- in A32 mode, a target address with bit 1 set in BxWritePC can
+-- either clear the bit automatically (avoiding unpredictable
+-- behavior) or leave the bit set, causing a PC Alignment fault (or
+-- other unpredictable behavior).   -- AppxG-5049
+constrainUnpredictable :: Expr 'TBool
+constrainUnpredictable = LitBool True
+
+
+-- | Do both arguments refer to the same location?
 sameLocation :: Location tp -> Location tp -> Expr 'TBool
 sameLocation l = LitBool . maybe False (const True) . testEquality l
 

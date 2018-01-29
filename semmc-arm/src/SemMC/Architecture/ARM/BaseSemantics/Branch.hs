@@ -80,42 +80,11 @@ blx_ newlr tgtaddr tgtarch = do
     -- its address plus 4 (T32) or 8 (A32) (F1.1.2, F1-2380).
     input lr
     defReg lr newlr
-    selectInstrSet tgtarch
-    branchWritePC tgtaddr
+    selectInstrSet' tgtarch
+    branchWritePC (LitBool True) tgtaddr
 
 
 -- ----------------------------------------------------------------------
-
-branchWritePC :: Expr 'TBV -> SemARM 'Def ()
-branchWritePC addr = do  -- (E1.2.3, E1-2296)
-    curarch <- (subArch . fromJust) <$> getArchData
-    let address = if curarch == InstrSet_A32
-                  then bvclr [0,1] addr
-                  else bvclr [1] addr
-    defReg pc address
-
-
-selectInstrSet :: ArchSubtype -> SemARM 'Def ()
-selectInstrSet tgtarch = do  -- (E1.2.3, E1-2300)
-    -- assumes already: input cpsr
-    curarch <- (subArch . fromJust) <$> getArchData
-    let (j,t) = case tgtarch of
-                      InstrSet_A32 -> if curarch == InstrSet_T32EE
-                                     then error "Invalid INSTRSET change T32EE->A32"
-                                     else (0, 0)
-                      InstrSet_T32 -> (0, 1)
-                      InstrSet_T32EE -> if curarch == InstrSet_A32
-                                       then error "Invalid INSTRSET change A32-T32EE"
-                                       else (1 :: Int, 1 :: Int)
-                      _ -> error "INSTRSET unreachable"
-        cpsr'j = if j == 1
-                 then bvset [24] (Loc cpsr)
-                 else bvclr [24] (Loc cpsr)
-        cpsr'jt = if t == 1
-                  then bvset [5] cpsr'j
-                  else bvclr [5] cpsr'j
-    defReg cpsr cpsr'jt
-
 
 target_label_align4 :: Expr 'TBV -> SemARM 'Def (Expr 'TBV)
 target_label_align4 off = do  -- Align(PC, 4) to force word-alignment (only affects T32, not A32).
