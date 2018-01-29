@@ -20,3 +20,13 @@ pred = "Pred"
 
 addrmode_imm12_pre :: String
 addrmode_imm12_pre = "Addrmode_imm12_pre"
+
+arm_blx_target :: String
+arm_blx_target = "Arm_blx_target"
+
+
+-- ----------------------------------------------------------------------
+-- T32 operand names
+
+thumb_blx_target :: String
+thumb_blx_target = "ThumbBlxTarget"

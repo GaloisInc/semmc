@@ -12,6 +12,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , zext, zext'
     , sext, sext'
     , imm12Reg, imm12Imm, imm12Add
+    , blxtgt_S, blxtgt_imm10H, blxtgt_imm10L, blxtgt_J1, blxtgt_J2
     , bvset, bvclr
     , unpredictable
     , sameLocation
@@ -237,6 +238,7 @@ sext' fullWidth e
 
 
 -- ----------------------------------------------------------------------
+-- Opcode unpacking
 
 -- | User defined function to place in the SemMC DST to get the value
 -- contained in the register referenced by the addrmode_imm12_[pre].
@@ -251,6 +253,27 @@ imm12Imm = uf naturalBV "a32.imm12_imm"
 -- | Returns the addition flag in the addrmode_imm12_[pre]
 imm12Add :: [Some Expr] -> Expr 'TBool
 imm12Add = uf EBool "a32.imm12_add"
+
+-- | Decoding for the ThumbBlxTarget type: S bit
+blxtgt_S :: Location 'TBV -> Expr 'TBV
+blxtgt_S = uf (EBV 1) "t32.blxtarget_S" . ((:[]) . Some) . Loc
+
+-- | Decoding for the ThumbBlxTarget type: Imm10H
+blxtgt_imm10H :: Location 'TBV -> Expr 'TBV
+blxtgt_imm10H = uf (EBV 10) "t32.blxtarget_imm10H" . ((:[]) . Some) . Loc
+
+-- | Decoding for the ThumbBlxTarget type: Imm10L
+blxtgt_imm10L :: Location 'TBV -> Expr 'TBV
+blxtgt_imm10L = uf (EBV 10) "t32.blxtarget_imm10L" . ((:[]) . Some) . Loc
+
+-- | Decoding for the ThumbBlxTarget type: J1
+blxtgt_J1 :: Location 'TBV -> Expr 'TBV
+blxtgt_J1 = uf (EBV 1) "t32.blxtarget_J1" . ((:[]) . Some) . Loc
+
+-- | Decoding for the ThumbBlxTarget type: J2
+blxtgt_J2 :: Location 'TBV -> Expr 'TBV
+blxtgt_J2 = uf (EBV 1) "t32.blxtarget_J2" . ((:[]) . Some) . Loc
+
 
 -- ----------------------------------------------------------------------
 

@@ -35,6 +35,8 @@ uninterpretedFunctions _ =
                                                          ::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
 
+    -- A32 Operands
+
   , ("a32.imm12_reg", -- reference to register by register number from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
@@ -44,6 +46,28 @@ uninterpretedFunctions _ =
   , ("a32.imm12_add", -- reference to U flag bit from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
+
+    -- T32 Operands
+
+  , ("t32.blxtarget_S", -- operand ThumbBlxTarget S bit reference
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 1)))
+
+  , ("t32.blxtarget_imm10H", -- operand ThumbBlxTarget immediate, upper half reference
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 10)))
+
+  , ("t32.blxtarget_imm10L", -- operand ThumbBlxTarget immediate, lower half reference
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 10)))
+
+  , ("t32.blxtarget_J1", -- operand ThumbBlxTarget J1 bit reference
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 1)))
+
+  , ("t32.blxtarget_J2", -- operand ThumbBlxTarget J1 bit reference
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 1)))
 
     -- Standard memory accesses
 
