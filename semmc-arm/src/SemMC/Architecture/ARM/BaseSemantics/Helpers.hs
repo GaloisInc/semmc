@@ -4,7 +4,9 @@
 module SemMC.Architecture.ARM.BaseSemantics.Helpers
     ( defineA32Opcode
     , defineA32OpcodeNoPred
+    , defineA32Branch
     , defineT32Opcode
+    , defineT32Branch
     , instrSetState
     , defReg
     , zext, zext'
@@ -17,13 +19,14 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     )
     where
 
+import Control.Monad ( unless )
 import Data.Bits
 import Data.Maybe
 import Data.Parameterized.Classes
 import Data.Parameterized.Some ( Some(..) )
 import Data.Semigroup
 import GHC.Stack ( HasCallStack )
-import Prelude hiding ( pred )
+import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import SemMC.Architecture.ARM.BaseSemantics.Registers
@@ -34,24 +37,31 @@ import SemMC.DSL
 -- the PC after the instruction executes (by 4 if A32 or 2 if T32).
 -- Do not use for branches or any operation that might update R15/PC.
 defineA32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32Opcode name def =
-    if a32OpcodeNameLooksValid name
-    then defineOpcode name $ do
-      subarch InstrSet_A32
-      testForConditionPassed
-      def
-      updatePC
-    else error $ "Opcode " <> name <> " does not look like a valid A32 ARM opcode"
+defineA32Opcode = defineOpcode'A32 False False
 
 -- | An alternative version of 'defineA32Opcode' for opcodes which do
 -- not have a Pred operand that controls the expression of the opcode.
 defineA32OpcodeNoPred :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32OpcodeNoPred name def =
+defineA32OpcodeNoPred = defineOpcode'A32 True False
+
+-- | An alternative version of 'defineA32Opcode' for branch opcodes
+-- which explicitly update the PC and therefore should not have the PC
+-- automatically updated to the next instruction.
+defineA32Branch :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
+defineA32Branch = defineOpcode'A32 False True
+
+
+defineOpcode'A32 :: HasCallStack => Bool -> Bool -> String -> SemARM 'Def () -> SemARM 'Top ()
+defineOpcode'A32 noPred isBranch name def =
     if a32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_A32
+      unless (noPred) $ do
+        predV <- param "predBits" pred (EBV 4)  -- CurrentCond() (F2.3.1, F2-2417)
+        input cpsr
+        testForConditionPassed (Loc predV)
       def
-      updatePC
+      unless isBranch updatePC
     else error $ "Opcode " <> name <> " does not look like a valid A32 ARM opcode"
 
 
@@ -59,13 +69,36 @@ defineA32OpcodeNoPred name def =
 -- the PC after the instruction executes (by 4 if A32 or 2 if T32).
 -- Do not use for branches or any operation that might update R15/PC.
 defineT32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineT32Opcode name def =
+defineT32Opcode = defineOpcode'T32 False
+
+-- | An alternative form of defineT32Opcode that is used for Branch
+-- opcodes; all PC updates are performed explicitly by the opcode
+-- definition and not by this entry point.
+defineT32Branch :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
+defineT32Branch = defineOpcode'T32 True
+
+defineOpcode'T32 isBranch name def =  --- inIT, notInIT, lastInIT
     if t32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_T32
+
+      input cpsr
+      let itstate_7_4 = extract 15 12 (Loc cpsr)
+          itstate_3_2 = extract 11 10 (Loc cpsr)
+          itstate_1_0 = extract 26 25 (Loc cpsr)
+          itstate_3_0 = concat itstate_3_2 itstate_1_0
+          -- CurrentCond() for T32 except T1 and T3 encodings of the Branch instruction (F2.3.1, F2-2417)
+          predV = ite (bveq itstate_3_0 (LitBV 4 0b0000))
+                  (ite (bveq itstate_7_4 (LitBV 4 0b0000))
+                   (LitBV 4 0b1110)
+                   (unpredictable (LitBV 4 0b1110))) -- ARM doc doesn't cover this case...
+                  itstate_7_4
+      testForConditionPassed predV
+
       def
-      updatePC
+      unless isBranch updatePC
     else error $ "Opcode " <> name <> " does not look like a valid T32 ARM opcode"
+
 
 
 a32OpcodeNameLooksValid :: String -> Bool
@@ -137,16 +170,15 @@ updatePC = do
 -- (see the ARM documentation pseudocode) for the current instruction
 -- so that subsequent defLoc operations can use this to determine if
 -- they are enabled to effect the changes from the Opcode.
-testForConditionPassed :: SemARM 'Def ()
-testForConditionPassed = do
-    predV <- param "predBits" pred (EBV 4)
-    input cpsr
+testForConditionPassed :: Expr 'TBV -> SemARM 'Def ()
+testForConditionPassed instrPred = do
+    -- assumes already: input cpsr
     let pstate_n = extract 31 31 (Loc cpsr)  -- (E1.2.4, E1-2297)
         pstate_z = extract 30 30 (Loc cpsr)
         pstate_c = extract 29 29 (Loc cpsr)
         pstate_v = extract 28 28 (Loc cpsr)
-        cond_3_1 = extract 3 1 (Loc predV)
-        cond_0   = extract 0 0 (Loc predV)
+        cond_3_1 = extract 3 1 instrPred
+        cond_0   = extract 0 0 instrPred
         isBitSet = bveq (LitBV 1 0b1)
         -- ConditionHolds (F2.3.1, F2-2417):
         result = ite (bveq cond_3_1 (LitBV 3 0b000)) (isBitSet pstate_z) -- EQ or NE
@@ -160,7 +192,7 @@ testForConditionPassed = do
                                                                  (notp $ isBitSet pstate_z)) -- GT or LE
                        {- (bveq cond_3_1 (LitBV 3 0b111)) -} (LitBool True))))))) -- AL
         result' = ite (andp (isBitSet cond_0)
-                            (bvne (Loc predV) (LitBV 4 0b1111))) (notp result) result
+                            (bvne instrPred (LitBV 4 0b1111))) (notp result) result
     modifyArchData (\m'ad -> case m'ad of
                               Nothing -> Just $ newARMData { condPassed = result' }
                               Just ad -> Just $ ad { condPassed = result' })
