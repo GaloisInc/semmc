@@ -30,6 +30,14 @@ data SemM_ARMData = SemM_ARMData
     , condPassed :: Expr 'TBool
       -- ^ stores the ConditionPassed expression for the current
       -- Opcode to be used for enabling defLoc updates.
+
+    , cpsrUpdates :: Expr 'TBV -> Expr 'TBV
+      -- ^ stores the various expressions that update the CPSR value
+      -- for an opcode.  There may be multiple distinct updates to the
+      -- CPSR (e.g. condition values, ISETSTATE, etc.), so this helps
+      -- to accumulate those updates so that they can be expressed in
+      -- a single defLoc update of the CPSR.
+
     }
 
 
@@ -37,6 +45,7 @@ newARMData :: SemM_ARMData
 newARMData = SemM_ARMData
              { subArch = InstrSet_Jazelle -- not supported: force error if not updated to actual
              , condPassed = LitBool False
+             , cpsrUpdates = id
              }
 
 

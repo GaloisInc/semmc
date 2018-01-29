@@ -79,6 +79,7 @@ defineOpcode'A32 noPred isBranch name def =
         testForConditionPassed (Loc predV)
       def
       unless isBranch updatePC
+      finalizeCPSR
     else error $ "Opcode " <> name <> " does not look like a valid A32 ARM opcode"
 
 
@@ -115,6 +116,7 @@ defineOpcode'T32 isBranch name def =  --- inIT, notInIT, lastInIT
 
       def
       unless isBranch updatePC
+      finalizeCPSR
     else error $ "Opcode " <> name <> " does not look like a valid T32 ARM opcode"
 
 
@@ -144,6 +146,28 @@ subarch sa =
 
 -- ----------------------------------------------------------------------
 -- CPSR (APSR) management
+
+-- | The CPSR may be updated in multiple places in the semantics for a
+-- particular Opcode.  The DSL state is used to accumulate the set of
+-- updates so that they can be expressed in a single value-setting
+-- expression at the end of the opcode semantics definition.  This
+-- function adds another expression updating the CPSR value.  There is
+-- no protection against multiple updates to the same location, and
+-- the effects of this are unpredictable.
+updateCPSR :: (Expr 'TBV -> Expr 'TBV) -> SemARM t ()
+updateCPSR updExp =
+    modifyArchData (\m'ad -> case m'ad of
+                              Nothing -> Just $ newARMData { cpsrUpdates = updExp }
+                              Just ad -> Just $ ad { cpsrUpdates = updExp . (cpsrUpdates ad) })
+
+-- | finalizeCPSR is called at the end of the opcode semantics
+-- definition to write the new CPSR value based on the accumulated
+-- expression.
+finalizeCPSR :: SemARM 'Def ()
+finalizeCPSR = do
+    updExp <- (cpsrUpdates . fromJust) <$> getArchData
+    defReg cpsr (updExp (Loc cpsr))
+
 
 -- | The processor mode can be determined by examining the ISETSTATE
 -- execution state register, which is embedded in the CPSR (as 'J' at
@@ -175,7 +199,9 @@ selectInstrSet :: Expr 'TBool -> Expr 'TBool -> SemARM 'Def ()
 selectInstrSet isEnabled toT32 = do
     setT32 <- cpsrT32
     setA32 <- cpsrA32
-    defReg cpsr (ite isEnabled (ite toT32 setT32 setA32) (Loc cpsr))
+    updateCPSR (\cpsrReg -> ite isEnabled
+                           (ite toT32 (setT32 cpsrReg) (setA32 cpsrReg))
+                           cpsrReg)
 
 
 -- | Update the CPSR to set to the known concrete target instruction set.
@@ -183,17 +209,17 @@ selectInstrSet isEnabled toT32 = do
 selectInstrSet' :: ArchSubtype -> SemARM 'Def ()
 selectInstrSet' tgtarch =
     case tgtarch of
-      InstrSet_A32 -> defReg cpsr =<< cpsrA32
-      InstrSet_T32 -> defReg cpsr =<< cpsrT32
-      InstrSet_T32EE -> defReg cpsr =<< cpsrT32EE
-      InstrSet_Jazelle -> defReg cpsr =<< cpsrJazelle
+      InstrSet_A32 -> updateCPSR =<< cpsrA32
+      InstrSet_T32 -> updateCPSR =<< cpsrT32
+      InstrSet_T32EE -> updateCPSR =<< cpsrT32EE
+      InstrSet_Jazelle -> updateCPSR =<< cpsrJazelle
 
 
-cpsrA32, cpsrT32, cpsrT32EE, cpsrJazelle :: SemARM 'Def (Expr 'TBV)
+cpsrA32, cpsrT32, cpsrT32EE, cpsrJazelle :: SemARM 'Def (Expr 'TBV -> Expr 'TBV)
 cpsrA32 = do
     curarch <- (subArch . fromJust) <$> getArchData
     if curarch == InstrSet_A32
-    then return $ Loc cpsr
+    then return id
     else if curarch == InstrSet_T32EE
          then error "Invalid INSTRSET change T32EE->A32"
          else return $ cpsr_jt $ arch_jt InstrSet_A32
@@ -201,24 +227,24 @@ cpsrA32 = do
 cpsrT32 = do
     curarch <- (subArch . fromJust) <$> getArchData
     if curarch == InstrSet_T32
-    then return $ Loc cpsr
+    then return id
     else return $ cpsr_jt $ arch_jt InstrSet_T32
 
 cpsrT32EE = do
     curarch <- (subArch . fromJust) <$> getArchData
     if curarch == InstrSet_T32EE
-    then return $ Loc cpsr
+    then return id
     else if curarch == InstrSet_A32
          then error "Invalid INSTRSET change A32->T32EE"
          else return $ cpsr_jt $ arch_jt InstrSet_T32
 
 cpsrJazelle = error "Jazelle instruction set not currently supported"
 
-cpsr_jt :: (Int, Int) -> Expr 'TBV
+cpsr_jt :: (Int, Int) -> (Expr 'TBV -> Expr 'TBV)
 cpsr_jt (j, t) =
     let updJ = if j == 1 then bvset [24] else bvclr [24]
         updT = if t == 1 then bvset [5] else bvclr [5]
-    in updJ $ updT $ Loc cpsr
+    in updJ . updT
 
 arch_jt :: ArchSubtype -> (Int, Int)
 arch_jt tgtarch =
@@ -233,8 +259,8 @@ arch_jt tgtarch =
 -- the CPSR (aka. the APSR)
 cpsrNZCV :: HasCallStack => Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
 cpsrNZCV isEnabled nzcv =
-    let cpsr' = concat nzcv (extract 27 0 (Loc cpsr))
-    in defReg cpsr (ite isEnabled cpsr' (Loc cpsr))
+    let cpsr' r = concat nzcv (extract 27 0 r)
+    in updateCPSR (\cpsrReg -> ite isEnabled (cpsr' cpsrReg) cpsrReg)
 
 
 
