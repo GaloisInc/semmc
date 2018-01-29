@@ -77,6 +77,7 @@ defineT32Opcode = defineOpcode'T32 False
 defineT32Branch :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
 defineT32Branch = defineOpcode'T32 True
 
+defineOpcode'T32 :: HasCallStack => Bool -> String -> SemARM 'Def () -> SemARM 'Top ()
 defineOpcode'T32 isBranch name def =  --- inIT, notInIT, lastInIT
     if t32OpcodeNameLooksValid name
     then defineOpcode name $ do
