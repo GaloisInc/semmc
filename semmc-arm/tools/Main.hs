@@ -2,6 +2,8 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent as C
+import           Data.Bits
+import           Data.Word
 import qualified System.Environment as E
 import qualified System.Exit as IO
 import qualified System.IO as IO
@@ -48,7 +50,6 @@ testRunner caseChan resChan = do
           printf "Received test result with nonce %d\n" (CE.resultNonce tr)
           print (CE.resultContext tr)
 
-{-
 -- | Data representation of CPSR flags
 data Flag = N | Z | C | V | Q
   deriving (Show, Eq)
@@ -61,4 +62,3 @@ mkCPSR flags = foldr (.|.) 16 [n,z,c,v,q]
         c = if C `elem` flags then (2 ^ (29 :: Word32)) else 0
         v = if V `elem` flags then (2 ^ (28 :: Word32)) else 0
         q = if Q `elem` flags then (2 ^ (27 :: Word32)) else 0
--}
