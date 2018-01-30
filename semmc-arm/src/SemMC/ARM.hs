@@ -145,7 +145,8 @@ instance A.IsOpcode  ARM.Opcode
 
 type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
-type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32  -- 12?
+type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
+type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 
 
 instance A.IsOperandTypeRepr ARM where
@@ -165,6 +166,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
         opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
         opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
+        opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
 
@@ -244,11 +246,16 @@ instance A.Architecture ARM where
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
 locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation { A.exprInterpName = 'interpIsR15 })
+
     , ("a32.imm12_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpImm12Reg
                                                  , A.exprInterpName = 'interpImm12RegExtractor
                                                  })
     , ("a32.imm12_off", A.FunctionInterpretation { A.exprInterpName = 'interpImm12OffsetExtractor })
     , ("a32.imm12_add", A.FunctionInterpretation { A.exprInterpName = 'interpImm12AddFlgExtractor })
+
+    , ("a32.modimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpModimmImmExtractor })
+    , ("a32.modimm_rot", A.FunctionInterpretation { A.exprInterpName = 'interpModimmRotExtractor })
+
     ]
 
 shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)

@@ -14,6 +14,8 @@ module SemMC.Architecture.ARM.Eval
     , interpImm12RegExtractor
     , interpImm12OffsetExtractor
     , interpImm12AddFlgExtractor
+    , interpModimmImmExtractor
+    , interpModimmRotExtractor
     )
     where
 
@@ -75,6 +77,13 @@ interpImm12OffsetExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12
 interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Int8
 interpImm12AddFlgExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12Add
 
+
+-- | Extract values from the Mod_imm operand
+interpModimmImmExtractor :: ARMOperands.ModImm -> Int8
+interpModimmImmExtractor = fromInteger . toInteger . ARMOperands.modImmOrigImmediate
+
+interpModimmRotExtractor :: ARMOperands.ModImm -> Int8
+interpModimmRotExtractor = fromInteger . toInteger . ARMOperands.modImmOrigRotate
 
 class InterpIsR15 a where
   interpIsR15 :: a -> Bool

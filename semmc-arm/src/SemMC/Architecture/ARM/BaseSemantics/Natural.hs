@@ -9,7 +9,7 @@ import SemMC.DSL
 
 
 -- | All ARM registers are 32-bits wide for both A32 and T32.
-naturalBitSize :: Int
+naturalBitSize :: Num a => a
 naturalBitSize = 32
 
 -- | A zero value of the full register width

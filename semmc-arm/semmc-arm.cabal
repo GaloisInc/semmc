@@ -20,10 +20,11 @@ library
                      , SemMC.Architecture.ARM.BaseSemantics
                      , SemMC.Architecture.ARM.Location
                      , SemMC.Architecture.ARM.Opcodes
-  other-modules:       SemMC.Architecture.ARM.BaseSemantics.Branch
+  other-modules:       SemMC.Architecture.ARM.BaseSemantics.Arithmetic
+                     , SemMC.Architecture.ARM.BaseSemantics.Base
+                     , SemMC.Architecture.ARM.BaseSemantics.Branch
                      , SemMC.Architecture.ARM.BaseSemantics.Helpers
                      , SemMC.Architecture.ARM.BaseSemantics.Memory
-                     , SemMC.Architecture.ARM.BaseSemantics.Base
                      , SemMC.Architecture.ARM.BaseSemantics.Natural
                      , SemMC.Architecture.ARM.BaseSemantics.OperandClasses
                      , SemMC.Architecture.ARM.BaseSemantics.Registers

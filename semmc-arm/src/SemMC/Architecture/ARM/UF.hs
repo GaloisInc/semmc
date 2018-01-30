@@ -47,6 +47,13 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
 
+  , ("a32.modimm_imm", -- reference to octet immediate value from a modimm operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
+  , ("a32.modimm_rot", -- reference to 4-bit rotation value a modimm operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 4)))
+
     -- T32 Operands
 
   , ("t32.blxtarget_S", -- operand ThumbBlxTarget S bit reference

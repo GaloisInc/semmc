@@ -26,8 +26,10 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , zext, zext'
     , sext, sext'
     , bvset, bvclr, tstBit
+    , bvror
     -- * Opcode unpacking
     , imm12Reg, imm12Imm, imm12Add
+    , modImm_imm, modImm_rot
     , blxtgt_S, blxtgt_imm10H, blxtgt_imm10L, blxtgt_J1, blxtgt_J2
       -- * Miscellaneous common functionality
     , unpredictable
@@ -385,6 +387,7 @@ defReg loc expr = do
 
 
 -- ----------------------------------------------------------------------
+-- Manipulation of Bit Values (BV)
 
 -- | Zero extension to the full native bit width of registers
 zext :: Expr 'TBV -> Expr 'TBV
@@ -425,6 +428,15 @@ bvclr bitnums = bvand (naturalLitBV $ toInteger $ complement $ foldl setBit natu
 tstBit :: Int -> Expr 'TBV -> Expr 'TBool
 tstBit n = bveq (LitBV 1 0) . extract n n
 
+-- | Rotate the BV (first arg) right by the number of bits specified
+-- in the second argument.
+bvror :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+bvror bv n =
+    let m = bvurem n nbits
+        nbits = naturalLitBV naturalBitSize
+        rs = bvlshr bv m
+        ls = bvshl bv (bvsub nbits m)
+    in bvor ls rs
 
 -- ----------------------------------------------------------------------
 -- Opcode unpacking
@@ -442,6 +454,14 @@ imm12Imm = uf naturalBV "a32.imm12_imm"
 -- | Returns the addition flag in the addrmode_imm12_[pre]
 imm12Add :: [Some Expr] -> Expr 'TBool
 imm12Add = uf EBool "a32.imm12_add"
+
+-- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
+modImm_imm :: Location 'TBV -> Expr 'TBV
+modImm_imm = uf (EBV 8) "a32.modimm_imm" . ((:[]) . Some) . Loc
+
+-- | Decoding for ModImm rotation 4 bits (ARMExpandImm(), (F4.2.4, F-2473)
+modImm_rot :: Location 'TBV -> Expr 'TBV
+modImm_rot = uf (EBV 4) "a32.modimm_rot" . ((:[]) . Some) . Loc
 
 -- | Decoding for the ThumbBlxTarget type: S bit
 blxtgt_S :: Location 'TBV -> Expr 'TBV

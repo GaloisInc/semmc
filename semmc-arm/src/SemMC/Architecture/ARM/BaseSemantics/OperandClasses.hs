@@ -24,6 +24,11 @@ addrmode_imm12_pre = "Addrmode_imm12_pre"
 arm_blx_target :: String
 arm_blx_target = "Arm_blx_target"
 
+cc_out :: String
+cc_out = "cc_out"
+
+mod_imm :: String
+mod_imm = "mod_imm"
 
 -- ----------------------------------------------------------------------
 -- T32 operand names
