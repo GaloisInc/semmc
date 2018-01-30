@@ -15,6 +15,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     -- CPSR (APSR) management
     , cpsrNZCV
     -- * PC management
+    , updatePC
     , aluWritePC
     , loadWritePC
     , branchWritePC
@@ -55,32 +56,32 @@ import SemMC.DSL
 -- the PC after the instruction executes (by 4 if A32 or 2 if T32).
 -- Do not use for branches or any operation that might update R15/PC.
 defineA32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32Opcode = defineOpcode'A32 False False
+defineA32Opcode = defineOpcode'A32 False
 
 -- | An alternative version of 'defineA32Opcode' for opcodes which do
 -- not have a Pred operand that controls the expression of the opcode.
 defineA32OpcodeNoPred :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32OpcodeNoPred = defineOpcode'A32 True False
+defineA32OpcodeNoPred = defineOpcode'A32 True
 
 -- | An alternative version of 'defineA32Opcode' for branch opcodes
 -- which explicitly update the PC and therefore should not have the PC
 -- automatically updated to the next instruction.
 defineA32Branch :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32Branch = defineOpcode'A32 False True
+defineA32Branch = defineOpcode'A32 False
 
-
-defineOpcode'A32 :: HasCallStack => Bool -> Bool -> String -> SemARM 'Def () -> SemARM 'Top ()
-defineOpcode'A32 noPred isBranch name def =
+defineOpcode'A32 :: HasCallStack => Bool -> String -> SemARM 'Def () -> SemARM 'Top ()
+defineOpcode'A32 noPred name def =
     if a32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_A32
+      input pc
       input cpsr
       unless (noPred) $ do
         predV <- param "predBits" pred (EBV 4)  -- CurrentCond() (F2.3.1, F2-2417)
         testForConditionPassed (Loc predV)
       def
-      unless isBranch updatePC
       finalizeCPSR
+      finalizePC
     else error $ "Opcode " <> name <> " does not look like a valid A32 ARM opcode"
 
 
@@ -88,19 +89,20 @@ defineOpcode'A32 noPred isBranch name def =
 -- the PC after the instruction executes (by 4 if A32 or 2 if T32).
 -- Do not use for branches or any operation that might update R15/PC.
 defineT32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineT32Opcode = defineOpcode'T32 False
+defineT32Opcode = defineOpcode'T32
 
 -- | An alternative form of defineT32Opcode that is used for Branch
 -- opcodes; all PC updates are performed explicitly by the opcode
 -- definition and not by this entry point.
 defineT32Branch :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineT32Branch = defineOpcode'T32 True
+defineT32Branch = defineOpcode'T32
 
-defineOpcode'T32 :: HasCallStack => Bool -> String -> SemARM 'Def () -> SemARM 'Top ()
-defineOpcode'T32 isBranch name def =  --- inIT, notInIT, lastInIT
+defineOpcode'T32 :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
+defineOpcode'T32 name def =  --- inIT, notInIT, lastInIT
     if t32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_T32
+      input pc
 
       input cpsr
       let itstate_7_4 = extract 15 12 (Loc cpsr)
@@ -116,8 +118,8 @@ defineOpcode'T32 isBranch name def =  --- inIT, notInIT, lastInIT
       testForConditionPassed predV
 
       def
-      unless isBranch updatePC
       finalizeCPSR
+      finalizePC
     else error $ "Opcode " <> name <> " does not look like a valid T32 ARM opcode"
 
 
@@ -268,32 +270,77 @@ cpsrNZCV isEnabled nzcv =
 -- ----------------------------------------------------------------------
 -- PC management
 
+-- | The PC is normally updated to the next instruction, but it may be
+-- explicitly modified by a branch or other PC-affecting opcode.  The
+-- 'updatePC' function is used to store the update expression so that
+-- the proper one can be expressed at the end of the instruction.
+--
+-- The PC update might not be certain at this point: it may only be
+-- actual evaluation that can determine if the modified update should
+-- be performed (e.g. isR15), so the new update is passed the old
+-- update so that it can choose to use the original functionality or
+-- its new functionality.
+updatePC :: ((ArchSubtype -> Expr 'TBV) -> ArchSubtype -> Expr 'TBV) -> SemARM t ()
+updatePC pcf =
+    let mod_pcf m'ad = let ad = maybe newARMData id m'ad
+                           oldUpd = pcUpdate ad
+                           newUpd = pcf oldUpd
+                       in Just $ ad { pcUpdate = newUpd }
+    in modifyArchData mod_pcf
+
+
 -- | Update the PC to the next instruction.  The PC always points to
 -- the current instruction (plus an offset), so the update should be
 -- done as the final step of the semantic modifications for each
 -- instruction.  The mode is always known here, as initially set by
 -- 'defineA32Opcode' or 'defineT32Opcode' and possibly updated during
 -- instruction execution.
-updatePC :: SemARM 'Def ()
-updatePC = do
-  input pc
-  instrSet <- (subArch . fromJust) <$> getArchData
-  let updPCVal = case instrSet of
-                   InstrSet_A32 -> bvadd (Loc pc) (naturalLitBV 4)
-                   InstrSet_T32 -> bvadd (Loc pc) (naturalLitBV 2)
-                   _ -> error "Execution PC update not currently supported for this arch subtype"
-  defLoc pc updPCVal
+finalizePC :: HasCallStack => SemARM 'Def ()
+finalizePC = do
+  instrSet <- (subArch  . fromJust) <$> getArchData
+  updExp   <- (pcUpdate . fromJust) <$> getArchData
+  defLoc pc $ updExp instrSet
 
+
+-- | ALUWritePC pseudocode.  This is usually for arithmetic operations
+-- when they target R15/PC. (E1.2.3, E1-2297)
+aluWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
+aluWritePC tgtRegIsPC addr = do
+    curarch <- (subArch . fromJust) <$> getArchData
+    if curarch == InstrSet_A32
+    then bxWritePC tgtRegIsPC addr
+    else branchWritePC tgtRegIsPC addr
+
+
+-- | LoadWritePC pseudocode.  (E1.2.3, E1-2297)
+loadWritePC :: Expr 'TBV -> SemARM 'Def ()
+loadWritePC = bxWritePC (LitBool True)
 
 
 -- | BranchWritePC pseudocode.  (E1.2.3, E1-2296)
 branchWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
-branchWritePC tgtRegIsPC addr = do
-    curarch <- (subArch . fromJust) <$> getArchData
-    let address = if curarch == InstrSet_A32
-                  then bvclr [0,1] addr
-                  else bvclr [1] addr
-    defReg pc (ite tgtRegIsPC address (Loc pc))
+branchWritePC tgtRegIsPC addr =
+    let setAddr curarch = if curarch == InstrSet_A32
+                          then bvclr [0,1] addr
+                          else bvclr [1] addr
+    in updatePC $ \old suba -> ite tgtRegIsPC (setAddr suba) (old suba)
+
+
+-- | BxWritePC pseudocode  (E1.2.3, E1-2296)
+bxWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
+bxWritePC tgtRegIsPC addr =
+    let toT32 = tstBit 0 addr
+        setAddr curarch = case curarch of
+                            InstrSet_T32EE -> error "TBD: bxWritePC for T32EE mode"
+                            InstrSet_Jazelle -> error "TBD: bxWritePC for Jazelle mode"
+                            _ -> ite toT32
+                                    (bvclr [0] addr)
+                                    (ite (andp (tstBit 1 addr) constrainUnpredictable)
+                                         (bvclr [1] addr)
+                                         addr)
+    in do selectInstrSet tgtRegIsPC toT32
+          updatePC $ \old suba -> ite tgtRegIsPC (setAddr suba) (old suba)
+
 
 -- ----------------------------------------------------------------------
 

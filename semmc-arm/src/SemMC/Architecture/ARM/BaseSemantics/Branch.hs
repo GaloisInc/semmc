@@ -89,6 +89,5 @@ blx_ newlr tgtaddr tgtarch = do
 
 target_label_align4 :: Expr 'TBV -> SemARM 'Def (Expr 'TBV)
 target_label_align4 off = do  -- Align(PC, 4) to force word-alignment (only affects T32, not A32).
-    input pc
     let alignPC_4 = bvclr [0,1] (Loc pc)
     return $ bvadd alignPC_4 off

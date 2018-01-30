@@ -3,7 +3,9 @@
 module SemMC.Architecture.ARM.BaseSemantics.Base
     where
 
+import Data.Semigroup
 import SemMC.Architecture.ARM.BaseSemantics.Natural
+import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 
 
@@ -37,6 +39,14 @@ data SemM_ARMData = SemM_ARMData
       -- to accumulate those updates so that they can be expressed in
       -- a single defLoc update of the CPSR.
 
+    , pcUpdate :: ArchSubtype -> Expr 'TBV
+      -- ^ stores the expression used to update the PC after execution
+      -- of an opcode.  By default, this simply increments the PC to
+      -- the next instruction, but branches and other PC-modifying
+      -- opcodes can effect different PC results.  This operation is
+      -- executed at the *end* of the opcode DSL definition, so the
+      -- ArchSubtype passed to it is the *result* of any changes made
+      -- by the Opcode.
     }
 
 
@@ -45,7 +55,13 @@ newARMData = SemM_ARMData
              { subArch = InstrSet_Jazelle -- not supported: force error if not updated to actual
              , condPassed = LitBool False
              , cpsrUpdates = id
+             , pcUpdate = nextInstruction
              }
+    where nextInstruction sub = case sub of
+                                  InstrSet_A32 -> bvadd (Loc pc) (naturalLitBV 4)
+                                  InstrSet_T32 -> bvadd (Loc pc) (naturalLitBV 2)
+                                  _ -> error $ "Execution PC update not currently supported\
+                                              \ for this arch subtype: " <> show sub
 
 
 type SemARM t a = SemMD t SemM_ARMData a
