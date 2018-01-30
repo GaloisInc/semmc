@@ -13,6 +13,7 @@ import Data.Semigroup
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
+import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL

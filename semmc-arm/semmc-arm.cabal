@@ -24,6 +24,7 @@ library
                      , SemMC.Architecture.ARM.BaseSemantics.Helpers
                      , SemMC.Architecture.ARM.BaseSemantics.Memory
                      , SemMC.Architecture.ARM.BaseSemantics.Base
+                     , SemMC.Architecture.ARM.BaseSemantics.Natural
                      , SemMC.Architecture.ARM.BaseSemantics.OperandClasses
                      , SemMC.Architecture.ARM.BaseSemantics.Registers
                      , SemMC.Architecture.ARM.Components

@@ -4,7 +4,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Registers
     where
 
 import SemMC.DSL
-import SemMC.Architecture.ARM.BaseSemantics.Base
+import SemMC.Architecture.ARM.BaseSemantics.Natural
 
 
 -- | The PC (Program Counter).  This is roughly analagous to R15, but
