@@ -35,7 +35,7 @@ manualArithmetic = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm32 = armExpandImm imm12
         (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
-    defReg rD result
+    defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
@@ -54,7 +54,7 @@ manualArithmetic = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm32 = armExpandImm imm12
         (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
-    defReg rD result
+    defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
@@ -81,7 +81,7 @@ manualBitwise = do
         z' = ite (bveq result (LitBV 32 0b0)) (LitBV 1 0b1) (LitBV 1 0b0)
         v' = v
         nzcv = concat n' $ concat z' $ concat c' v'
-    defReg rD result
+    defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
