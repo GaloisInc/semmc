@@ -28,6 +28,7 @@ memory = runSem $ do
 arithmetic :: [(String, Definition)]
 arithmetic = runSem $ do
              manualArithmetic
+             manualBitwise
              return ()
 
 branches :: [(String, Definition)]
