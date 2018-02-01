@@ -265,7 +265,11 @@ forkDefinition name (SemM def) = do
 comment :: String -> SemMD 'Def d ()
 comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
 
--- | Declare a named parameter; the string provided is used in the produced formula
+-- | Declare a named parameter; the 'name' string provided is used as
+-- the variable name in the produced formula, the 'ty' string
+-- specifies the type (strings are types via TypeLits), and the 'ety'
+-- specifies the expression type for this parameter.  The result is a
+-- Location reference to that parameter.
 param :: String -> String -> ExprType tp -> SemMD 'Def d (Location tp)
 param name ty ety = do
   let p = Parameter { pName = name
