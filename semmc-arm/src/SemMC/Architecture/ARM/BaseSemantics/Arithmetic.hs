@@ -39,12 +39,15 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-  defineA32Opcode "SUBri" $ do
+  defineA32Opcode "SUBri" (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          )
+                      $ \rD setcc _ imm12 rN -> do
     comment "SUB immediate, A32, Encoding A1  (F7.1.235, F7-2916)"
-    rD <- param "rD" gpr naturalBV
-    setcc <- param "setcc" cc_out (EBV 1)
-    imm12 <- param "mimm" mod_imm naturalBV
-    rN <- param "rN" gpr naturalBV
     input rN
     input setcc
     input imm12
@@ -58,12 +61,15 @@ manualArithmetic = do
 manualBitwise :: SemARM 'Top ()
 manualBitwise = do
 
-  defineA32Opcode "ANDri" $ do
+  defineA32Opcode "ANDri" (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          )
+                $ \rD setcc _ imm12 rN -> do
     comment "AND immediate, Encoding A1  (F7.1.13, F7-2556)"
-    rD <- param "rD" gpr naturalBV
-    setcc <- param "setcc" cc_out (EBV 1)
-    imm12 <- param "mimm" mod_imm naturalBV
-    rN <- param "rN" gpr naturalBV
     input rN
     input setcc
     input imm12
