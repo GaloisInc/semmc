@@ -54,7 +54,26 @@ manualArithmetic = do
 manualBitwise :: SemARM 'Top ()
 manualBitwise = do
 
-  return ()
+  defineA32Opcode "ANDri" $ do
+    comment "AND immediate, Encoding A1  (F7.1.13, F7-2556)"
+    rD <- param "rD" gpr naturalBV
+    setcc <- param "setcc" cc_out (EBV 1)
+    imm12 <- param "mimm" mod_imm naturalBV
+    rN <- param "rN" gpr naturalBV
+    input rN
+    input setcc
+    input imm12
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        (_, _, c, v) = getNZCV
+        (imm32, c') = armExpandImmC imm12 c
+        result = bvand (Loc rN) imm32
+        n' = extract 31 31 result
+        z' = ite (bveq result (LitBV 32 0b0)) (LitBV 1 0b1) (LitBV 1 0b0)
+        v' = v
+        nzcv = concat n' $ concat z' $ concat c' v'
+    defReg rD result
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
 -- ----------------------------------------------------------------------
 
@@ -70,6 +89,21 @@ armExpandImm imm12 =
         rotv = bvshl (naturalLitBV 1) $ zext rot -- multiply by 2
         rval32 = ite (bveq rotv (naturalLitBV 0)) val32 (bvror rotv val32)
     in rval32
+
+-- | Expand/rotate ModImm value to corresponding 32-bit immediate
+-- value (F4-2473) with carry
+armExpandImmC :: Location 'TBV -> Expr 'TBV -> (Expr 'TBV, Expr 'TBV)
+armExpandImmC imm12 carry_in =
+    let val = modImm_imm imm12
+        rot = modImm_rot imm12
+        -- Determine value per Table F4-6 (F4.2.4, F4-2472)
+        val32 = zext val
+        rotv = bvshl (naturalLitBV 1) $ zext rot -- multiply by 2
+        rval32 = ite (bveq rotv (naturalLitBV 0)) val32 (bvror rotv val32)
+        msb = extract 31 31 rval32 -- return the MSB as the carry_out
+        carry_out =
+          ite (bveq rotv (naturalLitBV 0)) carry_in msb
+    in (rval32, carry_out)
 
 
 -- | Pseudocode AddWithCarry (E1-2292 or F2-2423)

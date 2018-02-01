@@ -14,6 +14,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , selectInstrSet'
     -- CPSR (APSR) management
     , cpsrNZCV
+    , getNZCV
     -- * PC management
     , updatePC
     , aluWritePC
@@ -267,7 +268,12 @@ cpsrNZCV isEnabled nzcv =
     let cpsr' r = concat nzcv (extract 27 0 r)
     in updateCPSR (\cpsrReg -> ite isEnabled (cpsr' cpsrReg) cpsrReg)
 
-
+getNZCV :: HasCallStack => (Expr 'TBV, Expr 'TBV, Expr 'TBV, Expr 'TBV)
+getNZCV = let n = extract 31 31 (Loc cpsr)
+              z = extract 30 30 (Loc cpsr)
+              c = extract 29 29 (Loc cpsr)
+              v = extract 28 28 (Loc cpsr)
+          in (n, z, c, v)
 
 -- ----------------------------------------------------------------------
 -- PC management
