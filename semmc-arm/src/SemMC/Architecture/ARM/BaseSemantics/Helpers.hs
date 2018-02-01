@@ -385,7 +385,7 @@ testForConditionPassed instrPred = do
 
 -- | Performs an assignment for a conditional Opcode when the target
 -- is a register location.
-defReg :: Location a -> Expr a -> SemARM 'Def ()
+defReg :: HasCallStack => Location a -> Expr a -> SemARM 'Def ()
 defReg loc expr = do
   isOK <- (condPassed . fromJust) <$> getArchData
   defLoc loc $ ite isOK expr (Loc loc)
