@@ -143,10 +143,13 @@ type instance A.Location ARM = Location ARM
 instance A.IsOperand ARM.Operand
 instance A.IsOpcode  ARM.Opcode
 
-type instance A.OperandType ARM "GPR" = BaseBVType 32
-type instance A.OperandType ARM "Pred" = BaseBVType 4
 type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
+type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
+type instance A.OperandType ARM "Cc_out" = BaseBVType 1
+type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
+type instance A.OperandType ARM "Pred" = BaseBVType 4
+type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
 
 
 instance A.IsOperandTypeRepr ARM where
@@ -163,10 +166,13 @@ operandValue :: forall sym s.
              -> IO (A.TaggedExpr ARM sym s)
 operandValue sym locLookup op = TaggedExpr <$> opV op
   where opV :: ARM.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
-        opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
-        opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
         opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
+        opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
+        opV (ARM.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
+        opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
         opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
+        opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
+        -- opV (Thumb.ThumbBlxTarget v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
 
@@ -261,9 +267,13 @@ locationFuncInterpretation =
 shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
 shapeReprType orep =
   case orep of
-    ARM.GPRRepr -> knownRepr
-    ARM.PredRepr -> knownRepr
     ARM.Addrmode_imm12_preRepr -> knownRepr
+    ARM.Arm_blx_targetRepr -> knownRepr
+    ARM.Cc_outRepr -> knownRepr
+    ARM.GPRRepr -> knownRepr
+    ARM.Mod_immRepr -> knownRepr
+    ARM.PredRepr -> knownRepr
+    -- Thumb.ThumbBlxTargetRepr -> knownRepr
     _ -> error $ "Unknown OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- "Imm0_15"
     --   | Just Refl <- testEquality sr (SR.knownSymbol @"Imm0_15") ->
@@ -277,8 +287,6 @@ data Signed = Signed | Unsigned deriving (Eq, Show)
 instance T.TemplatableOperand ARM where
   opTemplates sr =
     case sr of
-      ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
-      ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
       ARM.Addrmode_imm12_preRepr ->
           mkTemplate <$> [0..numGPR-1]
             where mkTemplate gprNum = T.TemplatedOperand Nothing
@@ -296,6 +304,12 @@ instance T.TemplatableOperand ARM where
                                   addflagVal <- fromInteger <$> evalFn addflag
                                   return $ ARM.Addrmode_imm12_pre $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                             return (expr, T.WrappedRecoverOperandFn recover)
+      ARM.Arm_blx_targetRepr -> undefined
+      ARM.Cc_outRepr -> undefined
+      ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
+      ARM.Mod_immRepr -> undefined
+      ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
+      -- ARM.ThumbBlxTargetRepr -> undefined
 
 
 concreteTemplatedOperand :: forall arch s a.
