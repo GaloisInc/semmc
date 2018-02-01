@@ -266,13 +266,15 @@ arch_jt tgtarch =
       InstrSet_Jazelle -> (1, 0)
 
 
--- Updates the N[31], Z[30], C[29], and V[28] condition code bits in
+-- | Updates the N[31], Z[30], C[29], and V[28] condition code bits in
 -- the CPSR (aka. the APSR)
 cpsrNZCV :: HasCallStack => Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
 cpsrNZCV isEnabled nzcv =
     let cpsr' r = concat nzcv (extract 27 0 r)
     in updateCPSR (\cpsrReg -> ite isEnabled (cpsr' cpsrReg) cpsrReg)
 
+-- | Extracts the N[31], Z[30], C[29], and V[28] bits from the CPSR
+-- (E1.2.4, E1-2297)
 getNZCV :: HasCallStack => (Expr 'TBV, Expr 'TBV, Expr 'TBV, Expr 'TBV)
 getNZCV = let n = extract 31 31 (Loc cpsr)
               z = extract 30 30 (Loc cpsr)
@@ -364,23 +366,20 @@ bxWritePC tgtRegIsPC addr =
 testForConditionPassed :: Expr 'TBV -> SemARM 'Def ()
 testForConditionPassed instrPred = do
     -- assumes already: input cpsr
-    let pstate_n = extract 31 31 (Loc cpsr)  -- (E1.2.4, E1-2297)
-        pstate_z = extract 30 30 (Loc cpsr)
-        pstate_c = extract 29 29 (Loc cpsr)
-        pstate_v = extract 28 28 (Loc cpsr)
+    let (n,z,c,v) = getNZCV  -- (E1.2.4, E1-2297)
         cond_3_1 = extract 3 1 instrPred
         cond_0   = extract 0 0 instrPred
         isBitSet = bveq (LitBV 1 0b1)
         -- ConditionHolds (F2.3.1, F2-2417):
-        result = ite (bveq cond_3_1 (LitBV 3 0b000)) (isBitSet pstate_z) -- EQ or NE
-                 (ite (bveq cond_3_1 (LitBV 3 0b001)) (isBitSet pstate_c) -- CS or CC
-                  (ite (bveq cond_3_1 (LitBV 3 0b010)) (isBitSet pstate_n) -- MI or PL
-                   (ite (bveq cond_3_1 (LitBV 3 0b011)) (isBitSet pstate_v) -- VS or VC
-                    (ite (bveq cond_3_1 (LitBV 3 0b100)) (andp (isBitSet pstate_c)
-                                                               (notp $ isBitSet pstate_z)) -- HI or LS
-                     (ite (bveq cond_3_1 (LitBV 3 0b101)) (bveq pstate_n pstate_v)  -- GE or LT
-                      (ite (bveq cond_3_1 (LitBV 3 0b110)) (andp (bveq pstate_n pstate_v)
-                                                                 (notp $ isBitSet pstate_z)) -- GT or LE
+        result = ite (bveq cond_3_1 (LitBV 3 0b000)) (isBitSet z) -- EQ or NE
+                 (ite (bveq cond_3_1 (LitBV 3 0b001)) (isBitSet c) -- CS or CC
+                  (ite (bveq cond_3_1 (LitBV 3 0b010)) (isBitSet n) -- MI or PL
+                   (ite (bveq cond_3_1 (LitBV 3 0b011)) (isBitSet v) -- VS or VC
+                    (ite (bveq cond_3_1 (LitBV 3 0b100)) (andp (isBitSet c)
+                                                               (notp $ isBitSet z)) -- HI or LS
+                     (ite (bveq cond_3_1 (LitBV 3 0b101)) (bveq n v)  -- GE or LT
+                      (ite (bveq cond_3_1 (LitBV 3 0b110)) (andp (bveq n v)
+                                                                 (notp $ isBitSet z)) -- GT or LE
                        {- (bveq cond_3_1 (LitBV 3 0b111)) -} (LitBool True))))))) -- AL
         result' = ite (andp (isBitSet cond_0)
                             (bvne instrPred (LitBV 4 0b1111))) (notp result) result
