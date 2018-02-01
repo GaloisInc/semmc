@@ -25,10 +25,10 @@ arm_blx_target :: String
 arm_blx_target = "Arm_blx_target"
 
 cc_out :: String
-cc_out = "cc_out"
+cc_out = "Cc_out"
 
 mod_imm :: String
-mod_imm = "mod_imm"
+mod_imm = "Mod_imm"
 
 -- ----------------------------------------------------------------------
 -- T32 operand names
