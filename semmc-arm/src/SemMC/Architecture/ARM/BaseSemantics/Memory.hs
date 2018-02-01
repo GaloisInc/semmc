@@ -8,6 +8,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Memory
     where
 
 import Data.Maybe
+import Data.Parameterized.Context
 import Data.Parameterized.Some ( Some(..) )
 import Data.Semigroup
 import Prelude hiding ( concat, pred )
@@ -30,12 +31,15 @@ defineLoads = do
 
 defineStores :: SemARM 'Top ()
 defineStores = do
-  defineA32Opcode "STR_PRE_IMM" $ do
+  defineA32Opcode "STR_PRE_IMM" (Empty
+                                :> ParamDef "predBits" pred (EBV 4)
+                                :> ParamDef "imm" addrmode_imm12_pre EMemRef
+                                :> ParamDef "gpr" gpr naturalBV
+                                )
+               $ \_ imm12 rT -> do
     comment "Store Register, Pre-indexed (P=1, W=1), immediate  (A32)"
     comment "doc: F7.1.217, page F7-2880"
     comment "see also PUSH, F7.1.138, page F7-2760" -- TBD: if add && rN=SP && imm.imm=4 [A1 v.s. A2 form]"
-    imm12 <- param "imm" addrmode_imm12_pre EMemRef
-    rT <- param "gpr" gpr naturalBV
     input rT
     input imm12
     input memory

@@ -8,7 +8,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Branch
     )
     where
 
-import Data.Maybe
+import Data.Parameterized.Context
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
@@ -35,9 +35,11 @@ t32_branches = do
 
 blx_a32 :: SemARM 'Top ()
 blx_a32 =
-    defineA32Branch "BLXi" $ do
+    defineA32Opcode "BLXi" (Empty
+                           :> ParamDef "target" arm_blx_target naturalBV
+                           )
+                        $ \tgt -> do
       comment "Encoding A2"
-      tgt <- param "target" arm_blx_target naturalBV
       input tgt
       let tgtarch = InstrSet_T32
           imm24 = extract 23 0 (Loc tgt)
@@ -49,9 +51,11 @@ blx_a32 =
 
 blx_t32 :: SemARM 'Top ()
 blx_t32 =
-    defineT32Branch "TBLXi" $ do
+    defineT32Opcode "TBLXi" (Empty
+                            :> ParamDef "target" thumb_blx_target naturalBV
+                            )
+                        $ \tgt -> do
       comment "Encoding T2"
-      tgt <- param "target" thumb_blx_target naturalBV
       let tgtarch = InstrSet_A32
           tgt_S = blxtgt_S tgt
           tgt_imm10H = blxtgt_imm10H tgt

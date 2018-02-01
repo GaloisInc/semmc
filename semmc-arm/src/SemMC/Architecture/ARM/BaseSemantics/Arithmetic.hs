@@ -7,7 +7,8 @@ module SemMC.Architecture.ARM.BaseSemantics.Arithmetic
     )
     where
 
-import Prelude hiding ( concat )
+import Data.Parameterized.Context
+import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
@@ -18,12 +19,15 @@ import SemMC.DSL
 manualArithmetic :: SemARM 'Top ()
 manualArithmetic = do
 
-  defineA32Opcode "ADDri" $ do
+  defineA32Opcode "ADDri" (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          )
+                      $ \rD setcc _ imm12 rN -> do
     comment "ADD immediate, A32, Encoding A1  (F7.1.5, F7-2542)"
-    rD <- param "rD" gpr naturalBV
-    setcc <- param "setcc" cc_out (EBV 1)
-    imm12 <- param "mimm" mod_imm naturalBV
-    rN <- param "rN" gpr naturalBV
     input rN
     input setcc
     input imm12

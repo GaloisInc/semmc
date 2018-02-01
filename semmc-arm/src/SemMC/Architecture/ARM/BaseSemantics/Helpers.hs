@@ -1,13 +1,12 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 
 module SemMC.Architecture.ARM.BaseSemantics.Helpers
     ( -- * Opcode definition assistance
       defineA32Opcode
-    , defineA32OpcodeNoPred
-    , defineA32Branch
     , defineT32Opcode
-    , defineT32Branch
+    , OpcodeParamDef(..)
     -- * Arch subtype (Instruction Set) handling
     , instrSetState
     , selectInstrSet
@@ -39,11 +38,13 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     )
     where
 
-import Control.Monad ( unless )
+import Control.Monad ( when )
 import Data.Bits
 import Data.Maybe
 import Data.Parameterized.Classes
+import Data.Parameterized.Context
 import Data.Parameterized.Some ( Some(..) )
+import Data.Parameterized.TraversableFC
 import Data.Semigroup
 import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat, pred )
@@ -54,53 +55,52 @@ import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 
 
--- | A wrapper around 'defineOpcode' that sets A32 mode and updates
--- the PC after the instruction executes (by 4 if A32 or 2 if T32).
--- Do not use for branches or any operation that might update R15/PC.
-defineA32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32Opcode = defineOpcode'A32 False
+data OpcodeParamDef t = ParamDef String String (ExprType t)
 
--- | An alternative version of 'defineA32Opcode' for opcodes which do
--- not have a Pred operand that controls the expression of the opcode.
-defineA32OpcodeNoPred :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32OpcodeNoPred = defineOpcode'A32 True
-
--- | An alternative version of 'defineA32Opcode' for branch opcodes
--- which explicitly update the PC and therefore should not have the PC
--- automatically updated to the next instruction.
-defineA32Branch :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineA32Branch = defineOpcode'A32 False
-
-defineOpcode'A32 :: HasCallStack => Bool -> String -> SemARM 'Def () -> SemARM 'Top ()
-defineOpcode'A32 noPred name def =
+defineA32Opcode :: CurryAssignmentClass args =>
+                   String
+                -> Assignment OpcodeParamDef args
+                -> CurryAssignment args Location (SemARM 'Def ())
+                -> SemARM 'Top ()
+defineA32Opcode name defargs defbody =
     if a32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_A32
       input pc
       input cpsr
-      unless (noPred) $ do
-        predV <- param "predBits" pred (EBV 4)  -- CurrentCond() (F2.3.1, F2-2417)
-        testForConditionPassed (Loc predV)
-      def
+      defineOp'Core defbody =<< traverseFC param' defargs
       finalizeCPSR
       finalizePC
     else error $ "Opcode " <> name <> " does not look like a valid A32 ARM opcode"
+        where param' :: OpcodeParamDef t -> SemARM 'Def (Location t)
+              param' (ParamDef pname ty ety) = do
+                -- Convert all param descriptions to explicit
+                -- instantiations of a Location
+                p <- param pname ty ety
+                -- Check for the *pred* param and use it to perform
+                -- the comparison to the CPSR to see if this
+                -- instruction should be executed (storing the result
+                -- in the state monad for use by defMem and
+                -- defReg). CurrentCond() (F2.3.1, F2-2417)
+                when (ty == pred) $ case testEquality (exprType $ Loc p) (EBV 4) of
+                                      Just Refl -> testForConditionPassed (Loc p)
+                                      Nothing -> return ()
+                return p
+
+defineOp'Core :: CurryAssignmentClass args =>
+                 CurryAssignment args Location (SemARM 'Def ())
+              -> Assignment Location args
+              -> SemARM 'Def ()
+defineOp'Core defbody deflocs =
+    uncurryAssignment defbody deflocs
 
 
--- | A wrapper around 'defineOpcode' that sets A32 mode and updates
--- the PC after the instruction executes (by 4 if A32 or 2 if T32).
--- Do not use for branches or any operation that might update R15/PC.
-defineT32Opcode :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineT32Opcode = defineOpcode'T32
-
--- | An alternative form of defineT32Opcode that is used for Branch
--- opcodes; all PC updates are performed explicitly by the opcode
--- definition and not by this entry point.
-defineT32Branch :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineT32Branch = defineOpcode'T32
-
-defineOpcode'T32 :: HasCallStack => String -> SemARM 'Def () -> SemARM 'Top ()
-defineOpcode'T32 name def =  --- inIT, notInIT, lastInIT
+defineT32Opcode :: (HasCallStack, CurryAssignmentClass args) =>
+                   String
+                -> Assignment OpcodeParamDef args
+                -> CurryAssignment args Location (SemARM 'Def ())
+                -> SemARM 'Top ()
+defineT32Opcode name defargs defbody =
     if t32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_T32
@@ -118,11 +118,12 @@ defineOpcode'T32 name def =  --- inIT, notInIT, lastInIT
                    (unpredictable (LitBV 4 0b1110))) -- ARM doc doesn't cover this case...
                   itstate_7_4
       testForConditionPassed predV
-
-      def
+      defineOp'Core defbody =<< traverseFC param' defargs
       finalizeCPSR
       finalizePC
     else error $ "Opcode " <> name <> " does not look like a valid T32 ARM opcode"
+        where param' :: OpcodeParamDef t -> SemARM 'Def (Location t)
+              param' (ParamDef pname ty ety) = param pname ty ety
 
 
 
