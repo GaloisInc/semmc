@@ -6,6 +6,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Definitions of evaluators over parameterized formulas
 --
 -- This module defines a function that can be used to evaluate uninterpreted
@@ -20,22 +21,15 @@ module SemMC.Formula.Eval (
   evaluateFunctions
   ) where
 
-import           GHC.Prim                           ( RealWorld )
-import           Control.Monad.ST                   ( stToIO )
-
-import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context         as Ctx
-import qualified Data.Parameterized.HashTable       as PH
 import qualified Data.Parameterized.List            as SL
-import qualified Data.Parameterized.Map             as MapF
-import qualified Data.Parameterized.Nonce           as PN
-import qualified Lang.Crucible.Solver.Interface     as SI
+import qualified Data.Text                          as T
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import qualified Lang.Crucible.Solver.Symbol        as S
 import           Lang.Crucible.Types
-
 import qualified SemMC.Architecture.Internal        as A
-import qualified SemMC.BoundVar                     as BV
 import           SemMC.Formula.Formula
+import           Data.Parameterized.TraversableFC
 
 type Sym t st = S.SimpleBuilder t st
 
@@ -48,61 +42,36 @@ data Evaluator arch t =
               -> BaseTypeRepr tp
               -> IO (S.Elt t tp))
 
-evaluateFunctions :: Sym t st
-                  -> ParameterizedFormula (Sym t st) arch sh
-                  -> SL.List (A.Operand arch) sh
-                  -> S.Elt t ret
-                  -> [(String, Evaluator arch t)]
-                  -> IO (S.Elt t ret)
-evaluateFunctions sym pf operands e0 rewriters = do
-  tbl <- stToIO (PH.newSized 100)
-  fnTab <- stToIO PH.new
-  let tbls = EvalHashTables { eltTable = tbl
-                            , fnTable = fnTab
-                            }
-  evaluateFunctions' tbls operandIndex sym e0 rewriters
-  where
-    operandIndex = SL.ifoldr (indexOperands operands) MapF.empty (pfOperandVars pf)
-
-indexOperands :: (OrdF (SI.BoundVar (Sym t st)))
-              => SL.List (A.Operand arch) sh
-              -> SL.Index sh tp
-              -> BV.BoundVar (Sym t st) arch tp
-              -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
-              -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
-indexOperands operands ix opVar = MapF.insert opVar (operands SL.!! ix)
-
-data CachedSymFn t c where
-  CachedSymFn :: (c ~ (a Ctx.::> r)) => CachedSymFn Bool (S.SimpleSymFn t a r)
-
-data EvalHashTables t =
-  EvalHashTables { eltTable :: PH.HashTable RealWorld (S.Elt t) (S.Elt t)
-                 , fnTable :: PH.HashTable RealWorld (PN.Nonce t) (CachedSymFn t)
-                 }
-
-evaluateFunctions' :: EvalHashTables t
-                   -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
-                   -> Sym t st
-                   -> S.Elt t ret
-                   -> [(String, Evaluator arch t)]
-                   -> IO (S.Elt t ret)
-evaluateFunctions' EvalHashTables {..} operandIndex sym e0 rewriters =
-  case e0 of
-    S.SemiRingLiteral {} -> return e0
-    S.BVElt {}           -> return e0
-    S.AppElt {}          -> return e0
-    S.NonceAppElt {}     -> return e0
-    S.BoundVarElt {}     -> return e0
-    _ -> undefined
-
-
--- type Sym t (st :: * -> *) = S.SimpleBuilder t st
-
--- newtype BV.BoundVar sym arch (op :: Symbol)
-   -- = BV.BoundVar {BV.unBoundVar :: SI.BoundVar
-
--- data EvalHashTables t
---   = EvalHashTables {
---       eltTable :: PH.HashTable RealWorld (S.Elt t) (S.Elt t),
---       fnTable :: PH.HashTable RealWorld (PN.Nonce t) (CachedSymFn t)
--- }
+evaluateFunctions
+  :: Sym t st
+  -> ParameterizedFormula (Sym t st) arch sh
+  -> SL.List (A.Operand arch) sh
+  -> [(String, Evaluator arch t)]
+  -> S.Elt t ret
+  -> IO (S.Elt t ret)
+evaluateFunctions sym pf operands rewriters e =
+  case e of
+    S.SemiRingLiteral {} -> return e
+    S.BVElt {} -> return e
+    S.BoundVarElt {} -> return e
+    S.AppElt app ->
+      S.traverseApp
+        (evaluateFunctions sym pf operands rewriters)
+          (S.appEltApp app) >>= S.sbMakeElt sym
+    S.NonceAppElt nonceApp -> do
+      case S.nonceEltApp nonceApp of
+        S.Forall{} -> error "evaluateFunctions: Forall Not implemented"
+        S.Exists{} -> error "evaluateFunctions: Exists Not implemented"
+        S.ArrayFromFn{} ->
+          error "evaluateFunctions: ArrayFromFn Not implemented"
+        S.MapOverArrays{} ->
+          error "evaluateFunctions: MapOverArrays Not implemented"
+        S.ArrayTrueOnEntries{} ->
+          error "evaluateFunctions: ArrayTrueOnEntries Not implemented"
+        S.FnApp symFun assignment -> do
+          let key = T.unpack $ S.solverSymbolAsText (S.symFnName symFun)
+          assignment' <- traverseFC (evaluateFunctions sym pf operands rewriters) assignment
+          case lookup key rewriters of
+            Just (Evaluator evaluator) ->
+              evaluator sym pf operands assignment' (S.exprType e)
+            Nothing -> S.sbNonceElt sym (S.FnApp symFun assignment')

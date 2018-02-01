@@ -651,7 +651,7 @@ boundVarElemIndex x xs = do
   let xs' = [ Some y | Some (BoundVar.BoundVar y) <- xs ]
   x `elemIndex` xs'
 
-locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC sh)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemriReg
                                                , A.exprInterpName = 'interpMemriRegExtractor
