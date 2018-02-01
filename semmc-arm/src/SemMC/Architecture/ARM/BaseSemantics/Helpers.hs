@@ -11,7 +11,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , instrSetState
     , selectInstrSet
     , selectInstrSet'
-    -- CPSR (APSR) management
+    -- * CPSR (APSR) management
     , cpsrNZCV
     -- * PC management
     , updatePC
