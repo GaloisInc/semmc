@@ -105,8 +105,12 @@ defineT32Opcode name defargs defbody =
     then defineOpcode name $ do
       subarch InstrSet_T32
       input pc
-
       input cpsr
+      -- n.b. ISETSTATE is updated between instruction execution to
+      -- the next state in the ITBLOCK (E1-2300).  SemMC is only
+      -- concerned with the discrete semantics of individual opcodes;
+      -- the ITSTATE updates form the machine state that must be
+      -- maintained by the evaluator of these instructions.
       let itstate_7_4 = extract 15 12 (Loc cpsr)
           itstate_3_2 = extract 11 10 (Loc cpsr)
           itstate_1_0 = extract 26 25 (Loc cpsr)
