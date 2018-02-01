@@ -4,6 +4,7 @@
 
 module SemMC.Architecture.ARM.BaseSemantics.Arithmetic
     ( manualArithmetic
+    , manualBitwise
     )
     where
 
@@ -33,6 +34,27 @@ manualArithmetic = do
     defReg rD result
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+  defineA32Opcode "SUBri" $ do
+    comment "SUB immediate, A32, Encoding A1  (F7.1.235, F7-2916)"
+    rD <- param "rD" gpr naturalBV
+    setcc <- param "setcc" cc_out (EBV 1)
+    imm12 <- param "mimm" mod_imm naturalBV
+    rN <- param "rN" gpr naturalBV
+    input rN
+    input setcc
+    input imm12
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        imm32 = armExpandImm imm12
+        (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+    defReg rD result
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+manualBitwise :: SemARM 'Top ()
+manualBitwise = do
+
+  return ()
 
 -- ----------------------------------------------------------------------
 
