@@ -5,12 +5,9 @@ module SemMC.Architecture.PPC.Base.Vector (
   baseVector
   ) where
 
-import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat )
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
-
-import Data.Parameterized.Some
 
 vec1op :: String -> SemM 'Def ()
 vec1op name = do
