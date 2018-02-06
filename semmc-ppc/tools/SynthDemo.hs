@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -15,13 +17,13 @@ import qualified Data.ByteString.UTF8               as BS8
 import qualified Data.Foldable                      as F
 import qualified Data.Functor.Identity              as I
 import           Data.Monoid
+import           Data.Parameterized.TraversableF
 import           Data.Proxy
 import           Data.Word                          ( Word32 )
 import qualified Options.Applicative                as O
 import           Text.Printf                        ( printf )
 
 import qualified Data.ElfEdit                       as E
--- import qualified Dismantle.PPC                      as PPC
 import           Data.Parameterized.Classes         ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map             as MapF
 import qualified Data.Parameterized.Nonce           as N
@@ -113,11 +115,10 @@ instantiateFormula' :: (Architecture arch)
 instantiateFormula' sym m rewriters (DPPC.Instruction op params) =
   case MapF.lookup op m of
     Just pf -> do
-      let rs = [ (s, exprInterp r)
-               | (s,r) <- rewriters
-               ]
-          k = FE.evaluateFunctions sym pf params rs
-      snd <$> F.instantiateFormula sym pf params
+      let rewrite = FE.evaluateFunctions sym pf params (fmap exprInterp <$> rewriters)
+      f@F.Formula{..} <- snd <$> F.instantiateFormula sym pf params
+      defs <- traverseF rewrite formDefs
+      pure f { F.formDefs = defs }
     Nothing -> fail (printf "Couldn't find semantics for opcode \"%s\"" (showF op))
 
 loadProgramBytes :: FilePath -> IO (E.Elf 32, E.ElfSection Word32)
@@ -170,7 +171,7 @@ rewriteElfText textSection elf newInsns =
       | otherwise = pure (Just sect)
 
 printProgram :: [DPPC.Instruction] -> String
-printProgram insns = unlines (map (("  " ++) . show . DPPC.ppInstruction) insns)
+printProgram insns = unlines (Prelude.map (("  " ++) . show . DPPC.ppInstruction) insns)
 
 main :: IO ()
 main = do
