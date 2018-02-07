@@ -45,9 +45,9 @@ defineStores = do
     input memory
     let rN = imm12Reg imm12
         imm12arg = [Some $ Loc imm12]
-        imm = imm12Imm imm12arg
+        off = zext $ imm12Off imm12arg
         add = imm12Add imm12arg
-        addr = ite add (bvadd (Loc rN) imm) (bvsub (Loc rN) imm)
+        addr = ite add (bvadd (Loc rN) off) (bvsub (Loc rN) off)
         nBytes = 4
         sameRegs = sameLocation rT rN
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))

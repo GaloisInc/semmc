@@ -28,7 +28,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , bvset, bvclr, tstBit
     , bvror
     -- * Opcode unpacking
-    , imm12Reg, imm12Imm, imm12Add
+    , imm12Reg, imm12Off, imm12Add
     , modImm_imm, modImm_rot
     , blxtgt_S, blxtgt_imm10H, blxtgt_imm10L, blxtgt_J1, blxtgt_J2
       -- * Miscellaneous common functionality
@@ -457,9 +457,9 @@ bvror bv n =
 imm12Reg :: Location 'TMemRef -> Location 'TBV
 imm12Reg = locUF naturalBV "a32.imm12_reg"
 
--- | Returns the immediate value in the addrmode_imm12_[pre]
-imm12Imm :: [Some Expr] -> Expr 'TBV
-imm12Imm = uf naturalBV "a32.imm12_imm"
+-- | Returns the immediate offset value in the addrmode_imm12_[pre]
+imm12Off :: [Some Expr] -> Expr 'TBV
+imm12Off = uf (EBV 16) "a32.imm12_off"
 
 -- | Returns the addition flag in the addrmode_imm12_[pre]
 imm12Add :: [Some Expr] -> Expr 'TBool

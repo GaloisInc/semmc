@@ -40,9 +40,9 @@ uninterpretedFunctions _ =
   , ("a32.imm12_reg", -- reference to register by register number from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
-  , ("a32.imm12_imm", -- reference to immediate value from an addrmode_imm12_pre operand
+  , ("a32.imm12_off", -- reference to immediate offset value from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
   , ("a32.imm12_add", -- reference to U flag bit from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
