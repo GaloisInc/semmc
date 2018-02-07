@@ -5,6 +5,7 @@ cabal.project
 dist-newstyle
 *.hi
 *.o
+*.dump-splices
 *.nix
 .*.swp
 dist
