@@ -39,6 +39,23 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+  defineA32Opcode "ADDrr" (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "rM" gpr naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          ) $ \rD setcc _ rM rN -> do
+    comment "ADD register, A32, Encoding A1  (F7.1.7, F7-2546)"
+    input rM
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        (result, nzcv) = addWithCarry (Loc rN) (Loc rM) (LitBV 32 0)
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
   defineA32Opcode "SUBri" (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -54,6 +71,23 @@ manualArithmetic = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm32 = armExpandImm imm12
         (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+  defineA32Opcode "SUBrr" (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "rM" gpr naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          ) $ \rD setcc _ rM rN -> do
+    comment "ADD register, A32, Encoding A1  (F7.1.7, F7-2546)"
+    input rM
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        (result, nzcv) = addWithCarry (Loc rN) (bvnot (Loc rM)) (LitBV 32 1)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
