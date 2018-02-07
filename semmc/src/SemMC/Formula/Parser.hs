@@ -17,8 +17,7 @@
 
 -- | A parser for an s-expression representation of formulas
 module SemMC.Formula.Parser
-  ( Atom(..)
-  , operandVarPrefix
+  ( operandVarPrefix
   , literalVarPrefix
   , readFormula
   , readFormulaFromFile
@@ -30,13 +29,9 @@ import qualified Control.Monad.Reader as MR
 import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
 import qualified Data.Map as Map
-import qualified Data.SCargot as SC
-import qualified Data.SCargot.Comments as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import qualified Text.Parsec as P
-import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
@@ -59,54 +54,11 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Env ( FormulaEnv(..), SomeSome(..) )
 import           SemMC.Formula.Formula
+import           SemMC.Formula.SETokens
 import qualified SemMC.Util as U
 
--- * First pass of parsing: turning the raw text into s-expressions
-
-data Atom = AIdent String
-          | AQuoted String
-          | AString String
-          | AInt Integer
-          | ABV Int Integer
-          deriving (Show)
-
-parseIdent :: Parser String
-parseIdent = (:) <$> first <*> P.many rest
-  where first = P.letter P.<|> P.oneOf "+-=<>_"
-        rest = P.letter P.<|> P.digit P.<|> P.oneOf "+-=<>_"
-
-parseString :: Parser String
-parseString = do
-  _ <- P.char '"'
-  s <- P.many (P.noneOf ['"'])
-  _ <- P.char '"'
-  return s
-
-parseBV :: Parser (Int, Integer)
-parseBV = P.char '#' >> ((P.char 'b' >> parseBin) P.<|> (P.char 'x' >> parseHex))
-  where parseBin = P.oneOf "10" >>= \d -> parseBin' (1, if d == '1' then 1 else 0)
-
-        parseBin' :: (Int, Integer) -> Parser (Int, Integer)
-        parseBin' (bits, x) = do
-          P.optionMaybe (P.oneOf "10") >>= \case
-            Just d -> parseBin' (bits + 1, x * 2 + (if d == '1' then 1 else 0))
-            Nothing -> return (bits, x)
-
-        parseHex = (\s -> (length s * 4, read ("0x" ++ s))) <$> P.many1 P.hexDigit
-
-parseAtom :: Parser Atom
-parseAtom
-  =   AIdent      <$> parseIdent
-  P.<|> AQuoted     <$> (P.char '\'' >> parseIdent)
-  P.<|> AString     <$> parseString
-  P.<|> AInt . read <$> P.many1 P.digit
-  P.<|> uncurry ABV <$> parseBV
-
-parserLL :: SC.SExprParser Atom (SC.SExpr Atom)
-parserLL = SC.withLispComments (SC.mkParser parseAtom)
-
-parseLL :: T.Text -> Either String (SC.SExpr Atom)
-parseLL = SC.decodeOne parserLL
+-- * First pass of parsing turns the raw text into s-expressions.
+--   This pass is handled by the code in SemMC.Formula.SELang
 
 -- * Second pass of parsing: turning the s-expressions into symbolic expressions
 -- and the overall templated formula
@@ -135,7 +87,7 @@ data OpData (arch :: *) (s :: Symbol) where
 buildOperandList' :: forall arch tps
                    . (A.Architecture arch)
                   => A.ShapeRepr arch tps
-                  -> SC.SExpr Atom
+                  -> SC.SExpr FAtom
                   -> Either String (SL.List (OpData arch) tps)
 buildOperandList' rep atm =
   case rep of
@@ -173,7 +125,7 @@ literalVarPrefix :: String
 literalVarPrefix = "lit_"
 
 -- | Parses the name of a parameter and whether it's an operand or a literal.
-readRawParameter :: (E.MonadError String m) => Atom -> m RawParameter
+readRawParameter :: (E.MonadError String m) => FAtom -> m RawParameter
 readRawParameter (AIdent name)
   | Right _ <- userSymbol (operandVarPrefix ++ name) = return (RawOperand name)
   | otherwise = E.throwError $ printf "%s is not a valid parameter name" name
@@ -196,7 +148,7 @@ findOpListIndex x ((OpData name tpRepr) SL.:< rest)
       where incrIndex (IndexWithType tpRepr' idx) = IndexWithType tpRepr' (SL.IndexThere idx)
 
 -- | Parse a single parameter, given the list of operands to use as a lookup.
-readParameter :: (E.MonadError String m, A.Architecture arch) => SL.List (OpData arch) sh -> Atom -> m (Some (Parameter arch sh))
+readParameter :: (E.MonadError String m, A.Architecture arch) => SL.List (OpData arch) sh -> FAtom -> m (Some (Parameter arch sh))
 readParameter oplist atom =
   readRawParameter atom >>= \case
     RawOperand op ->
@@ -212,7 +164,7 @@ readParameter oplist atom =
 readInputs :: (E.MonadError String m,
                A.Architecture arch)
            => SL.List (OpData arch) sh
-           -> SC.SExpr Atom
+           -> SC.SExpr FAtom
            -> m [Some (Parameter arch sh)]
 readInputs _ SC.SNil = return []
 readInputs oplist (SC.SCons (SC.SAtom p) rest) = do
@@ -281,7 +233,7 @@ type ExprParser sym arch sh m = (S.IsSymInterface sym,
                                  E.MonadError String m,
                                  MR.MonadReader (DefsInfo sym arch sh) m,
                                  MonadIO m)
-                              => SC.SExpr Atom
+                              => SC.SExpr FAtom
                               -> [Some (S.SymExpr sym)]
                               -> m (Maybe (Some (S.SymExpr sym)))
 
@@ -669,7 +621,7 @@ readExpr :: (S.IsExprBuilder sym,
              A.Architecture arch,
              MR.MonadReader (DefsInfo sym arch sh) m,
              MonadIO m)
-         => SC.SExpr Atom
+         => SC.SExpr FAtom
          -> m (Some (S.SymExpr sym))
 readExpr SC.SNil = E.throwError "found nil where expected an expression"
 readExpr (SC.SAtom (AInt _)) = E.throwError "found int where expected an expression; perhaps you wanted a bitvector?"
@@ -732,7 +684,7 @@ readExprs :: (S.IsExprBuilder sym,
               A.Architecture arch,
               MR.MonadReader (DefsInfo sym arch sh) m,
               MonadIO m)
-          => SC.SExpr Atom
+          => SC.SExpr FAtom
           -> m [Some (S.SymExpr sym)]
 readExprs SC.SNil = return []
 readExprs (SC.SAtom _) = E.throwError "found atom where expected a list of expressions"
@@ -753,7 +705,7 @@ readDefs :: (S.IsExprBuilder sym,
              A.Architecture arch,
              MR.MonadReader (DefsInfo sym arch sh) m,
              MonadIO m)
-         => SC.SExpr Atom
+         => SC.SExpr FAtom
          -> m (MapF.MapF (Parameter arch sh) (S.SymExpr sym))
 readDefs SC.SNil = return MapF.empty
 readDefs (SC.SCons (SC.SCons (SC.SAtom p) (SC.SCons defRaw SC.SNil)) rest) = do
@@ -783,7 +735,7 @@ readDefs (SC.SCons (SC.SCons (SC.SCons mUF (SC.SCons (SC.SAtom p) SC.SNil)) (SC.
       _ -> E.throwError ("Missing type repr for uninterpreted function " ++ show funcName)
 readDefs _ = E.throwError "invalid defs structure"
 
-matchUF :: SC.SExpr Atom -> Maybe String
+matchUF :: SC.SExpr FAtom -> Maybe String
 matchUF se =
   case se of
     SC.SCons (SC.SAtom (AIdent "_"))

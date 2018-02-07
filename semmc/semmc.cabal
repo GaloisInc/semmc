@@ -36,6 +36,7 @@ library
                        SemMC.Formula.Load
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
+                       SemMC.Formula.SETokens
                        SemMC.Log
                        SemMC.Log.Tests
                        SemMC.Stochastic.CandidateProgram

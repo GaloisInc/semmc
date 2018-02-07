@@ -16,7 +16,6 @@ module SemMC.Formula.Printer
 
 import qualified Data.Map as Map
 import           Data.Maybe ( fromJust )
-import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
@@ -28,9 +27,7 @@ import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import           Text.Printf ( printf )
 
-import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 
 import           Lang.Crucible.BaseTypes
@@ -41,7 +38,9 @@ import qualified Lang.Crucible.Solver.Symbol as S
 import qualified SemMC.Architecture as A
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Formula
-import           SemMC.Formula.Parser ( Atom(..) )
+import           SemMC.Formula.SETokens ( FAtom(..), printTokens
+                                        , fromFoldable, fromFoldable'
+                                        , ident, quoted, int )
 
 -- This file is organized top-down, i.e., from high-level to low-level.
 
@@ -51,27 +50,17 @@ printParameterizedFormula :: (A.Architecture arch)
                           -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
                           -> T.Text
 printParameterizedFormula rep =
-  SC.encodeOne (SC.basicPrint printAtom) . sexprConvertParameterized rep
+  printTokens mempty . sexprConvertParameterized rep
 
 printFormula :: (ShowF (A.Location arch))
              => Formula (S.SimpleBuilder t st) arch
              -> T.Text
-printFormula = SC.encodeOne (SC.basicPrint printAtom) . sexprConvert
-
-printAtom :: Atom -> T.Text
-printAtom (AIdent s) = T.pack s
-printAtom (AQuoted s) = T.pack ('\'' : s)
-printAtom (AString s) = "\"" <> T.pack s <> "\""
-printAtom (AInt i) = T.pack (show i)
-printAtom (ABV sz val) = T.pack (prefix ++ printf fmt val)
-  where (prefix, fmt)
-          | sz `rem` 4 == 0 = ("#x", "%0" ++ show (sz `div` 4) ++ "x")
-          | otherwise = ("#b", "%0" ++ show sz ++ "b")
+printFormula = printTokens mempty . sexprConvert
 
 sexprConvert :: forall t st arch
               . (ShowF (A.Location arch))
              => Formula (S.SimpleBuilder t st) arch
-             -> SC.SExpr Atom
+             -> SC.SExpr FAtom
 sexprConvert f =
   fromFoldable' (ident "defs" : map (convertSimpleDef (Proxy @arch) (formParamVars f)) (MapF.toList (formDefs f)))
 
@@ -80,19 +69,19 @@ convertSimpleDef :: forall arch proxy t
                  => proxy arch
                  -> MapF.MapF (A.Location arch) (S.SimpleBoundVar t)
                  -> MapF.Pair (A.Location arch) (S.Elt t)
-                 -> SC.SExpr Atom
+                 -> SC.SExpr FAtom
 convertSimpleDef _ paramVars (MapF.Pair loc elt) =
   SC.SCons (convertLocation loc) (convertElt paramLookup elt)
   where
     tbl = Map.fromList [ (Some bv, convertLocation l) | MapF.Pair l bv <- MapF.toList paramVars ]
-    paramLookup :: forall tp . S.SimpleBoundVar t tp -> Maybe (SC.SExpr Atom)
+    paramLookup :: forall tp . S.SimpleBoundVar t tp -> Maybe (SC.SExpr FAtom)
     paramLookup bv = Map.lookup (Some bv) tbl
 
 -- | Intermediate serialization.
 sexprConvertParameterized :: (A.Architecture arch)
                           => A.ShapeRepr arch sh
                           -> ParameterizedFormula (S.SimpleBuilder t st) arch sh
-                          -> SC.SExpr Atom
+                          -> SC.SExpr FAtom
 sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
                                        , pfOperandVars = opVars
                                        , pfLiteralVars = litVars
@@ -106,13 +95,13 @@ sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
 convertUses :: (ShowF (A.Location arch))
             => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
             -> Set.Set (Some (Parameter arch sh))
-            -> SC.SExpr Atom
+            -> SC.SExpr FAtom
 convertUses oplist = fromFoldable (viewSome (convertParameter oplist))
 
 convertParameter :: (ShowF (A.Location arch))
                  => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
                  -> Parameter arch sh tp
-                 -> SC.SExpr Atom
+                 -> SC.SExpr FAtom
 convertParameter opVars (OperandParameter _ idx) = ident name
   where name = varName (opVars SL.!! idx)
 convertParameter _ (LiteralParameter loc) = quoted (showF loc)
@@ -127,14 +116,14 @@ convertParameter opVars (FunctionParameter fnName (WrappedOperand orep oix) _) =
 
 -- | Used for substituting in the result expression when a variable is
 -- encountered in a definition.
-type ParamLookup t = forall tp. S.SimpleBoundVar t tp -> Maybe (SC.SExpr Atom)
+type ParamLookup t = forall tp. S.SimpleBoundVar t tp -> Maybe (SC.SExpr FAtom)
 
 convertDefs :: forall t st arch sh.
                (ShowF (A.Location arch))
             => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
             -> MapF.MapF (A.Location arch) (S.SimpleBoundVar t)
             -> MapF.MapF (Parameter arch sh) (S.Elt t)
-            -> SC.SExpr Atom
+            -> SC.SExpr FAtom
 convertDefs opVars locVars = fromFoldable (convertDef opVars paramLookup) . MapF.toList
   where paramLookup :: ParamLookup t
         paramLookup = flip Map.lookup paramMapping . Some
@@ -142,12 +131,12 @@ convertDefs opVars locVars = fromFoldable (convertDef opVars paramLookup) . MapF
         insertLoc loc var = Map.insert (Some var) (convertLocation loc)
         opMapping = buildOpMapping opVars
 
-convertLocation :: (ShowF loc) => loc tp -> SC.SExpr Atom
+convertLocation :: (ShowF loc) => loc tp -> SC.SExpr FAtom
 convertLocation = SC.SAtom . AQuoted . showF
 
 -- | For use in the parameter lookup function.
 buildOpMapping :: SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
-               -> Map.Map (Some (S.SimpleBoundVar t)) (SC.SExpr Atom)
+               -> Map.Map (Some (S.SimpleBoundVar t)) (SC.SExpr FAtom)
 buildOpMapping SL.Nil = Map.empty
 buildOpMapping (var SL.:< rest) =
   Map.insert (Some (BV.unBoundVar var)) (ident name) $ buildOpMapping rest
@@ -157,7 +146,7 @@ convertDef :: (ShowF (A.Location arch))
            => SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
            -> ParamLookup t
            -> Pair (Parameter arch sh) (S.Elt t)
-           -> SC.SExpr Atom
+           -> SC.SExpr FAtom
 convertDef opVars paramLookup (Pair param expr) =
   SC.SCons (convertParameter opVars param) (SC.SCons (convertElt paramLookup expr) SC.SNil)
 
@@ -166,7 +155,7 @@ convertDef opVars paramLookup (Pair param expr) =
 -- implement that. However, I'm skipping it for now, since I imagine this won't
 -- be a bottleneck.
 
-convertElt :: ParamLookup t -> S.Elt t tp -> SC.SExpr Atom
+convertElt :: ParamLookup t -> S.Elt t tp -> SC.SExpr FAtom
 convertElt _ (S.SemiRingLiteral S.SemiRingNat _ _) = error "NatElt not supported"
 convertElt _ (S.SemiRingLiteral S.SemiRingInt _ _) = error "IntElt not supported"
 convertElt _ (S.SemiRingLiteral S.SemiRingReal _ _) = error "RatElt not supported"
@@ -182,7 +171,7 @@ convertElt paramLookup (S.NonceAppElt nae) =
     S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppElt not supported"
 convertElt paramLookup (S.BoundVarElt var) = fromJust $ paramLookup var
 
-convertFnApp :: ParamLookup t -> S.SimpleSymFn t args ret -> Ctx.Assignment (S.Elt t) args -> SC.SExpr Atom
+convertFnApp :: ParamLookup t -> S.SimpleSymFn t args ret -> Ctx.Assignment (S.Elt t) args -> SC.SExpr FAtom
 convertFnApp paramLookup fn args
   | S.solverSymbolAsText (S.symFnName fn) == "undefined"
   , BaseBVRepr nr <- S.fnReturnType fn =
@@ -192,15 +181,15 @@ convertFnApp paramLookup fn args
     let call = fromFoldable' [ ident "_", ident "call", quoted (T.unpack (S.solverSymbolAsText (S.symFnName fn))) ]
     in fromFoldable' (call : FC.toListFC (convertElt paramLookup) args)
 
-convertAppElt :: ParamLookup t -> S.AppElt t tp -> SC.SExpr Atom
+convertAppElt :: ParamLookup t -> S.AppElt t tp -> SC.SExpr FAtom
 convertAppElt paramLookup = convertApp paramLookup . S.appEltApp
 
-convertApp :: forall t tp. ParamLookup t -> S.App (S.Elt t) tp -> SC.SExpr Atom
+convertApp :: forall t tp. ParamLookup t -> S.App (S.Elt t) tp -> SC.SExpr FAtom
 convertApp paramLookup = fromFoldable' . convertApp'
-  where convert :: forall tp'. S.Elt t tp' -> SC.SExpr Atom
+  where convert :: forall tp'. S.Elt t tp' -> SC.SExpr FAtom
         convert = convertElt paramLookup
 
-        convertApp' :: S.App (S.Elt t) tp -> [SC.SExpr Atom]
+        convertApp' :: S.App (S.Elt t) tp -> [SC.SExpr FAtom]
         convertApp' S.TrueBool = [ident "true"]
         convertApp' S.FalseBool = [ident "false"]
         convertApp' (S.NotBool b) = [ident "not", convert b]
@@ -236,11 +225,11 @@ convertApp paramLookup = fromFoldable' . convertApp'
         convertApp' (S.BVBitXor _ bv1 bv2) = [ident "bvxor", convert bv1, convert bv2]
         convertApp' app = error $ "unhandled App: " ++ show app
 
-        extract :: forall tp'. Integer -> Integer -> S.Elt t tp' -> [SC.SExpr Atom]
+        extract :: forall tp'. Integer -> Integer -> S.Elt t tp' -> [SC.SExpr FAtom]
         extract i j bv = [fromFoldable' [ident "_", ident "extract", int i, int j],
                           convert bv]
 
-        extend :: forall w. String -> Integer -> S.Elt t (BaseBVType w) -> [SC.SExpr Atom]
+        extend :: forall w. String -> Integer -> S.Elt t (BaseBVType w) -> [SC.SExpr FAtom]
         extend op r bv = [fromFoldable' [ident "_", ident (op ++ "_extend"), int extension],
                           convert bv]
           where extension = r - w
@@ -250,32 +239,12 @@ convertApp paramLookup = fromFoldable' . convertApp'
 varName :: BV.BoundVar (S.SimpleBuilder t st) arch op -> String
 varName (BV.BoundVar var) = show (S.bvarName var)
 
--- | Turn any 'Foldable' into an s-expression by transforming each element with
--- the given function, then assembling as you would expect.
-fromFoldable :: (Foldable f) => (a -> SC.SExpr atom) -> f a -> SC.SExpr atom
-fromFoldable f = foldr (SC.SCons . f) SC.SNil
-
--- | @fromFoldable id@
-fromFoldable' :: (Foldable f) => f (SC.SExpr atom) -> SC.SExpr atom
-fromFoldable' = fromFoldable id
-
--- | Lift an unquoted identifier.
-ident :: String -> SC.SExpr Atom
-ident = SC.SAtom . AIdent
-
--- | Lift a quoted identifier.
-quoted :: String -> SC.SExpr Atom
-quoted = SC.SAtom . AQuoted
-
--- | Lift an integer.
-int :: Integer -> SC.SExpr Atom
-int = SC.SAtom . AInt
 
 convertOperandVars :: forall arch sh t st
                     . (A.Architecture arch)
                    => A.ShapeRepr arch sh
                    -> SL.List (BV.BoundVar (S.SimpleBuilder t st) arch) sh
-                   -> SC.SExpr Atom
+                   -> SC.SExpr FAtom
 convertOperandVars rep l =
   case (rep, l) of
     (SL.Nil, SL.Nil) -> SC.SNil

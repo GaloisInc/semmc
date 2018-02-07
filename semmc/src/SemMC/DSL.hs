@@ -84,8 +84,6 @@ import           Prelude hiding ( concat )
 
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
-import           Data.Monoid
-import qualified Data.SCargot as SC
 import qualified Data.SCargot.Repr as SC
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
@@ -94,9 +92,8 @@ import           Text.Printf ( printf )
 import           Data.Parameterized.Some ( Some(..) )
 
 import           SemMC.DSL.Internal
-
-
-
+import           SemMC.Formula.SETokens ( FAtom(..), fromFoldable', printTokens
+                                        , ident, int, quoted, string )
 
 
 locationType :: Location tp -> ExprType tp
@@ -441,7 +438,7 @@ ite b t e =
     t1 = exprType t
     t2 = exprType e
     tc = exprType b
-    e2txt = SC.encodeOne (SC.basicPrint printAtom) . convertExpr . Some
+    e2txt = printTokens mempty . convertExpr . Some
 
 -- | Bitwise not (complement)
 bvnot :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
@@ -597,60 +594,6 @@ convertInputs = fromFoldable' . map locToExpr
   where
     locToExpr (Some l) = convertLoc l
 
--- | Turn any 'Foldable' into an s-expression by transforming each element with
--- the given function, then assembling as you would expect.
-fromFoldable :: (F.Foldable f) => (a -> SC.SExpr atom) -> f a -> SC.SExpr atom
-fromFoldable f = F.foldr (SC.SCons . f) SC.SNil
-
--- | @fromFoldable id@
-fromFoldable' :: (F.Foldable f) => f (SC.SExpr atom) -> SC.SExpr atom
-fromFoldable' = fromFoldable id
-
-string :: String -> SC.SExpr FAtom
-string = SC.SAtom . AString
-
--- | Lift an unquoted identifier.
-ident :: String -> SC.SExpr FAtom
-ident = SC.SAtom . AIdent
-
--- | Lift a quoted identifier.
-quoted :: String -> SC.SExpr FAtom
-quoted = SC.SAtom . AQuoted
-
--- | Lift an integer.
-int :: Integer -> SC.SExpr FAtom
-int = SC.SAtom . AInt
-
-data FAtom = AIdent String
-           | AQuoted String
-           | AString String
-           | AInt Integer
-           | ABV Int Integer
-           deriving (Show)
 
 printDefinition :: Definition -> T.Text
-printDefinition (Definition mc sexpr) =
---  formatComment mc <> SC.encodeOne (SC.setIndentAmount 1 $ SC.basicPrint printAtom) sexpr
-  formatComment mc <> SC.encodeOne (SC.removeMaxWidth $ SC.basicPrint printAtom) sexpr
-formatComment :: Seq.Seq String -> T.Text
-formatComment c
-  | Seq.null c = T.empty
-  | otherwise = T.pack $ unlines $ fmap formatLine (F.toList c)
-  where
-    formatLine l = printf ";; %s" l
-
-printAtom :: FAtom -> T.Text
-printAtom a =
-  case a of
-    AIdent s -> T.pack s
-    AQuoted s -> T.pack ('\'' : s)
-    AString s -> T.pack (show s)
-    AInt i -> T.pack (show i)
-    ABV w val -> formatBV w val
-
-formatBV :: Int -> Integer -> T.Text
-formatBV w val = T.pack (prefix ++ printf fmt val)
-  where
-    (prefix, fmt)
-      | w `rem` 4 == 0 = ("#x", "%0" ++ show (w `div` 4) ++ "x")
-      | otherwise = ("#b", "%0" ++ show w ++ "b")
+printDefinition (Definition mc sexpr) = printTokens mc sexpr
