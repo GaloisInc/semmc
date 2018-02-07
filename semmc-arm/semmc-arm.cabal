@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC.ARM
                      , SemMC.Architecture.ARM.BaseSemantics
+                     , SemMC.Architecture.ARM.Eval
                      , SemMC.Architecture.ARM.Location
                      , SemMC.Architecture.ARM.Opcodes
   other-modules:       SemMC.Architecture.ARM.BaseSemantics.Arithmetic
@@ -29,7 +30,6 @@ library
                      , SemMC.Architecture.ARM.BaseSemantics.OperandClasses
                      , SemMC.Architecture.ARM.BaseSemantics.Registers
                      , SemMC.Architecture.ARM.Components
-                     , SemMC.Architecture.ARM.Eval
                      , SemMC.Architecture.ARM.Opcodes.InternalA32
                      , SemMC.Architecture.ARM.Opcodes.InternalT32
                      , SemMC.Architecture.ARM.UF
