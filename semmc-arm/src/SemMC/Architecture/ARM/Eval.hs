@@ -88,6 +88,10 @@ interpModimmImmExtractor = fromInteger . toInteger . ARMOperands.modImmOrigImmed
 interpModimmRotExtractor :: ARMOperands.ModImm -> W.W 4
 interpModimmRotExtractor = fromInteger . toInteger . ARMOperands.modImmOrigRotate
 
+
+-- | Determination of whether this register reference is for R15
+-- (which is often, but not always, the PC).
+
 class InterpIsR15 a where
   interpIsR15 :: a -> Bool
 
