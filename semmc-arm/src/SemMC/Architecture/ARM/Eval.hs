@@ -68,8 +68,9 @@ interpImm12Reg operands (F.WrappedOperand _orep ix) rep =
           | otherwise -> error ("Invalid return type for location function 'imm12_reg' at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
-interpImm12RegExtractor :: ARMOperands.AddrModeImm12 -> ARMOperands.GPR
-interpImm12RegExtractor = ARMOperands.addrModeImm12Register
+-- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
+interpImm12RegExtractor :: ARMOperands.AddrModeImm12 -> Maybe ARMOperands.GPR
+interpImm12RegExtractor = Just . ARMOperands.addrModeImm12Register
 
 interpImm12OffsetExtractor :: ARMOperands.AddrModeImm12 -> Int16
 interpImm12OffsetExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12Immediate
