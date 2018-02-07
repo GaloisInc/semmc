@@ -75,8 +75,8 @@ interpImm12RegExtractor = Just . ARMOperands.addrModeImm12Register
 interpImm12OffsetExtractor :: ARMOperands.AddrModeImm12 -> Int16
 interpImm12OffsetExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12Immediate
 
-interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Int8
-interpImm12AddFlgExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12Add
+interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Bool
+interpImm12AddFlgExtractor = (== 1) . ARMOperands.addrModeImm12Add
 
 
 -- | Extract values from the Mod_imm operand
