@@ -85,6 +85,30 @@ manualBitwise = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+  defineA32Opcode "ORRri" (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          )
+                $ \rD setcc _ imm12 rN -> do
+    comment "ORR immediate, Encoding A1  (F7.1.127, F7-2738)"
+    input rN
+    input setcc
+    input imm12
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        (_, _, c, v) = getNZCV
+        (imm32, c') = armExpandImmC imm12 c
+        result = bvor (Loc rN) imm32
+        n' = extract 31 31 result
+        z' = ite (bveq result (LitBV 32 0b0)) (LitBV 1 0b1) (LitBV 1 0b0)
+        v' = v
+        nzcv = concat n' $ concat z' $ concat c' v'
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
 -- ----------------------------------------------------------------------
 
 
