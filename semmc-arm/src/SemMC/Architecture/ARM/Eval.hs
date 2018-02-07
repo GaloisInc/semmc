@@ -1,5 +1,6 @@
 -- | Evaluators for location functions in formula definitions (e.g., memri_reg)
 
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -22,6 +23,7 @@ module SemMC.Architecture.ARM.Eval
 import           Data.Int ( Int16, Int8 )
 import qualified Data.Parameterized.List as PL
 import           Data.Word
+import qualified Data.Word.Indexed as W
 import qualified Dismantle.ARM as ARM
 import qualified Dismantle.ARM.Operands as ARMOperands
 import           Lang.Crucible.BaseTypes
@@ -83,7 +85,7 @@ interpImm12AddFlgExtractor = (== 1) . ARMOperands.addrModeImm12Add
 interpModimmImmExtractor :: ARMOperands.ModImm -> Int8
 interpModimmImmExtractor = fromInteger . toInteger . ARMOperands.modImmOrigImmediate
 
-interpModimmRotExtractor :: ARMOperands.ModImm -> Int8
+interpModimmRotExtractor :: ARMOperands.ModImm -> W.W 4
 interpModimmRotExtractor = fromInteger . toInteger . ARMOperands.modImmOrigRotate
 
 class InterpIsR15 a where
