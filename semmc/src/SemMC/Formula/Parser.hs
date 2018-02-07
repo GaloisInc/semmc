@@ -332,9 +332,9 @@ bvUnop       _ = Nothing
 
 -- | Parse an expression of the form @(f x)@, where @f@ operates on bitvectors.
 readBVUnop :: forall sym arch sh m. ExprParser sym arch sh m
-readBVUnop (SC.SAtom (AIdent ident)) args
-  | Just (BVUnop op :: BVUnop sym) <- bvUnop ident =
-      prefixError (printf "in reading %s expression: " ident) $ do
+readBVUnop (SC.SAtom (AIdent idnt)) args
+  | Just (BVUnop op :: BVUnop sym) <- bvUnop idnt =
+      prefixError (printf "in reading %s expression: " idnt) $ do
         when (length args /= 1) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
         sym <- MR.reader getSym
         Some expr <- return $ args !! 0
@@ -406,9 +406,9 @@ boolUnop s =
 -- | Parse an expression of the form @(f x y)@, where @f@ is a binary operation
 -- on bitvectors.
 readBVBinop :: forall sym arch sh m. ExprParser sym arch sh m
-readBVBinop (SC.SAtom (AIdent ident)) args
-  | Just (op :: BVBinop sym) <- bvBinop ident =
-      prefixError (printf "in reading %s expression: " ident) $ do
+readBVBinop (SC.SAtom (AIdent idnt)) args
+  | Just (op :: BVBinop sym) <- bvBinop idnt =
+      prefixError (printf "in reading %s expression: " idnt) $ do
         when (length args /= 2) (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
         sym <- MR.reader getSym
         Some arg1 <- return $ args !! 0
@@ -423,15 +423,15 @@ readBVBinop (SC.SAtom (AIdent ident)) args
           Nothing -> E.throwError $ printf "arguments to %s must be the same length, \
                                          \but arg 1 has length %s \
                                          \and arg 2 has length %s"
-                                         ident
+                                         idnt
                                          (show m)
                                          (show n)
 readBVBinop _ _ = return Nothing
 
 readBoolBinop :: forall sym arch sh m . ExprParser sym arch sh m
-readBoolBinop (SC.SAtom (AIdent ident)) args
-  | Just (op :: BoolBinop sym) <- boolBinop ident =
-      prefixError (printf "in reading %s expression: " ident) $ do
+readBoolBinop (SC.SAtom (AIdent idnt)) args
+  | Just (op :: BoolBinop sym) <- boolBinop idnt =
+      prefixError (printf "in reading %s expression: " idnt) $ do
         when (length args /= 2) (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
         sym <- MR.reader getSym
         Some arg1 <- return (args !! 0)
@@ -443,9 +443,9 @@ readBoolBinop (SC.SAtom (AIdent ident)) args
 readBoolBinop _ _ = return Nothing
 
 readBoolUnop :: forall sym arch sh m . ExprParser sym arch sh m
-readBoolUnop (SC.SAtom (AIdent ident)) args
-  | Just (op :: BoolUnop sym) <- boolUnop ident =
-      prefixError (printf "in reading %s expression: " ident) $ do
+readBoolUnop (SC.SAtom (AIdent idnt)) args
+  | Just (op :: BoolUnop sym) <- boolUnop idnt =
+      prefixError (printf "in reading %s expression: " idnt) $ do
         when (length args /= 1) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
         sym <- MR.reader getSym
         Some arg1 <- return (args !! 0)
