@@ -22,6 +22,7 @@ module SemMC.Formula.Eval (
   ) where
 
 import qualified Data.Parameterized.Context         as Ctx
+import           Control.Arrow                      (first)
 import qualified Data.Parameterized.List            as SL
 import qualified Data.Text                          as T
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
@@ -54,10 +55,10 @@ evaluateFunctions sym pf operands rewriters e =
     S.SemiRingLiteral {} -> return e
     S.BVElt {} -> return e
     S.BoundVarElt {} -> return e
-    S.AppElt app ->
+    S.AppElt a ->
       S.traverseApp
         (evaluateFunctions sym pf operands rewriters)
-          (S.appEltApp app) >>= S.sbMakeElt sym
+          (S.appEltApp a) >>= S.sbMakeElt sym
     S.NonceAppElt nonceApp -> do
       case S.nonceEltApp nonceApp of
         S.Forall{} -> error "evaluateFunctions: Forall Not implemented"
@@ -70,8 +71,15 @@ evaluateFunctions sym pf operands rewriters e =
           error "evaluateFunctions: ArrayTrueOnEntries Not implemented"
         S.FnApp symFun assignment -> do
           let key = T.unpack $ S.solverSymbolAsText (S.symFnName symFun)
-          assignment' <- traverseFC (evaluateFunctions sym pf operands rewriters) assignment
+              rs = first replace <$> rewriters
+          assignment' <- traverseFC (evaluateFunctions sym pf operands rs) assignment
           case lookup key rewriters of
             Just (Evaluator evaluator) ->
               evaluator sym pf operands assignment' (S.exprType e)
-            Nothing -> S.sbNonceElt sym (S.FnApp symFun assignment')
+            Nothing ->
+              S.sbNonceElt sym (S.FnApp symFun assignment')
+
+  where
+    replace ks = xs ++ "_" ++ ys
+      where
+        (xs,_:ys) = splitAt 3 ks

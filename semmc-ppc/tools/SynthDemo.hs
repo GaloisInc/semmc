@@ -17,7 +17,6 @@ import qualified Data.ByteString.UTF8               as BS8
 import qualified Data.Foldable                      as F
 import qualified Data.Functor.Identity              as I
 import           Data.Monoid
-import           Data.Parameterized.TraversableF
 import           Data.Proxy
 import           Data.Word                          ( Word32 )
 import qualified Options.Applicative                as O
@@ -45,7 +44,6 @@ import           SemMC.Architecture ( Architecture
 import qualified SemMC.Architecture.PPC32.Opcodes   as PPC32
 import qualified SemMC.Architecture.PPC64.Opcodes   as PPC64
 import qualified SemMC.Formula                      as F
-import qualified SemMC.Formula.Eval                 as FE
 import           SemMC.Synthesis.Template           ( BaseSet, TemplatedArch, unTemplate )
 import qualified SemMC.Synthesis                    as SemMC
 import qualified SemMC.Synthesis.Core               as SemMC
@@ -112,13 +110,9 @@ instantiateFormula' :: (Architecture arch)
                     -> [(String, FunctionInterpretation t arch)]
                     -> Instruction arch
                     -> IO (F.Formula (SB.SimpleBuilder t st) arch)
-instantiateFormula' sym m rewriters (DPPC.Instruction op params) =
+instantiateFormula' sym m rewriters (DPPC.Instruction op params) = do
   case MapF.lookup op m of
-    Just pf -> do
-      let rewrite = FE.evaluateFunctions sym pf params (fmap exprInterp <$> rewriters)
-      f@F.Formula{..} <- snd <$> F.instantiateFormula sym pf params
-      defs <- traverseF rewrite formDefs
-      pure f { F.formDefs = defs }
+    Just pf -> snd <$> F.instantiateFormula sym pf params
     Nothing -> fail (printf "Couldn't find semantics for opcode \"%s\"" (showF op))
 
 loadProgramBytes :: FilePath -> IO (E.Elf 32, E.ElfSection Word32)

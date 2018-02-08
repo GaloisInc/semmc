@@ -19,29 +19,30 @@ module SemMC.Formula.Instantiate
   , paramToLocation
   ) where
 
-import           Data.Foldable ( foldlM, foldrM )
-import           Data.IORef ( IORef, readIORef, writeIORef )
-import           Data.Maybe ( fromJust, isNothing )
+import           Data.Foldable                      ( foldlM, foldrM )
+import           Data.IORef                         ( IORef, readIORef, writeIORef )
+import           Data.Maybe                         ( fromJust, isNothing )
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Context         as Ctx
 import           Data.Parameterized.Ctx
-import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Pair ( Pair(..) )
-import qualified Data.Parameterized.List as SL
-import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.List            as SL
+import qualified Data.Parameterized.Map             as MapF
+import           Data.Parameterized.Pair            ( Pair(..) )
+import           Data.Parameterized.Some            ( Some(..) )
 import           Data.Parameterized.TraversableF
-import           Data.Proxy ( Proxy(..) )
-import           GHC.TypeLits ( Symbol )
-import           Text.Printf ( printf )
+import           Data.Proxy                         ( Proxy(..) )
+import           GHC.TypeLits                       ( Symbol )
+import           Text.Printf                        ( printf )
 
 import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Solver.Interface     as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-import qualified SemMC.Architecture as A
-import qualified SemMC.BoundVar as BV
+import qualified SemMC.Architecture                 as A
+import qualified SemMC.BoundVar                     as BV
+import qualified SemMC.Formula.Eval                 as FE
 import           SemMC.Formula.Formula
-import qualified SemMC.Util as U
+import qualified SemMC.Util                         as U
 
 -- I got tired of typing this.
 type SB t st = S.SimpleBuilder t st
@@ -188,11 +189,14 @@ instantiateFormula :: forall arch t st sh.
                    -> IO (SL.List (A.TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
 instantiateFormula
   sym
-  (ParameterizedFormula { pfOperandVars = opVars
-                        , pfLiteralVars = litVars
-                        , pfDefs = defs
-                        })
+  pf@(ParameterizedFormula { pfOperandVars = opVars
+                           , pfLiteralVars = litVars
+                           , pfDefs = defs
+                           })
   opVals = do
+    let rewrite :: forall tp . S.Elt t tp -> IO (S.Elt t tp)
+        rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
+    defs' <- traverseF rewrite defs
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
@@ -214,7 +218,7 @@ instantiateFormula
           litVarsReplaced <- replaceLitVars sym newLitExprLookup litVars opVarsReplaced
           return (definingLoc, litVarsReplaced)
 
-    newDefs <- U.mapFMapBothM instantiateDefn defs
+    newDefs <- U.mapFMapBothM instantiateDefn defs'
     -- 'newLitVars' has variables for /all/ of the machine locations. Here we
     -- extract only the ones that are actually used.
     let newActualLitVars = foldrF (MapF.union . U.extractUsedLocs newLitVars) MapF.empty newDefs

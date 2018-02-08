@@ -518,9 +518,9 @@ isR0 sym pf operands assignment bv =
   case assignment of
     Empty :> S.BoundVarElt b ->
       case Some b `boundVarElemIndex` stripped pf of
-        Nothing -> do
+        Nothing ->
           case MapF.lookup (LocGPR (PPC.GPR 0x0)) (F.pfLiteralVars pf) of
-            Nothing -> error "Index not present in operands list"
+            Nothing -> returnElt S.FalseBool
             Just b' -> returnElt $
               case testEquality b b' of
                 Just Refl -> S.TrueBool
