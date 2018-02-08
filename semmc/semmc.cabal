@@ -70,6 +70,7 @@ library
                        SemMC.Worklist
                        Data.Parameterized.Seq
                        Data.Parameterized.Unfold
+                       Data.Type.List
   other-modules:       SemMC.Architecture.Internal
                        SemMC.DSL.Internal
   -- The tight async bound of @< 2.2@ is due to (great!) recent
