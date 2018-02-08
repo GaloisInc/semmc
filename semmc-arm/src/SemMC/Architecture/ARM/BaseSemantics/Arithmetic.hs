@@ -15,12 +15,11 @@ import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import SemMC.DSL
-
+import qualified Dismantle.ARM as A
 
 manualArithmetic :: SemARM 'Top ()
 manualArithmetic = do
-
-  defineA32Opcode "ADDri" (Empty
+  defineA32Opcode A.ADDri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
@@ -39,7 +38,7 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-  defineA32Opcode "ADDrr" (Empty
+  defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
@@ -56,7 +55,7 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-  defineA32Opcode "SUBri" (Empty
+  defineA32Opcode A.SUBri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
@@ -75,7 +74,7 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-  defineA32Opcode "SUBrr" (Empty
+  defineA32Opcode A.SUBrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
@@ -95,7 +94,7 @@ manualArithmetic = do
 manualBitwise :: SemARM 'Top ()
 manualBitwise = do
 
-  defineA32Opcode "ANDri" (Empty
+  defineA32Opcode A.ANDri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
@@ -119,7 +118,7 @@ manualBitwise = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-  defineA32Opcode "ORRri" (Empty
+  defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)

@@ -1,7 +1,9 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Architecture.ARM.BaseSemantics.Helpers
     ( -- * Opcode definition assistance
       defineA32Opcode
@@ -47,23 +49,41 @@ import Data.Parameterized.Context
 import Data.Parameterized.Some ( Some(..) )
 import Data.Parameterized.TraversableFC
 import Data.Semigroup
+import qualified Data.Type.List as TL
 import GHC.Stack ( HasCallStack )
+import GHC.TypeLits ( Symbol )
 import Prelude hiding ( concat, pred )
+import qualified Dismantle.ARM as A
+import qualified Dismantle.Thumb as T
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 
+-- | We need a data wrapper around the 'SymToExprTag' to work around what is
+-- known as the "saturation requirement" on type families:
+--
+-- https://stackoverflow.com/questions/40758738/why-doesnt-this-code-infringe-the-saturation-requirement-of-type-families
+data SymToExprTagWrapper :: TL.TyFun k1 k2 -> *
+type instance TL.Apply SymToExprTagWrapper x = SymToExprTag x
+type family SymToExprTag (sym :: Symbol) :: ExprTag where
+  SymToExprTag "GPR" = 'TBV
+  SymToExprTag "Mod_imm" = 'TBV
+  SymToExprTag "Pred" = 'TBV
+  SymToExprTag "Cc_out" = 'TBV
+  SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
+  SymToExprTag "Arm_blx_target" = 'TBV
+  SymToExprTag "Thumb_blx_target" = 'TBV
 
 data OpcodeParamDef t = ParamDef String String (ExprType t)
 
-defineA32Opcode :: CurryAssignmentClass args =>
-                   String
+defineA32Opcode :: (CurryAssignmentClass args, TL.SameShape args (TL.Map SymToExprTagWrapper sh))
+                => A.Opcode A.Operand sh
                 -> Assignment OpcodeParamDef args
                 -> CurryAssignment args Location (SemARM 'Def ())
                 -> SemARM 'Top ()
-defineA32Opcode name defargs defbody =
+defineA32Opcode opc defargs defbody =
     if a32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_A32
@@ -88,6 +108,8 @@ defineA32Opcode name defargs defbody =
                                       Nothing -> return ()
                 return p
 
+              name = show opc
+
 defineOp'Core :: CurryAssignmentClass args =>
                  CurryAssignment args Location (SemARM 'Def ())
               -> Assignment Location args
@@ -96,12 +118,12 @@ defineOp'Core defbody deflocs =
     uncurryAssignment defbody deflocs
 
 
-defineT32Opcode :: (HasCallStack, CurryAssignmentClass args) =>
-                   String
+defineT32Opcode :: (HasCallStack, CurryAssignmentClass args, TL.SameShape args (TL.Map SymToExprTagWrapper sh)) =>
+                   T.Opcode T.Operand sh
                 -> Assignment OpcodeParamDef args
                 -> CurryAssignment args Location (SemARM 'Def ())
                 -> SemARM 'Top ()
-defineT32Opcode name defargs defbody =
+defineT32Opcode opc defargs defbody =
     if t32OpcodeNameLooksValid name
     then defineOpcode name $ do
       subarch InstrSet_T32
@@ -129,6 +151,8 @@ defineT32Opcode name defargs defbody =
     else error $ "Opcode " <> name <> " does not look like a valid T32 ARM opcode"
         where param' :: OpcodeParamDef t -> SemARM 'Def (Location t)
               param' (ParamDef pname ty ety) = param pname ty ety
+
+              name = show opc
 
 
 

@@ -10,6 +10,8 @@ module SemMC.Architecture.ARM.BaseSemantics.Branch
 
 import Data.Parameterized.Context
 import Prelude hiding ( concat, pred )
+import qualified Dismantle.ARM as A
+import qualified Dismantle.Thumb as T
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
@@ -35,7 +37,7 @@ t32_branches = do
 
 blx_a32 :: SemARM 'Top ()
 blx_a32 =
-    defineA32Opcode "BLXi" (Empty
+    defineA32Opcode A.BLXi (Empty
                            :> ParamDef "target" arm_blx_target naturalBV
                            )
                         $ \tgt -> do
@@ -51,7 +53,7 @@ blx_a32 =
 
 blx_t32 :: SemARM 'Top ()
 blx_t32 =
-    defineT32Opcode "TBLXi" (Empty
+    defineT32Opcode T.TBLXi (Empty
                             :> ParamDef "target" thumb_blx_target naturalBV
                             )
                         $ \tgt -> do

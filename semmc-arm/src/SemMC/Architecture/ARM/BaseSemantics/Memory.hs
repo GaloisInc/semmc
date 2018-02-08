@@ -12,6 +12,7 @@ import Data.Parameterized.Context
 import Data.Parameterized.Some ( Some(..) )
 import Data.Semigroup
 import Prelude hiding ( concat, pred )
+import qualified Dismantle.ARM as A
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
@@ -31,7 +32,7 @@ defineLoads = do
 
 defineStores :: SemARM 'Top ()
 defineStores = do
-  defineA32Opcode "STR_PRE_IMM" (Empty
+  defineA32Opcode A.STR_PRE_IMM (Empty
                                 :> ParamDef "predBits" pred (EBV 4)
                                 :> ParamDef "imm" addrmode_imm12_pre EMemRef
                                 :> ParamDef "gpr" gpr naturalBV
