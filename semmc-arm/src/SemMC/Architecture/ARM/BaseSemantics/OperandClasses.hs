@@ -8,6 +8,9 @@ module SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 gpr :: String
 gpr = "GPR"
 
+tgpr :: String
+tgpr = "TGPR"
+
 -- ----------------------------------------------------------------------
 -- A32 operand names
 

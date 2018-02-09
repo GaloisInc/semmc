@@ -3,6 +3,8 @@
 module SemMC.Architecture.ARM.BaseSemantics.Registers
     where
 
+import Prelude hiding ( concat )
+
 import SemMC.DSL
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 
@@ -37,3 +39,15 @@ cpsr :: Location 'TBV
 cpsr = LiteralLoc Literal { lName = "CPSR"
                           , lExprType = naturalBV
                           }
+
+itBlockState :: Expr 'TBV
+itBlockState =
+  concat itstate_7_4 (concat itstate_3_2 itstate_1_0)
+  where
+    sr = Loc cpsr
+    itstate_7_4 = extract 15 12 sr
+    itstate_3_2 = extract 11 10 sr
+    itstate_1_0 = extract 26 25 sr
+
+inITBlock :: Expr 'TBool
+inITBlock = bvne (LitBV 8 0x0) itBlockState

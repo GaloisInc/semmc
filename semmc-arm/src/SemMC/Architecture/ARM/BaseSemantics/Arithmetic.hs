@@ -16,8 +16,10 @@ import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 import qualified Dismantle.ARM as A
+import qualified Dismantle.Thumb as T
 
 manualArithmetic :: SemARM 'Top ()
 manualArithmetic = do
@@ -138,6 +140,39 @@ manualBitwise = do
     let shift_n = decodeImmShift (LitBV 2 0b00) imm5
     let shift_t = LitBV 2 0b00
     andrr rD (Loc rM) (Loc rN) setflags imm5 shift_t shift_n
+
+  defineT32Opcode T.TAND ( Empty
+                         :> ParamDef "rD" tgpr naturalBV
+                         :> ParamDef "rM" tgpr naturalBV
+                         )
+                  $ \rD rM -> do
+    comment "AND register, Encoding T1 (F7.1.14, F7-2558)"
+    comment "This encoding has no shift"
+    input rD
+    input rM
+    let setflags = notp inITBlock
+    let imm5 = LitBV 5 0b00000
+    let shift_n = decodeImmShift (LitBV 2 0b00) imm5
+    let shift_t = LitBV 2 0b00
+    andrr rD (Loc rM) (Loc rD) setflags imm5 shift_t shift_n
+  defineT32Opcode T.T2ANDrr (  Empty
+                            :> ParamDef "rD" tgpr naturalBV
+                            :> ParamDef "setcc" cc_out (EBV 1)
+                            :> ParamDef "rN" tgpr naturalBV
+                            :> ParamDef "rM" tgpr naturalBV
+                            )
+                 $ \rD setcc rN rM -> do
+    comment "AND register, Encoding T2 (F7.1.14, F7-2558)"
+    comment "This encoding has no shift"
+    input rD
+    input rN
+    input rM
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    let imm5 = LitBV 5 0b00000
+    let shift_n = decodeImmShift (LitBV 2 0b00) imm5
+    let shift_t = LitBV 2 0b00
+    andrr rD (Loc rN) (Loc rM) setflags imm5 shift_t shift_n
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)

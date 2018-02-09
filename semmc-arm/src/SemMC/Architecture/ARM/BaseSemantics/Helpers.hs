@@ -73,6 +73,8 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
   SymToExprTag "Arm_blx_target" = 'TBV
+  SymToExprTag "RGPR" = 'TBV
+  SymToExprTag "TGPR" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TBV
 
 data OpcodeParamDef t = ParamDef String String (ExprType t)
@@ -152,8 +154,6 @@ defineT32Opcode opc defargs defbody =
               param' (ParamDef pname ty ety) = param pname ty ety
 
               name = show opc
-
-
 
 a32OpcodeNameLooksValid :: String -> Bool
 a32OpcodeNameLooksValid name =
