@@ -23,6 +23,7 @@ module SemMC.DSL (
   signExtend,
   concat,
   ite,
+  cases,
   uf,
   locUF,
   -- * Logical operations
@@ -439,6 +440,14 @@ ite b t e =
     t2 = exprType e
     tc = exprType b
     e2txt = printTokens mempty . convertExpr . Some
+
+-- | Construct a nested chain of ITEs that is equivalent to a case match with a
+-- fallthrough.
+cases :: (HasCallStack) => [(Expr 'TBool, Expr a)] -> Expr a -> Expr a
+cases cs els =
+  case cs of
+    [] -> els
+    (c, thn) : rest -> ite c thn (cases rest els)
 
 -- | Bitwise not (complement)
 bvnot :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
