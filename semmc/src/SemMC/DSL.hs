@@ -433,7 +433,7 @@ ite b t e =
              LitBool True -> t
              LitBool False -> e
              _ | t1 == t2 && tc == EBool -> Builtin t1 "ite" [Some b, Some t, Some e]
-               | otherwise -> error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show t1) (show t2) (show tc))
+               | otherwise -> error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show tc) (show t1) (show t2))
   where
     t1 = exprType t
     t2 = exprType e
