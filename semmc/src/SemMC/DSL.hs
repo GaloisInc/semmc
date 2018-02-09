@@ -472,7 +472,8 @@ binTestBuiltin s e1 e2
     t1 = exprType e1
     t2 = exprType e2
 
--- | Test a dynamically-chosen bit number
+-- | Test a dynamically-chosen bit number (i.e., the bit number to test is an
+-- expr and not an 'Int')
 testBitDynamic :: (HasCallStack)
                => Expr 'TBV -- ^ Bit number to test
                -> Expr 'TBV
