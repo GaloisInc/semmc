@@ -28,7 +28,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , zext, zext'
     , sext, sext'
     , bvset, bvclr, tstBit
-    , bvror
     -- * Opcode unpacking
     , imm12Reg, imm12Off, imm12Add
     , modImm_imm, modImm_rot
@@ -387,6 +386,8 @@ bxWritePC tgtRegIsPC addr =
 -- (see the ARM documentation pseudocode) for the current instruction
 -- so that subsequent defLoc operations can use this to determine if
 -- they are enabled to effect the changes from the Opcode.
+--
+-- This is the predication check.
 testForConditionPassed :: Expr 'TBV -> SemARM 'Def ()
 testForConditionPassed instrPred = do
     -- assumes already: input cpsr
@@ -462,16 +463,6 @@ bvclr bitnums = bvand (naturalLitBV $ toInteger $ complement $ foldl setBit natu
 tstBit :: Int -> Expr 'TBV -> Expr 'TBool
 tstBit n = bveq (LitBV 1 0) . extract n n
 
--- | Rotate the BV (first arg) right by the number of bits specified
--- in the second argument.
-bvror :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-bvror bv n =
-    let m = bvurem n nbits
-        nbits = naturalLitBV naturalBitSize
-        rs = bvlshr bv m
-        ls = bvshl bv (bvsub nbits m)
-    in bvor ls rs
-
 -- ----------------------------------------------------------------------
 -- Opcode unpacking
 
@@ -519,31 +510,6 @@ blxtgt_J2 = uf (EBV 1) "t32.blxtarget_J2" . ((:[]) . Some) . Loc
 
 
 -- ----------------------------------------------------------------------
-
-memriOffset :: Int
-            -- ^ The number of bits of the offset
-            -> Expr 'TMemRef
-            -- ^ The memory ref expression
-            -> Expr 'TBV
-memriOffset osize = uf (EBV osize) "arm.memri_offset" . ((:[]) . Some)
-
-
--- | A wrapper around the two low bit extractors parameterized by bit size (it
--- selects the appropriate extractor based on architecture size)
-lowBits :: Int -> Expr 'TBV -> Expr 'TBV
-lowBits n e
-  | n == 32 = e
-  | otherwise = lowBits32 n e
-
-
-lowBits64 :: Int -> Expr 'TBV -> Expr 'TBV
-lowBits64 n = extract 63 (63 - n + 1)
-
-lowBits32 :: Int -> Expr 'TBV -> Expr 'TBV
-lowBits32 n = extract 31 (31 - n + 1)
-
-lowBits128 :: Int -> Expr 'TBV -> Expr 'TBV
-lowBits128 n = extract 127 (127 - n + 1)
 
 
 -- ----------------------------------------------------------------------
