@@ -36,6 +36,9 @@ mod_imm = "Mod_imm"
 so_reg_reg :: String
 so_reg_reg = "So_reg_reg"
 
+so_reg_imm :: String
+so_reg_imm = "So_reg_imm"
+
 -- ----------------------------------------------------------------------
 -- T32 operand names
 

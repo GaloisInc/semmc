@@ -64,6 +64,16 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
 
+  , ("a32.soregimm_type", -- Extract the two bit shift type
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 2)))
+  , ("a32.soregimm_reg", -- Extract the register being shifted
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+  , ("a32.soregimm_imm", -- Extract the shift amount
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 5)))
+
     -- T32 Operands
 
   , ("t32.blxtarget_S", -- operand ThumbBlxTarget S bit reference

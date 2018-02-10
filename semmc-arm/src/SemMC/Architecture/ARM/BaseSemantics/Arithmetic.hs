@@ -138,6 +138,24 @@ manualBitwise = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
     andrr rD (Loc rM) (Loc rN) setflags shift_t shift_n
+  defineA32Opcode A.ANDrsi (  Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "sori" so_reg_imm naturalBV
+                           :> ParamDef "rN" gpr naturalBV
+                           )
+                 $ \rD setcc _ sori rN -> do
+    comment "AND register, Encoding A1 (F7.1.14, F7-2558)"
+    input sori
+    input setcc
+    input rN
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    let ty = soRegImm_type sori
+    let rM = soRegImm_reg sori
+    let imm = soRegImm_imm sori
+    let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
+    andrr rD (Loc rN) rM setflags shift_t shift_n
   defineA32Opcode A.ANDrsr (  Empty
                            :> ParamDef "rD" gpr naturalBV
                            :> ParamDef "setcc" cc_out (EBV 1)
