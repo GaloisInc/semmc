@@ -33,6 +33,9 @@ cc_out = "Cc_out"
 mod_imm :: String
 mod_imm = "Mod_imm"
 
+so_reg_reg :: String
+so_reg_reg = "So_reg_reg"
+
 -- ----------------------------------------------------------------------
 -- T32 operand names
 

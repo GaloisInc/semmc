@@ -31,6 +31,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     -- * Opcode unpacking
     , imm12Reg, imm12Off, imm12Add
     , modImm_imm, modImm_rot
+    , soRegReg_shift, soRegReg_type, soRegReg_reg
     , blxtgt_S, blxtgt_imm10H, blxtgt_imm10L, blxtgt_J1, blxtgt_J2
       -- * Miscellaneous common functionality
     , unpredictable
@@ -73,6 +74,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
   SymToExprTag "Arm_blx_target" = 'TBV
+  SymToExprTag "So_reg_reg" = 'TBV
   SymToExprTag "RGPR" = 'TBV
   SymToExprTag "TGPR" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TBV
@@ -487,6 +489,18 @@ modImm_imm = uf (EBV 8) "a32.modimm_imm" . ((:[]) . Some) . Loc
 -- | Decoding for ModImm rotation 4 bits (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_rot :: Location 'TBV -> Expr 'TBV
 modImm_rot = uf (EBV 4) "a32.modimm_rot" . ((:[]) . Some) . Loc
+
+-- | Extract the shift type from a so_reg_reg
+soRegReg_type :: Location 'TBV -> Expr 'TBV
+soRegReg_type = uf (EBV 2) "a32.soregreg_type" . ((:[]) . Some) . Loc
+
+-- | Extract the register containing the shift amount from a so_reg_reg
+soRegReg_shift :: Location 'TBV -> Expr 'TBV
+soRegReg_shift = uf naturalBV "a32.soregreg_shift" . ((:[]) . Some) . Loc
+
+-- | Extract the register containing the value to be shifted from a so_reg_reg
+soRegReg_reg :: Location 'TBV -> Expr 'TBV
+soRegReg_reg = uf naturalBV "a32.soregreg_reg" . ((:[]) . Some) . Loc
 
 -- | Decoding for the ThumbBlxTarget type: S bit
 blxtgt_S :: Location 'TBV -> Expr 'TBV

@@ -1,7 +1,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-
+{-# LANGUAGE ViewPatterns #-}
 module SemMC.Architecture.ARM.BaseSemantics.Arithmetic
     ( manualArithmetic
     , manualBitwise
@@ -136,11 +136,26 @@ manualBitwise = do
     input rN
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-    let imm5 = LitBV 5 0b00000
-    let shift_n = decodeImmShift (LitBV 2 0b00) imm5
-    let shift_t = LitBV 2 0b00
-    andrr rD (Loc rM) (Loc rN) setflags imm5 shift_t shift_n
-
+    let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
+    andrr rD (Loc rM) (Loc rN) setflags shift_t shift_n
+  defineA32Opcode A.ANDrsr (  Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "sorr" so_reg_reg naturalBV
+                           :> ParamDef "rN" gpr naturalBV
+                           )
+                 $ \rD setcc _ sorr rN -> do
+    comment "AND (register-shifted register), Encoding A1 (F7.1.15, F7-2560)"
+    input rD
+    input sorr
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    let shift_t = decodeRegShift (soRegReg_type sorr)
+    let shift_n = zext (extract 7 0 (soRegReg_shift sorr))
+    let rM = soRegReg_reg sorr
+    andrsr rD (Loc rN) rM setflags shift_t shift_n
   defineT32Opcode T.TAND ( Empty
                          :> ParamDef "rD" tgpr naturalBV
                          :> ParamDef "rM" tgpr naturalBV
@@ -151,10 +166,8 @@ manualBitwise = do
     input rD
     input rM
     let setflags = notp inITBlock
-    let imm5 = LitBV 5 0b00000
-    let shift_n = decodeImmShift (LitBV 2 0b00) imm5
-    let shift_t = LitBV 2 0b00
-    andrr rD (Loc rM) (Loc rD) setflags imm5 shift_t shift_n
+    let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
+    andrr rD (Loc rM) (Loc rD) setflags shift_t shift_n
   defineT32Opcode T.T2ANDrr (  Empty
                             :> ParamDef "rD" tgpr naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
@@ -169,10 +182,8 @@ manualBitwise = do
     input rM
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-    let imm5 = LitBV 5 0b00000
-    let shift_n = decodeImmShift (LitBV 2 0b00) imm5
-    let shift_t = LitBV 2 0b00
-    andrr rD (Loc rN) (Loc rM) setflags imm5 shift_t shift_n
+    let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
+    andrr rD (Loc rN) (Loc rM) setflags shift_t shift_n
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -199,10 +210,10 @@ manualBitwise = do
 
 -- ----------------------------------------------------------------------
 
-andrr :: (HasCallStack) => Location 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> SemARM 'Def ()
-andrr rD rM rN setflags imm5 shift_t shift_n = do
+andrr :: (HasCallStack) => Location 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
+andrr rD rM rN setflags shift_t shift_n = do
   let (_, _, c, v) = getNZCV
-  let shiftedWithCarry = shiftC rM imm5 shift_t shift_n c
+  let shiftedWithCarry = shiftC rM shift_t shift_n c
   let shifted = extract 31 0 shiftedWithCarry
   let carry = extract 32 32 shiftedWithCarry
   let result = bvand rN shifted
@@ -215,20 +226,40 @@ andrr rD rM rN setflags imm5 shift_t shift_n = do
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+andrsr :: (HasCallStack) => Location 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
+andrsr rD rM rN setflags shift_t shift_n = do
+  let (_, _, c, v) = getNZCV
+  let shiftedWithCarry = shiftC rM shift_t shift_n c
+  let shifted = extract 31 0 shiftedWithCarry
+  let carry = extract 32 32 shiftedWithCarry
+  let result = bvand rN shifted
+  let n' = extract 31 31 result
+  let z' = ite (bveq result (naturalLitBV 0x0)) (LitBV 1 0b1) (LitBV 1 0b0)
+  let c' = carry
+  let v' = v
+  let nzcv = concat n' (concat z' (concat c' v'))
+  let writesOrReadsR15 = anyp  [ isR15 rD ] -- FIXME: We need the rest of these, too
+  defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
+  cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
+
+anyp :: [Expr 'TBool] -> Expr 'TBool
+anyp [] = LitBool False
+anyp (r : rs) = orp r (anyp rs)
+
 -- | Shift with carry out
 --
 -- The version in the manual returns a pair.  That is inconvenient in our
 -- representation (we don't have pairs). Instead, when the input bitvector is N
 -- bits, we return an N+1 bit bitvector where the top bit is the carry out
 -- bit. The caller can dissect it.
-shiftC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-shiftC value imm5 shift_t shift_n c =
+shiftC :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+shiftC value (unSRType -> shift_t) shift_n c =
   cases [ (bveq shift_n (naturalLitBV 0x0), concat c value)
-        , (bveq shift_t (LitBV 2 0b00), lslC value shift_n)
-        , (bveq shift_t (LitBV 2 0b01), lsrC value shift_n)
-        , (bveq shift_t (LitBV 2 0b10), asrC value shift_n)
-        , (bveq imm5 (LitBV 5 0b00000), rrxC value c)
-        ] (rorC value shift_n)
+        , (bveq shift_t (LitBV 3 0b000), lslC value shift_n)
+        , (bveq shift_t (LitBV 3 0b001), lsrC value shift_n)
+        , (bveq shift_t (LitBV 3 0b010), asrC value shift_n)
+        , (bveq shift_t (LitBV 3 0b011), rorC value shift_n)
+        ] (rrxC value c)
 
 -- | Logical Shift Left (with carry out)  AppxG-5008
 --
@@ -365,6 +396,57 @@ addWithCarry x y carry_in =
         v = bvand n (extract naturalBitSize naturalBitSize eres)
     in (res, concat n $ concat z $ concat c v)
 
+-- | A wrapper around expressions representing the shift type
+--
+-- In the ARM manual, this is represented with an ADT, but our formula language
+-- does not have ADTs. Instead, we use the following encoding:
+--
+-- * 0b000 : SRType_LSL
+-- * 0b001 : SRType_LSR
+-- * 0b010 : SRType_ASR
+-- * 0b011 : SRType_ROR
+-- * 0b100 : SRType_RRX
+--
+-- Note that there is an unused bit pattern, which is unfortunate but unavoidable
+newtype SRType = SRType { unSRType :: Expr 'TBV }
+
+srtLSL, srtLSR, srtASR, srtROR, srtRRX :: SRType
+srtLSL = SRType (LitBV 3 0b000)
+srtLSR = SRType (LitBV 3 0b001)
+srtASR = SRType (LitBV 3 0b010)
+srtROR = SRType (LitBV 3 0b011)
+srtRRX = SRType (LitBV 3 0b100)
+
+-- | Represents the result of 'decodeImmShift', and is actually a pair of the
+-- SRType (3 bits) followed by the shift amount (32 bits).
+--
+-- We need this because our formulas can't return multiple values
+newtype ImmShift = ImmShift (Expr 'TBV)
+
+-- | Split an 'ImmShift' into its component parts
+--
+-- We use this newtype to make it clear that the result of 'decodeImmShift' is
+-- not directly usable as a bitvector.
+--
+-- The first element of the pair is the SRType, while the second is a 32 bit
+-- bitvector encoding the shift amount.
+splitImmShift :: ImmShift -> (SRType, Expr 'TBV)
+splitImmShift (ImmShift is) = (SRType (extract 34 32 is), extract 31 0 is)
+
+-- | Convert a two bit shift type into our SRType
+--
+-- > // DecodeRegShift()
+-- > // ================
+-- > SRType DecodeRegShift(bits(2) type)
+-- >   case type of
+-- >     when ‘00’ shift_t = SRType_LSL;
+-- >     when ‘01’ shift_t = SRType_LSR;
+-- >     when ‘10’ shift_t = SRType_ASR;
+-- >     when ‘11’ shift_t = SRType_ROR;
+-- >   return shift_t;
+decodeRegShift :: Expr 'TBV -> SRType
+decodeRegShift = SRType . concat (LitBV 1 0b0)
+
 -- | This is the DecodeImmShift function in the ARM semantics.
 --
 -- Note that we only return the shift amount expression (shift_n); we can get
@@ -386,10 +468,12 @@ addWithCarry x y carry_in =
 -- >     else
 -- >       shift_t = SRType_ROR; shift_n = UInt(imm5);
 -- > return (shift_t, shift_n);
-decodeImmShift :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-decodeImmShift ty imm5 =
-  cases [ (bveq ty (LitBV 2 0b00), zext imm5)
-        , (bveq ty (LitBV 2 0b01), ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5))
-        , (bveq ty (LitBV 2 0b10), ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5))
-        ] (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 1) (zext imm5))
+decodeImmShift :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> ImmShift
+decodeImmShift ty imm5 = ImmShift $
+  cases [ (bveq ty (LitBV 2 0b00), concat (LitBV 3 0b000) (zext imm5))
+        , (bveq ty (LitBV 2 0b01), concat (LitBV 3 0b001) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))
+        , (bveq ty (LitBV 2 0b10), concat (LitBV 3 0b010) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))
+        , (bveq imm5 (LitBV 5 0b00000), concat (LitBV 3 0b100) (naturalLitBV 1))
+        ] (concat (LitBV 3 0b011) (zext imm5))
+
 
