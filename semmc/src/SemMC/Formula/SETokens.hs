@@ -20,6 +20,7 @@ module SemMC.Formula.SETokens
 import qualified Data.Foldable as F
 import qualified Data.SCargot as SC
 import qualified Data.SCargot.Comments as SC
+import           Data.SCargot.LetBind
 import qualified Data.SCargot.Repr as SC
 import           Data.Semigroup
 import qualified Data.Sequence as Seq
@@ -72,9 +73,12 @@ fromFoldable' = fromFoldable id
 -- argument, preceeded by a list of strings output as comments.
 printTokens :: Seq.Seq String -> SC.SExpr FAtom -> T.Text
 printTokens comments sexpr =
-  formatComment comments <> SC.encodeOne (SC.removeMaxWidth $ SC.basicPrint printAtom) sexpr
-  -- n.b. the following is more human-readable, but *much* slower to generate
-  -- formatComment comments <> SC.encodeOne (SC.setIndentAmount 1 $ SC.basicPrint printAtom) sexpr
+  let guide = nativeGuide AIdent nameFor
+      nameFor n _ = AIdent n
+      -- outputFmt = SC.removeMaxWidth $ SC.basicPrint printAtom
+      outputFmt = SC.setIndentAmount 1 $ SC.basicPrint printAtom
+  in formatComment comments <> (SC.encodeOne outputFmt $
+                                discoverLetBindings guide sexpr)
 
 
 formatComment :: Seq.Seq String -> T.Text
@@ -144,4 +148,6 @@ parserLL :: SC.SExprParser FAtom (SC.SExpr FAtom)
 parserLL = SC.withLispComments (SC.mkParser parseAtom)
 
 parseLL :: T.Text -> Either String (SC.SExpr FAtom)
-parseLL = SC.decodeOne parserLL
+parseLL t = letExpand getIdent <$> SC.decodeOne parserLL t
+    where getIdent (AIdent s) = Just s
+          getIdent _ = Nothing
