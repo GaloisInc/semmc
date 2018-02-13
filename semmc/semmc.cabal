@@ -123,7 +123,7 @@ test-suite semmc-tests
   build-depends:   semmc
                  , base
                  , containers
-                 , tasty >= 0.10 && < 0.12
+                 , tasty >= 0.10 && < 2
                  , tasty-hunit
                  , async
                  , directory
