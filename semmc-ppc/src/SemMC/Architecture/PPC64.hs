@@ -260,7 +260,7 @@ symbolicTemplatedOperand Proxy signed name constr =
 instance T.TemplatableOperand PPC where
   opTemplates sr =
     case sr of
-      PPC.VsrcRepr -> concreteTemplatedOperand (PPC.Vsrc . PPC.VSReg) (LocVSR . PPC.VSReg) <$> [0..31]
+      PPC.VsrcRepr -> concreteTemplatedOperand (PPC.Vsrc . PPC.VSReg) (LocVSR . PPC.VSReg) <$> [0..63]
       PPC.MemrrRepr ->
         mkTemplate <$> [0..31]
             where mkTemplate gprNum =

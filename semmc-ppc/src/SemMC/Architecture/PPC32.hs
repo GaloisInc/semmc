@@ -217,7 +217,7 @@ symbolicTemplatedOperand Proxy signed name constr =
 instance T.TemplatableOperand PPC where
   opTemplates sr =
     case sr of
-      PPC.VsrcRepr -> concreteTemplatedOperand (PPC.Vsrc . PPC.VSReg) (LocVSR . PPC.VSReg) <$> [0..31]
+      PPC.VsrcRepr -> concreteTemplatedOperand (PPC.Vsrc . PPC.VSReg) (LocVSR . PPC.VSReg) <$> [0..63]
       PPC.S17imm64Repr -> [symbolicTemplatedOperand (Proxy @16) True "S17imm64" (PPC.S17imm64 . fromInteger)]
       PPC.MemrrRepr -> mkTemplate <$> [0..31] <*> [0..31]
             where mkTemplate gprNum gprOffset =
@@ -381,8 +381,8 @@ instance T.TemplatableOperand PPC where
               where mkImm :: T.TemplatedOperandFn PPC "I32imm"
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "I32imm") knownRepr
-                      let recover' evalFn = PPC.I32imm . fromInteger <$> evalFn v
-                      return (v, T.WrappedRecoverOperandFn recover')
+                      let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
+                      return (v, T.WrappedRecoverOperandFn recover)
 
 type instance A.Location PPC = Location PPC
 
