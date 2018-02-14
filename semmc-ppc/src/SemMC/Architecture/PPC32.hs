@@ -24,53 +24,54 @@ module SemMC.Architecture.PPC32
   , PPCP.PseudoOpcode(..)
   ) where
 
-import qualified GHC.Err.Located as L
-import qualified Data.Int.Indexed as I
-import qualified Data.List.NonEmpty as NEL
-import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.List as SL
-import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Context
-import           Data.Parameterized.TraversableFC
-import           Data.Parameterized.NatRepr
-import           Data.Proxy ( Proxy(..) )
+import qualified Data.Int.Indexed                       as I
 import           Data.List
-import qualified Data.Set as Set
+import qualified Data.List.NonEmpty                     as NEL
+import           Data.Parameterized.Classes
+import           Data.Parameterized.Context
+import qualified Data.Parameterized.List                as SL
+import qualified Data.Parameterized.Map                 as MapF
+import           Data.Parameterized.NatRepr
+import           Data.Parameterized.Some                ( Some(..) )
+import           Data.Parameterized.TraversableFC
+import           Data.Proxy                             ( Proxy(..) )
+import qualified Data.Set                               as Set
 import           Data.Word
-import qualified Data.Word.Indexed as W
-import           GHC.TypeLits ( KnownNat, Nat )
-import qualified Text.Megaparsec as P
-import qualified Text.Megaparsec.Char as P
+import qualified Data.Word.Indexed                      as W
+import qualified GHC.Err.Located                        as L
+import           GHC.TypeLits                           ( KnownNat, Nat )
+import qualified Text.Megaparsec                        as P
+import qualified Text.Megaparsec.Char                   as P
 
 import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Solver.SimpleBuilder     as S
+import qualified Lang.Crucible.Solver.Interface         as S
 
-import qualified Dismantle.Instruction as D
-import qualified Dismantle.PPC as PPC
-import           Dismantle.PPC.Random ()
+import qualified Dismantle.Instruction                  as D
+import qualified Dismantle.PPC                          as PPC
+import           Dismantle.PPC.Random                   ()
 
-import qualified SemMC.Architecture as A
-import qualified SemMC.Architecture.Concrete as AC
-import qualified SemMC.Architecture.Value as V
-import qualified SemMC.Architecture.View as V
-import qualified SemMC.Concrete.Execution as CE
-import qualified SemMC.Formula as F
-import qualified SemMC.BoundVar as BoundVar
+import qualified SemMC.Architecture                     as A
+import qualified SemMC.Architecture.Concrete            as AC
+import qualified SemMC.Architecture.Value               as V
+import qualified SemMC.Architecture.View                as V
+import qualified SemMC.Concrete.Execution               as CE
+import qualified SemMC.Formula                          as F
+import qualified SemMC.BoundVar                         as BoundVar
 
-import qualified SemMC.Formula.Eval as E
-import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
-import qualified SemMC.Stochastic.RvwpOptimization as R
-import qualified SemMC.Synthesis.Template as T
-import qualified SemMC.Util as U
+import qualified SemMC.Formula.Eval                     as E
+import           SemMC.Stochastic.Pseudo                ( Pseudo, ArchitectureWithPseudo(..) )
+import qualified SemMC.Stochastic.RvwpOptimization      as R
+import qualified SemMC.Synthesis.Template               as T
+import qualified SemMC.Util                             as U
 
 import           SemMC.Architecture.PPC.Eval
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
-import qualified SemMC.Architecture.PPC.Pseudo as PPCP
-import qualified SemMC.Architecture.PPC.Shared as PPCS
-import qualified SemMC.Architecture.PPC.UF as UF
+import qualified SemMC.Architecture.PPC.Pseudo          as PPCP
+import qualified SemMC.Architecture.PPC.Shared          as PPCS
+import qualified SemMC.Architecture.PPC.UF              as UF
+import qualified Data.Parameterized.Map                 as M
 
 data PPC
 
@@ -513,7 +514,7 @@ isR0
   -> PPC.List (A.Operand PPC) sh
   -> Assignment (S.Elt t) u
   -> BaseTypeRepr tp
-  -> IO (S.Elt t tp)
+  -> IO (S.Elt t tp, Literals PPC (S.SimpleBuilder t st))
 isR0 sym pf operands assignment bv =
   case assignment of
     Empty :> S.BoundVarElt b ->
@@ -536,20 +537,25 @@ isR0 sym pf operands assignment bv =
    where
      returnElt
        :: S.App (S.Elt t) BaseBoolType
-       -> IO (S.Elt t tp)
+       -> IO (S.Elt t tp, Literals PPC (S.SimpleBuilder t st))
      returnElt b' =
        case testEquality (S.appType b') bv of
-         Just Refl -> S.sbMakeElt sym b'
+         Just Refl -> do
+           s <- S.sbMakeElt sym b'
+           pure (s, M.empty)
          Nothing -> error "Failed type equality in isR0"
 
+type Literals arch sym = M.MapF (Location arch) (S.BoundVar sym)
+
 handler
-  :: forall t st sh u tp . Bool
+  :: forall t st sh u tp
+   . Bool
   -> S.SimpleBuilder t st
   -> F.ParameterizedFormula (S.SimpleBuilder t st) PPC sh
   -> PPC.List (A.Operand PPC) sh
   -> Assignment (S.Elt t) u
   -> BaseTypeRepr tp
-  -> IO (S.Elt t tp)
+  -> IO (S.Elt t tp, Literals PPC (S.SimpleBuilder t st))
 handler isOffset sym pf operands assignment bv =
   case assignment of
     Empty :> S.BoundVarElt b ->
@@ -581,11 +587,11 @@ handler isOffset sym pf operands assignment bv =
                 , 1 <= n
                 ) => Integer
                   -> NatRepr n
-                  -> IO (S.Elt t tp)
+                  -> IO (S.Elt t tp, Literals PPC (S.SimpleBuilder t st))
            handleOffset offset natRepr = do
              s <- S.bvLit sym natRepr offset
              case S.exprType s `testEquality` bv of
-               Just Refl -> pure s
+               Just Refl -> pure (s, M.empty)
                Nothing -> error "Couldn't unify offset types"
            handleBase maybeBase =
              case maybeBase of
@@ -593,20 +599,31 @@ handler isOffset sym pf operands assignment bv =
                  findAtRegister 0x0 (U.makeSymbol "r0")
                Just (PPC.GPR base) ->
                  findAtRegister base $ U.makeSymbol $ "r" ++ show base
+           findAtRegister
+             :: Word8
+             -> S.SolverSymbol
+             -> IO (S.Elt t tp, Literals PPC (S.SimpleBuilder t st))
            findAtRegister reg symbol =
              case MapF.lookup (LocGPR (PPC.GPR reg)) (F.pfLiteralVars pf) of
                Nothing ->
                  case findReg reg operands pf of
                    Just (Some (BoundVar.BoundVar k)) ->
                      case testEquality bv (S.bvarType k) of
-                       Just Refl -> pure $ S.varExpr sym k
+                       Just Refl ->
+                         pure (S.varExpr sym k, M.empty)
                        _ -> error "Type equality failure"
-                   Nothing ->
-                     S.BoundVarElt <$>
-                       S.freshBoundVar sym symbol bv
+                   Nothing -> do
+                     let loc :: Location PPC (BaseBVType 32) = LocGPR (PPC.GPR reg)
+                     s <- S.freshBoundVar sym symbol bv
+                     case testEquality (A.locationType loc) (S.bvarType s) of
+                       Just Refl -> do
+                         let map' :: Literals PPC (S.SimpleBuilder t st)
+                             map' = M.singleton loc s
+                         pure (S.BoundVarElt s, map')
+                       Nothing -> error "whoops"
                Just k ->
-                 case testEquality bv (S.bvarType k) of
-                   Just Refl -> pure $ S.varExpr sym k
+                 pure $ case testEquality bv (S.bvarType k) of
+                   Just Refl -> (S.varExpr sym k, M.empty)
                    _ -> error "Type equality failure"
 
 stripped

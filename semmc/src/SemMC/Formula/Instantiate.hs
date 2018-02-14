@@ -19,8 +19,8 @@ module SemMC.Formula.Instantiate
   , paramToLocation
   ) where
 
+import           Control.Monad.State
 import           Data.Foldable                      ( foldlM, foldrM )
-import           Data.IORef                         ( IORef, readIORef, writeIORef )
 import           Data.Maybe                         ( fromJust, isNothing )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context         as Ctx
@@ -160,23 +160,7 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
       case A.locationInterp interp of
         LocationFuncInterp fn -> Just (fn opVals wo rep)
 
--- | Return the bound variable corresponding to the given location, by either
--- looking it up in the given map or creating it then inserting it if it doesn't
--- exist yet.
-lookupOrCreateVar :: (S.IsSymInterface sym,
-                      A.IsLocation loc)
-                  => sym
-                  -> IORef (MapF.MapF loc (S.BoundVar sym))
-                  -> loc tp
-                  -> IO (S.BoundVar sym tp)
-lookupOrCreateVar sym litVarsRef loc = do
-  litVars <- readIORef litVarsRef
-  case MapF.lookup loc litVars of
-    Just bVar -> return bVar
-    Nothing -> do
-      bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
-      writeIORef litVarsRef (MapF.insert loc bVar litVars)
-      return bVar
+type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
 
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each
@@ -194,9 +178,10 @@ instantiateFormula
                            , pfDefs = defs
                            })
   opVals = do
-    let rewrite :: forall tp . S.Elt t tp -> IO (S.Elt t tp)
+    let rewrite :: forall tp . S.Elt t tp -> IO (S.Elt t tp, Literals arch (SB t st))
         rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
-    defs' <- traverseF rewrite defs
+    (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
+      fmap (`MapF.union` m) <$> rewrite e
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
@@ -215,7 +200,8 @@ instantiateFormula
             Just loc -> return loc
             Nothing -> fail $ printf "parameter %s is not a valid location" (show definingParam)
           opVarsReplaced <- S.evalBoundVars sym definition opVarsAssn opExprsAssn
-          litVarsReplaced <- replaceLitVars sym newLitExprLookup litVars opVarsReplaced
+          litVarsReplaced <-
+            replaceLitVars sym newLitExprLookup litVars' opVarsReplaced
           return (definingLoc, litVarsReplaced)
 
     newDefs <- U.mapFMapBothM instantiateDefn defs'
@@ -296,3 +282,14 @@ condenseFormulas :: forall t f st arch.
                  -> f (Formula (SB t st) arch)
                  -> IO (Formula (SB t st) arch)
 condenseFormulas sym = foldrM (sequenceFormulas sym) emptyFormula
+
+mapAccumLMF :: forall acc m t a .
+  (Monad m, TraversableF t) =>
+  acc ->
+  t a ->
+  (forall z. acc -> a z -> m (a z, acc)) ->
+  m (t a, acc)
+mapAccumLMF acc0 tea f = runStateT (traverseF go tea) acc0
+  where
+    go :: forall z . a z -> StateT acc m (a z)
+    go x = StateT $ \acc -> f acc x

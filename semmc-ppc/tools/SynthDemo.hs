@@ -107,10 +107,9 @@ makePlain = MapF.foldrWithKey f MapF.empty
 instantiateFormula' :: (Architecture arch)
                     => SB.SimpleBuilder t st
                     -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.SimpleBuilder t st) arch)
-                    -> [(String, FunctionInterpretation t arch)]
                     -> Instruction arch
                     -> IO (F.Formula (SB.SimpleBuilder t st) arch)
-instantiateFormula' sym m rewriters (DPPC.Instruction op params) = do
+instantiateFormula' sym m (DPPC.Instruction op params) = do
   case MapF.lookup op m of
     Just pf -> snd <$> F.instantiateFormula sym pf params
     Nothing -> fail (printf "Couldn't find semantics for opcode \"%s\"" (showF op))
@@ -145,10 +144,9 @@ symbolicallyExecute ::
        (F.ParameterizedFormula (SB.SimpleBuilder t2 st) arch)
   -> t1 (DPPC.GenericInstruction
            (SemMC.Architecture.Opcode arch) (SemMC.Architecture.Operand arch))
-  -> [(String, FunctionInterpretation t2 arch)]
   -> IO (F.Formula (SB.SimpleBuilder t2 st) arch)
-symbolicallyExecute sym plainBaseSet insns rewriters = do
-  formulas <- traverse (instantiateFormula' sym plainBaseSet rewriters) insns
+symbolicallyExecute sym plainBaseSet insns = do
+  formulas <- traverse (instantiateFormula' sym plainBaseSet) insns
   F.foldrM (F.sequenceFormulas sym) F.emptyFormula formulas
 
 rewriteElfText :: E.ElfSection w -> E.Elf 32 -> [DPPC.Instruction] -> BSL.ByteString
@@ -197,12 +195,10 @@ mainWith r opts = do
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
   sym <- SB.newSimpleBackend r
-  let semantics = bool PPC32.allSemantics PPC64.allSemantics (oBaseArch opts == "PPC64")
-      rewriters = locationFuncInterpretation (Proxy :: Proxy PPC32.PPC)
-  (plainBaseSet, synthEnv) <- loadBaseSet semantics sym
+  (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
 
   -- Turn it into a formula
-  formula <- symbolicallyExecute sym plainBaseSet insns rewriters
+  formula <- symbolicallyExecute sym plainBaseSet insns
   putStrLn ""
   putStrLn "Here's the formula for the whole program:"
   print formula
