@@ -22,7 +22,7 @@ module SemMC.Formula.Eval (
   evaluateFunctions
   ) where
 
-import           Control.Arrow                      (first)
+import           Control.Arrow                      (first, (&&&))
 import           Control.Monad.State
 import qualified Data.Parameterized.Context         as Ctx
 import qualified Data.Parameterized.List            as SL
@@ -103,7 +103,10 @@ evaluateFunctions' sym pf operands rewriters e =
               pure e'
             Nothing ->
               liftIO $ S.sbNonceElt sym (S.FnApp symFun assignment')
+
+replace :: [Char] -> [Char]
+replace ks = xs ++ "_" ++ ys
   where
-    replace ks = xs ++ "_" ++ ys
-      where
-        (xs,_:ys) = splitAt 3 ks
+    (xs,ys) =
+      takeWhile (/='.') &&&
+        drop 1 . dropWhile (/='.') $ ks
