@@ -94,7 +94,7 @@ evaluateFunctions' sym pf operands rewriters e =
           error "evaluateFunctions: ArrayTrueOnEntries Not implemented"
         S.FnApp symFun assignment -> do
           let key = T.unpack $ S.solverSymbolAsText (S.symFnName symFun)
-              rs = first replace <$> rewriters
+              rs = first renameUninterpretedFunction <$> rewriters
           assignment' <- traverseFC (evaluateFunctions' sym pf operands rs) assignment
           case lookup key rewriters of
             Just (Evaluator evaluator) -> do
@@ -104,8 +104,11 @@ evaluateFunctions' sym pf operands rewriters e =
             Nothing ->
               liftIO $ applySymFn sym symFun assignment
 
-replace :: [Char] -> [Char]
-replace ks = xs ++ "_" ++ ys
+-- | By default, symbolic function names hold to a different naming convention than what is defined
+-- in instruction semantics. In order to ensure we can lookup a function by its name,
+-- we modify it in our list of rewriters (e.g. `ppc.memrr_base` to `ppc_memrr_base`).
+renameUninterpretedFunction :: [Char] -> [Char]
+renameUninterpretedFunction ks = xs ++ "_" ++ ys
   where
     (xs,ys) =
       takeWhile (/='.') &&&
