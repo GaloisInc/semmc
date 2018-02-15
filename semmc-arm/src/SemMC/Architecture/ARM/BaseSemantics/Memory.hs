@@ -32,6 +32,15 @@ defineLoads = do
 
 defineStores :: SemARM 'Top ()
 defineStores = do
+  -- Note about STR_PRE_IMM vs STR_POST_IMM:
+  -- for STR_PRE_IMM, the addrmode_imm12_pre bundle is holding three pieces of
+  -- information: the register holding the target address, the immediate offset, and
+  -- the add bit. for STR_POST_IMM, the am2offset_imm argument plays a similar role,
+  -- except that one only holds the last two. The GPR holding the target address
+  -- appears as the addr_offset_none argument. This is just a dumb quirk about the
+  -- TableGen data -- the data is packaged differently for the two instruction
+  -- variants in a way that doesn't really make much sense. But there's a lot about
+  -- the tablegen data that doesn't really make much sense.
   defineA32Opcode A.STR_PRE_IMM (Empty
                                 :> ParamDef "predBits" pred (EBV 4)
                                 :> ParamDef "imm" addrmode_imm12_pre EMemRef
@@ -53,7 +62,28 @@ defineStores = do
         sameRegs = sameLocation rT rN
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
     defReg rN (ite (orp (isR15 rN) sameRegs) (unpredictable addr) addr)
-
+  defineA32Opcode A.STR_POST_IMM (Empty
+                                 :> ParamDef "predBits" pred (EBV 4)
+                                 :> ParamDef "imm" am2offset_imm EMemRef
+                                 :> ParamDef "off" addr_offset_none EMemRef -- ???
+                                 :> ParamDef "gpr" gpr naturalBV
+                                 )
+    $ \_ imm12 off rT -> do
+    comment "Store Register, Post-indexed (P=0, W=1), immediate  (A32)"
+    comment "doc: F7.1.217, page F7-2880"
+    input rT
+    input imm12
+    input off
+    input memory
+    let imm12arg = [Some $ Loc imm12]
+        add = am2offset_immAdd imm12arg
+        offset = zext $ am2offset_immImm imm12arg
+        rN = addr_offset_noneReg off
+        updated_addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
+        nBytes = 4
+        sameRegs = sameLocation rT rN
+    defMem memory (Loc rN) nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
+    defReg rN (ite (orp (isR15 rN) sameRegs) (unpredictable updated_addr) updated_addr)
 
 -- ----------------------------------------------------------------------
 

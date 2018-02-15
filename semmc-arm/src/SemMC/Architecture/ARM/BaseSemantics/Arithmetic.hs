@@ -121,7 +121,6 @@ manualBitwise = do
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
-
   defineA32Opcode A.ANDrr ( Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -202,6 +201,7 @@ manualBitwise = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
     andrr rD (Loc rN) (Loc rM) setflags shift_t shift_n
+
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)

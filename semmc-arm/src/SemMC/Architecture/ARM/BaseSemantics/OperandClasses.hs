@@ -24,6 +24,12 @@ pred = "Pred"
 addrmode_imm12_pre :: String
 addrmode_imm12_pre = "Addrmode_imm12_pre"
 
+am2offset_imm :: String
+am2offset_imm = "Am2offset_imm"
+
+addr_offset_none :: String
+addr_offset_none = "Addr_offset_none"
+
 arm_blx_target :: String
 arm_blx_target = "Arm_blx_target"
 
