@@ -102,7 +102,7 @@ evaluateFunctions' sym pf operands rewriters e =
               modify' (m' `M.union`)
               pure e'
             Nothing ->
-              liftIO $ S.sbNonceElt sym (S.FnApp symFun assignment')
+              liftIO $ applySymFn sym symFun assignment
 
 replace :: [Char] -> [Char]
 replace ks = xs ++ "_" ++ ys
