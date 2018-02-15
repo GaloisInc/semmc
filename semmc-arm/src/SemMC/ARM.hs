@@ -144,6 +144,8 @@ instance A.IsOperand ARM.Operand
 instance A.IsOpcode  ARM.Opcode
 
 type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
+type instance A.OperandType ARM "Am2offset_imm" = BaseBVType 32
+type instance A.OperandType ARM "Addr_offset_none" = BaseBVType 32
 type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32

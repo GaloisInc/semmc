@@ -497,7 +497,7 @@ am2offset_immImm :: [Some Expr] -> Expr 'TBV
 am2offset_immImm = uf (EBV 16) "a32.am2offset_imm_imm"
 
 addr_offset_noneReg :: Location 'TMemRef -> Location 'TBV
-addr_offset_noneReg = locUF naturalBV "a32.addr_offset_noneReg"
+addr_offset_noneReg = locUF naturalBV "a32.addr_offset_none_reg"
 
 -- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_imm :: Location 'TBV -> Expr 'TBV

@@ -47,6 +47,17 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
 
+  , ("a32.am2offset_imm_add", -- reference to U flag bit from an am2offset_imm operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
+  , ("a32.am2offset_imm_imm", -- reference to immediate offset value from an am2offset_imm operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
+
+  , ("a32.addr_offset_none_reg", -- reference to register by register number from an addr_offset_none operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+
   , ("a32.modimm_imm", -- reference to octet immediate value from a modimm operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
