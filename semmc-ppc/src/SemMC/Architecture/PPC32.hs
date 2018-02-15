@@ -501,10 +501,13 @@ instance A.Architecture PPC where
   locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
   shapeReprToTypeRepr _proxy = shapeReprType
 
-newtype IsOffset = IsOffset Bool
+data MemoryAccess
+  = Base
+  | Offset
+  deriving (Show, Eq)
 
-evalMemReg :: IsOffset -> E.Evaluator PPC t
-evalMemReg isOffset = E.Evaluator (rewrite isOffset)
+evalMemReg :: MemoryAccess -> E.Evaluator PPC t
+evalMemReg access = E.Evaluator (rewrite access)
 
 isR0
   :: forall t st sh u tp
@@ -547,14 +550,14 @@ type Literals arch sym = M.MapF (Location arch) (S.BoundVar sym)
 
 rewrite
   :: forall t st sh u tp
-   . IsOffset
+   . MemoryAccess
   -> S.SimpleBuilder t st
   -> F.ParameterizedFormula (S.SimpleBuilder t st) PPC sh
   -> PPC.List (A.Operand PPC) sh
   -> Assignment (S.Elt t) u
   -> BaseTypeRepr tp
   -> IO (S.Elt t tp, Literals PPC (S.SimpleBuilder t st))
-rewrite (IsOffset isOffset) sym pf operands assignment baseTypeRepr =
+rewrite access sym pf operands assignment baseTypeRepr =
   case assignment of
     Empty :> S.BoundVarElt b ->
       case Some b `boundVarElemIndex` (toListFC Some (F.pfOperandVars pf)) of
@@ -564,17 +567,17 @@ rewrite (IsOffset isOffset) sym pf operands assignment baseTypeRepr =
             Just (Some op) ->
               case op of
                 PPC.Memri (PPC.MemRI maybeBase offset) ->
-                  if isOffset
-                    then handleOffset (fromIntegral offset) (knownNat :: NatRepr 16)
-                    else handleBase maybeBase
+                  case access of
+                    Offset -> handleOffset (fromIntegral offset) (knownNat :: NatRepr 16)
+                    Base -> handleBase maybeBase
                 PPC.Memrix (PPC.MemRIX maybeBase (I.I offset)) ->
-                  if isOffset
-                    then handleOffset (fromIntegral offset) (knownNat :: NatRepr 14)
-                    else handleBase maybeBase
+                  case access of
+                    Offset -> handleOffset (fromIntegral offset) (knownNat :: NatRepr 14)
+                    Base -> handleBase maybeBase
                 PPC.Memrr (PPC.MemRR maybeBase offset) ->
-                  if isOffset
-                    then handleBase (Just offset)
-                    else handleBase maybeBase
+                  case access of
+                    Offset -> handleBase (Just offset)
+                    Base -> handleBase maybeBase
                 _ -> error $ "Unexpected operand type: " ++ show op
             Nothing ->
               error "Index not present in operands list"
@@ -664,27 +667,27 @@ locationFuncInterpretation :: [(String, A.FunctionInterpretation t PPC)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemriReg
                                                , A.exprInterpName = 'interpMemriRegExtractor
-                                               , A.exprInterp = evalMemReg (IsOffset False)
+                                               , A.exprInterp = evalMemReg Base
                                                })
   , ("ppc.memrix_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrixReg
                                                 , A.exprInterpName = 'interpMemrixRegExtractor
-                                                , A.exprInterp = evalMemReg (IsOffset False)
+                                                , A.exprInterp = evalMemReg Base
                                                 })
   , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrBase
                                                 , A.exprInterpName = 'interpMemrrBaseExtractor
-                                                , A.exprInterp = evalMemReg (IsOffset False)
+                                                , A.exprInterp = evalMemReg Base
                                                 })
   , ("ppc.memrr_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpMemrrOffset
                                                   , A.exprInterpName = 'interpMemrrOffsetExtractor
-                                                  , A.exprInterp = evalMemReg (IsOffset True)
+                                                  , A.exprInterp = evalMemReg Offset
                                                   })
   , ("ppc.memrix_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp undefined
                                                    , A.exprInterpName = 'interpMemrixOffsetExtractor
-                                                   , A.exprInterp = evalMemReg (IsOffset True)
+                                                   , A.exprInterp = evalMemReg Offset
                                                    })
   , ("ppc.memri_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp undefined
                                                   , A.exprInterpName = 'interpMemriOffsetExtractor
-                                                  , A.exprInterp = evalMemReg (IsOffset True)
+                                                  , A.exprInterp = evalMemReg Offset
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'interpIsR0
                                            , A.exprInterp = E.Evaluator isR0
