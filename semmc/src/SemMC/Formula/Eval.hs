@@ -42,6 +42,7 @@ type Sym t st = S.SimpleBuilder t st
 
 type Literals arch sym = M.MapF (Location arch) (BoundVar sym)
 
+-- | Type used to encapsulate rewriting of formulas related to register unpacking across different ISAs.
 data Evaluator arch t =
   Evaluator (forall tp u st sh
                . Sym t st
@@ -51,6 +52,7 @@ data Evaluator arch t =
               -> BaseTypeRepr tp
               -> IO (S.Elt t tp, Literals arch (Sym t st)))
 
+-- | See `evaluateFunctions'`
 evaluateFunctions
   :: M.OrdF (Location arch)
   => Sym t st
@@ -59,10 +61,11 @@ evaluateFunctions
   -> [(String, Evaluator arch t)]
   -> S.Elt t tp
   -> IO (S.Elt t tp, M.MapF (Location arch) (S.SimpleBoundVar t))
-evaluateFunctions a b c d e =
+evaluateFunctions sym pf operands rewriters elt =
   flip runStateT M.empty
-    (evaluateFunctions' a b c d e)
+    (evaluateFunctions' sym pf operands rewriters elt)
 
+-- | Recursively applies rewrite rules to all uninterpreted functions present in a formula.
 evaluateFunctions'
   :: M.OrdF (Location arch)
   => Sym t st
