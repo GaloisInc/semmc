@@ -438,18 +438,21 @@ boolBinopBuiltin s e1 e2 = Builtin EBool  s [Some e1, Some e2]
 
 ite :: (HasCallStack) => Expr 'TBool -> Expr tp -> Expr tp -> Expr tp
 ite b t e =
-  if (e2txt t) == (e2txt e)
+  if comparable t == comparable e
   then t
   else case b of
-             LitBool True -> t
-             LitBool False -> e
-             _ | t1 == t2 && tc == EBool -> Builtin t1 "ite" [Some b, Some t, Some e]
-               | otherwise -> error (printf "Unexpected type for ite: %s (should be TBool); %s and %s (should be equal)" (show tc) (show t1) (show t2))
+         LitBool True -> t
+         LitBool False -> e
+         _ | t1 == t2 && tc == EBool -> Builtin t1 "ite" [Some b, Some t, Some e]
+           | otherwise -> error (printf "Unexpected type for ite: %s\
+                                        \ (should be TBool); %s and %s\
+                                        \ (should be equal)"
+                                 (show tc) (show t1) (show t2))
   where
     t1 = exprType t
     t2 = exprType e
     tc = exprType b
-    e2txt = printTokens mempty . convertExpr . Some
+    comparable = convertExpr . Some
 
 -- | Construct a nested chain of ITEs that is equivalent to a case match with a
 -- fallthrough.
