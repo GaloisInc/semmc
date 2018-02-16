@@ -46,8 +46,8 @@ blx_a32 =
       let tgtarch = InstrSet_T32
           imm24 = extract 23 0 (Loc tgt)
           immH = extract 24 24 (Loc tgt)
-          imm32 = sext $ concat imm24 $ concat immH $ LitBV 1 0
-          newlr = (bvsub (Loc pc) (naturalLitBV 0x4))
+          imm32 = "imm32" =: (sext $ concat imm24 $ concat immH $ LitBV 1 0)
+          newlr = "newlr" =: (bvsub (Loc pc) (naturalLitBV 0x4))
       label <- target_label_align4 imm32
       blx_ newlr label tgtarch
 
@@ -95,5 +95,5 @@ blx_ newlr tgtaddr tgtarch = do
 
 target_label_align4 :: Expr 'TBV -> SemARM 'Def (Expr 'TBV)
 target_label_align4 off = do  -- Align(PC, 4) to force word-alignment (only affects T32, not A32).
-    let alignPC_4 = bvclr [0,1] (Loc pc)
+    let alignPC_4 = "alignPC_4" =: bvclr [0,1] (Loc pc)
     return $ bvadd alignPC_4 off

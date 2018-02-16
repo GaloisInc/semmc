@@ -239,7 +239,7 @@ andrr rD rM rN setflags shift_t shift_n = do
   let z' = ite (bveq result (naturalLitBV 0x0)) (LitBV 1 0b1) (LitBV 1 0b0)
   let c' = carry
   let v' = v
-  let nzcv = concat n' (concat z' (concat c' v'))
+  let nzcv = "nzcv" =: concat n' (concat z' (concat c' v'))
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -255,7 +255,7 @@ andrsr rD rM rN setflags shift_t shift_n = do
   let z' = ite (bveq result (naturalLitBV 0x0)) (LitBV 1 0b1) (LitBV 1 0b0)
   let c' = carry
   let v' = v
-  let nzcv = concat n' (concat z' (concat c' v'))
+  let nzcv = "nzcv" =: concat n' (concat z' (concat c' v'))
   let writesOrReadsR15 = anyp  [ isR15 rD ] -- FIXME: We need the rest of these, too
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
@@ -271,7 +271,7 @@ anyp (r : rs) = orp r (anyp rs)
 -- bits, we return an N+1 bit bitvector where the top bit is the carry out
 -- bit. The caller can dissect it.
 shiftC :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-shiftC value (unSRType -> shift_t) shift_n c =
+shiftC value (unSRType -> shift_t) shift_n c = "shiftC" =:
   cases [ (bveq shift_n (naturalLitBV 0x0), concat c value)
         , (bveq shift_t (LitBV 3 0b000), lslC value shift_n)
         , (bveq shift_t (LitBV 3 0b001), lsrC value shift_n)
@@ -293,7 +293,7 @@ shiftC value (unSRType -> shift_t) shift_n c =
 -- >   carry_out = extended_x<N>;
 -- >   return (result, carry_out);
 lslC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-lslC x shift =
+lslC x shift = "lslC" =:
   bvshl (zext' xsize x) (zext' xsize shift)
   where
     xsize = exprBVSize x + 1
@@ -314,10 +314,10 @@ lslC x shift =
 -- >   carry_out = extended_x<shift-1>;
 -- >   return (result, carry_out)
 lsrC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-lsrC = srC bvlshr
+lsrC x shift = "logicalShiftRightCarry" =: srC bvlshr x shift
 
 asrC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-asrC = srC bvashr
+asrC x shift = "arithmeticShiftRightCarry" =: srC bvashr x shift
 
 -- | Generalized shift right with carry out
 --
@@ -340,7 +340,7 @@ srC op x shift = concat carry_out rs
 -- >   carry_out = x<0>;
 -- >   return (result, carry_out);
 rrxC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-rrxC x carry_in = concat carry_out (concat carry_in slice)
+rrxC x carry_in = "rrxC" =: concat carry_out (concat carry_in slice)
   where
     carry_out = extract 0 0 x
     slice = extract (exprBVSize x - 1) 1 x
@@ -356,7 +356,7 @@ rrxC x carry_in = concat carry_out (concat carry_in slice)
 -- >   carry_out = result<N-1>;
 -- >   return (result, carry_out);
 rorC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-rorC x shift = concat carry_out (bvor ls rs)
+rorC x shift = "rorC" =: concat carry_out (bvor ls rs)
   where
     nBits = LitBV (exprBVSize x) (fromIntegral (exprBVSize x))
     m = bvurem shift nBits
@@ -366,7 +366,7 @@ rorC x shift = concat carry_out (bvor ls rs)
     carry_out = ite (bvult shift (naturalLitBV 32)) co (LitBV 1 0)
 
 ror :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-ror x shift = extract (nBits - 1) 0 wc
+ror x shift = "ror" =: extract (nBits - 1) 0 wc
   where
     nBits = exprBVSize x
     wc = rorC x shift
@@ -381,7 +381,7 @@ armExpandImm imm12 =
         val32 = zext val
         rotv = bvshl (naturalLitBV 1) $ zext rot -- multiply by 2
         rval32 = ite (bveq rotv (naturalLitBV 0)) val32 (ror rotv val32)
-    in rval32
+    in "armExpandImm" =: rval32
 
 -- | Expand/rotate ModImm value to corresponding 32-bit immediate
 -- value (F4-2473) with carry
@@ -412,7 +412,7 @@ addWithCarry x y carry_in =
         z = ite (bveq res (naturalLitBV 0)) (LitBV 1 1) (LitBV 1 0)
         c = extract naturalBitSize naturalBitSize eres
         v = bvand n (extract naturalBitSize naturalBitSize eres)
-    in (res, concat n $ concat z $ concat c v)
+    in ("addResult" =: res, "addCarry" =: (concat n $ concat z $ concat c v))
 
 -- | A wrapper around expressions representing the shift type
 --
@@ -487,7 +487,7 @@ decodeRegShift = SRType . concat (LitBV 1 0b0)
 -- >       shift_t = SRType_ROR; shift_n = UInt(imm5);
 -- > return (shift_t, shift_n);
 decodeImmShift :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> ImmShift
-decodeImmShift ty imm5 = ImmShift $
+decodeImmShift ty imm5 = ImmShift $ "immShift" =:
   cases [ (bveq ty (LitBV 2 0b00), concat (LitBV 3 0b000) (zext imm5))
         , (bveq ty (LitBV 2 0b01), concat (LitBV 3 0b001) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))
         , (bveq ty (LitBV 2 0b10), concat (LitBV 3 0b010) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))

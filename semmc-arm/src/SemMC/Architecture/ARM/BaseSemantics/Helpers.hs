@@ -144,7 +144,8 @@ defineT32Opcode opc defargs defbody =
           itstate_1_0 = extract 26 25 (Loc cpsr)
           itstate_3_0 = concat itstate_3_2 itstate_1_0
           -- CurrentCond() for T32 except T1 and T3 encodings of the Branch instruction (F2.3.1, F2-2417)
-          predV = ite (bveq itstate_3_0 (LitBV 4 0b0000))
+          predV = "ITState" =:
+                  ite (bveq itstate_3_0 (LitBV 4 0b0000))
                   (ite (bveq itstate_7_4 (LitBV 4 0b0000))
                    (LitBV 4 0b1110)
                    (unpredictable (LitBV 4 0b1110))) -- ARM doc doesn't cover this case...
@@ -260,13 +261,13 @@ cpsrA32 = do
     then return id
     else if curarch == InstrSet_T32EE
          then error "Invalid INSTRSET change T32EE->A32"
-         else return $ cpsr_jt $ arch_jt InstrSet_A32
+         else return (("SetA32Mode" =:) . (cpsr_jt $ arch_jt InstrSet_A32))
 
 cpsrT32 = do
     curarch <- (subArch . fromJust) <$> getArchData
     if curarch == InstrSet_T32
     then return id
-    else return $ cpsr_jt $ arch_jt InstrSet_T32
+    else return (("SetT32Mode" =:) . (cpsr_jt $ arch_jt InstrSet_T32))
 
 cpsrT32EE = do
     curarch <- (subArch . fromJust) <$> getArchData
@@ -274,7 +275,7 @@ cpsrT32EE = do
     then return id
     else if curarch == InstrSet_A32
          then error "Invalid INSTRSET change A32->T32EE"
-         else return $ cpsr_jt $ arch_jt InstrSet_T32
+         else return (("SetT32EEMode" =:) . (cpsr_jt $ arch_jt InstrSet_T32))
 
 cpsrJazelle = error "Jazelle instruction set not currently supported"
 
@@ -365,7 +366,7 @@ branchWritePC tgtRegIsPC addr =
     let setAddr curarch = if curarch == InstrSet_A32
                           then bvclr [0,1] addr
                           else bvclr [1] addr
-    in updatePC $ \old suba -> ite tgtRegIsPC (setAddr suba) (old suba)
+    in updatePC $ \old suba -> "branchWritePC" =: ite tgtRegIsPC (setAddr suba) (old suba)
 
 
 -- | BxWritePC pseudocode  (E1.2.3, E1-2296)
@@ -381,7 +382,7 @@ bxWritePC tgtRegIsPC addr =
                                          (bvclr [1] addr)
                                          addr)
     in do selectInstrSet tgtRegIsPC toT32
-          updatePC $ \old suba -> ite tgtRegIsPC (setAddr suba) (old suba)
+          updatePC $ \old suba -> "bxWritePC" =: ite tgtRegIsPC (setAddr suba) (old suba)
 
 
 -- ----------------------------------------------------------------------
@@ -400,7 +401,8 @@ testForConditionPassed instrPred = do
         cond_0   = extract 0 0 instrPred
         isBitSet = bveq (LitBV 1 0b1)
         -- ConditionHolds (F2.3.1, F2-2417):
-        result = ite (bveq cond_3_1 (LitBV 3 0b000)) (isBitSet z) -- EQ or NE
+        result = "conditionMatch" =:
+                 ite (bveq cond_3_1 (LitBV 3 0b000)) (isBitSet z) -- EQ or NE
                  (ite (bveq cond_3_1 (LitBV 3 0b001)) (isBitSet c) -- CS or CC
                   (ite (bveq cond_3_1 (LitBV 3 0b010)) (isBitSet n) -- MI or PL
                    (ite (bveq cond_3_1 (LitBV 3 0b011)) (isBitSet v) -- VS or VC
@@ -410,8 +412,8 @@ testForConditionPassed instrPred = do
                       (ite (bveq cond_3_1 (LitBV 3 0b110)) (andp (bveq n v)
                                                                  (notp $ isBitSet z)) -- GT or LE
                        {- (bveq cond_3_1 (LitBV 3 0b111)) -} (LitBool True))))))) -- AL
-        result' = ite (andp (isBitSet cond_0)
-                            (bvne instrPred (LitBV 4 0b1111))) (notp result) result
+        result' = "testCondition" =: ite (andp (isBitSet cond_0)
+                                          (bvne instrPred (LitBV 4 0b1111))) (notp result) result
     modifyArchData (\m'ad -> case m'ad of
                               Nothing -> Just $ newARMData { condPassed = result' }
                               Just ad -> Just $ ad { condPassed = result' })
@@ -544,7 +546,7 @@ blxtgt_J2 = uf (EBV 1) "t32.blxtarget_J2" . ((:[]) . Some) . Loc
 -- doesn't do much, but it is an abstraction point that allows future
 -- focus and refinement on these areas.
 unpredictable :: Expr a -> Expr a
-unpredictable = id
+unpredictable = ("unpredictable" =:)
 
 
 -- | In some cases, the implementation of the chip is allowed to
