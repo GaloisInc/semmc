@@ -53,7 +53,7 @@ data SemM_ARMData = SemM_ARMData
 newARMData :: SemM_ARMData
 newARMData = SemM_ARMData
              { subArch = InstrSet_Jazelle -- not supported: force error if not updated to actual
-             , condPassed = LitBool False
+             , condPassed = LitBool True
              , cpsrUpdates = id
              , pcUpdate = nextInstruction
              }
