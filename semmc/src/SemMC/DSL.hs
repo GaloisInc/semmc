@@ -17,6 +17,7 @@ module SemMC.DSL (
   setArchData,
   modifyArchData,
   -- * Operations
+  (=:),
   testBitDynamic,
   extract,
   zeroExtend,
@@ -115,6 +116,7 @@ exprType e =
     Builtin t _ _ -> t
     TheoryFunc t _ _ _ -> t
     UninterpretedFunc t _ _ -> t
+    NamedSubExpr _ sube -> exprType sube
 
 -- | Get the size of the bitvector produced by the given expression
 exprBVSize :: Expr 'TBV -> Int
@@ -127,6 +129,7 @@ exprBVSize e =
     Builtin (EBV w) _ _ -> w
     TheoryFunc (EBV w) _ _ _ -> w
     UninterpretedFunc (EBV w) _ _ -> w
+    NamedSubExpr _ sube -> exprBVSize sube
 
 
 -- | The definition of the Formula that semantically describes the
@@ -290,6 +293,13 @@ defLoc loc e
         Nothing -> RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
         Just _ -> error (printf "Location is already defined: %s" (show loc))
   | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
+
+
+-- | Define a subphrase that is a natural candidate for a let binding
+-- with the associated variable name.
+infix 1 =:
+(=:) :: String -> Expr tp -> Expr tp
+name =: expr = NamedSubExpr name expr
 
 
 -- | Get the current architecture-specific data in the DSL computation
@@ -580,6 +590,7 @@ convertExpr (Some e) =
       fromFoldable' (fromFoldable' (ident "_" : ident name : map convertExpr conParams) : map convertExpr appParams)
     UninterpretedFunc _ name params ->
       fromFoldable' (fromFoldable' [ident "_", ident "call", string name] : map convertExpr params)
+    NamedSubExpr name expr -> SC.SCons (SC.SAtom (APhrase name)) $ convertExpr $ Some expr
 
 convertLoc :: Location tp -> SC.SExpr FAtom
 convertLoc loc =

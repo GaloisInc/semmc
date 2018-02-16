@@ -131,6 +131,10 @@ data Expr (tp :: ExprTag) where
   -- | User-defined uninterpreted functions called with the @call@ SMTLib
   -- primitive
   UninterpretedFunc :: ExprType tp -> String -> [Some Expr] -> Expr tp
+  -- | Assign an advisory name to a sub-expression.  This can be used
+  -- (for example) to guide let-binding for output S-expression forms
+  -- of this expression.
+  NamedSubExpr :: String -> Expr tp -> Expr tp
 
 deriving instance Show (Expr tp)
 instance ShowF Expr

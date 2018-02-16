@@ -7,6 +7,7 @@
 -- evaluation.
 
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module SemMC.Formula.SETokens
     ( FAtom(..)
@@ -29,13 +30,13 @@ import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 
-
 data FAtom = AIdent String
            | AQuoted String
            | AString String
            | AInt Integer
            | ABV Int Integer
-           deriving (Show)
+           | APhrase String
+           deriving (Show, Eq)
 
 
 string :: String -> SC.SExpr FAtom
@@ -73,8 +74,22 @@ fromFoldable' = fromFoldable id
 -- argument, preceeded by a list of strings output as comments.
 printTokens :: Seq.Seq String -> SC.SExpr FAtom -> T.Text
 printTokens comments sexpr =
-  let guide = nativeGuide AIdent nameFor
-      nameFor n _ = AIdent n
+  let oguide = nativeGuide AIdent nameFor
+      guide = oguide { weighting = weighter (weighting oguide)
+                     , allowRecursion = True
+                     , minExprSize = 6
+                     , maxLetBinds = min 8 . (`div` 2)
+                     }
+      nameFor _ (SC.SCons (SC.SAtom (APhrase pn)) _) = AIdent pn
+      nameFor n e = AIdent n
+      weighter _ (SC.SCons (SC.SAtom (APhrase _)) _) _ = 1000000 -- always bind this!
+      weighter orig expr cnt = let w' = orig expr cnt
+                                   bl = case expr of
+                                          (SC.SCons (SC.SAtom _) _) -> 500 -- higher baseline
+                                          _ -> 0
+                                   h = F.length expr
+                                   w = bl + h + (2 * cnt)
+                               in if w > 600 then w else 0
       -- outputFmt = SC.removeMaxWidth $ SC.basicPrint printAtom
       outputFmt = SC.setIndentAmount 1 $ SC.basicPrint printAtom
   in formatComment comments <> (SC.encodeOne outputFmt $
@@ -97,6 +112,7 @@ printAtom a =
     AString s -> T.pack (show s)
     AInt i -> T.pack (show i)
     ABV w val -> formatBV w val
+    APhrase _ -> ""
 
 
 formatBV :: Int -> Integer -> T.Text
@@ -143,6 +159,8 @@ parseAtom
   P.<|> AString     <$> parseString
   P.<|> AInt . read <$> P.many1 P.digit
   P.<|> uncurry ABV <$> parseBV
+   -- n.b. an APhrase is an internal marker and not expressed or
+   -- recoverable in the streamed text version
 
 parserLL :: SC.SExprParser FAtom (SC.SExpr FAtom)
 parserLL = SC.withLispComments (SC.mkParser parseAtom)
