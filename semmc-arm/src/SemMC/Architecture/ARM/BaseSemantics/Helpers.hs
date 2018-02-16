@@ -30,6 +30,8 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , bvset, bvclr, tstBit
     -- * Opcode unpacking
     , imm12Reg, imm12Off, imm12Add
+    , am2offset_immAdd, am2offset_immImm
+    , addr_offset_noneReg
     , modImm_imm, modImm_rot
     , soRegReg_shift, soRegReg_type, soRegReg_reg
     , soRegImm_imm, soRegImm_type, soRegImm_reg
@@ -74,6 +76,8 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Pred" = 'TBV
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
+  SymToExprTag "Am2offset_imm" = 'TMemRef
+  SymToExprTag "Addr_offset_none" = 'TMemRef
   SymToExprTag "Arm_blx_target" = 'TBV
   SymToExprTag "So_reg_reg" = 'TBV
   SymToExprTag "So_reg_imm" = 'TBV
@@ -485,6 +489,17 @@ imm12Off = uf (EBV 16) "a32.imm12_off"
 -- | Returns the addition flag in the addrmode_imm12_[pre]
 imm12Add :: [Some Expr] -> Expr 'TBool
 imm12Add = uf EBool "a32.imm12_add"
+
+-- | Returns the addition flag in the am2offset_imm
+am2offset_immAdd :: [Some Expr] -> Expr 'TBool
+am2offset_immAdd = uf EBool "a32.am2offset_imm_add"
+
+-- | Returns the immediate flag in the am2offset_imm
+am2offset_immImm :: [Some Expr] -> Expr 'TBV
+am2offset_immImm = uf (EBV 16) "a32.am2offset_imm_imm"
+
+addr_offset_noneReg :: Location 'TMemRef -> Location 'TBV
+addr_offset_noneReg = locUF naturalBV "a32.addr_offset_none_reg"
 
 -- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_imm :: Location 'TBV -> Expr 'TBV
