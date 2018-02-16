@@ -22,7 +22,7 @@ module SemMC.Formula.Eval (
   evaluateFunctions
   ) where
 
-import           Control.Arrow                      (first, (&&&))
+import           Control.Arrow                      ( first )
 import           Control.Monad.State
 import qualified Data.Parameterized.Context         as Ctx
 import qualified Data.Parameterized.List            as SL
@@ -94,7 +94,7 @@ evaluateFunctions' sym pf operands rewriters e =
           error "evaluateFunctions: ArrayTrueOnEntries Not implemented"
         S.FnApp symFun assignment -> do
           let key = T.unpack $ S.solverSymbolAsText (S.symFnName symFun)
-              rs = first renameUninterpretedFunction <$> rewriters
+              rs = first normalizeUFName <$> rewriters
           assignment' <- traverseFC (evaluateFunctions' sym pf operands rs) assignment
           case lookup key rewriters of
             Just (Evaluator evaluator) -> do
@@ -104,12 +104,19 @@ evaluateFunctions' sym pf operands rewriters e =
             Nothing ->
               liftIO $ applySymFn sym symFun assignment
 
--- | By default, symbolic function names hold to a different naming convention than what is defined
--- in instruction semantics. In order to ensure we can lookup a function by its name,
--- we modify it in our list of rewriters (e.g. `ppc.memrr_base` to `ppc_memrr_base`).
-renameUninterpretedFunction :: [Char] -> [Char]
-renameUninterpretedFunction ks = xs ++ "_" ++ ys
-  where
-    (xs,ys) =
-      takeWhile (/='.') &&&
-        drop 1 . dropWhile (/='.') $ ks
+-- | Normalize the name of an uninterpreted function to the SimpleBuilder-friendly form
+--
+-- Our mapping from uninterpreted function names to evaluators uses names in the
+-- format they appear in our semantics files.  Those names sometimes contain
+-- periods.
+--
+-- SimpleBuilder has a restriction where user-provided uninterpreted function
+-- names cannot contain periods (it replaces all periods it finds with
+-- underscores).  As we traverse an expression (an 'S.Elt'), we will find
+-- uninterpreted functions with names in the SimpleBuilder format.  To correctly
+-- match the functions we find in expressions to the evaluators in the table, we
+-- need to /normalize/ the names in the table so that they are consistent with
+-- the names in the expression tree.  To do that, we need to replace every
+-- period in the name with an underscore.
+normalizeUFName :: String -> String
+normalizeUFName = map (\c -> if c == '.' then '_' else c)
