@@ -8,16 +8,18 @@ module SemMC.Architecture.ARM.BaseSemantics.Branch
     )
     where
 
-import Data.Parameterized.Context
-import Prelude hiding ( concat, pred )
+import           Data.Maybe ( fromJust )
+import           Data.Parameterized.Context
+import           Data.Semigroup
 import qualified Dismantle.ARM as A
 import qualified Dismantle.Thumb as T
-import SemMC.Architecture.ARM.BaseSemantics.Base
-import SemMC.Architecture.ARM.BaseSemantics.Helpers
-import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
-import SemMC.Architecture.ARM.BaseSemantics.Registers
-import SemMC.DSL
+import           Prelude hiding ( concat, pred )
+import           SemMC.Architecture.ARM.BaseSemantics.Base
+import           SemMC.Architecture.ARM.BaseSemantics.Helpers
+import           SemMC.Architecture.ARM.BaseSemantics.Natural
+import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Registers
+import           SemMC.DSL
 
 
 manualBranches :: SemARM 'Top ()
@@ -77,7 +79,8 @@ blx_ :: Expr 'TBV  -- ^ new LR value
      -> ArchSubtype  -- ^ target architecture subtype
      -> SemARM 'Def ()
 blx_ newlr tgtaddr tgtarch = do
-    comment "Used to call a subroutine (branch) and switch between A32 and T32 states."
+    curarch <- (subArch . fromJust) <$> getArchData
+    comment $ "Used to call a subroutine (branch) and switch from " <> show curarch <> " to " <> show tgtarch
     comment "Branch with Link and Exchange (F7.1.25, F7-2576)"
     comment "Writes to PC, not R15."
     -- Assembler specifies the label of the instruction being branched
