@@ -35,7 +35,7 @@ data FAtom = AIdent String
            | AString String
            | AInt Integer
            | ABV Int Integer
-           | APhrase String
+           | ANamed String Int FAtom
            deriving (Show, Eq)
 
 
@@ -80,17 +80,20 @@ printTokens comments sexpr =
                      , minExprSize = 6
                      , maxLetBinds = min 8 . (`div` 2)
                      }
-      nameFor _ (SC.SCons (SC.SAtom (APhrase pn)) _) = AIdent pn
-      nameFor n e = AIdent n
-      weighter _ (SC.SCons (SC.SAtom (APhrase _)) _) _ = 1000000 -- always bind this!
-      weighter orig expr cnt = let w' = orig expr cnt
-                                   bl = case expr of
-                                          (SC.SCons (SC.SAtom _) _) -> 500 -- higher baseline
-                                          _ -> 0
-                                   h = F.length expr
-                                   w = bl + h + (2 * cnt)
-                               in if w > 600 then w else 0
-      -- outputFmt = SC.removeMaxWidth $ SC.basicPrint printAtom
+      nameFor n e = case nameOf 0 e of
+                      Nothing -> AIdent n
+                      Just n' -> AIdent n'
+      nameOf d (SC.SAtom (ANamed n' d' _)) = if d == d' then Just n' else Nothing
+      nameOf d (SC.SCons l r) = nameOf (d+1) l
+      nameOf _ _ = Nothing
+      weighter orig expr cnt = case nameOf 0 expr of
+                                 Just _ -> 1000000 -- always bind this!
+                                 Nothing -> let bl = case expr of
+                                                       (SC.SCons (SC.SAtom _) _) -> 500 -- higher baseline
+                                                       _ -> 0
+                                                h = F.length expr
+                                                w = bl + h + (2 * cnt)
+                                            in if w > 600 then w else 0
       outputFmt = SC.setIndentAmount 1 $ SC.basicPrint printAtom
   in formatComment comments <> (SC.encodeOne outputFmt $
                                 discoverLetBindings guide sexpr)
@@ -112,7 +115,7 @@ printAtom a =
     AString s -> T.pack (show s)
     AInt i -> T.pack (show i)
     ABV w val -> formatBV w val
-    APhrase _ -> ""
+    ANamed _ _ a -> printAtom a
 
 
 formatBV :: Int -> Integer -> T.Text
@@ -159,7 +162,7 @@ parseAtom
   P.<|> AString     <$> parseString
   P.<|> AInt . read <$> P.many1 P.digit
   P.<|> uncurry ABV <$> parseBV
-   -- n.b. an APhrase is an internal marker and not expressed or
+   -- n.b. an ANamed is an internal marker and not expressed or
    -- recoverable in the streamed text version
 
 parserLL :: SC.SExprParser FAtom (SC.SExpr FAtom)
