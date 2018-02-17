@@ -561,7 +561,7 @@ blxtgt_J2 = uf (EBV 1) "t32.blxtarget_J2" . ((:[]) . Some) . Loc
 -- doesn't do much, but it is an abstraction point that allows future
 -- focus and refinement on these areas.
 unpredictable :: Expr a -> Expr a
-unpredictable = ("unpredictable" =:)
+unpredictable = id
 
 
 -- | In some cases, the implementation of the chip is allowed to
