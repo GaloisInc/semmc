@@ -151,6 +151,8 @@ type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
+type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
+type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
 type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
 
 
@@ -174,6 +176,8 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
         opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
         opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
+        opV (ARM.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
+        opV (ARM.So_reg_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
         -- opV (Thumb.ThumbBlxTarget v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
@@ -275,6 +279,8 @@ shapeReprType orep =
     ARM.GPRRepr -> knownRepr
     ARM.Mod_immRepr -> knownRepr
     ARM.PredRepr -> knownRepr
+    ARM.So_reg_immRepr -> knownRepr
+    ARM.So_reg_regRepr -> knownRepr
     -- Thumb.ThumbBlxTargetRepr -> knownRepr
     _ -> error $ "Unknown OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- "Imm0_15"
