@@ -2,8 +2,11 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StandaloneDeriving #-}
+
 -- | A DSL to help defining instruction semantics to populate the base set (and manual set)
+
 module SemMC.DSL (
   -- * Definitions
   defineOpcode,
@@ -594,10 +597,10 @@ convertExpr (Some e) =
     UninterpretedFunc _ name params ->
       fromFoldable' (fromFoldable' [ident "_", ident "call", string name] : map convertExpr params)
     NamedSubExpr name expr ->
-        let tag d e = case e of
-                        SC.SNil -> SC.SNil  -- no tagging of nil elements
-                        SC.SAtom a -> SC.SAtom $ ANamed name d a
-                        SC.SCons l r -> SC.SCons (tag (d+1) l) r
+        let tag d = \case
+                    SC.SNil -> SC.SNil  -- no tagging of nil elements
+                    SC.SAtom a -> SC.SAtom $ ANamed name d a
+                    SC.SCons l r -> SC.SCons (tag (d+1) l) r
         in tag 0 $ convertExpr $ Some expr
 
 convertLoc :: Location tp -> SC.SExpr FAtom

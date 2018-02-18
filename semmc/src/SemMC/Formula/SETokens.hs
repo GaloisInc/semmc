@@ -84,16 +84,16 @@ printTokens comments sexpr =
                       Nothing -> AIdent n
                       Just n' -> AIdent n'
       nameOf d (SC.SAtom (ANamed n' d' _)) = if d == d' then Just n' else Nothing
-      nameOf d (SC.SCons l r) = nameOf (d+1) l
+      nameOf d (SC.SCons l _) = nameOf (d+1) l
       nameOf _ _ = Nothing
-      weighter orig expr cnt = case nameOf 0 expr of
-                                 Just _ -> 1000000 -- always bind this!
-                                 Nothing -> let bl = case expr of
-                                                       (SC.SCons (SC.SAtom _) _) -> 500 -- higher baseline
-                                                       _ -> 0
-                                                h = F.length expr
-                                                w = bl + h + (2 * cnt)
-                                            in if w > 600 then w else 0
+      weighter _ expr cnt = case nameOf 0 expr of
+                              Just _ -> 1000000 -- always bind this!
+                              Nothing -> let bl = case expr of
+                                                    (SC.SCons (SC.SAtom _) _) -> 500 -- higher baseline
+                                                    _ -> 0
+                                             h = F.length expr
+                                             w = bl + h + (2 * cnt)
+                                         in if w > 600 then w else 0
       outputFmt = SC.setIndentAmount 1 $ SC.basicPrint printAtom
   in formatComment comments <> (SC.encodeOne outputFmt $
                                 discoverLetBindings guide sexpr)
@@ -115,7 +115,7 @@ printAtom a =
     AString s -> T.pack (show s)
     AInt i -> T.pack (show i)
     ABV w val -> formatBV w val
-    ANamed _ _ a -> printAtom a
+    ANamed _ _ e -> printAtom e
 
 
 formatBV :: Int -> Integer -> T.Text
