@@ -9,7 +9,6 @@
 module Main ( main ) where
 
 import qualified Control.Concurrent.Async           as A
-import           Data.Bool                          ( bool )
 import qualified Data.ByteString                    as BS
 import qualified Data.ByteString.Base16             as BSHex
 import qualified Data.ByteString.Lazy               as BSL
@@ -17,7 +16,6 @@ import qualified Data.ByteString.UTF8               as BS8
 import qualified Data.Foldable                      as F
 import qualified Data.Functor.Identity              as I
 import           Data.Monoid
-import           Data.Proxy
 import           Data.Word                          ( Word32 )
 import qualified Options.Applicative                as O
 import           Text.Printf                        ( printf )
@@ -37,12 +35,8 @@ import           SemMC.Architecture ( Architecture
                                     , Location
                                     , Opcode
                                     , Operand
-                                    , locationFuncInterpretation
-                                    , FunctionInterpretation
-                                    , exprInterp
                                     )
 import qualified SemMC.Architecture.PPC32.Opcodes   as PPC32
-import qualified SemMC.Architecture.PPC64.Opcodes   as PPC64
 import qualified SemMC.Formula                      as F
 import           SemMC.Synthesis.Template           ( BaseSet, TemplatedArch, unTemplate )
 import qualified SemMC.Synthesis                    as SemMC
@@ -54,7 +48,6 @@ import qualified SemMC.Architecture.PPC32           as PPC32
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
                        , oOriginalWithReturn :: Maybe FilePath
-                       , oBaseArch :: String
                        , oAppendReturn :: Bool
                        }
 
@@ -68,10 +61,6 @@ options = Options <$> O.strArgument ( O.metavar "FILE"
                   <*> O.optional ( O.strOption ( O.long "with-return"
                                                <> O.metavar "FILE"
                                                <> O.help "The file to save the original program with a return instruction appended" ))
-                  <*> O.strOption ( O.long "arch"
-                                  <> O.short 'a'
-                                  <> O.metavar "ARCH"
-                                  <> O.help "The architecture of instructions to disassemble (PPC32 or PPC64)" )
                   <*> O.switch ( O.long "append-return"
                                <> O.short 'r'
                                <> O.help "Append a return instruction to the synthesized program" )
@@ -136,9 +125,9 @@ loadBaseSet ops sym = do
       synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
 
-symbolicallyExecute ::
-  (Architecture arch, Traversable t1) =>
-  SB.SimpleBuilder t2 st
+symbolicallyExecute
+  :: (Architecture arch, Traversable t1)
+  => SB.SimpleBuilder t2 st
   -> MapF.MapF
        (SemMC.Architecture.Opcode arch (SemMC.Architecture.Operand arch))
        (F.ParameterizedFormula (SB.SimpleBuilder t2 st) arch)
