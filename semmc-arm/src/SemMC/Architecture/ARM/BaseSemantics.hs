@@ -17,6 +17,7 @@ numGPR = 16
 semdefs :: [ (String, [(String, Definition)]) ]
 semdefs = [ ("memory", memory)
           , ("arithmetic", arithmetic)
+          , ("bitwise", bitwise)
           , ("branches", branches)
           ]
 
@@ -28,8 +29,12 @@ memory = runSem $ do
 arithmetic :: [(String, Definition)]
 arithmetic = runSem $ do
              manualArithmetic
-             manualBitwise
              return ()
+
+bitwise :: [(String, Definition)]
+bitwise = runSem $ do
+            manualBitwise
+            return ()
 
 branches :: [(String, Definition)]
 branches = runSem $ do
