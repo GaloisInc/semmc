@@ -172,6 +172,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
   where opV :: ARM.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
         opV (ARM.Addr_offset_none gpr) = locLookup (LocGPR gpr)
         opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
+        opV (ARM.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
         opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
         opV (ARM.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
@@ -260,6 +261,9 @@ locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
 locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation { A.exprInterpName = 'interpIsR15 })
 
+    , ("a32.am2offset_imm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpAm2offsetimmImmExtractor })
+    , ("a32.am2offset_imm_add", A.FunctionInterpretation { A.exprInterpName = 'interpAm2offsetimmAddExtractor })
+
     , ("a32.imm12_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpImm12Reg
                                                  , A.exprInterpName = 'interpImm12RegExtractor
                                                  })
@@ -276,6 +280,7 @@ shapeReprType orep =
   case orep of
     ARM.Addr_offset_noneRepr -> knownRepr
     ARM.Addrmode_imm12_preRepr -> knownRepr
+    ARM.Am2offset_immRepr -> knownRepr
     ARM.Arm_blx_targetRepr -> knownRepr
     ARM.Cc_outRepr -> knownRepr
     ARM.GPRRepr -> knownRepr

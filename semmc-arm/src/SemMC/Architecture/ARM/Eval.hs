@@ -11,6 +11,8 @@
 module SemMC.Architecture.ARM.Eval
     ( createSymbolicEntries
     , interpIsR15
+    , interpAm2offsetimmImmExtractor
+    , interpAm2offsetimmAddExtractor
     , interpImm12Reg
     , interpImm12RegExtractor
     , interpImm12OffsetExtractor
@@ -52,8 +54,20 @@ createSymbolicEntries = foldr duplicateIfDotted []
           in newElt : elt : acc
 
 
+------------------------------------------------------------------------
+-- | Extract values from the Am2offset_imm operand
+
+interpAm2offsetimmImmExtractor :: ARMOperands.Am2OffsetImm -> Int16
+interpAm2offsetimmImmExtractor = fromInteger . toInteger . ARMOperands.am2OffsetImmImmediate
+
+interpAm2offsetimmAddExtractor :: ARMOperands.Am2OffsetImm -> Bool
+interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
+
+
+------------------------------------------------------------------------
+
 -- | Extract the register value from an addrmode_imm12[_pre] via
--- the arm.imm12_reg user function.
+-- the a32.imm12_reg user function.
 interpImm12Reg :: forall sh s arm tp
                    . (L.IsLocation (Location arm), L.Location arm ~ Location arm)
                    => PL.List ARM.Operand sh
@@ -81,7 +95,9 @@ interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Bool
 interpImm12AddFlgExtractor = (== 1) . ARMOperands.addrModeImm12Add
 
 
+------------------------------------------------------------------------
 -- | Extract values from the Mod_imm operand
+
 interpModimmImmExtractor :: ARMOperands.ModImm -> Int8
 interpModimmImmExtractor = fromInteger . toInteger . ARMOperands.modImmOrigImmediate
 
