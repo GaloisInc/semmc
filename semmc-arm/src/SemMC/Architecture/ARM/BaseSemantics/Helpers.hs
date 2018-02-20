@@ -525,11 +525,11 @@ ldst_so_regAdd = uf EBool "a32.ldst_so_reg_add"
 
 -- | Returns the immediate offset value in ldst_so_reg
 ldst_so_regImmediate :: [Some Expr] -> Expr 'TBV
-ldst_so_regImmediate = uf (EBV 16) "a32.ldst_so_reg_immediate"
+ldst_so_regImmediate = uf (EBV 5) "a32.ldst_so_reg_immediate"
 
 -- | Returns the shift type in ldst_so_reg
 ldst_so_regShiftType :: [Some Expr] -> Expr 'TBV
-ldst_so_regShiftType = uf (EBV 8) "a32.ldst_so_shift_type"
+ldst_so_regShiftType = uf (EBV 2) "a32.ldst_so_shift_type"
 
 -- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_imm :: Location 'TBV -> Expr 'TBV
@@ -697,4 +697,5 @@ decodeImmShift ty imm5 = ImmShift $ "immShift" =:
 
 -- | The Shift function from the ARM manual (v8).
 shift :: Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-shift value st amount carry_in = undefined -- FIXME
+shift value st amount carry_in =
+  uf naturalBV "a32.shift" (Some <$> [value, unSRType st, amount, carry_in])

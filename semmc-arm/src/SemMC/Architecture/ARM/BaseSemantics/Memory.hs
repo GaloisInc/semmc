@@ -97,15 +97,15 @@ defineStores = do
     input memory
     let ldstSoRegArg = [Some $ Loc ldstSoReg]
 
-        add = ldst_so_regAdd ldstSoRegArg
-        rN  = ldst_so_regBaseRegister ldstSoReg
-        rM  = ldst_so_regOffsetRegister ldstSoReg
-        imm = ldst_so_regImmediate ldstSoRegArg
-        st  = ldst_so_regShiftType ldstSoRegArg
+        add  = ldst_so_regAdd ldstSoRegArg
+        rN   = ldst_so_regBaseRegister ldstSoReg
+        rM   = ldst_so_regOffsetRegister ldstSoReg
+        imm5 = ldst_so_regImmediate ldstSoRegArg
+        st   = ldst_so_regShiftType ldstSoRegArg
 
         (_,_,c,_) = getNZCV
 
-        (shift_t, shift_n) = splitImmShift (decodeImmShift st imm)
+        (shift_t, shift_n) = splitImmShift (decodeImmShift st imm5)
         offset = shift (Loc rM) shift_t shift_n c
 
         nBytes = 4
