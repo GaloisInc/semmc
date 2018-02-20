@@ -200,7 +200,7 @@ manualBitwise = do
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
-    andrr rD (Loc rN) (Loc rM) setflags shift_t shift_n
+    andrr rD (Loc rM) (Loc rN) setflags shift_t shift_n
 
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
