@@ -261,6 +261,8 @@ locationFuncInterpretation =
     , ("a32.imm12_off", A.FunctionInterpretation { A.exprInterpName = 'interpImm12OffsetExtractor })
     , ("a32.imm12_add", A.FunctionInterpretation { A.exprInterpName = 'interpImm12AddFlgExtractor })
 
+    -- FIXME: Need to add lines for Am2Offset_imm and Addr_offset_none
+
     , ("a32.modimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpModimmImmExtractor })
     , ("a32.modimm_rot", A.FunctionInterpretation { A.exprInterpName = 'interpModimmRotExtractor })
 

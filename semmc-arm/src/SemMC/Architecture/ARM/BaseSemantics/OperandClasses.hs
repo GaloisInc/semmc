@@ -33,6 +33,9 @@ addr_offset_none = "Addr_offset_none"
 arm_blx_target :: String
 arm_blx_target = "Arm_blx_target"
 
+ldst_so_reg :: String
+ldst_so_reg = "Ldst_so_reg"
+
 cc_out :: String
 cc_out = "Cc_out"
 

@@ -84,6 +84,33 @@ defineStores = do
         sameRegs = sameLocation rT rN
     defMem memory (Loc rN) nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
     defReg rN (ite (orp (isR15 rN) sameRegs) (unpredictable updated_addr) updated_addr)
+  defineA32Opcode A.STR_PRE_REG (Empty
+                                :> ParamDef "predBits" pred (EBV 4)
+                                :> ParamDef "ldst_so_reg" ldst_so_reg EMemRef -- ???
+                                :> ParamDef "grp" gpr naturalBV
+                                )
+    $ \_ ldstSoReg rT -> do
+    comment "Store Register, Pre-indexed (P=1, W=1), register (A32)"
+    comment "doc: F7.1.218, page F7-2882"
+    input rT
+    input ldstSoReg
+    input memory
+    let ldstSoRegArg = [Some $ Loc ldstSoReg]
+
+        add = ldst_so_regAdd ldstSoRegArg
+        rN  = ldst_so_regBaseRegister ldstSoReg
+        rM  = ldst_so_regOffsetRegister ldstSoReg
+        imm = ldst_so_regImmediate ldstSoRegArg
+        st  = ldst_so_regShiftType ldstSoRegArg
+
+        (_,_,c,_) = getNZCV
+
+        (shift_t, shift_n) = splitImmShift (decodeImmShift st imm)
+        offset = shift (Loc rM) shift_t shift_n c
+
+        nBytes = 4
+        addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
+    defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
 
 -- ----------------------------------------------------------------------
 
