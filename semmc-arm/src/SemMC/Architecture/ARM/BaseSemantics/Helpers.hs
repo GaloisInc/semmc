@@ -31,6 +31,9 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     -- * Opcode unpacking
     , imm12Reg, imm12Off, imm12Add
     , am2offset_immAdd, am2offset_immImm
+    , ldst_so_regBaseRegister, ldst_so_regOffsetRegister
+    , ldst_so_regAdd, ldst_so_regImmediate
+    , ldst_so_regShiftType
     , modImm_imm, modImm_rot
     , soRegReg_type, soRegReg_reg1, soRegReg_reg2
     , soRegImm_imm, soRegImm_type, soRegImm_reg
@@ -40,11 +43,16 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , constrainUnpredictable
     , sameLocation
     , isR15
+    , SRType(..)
+    , srtLSL, srtLSR, srtASR, srtROR, srtRRX
+    , ImmShift(..)
+    , splitImmShift, decodeRegShift, decodeImmShift
+    , shift
     )
     where
 
 import Control.Monad ( when )
-import Data.Bits
+import Data.Bits hiding (shift)
 import Data.Maybe
 import Data.Parameterized.Classes
 import Data.Parameterized.Context
@@ -76,7 +84,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
   SymToExprTag "Am2offset_imm" = 'TMemRef
-  SymToExprTag "Addr_offset_none" = 'TBV
+  SymToExprTag "Ldst_so_reg" = 'TMemRef
   SymToExprTag "Arm_blx_target" = 'TBV
   SymToExprTag "So_reg_reg" = 'TMemRef
   SymToExprTag "So_reg_imm" = 'TMemRef
@@ -497,6 +505,27 @@ am2offset_immAdd = uf EBool "a32.am2offset_imm_add"
 am2offset_immImm :: [Some Expr] -> Expr 'TBV
 am2offset_immImm = uf (EBV 16) "a32.am2offset_imm_imm"
 
+-- | Returns the base register in ldst_so_reg
+ldst_so_regBaseRegister :: Location 'TMemRef -> Location 'TBV
+ldst_so_regBaseRegister = locUF naturalBV "a32.ldst_so_reg_base_register"
+
+-- | Returns the offset register in ldst_so_reg
+ldst_so_regOffsetRegister :: Location 'TMemRef -> Location 'TBV
+ldst_so_regOffsetRegister = locUF naturalBV "a32.ldst_so_reg_offset_register"
+
+-- | Returns the addition flag in ldst_so_reg
+ldst_so_regAdd :: [Some Expr] -> Expr 'TBool
+ldst_so_regAdd = uf EBool "a32.ldst_so_reg_add"
+
+-- | Returns the immediate offset value in ldst_so_reg
+ldst_so_regImmediate :: [Some Expr] -> Expr 'TBV
+ldst_so_regImmediate = uf (EBV 5) "a32.ldst_so_reg_immediate"
+
+-- | Returns the shift type in ldst_so_reg
+ldst_so_regShiftType :: [Some Expr] -> Expr 'TBV
+ldst_so_regShiftType = uf (EBV 2) "a32.ldst_so_shift_type"
+
+>>>>>>> c7abab51c9da5fc044f48a241ef95a133a8c30fb
 -- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_imm :: Location 'TBV -> Expr 'TBV
 modImm_imm = uf (EBV 8) "a32.modimm_imm" . ((:[]) . Some) . Loc
@@ -578,3 +607,90 @@ sameLocation l = LitBool . maybe False (const True) . testEquality l
 -- | Is the current register R15 (aka PC)?
 isR15 :: Location 'TBV -> Expr 'TBool
 isR15 = uf EBool "arm.is_r15" . ((:[]) . Some) . Loc
+
+-- | A wrapper around expressions representing the shift type
+--
+-- In the ARM manual, this is represented with an ADT, but our formula language
+-- does not have ADTs. Instead, we use the following encoding:
+--
+-- * 0b000 : SRType_LSL
+-- * 0b001 : SRType_LSR
+-- * 0b010 : SRType_ASR
+-- * 0b011 : SRType_ROR
+-- * 0b100 : SRType_RRX
+--
+-- Note that there is an unused bit pattern, which is unfortunate but unavoidable
+newtype SRType = SRType { unSRType :: Expr 'TBV }
+
+srtLSL, srtLSR, srtASR, srtROR, srtRRX :: SRType
+srtLSL = SRType (LitBV 3 0b000)
+srtLSR = SRType (LitBV 3 0b001)
+srtASR = SRType (LitBV 3 0b010)
+srtROR = SRType (LitBV 3 0b011)
+srtRRX = SRType (LitBV 3 0b100)
+
+-- | Represents the result of 'decodeImmShift', and is actually a pair of the
+-- SRType (3 bits) followed by the shift amount (32 bits).
+--
+-- We need this because our formulas can't return multiple values
+newtype ImmShift = ImmShift (Expr 'TBV)
+
+-- | Split an 'ImmShift' into its component parts
+--
+-- We use this newtype to make it clear that the result of 'decodeImmShift' is
+-- not directly usable as a bitvector.
+--
+-- The first element of the pair is the SRType, while the second is a 32 bit
+-- bitvector encoding the shift amount.
+splitImmShift :: ImmShift -> (SRType, Expr 'TBV)
+splitImmShift (ImmShift is) = (SRType (extract 34 32 is), extract 31 0 is)
+
+-- | Convert a two bit shift type into our SRType
+--
+-- > // DecodeRegShift()
+-- > // ================
+-- > SRType DecodeRegShift(bits(2) type)
+-- >   case type of
+-- >     when ‘00’ shift_t = SRType_LSL;
+-- >     when ‘01’ shift_t = SRType_LSR;
+-- >     when ‘10’ shift_t = SRType_ASR;
+-- >     when ‘11’ shift_t = SRType_ROR;
+-- >   return shift_t;
+decodeRegShift :: Expr 'TBV -> SRType
+decodeRegShift = SRType . concat (LitBV 1 0b0)
+
+
+
+-- | This is the DecodeImmShift function in the ARM semantics.
+--
+-- Note that we only return the shift amount expression (shift_n); we can get
+-- the shift type with a different accessor
+--
+-- > // DecodeImmShift()
+-- > // ================
+-- > (SRType, integer) DecodeImmShift(bits(2) type, bits(5) imm5)
+-- > case type of
+-- >   when ‘00’
+-- >     shift_t = SRType_LSL; shift_n = UInt(imm5);
+-- >   when ‘01’
+-- >     shift_t = SRType_LSR; shift_n = if imm5 == ‘00000’ then 32 else UInt(imm5);
+-- >   when ‘10’
+-- >     shift_t = SRType_ASR; shift_n = if imm5 == ‘00000’ then 32 else UInt(imm5);
+-- >   when ‘11’
+-- >     if imm5 == ‘00000’ then
+-- >       shift_t = SRType_RRX; shift_n = 1;
+-- >     else
+-- >       shift_t = SRType_ROR; shift_n = UInt(imm5);
+-- > return (shift_t, shift_n);
+decodeImmShift :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> ImmShift
+decodeImmShift ty imm5 = ImmShift $ "immShift" =:
+  cases [ (bveq ty (LitBV 2 0b00), concat (LitBV 3 0b000) (zext imm5))
+        , (bveq ty (LitBV 2 0b01), concat (LitBV 3 0b001) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))
+        , (bveq ty (LitBV 2 0b10), concat (LitBV 3 0b010) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))
+        , (bveq imm5 (LitBV 5 0b00000), concat (LitBV 3 0b100) (naturalLitBV 1))
+        ] (concat (LitBV 3 0b011) (zext imm5))
+
+-- | The Shift function from the ARM manual (v8).
+shift :: Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+shift value st amount carry_in =
+  uf naturalBV "a32.shift" (Some <$> [value, unSRType st, amount, carry_in])
