@@ -64,10 +64,10 @@ uninterpretedFunctions _ =
   , ("a32.soregreg_type", -- Extract the two bit shift type
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 2)))
-  , ("a32.soregreg_shift", -- Extract the register containing the shift amount
+  , ("a32.soregreg_reg1", -- Extract the register containing the shift amount
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
-  , ("a32.soregreg_reg", -- Extract the register being shifted
+  , ("a32.soregreg_reg2", -- Extract the register being shifted
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
 

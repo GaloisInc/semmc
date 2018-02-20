@@ -273,6 +273,17 @@ locationFuncInterpretation =
     , ("a32.modimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpModimmImmExtractor })
     , ("a32.modimm_rot", A.FunctionInterpretation { A.exprInterpName = 'interpModimmRotExtractor })
 
+    , ("a32.soregimm_type", A.FunctionInterpretation { A.exprInterpName = 'interpSoregimmTypeExtractor })
+    , ("a32.soregimm_imm",  A.FunctionInterpretation { A.exprInterpName = 'interpSoregimmImmExtractor })
+    , ("a32.soregimm_reg",  A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpSoregimmReg
+                                                     , A.exprInterpName = 'interpSoregimmRegExtractor })
+
+    , ("a32.soregreg_type", A.FunctionInterpretation { A.exprInterpName = 'interpSoregregTypeExtractor })
+    , ("a32.soregreg_reg1", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpSoregregReg1
+                                                     , A.exprInterpName = 'interpSoregregReg1Extractor })
+    , ("a32.soregreg_reg2", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
+                                                     , A.exprInterpName = 'interpSoregregReg2Extractor })
+
     ]
 
 shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)

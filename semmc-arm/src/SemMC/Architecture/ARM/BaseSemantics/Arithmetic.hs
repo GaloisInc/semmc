@@ -130,18 +130,18 @@ manualBitwise = do
                           )
                     $ \ rD setcc _ rM rN -> do
     comment "AND register, Encoding A1  (F7.1.14, F7-2558)"
-    comment "Note that this encoding fixes the shift to 0"
     input rM
     input rN
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    comment "Note that this encoding fixes the shift to 0"
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
-    andrr rD (Loc rM) (Loc rN) setflags shift_t shift_n
+    andrr rD rM rN setflags shift_t shift_n
   defineA32Opcode A.ANDrsi (  Empty
                            :> ParamDef "rD" gpr naturalBV
                            :> ParamDef "setcc" cc_out (EBV 1)
                            :> ParamDef "predBits" pred (EBV 4)
-                           :> ParamDef "sori" so_reg_imm naturalBV
+                           :> ParamDef "sori" so_reg_imm EMemRef
                            :> ParamDef "rN" gpr naturalBV
                            )
                  $ \rD setcc _ sori rN -> do
@@ -154,12 +154,12 @@ manualBitwise = do
     let rM = soRegImm_reg sori
     let imm = soRegImm_imm sori
     let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
-    andrr rD rM (Loc rN) setflags shift_t shift_n
+    andrr rD rM rN setflags shift_t shift_n
   defineA32Opcode A.ANDrsr (  Empty
                            :> ParamDef "rD" gpr naturalBV
                            :> ParamDef "setcc" cc_out (EBV 1)
                            :> ParamDef "predBits" pred (EBV 4)
-                           :> ParamDef "sorr" so_reg_reg naturalBV
+                           :> ParamDef "sorr" so_reg_reg EMemRef
                            :> ParamDef "rN" gpr naturalBV
                            )
                  $ \rD setcc _ sorr rN -> do
@@ -170,21 +170,21 @@ manualBitwise = do
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
     let shift_t = decodeRegShift (soRegReg_type sorr)
-    let shift_n = zext (extract 7 0 (soRegReg_shift sorr))
-    let rM = soRegReg_reg sorr
-    andrsr rD (Loc rN) rM setflags shift_t shift_n
+    let rS = soRegReg_reg1 sorr
+    let rM = soRegReg_reg2 sorr
+    andrsr rD rM rN setflags shift_t rS
   defineT32Opcode T.TAND ( Empty
-                         :> ParamDef "rD" tgpr naturalBV
+                         :> ParamDef "rDN" tgpr naturalBV
                          :> ParamDef "rM" tgpr naturalBV
                          )
-                  $ \rD rM -> do
+                  $ \rDN rM -> do
     comment "AND register, Encoding T1 (F7.1.14, F7-2558)"
-    comment "This encoding has no shift"
-    input rD
+    input rDN
     input rM
     let setflags = notp inITBlock
+    comment "This encoding has no shift; fixed to 0"
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
-    andrr rD (Loc rM) (Loc rD) setflags shift_t shift_n
+    andrr rDN rM rDN setflags shift_t shift_n
   defineT32Opcode T.T2ANDrr (  Empty
                             :> ParamDef "rD" tgpr naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
@@ -193,14 +193,14 @@ manualBitwise = do
                             )
                  $ \rD setcc rN rM -> do
     comment "AND register, Encoding T2 (F7.1.14, F7-2558)"
-    comment "This encoding has no shift"
     input rD
     input rN
     input rM
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    comment "This encoding has no shift; fixed to 0"
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
-    andrr rD (Loc rM) (Loc rN) setflags shift_t shift_n
+    andrr rD rM rN setflags shift_t shift_n
 
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -228,13 +228,16 @@ manualBitwise = do
 
 -- ----------------------------------------------------------------------
 
-andrr :: (HasCallStack) => Location 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
+andrr :: (HasCallStack) =>
+         Location 'TBV
+      -> Location 'TBV
+      -> Location 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
 andrr rD rM rN setflags shift_t shift_n = do
   let (_, _, c, v) = getNZCV
-  let shiftedWithCarry = shiftC rM shift_t shift_n c
+  let shiftedWithCarry = shiftC (Loc rM) shift_t shift_n c
   let shifted = extract 31 0 shiftedWithCarry
   let carry = extract 32 32 shiftedWithCarry
-  let result = bvand rN shifted
+  let result = bvand (Loc rN) shifted
   let n' = extract 31 31 result
   let z' = ite (bveq result (naturalLitBV 0x0)) (LitBV 1 0b1) (LitBV 1 0b0)
   let c' = carry
@@ -244,19 +247,21 @@ andrr rD rM rN setflags shift_t shift_n = do
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-andrsr :: (HasCallStack) => Location 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
-andrsr rD rM rN setflags shift_t shift_n = do
+andrsr :: (HasCallStack) =>
+          Location 'TBV
+       -> Location 'TBV
+       -> Location 'TBV -> Expr 'TBool -> SRType -> Location 'TBV -> SemARM 'Def ()
+andrsr rD rM rN setflags shift_t rS = do
   let (_, _, c, v) = getNZCV
-  let shiftedWithCarry = shiftC rM shift_t shift_n c
+      shift_n = zext $ extract 7 0 (Loc rS)
+  let shiftedWithCarry = shiftC (Loc rM) shift_t shift_n c
   let shifted = extract 31 0 shiftedWithCarry
   let carry = extract 32 32 shiftedWithCarry
-  let result = bvand rN shifted
+  let result = bvand (Loc rN) shifted
   let n' = extract 31 31 result
   let z' = ite (bveq result (naturalLitBV 0x0)) (LitBV 1 0b1) (LitBV 1 0b0)
-  let c' = carry
-  let v' = v
-  let nzcv = "nzcv" =: concat n' (concat z' (concat c' v'))
-  let writesOrReadsR15 = anyp  [ isR15 rD ] -- FIXME: We need the rest of these, too
+  let nzcv = "nzcv" =: concat n' (concat z' (concat carry v))
+  let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
 
