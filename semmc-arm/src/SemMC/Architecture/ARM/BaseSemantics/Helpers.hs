@@ -84,6 +84,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
   SymToExprTag "Am2offset_imm" = 'TMemRef
+  SymToExprTag "Addr_offset_none" = 'TBV
   SymToExprTag "Ldst_so_reg" = 'TMemRef
   SymToExprTag "Arm_blx_target" = 'TBV
   SymToExprTag "So_reg_reg" = 'TMemRef
@@ -525,7 +526,6 @@ ldst_so_regImmediate = uf (EBV 5) "a32.ldst_so_reg_immediate"
 ldst_so_regShiftType :: [Some Expr] -> Expr 'TBV
 ldst_so_regShiftType = uf (EBV 2) "a32.ldst_so_shift_type"
 
->>>>>>> c7abab51c9da5fc044f48a241ef95a133a8c30fb
 -- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_imm :: Location 'TBV -> Expr 'TBV
 modImm_imm = uf (EBV 8) "a32.modimm_imm" . ((:[]) . Some) . Loc
