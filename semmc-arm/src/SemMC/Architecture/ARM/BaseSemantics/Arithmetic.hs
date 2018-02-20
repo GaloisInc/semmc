@@ -154,7 +154,7 @@ manualBitwise = do
     let rM = soRegImm_reg sori
     let imm = soRegImm_imm sori
     let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
-    andrr rD (Loc rN) rM setflags shift_t shift_n
+    andrr rD rM (Loc rN) setflags shift_t shift_n
   defineA32Opcode A.ANDrsr (  Empty
                            :> ParamDef "rD" gpr naturalBV
                            :> ParamDef "setcc" cc_out (EBV 1)
