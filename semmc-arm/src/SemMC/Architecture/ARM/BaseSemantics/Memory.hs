@@ -65,7 +65,7 @@ defineStores = do
   defineA32Opcode A.STR_POST_IMM (Empty
                                  :> ParamDef "predBits" pred (EBV 4)
                                  :> ParamDef "imm" am2offset_imm EMemRef
-                                 :> ParamDef "off" addr_offset_none EMemRef -- ???
+                                 :> ParamDef "off" addr_offset_none naturalBV
                                  :> ParamDef "gpr" gpr naturalBV
                                  )
     $ \_ imm12 off rT -> do
@@ -78,7 +78,7 @@ defineStores = do
     let imm12arg = [Some $ Loc imm12]
         add = am2offset_immAdd imm12arg
         offset = zext $ am2offset_immImm imm12arg
-        rN = addr_offset_noneReg off
+        rN = off
         updated_addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
         nBytes = 4
         sameRegs = sameLocation rT rN
