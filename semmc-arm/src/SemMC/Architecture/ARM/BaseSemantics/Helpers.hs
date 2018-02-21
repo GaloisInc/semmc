@@ -43,6 +43,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , constrainUnpredictable
     , sameLocation
     , isR15
+    , anyp
     )
     where
 
@@ -603,3 +604,6 @@ sameLocation l = LitBool . maybe False (const True) . testEquality l
 isR15 :: Location 'TBV -> Expr 'TBool
 isR15 = uf EBool "arm.is_r15" . ((:[]) . Some) . Loc
 
+anyp :: [Expr 'TBool] -> Expr 'TBool
+anyp [] = LitBool False
+anyp (r : rs) = orp r (anyp rs)

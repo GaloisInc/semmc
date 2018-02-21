@@ -266,10 +266,6 @@ andrsr rD rM rN setflags shift_t rS = do
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
 
-anyp :: [Expr 'TBool] -> Expr 'TBool
-anyp [] = LitBool False
-anyp (r : rs) = orp r (anyp rs)
-
 -- | Expand/rotate ModImm value to corresponding 32-bit immediate
 -- value (F4-2473)
 armExpandImm :: Location 'TBV -> Expr 'TBV
