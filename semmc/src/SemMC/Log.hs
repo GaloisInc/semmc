@@ -44,11 +44,15 @@ module SemMC.Log (
   -- * Configuration
   LogCfg,
   mkLogCfg,
+  mkNonLogCfg,
   withLogging,
   -- * Log consumers
   stdErrLogEventConsumer,
   fileLogEventConsumer,
   tmpFileLogEventConsumer,
+  -- * Log formatting and consumption (useful for 3rd-party consumers)
+  prettyLogEvent,
+  consumeUntilEnd,
   -- * Named threads
   named,
   namedIO,
@@ -198,7 +202,9 @@ logM level msg = do
 -- logger has finished logging and has successfully flushed all log messages
 -- before terminating it.
 logEndWith :: LogCfg -> IO ()
-logEndWith cfg = BC.writeChan (lcChan cfg) Nothing
+logEndWith cfg = case lcChan cfg of
+                   Just c -> BC.writeChan c Nothing
+                   Nothing -> return ()
 
 ----------------------------------------------------------------
 -- ** Initialization
@@ -221,8 +227,21 @@ mkLogCfg threadName = do
     tid <- show <$> Cc.myThreadId
     return $ Map.fromList [ (tid, threadName) ]
   lcThreadMap <- Stm.newTVarIO threadMap
-  return $ LogCfg { lcChan = lcChan
+  return $ LogCfg { lcChan = Just lcChan
                   , lcThreadMap = lcThreadMap }
+
+
+-- | Initialize a 'LogCfg' that does no logging.
+--
+-- This can be used as a LogCfg when no logging is to be performed.
+-- Runtime overhead is smaller when this configuration is specified at
+-- compile time.
+mkNonLogCfg :: IO LogCfg
+mkNonLogCfg = do lcThreadMap <- Stm.newTVarIO Map.empty
+                 return LogCfg { lcChan = Nothing
+                               , lcThreadMap = lcThreadMap
+                               }
+
 
 -- | Run an action with the given log event consumer.
 --
@@ -253,13 +272,15 @@ withLogging threadName logEventConsumer action = do
 -- 'Debug' level messages.
 consumeUntilEnd ::
   (LogEvent -> Bool) -> (LogEvent -> IO ()) -> LogCfg -> IO ()
-consumeUntilEnd pred k cfg = do
-  mevent <- BC.readChan (lcChan cfg)
-  case mevent of
-    Just event -> do
-        when (pred event) $ k event
-        consumeUntilEnd pred k cfg
-    _ -> return ()
+consumeUntilEnd pred k cfg =
+  case lcChan cfg of
+    Nothing -> return ()
+    Just c -> do
+      mevent <- BC.readChan c
+      case mevent of
+        Just event -> do when (pred event) $ k event
+                         consumeUntilEnd pred k cfg
+        _ -> return ()
 
 -- | A log event consumer that prints formatted log events to stderr.
 stdErrLogEventConsumer :: (LogEvent -> Bool) -> LogCfg -> IO ()
@@ -347,7 +368,7 @@ data LogEvent = LogEvent
 
 -- | Logging configuration.
 data LogCfg = LogCfg
-  { lcChan :: BC.BoundedChan (Maybe LogEvent)
+  { lcChan :: Maybe (BC.BoundedChan (Maybe LogEvent))
   , lcThreadMap :: Stm.TVar (Map ThreadId String)
     -- ^ User friendly names for threads. See 'asyncNamed'.
 
@@ -398,7 +419,9 @@ writeLogEvent cfg cs level msg = do
   tid <- show <$> Cc.myThreadId
   ptid <- prettyThreadId cfg tid
   time <- T.getCurrentTime
-  BC.writeChan (lcChan cfg) (Just (event ptid time))
+  case lcChan cfg of
+    Nothing -> return ()
+    Just c -> BC.writeChan c (Just (event ptid time))
   where
     event tid time = LogEvent
       { leCallSite = callSite
