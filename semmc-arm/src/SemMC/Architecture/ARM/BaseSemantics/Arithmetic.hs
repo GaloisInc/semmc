@@ -17,6 +17,7 @@ import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
+import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExpandImm
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 import qualified Dismantle.ARM as A
@@ -265,34 +266,6 @@ andrsr rD rM rN setflags shift_t rS = do
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
-
--- | Expand/rotate ModImm value to corresponding 32-bit immediate
--- value (F4-2473)
-armExpandImm :: Location 'TBV -> Expr 'TBV
-armExpandImm imm12 =
-    let val = modImm_imm imm12
-        rot = modImm_rot imm12
-        -- Determine value per Table F4-6 (F4.2.4, F4-2472)
-        val32 = zext val
-        rotv = bvshl (naturalLitBV 1) $ zext rot -- multiply by 2
-        rval32 = ite (bveq rotv (naturalLitBV 0)) val32 (ror rotv val32)
-    in "armExpandImm" =: rval32
-
--- | Expand/rotate ModImm value to corresponding 32-bit immediate
--- value (F4-2473) with carry
-armExpandImmC :: Location 'TBV -> Expr 'TBV -> (Expr 'TBV, Expr 'TBV)
-armExpandImmC imm12 carry_in =
-    let val = modImm_imm imm12
-        rot = modImm_rot imm12
-        -- Determine value per Table F4-6 (F4.2.4, F4-2472)
-        val32 = zext val
-        rotv = bvshl (naturalLitBV 1) $ zext rot -- multiply by 2
-        rval32 = ite (bveq rotv (naturalLitBV 0)) val32 (ror rotv val32)
-        msb = extract 31 31 rval32 -- return the MSB as the carry_out
-        carry_out =
-          ite (bveq rotv (naturalLitBV 0)) carry_in msb
-    in (rval32, carry_out)
-
 
 -- | Pseudocode AddWithCarry (E1-2292 or F2-2423)
 addWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV

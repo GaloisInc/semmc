@@ -28,6 +28,7 @@ library
                      , SemMC.Architecture.ARM.BaseSemantics.Memory
                      , SemMC.Architecture.ARM.BaseSemantics.Natural
                      , SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+                     , SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExpandImm
                      , SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
                      , SemMC.Architecture.ARM.BaseSemantics.Registers
                      , SemMC.Architecture.ARM.Components
