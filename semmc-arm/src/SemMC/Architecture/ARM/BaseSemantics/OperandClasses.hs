@@ -2,8 +2,17 @@
 -- specification of operands) and the corresponding operand names in
 -- Dismantle.
 
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+
 module SemMC.Architecture.ARM.BaseSemantics.OperandClasses
     where
+
+import qualified Data.Type.List as TL
+import           GHC.TypeLits ( Symbol )
+import           SemMC.DSL
+
 
 gpr :: String
 gpr = "GPR"
@@ -53,3 +62,28 @@ so_reg_imm = "So_reg_imm"
 
 thumb_blx_target :: String
 thumb_blx_target = "ThumbBlxTarget"
+
+
+-- ----------------------------------------------------------------------
+
+-- | We need a data wrapper around the 'SymToExprTag' to work around what is
+-- known as the "saturation requirement" on type families:
+--
+-- https://stackoverflow.com/questions/40758738/why-doesnt-this-code-infringe-the-saturation-requirement-of-type-families
+data SymToExprTagWrapper :: TL.TyFun k1 k2 -> *
+type instance TL.Apply SymToExprTagWrapper x = SymToExprTag x
+type family SymToExprTag (sym :: Symbol) :: ExprTag where
+  SymToExprTag "GPR" = 'TBV
+  SymToExprTag "Mod_imm" = 'TBV
+  SymToExprTag "Pred" = 'TBV
+  SymToExprTag "Cc_out" = 'TBV
+  SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
+  SymToExprTag "Am2offset_imm" = 'TMemRef
+  SymToExprTag "Addr_offset_none" = 'TBV
+  SymToExprTag "Ldst_so_reg" = 'TMemRef
+  SymToExprTag "Arm_blx_target" = 'TBV
+  SymToExprTag "So_reg_reg" = 'TMemRef
+  SymToExprTag "So_reg_imm" = 'TMemRef
+  SymToExprTag "RGPR" = 'TBV
+  SymToExprTag "TGPR" = 'TBV
+  SymToExprTag "Thumb_blx_target" = 'TBV
