@@ -81,3 +81,23 @@ executable semmc-arm-test
                  vector-sized,
                  semmc,
                  semmc-arm
+
+test-suite test_formulas
+  default-language: Haskell2010
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          TestFormulas.hs
+  build-depends:    base      >=4.7 && <5
+                  , bytestring
+                  , crucible
+                  , dismantle-arm
+                  , dismantle-tablegen
+                  , dismantle-thumb
+                  , parameterized-utils
+                  , semmc
+                  , semmc-arm
+                  , tasty-hunit
+                  , tasty
+                  , text
+  -- dismantle-tablegen needed for Data.Parameterized.HasRepr
+  ghc-options:      -Wall
