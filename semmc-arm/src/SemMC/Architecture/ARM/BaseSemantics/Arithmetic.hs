@@ -16,6 +16,7 @@ import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 import qualified Dismantle.ARM as A
@@ -268,113 +269,6 @@ andrsr rD rM rN setflags shift_t rS = do
 anyp :: [Expr 'TBool] -> Expr 'TBool
 anyp [] = LitBool False
 anyp (r : rs) = orp r (anyp rs)
-
--- | Shift with carry out
---
--- The version in the manual returns a pair.  That is inconvenient in our
--- representation (we don't have pairs). Instead, when the input bitvector is N
--- bits, we return an N+1 bit bitvector where the top bit is the carry out
--- bit. The caller can dissect it.
-shiftC :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-shiftC value (unSRType -> shift_t) shift_n c = "shiftC" =:
-  cases [ (bveq shift_n (naturalLitBV 0x0), concat c value)
-        , (bveq shift_t (LitBV 3 0b000), lslC value shift_n)
-        , (bveq shift_t (LitBV 3 0b001), lsrC value shift_n)
-        , (bveq shift_t (LitBV 3 0b010), asrC value shift_n)
-        , (bveq shift_t (LitBV 3 0b011), rorC value shift_n)
-        ] (rrxC value c)
-
--- | Logical Shift Left (with carry out)  AppxG-5008
---
--- Unlike the version in the manual, we return an N+1 bit bitvector, where the
--- highest bit is the carry out bit.  We do this because we don't have tuples.
---
--- > // LSL_C()
--- > // =======
--- > (bits(N), bit) LSL_C(bits(N) x, integer shift)
--- >   assert shift > 0;
--- >   extended_x = x : Zeros(shift);
--- >   result = extended_x<N-1:0>;
--- >   carry_out = extended_x<N>;
--- >   return (result, carry_out);
-lslC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-lslC x shift = "lslC" =:
-  bvshl (zext' xsize x) (zext' xsize shift)
-  where
-    xsize = exprBVSize x + 1
-
--- | Logical shift right (with carry out) AppxG-5008
---
--- Our implementation isn't the same as the manual because we can't zero extend
--- out to a dynamic width.  Instead, we have to shift and then, if the shift
--- size is less than the bit width, pull out the last bit that would be shifted
--- off with @test_bit_dynamic@.
---
--- > // LSR_C()
--- > // =======
--- >   (bits(N), bit) LSR_C(bits(N) x, integer shift)
--- >   assert shift > 0;
--- >   extended_x = ZeroExtend(x, shift+N);
--- >   result = extended_x<shift+N-1:shift>;
--- >   carry_out = extended_x<shift-1>;
--- >   return (result, carry_out)
-lsrC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-lsrC x shift = "logicalShiftRightCarry" =: srC bvlshr x shift
-
-asrC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-asrC x shift = "arithmeticShiftRightCarry" =: srC bvashr x shift
-
--- | Generalized shift right with carry out
---
--- This is parameterized by the shift operation to perform (arithmetic vs logical)
-srC :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV -> Expr 'TBV) -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-srC op x shift = concat carry_out rs
-  where
-    nBits = LitBV (exprBVSize x) (fromIntegral (exprBVSize x))
-    m = bvurem shift nBits
-    rs = op x m
-    co = ite (testBitDynamic (bvsub shift (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
-    carry_out = ite (bvult shift (naturalLitBV 32)) co (LitBV 1 0)
-
--- | Rotate right with carry in? (and with carry out) AppxG-4947
---
--- > // RRX_C()
--- > // =======
--- > (bits(N), bit) RRX_C(bits(N) x, bit carry_in)
--- >   result = carry_in : x<N-1:1>;
--- >   carry_out = x<0>;
--- >   return (result, carry_out);
-rrxC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-rrxC x carry_in = "rrxC" =: concat carry_out (concat carry_in slice)
-  where
-    carry_out = extract 0 0 x
-    slice = extract (exprBVSize x - 1) 1 x
-
--- | Rotate right (with carry out) - AppxG-5009
---
--- > // ROR_C()
--- > // =======
--- > (bits(N), bit) ROR_C(bits(N) x, integer shift)
--- >   assert shift != 0;
--- >   m = shift MOD N;
--- >   result = LSR(x,m) OR LSL(x,N-m);
--- >   carry_out = result<N-1>;
--- >   return (result, carry_out);
-rorC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-rorC x shift = "rorC" =: concat carry_out (bvor ls rs)
-  where
-    nBits = LitBV (exprBVSize x) (fromIntegral (exprBVSize x))
-    m = bvurem shift nBits
-    rs = bvlshr x m
-    ls = bvshl x (bvsub nBits m)
-    co = ite (testBitDynamic (bvsub shift (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
-    carry_out = ite (bvult shift (naturalLitBV 32)) co (LitBV 1 0)
-
-ror :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-ror x shift = "ror" =: extract (nBits - 1) 0 wc
-  where
-    nBits = exprBVSize x
-    wc = rorC x shift
 
 -- | Expand/rotate ModImm value to corresponding 32-bit immediate
 -- value (F4-2473)
