@@ -149,6 +149,7 @@ type instance A.OperandType ARM "Am2offset_imm" = BaseBVType 32
 type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
+type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
@@ -176,6 +177,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
         opV (ARM.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
+        opV (ARM.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
         opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
         opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
         opV (ARM.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
@@ -270,7 +272,15 @@ locationFuncInterpretation =
     , ("a32.imm12_off", A.FunctionInterpretation { A.exprInterpName = 'interpImm12OffsetExtractor })
     , ("a32.imm12_add", A.FunctionInterpretation { A.exprInterpName = 'interpImm12AddFlgExtractor })
 
-    -- FIXME: Need to add lines for Am2Offset_imm and Addr_offset_none
+    , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
+                                          { A.locationInterp = F.LocationFuncInterp interpLdstsoregBaseReg
+                                          , A.exprInterpName = 'interpLdstsoregBaseRegExtractor })
+    , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
+                                            { A.locationInterp = F.LocationFuncInterp interpLdstsoregOffReg
+                                            , A.exprInterpName = 'interpLdstsoregOffRegExtractor })
+    , ("a32.ldst_so_reg_add", A.FunctionInterpretation { A.exprInterpName = 'interpLdstsoregAddExtractor })
+    , ("a32.ldst_so_reg_immediate", A.FunctionInterpretation { A.exprInterpName = 'interpLdstsoregImmExtractor })
+    , ("a32.ldst_so_reg_shift_type", A.FunctionInterpretation { A.exprInterpName = 'interpLdstsoregTypeExtractor })
 
     , ("a32.modimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpModimmImmExtractor })
     , ("a32.modimm_rot", A.FunctionInterpretation { A.exprInterpName = 'interpModimmRotExtractor })
@@ -297,6 +307,7 @@ shapeReprType orep =
     ARM.Arm_blx_targetRepr -> knownRepr
     ARM.Cc_outRepr -> knownRepr
     ARM.GPRRepr -> knownRepr
+    ARM.Ldst_so_regRepr -> knownRepr
     ARM.Mod_immRepr -> knownRepr
     ARM.PredRepr -> knownRepr
     ARM.So_reg_immRepr -> knownRepr

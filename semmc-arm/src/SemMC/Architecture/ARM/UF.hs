@@ -54,6 +54,22 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
 
+  , ("a32.ldst_so_reg_base_register", -- ref to base register from ldst_so_reg operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+  , ("a32.ldst_so_reg_offset_register", -- ref to offset register from ldst_so_reg operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+  , ("a32.ldst_so_reg_add", -- ref to add/subtract flag from ldst_so_reg operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr BaseBoolType))
+  , ("a32.ldst_so_reg_immediate", -- ref to immediate value from ldst_so_reg operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 5)))
+  , ("a32.ldst_so_reg_shift_type", -- ref to shift type value from ldst_so_reg operand
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 2)))
+
   , ("a32.modimm_imm", -- reference to octet immediate value from a modimm operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))

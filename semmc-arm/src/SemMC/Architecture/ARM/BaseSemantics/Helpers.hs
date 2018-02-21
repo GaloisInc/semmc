@@ -524,7 +524,7 @@ ldst_so_regImmediate = uf (EBV 5) "a32.ldst_so_reg_immediate"
 
 -- | Returns the shift type in ldst_so_reg
 ldst_so_regShiftType :: [Some Expr] -> Expr 'TBV
-ldst_so_regShiftType = uf (EBV 2) "a32.ldst_so_shift_type"
+ldst_so_regShiftType = uf (EBV 2) "a32.ldst_so_reg_shift_type"
 
 -- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_imm :: Location 'TBV -> Expr 'TBV

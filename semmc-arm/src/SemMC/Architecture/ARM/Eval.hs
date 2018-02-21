@@ -17,6 +17,13 @@ module SemMC.Architecture.ARM.Eval
     , interpImm12RegExtractor
     , interpImm12OffsetExtractor
     , interpImm12AddFlgExtractor
+    , interpLdstsoregAddExtractor
+    , interpLdstsoregImmExtractor
+    , interpLdstsoregTypeExtractor
+    , interpLdstsoregBaseRegExtractor
+    , interpLdstsoregBaseReg
+    , interpLdstsoregOffRegExtractor
+    , interpLdstsoregOffReg
     , interpModimmImmExtractor
     , interpModimmRotExtractor
     , interpSoregimmTypeExtractor
@@ -74,6 +81,7 @@ interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
 
 
 ------------------------------------------------------------------------
+-- | Extract values from the Addrmode_imm12 operand
 
 -- | Extract the register value from an addrmode_imm12[_pre] via
 -- the a32.imm12_reg user function.
@@ -103,6 +111,59 @@ interpImm12OffsetExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12
 interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Bool
 interpImm12AddFlgExtractor = (== 1) . ARMOperands.addrModeImm12Add
 
+
+------------------------------------------------------------------------
+-- | Extract values from the LdstSoReg operand
+
+interpLdstsoregAddExtractor :: ARMOperands.LdstSoReg -> Bool
+interpLdstsoregAddExtractor = (== 1) . ARMOperands.ldstSoRegAdd
+
+interpLdstsoregImmExtractor :: ARMOperands.LdstSoReg -> W.W 5
+interpLdstsoregImmExtractor = fromInteger . toInteger . ARMOperands.ldstSoRegImmediate
+
+interpLdstsoregTypeExtractor :: ARMOperands.LdstSoReg -> W.W 2
+interpLdstsoregTypeExtractor = fromInteger . toInteger . ARMOperands.ldstSoRegShiftType
+
+-- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
+interpLdstsoregBaseRegExtractor :: ARMOperands.LdstSoReg -> Maybe ARMOperands.GPR
+interpLdstsoregBaseRegExtractor = Just . ARMOperands.ldstSoRegBaseRegister
+
+-- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
+interpLdstsoregOffRegExtractor :: ARMOperands.LdstSoReg -> Maybe ARMOperands.GPR
+interpLdstsoregOffRegExtractor = Just . ARMOperands.ldstSoRegOffsetRegister
+
+
+interpLdstsoregBaseReg :: forall sh s arm tp
+                          . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                          PL.List ARM.Operand sh
+                       -> F.WrappedOperand arm sh s
+                       -> BaseTypeRepr tp
+                       -> L.Location arm tp
+interpLdstsoregBaseReg operands (F.WrappedOperand _orep ix) rep =
+  case operands PL.!! ix of
+    ARM.Ldst_so_reg oprnd ->
+      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
+          loc = LocGPR $ ARMOperands.ldstSoRegBaseRegister oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+          | otherwise -> error ("Invalid return type for location function 'ldst_so_reg' base reg at index " ++ show ix)
+    _ -> error ("Invalid operand type at index " ++ show ix)
+
+interpLdstsoregOffReg :: forall sh s arm tp
+                         . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                         PL.List ARM.Operand sh
+                      -> F.WrappedOperand arm sh s
+                      -> BaseTypeRepr tp
+                      -> L.Location arm tp
+interpLdstsoregOffReg operands (F.WrappedOperand _orep ix) rep =
+  case operands PL.!! ix of
+    ARM.Ldst_so_reg oprnd ->
+      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
+          loc = LocGPR $ ARMOperands.ldstSoRegOffsetRegister oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+          | otherwise -> error ("Invalid return type for location function 'ldst_so_reg' offset reg at index " ++ show ix)
+    _ -> error ("Invalid operand type at index " ++ show ix)
 
 ------------------------------------------------------------------------
 -- | Extract values from the Mod_imm operand
