@@ -233,8 +233,7 @@ isR0 sym pf operands assignment typeRepr =
       case Some b `boundVarElemIndex` (toListFC Some (F.pfOperandVars pf)) of
         Nothing ->
          returnElt $
-          case MapF.lookup (LocGPR (PPC.GPR 0x0))
-            (F.pfLiteralVars pf :: MapF.MapF (Location arch) (S.BoundVar (S.SimpleBuilder t st))) of
+          case MapF.lookup (LocGPR (PPC.GPR 0x0)) (F.pfLiteralVars pf) of
             Nothing -> S.falsePred sym
             Just b' ->
               case testEquality b b' of
