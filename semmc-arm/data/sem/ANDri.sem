@@ -1,0 +1,260 @@
+;; AND immediate, Encoding A1  (F7.1.13, F7-2556)
+(let
+ ((var1
+   (rD
+    (ite
+     (testCondition)
+     (ite
+      ((_ call "arm.is_r15") rD)
+      rD
+      (bvand
+       rN
+       (ite
+        (bveq
+         (bvshl
+           #x00000001
+           ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+         #x00000000)
+        ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+        (ror))))
+     rD)))
+  (ror ((_ extract 31 0) (rorC)))
+  (rorC
+   (concat
+    (ite
+     (bvult ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm)) #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+         #x00000001)
+       (bvshl
+         #x00000001
+         ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm))))
+      #b1
+      #b0)
+     #b0)
+    (bvor
+     (bvshl
+      (bvshl
+        #x00000001
+        ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+      (bvsub
+       #x00000020
+       (bvurem
+         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+         #x00000020)))
+     (bvlshr
+      (bvshl
+        #x00000001
+        ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+      (bvurem
+        ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+        #x00000020)))))
+  (testCondition
+   (ite
+    (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
+    (notp (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq ((_ extract 3 1) predBits) #b000)
+    (bveq #b1 ((_ extract 30 30) 'CPSR))
+    (ite
+     (bveq ((_ extract 3 1) predBits) #b001)
+     (bveq #b1 ((_ extract 29 29) 'CPSR))
+     (ite
+      (bveq ((_ extract 3 1) predBits) #b010)
+      (bveq #b1 ((_ extract 31 31) 'CPSR))
+      (ite
+       (bveq ((_ extract 3 1) predBits) #b011)
+       (bveq #b1 ((_ extract 28 28) 'CPSR))
+       (ite
+        (bveq ((_ extract 3 1) predBits) #b100)
+        (andp
+          (bveq #b1 ((_ extract 29 29) 'CPSR))
+          (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+        (ite
+         (bveq ((_ extract 3 1) predBits) #b101)
+         (bveq ((_ extract 31 31) 'CPSR) ((_ extract 28 28) 'CPSR))
+         (ite
+          (bveq ((_ extract 3 1) predBits) #b110)
+          (andp
+           (bveq
+             ((_ extract 31 31) 'CPSR)
+             ((_ extract 28 28) 'CPSR))
+           (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+          (bveq #b0 #b0)))))))))
+  (var2
+   ('CPSR
+    (ite
+     (testCondition)
+     (ite
+      (andp (bveq setcc #b1) (notp ((_ call "arm.is_r15") rD)))
+      (concat
+       (concat
+        ((_ extract 31 31)
+         (bvand
+          rN
+          (ite
+           (bveq
+            (bvshl
+             #x00000001
+             ((_ zero_extend 28)
+              ((_ call "a32.modimm_rot") mimm)))
+            #x00000000)
+           ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+           (ror))))
+        (concat
+         (ite
+          (bveq
+           (bvand
+            rN
+            (ite
+             (bveq
+              (bvshl
+               #x00000001
+               ((_ zero_extend 28)
+                ((_ call "a32.modimm_rot") mimm)))
+              #x00000000)
+             ((_ zero_extend 24)
+              ((_ call "a32.modimm_imm") mimm))
+             (ror)))
+           #x00000000)
+          #b1
+          #b0)
+         (concat
+          (ite
+           (bveq
+            (bvshl
+             #x00000001
+             ((_ zero_extend 28)
+              ((_ call "a32.modimm_rot") mimm)))
+            #x00000000)
+           ((_ extract 29 29) 'CPSR)
+           ((_ extract 31 31)
+            (ite
+             (bveq
+              (bvshl
+               #x00000001
+               ((_ zero_extend 28)
+                ((_ call "a32.modimm_rot") mimm)))
+              #x00000000)
+             ((_ zero_extend 24)
+              ((_ call "a32.modimm_imm") mimm))
+             (ror))))
+          ((_ extract 28 28) 'CPSR))))
+       ((_ extract 27 0)
+        (ite
+         ((_ call "arm.is_r15") rD)
+         (ite
+          (bveq
+           #b0
+           ((_ extract 0 0)
+            (bvand
+             rN
+             (ite
+              (bveq
+               (bvshl
+                #x00000001
+                ((_ zero_extend 28)
+                 ((_ call "a32.modimm_rot") mimm)))
+               #x00000000)
+              ((_ zero_extend 24)
+               ((_ call "a32.modimm_imm") mimm))
+              (ror)))))
+          (SetT32Mode)
+          'CPSR)
+         'CPSR)))
+      (ite
+       ((_ call "arm.is_r15") rD)
+       (ite
+        (bveq
+         #b0
+         ((_ extract 0 0)
+          (bvand
+           rN
+           (ite
+            (bveq
+             (bvshl
+              #x00000001
+              ((_ zero_extend 28)
+               ((_ call "a32.modimm_rot") mimm)))
+             #x00000000)
+            ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+            (ror)))))
+        (SetT32Mode)
+        'CPSR)
+       'CPSR))
+     'CPSR)))
+  (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
+  (bxWritePC
+   (ite
+    ((_ call "arm.is_r15") rD)
+    (ite
+     (bveq
+      #b0
+      ((_ extract 0 0)
+       (bvand
+        rN
+        (ite
+         (bveq
+          (bvshl
+            #x00000001
+            ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+          #x00000000)
+         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+         (ror)))))
+     (bvand
+      #xfffffffe
+      (bvand
+       rN
+       (ite
+        (bveq
+         (bvshl
+           #x00000001
+           ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+         #x00000000)
+        ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+        (ror))))
+     (ite
+      (bveq
+       #b0
+       ((_ extract 1 1)
+        (bvand
+         rN
+         (ite
+          (bveq
+           (bvshl
+             #x00000001
+             ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+           #x00000000)
+          ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+          (ror)))))
+      (bvand
+       #xfffffffd
+       (bvand
+        rN
+        (ite
+         (bveq
+          (bvshl
+            #x00000001
+            ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+          #x00000000)
+         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+         (ror))))
+      (bvand
+       rN
+       (ite
+        (bveq
+         (bvshl
+           #x00000001
+           ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+         #x00000000)
+        ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
+        (ror)))))
+    (bvadd 'PC #x00000004))))
+ ((operands
+    ((rD . 'GPR) (setcc . 'Cc_out) (predBits . 'Pred) (mimm . 'Mod_imm) (rN . 'GPR)))
+  (in (mimm setcc rN 'CPSR 'PC))
+  (defs (('PC (bxWritePC)) (var2) (var1)))))

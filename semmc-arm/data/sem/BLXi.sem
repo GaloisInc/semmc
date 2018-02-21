@@ -1,0 +1,15 @@
+;; Encoding A2
+;; Used to call a subroutine (branch) and switch from InstrSet_A32 to InstrSet_T32
+;; Branch with Link and Exchange (F7.1.25, F7-2576)
+;; Writes to PC, not R15.
+(let
+ ((newlr (bvsub 'PC #x00000004))
+  (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
+  (branchWritePC (bvand #xfffffffc (bvadd (alignPC_4) (imm32))))
+  (imm32
+    ((_ sign_extend 6)
+    (concat ((_ extract 23 0) target) (concat ((_ extract 24 24) target) #b0))))
+  (alignPC_4 (bvand #xfffffffc 'PC)))
+ ((operands ((target . 'Arm_blx_target)))
+  (in ('R14 target 'CPSR 'PC))
+  (defs (('PC (branchWritePC)) ('CPSR (SetT32Mode)) ('R14 (newlr))))))
