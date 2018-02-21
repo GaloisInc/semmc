@@ -62,13 +62,15 @@ instance E.Exception FormulaParseError
 --
 -- This will throw an exception if any of the formula strings is malformed
 loadFormulas :: forall sym arch a
-              . (CRU.IsExprBuilder sym,
-                 CRU.IsSymInterface sym,
-                 A.Architecture arch,
-                 HR.HasRepr a (A.ShapeRepr arch),
-                 ShowF a,
-                 OrdF a)
-             => sym
+                . ( CRU.IsExprBuilder sym
+                  , CRU.IsSymInterface sym
+                  , A.Architecture arch
+                  , HR.HasRepr a (A.ShapeRepr arch)
+                  , ShowF a
+                  , ShowF (CRU.SymExpr sym)
+                  , OrdF a
+                  , U.HasCallStack)
+                => sym
              -> [(Some a, BS.ByteString)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
 loadFormulas sym contents = do
@@ -105,6 +107,7 @@ loadFormulasFromFiles :: forall sym arch a
                          , A.Architecture arch
                          , HR.HasRepr a (A.ShapeRepr arch)
                          , MapF.OrdF a
+                         , ShowF (CRU.SymExpr sym)
                          , U.HasCallStack
                          , L.HasLogCfg )
                       => sym

@@ -30,6 +30,7 @@ import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
 import qualified Data.Map as Map
 import qualified Data.SCargot.Repr as SC
+import           Data.Semigroup
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Text.Printf ( printf )
@@ -704,7 +705,8 @@ readDefs :: (S.IsExprBuilder sym,
              E.MonadError String m,
              A.Architecture arch,
              MR.MonadReader (DefsInfo sym arch sh) m,
-             MonadIO m)
+             MonadIO m,
+             ShowF (S.SymExpr sym))
          => SC.SExpr FAtom
          -> m (MapF.MapF (Parameter arch sh) (S.SymExpr sym))
 readDefs SC.SNil = return MapF.empty
@@ -714,10 +716,10 @@ readDefs (SC.SCons (SC.SCons (SC.SAtom p) (SC.SCons defRaw SC.SNil)) rest) = do
   Some def <- readExpr defRaw
   Refl <- fromMaybeError ("mismatching types of parameter and expression for " ++ showF param) $
             testEquality (paramType param) (S.exprType def)
-  rest' <- readDefs rest
+  rest' <- prefixError (", defining " <> showF def <> " ... ") $ readDefs rest
   return $ MapF.insert param def rest'
 readDefs (SC.SCons (SC.SCons (SC.SCons mUF (SC.SCons (SC.SAtom p) SC.SNil)) (SC.SCons defRaw SC.SNil)) rest)
-  | Just funcName <- matchUF mUF = do
+  | Just funcName <- matchUF mUF = prefixError (", processing uninterpreted function " <> show funcName <> " ... ") $ do
     oplist <- MR.reader getOpNameList
     Some param <- readParameter oplist p
     fns <- MR.reader (envFunctions . getEnv)
@@ -751,7 +753,8 @@ readFormula' :: forall sym arch sh m.
                  S.IsSymInterface sym,
                  E.MonadError String m,
                  MonadIO m,
-                 A.Architecture arch)
+                 A.Architecture arch,
+                 ShowF (S.SymExpr sym))
              => sym
              -> FormulaEnv sym arch
              -> A.ShapeRepr arch sh
@@ -830,7 +833,8 @@ readFormula' sym env repr text = do
 -- | Parse the definition of a templated formula.
 readFormula :: (S.IsExprBuilder sym,
                 S.IsSymInterface sym,
-                A.Architecture arch)
+                A.Architecture arch,
+                ShowF (S.SymExpr sym))
             => sym
             -> FormulaEnv sym arch
             -> A.ShapeRepr arch sh
@@ -841,7 +845,8 @@ readFormula sym env repr text = E.runExceptT $ readFormula' sym env repr text
 -- | Read a templated formula definition from file, then parse it.
 readFormulaFromFile :: (S.IsExprBuilder sym,
                         S.IsSymInterface sym,
-                        A.Architecture arch)
+                        A.Architecture arch,
+                        ShowF (S.SymExpr sym))
                     => sym
                     -> FormulaEnv sym arch
                     -> A.ShapeRepr arch sh
