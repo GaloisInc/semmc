@@ -1,8 +1,0 @@
-;; Floating Negative Absolute Value (X-form)
-((operands ((frT . 'Fprc) (frB . 'Fprc))) 
-  (in (frB 'IP))
-  (defs 
-    ((frT 
-       (concat 
-         #x0000000000000000
-         ((_ call "fp.negate64") ((_ call "fp.abs") ((_ extract 127 64) frB))))) ('IP (bvadd 'IP #x0000000000000004)))))
