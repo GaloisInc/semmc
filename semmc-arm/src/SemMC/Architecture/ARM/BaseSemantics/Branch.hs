@@ -18,6 +18,8 @@ import           SemMC.Architecture.ARM.BaseSemantics.Base
 import           SemMC.Architecture.ARM.BaseSemantics.Helpers
 import           SemMC.Architecture.ARM.BaseSemantics.Natural
 import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExecState
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
 import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
 

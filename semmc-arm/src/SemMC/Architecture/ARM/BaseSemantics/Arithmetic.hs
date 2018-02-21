@@ -8,21 +8,21 @@ module SemMC.Architecture.ARM.BaseSemantics.Arithmetic
     )
     where
 
-import GHC.Stack ( HasCallStack )
-
-import Data.Parameterized.Context
-import Prelude hiding ( concat, pred )
-import SemMC.Architecture.ARM.BaseSemantics.Base
-import SemMC.Architecture.ARM.BaseSemantics.Helpers
-import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
-import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
-import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExpandImm
-import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
-import SemMC.Architecture.ARM.BaseSemantics.Registers
-import SemMC.DSL
+import           Data.Parameterized.Context
 import qualified Dismantle.ARM as A
 import qualified Dismantle.Thumb as T
+import           GHC.Stack ( HasCallStack )
+import           Prelude hiding ( concat, pred )
+import           SemMC.Architecture.ARM.BaseSemantics.Base
+import           SemMC.Architecture.ARM.BaseSemantics.Helpers
+import           SemMC.Architecture.ARM.BaseSemantics.Natural
+import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExpandImm
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
+import           SemMC.Architecture.ARM.BaseSemantics.Registers
+import           SemMC.DSL
 
 
 manualArithmetic :: SemARM 'Top ()
