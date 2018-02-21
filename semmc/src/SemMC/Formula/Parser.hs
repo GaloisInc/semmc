@@ -754,7 +754,8 @@ readFormula' :: forall sym arch sh m.
                  E.MonadError String m,
                  MonadIO m,
                  A.Architecture arch,
-                 ShowF (S.SymExpr sym))
+                 ShowF (S.SymExpr sym),
+                 U.HasLogCfg)
              => sym
              -> FormulaEnv sym arch
              -> A.ShapeRepr arch sh
@@ -764,6 +765,9 @@ readFormula' sym env repr text = do
   sexpr <- case parseLL text of
              Left err -> E.throwError err
              Right res -> return res
+  let firstLine = show $ fmap T.unpack $ take 1 $ T.lines text
+  liftIO $ U.logIO U.Info $ "readFormula' of " ++ (show $ T.length text) ++ " bytes " ++ firstLine
+  liftIO $ U.logIO U.Debug $ "readFormula' shaperepr " ++ (A.showShapeRepr (Proxy @arch) repr)
   -- Extract the raw s-expressions for the three components.
   (opsRaw, inputsRaw, defsRaw) <- case sexpr of
     SC.SCons (SC.SCons (SC.SAtom (AIdent "operands")) (SC.SCons ops SC.SNil))
@@ -834,7 +838,8 @@ readFormula' sym env repr text = do
 readFormula :: (S.IsExprBuilder sym,
                 S.IsSymInterface sym,
                 A.Architecture arch,
-                ShowF (S.SymExpr sym))
+                ShowF (S.SymExpr sym),
+                U.HasLogCfg)
             => sym
             -> FormulaEnv sym arch
             -> A.ShapeRepr arch sh
@@ -846,10 +851,13 @@ readFormula sym env repr text = E.runExceptT $ readFormula' sym env repr text
 readFormulaFromFile :: (S.IsExprBuilder sym,
                         S.IsSymInterface sym,
                         A.Architecture arch,
-                        ShowF (S.SymExpr sym))
+                        ShowF (S.SymExpr sym),
+                        U.HasLogCfg)
                     => sym
                     -> FormulaEnv sym arch
                     -> A.ShapeRepr arch sh
                     -> FilePath
                     -> IO (Either String (ParameterizedFormula sym arch sh))
-readFormulaFromFile sym env repr fp = readFormula sym env repr =<< T.readFile fp
+readFormulaFromFile sym env repr fp = do
+  liftIO $ U.logIO U.Info $ "readFormulaFromFile " ++ fp
+  readFormula sym env repr =<< T.readFile fp

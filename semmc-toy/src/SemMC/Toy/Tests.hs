@@ -60,14 +60,15 @@ import           Debug.Trace
 allOperands :: [Some (T.Opcode T.Operand)]
 allOperands = $(captureDictionaries (const True) ''T.Opcode)
 
-readBinOpc :: SimpleBackend t
+readBinOpc :: (U.HasLogCfg) =>
+              SimpleBackend t
            -> Opcode Operand sh
            -> IO (Either String (ParameterizedFormula (SimpleBackend t) Toy sh))
 readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semantics" </> show opc <.> "sem")
   where
     env = FormulaEnv Map.empty undefined
 
-doThing :: IO ()
+doThing :: (U.HasLogCfg) => IO ()
 doThing = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
@@ -135,7 +136,7 @@ dependentFormula sym = do
                               $ MapF.empty
                    }
 
-doThing2 :: IO ()
+doThing2 :: (U.HasLogCfg) => IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
@@ -153,14 +154,14 @@ doThing2 = do
   print =<< mcSynth env target
   print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
-doThing3 :: IO ()
+doThing3 :: (U.HasLogCfg) => IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
-doThing4 :: IO ()
+doThing4 :: (U.HasLogCfg) => IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
   sym <- newSimpleBackend r

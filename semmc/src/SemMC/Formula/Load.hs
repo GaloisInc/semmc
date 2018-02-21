@@ -69,7 +69,8 @@ loadFormulas :: forall sym arch a
                   , ShowF a
                   , ShowF (CRU.SymExpr sym)
                   , OrdF a
-                  , U.HasCallStack)
+                  , U.HasCallStack
+                  , L.HasLogCfg )
                 => sym
              -> [(Some a, BS.ByteString)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
@@ -82,6 +83,7 @@ loadFormulas sym contents = do
                    -> (Some a, BS.ByteString)
                    -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
     parseFormulaBS env m (Some (op :: a sh), bs) = do
+      U.logIO U.Info $ "reading formula for opcode " ++ showF op
       ef <- FP.readFormula sym env (HR.typeRepr op) (T.decodeUtf8 bs)
       case ef of
         Right f -> return (MapF.insert op f m)
