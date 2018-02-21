@@ -1,17 +1,18 @@
 ;; Load Vector Element Halfword Indexed (X-form)
-((operands ((vrT . 'Vrrc) (memrr . 'Memrr))) 
-  (in (memrr 'Mem 'IP))
-  (defs 
-    ((vrT 
-       (concat 
-         ((_ call "undefined") #x00000070)
-         ((_ call "read_mem.16") 
-           'Mem
-           (bvand 
-             ((_ sign_extend 56) #xfe)
-             (bvadd 
-               ((_ call "ppc.memrr_offset") memrr)
-               (ite 
-                 ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memrr))
-                 #x0000000000000000
-                 ((_ call "ppc.memrr_base") memrr))))))) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((vrT . 'Vrrc) (memrr . 'Memrr)))
+ (in (memrr 'Mem 'IP))
+ (defs
+  ((vrT
+    (concat
+     ((_ call "undefined") #x00000070)
+     ((_ call "read_mem.16")
+      'Mem
+      (bvand
+       ((_ sign_extend 56) #xfe)
+       (bvadd
+        ((_ call "ppc.memrr_offset") memrr)
+        (ite
+         ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memrr))
+         #x0000000000000000
+         ((_ call "ppc.memrr_base") memrr)))))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

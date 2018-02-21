@@ -1,9 +1,9 @@
 ;; Floating Negate (X-form)
 ;; There is no single-precision form of this because
 ;; the sign bit is always in the same place (MSB)
-((operands ((frT . 'Fprc) (frB . 'Fprc))) 
-  (in ('FPSCR frB 'IP))
-  (defs 
-    (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec1") "FNEGS" frB 'FPSCR))) 
-      (frT ((_ extract 127 0) ((_ call "ppc.vec1") "FNEGS" frB 'FPSCR)))
-      ('IP (bvadd 'IP #x00000004)))))
+((operands ((frT . 'Fprc) (frB . 'Fprc)))
+ (in ('FPSCR frB 'IP))
+ (defs
+  (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec1") "FNEGS" frB 'FPSCR)))
+   (frT ((_ extract 127 0) ((_ call "ppc.vec1") "FNEGS" frB 'FPSCR)))
+   ('IP (bvadd 'IP #x00000004)))))

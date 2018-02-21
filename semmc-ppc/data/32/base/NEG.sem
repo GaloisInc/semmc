@@ -1,4 +1,4 @@
 ;; Negate (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc))) 
-  (in (rA 'IP))
-  (defs ((rT (bvadd (bvnot rA) #x00000001)) ('IP (bvadd 'IP #x00000004)))))
+((operands ((rT . 'Gprc) (rA . 'Gprc)))
+ (in (rA 'IP))
+ (defs ((rT (bvadd (bvnot rA) #x00000001)) ('IP (bvadd 'IP #x00000004)))))

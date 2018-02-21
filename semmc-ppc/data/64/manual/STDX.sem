@@ -1,14 +1,15 @@
 ;; Store Doubleword Indexed (X-form)
-((operands ((memref . 'Memrr) (rS . 'Gprc))) 
-  (in ('Mem memref rS 'IP))
-  (defs 
-    (('Mem 
-       ((_ call "write_mem.64") 
-         'Mem
-         (bvadd 
-           (ite 
-             ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
-             #x0000000000000000
-             ((_ call "ppc.memrr_base") memref))
-           ((_ call "ppc.memrr_offset") memref))
-         rS)) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((memref . 'Memrr) (rS . 'Gprc)))
+ (in ('Mem memref rS 'IP))
+ (defs
+  (('Mem
+    ((_ call "write_mem.64")
+     'Mem
+     (bvadd
+      (ite
+       ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+       #x0000000000000000
+       ((_ call "ppc.memrr_base") memref))
+      ((_ call "ppc.memrr_offset") memref))
+     rS))
+   ('IP (bvadd 'IP #x0000000000000004)))))

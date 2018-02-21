@@ -1,12 +1,16 @@
 ;; VSX Vector Compare Equal To Double-Precision & Record (XX3-form)
-((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc))) 
-  (in ('XER 'CR xB xA 'IP))
-  (defs 
-    (('CR 
-       (bvor 
-         (bvand 
-           'CR
-           (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b110) #x00000004))))
-         (bvshl 
-           ((_ zero_extend 28) ((_ call "undefined") #x00000004))
-           (bvmul ((_ zero_extend 29) #b110) #x00000004)))) (xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc)))
+ (in ('XER 'CR 'FPSCR xB xA 'IP))
+ (defs
+  (('CR
+    (bvor
+     (bvand
+       'CR
+       (bvnot
+        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b110) #x00000004))))
+     (bvshl
+      ((_ zero_extend 28) ((_ call "undefined") #x00000004))
+      (bvmul ((_ zero_extend 29) #b110) #x00000004))))
+   ('FPSCR ((_ extract 159 128) ((_ call "ppc.vec2") "XVCMPEQDP" xA xB 'FPSCR)))
+   (xT ((_ extract 127 0) ((_ call "ppc.vec2") "XVCMPEQDP" xA xB 'FPSCR)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

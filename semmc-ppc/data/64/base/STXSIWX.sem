@@ -1,14 +1,15 @@
 ;; Store VSX Scalar as Integer Word Indexed (XX1-form)
-((operands ((memref . 'Memrr) (xS . 'Vsrc))) 
-  (in (memref 'Mem xS 'IP))
-  (defs 
-    (('Mem 
-       ((_ call "write_mem.32") 
-         'Mem
-         (bvadd 
-           ((_ call "ppc.memrr_offset") memref)
-           (ite 
-             ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
-             #x0000000000000000
-             ((_ call "ppc.memrr_base") memref)))
-         ((_ extract 31 0) xS))) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((memref . 'Memrr) (xS . 'Vsrc)))
+ (in (memref 'Mem xS 'IP))
+ (defs
+  (('Mem
+    ((_ call "write_mem.32")
+     'Mem
+     (bvadd
+      ((_ call "ppc.memrr_offset") memref)
+      (ite
+       ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+       #x0000000000000000
+       ((_ call "ppc.memrr_base") memref)))
+     ((_ extract 31 0) xS)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

@@ -1,4 +1,4 @@
 ;; Vector Logical NAND (VX-form)
-((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc))) 
-  (in (vrB vrA 'IP))
-  (defs ((vrT (bvnot (bvand vrA vrB))) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc)))
+ (in (vrB vrA 'IP))
+ (defs ((vrT (bvnot (bvand vrA vrB))) ('IP (bvadd 'IP #x0000000000000004)))))

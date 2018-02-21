@@ -1,29 +1,29 @@
 ;; Floating Compare Unordered (X-form)
-((operands ((bf . 'Crrc) (frA . 'Fprc) (frB . 'Fprc))) 
-  (in ('FPSCR 'CR frB frA 'IP))
-  (defs 
-    (('FPSCR 
-       (bvor 
-         (ite 
-           (orp 
-             ((_ call "fp.is_snan64") ((_ extract 63 0) frA))
-             ((_ call "fp.is_snan64") ((_ extract 63 0) frB)))
-           #x00000080
-           #x00000000)
-         (bvor 
-           (bvshl ((_ zero_extend 28) #x0) #x00000010)
-           (bvor 
-             (ite 
-               (orp 
-                 ((_ call "fp.is_snan64") ((_ extract 63 0) frA))
-                 ((_ call "fp.is_snan64") ((_ extract 63 0) frB)))
-               #x00000001
-               #x00000000)
-             (bvand 'FPSCR #xfff0ff7f))))) 
-      ('CR 
-        (bvor 
-          (bvand 
-            'CR
-            (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) bf) #x00000004))))
-          (bvshl ((_ zero_extend 28) #x0) (bvmul ((_ zero_extend 29) bf) #x00000004))))
-      ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((bf . 'Crrc) (frA . 'Fprc) (frB . 'Fprc)))
+ (in ('FPSCR 'CR frB frA 'IP))
+ (defs
+  (('FPSCR
+    (bvor
+     (ite
+      (orp
+       ((_ call "fp.is_snan64") ((_ extract 63 0) frA))
+       ((_ call "fp.is_snan64") ((_ extract 63 0) frB)))
+      #x00000080
+      #x00000000)
+     (bvor
+      (bvshl ((_ zero_extend 28) #x0) #x00000010)
+      (bvor
+       (ite
+        (orp
+         ((_ call "fp.is_snan64") ((_ extract 63 0) frA))
+         ((_ call "fp.is_snan64") ((_ extract 63 0) frB)))
+        #x00000001
+        #x00000000)
+       (bvand 'FPSCR #xfff0ff7f)))))
+   ('CR
+    (bvor
+     (bvand
+       'CR
+       (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) bf) #x00000004))))
+     (bvshl ((_ zero_extend 28) #x0) (bvmul ((_ zero_extend 29) bf) #x00000004))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

@@ -1,18 +1,24 @@
 ;; EQV (X-form, RC=1)
-((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) 
-  (in ('XER 'CR rB rS 'IP))
-  (defs 
-    (('CR 
-       (bvor 
-         (bvand 
-           'CR
-           (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-         (bvshl 
-           ((_ zero_extend 28) 
-             (concat 
-               (ite 
-                 (bvslt (bvnot (bvxor rS rB)) #x0000000000000000)
-                 #b100
-                 (ite (bvsgt (bvnot (bvxor rS rB)) #x0000000000000000) #b010 #b001))
-               ((_ extract 32 32) 'XER)))
-           (bvmul ((_ zero_extend 29) #b000) #x00000004)))) (rA (bvnot (bvxor rS rB))) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc)))
+ (in ('XER 'CR rB rS 'IP))
+ (defs
+  (('CR
+    (bvor
+     (bvand
+       'CR
+       (bvnot
+        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl
+      ((_ zero_extend 28)
+       (concat
+        (ite
+         (bvslt (bvnot (bvxor rS rB)) #x0000000000000000)
+         #b100
+         (ite
+           (bvsgt (bvnot (bvxor rS rB)) #x0000000000000000)
+           #b010
+           #b001))
+        ((_ extract 32 32) 'XER)))
+      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+   (rA (bvnot (bvxor rS rB)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

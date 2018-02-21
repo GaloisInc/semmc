@@ -1,7 +1,8 @@
 ;; Add Immediate Shifted (D-form)
 ;; Like 'ADDI', we hand wrote this formula because it is one of the few that
 ;; have special treatment of r0
-((operands ((rT . 'Gprc) (si . 'S17imm) (rA . 'Gprc_nor0))) 
-  (in (si rA 'IP))
-  (defs 
-    ((rT (bvadd (ite ((_ call "ppc.is_r0") rA) #x00000000 rA) (concat si #x0000))) ('IP (bvadd 'IP #x00000004)))))
+((operands ((rT . 'Gprc) (si . 'S17imm) (rA . 'Gprc_nor0)))
+ (in (si rA 'IP))
+ (defs
+  ((rT (bvadd (ite ((_ call "ppc.is_r0") rA) #x00000000 rA) (concat si #x0000)))
+   ('IP (bvadd 'IP #x00000004)))))

@@ -1,4 +1,4 @@
 ;; VSX Shift Left Double by Word Immediate (XX3-form)
-((operands ((xT . 'Vsrc) (SHW . 'U2imm) (xA . 'Vsrc) (xB . 'Vsrc))) 
-  (in (xB xA SHW 'IP))
-  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
+((operands ((xT . 'Vsrc) (SHW . 'U2imm) (xA . 'Vsrc) (xB . 'Vsrc)))
+ (in (xB xA SHW 'IP))
+ (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))

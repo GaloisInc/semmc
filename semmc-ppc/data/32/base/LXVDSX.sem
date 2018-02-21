@@ -1,22 +1,23 @@
 ;; Load VSX Vector Doubleword & Splat Indexed (XX1-form)
-((operands ((xT . 'Vsrc) (memref . 'Memrr))) 
-  (in (memref 'Mem 'IP))
-  (defs 
-    ((xT 
-       (concat 
-         ((_ call "read_mem.64") 
-           'Mem
-           (bvadd 
-             ((_ call "ppc.memrr_offset") memref)
-             (ite 
-               ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
-               #x00000000
-               ((_ call "ppc.memrr_base") memref))))
-         ((_ call "read_mem.64") 
-           'Mem
-           (bvadd 
-             ((_ call "ppc.memrr_offset") memref)
-             (ite 
-               ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
-               #x00000000
-               ((_ call "ppc.memrr_base") memref)))))) ('IP (bvadd 'IP #x00000004)))))
+((operands ((xT . 'Vsrc) (memref . 'Memrr)))
+ (in (memref 'Mem 'IP))
+ (defs
+  ((xT
+    (concat
+     ((_ call "read_mem.64")
+      'Mem
+      (bvadd
+       ((_ call "ppc.memrr_offset") memref)
+       (ite
+        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+        #x00000000
+        ((_ call "ppc.memrr_base") memref))))
+     ((_ call "read_mem.64")
+      'Mem
+      (bvadd
+       ((_ call "ppc.memrr_offset") memref)
+       (ite
+        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+        #x00000000
+        ((_ call "ppc.memrr_base") memref))))))
+   ('IP (bvadd 'IP #x00000004)))))

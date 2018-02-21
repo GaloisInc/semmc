@@ -1,14 +1,15 @@
 ;; Store VSX Vector Doubleword*2 Indexed (XX1-form)
-((operands ((memref . 'Memrr) (xS . 'Vsrc))) 
-  (in (memref 'Mem xS 'IP))
-  (defs 
-    (('Mem 
-       ((_ call "write_mem.128") 
-         'Mem
-         (bvadd 
-           ((_ call "ppc.memrr_offset") memref)
-           (ite 
-             ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
-             #x00000000
-             ((_ call "ppc.memrr_base") memref)))
-         xS)) ('IP (bvadd 'IP #x00000004)))))
+((operands ((memref . 'Memrr) (xS . 'Vsrc)))
+ (in (memref 'Mem xS 'IP))
+ (defs
+  (('Mem
+    ((_ call "write_mem.128")
+     'Mem
+     (bvadd
+      ((_ call "ppc.memrr_offset") memref)
+      (ite
+       ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+       #x00000000
+       ((_ call "ppc.memrr_base") memref)))
+     xS))
+   ('IP (bvadd 'IP #x00000004)))))

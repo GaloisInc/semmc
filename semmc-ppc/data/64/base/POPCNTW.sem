@@ -1,8 +1,9 @@
 ;; Population Count Words (X-form)
-((operands ((rA . 'Gprc) (rS . 'Gprc))) 
-  (in (rS 'IP))
-  (defs 
-    ((rA 
-       (concat 
-         ((_ call "popcnt.32") ((_ extract 31 0) rS))
-         ((_ call "popcnt.32") ((_ extract 63 32) rS)))) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((rA . 'Gprc) (rS . 'Gprc)))
+ (in (rS 'IP))
+ (defs
+  ((rA
+     (concat
+      ((_ call "popcnt.32") ((_ extract 31 0) rS))
+      ((_ call "popcnt.32") ((_ extract 63 32) rS))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

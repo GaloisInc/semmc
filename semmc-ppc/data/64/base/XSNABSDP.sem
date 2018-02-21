@@ -1,4 +1,7 @@
 ;; VSX Scalar Negative Absolute Value Double-Precision (XX2-form)
-((operands ((xT . 'Vsrc) (xB . 'Vsrc))) 
-  (in (xB 'IP))
-  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((xT . 'Vsrc) (xB . 'Vsrc)))
+ (in ('FPSCR xB 'IP))
+ (defs
+  (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec1") "XSNABSDP" xB 'FPSCR)))
+   (xT ((_ extract 127 0) ((_ call "ppc.vec1") "XSNABSDP" xB 'FPSCR)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

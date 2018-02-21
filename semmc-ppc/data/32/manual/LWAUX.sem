@@ -1,13 +1,13 @@
 ;; Load Word Algebraic with Update Indexed (X-form)
-((operands ((rT . 'Gprc) (memref . 'Memrr))) 
-  (in ('Mem memref 'IP))
-  (defs 
-    ((((_ call "ppc.memrr_base") memref) 
-       (bvadd ((_ call "ppc.memrr_base") memref) ((_ call "ppc.memrr_offset") memref))) 
-      (rT 
-        ((_ call "read_mem.32") 
-          'Mem
-          (bvadd 
-            ((_ call "ppc.memrr_base") memref)
-            ((_ call "ppc.memrr_offset") memref))))
-      ('IP (bvadd 'IP #x00000004)))))
+((operands ((rT . 'Gprc) (memref . 'Memrr)))
+ (in ('Mem memref 'IP))
+ (defs
+  ((((_ call "ppc.memrr_base") memref)
+    (bvadd ((_ call "ppc.memrr_base") memref) ((_ call "ppc.memrr_offset") memref)))
+   (rT
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+       ((_ call "ppc.memrr_base") memref)
+       ((_ call "ppc.memrr_offset") memref))))
+   ('IP (bvadd 'IP #x00000004)))))

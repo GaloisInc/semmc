@@ -1,106 +1,138 @@
 ;; Rotate Left Word Immediate then Mask Insert (M-form, RC=1)
-((operands ((rA . 'Gprc) (sh . 'U5imm) (mb . 'U5imm) (me . 'U5imm) (rS . 'Gprc))) 
-  (in ('XER 'CR rA rS me mb sh 'IP))
-  (defs 
-    (('CR 
-       (bvor 
-         (bvand 
-           'CR
-           (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-         (bvshl 
-           ((_ zero_extend 28) 
-             (concat 
-               (ite 
-                 (bvslt 
-                   ((_ zero_extend 32) 
-                     (bvor 
-                       (bvand 
-                         (bvor 
-                           (bvshl ((_ extract 63 32) rS) ((_ zero_extend 27) sh))
-                           (bvlshr 
-                             ((_ extract 63 32) rS)
-                             (bvsub #x00000020 ((_ zero_extend 27) sh))))
-                         (bvshl 
-                           (bvlshr 
-                             (bvlshr 
-                               (bvshl ((_ sign_extend 31) #b1) ((_ zero_extend 27) mb))
-                               ((_ zero_extend 27) mb))
-                             (bvsub #x0000001f ((_ zero_extend 27) me)))
-                           (bvsub #x0000001f ((_ zero_extend 27) me))))
-                       (bvand 
-                         ((_ extract 63 32) rA)
-                         (bvnot 
-                           (bvshl 
-                             (bvlshr 
-                               (bvlshr 
-                                 (bvshl 
-                                   ((_ sign_extend 31) #b1)
-                                   ((_ zero_extend 27) mb))
-                                 ((_ zero_extend 27) mb))
-                               (bvsub #x0000001f ((_ zero_extend 27) me)))
-                             (bvsub #x0000001f ((_ zero_extend 27) me)))))))
-                   #x0000000000000000)
-                 #b100
-                 (ite 
-                   (bvsgt 
-                     ((_ zero_extend 32) 
-                       (bvor 
-                         (bvand 
-                           (bvor 
-                             (bvshl ((_ extract 63 32) rS) ((_ zero_extend 27) sh))
-                             (bvlshr 
-                               ((_ extract 63 32) rS)
-                               (bvsub #x00000020 ((_ zero_extend 27) sh))))
-                           (bvshl 
-                             (bvlshr 
-                               (bvlshr 
-                                 (bvshl 
-                                   ((_ sign_extend 31) #b1)
-                                   ((_ zero_extend 27) mb))
-                                 ((_ zero_extend 27) mb))
-                               (bvsub #x0000001f ((_ zero_extend 27) me)))
-                             (bvsub #x0000001f ((_ zero_extend 27) me))))
-                         (bvand 
-                           ((_ extract 63 32) rA)
-                           (bvnot 
-                             (bvshl 
-                               (bvlshr 
-                                 (bvlshr 
-                                   (bvshl 
-                                     ((_ sign_extend 31) #b1)
-                                     ((_ zero_extend 27) mb))
-                                   ((_ zero_extend 27) mb))
-                                 (bvsub #x0000001f ((_ zero_extend 27) me)))
-                               (bvsub #x0000001f ((_ zero_extend 27) me)))))))
-                     #x0000000000000000)
-                   #b010
-                   #b001))
-               ((_ extract 32 32) 'XER)))
-           (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
-      (rA 
-        ((_ zero_extend 32) 
-          (bvor 
-            (bvand 
-              (bvor 
-                (bvshl ((_ extract 63 32) rS) ((_ zero_extend 27) sh))
-                (bvlshr 
+(let
+ ((var1
+   (defs
+    (('CR
+      (bvor
+       (bvand
+         'CR
+         (bvnot
+          (bvshl
+           #x0000000f
+           (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+       (bvshl
+        ((_ zero_extend 28)
+         (concat
+          (ite
+           (bvslt
+            ((_ zero_extend 32)
+             (bvor
+              (bvand
+               (bvor
+                (bvshl
                   ((_ extract 63 32) rS)
-                  (bvsub #x00000020 ((_ zero_extend 27) sh))))
-              (bvshl 
-                (bvlshr 
-                  (bvlshr 
-                    (bvshl ((_ sign_extend 31) #b1) ((_ zero_extend 27) mb))
+                  ((_ zero_extend 27) sh))
+                (bvlshr
+                 ((_ extract 63 32) rS)
+                 (bvsub
+                   #x00000020
+                   ((_ zero_extend 27) sh))))
+               (bvshl
+                (bvlshr
+                 (bvlshr
+                  (bvshl
+                    ((_ sign_extend 31) #b1)
                     ((_ zero_extend 27) mb))
-                  (bvsub #x0000001f ((_ zero_extend 27) me)))
+                  ((_ zero_extend 27) mb))
+                 (bvsub
+                   #x0000001f
+                   ((_ zero_extend 27) me)))
                 (bvsub #x0000001f ((_ zero_extend 27) me))))
-            (bvand 
-              ((_ extract 63 32) rA)
-              (bvnot 
-                (bvshl 
-                  (bvlshr 
-                    (bvlshr 
-                      (bvshl ((_ sign_extend 31) #b1) ((_ zero_extend 27) mb))
+              (bvand
+               ((_ extract 63 32) rA)
+               (bvnot
+                (bvshl
+                 (bvlshr
+                  (bvlshr
+                   (bvshl
+                     ((_ sign_extend 31) #b1)
+                     ((_ zero_extend 27) mb))
+                   ((_ zero_extend 27) mb))
+                  (bvsub
+                    #x0000001f
+                    ((_ zero_extend 27) me)))
+                 (bvsub
+                   #x0000001f
+                   ((_ zero_extend 27) me)))))))
+            #x0000000000000000)
+           #b100
+           (ite
+            (bvsgt
+             ((_ zero_extend 32)
+              (bvor
+               (bvand
+                (bvor
+                 (bvshl
+                   ((_ extract 63 32) rS)
+                   ((_ zero_extend 27) sh))
+                 (bvlshr
+                  ((_ extract 63 32) rS)
+                  (bvsub
+                    #x00000020
+                    ((_ zero_extend 27) sh))))
+                (bvshl
+                 (bvlshr
+                  (bvlshr
+                   (bvshl
+                     ((_ sign_extend 31) #b1)
+                     ((_ zero_extend 27) mb))
+                   ((_ zero_extend 27) mb))
+                  (bvsub
+                    #x0000001f
+                    ((_ zero_extend 27) me)))
+                 (bvsub
+                   #x0000001f
+                   ((_ zero_extend 27) me))))
+               (bvand
+                ((_ extract 63 32) rA)
+                (bvnot
+                 (bvshl
+                  (bvlshr
+                   (bvlshr
+                    (bvshl
+                      ((_ sign_extend 31) #b1)
                       ((_ zero_extend 27) mb))
-                    (bvsub #x0000001f ((_ zero_extend 27) me)))
-                  (bvsub #x0000001f ((_ zero_extend 27) me))))))))
-      ('IP (bvadd 'IP #x0000000000000004)))))
+                    ((_ zero_extend 27) mb))
+                   (bvsub
+                     #x0000001f
+                     ((_ zero_extend 27) me)))
+                  (bvsub
+                    #x0000001f
+                    ((_ zero_extend 27) me)))))))
+             #x0000000000000000)
+            #b010
+            #b001))
+          ((_ extract 32 32) 'XER)))
+        (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (rA
+      ((_ zero_extend 32)
+       (bvor
+        (bvand
+         (bvor
+          (bvshl ((_ extract 63 32) rS) ((_ zero_extend 27) sh))
+          (bvlshr
+            ((_ extract 63 32) rS)
+            (bvsub #x00000020 ((_ zero_extend 27) sh))))
+         (bvshl
+          (bvlshr
+           (bvlshr
+            (bvshl ((_ sign_extend 31) #b1) ((_ zero_extend 27) mb))
+            ((_ zero_extend 27) mb))
+           (bvsub #x0000001f ((_ zero_extend 27) me)))
+          (bvsub #x0000001f ((_ zero_extend 27) me))))
+        (bvand
+         ((_ extract 63 32) rA)
+         (bvnot
+          (bvshl
+           (bvlshr
+            (bvlshr
+             (bvshl
+               ((_ sign_extend 31) #b1)
+               ((_ zero_extend 27) mb))
+             ((_ zero_extend 27) mb))
+            (bvsub #x0000001f ((_ zero_extend 27) me)))
+           (bvsub #x0000001f ((_ zero_extend 27) me))))))))
+     ('IP (bvadd 'IP #x0000000000000004))))))
+ ((operands ((rA . 'Gprc) (sh . 'U5imm) (mb . 'U5imm) (me . 'U5imm) (rS . 'Gprc)))
+  (in ('XER 'CR rA rS me mb sh 'IP))
+  (var1)))

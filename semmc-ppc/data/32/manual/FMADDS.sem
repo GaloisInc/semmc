@@ -1,7 +1,7 @@
 ;; Floating Multiply-Add Single (A-form)
-((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc) (frC . 'Fprc))) 
-  (in ('FPSCR frC frB frA 'IP))
-  (defs 
-    (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec3") "FMADDS" frA frB frC 'FPSCR))) 
-      (frT ((_ extract 127 0) ((_ call "ppc.vec3") "FMADDS" frA frB frC 'FPSCR)))
-      ('IP (bvadd 'IP #x00000004)))))
+((operands ((frT . 'Fprc) (frA . 'Fprc) (frB . 'Fprc) (frC . 'Fprc)))
+ (in ('FPSCR frC frB frA 'IP))
+ (defs
+  (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec3") "FMADDS" frA frB frC 'FPSCR)))
+   (frT ((_ extract 127 0) ((_ call "ppc.vec3") "FMADDS" frA frB frC 'FPSCR)))
+   ('IP (bvadd 'IP #x00000004)))))

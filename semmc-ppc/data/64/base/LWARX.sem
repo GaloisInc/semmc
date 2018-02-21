@@ -1,15 +1,16 @@
 ;; Load Word and Reserve Indexed (X-form)
 ;; This is basically LWZX with additional memory synchronization semantics
-((operands ((rT . 'Gprc) (memref . 'Memrr))) 
-  (in ('Mem memref 'IP))
-  (defs 
-    ((rT 
-       ((_ zero_extend 32) 
-         ((_ call "read_mem.32") 
-           'Mem
-           (bvadd 
-             (ite 
-               ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
-               #x0000000000000000
-               ((_ call "ppc.memrr_base") memref))
-             ((_ call "ppc.memrr_offset") memref))))) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((rT . 'Gprc) (memref . 'Memrr)))
+ (in ('Mem memref 'IP))
+ (defs
+  ((rT
+    ((_ zero_extend 32)
+     ((_ call "read_mem.32")
+      'Mem
+      (bvadd
+       (ite
+        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+        #x0000000000000000
+        ((_ call "ppc.memrr_base") memref))
+       ((_ call "ppc.memrr_offset") memref)))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

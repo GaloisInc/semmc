@@ -1,23 +1,25 @@
 ;; Shift Right Algebraic Word (X-form, RC=0)
-((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) 
-  (in ('XER rB rS 'IP))
-  (defs 
-    (('XER 
-       (concat 
-         ((_ extract 33 0) 'XER)
-         (concat 
-           (ite 
-             (bvne 
-               (bvlshr 
-                 (bvshl 
-                   ((_ extract 63 32) rS)
-                   (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 63 59) rB))))
-                 (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 63 59) rB))))
-               #x00000000)
-             ((_ extract 0 0) ((_ extract 63 32) rS))
-             #b0)
-           ((_ extract 63 35) 'XER)))) 
-      (rA 
-        ((_ sign_extend 32) 
-          (bvashr ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB)))))
-      ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc)))
+ (in ('XER rB rS 'IP))
+ (defs
+  (('XER
+    (concat
+     ((_ extract 33 0) 'XER)
+     (concat
+      (ite
+       (bvne
+        (bvlshr
+         (bvshl
+          ((_ extract 63 32) rS)
+          (bvsub
+            #x00000020
+            ((_ zero_extend 27) ((_ extract 63 59) rB))))
+         (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 63 59) rB))))
+        #x00000000)
+       ((_ extract 0 0) ((_ extract 63 32) rS))
+       #b0)
+      ((_ extract 63 35) 'XER))))
+   (rA
+     ((_ sign_extend 32)
+     (bvashr ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB)))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

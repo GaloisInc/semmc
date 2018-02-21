@@ -1,4 +1,4 @@
 ;; XOR Immediate Shifted (D-form)
-((operands ((rT . 'Gprc) (ui . 'U16imm) (rA . 'Gprc))) 
-  (in (ui rA 'IP))
-  (defs ((rT (bvxor rA (concat ui #x0000))) ('IP (bvadd 'IP #x00000004)))))
+((operands ((rT . 'Gprc) (ui . 'U16imm) (rA . 'Gprc)))
+ (in (ui rA 'IP))
+ (defs ((rT (bvxor rA (concat ui #x0000))) ('IP (bvadd 'IP #x00000004)))))

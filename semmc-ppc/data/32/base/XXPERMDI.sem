@@ -1,4 +1,4 @@
 ;; VSX Permute Doubleword Immediate (XX3-form)
-((operands ((xT . 'Vsrc) (DM . 'U2imm) (xA . 'Vsrc) (xB . 'Vsrc))) 
-  (in (xB xA DM 'IP))
-  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
+((operands ((xT . 'Vsrc) (DM . 'U2imm) (xA . 'Vsrc) (xB . 'Vsrc)))
+ (in (xB xA DM 'IP))
+ (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))

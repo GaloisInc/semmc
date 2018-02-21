@@ -1,5 +1,7 @@
 ;; Move to Condition Register from FPSCR (X-form)
-((operands ((BF . 'Crrc) (BFA . 'Crrc))) 
-  (in ('IP))
-  (defs 
-    (('FPSCR ((_ call "undefined") #x00000020)) ('CR ((_ call "undefined") #x00000020)) ('IP (bvadd 'IP #x00000004)))))
+((operands ((BF . 'Crrc) (BFA . 'Crrc)))
+ (in ('IP))
+ (defs
+  (('FPSCR ((_ call "undefined") #x00000020))
+   ('CR ((_ call "undefined") #x00000020))
+   ('IP (bvadd 'IP #x00000004)))))
