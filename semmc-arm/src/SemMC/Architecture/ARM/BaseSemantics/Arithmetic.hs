@@ -64,6 +64,26 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+  defineA32Opcode A.MOVr (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "rM" gpr naturalBV
+                         )
+                      $ \rD setcc _ rM -> do
+    comment "MOV register, A32, Encoding A1  (F7.1.109, F7-2712)"
+    input rD
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        result = Loc rM
+        (_,_,c,v) = getNZCV
+        n = extract 31 31 result
+        z = isZeroBit result
+        nzcv = concat n $ concat z $ concat c v
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
   defineA32Opcode A.SUBri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
