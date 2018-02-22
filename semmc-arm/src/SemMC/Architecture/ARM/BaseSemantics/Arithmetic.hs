@@ -18,6 +18,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Helpers
 import           SemMC.Architecture.ARM.BaseSemantics.Natural
 import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Bitstring
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExpandImm
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
@@ -119,7 +120,7 @@ manualBitwise = do
         (imm32, c') = armExpandImmC imm12 c
         result = bvand (Loc rN) imm32
         n' = extract 31 31 result
-        z' = ite (bveq result (LitBV 32 0b0)) (LitBV 1 0b1) (LitBV 1 0b0)
+        z' = isZeroBit result
         v' = v
         nzcv = concat n' $ concat z' $ concat c' v'
     defReg rD (ite (isR15 rD) (Loc rD) result)
@@ -223,7 +224,7 @@ manualBitwise = do
         (imm32, c') = armExpandImmC imm12 c
         result = bvor (Loc rN) imm32
         n' = extract 31 31 result
-        z' = ite (bveq result (LitBV 32 0b0)) (LitBV 1 0b1) (LitBV 1 0b0)
+        z' = isZeroBit result
         v' = v
         nzcv = concat n' $ concat z' $ concat c' v'
     defReg rD (ite (isR15 rD) (Loc rD) result)
@@ -243,7 +244,7 @@ andrr rD rM rN setflags shift_t shift_n = do
   let carry = extract 32 32 shiftedWithCarry
   let result = bvand (Loc rN) shifted
   let n' = extract 31 31 result
-  let z' = ite (bveq result (naturalLitBV 0x0)) (LitBV 1 0b1) (LitBV 1 0b0)
+  let z' = isZeroBit result
   let c' = carry
   let v' = v
   let nzcv = "nzcv" =: concat n' (concat z' (concat c' v'))
@@ -263,7 +264,7 @@ andrsr rD rM rN setflags shift_t rS = do
   let carry = extract 32 32 shiftedWithCarry
   let result = bvand (Loc rN) shifted
   let n' = extract 31 31 result
-  let z' = ite (bveq result (naturalLitBV 0x0)) (LitBV 1 0b1) (LitBV 1 0b0)
+  let z' = isZeroBit result
   let nzcv = "nzcv" =: concat n' (concat z' (concat carry v))
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
