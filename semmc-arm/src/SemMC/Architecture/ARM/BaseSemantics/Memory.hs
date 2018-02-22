@@ -88,7 +88,7 @@ defineStores = do
   defineA32Opcode A.STR_PRE_REG (Empty
                                 :> ParamDef "predBits" pred (EBV 4)
                                 :> ParamDef "ldst_so_reg" ldst_so_reg EMemRef -- ???
-                                :> ParamDef "grp" gpr naturalBV
+                                :> ParamDef "gpr" gpr naturalBV
                                 )
     $ \_ ldstSoReg rT -> do
     comment "Store Register, Pre-indexed (P=1, W=1), register (A32)"

@@ -905,8 +905,8 @@
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
           (bveq #b0 #b0))))))))))
- ((operands ((predBits . 'Pred) (ldst_so_reg . 'Ldst_so_reg) (grp . 'GPR)))
-  (in ('Mem ldst_so_reg grp 'CPSR 'PC))
+ ((operands ((predBits . 'Pred) (ldst_so_reg . 'Ldst_so_reg) (gpr . 'GPR)))
+  (in ('Mem ldst_so_reg gpr 'CPSR 'PC))
   (defs
    (('PC (bvadd 'PC #x00000004))
     ('CPSR 'CPSR)
@@ -923,7 +923,7 @@
         ((_ extract 31 0) (shiftC))))
       (ite
        (testCondition)
-       (ite ((_ call "arm.is_r15") grp) 'PC grp)
+       (ite ((_ call "arm.is_r15") gpr) 'PC gpr)
        ((_ call "read_mem.32")
         'Mem
         (ite
