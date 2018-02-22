@@ -17,6 +17,7 @@ import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
 import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
@@ -33,6 +34,27 @@ defineLoads = do
 
 defineStores :: SemARM 'Top ()
 defineStores = do
+  defineA32Opcode A.LDR_POST_IMM (Empty
+                                 :> ParamDef "gpr" gpr naturalBV
+                                 :> ParamDef "predBits" pred (EBV 4)
+                                 :> ParamDef "imm" am2offset_imm EMemRef
+                                 :> ParamDef "off" addr_offset_none naturalBV
+                                 )
+                      $ \rT _ imm12 off -> do
+    comment "Load Register, Post-indexed (P=0, W=0), immediate (A32), Encoding A1"
+    comment "doc: F7.1.69, page F7-2636"
+    input imm12
+    input off
+    let imm12arg = [Some $ Loc imm12]
+        add = am2offset_immAdd imm12arg
+        offset = zext $ am2offset_immImm imm12arg
+        rN = off
+        b'P = LitBV 1 0
+        b'W = LitBV 1 0
+        index =bveq b'P (LitBV 1 1)
+        wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
+    ldr rT add rN offset index wback
+
   -- Note about STR_PRE_IMM vs STR_POST_IMM:
   -- for STR_PRE_IMM, the addrmode_imm12_pre bundle is holding three pieces of
   -- information: the register holding the target address, the immediate offset, and
@@ -166,3 +188,20 @@ defMem memloc addr nBytes expr = do
     defLoc memloc (storeMem (Loc memloc) addr nBytes updval)
 
 
+ldr :: Location 'TBV -> Expr 'TBool -> Location 'TBV
+    -> Expr 'TBV -> Expr 'TBool -> Expr 'TBool
+    -> SemARM 'Def ()
+ldr rT add rN imm32 index wback = do
+  input memory
+  let updated_addr = "updAddr" =: ite add (bvadd (Loc rN) imm32) (bvsub (Loc rN) imm32)
+      nBytes = 4
+      addr = ite index updated_addr (Loc rN)
+      result = readMem (Loc memory) addr nBytes
+      alignedResult = ite (orp (tstBit 1 addr) (tstBit 0 addr)) (unpredictable result) result
+      sameRegs = sameLocation rT rN
+      isUnpredictable = "isUnpredictable" =: andp sameRegs wback
+  loadWritePC (isR15 rT) alignedResult
+  defReg rN (ite wback updated_addr (Loc rN))
+  defReg rT (ite (isR15 rT)
+                 (Loc rT)
+                 (ite isUnpredictable (unpredictable result) result))
