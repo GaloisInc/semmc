@@ -80,7 +80,7 @@ defineStores = do
         add = am2offset_immAdd imm12arg
         offset = zext $ am2offset_immImm imm12arg
         rN = off
-        updated_addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
+        updated_addr = "addr" =: ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
         nBytes = 4
         sameRegs = sameLocation rT rN
     defMem memory (Loc rN) nBytes (ite (isR15 rT) (Loc pc) (Loc rT))

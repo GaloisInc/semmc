@@ -4,18 +4,7 @@
  ((var1
    (('PC (bvadd 'PC #x00000004))
     ('CPSR 'CPSR)
-    (off
-     (ite
-      (testCondition)
-      (ite
-       ((_ call "a32.am2offset_imm_add") imm)
-       (bvadd
-         off
-         ((_ zero_extend 16) ((_ call "a32.am2offset_imm_imm") imm)))
-       (bvsub
-         off
-         ((_ zero_extend 16) ((_ call "a32.am2offset_imm_imm") imm))))
-      off))
+    (off (ite (testCondition) (addr) off))
     ('Mem ((_ call "write_mem.32") 'Mem off (var2)))))
   (var2
    (ite
@@ -55,7 +44,12 @@
              ((_ extract 31 31) 'CPSR)
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-          (bveq #b0 #b0))))))))))
+          (bveq #b0 #b0)))))))))
+  (addr
+   (ite
+    ((_ call "a32.am2offset_imm_add") imm)
+    (bvadd off ((_ zero_extend 16) ((_ call "a32.am2offset_imm_imm") imm)))
+    (bvsub off ((_ zero_extend 16) ((_ call "a32.am2offset_imm_imm") imm))))))
  ((operands
     ((predBits . 'Pred)
     (imm . 'Am2offset_imm)
