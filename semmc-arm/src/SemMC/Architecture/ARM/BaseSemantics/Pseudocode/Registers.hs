@@ -30,8 +30,8 @@ aluWritePC tgtRegIsPC addr = do
 
 
 -- | LoadWritePC pseudocode.  (E1.2.3, E1-2297)
-loadWritePC :: Expr 'TBV -> SemARM 'Def ()
-loadWritePC = bxWritePC (LitBool True)
+loadWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
+loadWritePC = bxWritePC
 
 
 -- | BranchWritePC pseudocode.  (E1.2.3, E1-2296)
