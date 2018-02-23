@@ -133,7 +133,7 @@ shiftC value (unSRType -> shift_t) shift_n c = "shiftC" =:
         , (bveq shift_t (LitBV 3 0b011), rorC value shift_n)
         ] (rrxC value c)
 
--- | Logical Shift Left (with carry out)  AppxG-5008
+-- | Logical Shift Left (with carry out)  AppxG-5008 and (E1.2.2, E1-2290)
 --
 -- Unlike the version in the manual, we return an N+1 bit bitvector, where the
 -- highest bit is the carry out bit.  We do this because we don't have tuples.
@@ -152,7 +152,7 @@ lslC x shft = "lslC" =:
   where
     xsize = exprBVSize x + 1
 
--- | Logical shift right (with carry out) AppxG-5008
+-- | Logical shift right (with carry out) AppxG-5008 and (E1.2.2, E1-2291)
 --
 -- Our implementation isn't the same as the manual because we can't zero extend
 -- out to a dynamic width.  Instead, we have to shift and then, if the shift
@@ -199,7 +199,7 @@ rrxC x carry_in = "rrxC" =: concat carry_out (concat carry_in slice)
     carry_out = extract 0 0 x
     slice = extract (exprBVSize x - 1) 1 x
 
--- | Rotate right (with carry out) - AppxG-5009
+-- | Rotate right (with carry out) - AppxG-5009 and (E1.2.2, E1-2292)
 --
 -- > // ROR_C()
 -- > // =======
