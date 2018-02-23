@@ -29,15 +29,21 @@ manualBranches = do
   a32_branches
   t32_branches
 
+-- ----------------------------------------------------------------------
+
 a32_branches :: SemARM 'Top ()
 a32_branches = do
   blx_a32
 
-t32_branches :: SemARM 'Top ()
-t32_branches = do
-  blx_t32
+  defineA32Opcode A.BX_RET (Empty
+                           :> ParamDef "predBits" pred (EBV 4)
+                           )
+                      $ \_ -> do
+    comment "BX, returning (target addr in LR), Encoding A1"
+    comment "F7.1.27, F7-2579"
+    input lr
+    bxWritePC (LitBool True) (Loc lr)
 
--- ----------------------------------------------------------------------
 
 blx_a32 :: SemARM 'Top ()
 blx_a32 =
@@ -54,6 +60,13 @@ blx_a32 =
           newlr = "newlr" =: (bvsub (Loc pc) (naturalLitBV 0x4))
       label <- target_label_align4 imm32
       blx_ newlr label tgtarch
+
+
+-- ----------------------------------------------------------------------
+
+t32_branches :: SemARM 'Top ()
+t32_branches = do
+  blx_t32
 
 blx_t32 :: SemARM 'Top ()
 blx_t32 =
