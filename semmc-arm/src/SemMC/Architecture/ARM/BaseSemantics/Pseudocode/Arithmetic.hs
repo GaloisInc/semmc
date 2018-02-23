@@ -45,7 +45,7 @@ roundTowardsZero x = ite (bvuge x (naturalLitBV 0)) (roundDown x) (roundUp x)
 --
 -- Align is only used with y as a constant power of 2
 align :: Expr 'TBV -> Int -> Expr 'TBV
-align x y = let bits = [n | n <- [0..naturalBitSize], 2^n <= y ]
+align x y = let bits = [n | n <- [0..naturalBitSize], 2^n < y ]
             in bvclr bits x
 
 -- | DIV divides the first argument by the second

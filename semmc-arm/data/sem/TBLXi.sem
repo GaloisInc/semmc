@@ -50,7 +50,6 @@
    (bvand
     #xfffffffd
     (bvadd
-     (alignPC_4)
      ((_ sign_extend 7)
       (concat
        ((_ call "t32.blxtarget_S") target)
@@ -66,8 +65,8 @@
            ((_ call "t32.blxtarget_S") target)))
          (concat
           ((_ call "t32.blxtarget_imm10H") target)
-          (concat ((_ call "t32.blxtarget_imm10L") target) #b00)))))))))
-  (alignPC_4 (bvand #xfffffffc 'PC)))
+          (concat ((_ call "t32.blxtarget_imm10L") target) #b00))))))
+     (bvand #xfffffffc 'PC)))))
  ((operands ((target . 'ThumbBlxTarget)))
   (in ('R14 'CPSR 'PC))
   (defs (('PC (branchWritePC)) var2))))

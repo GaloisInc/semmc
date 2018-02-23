@@ -18,6 +18,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Base
 import           SemMC.Architecture.ARM.BaseSemantics.Helpers
 import           SemMC.Architecture.ARM.BaseSemantics.Natural
 import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Arithmetic
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExecState
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
 import           SemMC.Architecture.ARM.BaseSemantics.Registers
@@ -112,6 +113,4 @@ blx_ newlr tgtaddr tgtarch = do
 -- ----------------------------------------------------------------------
 
 target_label_align4 :: Expr 'TBV -> SemARM 'Def (Expr 'TBV)
-target_label_align4 off = do  -- Align(PC, 4) to force word-alignment (only affects T32, not A32).
-    let alignPC_4 = "alignPC_4" =: bvclr [0,1] (Loc pc)
-    return $ bvadd alignPC_4 off
+target_label_align4 off = return $ bvadd off $ align (Loc pc) 4
