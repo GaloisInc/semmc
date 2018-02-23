@@ -24,6 +24,7 @@ import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
+import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Arithmetic
 import SemMC.DSL
 
 
@@ -179,7 +180,7 @@ srC :: (HasCallStack) => (Expr 'TBV -> Expr 'TBV -> Expr 'TBV) -> Expr 'TBV -> E
 srC op x shft = concat carry_out rs
   where
     nBits = LitBV (exprBVSize x) (fromIntegral (exprBVSize x))
-    m = bvurem shft nBits
+    m = shft `pMOD` nBits
     rs = op x m
     co = ite (testBitDynamic (bvsub shft (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
     carry_out = ite (bvult shft (naturalLitBV 32)) co (LitBV 1 0)
@@ -212,7 +213,7 @@ rorC :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 rorC x shft = "rorC" =: concat carry_out (bvor ls rs)
   where
     nBits = LitBV (exprBVSize x) (fromIntegral (exprBVSize x))
-    m = bvurem shft nBits
+    m = shft `pMOD` nBits
     rs = bvlshr x m
     ls = bvshl x (bvsub nBits m)
     co = ite (testBitDynamic (bvsub shft (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
