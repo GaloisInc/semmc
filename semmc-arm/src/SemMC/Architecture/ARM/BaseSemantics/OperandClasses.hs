@@ -45,6 +45,9 @@ addr_offset_none = "Addr_offset_none"
 arm_blx_target :: String
 arm_blx_target = "Arm_blx_target"
 
+arm_br_target :: String
+arm_br_target = "Arm_br_target"
+
 ldst_so_reg :: String
 ldst_so_reg = "Ldst_so_reg"
 
@@ -86,6 +89,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Addr_offset_none" = 'TBV
   SymToExprTag "Ldst_so_reg" = 'TMemRef
   SymToExprTag "Arm_blx_target" = 'TBV
+  SymToExprTag "Arm_br_target" = 'TBV
   SymToExprTag "So_reg_reg" = 'TMemRef
   SymToExprTag "So_reg_imm" = 'TMemRef
   SymToExprTag "RGPR" = 'TBV

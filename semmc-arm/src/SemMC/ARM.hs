@@ -148,6 +148,7 @@ type instance A.OperandType ARM "Addrmode_imm12" = BaseBVType 32
 type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
 type instance A.OperandType ARM "Am2offset_imm" = BaseBVType 32
 type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
+type instance A.OperandType ARM "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
@@ -178,6 +179,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opV (ARM.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
         opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
         opV (ARM.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
+        opV (ARM.Arm_br_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
         opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
         opV (ARM.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
         opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
@@ -308,6 +310,7 @@ shapeReprType orep =
     ARM.Addrmode_imm12_preRepr -> knownRepr
     ARM.Am2offset_immRepr -> knownRepr
     ARM.Arm_blx_targetRepr -> knownRepr
+    ARM.Arm_br_targetRepr -> knownRepr
     ARM.Cc_outRepr -> knownRepr
     ARM.GPRRepr -> knownRepr
     ARM.Ldst_so_regRepr -> knownRepr
@@ -363,8 +366,9 @@ instance T.TemplatableOperand ARM where
                                   addflagVal <- fromInteger <$> evalFn addflag
                                   return $ ARM.Addrmode_imm12_pre $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                             return (expr, T.WrappedRecoverOperandFn recover)
-      ARM.Arm_blx_targetRepr -> undefined
-      ARM.Cc_outRepr -> undefined
+      ARM.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
+      ARM.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
+      ARM.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
       ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
       ARM.Mod_immRepr -> undefined
       ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
