@@ -55,6 +55,26 @@ defineStores = do
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
     ldr rT add rN offset index wback
 
+  defineA32Opcode A.LDRi12 (Empty
+                           :> ParamDef "gpr" gpr naturalBV
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "imm12" addrmode_imm12 EMemRef
+                           )
+                      $ \rT _ imm12 -> do
+    comment "Load Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1"
+    comment "doc: F7.1.69, page F7-2636"
+    input imm12
+    input memory
+    let rN = imm12Reg imm12
+        offset = zext $ imm12Off $ [Some $ Loc imm12]
+        add = imm12Add $ [Some $ Loc imm12]
+        b'P = LitBV 1 1
+        b'W = LitBV 1 0
+        index =bveq b'P (LitBV 1 1)
+        wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
+    ldr rT add rN offset index wback
+
+
   -- Note about STR_PRE_IMM vs STR_POST_IMM:
   -- for STR_PRE_IMM, the addrmode_imm12_pre bundle is holding three pieces of
   -- information: the register holding the target address, the immediate offset, and
