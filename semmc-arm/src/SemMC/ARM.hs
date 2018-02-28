@@ -144,6 +144,7 @@ instance A.IsOperand ARM.Operand
 instance A.IsOpcode  ARM.Opcode
 
 type instance A.OperandType ARM "Addr_offset_none" = BaseBVType 32
+type instance A.OperandType ARM "Addrmode_imm12" = BaseBVType 32
 type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
 type instance A.OperandType ARM "Am2offset_imm" = BaseBVType 32
 type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
@@ -172,6 +173,7 @@ operandValue :: forall sym s.
 operandValue sym locLookup op = TaggedExpr <$> opV op
   where opV :: ARM.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
         opV (ARM.Addr_offset_none gpr) = locLookup (LocGPR gpr)
+        opV (ARM.Addrmode_imm12 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opV (ARM.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
         opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
@@ -302,6 +304,7 @@ shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType A
 shapeReprType orep =
   case orep of
     ARM.Addr_offset_noneRepr -> knownRepr
+    ARM.Addrmode_imm12Repr -> knownRepr
     ARM.Addrmode_imm12_preRepr -> knownRepr
     ARM.Am2offset_immRepr -> knownRepr
     ARM.Arm_blx_targetRepr -> knownRepr
@@ -326,6 +329,23 @@ data Signed = Signed | Unsigned deriving (Eq, Show)
 instance T.TemplatableOperand ARM where
   opTemplates sr =
     case sr of
+      ARM.Addrmode_imm12Repr ->
+          mkTemplate <$> [0..numGPR-1]
+            where mkTemplate gprNum = T.TemplatedOperand Nothing
+                                      (Set.singleton (Some (LocGPR (ARMOperands.gpr gprNum)))) mkTemplate'
+                                          :: T.TemplatedOperand ARM "Addrmode_imm12"
+                    where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12"
+                          mkTemplate' sym locLookup = do
+                            let gprN = ARMOperands.gpr gprNum
+                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (ARM.GPR $ gprN)
+                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
+                            addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
+                            expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
+                            let recover evalFn = do
+                                  offsetVal <- fromInteger <$> evalFn offset
+                                  addflagVal <- fromInteger <$> evalFn addflag
+                                  return $ ARM.Addrmode_imm12 $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
+                            return (expr, T.WrappedRecoverOperandFn recover)
       ARM.Addrmode_imm12_preRepr ->
           mkTemplate <$> [0..numGPR-1]
             where mkTemplate gprNum = T.TemplatedOperand Nothing

@@ -30,6 +30,9 @@ memri = "Memri"
 pred :: String
 pred = "Pred"
 
+addrmode_imm12 :: String
+addrmode_imm12 = "Addrmode_imm12"
+
 addrmode_imm12_pre :: String
 addrmode_imm12_pre = "Addrmode_imm12_pre"
 
@@ -77,6 +80,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Mod_imm" = 'TBV
   SymToExprTag "Pred" = 'TBV
   SymToExprTag "Cc_out" = 'TBV
+  SymToExprTag "Addrmode_imm12" = 'TMemRef
   SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
   SymToExprTag "Am2offset_imm" = 'TMemRef
   SymToExprTag "Addr_offset_none" = 'TBV
