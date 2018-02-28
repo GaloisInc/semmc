@@ -63,6 +63,18 @@ so_reg_reg = "So_reg_reg"
 so_reg_imm :: String
 so_reg_imm = "So_reg_imm"
 
+-- | The 'unpredictableInstrBits' operand is used to define bits in
+-- the instruction encoding that the architecture specification
+-- declares as "unpredictable" and which may have different values
+-- (e.g. for future expansions).
+--
+-- These are declared by Dismantle so that round-trip decode/encode
+-- can pass through and reproduce the same values.
+--
+-- The generated semantics will always ignore these.
+unpredictableInstrBits :: String
+unpredictableInstrBits = "Unpredictable"
+
 -- ----------------------------------------------------------------------
 -- T32 operand names
 
@@ -95,3 +107,4 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "RGPR" = 'TBV
   SymToExprTag "TGPR" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TBV
+  SymToExprTag "Unpredictable" = 'TBV

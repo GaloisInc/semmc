@@ -157,6 +157,7 @@ type instance A.OperandType ARM "Pred" = BaseBVType 4
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
 type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
+type instance A.OperandType ARM "Unpredictable" = BaseBVType 32
 
 
 instance A.IsOperandTypeRepr ARM where
@@ -186,6 +187,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
         opV (ARM.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
         opV (ARM.So_reg_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
+        opV (ARM.Unpredictable v) = S.bvLit sym knownNat $ toInteger v
         -- opV (Thumb.ThumbBlxTarget v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
@@ -318,6 +320,7 @@ shapeReprType orep =
     ARM.PredRepr -> knownRepr
     ARM.So_reg_immRepr -> knownRepr
     ARM.So_reg_regRepr -> knownRepr
+    ARM.UnpredictableRepr -> knownRepr
     -- Thumb.ThumbBlxTargetRepr -> knownRepr
     _ -> error $ "Unknown OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- "Imm0_15"
@@ -372,6 +375,7 @@ instance T.TemplatableOperand ARM where
       ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
       ARM.Mod_immRepr -> undefined
       ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
+      ARM.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
       -- ARM.ThumbBlxTargetRepr -> undefined
 
 
