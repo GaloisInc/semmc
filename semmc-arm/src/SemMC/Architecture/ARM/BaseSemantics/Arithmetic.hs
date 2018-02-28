@@ -227,6 +227,23 @@ manualBitwise = do
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
     andrr rD rM rN setflags shift_t shift_n
 
+  defineA32Opcode A.CMPri (Empty
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "modimm" mod_imm naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          :> ParamDef "unpredictable" unpredictableInstrBits naturalBV
+                          )
+                      $ \_ mimm rN _unpred -> do
+    comment "Compare immediate, Encoding A1"
+    comment "doc: F7.1.36, page F7-2589"
+    comment "unpredictable argument is ignored"
+    input mimm
+    input rN
+    let imm32 = armExpandImm mimm
+        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 1 1)
+    cpsrNZCV (LitBool True) nzcv
+
+
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
