@@ -1,0 +1,48 @@
+;; BX, returning (target addr in LR), Encoding A1
+;; F7.1.27, F7-2579
+(let
+ ((SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
+  (testCondition
+   (ite
+    (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
+    (notp (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq ((_ extract 3 1) predBits) #b000)
+    (bveq #b1 ((_ extract 30 30) 'CPSR))
+    (ite
+     (bveq ((_ extract 3 1) predBits) #b001)
+     (bveq #b1 ((_ extract 29 29) 'CPSR))
+     (ite
+      (bveq ((_ extract 3 1) predBits) #b010)
+      (bveq #b1 ((_ extract 31 31) 'CPSR))
+      (ite
+       (bveq ((_ extract 3 1) predBits) #b011)
+       (bveq #b1 ((_ extract 28 28) 'CPSR))
+       (ite
+        (bveq ((_ extract 3 1) predBits) #b100)
+        (andp
+          (bveq #b1 ((_ extract 29 29) 'CPSR))
+          (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+        (ite
+         (bveq ((_ extract 3 1) predBits) #b101)
+         (bveq ((_ extract 31 31) 'CPSR) ((_ extract 28 28) 'CPSR))
+         (ite
+          (bveq ((_ extract 3 1) predBits) #b110)
+          (andp
+           (bveq
+             ((_ extract 31 31) 'CPSR)
+             ((_ extract 28 28) 'CPSR))
+           (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+          (bveq #b0 #b0)))))))))
+  (bxWritePC
+   (ite
+    (bveq #b0 ((_ extract 0 0) 'R14))
+    (bvand #xfffffffe 'R14)
+    (ite (bveq #b0 ((_ extract 1 1) 'R14)) (bvand #xfffffffd 'R14) 'R14))))
+ ((operands ((predBits . 'Pred)))
+  (in ('R14 'CPSR 'PC))
+  (defs
+   (('PC (bxWritePC))
+    ('CPSR (ite (testCondition) (ite (bveq #b0 ((_ extract 0 0) 'R14)) (SetT32Mode) 'CPSR) 'CPSR))))))
