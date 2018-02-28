@@ -216,7 +216,7 @@ getNZCV = let n = extract 31 31 (Loc cpsr)
 -- be performed (e.g. isR15), so the new update is passed the old
 -- update so that it can choose to use the original functionality or
 -- its new functionality.
-updatePC :: ((ArchSubtype -> Expr 'TBV) -> ArchSubtype -> Expr 'TBV) -> SemARM t ()
+updatePC :: (PCUpdateExpr -> PCUpdateExpr) -> SemARM t ()
 updatePC pcf =
     let mod_pcf m'ad = let ad = maybe newARMData id m'ad
                            oldUpd = pcUpdate ad
@@ -235,7 +235,7 @@ finalizePC :: HasCallStack => SemARM 'Def ()
 finalizePC = do
   instrSet <- (subArch  . fromJust) <$> getArchData
   updExp   <- (pcUpdate . fromJust) <$> getArchData
-  defLoc pc $ updExp instrSet
+  defLoc pc $ updExp instrSet (Loc pc)
 
 
 -- ----------------------------------------------------------------------

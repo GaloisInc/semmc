@@ -7,6 +7,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
     ( aluWritePC
     , loadWritePC
     , branchWritePC
+    , branchWritePCRel
     , bxWritePC
     )
     where
@@ -34,14 +35,24 @@ loadWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
 loadWritePC = bxWritePC
 
 
--- | BranchWritePC pseudocode.  (E1.2.3, E1-2296)
+-- | BranchWritePC pseudocode.  (E1.2.3, E1-2296).
 branchWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
 branchWritePC tgtRegIsPC addr =
-    let setAddr curarch = if curarch == InstrSet_A32
-                          then bvclr [0,1] addr
-                          else bvclr [1] addr
-    in updatePC $ \old suba -> "branchWritePC" =: ite tgtRegIsPC (setAddr suba) (old suba)
+    updatePC $ \oldMod suba curpc -> "branchWritePC" =:
+    ite tgtRegIsPC (maskPCForSubArch suba addr) (oldMod suba curpc)
 
+-- | BranchWritePC pseudocode for handling relative branch arguments
+-- (PC + offset), where this is just passed the offset.  (D1.2.3,
+-- E1-2296)
+branchWritePCRel :: Expr 'TBV -> SemARM 'Def ()
+branchWritePCRel offset = updatePC $ \_oldMod subarch curpc -> "branchWritePCrel" =:
+                          maskPCForSubArch subarch (bvadd curpc offset)
+
+
+maskPCForSubArch :: ArchSubtype -> Expr 'TBV -> Expr 'TBV
+maskPCForSubArch subarch addr = if subarch == InstrSet_A32
+                                then bvclr [0,1] addr
+                                else bvclr [1] addr
 
 -- | BxWritePC pseudocode  (E1.2.3, E1-2296)
 bxWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
@@ -56,4 +67,4 @@ bxWritePC tgtRegIsPC addr =
                                          (bvclr [1] addr)
                                          addr)
     in do selectInstrSet tgtRegIsPC toT32
-          updatePC $ \old suba -> "bxWritePC" =: ite tgtRegIsPC (setAddr suba) (old suba)
+          updatePC $ \old suba oldpc -> "bxWritePC" =: ite tgtRegIsPC (setAddr suba) (old suba oldpc)
