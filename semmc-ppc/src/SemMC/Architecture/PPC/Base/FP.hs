@@ -297,6 +297,54 @@ floatingPoint = do
     comment "Floating Round to Single-Precision (X-form)"
     fp1op "FRSP"
 
+  defineOpcodeWithIP "FCTID" $ do
+    comment "Floating Point Convert to Integer Doubleword (X-form)"
+    fp1op "FCTID"
+
+  defineOpcodeWithIP "FCTIDZ" $ do
+    comment "Floating Point Convert to Integer Doubleword with Round Towards Zero (X-form)"
+    fp1op "FCTIDZ"
+
+  defineOpcodeWithIP "FCTIDU" $ do
+    comment "Floating Point Convert to Integer Doubleword Unsigned (X-form)"
+    fp1op "FCTIDU"
+
+  defineOpcodeWithIP "FCTIDUZ" $ do
+    comment "Floating Point Convert to Integer Doubleword Unsigned with Round Towards Zero (X-form)"
+    fp1op "FCTIDUZ"
+
+  defineOpcodeWithIP "FCTIW" $ do
+    comment "Floating Point Convert to Integer Word (X-form)"
+    fp1op "FCTIW"
+
+  defineOpcodeWithIP "FCTIWZ" $ do
+    comment "Floating Point Convert to Integer Word with Round Towards Zero (X-form)"
+    fp1op "FCTIWZ"
+
+  defineOpcodeWithIP "FCTIWU" $ do
+    comment "Floating Point Convert to Integer Word Unsigned (X-form)"
+    fp1op "FCTIWU"
+
+  defineOpcodeWithIP "FCTIWUZ" $ do
+    comment "Floating Point Convert to Integer Word Unsigned with Round Towards Zero (X-form)"
+    fp1op "FCTIWUZ"
+
+  defineOpcodeWithIP "FCFID" $ do
+    comment "Floating Point Convert from Integer Doubleword (X-form)"
+    fp1op "FCFID"
+
+  defineOpcodeWithIP "FCFIDU" $ do
+    comment "Floating Point Convert from Integer Doubleword Unsigned (X-form)"
+    fp1op "FCFIDU"
+
+  defineOpcodeWithIP "FCFIDS" $ do
+    comment "Floating Point Convert from Integer Doubleword Single (X-form)"
+    fp1op "FCFIDS"
+
+  defineOpcodeWithIP "FCFIDUS" $ do
+    comment "Floating Point Convert from Integer Doubleword Unsigned Single (X-form)"
+    fp1op "FCFIDUS"
+
   defineOpcodeWithIP "FNEGD" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
