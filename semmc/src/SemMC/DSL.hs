@@ -485,7 +485,7 @@ bvpopcnt e =
 binBVBuiltin :: (HasCallStack) => String -> Expr tp1 -> Expr tp1 -> Expr tp1
 binBVBuiltin s e1 e2
   | t1 == t2 = Builtin t1 s [Some e1, Some e2]
-  | otherwise = error (printf "Type mismatch for bitvector builtin; lhs type is %s while rhs type is %s" (show t1) (show t2))
+  | otherwise = error (printf "Type mismatch for bitvector builtin %s; lhs type is %s while rhs type is %s" s (show t1) (show t2))
   where
     t1 = exprType e1
     t2 = exprType e2
@@ -493,7 +493,7 @@ binBVBuiltin s e1 e2
 binTestBuiltin :: (HasCallStack) => String -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 binTestBuiltin s e1 e2
   | t1 == t2 = Builtin EBool s [Some e1, Some e2]
-  | otherwise = error (printf "Type mismatch for bitvector test builtin; lhs type is %s while rhs type is %s" (show t1) (show t2))
+  | otherwise = error (printf "Type mismatch for bitvector test builtin %s; lhs type is %s while rhs type is %s" s (show t1) (show t2))
   where
     t1 = exprType e1
     t2 = exprType e2
