@@ -1,4 +1,4 @@
-;; SUB register, A32, Encoding A1  (F7.1.236, F7-2918)
+;; SUB register, A32, Encoding A1  (F7.1.236, F7-2918?)
 (let
  ((var1
    ((('PC (bxWritePC))
