@@ -60,6 +60,9 @@ cc_out = "Cc_out"
 mod_imm :: String
 mod_imm = "Mod_imm"
 
+shift_so_reg_imm :: String
+shift_so_reg_imm = "Shift_so_reg_imm"
+
 so_reg_reg :: String
 so_reg_reg = "So_reg_reg"
 
@@ -106,6 +109,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Arm_bl_target" = 'TBV
   SymToExprTag "Arm_blx_target" = 'TBV
   SymToExprTag "Arm_br_target" = 'TBV
+  SymToExprTag "Shift_so_reg_imm" = 'TBV
   SymToExprTag "So_reg_reg" = 'TMemRef
   SymToExprTag "So_reg_imm" = 'TMemRef
   SymToExprTag "RGPR" = 'TBV

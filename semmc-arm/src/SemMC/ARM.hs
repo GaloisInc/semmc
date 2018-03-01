@@ -155,6 +155,7 @@ type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
+type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
 type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
@@ -187,6 +188,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opV (ARM.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
         opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
         opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
+        opV (ARM.Shift_so_reg_imm v) = S.bvLit sym knownNat $ toInteger v
         opV (ARM.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
         opV (ARM.So_reg_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
         opV (ARM.Unpredictable v) = S.bvLit sym knownNat $ toInteger v
@@ -321,6 +323,7 @@ shapeReprType orep =
     ARM.Ldst_so_regRepr -> knownRepr
     ARM.Mod_immRepr -> knownRepr
     ARM.PredRepr -> knownRepr
+    ARM.Shift_so_reg_immRepr -> knownRepr
     ARM.So_reg_immRepr -> knownRepr
     ARM.So_reg_regRepr -> knownRepr
     ARM.UnpredictableRepr -> knownRepr
@@ -377,8 +380,10 @@ instance T.TemplatableOperand ARM where
       ARM.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
       ARM.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
       ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
-      ARM.Mod_immRepr -> undefined
+      ARM.Mod_immRepr -> error "opTemplate ARM_Mod_immRepr TBD"
       ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
+      ARM.Shift_so_reg_immRepr -> error "opTemplate Shift_so_reg_immRepr TBD"
+      ARM.So_reg_immRepr -> error "opTemplate So_reg_immRepr TBD"
       ARM.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
       -- ARM.ThumbBlxTargetRepr -> undefined
 
