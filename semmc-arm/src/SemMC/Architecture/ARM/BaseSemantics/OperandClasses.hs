@@ -30,6 +30,9 @@ memri = "Memri"
 pred :: String
 pred = "Pred"
 
+addrmode_imm12 :: String
+addrmode_imm12 = "Addrmode_imm12"
+
 addrmode_imm12_pre :: String
 addrmode_imm12_pre = "Addrmode_imm12_pre"
 
@@ -41,6 +44,9 @@ addr_offset_none = "Addr_offset_none"
 
 arm_blx_target :: String
 arm_blx_target = "Arm_blx_target"
+
+arm_br_target :: String
+arm_br_target = "Arm_br_target"
 
 ldst_so_reg :: String
 ldst_so_reg = "Ldst_so_reg"
@@ -59,6 +65,18 @@ so_reg_imm = "So_reg_imm"
 
 imm0_7 :: String
 imm0_7 = "Imm0_7"
+
+-- | The 'unpredictableInstrBits' operand is used to define bits in
+-- the instruction encoding that the architecture specification
+-- declares as "unpredictable" and which may have different values
+-- (e.g. for future expansions).
+--
+-- These are declared by Dismantle so that round-trip decode/encode
+-- can pass through and reproduce the same values.
+--
+-- The generated semantics will always ignore these.
+unpredictableInstrBits :: String
+unpredictableInstrBits = "Unpredictable"
 
 -- ----------------------------------------------------------------------
 -- T32 operand names
@@ -81,13 +99,16 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Imm0_7" = 'TBV
   SymToExprTag "Pred" = 'TBV
   SymToExprTag "Cc_out" = 'TBV
+  SymToExprTag "Addrmode_imm12" = 'TMemRef
   SymToExprTag "Addrmode_imm12_pre" = 'TMemRef
   SymToExprTag "Am2offset_imm" = 'TMemRef
   SymToExprTag "Addr_offset_none" = 'TBV
   SymToExprTag "Ldst_so_reg" = 'TMemRef
   SymToExprTag "Arm_blx_target" = 'TBV
+  SymToExprTag "Arm_br_target" = 'TBV
   SymToExprTag "So_reg_reg" = 'TMemRef
   SymToExprTag "So_reg_imm" = 'TMemRef
   SymToExprTag "RGPR" = 'TBV
   SymToExprTag "TGPR" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TBV
+  SymToExprTag "Unpredictable" = 'TBV

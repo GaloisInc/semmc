@@ -5,7 +5,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Base
 
 import Data.Semigroup
 import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
 
 
@@ -15,6 +14,8 @@ import SemMC.DSL
 data ArchSubtype = InstrSet_A32 | InstrSet_T32 | InstrSet_Jazelle | InstrSet_T32EE
                  deriving (Eq, Show)
 
+
+type PCUpdateExpr = ArchSubtype -> Expr 'TBV -> Expr 'TBV
 
 -- | The 'fArchData' field of the current DSL state is used to contain
 -- values used in the Semantics definitions of opcodes.
@@ -39,14 +40,15 @@ data SemM_ARMData = SemM_ARMData
       -- to accumulate those updates so that they can be expressed in
       -- a single defLoc update of the CPSR.
 
-    , pcUpdate :: ArchSubtype -> Expr 'TBV
+    , pcUpdate :: PCUpdateExpr
       -- ^ stores the expression used to update the PC after execution
-      -- of an opcode.  By default, this simply increments the PC to
-      -- the next instruction, but branches and other PC-modifying
-      -- opcodes can effect different PC results.  This operation is
-      -- executed at the *end* of the opcode DSL definition, so the
-      -- ArchSubtype passed to it is the *result* of any changes made
-      -- by the Opcode.
+      -- of an opcode, given the Architecture subtype (e.g. A32, T32)
+      -- and the current PC value.  By default, this simply increments
+      -- the PC to the next instruction, but branches and other
+      -- PC-modifying opcodes can effect different PC results.  This
+      -- operation is executed at the *end* of the opcode DSL
+      -- definition, so the ArchSubtype passed to it is the *result*
+      -- of any changes made by the Opcode.
     }
 
 
@@ -57,11 +59,12 @@ newARMData = SemM_ARMData
              , cpsrUpdates = id
              , pcUpdate = nextInstruction
              }
-    where nextInstruction sub = case sub of
-                                  InstrSet_A32 -> bvadd (Loc pc) (naturalLitBV 4)
-                                  InstrSet_T32 -> bvadd (Loc pc) (naturalLitBV 2)
-                                  _ -> error $ "Execution PC update not currently supported\
-                                              \ for this arch subtype: " <> show sub
+    where nextInstruction subarch curpc =
+              case subarch of
+                InstrSet_A32 -> bvadd curpc (naturalLitBV 4)
+                InstrSet_T32 -> bvadd curpc (naturalLitBV 2)
+                _ -> error $ "Execution PC update not currently supported\
+                             \ for this arch subtype: " <> show subarch
 
 
 type SemARM t a = SemMD t SemM_ARMData a

@@ -1,0 +1,126 @@
+;; Compare immediate, Encoding A1
+;; doc: F7.1.36, page F7-2589
+;; unpredictable argument is ignored
+(let
+ ((var2
+   ((in (rN modimm 'CPSR 'PC))
+    (defs
+     (('PC (bvadd 'PC #x00000004))
+      ('CPSR
+        (ite (testCondition) (concat (addCarry) ((_ extract 27 0) 'CPSR)) 'CPSR))))))
+  (addCarry
+   (concat
+    ((_ extract 31 31)
+     ((_ extract 31 0)
+      (bvadd
+       (bvadd ((_ zero_extend 1) rN) ((_ zero_extend 1) (bvnot (armExpandImm))))
+       ((_ zero_extend 32) #b1))))
+    (concat
+     (ite
+      (bveq
+       ((_ extract 31 0)
+        (bvadd
+         (bvadd ((_ zero_extend 1) rN) ((_ zero_extend 1) (bvnot (armExpandImm))))
+         ((_ zero_extend 32) #b1)))
+       #x00000000)
+      #b1
+      #b0)
+     (var1))))
+  (var1
+   (concat
+    ((_ extract 32 32)
+     (bvadd
+      (bvadd ((_ zero_extend 1) rN) ((_ zero_extend 1) (bvnot (armExpandImm))))
+      ((_ zero_extend 32) #b1)))
+    (bvand
+     ((_ extract 31 31)
+      ((_ extract 31 0)
+       (bvadd
+        (bvadd ((_ zero_extend 1) rN) ((_ zero_extend 1) (bvnot (armExpandImm))))
+        ((_ zero_extend 32) #b1))))
+     ((_ extract 32 32)
+      (bvadd
+       (bvadd ((_ zero_extend 1) rN) ((_ zero_extend 1) (bvnot (armExpandImm))))
+       ((_ zero_extend 32) #b1))))))
+  (armExpandImm
+   (ite
+    (bveq
+     (bvshl
+       #x00000001
+       ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+     #x00000000)
+    ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
+    (ror)))
+  (ror ((_ extract 31 0) (rorC)))
+  (rorC
+   (concat
+    (ite
+     (bvult ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm)) #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+         ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
+         #x00000001)
+       (bvshl
+         #x00000001
+         ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm))))
+      #b1
+      #b0)
+     #b0)
+    (bvor
+     (bvshl
+      (bvshl
+        #x00000001
+        ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+      (bvsub
+       #x00000020
+       (bvurem
+         ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
+         #x00000020)))
+     (bvlshr
+      (bvshl
+        #x00000001
+        ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+      (bvurem
+        ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
+        #x00000020)))))
+  (testCondition
+   (ite
+    (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
+    (notp (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq ((_ extract 3 1) predBits) #b000)
+    (bveq #b1 ((_ extract 30 30) 'CPSR))
+    (ite
+     (bveq ((_ extract 3 1) predBits) #b001)
+     (bveq #b1 ((_ extract 29 29) 'CPSR))
+     (ite
+      (bveq ((_ extract 3 1) predBits) #b010)
+      (bveq #b1 ((_ extract 31 31) 'CPSR))
+      (ite
+       (bveq ((_ extract 3 1) predBits) #b011)
+       (bveq #b1 ((_ extract 28 28) 'CPSR))
+       (ite
+        (bveq ((_ extract 3 1) predBits) #b100)
+        (andp
+          (bveq #b1 ((_ extract 29 29) 'CPSR))
+          (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+        (ite
+         (bveq ((_ extract 3 1) predBits) #b101)
+         (bveq ((_ extract 31 31) 'CPSR) ((_ extract 28 28) 'CPSR))
+         (ite
+          (bveq ((_ extract 3 1) predBits) #b110)
+          (andp
+           (bveq
+             ((_ extract 31 31) 'CPSR)
+             ((_ extract 28 28) 'CPSR))
+           (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+          (bveq #b0 #b0))))))))))
+ ((operands
+    ((predBits . 'Pred)
+    (modimm . 'Mod_imm)
+    (rN . 'GPR)
+    (unpredictable . 'Unpredictable)))
+  var2))

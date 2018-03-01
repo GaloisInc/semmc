@@ -45,6 +45,17 @@ a32_branches = do
     input lr
     bxWritePC (LitBool True) (Loc lr)
 
+  defineA32Opcode A.Bcc (Empty
+                        :> ParamDef "predBits" pred (EBV 4)
+                        :> ParamDef "brTarget" arm_br_target naturalBV
+                        )
+                      $ \_ tgt -> do
+    comment "B, branch, Encoding A1"
+    comment "F7.1.18, F7-2566"
+    let imm24 = extract 23 0 (Loc tgt)
+        imm32 = "imm32" =: (sext $ concat imm24 $ LitBV 2 0b00)
+    branchWritePCRel imm32
+
 
 blx_a32 :: SemARM 'Top ()
 blx_a32 =

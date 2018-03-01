@@ -144,9 +144,11 @@ instance A.IsOperand ARM.Operand
 instance A.IsOpcode  ARM.Opcode
 
 type instance A.OperandType ARM "Addr_offset_none" = BaseBVType 32
+type instance A.OperandType ARM "Addrmode_imm12" = BaseBVType 32
 type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
 type instance A.OperandType ARM "Am2offset_imm" = BaseBVType 32
 type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
+type instance A.OperandType ARM "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
@@ -155,6 +157,7 @@ type instance A.OperandType ARM "Pred" = BaseBVType 4
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
 type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
+type instance A.OperandType ARM "Unpredictable" = BaseBVType 32
 
 
 instance A.IsOperandTypeRepr ARM where
@@ -172,16 +175,19 @@ operandValue :: forall sym s.
 operandValue sym locLookup op = TaggedExpr <$> opV op
   where opV :: ARM.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
         opV (ARM.Addr_offset_none gpr) = locLookup (LocGPR gpr)
+        opV (ARM.Addrmode_imm12 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opV (ARM.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
         opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
         opV (ARM.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
+        opV (ARM.Arm_br_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
         opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
         opV (ARM.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
         opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
         opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
         opV (ARM.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
         opV (ARM.So_reg_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
+        opV (ARM.Unpredictable v) = S.bvLit sym knownNat $ toInteger v
         -- opV (Thumb.ThumbBlxTarget v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
@@ -302,9 +308,11 @@ shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType A
 shapeReprType orep =
   case orep of
     ARM.Addr_offset_noneRepr -> knownRepr
+    ARM.Addrmode_imm12Repr -> knownRepr
     ARM.Addrmode_imm12_preRepr -> knownRepr
     ARM.Am2offset_immRepr -> knownRepr
     ARM.Arm_blx_targetRepr -> knownRepr
+    ARM.Arm_br_targetRepr -> knownRepr
     ARM.Cc_outRepr -> knownRepr
     ARM.GPRRepr -> knownRepr
     ARM.Ldst_so_regRepr -> knownRepr
@@ -312,6 +320,7 @@ shapeReprType orep =
     ARM.PredRepr -> knownRepr
     ARM.So_reg_immRepr -> knownRepr
     ARM.So_reg_regRepr -> knownRepr
+    ARM.UnpredictableRepr -> knownRepr
     -- Thumb.ThumbBlxTargetRepr -> knownRepr
     _ -> error $ "Unknown OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- "Imm0_15"
@@ -326,6 +335,23 @@ data Signed = Signed | Unsigned deriving (Eq, Show)
 instance T.TemplatableOperand ARM where
   opTemplates sr =
     case sr of
+      ARM.Addrmode_imm12Repr ->
+          mkTemplate <$> [0..numGPR-1]
+            where mkTemplate gprNum = T.TemplatedOperand Nothing
+                                      (Set.singleton (Some (LocGPR (ARMOperands.gpr gprNum)))) mkTemplate'
+                                          :: T.TemplatedOperand ARM "Addrmode_imm12"
+                    where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12"
+                          mkTemplate' sym locLookup = do
+                            let gprN = ARMOperands.gpr gprNum
+                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (ARM.GPR $ gprN)
+                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
+                            addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
+                            expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
+                            let recover evalFn = do
+                                  offsetVal <- fromInteger <$> evalFn offset
+                                  addflagVal <- fromInteger <$> evalFn addflag
+                                  return $ ARM.Addrmode_imm12 $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
+                            return (expr, T.WrappedRecoverOperandFn recover)
       ARM.Addrmode_imm12_preRepr ->
           mkTemplate <$> [0..numGPR-1]
             where mkTemplate gprNum = T.TemplatedOperand Nothing
@@ -343,11 +369,13 @@ instance T.TemplatableOperand ARM where
                                   addflagVal <- fromInteger <$> evalFn addflag
                                   return $ ARM.Addrmode_imm12_pre $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                             return (expr, T.WrappedRecoverOperandFn recover)
-      ARM.Arm_blx_targetRepr -> undefined
-      ARM.Cc_outRepr -> undefined
+      ARM.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
+      ARM.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
+      ARM.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
       ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
       ARM.Mod_immRepr -> undefined
       ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
+      ARM.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
       -- ARM.ThumbBlxTargetRepr -> undefined
 
 
