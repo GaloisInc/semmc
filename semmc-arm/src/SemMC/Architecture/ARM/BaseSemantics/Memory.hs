@@ -64,7 +64,6 @@ defineStores = do
     comment "Load Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1"
     comment "doc: F7.1.69, page F7-2636"
     input imm12
-    input memory
     let rN = imm12Reg imm12
         offset = zext $ imm12Off $ [Some $ Loc imm12]
         add = imm12Add $ [Some $ Loc imm12]

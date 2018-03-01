@@ -113,5 +113,5 @@
       'Mem
       (ite (bveq #b1 #b1) (updAddr) ((_ call "a32.imm12_reg") imm12)))))))
  ((operands ((gpr . 'GPR) (predBits . 'Pred) (imm12 . 'Addrmode_imm12)))
-  (in ('Mem 'Mem imm12 'CPSR 'PC))
+  (in ('Mem imm12 'CPSR 'PC))
   (defs (('PC (bxWritePC)) var2))))
