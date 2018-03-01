@@ -72,7 +72,7 @@ manualArithmetic = do
                          )
                       $ \rD setcc _ rM -> do
     comment "MOV register, A32, Encoding A1  (F7.1.109, F7-2712)"
-    input rD
+    input rM
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         result = Loc rM

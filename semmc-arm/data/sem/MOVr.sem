@@ -1,7 +1,7 @@
 ;; MOV register, A32, Encoding A1  (F7.1.109, F7-2712)
 (let
  ((var2
-   ((in (setcc rD 'CPSR 'PC))
+   ((in (setcc rM 'CPSR 'PC))
     (defs
      (('PC (bxWritePC))
       ('CPSR
