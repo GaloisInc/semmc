@@ -726,13 +726,11 @@
                    ((_ call "a32.soregimm_imm")
                     sori))))))))
             #x00000020))))
-        (rrxC)))))))
-  (rrxC
-   (concat
-    ((_ extract 0 0) ((_ call "a32.soregimm_reg") sori))
-    (concat
-      ((_ extract 29 29) 'CPSR)
-      ((_ extract 31 1) ((_ call "a32.soregimm_reg") sori)))))
+        (concat
+         ((_ extract 0 0) ((_ call "a32.soregimm_reg") sori))
+         (concat
+          ((_ extract 29 29) 'CPSR)
+          ((_ extract 31 1) ((_ call "a32.soregimm_reg") sori))))))))))
   (testCondition
    (ite
     (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
@@ -766,7 +764,8 @@
              ((_ extract 31 31) 'CPSR)
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-          (bveq #b0 #b0)))))))))
+          (true)))))))))
+  (true (bveq #b0 #b0))
   (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
   (nzcv
    (concat

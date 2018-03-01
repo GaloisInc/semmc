@@ -60,6 +60,18 @@ manualArithmetic = do
         imm32    = zext (Loc imm3)
     tadd rD rN imm32 setflags
 
+
+  defineT32Opcode T.TADDi8 (Empty
+                           :> ParamDef "rDn" gpr naturalBV
+                           :> ParamDef "imm" imm0_255 (EBV 8)
+                           )
+                       $ \rDn imm8 -> do
+    comment "Add immediate, T32, encoding T2 (F7.1.4, F7-2540)"
+    input imm8
+    let setflags = notp inITBlock
+        imm32   = zext (Loc imm8)
+    tadd rDn rDn imm32 setflags
+
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -85,7 +97,7 @@ manualArithmetic = do
                          )
                       $ \rD setcc _ rM -> do
     comment "MOV register, A32, Encoding A1  (F7.1.109, F7-2712)"
-    input rD
+    input rM
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         result = Loc rM
@@ -93,6 +105,29 @@ manualArithmetic = do
         n = extract 31 31 result
         z = isZeroBit result
         nzcv = concat n $ concat z $ concat c v
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+  defineA32Opcode A.MOVsi (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "regimm" shift_so_reg_imm (EBV 16)
+                         )
+                      $ \rD setcc _ imm -> do
+    comment "MOV immediate, A32, Encoding A1  (F7.1.107, F7-2708)"
+    -- note: that encoding is instr 0xe3auDiii, u=undefined, D=rD, i=imm, s=lo-bit of a
+    -- but actual is:               0xe1a0Diii
+    input setcc
+    input imm
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        imm12 = extract 11 0 (Loc imm)
+        (_,_,c,v) = getNZCV
+        (imm32, c') = armExpandImmC' imm12 c
+        result = imm32
+        n = extract 31 31 result
+        z = isZeroBit result
+        nzcv = concat n $ concat z $ concat c' v
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -123,7 +158,7 @@ manualArithmetic = do
                           :> ParamDef "rM" gpr naturalBV
                           :> ParamDef "rN" gpr naturalBV
                           ) $ \rD setcc _ rM rN -> do
-    comment "ADD register, A32, Encoding A1  (F7.1.7, F7-2546)"
+    comment "SUB register, A32, Encoding A1  (F7.1.236, F7-2918?)"
     input rM
     input rN
     input setcc
@@ -132,6 +167,9 @@ manualArithmetic = do
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+
+------------------------------------------------------------------------
 
 manualBitwise :: (HasCallStack) => SemARM 'Top ()
 manualBitwise = do

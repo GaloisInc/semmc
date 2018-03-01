@@ -1,4 +1,6 @@
 ;; VSX Scalar Compare Unordered Double-Precision (XX3-form)
-((operands ((bf . 'Crrc) (xA . 'Vsrc) (xB . 'Vsrc))) 
+((operands ((bf . 'Crrc) (xA . 'Vsrc) (xB . 'Vsrc)))
  (in (bf 'CR xB xA 'IP))
- (defs (('CR ((_ call "undefined") #x00000020)) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs
+  (('CR ((_ call "undefined") #x00000020))
+   ('IP (bvadd 'IP #x0000000000000004)))))

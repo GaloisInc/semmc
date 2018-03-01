@@ -1,5 +1,9 @@
 ;; Subtract From Zero Extended (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc))) 
+((operands ((rT . 'Gprc) (rA . 'Gprc)))
  (in ('XER rA 'IP))
- (defs 
-  ((rT (bvadd (bvnot rA) ((_ zero_extend 31) ((_ extract 2 2) 'XER)))) ('IP (bvadd 'IP #x00000004)))))
+ (defs
+  ((rT
+    (bvadd
+     (bvnot rA)
+     ((_ zero_extend 31) ((_ extract 2 2) 'XER))))
+   ('IP (bvadd 'IP #x00000004)))))

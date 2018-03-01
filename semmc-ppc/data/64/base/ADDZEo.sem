@@ -1,27 +1,35 @@
 ;; Add to Zero Extended (XO-form, RC=1)
-((operands ((rT . 'Gprc) (rA . 'Gprc))) 
+((operands ((rT . 'Gprc) (rA . 'Gprc)))
  (in ('XER 'CR 'XER rA 'IP))
- (defs 
-  (('CR 
-    (bvor 
-     (bvand 
+ (defs
+  (('CR
+    (bvor
+     (bvand
       'CR
-      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl 
-      ((_ zero_extend 28) 
-       (concat 
-        (ite 
-         (bvslt 
-          (bvadd rA ((_ zero_extend 63) ((_ extract 34 34) 'XER)))
+      (bvnot
+       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl
+      ((_ zero_extend 28)
+       (concat
+        (ite
+         (bvslt
+          (bvadd
+           rA
+           ((_ zero_extend 63)
+            ((_ extract 34 34) 'XER)))
           #x0000000000000000)
          #b100
-         (ite 
-          (bvsgt 
-           (bvadd rA ((_ zero_extend 63) ((_ extract 34 34) 'XER)))
+         (ite
+          (bvsgt
+           (bvadd
+            rA
+            ((_ zero_extend 63)
+             ((_ extract 34 34) 'XER)))
            #x0000000000000000)
           #b010
           #b001))
         ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
-   (rT (bvadd rA ((_ zero_extend 63) ((_ extract 34 34) 'XER))))
+      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+   (rT
+    (bvadd rA ((_ zero_extend 63) ((_ extract 34 34) 'XER))))
    ('IP (bvadd 'IP #x0000000000000004)))))

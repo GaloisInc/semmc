@@ -4,5 +4,5 @@
  ((branchWritePCrel (bvand #xfffffffc (bvadd 'PC (imm32))))
   (imm32 ((_ sign_extend 6) (concat ((_ extract 23 0) brTarget) #b00))))
  ((operands ((predBits . 'Pred) (brTarget . 'Arm_br_target)))
-  (in ('CPSR 'PC))
+  (in (brTarget 'CPSR 'PC))
   (defs (('PC (branchWritePCrel)) ('CPSR 'CPSR)))))

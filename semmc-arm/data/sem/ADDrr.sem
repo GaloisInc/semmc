@@ -1,6 +1,6 @@
 ;; ADD register, A32, Encoding A1  (F7.1.7, F7-2546)
 (let
- ((var2
+ ((var1
    ((('PC (bxWritePC))
      ('CPSR
       (ite
@@ -26,7 +26,10 @@
       (bvadd ((_ zero_extend 1) rN) ((_ zero_extend 1) rM))
       ((_ zero_extend 1) #x00000000))))
   (testCondition
-   (ite (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf)) (var1) (conditionMatch)))
+   (ite
+    (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
+    (notp (conditionMatch))
+    (conditionMatch)))
   (conditionMatch
    (ite
     (bveq ((_ extract 3 1) predBits) #b000)
@@ -55,8 +58,8 @@
              ((_ extract 31 31) 'CPSR)
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-          (bveq #b0 #b0)))))))))
-  (var1 (notp (conditionMatch)))
+          (true)))))))))
+  (true (bveq #b0 #b0))
   (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
   (addCarry
    (concat
@@ -100,4 +103,4 @@
     (bvadd 'PC #x00000004))))
  ((operands ((rD . 'GPR) (setcc . 'Cc_out) (predBits . 'Pred) (rM . 'GPR) (rN . 'GPR)))
   (in (setcc rN rM 'CPSR 'PC))
-  (defs var2)))
+  (defs var1)))

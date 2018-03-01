@@ -1,4 +1,6 @@
 ;; VSX Logical AND (XX3-form)
-((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc))) 
+((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc)))
  (in (xB xA 'IP))
- (defs ((xT (bvand xA xB)) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs
+  ((xT (bvand xA xB))
+   ('IP (bvadd 'IP #x0000000000000004)))))

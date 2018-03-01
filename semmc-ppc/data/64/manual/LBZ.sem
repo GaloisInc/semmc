@@ -1,14 +1,19 @@
 ;; Load Byte and Zero (D-form)
-((operands ((rT . 'Gprc) (memref . 'Memri))) 
+((operands ((rT . 'Gprc) (memref . 'Memri)))
  (in ('Mem memref 'IP))
- (defs 
-  ((rT 
-    ((_ zero_extend 56) 
-     ((_ call "read_mem.8") 
+ (defs
+  ((rT
+    ((_ zero_extend 56)
+     ((_ call "read_mem.8")
       'Mem
-      (bvadd 
-       (ite 
-        ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
+      (bvadd
+       (ite
+        ((_ call "ppc.is_r0")
+         ((_ call "ppc.memri_reg")
+          memref))
         #x0000000000000000
         ((_ call "ppc.memri_reg") memref))
-       ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))))) ('IP (bvadd 'IP #x0000000000000004)))))
+       ((_ sign_extend 48)
+        ((_ call "ppc.memri_offset")
+         memref))))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

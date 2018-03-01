@@ -35,7 +35,8 @@
              ((_ extract 31 31) 'CPSR)
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-          (bveq #b0 #b0)))))))))
+          (true)))))))))
+  (true (bveq #b0 #b0))
   (bxWritePC
    (ite
     (bveq #b0 ((_ extract 0 0) 'R14))

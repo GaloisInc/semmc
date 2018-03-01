@@ -1,6 +1,6 @@
+;; Branch with Link and Exchange (F7.1.25, F7-2576)
 ;; Encoding A2
 ;; Used to call a subroutine (branch) and switch from InstrSet_A32 to InstrSet_T32
-;; Branch with Link and Exchange (F7.1.25, F7-2576)
 ;; Writes to PC, not R15.
 (let
  ((newlr (bvsub 'PC #x00000004))

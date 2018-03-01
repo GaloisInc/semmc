@@ -1,15 +1,18 @@
 ;; Load VSX Scalar Doubleword Indexed (XX1-form)
-((operands ((xT . 'Vsrc) (memref . 'Memrr))) 
+((operands ((xT . 'Vsrc) (memref . 'Memrr)))
  (in (memref 'Mem 'IP))
- (defs 
-  ((xT 
-    (concat 
-     ((_ call "read_mem.64") 
+ (defs
+  ((xT
+    (concat
+     ((_ call "read_mem.64")
       'Mem
-      (bvadd 
+      (bvadd
        ((_ call "ppc.memrr_offset") memref)
-       (ite 
-        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+       (ite
+        ((_ call "ppc.is_r0")
+         ((_ call "ppc.memrr_base")
+          memref))
         #x0000000000000000
         ((_ call "ppc.memrr_base") memref))))
-     ((_ call "undefined") #x00000040))) ('IP (bvadd 'IP #x0000000000000004)))))
+     ((_ call "undefined") #x00000040)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

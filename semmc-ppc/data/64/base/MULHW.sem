@@ -1,12 +1,13 @@
 ;; Multiply High Word (XO-form, RC=0)
 ;; Multiply the low 32 bits of two registers, producing a 64 bit result.
 ;; Save the high 32 bits of the result into the output register
-((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
  (in (rB rA 'IP))
- (defs 
-  ((rT 
-    ((_ zero_extend 32) 
-     ((_ extract 31 0) 
-      (bvmul 
+ (defs
+  ((rT
+    ((_ zero_extend 32)
+     ((_ extract 31 0)
+      (bvmul
        ((_ sign_extend 32) ((_ extract 63 32) rA))
-       ((_ sign_extend 32) ((_ extract 63 32) rB)))))) ('IP (bvadd 'IP #x0000000000000004)))))
+       ((_ sign_extend 32) ((_ extract 63 32) rB))))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

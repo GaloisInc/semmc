@@ -7,20 +7,20 @@ module SemMC.Architecture.ARM.BaseSemantics.Memory
     )
     where
 
-import Data.Maybe
-import Data.Parameterized.Context
-import Data.Parameterized.Some ( Some(..) )
-import Data.Semigroup
-import Prelude hiding ( concat, pred )
+import           Data.Maybe
+import           Data.Parameterized.Context
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Semigroup
 import qualified Dismantle.ARM as A
-import SemMC.Architecture.ARM.BaseSemantics.Base
-import SemMC.Architecture.ARM.BaseSemantics.Helpers
-import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
-import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
-import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
-import SemMC.Architecture.ARM.BaseSemantics.Registers
-import SemMC.DSL
+import           Prelude hiding ( concat, pred )
+import           SemMC.Architecture.ARM.BaseSemantics.Base
+import           SemMC.Architecture.ARM.BaseSemantics.Helpers
+import           SemMC.Architecture.ARM.BaseSemantics.Natural
+import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
+import           SemMC.Architecture.ARM.BaseSemantics.Registers
+import           SemMC.DSL
 
 
 manualMemory :: SemARM 'Top ()
@@ -30,10 +30,6 @@ manualMemory = do
 
 defineLoads :: SemARM 'Top ()
 defineLoads = do
-  return ()
-
-defineStores :: SemARM 'Top ()
-defineStores = do
   defineA32Opcode A.LDR_POST_IMM (Empty
                                  :> ParamDef "gpr" gpr naturalBV
                                  :> ParamDef "predBits" pred (EBV 4)
@@ -51,10 +47,9 @@ defineStores = do
         rN = off
         b'P = LitBV 1 0
         b'W = LitBV 1 0
-        index =bveq b'P (LitBV 1 1)
+        index = bveq b'P (LitBV 1 1)
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
     ldr rT add rN offset index wback
-
   defineA32Opcode A.LDRi12 (Empty
                            :> ParamDef "gpr" gpr naturalBV
                            :> ParamDef "predBits" pred (EBV 4)
@@ -64,17 +59,18 @@ defineStores = do
     comment "Load Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1"
     comment "doc: F7.1.69, page F7-2636"
     input imm12
-    input memory
     let rN = imm12Reg imm12
         offset = zext $ imm12Off $ [Some $ Loc imm12]
         add = imm12Add $ [Some $ Loc imm12]
         b'P = LitBV 1 1
         b'W = LitBV 1 0
-        index =bveq b'P (LitBV 1 1)
+        index = bveq b'P (LitBV 1 1)
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
     ldr rT add rN offset index wback
 
 
+defineStores :: SemARM 'Top ()
+defineStores = do
   -- Note about STR_PRE_IMM vs STR_POST_IMM:
   -- for STR_PRE_IMM, the addrmode_imm12_pre bundle is holding three pieces of
   -- information: the register holding the target address, the immediate offset, and
@@ -93,18 +89,12 @@ defineStores = do
     comment "Store Register, Pre-indexed (P=1, W=1), immediate  (A32)"
     comment "doc: F7.1.217, page F7-2880"
     comment "see also PUSH, F7.1.138, page F7-2760" -- TBD: if add && rN=SP && imm.imm=4 [A1 v.s. A2 form]"
-    input rT
     input imm12
-    input memory
     let rN = imm12Reg imm12
-        sameRegs = sameLocation rT rN
         imm12arg = [Some $ Loc imm12]
-        nBytes = 4
         off = zext $ imm12Off imm12arg
         add = imm12Add imm12arg
-        addr = "addr" =: ite add (bvadd (Loc rN) off) (bvsub (Loc rN) off)
-    defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
-    defReg rN (ite (orp (isR15 rN) sameRegs) (unpredictable addr) addr)
+    streg rT add off rN (LitBV 1 1) (LitBV 1 1)
   defineA32Opcode A.STR_POST_IMM (Empty
                                  :> ParamDef "predBits" pred (EBV 4)
                                  :> ParamDef "imm" am2offset_imm EMemRef
@@ -114,19 +104,29 @@ defineStores = do
     $ \_ imm12 off rT -> do
     comment "Store Register, Post-indexed (P=0, W=1), immediate  (A32)"
     comment "doc: F7.1.217, page F7-2880"
-    input rT
     input imm12
     input off
-    input memory
     let imm12arg = [Some $ Loc imm12]
         add = am2offset_immAdd imm12arg
         offset = zext $ am2offset_immImm imm12arg
         rN = off
-        updated_addr = "addr" =: ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
-        nBytes = 4
-        sameRegs = sameLocation rT rN
-    defMem memory (Loc rN) nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
-    defReg rN (ite (orp (isR15 rN) sameRegs) (unpredictable updated_addr) updated_addr)
+    streg rT add offset rN (LitBV 1 0) (LitBV 1 1)
+  defineA32Opcode A.STRi12 (Empty
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "imm12" addrmode_imm12 EMemRef
+                           :> ParamDef "gpr" gpr naturalBV
+                           )
+                      $ \_ imm12 rT -> do
+    comment "Store Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1"
+    comment "doc: F7.1.217, page F7-2880"
+    input imm12
+    let rN = imm12Reg imm12
+        offset = zext $ imm12Off $ [Some $ Loc imm12]
+        add = imm12Add $ [Some $ Loc imm12]
+        b'P = LitBV 1 1
+        b'W = LitBV 1 0
+    streg rT add offset rN b'P b'W
+
   defineA32Opcode A.STR_PRE_REG (Empty
                                 :> ParamDef "predBits" pred (EBV 4)
                                 :> ParamDef "ldst_so_reg" ldst_so_reg EMemRef -- ???
@@ -225,3 +225,21 @@ ldr rT add rN imm32 index wback = do
   defReg rT (ite (isR15 rT)
                  (Loc rT)
                  (ite isUnpredictable (unpredictable result) result))
+
+streg :: Location 'TBV
+      -> Expr 'TBool -> Expr 'TBV -> Location 'TBV
+      -> Expr 'TBV -> Expr 'TBV
+    -> SemARM 'Def ()
+streg rT add offset rN pbit wbit = do
+  input memory
+  input rT
+  let index = bveq pbit (LitBV 1 1)
+      wback = "wback" =: orp (bveq pbit (LitBV 1 0)) (bveq wbit (LitBV 1 1))
+      offAddr = "offAddr" =: ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
+      addr = "addr" =: ite index offAddr (Loc rN)
+      isUnpredictable = "isUnpredictable" =: (andp wback (orp (isR15 rN) (sameLocation rN rT)))
+      nBytes = 4
+      newMem = "wval" =: ite (isR15 rT) (Loc pc) (Loc rT)
+      newRn = "rnUpd" =: ite wback offAddr (Loc rN)
+  defMem memory addr nBytes (ite isUnpredictable (unpredictable newMem) newMem)
+  defReg rN (ite isUnpredictable (unpredictable newRn) newRn)

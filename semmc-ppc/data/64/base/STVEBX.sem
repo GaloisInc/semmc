@@ -1,14 +1,17 @@
 ;; Store Vector Element Byte Indexed (X-form)
-((operands ((memref . 'Memrr) (vrS . 'Vrrc))) 
+((operands ((memref . 'Memrr) (vrS . 'Vrrc)))
  (in (memref 'Mem vrS 'IP))
- (defs 
-  (('Mem 
-    ((_ call "write_mem.8") 
+ (defs
+  (('Mem
+    ((_ call "write_mem.8")
      'Mem
-     (bvadd 
+     (bvadd
       ((_ call "ppc.memrr_offset") memref)
-      (ite 
-       ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+      (ite
+       ((_ call "ppc.is_r0")
+        ((_ call "ppc.memrr_base")
+         memref))
        #x0000000000000000
        ((_ call "ppc.memrr_base") memref)))
-     ((_ extract 127 120) vrS))) ('IP (bvadd 'IP #x0000000000000004)))))
+     ((_ extract 127 120) vrS)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

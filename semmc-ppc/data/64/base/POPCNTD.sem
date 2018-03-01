@@ -1,4 +1,6 @@
 ;; Population Count Doubleword (X-form)
-((operands ((rA . 'Gprc) (rS . 'Gprc))) 
+((operands ((rA . 'Gprc) (rS . 'Gprc)))
  (in (rS 'IP))
- (defs ((rA ((_ call "popcnt.64") rS)) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs
+  ((rA ((_ call "popcnt.64") rS))
+   ('IP (bvadd 'IP #x0000000000000004)))))

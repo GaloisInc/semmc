@@ -1,9 +1,17 @@
 ;; Vector Splat Immediate Signed Word (VX-form)
-((operands ((vrT . 'Vrrc) (sim . 'S5imm))) 
+((operands ((vrT . 'Vrrc) (sim . 'S5imm)))
  (in ('VSCR 'IP))
- (defs 
-  (('VSCR 
-    ((_ extract 159 128) ((_ call "ppc.vec1") "VSPLTISW" ((_ sign_extend 123) sim) 'VSCR))) 
-   (vrT 
-    ((_ extract 127 0) ((_ call "ppc.vec1") "VSPLTISW" ((_ sign_extend 123) sim) 'VSCR)))
+ (defs
+  (('VSCR
+    ((_ extract 159 128)
+     ((_ call "ppc.vec1")
+      "VSPLTISW"
+      ((_ sign_extend 123) sim)
+      'VSCR)))
+   (vrT
+    ((_ extract 127 0)
+     ((_ call "ppc.vec1")
+      "VSPLTISW"
+      ((_ sign_extend 123) sim)
+      'VSCR)))
    ('IP (bvadd 'IP #x00000004)))))

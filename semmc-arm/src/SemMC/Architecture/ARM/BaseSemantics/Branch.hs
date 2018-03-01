@@ -52,9 +52,27 @@ a32_branches = do
                       $ \_ tgt -> do
     comment "B, branch, Encoding A1"
     comment "F7.1.18, F7-2566"
+    input tgt
     let imm24 = extract 23 0 (Loc tgt)
         imm32 = "imm32" =: (sext $ concat imm24 $ LitBV 2 0b00)
     branchWritePCRel imm32
+
+  defineA32Opcode A.BL (Empty
+                       :> ParamDef "blTarget" arm_bl_target naturalBV
+                       )
+                      $ \tgt -> do
+    comment "BL, branch with link, Encoding A1"
+    comment "F7.1.25, F7-2576"
+    input tgt
+    input pc
+    curarch <- (subArch . fromJust) <$> getArchData
+    let imm24 = extract 23 0 (Loc tgt)
+        imm32 = "imm32" =: (sext $ concat imm24 $ LitBV 2 0b00)
+        tgtarch = InstrSet_A32
+        newlr = if curarch == InstrSet_A32
+                then bvsub (Loc pc) (LitBV 32 0x4)  -- n.b. PC is cur-instr + 8
+                else concat (extract 31 1 (Loc pc)) (LitBV 1 0b1)
+    blx_ newlr imm32 tgtarch
 
 
 blx_a32 :: SemARM 'Top ()
@@ -63,6 +81,7 @@ blx_a32 =
                            :> ParamDef "target" arm_blx_target naturalBV
                            )
                         $ \tgt -> do
+      comment "Branch with Link and Exchange (F7.1.25, F7-2576)"
       comment "Encoding A2"
       input tgt
       let tgtarch = InstrSet_T32
@@ -86,6 +105,7 @@ blx_t32 =
                             :> ParamDef "target" thumb_blx_target naturalBV
                             )
                         $ \tgt -> do
+      comment "Branch with Link and Exchange (F7.1.25, F7-2576)"
       comment "Encoding T2"
       let tgtarch = InstrSet_A32
           tgt_S = blxtgt_S tgt
@@ -101,14 +121,20 @@ blx_t32 =
       label <- target_label_align4 imm32
       blx_ newlr label tgtarch
 
+
+-- ----------------------------------------------------------------------
+
 blx_ :: Expr 'TBV  -- ^ new LR value
      -> Expr 'TBV  -- ^ target label (address)
      -> ArchSubtype  -- ^ target architecture subtype
      -> SemARM 'Def ()
 blx_ newlr tgtaddr tgtarch = do
     curarch <- (subArch . fromJust) <$> getArchData
-    comment $ "Used to call a subroutine (branch) and switch from " <> show curarch <> " to " <> show tgtarch
-    comment "Branch with Link and Exchange (F7.1.25, F7-2576)"
+    let switching = curarch /= tgtarch
+        switchmsg = if switching
+                    then " and switch from " <> show curarch <> " to " <> show tgtarch
+                    else ""
+    comment $ "Used to call a subroutine (branch)" <> switchmsg
     comment "Writes to PC, not R15."
     -- Assembler specifies the label of the instruction being branched
     -- to.  The encoding is a sign-extended immediate offset added to

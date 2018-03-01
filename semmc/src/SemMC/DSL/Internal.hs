@@ -3,19 +3,21 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
-module SemMC.DSL.Internal (
-  ExprTag(..),
-  ExprType(..),
-  Parameter(..),
-  Location(..),
-  Literal(..),
-  Expr(..)
+
+module SemMC.DSL.Internal
+    ( ExprTag(..)
+    , ExprType(..)
+    , Parameter(..)
+    , Location(..)
+    , Literal(..)
+    , Expr(..)
+    , litEq
   ) where
 
-import           Control.Monad ( guard )
-import           Data.Parameterized.Classes
-import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.TH.GADT ( structuralTypeEquality )
+import Control.Monad ( guard )
+import Data.Parameterized.Classes
+import Data.Parameterized.Some ( Some(..) )
+import Data.Parameterized.TH.GADT ( structuralTypeEquality )
 
 data ExprTag = TBool
               | TBV
@@ -138,6 +140,23 @@ data Expr (tp :: ExprTag) where
 
 deriving instance Show (Expr tp)
 instance ShowF Expr
+
+
+-- | If both terms are literals, this can provide an evaluation of
+-- their equality, otherwise it returns Nothing to indicate that a
+-- literal comparison cannot be made (deferring to an actual
+-- evaluation).
+litEq :: Expr tp -> Expr tp -> Maybe (Expr 'TBool)
+litEq (LitBool x) (LitBool y) = Just $ LitBool $ x == y
+litEq (LitBV w x) (LitBV v y) = if w == v
+                                then Just $ LitBool $ x == y
+                                else Nothing -- error indicated elsewhere
+litEq (LitInt x) (LitInt y) = Just $ LitBool $ x == y
+litEq (LitString x) (LitString y) = Just $ LitBool $ x == y
+litEq (NamedSubExpr _ x) y = litEq x y
+litEq x (NamedSubExpr _ y) = litEq x y
+litEq _ _ = Nothing
+
 
 -- $(return [])
 

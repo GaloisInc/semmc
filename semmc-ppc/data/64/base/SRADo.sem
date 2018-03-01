@@ -1,39 +1,49 @@
 ;; Shift Right Algebraic Doubleword (X-form, RC=1)
-((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) 
+((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc)))
  (in ('XER 'CR 'XER rB rS 'IP))
- (defs 
-  (('CR 
-    (bvor 
-     (bvand 
+ (defs
+  (('CR
+    (bvor
+     (bvand
       'CR
-      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl 
-      ((_ zero_extend 28) 
-       (concat 
-        (ite 
-         (bvslt 
-          (bvashr rS ((_ zero_extend 58) ((_ extract 63 58) rB)))
+      (bvnot
+       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl
+      ((_ zero_extend 28)
+       (concat
+        (ite
+         (bvslt
+          (bvashr
+           rS
+           ((_ zero_extend 58) ((_ extract 63 58) rB)))
           #x0000000000000000)
          #b100
-         (ite 
-          (bvsgt 
-           (bvashr rS ((_ zero_extend 58) ((_ extract 63 58) rB)))
+         (ite
+          (bvsgt
+           (bvashr
+            rS
+            ((_ zero_extend 58)
+             ((_ extract 63 58) rB)))
            #x0000000000000000)
           #b010
           #b001))
         ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
-   ('XER 
-    (concat 
+      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+   ('XER
+    (concat
      ((_ extract 33 0) 'XER)
-     (concat 
-      (ite 
-       (bvne 
-        (bvlshr 
-         (bvshl 
+     (concat
+      (ite
+       (bvne
+        (bvlshr
+         (bvshl
           rS
-          (bvsub #x0000000000000040 ((_ zero_extend 58) ((_ extract 63 58) rB))))
-         (bvsub #x0000000000000040 ((_ zero_extend 58) ((_ extract 63 58) rB))))
+          (bvsub
+           #x0000000000000040
+           ((_ zero_extend 58) ((_ extract 63 58) rB))))
+         (bvsub
+          #x0000000000000040
+          ((_ zero_extend 58) ((_ extract 63 58) rB))))
         #x0000000000000000)
        ((_ extract 0 0) rS)
        #b0)

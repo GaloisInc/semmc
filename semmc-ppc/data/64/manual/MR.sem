@@ -1,1 +1,3 @@
-((operands ((rT . 'Gprc) (rA . 'Gprc))) (in (rA 'IP)) (defs ((rT rA) ('IP (bvadd 'IP #x0000000000000004)))))
+((operands ((rT . 'Gprc) (rA . 'Gprc)))
+ (in (rA 'IP))
+ (defs ((rT rA) ('IP (bvadd 'IP #x0000000000000004)))))

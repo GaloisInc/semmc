@@ -87,6 +87,7 @@ import           GHC.Stack ( HasCallStack )
 
 import           Prelude hiding ( concat )
 
+import Data.Maybe
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
 import qualified Data.SCargot.Repr as SC
@@ -403,10 +404,10 @@ bvsge :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 bvsge = binTestBuiltin "bvsge"
 
 bveq :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
-bveq = binTestBuiltin "bveq"
+bveq x y = maybe (binTestBuiltin "bveq" x y) id $ litEq x y
 
 bvne :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
-bvne = binTestBuiltin "bvne"
+bvne x y = maybe (binTestBuiltin "bvne" x y) notp $ litEq x y
 
 notp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool
 notp e =
@@ -484,7 +485,7 @@ bvpopcnt e =
 binBVBuiltin :: (HasCallStack) => String -> Expr tp1 -> Expr tp1 -> Expr tp1
 binBVBuiltin s e1 e2
   | t1 == t2 = Builtin t1 s [Some e1, Some e2]
-  | otherwise = error (printf "Type mismatch for bitvector builtin; lhs type is %s while rhs type is %s" (show t1) (show t2))
+  | otherwise = error (printf "Type mismatch for bitvector builtin %s; lhs type is %s while rhs type is %s" s (show t1) (show t2))
   where
     t1 = exprType e1
     t2 = exprType e2
@@ -492,7 +493,7 @@ binBVBuiltin s e1 e2
 binTestBuiltin :: (HasCallStack) => String -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 binTestBuiltin s e1 e2
   | t1 == t2 = Builtin EBool s [Some e1, Some e2]
-  | otherwise = error (printf "Type mismatch for bitvector test builtin; lhs type is %s while rhs type is %s" (show t1) (show t2))
+  | otherwise = error (printf "Type mismatch for bitvector test builtin %s; lhs type is %s while rhs type is %s" s (show t1) (show t2))
   where
     t1 = exprType e1
     t2 = exprType e2
@@ -580,12 +581,15 @@ extractSExpr operands inputs defs =
                 , SC.SCons (SC.SAtom (AIdent "defs")) (SC.SCons (convertDefs defs) SC.SNil)
                 ]
 
--- TODO: add a case for LitString
 convertExpr :: Some Expr -> SC.SExpr FAtom
 convertExpr (Some e) =
+  let samevals = [Some $ LitBV 1 0, Some $ LitBV 1 0] in
   case e of
-    LitBool True -> convertExpr (Some (bveq (LitBV 1 0x0) (LitBV 1 0x0)))
-    LitBool False -> convertExpr (Some (bvne (LitBV 1 0x0) (LitBV 1 0x0)))
+    -- there is no atomic True or False value, so represent those as
+    -- an expression, but use the base expression form without any
+    -- possible re-evaluation to avoid recursion.
+    LitBool True -> convertExpr $ Some $ NamedSubExpr "true" $ Builtin EBool "bveq" samevals
+    LitBool False -> convertExpr $ Some $ NamedSubExpr "false" $ Builtin EBool "bvne" samevals
     LitInt i -> int i
     LitString s -> string s
     LitBV w val -> SC.SAtom (ABV w val)

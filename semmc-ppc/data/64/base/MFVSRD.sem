@@ -1,4 +1,6 @@
 ;; Move From VSR Doubleword (XX1-form)
-((operands ((rA . 'Gprc) (xS . 'Vsrc))) 
+((operands ((rA . 'Gprc) (xS . 'Vsrc)))
  (in (xS 'IP))
- (defs ((rA ((_ extract 63 0) xS)) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs
+  ((rA ((_ extract 63 0) xS))
+   ('IP (bvadd 'IP #x0000000000000004)))))

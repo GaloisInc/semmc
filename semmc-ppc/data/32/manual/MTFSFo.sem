@@ -1,5 +1,11 @@
 ;; Move to FPSCR Fields (XFL-form, RC=1)
-((operands ((FLM . 'I32imm) (L . 'I32imm) (frB . 'Fprc) (W . 'I32imm))) 
+((operands
+  ((FLM . 'I32imm)
+   (L . 'I32imm)
+   (frB . 'Fprc)
+   (W . 'I32imm)))
  (in ('IP))
- (defs 
-  (('CR ((_ call "undefined") #x00000020)) ('FPSCR ((_ call "undefined") #x00000020)) ('IP (bvadd 'IP #x00000004)))))
+ (defs
+  (('CR ((_ call "undefined") #x00000020))
+   ('FPSCR ((_ call "undefined") #x00000020))
+   ('IP (bvadd 'IP #x00000004)))))

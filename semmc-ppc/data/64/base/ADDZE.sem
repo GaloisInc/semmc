@@ -1,5 +1,7 @@
 ;; Add to Zero Extended (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc))) 
+((operands ((rT . 'Gprc) (rA . 'Gprc)))
  (in ('XER rA 'IP))
- (defs 
-  ((rT (bvadd rA ((_ zero_extend 63) ((_ extract 34 34) 'XER)))) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs
+  ((rT
+    (bvadd rA ((_ zero_extend 63) ((_ extract 34 34) 'XER))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

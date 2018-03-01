@@ -42,29 +42,38 @@ am2offset_imm = "Am2offset_imm"
 addr_offset_none :: String
 addr_offset_none = "Addr_offset_none"
 
+arm_bl_target :: String
+arm_bl_target = "Arm_bl_target"
+
 arm_blx_target :: String
 arm_blx_target = "Arm_blx_target"
 
 arm_br_target :: String
 arm_br_target = "Arm_br_target"
 
-ldst_so_reg :: String
-ldst_so_reg = "Ldst_so_reg"
-
 cc_out :: String
 cc_out = "Cc_out"
 
+imm0_7 :: String
+imm0_7 = "Imm0_7"
+
+imm0_255 :: String
+imm0_255 = "Imm0_255"
+
+ldst_so_reg :: String
+ldst_so_reg = "Ldst_so_reg"
+
 mod_imm :: String
 mod_imm = "Mod_imm"
+
+shift_so_reg_imm :: String
+shift_so_reg_imm = "Shift_so_reg_imm"
 
 so_reg_reg :: String
 so_reg_reg = "So_reg_reg"
 
 so_reg_imm :: String
 so_reg_imm = "So_reg_imm"
-
-imm0_7 :: String
-imm0_7 = "Imm0_7"
 
 -- | The 'unpredictableInstrBits' operand is used to define bits in
 -- the instruction encoding that the architecture specification
@@ -97,6 +106,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "GPR" = 'TBV
   SymToExprTag "Mod_imm" = 'TBV
   SymToExprTag "Imm0_7" = 'TBV
+  SymToExprTag "Imm0_255" = 'TBV
   SymToExprTag "Pred" = 'TBV
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12" = 'TMemRef
@@ -104,8 +114,10 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Am2offset_imm" = 'TMemRef
   SymToExprTag "Addr_offset_none" = 'TBV
   SymToExprTag "Ldst_so_reg" = 'TMemRef
+  SymToExprTag "Arm_bl_target" = 'TBV
   SymToExprTag "Arm_blx_target" = 'TBV
   SymToExprTag "Arm_br_target" = 'TBV
+  SymToExprTag "Shift_so_reg_imm" = 'TBV
   SymToExprTag "So_reg_reg" = 'TMemRef
   SymToExprTag "So_reg_imm" = 'TMemRef
   SymToExprTag "RGPR" = 'TBV

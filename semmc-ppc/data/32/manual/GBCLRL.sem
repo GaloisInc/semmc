@@ -1,25 +1,40 @@
 ;; BCLR (XL-form, LK=1, AA=0)
 ;; Generic branch conditional to LR with arbitrary BO field
-((operands ((bh . 'I32imm) (bi . 'Crbitrc) (bo . 'U5imm))) 
- (in ('CR 'CTR 'IP 'LNK))
- (defs 
-  (('LNK (bvadd 'IP #x00000004)) 
-   ('IP 
-    (ite 
-     (andp 
-      (ite 
-       ((_ call "test_bit_dynamic") #x00000000 ((_ zero_extend 27) bo))
-       (bveq #b0 #b0)
-       (ite 
-        ((_ call "test_bit_dynamic") #x00000001 ((_ zero_extend 27) bo))
-        ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR)
-        (notp ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR))))
-      (ite 
-       ((_ call "test_bit_dynamic") #x00000002 ((_ zero_extend 27) bo))
-       (bveq #b0 #b0)
-       (ite 
-        ((_ call "test_bit_dynamic") #x00000003 ((_ zero_extend 27) bo))
-        (xorp (notp (bveq 'CTR #x00000000)) (bveq #b0 #b0))
-        (xorp (notp (bveq 'CTR #x00000000)) (bvne #b0 #b0)))))
-     (concat ((_ extract 29 0) 'LNK) #b00)
-     (bvadd 'IP #x00000004))))))
+(let
+ ((false (bvne #b0 #b0)) (true (bveq #b0 #b0)))
+ ((operands ((bh . 'I32imm) (bi . 'Crbitrc) (bo . 'U5imm)))
+  (in ('CR 'CTR 'IP 'LNK))
+  (defs
+   (('LNK (bvadd 'IP #x00000004))
+    ('IP
+     (ite
+      (andp
+       (ite
+        ((_ call "test_bit_dynamic")
+         #x00000000
+         ((_ zero_extend 27) bo))
+        (true)
+        (ite
+         ((_ call "test_bit_dynamic")
+          #x00000001
+          ((_ zero_extend 27) bo))
+         ((_ call "test_bit_dynamic")
+          ((_ zero_extend 27) bi)
+          'CR)
+         (notp
+          ((_ call "test_bit_dynamic")
+           ((_ zero_extend 27) bi)
+           'CR))))
+       (ite
+        ((_ call "test_bit_dynamic")
+         #x00000002
+         ((_ zero_extend 27) bo))
+        (true)
+        (ite
+         ((_ call "test_bit_dynamic")
+          #x00000003
+          ((_ zero_extend 27) bo))
+         (xorp (notp (bveq 'CTR #x00000000)) (true))
+         (xorp (notp (bveq 'CTR #x00000000)) (false)))))
+      (concat ((_ extract 29 0) 'LNK) #b00)
+      (bvadd 'IP #x00000004)))))))

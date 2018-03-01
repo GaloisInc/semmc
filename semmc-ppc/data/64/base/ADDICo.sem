@@ -1,34 +1,47 @@
 ;; Add Immediate Carrying and Record (D-form)
-((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc))) 
+((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc)))
  (in ('XER 'CR 'XER si rA 'IP))
- (defs 
-  (('CR 
-    (bvor 
-     (bvand 
+ (defs
+  (('CR
+    (bvor
+     (bvand
       'CR
-      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl 
-      ((_ zero_extend 28) 
-       (concat 
-        (ite 
-         (bvslt 
-          ((_ extract 64 1) (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si))))
+      (bvnot
+       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl
+      ((_ zero_extend 28)
+       (concat
+        (ite
+         (bvslt
+          ((_ extract 64 1)
+           (bvadd
+            ((_ zero_extend 1) rA)
+            (concat #b0 ((_ sign_extend 48) si))))
           #x0000000000000000)
          #b100
-         (ite 
-          (bvsgt 
-           ((_ extract 64 1) (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si))))
+         (ite
+          (bvsgt
+           ((_ extract 64 1)
+            (bvadd
+             ((_ zero_extend 1) rA)
+             (concat #b0 ((_ sign_extend 48) si))))
            #x0000000000000000)
           #b010
           #b001))
         ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
-   ('XER 
-    (concat 
+      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+   ('XER
+    (concat
      ((_ extract 33 0) 'XER)
-     (concat 
-      ((_ extract 0 0) (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si))))
+     (concat
+      ((_ extract 0 0)
+       (bvadd
+        ((_ zero_extend 1) rA)
+        (concat #b0 ((_ sign_extend 48) si))))
       ((_ extract 63 35) 'XER))))
-   (rT 
-    ((_ extract 64 1) (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si)))))
+   (rT
+    ((_ extract 64 1)
+     (bvadd
+      ((_ zero_extend 1) rA)
+      (concat #b0 ((_ sign_extend 48) si)))))
    ('IP (bvadd 'IP #x0000000000000004)))))

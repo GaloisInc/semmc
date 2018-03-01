@@ -1,16 +1,19 @@
 ;; Load Byte and Reserve Indexed (X-form)
 ;; This is basically LBZX with additional memory synchronization semantics
 ;; This is a variant of LBARX with a hint about future updates to the storage
-((operands ((rT . 'Gprc) (memref . 'Memrr))) 
+((operands ((rT . 'Gprc) (memref . 'Memrr)))
  (in ('Mem memref 'IP))
- (defs 
-  ((rT 
-    ((_ zero_extend 24) 
-     ((_ call "read_mem.8") 
+ (defs
+  ((rT
+    ((_ zero_extend 24)
+     ((_ call "read_mem.8")
       'Mem
-      (bvadd 
-       (ite 
-        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+      (bvadd
+       (ite
+        ((_ call "ppc.is_r0")
+         ((_ call "ppc.memrr_base")
+          memref))
         #x00000000
         ((_ call "ppc.memrr_base") memref))
-       ((_ call "ppc.memrr_offset") memref))))) ('IP (bvadd 'IP #x00000004)))))
+       ((_ call "ppc.memrr_offset") memref)))))
+   ('IP (bvadd 'IP #x00000004)))))

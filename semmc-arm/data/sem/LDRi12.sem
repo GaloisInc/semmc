@@ -1,45 +1,7 @@
 ;; Load Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1
 ;; doc: F7.1.69, page F7-2636
 (let
- ((var2
-   (('CPSR
-     (ite
-      (testCondition)
-      (ite
-       ((_ call "arm.is_r15") gpr)
-       (ite
-        (bveq
-         #b0
-         ((_ extract 0 0)
-          ((_ call "read_mem.32")
-           'Mem
-           (ite
-             (bveq #b1 #b1)
-             (updAddr)
-             ((_ call "a32.imm12_reg") imm12)))))
-        (SetT32Mode)
-        'CPSR)
-       'CPSR)
-      'CPSR))
-    (gpr
-     (ite
-      (testCondition)
-      (ite
-       ((_ call "arm.is_r15") gpr)
-       gpr
-       ((_ call "read_mem.32")
-        'Mem
-        (ite (bveq #b1 #b1) (updAddr) ((_ call "a32.imm12_reg") imm12))))
-      gpr))
-    (((_ call "a32.imm12_reg") imm12)
-     (ite
-      (testCondition)
-      (ite
-        (orp (bveq #b1 #b0) (bveq #b0 #b1))
-        (updAddr)
-        ((_ call "a32.imm12_reg") imm12))
-      ((_ call "a32.imm12_reg") imm12)))))
-  (updAddr
+ ((updAddr
    (ite
     ((_ call "a32.imm12_add") imm12)
     (bvadd
@@ -49,10 +11,7 @@
      ((_ call "a32.imm12_reg") imm12)
      ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))))
   (testCondition
-   (ite
-    (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
-    (notp (conditionMatch))
-    (conditionMatch)))
+   (ite (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf)) (var1) (conditionMatch)))
   (conditionMatch
    (ite
     (bveq ((_ extract 3 1) predBits) #b000)
@@ -81,37 +40,41 @@
              ((_ extract 31 31) 'CPSR)
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-          (bveq #b0 #b0)))))))))
-  (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
-  (bxWritePC (ite ((_ call "arm.is_r15") gpr) (var1) (bvadd 'PC #x00000004)))
-  (var1
-   (ite
-    (bveq
-     #b0
-     ((_ extract 0 0)
-      ((_ call "read_mem.32")
-       'Mem
-       (ite (bveq #b1 #b1) (updAddr) ((_ call "a32.imm12_reg") imm12)))))
-    (bvand
-     #xfffffffe
-     ((_ call "read_mem.32")
-      'Mem
-      (ite (bveq #b1 #b1) (updAddr) ((_ call "a32.imm12_reg") imm12))))
+          (true)))))))))
+  (true (bveq #b0 #b0))
+  (var1 (notp (conditionMatch)))
+  (var2
+   ('CPSR
     (ite
-     (bveq
-      #b0
-      ((_ extract 1 1)
-       ((_ call "read_mem.32")
-        'Mem
-        (ite (bveq #b1 #b1) (updAddr) ((_ call "a32.imm12_reg") imm12)))))
-     (bvand
-      #xfffffffd
-      ((_ call "read_mem.32")
-       'Mem
-       (ite (bveq #b1 #b1) (updAddr) ((_ call "a32.imm12_reg") imm12))))
-     ((_ call "read_mem.32")
-      'Mem
-      (ite (bveq #b1 #b1) (updAddr) ((_ call "a32.imm12_reg") imm12)))))))
+     (testCondition)
+     (ite
+      ((_ call "arm.is_r15") gpr)
+      (ite
+       (bveq #b0 ((_ extract 0 0) ((_ call "read_mem.32") 'Mem (updAddr))))
+       (SetT32Mode)
+       'CPSR)
+      'CPSR)
+     'CPSR)))
+  (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
+  (bxWritePC
+   (ite
+    ((_ call "arm.is_r15") gpr)
+    (ite
+     (bveq #b0 ((_ extract 0 0) ((_ call "read_mem.32") 'Mem (updAddr))))
+     (bvand #xfffffffe ((_ call "read_mem.32") 'Mem (updAddr)))
+     (ite
+      (bveq #b0 ((_ extract 1 1) ((_ call "read_mem.32") 'Mem (updAddr))))
+      (bvand #xfffffffd ((_ call "read_mem.32") 'Mem (updAddr)))
+      ((_ call "read_mem.32") 'Mem (updAddr))))
+    (bvadd 'PC #x00000004))))
  ((operands ((gpr . 'GPR) (predBits . 'Pred) (imm12 . 'Addrmode_imm12)))
-  (in ('Mem 'Mem imm12 'CPSR 'PC))
-  (defs (('PC (bxWritePC)) var2))))
+  (in ('Mem imm12 'CPSR 'PC))
+  (defs
+   (('PC (bxWritePC))
+    (var2)
+    (gpr
+     (ite
+      (testCondition)
+      (ite ((_ call "arm.is_r15") gpr) gpr ((_ call "read_mem.32") 'Mem (updAddr)))
+      gpr))
+    (((_ call "a32.imm12_reg") imm12) ((_ call "a32.imm12_reg") imm12))))))

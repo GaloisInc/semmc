@@ -76,8 +76,8 @@ mform5r = do
 mdform4 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
 mdform4 = do
   rA <- param "rA" gprc naturalBV
-  sh <- param "sh" u6imm (EBV 6)
   mb <- param "mb" u6imm (EBV 6)
+  sh <- param "sh" u6imm (EBV 6)
   rS <- param "rS" gprc naturalBV
   input rS
   input sh

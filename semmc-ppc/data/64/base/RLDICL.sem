@@ -1,16 +1,18 @@
 ;; Rotate Left Doubleword Immediate then Clear Left (MD-form, RC=0)
-((operands ((rA . 'Gprc) (sh . 'U6imm) (mb . 'U6imm) (rS . 'Gprc))) 
+((operands
+  ((rA . 'Gprc) (mb . 'U6imm) (sh . 'U6imm) (rS . 'Gprc)))
  (in (mb sh rS 'IP))
- (defs 
-  ((rA 
-    (bvand 
-     (bvor 
+ (defs
+  ((rA
+    (bvand
+     (bvor
       (bvshl rS ((_ zero_extend 58) sh))
       (bvlshr rS (bvsub #x0000000000000040 ((_ zero_extend 58) sh))))
-     (bvshl 
-      (bvlshr 
-       (bvlshr 
+     (bvshl
+      (bvlshr
+       (bvlshr
         (bvshl ((_ sign_extend 63) #b1) ((_ zero_extend 58) mb))
         ((_ zero_extend 58) mb))
        (bvsub #x000000000000003f #x000000000000003f))
-      (bvsub #x000000000000003f #x000000000000003f)))) ('IP (bvadd 'IP #x0000000000000004)))))
+      (bvsub #x000000000000003f #x000000000000003f))))
+   ('IP (bvadd 'IP #x0000000000000004)))))

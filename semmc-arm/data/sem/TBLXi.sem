@@ -1,6 +1,6 @@
+;; Branch with Link and Exchange (F7.1.25, F7-2576)
 ;; Encoding T2
 ;; Used to call a subroutine (branch) and switch from InstrSet_T32 to InstrSet_A32
-;; Branch with Link and Exchange (F7.1.25, F7-2576)
 ;; Writes to PC, not R15.
 (let
  ((var2
@@ -39,7 +39,8 @@
         (andp
          (bveq ((_ extract 31 31) 'CPSR) ((_ extract 28 28) 'CPSR))
          (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-        (bveq #b0 #b0)))))))
+        (true)))))))
+  (true (bveq #b0 #b0))
   (ITState
    (ite
     (bveq (concat ((_ extract 11 10) 'CPSR) ((_ extract 26 25) 'CPSR)) #x0)

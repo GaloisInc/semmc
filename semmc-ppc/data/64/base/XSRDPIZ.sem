@@ -1,7 +1,17 @@
 ;; VSX Scalar Round to Double-Precision Integer using Round Toward Zero (XX2-form)
-((operands ((xT . 'Vsrc) (xB . 'Vsrc))) 
+((operands ((xT . 'Vsrc) (xB . 'Vsrc)))
  (in ('FPSCR xB 'IP))
- (defs 
-  (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec1") "XSRDPIZ" xB 'FPSCR))) 
-   (xT ((_ extract 127 0) ((_ call "ppc.vec1") "XSRDPIZ" xB 'FPSCR)))
+ (defs
+  (('FPSCR
+    ((_ extract 159 128)
+     ((_ call "ppc.vec1")
+      "XSRDPIZ"
+      xB
+      'FPSCR)))
+   (xT
+    ((_ extract 127 0)
+     ((_ call "ppc.vec1")
+      "XSRDPIZ"
+      xB
+      'FPSCR)))
    ('IP (bvadd 'IP #x0000000000000004)))))
