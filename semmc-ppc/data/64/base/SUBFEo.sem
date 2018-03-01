@@ -5,9 +5,9 @@
   (('CR
     (bvor
      (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+      'CR
+      (bvnot
+       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
      (bvshl
       ((_ zero_extend 28)
        (concat
@@ -16,9 +16,10 @@
           ((_ extract 64 1)
            (bvadd
             (bvadd
-              (bvnot ((_ zero_extend 1) rA))
-              ((_ zero_extend 1) rB))
-            ((_ zero_extend 64) ((_ extract 34 34) 'XER))))
+             (bvnot ((_ zero_extend 1) rA))
+             ((_ zero_extend 1) rB))
+            ((_ zero_extend 64)
+             ((_ extract 34 34) 'XER))))
           #x0000000000000000)
          #b100
          (ite
@@ -26,9 +27,10 @@
            ((_ extract 64 1)
             (bvadd
              (bvadd
-               (bvnot ((_ zero_extend 1) rA))
-               ((_ zero_extend 1) rB))
-             ((_ zero_extend 64) ((_ extract 34 34) 'XER))))
+              (bvnot ((_ zero_extend 1) rA))
+              ((_ zero_extend 1) rB))
+             ((_ zero_extend 64)
+              ((_ extract 34 34) 'XER))))
            #x0000000000000000)
           #b010
           #b001))

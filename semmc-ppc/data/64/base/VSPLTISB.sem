@@ -3,9 +3,15 @@
  (in ('VSCR 'IP))
  (defs
   (('VSCR
-     ((_ extract 159 128)
-     ((_ call "ppc.vec1") "VSPLTISB" ((_ sign_extend 123) sim) 'VSCR)))
+    ((_ extract 159 128)
+     ((_ call "ppc.vec1")
+      "VSPLTISB"
+      ((_ sign_extend 123) sim)
+      'VSCR)))
    (vrT
-     ((_ extract 127 0)
-     ((_ call "ppc.vec1") "VSPLTISB" ((_ sign_extend 123) sim) 'VSCR)))
+    ((_ extract 127 0)
+     ((_ call "ppc.vec1")
+      "VSPLTISB"
+      ((_ sign_extend 123) sim)
+      'VSCR)))
    ('IP (bvadd 'IP #x0000000000000004)))))

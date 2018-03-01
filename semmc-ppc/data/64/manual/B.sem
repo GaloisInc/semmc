@@ -1,4 +1,6 @@
 ;; Branch (I-form, AA=0, LK=0)
 ((operands ((target . 'Directbrtarget)))
  (in ('IP target))
- (defs (('IP (bvadd 'IP ((_ sign_extend 38) (concat target #b00)))))))
+ (defs
+  (('IP
+    (bvadd 'IP ((_ sign_extend 38) (concat target #b00)))))))

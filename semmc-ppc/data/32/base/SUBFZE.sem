@@ -2,5 +2,8 @@
 ((operands ((rT . 'Gprc) (rA . 'Gprc)))
  (in ('XER rA 'IP))
  (defs
-   ((rT (bvadd (bvnot rA) ((_ zero_extend 31) ((_ extract 2 2) 'XER))))
+  ((rT
+    (bvadd
+     (bvnot rA)
+     ((_ zero_extend 31) ((_ extract 2 2) 'XER))))
    ('IP (bvadd 'IP #x00000004)))))

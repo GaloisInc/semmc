@@ -3,7 +3,7 @@
  (in (rB rA 'IP))
  (defs
   ((rT
-     (bvsdiv
-      ((_ sign_extend 32) ((_ extract 63 32) rA))
-      ((_ sign_extend 32) ((_ extract 63 32) rB))))
+    (bvsdiv
+     ((_ sign_extend 32) ((_ extract 63 32) rA))
+     ((_ sign_extend 32) ((_ extract 63 32) rB))))
    ('IP (bvadd 'IP #x0000000000000004)))))

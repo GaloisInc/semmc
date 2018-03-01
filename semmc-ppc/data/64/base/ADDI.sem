@@ -5,7 +5,7 @@
  (in (si rA 'IP))
  (defs
   ((rT
-     (bvadd
-      (ite ((_ call "ppc.is_r0") rA) #x0000000000000000 rA)
-      ((_ sign_extend 48) si)))
+    (bvadd
+     (ite ((_ call "ppc.is_r0") rA) #x0000000000000000 rA)
+     ((_ sign_extend 48) si)))
    ('IP (bvadd 'IP #x0000000000000004)))))

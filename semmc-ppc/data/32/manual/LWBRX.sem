@@ -9,7 +9,9 @@
          'Mem
          (bvadd
           (ite
-           ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+           ((_ call "ppc.is_r0")
+            ((_ call "ppc.memrr_base")
+             memref))
            #x00000000
            ((_ call "ppc.memrr_base") memref))
           ((_ call "ppc.memrr_offset") memref))))
@@ -19,7 +21,8 @@
           'Mem
           (bvadd
            (ite
-            ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+            ((_ call "ppc.is_r0")
+             ((_ call "ppc.memrr_base") memref))
             #x00000000
             ((_ call "ppc.memrr_base") memref))
            ((_ call "ppc.memrr_offset") memref))))
@@ -45,4 +48,6 @@
              ((_ call "ppc.memrr_base") memref))
             ((_ call "ppc.memrr_offset") memref))))))))
      ('IP (bvadd 'IP #x00000004))))))
- ((operands ((rT . 'Gprc) (memref . 'Memrr))) (in ('Mem memref 'IP)) (var1)))
+ ((operands ((rT . 'Gprc) (memref . 'Memrr)))
+  (in ('Mem memref 'IP))
+  (var1)))

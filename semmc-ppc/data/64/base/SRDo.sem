@@ -5,20 +5,25 @@
   (('CR
     (bvor
      (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+      'CR
+      (bvnot
+       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
      (bvshl
       ((_ zero_extend 28)
        (concat
         (ite
          (bvslt
-           (bvlshr rS ((_ zero_extend 58) ((_ extract 63 58) rB)))
-           #x0000000000000000)
+          (bvlshr
+           rS
+           ((_ zero_extend 58) ((_ extract 63 58) rB)))
+          #x0000000000000000)
          #b100
          (ite
           (bvsgt
-           (bvlshr rS ((_ zero_extend 58) ((_ extract 63 58) rB)))
+           (bvlshr
+            rS
+            ((_ zero_extend 58)
+             ((_ extract 63 58) rB)))
            #x0000000000000000)
           #b010
           #b001))

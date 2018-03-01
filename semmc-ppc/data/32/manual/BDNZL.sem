@@ -7,6 +7,8 @@
     ('IP
      (ite
       (xorp (notp (bveq (bvsub 'CTR #x00000001) #x00000000)) (false))
-      (bvadd ((_ sign_extend 16) (concat target #b00)) 'IP)
+      (bvadd
+       ((_ sign_extend 16) (concat target #b00))
+       'IP)
       (bvadd 'IP #x00000004)))
     ('CTR (bvsub 'CTR #x00000001))))))

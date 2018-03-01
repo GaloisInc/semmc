@@ -17,10 +17,13 @@
             (concat
              ((_ sign_extend 3) ((_ extract 4 4) FXM))
              (concat
-              ((_ sign_extend 3) ((_ extract 5 5) FXM))
+              ((_ sign_extend 3)
+               ((_ extract 5 5) FXM))
               (concat
-               ((_ sign_extend 3) ((_ extract 6 6) FXM))
-               ((_ sign_extend 3) ((_ extract 7 7) FXM))))))))))
+               ((_ sign_extend 3)
+                ((_ extract 6 6) FXM))
+               ((_ sign_extend 3)
+                ((_ extract 7 7) FXM))))))))))
        (bvand
         'CR
         (bvnot
@@ -33,11 +36,17 @@
             (concat
              ((_ sign_extend 3) ((_ extract 3 3) FXM))
              (concat
-              ((_ sign_extend 3) ((_ extract 4 4) FXM))
+              ((_ sign_extend 3)
+               ((_ extract 4 4) FXM))
               (concat
-               ((_ sign_extend 3) ((_ extract 5 5) FXM))
+               ((_ sign_extend 3)
+                ((_ extract 5 5) FXM))
                (concat
-                ((_ sign_extend 3) ((_ extract 6 6) FXM))
-                ((_ sign_extend 3) ((_ extract 7 7) FXM)))))))))))))
+                ((_ sign_extend 3)
+                 ((_ extract 6 6) FXM))
+                ((_ sign_extend 3)
+                 ((_ extract 7 7) FXM)))))))))))))
      ('IP (bvadd 'IP #x0000000000000004))))))
- ((operands ((rS . 'Gprc) (FXM . 'I32imm))) (in ('CR rS 'IP)) (var1)))
+ ((operands ((rS . 'Gprc) (FXM . 'I32imm)))
+  (in ('CR rS 'IP))
+  (var1)))

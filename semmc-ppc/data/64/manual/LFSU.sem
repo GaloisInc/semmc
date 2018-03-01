@@ -5,7 +5,9 @@
   ((((_ call "ppc.memri_reg") memref)
     (bvadd
      ((_ call "ppc.memri_reg") memref)
-     ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref))))
+     ((_ sign_extend 48)
+      ((_ call "ppc.memri_offset")
+       memref))))
    (frT
     (concat
      #x0000000000000000
@@ -14,5 +16,7 @@
        'Mem
        (bvadd
         ((_ call "ppc.memri_reg") memref)
-        ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))))))
+        ((_ sign_extend 48)
+         ((_ call "ppc.memri_offset")
+          memref)))))))
    ('IP (bvadd 'IP #x0000000000000004)))))

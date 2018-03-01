@@ -7,9 +7,13 @@
      'Mem
      (bvadd
       (ite
-       ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
+       ((_ call "ppc.is_r0")
+        ((_ call "ppc.memri_reg")
+         memref))
        #x00000000
        ((_ call "ppc.memri_reg") memref))
-      ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref)))
+      ((_ sign_extend 16)
+       ((_ call "ppc.memri_offset")
+        memref)))
      ((_ extract 31 16) rS)))
    ('IP (bvadd 'IP #x00000004)))))

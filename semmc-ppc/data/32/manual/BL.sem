@@ -2,5 +2,6 @@
 ((operands ((target . 'Calltarget)))
  (in ('IP 'IP target))
  (defs
-   (('LNK (bvadd 'IP #x00000004))
-   ('IP (bvadd 'IP ((_ sign_extend 6) (concat target #b00)))))))
+  (('LNK (bvadd 'IP #x00000004))
+   ('IP
+    (bvadd 'IP ((_ sign_extend 6) (concat target #b00)))))))

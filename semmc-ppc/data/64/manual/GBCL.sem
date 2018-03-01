@@ -2,7 +2,10 @@
 ;; Generic branch conditional with arbitrary BO
 (let
  ((false (bvne #b0 #b0)) (true (bveq #b0 #b0)))
- ((operands ((target . 'Condbrtarget) (bi . 'Crbitrc) (bo . 'U5imm)))
+ ((operands
+   ((target . 'Condbrtarget)
+    (bi . 'Crbitrc)
+    (bo . 'U5imm)))
   (in ('IP 'CR 'CTR))
   (defs
    (('LNK (bvadd 'IP #x0000000000000004))
@@ -10,17 +13,25 @@
      (ite
       (andp
        (ite
-        ((_ call "test_bit_dynamic") #x00000000 ((_ zero_extend 27) bo))
+        ((_ call "test_bit_dynamic")
+         #x00000000
+         ((_ zero_extend 27) bo))
         (true)
         (ite
          ((_ call "test_bit_dynamic")
           #x00000001
           ((_ zero_extend 27) bo))
-         ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR)
+         ((_ call "test_bit_dynamic")
+          ((_ zero_extend 27) bi)
+          'CR)
          (notp
-           ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR))))
+          ((_ call "test_bit_dynamic")
+           ((_ zero_extend 27) bi)
+           'CR))))
        (ite
-        ((_ call "test_bit_dynamic") #x00000002 ((_ zero_extend 27) bo))
+        ((_ call "test_bit_dynamic")
+         #x00000002
+         ((_ zero_extend 27) bo))
         (true)
         (ite
          ((_ call "test_bit_dynamic")
@@ -50,10 +61,15 @@
              'CTR)
             #x0000000000000000))
           (false)))))
-      (bvadd ((_ sign_extend 48) (concat target #b00)) 'IP)
+      (bvadd
+       ((_ sign_extend 48) (concat target #b00))
+       'IP)
       (bvadd 'IP #x0000000000000004)))
     ('CTR
      (ite
-      (notp ((_ call "test_bit_dynamic") #x00000002 ((_ zero_extend 27) bo)))
+      (notp
+       ((_ call "test_bit_dynamic")
+        #x00000002
+        ((_ zero_extend 27) bo)))
       (bvsub 'CTR #x0000000000000001)
       'CTR))))))

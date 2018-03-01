@@ -5,12 +5,25 @@
   (('CR
     (bvor
      (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b110) #x00000004))))
+      'CR
+      (bvnot
+       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b110) #x00000004))))
      (bvshl
-      ((_ zero_extend 28) ((_ call "undefined") #x00000004))
+      ((_ zero_extend 28)
+       ((_ call "undefined") #x00000004))
       (bvmul ((_ zero_extend 29) #b110) #x00000004))))
-   ('VSCR ((_ extract 159 128) ((_ call "ppc.vec2") "VCMPGTUW" vrA vrB 'VSCR)))
-   (vrT ((_ extract 127 0) ((_ call "ppc.vec2") "VCMPGTUW" vrA vrB 'VSCR)))
+   ('VSCR
+    ((_ extract 159 128)
+     ((_ call "ppc.vec2")
+      "VCMPGTUW"
+      vrA
+      vrB
+      'VSCR)))
+   (vrT
+    ((_ extract 127 0)
+     ((_ call "ppc.vec2")
+      "VCMPGTUW"
+      vrA
+      vrB
+      'VSCR)))
    ('IP (bvadd 'IP #x00000004)))))

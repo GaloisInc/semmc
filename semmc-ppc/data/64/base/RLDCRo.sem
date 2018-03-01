@@ -5,11 +5,11 @@
     (('CR
       (bvor
        (bvand
-         'CR
-         (bvnot
-          (bvshl
-           #x0000000f
-           (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+        'CR
+        (bvnot
+         (bvshl
+          #x0000000f
+          (bvmul ((_ zero_extend 29) #b000) #x00000004))))
        (bvshl
         ((_ zero_extend 28)
          (concat
@@ -18,22 +18,24 @@
             (bvand
              (bvor
               (bvshl
-                rS
-                ((_ zero_extend 58) ((_ extract 63 58) rB)))
+               rS
+               ((_ zero_extend 58)
+                ((_ extract 63 58) rB)))
               (bvlshr
                rS
                (bvsub
                 #x0000000000000040
-                ((_ zero_extend 58) ((_ extract 63 58) rB)))))
+                ((_ zero_extend 58)
+                 ((_ extract 63 58) rB)))))
              (bvshl
               (bvlshr
                ((_ sign_extend 63) #b1)
                (bvsub
-                 #x000000000000003f
-                 ((_ zero_extend 58) mb)))
-              (bvsub
                 #x000000000000003f
-                ((_ zero_extend 58) mb))))
+                ((_ zero_extend 58) mb)))
+              (bvsub
+               #x000000000000003f
+               ((_ zero_extend 58) mb))))
             #x0000000000000000)
            #b100
            (ite
@@ -41,23 +43,25 @@
              (bvand
               (bvor
                (bvshl
-                 rS
-                 ((_ zero_extend 58) ((_ extract 63 58) rB)))
+                rS
+                ((_ zero_extend 58)
+                 ((_ extract 63 58) rB)))
                (bvlshr
                 rS
                 (bvsub
                  #x0000000000000040
                  ((_ zero_extend 58)
-                  ((_ extract 63 58) rB)))))
+                  ((_ extract 63 58)
+                   rB)))))
               (bvshl
                (bvlshr
                 ((_ sign_extend 63) #b1)
                 (bvsub
-                  #x000000000000003f
-                  ((_ zero_extend 58) mb)))
-               (bvsub
                  #x000000000000003f
-                 ((_ zero_extend 58) mb))))
+                 ((_ zero_extend 58) mb)))
+               (bvsub
+                #x000000000000003f
+                ((_ zero_extend 58) mb))))
              #x0000000000000000)
             #b010
             #b001))
@@ -66,18 +70,21 @@
      (rA
       (bvand
        (bvor
-        (bvshl rS ((_ zero_extend 58) ((_ extract 63 58) rB)))
+        (bvshl
+         rS
+         ((_ zero_extend 58) ((_ extract 63 58) rB)))
         (bvlshr
-          rS
-          (bvsub
-           #x0000000000000040
-           ((_ zero_extend 58) ((_ extract 63 58) rB)))))
+         rS
+         (bvsub
+          #x0000000000000040
+          ((_ zero_extend 58) ((_ extract 63 58) rB)))))
        (bvshl
         (bvlshr
          ((_ sign_extend 63) #b1)
          (bvsub #x000000000000003f ((_ zero_extend 58) mb)))
         (bvsub #x000000000000003f ((_ zero_extend 58) mb)))))
      ('IP (bvadd 'IP #x0000000000000004))))))
- ((operands ((rA . 'Gprc) (mb . 'U6imm) (rS . 'Gprc) (rB . 'Gprc)))
+ ((operands
+   ((rA . 'Gprc) (mb . 'U6imm) (rS . 'Gprc) (rB . 'Gprc)))
   (in ('XER 'CR rB rS mb 'IP))
   (var1)))

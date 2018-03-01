@@ -9,11 +9,20 @@
     ('IP
      (ite
       (ite
-       ((_ call "test_bit_dynamic") #x00000000 ((_ zero_extend 27) bo))
+       ((_ call "test_bit_dynamic")
+        #x00000000
+        ((_ zero_extend 27) bo))
        (true)
        (ite
-        ((_ call "test_bit_dynamic") #x00000001 ((_ zero_extend 27) bo))
-        ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR)
-        (notp ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR))))
+        ((_ call "test_bit_dynamic")
+         #x00000001
+         ((_ zero_extend 27) bo))
+        ((_ call "test_bit_dynamic")
+         ((_ zero_extend 27) bi)
+         'CR)
+        (notp
+         ((_ call "test_bit_dynamic")
+          ((_ zero_extend 27) bi)
+          'CR))))
       (concat ((_ extract 29 0) 'CTR) #b00)
       (bvadd 'IP #x00000004)))))))

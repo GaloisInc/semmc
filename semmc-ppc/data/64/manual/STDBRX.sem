@@ -7,7 +7,9 @@
      'Mem
      (bvadd
       (ite
-       ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+       ((_ call "ppc.is_r0")
+        ((_ call "ppc.memrr_base")
+         memref))
        #x0000000000000000
        ((_ call "ppc.memrr_base") memref))
       ((_ call "ppc.memrr_offset") memref))
@@ -22,6 +24,6 @@
          (concat
           ((_ extract 39 32) rS)
           (concat
-            ((_ extract 47 40) rS)
-            (concat ((_ extract 55 48) rS) ((_ extract 63 56) rS))))))))))
+           ((_ extract 47 40) rS)
+           (concat ((_ extract 55 48) rS) ((_ extract 63 56) rS))))))))))
    ('IP (bvadd 'IP #x0000000000000004)))))

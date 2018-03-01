@@ -1,4 +1,6 @@
 ;; Divide Doubleword Signed (XO-form, RC=0)
 ((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
  (in (rB rA 'IP))
- (defs ((rT (bvsdiv rA rB)) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs
+  ((rT (bvsdiv rA rB))
+   ('IP (bvadd 'IP #x0000000000000004)))))
