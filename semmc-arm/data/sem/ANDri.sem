@@ -1,38 +1,50 @@
 ;; AND immediate, Encoding A1  (F7.1.13, F7-2556)
 (let
- ((ror ((_ extract 31 0) (rorC)))
+ ((shiftC
+   (ite
+    (bveq
+     (bvshl #x00000001 ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+     #x00000000)
+    (concat
+      ((_ extract 29 29) 'CPSR)
+      ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm)))
+    (rorC)))
   (rorC
    (concat
     (ite
-     (bvult ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm)) #x00000020)
+     (bvult
+      (bvshl
+        #x00000001
+        ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+      #x00000020)
      (ite
       ((_ call "test_bit_dynamic")
        (bvsub
-         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-         #x00000001)
-       (bvshl
-         #x00000001
-         ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm))))
+        (bvshl
+          #x00000001
+          ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+        #x00000001)
+       ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm)))
       #b1
       #b0)
      #b0)
     (bvor
      (bvshl
-      (bvshl
-        #x00000001
-        ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+      ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
       (bvsub
        #x00000020
        (bvurem
-         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-         #x00000020)))
+        (bvshl
+          #x00000001
+          ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+        #x00000020)))
      (bvlshr
-      (bvshl
-        #x00000001
-        ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+      ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
       (bvurem
-        ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-        #x00000020)))))
+       (bvshl
+         #x00000001
+         ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
+       #x00000020)))))
   (testCondition
    (ite
     (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
@@ -69,87 +81,17 @@
           (true)))))))))
   (true (bveq #b0 #b0))
   (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
-  (isZeroBit
-   (ite
-    (bveq
-     (bvand
-      rN
-      (ite
-       (bveq
-        (bvshl
-          #x00000001
-          ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
-        #x00000000)
-       ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-       (ror)))
-     #x00000000)
-    #b1
-    #b0))
+  (isZeroBit (ite (bveq (bvand rN ((_ extract 31 0) (shiftC))) #x00000000) #b1 #b0))
   (bxWritePC
    (ite
     ((_ call "arm.is_r15") rD)
     (ite
-     (bveq
-      #b0
-      ((_ extract 0 0)
-       (bvand
-        rN
-        (ite
-         (bveq
-          (bvshl
-            #x00000001
-            ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
-          #x00000000)
-         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-         (ror)))))
-     (bvand
-      #xfffffffe
-      (bvand
-       rN
-       (ite
-        (bveq
-         (bvshl
-           #x00000001
-           ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
-         #x00000000)
-        ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-        (ror))))
+     (bveq #b0 ((_ extract 0 0) (bvand rN ((_ extract 31 0) (shiftC)))))
+     (bvand #xfffffffe (bvand rN ((_ extract 31 0) (shiftC))))
      (ite
-      (bveq
-       #b0
-       ((_ extract 1 1)
-        (bvand
-         rN
-         (ite
-          (bveq
-           (bvshl
-             #x00000001
-             ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
-           #x00000000)
-          ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-          (ror)))))
-      (bvand
-       #xfffffffd
-       (bvand
-        rN
-        (ite
-         (bveq
-          (bvshl
-            #x00000001
-            ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
-          #x00000000)
-         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-         (ror))))
-      (bvand
-       rN
-       (ite
-        (bveq
-         (bvshl
-           #x00000001
-           ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
-         #x00000000)
-        ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-        (ror)))))
+      (bveq #b0 ((_ extract 1 1) (bvand rN ((_ extract 31 0) (shiftC)))))
+      (bvand #xfffffffd (bvand rN ((_ extract 31 0) (shiftC))))
+      (bvand rN ((_ extract 31 0) (shiftC)))))
     (bvadd 'PC #x00000004))))
  ((operands
     ((rD . 'GPR) (setcc . 'Cc_out) (predBits . 'Pred) (mimm . 'Mod_imm) (rN . 'GPR)))
@@ -163,99 +105,28 @@
        (andp (bveq setcc #b1) (notp ((_ call "arm.is_r15") rD)))
        (concat
         (concat
-         ((_ extract 31 31)
-          (bvand
-           rN
-           (ite
-            (bveq
-             (bvshl
-              #x00000001
-              ((_ zero_extend 28)
-               ((_ call "a32.modimm_rot") mimm)))
-             #x00000000)
-            ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-            (ror))))
+         ((_ extract 31 31) (bvand rN ((_ extract 31 0) (shiftC))))
          (concat
-          (isZeroBit)
-          (concat
-           (ite
-            (bveq
-             (bvshl
-              #x00000001
-              ((_ zero_extend 28)
-               ((_ call "a32.modimm_rot") mimm)))
-             #x00000000)
-            ((_ extract 29 29) 'CPSR)
-            ((_ extract 31 31)
-             (ite
-              (bveq
-               (bvshl
-                #x00000001
-                ((_ zero_extend 28)
-                 ((_ call "a32.modimm_rot") mimm)))
-               #x00000000)
-              ((_ zero_extend 24)
-               ((_ call "a32.modimm_imm") mimm))
-              (ror))))
-           ((_ extract 28 28) 'CPSR))))
+           (isZeroBit)
+           (concat ((_ extract 32 32) (shiftC)) ((_ extract 28 28) 'CPSR))))
         ((_ extract 27 0)
          (ite
           ((_ call "arm.is_r15") rD)
           (ite
-           (bveq
-            #b0
-            ((_ extract 0 0)
-             (bvand
-              rN
-              (ite
-               (bveq
-                (bvshl
-                 #x00000001
-                 ((_ zero_extend 28)
-                  ((_ call "a32.modimm_rot") mimm)))
-                #x00000000)
-               ((_ zero_extend 24)
-                ((_ call "a32.modimm_imm") mimm))
-               (ror)))))
+           (bveq #b0 ((_ extract 0 0) (bvand rN ((_ extract 31 0) (shiftC)))))
            (SetT32Mode)
            'CPSR)
           'CPSR)))
        (ite
         ((_ call "arm.is_r15") rD)
         (ite
-         (bveq
-          #b0
-          ((_ extract 0 0)
-           (bvand
-            rN
-            (ite
-             (bveq
-              (bvshl
-               #x00000001
-               ((_ zero_extend 28)
-                ((_ call "a32.modimm_rot") mimm)))
-              #x00000000)
-             ((_ zero_extend 24)
-              ((_ call "a32.modimm_imm") mimm))
-             (ror)))))
-         (SetT32Mode)
-         'CPSR)
+          (bveq #b0 ((_ extract 0 0) (bvand rN ((_ extract 31 0) (shiftC)))))
+          (SetT32Mode)
+          'CPSR)
         'CPSR))
       'CPSR))
     (rD
-     (ite
-      (testCondition)
       (ite
-       ((_ call "arm.is_r15") rD)
-       rD
-       (bvand
-        rN
-        (ite
-         (bveq
-          (bvshl
-            #x00000001
-            ((_ zero_extend 28) ((_ call "a32.modimm_rot") mimm)))
-          #x00000000)
-         ((_ zero_extend 24) ((_ call "a32.modimm_imm") mimm))
-         (ror))))
+      (testCondition)
+      (ite ((_ call "arm.is_r15") rD) rD (bvand rN ((_ extract 31 0) (shiftC))))
       rD))))))

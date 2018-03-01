@@ -1,40 +1,52 @@
 ;; MOV immediate, A32, Encoding A1  (F7.1.107, F7-2708)
 (let
- ((ror ((_ extract 31 0) (rorC)))
+ ((shiftC
+   (ite
+    (bveq
+     (bvshl
+       #x00000001
+       ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
+     #x00000000)
+    (concat
+      ((_ extract 29 29) 'CPSR)
+      ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm))))
+    (rorC)))
   (rorC
    (concat
     (ite
      (bvult
-       ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-       #x00000020)
+      (bvshl
+        #x00000001
+        ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
+      #x00000020)
      (ite
       ((_ call "test_bit_dynamic")
        (bvsub
-         ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-         #x00000001)
-       (bvshl
-         #x00000001
-         ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm)))))
+        (bvshl
+          #x00000001
+          ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
+        #x00000001)
+       ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm))))
       #b1
       #b0)
      #b0)
     (bvor
      (bvshl
-      (bvshl
-        #x00000001
-        ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
+      ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
       (bvsub
        #x00000020
        (bvurem
-         ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-         #x00000020)))
+        (bvshl
+          #x00000001
+          ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
+        #x00000020)))
      (bvlshr
-      (bvshl
-        #x00000001
-        ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
+      ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
       (bvurem
-        ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-        #x00000020)))))
+       (bvshl
+         #x00000001
+         ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
+       #x00000020)))))
   (testCondition
    (ite
     (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
@@ -71,77 +83,17 @@
           (true)))))))))
   (true (bveq #b0 #b0))
   (SetT32Mode (bvand #xfeffffff (bvor #x00000020 'CPSR)))
-  (isZeroBit
-   (ite
-    (bveq
-     (ite
-      (bveq
-       (bvshl
-         #x00000001
-         ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
-       #x00000000)
-      ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-      (ror))
-     #x00000000)
-    #b1
-    #b0))
+  (isZeroBit (ite (bveq ((_ extract 31 0) (shiftC)) #x00000000) #b1 #b0))
   (bxWritePC
    (ite
     ((_ call "arm.is_r15") rD)
     (ite
-     (bveq
-      #b0
-      ((_ extract 0 0)
-       (ite
-        (bveq
-         (bvshl
-           #x00000001
-           ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
-         #x00000000)
-        ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-        (ror))))
-     (bvand
-      #xfffffffe
-      (ite
-       (bveq
-        (bvshl
-          #x00000001
-          ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
-        #x00000000)
-       ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-       (ror)))
+     (bveq #b0 ((_ extract 0 0) ((_ extract 31 0) (shiftC))))
+     (bvand #xfffffffe ((_ extract 31 0) (shiftC)))
      (ite
-      (bveq
-       #b0
-       ((_ extract 1 1)
-        (ite
-         (bveq
-          (bvshl
-           #x00000001
-           ((_ zero_extend 28)
-            ((_ extract 11 8) ((_ extract 11 0) regimm))))
-          #x00000000)
-         ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-         (ror))))
-      (bvand
-       #xfffffffd
-       (ite
-        (bveq
-         (bvshl
-           #x00000001
-           ((_ zero_extend 28)
-           ((_ extract 11 8) ((_ extract 11 0) regimm))))
-         #x00000000)
-        ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-        (ror)))
-      (ite
-       (bveq
-        (bvshl
-          #x00000001
-          ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
-        #x00000000)
-       ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-       (ror))))
+      (bveq #b0 ((_ extract 1 1) ((_ extract 31 0) (shiftC))))
+      (bvand #xfffffffd ((_ extract 31 0) (shiftC)))
+      ((_ extract 31 0) (shiftC))))
     (bvadd 'PC #x00000004))))
  ((operands
     ((rD . 'GPR) (setcc . 'Cc_out) (predBits . 'Pred) (regimm . 'Shift_so_reg_imm)))
@@ -155,91 +107,18 @@
        (andp (bveq setcc #b1) (notp ((_ call "arm.is_r15") rD)))
        (concat
         (concat
-         ((_ extract 31 31)
-          (ite
-           (bveq
-            (bvshl
-             #x00000001
-             ((_ zero_extend 28)
-              ((_ extract 11 8) ((_ extract 11 0) regimm))))
-            #x00000000)
-           ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-           (ror)))
+         ((_ extract 31 31) ((_ extract 31 0) (shiftC)))
          (concat
-          (isZeroBit)
-          (concat
-           (ite
-            (bveq
-             (bvshl
-              #x00000001
-              ((_ zero_extend 28)
-               ((_ extract 11 8) ((_ extract 11 0) regimm))))
-             #x00000000)
-            ((_ extract 29 29) 'CPSR)
-            ((_ extract 31 31)
-             (ite
-              (bveq
-               (bvshl
-                #x00000001
-                ((_ zero_extend 28)
-                 ((_ extract 11 8) ((_ extract 11 0) regimm))))
-               #x00000000)
-              ((_ zero_extend 24)
-               ((_ extract 7 0) ((_ extract 11 0) regimm)))
-              (ror))))
-           ((_ extract 28 28) 'CPSR))))
+           (isZeroBit)
+           (concat ((_ extract 32 32) (shiftC)) ((_ extract 28 28) 'CPSR))))
         ((_ extract 27 0)
          (ite
           ((_ call "arm.is_r15") rD)
-          (ite
-           (bveq
-            #b0
-            ((_ extract 0 0)
-             (ite
-              (bveq
-               (bvshl
-                #x00000001
-                ((_ zero_extend 28)
-                 ((_ extract 11 8) ((_ extract 11 0) regimm))))
-               #x00000000)
-              ((_ zero_extend 24)
-               ((_ extract 7 0) ((_ extract 11 0) regimm)))
-              (ror))))
-           (SetT32Mode)
-           'CPSR)
+          (ite (bveq #b0 ((_ extract 0 0) ((_ extract 31 0) (shiftC)))) (SetT32Mode) 'CPSR)
           'CPSR)))
        (ite
         ((_ call "arm.is_r15") rD)
-        (ite
-         (bveq
-          #b0
-          ((_ extract 0 0)
-           (ite
-            (bveq
-             (bvshl
-              #x00000001
-              ((_ zero_extend 28)
-               ((_ extract 11 8) ((_ extract 11 0) regimm))))
-             #x00000000)
-            ((_ zero_extend 24)
-             ((_ extract 7 0) ((_ extract 11 0) regimm)))
-            (ror))))
-         (SetT32Mode)
-         'CPSR)
+        (ite (bveq #b0 ((_ extract 0 0) ((_ extract 31 0) (shiftC)))) (SetT32Mode) 'CPSR)
         'CPSR))
       'CPSR))
-    (rD
-     (ite
-      (testCondition)
-      (ite
-       ((_ call "arm.is_r15") rD)
-       rD
-       (ite
-        (bveq
-         (bvshl
-           #x00000001
-           ((_ zero_extend 28) ((_ extract 11 8) ((_ extract 11 0) regimm))))
-         #x00000000)
-        ((_ zero_extend 24) ((_ extract 7 0) ((_ extract 11 0) regimm)))
-        (ror)))
-      rD))))))
+    (rD (ite (testCondition) (ite ((_ call "arm.is_r15") rD) rD ((_ extract 31 0) (shiftC))) rD))))))

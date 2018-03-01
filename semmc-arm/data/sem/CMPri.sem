@@ -40,48 +40,52 @@
         (bvadd
          (bvadd ((_ zero_extend 1) rN) ((_ zero_extend 1) (bvnot (armExpandImm))))
          ((_ zero_extend 32) #b1))))))))
-  (armExpandImm
+  (armExpandImm ((_ extract 31 0) (shiftC)))
+  (shiftC
    (ite
     (bveq
      (bvshl
        #x00000001
        ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
      #x00000000)
-    ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
-    (ror)))
-  (ror ((_ extract 31 0) (rorC)))
+    (concat #b0 ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm)))
+    (rorC)))
   (rorC
    (concat
     (ite
-     (bvult ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm)) #x00000020)
+     (bvult
+      (bvshl
+        #x00000001
+        ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+      #x00000020)
      (ite
       ((_ call "test_bit_dynamic")
        (bvsub
-         ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
-         #x00000001)
-       (bvshl
-         #x00000001
-         ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm))))
+        (bvshl
+          #x00000001
+          ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+        #x00000001)
+       ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm)))
       #b1
       #b0)
      #b0)
     (bvor
      (bvshl
-      (bvshl
-        #x00000001
-        ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+      ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
       (bvsub
        #x00000020
        (bvurem
-         ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
-         #x00000020)))
+        (bvshl
+          #x00000001
+          ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+        #x00000020)))
      (bvlshr
-      (bvshl
-        #x00000001
-        ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+      ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
       (bvurem
-        ((_ zero_extend 24) ((_ call "a32.modimm_imm") modimm))
-        #x00000020)))))
+       (bvshl
+         #x00000001
+         ((_ zero_extend 28) ((_ call "a32.modimm_rot") modimm)))
+       #x00000020)))))
   (testCondition
    (ite
     (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
