@@ -147,6 +147,7 @@ type instance A.OperandType ARM "Addr_offset_none" = BaseBVType 32
 type instance A.OperandType ARM "Addrmode_imm12" = BaseBVType 32
 type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
 type instance A.OperandType ARM "Am2offset_imm" = BaseBVType 32
+type instance A.OperandType ARM "Arm_bl_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
@@ -178,6 +179,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opV (ARM.Addrmode_imm12 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opV (ARM.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
+        opV (ARM.Arm_bl_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
         opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
         opV (ARM.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opV (ARM.Arm_br_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
@@ -311,6 +313,7 @@ shapeReprType orep =
     ARM.Addrmode_imm12Repr -> knownRepr
     ARM.Addrmode_imm12_preRepr -> knownRepr
     ARM.Am2offset_immRepr -> knownRepr
+    ARM.Arm_bl_targetRepr -> knownRepr
     ARM.Arm_blx_targetRepr -> knownRepr
     ARM.Arm_br_targetRepr -> knownRepr
     ARM.Cc_outRepr -> knownRepr
@@ -369,6 +372,7 @@ instance T.TemplatableOperand ARM where
                                   addflagVal <- fromInteger <$> evalFn addflag
                                   return $ ARM.Addrmode_imm12_pre $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                             return (expr, T.WrappedRecoverOperandFn recover)
+      ARM.Arm_bl_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
       ARM.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
       ARM.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
       ARM.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
