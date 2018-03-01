@@ -3,171 +3,28 @@
 (let
  ((shiftC
    (ite
-    (bveq
-     ((_ extract 31 0)
-      (ite
-       (bveq #b00 #b00)
-       (concat #b000 ((_ zero_extend 27) #b00000))
-       (ite
-        (bveq #b00 #b01)
-        (concat
-         #b001
-         (ite
-           (bveq #b00000 #b00000)
-           #x00000020
-           ((_ zero_extend 27) #b00000)))
-        (ite
-         (bveq #b00 #b10)
-         (concat
-          #b010
-          (ite
-            (bveq #b00000 #b00000)
-            #x00000020
-            ((_ zero_extend 27) #b00000)))
-         (ite
-          (bveq #b00000 #b00000)
-          (concat #b100 #x00000001)
-          (concat #b011 ((_ zero_extend 27) #b00000)))))))
-     #x00000000)
+    (bveq ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000))) #x00000000)
     (concat ((_ extract 29 29) 'CPSR) rM)
     (ite
-     (bveq
-      ((_ extract 34 32)
-       (ite
-        (bveq #b00 #b00)
-        (concat #b000 ((_ zero_extend 27) #b00000))
-        (ite
-         (bveq #b00 #b01)
-         (concat
-          #b001
-          (ite
-            (bveq #b00000 #b00000)
-            #x00000020
-            ((_ zero_extend 27) #b00000)))
-         (ite
-          (bveq #b00 #b10)
-          (concat
-           #b010
-           (ite
-             (bveq #b00000 #b00000)
-             #x00000020
-             ((_ zero_extend 27) #b00000)))
-          (ite
-           (bveq #b00000 #b00000)
-           (concat #b100 #x00000001)
-           (concat #b011 ((_ zero_extend 27) #b00000)))))))
-      #b000)
+     (bveq ((_ extract 34 32) (concat #b000 ((_ zero_extend 27) #b00000))) #b000)
      (bvshl
       ((_ zero_extend 1) rM)
       ((_ zero_extend 1)
-       ((_ extract 31 0)
-        (ite
-         (bveq #b00 #b00)
-         (concat #b000 ((_ zero_extend 27) #b00000))
-         (ite
-          (bveq #b00 #b01)
-          (concat
-           #b001
-           (ite
-             (bveq #b00000 #b00000)
-             #x00000020
-             ((_ zero_extend 27) #b00000)))
-          (ite
-           (bveq #b00 #b10)
-           (concat
-            #b010
-            (ite
-              (bveq #b00000 #b00000)
-              #x00000020
-              ((_ zero_extend 27) #b00000)))
-           (ite
-            (bveq #b00000 #b00000)
-            (concat #b100 #x00000001)
-            (concat #b011 ((_ zero_extend 27) #b00000)))))))))
+       ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000)))))
      (ite
       (bveq
-       ((_ extract 34 32)
-        (ite
-         (bveq #b00 #b00)
-         (concat #b000 ((_ zero_extend 27) #b00000))
-         (ite
-          (bveq #b00 #b01)
-          (concat
-           #b001
-           (ite
-             (bveq #b00000 #b00000)
-             #x00000020
-             ((_ zero_extend 27) #b00000)))
-          (ite
-           (bveq #b00 #b10)
-           (concat
-            #b010
-            (ite
-             (bveq #b00000 #b00000)
-             #x00000020
-             ((_ zero_extend 27) #b00000)))
-           (ite
-            (bveq #b00000 #b00000)
-            (concat #b100 #x00000001)
-            (concat #b011 ((_ zero_extend 27) #b00000)))))))
-       #b001)
+        ((_ extract 34 32) (concat #b000 ((_ zero_extend 27) #b00000)))
+        #b001)
       (concat
        (ite
         (bvult
-         ((_ extract 31 0)
-          (ite
-           (bveq #b00 #b00)
-           (concat #b000 ((_ zero_extend 27) #b00000))
-           (ite
-            (bveq #b00 #b01)
-            (concat
-             #b001
-             (ite
-              (bveq #b00000 #b00000)
-              #x00000020
-              ((_ zero_extend 27) #b00000)))
-            (ite
-             (bveq #b00 #b10)
-             (concat
-              #b010
-              (ite
-               (bveq #b00000 #b00000)
-               #x00000020
-               ((_ zero_extend 27) #b00000)))
-             (ite
-              (bveq #b00000 #b00000)
-              (concat #b100 #x00000001)
-              (concat #b011 ((_ zero_extend 27) #b00000)))))))
-         #x00000020)
+          ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000)))
+          #x00000020)
         (ite
          ((_ call "test_bit_dynamic")
           (bvsub
            ((_ extract 31 0)
-            (ite
-             (bveq #b00 #b00)
-             (concat #b000 ((_ zero_extend 27) #b00000))
-             (ite
-              (bveq #b00 #b01)
-              (concat
-               #b001
-               (ite
-                (bveq #b00000 #b00000)
-                #x00000020
-                ((_ zero_extend 27) #b00000)))
-              (ite
-               (bveq #b00 #b10)
-               (concat
-                #b010
-                (ite
-                 (bveq #b00000 #b00000)
-                 #x00000020
-                 ((_ zero_extend 27) #b00000)))
-               (ite
-                (bveq #b00000 #b00000)
-                (concat #b100 #x00000001)
-                (concat
-                  #b011
-                  ((_ zero_extend 27) #b00000)))))))
+            (concat #b000 ((_ zero_extend 27) #b00000)))
            #x00000001)
           rM)
          #b1
@@ -176,117 +33,23 @@
        (bvlshr
         rM
         (bvurem
-         ((_ extract 31 0)
-          (ite
-           (bveq #b00 #b00)
-           (concat #b000 ((_ zero_extend 27) #b00000))
-           (ite
-            (bveq #b00 #b01)
-            (concat
-             #b001
-             (ite
-              (bveq #b00000 #b00000)
-              #x00000020
-              ((_ zero_extend 27) #b00000)))
-            (ite
-             (bveq #b00 #b10)
-             (concat
-              #b010
-              (ite
-               (bveq #b00000 #b00000)
-               #x00000020
-               ((_ zero_extend 27) #b00000)))
-             (ite
-              (bveq #b00000 #b00000)
-              (concat #b100 #x00000001)
-              (concat #b011 ((_ zero_extend 27) #b00000)))))))
-         #x00000020)))
+          ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000)))
+          #x00000020)))
       (ite
        (bveq
-        ((_ extract 34 32)
-         (ite
-          (bveq #b00 #b00)
-          (concat #b000 ((_ zero_extend 27) #b00000))
-          (ite
-           (bveq #b00 #b01)
-           (concat
-            #b001
-            (ite
-             (bveq #b00000 #b00000)
-             #x00000020
-             ((_ zero_extend 27) #b00000)))
-           (ite
-            (bveq #b00 #b10)
-            (concat
-             #b010
-             (ite
-              (bveq #b00000 #b00000)
-              #x00000020
-              ((_ zero_extend 27) #b00000)))
-            (ite
-             (bveq #b00000 #b00000)
-             (concat #b100 #x00000001)
-             (concat #b011 ((_ zero_extend 27) #b00000)))))))
-        #b010)
+         ((_ extract 34 32) (concat #b000 ((_ zero_extend 27) #b00000)))
+         #b010)
        (concat
         (ite
          (bvult
           ((_ extract 31 0)
-           (ite
-            (bveq #b00 #b00)
-            (concat #b000 ((_ zero_extend 27) #b00000))
-            (ite
-             (bveq #b00 #b01)
-             (concat
-              #b001
-              (ite
-               (bveq #b00000 #b00000)
-               #x00000020
-               ((_ zero_extend 27) #b00000)))
-             (ite
-              (bveq #b00 #b10)
-              (concat
-               #b010
-               (ite
-                (bveq #b00000 #b00000)
-                #x00000020
-                ((_ zero_extend 27) #b00000)))
-              (ite
-               (bveq #b00000 #b00000)
-               (concat #b100 #x00000001)
-               (concat
-                 #b011
-                 ((_ zero_extend 27) #b00000)))))))
+           (concat #b000 ((_ zero_extend 27) #b00000)))
           #x00000020)
          (ite
           ((_ call "test_bit_dynamic")
            (bvsub
             ((_ extract 31 0)
-             (ite
-              (bveq #b00 #b00)
-              (concat #b000 ((_ zero_extend 27) #b00000))
-              (ite
-               (bveq #b00 #b01)
-               (concat
-                #b001
-                (ite
-                 (bveq #b00000 #b00000)
-                 #x00000020
-                 ((_ zero_extend 27) #b00000)))
-               (ite
-                (bveq #b00 #b10)
-                (concat
-                 #b010
-                 (ite
-                  (bveq #b00000 #b00000)
-                  #x00000020
-                  ((_ zero_extend 27) #b00000)))
-                (ite
-                 (bveq #b00000 #b00000)
-                 (concat #b100 #x00000001)
-                 (concat
-                   #b011
-                   ((_ zero_extend 27) #b00000)))))))
+             (concat #b000 ((_ zero_extend 27) #b00000)))
             #x00000001)
            rM)
           #b1
@@ -296,118 +59,24 @@
          rM
          (bvurem
           ((_ extract 31 0)
-           (ite
-            (bveq #b00 #b00)
-            (concat #b000 ((_ zero_extend 27) #b00000))
-            (ite
-             (bveq #b00 #b01)
-             (concat
-              #b001
-              (ite
-               (bveq #b00000 #b00000)
-               #x00000020
-               ((_ zero_extend 27) #b00000)))
-             (ite
-              (bveq #b00 #b10)
-              (concat
-               #b010
-               (ite
-                (bveq #b00000 #b00000)
-                #x00000020
-                ((_ zero_extend 27) #b00000)))
-              (ite
-               (bveq #b00000 #b00000)
-               (concat #b100 #x00000001)
-               (concat
-                 #b011
-                 ((_ zero_extend 27) #b00000)))))))
+           (concat #b000 ((_ zero_extend 27) #b00000)))
           #x00000020)))
        (ite
         (bveq
-         ((_ extract 34 32)
-          (ite
-           (bveq #b00 #b00)
-           (concat #b000 ((_ zero_extend 27) #b00000))
-           (ite
-            (bveq #b00 #b01)
-            (concat
-             #b001
-             (ite
-              (bveq #b00000 #b00000)
-              #x00000020
-              ((_ zero_extend 27) #b00000)))
-            (ite
-             (bveq #b00 #b10)
-             (concat
-              #b010
-              (ite
-               (bveq #b00000 #b00000)
-               #x00000020
-               ((_ zero_extend 27) #b00000)))
-             (ite
-              (bveq #b00000 #b00000)
-              (concat #b100 #x00000001)
-              (concat #b011 ((_ zero_extend 27) #b00000)))))))
-         #b011)
+          ((_ extract 34 32)
+          (concat #b000 ((_ zero_extend 27) #b00000)))
+          #b011)
         (concat
          (ite
           (bvult
            ((_ extract 31 0)
-            (ite
-             (bveq #b00 #b00)
-             (concat #b000 ((_ zero_extend 27) #b00000))
-             (ite
-              (bveq #b00 #b01)
-              (concat
-               #b001
-               (ite
-                (bveq #b00000 #b00000)
-                #x00000020
-                ((_ zero_extend 27) #b00000)))
-              (ite
-               (bveq #b00 #b10)
-               (concat
-                #b010
-                (ite
-                 (bveq #b00000 #b00000)
-                 #x00000020
-                 ((_ zero_extend 27) #b00000)))
-               (ite
-                (bveq #b00000 #b00000)
-                (concat #b100 #x00000001)
-                (concat
-                  #b011
-                  ((_ zero_extend 27) #b00000)))))))
+            (concat #b000 ((_ zero_extend 27) #b00000)))
            #x00000020)
           (ite
            ((_ call "test_bit_dynamic")
             (bvsub
              ((_ extract 31 0)
-              (ite
-               (bveq #b00 #b00)
-               (concat #b000 ((_ zero_extend 27) #b00000))
-               (ite
-                (bveq #b00 #b01)
-                (concat
-                 #b001
-                 (ite
-                  (bveq #b00000 #b00000)
-                  #x00000020
-                  ((_ zero_extend 27) #b00000)))
-                (ite
-                 (bveq #b00 #b10)
-                 (concat
-                  #b010
-                  (ite
-                   (bveq #b00000 #b00000)
-                   #x00000020
-                   ((_ zero_extend 27) #b00000)))
-                 (ite
-                  (bveq #b00000 #b00000)
-                  (concat #b100 #x00000001)
-                  (concat
-                    #b011
-                    ((_ zero_extend 27) #b00000)))))))
+              (concat #b000 ((_ zero_extend 27) #b00000)))
              #x00000001)
             rM)
            #b1
@@ -420,67 +89,17 @@
             #x00000020
             (bvurem
              ((_ extract 31 0)
-              (ite
-               (bveq #b00 #b00)
-               (concat
-                 #b000
-                 ((_ zero_extend 27) #b00000))
-               (ite
-                (bveq #b00 #b01)
-                (concat
-                 #b001
-                 (ite
-                  (bveq #b00000 #b00000)
-                  #x00000020
-                  ((_ zero_extend 27) #b00000)))
-                (ite
-                 (bveq #b00 #b10)
-                 (concat
-                  #b010
-                  (ite
-                   (bveq #b00000 #b00000)
-                   #x00000020
-                   ((_ zero_extend 27) #b00000)))
-                 (ite
-                  (bveq #b00000 #b00000)
-                  (concat #b100 #x00000001)
-                  (concat
-                    #b011
-                    ((_ zero_extend 27) #b00000)))))))
+              (concat #b000 ((_ zero_extend 27) #b00000)))
              #x00000020)))
           (bvlshr
            rM
            (bvurem
             ((_ extract 31 0)
-             (ite
-              (bveq #b00 #b00)
-              (concat #b000 ((_ zero_extend 27) #b00000))
-              (ite
-               (bveq #b00 #b01)
-               (concat
-                #b001
-                (ite
-                 (bveq #b00000 #b00000)
-                 #x00000020
-                 ((_ zero_extend 27) #b00000)))
-               (ite
-                (bveq #b00 #b10)
-                (concat
-                 #b010
-                 (ite
-                  (bveq #b00000 #b00000)
-                  #x00000020
-                  ((_ zero_extend 27) #b00000)))
-                (ite
-                 (bveq #b00000 #b00000)
-                 (concat #b100 #x00000001)
-                 (concat
-                   #b011
-                   ((_ zero_extend 27) #b00000)))))))
+             (concat #b000 ((_ zero_extend 27) #b00000)))
             #x00000020))))
-        (rrxC)))))))
-  (rrxC
-    (concat ((_ extract 0 0) rM) (concat ((_ extract 29 29) 'CPSR) ((_ extract 31 1) rM))))
+        (concat
+          ((_ extract 0 0) rM)
+          (concat ((_ extract 29 29) 'CPSR) ((_ extract 31 1) rM)))))))))
   (testCondition
    (ite
     (andp (bveq #b1 ((_ extract 0 0) (ITState))) (bvne (ITState) #xf))
@@ -514,7 +133,8 @@
              ((_ extract 31 31) 'CPSR)
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-          (bveq #b0 #b0)))))))))
+          (true)))))))))
+  (true (bveq #b0 #b0))
   (ITState
    (ite
     (bveq (concat ((_ extract 11 10) 'CPSR) ((_ extract 26 25) 'CPSR)) #x0)

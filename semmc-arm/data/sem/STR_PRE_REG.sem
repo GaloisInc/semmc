@@ -99,7 +99,57 @@
              ((_ call "a32.ldst_so_reg_immediate")
               ldst_so_reg))))))))
       #b000)
-     (lslC)
+     (bvshl
+      ((_ zero_extend 1)
+       ((_ call "a32.ldst_so_reg_offset_register") ldst_so_reg))
+      ((_ zero_extend 1)
+       ((_ extract 31 0)
+        (ite
+         (bveq ((_ call "a32.ldst_so_reg_shift_type") ldst_so_reg) #b00)
+         (concat
+          #b000
+          ((_ zero_extend 27)
+           ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg)))
+         (ite
+          (bveq
+            ((_ call "a32.ldst_so_reg_shift_type") ldst_so_reg)
+            #b01)
+          (concat
+           #b001
+           (ite
+            (bveq
+             #b00000
+             ((_ call "a32.ldst_so_reg_immediate")
+              ldst_so_reg))
+            #x00000020
+            ((_ zero_extend 27)
+             ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg))))
+          (ite
+           (bveq
+             ((_ call "a32.ldst_so_reg_shift_type") ldst_so_reg)
+             #b10)
+           (concat
+            #b010
+            (ite
+             (bveq
+              #b00000
+              ((_ call "a32.ldst_so_reg_immediate")
+               ldst_so_reg))
+             #x00000020
+             ((_ zero_extend 27)
+              ((_ call "a32.ldst_so_reg_immediate")
+               ldst_so_reg))))
+           (ite
+            (bveq
+             ((_ call "a32.ldst_so_reg_immediate")
+              ldst_so_reg)
+             #b00000)
+            (concat #b100 #x00000001)
+            (concat
+             #b011
+             ((_ zero_extend 27)
+              ((_ call "a32.ldst_so_reg_immediate")
+               ldst_so_reg))))))))))
      (ite
       (bveq
        ((_ extract 34 32)
@@ -828,49 +878,6 @@
              ((_ call "a32.ldst_so_reg_immediate")
               ldst_so_reg))))))))
       #x00000020))))
-  (lslC
-   (bvshl
-    ((_ zero_extend 1)
-     ((_ call "a32.ldst_so_reg_offset_register") ldst_so_reg))
-    ((_ zero_extend 1)
-     ((_ extract 31 0)
-      (ite
-       (bveq ((_ call "a32.ldst_so_reg_shift_type") ldst_so_reg) #b00)
-       (concat
-        #b000
-        ((_ zero_extend 27)
-         ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg)))
-       (ite
-        (bveq ((_ call "a32.ldst_so_reg_shift_type") ldst_so_reg) #b01)
-        (concat
-         #b001
-         (ite
-          (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg))
-          #x00000020
-          ((_ zero_extend 27)
-           ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg))))
-        (ite
-         (bveq ((_ call "a32.ldst_so_reg_shift_type") ldst_so_reg) #b10)
-         (concat
-          #b010
-          (ite
-           (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg))))
-         (ite
-          (bveq
-            ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg)
-            #b00000)
-          (concat #b100 #x00000001)
-          (concat
-           #b011
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate") ldst_so_reg)))))))))))
   (testCondition
    (ite
     (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
@@ -904,7 +911,8 @@
              ((_ extract 31 31) 'CPSR)
              ((_ extract 28 28) 'CPSR))
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
-          (bveq #b0 #b0))))))))))
+          (true)))))))))
+  (true (bveq #b0 #b0)))
  ((operands ((predBits . 'Pred) (ldst_so_reg . 'Ldst_so_reg) (gpr . 'GPR)))
   (in ('Mem ldst_so_reg gpr 'CPSR 'PC))
   (defs

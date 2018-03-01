@@ -1,16 +1,15 @@
-;; Store Register, Pre-indexed (P=1, W=1), immediate  (A32)
+;; Store Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1
 ;; doc: F7.1.217, page F7-2880
-;; see also PUSH, F7.1.138, page F7-2760
 (let
  ((addr
    (ite
-    ((_ call "a32.imm12_add") imm)
+    ((_ call "a32.imm12_add") imm12)
     (bvadd
-      ((_ call "a32.imm12_reg") imm)
-      ((_ zero_extend 16) ((_ call "a32.imm12_off") imm)))
+     ((_ call "a32.imm12_reg") imm12)
+     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))
     (bvsub
-      ((_ call "a32.imm12_reg") imm)
-      ((_ zero_extend 16) ((_ call "a32.imm12_off") imm)))))
+     ((_ call "a32.imm12_reg") imm12)
+     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))))
   (wval (ite ((_ call "arm.is_r15") gpr) 'PC gpr))
   (testCondition
    (ite
@@ -47,24 +46,24 @@
            (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
           (true)))))))))
   (true (bveq #b0 #b0))
-  (rnUpd (ite (wback) (offAddr) ((_ call "a32.imm12_reg") imm)))
+  (rnUpd (ite (wback) (offAddr) ((_ call "a32.imm12_reg") imm12)))
   (offAddr
    (ite
-    ((_ call "a32.imm12_add") imm)
+    ((_ call "a32.imm12_add") imm12)
     (bvadd
-      ((_ call "a32.imm12_reg") imm)
-      ((_ zero_extend 16) ((_ call "a32.imm12_off") imm)))
+     ((_ call "a32.imm12_reg") imm12)
+     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))
     (bvsub
-      ((_ call "a32.imm12_reg") imm)
-      ((_ zero_extend 16) ((_ call "a32.imm12_off") imm)))))
-  (wback (bveq #b0 #b0)))
- ((operands ((predBits . 'Pred) (imm . 'Addrmode_imm12_pre) (gpr . 'GPR)))
-  (in (gpr 'Mem imm 'CPSR 'PC))
+     ((_ call "a32.imm12_reg") imm12)
+     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))))
+  (wback (bvne #b0 #b0)))
+ ((operands ((predBits . 'Pred) (imm12 . 'Addrmode_imm12) (gpr . 'GPR)))
+  (in (gpr 'Mem imm12 'CPSR 'PC))
   (defs
    (('PC (bvadd 'PC #x00000004))
     ('CPSR 'CPSR)
-    (((_ call "a32.imm12_reg") imm)
-     (ite (testCondition) (rnUpd) ((_ call "a32.imm12_reg") imm)))
+    (((_ call "a32.imm12_reg") imm12)
+     (ite (testCondition) (rnUpd) ((_ call "a32.imm12_reg") imm12)))
     ('Mem
      ((_ call "write_mem.32")
       'Mem
