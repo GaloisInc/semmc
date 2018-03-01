@@ -133,7 +133,7 @@ manualArithmetic = do
                           :> ParamDef "rM" gpr naturalBV
                           :> ParamDef "rN" gpr naturalBV
                           ) $ \rD setcc _ rM rN -> do
-    comment "ADD register, A32, Encoding A1  (F7.1.7, F7-2546)"
+    comment "SUB register, A32, Encoding A1  (F7.1.236, F7-2918?)"
     input rM
     input rN
     input setcc
@@ -142,6 +142,9 @@ manualArithmetic = do
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+
+------------------------------------------------------------------------
 
 manualBitwise :: (HasCallStack) => SemARM 'Top ()
 manualBitwise = do
