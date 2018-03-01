@@ -378,6 +378,38 @@ floatingPoint = do
     comment "Floating Negative Absolute Value (X-form)"
     fp1op "FNABSS"
 
+  defineOpcodeWithIP "FSQRT" $ do
+    comment "Floating Square Root (A-form)"
+    fp1op "FSQRT"
+
+  defineOpcodeWithIP "FSQRTS" $ do
+    comment "Floating Square Root Single (A-form)"
+    fp1op "FSQRT"
+
+  defineOpcodeWithIP "FRE" $ do
+    comment "Floating Reciprocal Estimate (A-form)"
+    fp1op "FRE"
+
+  defineOpcodeWithIP "FRES" $ do
+    comment "Floating Reciprocal Estimate Single (A-form)"
+    fp1op "FRES"
+
+  defineOpcodeWithIP "FRSQRTE" $ do
+    comment "Floating Reciprocal Square Root Estimate (A-form)"
+    fp1op "FRSQRTE"
+
+  defineOpcodeWithIP "FRSQRTES" $ do
+    comment "Floating Reciprocal Square Root Estimate Single (A-form)"
+    fp1op "FRSQRTES"
+
+  defineOpcodeWithIP "FSELD" $ do
+    comment "Floating-Point Select (A-form)"
+    fp3op "FSELD"
+
+  defineOpcodeWithIP "FSELS" $ do
+    comment "Floating-Point Select Single (A-form)"
+    fp3op "FSELS"
+
 -- | Define a load and double conversion of a single floating-point (D-form)
 loadFloat :: (?bitSize :: BitSize)
           => Int
