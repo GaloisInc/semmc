@@ -7,20 +7,20 @@ module SemMC.Architecture.ARM.BaseSemantics.Memory
     )
     where
 
-import Data.Maybe
-import Data.Parameterized.Context
-import Data.Parameterized.Some ( Some(..) )
-import Data.Semigroup
-import Prelude hiding ( concat, pred )
+import           Data.Maybe
+import           Data.Parameterized.Context
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Semigroup
 import qualified Dismantle.ARM as A
-import SemMC.Architecture.ARM.BaseSemantics.Base
-import SemMC.Architecture.ARM.BaseSemantics.Helpers
-import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
-import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
-import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
-import SemMC.Architecture.ARM.BaseSemantics.Registers
-import SemMC.DSL
+import           Prelude hiding ( concat, pred )
+import           SemMC.Architecture.ARM.BaseSemantics.Base
+import           SemMC.Architecture.ARM.BaseSemantics.Helpers
+import           SemMC.Architecture.ARM.BaseSemantics.Natural
+import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
+import           SemMC.Architecture.ARM.BaseSemantics.Registers
+import           SemMC.DSL
 
 
 manualMemory :: SemARM 'Top ()
@@ -30,10 +30,6 @@ manualMemory = do
 
 defineLoads :: SemARM 'Top ()
 defineLoads = do
-  return ()
-
-defineStores :: SemARM 'Top ()
-defineStores = do
   defineA32Opcode A.LDR_POST_IMM (Empty
                                  :> ParamDef "gpr" gpr naturalBV
                                  :> ParamDef "predBits" pred (EBV 4)
@@ -51,10 +47,9 @@ defineStores = do
         rN = off
         b'P = LitBV 1 0
         b'W = LitBV 1 0
-        index =bveq b'P (LitBV 1 1)
+        index = bveq b'P (LitBV 1 1)
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
     ldr rT add rN offset index wback
-
   defineA32Opcode A.LDRi12 (Empty
                            :> ParamDef "gpr" gpr naturalBV
                            :> ParamDef "predBits" pred (EBV 4)
@@ -69,10 +64,13 @@ defineStores = do
         add = imm12Add $ [Some $ Loc imm12]
         b'P = LitBV 1 1
         b'W = LitBV 1 0
-        index =bveq b'P (LitBV 1 1)
+        index = bveq b'P (LitBV 1 1)
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
     ldr rT add rN offset index wback
 
+
+defineStores :: SemARM 'Top ()
+defineStores = do
   -- Note about STR_PRE_IMM vs STR_POST_IMM:
   -- for STR_PRE_IMM, the addrmode_imm12_pre bundle is holding three pieces of
   -- information: the register holding the target address, the immediate offset, and
