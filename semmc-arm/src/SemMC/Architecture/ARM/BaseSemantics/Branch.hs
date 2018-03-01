@@ -52,6 +52,7 @@ a32_branches = do
                       $ \_ tgt -> do
     comment "B, branch, Encoding A1"
     comment "F7.1.18, F7-2566"
+    input tgt
     let imm24 = extract 23 0 (Loc tgt)
         imm32 = "imm32" =: (sext $ concat imm24 $ LitBV 2 0b00)
     branchWritePCRel imm32
