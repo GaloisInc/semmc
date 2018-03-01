@@ -87,6 +87,7 @@ import           GHC.Stack ( HasCallStack )
 
 import           Prelude hiding ( concat )
 
+import Data.Maybe
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
 import qualified Data.SCargot.Repr as SC
