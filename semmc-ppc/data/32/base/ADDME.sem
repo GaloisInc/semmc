@@ -9,13 +9,15 @@
       ((_ extract 0 0)
        (bvsub
         (bvadd
-          ((_ zero_extend 1) rA)
-          ((_ zero_extend 32) ((_ extract 2 2) 'XER)))
+         ((_ zero_extend 1) rA)
+         ((_ zero_extend 32) ((_ extract 2 2) 'XER)))
         #b000000000000000000000000000000001))
       ((_ extract 31 3) 'XER))))
    (rT
     ((_ extract 32 1)
      (bvsub
-      (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 32) ((_ extract 2 2) 'XER)))
+      (bvadd
+       ((_ zero_extend 1) rA)
+       ((_ zero_extend 32) ((_ extract 2 2) 'XER)))
       #b000000000000000000000000000000001)))
    ('IP (bvadd 'IP #x00000004)))))

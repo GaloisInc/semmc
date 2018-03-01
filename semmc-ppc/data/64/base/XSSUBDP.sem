@@ -2,6 +2,18 @@
 ((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc)))
  (in ('FPSCR xB xA 'IP))
  (defs
-  (('FPSCR ((_ extract 159 128) ((_ call "ppc.vec2") "XSSUBDP" xA xB 'FPSCR)))
-   (xT ((_ extract 127 0) ((_ call "ppc.vec2") "XSSUBDP" xA xB 'FPSCR)))
+  (('FPSCR
+    ((_ extract 159 128)
+     ((_ call "ppc.vec2")
+      "XSSUBDP"
+      xA
+      xB
+      'FPSCR)))
+   (xT
+    ((_ extract 127 0)
+     ((_ call "ppc.vec2")
+      "XSSUBDP"
+      xA
+      xB
+      'FPSCR)))
    ('IP (bvadd 'IP #x0000000000000004)))))

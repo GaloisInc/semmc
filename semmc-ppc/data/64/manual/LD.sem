@@ -7,8 +7,11 @@
      'Mem
      (bvadd
       (ite
-       ((_ call "ppc.is_r0") ((_ call "ppc.memrix_reg") memref))
+       ((_ call "ppc.is_r0")
+        ((_ call "ppc.memrix_reg")
+         memref))
        #x0000000000000000
        ((_ call "ppc.memrix_reg") memref))
-      ((_ sign_extend 48) (concat ((_ call "ppc.memrix_offset") memref) #b00)))))
+      ((_ sign_extend 48)
+       (concat ((_ call "ppc.memrix_offset") memref) #b00)))))
    ('IP (bvadd 'IP #x0000000000000004)))))

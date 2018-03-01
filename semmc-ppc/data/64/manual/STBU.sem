@@ -5,12 +5,16 @@
   ((((_ call "ppc.memri_reg") memref)
     (bvadd
      ((_ call "ppc.memri_reg") memref)
-     ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref))))
+     ((_ sign_extend 48)
+      ((_ call "ppc.memri_offset")
+       memref))))
    ('Mem
     ((_ call "write_mem.8")
      'Mem
      (bvadd
       ((_ call "ppc.memri_reg") memref)
-      ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))
+      ((_ sign_extend 48)
+       ((_ call "ppc.memri_offset")
+        memref)))
      ((_ extract 63 56) rS)))
    ('IP (bvadd 'IP #x0000000000000004)))))

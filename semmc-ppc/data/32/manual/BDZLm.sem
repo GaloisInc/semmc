@@ -8,8 +8,12 @@
     ('IP
      (ite
       (andp
-       ((_ call "test_bit_dynamic") ((_ zero_extend 27) #b00000) 'CR)
+       ((_ call "test_bit_dynamic")
+        ((_ zero_extend 27) #b00000)
+        'CR)
        (xorp (notp (bveq (bvsub 'CTR #x00000001) #x00000000)) (true)))
-      (bvadd ((_ sign_extend 16) (concat target #b00)) 'IP)
+      (bvadd
+       ((_ sign_extend 16) (concat target #b00))
+       'IP)
       (bvadd 'IP #x00000004)))
     ('CTR (bvsub 'CTR #x00000001))))))

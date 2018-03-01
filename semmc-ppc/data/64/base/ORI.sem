@@ -1,3 +1,5 @@
 ((operands ((rT . 'Gprc) (ui . 'U16imm) (rA . 'Gprc)))
  (in (ui rA 'IP))
- (defs ((rT (bvor rA ((_ zero_extend 48) ui))) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs
+  ((rT (bvor rA ((_ zero_extend 48) ui)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

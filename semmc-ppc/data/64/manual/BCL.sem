@@ -6,6 +6,8 @@
   (('LNK (bvadd 'IP #x0000000000000004))
    ('IP
     (ite
-     ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR)
+     ((_ call "test_bit_dynamic")
+      ((_ zero_extend 27) bi)
+      'CR)
      (bvadd ((_ sign_extend 48) (concat target #b00)) 'IP)
      (bvadd 'IP #x0000000000000004))))))

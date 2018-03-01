@@ -2,5 +2,5 @@
 ((operands ((FRT . 'Fprc)))
  (in ('FPSCR 'IP))
  (defs
-   ((FRT (concat 'FPSCR ((_ call "undefined") #x00000060)))
+  ((FRT (concat 'FPSCR ((_ call "undefined") #x00000060)))
    ('IP (bvadd 'IP #x00000004)))))

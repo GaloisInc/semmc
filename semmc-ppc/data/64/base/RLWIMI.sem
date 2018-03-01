@@ -1,5 +1,10 @@
 ;; Rotate Left Word Immediate then Mask Insert (M-form, RC=0)
-((operands ((rA . 'Gprc) (sh . 'U5imm) (mb . 'U5imm) (me . 'U5imm) (rS . 'Gprc)))
+((operands
+  ((rA . 'Gprc)
+   (sh . 'U5imm)
+   (mb . 'U5imm)
+   (me . 'U5imm)
+   (rS . 'Gprc)))
  (in (rA rS me mb sh 'IP))
  (defs
   ((rA
@@ -9,8 +14,8 @@
        (bvor
         (bvshl ((_ extract 63 32) rS) ((_ zero_extend 27) sh))
         (bvlshr
-          ((_ extract 63 32) rS)
-          (bvsub #x00000020 ((_ zero_extend 27) sh))))
+         ((_ extract 63 32) rS)
+         (bvsub #x00000020 ((_ zero_extend 27) sh))))
        (bvshl
         (bvlshr
          (bvlshr

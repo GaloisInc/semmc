@@ -12,7 +12,9 @@
        (bvadd
         ((_ call "ppc.memrr_offset") memrr)
         (ite
-         ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memrr))
+         ((_ call "ppc.is_r0")
+          ((_ call "ppc.memrr_base")
+           memrr))
          #x00000000
          ((_ call "ppc.memrr_base") memrr)))))))
    ('IP (bvadd 'IP #x00000004)))))

@@ -1,4 +1,6 @@
 ;; VSX Scalar Test for Software Square Root Double-Precision (XX2-form)
 ((operands ((bf . 'Crrc) (xB . 'Vsrc)))
  (in ('CR xB bf 'IP))
- (defs (('CR ((_ call "undefined") #x00000020)) ('IP (bvadd 'IP #x00000004)))))
+ (defs
+  (('CR ((_ call "undefined") #x00000020))
+   ('IP (bvadd 'IP #x00000004)))))

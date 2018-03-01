@@ -3,12 +3,14 @@
  (in ('Mem memref frS 'IP))
  (defs
   ((((_ call "ppc.memrr_base") memref)
-    (bvadd ((_ call "ppc.memrr_base") memref) ((_ call "ppc.memrr_offset") memref)))
+    (bvadd
+     ((_ call "ppc.memrr_base") memref)
+     ((_ call "ppc.memrr_offset") memref)))
    ('Mem
     ((_ call "write_mem.64")
      'Mem
      (bvadd
-       ((_ call "ppc.memrr_base") memref)
-       ((_ call "ppc.memrr_offset") memref))
+      ((_ call "ppc.memrr_base") memref)
+      ((_ call "ppc.memrr_offset") memref))
      ((_ extract 63 0) frS)))
    ('IP (bvadd 'IP #x00000004)))))

@@ -5,6 +5,9 @@
   (('LNK (bvadd 'IP #x00000004))
    ('IP
     (ite
-     (notp ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR))
+     (notp
+      ((_ call "test_bit_dynamic")
+       ((_ zero_extend 27) bi)
+       'CR))
      (concat ((_ extract 29 0) 'LNK) #b00)
      (bvadd 'IP #x00000004))))))

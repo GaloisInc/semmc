@@ -10,11 +10,12 @@
        (bvne
         (bvlshr
          (bvshl
-           rS
-           (bvsub #x0000000000000040 ((_ zero_extend 58) sh)))
+          rS
+          (bvsub #x0000000000000040 ((_ zero_extend 58) sh)))
          (bvsub #x0000000000000040 ((_ zero_extend 58) sh)))
         #x0000000000000000)
-       ((_ extract 0 0) (bvashr rS ((_ zero_extend 58) sh)))
+       ((_ extract 0 0)
+        (bvashr rS ((_ zero_extend 58) sh)))
        #b0)
       ((_ extract 63 35) 'XER))))
    (rA (bvashr rS ((_ zero_extend 58) sh)))

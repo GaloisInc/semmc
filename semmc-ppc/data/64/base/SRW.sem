@@ -3,6 +3,8 @@
  (in (rB rS 'IP))
  (defs
   ((rA
-     ((_ zero_extend 32)
-     (bvlshr ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB)))))
+    ((_ zero_extend 32)
+     (bvlshr
+      ((_ extract 63 32) rS)
+      ((_ zero_extend 27) ((_ extract 63 59) rB)))))
    ('IP (bvadd 'IP #x0000000000000004)))))

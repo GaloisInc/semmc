@@ -5,11 +5,11 @@
     (('CR
       (bvor
        (bvand
-         'CR
-         (bvnot
-          (bvshl
-           #x0000000f
-           (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+        'CR
+        (bvnot
+         (bvshl
+          #x0000000f
+          (bvmul ((_ zero_extend 29) #b000) #x00000004))))
        (bvshl
         ((_ zero_extend 28)
          (concat
@@ -19,23 +19,25 @@
              (bvor
               (bvshl rS ((_ zero_extend 58) sh))
               (bvlshr
-                rS
-                (bvsub
-                 #x0000000000000040
-                 ((_ zero_extend 58) sh))))
+               rS
+               (bvsub
+                #x0000000000000040
+                ((_ zero_extend 58) sh))))
              (bvshl
               (bvlshr
                (bvlshr
                 (bvshl
-                  ((_ sign_extend 63) #b1)
-                  ((_ zero_extend 58) mb))
+                 ((_ sign_extend 63) #b1)
+                 ((_ zero_extend 58) mb))
                 ((_ zero_extend 58) mb))
                (bvsub
                 #x000000000000003f
-                ((_ zero_extend 58) (bvsub #b111111 sh))))
+                ((_ zero_extend 58)
+                 (bvsub #b111111 sh))))
               (bvsub
                #x000000000000003f
-               ((_ zero_extend 58) (bvsub #b111111 sh)))))
+               ((_ zero_extend 58)
+                (bvsub #b111111 sh)))))
             #x0000000000000000)
            #b100
            (ite
@@ -44,24 +46,27 @@
               (bvor
                (bvshl rS ((_ zero_extend 58) sh))
                (bvlshr
-                 rS
-                 (bvsub
-                  #x0000000000000040
-                  ((_ zero_extend 58) sh))))
+                rS
+                (bvsub
+                 #x0000000000000040
+                 ((_ zero_extend 58) sh))))
               (bvshl
                (bvlshr
                 (bvlshr
                  (bvshl
-                   ((_ sign_extend 63) #b1)
-                   ((_ zero_extend 58) mb))
+                  ((_ sign_extend 63) #b1)
+                  ((_ zero_extend 58) mb))
                  ((_ zero_extend 58) mb))
                 (bvsub
                  #x000000000000003f
                  ((_ zero_extend 58)
-                  (bvsub #b111111 sh))))
+                  (bvsub
+                   #b111111
+                   sh))))
                (bvsub
                 #x000000000000003f
-                ((_ zero_extend 58) (bvsub #b111111 sh)))))
+                ((_ zero_extend 58)
+                 (bvsub #b111111 sh)))))
              #x0000000000000000)
             #b010
             #b001))
@@ -71,18 +76,20 @@
       (bvand
        (bvor
         (bvshl rS ((_ zero_extend 58) sh))
-        (bvlshr rS (bvsub #x0000000000000040 ((_ zero_extend 58) sh))))
+        (bvlshr
+         rS
+         (bvsub #x0000000000000040 ((_ zero_extend 58) sh))))
        (bvshl
         (bvlshr
          (bvlshr
           (bvshl ((_ sign_extend 63) #b1) ((_ zero_extend 58) mb))
           ((_ zero_extend 58) mb))
          (bvsub
-           #x000000000000003f
-           ((_ zero_extend 58) (bvsub #b111111 sh))))
-        (bvsub
           #x000000000000003f
-          ((_ zero_extend 58) (bvsub #b111111 sh))))))
+          ((_ zero_extend 58) (bvsub #b111111 sh))))
+        (bvsub
+         #x000000000000003f
+         ((_ zero_extend 58) (bvsub #b111111 sh))))))
      ('IP (bvadd 'IP #x0000000000000004))))))
  ((operands
    ((rA . 'Gprc) (mb . 'U6imm) (sh . 'U6imm) (rS . 'Gprc)))

@@ -10,11 +10,13 @@
        (bvne
         (bvlshr
          (bvshl
-           rS
-           (bvsub
-            #x00000020
-            ((_ zero_extend 27) ((_ extract 31 27) rB))))
-         (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 31 27) rB))))
+          rS
+          (bvsub
+           #x00000020
+           ((_ zero_extend 27) ((_ extract 31 27) rB))))
+         (bvsub
+          #x00000020
+          ((_ zero_extend 27) ((_ extract 31 27) rB))))
         #x00000000)
        ((_ extract 0 0) rS)
        #b0)

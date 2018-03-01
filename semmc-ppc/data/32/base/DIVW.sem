@@ -1,4 +1,5 @@
 ;; Divide Word (XO-form, RC=0)
 ((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
  (in (rB rA 'IP))
- (defs ((rT (bvsdiv rA rB)) ('IP (bvadd 'IP #x00000004)))))
+ (defs
+  ((rT (bvsdiv rA rB)) ('IP (bvadd 'IP #x00000004)))))

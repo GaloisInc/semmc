@@ -11,7 +11,9 @@
       (bvadd
        ((_ call "ppc.memrr_offset") memref)
        (ite
-        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+        ((_ call "ppc.is_r0")
+         ((_ call "ppc.memrr_base")
+          memref))
         #x00000000
         ((_ call "ppc.memrr_base") memref))))
      vrS))

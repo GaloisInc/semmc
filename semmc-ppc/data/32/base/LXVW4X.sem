@@ -9,7 +9,9 @@
       (bvadd
        ((_ call "ppc.memrr_offset") memref)
        (ite
-        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+        ((_ call "ppc.is_r0")
+         ((_ call "ppc.memrr_base")
+          memref))
         #x00000000
         ((_ call "ppc.memrr_base") memref))))
      (concat
@@ -19,7 +21,9 @@
         (bvadd
          ((_ call "ppc.memrr_offset") memref)
          (ite
-          ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+          ((_ call "ppc.is_r0")
+           ((_ call "ppc.memrr_base")
+            memref))
           #x00000000
           ((_ call "ppc.memrr_base") memref)))
         #x00000004))
@@ -30,7 +34,8 @@
          (bvadd
           ((_ call "ppc.memrr_offset") memref)
           (ite
-           ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+           ((_ call "ppc.is_r0")
+            ((_ call "ppc.memrr_base") memref))
            #x00000000
            ((_ call "ppc.memrr_base") memref)))
          #x00000008))
@@ -40,7 +45,8 @@
          (bvadd
           ((_ call "ppc.memrr_offset") memref)
           (ite
-           ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+           ((_ call "ppc.is_r0")
+            ((_ call "ppc.memrr_base") memref))
            #x00000000
            ((_ call "ppc.memrr_base") memref)))
          #x00000012))))))

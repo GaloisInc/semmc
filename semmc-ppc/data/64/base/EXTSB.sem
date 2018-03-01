@@ -2,4 +2,5 @@
 ((operands ((rA . 'Gprc) (rS . 'Gprc)))
  (in (rS 'IP))
  (defs
-   ((rA ((_ sign_extend 56) ((_ extract 63 56) rS))) ('IP (bvadd 'IP #x0000000000000004)))))
+  ((rA ((_ sign_extend 56) ((_ extract 63 56) rS)))
+   ('IP (bvadd 'IP #x0000000000000004)))))

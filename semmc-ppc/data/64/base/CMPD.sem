@@ -6,12 +6,12 @@
   (('CR
     (bvor
      (bvand
-       'CR
-       (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) fld) #x00000004))))
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) fld) #x00000004))))
      (bvshl
       ((_ zero_extend 28)
        (concat
-         (ite (bvslt rB rA) #b100 (ite (bvsgt rB rA) #b010 #b001))
-         ((_ extract 32 32) 'XER)))
+        (ite (bvslt rB rA) #b100 (ite (bvsgt rB rA) #b010 #b001))
+        ((_ extract 32 32) 'XER)))
       (bvmul ((_ zero_extend 29) fld) #x00000004))))
    ('IP (bvadd 'IP #x0000000000000004)))))

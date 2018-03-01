@@ -3,7 +3,7 @@
  (in (xT 'IP))
  (defs
   ((xT
-     (concat
-      ((_ zero_extend 32) ((_ extract 63 32) rA))
-      ((_ call "undefined") #x00000040)))
+    (concat
+     ((_ zero_extend 32) ((_ extract 63 32) rA))
+     ((_ call "undefined") #x00000040)))
    ('IP (bvadd 'IP #x0000000000000004)))))

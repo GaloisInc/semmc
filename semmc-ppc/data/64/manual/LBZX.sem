@@ -8,7 +8,9 @@
       'Mem
       (bvadd
        (ite
-        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+        ((_ call "ppc.is_r0")
+         ((_ call "ppc.memrr_base")
+          memref))
         #x0000000000000000
         ((_ call "ppc.memrr_base") memref))
        ((_ call "ppc.memrr_offset") memref)))))

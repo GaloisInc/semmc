@@ -5,22 +5,26 @@
   (('CR
     (bvor
      (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+      'CR
+      (bvnot
+       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
      (bvshl
       ((_ zero_extend 28)
        (concat
         (ite
          (bvslt
           ((_ extract 32 1)
-           (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB)))
+           (bvadd
+            ((_ zero_extend 1) rA)
+            ((_ zero_extend 1) rB)))
           #x00000000)
          #b100
          (ite
           (bvsgt
            ((_ extract 32 1)
-            (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB)))
+            (bvadd
+             ((_ zero_extend 1) rA)
+             ((_ zero_extend 1) rB)))
            #x00000000)
           #b010
           #b001))
@@ -30,7 +34,10 @@
     (concat
      ((_ extract 1 0) 'XER)
      (concat
-       ((_ extract 0 0) (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB)))
-       ((_ extract 31 3) 'XER))))
-   (rT ((_ extract 32 1) (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB))))
+      ((_ extract 0 0)
+       (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB)))
+      ((_ extract 31 3) 'XER))))
+   (rT
+    ((_ extract 32 1)
+     (bvadd ((_ zero_extend 1) rA) ((_ zero_extend 1) rB))))
    ('IP (bvadd 'IP #x00000004)))))

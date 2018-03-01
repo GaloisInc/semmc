@@ -11,8 +11,12 @@
      (bvshl
       (bvlshr
        (bvlshr
-         (bvshl ((_ sign_extend 63) #b1) ((_ zero_extend 58) mb))
-         ((_ zero_extend 58) mb))
-       (bvsub #x000000000000003f ((_ zero_extend 58) (bvsub #b111111 sh))))
-      (bvsub #x000000000000003f ((_ zero_extend 58) (bvsub #b111111 sh))))))
+        (bvshl ((_ sign_extend 63) #b1) ((_ zero_extend 58) mb))
+        ((_ zero_extend 58) mb))
+       (bvsub
+        #x000000000000003f
+        ((_ zero_extend 58) (bvsub #b111111 sh))))
+      (bvsub
+       #x000000000000003f
+       ((_ zero_extend 58) (bvsub #b111111 sh))))))
    ('IP (bvadd 'IP #x0000000000000004)))))

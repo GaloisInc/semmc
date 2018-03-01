@@ -4,15 +4,20 @@
  (in ('XER 'CR 'Mem memref rS 'IP))
  (defs
   (('CR
-     (bvor
-      'CR
-      ((_ zero_extend 28) (concat (concat #b00 #b1) ((_ extract 32 32) 'XER)))))
+    (bvor
+     'CR
+     ((_ zero_extend 28)
+      (concat
+       (concat #b00 #b1)
+       ((_ extract 32 32) 'XER)))))
    ('Mem
     ((_ call "write_mem.8")
      'Mem
      (bvadd
       (ite
-       ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
+       ((_ call "ppc.is_r0")
+        ((_ call "ppc.memrr_base")
+         memref))
        #x0000000000000000
        ((_ call "ppc.memrr_base") memref))
       ((_ call "ppc.memrr_offset") memref))

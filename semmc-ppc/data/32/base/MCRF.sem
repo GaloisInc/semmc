@@ -5,11 +5,13 @@
   (('CR
     (bvor
      (bvand
-       'CR
-       (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) BF) #x00000004))))
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) BF) #x00000004))))
      (bvshl
       ((_ zero_extend 28)
        ((_ extract 31 28)
-        (bvlshr 'CR (bvmul ((_ zero_extend 29) BFA) #x00000004))))
+        (bvlshr
+         'CR
+         (bvmul ((_ zero_extend 29) BFA) #x00000004))))
       (bvmul ((_ zero_extend 29) BF) #x00000004))))
    ('IP (bvadd 'IP #x00000004)))))
