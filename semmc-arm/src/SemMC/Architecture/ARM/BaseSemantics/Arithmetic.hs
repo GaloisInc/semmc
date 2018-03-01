@@ -83,6 +83,29 @@ manualArithmetic = do
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+  defineA32Opcode A.MOVsi (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "regimm" shift_so_reg_imm (EBV 16)
+                         )
+                      $ \rD setcc _ imm -> do
+    comment "MOV immediate, A32, Encoding A1  (F7.1.107, F7-2708)"
+    -- note: that encoding is instr 0xe3auDiii, u=undefined, D=rD, i=imm, s=lo-bit of a
+    -- but actual is:               0xe1a0Diii
+    input setcc
+    input imm
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        imm12 = extract 11 0 (Loc imm)
+        (_,_,c,v) = getNZCV
+        (imm32, c') = armExpandImmC' imm12 c
+        result = imm32
+        n = extract 31 31 result
+        z = isZeroBit result
+        nzcv = concat n $ concat z $ concat c' v
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
   defineA32Opcode A.SUBri (Empty
                           :> ParamDef "rD" gpr naturalBV
