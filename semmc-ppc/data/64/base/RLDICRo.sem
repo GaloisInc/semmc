@@ -69,6 +69,7 @@
          (bvsub #x000000000000003f ((_ zero_extend 58) mb)))
         (bvsub #x000000000000003f ((_ zero_extend 58) mb)))))
      ('IP (bvadd 'IP #x0000000000000004))))))
- ((operands ((rA . 'Gprc) (sh . 'U6imm) (mb . 'U6imm) (rS . 'Gprc)))
+ ((operands
+   ((rA . 'Gprc) (mb . 'U6imm) (sh . 'U6imm) (rS . 'Gprc)))
   (in ('XER 'CR mb sh rS 'IP))
   (var1)))
