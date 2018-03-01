@@ -69,6 +69,9 @@ so_reg_reg = "So_reg_reg"
 so_reg_imm :: String
 so_reg_imm = "So_reg_imm"
 
+imm0_7 :: String
+imm0_7 = "Imm0_7"
+
 -- | The 'unpredictableInstrBits' operand is used to define bits in
 -- the instruction encoding that the architecture specification
 -- declares as "unpredictable" and which may have different values
@@ -99,6 +102,7 @@ type instance TL.Apply SymToExprTagWrapper x = SymToExprTag x
 type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "GPR" = 'TBV
   SymToExprTag "Mod_imm" = 'TBV
+  SymToExprTag "Imm0_7" = 'TBV
   SymToExprTag "Pred" = 'TBV
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12" = 'TMemRef

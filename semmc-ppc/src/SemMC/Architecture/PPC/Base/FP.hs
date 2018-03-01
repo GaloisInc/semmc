@@ -297,6 +297,54 @@ floatingPoint = do
     comment "Floating Round to Single-Precision (X-form)"
     fp1op "FRSP"
 
+  defineOpcodeWithIP "FCTID" $ do
+    comment "Floating Point Convert to Integer Doubleword (X-form)"
+    fp1op "FCTID"
+
+  defineOpcodeWithIP "FCTIDZ" $ do
+    comment "Floating Point Convert to Integer Doubleword with Round Towards Zero (X-form)"
+    fp1op "FCTIDZ"
+
+  defineOpcodeWithIP "FCTIDU" $ do
+    comment "Floating Point Convert to Integer Doubleword Unsigned (X-form)"
+    fp1op "FCTIDU"
+
+  defineOpcodeWithIP "FCTIDUZ" $ do
+    comment "Floating Point Convert to Integer Doubleword Unsigned with Round Towards Zero (X-form)"
+    fp1op "FCTIDUZ"
+
+  defineOpcodeWithIP "FCTIW" $ do
+    comment "Floating Point Convert to Integer Word (X-form)"
+    fp1op "FCTIW"
+
+  defineOpcodeWithIP "FCTIWZ" $ do
+    comment "Floating Point Convert to Integer Word with Round Towards Zero (X-form)"
+    fp1op "FCTIWZ"
+
+  defineOpcodeWithIP "FCTIWU" $ do
+    comment "Floating Point Convert to Integer Word Unsigned (X-form)"
+    fp1op "FCTIWU"
+
+  defineOpcodeWithIP "FCTIWUZ" $ do
+    comment "Floating Point Convert to Integer Word Unsigned with Round Towards Zero (X-form)"
+    fp1op "FCTIWUZ"
+
+  defineOpcodeWithIP "FCFID" $ do
+    comment "Floating Point Convert from Integer Doubleword (X-form)"
+    fp1op "FCFID"
+
+  defineOpcodeWithIP "FCFIDU" $ do
+    comment "Floating Point Convert from Integer Doubleword Unsigned (X-form)"
+    fp1op "FCFIDU"
+
+  defineOpcodeWithIP "FCFIDS" $ do
+    comment "Floating Point Convert from Integer Doubleword Single (X-form)"
+    fp1op "FCFIDS"
+
+  defineOpcodeWithIP "FCFIDUS" $ do
+    comment "Floating Point Convert from Integer Doubleword Unsigned Single (X-form)"
+    fp1op "FCFIDUS"
+
   defineOpcodeWithIP "FNEGD" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
@@ -417,6 +465,14 @@ floatingPointLoads = do
   defineOpcodeWithIP "LFDUX" $ do
     comment "Load Floating-Point Single with Update Indexed (X-form)"
     loadFloatWithUpdateIndexed 8 id
+
+  defineOpcodeWithIP "LFIWAX" $ do
+    comment "Load Floating-Point as Integer Word Algebraic Indexed (X-form)"
+    loadFloatIndexed 4 (sext' 64)
+
+  defineOpcodeWithIP "LFIWZX" $ do
+    comment "Load Floating-Point as Integer Word Zero Indexed (X-form)"
+    loadFloatIndexed 4 (zext' 64)
   return ()
 
 
@@ -511,6 +567,10 @@ floatingPointStores = do
   defineOpcodeWithIP "STFDUX" $ do
     comment "Store Floating-Point Double with Update Indexed (X-form)"
     storeFloatWithUpdateIndexed 8 id
+
+  defineOpcodeWithIP "STFIWX" $ do
+    comment "Store Floating-Point as Integer Word Indexed (X-form)"
+    storeFloatIndexed 4 (lowBits' 32)
   return ()
 
 

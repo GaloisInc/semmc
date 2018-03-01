@@ -47,6 +47,19 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+  defineT32Opcode T.TADDi3 (Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "imm" imm0_7 (EBV 3)
+                           :> ParamDef "rN" gpr naturalBV
+                           )
+                       $ \rD imm3 rN -> do
+    comment "ADD immediate, T32, encoding T1 (F7.1.4, F7-2540)"
+    input rN
+    input imm3
+    let setflags = notp inITBlock
+        imm32    = zext (Loc imm3)
+    tadd rD rN imm32 setflags
+
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -332,3 +345,14 @@ andrsr rD rM rN setflags shift_t rS = do
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
+
+tadd :: (HasCallStack)
+     => Location 'TBV
+     -> Location 'TBV
+     -> Expr 'TBV
+     -> Expr 'TBool
+     -> SemARM 'Def ()
+tadd rD rN imm32 setflags = do
+  let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 1 0b0)
+  defReg rD result
+  cpsrNZCV setflags nzcv
