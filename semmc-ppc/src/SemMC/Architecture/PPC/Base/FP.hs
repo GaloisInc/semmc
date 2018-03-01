@@ -465,6 +465,14 @@ floatingPointLoads = do
   defineOpcodeWithIP "LFDUX" $ do
     comment "Load Floating-Point Single with Update Indexed (X-form)"
     loadFloatWithUpdateIndexed 8 id
+
+  defineOpcodeWithIP "LFIWAX" $ do
+    comment "Load Floating-Point as Integer Word Algebraic Indexed (X-form)"
+    loadFloatIndexed 4 (sext' 64)
+
+  defineOpcodeWithIP "LFIWZX" $ do
+    comment "Load Floating-Point as Integer Word Zero Indexed (X-form)"
+    loadFloatIndexed 4 (zext' 64)
   return ()
 
 
@@ -559,6 +567,10 @@ floatingPointStores = do
   defineOpcodeWithIP "STFDUX" $ do
     comment "Store Floating-Point Double with Update Indexed (X-form)"
     storeFloatWithUpdateIndexed 8 id
+
+  defineOpcodeWithIP "STFIWX" $ do
+    comment "Store Floating-Point as Integer Word Indexed (X-form)"
+    storeFloatIndexed 4 (lowBits' 32)
   return ()
 
 
