@@ -1,15 +1,14 @@
 ;; Load Halfword and Zero (D-form)
-((operands ((rT . 'Gprc) (memref . 'Memri)))
+((operands ((rT . 'Gprc) (memref . 'Memri))) 
  (in ('Mem memref 'IP))
- (defs
-  ((rT
-    ((_ zero_extend 16)
-     ((_ call "read_mem.16")
+ (defs 
+  ((rT 
+    ((_ zero_extend 16) 
+     ((_ call "read_mem.16") 
       'Mem
-      (bvadd
-       (ite
+      (bvadd 
+       (ite 
         ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
         #x00000000
         ((_ call "ppc.memri_reg") memref))
-       ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref))))))
-   ('IP (bvadd 'IP #x00000004)))))
+       ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref)))))) ('IP (bvadd 'IP #x00000004)))))

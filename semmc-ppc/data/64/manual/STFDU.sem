@@ -1,15 +1,15 @@
 ;; Store Floating-Point Double with Update (D-form)
-((operands ((memref . 'Memri) (frS . 'Fprc)))
+((operands ((memref . 'Memri) (frS . 'Fprc))) 
  (in ('Mem memref frS 'IP))
- (defs
-  ((((_ call "ppc.memri_reg") memref)
-    (bvadd
+ (defs 
+  ((((_ call "ppc.memri_reg") memref) 
+    (bvadd 
      ((_ call "ppc.memri_reg") memref)
-     ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref))))
-   ('Mem
-    ((_ call "write_mem.64")
+     ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))) 
+   ('Mem 
+    ((_ call "write_mem.64") 
      'Mem
-     (bvadd
+     (bvadd 
       ((_ call "ppc.memri_reg") memref)
       ((_ sign_extend 48) ((_ call "ppc.memri_offset") memref)))
      ((_ extract 63 0) frS)))

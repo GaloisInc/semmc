@@ -1,15 +1,14 @@
 ;; Store Byte Indexed (X-form)
-((operands ((memref . 'Memrr) (rS . 'Gprc)))
+((operands ((memref . 'Memrr) (rS . 'Gprc))) 
  (in ('Mem memref rS 'IP))
- (defs
-  (('Mem
-    ((_ call "write_mem.8")
+ (defs 
+  (('Mem 
+    ((_ call "write_mem.8") 
      'Mem
-     (bvadd
-      (ite
+     (bvadd 
+      (ite 
        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
        #x00000000
        ((_ call "ppc.memrr_base") memref))
       ((_ call "ppc.memrr_offset") memref))
-     ((_ extract 31 24) rS)))
-   ('IP (bvadd 'IP #x00000004)))))
+     ((_ extract 31 24) rS))) ('IP (bvadd 'IP #x00000004)))))

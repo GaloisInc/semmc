@@ -1,16 +1,15 @@
 ;; Load Floating-Point Double (D-form)
-((operands ((frT . 'Fprc) (memref . 'Memri)))
+((operands ((frT . 'Fprc) (memref . 'Memri))) 
  (in ('Mem memref 'IP))
- (defs
-  ((frT
-    (concat
+ (defs 
+  ((frT 
+    (concat 
      #x0000000000000000
-     ((_ call "read_mem.64")
+     ((_ call "read_mem.64") 
       'Mem
-      (bvadd
-       (ite
+      (bvadd 
+       (ite 
         ((_ call "ppc.is_r0") ((_ call "ppc.memri_reg") memref))
         #x00000000
         ((_ call "ppc.memri_reg") memref))
-       ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref))))))
-   ('IP (bvadd 'IP #x00000004)))))
+       ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref)))))) ('IP (bvadd 'IP #x00000004)))))

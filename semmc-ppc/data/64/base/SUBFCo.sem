@@ -1,51 +1,46 @@
 ;; Subtract From Carrying (XO-form, RC=1)
-((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
  (in ('XER 'CR 'XER rB rA 'IP))
- (defs
-  (('CR
-    (bvor
-     (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-        (ite
-         (bvslt
-          ((_ extract 64 1)
-           (bvadd
-            (bvadd
-              (bvnot ((_ zero_extend 1) rA))
-              ((_ zero_extend 1) rB))
+ (defs 
+  (('CR 
+    (bvor 
+     (bvand 
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl 
+      ((_ zero_extend 28) 
+       (concat 
+        (ite 
+         (bvslt 
+          ((_ extract 64 1) 
+           (bvadd 
+            (bvadd (bvnot ((_ zero_extend 1) rA)) ((_ zero_extend 1) rB))
             #b00000000000000000000000000000000000000000000000000000000000000001))
           #x0000000000000000)
          #b100
-         (ite
-          (bvsgt
-           ((_ extract 64 1)
-            (bvadd
-             (bvadd
-               (bvnot ((_ zero_extend 1) rA))
-               ((_ zero_extend 1) rB))
+         (ite 
+          (bvsgt 
+           ((_ extract 64 1) 
+            (bvadd 
+             (bvadd (bvnot ((_ zero_extend 1) rA)) ((_ zero_extend 1) rB))
              #b00000000000000000000000000000000000000000000000000000000000000001))
            #x0000000000000000)
           #b010
           #b001))
         ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-   ('XER
-    (concat
+      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
+   ('XER 
+    (concat 
      ((_ extract 33 0) 'XER)
-     (concat
-      ((_ extract 0 0)
-       (bvadd
+     (concat 
+      ((_ extract 0 0) 
+       (bvadd 
         (bvadd (bvnot ((_ zero_extend 1) rA)) ((_ zero_extend 1) rB))
         #b00000000000000000000000000000000000000000000000000000000000000001))
       ((_ extract 63 35) 'XER))))
-   (rT
-    ((_ extract 64 1)
-     (bvadd
+   (rT 
+    ((_ extract 64 1) 
+     (bvadd 
       (bvadd (bvnot ((_ zero_extend 1) rA)) ((_ zero_extend 1) rB))
       #b00000000000000000000000000000000000000000000000000000000000000001)))
    ('IP (bvadd 'IP #x0000000000000004)))))

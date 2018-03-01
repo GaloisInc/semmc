@@ -1,17 +1,17 @@
 ;; Load Floating-Point Double with Update (D-form)
-((operands ((frT . 'Fprc) (memref . 'Memri)))
+((operands ((frT . 'Fprc) (memref . 'Memri))) 
  (in (memref 'Mem 'IP))
- (defs
-  ((((_ call "ppc.memri_reg") memref)
-    (bvadd
+ (defs 
+  ((((_ call "ppc.memri_reg") memref) 
+    (bvadd 
      ((_ call "ppc.memri_reg") memref)
-     ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref))))
-   (frT
-    (concat
+     ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref)))) 
+   (frT 
+    (concat 
      #x0000000000000000
-     ((_ call "read_mem.64")
+     ((_ call "read_mem.64") 
       'Mem
-      (bvadd
+      (bvadd 
        ((_ call "ppc.memri_reg") memref)
        ((_ sign_extend 16) ((_ call "ppc.memri_offset") memref))))))
    ('IP (bvadd 'IP #x00000004)))))

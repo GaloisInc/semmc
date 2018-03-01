@@ -1,5 +1,5 @@
 ;; BCTR : BCCTR (XL-form, LK=0)
 ;; This is a specialized unconditional BCCTR
-((operands ())
+((operands ()) 
  (in ('IP 'CTR))
  (defs (('LNK (bvadd 'IP #x00000004)) ('IP (concat ((_ extract 29 0) 'CTR) #b00)))))

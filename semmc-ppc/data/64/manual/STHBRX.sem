@@ -1,17 +1,16 @@
 ;; Store Halfword Byte-Reverse Indexed (X-form)
-((operands ((memref . 'Memrr) (rS . 'Gprc)))
+((operands ((memref . 'Memrr) (rS . 'Gprc))) 
  (in ('Mem memref rS 'IP))
- (defs
-  (('Mem
-    ((_ call "write_mem.16")
+ (defs 
+  (('Mem 
+    ((_ call "write_mem.16") 
      'Mem
-     (bvadd
-      (ite
+     (bvadd 
+      (ite 
        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
        #x0000000000000000
        ((_ call "ppc.memrr_base") memref))
       ((_ call "ppc.memrr_offset") memref))
-     (concat
-       ((_ extract 7 0) ((_ extract 63 48) rS))
-       ((_ extract 15 8) ((_ extract 63 48) rS)))))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+     (concat 
+      ((_ extract 7 0) ((_ extract 63 48) rS))
+      ((_ extract 15 8) ((_ extract 63 48) rS))))) ('IP (bvadd 'IP #x0000000000000004)))))

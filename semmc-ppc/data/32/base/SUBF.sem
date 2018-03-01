@@ -1,4 +1,2 @@
 ;; SUBF (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
- (in (rB rA 'IP))
- (defs ((rT (bvsub rB rA)) ('IP (bvadd 'IP #x00000004)))))
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) (in (rB rA 'IP)) (defs ((rT (bvsub rB rA)) ('IP (bvadd 'IP #x00000004)))))

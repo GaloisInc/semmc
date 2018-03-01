@@ -1,6 +1,5 @@
 ;; Multiply High Word Unsigned (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
  (in (rB rA 'IP))
- (defs
-  ((rT ((_ extract 31 0) (bvmul ((_ zero_extend 32) rA) ((_ zero_extend 32) rB))))
-   ('IP (bvadd 'IP #x00000004)))))
+ (defs 
+  ((rT ((_ extract 31 0) (bvmul ((_ zero_extend 32) rA) ((_ zero_extend 32) rB)))) ('IP (bvadd 'IP #x00000004)))))

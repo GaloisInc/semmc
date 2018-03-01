@@ -1,17 +1,16 @@
 ;; Store Vector Indexed (X-form)
-((operands ((memref . 'Memrr) (vrS . 'Vrrc)))
+((operands ((memref . 'Memrr) (vrS . 'Vrrc))) 
  (in (memref 'Mem vrS 'IP))
- (defs
-  (('Mem
-    ((_ call "write_mem.128")
+ (defs 
+  (('Mem 
+    ((_ call "write_mem.128") 
      'Mem
-     (bvand
+     (bvand 
       ((_ sign_extend 56) #xfe)
-      (bvadd
+      (bvadd 
        ((_ call "ppc.memrr_offset") memref)
-       (ite
+       (ite 
         ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
         #x0000000000000000
         ((_ call "ppc.memrr_base") memref))))
-     vrS))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+     vrS)) ('IP (bvadd 'IP #x0000000000000004)))))

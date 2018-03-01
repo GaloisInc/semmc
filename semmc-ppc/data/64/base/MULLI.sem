@@ -1,4 +1,4 @@
 ;; Multiply Low Immediate (D-form)
-((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc)))
+((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc))) 
  (in (si rA 'IP))
  (defs ((rT (bvmul rA ((_ sign_extend 48) si))) ('IP (bvadd 'IP #x0000000000000004)))))

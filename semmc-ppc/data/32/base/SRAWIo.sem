@@ -1,32 +1,28 @@
 ;; Shift Right Algebraic Word Immediate (X-form, RC=1)
-((operands ((rA . 'Gprc) (sh . 'U5imm) (rS . 'Gprc)))
+((operands ((rA . 'Gprc) (sh . 'U5imm) (rS . 'Gprc))) 
  (in ('XER 'CR 'XER rS sh 'IP))
- (defs
-  (('CR
-    (bvor
-     (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-        (ite
+ (defs 
+  (('CR 
+    (bvor 
+     (bvand 
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl 
+      ((_ zero_extend 28) 
+       (concat 
+        (ite 
          (bvslt (bvashr rS ((_ zero_extend 27) sh)) #x00000000)
          #b100
-         (ite
-           (bvsgt (bvashr rS ((_ zero_extend 27) sh)) #x00000000)
-           #b010
-           #b001))
+         (ite (bvsgt (bvashr rS ((_ zero_extend 27) sh)) #x00000000) #b010 #b001))
         ((_ extract 0 0) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-   ('XER
-    (concat
+      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
+   ('XER 
+    (concat 
      ((_ extract 1 0) 'XER)
-     (concat
-      (ite
-       (bvne
-        (bvlshr
+     (concat 
+      (ite 
+       (bvne 
+        (bvlshr 
          (bvshl rS (bvsub #x00000020 ((_ zero_extend 27) sh)))
          (bvsub #x00000020 ((_ zero_extend 27) sh)))
         #x00000000)

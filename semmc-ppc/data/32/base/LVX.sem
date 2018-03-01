@@ -1,16 +1,15 @@
 ;; Load Vector Indexed (X-form)
-((operands ((vrT . 'Vrrc) (memrr . 'Memrr)))
+((operands ((vrT . 'Vrrc) (memrr . 'Memrr))) 
  (in (memrr 'Mem 'IP))
- (defs
-  ((vrT
-    ((_ call "read_mem.128")
+ (defs 
+  ((vrT 
+    ((_ call "read_mem.128") 
      'Mem
-     (bvand
+     (bvand 
       ((_ sign_extend 24) #xfe)
-      (bvadd
+      (bvadd 
        ((_ call "ppc.memrr_offset") memrr)
-       (ite
+       (ite 
         ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memrr))
         #x00000000
-        ((_ call "ppc.memrr_base") memrr))))))
-   ('IP (bvadd 'IP #x00000004)))))
+        ((_ call "ppc.memrr_base") memrr)))))) ('IP (bvadd 'IP #x00000004)))))

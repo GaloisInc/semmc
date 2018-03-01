@@ -1,11 +1,10 @@
 ;; Multiply Low Word (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
+((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc))) 
  (in (rB rA 'IP))
- (defs
-  ((rT
-    ((_ zero_extend 32)
-     ((_ extract 63 32)
-      (bvmul
-        ((_ sign_extend 32) ((_ extract 63 32) rA))
-        ((_ sign_extend 32) ((_ extract 63 32) rB))))))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs 
+  ((rT 
+    ((_ zero_extend 32) 
+     ((_ extract 63 32) 
+      (bvmul 
+       ((_ sign_extend 32) ((_ extract 63 32) rA))
+       ((_ sign_extend 32) ((_ extract 63 32) rB)))))) ('IP (bvadd 'IP #x0000000000000004)))))

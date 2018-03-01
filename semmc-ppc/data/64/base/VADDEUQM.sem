@@ -1,7 +1,7 @@
 ;; Vector Add Extended Unsigned Quadword Modulo (VA-form)
-((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc) (vrC . 'Vrrc)))
+((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc) (vrC . 'Vrrc))) 
  (in ('VSCR vrC vrB vrA 'IP))
- (defs
-  (('VSCR ((_ extract 159 128) ((_ call "ppc.vec3") "VADDEUQM" vrA vrB vrC 'VSCR)))
+ (defs 
+  (('VSCR ((_ extract 159 128) ((_ call "ppc.vec3") "VADDEUQM" vrA vrB vrC 'VSCR))) 
    (vrT ((_ extract 127 0) ((_ call "ppc.vec3") "VADDEUQM" vrA vrB vrC 'VSCR)))
    ('IP (bvadd 'IP #x0000000000000004)))))

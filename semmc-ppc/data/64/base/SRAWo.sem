@@ -1,53 +1,45 @@
 ;; Shift Right Algebraic Word (X-form, RC=1)
-((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc)))
+((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc))) 
  (in ('XER 'CR 'XER rB rS 'IP))
- (defs
-  (('CR
-    (bvor
-     (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-        (ite
-         (bvslt
-          ((_ sign_extend 32)
-           (bvashr
-             ((_ extract 63 32) rS)
-             ((_ zero_extend 27) ((_ extract 63 59) rB))))
+ (defs 
+  (('CR 
+    (bvor 
+     (bvand 
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl 
+      ((_ zero_extend 28) 
+       (concat 
+        (ite 
+         (bvslt 
+          ((_ sign_extend 32) 
+           (bvashr ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB))))
           #x0000000000000000)
          #b100
-         (ite
-          (bvsgt
-           ((_ sign_extend 32)
-            (bvashr
-              ((_ extract 63 32) rS)
-              ((_ zero_extend 27) ((_ extract 63 59) rB))))
+         (ite 
+          (bvsgt 
+           ((_ sign_extend 32) 
+            (bvashr ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB))))
            #x0000000000000000)
           #b010
           #b001))
         ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-   ('XER
-    (concat
+      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
+   ('XER 
+    (concat 
      ((_ extract 33 0) 'XER)
-     (concat
-      (ite
-       (bvne
-        (bvlshr
-         (bvshl
+     (concat 
+      (ite 
+       (bvne 
+        (bvlshr 
+         (bvshl 
           ((_ extract 63 32) rS)
-          (bvsub
-            #x00000020
-            ((_ zero_extend 27) ((_ extract 63 59) rB))))
+          (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 63 59) rB))))
          (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 63 59) rB))))
         #x00000000)
        ((_ extract 0 0) ((_ extract 63 32) rS))
        #b0)
       ((_ extract 63 35) 'XER))))
-   (rA
-     ((_ sign_extend 32)
-     (bvashr ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB)))))
+   (rA 
+    ((_ sign_extend 32) (bvashr ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB)))))
    ('IP (bvadd 'IP #x0000000000000004)))))

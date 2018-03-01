@@ -1,24 +1,18 @@
 ;; Negate (XO-form, RC=1)
-((operands ((rT . 'Gprc) (rA . 'Gprc)))
+((operands ((rT . 'Gprc) (rA . 'Gprc))) 
  (in ('XER 'CR rA 'IP))
- (defs
-  (('CR
-    (bvor
-     (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-        (ite
+ (defs 
+  (('CR 
+    (bvor 
+     (bvand 
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl 
+      ((_ zero_extend 28) 
+       (concat 
+        (ite 
          (bvslt (bvadd (bvnot rA) #x00000001) #x00000000)
          #b100
-         (ite
-           (bvsgt (bvadd (bvnot rA) #x00000001) #x00000000)
-           #b010
-           #b001))
+         (ite (bvsgt (bvadd (bvnot rA) #x00000001) #x00000000) #b010 #b001))
         ((_ extract 0 0) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-   (rT (bvadd (bvnot rA) #x00000001))
-   ('IP (bvadd 'IP #x00000004)))))
+      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) (rT (bvadd (bvnot rA) #x00000001)) ('IP (bvadd 'IP #x00000004)))))

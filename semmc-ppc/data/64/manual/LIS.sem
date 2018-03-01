@@ -1,4 +1,4 @@
-((operands ((rT . 'Gprc) (imm . 'S17imm)))
+((operands ((rT . 'Gprc) (imm . 'S17imm))) 
  (in (imm 'IP))
- (defs
-   ((rT ((_ sign_extend 32) (concat imm #x0000))) ('IP (bvadd 'IP #x0000000000000004)))))
+ (defs 
+  ((rT ((_ sign_extend 32) (concat imm #x0000))) ('IP (bvadd 'IP #x0000000000000004)))))

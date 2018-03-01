@@ -1,20 +1,19 @@
 ;; Rotate Left Word then AND with Mask (M-form, RC=0)
-((operands ((rA . 'Gprc) (mb . 'U5imm) (me . 'U5imm) (rS . 'Gprc) (rB . 'Gprc)))
+((operands ((rA . 'Gprc) (mb . 'U5imm) (me . 'U5imm) (rS . 'Gprc) (rB . 'Gprc))) 
  (in (rS me mb rB 'IP))
- (defs
-  ((rA
-    ((_ zero_extend 32)
-     (bvand
-      (bvor
+ (defs 
+  ((rA 
+    ((_ zero_extend 32) 
+     (bvand 
+      (bvor 
        (bvshl ((_ extract 63 32) rS) ((_ zero_extend 27) ((_ extract 63 59) rB)))
-       (bvlshr
-         ((_ extract 63 32) rS)
-         (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 63 59) rB)))))
-      (bvshl
-       (bvlshr
-        (bvlshr
-          (bvshl ((_ sign_extend 31) #b1) ((_ zero_extend 27) mb))
-          ((_ zero_extend 27) mb))
+       (bvlshr 
+        ((_ extract 63 32) rS)
+        (bvsub #x00000020 ((_ zero_extend 27) ((_ extract 63 59) rB)))))
+      (bvshl 
+       (bvlshr 
+        (bvlshr 
+         (bvshl ((_ sign_extend 31) #b1) ((_ zero_extend 27) mb))
+         ((_ zero_extend 27) mb))
         (bvsub #x0000001f ((_ zero_extend 27) me)))
-       (bvsub #x0000001f ((_ zero_extend 27) me))))))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+       (bvsub #x0000001f ((_ zero_extend 27) me)))))) ('IP (bvadd 'IP #x0000000000000004)))))

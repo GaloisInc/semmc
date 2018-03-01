@@ -1,28 +1,23 @@
 ;; Extend Sign Word (X-form, RC=1)
-((operands ((rA . 'Gprc) (rS . 'Gprc)))
+((operands ((rA . 'Gprc) (rS . 'Gprc))) 
  (in ('XER 'CR rS 'IP))
- (defs
-  (('CR
-    (bvor
-     (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-        (ite
-         (bvslt
-           ((_ sign_extend 32) ((_ extract 63 32) rS))
-           #x0000000000000000)
+ (defs 
+  (('CR 
+    (bvor 
+     (bvand 
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl 
+      ((_ zero_extend 28) 
+       (concat 
+        (ite 
+         (bvslt ((_ sign_extend 32) ((_ extract 63 32) rS)) #x0000000000000000)
          #b100
-         (ite
-          (bvsgt
-            ((_ sign_extend 32) ((_ extract 63 32) rS))
-            #x0000000000000000)
+         (ite 
+          (bvsgt ((_ sign_extend 32) ((_ extract 63 32) rS)) #x0000000000000000)
           #b010
           #b001))
         ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) 
    (rA ((_ sign_extend 32) ((_ extract 63 32) rS)))
    ('IP (bvadd 'IP #x0000000000000004)))))

@@ -1,21 +1,18 @@
 ;; Count Leading Zeros Word (X-form, RC=1)
-((operands ((rA . 'Gprc) (rS . 'Gprc)))
+((operands ((rA . 'Gprc) (rS . 'Gprc))) 
  (in ('XER 'CR rS 'IP))
- (defs
-  (('CR
-    (bvor
-     (bvand
-       'CR
-       (bvnot
-        (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-        (ite
+ (defs 
+  (('CR 
+    (bvor 
+     (bvand 
+      'CR
+      (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
+     (bvshl 
+      ((_ zero_extend 28) 
+       (concat 
+        (ite 
          (bvslt ((_ call "clz.32") rS) #x00000000)
          #b100
          (ite (bvsgt ((_ call "clz.32") rS) #x00000000) #b010 #b001))
         ((_ extract 0 0) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-   (rA ((_ call "clz.32") rS))
-   ('IP (bvadd 'IP #x00000004)))))
+      (bvmul ((_ zero_extend 29) #b000) #x00000004)))) (rA ((_ call "clz.32") rS)) ('IP (bvadd 'IP #x00000004)))))

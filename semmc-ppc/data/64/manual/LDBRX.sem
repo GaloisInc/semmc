@@ -1,92 +1,85 @@
 ;; Load Doubleword Byte-Reverse Indexed (X-form)
-(let
- ((var1
-   (defs
-    ((rT
-      (concat
-       ((_ extract 7 0)
-        ((_ call "read_mem.64")
+(let 
+ ((var1 
+   (defs 
+    ((rT 
+      (concat 
+       ((_ extract 7 0) 
+        ((_ call "read_mem.64") 
          'Mem
-         (bvadd
-          (ite
+         (bvadd 
+          (ite 
            ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
            #x0000000000000000
            ((_ call "ppc.memrr_base") memref))
           ((_ call "ppc.memrr_offset") memref))))
-       (concat
-        ((_ extract 15 8)
-         ((_ call "read_mem.64")
+       (concat 
+        ((_ extract 15 8) 
+         ((_ call "read_mem.64") 
           'Mem
-          (bvadd
-           (ite
+          (bvadd 
+           (ite 
             ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
             #x0000000000000000
             ((_ call "ppc.memrr_base") memref))
            ((_ call "ppc.memrr_offset") memref))))
-        (concat
-         ((_ extract 23 16)
-          ((_ call "read_mem.64")
+        (concat 
+         ((_ extract 23 16) 
+          ((_ call "read_mem.64") 
            'Mem
-           (bvadd
-            (ite
-             ((_ call "ppc.is_r0")
-              ((_ call "ppc.memrr_base") memref))
+           (bvadd 
+            (ite 
+             ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
              #x0000000000000000
              ((_ call "ppc.memrr_base") memref))
             ((_ call "ppc.memrr_offset") memref))))
-         (concat
-          ((_ extract 31 24)
-           ((_ call "read_mem.64")
+         (concat 
+          ((_ extract 31 24) 
+           ((_ call "read_mem.64") 
             'Mem
-            (bvadd
-             (ite
-              ((_ call "ppc.is_r0")
-               ((_ call "ppc.memrr_base") memref))
+            (bvadd 
+             (ite 
+              ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
               #x0000000000000000
               ((_ call "ppc.memrr_base") memref))
              ((_ call "ppc.memrr_offset") memref))))
-          (concat
-           ((_ extract 39 32)
-            ((_ call "read_mem.64")
+          (concat 
+           ((_ extract 39 32) 
+            ((_ call "read_mem.64") 
              'Mem
-             (bvadd
-              (ite
-               ((_ call "ppc.is_r0")
-                ((_ call "ppc.memrr_base") memref))
+             (bvadd 
+              (ite 
+               ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
                #x0000000000000000
                ((_ call "ppc.memrr_base") memref))
               ((_ call "ppc.memrr_offset") memref))))
-           (concat
-            ((_ extract 47 40)
-             ((_ call "read_mem.64")
+           (concat 
+            ((_ extract 47 40) 
+             ((_ call "read_mem.64") 
               'Mem
-              (bvadd
-               (ite
-                ((_ call "ppc.is_r0")
-                 ((_ call "ppc.memrr_base") memref))
+              (bvadd 
+               (ite 
+                ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
                 #x0000000000000000
                 ((_ call "ppc.memrr_base") memref))
                ((_ call "ppc.memrr_offset") memref))))
-            (concat
-             ((_ extract 55 48)
-              ((_ call "read_mem.64")
+            (concat 
+             ((_ extract 55 48) 
+              ((_ call "read_mem.64") 
                'Mem
-               (bvadd
-                (ite
-                 ((_ call "ppc.is_r0")
-                  ((_ call "ppc.memrr_base") memref))
+               (bvadd 
+                (ite 
+                 ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
                  #x0000000000000000
                  ((_ call "ppc.memrr_base") memref))
                 ((_ call "ppc.memrr_offset") memref))))
-             ((_ extract 63 56)
-              ((_ call "read_mem.64")
+             ((_ extract 63 56) 
+              ((_ call "read_mem.64") 
                'Mem
-               (bvadd
-                (ite
-                 ((_ call "ppc.is_r0")
-                  ((_ call "ppc.memrr_base") memref))
+               (bvadd 
+                (ite 
+                 ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
                  #x0000000000000000
                  ((_ call "ppc.memrr_base") memref))
-                ((_ call "ppc.memrr_offset") memref))))))))))))
-     ('IP (bvadd 'IP #x0000000000000004))))))
+                ((_ call "ppc.memrr_offset") memref)))))))))))) ('IP (bvadd 'IP #x0000000000000004))))))
  ((operands ((rT . 'Gprc) (memref . 'Memrr))) (in ('Mem memref 'IP)) (var1)))

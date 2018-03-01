@@ -1,15 +1,14 @@
 ;; Store VSX Scalar Single-Precision Indexed (XX1-form)
-((operands ((memref . 'Memrr) (xS . 'Vsrc)))
+((operands ((memref . 'Memrr) (xS . 'Vsrc))) 
  (in (memref 'Mem xS 'IP))
- (defs
-  (('Mem
-    ((_ call "write_mem.32")
+ (defs 
+  (('Mem 
+    ((_ call "write_mem.32") 
      'Mem
-     (bvadd
+     (bvadd 
       ((_ call "ppc.memrr_offset") memref)
-      (ite
+      (ite 
        ((_ call "ppc.is_r0") ((_ call "ppc.memrr_base") memref))
        #x00000000
        ((_ call "ppc.memrr_base") memref)))
-     ((_ call "fp.round_single") ((_ extract 63 0) xS))))
-   ('IP (bvadd 'IP #x00000004)))))
+     ((_ call "fp.round_single") ((_ extract 63 0) xS)))) ('IP (bvadd 'IP #x00000004)))))

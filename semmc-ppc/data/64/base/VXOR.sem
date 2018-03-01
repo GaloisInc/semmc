@@ -1,4 +1,4 @@
 ;; Vector Logical XOR (VX-form)
-((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc)))
+((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc))) 
  (in (vrB vrA 'IP))
  (defs ((vrT (bvxor vrA vrB)) ('IP (bvadd 'IP #x0000000000000004)))))

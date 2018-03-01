@@ -1,17 +1,14 @@
 ;; Compare Word (X-form)
 ;; This is a word variant (where L=0)
-((operands ((fld . 'Crrc) (rA . 'Gprc) (rB . 'Gprc)))
+((operands ((fld . 'Crrc) (rA . 'Gprc) (rB . 'Gprc))) 
  (in ('CR 'XER rB rA 'IP))
- (defs
-  (('CR
-    (bvor
-     (bvand
-       'CR
-       (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) fld) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-         (ite (bvslt rB rA) #b100 (ite (bvsgt rB rA) #b010 #b001))
-         ((_ extract 0 0) 'XER)))
-      (bvmul ((_ zero_extend 29) fld) #x00000004))))
-   ('IP (bvadd 'IP #x00000004)))))
+ (defs 
+  (('CR 
+    (bvor 
+     (bvand 'CR (bvnot (bvshl #x0000000f (bvmul ((_ zero_extend 29) fld) #x00000004))))
+     (bvshl 
+      ((_ zero_extend 28) 
+       (concat 
+        (ite (bvslt rB rA) #b100 (ite (bvsgt rB rA) #b010 #b001))
+        ((_ extract 0 0) 'XER)))
+      (bvmul ((_ zero_extend 29) fld) #x00000004)))) ('IP (bvadd 'IP #x00000004)))))

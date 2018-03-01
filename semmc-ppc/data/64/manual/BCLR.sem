@@ -1,9 +1,9 @@
 ;; BCLR (XL-form, LK=0)
-((operands ((bi . 'Crbitrc)))
+((operands ((bi . 'Crbitrc))) 
  (in ('CR 'IP 'LNK))
- (defs
-  (('IP
-    (ite
+ (defs 
+  (('IP 
+    (ite 
      (notp ((_ call "test_bit_dynamic") ((_ zero_extend 27) bi) 'CR))
      (concat ((_ extract 61 0) 'LNK) #b00)
      (bvadd 'IP #x0000000000000004))))))

@@ -1,15 +1,13 @@
 ;; Add Immediate Carrying (D-form)
-((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc)))
+((operands ((rT . 'Gprc) (si . 'S16imm) (rA . 'Gprc))) 
  (in ('XER si rA 'IP))
- (defs
-  (('XER
-    (concat
+ (defs 
+  (('XER 
+    (concat 
      ((_ extract 33 0) 'XER)
-     (concat
-      ((_ extract 0 0)
-       (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si))))
-      ((_ extract 63 35) 'XER))))
-   (rT
-     ((_ extract 64 1)
-     (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si)))))
+     (concat 
+      ((_ extract 0 0) (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si))))
+      ((_ extract 63 35) 'XER)))) 
+   (rT 
+    ((_ extract 64 1) (bvadd ((_ zero_extend 1) rA) (concat #b0 ((_ sign_extend 48) si)))))
    ('IP (bvadd 'IP #x0000000000000004)))))

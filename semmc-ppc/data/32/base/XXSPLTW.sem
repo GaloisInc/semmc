@@ -1,4 +1,4 @@
 ;; VSX Splat Word (XX2-form)
-((operands ((xT . 'Vsrc) (UIM . 'U2imm) (xB . 'Vsrc)))
+((operands ((xT . 'Vsrc) (UIM . 'U2imm) (xB . 'Vsrc))) 
  (in (xB UIM 'IP))
  (defs ((xT ((_ call "undefined") #x00000080)) ('IP (bvadd 'IP #x00000004)))))
