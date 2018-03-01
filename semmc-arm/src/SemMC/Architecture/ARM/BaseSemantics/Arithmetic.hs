@@ -60,6 +60,18 @@ manualArithmetic = do
         imm32    = zext (Loc imm3)
     tadd rD rN imm32 setflags
 
+
+  defineT32Opcode T.TADDi8 (Empty
+                           :> ParamDef "rDn" gpr naturalBV
+                           :> ParamDef "imm" imm0_255 (EBV 8)
+                           )
+                       $ \rDn imm8 -> do
+    comment "Add immediate, T32, encoding T2 (F7.1.4, F7-2540)"
+    input imm8
+    let setflags = notp inITBlock
+        imm32   = zext (Loc imm8)
+    tadd rDn rDn imm32 setflags
+
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
