@@ -345,6 +345,38 @@ floatingPoint = do
     comment "Floating Point Convert from Integer Doubleword Unsigned Single (X-form)"
     fp1op "FCFIDUS"
 
+  defineOpcodeWithIP "FRIND" $ do
+    comment "Floating Round to Integer Nearest (X-form)"
+    fp1op "FRIND"
+
+  defineOpcodeWithIP "FRINS" $ do
+    comment "Floating Round to Integer Nearest Single (X-form)"
+    fp1op "FRINS"
+
+  defineOpcodeWithIP "FRIPD" $ do
+    comment "Floating Round to Integer Plus (X-form)"
+    fp1op "FRIPD"
+
+  defineOpcodeWithIP "FRIPS" $ do
+    comment "Floating Round to Integer Plus Single (X-form)"
+    fp1op "FRIPS"
+
+  defineOpcodeWithIP "FRIZD" $ do
+    comment "Floating Round to Integer Toward Zero (X-form)"
+    fp1op "FRIZD"
+
+  defineOpcodeWithIP "FRIZS" $ do
+    comment "Floating Round to Integer Toward Zero Single (X-form)"
+    fp1op "FRIZS"
+
+  defineOpcodeWithIP "FRIMD" $ do
+    comment "Floating Round to Integer Minus (X-form)"
+    fp1op "FRIMD"
+
+  defineOpcodeWithIP "FRIMS" $ do
+    comment "Floating Round to Integer Minus Single (X-form)"
+    fp1op "FRIMS"
+
   defineOpcodeWithIP "FNEGD" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
