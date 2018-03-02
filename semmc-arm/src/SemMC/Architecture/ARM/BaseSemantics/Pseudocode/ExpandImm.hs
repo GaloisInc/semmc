@@ -8,6 +8,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExpandImm
     ( armExpandImm
     , armExpandImmC
     , armExpandImmC'
+    , thumbExpandImm
     )
     where
 
@@ -72,7 +73,7 @@ thumbexpandimm_c imm12 carry_in =
 
       unrotated_value = zext (LitBV 1 0b1 `concat` val')
 
-      rorC'      = rorC unrotated_value top5
+      rorC'      = rorC unrotated_value (zext top5)
       carry_out' = extract 32 32 rorC'
       imm32'     = extract 31 0 rorC'
 

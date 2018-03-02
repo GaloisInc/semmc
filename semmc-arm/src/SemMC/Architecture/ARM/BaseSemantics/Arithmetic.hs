@@ -29,11 +29,11 @@ import           SemMC.DSL
 manualArithmetic :: SemARM 'Top ()
 manualArithmetic = do
   defineA32Opcode A.ADDri (Empty
-                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "rD" gprnopc naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
                           :> ParamDef "mimm" mod_imm naturalBV
-                          :> ParamDef "rN" gpr naturalBV
+                          :> ParamDef "rN" gprnopc naturalBV
                           )
                       $ \rD setcc _ imm12 rN -> do
     comment "ADD immediate, A32, Encoding A1  (F7.1.5, F7-2542)"
@@ -58,7 +58,7 @@ manualArithmetic = do
     input imm3
     let setflags = notp inITBlock
         imm32    = zext (Loc imm3)
-    tadd rD rN imm32 setflags
+    tadd rD rN imm32 (LitBool True) setflags
 
 
   defineT32Opcode T.TADDi8 (Empty
@@ -70,7 +70,25 @@ manualArithmetic = do
     input imm8
     let setflags = notp inITBlock
         imm32   = zext (Loc imm8)
-    tadd rDn rDn imm32 setflags
+    tadd rDn rDn imm32 (LitBool True) setflags
+
+  defineT32Opcode T.T2ADDri (Empty
+                            :> ParamDef "rD" gpr naturalBV
+                            :> ParamDef "setcc" cc_out (EBV 1)
+                            :> ParamDef "imm" t2_so_imm (EBV 16) -- FIXME: Should
+                              -- this be 12 bits?
+                            :> ParamDef "rN" gpr naturalBV
+                            )
+                        $ \rD setcc imm16 rN -> do
+    comment "Add immediate, T32, encoding T3 (F7.1.4, F7-2540)"
+    input rN
+    input imm16
+    -- FIXME: Assume T32 version gets decoded the same was as A32 and we don't have
+    -- to worry about CMN or ADD (SP plus immediate)
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        imm32    = thumbExpandImm imm16
+        undef    = orp (andp (isR15 rD) (notp setflags)) (isR15 rN)
+    tadd rD rN imm32 undef (isR15 rD)
 
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -363,8 +381,9 @@ tadd :: (HasCallStack)
      -> Location 'TBV
      -> Expr 'TBV
      -> Expr 'TBool
+     -> Expr 'TBool
      -> SemARM 'Def ()
-tadd rD rN imm32 setflags = do
+tadd rD rN imm32 setflags undef = do
   let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 1 0b0)
-  defReg rD result
-  cpsrNZCV setflags nzcv
+  defReg rD (ite undef (unpredictable (Loc rD)) result)
+  cpsrNZCV (andp setflags (notp undef)) nzcv

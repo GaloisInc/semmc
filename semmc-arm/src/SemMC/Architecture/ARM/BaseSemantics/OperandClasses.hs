@@ -17,6 +17,9 @@ import           SemMC.DSL
 gpr :: String
 gpr = "GPR"
 
+gprnopc :: String
+gprnopc = "GPRnopc"
+
 tgpr :: String
 tgpr = "TGPR"
 
@@ -75,6 +78,9 @@ so_reg_reg = "So_reg_reg"
 so_reg_imm :: String
 so_reg_imm = "So_reg_imm"
 
+t2_so_imm :: String
+t2_so_imm = "T2_so_imm"
+
 -- | The 'unpredictableInstrBits' operand is used to define bits in
 -- the instruction encoding that the architecture specification
 -- declares as "unpredictable" and which may have different values
@@ -104,6 +110,7 @@ data SymToExprTagWrapper :: TL.TyFun k1 k2 -> *
 type instance TL.Apply SymToExprTagWrapper x = SymToExprTag x
 type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "GPR" = 'TBV
+  SymToExprTag "GPRnopc" = 'TBV
   SymToExprTag "Mod_imm" = 'TBV
   SymToExprTag "Imm0_7" = 'TBV
   SymToExprTag "Imm0_255" = 'TBV
@@ -121,6 +128,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "So_reg_reg" = 'TMemRef
   SymToExprTag "So_reg_imm" = 'TMemRef
   SymToExprTag "RGPR" = 'TBV
+  SymToExprTag "T2_so_imm" = 'TBV
   SymToExprTag "TGPR" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TBV
   SymToExprTag "Unpredictable" = 'TBV
