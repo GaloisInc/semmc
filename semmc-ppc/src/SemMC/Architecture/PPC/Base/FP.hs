@@ -345,6 +345,38 @@ floatingPoint = do
     comment "Floating Point Convert from Integer Doubleword Unsigned Single (X-form)"
     fp1op "FCFIDUS"
 
+  defineOpcodeWithIP "FRIND" $ do
+    comment "Floating Round to Integer Nearest (X-form)"
+    fp1op "FRIND"
+
+  defineOpcodeWithIP "FRINS" $ do
+    comment "Floating Round to Integer Nearest Single (X-form)"
+    fp1op "FRINS"
+
+  defineOpcodeWithIP "FRIPD" $ do
+    comment "Floating Round to Integer Plus (X-form)"
+    fp1op "FRIPD"
+
+  defineOpcodeWithIP "FRIPS" $ do
+    comment "Floating Round to Integer Plus Single (X-form)"
+    fp1op "FRIPS"
+
+  defineOpcodeWithIP "FRIZD" $ do
+    comment "Floating Round to Integer Toward Zero (X-form)"
+    fp1op "FRIZD"
+
+  defineOpcodeWithIP "FRIZS" $ do
+    comment "Floating Round to Integer Toward Zero Single (X-form)"
+    fp1op "FRIZS"
+
+  defineOpcodeWithIP "FRIMD" $ do
+    comment "Floating Round to Integer Minus (X-form)"
+    fp1op "FRIMD"
+
+  defineOpcodeWithIP "FRIMS" $ do
+    comment "Floating Round to Integer Minus Single (X-form)"
+    fp1op "FRIMS"
+
   defineOpcodeWithIP "FNEGD" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
@@ -377,6 +409,46 @@ floatingPoint = do
   defineOpcodeWithIP "FNABSS" $ do
     comment "Floating Negative Absolute Value (X-form)"
     fp1op "FNABSS"
+
+  defineOpcodeWithIP "FCPSGND" $ do
+    comment "Floating Copy Sign (X-form)"
+    fp2op "FCPSGND"
+
+  defineOpcodeWithIP "FCPSGNS" $ do
+    comment "Floating Copy Sign Single (X-form)"
+    fp2op "FCPSGNS"
+
+  defineOpcodeWithIP "FSQRT" $ do
+    comment "Floating Square Root (A-form)"
+    fp1op "FSQRT"
+
+  defineOpcodeWithIP "FSQRTS" $ do
+    comment "Floating Square Root Single (A-form)"
+    fp1op "FSQRT"
+
+  defineOpcodeWithIP "FRE" $ do
+    comment "Floating Reciprocal Estimate (A-form)"
+    fp1op "FRE"
+
+  defineOpcodeWithIP "FRES" $ do
+    comment "Floating Reciprocal Estimate Single (A-form)"
+    fp1op "FRES"
+
+  defineOpcodeWithIP "FRSQRTE" $ do
+    comment "Floating Reciprocal Square Root Estimate (A-form)"
+    fp1op "FRSQRTE"
+
+  defineOpcodeWithIP "FRSQRTES" $ do
+    comment "Floating Reciprocal Square Root Estimate Single (A-form)"
+    fp1op "FRSQRTES"
+
+  defineOpcodeWithIP "FSELD" $ do
+    comment "Floating-Point Select (A-form)"
+    fp3op "FSELD"
+
+  defineOpcodeWithIP "FSELS" $ do
+    comment "Floating-Point Select Single (A-form)"
+    fp3op "FSELS"
 
 -- | Define a load and double conversion of a single floating-point (D-form)
 loadFloat :: (?bitSize :: BitSize)
