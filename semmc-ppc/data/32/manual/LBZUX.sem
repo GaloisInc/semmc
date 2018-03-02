@@ -1,16 +1,25 @@
 ;; Load Byte and Zero with Update Indexed (X-form)
-((operands ((rT . 'Gprc) (memref . 'Memrr)))
- (in ('Mem memref 'IP))
+((operands
+ ((rT. 'Gprc)
+  (memref. 'Memrr)))
+ (in
+  ('Mem memref 'IP))
  (defs
-  ((((_ call "ppc.memrr_base") memref)
-    (bvadd
-     ((_ call "ppc.memrr_base") memref)
-     ((_ call "ppc.memrr_offset") memref)))
+  ((((_ call "ppc.memrr_base")
+   memref)
+   (bvadd
+    ((_ call "ppc.memrr_base")
+     memref)
+    ((_ call "ppc.memrr_offset")
+     memref)))
    (rT
     ((_ zero_extend 24)
      ((_ call "read_mem.8")
       'Mem
       (bvadd
-       ((_ call "ppc.memrr_base") memref)
-       ((_ call "ppc.memrr_offset") memref)))))
-   ('IP (bvadd 'IP #x00000004)))))
+       ((_ call "ppc.memrr_base")
+        memref)
+       ((_ call "ppc.memrr_offset")
+        memref)))))
+   ('IP
+    (bvadd 'IP #x00000004)))))

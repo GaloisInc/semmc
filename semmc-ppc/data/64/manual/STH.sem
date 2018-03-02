@@ -1,19 +1,25 @@
 ;; Store Halfword (D-form)
-((operands ((memref . 'Memri) (rS . 'Gprc)))
- (in ('Mem memref rS 'IP))
+((operands
+ ((memref. 'Memri)
+  (rS. 'Gprc)))
+ (in
+  ('Mem memref rS 'IP))
  (defs
   (('Mem
-    ((_ call "write_mem.16")
-     'Mem
-     (bvadd
-      (ite
-       ((_ call "ppc.is_r0")
-        ((_ call "ppc.memri_reg")
-         memref))
-       #x0000000000000000
-       ((_ call "ppc.memri_reg") memref))
-      ((_ sign_extend 48)
-       ((_ call "ppc.memri_offset")
-        memref)))
-     ((_ extract 63 48) rS)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   ((_ call "write_mem.16")
+    'Mem
+    (bvadd
+     (ite
+      ((_ call "ppc.is_r0")
+       ((_ call "ppc.memri_reg")
+        memref))
+      #x0000000000000000
+      ((_ call "ppc.memri_reg")
+       memref))
+     ((_ sign_extend 48)
+      ((_ call "ppc.memri_offset")
+       memref)))
+    ((_ extract 63 48)
+     rS)))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

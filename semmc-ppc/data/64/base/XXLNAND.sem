@@ -1,6 +1,13 @@
 ;; VSX Logical NAND (XX3-form)
-((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc)))
- (in (xB xA 'IP))
+((operands
+ ((xT. 'Vsrc)
+  (xA. 'Vsrc)
+  (xB. 'Vsrc)))
+ (in
+  (xB xA 'IP))
  (defs
-  ((xT (bvnot (bvand xA xB)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+  ((xT
+   (bvnot
+    (bvand xA xB)))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

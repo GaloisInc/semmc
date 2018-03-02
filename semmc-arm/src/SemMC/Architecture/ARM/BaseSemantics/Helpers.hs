@@ -30,6 +30,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , modImm_imm, modImm_rot
     , soRegReg_type, soRegReg_reg1, soRegReg_reg2
     , soRegImm_imm, soRegImm_type, soRegImm_reg
+    , t2SoImm_imm
     , blxtgt_S, blxtgt_imm10H, blxtgt_imm10L, blxtgt_J1, blxtgt_J2
       -- * Miscellaneous common functionality
     , unpredictable
@@ -395,6 +396,9 @@ soRegImm_reg = locUF naturalBV "a32.soregimm_reg"
 
 soRegImm_imm :: Location 'TMemRef -> Expr 'TBV
 soRegImm_imm = uf (EBV 5) "a32.soregimm_imm" . ((:[]) . Some) . Loc
+
+t2SoImm_imm :: Location 'TBV -> Expr 'TBV
+t2SoImm_imm = uf (EBV 12) "t32.t2soimm_imm" . ((:[]) . Some) . Loc
 
 -- | Decoding for the ThumbBlxTarget type: S bit
 blxtgt_S :: Location 'TBV -> Expr 'TBV

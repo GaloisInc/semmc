@@ -1,19 +1,26 @@
 ;; Vector Splat Word (VX-form)
-((operands ((vrT . 'Vrrc) (vrB . 'Vrrc) (uim . 'U5imm)))
- (in ('VSCR vrB 'IP))
+((operands
+ ((vrT. 'Vrrc)
+  (vrB. 'Vrrc)
+  (uim. 'U5imm)))
+ (in
+  ('VSCR vrB 'IP))
  (defs
   (('VSCR
-    ((_ extract 159 128)
-     ((_ call "ppc.vec2")
-      "VSPLTW"
-      ((_ zero_extend 123) uim)
-      vrB
-      'VSCR)))
+   ((_ extract 159 128)
+    ((_ call "ppc.vec2")
+     "VSPLTW"
+     ((_ zero_extend 123)
+      uim)
+     vrB
+     'VSCR)))
    (vrT
     ((_ extract 127 0)
      ((_ call "ppc.vec2")
       "VSPLTW"
-      ((_ zero_extend 123) uim)
+      ((_ zero_extend 123)
+       uim)
       vrB
       'VSCR)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

@@ -1,6 +1,14 @@
 ;; Vector Logical OR with Complement (VX-form)
-((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc)))
- (in (vrB vrA 'IP))
+((operands
+ ((vrT. 'Vrrc)
+  (vrA. 'Vrrc)
+  (vrB. 'Vrrc)))
+ (in
+  (vrB vrA 'IP))
  (defs
-  ((vrT (bvor vrA (bvnot vrB)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+  ((vrT
+   (bvor
+    vrA
+    (bvnot vrB)))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

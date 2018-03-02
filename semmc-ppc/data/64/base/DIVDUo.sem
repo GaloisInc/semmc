@@ -1,21 +1,43 @@
 ;; Divide Doubleword Unsigned (XO-form, RC=1)
-((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
- (in ('XER 'CR rB rA 'IP))
+((operands
+ ((rT. 'Gprc)
+  (rA. 'Gprc)
+  (rB. 'Gprc)))
+ (in
+  ('XER 'CR rB rA 'IP))
  (defs
   (('CR
-    (bvor
-     (bvand
-      'CR
-      (bvnot
-       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
+   (bvor
+    (bvand
+     'CR
+     (bvnot
+      (bvshl
+       #x0000000f
+       (bvmul
+        ((_ zero_extend 29)
+         #b000)
+        #x00000004))))
+    (bvshl
+     ((_ zero_extend 28)
+      (concat
+       (ite
+        (bvslt
+         (bvudiv rA rB)
+         #x0000000000000000)
+        #b100
         (ite
-         (bvslt (bvudiv rA rB) #x0000000000000000)
-         #b100
-         (ite (bvsgt (bvudiv rA rB) #x0000000000000000) #b010 #b001))
-        ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-   (rT (bvudiv rA rB))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+         (bvsgt
+          (bvudiv rA rB)
+          #x0000000000000000)
+         #b010
+         #b001))
+       ((_ extract 32 32)
+        'XER)))
+     (bvmul
+      ((_ zero_extend 29)
+       #b000)
+      #x00000004))))
+   (rT
+    (bvudiv rA rB))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

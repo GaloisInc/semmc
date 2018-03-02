@@ -1,6 +1,13 @@
 ;; VSX Logical Equivalence (XX3-form)
-((operands ((xT . 'Vsrc) (xA . 'Vsrc) (xB . 'Vsrc)))
- (in (xB xA 'IP))
+((operands
+ ((xT. 'Vsrc)
+  (xA. 'Vsrc)
+  (xB. 'Vsrc)))
+ (in
+  (xB xA 'IP))
  (defs
-  ((xT (bvnot (bvxor xA xB)))
-   ('IP (bvadd 'IP #x00000004)))))
+  ((xT
+   (bvnot
+    (bvxor xA xB)))
+   ('IP
+    (bvadd 'IP #x00000004)))))

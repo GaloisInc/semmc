@@ -1,17 +1,25 @@
 ;; Store Floating-Point as Integer Word Indexed (X-form)
-((operands ((memref . 'Memrr) (frS . 'Fprc)))
- (in ('Mem memref frS 'IP))
+((operands
+ ((memref. 'Memrr)
+  (frS. 'Fprc)))
+ (in
+  ('Mem memref frS 'IP))
  (defs
   (('Mem
-    ((_ call "write_mem.32")
-     'Mem
-     (bvadd
-      (ite
-       ((_ call "ppc.is_r0")
-        ((_ call "ppc.memrr_base")
-         memref))
-       #x0000000000000000
-       ((_ call "ppc.memrr_base") memref))
-      ((_ call "ppc.memrr_offset") memref))
-     ((_ extract 63 32) ((_ extract 63 0) frS))))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   ((_ call "write_mem.32")
+    'Mem
+    (bvadd
+     (ite
+      ((_ call "ppc.is_r0")
+       ((_ call "ppc.memrr_base")
+        memref))
+      #x0000000000000000
+      ((_ call "ppc.memrr_base")
+       memref))
+     ((_ call "ppc.memrr_offset")
+      memref))
+    ((_ extract 63 32)
+     ((_ extract 63 0)
+      frS))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

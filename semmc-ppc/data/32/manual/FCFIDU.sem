@@ -1,17 +1,21 @@
 ;; Floating Point Convert from Integer Doubleword Unsigned (X-form)
-((operands ((frT . 'Fprc) (frB . 'Fprc)))
- (in ('FPSCR frB 'IP))
+((operands
+ ((frT. 'Fprc)
+  (frB. 'Fprc)))
+ (in
+  ('FPSCR frB 'IP))
  (defs
   (('FPSCR
-    ((_ extract 159 128)
-     ((_ call "ppc.vec1")
-      "FCFIDU"
-      frB
-      'FPSCR)))
+   ((_ extract 159 128)
+    ((_ call "ppc.vec1")
+     "FCFIDU"
+     frB
+     'FPSCR)))
    (frT
     ((_ extract 127 0)
      ((_ call "ppc.vec1")
       "FCFIDU"
       frB
       'FPSCR)))
-   ('IP (bvadd 'IP #x00000004)))))
+   ('IP
+    (bvadd 'IP #x00000004)))))

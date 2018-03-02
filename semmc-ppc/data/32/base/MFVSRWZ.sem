@@ -1,6 +1,12 @@
 ;; Move From VSR Word and Zero (XX1-form)
-((operands ((rA . 'Gprc) (xS . 'Vsrc)))
- (in ('IP))
+((operands
+ ((rA. 'Gprc)
+  (xS. 'Vsrc)))
+ (in
+  ('IP))
  (defs
-  ((rA ((_ extract 31 0) xS))
-   ('IP (bvadd 'IP #x00000004)))))
+  ((rA
+   ((_ extract 31 0)
+    xS))
+   ('IP
+    (bvadd 'IP #x00000004)))))

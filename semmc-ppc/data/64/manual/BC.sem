@@ -1,12 +1,19 @@
 ;; BC (B-form, AA=0, LK=0)
 ;; This form is actually equivalent to BT, which has the BO field=01100
-((operands ((target . 'Condbrtarget) (bi . 'Crbitrc)))
- (in ('IP 'CR 'CTR))
+((operands
+ ((target. 'Condbrtarget)
+  (bi. 'Crbitrc)))
+ (in
+  ('IP 'CR 'CTR))
  (defs
   (('IP
-    (ite
-     ((_ call "test_bit_dynamic")
-      ((_ zero_extend 27) bi)
-      'CR)
-     (bvadd ((_ sign_extend 48) (concat target #b00)) 'IP)
-     (bvadd 'IP #x0000000000000004))))))
+   (ite
+    ((_ call "test_bit_dynamic")
+     ((_ zero_extend 27)
+      bi)
+     'CR)
+    (bvadd
+     ((_ sign_extend 48)
+      (concat target #b00))
+     'IP)
+    (bvadd 'IP #x0000000000000004))))))

@@ -1,16 +1,25 @@
 (let
- ((true (bveq #b0 #b0)))
- ((operands ((target . 'Condbrtarget)))
-  (in ('IP 'CTR))
+ ((true
+  (bveq #b0 #b0)))
+ ((operands
+  ((target. 'Condbrtarget)))
+  (in
+   ('IP 'CTR))
   (defs
-   (('LNK (bvadd 'IP #x0000000000000004))
+   (('LNK
+    (bvadd 'IP #x0000000000000004))
     ('IP
      (ite
       (xorp
-       (notp (bveq (bvsub 'CTR #x0000000000000001) #x0000000000000000))
+       (notp
+        (bveq
+         (bvsub 'CTR #x0000000000000001)
+         #x0000000000000000))
        (true))
       (bvadd
-       ((_ sign_extend 48) (concat target #b00))
+       ((_ sign_extend 48)
+        (concat target #b00))
        'IP)
       (bvadd 'IP #x0000000000000004)))
-    ('CTR (bvsub 'CTR #x0000000000000001))))))
+    ('CTR
+     (bvsub 'CTR #x0000000000000001))))))

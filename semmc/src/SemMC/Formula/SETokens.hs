@@ -94,7 +94,7 @@ printTokens comments sexpr =
                                              h = F.length expr
                                              w = bl + h + (2 * cnt)
                                          in if w > 600 then w else 0
-      outputFmt = SC.setIndentAmount 1 $ SC.basicPrint printAtom
+      outputFmt = SC.setIndentAmount 1 $ SC.unconstrainedPrint printAtom
   in formatComment comments <> (SC.encodeOne outputFmt $
                                 discoverLetBindings guide sexpr)
 

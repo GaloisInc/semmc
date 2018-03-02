@@ -1,6 +1,13 @@
 ;; NAND (X-form, RC=0)
-((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc)))
- (in (rB rS 'IP))
+((operands
+ ((rA. 'Gprc)
+  (rS. 'Gprc)
+  (rB. 'Gprc)))
+ (in
+  (rB rS 'IP))
  (defs
-  ((rA (bvnot (bvand rS rB)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+  ((rA
+   (bvnot
+    (bvand rS rB)))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))
