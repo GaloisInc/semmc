@@ -17,6 +17,7 @@ import           SemMC.DSL
 gpr :: String
 gpr = "GPR"
 
+-- FIXME: Do we actually need to use the below, or can we just use gpr?
 gprnopc :: String
 gprnopc = "GPRnopc"
 
@@ -62,6 +63,9 @@ imm0_7 = "Imm0_7"
 
 imm0_255 :: String
 imm0_255 = "Imm0_255"
+
+imm0_4095 :: String
+imm0_4095 = "Imm0_4095"
 
 ldst_so_reg :: String
 ldst_so_reg = "Ldst_so_reg"
@@ -114,6 +118,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Mod_imm" = 'TBV
   SymToExprTag "Imm0_7" = 'TBV
   SymToExprTag "Imm0_255" = 'TBV
+  SymToExprTag "Imm0_4095" = 'TBV
   SymToExprTag "Pred" = 'TBV
   SymToExprTag "Cc_out" = 'TBV
   SymToExprTag "Addrmode_imm12" = 'TMemRef
