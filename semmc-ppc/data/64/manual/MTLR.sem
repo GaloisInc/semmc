@@ -1,4 +1,8 @@
-((operands ((rA . 'Gprc)))
- (in (rA 'IP))
+((operands
+ ((rA. 'Gprc)))
+ (in
+  (rA 'IP))
  (defs
-  (('LNK rA) ('IP (bvadd 'IP #x0000000000000004)))))
+  (('LNK rA)
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

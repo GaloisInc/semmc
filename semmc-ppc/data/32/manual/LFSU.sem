@@ -1,13 +1,18 @@
 ;; Load Floating-Point Single with Update (D-form)
-((operands ((frT . 'Fprc) (memref . 'Memri)))
- (in (memref 'Mem 'IP))
+((operands
+ ((frT. 'Fprc)
+  (memref. 'Memri)))
+ (in
+  (memref 'Mem 'IP))
  (defs
-  ((((_ call "ppc.memri_reg") memref)
-    (bvadd
-     ((_ call "ppc.memri_reg") memref)
-     ((_ sign_extend 16)
-      ((_ call "ppc.memri_offset")
-       memref))))
+  ((((_ call "ppc.memri_reg")
+   memref)
+   (bvadd
+    ((_ call "ppc.memri_reg")
+     memref)
+    ((_ sign_extend 16)
+     ((_ call "ppc.memri_offset")
+      memref))))
    (frT
     (concat
      #x0000000000000000
@@ -15,8 +20,10 @@
       ((_ call "read_mem.32")
        'Mem
        (bvadd
-        ((_ call "ppc.memri_reg") memref)
+        ((_ call "ppc.memri_reg")
+         memref)
         ((_ sign_extend 16)
          ((_ call "ppc.memri_offset")
           memref)))))))
-   ('IP (bvadd 'IP #x00000004)))))
+   ('IP
+    (bvadd 'IP #x00000004)))))

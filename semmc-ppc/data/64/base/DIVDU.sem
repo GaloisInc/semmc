@@ -1,6 +1,12 @@
 ;; Divide Doubleword Unsigned (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc) (rB . 'Gprc)))
- (in (rB rA 'IP))
+((operands
+ ((rT. 'Gprc)
+  (rA. 'Gprc)
+  (rB. 'Gprc)))
+ (in
+  (rB rA 'IP))
  (defs
-  ((rT (bvudiv rA rB))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+  ((rT
+   (bvudiv rA rB))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

@@ -1,17 +1,30 @@
 ;; Vector Compare Greater Than Unsigned Byte (VC-form, RC=1)
-((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc)))
- (in ('XER 'CR 'VSCR vrB vrA 'IP))
+((operands
+ ((vrT. 'Vrrc)
+  (vrA. 'Vrrc)
+  (vrB. 'Vrrc)))
+ (in
+  ('XER 'CR 'VSCR vrB vrA 'IP))
  (defs
   (('CR
-    (bvor
-     (bvand
-      'CR
-      (bvnot
-       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b110) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       ((_ call "undefined") #x00000004))
-      (bvmul ((_ zero_extend 29) #b110) #x00000004))))
+   (bvor
+    (bvand
+     'CR
+     (bvnot
+      (bvshl
+       #x0000000f
+       (bvmul
+        ((_ zero_extend 29)
+         #b110)
+        #x00000004))))
+    (bvshl
+     ((_ zero_extend 28)
+      ((_ call "undefined")
+       #x00000004))
+     (bvmul
+      ((_ zero_extend 29)
+       #b110)
+      #x00000004))))
    ('VSCR
     ((_ extract 159 128)
      ((_ call "ppc.vec2")
@@ -26,4 +39,5 @@
       vrA
       vrB
       'VSCR)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

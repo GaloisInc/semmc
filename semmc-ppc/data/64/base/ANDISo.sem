@@ -1,33 +1,52 @@
 ;; AND Immediage Shifted (D-form)
-((operands ((rT . 'Gprc) (ui . 'U16imm) (rA . 'Gprc)))
- (in ('XER 'CR ui rA 'IP))
+((operands
+ ((rT. 'Gprc)
+  (ui. 'U16imm)
+  (rA. 'Gprc)))
+ (in
+  ('XER 'CR ui rA 'IP))
  (defs
   (('CR
-    (bvor
-     (bvand
-      'CR
-      (bvnot
-       (bvshl #x0000000f (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
+   (bvor
+    (bvand
+     'CR
+     (bvnot
+      (bvshl
+       #x0000000f
+       (bvmul
+        ((_ zero_extend 29)
+         #b000)
+        #x00000004))))
+    (bvshl
+     ((_ zero_extend 28)
+      (concat
+       (ite
+        (bvslt
+         (bvand
+          rA
+          ((_ zero_extend 32)
+           (concat ui #x0000)))
+         #x0000000000000000)
+        #b100
         (ite
-         (bvslt
+         (bvsgt
           (bvand
            rA
-           ((_ zero_extend 32) (concat ui #x0000)))
+           ((_ zero_extend 32)
+            (concat ui #x0000)))
           #x0000000000000000)
-         #b100
-         (ite
-          (bvsgt
-           (bvand
-            rA
-            ((_ zero_extend 32)
-             (concat ui #x0000)))
-           #x0000000000000000)
-          #b010
-          #b001))
-        ((_ extract 32 32) 'XER)))
-      (bvmul ((_ zero_extend 29) #b000) #x00000004))))
-   (rT (bvand rA ((_ zero_extend 32) (concat ui #x0000))))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+         #b010
+         #b001))
+       ((_ extract 32 32)
+        'XER)))
+     (bvmul
+      ((_ zero_extend 29)
+       #b000)
+      #x00000004))))
+   (rT
+    (bvand
+     rA
+     ((_ zero_extend 32)
+      (concat ui #x0000))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

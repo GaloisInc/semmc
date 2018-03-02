@@ -1,3 +1,6 @@
 ((operands ())
- (in ('IP))
- (defs (('IP (bvadd 'IP #x00000004)))))
+ (in
+  ('IP))
+ (defs
+  (('IP
+   (bvadd 'IP #x00000004)))))

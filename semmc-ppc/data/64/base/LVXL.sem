@@ -1,19 +1,26 @@
 ;; Load Vector Indexed LRU (X-form)
 ;; This form provides a cache hint
-((operands ((vrT . 'Vrrc) (memrr . 'Memrr)))
- (in (memrr 'Mem 'IP))
+((operands
+ ((vrT. 'Vrrc)
+  (memrr. 'Memrr)))
+ (in
+  (memrr 'Mem 'IP))
  (defs
   ((vrT
-    ((_ call "read_mem.128")
-     'Mem
-     (bvand
-      ((_ sign_extend 56) #xfe)
-      (bvadd
-       ((_ call "ppc.memrr_offset") memrr)
-       (ite
-        ((_ call "ppc.is_r0")
-         ((_ call "ppc.memrr_base")
-          memrr))
-        #x0000000000000000
-        ((_ call "ppc.memrr_base") memrr))))))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   ((_ call "read_mem.128")
+    'Mem
+    (bvand
+     ((_ sign_extend 56)
+      #xfe)
+     (bvadd
+      ((_ call "ppc.memrr_offset")
+       memrr)
+      (ite
+       ((_ call "ppc.is_r0")
+        ((_ call "ppc.memrr_base")
+         memrr))
+       #x0000000000000000
+       ((_ call "ppc.memrr_base")
+        memrr))))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

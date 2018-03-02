@@ -1,81 +1,95 @@
 ;; Move To One Condition Register Field (XFX-form)
 (let
  ((var1
-   (defs
-    (('CR
-      (ite
-       (bveq
-        ((_ call "popcnt.32")
-         ((_ zero_extend 24) FXM))
-        #x00000001)
-       (bvor
-        (bvand
-         (bvnot
-          (bvshl
-           (bvlshr
-            (bvlshr
-             (bvshl
-              ((_ sign_extend 31) #b1)
-              (bvmul
-               ((_ call "clz.32")
-                ((_ zero_extend 24)
-                 FXM))
-               #x00000004))
-             (bvmul
-              ((_ call "clz.32")
-               ((_ zero_extend 24) FXM))
-              #x00000004))
-            (bvsub
-             #x0000001f
-             (bvadd
-              (bvmul
-               ((_ call "clz.32")
-                ((_ zero_extend 24)
-                 FXM))
-               #x00000004)
-              #x00000003)))
-           (bvsub
-            #x0000001f
-            (bvadd
-             (bvmul
-              ((_ call "clz.32")
-               ((_ zero_extend 24) FXM))
-              #x00000004)
-             #x00000003))))
-         'CR)
-        (bvand
-         (bvshl
+  (defs
+   (('CR
+    (ite
+     (bveq
+      ((_ call "popcnt.32")
+       ((_ zero_extend 24)
+        FXM))
+      #x00000001)
+     (bvor
+      (bvand
+       (bvnot
+        (bvshl
+         (bvlshr
           (bvlshr
-           (bvlshr
-            (bvshl
-             ((_ sign_extend 31) #b1)
-             (bvmul
-              ((_ call "clz.32")
-               ((_ zero_extend 24) FXM))
-              #x00000004))
+           (bvshl
+            ((_ sign_extend 31)
+             #b1)
             (bvmul
              ((_ call "clz.32")
-              ((_ zero_extend 24) FXM))
+              ((_ zero_extend 24)
+               FXM))
              #x00000004))
-           (bvsub
-            #x0000001f
-            (bvadd
-             (bvmul
-              ((_ call "clz.32")
-               ((_ zero_extend 24) FXM))
-              #x00000004)
-             #x00000003)))
+           (bvmul
+            ((_ call "clz.32")
+             ((_ zero_extend 24)
+              FXM))
+            #x00000004))
           (bvsub
            #x0000001f
            (bvadd
             (bvmul
              ((_ call "clz.32")
-              ((_ zero_extend 24) FXM))
+              ((_ zero_extend 24)
+               FXM))
              #x00000004)
             #x00000003)))
-         rS))
-       ((_ call "undefined") #x00000020)))
-     ('IP (bvadd 'IP #x00000004))))))
- ((operands ((FXM . 'Crbitm) (rS . 'Gprc)))
-  (in ('CR FXM rS 'IP))
+         (bvsub
+          #x0000001f
+          (bvadd
+           (bvmul
+            ((_ call "clz.32")
+             ((_ zero_extend 24)
+              FXM))
+            #x00000004)
+           #x00000003))))
+       'CR)
+      (bvand
+       (bvshl
+        (bvlshr
+         (bvlshr
+          (bvshl
+           ((_ sign_extend 31)
+            #b1)
+           (bvmul
+            ((_ call "clz.32")
+             ((_ zero_extend 24)
+              FXM))
+            #x00000004))
+          (bvmul
+           ((_ call "clz.32")
+            ((_ zero_extend 24)
+             FXM))
+           #x00000004))
+         (bvsub
+          #x0000001f
+          (bvadd
+           (bvmul
+            ((_ call "clz.32")
+             ((_ zero_extend 24)
+              FXM))
+            #x00000004)
+           #x00000003)))
+        (bvsub
+         #x0000001f
+         (bvadd
+          (bvmul
+           ((_ call "clz.32")
+            ((_ zero_extend 24)
+             FXM))
+           #x00000004)
+          #x00000003)))
+       rS))
+     ((_ call "undefined")
+      #x00000020)))
+    ('IP
+     (bvadd 'IP #x00000004))))))
+ ((operands
+  ((FXM. 'Crbitm)
+   (rS. 'Gprc)))
+  (in
+   ('CR FXM rS 'IP))
   (var1)))

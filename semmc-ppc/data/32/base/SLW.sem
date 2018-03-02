@@ -1,6 +1,16 @@
 ;; Shift Left Word (X-form, RC=0)
-((operands ((rA . 'Gprc) (rS . 'Gprc) (rB . 'Gprc)))
- (in (rB rS 'IP))
+((operands
+ ((rA. 'Gprc)
+  (rS. 'Gprc)
+  (rB. 'Gprc)))
+ (in
+  (rB rS 'IP))
  (defs
-  ((rA (bvshl rS ((_ zero_extend 27) ((_ extract 31 27) rB))))
-   ('IP (bvadd 'IP #x00000004)))))
+  ((rA
+   (bvshl
+    rS
+    ((_ zero_extend 27)
+     ((_ extract 31 27)
+      rB))))
+   ('IP
+    (bvadd 'IP #x00000004)))))

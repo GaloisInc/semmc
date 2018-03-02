@@ -1,17 +1,21 @@
 ;; VSX Scalar Reciprocal Square Root Estimate Single-Precision (XX2-form)
-((operands ((xT . 'Vsrc) (xB . 'Vsrc)))
- (in ('FPSCR xB 'IP))
+((operands
+ ((xT. 'Vsrc)
+  (xB. 'Vsrc)))
+ (in
+  ('FPSCR xB 'IP))
  (defs
   (('FPSCR
-    ((_ extract 159 128)
-     ((_ call "ppc.vec1")
-      "XSRSQRTESP"
-      xB
-      'FPSCR)))
+   ((_ extract 159 128)
+    ((_ call "ppc.vec1")
+     "XSRSQRTESP"
+     xB
+     'FPSCR)))
    (xT
     ((_ extract 127 0)
      ((_ call "ppc.vec1")
       "XSRSQRTESP"
       xB
       'FPSCR)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

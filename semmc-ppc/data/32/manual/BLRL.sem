@@ -1,7 +1,13 @@
 ;; BLRL : BCLR (XL-form, LK=1)
 ;; This is a specialized unconditional BCLR
 ((operands ())
- (in ('IP 'LNK))
+ (in
+  ('IP 'LNK))
  (defs
-  (('LNK (bvadd 'IP #x00000004))
-   ('IP (concat ((_ extract 29 0) 'LNK) #b00)))))
+  (('LNK
+   (bvadd 'IP #x00000004))
+   ('IP
+    (concat
+     ((_ extract 29 0)
+      'LNK)
+     #b00)))))

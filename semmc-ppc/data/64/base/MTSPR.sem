@@ -1,8 +1,24 @@
 ;; Move To Special Purpose Register (XFX-form)
-((operands ((rS . 'Gprc) (SPR . 'I32imm)))
- (in ('LNK 'XER 'CTR SPR rS 'IP))
+((operands
+ ((rS. 'Gprc)
+  (SPR. 'I32imm)))
+ (in
+  ('LNK 'XER 'CTR SPR rS 'IP))
  (defs
-  (('LNK (ite (bveq SPR #x00000009) rS 'LNK))
-   ('XER (ite (bveq SPR #x00000001) rS 'XER))
-   ('CTR (ite (bveq SPR #x00000008) rS 'CTR))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+  (('LNK
+   (ite
+    (bveq SPR #x00000009)
+    rS
+    'LNK))
+   ('XER
+    (ite
+     (bveq SPR #x00000001)
+     rS
+     'XER))
+   ('CTR
+    (ite
+     (bveq SPR #x00000008)
+     rS
+     'CTR))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

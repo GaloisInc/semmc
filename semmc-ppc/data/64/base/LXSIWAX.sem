@@ -1,19 +1,26 @@
 ;; Load VSX Scalar as Integer Word Algebraic Indexed (XX1-form)
-((operands ((xT . 'Vsrc) (memref . 'Memrr)))
- (in (memref 'Mem 'IP))
+((operands
+ ((xT. 'Vsrc)
+  (memref. 'Memrr)))
+ (in
+  (memref 'Mem 'IP))
  (defs
   ((xT
-    (concat
-     ((_ sign_extend 32)
-      ((_ call "read_mem.32")
-       'Mem
-       (bvadd
-        ((_ call "ppc.memrr_offset") memref)
-        (ite
-         ((_ call "ppc.is_r0")
-          ((_ call "ppc.memrr_base")
-           memref))
-         #x0000000000000000
-         ((_ call "ppc.memrr_base") memref)))))
-     ((_ call "undefined") #x00000040)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   (concat
+    ((_ sign_extend 32)
+     ((_ call "read_mem.32")
+      'Mem
+      (bvadd
+       ((_ call "ppc.memrr_offset")
+        memref)
+       (ite
+        ((_ call "ppc.is_r0")
+         ((_ call "ppc.memrr_base")
+          memref))
+        #x0000000000000000
+        ((_ call "ppc.memrr_base")
+         memref)))))
+    ((_ call "undefined")
+     #x00000040)))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

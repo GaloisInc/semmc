@@ -1,20 +1,37 @@
 ;; Condition Register NAND (XL-form)
-((operands ((BT . 'Crbitrc) (BA . 'Crbitrc) (BB . 'Crbitrc)))
- (in ('CR BB BA 'IP))
+((operands
+ ((BT. 'Crbitrc)
+  (BA. 'Crbitrc)
+  (BB. 'Crbitrc)))
+ (in
+  ('CR BB BA 'IP))
  (defs
   (('CR
-    (bvor
-     (bvand
-      'CR
+   (bvor
+    (bvand
+     'CR
+     (bvnot
+      (bvshl
+       #x00000001
+       (bvsub
+        #x0000001f
+        ((_ zero_extend 27)
+         BT)))))
+    (bvshl
+     ((_ zero_extend 31)
       (bvnot
-       (bvshl #x00000001 (bvsub #x0000001f ((_ zero_extend 27) BT)))))
-     (bvshl
-      ((_ zero_extend 31)
-       (bvnot
-        (bvand
-         ((_ extract 0 0)
-          (bvshl 'CR ((_ zero_extend 27) BA)))
-         ((_ extract 0 0)
-          (bvshl 'CR ((_ zero_extend 27) BB))))))
-      ((_ zero_extend 27) BT))))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+       (bvand
+        ((_ extract 0 0)
+         (bvshl
+          'CR
+          ((_ zero_extend 27)
+           BA)))
+        ((_ extract 0 0)
+         (bvshl
+          'CR
+          ((_ zero_extend 27)
+           BB))))))
+     ((_ zero_extend 27)
+      BT))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

@@ -1,23 +1,35 @@
 ;; Add to Minus One Extended (XO-form, RC=0)
-((operands ((rT . 'Gprc) (rA . 'Gprc)))
- (in ('XER rA 'IP))
+((operands
+ ((rT. 'Gprc)
+  (rA. 'Gprc)))
+ (in
+  ('XER rA 'IP))
  (defs
   (('XER
+   (concat
+    ((_ extract 33 0)
+     'XER)
     (concat
-     ((_ extract 33 0) 'XER)
-     (concat
-      ((_ extract 0 0)
-       (bvsub
-        (bvadd
-         ((_ zero_extend 1) rA)
-         ((_ zero_extend 64) ((_ extract 34 34) 'XER)))
-        #b00000000000000000000000000000000000000000000000000000000000000001))
-      ((_ extract 63 35) 'XER))))
+     ((_ extract 0 0)
+      (bvsub
+       (bvadd
+        ((_ zero_extend 1)
+         rA)
+        ((_ zero_extend 64)
+         ((_ extract 34 34)
+          'XER)))
+       #b00000000000000000000000000000000000000000000000000000000000000001))
+     ((_ extract 63 35)
+      'XER))))
    (rT
     ((_ extract 64 1)
      (bvsub
       (bvadd
-       ((_ zero_extend 1) rA)
-       ((_ zero_extend 64) ((_ extract 34 34) 'XER)))
+       ((_ zero_extend 1)
+        rA)
+       ((_ zero_extend 64)
+        ((_ extract 34 34)
+         'XER)))
       #b00000000000000000000000000000000000000000000000000000000000000001)))
-   ('IP (bvadd 'IP #x0000000000000004)))))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

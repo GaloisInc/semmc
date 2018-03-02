@@ -1,6 +1,13 @@
 ;; Move to FPSCR Field Immediate (X-form, RC=0)
-((operands ((BF . 'Crrc) (U . 'I32imm) (W . 'I32imm)))
- (in ('IP))
+((operands
+ ((BF. 'Crrc)
+  (U. 'I32imm)
+  (W. 'I32imm)))
+ (in
+  ('IP))
  (defs
-  (('FPSCR ((_ call "undefined") #x00000020))
-   ('IP (bvadd 'IP #x00000004)))))
+  (('FPSCR
+   ((_ call "undefined")
+    #x00000020))
+   ('IP
+    (bvadd 'IP #x00000004)))))

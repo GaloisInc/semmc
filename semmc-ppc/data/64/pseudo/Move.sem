@@ -1,3 +1,7 @@
-((operands ((target . 'Gprc) (source . 'Gprc_nor0)))
- (in (source))
- (defs ((target source))))
+((operands
+ ((target. 'Gprc)
+  (source. 'Gprc_nor0)))
+ (in
+  (source))
+ (defs
+  ((target source))))

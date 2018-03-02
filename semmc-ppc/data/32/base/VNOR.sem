@@ -1,6 +1,13 @@
 ;; Vector Logical NOR (VX-form)
-((operands ((vrT . 'Vrrc) (vrA . 'Vrrc) (vrB . 'Vrrc)))
- (in (vrB vrA 'IP))
+((operands
+ ((vrT. 'Vrrc)
+  (vrA. 'Vrrc)
+  (vrB. 'Vrrc)))
+ (in
+  (vrB vrA 'IP))
  (defs
-  ((vrT (bvnot (bvor vrA vrB)))
-   ('IP (bvadd 'IP #x00000004)))))
+  ((vrT
+   (bvnot
+    (bvor vrA vrB)))
+   ('IP
+    (bvadd 'IP #x00000004)))))

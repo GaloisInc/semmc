@@ -1,14 +1,21 @@
 ;; BCCTR (XL-form, LK=1)
 ;; This variant has BO=01100, branch when the CR bit is 1
-((operands ((bi . 'Crbitrc)))
- (in ('CR 'IP 'CTR))
+((operands
+ ((bi. 'Crbitrc)))
+ (in
+  ('CR 'IP 'CTR))
  (defs
-  (('LNK (bvadd 'IP #x00000004))
+  (('LNK
+   (bvadd 'IP #x00000004))
    ('IP
     (ite
      (notp
       ((_ call "test_bit_dynamic")
-       ((_ zero_extend 27) bi)
+       ((_ zero_extend 27)
+        bi)
        'CR))
-     (concat ((_ extract 29 0) 'CTR) #b00)
+     (concat
+      ((_ extract 29 0)
+       'CTR)
+      #b00)
      (bvadd 'IP #x00000004))))))
