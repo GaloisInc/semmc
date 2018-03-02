@@ -40,24 +40,24 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     )
     where
 
-import Control.Monad ( when )
-import Data.Bits hiding (shift)
-import Data.Maybe
-import Data.Parameterized.Classes
-import Data.Parameterized.Context
-import Data.Parameterized.Some ( Some(..) )
-import Data.Parameterized.TraversableFC
-import Data.Semigroup
+import           Control.Monad ( when )
+import           Data.Bits hiding (shift)
+import           Data.Maybe
+import           Data.Parameterized.Classes
+import           Data.Parameterized.Context
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.TraversableFC
+import           Data.Semigroup
 import qualified Data.Type.List as TL
-import GHC.Stack ( HasCallStack )
-import Prelude hiding ( concat, pred )
 import qualified Dismantle.ARM as A
 import qualified Dismantle.Thumb as T
-import SemMC.Architecture.ARM.BaseSemantics.Base
-import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
-import SemMC.Architecture.ARM.BaseSemantics.Registers
-import SemMC.DSL
+import           GHC.Stack ( HasCallStack )
+import           Prelude hiding ( concat, pred )
+import           SemMC.Architecture.ARM.BaseSemantics.Base
+import           SemMC.Architecture.ARM.BaseSemantics.Natural
+import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Registers
+import           SemMC.DSL
 
 
 data OpcodeParamDef t = ParamDef String String (ExprType t)
