@@ -410,6 +410,14 @@ floatingPoint = do
     comment "Floating Negative Absolute Value (X-form)"
     fp1op "FNABSS"
 
+  defineOpcodeWithIP "FCPSGND" $ do
+    comment "Floating Copy Sign (X-form)"
+    fp2op "FCPSGND"
+
+  defineOpcodeWithIP "FCPSGNS" $ do
+    comment "Floating Copy Sign Single (X-form)"
+    fp2op "FCPSGNS"
+
   defineOpcodeWithIP "FSQRT" $ do
     comment "Floating Square Root (A-form)"
     fp1op "FSQRT"
