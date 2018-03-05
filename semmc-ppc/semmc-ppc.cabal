@@ -151,9 +151,14 @@ executable semmc-ppc-genbase
   main-is: GenBase.hs
   ghc-options: -Wall -rtsopts
   build-depends: base,
+                 bytestring,
+                 crucible,
+                 dismantle-ppc,
+                 dismantle-tablegen,
                  optparse-applicative,
                  text,
                  directory,
                  filepath,
+                 parameterized-utils,
                  semmc,
                  semmc-ppc
