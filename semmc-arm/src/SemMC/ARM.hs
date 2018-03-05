@@ -209,6 +209,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
         opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opVt (ThumbDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
         opVt x = error $ "operandValue T32 not implemented for " <> show x
@@ -351,6 +352,7 @@ shapeReprType orep =
             _ -> error $ "Unknown A32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
       T32OperandRepr t32rep ->
           case t32rep of
+            ThumbDis.Cc_outRepr -> knownRepr
             ThumbDis.GPRnopcRepr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr
             _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
