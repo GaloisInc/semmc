@@ -19,6 +19,7 @@ import qualified Lang.Crucible.Solver.Interface as CRU
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 import qualified SemMC.ARM as ARM
 import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics )
+import           SemMC.Architecture.ARM.Combined
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Util as U
@@ -63,22 +64,26 @@ tests = testGroup "Read Formulas"
 
 testA32Formulas :: TestTree
 testA32Formulas = testGroup "A32 Formulas" $
-                  fmap testA32Formula allA32Semantics
+                  fmap testFormula allA32Semantics
 
-testA32Formula :: (Some (A32.Opcode A32.Operand), BS.ByteString) -> TestTree
-testA32Formula a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
+testT32Formulas :: TestTree
+testT32Formulas = testGroup "T32 Formulas" $
+                  fmap testFormula allT32Semantics
+
+testFormula :: (Some (ARMOpcode ARMOperand), BS.ByteString) -> TestTree
+testFormula a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
   do Some ng <- PN.newIONonceGenerator
      sym <- S.newSimpleBackend ng
-     fm <- withTestLogging $ loadA32Formula sym a
-     -- The Main test is loadA32Formula doesn't generate an exception.
+     fm <- withTestLogging $ loadFormula sym a
+     -- The Main test is loadFormula doesn't generate an exception.
      -- The result should be a MapF with a valid entry in it.
      MapF.size fm @?= 1
     where opname (Some op) = showF op
 
-loadA32Formula :: ( CRU.IsSymInterface sym
+loadFormula :: ( CRU.IsSymInterface sym
                   , ShowF (CRU.SymExpr sym)
                   , U.HasLogCfg) =>
                   sym
-               -> (Some (A32.Opcode A32.Operand), BS.ByteString)
-               -> IO (MapF.MapF (A32.Opcode A32.Operand) (F.ParameterizedFormula sym ARM.ARM))
-loadA32Formula sym a = FL.loadFormulas sym [a]
+               -> (Some (ARMOpcode ARMOperand), BS.ByteString)
+               -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.ARM))
+loadFormula sym a = FL.loadFormulas sym [a]

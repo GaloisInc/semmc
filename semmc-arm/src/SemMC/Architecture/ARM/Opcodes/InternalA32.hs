@@ -4,8 +4,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module SemMC.Architecture.ARM.Opcodes.InternalA32
-    ( allA32Opcodes
-    , allA32OpcodeInfo
+    ( a32Opcodes
+    , a32OpcodeInfo
     )
     where
 
@@ -14,9 +14,9 @@ import qualified Dismantle.ARM as A32
 import qualified Dismantle.Tablegen.TH.Capture as DT
 
 
-allA32OpcodeInfo :: [Some (DT.CaptureInfo (A32.Opcode A32.Operand))]
-allA32OpcodeInfo = $(DT.captureInfo (const True) ''A32.Opcode)
+a32OpcodeInfo :: [Some (DT.CaptureInfo (A32.Opcode A32.Operand))]
+a32OpcodeInfo = $(DT.captureInfo (const True) ''A32.Opcode)
 
 -- | All opcodes known for the architecture
-allA32Opcodes :: [Some (A32.Opcode A32.Operand)]
-allA32Opcodes = map (mapSome DT.capturedOpcode) allA32OpcodeInfo
+a32Opcodes :: [Some (A32.Opcode A32.Operand)]
+a32Opcodes = map (mapSome DT.capturedOpcode) a32OpcodeInfo
