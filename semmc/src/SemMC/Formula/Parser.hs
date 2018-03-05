@@ -604,7 +604,7 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
             (SC.SCons (SC.SAtom (AIdent "call"))
                (SC.SCons (SC.SAtom (AString fnName))
                   SC.SNil))) args =
-  prefixError "in reading call expression: " $ do
+  prefixError ("in reading call '" <> fnName <> "' expression: ") $ do
     sym <- MR.reader getSym
     fns <- MR.reader (envFunctions . getEnv)
     SomeSome fn <- case Map.lookup fnName fns of
