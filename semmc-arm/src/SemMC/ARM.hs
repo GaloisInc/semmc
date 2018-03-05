@@ -158,6 +158,7 @@ type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in i
 type instance A.OperandType ARM "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
+type instance A.OperandType ARM "GPRnopc" = BaseBVType 32
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
@@ -207,6 +208,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
         opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt x = error $ "operandValue T32 not implemented for " <> show x
 
 
@@ -347,6 +349,7 @@ shapeReprType orep =
             _ -> error $ "Unknown A32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
       T32OperandRepr t32rep ->
           case t32rep of
+            ThumbDis.GPRnopcRepr -> knownRepr
             _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- Thumb.ThumbBlxTargetRepr -> knownRepr
     -- "Imm0_15"
