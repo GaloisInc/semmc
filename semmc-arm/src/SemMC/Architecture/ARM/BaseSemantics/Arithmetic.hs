@@ -62,7 +62,7 @@ manualArithmetic = do
 
 
   defineT32Opcode T.TADDi8 (Empty
-                           :> ParamDef "rDn" gpr naturalBV
+                           :> ParamDef "rDn" tgpr naturalBV
                            :> ParamDef "imm" imm0_255 (EBV 8)
                            )
                        $ \rDn imm8 -> do
@@ -73,10 +73,10 @@ manualArithmetic = do
     tadd rDn rDn imm32 (LitBool True) setflags
 
   defineT32Opcode T.T2ADDri (Empty
-                            :> ParamDef "rD" gpr naturalBV
+                            :> ParamDef "rD" gprnopc naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
                             :> ParamDef "imm" t2_so_imm (EBV 16)
-                            :> ParamDef "rN" gpr naturalBV
+                            :> ParamDef "rN" gprnopc naturalBV
                             )
                         $ \rD setcc imm16 rN -> do
     comment "Add immediate, T32, encoding T3 (F7.1.4, F7-2540)"
@@ -90,14 +90,14 @@ manualArithmetic = do
     tadd rD rN imm32 undef setflags
 
   defineT32Opcode T.T2ADDri12 (Empty
-                               :> ParamDef "rD" gpr naturalBV
+                               :> ParamDef "rD" gprnopc naturalBV
                                :> ParamDef "imm" imm0_4095 (EBV 16)
                                :> ParamDef "rN" gpr naturalBV
                               )
                         $ \rD imm12 rN -> do
     comment "Add immediate, T32, encoding T4 (F7.1.4, F7-2540)"
     input rN
-    input imm12
+    input imm12  -- n.b. encodes 12 bits, but Dismantle provides 16 bits (assumed zext)
     let imm32 = zext (Loc imm12)
     tadd rD rN imm32 (LitBool False) (LitBool False)
 
