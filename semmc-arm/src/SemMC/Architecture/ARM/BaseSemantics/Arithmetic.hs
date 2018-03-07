@@ -410,7 +410,7 @@ tadd :: (HasCallStack)
 tadd rD rN imm32 setflags undef = do
   let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 1 0b0)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
-  cpsrNZCV (andp setflags (notp undef)) nzcv
+  cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 
 lsl :: Location 'TBV -> Expr 'TBV -> Location 'TBV -> Expr 'TBool -> SemARM 'Def ()
 lsl rD shift_n rM setflags = do

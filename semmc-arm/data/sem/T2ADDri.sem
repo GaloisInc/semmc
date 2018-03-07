@@ -343,8 +343,12 @@
            (bveq setcc #b1)))
          ((_ call "arm.is_r15")
           rN))
-        (notp
-         (bveq setcc #b1)))
+        (andp
+         (notp
+          ((_ call "arm.is_r15")
+           rD))
+         (notp
+          (bveq setcc #b1))))
        (concat
         (addCarry)
         ((_ extract 27 0)
