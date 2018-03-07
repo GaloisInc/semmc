@@ -43,6 +43,8 @@ import qualified Data.Parameterized.List as PL
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.ARM as ARMDis
 import qualified Dismantle.ARM.Operands as ARMOperands
+import qualified Dismantle.Thumb as ThumbDis
+import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           Lang.Crucible.BaseTypes
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Location
