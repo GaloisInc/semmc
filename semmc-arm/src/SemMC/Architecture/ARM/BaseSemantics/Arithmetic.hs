@@ -291,10 +291,10 @@ manualBitwise = do
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
     andrr rDN rM rDN setflags shift_t shift_n
   defineT32Opcode T.T2ANDrr (  Empty
-                            :> ParamDef "rD" tgpr naturalBV
+                            :> ParamDef "rD" rgpr naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
-                            :> ParamDef "rN" tgpr naturalBV
-                            :> ParamDef "rM" tgpr naturalBV
+                            :> ParamDef "rN" rgpr naturalBV
+                            :> ParamDef "rM" rgpr naturalBV
                             )
                  $ \rD setcc rN rM -> do
     comment "AND register, Encoding T2 (F7.1.14, F7-2558)"
