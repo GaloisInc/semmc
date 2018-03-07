@@ -168,8 +168,8 @@ type instance A.OperandType ARM "Pred" = BaseBVType 4
 type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
-type instance A.OperandType ARM "T2_so_imm" = BaseBVType 32
 type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
+type instance A.OperandType ARM "T2_so_imm" = BaseBVType 16
 type instance A.OperandType ARM "Unpredictable" = BaseBVType 32
 
 
