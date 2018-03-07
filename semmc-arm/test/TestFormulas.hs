@@ -13,13 +13,11 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Semigroup
-import qualified Dismantle.ARM as A32
-import qualified Dismantle.Thumb as T32
 import qualified Lang.Crucible.Solver.Interface as CRU
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 import qualified SemMC.ARM as ARM
-import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics )
 import           SemMC.Architecture.ARM.Combined
+import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics )
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Util as U
@@ -60,6 +58,7 @@ tests :: TestTree
 tests = testGroup "Read Formulas"
         [ testCase "warmup test" $ 1 + 1 @?= (2::Int)
         , testA32Formulas
+        , testT32Formulas
         ]
 
 testA32Formulas :: TestTree
