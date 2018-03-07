@@ -120,7 +120,7 @@ uninterpretedFunctions _ =
      Some (knownRepr :: BaseTypeRepr (BaseBVType 1)))
 
   , ("t32.imm0_1020S4_imm", -- Extract the shift amount
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 8)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
 
   , ("t32.t2soimm_imm", -- Extract the shift amount
