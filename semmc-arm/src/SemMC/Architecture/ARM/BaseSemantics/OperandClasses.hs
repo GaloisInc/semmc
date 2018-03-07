@@ -101,7 +101,7 @@ unpredictableInstrBits = "Unpredictable"
 -- T32 operand names
 
 thumb_blx_target :: String
-thumb_blx_target = "ThumbBlxTarget"
+thumb_blx_target = "Thumb_blx_target"
 
 
 -- ----------------------------------------------------------------------

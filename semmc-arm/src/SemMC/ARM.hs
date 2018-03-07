@@ -168,8 +168,8 @@ type instance A.OperandType ARM "Pred" = BaseBVType 4
 type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
-type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
 type instance A.OperandType ARM "T2_so_imm" = BaseBVType 16
+type instance A.OperandType ARM "Thumb_blx_target" = BaseBVType 32 -- double-instr val
 type instance A.OperandType ARM "Unpredictable" = BaseBVType 32
 
 
@@ -208,13 +208,13 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVa (ARMDis.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
         opVa (ARMDis.So_reg_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
         opVa (ARMDis.Unpredictable v) = S.bvLit sym knownNat $ toInteger v
-        -- opV (Thumb.ThumbBlxTarget v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
         opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
         opVt (ThumbDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
+        opVt (ThumbDis.Thumb_blx_target v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
         opVt x = error $ "operandValue T32 not implemented for " <> show x
 
 
@@ -358,6 +358,7 @@ shapeReprType orep =
             ThumbDis.Cc_outRepr -> knownRepr
             ThumbDis.GPRnopcRepr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr
+            ThumbDis.Thumb_blx_targetRepr -> knownRepr
             _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- Thumb.ThumbBlxTargetRepr -> knownRepr
     -- "Imm0_15"
