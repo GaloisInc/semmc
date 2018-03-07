@@ -552,7 +552,7 @@ exprAssignment' (Ctx.viewAssign -> Ctx.AssignEmpty) [] = return Ctx.empty
 exprAssignment' (Ctx.viewAssign -> Ctx.AssignExtend restTps tp) (Some e : restExprs) = do
   Refl <- case testEquality tp (S.exprType e) of
             Just pf -> return pf
-            Nothing -> E.throwError ("unexpected type: " ++ show tp ++ " and " ++ show (S.exprType e))
+            Nothing -> E.throwError ("unexpected type, assigning to: " ++ show tp ++ " from expr: " ++ show (S.exprType e))
   restAssn <- exprAssignment' restTps restExprs
   return $ restAssn Ctx.:> e
 exprAssignment' _ _ = E.throwError "mismatching numbers of arguments"
@@ -653,7 +653,8 @@ readExpr (SC.SAtom paramRaw) = do
   param <- readParameter opNames paramRaw
   case param of
     Some (OperandParameter _ idx) -> return . Some . S.varExpr sym . BV.unBoundVar $ (opVars SL.!! idx)
-    Some (LiteralParameter lit) -> maybe (E.throwError "not declared as input") (return . Some) $ litLookup lit
+    Some (LiteralParameter lit) -> maybe (E.throwError ("not declared as input but saw unknown literal param: " ++ showF lit))
+                                   (return . Some) $ litLookup lit
     Some (FunctionParameter fname _ _) -> E.throwError ("Functions cannot appear as atoms: " ++ fname)
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
