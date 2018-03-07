@@ -65,7 +65,7 @@ fakeTestEq x y = if x == y then Just Refl else Nothing
 instance TestEquality (Location arm) where
   testEquality = $(structuralTypeEquality [t|Location|]
                    [ (ConType [t|ARMOprnds.GPR|], [|fakeTestEq|])
-                     -- , (ConType [t|ARM.GPR|], [|fakeTestEq|])
+                   , (ConType [t|ThumbOprnds.GPR|], [|fakeTestEq|])
                    ]
                   )
 
@@ -75,6 +75,6 @@ fakeCompareF x y = fromOrdering (compare x y)
 instance OrdF (Location arm) where
   compareF = $(structuralTypeOrd [t|Location|]
                [ (ConType [t|ARMOprnds.GPR|], [|fakeCompareF|])
-                 -- , (ConType [t|ARM.GPR|], [|fakeCompareF|])
+               , (ConType [t|ThumbOprnds.GPR|], [|fakeCompareF|])
                ]
               )

@@ -277,3 +277,12 @@ instance InterpIsR15 (Maybe ARMOperands.GPR) where
     case mr of
       Nothing -> True
       Just r -> interpIsR15 r
+
+instance InterpIsR15 ThumbOperands.GPR where
+    interpIsR15 gprReg = ThumbOperands.unGPR gprReg == 15
+
+instance InterpIsR15 (Maybe ThumbOperands.GPR) where
+  interpIsR15 mr =
+    case mr of
+      Nothing -> True
+      Just r -> interpIsR15 r
