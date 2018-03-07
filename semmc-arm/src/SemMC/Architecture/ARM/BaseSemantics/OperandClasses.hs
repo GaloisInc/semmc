@@ -64,6 +64,9 @@ cc_out = "Cc_out"
 imm0_7 :: String
 imm0_7 = "Imm0_7"
 
+imm0_31 :: String
+imm0_31 = "Imm0_31"
+
 imm0_255 :: String
 imm0_255 = "Imm0_255"
 
@@ -120,6 +123,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "GPRnopc" = 'TBV
   SymToExprTag "Mod_imm" = 'TBV
   SymToExprTag "Imm0_7" = 'TBV
+  SymToExprTag "Imm0_31" = 'TBV
   SymToExprTag "Imm0_255" = 'TBV
   SymToExprTag "Imm0_4095" = 'TBV
   SymToExprTag "Pred" = 'TBV

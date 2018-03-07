@@ -163,6 +163,7 @@ type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "GPRnopc" = BaseBVType 32
 type instance A.OperandType ARM "Imm0_7" = BaseBVType 3
+type instance A.OperandType ARM "Imm0_31" = BaseBVType 5
 type instance A.OperandType ARM "Imm0_255" = BaseBVType 8
 type instance A.OperandType ARM "Imm0_4095" = BaseBVType 16
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
@@ -219,6 +220,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt (ThumbDis.GPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.Imm0_7 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.opcodeToBits v -- KWQ: (.&. 7)?
+        opVt (ThumbDis.Imm0_31 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.imm5ToBits v
         opVt (ThumbDis.Imm0_255 v) = S.bvLit sym knownNat $ toInteger v  -- v :: Word8
         opVt (ThumbDis.Imm0_4095 v) = S.bvLit sym knownNat $ toInteger v -- v :: Word16
         opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
@@ -372,6 +374,7 @@ shapeReprType orep =
             ThumbDis.GPRRepr -> knownRepr
             ThumbDis.GPRnopcRepr -> knownRepr
             ThumbDis.Imm0_7Repr -> knownRepr
+            ThumbDis.Imm0_31Repr -> knownRepr
             ThumbDis.Imm0_255Repr -> knownRepr
             ThumbDis.Imm0_4095Repr -> knownRepr
             ThumbDis.RGPRRepr -> knownRepr
@@ -379,10 +382,6 @@ shapeReprType orep =
             ThumbDis.Thumb_blx_targetRepr -> knownRepr
             ThumbDis.TGPRRepr -> knownRepr
             _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
-    -- Thumb.ThumbBlxTargetRepr -> knownRepr
-    -- "Imm0_15"
-    --   | Just Refl <- testEquality sr (SR.knownSymbol @"Imm0_15") ->
-    --     knownRepr :: BaseTypeRepr (A.OperandType ARM "Imm0_15")
 
 
 -- ----------------------------------------------------------------------
