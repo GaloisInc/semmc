@@ -165,6 +165,7 @@ type instance A.OperandType ARM "GPRnopc" = BaseBVType 32
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
+type instance A.OperandType ARM "RGPR" = BaseBVType 32
 type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
@@ -213,6 +214,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
         opVt (ThumbDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
         opVt (ThumbDis.Thumb_blx_target v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
         opVt x = error $ "operandValue T32 not implemented for " <> show x
@@ -221,6 +223,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
 operandToLocation :: ARMOperand s -> Maybe (Location ARM (A.OperandType ARM s))
 operandToLocation (A32Operand (ARMDis.GPR gpr)) = Just $ LocGPR $ ARMOperands.unGPR gpr
 operandToLocation (T32Operand (ThumbDis.GPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.RGPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
 operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
@@ -357,6 +360,7 @@ shapeReprType orep =
           case t32rep of
             ThumbDis.Cc_outRepr -> knownRepr
             ThumbDis.GPRnopcRepr -> knownRepr
+            ThumbDis.RGPRRepr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr
             ThumbDis.Thumb_blx_targetRepr -> knownRepr
             _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)

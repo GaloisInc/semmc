@@ -24,6 +24,9 @@ gprnopc = "GPRnopc"
 tgpr :: String
 tgpr = "TGPR"
 
+rgpr :: String
+rgpr = "RGPR"
+
 -- ----------------------------------------------------------------------
 -- A32 operand names
 
