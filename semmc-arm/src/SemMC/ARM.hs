@@ -162,6 +162,9 @@ type instance A.OperandType ARM "Arm_br_target" = BaseBVType 32 -- 24 bits in in
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
 type instance A.OperandType ARM "GPRnopc" = BaseBVType 32
+type instance A.OperandType ARM "Imm0_7" = BaseBVType 3
+type instance A.OperandType ARM "Imm0_255" = BaseBVType 8
+type instance A.OperandType ARM "Imm0_4095" = BaseBVType 16
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
@@ -215,6 +218,9 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt (ThumbDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opVt (ThumbDis.GPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.Imm0_7 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.opcodeToBits v -- KWQ: (.&. 7)?
+        opVt (ThumbDis.Imm0_255 v) = S.bvLit sym knownNat $ toInteger v  -- v :: Word8
+        opVt (ThumbDis.Imm0_4095 v) = S.bvLit sym knownNat $ toInteger v -- v :: Word16
         opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
         opVt (ThumbDis.Thumb_blx_target v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
@@ -365,6 +371,9 @@ shapeReprType orep =
             ThumbDis.Cc_outRepr -> knownRepr
             ThumbDis.GPRRepr -> knownRepr
             ThumbDis.GPRnopcRepr -> knownRepr
+            ThumbDis.Imm0_7Repr -> knownRepr
+            ThumbDis.Imm0_255Repr -> knownRepr
+            ThumbDis.Imm0_4095Repr -> knownRepr
             ThumbDis.RGPRRepr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr
             ThumbDis.Thumb_blx_targetRepr -> knownRepr
