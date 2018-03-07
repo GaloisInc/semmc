@@ -1,0 +1,198 @@
+;; Logical Shift Left, Encoding T1
+;; doc: F7.1.99, page F7-2692
+(let
+ ((shiftC
+  (ite
+   (bveq
+    ((_ extract 31 0)
+     (concat
+      #b000
+      ((_ zero_extend 27)
+       imm)))
+    #x00000000)
+   (concat
+    ((_ extract 29 29)
+     'CPSR)
+    rM)
+   (lslC)))
+  (lslC
+   (bvshl
+    ((_ zero_extend 1)
+     rM)
+    ((_ zero_extend 1)
+     ((_ extract 31 0)
+      (concat
+       #b000
+       ((_ zero_extend 27)
+        imm))))))
+  (testCondition
+   (ite
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (ITState)))
+     (bvne
+      (ITState)
+      #xf))
+    (notp
+     (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      (ITState))
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
+    (ite
+     (bveq
+      ((_ extract 3 1)
+       (ITState))
+      #b001)
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
+     (ite
+      (bveq
+       ((_ extract 3 1)
+        (ITState))
+       #b010)
+      (bveq
+       #b1
+       ((_ extract 31 31)
+        'CPSR))
+      (ite
+       (bveq
+        ((_ extract 3 1)
+         (ITState))
+        #b011)
+       (bveq
+        #b1
+        ((_ extract 28 28)
+         'CPSR))
+       (ite
+        (bveq
+         ((_ extract 3 1)
+          (ITState))
+         #b100)
+        (andp
+         (bveq
+          #b1
+          ((_ extract 29 29)
+           'CPSR))
+         (notp
+          (bveq
+           #b1
+           ((_ extract 30 30)
+            'CPSR))))
+        (ite
+         (bveq
+          ((_ extract 3 1)
+           (ITState))
+          #b101)
+         (bveq
+          ((_ extract 31 31)
+           'CPSR)
+          ((_ extract 28 28)
+           'CPSR))
+         (ite
+          (bveq
+           ((_ extract 3 1)
+            (ITState))
+           #b110)
+          (andp
+           (bveq
+            ((_ extract 31 31)
+             'CPSR)
+            ((_ extract 28 28)
+             'CPSR))
+           (notp
+            (bveq
+             #b1
+             ((_ extract 30 30)
+              'CPSR))))
+          (true)))))))))
+  (true
+   (bveq #b0 #b0))
+  (ITState
+   (ite
+    (bveq
+     (concat
+      ((_ extract 11 10)
+       'CPSR)
+      ((_ extract 26 25)
+       'CPSR))
+     #x0)
+    #xe
+    ((_ extract 15 12)
+     'CPSR)))
+  (nzcv
+   (concat
+    ((_ extract 31 31)
+     'CPSR)
+    (concat
+     ((_ extract 30 30)
+      'CPSR)
+     (concat
+      ((_ extract 32 32)
+       (shiftC))
+      ((_ extract 28 28)
+       'CPSR)))))
+  (branchWritePC
+   (ite
+    ((_ call "arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     ((_ extract 31 0)
+      (shiftC)))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'TGPR)
+   (imm . 'Imm0_31)
+   (rM . 'TGPR)))
+  (in
+   (rM imm 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite
+      (testCondition)
+      (ite
+       (andp
+        (notp
+         (bvne
+          #x00
+          (concat
+           ((_ extract 15 12)
+            'CPSR)
+           (concat
+            ((_ extract 11 10)
+             'CPSR)
+            ((_ extract 26 25)
+             'CPSR)))))
+        (notp
+         ((_ call "arm.is_r15")
+          rD)))
+       (concat
+        (nzcv)
+        ((_ extract 27 0)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      (testCondition)
+      (ite
+       ((_ call "arm.is_r15")
+        rD)
+       rD
+       ((_ extract 31 0)
+        (shiftC)))
+      rD))))))

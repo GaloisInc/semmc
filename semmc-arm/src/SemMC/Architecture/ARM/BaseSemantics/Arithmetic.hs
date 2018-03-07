@@ -323,6 +323,19 @@ manualBitwise = do
         (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 1 1)
     cpsrNZCV (LitBool True) nzcv
 
+  defineT32Opcode T.TLSLri (Empty
+                           :> ParamDef "rD" tgpr naturalBV
+                           :> ParamDef "imm" imm0_31 (EBV 5)
+                           :> ParamDef "rM" tgpr naturalBV
+                           )
+                      $ \rD imm5 rM -> do
+    comment "Logical Shift Left, Encoding T1"
+    comment "doc: F7.1.99, page F7-2692"
+    input imm5
+    input rM
+    let (_, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 00) (Loc imm5)
+        setflags = notp inITBlock
+    lsl rD shift_n rM setflags
 
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -398,3 +411,14 @@ tadd rD rN imm32 setflags undef = do
   let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 1 0b0)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (notp undef)) nzcv
+
+lsl :: Location 'TBV -> Expr 'TBV -> Location 'TBV -> Expr 'TBool -> SemARM 'Def ()
+lsl rD shift_n rM setflags = do
+  let (n,z,c,v) = getNZCV
+  let shiftres = shiftC (Loc rM) srtLSL shift_n c
+      result = extract 31 0 shiftres
+      c' = extract 32 32 shiftres
+  defReg rD (ite (isR15 rD) (Loc rD) result)
+  aluWritePC (isR15 rD) result
+  let nzcv = "nzcv" =: concat n (concat z (concat c' v))
+  cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
