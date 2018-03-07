@@ -17,10 +17,11 @@ import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
 import           Data.Semigroup
+import           Data.Word ( Word8 )
 import qualified Dismantle.ARM.Operands as ARMOprnds
+import qualified Dismantle.Thumb.Operands as ThumbOprnds
 import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
-import           Data.Word ( Word8 )
 
 
 type family ArchRegWidth arch :: Nat
@@ -66,6 +67,7 @@ instance TestEquality (Location arm) where
   testEquality = $(structuralTypeEquality [t|Location|]
                    [ (ConType [t|ARMOprnds.GPR|], [|fakeTestEq|])
                    , (ConType [t|ThumbOprnds.GPR|], [|fakeTestEq|])
+                   , (ConType [t|ThumbOprnds.LowGPR|], [|fakeTestEq|])
                    ]
                   )
 
@@ -76,5 +78,6 @@ instance OrdF (Location arm) where
   compareF = $(structuralTypeOrd [t|Location|]
                [ (ConType [t|ARMOprnds.GPR|], [|fakeCompareF|])
                , (ConType [t|ThumbOprnds.GPR|], [|fakeCompareF|])
+               , (ConType [t|ThumbOprnds.LowGPR|], [|fakeCompareF|])
                ]
               )

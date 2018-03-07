@@ -171,8 +171,8 @@ type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
 type instance A.OperandType ARM "T2_so_imm" = BaseBVType 16
 type instance A.OperandType ARM "Thumb_blx_target" = BaseBVType 32 -- double-instr val
+type instance A.OperandType ARM "TGPR" = BaseBVType 32
 type instance A.OperandType ARM "Unpredictable" = BaseBVType 32
-
 
 instance A.IsOperandTypeRepr ARM where
     type OperandTypeRepr ARM = ARMOperandRepr
@@ -218,6 +218,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
         opVt (ThumbDis.Thumb_blx_target v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
+        opVt (ThumbDis.TGPR gpr) = locLookup (LocGPR $ ThumbOperands.unLowGPR gpr)
         opVt x = error $ "operandValue T32 not implemented for " <> show x
 
 
@@ -226,6 +227,7 @@ operandToLocation (A32Operand (ARMDis.GPR gpr)) = Just $ LocGPR $ ARMOperands.un
 operandToLocation (T32Operand (ThumbDis.GPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
 operandToLocation (T32Operand (ThumbDis.GPRnopc gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
 operandToLocation (T32Operand (ThumbDis.RGPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.TGPR gpr)) = Just $ LocGPR $ ThumbOperands.unLowGPR gpr
 operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
@@ -366,6 +368,7 @@ shapeReprType orep =
             ThumbDis.RGPRRepr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr
             ThumbDis.Thumb_blx_targetRepr -> knownRepr
+            ThumbDis.TGPRRepr -> knownRepr
             _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
     -- Thumb.ThumbBlxTargetRepr -> knownRepr
     -- "Imm0_15"
