@@ -19,48 +19,29 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-} -- KWQ
-{-# LANGUAGE AllowAmbiguousTypes #-} -- KWQ
 
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
+module SemMC.Architecture.ARM.Combined where
 
-module SemMC.Architecture.ARM.Combined
-    -- (
-    -- )
-    where
-
+import           Data.Data
 import           Data.EnumF ( congruentF, EnumF, enumF, enumCompareF )
 import qualified Data.Foldable as F
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.Lift
 import qualified Data.Parameterized.List as SL
-import           Data.Parameterized.Map
 import           Data.Parameterized.TraversableFC
 import qualified Data.Set.NonEmpty as NES
-import           Data.Word ( Word8, Word32 )
 import qualified Dismantle.ARM as ARMDis
-import qualified Dismantle.ARM.Operands as ARMOperands
 import qualified Dismantle.Thumb as ThumbDis
-import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
-import           Lang.Crucible.BaseTypes
-import           Language.Haskell.TH.Syntax ( Lift(..) )
-import qualified SemMC.Architecture as A
-import Data.Data
-import Data.Typeable
-import Data.Proxy -- ( Proxy(..) )
 
--- data ARMOperand :: Symbol -> * where
-data ARMOperand (tp :: Symbol) where
+
+data ARMOperand :: Symbol -> * where
     A32Operand :: ARMDis.Operand tp -> ARMOperand tp
     T32Operand :: ThumbDis.Operand tp -> ARMOperand tp
                   deriving (Typeable)
 
--- data ARMOpcode :: (Symbol -> *) -> [Symbol] -> * where
-data ARMOpcode (o :: Symbol -> *) (sh :: [Symbol]) where
+data ARMOpcode :: (Symbol -> *) -> [Symbol] -> * where
     A32Opcode :: (ARMDis.Opcode ARMDis.Operand sh)   -> ARMOpcode ARMOperand sh
     T32Opcode :: (ThumbDis.Opcode ThumbDis.Operand sh) -> ARMOpcode ARMOperand sh
                  deriving (Typeable)
@@ -76,26 +57,9 @@ instance Show (ARMOpcode ARMOperand sh) where
 instance ShowF ARMOperand where
 instance ShowF (ARMOpcode ARMOperand) where
 
-instance (Typeable sh) => Data (ARMOpcode ARMOperand sh)
--- instance (Typeable sh) => Lift (ARMOpcode ARMOperand sh)
--- instance LiftF (ARMOpcode ARMOperand)
---     where withLift :: Typeable tp => p (ARMOpcode ARMOperand) -> q tp -> ((Typeable tp, Lift (ARMOpcode ARMOperand tp)) => a) -> a
---           withLift _ _ x = x
---     -- where withLift :: (Lift ((ARMOpcode o) (tp :: [Symbol]))) => p (ARMOpcode o) -> q tp -> (Lift (ARMOpcode o tp) => a) -> a
---     --       withLift _ _ x = x
--- -- instance (Typeable o, Typeable tp) => LiftF (ARMOpcode o)
--- --     where withLift :: (Lift ((ARMOpcode o) tp), Typeable tp) => p (ARMOpcode o) -> q tp -> (Lift ((ARMOpcode o) tp) => a) -> a
--- --           withLift _ _ x = x
---     -- where
---     -- withLift _ _ (A32Operand x) = A32Operand x
--- -- instance (Lift tp) => LiftF (ARMOpcode ARMOperand)
--- --     where
--- --       withLift (Proxy :: Proxy (ARMOpcode ARMOperand)) (Proxy :: Proxy [Symbol]) x = x
--- --       -- withLift (Proxy :: Proxy (ARMOpcode ARMOperand)) (Proxy :: sh) (x :: ARMOpcode ARMOperand sh) = x
--- -- -- instance LiftF (ARMOpcode ARMOperand) where
--- -- --     withLift _ _ (Typeable x = x
--- --     -- withLift (proxy (ARMOpcode ARMOperand)) (Proxy tp) x = x
--- --     --                                             -- (Lift (ARMOpcode ARMOperand tp) => x) = x
+-- instance (Typeable sh) => Data (ARMOpcode ARMOperand sh)
+instance LiftF (ARMOpcode ARMOperand)
+    where withLift _ _ _ = undefined
 
 instance TestEquality (ARMOpcode ARMOperand) where
     testEquality (A32Opcode x) (A32Opcode y) = testEquality x y
@@ -149,9 +113,3 @@ instance OrdF ARMOperandRepr where
 instance HasRepr (ARMOpcode ARMOperand) (SL.List ARMOperandRepr) where
     typeRepr (A32Opcode x) = fmapFC A32OperandRepr $ typeRepr x
     typeRepr (T32Opcode x) = fmapFC T32OperandRepr $ typeRepr x
-
-    {-
-instance (KnownRepr (SL.List ARMOperandRepr) ty) => HasRepr (ARMOpcode op) (SL.List ARMOperandRepr) where
-  typeRepr (A32Opcode (x :: ARMDis.Opcode ARMDis.Operand ty)) = knownRepr
-  typeRepr (T32Opcode y) = knownRepr
-    -}

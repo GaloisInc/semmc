@@ -28,7 +28,10 @@ module SemMC.ARM
     ( ARM
     , MachineState(..)
     , Instruction
+    , ARMOpcode(..)
+    , ARMOperand(..)
     , testSerializer
+    , module SemMC.Architecture.ARM.Combined  -- for the instances
     )
     where
 
