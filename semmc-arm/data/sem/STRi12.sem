@@ -2,70 +2,167 @@
 ;; doc: F7.1.217, page F7-2880
 (let
  ((addr
+  (ite
+   ((_ call "a32.imm12_add")
+    imm12)
+   (bvadd
+    ((_ call "a32.imm12_reg")
+     imm12)
+    ((_ zero_extend 16)
+     ((_ call "a32.imm12_off")
+      imm12)))
+   (bvsub
+    ((_ call "a32.imm12_reg")
+     imm12)
+    ((_ zero_extend 16)
+     ((_ call "a32.imm12_off")
+      imm12)))))
+  (wval
    (ite
-    ((_ call "a32.imm12_add") imm12)
-    (bvadd
-     ((_ call "a32.imm12_reg") imm12)
-     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))
-    (bvsub
-     ((_ call "a32.imm12_reg") imm12)
-     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))))
-  (wval (ite ((_ call "arm.is_r15") gpr) 'PC gpr))
+    ((_ call "arm.is_r15")
+     gpr)
+    'PC
+    gpr))
   (testCondition
    (ite
-    (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
-    (notp (conditionMatch))
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       predBits))
+     (bvne predBits #xf))
+    (notp
+     (conditionMatch))
     (conditionMatch)))
   (conditionMatch
    (ite
-    (bveq ((_ extract 3 1) predBits) #b000)
-    (bveq #b1 ((_ extract 30 30) 'CPSR))
+    (bveq
+     ((_ extract 3 1)
+      predBits)
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
     (ite
-     (bveq ((_ extract 3 1) predBits) #b001)
-     (bveq #b1 ((_ extract 29 29) 'CPSR))
+     (bveq
+      ((_ extract 3 1)
+       predBits)
+      #b001)
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
      (ite
-      (bveq ((_ extract 3 1) predBits) #b010)
-      (bveq #b1 ((_ extract 31 31) 'CPSR))
+      (bveq
+       ((_ extract 3 1)
+        predBits)
+       #b010)
+      (bveq
+       #b1
+       ((_ extract 31 31)
+        'CPSR))
       (ite
-       (bveq ((_ extract 3 1) predBits) #b011)
-       (bveq #b1 ((_ extract 28 28) 'CPSR))
+       (bveq
+        ((_ extract 3 1)
+         predBits)
+        #b011)
+       (bveq
+        #b1
+        ((_ extract 28 28)
+         'CPSR))
        (ite
-        (bveq ((_ extract 3 1) predBits) #b100)
+        (bveq
+         ((_ extract 3 1)
+          predBits)
+         #b100)
         (andp
-          (bveq #b1 ((_ extract 29 29) 'CPSR))
-          (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+         (bveq
+          #b1
+          ((_ extract 29 29)
+           'CPSR))
+         (notp
+          (bveq
+           #b1
+           ((_ extract 30 30)
+            'CPSR))))
         (ite
-         (bveq ((_ extract 3 1) predBits) #b101)
-         (bveq ((_ extract 31 31) 'CPSR) ((_ extract 28 28) 'CPSR))
+         (bveq
+          ((_ extract 3 1)
+           predBits)
+          #b101)
+         (bveq
+          ((_ extract 31 31)
+           'CPSR)
+          ((_ extract 28 28)
+           'CPSR))
          (ite
-          (bveq ((_ extract 3 1) predBits) #b110)
+          (bveq
+           ((_ extract 3 1)
+            predBits)
+           #b110)
           (andp
            (bveq
-             ((_ extract 31 31) 'CPSR)
-             ((_ extract 28 28) 'CPSR))
-           (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+            ((_ extract 31 31)
+             'CPSR)
+            ((_ extract 28 28)
+             'CPSR))
+           (notp
+            (bveq
+             #b1
+             ((_ extract 30 30)
+              'CPSR))))
           (true)))))))))
-  (true (bveq #b0 #b0))
-  (rnUpd (ite (wback) (offAddr) ((_ call "a32.imm12_reg") imm12)))
+  (true
+   (bveq #b0 #b0))
+  (rnUpd
+   (ite
+    (wback)
+    (offAddr)
+    ((_ call "a32.imm12_reg")
+     imm12)))
   (offAddr
    (ite
-    ((_ call "a32.imm12_add") imm12)
+    ((_ call "a32.imm12_add")
+     imm12)
     (bvadd
-     ((_ call "a32.imm12_reg") imm12)
-     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))
+     ((_ call "a32.imm12_reg")
+      imm12)
+     ((_ zero_extend 16)
+      ((_ call "a32.imm12_off")
+       imm12)))
     (bvsub
-     ((_ call "a32.imm12_reg") imm12)
-     ((_ zero_extend 16) ((_ call "a32.imm12_off") imm12)))))
-  (wback (bvne #b0 #b0)))
- ((operands ((predBits . 'Pred) (imm12 . 'Addrmode_imm12) (gpr . 'GPR)))
-  (in (gpr 'Mem imm12 'CPSR 'PC))
+     ((_ call "a32.imm12_reg")
+      imm12)
+     ((_ zero_extend 16)
+      ((_ call "a32.imm12_off")
+       imm12)))))
+  (wback
+   (bvne #b0 #b0)))
+ ((operands
+  ((predBits . 'Pred)
+   (imm12 . 'Addrmode_imm12)
+   (gpr . 'GPR)))
+  (in
+   (gpr 'Mem imm12 'CPSR 'PC))
   (defs
-   (('PC (bvadd 'PC #x00000004))
+   (('PC
+    (bvadd 'PC #x00000004))
     ('CPSR 'CPSR)
-    (((_ call "a32.imm12_reg") imm12)
-     (ite (testCondition) (rnUpd) ((_ call "a32.imm12_reg") imm12)))
+    (((_ call "a32.imm12_reg")
+     imm12)
+     (ite
+      (testCondition)
+      (rnUpd)
+      ((_ call "a32.imm12_reg")
+       imm12)))
     ('Mem
      ((_ call "write_mem.32")
       'Mem
       (addr)
-      (ite (testCondition) (wval) ((_ call "read_mem.32") 'Mem (addr)))))))))
+      (ite
+       (testCondition)
+       (wval)
+       ((_ call "read_mem.32")
+        'Mem
+        (addr)))))))))

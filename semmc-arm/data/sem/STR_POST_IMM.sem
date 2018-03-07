@@ -1,58 +1,150 @@
 ;; Store Register, Post-indexed (P=0, W=1), immediate  (A32)
 ;; doc: F7.1.217, page F7-2880
 (let
- ((var1 (ite (testCondition) (wval) ((_ call "read_mem.32") 'Mem off)))
-  (wval (ite ((_ call "arm.is_r15") gpr) 'PC gpr))
+ ((var1
+  (ite
+   (testCondition)
+   (wval)
+   ((_ call "read_mem.32")
+    'Mem
+    off)))
+  (wval
+   (ite
+    ((_ call "arm.is_r15")
+     gpr)
+    'PC
+    gpr))
   (testCondition
    (ite
-    (andp (bveq #b1 ((_ extract 0 0) predBits)) (bvne predBits #xf))
-    (notp (conditionMatch))
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       predBits))
+     (bvne predBits #xf))
+    (notp
+     (conditionMatch))
     (conditionMatch)))
   (conditionMatch
    (ite
-    (bveq ((_ extract 3 1) predBits) #b000)
-    (bveq #b1 ((_ extract 30 30) 'CPSR))
+    (bveq
+     ((_ extract 3 1)
+      predBits)
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
     (ite
-     (bveq ((_ extract 3 1) predBits) #b001)
-     (bveq #b1 ((_ extract 29 29) 'CPSR))
+     (bveq
+      ((_ extract 3 1)
+       predBits)
+      #b001)
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
      (ite
-      (bveq ((_ extract 3 1) predBits) #b010)
-      (bveq #b1 ((_ extract 31 31) 'CPSR))
+      (bveq
+       ((_ extract 3 1)
+        predBits)
+       #b010)
+      (bveq
+       #b1
+       ((_ extract 31 31)
+        'CPSR))
       (ite
-       (bveq ((_ extract 3 1) predBits) #b011)
-       (bveq #b1 ((_ extract 28 28) 'CPSR))
+       (bveq
+        ((_ extract 3 1)
+         predBits)
+        #b011)
+       (bveq
+        #b1
+        ((_ extract 28 28)
+         'CPSR))
        (ite
-        (bveq ((_ extract 3 1) predBits) #b100)
+        (bveq
+         ((_ extract 3 1)
+          predBits)
+         #b100)
         (andp
-          (bveq #b1 ((_ extract 29 29) 'CPSR))
-          (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+         (bveq
+          #b1
+          ((_ extract 29 29)
+           'CPSR))
+         (notp
+          (bveq
+           #b1
+           ((_ extract 30 30)
+            'CPSR))))
         (ite
-         (bveq ((_ extract 3 1) predBits) #b101)
-         (bveq ((_ extract 31 31) 'CPSR) ((_ extract 28 28) 'CPSR))
+         (bveq
+          ((_ extract 3 1)
+           predBits)
+          #b101)
+         (bveq
+          ((_ extract 31 31)
+           'CPSR)
+          ((_ extract 28 28)
+           'CPSR))
          (ite
-          (bveq ((_ extract 3 1) predBits) #b110)
+          (bveq
+           ((_ extract 3 1)
+            predBits)
+           #b110)
           (andp
            (bveq
-             ((_ extract 31 31) 'CPSR)
-             ((_ extract 28 28) 'CPSR))
-           (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+            ((_ extract 31 31)
+             'CPSR)
+            ((_ extract 28 28)
+             'CPSR))
+           (notp
+            (bveq
+             #b1
+             ((_ extract 30 30)
+              'CPSR))))
           (true)))))))))
-  (true (bveq #b0 #b0))
-  (rnUpd (ite (wback) (offAddr) off))
+  (true
+   (bveq #b0 #b0))
+  (rnUpd
+   (ite
+    (wback)
+    (offAddr)
+    off))
   (offAddr
    (ite
-    ((_ call "a32.am2offset_imm_add") imm)
-    (bvadd off ((_ zero_extend 16) ((_ call "a32.am2offset_imm_imm") imm)))
-    (bvsub off ((_ zero_extend 16) ((_ call "a32.am2offset_imm_imm") imm)))))
-  (wback (bveq #b0 #b0)))
+    ((_ call "a32.am2offset_imm_add")
+     imm)
+    (bvadd
+     off
+     ((_ zero_extend 16)
+      ((_ call "a32.am2offset_imm_imm")
+       imm)))
+    (bvsub
+     off
+     ((_ zero_extend 16)
+      ((_ call "a32.am2offset_imm_imm")
+       imm)))))
+  (wback
+   (bveq #b0 #b0)))
  ((operands
-    ((predBits . 'Pred)
-    (imm . 'Am2offset_imm)
-    (off . 'Addr_offset_none)
-    (gpr . 'GPR)))
-  (in (gpr 'Mem off imm 'CPSR 'PC))
+  ((predBits . 'Pred)
+   (imm . 'Am2offset_imm)
+   (off . 'Addr_offset_none)
+   (gpr . 'GPR)))
+  (in
+   (gpr 'Mem off imm 'CPSR 'PC))
   (defs
-   (('PC (bvadd 'PC #x00000004))
+   (('PC
+    (bvadd 'PC #x00000004))
     ('CPSR 'CPSR)
-    (off (ite (testCondition) (rnUpd) off))
-    ('Mem ((_ call "write_mem.32") 'Mem off (var1)))))))
+    (off
+     (ite
+      (testCondition)
+      (rnUpd)
+      off))
+    ('Mem
+     ((_ call "write_mem.32")
+      'Mem
+      off
+      (var1)))))))
