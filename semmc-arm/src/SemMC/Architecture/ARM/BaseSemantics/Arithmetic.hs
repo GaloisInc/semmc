@@ -48,9 +48,9 @@ manualArithmetic = do
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
   defineT32Opcode T.TADDi3 (Empty
-                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "rD" tgpr naturalBV
                            :> ParamDef "imm" imm0_7 (EBV 3)
-                           :> ParamDef "rN" gpr naturalBV
+                           :> ParamDef "rN" tgpr naturalBV
                            )
                        $ \rD imm3 rN -> do
     comment "ADD immediate, T32, encoding T1 (F7.1.4, F7-2540)"
