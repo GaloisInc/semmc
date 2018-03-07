@@ -2,170 +2,347 @@
 ;; This encoding has no shift; fixed to 0
 (let
  ((shiftC
+  (ite
+   (bveq
+    ((_ extract 31 0)
+     (concat
+      #b000
+      ((_ zero_extend 27)
+       #b00000)))
+    #x00000000)
+   (concat
+    ((_ extract 29 29)
+     'CPSR)
+    rM)
    (ite
-    (bveq ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000))) #x00000000)
-    (concat ((_ extract 29 29) 'CPSR) rM)
+    (bveq
+     ((_ extract 34 32)
+      (concat
+       #b000
+       ((_ zero_extend 27)
+        #b00000)))
+     #b000)
+    (bvshl
+     ((_ zero_extend 1)
+      rM)
+     ((_ zero_extend 1)
+      ((_ extract 31 0)
+       (concat
+        #b000
+        ((_ zero_extend 27)
+         #b00000)))))
     (ite
-     (bveq ((_ extract 34 32) (concat #b000 ((_ zero_extend 27) #b00000))) #b000)
-     (bvshl
-      ((_ zero_extend 1) rM)
-      ((_ zero_extend 1)
-       ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000)))))
+     (bveq
+      ((_ extract 34 32)
+       (concat
+        #b000
+        ((_ zero_extend 27)
+         #b00000)))
+      #b001)
+     (concat
+      (ite
+       (bvult
+        ((_ extract 31 0)
+         (concat
+          #b000
+          ((_ zero_extend 27)
+           #b00000)))
+        #x00000020)
+       (ite
+        ((_ call "test_bit_dynamic")
+         (bvsub
+          ((_ extract 31 0)
+           (concat
+            #b000
+            ((_ zero_extend 27)
+             #b00000)))
+          #x00000001)
+         rM)
+        #b1
+        #b0)
+       #b0)
+      (bvlshr
+       rM
+       (bvurem
+        ((_ extract 31 0)
+         (concat
+          #b000
+          ((_ zero_extend 27)
+           #b00000)))
+        #x00000020)))
      (ite
       (bveq
-        ((_ extract 34 32) (concat #b000 ((_ zero_extend 27) #b00000)))
-        #b001)
+       ((_ extract 34 32)
+        (concat
+         #b000
+         ((_ zero_extend 27)
+          #b00000)))
+       #b010)
       (concat
        (ite
         (bvult
-          ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000)))
-          #x00000020)
+         ((_ extract 31 0)
+          (concat
+           #b000
+           ((_ zero_extend 27)
+            #b00000)))
+         #x00000020)
         (ite
          ((_ call "test_bit_dynamic")
           (bvsub
            ((_ extract 31 0)
-            (concat #b000 ((_ zero_extend 27) #b00000)))
+            (concat
+             #b000
+             ((_ zero_extend 27)
+              #b00000)))
            #x00000001)
           rM)
          #b1
          #b0)
         #b0)
-       (bvlshr
+       (bvashr
         rM
         (bvurem
-          ((_ extract 31 0) (concat #b000 ((_ zero_extend 27) #b00000)))
-          #x00000020)))
+         ((_ extract 31 0)
+          (concat
+           #b000
+           ((_ zero_extend 27)
+            #b00000)))
+         #x00000020)))
       (ite
        (bveq
-         ((_ extract 34 32) (concat #b000 ((_ zero_extend 27) #b00000)))
-         #b010)
+        ((_ extract 34 32)
+         (concat
+          #b000
+          ((_ zero_extend 27)
+           #b00000)))
+        #b011)
        (concat
         (ite
          (bvult
           ((_ extract 31 0)
-           (concat #b000 ((_ zero_extend 27) #b00000)))
+           (concat
+            #b000
+            ((_ zero_extend 27)
+             #b00000)))
           #x00000020)
          (ite
           ((_ call "test_bit_dynamic")
            (bvsub
             ((_ extract 31 0)
-             (concat #b000 ((_ zero_extend 27) #b00000)))
+             (concat
+              #b000
+              ((_ zero_extend 27)
+               #b00000)))
             #x00000001)
            rM)
           #b1
           #b0)
          #b0)
-        (bvashr
-         rM
-         (bvurem
-          ((_ extract 31 0)
-           (concat #b000 ((_ zero_extend 27) #b00000)))
-          #x00000020)))
-       (ite
-        (bveq
-          ((_ extract 34 32)
-          (concat #b000 ((_ zero_extend 27) #b00000)))
-          #b011)
-        (concat
-         (ite
-          (bvult
-           ((_ extract 31 0)
-            (concat #b000 ((_ zero_extend 27) #b00000)))
-           #x00000020)
-          (ite
-           ((_ call "test_bit_dynamic")
-            (bvsub
-             ((_ extract 31 0)
-              (concat #b000 ((_ zero_extend 27) #b00000)))
-             #x00000001)
-            rM)
-           #b1
-           #b0)
-          #b0)
-         (bvor
-          (bvshl
-           rM
-           (bvsub
-            #x00000020
-            (bvurem
-             ((_ extract 31 0)
-              (concat #b000 ((_ zero_extend 27) #b00000)))
-             #x00000020)))
-          (bvlshr
-           rM
+        (bvor
+         (bvshl
+          rM
+          (bvsub
+           #x00000020
            (bvurem
             ((_ extract 31 0)
-             (concat #b000 ((_ zero_extend 27) #b00000)))
-            #x00000020))))
+             (concat
+              #b000
+              ((_ zero_extend 27)
+               #b00000)))
+            #x00000020)))
+         (bvlshr
+          rM
+          (bvurem
+           ((_ extract 31 0)
+            (concat
+             #b000
+             ((_ zero_extend 27)
+              #b00000)))
+           #x00000020))))
+       (concat
+        ((_ extract 0 0)
+         rM)
         (concat
-          ((_ extract 0 0) rM)
-          (concat ((_ extract 29 29) 'CPSR) ((_ extract 31 1) rM)))))))))
+         ((_ extract 29 29)
+          'CPSR)
+         ((_ extract 31 1)
+          rM)))))))))
   (testCondition
    (ite
-    (andp (bveq #b1 ((_ extract 0 0) (ITState))) (bvne (ITState) #xf))
-    (notp (conditionMatch))
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (ITState)))
+     (bvne
+      (ITState)
+      #xf))
+    (notp
+     (conditionMatch))
     (conditionMatch)))
   (conditionMatch
    (ite
-    (bveq ((_ extract 3 1) (ITState)) #b000)
-    (bveq #b1 ((_ extract 30 30) 'CPSR))
+    (bveq
+     ((_ extract 3 1)
+      (ITState))
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
     (ite
-     (bveq ((_ extract 3 1) (ITState)) #b001)
-     (bveq #b1 ((_ extract 29 29) 'CPSR))
+     (bveq
+      ((_ extract 3 1)
+       (ITState))
+      #b001)
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
      (ite
-      (bveq ((_ extract 3 1) (ITState)) #b010)
-      (bveq #b1 ((_ extract 31 31) 'CPSR))
+      (bveq
+       ((_ extract 3 1)
+        (ITState))
+       #b010)
+      (bveq
+       #b1
+       ((_ extract 31 31)
+        'CPSR))
       (ite
-       (bveq ((_ extract 3 1) (ITState)) #b011)
-       (bveq #b1 ((_ extract 28 28) 'CPSR))
+       (bveq
+        ((_ extract 3 1)
+         (ITState))
+        #b011)
+       (bveq
+        #b1
+        ((_ extract 28 28)
+         'CPSR))
        (ite
-        (bveq ((_ extract 3 1) (ITState)) #b100)
+        (bveq
+         ((_ extract 3 1)
+          (ITState))
+         #b100)
         (andp
-          (bveq #b1 ((_ extract 29 29) 'CPSR))
-          (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+         (bveq
+          #b1
+          ((_ extract 29 29)
+           'CPSR))
+         (notp
+          (bveq
+           #b1
+           ((_ extract 30 30)
+            'CPSR))))
         (ite
-         (bveq ((_ extract 3 1) (ITState)) #b101)
-         (bveq ((_ extract 31 31) 'CPSR) ((_ extract 28 28) 'CPSR))
+         (bveq
+          ((_ extract 3 1)
+           (ITState))
+          #b101)
+         (bveq
+          ((_ extract 31 31)
+           'CPSR)
+          ((_ extract 28 28)
+           'CPSR))
          (ite
-          (bveq ((_ extract 3 1) (ITState)) #b110)
+          (bveq
+           ((_ extract 3 1)
+            (ITState))
+           #b110)
           (andp
            (bveq
-             ((_ extract 31 31) 'CPSR)
-             ((_ extract 28 28) 'CPSR))
-           (notp (bveq #b1 ((_ extract 30 30) 'CPSR))))
+            ((_ extract 31 31)
+             'CPSR)
+            ((_ extract 28 28)
+             'CPSR))
+           (notp
+            (bveq
+             #b1
+             ((_ extract 30 30)
+              'CPSR))))
           (true)))))))))
-  (true (bveq #b0 #b0))
+  (true
+   (bveq #b0 #b0))
   (ITState
    (ite
-    (bveq (concat ((_ extract 11 10) 'CPSR) ((_ extract 26 25) 'CPSR)) #x0)
+    (bveq
+     (concat
+      ((_ extract 11 10)
+       'CPSR)
+      ((_ extract 26 25)
+       'CPSR))
+     #x0)
     #xe
-    ((_ extract 15 12) 'CPSR)))
+    ((_ extract 15 12)
+     'CPSR)))
   (nzcv
    (concat
-    ((_ extract 31 31) (bvand rN ((_ extract 31 0) (shiftC))))
+    ((_ extract 31 31)
+     (bvand
+      rN
+      ((_ extract 31 0)
+       (shiftC))))
     (concat
-      (isZeroBit)
-      (concat ((_ extract 32 32) (shiftC)) ((_ extract 28 28) 'CPSR)))))
-  (isZeroBit (ite (bveq (bvand rN ((_ extract 31 0) (shiftC))) #x00000000) #b1 #b0))
+     (isZeroBit)
+     (concat
+      ((_ extract 32 32)
+       (shiftC))
+      ((_ extract 28 28)
+       'CPSR)))))
+  (isZeroBit
+   (ite
+    (bveq
+     (bvand
+      rN
+      ((_ extract 31 0)
+       (shiftC)))
+     #x00000000)
+    #b1
+    #b0))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15") rD)
-    (bvand #xfffffffd (bvand rN ((_ extract 31 0) (shiftC))))
+    ((_ call "arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     (bvand
+      rN
+      ((_ extract 31 0)
+       (shiftC))))
     (bvadd 'PC #x00000002))))
- ((operands ((rD . 'TGPR) (setcc . 'Cc_out) (rN . 'TGPR) (rM . 'TGPR)))
-  (in (setcc rM rN rD 'CPSR 'PC))
+ ((operands
+  ((rD . 'RGPR)
+   (setcc . 'Cc_out)
+   (rN . 'RGPR)
+   (rM . 'RGPR)))
+  (in
+   (setcc rM rN rD 'CPSR 'PC))
   (defs
-   (('PC (branchWritePC))
+   (('PC
+    (branchWritePC))
     ('CPSR
      (ite
       (testCondition)
       (ite
-       (andp (bveq setcc #b1) (notp ((_ call "arm.is_r15") rD)))
-       (concat (nzcv) ((_ extract 27 0) 'CPSR))
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "arm.is_r15")
+          rD)))
+       (concat
+        (nzcv)
+        ((_ extract 27 0)
+         'CPSR))
        'CPSR)
       'CPSR))
     (rD
-      (ite
+     (ite
       (testCondition)
-      (ite ((_ call "arm.is_r15") rD) rD (bvand rN ((_ extract 31 0) (shiftC))))
+      (ite
+       ((_ call "arm.is_r15")
+        rD)
+       rD
+       (bvand
+        rN
+        ((_ extract 31 0)
+         (shiftC))))
       rD))))))

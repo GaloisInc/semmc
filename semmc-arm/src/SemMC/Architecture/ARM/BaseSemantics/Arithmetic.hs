@@ -48,9 +48,9 @@ manualArithmetic = do
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
   defineT32Opcode T.TADDi3 (Empty
-                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "rD" tgpr naturalBV
                            :> ParamDef "imm" imm0_7 (EBV 3)
-                           :> ParamDef "rN" gpr naturalBV
+                           :> ParamDef "rN" tgpr naturalBV
                            )
                        $ \rD imm3 rN -> do
     comment "ADD immediate, T32, encoding T1 (F7.1.4, F7-2540)"
@@ -62,7 +62,7 @@ manualArithmetic = do
 
 
   defineT32Opcode T.TADDi8 (Empty
-                           :> ParamDef "rDn" gpr naturalBV
+                           :> ParamDef "rDn" tgpr naturalBV
                            :> ParamDef "imm" imm0_255 (EBV 8)
                            )
                        $ \rDn imm8 -> do
@@ -73,10 +73,10 @@ manualArithmetic = do
     tadd rDn rDn imm32 (LitBool True) setflags
 
   defineT32Opcode T.T2ADDri (Empty
-                            :> ParamDef "rD" gpr naturalBV
+                            :> ParamDef "rD" gprnopc naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
                             :> ParamDef "imm" t2_so_imm (EBV 16)
-                            :> ParamDef "rN" gpr naturalBV
+                            :> ParamDef "rN" gprnopc naturalBV
                             )
                         $ \rD setcc imm16 rN -> do
     comment "Add immediate, T32, encoding T3 (F7.1.4, F7-2540)"
@@ -90,16 +90,29 @@ manualArithmetic = do
     tadd rD rN imm32 undef setflags
 
   defineT32Opcode T.T2ADDri12 (Empty
-                               :> ParamDef "rD" gpr naturalBV
+                               :> ParamDef "rD" gprnopc naturalBV
                                :> ParamDef "imm" imm0_4095 (EBV 16)
                                :> ParamDef "rN" gpr naturalBV
                               )
                         $ \rD imm12 rN -> do
     comment "Add immediate, T32, encoding T4 (F7.1.4, F7-2540)"
     input rN
-    input imm12
+    input imm12  -- n.b. encodes 12 bits, but Dismantle provides 16 bits (assumed zext)
     let imm32 = zext (Loc imm12)
     tadd rD rN imm32 (LitBool False) (LitBool False)
+
+  defineT32Opcode T.TADDrSPi (Empty
+                             :> ParamDef "rD" tgpr naturalBV
+                             :> ParamDef "imm" t_imm0_1020s4 EMemRef
+                             )
+                      $ \rD imm0_1020s4 -> do
+    comment "ADD SP + immediate, T32, encoding T1 (F7.1.9, F7-2548)"
+    input rD
+    input imm0_1020s4
+    let setflags = LitBool False
+        imm8 = t32_imm_0_1020s4_val imm0_1020s4
+        imm32 = zext $ concat imm8 (LitBV 2 0b00)
+    addSP rD imm32 setflags
 
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -291,10 +304,10 @@ manualBitwise = do
     let (shift_t, shift_n) = splitImmShift (decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000))
     andrr rDN rM rDN setflags shift_t shift_n
   defineT32Opcode T.T2ANDrr (  Empty
-                            :> ParamDef "rD" tgpr naturalBV
+                            :> ParamDef "rD" rgpr naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
-                            :> ParamDef "rN" tgpr naturalBV
-                            :> ParamDef "rM" tgpr naturalBV
+                            :> ParamDef "rN" rgpr naturalBV
+                            :> ParamDef "rM" rgpr naturalBV
                             )
                  $ \rD setcc rN rM -> do
     comment "AND register, Encoding T2 (F7.1.14, F7-2558)"
@@ -323,6 +336,19 @@ manualBitwise = do
         (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 1 1)
     cpsrNZCV (LitBool True) nzcv
 
+  defineT32Opcode T.TLSLri (Empty
+                           :> ParamDef "rD" tgpr naturalBV
+                           :> ParamDef "imm" imm0_31 (EBV 5)
+                           :> ParamDef "rM" tgpr naturalBV
+                           )
+                      $ \rD imm5 rM -> do
+    comment "Logical Shift Left, Encoding T1"
+    comment "doc: F7.1.99, page F7-2692"
+    input imm5
+    input rM
+    let (_, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 00) (Loc imm5)
+        setflags = notp inITBlock
+    lsl rD shift_n rM setflags
 
   defineA32Opcode A.ORRri (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -397,4 +423,27 @@ tadd :: (HasCallStack)
 tadd rD rN imm32 setflags undef = do
   let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 1 0b0)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
-  cpsrNZCV (andp setflags (notp undef)) nzcv
+  cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
+
+addSP :: (HasCallStack) =>
+         Location 'TBV
+      -> Expr 'TBV
+      -> Expr 'TBool
+      -> SemARM 'Def ()
+addSP rD imm32 setflags = do
+  input sp
+  let (result, nzcv) = addWithCarry (Loc sp) imm32 (LitBV 1 0b0)
+  defReg rD $ ite (isR15 rD) (Loc rD) result
+  aluWritePC (isR15 rD) result
+  cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+lsl :: Location 'TBV -> Expr 'TBV -> Location 'TBV -> Expr 'TBool -> SemARM 'Def ()
+lsl rD shift_n rM setflags = do
+  let (n,z,c,v) = getNZCV
+  let shiftres = shiftC (Loc rM) srtLSL shift_n c
+      result = extract 31 0 shiftres
+      c' = extract 32 32 shiftres
+  defReg rD (ite (isR15 rD) (Loc rD) result)
+  aluWritePC (isR15 rD) result
+  let nzcv = "nzcv" =: concat n (concat z (concat c' v))
+  cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv

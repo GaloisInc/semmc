@@ -16,11 +16,12 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
-import qualified Dismantle.ARM as ARM
+import           Data.Semigroup
+import           Data.Word ( Word8 )
 import qualified Dismantle.ARM.Operands as ARMOprnds
+import qualified Dismantle.Thumb.Operands as ThumbOprnds
 import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
-import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
 
 type family ArchRegWidth arch :: Nat
@@ -37,13 +38,20 @@ class ArchRepr arch where
 -- R15 is sometimes not the PC value, it is separately managed.
 
 data Location arm :: BaseType -> * where
-  LocGPR :: ARMOprnds.GPR -> Location arm (BaseBVType (ArchRegWidth arm))
+  LocGPR :: Word8 -> Location arm (BaseBVType (ArchRegWidth arm))
   LocPC :: Location arm (BaseBVType (ArchRegWidth arm))
   LocCPSR :: Location arm (BaseBVType (ArchRegWidth arm))
-  LocMem :: Location ppc (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth ppc))) (BaseBVType 8))
+  LocMem :: Location arm (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))
 
 instance Show (Location arm tp) where
-  show (LocGPR gpr) = show (pPrint gpr)
+  show (LocGPR gpr) = case gpr of
+                        10 -> "sl"
+                        11 -> "fp"
+                        12 -> "ip"
+                        13 -> "sp"
+                        14 -> "lr"
+                        15 -> "pc"
+                        _ -> "r" <> show gpr
   show LocPC = "PC"
   show LocCPSR = "CPSR"
   show LocMem = "Mem"
@@ -58,7 +66,8 @@ fakeTestEq x y = if x == y then Just Refl else Nothing
 instance TestEquality (Location arm) where
   testEquality = $(structuralTypeEquality [t|Location|]
                    [ (ConType [t|ARMOprnds.GPR|], [|fakeTestEq|])
-                     -- , (ConType [t|ARM.GPR|], [|fakeTestEq|])
+                   , (ConType [t|ThumbOprnds.GPR|], [|fakeTestEq|])
+                   , (ConType [t|ThumbOprnds.LowGPR|], [|fakeTestEq|])
                    ]
                   )
 
@@ -68,6 +77,7 @@ fakeCompareF x y = fromOrdering (compare x y)
 instance OrdF (Location arm) where
   compareF = $(structuralTypeOrd [t|Location|]
                [ (ConType [t|ARMOprnds.GPR|], [|fakeCompareF|])
-                 -- , (ConType [t|ARM.GPR|], [|fakeCompareF|])
+               , (ConType [t|ThumbOprnds.GPR|], [|fakeCompareF|])
+               , (ConType [t|ThumbOprnds.LowGPR|], [|fakeCompareF|])
                ]
               )

@@ -24,8 +24,8 @@ gprnopc = "GPRnopc"
 tgpr :: String
 tgpr = "TGPR"
 
--- ----------------------------------------------------------------------
--- A32 operand names
+rgpr :: String
+rgpr = "RGPR"
 
 memri :: String
 memri = "Memri"
@@ -61,6 +61,9 @@ cc_out = "Cc_out"
 imm0_7 :: String
 imm0_7 = "Imm0_7"
 
+imm0_31 :: String
+imm0_31 = "Imm0_31"
+
 imm0_255 :: String
 imm0_255 = "Imm0_255"
 
@@ -85,6 +88,12 @@ so_reg_imm = "So_reg_imm"
 t2_so_imm :: String
 t2_so_imm = "T2_so_imm"
 
+t_imm0_1020s4 :: String
+t_imm0_1020s4 = "T_imm0_1020s4"
+
+thumb_blx_target :: String
+thumb_blx_target = "Thumb_blx_target"
+
 -- | The 'unpredictableInstrBits' operand is used to define bits in
 -- the instruction encoding that the architecture specification
 -- declares as "unpredictable" and which may have different values
@@ -96,12 +105,6 @@ t2_so_imm = "T2_so_imm"
 -- The generated semantics will always ignore these.
 unpredictableInstrBits :: String
 unpredictableInstrBits = "Unpredictable"
-
--- ----------------------------------------------------------------------
--- T32 operand names
-
-thumb_blx_target :: String
-thumb_blx_target = "ThumbBlxTarget"
 
 
 -- ----------------------------------------------------------------------
@@ -117,6 +120,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "GPRnopc" = 'TBV
   SymToExprTag "Mod_imm" = 'TBV
   SymToExprTag "Imm0_7" = 'TBV
+  SymToExprTag "Imm0_31" = 'TBV
   SymToExprTag "Imm0_255" = 'TBV
   SymToExprTag "Imm0_4095" = 'TBV
   SymToExprTag "Pred" = 'TBV
@@ -133,6 +137,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "So_reg_reg" = 'TMemRef
   SymToExprTag "So_reg_imm" = 'TMemRef
   SymToExprTag "RGPR" = 'TBV
+  SymToExprTag "T_imm0_1020s4" = 'TMemRef
   SymToExprTag "T2_so_imm" = 'TBV
   SymToExprTag "TGPR" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TBV

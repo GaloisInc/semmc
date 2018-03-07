@@ -115,9 +115,17 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 1)))
 
-  , ("t32.blxtarget_J2", -- operand ThumbBlxTarget J1 bit reference
+  , ("t32.blxtarget_J2", -- operand ThumbBlxTarget J2 bit reference
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 1)))
+
+  , ("t32.imm0_1020S4_imm", -- Extract the shift amount
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 8)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
+
+  , ("t32.t2soimm_imm", -- Extract the shift amount
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 16)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 12)))
 
     -- Standard memory accesses
 

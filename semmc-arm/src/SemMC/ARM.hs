@@ -12,6 +12,8 @@
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -26,7 +28,10 @@ module SemMC.ARM
     ( ARM
     , MachineState(..)
     , Instruction
+    , ARMOpcode(..)
+    , ARMOperand(..)
     , testSerializer
+    , module SemMC.Architecture.ARM.Combined  -- for the instances
     )
     where
 
@@ -43,13 +48,16 @@ import           Data.Semigroup ((<>))
 import qualified Data.Set as Set
 import qualified Data.Vector.Sized as V
 import           Data.Word ( Word8, Word32 )
-import qualified Dismantle.ARM as ARM
+import qualified Dismantle.ARM as ARMDis
 import qualified Dismantle.ARM.Operands as ARMOperands
+import qualified Dismantle.Thumb as ThumbDis
+import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics ( numGPR )
+import           SemMC.Architecture.ARM.Combined
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
 import           SemMC.Architecture.ARM.Location
@@ -64,7 +72,8 @@ import qualified Text.Megaparsec.Char.Lexer as P
 
 
 -- | Define the arch type for this processor.  There are no
--- inhabitants, but this is used as a phantom type selector.
+-- inhabitants, but this is used as a phantom type selector.  This
+-- includes both A32 and T32 instruction modes.
 data ARM  -- arch type
 
 
@@ -136,12 +145,12 @@ getMachineState = do
 
 -- ----------------------------------------------------------------------
 
-type instance A.Operand  ARM = ARM.Operand
-type instance A.Opcode   ARM = ARM.Opcode
+type instance A.Opcode   ARM = ARMOpcode
+type instance A.Operand  ARM = ARMOperand
 type instance A.Location ARM = Location ARM
 
-instance A.IsOperand ARM.Operand
-instance A.IsOpcode  ARM.Opcode
+instance A.IsOpcode  ARMOpcode
+instance A.IsOperand ARMOperand
 
 type instance A.OperandType ARM "Addr_offset_none" = BaseBVType 32
 type instance A.OperandType ARM "Addrmode_imm12" = BaseBVType 32
@@ -152,19 +161,28 @@ type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in i
 type instance A.OperandType ARM "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType ARM "Cc_out" = BaseBVType 1
 type instance A.OperandType ARM "GPR" = BaseBVType 32
+type instance A.OperandType ARM "GPRnopc" = BaseBVType 32
+type instance A.OperandType ARM "Imm0_7" = BaseBVType 3
+type instance A.OperandType ARM "Imm0_31" = BaseBVType 5
+type instance A.OperandType ARM "Imm0_255" = BaseBVType 8
+type instance A.OperandType ARM "Imm0_4095" = BaseBVType 16
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
+type instance A.OperandType ARM "RGPR" = BaseBVType 32
 type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
-type instance A.OperandType ARM "ThumbBlxTarget" = BaseBVType 32 -- double-instr val
+type instance A.OperandType ARM "T2_so_imm" = BaseBVType 16
+type instance A.OperandType ARM "T_imm0_1020s4" = BaseBVType 8
+type instance A.OperandType ARM "Thumb_blx_target" = BaseBVType 32 -- double-instr val
+type instance A.OperandType ARM "TGPR" = BaseBVType 32
 type instance A.OperandType ARM "Unpredictable" = BaseBVType 32
 
-
 instance A.IsOperandTypeRepr ARM where
-    type OperandTypeRepr ARM = ARM.OperandRepr
-    operandTypeReprSymbol _ = ARM.operandReprString
+    type OperandTypeRepr ARM = ARMOperandRepr
+    operandTypeReprSymbol _ (A32OperandRepr o) = ARMDis.operandReprString o
+    operandTypeReprSymbol _ (T32OperandRepr o) = ThumbDis.operandReprString o
 
 
 operandValue :: forall sym s.
@@ -172,32 +190,54 @@ operandValue :: forall sym s.
                  S.IsExprBuilder sym)
              => sym
              -> (forall tp. Location ARM tp -> IO (S.SymExpr sym tp))
-             -> ARM.Operand s
+             -> ARMOperand s
              -> IO (A.TaggedExpr ARM sym s)
 operandValue sym locLookup op = TaggedExpr <$> opV op
-  where opV :: ARM.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
-        opV (ARM.Addr_offset_none gpr) = locLookup (LocGPR gpr)
-        opV (ARM.Addrmode_imm12 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
-        opV (ARM.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
-        opV (ARM.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
-        opV (ARM.Arm_bl_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
-        opV (ARM.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
-        opV (ARM.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
-        opV (ARM.Arm_br_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
-        opV (ARM.GPR gpr) = locLookup (LocGPR gpr)
-        opV (ARM.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
-        opV (ARM.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
-        opV (ARM.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
-        opV (ARM.Shift_so_reg_imm v) = S.bvLit sym knownNat $ toInteger v
-        opV (ARM.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
-        opV (ARM.So_reg_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
-        opV (ARM.Unpredictable v) = S.bvLit sym knownNat $ toInteger v
-        -- opV (Thumb.ThumbBlxTarget v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
+  where opV :: ARMOperand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opV (A32Operand o) = opVa o
+        opV (T32Operand o) = opVt o
+
+        opVa :: ARMDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opVa (ARMDis.Addr_offset_none gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
+        opVa (ARMDis.Addrmode_imm12 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
+        opVa (ARMDis.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
+        opVa (ARMDis.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
+        opVa (ARMDis.Arm_bl_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
+        opVa (ARMDis.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
+        opVa (ARMDis.Arm_br_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
+        opVa (ARMDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v -- KWQ: Bool? size?
+        opVa (ARMDis.GPR gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
+        opVa (ARMDis.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
+        opVa (ARMDis.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
+        opVa (ARMDis.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
+        opVa (ARMDis.Shift_so_reg_imm v) = S.bvLit sym knownNat $ toInteger v
+        opVa (ARMDis.So_reg_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
+        opVa (ARMDis.So_reg_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
+        opVa (ARMDis.Unpredictable v) = S.bvLit sym knownNat $ toInteger v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
+        opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opVt (ThumbDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
+        opVt (ThumbDis.GPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.Imm0_7 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.opcodeToBits v -- KWQ: (.&. 7)?
+        opVt (ThumbDis.Imm0_31 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.imm5ToBits v
+        opVt (ThumbDis.Imm0_255 v) = S.bvLit sym knownNat $ toInteger v  -- v :: Word8
+        opVt (ThumbDis.Imm0_4095 v) = S.bvLit sym knownNat $ toInteger v -- v :: Word16
+        opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.T_imm0_1020s4 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.tImm01020S4ToBits v
+        opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
+        opVt (ThumbDis.Thumb_blx_target v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
+        opVt (ThumbDis.TGPR gpr) = locLookup (LocGPR $ ThumbOperands.unLowGPR gpr)
+        opVt x = error $ "operandValue T32 not implemented for " <> show x
 
-operandToLocation :: ARM.Operand s -> Maybe (Location ARM (A.OperandType ARM s))
-operandToLocation (ARM.GPR gpr) = Just $ LocGPR gpr
+
+operandToLocation :: ARMOperand s -> Maybe (Location ARM (A.OperandType ARM s))
+operandToLocation (A32Operand (ARMDis.GPR gpr)) = Just $ LocGPR $ ARMOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.GPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.GPRnopc gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.RGPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.TGPR gpr)) = Just $ LocGPR $ ThumbOperands.unLowGPR gpr
 operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
@@ -221,14 +261,14 @@ instance A.IsLocation (Location ARM) where
       S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
   allLocations = concat
-    [ map (Some . LocGPR . ARMOperands.gpr) [0..numGPR-1],
+    [ map (Some . LocGPR) [0..numGPR-1],
       [ Some LocPC
       , Some LocCPSR
       , Some LocMem
       ]
     ]
 
-  registerizationLocations = [] -- map (Some . LocGPR . ARM.GPR) (0 : [3..4])
+  registerizationLocations = [] -- map (Some . LocGPR . ARMDis.GPR) (0 : [3..4])
 
 parseLocation :: ARMComp.Parser (Some (Location ARM))
 parseLocation = do
@@ -237,7 +277,7 @@ parseLocation = do
     'C' -> Some LocCPSR <$ P.string "CPSR"
     'M' -> Some LocMem <$ P.string "Mem"
     'P' -> Some LocPC <$ P.string "PC"
-    'R' -> parsePrefixedRegister (Some . LocGPR . ARMOperands.gpr) 'R'
+    'R' -> parsePrefixedRegister (Some . LocGPR) 'R'
     _ -> P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
 parsePrefixedRegister :: (Word8 -> b) -> Char -> ARMComp.Parser b
@@ -308,30 +348,43 @@ locationFuncInterpretation =
 
     ]
 
-shapeReprType :: forall tp . ARM.OperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
+shapeReprType :: forall tp . ARMOperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
 shapeReprType orep =
-  case orep of
-    ARM.Addr_offset_noneRepr -> knownRepr
-    ARM.Addrmode_imm12Repr -> knownRepr
-    ARM.Addrmode_imm12_preRepr -> knownRepr
-    ARM.Am2offset_immRepr -> knownRepr
-    ARM.Arm_bl_targetRepr -> knownRepr
-    ARM.Arm_blx_targetRepr -> knownRepr
-    ARM.Arm_br_targetRepr -> knownRepr
-    ARM.Cc_outRepr -> knownRepr
-    ARM.GPRRepr -> knownRepr
-    ARM.Ldst_so_regRepr -> knownRepr
-    ARM.Mod_immRepr -> knownRepr
-    ARM.PredRepr -> knownRepr
-    ARM.Shift_so_reg_immRepr -> knownRepr
-    ARM.So_reg_immRepr -> knownRepr
-    ARM.So_reg_regRepr -> knownRepr
-    ARM.UnpredictableRepr -> knownRepr
-    -- Thumb.ThumbBlxTargetRepr -> knownRepr
-    _ -> error $ "Unknown OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
-    -- "Imm0_15"
-    --   | Just Refl <- testEquality sr (SR.knownSymbol @"Imm0_15") ->
-    --     knownRepr :: BaseTypeRepr (A.OperandType ARM "Imm0_15")
+    case orep of
+      A32OperandRepr a32rep ->
+          case a32rep of
+            ARMDis.Addr_offset_noneRepr -> knownRepr
+            ARMDis.Addrmode_imm12Repr -> knownRepr
+            ARMDis.Addrmode_imm12_preRepr -> knownRepr
+            ARMDis.Am2offset_immRepr -> knownRepr
+            ARMDis.Arm_bl_targetRepr -> knownRepr
+            ARMDis.Arm_blx_targetRepr -> knownRepr
+            ARMDis.Arm_br_targetRepr -> knownRepr
+            ARMDis.Cc_outRepr -> knownRepr
+            ARMDis.GPRRepr -> knownRepr
+            ARMDis.Ldst_so_regRepr -> knownRepr
+            ARMDis.Mod_immRepr -> knownRepr
+            ARMDis.PredRepr -> knownRepr
+            ARMDis.Shift_so_reg_immRepr -> knownRepr
+            ARMDis.So_reg_immRepr -> knownRepr
+            ARMDis.So_reg_regRepr -> knownRepr
+            ARMDis.UnpredictableRepr -> knownRepr
+            _ -> error $ "Unknown A32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
+      T32OperandRepr t32rep ->
+          case t32rep of
+            ThumbDis.Cc_outRepr -> knownRepr
+            ThumbDis.GPRRepr -> knownRepr
+            ThumbDis.GPRnopcRepr -> knownRepr
+            ThumbDis.Imm0_7Repr -> knownRepr
+            ThumbDis.Imm0_31Repr -> knownRepr
+            ThumbDis.Imm0_255Repr -> knownRepr
+            ThumbDis.Imm0_4095Repr -> knownRepr
+            ThumbDis.RGPRRepr -> knownRepr
+            ThumbDis.T_imm0_1020s4Repr -> knownRepr
+            ThumbDis.T2_so_immRepr -> knownRepr
+            ThumbDis.Thumb_blx_targetRepr -> knownRepr
+            ThumbDis.TGPRRepr -> knownRepr
+            _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
 
 
 -- ----------------------------------------------------------------------
@@ -340,52 +393,82 @@ data Signed = Signed | Unsigned deriving (Eq, Show)
 
 instance T.TemplatableOperand ARM where
   opTemplates sr =
-    case sr of
-      ARM.Addrmode_imm12Repr ->
+      case sr of
+        (A32OperandRepr a) -> a32template a
+        (T32OperandRepr a) -> t32template a
+
+a32template :: ARMDis.OperandRepr s -> [T.TemplatedOperand ARM s]
+a32template a32sr =
+    case a32sr of
+      ARMDis.Addrmode_imm12Repr ->
+          mkTemplate <$> [0..numGPR-1]
+              where mkTemplate gprNum = T.TemplatedOperand Nothing
+                                        (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
+                                            :: T.TemplatedOperand ARM "Addrmode_imm12"
+                        where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12"
+                              mkTemplate' sym locLookup = do
+                                let gprN = ARMOperands.gpr gprNum
+                                base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup
+                                                          (A32Operand $ ARMDis.GPR gprN)
+                                offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
+                                addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
+                                expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
+                                let recover evalFn = do
+                                      offsetVal <- fromInteger <$> evalFn offset
+                                      addflagVal <- fromInteger <$> evalFn addflag
+                                      return $ A32Operand $ ARMDis.Addrmode_imm12 $
+                                             ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
+                                return (expr, T.WrappedRecoverOperandFn recover)
+      ARMDis.Addrmode_imm12_preRepr ->
           mkTemplate <$> [0..numGPR-1]
             where mkTemplate gprNum = T.TemplatedOperand Nothing
-                                      (Set.singleton (Some (LocGPR (ARMOperands.gpr gprNum)))) mkTemplate'
-                                          :: T.TemplatedOperand ARM "Addrmode_imm12"
-                    where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12"
+                                      (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
+                                          :: T.TemplatedOperand ARM "Addrmode_imm12_pre"
+                    where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12_pre"
                           mkTemplate' sym locLookup = do
-                            let gprN = ARMOperands.gpr gprNum
-                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (ARM.GPR $ gprN)
-                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
-                            addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
+                            let gprN = ARMOperands.gpr $ gprNum
+                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (A32Operand $ ARMDis.GPR gprN)
+                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
+                            addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
                             expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
                             let recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
                                   addflagVal <- fromInteger <$> evalFn addflag
-                                  return $ ARM.Addrmode_imm12 $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
+                                  return $ A32Operand $ ARMDis.Addrmode_imm12_pre $
+                                         ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                             return (expr, T.WrappedRecoverOperandFn recover)
-      ARM.Addrmode_imm12_preRepr ->
-          mkTemplate <$> [0..numGPR-1]
-            where mkTemplate gprNum = T.TemplatedOperand Nothing
-                                      (Set.singleton (Some (LocGPR (ARMOperands.gpr gprNum)))) mkTemplate'
-                                          :: T.TemplatedOperand ARM "Addrmode_imm12_pre"
-                    where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12_pre"
-                          mkTemplate' sym locLookup = do
-                            let gprN = ARMOperands.gpr gprNum
-                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (ARM.GPR $ gprN)
-                            offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
-                            addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
-                            expr <- S.bvAdd sym base offset
-                            let recover evalFn = do
-                                  offsetVal <- fromInteger <$> evalFn offset
-                                  addflagVal <- fromInteger <$> evalFn addflag
-                                  return $ ARM.Addrmode_imm12_pre $ ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
-                            return (expr, T.WrappedRecoverOperandFn recover)
-      ARM.Arm_bl_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
-      ARM.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
-      ARM.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
-      ARM.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
-      ARM.GPRRepr -> concreteTemplatedOperand ARM.GPR LocGPR . ARMOperands.gpr <$> [0..numGPR-1]
-      ARM.Mod_immRepr -> error "opTemplate ARM_Mod_immRepr TBD"
-      ARM.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred" (ARM.Pred . ARM.mkPred . fromInteger)]
-      ARM.Shift_so_reg_immRepr -> error "opTemplate Shift_so_reg_immRepr TBD"
-      ARM.So_reg_immRepr -> error "opTemplate So_reg_immRepr TBD"
-      ARM.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
-      -- ARM.ThumbBlxTargetRepr -> undefined
+      ARMDis.Arm_bl_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
+      ARMDis.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
+      ARMDis.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
+      ARMDis.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
+      ARMDis.GPRRepr -> concreteTemplatedOperand (A32Operand . ARMDis.GPR . ARMOperands.gpr) LocGPR <$> [0..numGPR-1]
+      ARMDis.Mod_immRepr -> error "opTemplate ARM_Mod_immRepr TBD"
+      ARMDis.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred"
+                          (A32Operand . ARMDis.Pred . ARMDis.mkPred . fromInteger)]
+      ARMDis.Shift_so_reg_immRepr -> error "opTemplate Shift_so_reg_immRepr TBD"
+      ARMDis.So_reg_immRepr -> error "opTemplate So_reg_immRepr TBD"
+      -- ARMDis.So_reg_regRepr ->
+      --     mkTemplate <$> [0..numGPR-1]
+      --       where mkTemplate gprNum = T.TemplatedOperand Nothing
+      --                                 (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
+      --                                     :: T.TemplatedOperand ARM "So_reg_reg"
+      --               where mkTemplate' :: T.TemplatedOperandFn ARM "So_reg_reg"
+      --                     mkTemplate' sym locLookup = do
+      --                       let gprN = ARMOperands.gpr gprNum
+      --                       base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (ARMDis.GPR $ gprN)
+      --                       offset <- S.freshConstant sym (U.makeSymbol "So_reg_reg_shift") knownRepr
+      --                       expr <- S.bvAdd sym offset offset -- KWQ!
+      --                       let recover evalFn = do
+      --                             offsetVal <- fromInteger <$> evalFn offset
+      --                             return $ ARMDis.So_reg_reg $ ARMOperands.SoRegReg gprN gprN offsetVal
+      --                       return (expr, T.WrappedRecoverOperandFn recover)
+      ARMDis.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
+
+t32template :: ThumbDis.OperandRepr s -> [T.TemplatedOperand ARM s]
+t32template t32sr =
+    case t32sr of
+      _ -> error "opTemplate T32 ?? TBD"
+
 
 
 concreteTemplatedOperand :: forall arch s a.
