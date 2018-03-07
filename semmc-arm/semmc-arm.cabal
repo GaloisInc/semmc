@@ -69,11 +69,15 @@ executable semmc-arm-genbase
   main-is:          GenBase.hs
   ghc-options:      -Wall -rtsopts
   build-depends: base
+               , bytestring
+               , crucible
                , directory
                , dismantle-arm
+               , dismantle-tablegen
                , dismantle-thumb
                , filepath
                , optparse-applicative
+               , parameterized-utils
                , semmc
                , semmc-arm
                , text
