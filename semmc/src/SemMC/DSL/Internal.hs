@@ -19,6 +19,7 @@ import Data.Parameterized.Classes
 import Data.Parameterized.Some ( Some(..) )
 import Data.Parameterized.TH.GADT ( structuralTypeEquality )
 
+
 data ExprTag = TBool
               | TBV
               | TInt
@@ -27,6 +28,7 @@ data ExprTag = TBool
               | TMemory
               | TMemRef
               | TString
+              | TPackedOperand
 
 data ExprType tp where
   -- | A type of bitvectors of a fixed width
@@ -38,6 +40,7 @@ data ExprType tp where
   EMemory :: ExprType 'TMemory
   EMemRef :: ExprType 'TMemRef
   EString :: ExprType 'TString
+  EPackedOperand :: String -> ExprType 'TPackedOperand
 
 deriving instance Eq (ExprType tp)
 deriving instance Show (ExprType tp)
@@ -137,6 +140,10 @@ data Expr (tp :: ExprTag) where
   -- (for example) to guide let-binding for output S-expression forms
   -- of this expression.
   NamedSubExpr :: String -> Expr tp -> Expr tp
+  -- | Reference to a packed operand; these are unique types that can
+  -- only be unpacked into more useable expression values by
+  -- uninterpreted function(s).
+  PackedOperand :: String -> Expr 'TPackedOperand
 
 deriving instance Show (Expr tp)
 instance ShowF Expr

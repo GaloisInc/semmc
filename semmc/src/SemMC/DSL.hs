@@ -30,6 +30,8 @@ module SemMC.DSL (
   cases,
   uf,
   locUF,
+  unpackUF,
+  unpackLocUF,
   -- * Logical operations
   andp,
   orp,
@@ -87,10 +89,10 @@ import           GHC.Stack ( HasCallStack )
 
 import           Prelude hiding ( concat )
 
-import Data.Maybe
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
 import qualified Data.SCargot.Repr as SC
+import           Data.Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Text.Printf ( printf )
@@ -121,6 +123,7 @@ exprType e =
     TheoryFunc t _ _ _ -> t
     UninterpretedFunc t _ _ -> t
     NamedSubExpr _ sube -> exprType sube
+    PackedOperand s -> EPackedOperand s
 
 -- | Get the size of the bitvector produced by the given expression
 exprBVSize :: Expr 'TBV -> Int
@@ -331,6 +334,22 @@ uf = UninterpretedFunc
 -- | Allow for user-defined functions over locations
 locUF :: ExprType tp -> String -> Location tp' -> Location tp
 locUF = LocationFunc
+
+-- | Unpack a specific operand type using an architecture-specific
+-- uninterpreted function
+unpackUF :: String -> ExprType tp -> String -> Location 'TPackedOperand -> Expr tp
+unpackUF operandName rtype ufname fromParam =
+    case exprType (Loc fromParam) of
+      EPackedOperand o | operandName == o -> uf rtype ufname [Some $ Loc fromParam]
+                       | otherwise -> error $ ufname <> " expected a \"" <> operandName <> "\" but got a " <> o
+
+-- | Unpack a specific operand type using an architecture-specific
+-- undefined function
+unpackLocUF :: String -> ExprType tp -> String -> Location 'TPackedOperand -> Location tp
+unpackLocUF operandName rtype ufname fromParam =
+    case exprType (Loc fromParam) of
+      EPackedOperand o | operandName == o -> locUF rtype ufname fromParam
+                       | otherwise -> error $ ufname <> " expected a \"" <> operandName <> "\" location but got a " <> o
 
 -- | Create an expression of bitvector type that represents an undefined value
 -- of the given size
@@ -606,6 +625,7 @@ convertExpr (Some e) =
                     SC.SAtom a -> SC.SAtom $ ANamed name d a
                     SC.SCons l r -> SC.SCons (tag (d+1) l) r
         in tag 0 $ convertExpr $ Some expr
+    PackedOperand name -> error "PackedOperand not unpacked with unpackUF.. cannot serialize"
 
 convertLoc :: Location tp -> SC.SExpr FAtom
 convertLoc loc =
