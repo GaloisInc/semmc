@@ -609,7 +609,7 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
     fns <- MR.reader (envFunctions . getEnv)
     SomeSome fn <- case Map.lookup fnName fns of
                      Just (fn, _) -> return fn
-                     Nothing -> E.throwError $ printf "uninterpreted function \"%s\" is not defined" fnName
+                     Nothing -> E.throwError $ printf "uninterpreted function '%s' is not defined" fnName
     assn <- exprAssignment (S.fnArgTypes fn) args
     liftIO (Just . Some <$> S.applySymFn sym fn assn)
 readCall _ _ = return Nothing
