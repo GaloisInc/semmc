@@ -102,7 +102,7 @@ t32_branches = do
 blx_t32 :: SemARM 'Top ()
 blx_t32 =
     defineT32Opcode T.TBLXi (Empty
-                            :> ParamDef "target" thumb_blx_target naturalBV
+                            :> ParamDef "target" thumb_blx_target (EPackedOperand "ThumbBlxTarget")
                             )
                         $ \tgt -> do
       comment "Branch with Link and Exchange (F7.1.25, F7-2576)"

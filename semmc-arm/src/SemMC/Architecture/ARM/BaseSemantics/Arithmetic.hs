@@ -32,7 +32,7 @@ manualArithmetic = do
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
-                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "mimm" mod_imm (EPackedOperand "ModImm")
                           :> ParamDef "rN" gpr naturalBV
                           )
                       $ \rD setcc _ imm12 rN -> do
@@ -75,7 +75,7 @@ manualArithmetic = do
   defineT32Opcode T.T2ADDri (Empty
                             :> ParamDef "rD" gprnopc naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
-                            :> ParamDef "imm" t2_so_imm (EBV 16)
+                            :> ParamDef "imm" t2_so_imm (EPackedOperand "T2_So_Imm")
                             :> ParamDef "rN" gprnopc naturalBV
                             )
                         $ \rD setcc imm16 rN -> do
@@ -103,7 +103,7 @@ manualArithmetic = do
 
   defineT32Opcode T.TADDrSPi (Empty
                              :> ParamDef "rD" tgpr naturalBV
-                             :> ParamDef "imm" t_imm0_1020s4 EMemRef
+                             :> ParamDef "imm" t_imm0_1020s4 (EPackedOperand "imm0_1020s4")
                              )
                       $ \rD imm0_1020s4 -> do
     comment "ADD SP + immediate, T32, encoding T1 (F7.1.9, F7-2548)"
@@ -178,7 +178,7 @@ manualArithmetic = do
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
-                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "mimm" mod_imm (EPackedOperand "ModImm")
                           :> ParamDef "rN" gpr naturalBV
                           )
                       $ \rD setcc _ imm12 rN -> do
@@ -220,7 +220,7 @@ manualBitwise = do
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
-                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "mimm" mod_imm (EPackedOperand "ModImm")
                           :> ParamDef "rN" gpr naturalBV
                           )
                 $ \rD setcc _ imm12 rN -> do
@@ -259,7 +259,7 @@ manualBitwise = do
                            :> ParamDef "rD" gpr naturalBV
                            :> ParamDef "setcc" cc_out (EBV 1)
                            :> ParamDef "predBits" pred (EBV 4)
-                           :> ParamDef "sori" so_reg_imm EMemRef
+                           :> ParamDef "sori" so_reg_imm (EPackedOperand "SoRegImm")
                            :> ParamDef "rN" gpr naturalBV
                            )
                  $ \rD setcc _ sori rN -> do
@@ -277,7 +277,7 @@ manualBitwise = do
                            :> ParamDef "rD" gpr naturalBV
                            :> ParamDef "setcc" cc_out (EBV 1)
                            :> ParamDef "predBits" pred (EBV 4)
-                           :> ParamDef "sorr" so_reg_reg EMemRef
+                           :> ParamDef "sorr" so_reg_reg (EPackedOperand "SoRegReg")
                            :> ParamDef "rN" gpr naturalBV
                            )
                  $ \rD setcc _ sorr rN -> do
@@ -322,7 +322,7 @@ manualBitwise = do
 
   defineA32Opcode A.CMPri (Empty
                           :> ParamDef "predBits" pred (EBV 4)
-                          :> ParamDef "modimm" mod_imm naturalBV
+                          :> ParamDef "modimm" mod_imm (EPackedOperand "ModImm")
                           :> ParamDef "rN" gpr naturalBV
                           :> ParamDef "unpredictable" unpredictableInstrBits naturalBV
                           )
@@ -354,7 +354,7 @@ manualBitwise = do
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
                           :> ParamDef "predBits" pred (EBV 4)
-                          :> ParamDef "mimm" mod_imm naturalBV
+                          :> ParamDef "mimm" mod_imm (EPackedOperand "ModImm")
                           :> ParamDef "rN" gpr naturalBV
                           )
                 $ \rD setcc _ imm12 rN -> do

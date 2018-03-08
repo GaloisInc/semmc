@@ -22,7 +22,7 @@ import Prelude hiding (concat)
 -- | Expand/rotate ModImm value to corresponding 32-bit immediate
 -- value (F4-2473)  This version expects to be called with
 -- the Mod_imm ARM operand.
-armExpandImm :: Location 'TBV -> Expr 'TBV
+armExpandImm :: Location 'TPackedOperand -> Expr 'TBV
 armExpandImm imm12 =
     let val = modImm_imm imm12
         rot = modImm_rot imm12
@@ -32,7 +32,7 @@ armExpandImm imm12 =
 -- | Expand/rotate ModImm value to corresponding 32-bit immediate
 -- value (F4-2473) with carry.  This version expects to be called with
 -- the Mod_imm ARM operand.
-armExpandImmC :: Location 'TBV -> Expr 'TBV -> (Expr 'TBV, Expr 'TBV)
+armExpandImmC :: Location 'TPackedOperand -> Expr 'TBV -> (Expr 'TBV, Expr 'TBV)
 armExpandImmC imm12 carry_in =
     let val = modImm_imm imm12
         rot = modImm_rot imm12
@@ -58,7 +58,7 @@ expandimm_c val rot carry_in =
 
 -- | Expand/rotate T2_So_Imm value to corresponding 32-bit immediate value
 -- (AppxG-4948)  This version expects to be called with the T2_So_Imm ARM operand.
-thumbExpandImm :: Location 'TBV -> Expr 'TBV
+thumbExpandImm :: Location 'TPackedOperand -> Expr 'TBV
 thumbExpandImm t2_so_imm =
   let imm12 = t2SoImm_imm t2_so_imm
   in "thumbExpandImm" =: (fst $ thumbexpandimm_c imm12 (LitBV 1 0))

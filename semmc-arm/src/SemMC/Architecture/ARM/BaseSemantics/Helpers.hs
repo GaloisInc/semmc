@@ -330,99 +330,99 @@ tstBit n = bveq (LitBV 1 0) . extract n n
 -- | User defined function to place in the SemMC DST to get the value
 -- contained in the register referenced by the addrmode_imm12_[pre].
 -- During the Eval stage this will perform the actual extraction of the value.
-imm12Reg :: Location 'TMemRef -> Location 'TBV
-imm12Reg = locUF naturalBV "a32.imm12_reg"
+imm12Reg :: Location 'TPackedOperand -> Location 'TBV
+imm12Reg = unpackLocUF "Imm12" naturalBV "a32.imm12_reg"
 
 -- | Returns the immediate offset value in the addrmode_imm12_[pre]
-imm12Off :: [Some Expr] -> Expr 'TBV
-imm12Off = uf (EBV 16) "a32.imm12_off"
+imm12Off :: Location 'TPackedOperand -> Expr 'TBV
+imm12Off = unpackUF "Imm12" (EBV 16) "a32.imm12_off"
 
 -- | Returns the addition flag in the addrmode_imm12_[pre]
-imm12Add :: [Some Expr] -> Expr 'TBool
-imm12Add = uf EBool "a32.imm12_add"
+imm12Add :: Location 'TPackedOperand -> Expr 'TBool
+imm12Add = unpackUF "Imm12" EBool "a32.imm12_add"
 
 -- | Returns the addition flag in the am2offset_imm
-am2offset_immAdd :: [Some Expr] -> Expr 'TBool
-am2offset_immAdd = uf EBool "a32.am2offset_imm_add"
+am2offset_immAdd :: Location 'TPackedOperand -> Expr 'TBool
+am2offset_immAdd = unpackUF "Am2Offset_Imm" EBool "a32.am2offset_imm_add"
 
 -- | Returns the immediate flag in the am2offset_imm
-am2offset_immImm :: [Some Expr] -> Expr 'TBV
-am2offset_immImm = uf (EBV 16) "a32.am2offset_imm_imm"
+am2offset_immImm :: Location 'TPackedOperand -> Expr 'TBV
+am2offset_immImm = unpackUF "Am2Offset_Imm" (EBV 16) "a32.am2offset_imm_imm"
 
 -- | Returns the base register in ldst_so_reg
-ldst_so_regBaseRegister :: Location 'TMemRef -> Location 'TBV
-ldst_so_regBaseRegister = locUF naturalBV "a32.ldst_so_reg_base_register"
+ldst_so_regBaseRegister :: Location 'TPackedOperand -> Location 'TBV
+ldst_so_regBaseRegister = unpackLocUF "LdstSoReg" naturalBV "a32.ldst_so_reg_base_register"
 
 -- | Returns the offset register in ldst_so_reg
-ldst_so_regOffsetRegister :: Location 'TMemRef -> Location 'TBV
-ldst_so_regOffsetRegister = locUF naturalBV "a32.ldst_so_reg_offset_register"
+ldst_so_regOffsetRegister :: Location 'TPackedOperand -> Location 'TBV
+ldst_so_regOffsetRegister = unpackLocUF "LdstSoReg" naturalBV "a32.ldst_so_reg_offset_register"
 
 -- | Returns the addition flag in ldst_so_reg
-ldst_so_regAdd :: [Some Expr] -> Expr 'TBool
-ldst_so_regAdd = uf EBool "a32.ldst_so_reg_add"
+ldst_so_regAdd :: Location 'TPackedOperand -> Expr 'TBool
+ldst_so_regAdd = unpackUF "LdstSoReg" EBool "a32.ldst_so_reg_add"
 
 -- | Returns the immediate offset value in ldst_so_reg
-ldst_so_regImmediate :: [Some Expr] -> Expr 'TBV
-ldst_so_regImmediate = uf (EBV 5) "a32.ldst_so_reg_immediate"
+ldst_so_regImmediate :: Location 'TPackedOperand -> Expr 'TBV
+ldst_so_regImmediate = unpackUF "LdstSoReg" (EBV 5) "a32.ldst_so_reg_immediate"
 
 -- | Returns the shift type in ldst_so_reg
-ldst_so_regShiftType :: [Some Expr] -> Expr 'TBV
-ldst_so_regShiftType = uf (EBV 2) "a32.ldst_so_reg_shift_type"
+ldst_so_regShiftType :: Location 'TPackedOperand -> Expr 'TBV
+ldst_so_regShiftType = unpackUF "LdstSoReg" (EBV 2) "a32.ldst_so_reg_shift_type"
 
 -- | Decoding for ModImm immediate octet (ARMExpandImm(), (F4.2.4, F-2473)
-modImm_imm :: Location 'TBV -> Expr 'TBV
-modImm_imm = uf (EBV 8) "a32.modimm_imm" . ((:[]) . Some) . Loc
+modImm_imm :: Location 'TPackedOperand -> Expr 'TBV
+modImm_imm = unpackUF "ModImm" (EBV 8) "a32.modimm_imm"
 
 -- | Decoding for ModImm rotation 4 bits (ARMExpandImm(), (F4.2.4, F-2473)
-modImm_rot :: Location 'TBV -> Expr 'TBV
-modImm_rot = uf (EBV 4) "a32.modimm_rot" . ((:[]) . Some) . Loc
+modImm_rot :: Location 'TPackedOperand -> Expr 'TBV
+modImm_rot = unpackUF "ModImm" (EBV 4) "a32.modimm_rot"
 
 -- | Extract the shift type from a so_reg_reg
-soRegReg_type :: Location 'TMemRef -> Expr 'TBV
-soRegReg_type = uf (EBV 2) "a32.soregreg_type" . ((:[]) . Some) . Loc
+soRegReg_type :: Location 'TPackedOperand -> Expr 'TBV
+soRegReg_type = unpackUF "SoRegReg" (EBV 2) "a32.soregreg_type"
 
 -- | Extract the register containing the shift amount from a so_reg_reg
-soRegReg_reg1 :: Location 'TMemRef -> Location 'TBV
-soRegReg_reg1 = locUF naturalBV "a32.soregreg_reg1"
+soRegReg_reg1 :: Location 'TPackedOperand -> Location 'TBV
+soRegReg_reg1 = unpackLocUF "SoRegReg" naturalBV "a32.soregreg_reg1"
 
 -- | Extract the register containing the value to be shifted from a so_reg_reg
-soRegReg_reg2 :: Location 'TMemRef -> Location 'TBV
-soRegReg_reg2 = locUF naturalBV "a32.soregreg_reg2"
+soRegReg_reg2 :: Location 'TPackedOperand -> Location 'TBV
+soRegReg_reg2 = unpackLocUF "SoRegReg" naturalBV "a32.soregreg_reg2"
 
-soRegImm_type :: Location 'TMemRef -> Expr 'TBV
-soRegImm_type = uf (EBV 2) "a32.soregimm_type" . ((:[]) . Some) . Loc
+soRegImm_type :: Location 'TPackedOperand -> Expr 'TBV
+soRegImm_type = unpackUF "SoRegImm" (EBV 2) "a32.soregimm_type"
 
-soRegImm_reg :: Location 'TMemRef -> Location 'TBV
-soRegImm_reg = locUF naturalBV "a32.soregimm_reg"
+soRegImm_reg :: Location 'TPackedOperand -> Location 'TBV
+soRegImm_reg = unpackLocUF "SoRegImm" naturalBV "a32.soregimm_reg"
 
-soRegImm_imm :: Location 'TMemRef -> Expr 'TBV
-soRegImm_imm = uf (EBV 5) "a32.soregimm_imm" . ((:[]) . Some) . Loc
+soRegImm_imm :: Location 'TPackedOperand -> Expr 'TBV
+soRegImm_imm = unpackUF "SoRegImm" (EBV 5) "a32.soregimm_imm"
 
-t2SoImm_imm :: Location 'TBV -> Expr 'TBV
-t2SoImm_imm = uf (EBV 12) "t32.t2soimm_imm" . ((:[]) . Some) . Loc
+t2SoImm_imm :: Location 'TPackedOperand -> Expr 'TBV
+t2SoImm_imm = unpackUF "T2_So_Imm" (EBV 12) "t32.t2soimm_imm"
 
-t32_imm_0_1020s4_val :: Location 'TMemRef -> Expr 'TBV
-t32_imm_0_1020s4_val = uf (EBV 8) "t32.imm0_1020S4_imm" . ((:[]) . Some) . Loc
+t32_imm_0_1020s4_val :: Location 'TPackedOperand -> Expr 'TBV
+t32_imm_0_1020s4_val = unpackUF "imm0_1020s4" (EBV 8) "t32.imm0_1020S4_imm"
 
 -- | Decoding for the ThumbBlxTarget type: S bit
-blxtgt_S :: Location 'TBV -> Expr 'TBV
-blxtgt_S = uf (EBV 1) "t32.blxtarget_S" . ((:[]) . Some) . Loc
+blxtgt_S :: Location 'TPackedOperand -> Expr 'TBV
+blxtgt_S = unpackUF "ThumbBlxTarget" (EBV 1) "t32.blxtarget_S"
 
 -- | Decoding for the ThumbBlxTarget type: Imm10H
-blxtgt_imm10H :: Location 'TBV -> Expr 'TBV
-blxtgt_imm10H = uf (EBV 10) "t32.blxtarget_imm10H" . ((:[]) . Some) . Loc
+blxtgt_imm10H :: Location 'TPackedOperand -> Expr 'TBV
+blxtgt_imm10H = unpackUF "ThumbBlxTarget" (EBV 10) "t32.blxtarget_imm10H"
 
 -- | Decoding for the ThumbBlxTarget type: Imm10L
-blxtgt_imm10L :: Location 'TBV -> Expr 'TBV
-blxtgt_imm10L = uf (EBV 10) "t32.blxtarget_imm10L" . ((:[]) . Some) . Loc
+blxtgt_imm10L :: Location 'TPackedOperand -> Expr 'TBV
+blxtgt_imm10L = unpackUF "ThumbBlxTarget" (EBV 10) "t32.blxtarget_imm10L"
 
 -- | Decoding for the ThumbBlxTarget type: J1
-blxtgt_J1 :: Location 'TBV -> Expr 'TBV
-blxtgt_J1 = uf (EBV 1) "t32.blxtarget_J1" . ((:[]) . Some) . Loc
+blxtgt_J1 :: Location 'TPackedOperand -> Expr 'TBV
+blxtgt_J1 = unpackUF "ThumbBlxTarget" (EBV 1) "t32.blxtarget_J1"
 
 -- | Decoding for the ThumbBlxTarget type: J2
-blxtgt_J2 :: Location 'TBV -> Expr 'TBV
-blxtgt_J2 = uf (EBV 1) "t32.blxtarget_J2" . ((:[]) . Some) . Loc
+blxtgt_J2 :: Location 'TPackedOperand -> Expr 'TBV
+blxtgt_J2 = unpackUF "ThumbBlxTarget" (EBV 1) "t32.blxtarget_J2"
 
 
 -- ----------------------------------------------------------------------

@@ -33,7 +33,7 @@ defineLoads = do
   defineA32Opcode A.LDR_POST_IMM (Empty
                                  :> ParamDef "gpr" gpr naturalBV
                                  :> ParamDef "predBits" pred (EBV 4)
-                                 :> ParamDef "imm" am2offset_imm EMemRef
+                                 :> ParamDef "imm" am2offset_imm (EPackedOperand "Am2Offset_Imm")
                                  :> ParamDef "off" addr_offset_none naturalBV
                                  )
                       $ \rT _ imm12 off -> do
@@ -41,9 +41,8 @@ defineLoads = do
     comment "doc: F7.1.69, page F7-2636"
     input imm12
     input off
-    let imm12arg = [Some $ Loc imm12]
-        add = am2offset_immAdd imm12arg
-        offset = zext $ am2offset_immImm imm12arg
+    let add = am2offset_immAdd imm12
+        offset = zext $ am2offset_immImm imm12
         rN = off
         b'P = LitBV 1 0
         b'W = LitBV 1 0
@@ -53,15 +52,15 @@ defineLoads = do
   defineA32Opcode A.LDRi12 (Empty
                            :> ParamDef "gpr" gpr naturalBV
                            :> ParamDef "predBits" pred (EBV 4)
-                           :> ParamDef "imm12" addrmode_imm12 EMemRef
+                           :> ParamDef "imm12" addrmode_imm12 (EPackedOperand "Imm12")
                            )
                       $ \rT _ imm12 -> do
     comment "Load Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1"
     comment "doc: F7.1.69, page F7-2636"
     input imm12
     let rN = imm12Reg imm12
-        offset = zext $ imm12Off $ [Some $ Loc imm12]
-        add = imm12Add $ [Some $ Loc imm12]
+        offset = zext $ imm12Off imm12
+        add = imm12Add imm12
         b'P = LitBV 1 1
         b'W = LitBV 1 0
         index = bveq b'P (LitBV 1 1)
@@ -82,7 +81,7 @@ defineStores = do
   -- the tablegen data that doesn't really make much sense.
   defineA32Opcode A.STR_PRE_IMM (Empty
                                 :> ParamDef "predBits" pred (EBV 4)
-                                :> ParamDef "imm" addrmode_imm12_pre EMemRef
+                                :> ParamDef "imm" addrmode_imm12_pre (EPackedOperand "Imm12")
                                 :> ParamDef "gpr" gpr naturalBV
                                 )
                $ \_ imm12 rT -> do
@@ -91,13 +90,12 @@ defineStores = do
     comment "see also PUSH, F7.1.138, page F7-2760" -- TBD: if add && rN=SP && imm.imm=4 [A1 v.s. A2 form]"
     input imm12
     let rN = imm12Reg imm12
-        imm12arg = [Some $ Loc imm12]
-        off = zext $ imm12Off imm12arg
-        add = imm12Add imm12arg
+        off = zext $ imm12Off imm12
+        add = imm12Add imm12
     streg rT add off rN (LitBV 1 1) (LitBV 1 1)
   defineA32Opcode A.STR_POST_IMM (Empty
                                  :> ParamDef "predBits" pred (EBV 4)
-                                 :> ParamDef "imm" am2offset_imm EMemRef
+                                 :> ParamDef "imm" am2offset_imm (EPackedOperand "Am2Offset_Imm")
                                  :> ParamDef "off" addr_offset_none naturalBV
                                  :> ParamDef "gpr" gpr naturalBV
                                  )
@@ -106,14 +104,13 @@ defineStores = do
     comment "doc: F7.1.217, page F7-2880"
     input imm12
     input off
-    let imm12arg = [Some $ Loc imm12]
-        add = am2offset_immAdd imm12arg
-        offset = zext $ am2offset_immImm imm12arg
+    let add = am2offset_immAdd imm12
+        offset = zext $ am2offset_immImm imm12
         rN = off
     streg rT add offset rN (LitBV 1 0) (LitBV 1 1)
   defineA32Opcode A.STRi12 (Empty
                            :> ParamDef "predBits" pred (EBV 4)
-                           :> ParamDef "imm12" addrmode_imm12 EMemRef
+                           :> ParamDef "imm12" addrmode_imm12 (EPackedOperand "Imm12")
                            :> ParamDef "gpr" gpr naturalBV
                            )
                       $ \_ imm12 rT -> do
@@ -121,15 +118,15 @@ defineStores = do
     comment "doc: F7.1.217, page F7-2880"
     input imm12
     let rN = imm12Reg imm12
-        offset = zext $ imm12Off $ [Some $ Loc imm12]
-        add = imm12Add $ [Some $ Loc imm12]
+        offset = zext $ imm12Off imm12
+        add = imm12Add imm12
         b'P = LitBV 1 1
         b'W = LitBV 1 0
     streg rT add offset rN b'P b'W
 
   defineA32Opcode A.STR_PRE_REG (Empty
                                 :> ParamDef "predBits" pred (EBV 4)
-                                :> ParamDef "ldst_so_reg" ldst_so_reg EMemRef -- ???
+                                :> ParamDef "ldst_so_reg" ldst_so_reg (EPackedOperand "LdstSoReg")
                                 :> ParamDef "gpr" gpr naturalBV
                                 )
     $ \_ ldstSoReg rT -> do
@@ -138,13 +135,11 @@ defineStores = do
     input rT
     input ldstSoReg
     input memory
-    let ldstSoRegArg = [Some $ Loc ldstSoReg]
-
-        add  = ldst_so_regAdd ldstSoRegArg
+    let add  = ldst_so_regAdd ldstSoReg
         rN   = ldst_so_regBaseRegister ldstSoReg
         rM   = ldst_so_regOffsetRegister ldstSoReg
-        imm5 = ldst_so_regImmediate ldstSoRegArg
-        st   = ldst_so_regShiftType ldstSoRegArg
+        imm5 = ldst_so_regImmediate ldstSoReg
+        st   = ldst_so_regShiftType ldstSoReg
 
         (_,_,c,_) = getNZCV
 
