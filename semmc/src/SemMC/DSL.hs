@@ -625,7 +625,8 @@ convertExpr (Some e) =
                     SC.SAtom a -> SC.SAtom $ ANamed name d a
                     SC.SCons l r -> SC.SCons (tag (d+1) l) r
         in tag 0 $ convertExpr $ Some expr
-    PackedOperand name -> error "PackedOperand not unpacked with unpackUF.. cannot serialize"
+    PackedOperand name -> error ("PackedOperand " <> name <>
+                                 " not unpacked with unpackUF.. cannot serialize")
 
 convertLoc :: Location tp -> SC.SExpr FAtom
 convertLoc loc =
