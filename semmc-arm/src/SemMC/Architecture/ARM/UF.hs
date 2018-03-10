@@ -121,7 +121,7 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 1)))
 
-  , ("t32.imm0_1020S4_imm", -- Extract the shift amount
+  , ("t32.imm0_1020S4_imm", -- Extract the immediate value
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 8)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
 

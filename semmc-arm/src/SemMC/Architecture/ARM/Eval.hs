@@ -17,6 +17,7 @@ module SemMC.Architecture.ARM.Eval
     , interpImm12RegExtractor
     , interpImm12OffsetExtractor
     , interpImm12AddFlgExtractor
+    , interpImm01020s4ImmExtractor
     , interpLdstsoregAddExtractor
     , interpLdstsoregImmExtractor
     , interpLdstsoregTypeExtractor
@@ -115,7 +116,14 @@ interpImm12AddFlgExtractor = (== 1) . ARMOperands.addrModeImm12Add
 
 
 ------------------------------------------------------------------------
--- | Extract values from the LdstSoReg operand
+-- | Extract values from the Thumb Imm0_1020S4 operand
+
+interpImm01020s4ImmExtractor :: ThumbOperands.TImm01020S4 -> Int8
+interpImm01020s4ImmExtractor = fromInteger . toInteger . ThumbOperands.tImm01020S4ToBits
+
+
+------------------------------------------------------------------------
+-- | Extract values from the ARM LdstSoReg operand
 
 interpLdstsoregAddExtractor :: ARMOperands.LdstSoReg -> Bool
 interpLdstsoregAddExtractor = (== 1) . ARMOperands.ldstSoRegAdd
