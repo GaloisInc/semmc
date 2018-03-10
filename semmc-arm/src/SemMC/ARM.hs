@@ -348,6 +348,12 @@ locationFuncInterpretation =
     , ("a32.soregreg_reg2", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
                                                      , A.exprInterpName = 'interpSoregregReg2Extractor })
 
+    , ("t32.blxtarget_S", A.FunctionInterpretation { A.exprInterpName = 'interpBlxTarget_S })
+    , ("t32.blxtarget_imm10H", A.FunctionInterpretation { A.exprInterpName = 'interpBlxTarget_imm10H })
+    , ("t32.blxtarget_imm10L", A.FunctionInterpretation { A.exprInterpName = 'interpBlxTarget_imm10L })
+    , ("t32.blxtarget_J1", A.FunctionInterpretation { A.exprInterpName = 'interpBlxTarget_J1 })
+    , ("t32.blxtarget_J2", A.FunctionInterpretation { A.exprInterpName = 'interpBlxTarget_J2 })
+
     , ("t32.imm0_1020S4_imm", A.FunctionInterpretation { A.exprInterpName = 'interpImm01020s4ImmExtractor })
     , ("t32.t2soimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpT2soimmImmExtractor })
     ]

@@ -13,6 +13,11 @@ module SemMC.Architecture.ARM.Eval
     , interpIsR15
     , interpAm2offsetimmImmExtractor
     , interpAm2offsetimmAddExtractor
+    , interpBlxTarget_S
+    , interpBlxTarget_imm10H
+    , interpBlxTarget_imm10L
+    , interpBlxTarget_J1
+    , interpBlxTarget_J2
     , interpImm12Reg
     , interpImm12RegExtractor
     , interpImm12OffsetExtractor
@@ -186,9 +191,27 @@ interpModimmRotExtractor :: ARMOperands.ModImm -> W.W 4
 interpModimmRotExtractor = fromInteger . toInteger . ARMOperands.modImmOrigRotate
 
 
+------------------------------------------------------------------------
+-- | Extract values from the Thumb ThumbBlxTarget operand
+
+interpBlxTarget_S :: ThumbOperands.ThumbBlxTarget -> W.W 1
+interpBlxTarget_S = fromInteger . toInteger . ThumbOperands.thumbBlxTargetS
+
+interpBlxTarget_J1 :: ThumbOperands.ThumbBlxTarget -> W.W 1
+interpBlxTarget_J1 = fromInteger . toInteger . ThumbOperands.thumbBlxTargetJ1
+
+interpBlxTarget_J2 :: ThumbOperands.ThumbBlxTarget -> W.W 1
+interpBlxTarget_J2 = fromInteger . toInteger . ThumbOperands.thumbBlxTargetJ2
+
+interpBlxTarget_imm10H :: ThumbOperands.ThumbBlxTarget -> W.W 10
+interpBlxTarget_imm10H = fromInteger . toInteger . ThumbOperands.thumbBlxTargetImm10H
+
+interpBlxTarget_imm10L :: ThumbOperands.ThumbBlxTarget -> W.W 10
+interpBlxTarget_imm10L = fromInteger . toInteger . ThumbOperands.thumbBlxTargetImm10L
+
 
 ------------------------------------------------------------------------
--- | Extract values from the SoRegImm operand
+-- | Extract values from the ARM SoRegImm operand
 
 interpSoregimmTypeExtractor :: ARMOperands.SoRegImm -> W.W 2
 interpSoregimmTypeExtractor = fromInteger . toInteger . ARMOperands.soRegImmShiftType
