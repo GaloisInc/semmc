@@ -36,6 +36,7 @@ module SemMC.Architecture.ARM.Eval
     , interpSoregregReg2Extractor
     , interpSoregregReg1
     , interpSoregregReg2
+    , interpT2soimmImmExtractor
     )
     where
 
@@ -269,6 +270,13 @@ interpSoregregReg2 operands (F.WrappedOperand _orep ix) rep =
         _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
           | otherwise -> error ("Invalid return type for location function 'soregreg_reg' 2 at index " ++ show ix)
     _ -> error ("Invalid operand type 2 at index " ++ show ix)
+
+
+------------------------------------------------------------------------
+-- | Extract values from the Thumb SoRegImm operand
+
+interpT2soimmImmExtractor :: ThumbOperands.T2SoImm -> W.W 12
+interpT2soimmImmExtractor = fromInteger . toInteger . ThumbOperands.t2SoImmToBits
 
 
 ------------------------------------------------------------------------

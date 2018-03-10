@@ -349,6 +349,7 @@ locationFuncInterpretation =
                                                      , A.exprInterpName = 'interpSoregregReg2Extractor })
 
     , ("t32.imm0_1020S4_imm", A.FunctionInterpretation { A.exprInterpName = 'interpImm01020s4ImmExtractor })
+    , ("t32.t2soimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpT2soimmImmExtractor })
     ]
 
 shapeReprType :: forall tp . ARMOperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
