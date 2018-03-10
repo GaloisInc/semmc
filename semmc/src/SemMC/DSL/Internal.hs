@@ -89,6 +89,20 @@ instance TestEquality Literal where
 data Location tp where
   ParamLoc :: Parameter tp -> Location tp
   LiteralLoc :: Literal tp -> Location tp
+  -- | The MemoryLoc specifies a location in memory.  These are always
+  -- accessed via a read_mem or write_mem uninterpreted function which
+  -- has an associated address within the memory region.  This address
+  -- is usually computed, but some opcodes can write to multiple
+  -- memory locations (e.g. PUSH can write multiple registers to
+  -- multiple stack locations), but defLoc has protection against
+  -- writing the same location multiple times (thereby creating
+  -- indeterminism about which write takes precedence).  To support
+  -- that, the memory locations can be declared with a local
+  -- identifier (usually the word offset, e.g. MemoryLoc 0, MemoryLoc
+  -- 4, etc.).  When defLoc compares, all of these refer to "Mem", but
+  -- the local identifier must be unique to ensure each location is
+  -- written only once.
+  MemoryLoc :: Integer -> Location 'TMemory
   LocationFunc :: ExprType tp -> String -> Location tp' -> Location tp
 
 deriving instance Show (Location tp)
@@ -109,6 +123,12 @@ instance TestEquality Location where
             Refl <- testEquality ll1 ll2
             return Refl
           _ -> Nothing
+      MemoryLoc addroff1 ->
+          case l2 of
+            MemoryLoc addroff2 -> do
+                guard (addroff1 == addroff2)
+                return Refl
+            _ -> Nothing
       LocationFunc e1 s1 ll1 ->
         case l2 of
           LocationFunc e2 s2 ll2 -> do

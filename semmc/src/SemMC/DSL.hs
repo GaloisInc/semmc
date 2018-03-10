@@ -109,6 +109,7 @@ locationType loc =
   case loc of
     ParamLoc p -> pExprType p
     LiteralLoc ll -> lExprType ll
+    MemoryLoc _ -> EMemory
     LocationFunc t _ _ -> t
 
 exprType :: Expr tp -> ExprType tp
@@ -632,7 +633,8 @@ convertLoc :: Location tp -> SC.SExpr FAtom
 convertLoc loc =
   case loc of
     ParamLoc p -> ident (pName p)
-    LiteralLoc ll -> quoted (lName ll)
+    LiteralLoc ll -> quoted $ lName ll
+    MemoryLoc _ident -> quoted "Mem"
     LocationFunc _ func loc' ->
       fromFoldable' [fromFoldable' [ident "_", ident "call", string func], convertLoc loc']
 
