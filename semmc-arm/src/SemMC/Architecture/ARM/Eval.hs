@@ -80,7 +80,7 @@ createSymbolicEntries = foldr duplicateIfDotted []
 
 
 ------------------------------------------------------------------------
--- | Extract values from the Am2offset_imm operand
+-- | Extract values from the ARM Am2offset_imm operand
 
 interpAm2offsetimmImmExtractor :: ARMOperands.Am2OffsetImm -> Int16
 interpAm2offsetimmImmExtractor = fromInteger . toInteger . ARMOperands.am2OffsetImmImmediate
@@ -90,7 +90,7 @@ interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
 
 
 ------------------------------------------------------------------------
--- | Extract values from the Addrmode_imm12 operand
+-- | Extract values from the ARM Addrmode_imm12 operand
 
 -- | Extract the register value from an addrmode_imm12[_pre] via
 -- the a32.imm12_reg user function.
@@ -182,7 +182,7 @@ interpLdstsoregOffReg operands (F.WrappedOperand _orep ix) rep =
     _ -> error ("Invalid operand type at index " ++ show ix)
 
 ------------------------------------------------------------------------
--- | Extract values from the Mod_imm operand
+-- | Extract values from the ARM Mod_imm operand
 
 interpModimmImmExtractor :: ARMOperands.ModImm -> Int8
 interpModimmImmExtractor = fromInteger . toInteger . ARMOperands.modImmOrigImmediate
@@ -244,7 +244,7 @@ interpSoregimmReg operands (F.WrappedOperand _orep ix) rep =
 
 
 ------------------------------------------------------------------------
--- | Extract values from the SoRegReg operand
+-- | Extract values from the ARM SoRegReg operand
 
 -- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
 interpSoregregReg1Extractor :: ARMOperands.SoRegReg -> Maybe ARMOperands.GPR
