@@ -3,10 +3,20 @@
 module SemMC.Architecture.ARM.BaseSemantics.Registers
     where
 
+import Data.Word ( Word8 )
 import Prelude hiding ( concat )
-
-import SemMC.DSL
 import SemMC.Architecture.ARM.BaseSemantics.Natural
+import SemMC.DSL
+
+
+numGPR :: Word8
+numGPR = 16
+
+
+-- | The width of a register (in bits), which typically also
+-- corresponds to the width of memory words for that architecture.
+regWidth :: Integer
+regWidth = 32  -- # bits
 
 
 -- | The PC (Program Counter).  This is roughly analagous to R15, but

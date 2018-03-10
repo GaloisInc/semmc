@@ -30,6 +30,7 @@ module SemMC.ARM
     , Instruction
     , ARMOpcode(..)
     , ARMOperand(..)
+    , numGPR
     , testSerializer
     , module SemMC.Architecture.ARM.Combined  -- for the instances
     )
@@ -55,8 +56,9 @@ import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
+import           Language.Haskell.TH hiding ( recover )
 import qualified SemMC.Architecture as A
-import           SemMC.Architecture.ARM.BaseSemantics ( numGPR )
+import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, regWidth )
 import           SemMC.Architecture.ARM.Combined
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
@@ -296,7 +298,7 @@ parsePrefixedRegister f c = do
 --             OrdF (A.Opcode ARM (A.Operand ARM))
 --                  (Data.EnumF.EnumF (A.Opcode ARM (A.Operand ARM)))
 
-type instance ArchRegWidth ARM = 32
+type instance ArchRegWidth ARM = $(litT $ numTyLit regWidth)
 
 
 instance A.Architecture ARM where
