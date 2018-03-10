@@ -6,9 +6,9 @@
   (true
    (bveq #b0 #b0)))
  ((operands
-  ((target. 'Condbrtarget)
-   (bi. 'Crbitrc)
-   (bo. 'U5imm)))
+  ((target . 'Condbrtarget)
+   (bi . 'Crbitrc)
+   (bo . 'U5imm)))
   (in
    ('IP 'CR 'CTR))
   (defs

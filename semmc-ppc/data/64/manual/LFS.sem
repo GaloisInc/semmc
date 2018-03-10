@@ -1,7 +1,7 @@
 ;; Load Floating-Point Single (D-form)
 ((operands
- ((frT. 'Fprc)
-  (memref. 'Memri)))
+ ((frT . 'Fprc)
+  (memref . 'Memri)))
  (in
   ('Mem memref 'IP))
  (defs

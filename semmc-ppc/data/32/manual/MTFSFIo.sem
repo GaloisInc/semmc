@@ -1,8 +1,8 @@
 ;; Move to FPSCR Field Immediate (X-form, RC=1)
 ((operands
- ((BF. 'Crrc)
-  (U. 'I32imm)
-  (W. 'I32imm)))
+ ((BF . 'Crrc)
+  (U . 'I32imm)
+  (W . 'I32imm)))
  (in
   ('IP))
  (defs

@@ -1,9 +1,9 @@
 ;; Compare Word (X-form)
 ;; This is a word variant (where L=0)
 ((operands
- ((fld. 'Crrc)
-  (rA. 'Gprc)
-  (rB. 'Gprc)))
+ ((fld . 'Crrc)
+  (rA . 'Gprc)
+  (rB . 'Gprc)))
  (in
   ('CR 'XER rB rA 'IP))
  (defs

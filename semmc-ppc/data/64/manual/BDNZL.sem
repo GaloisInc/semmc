@@ -2,7 +2,7 @@
  ((false
   (bvne #b0 #b0)))
  ((operands
-  ((target. 'Condbrtarget)))
+  ((target . 'Condbrtarget)))
   (in
    ('IP 'CTR))
   (defs

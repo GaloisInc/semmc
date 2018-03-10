@@ -1,7 +1,7 @@
 ;; Floating Reciprocal Square Root Estimate (A-form)
 ((operands
- ((frT. 'Fprc)
-  (frB. 'Fprc)))
+ ((frT . 'Fprc)
+  (frB . 'Fprc)))
  (in
   ('FPSCR frB 'IP))
  (defs

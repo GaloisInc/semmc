@@ -2,9 +2,9 @@
 ;; We hand wrote this formula because it is one of the few that
 ;; have special treatment of r0
 ((operands
- ((rT. 'Gprc)
-  (si. 'S16imm)
-  (rA. 'Gprc_nor0)))
+ ((rT . 'Gprc)
+  (si . 'S16imm)
+  (rA . 'Gprc_nor0)))
  (in
   (si rA 'IP))
  (defs

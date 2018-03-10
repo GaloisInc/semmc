@@ -1,7 +1,7 @@
 ;; Store Word (D-form)
 ((operands
- ((memref. 'Memri)
-  (rS. 'Gprc)))
+ ((memref . 'Memri)
+  (rS . 'Gprc)))
  (in
   ('Mem memref rS 'IP))
  (defs

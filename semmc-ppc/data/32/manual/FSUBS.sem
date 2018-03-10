@@ -1,8 +1,8 @@
 ;; Floating Subtract Single (A-form)
 ((operands
- ((frT. 'Fprc)
-  (frA. 'Fprc)
-  (frB. 'Fprc)))
+ ((frT . 'Fprc)
+  (frA . 'Fprc)
+  (frB . 'Fprc)))
  (in
   ('FPSCR frB frA 'IP))
  (defs

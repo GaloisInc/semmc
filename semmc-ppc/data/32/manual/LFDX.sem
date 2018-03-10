@@ -1,7 +1,7 @@
 ;; Load Floating-Point Double Indexed (X-form)
 ((operands
- ((rT. 'Fprc)
-  (memref. 'Memrr)))
+ ((rT . 'Fprc)
+  (memref . 'Memrr)))
  (in
   ('Mem memref 'IP))
  (defs

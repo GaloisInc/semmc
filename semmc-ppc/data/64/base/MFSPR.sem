@@ -1,7 +1,7 @@
 ;; Move From Special Purpose Register (XFX-form)
 ((operands
- ((rT. 'Gprc)
-  (SPR. 'I32imm)))
+ ((rT . 'Gprc)
+  (SPR . 'I32imm)))
  (in
   ('LNK 'XER 'CTR SPR 'IP))
  (defs

@@ -1,8 +1,8 @@
 ;; Shift Right Algebraic Word Immediate (X-form, RC=0)
 ((operands
- ((rA. 'Gprc)
-  (sh. 'U5imm)
-  (rS. 'Gprc)))
+ ((rA . 'Gprc)
+  (sh . 'U5imm)
+  (rS . 'Gprc)))
  (in
   ('XER rS sh 'IP))
  (defs

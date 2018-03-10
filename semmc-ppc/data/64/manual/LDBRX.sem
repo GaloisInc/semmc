@@ -117,8 +117,8 @@
     ('IP
      (bvadd 'IP #x0000000000000004))))))
  ((operands
-  ((rT. 'Gprc)
-   (memref. 'Memrr)))
+  ((rT . 'Gprc)
+   (memref . 'Memrr)))
   (in
    ('Mem memref 'IP))
   (var1)))

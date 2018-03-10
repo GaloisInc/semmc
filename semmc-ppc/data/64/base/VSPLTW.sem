@@ -1,8 +1,8 @@
 ;; Vector Splat Word (VX-form)
 ((operands
- ((vrT. 'Vrrc)
-  (vrB. 'Vrrc)
-  (uim. 'U5imm)))
+ ((vrT . 'Vrrc)
+  (vrB . 'Vrrc)
+  (uim . 'U5imm)))
  (in
   ('VSCR vrB 'IP))
  (defs

@@ -1,9 +1,9 @@
 ;; VSX Select (XX4-form)
 ((operands
- ((xT. 'Vsrc)
-  (xA. 'Vsrc)
-  (xB. 'Vsrc)
-  (xC. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (xA . 'Vsrc)
+  (xB . 'Vsrc)
+  (xC . 'Vsrc)))
  (in
   ('FPSCR xC xB xA 'IP))
  (defs

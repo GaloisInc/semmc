@@ -158,6 +158,21 @@
           (true)))))))))
   (true
    (bveq #b0 #b0))
+  (var2
+   (ite
+    ((_ call "arm.is_r15")
+     rD)
+    (ite
+     (bveq
+      #b0
+      ((_ extract 0 0)
+       (bvor
+        rN
+        ((_ extract 31 0)
+         (shiftC)))))
+     (SetT32Mode)
+     'CPSR)
+    'CPSR))
   (SetT32Mode
    (bvand
     #xfeffffff
@@ -172,6 +187,9 @@
      #x00000000)
     #b1
     #b0))
+  (var3
+   ('PC
+    (bxWritePC)))
   (bxWritePC
    (ite
     ((_ call "arm.is_r15")
@@ -191,13 +209,7 @@
        ((_ extract 31 0)
         (shiftC))))
      (ite
-      (bveq
-       #b0
-       ((_ extract 1 1)
-        (bvor
-         rN
-         ((_ extract 31 0)
-          (shiftC)))))
+      (bveq var1)
       (bvand
        #xfffffffd
        (bvor
@@ -208,7 +220,14 @@
        rN
        ((_ extract 31 0)
         (shiftC)))))
-    (bvadd 'PC #x00000004))))
+    (bvadd 'PC #x00000004)))
+  (var1
+   (#b0
+    ((_ extract 1 1)
+     (bvor
+      rN
+      ((_ extract 31 0)
+       (shiftC)))))))
  ((operands
   ((rD . 'GPR)
    (setcc . 'Cc_out)
@@ -218,8 +237,7 @@
   (in
    (mimm setcc rN 'CPSR 'PC))
   (defs
-   (('PC
-    (bxWritePC))
+   ((var3)
     ('CPSR
      (ite
       (testCondition)
@@ -244,34 +262,8 @@
            ((_ extract 28 28)
             'CPSR))))
         ((_ extract 27 0)
-         (ite
-          ((_ call "arm.is_r15")
-           rD)
-          (ite
-           (bveq
-            #b0
-            ((_ extract 0 0)
-             (bvor
-              rN
-              ((_ extract 31 0)
-               (shiftC)))))
-           (SetT32Mode)
-           'CPSR)
-          'CPSR)))
-       (ite
-        ((_ call "arm.is_r15")
-         rD)
-        (ite
-         (bveq
-          #b0
-          ((_ extract 0 0)
-           (bvor
-            rN
-            ((_ extract 31 0)
-             (shiftC)))))
-         (SetT32Mode)
-         'CPSR)
-        'CPSR))
+         (var2)))
+       (var2))
       'CPSR))
     (rD
      (ite

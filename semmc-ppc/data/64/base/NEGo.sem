@@ -1,7 +1,7 @@
 ;; Negate (XO-form, RC=1)
 ((operands
- ((rT. 'Gprc)
-  (rA. 'Gprc)))
+ ((rT . 'Gprc)
+  (rA . 'Gprc)))
  (in
   ('XER 'CR rA 'IP))
  (defs

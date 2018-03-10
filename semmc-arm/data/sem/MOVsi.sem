@@ -96,81 +96,123 @@
      #b1
      ((_ extract 30 30)
       'CPSR))
+    (var1)))
+  (var1
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      predBits)
+     #b001)
+    (bveq
+     #b1
+     ((_ extract 29 29)
+      'CPSR))
     (ite
      (bveq
       ((_ extract 3 1)
        predBits)
-      #b001)
+      #b010)
      (bveq
       #b1
-      ((_ extract 29 29)
+      ((_ extract 31 31)
        'CPSR))
      (ite
       (bveq
        ((_ extract 3 1)
         predBits)
-       #b010)
+       #b011)
       (bveq
        #b1
-       ((_ extract 31 31)
+       ((_ extract 28 28)
         'CPSR))
       (ite
        (bveq
         ((_ extract 3 1)
          predBits)
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
+        #b100)
+       (andp
+        (bveq
+         #b1
+         ((_ extract 29 29)
+          'CPSR))
+        (notp
+         (bveq
+          #b1
+          ((_ extract 30 30)
+           'CPSR))))
        (ite
         (bveq
          ((_ extract 3 1)
           predBits)
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
+         #b101)
+        (bveq
+         ((_ extract 31 31)
+          'CPSR)
+         ((_ extract 28 28)
+          'CPSR))
         (ite
          (bveq
           ((_ extract 3 1)
            predBits)
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
+          #b110)
+         (andp
           (bveq
-           ((_ extract 3 1)
-            predBits)
-           #b110)
-          (andp
+           ((_ extract 31 31)
+            'CPSR)
+           ((_ extract 28 28)
+            'CPSR))
+          (notp
            (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
+            #b1
+            ((_ extract 30 30)
+             'CPSR))))
+         (true))))))))
   (true
    (bveq #b0 #b0))
+  (var3
+   ((concat
+    (concat
+     ((_ extract 31 31)
+      ((_ extract 31 0)
+       (shiftC)))
+     (concat
+      (isZeroBit)
+      (var2)))
+    ((_ extract 27 0)
+     (ite
+      ((_ call "arm.is_r15")
+       rD)
+      (ite
+       (bveq
+        #b0
+        ((_ extract 0 0)
+         ((_ extract 31 0)
+          (shiftC))))
+       (SetT32Mode)
+       'CPSR)
+      'CPSR)))
+    (ite
+     ((_ call "arm.is_r15")
+      rD)
+     (ite
+      (bveq
+       #b0
+       ((_ extract 0 0)
+        ((_ extract 31 0)
+         (shiftC))))
+      (SetT32Mode)
+      'CPSR)
+     'CPSR)))
   (SetT32Mode
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
+  (var2
+   (concat
+    ((_ extract 32 32)
+     (shiftC))
+    ((_ extract 28 28)
+     'CPSR)))
   (isZeroBit
    (ite
     (bveq
@@ -179,6 +221,9 @@
      #x00000000)
     #b1
     #b0))
+  (var4
+   ('PC
+    (bxWritePC)))
   (bxWritePC
    (ite
     ((_ call "arm.is_r15")
@@ -214,8 +259,7 @@
   (in
    (regimm setcc 'CPSR 'PC))
   (defs
-   (('PC
-    (bxWritePC))
+   ((var4)
     ('CPSR
      (ite
       (testCondition)
@@ -225,43 +269,7 @@
         (notp
          ((_ call "arm.is_r15")
           rD)))
-       (concat
-        (concat
-         ((_ extract 31 31)
-          ((_ extract 31 0)
-           (shiftC)))
-         (concat
-          (isZeroBit)
-          (concat
-           ((_ extract 32 32)
-            (shiftC))
-           ((_ extract 28 28)
-            'CPSR))))
-        ((_ extract 27 0)
-         (ite
-          ((_ call "arm.is_r15")
-           rD)
-          (ite
-           (bveq
-            #b0
-            ((_ extract 0 0)
-             ((_ extract 31 0)
-              (shiftC))))
-           (SetT32Mode)
-           'CPSR)
-          'CPSR)))
-       (ite
-        ((_ call "arm.is_r15")
-         rD)
-        (ite
-         (bveq
-          #b0
-          ((_ extract 0 0)
-           ((_ extract 31 0)
-            (shiftC))))
-         (SetT32Mode)
-         'CPSR)
-        'CPSR))
+       var3)
       'CPSR))
     (rD
      (ite

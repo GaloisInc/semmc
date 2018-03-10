@@ -1,7 +1,7 @@
 ;; Floating Point Convert from Integer Doubleword Unsigned (X-form)
 ((operands
- ((frT. 'Fprc)
-  (frB. 'Fprc)))
+ ((frT . 'Fprc)
+  (frB . 'Fprc)))
  (in
   ('FPSCR frB 'IP))
  (defs

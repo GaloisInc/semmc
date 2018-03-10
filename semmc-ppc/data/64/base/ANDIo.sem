@@ -1,8 +1,8 @@
 ;; AND Immediate (D-form)
 ((operands
- ((rT. 'Gprc)
-  (ui. 'U16imm)
-  (rA. 'Gprc)))
+ ((rT . 'Gprc)
+  (ui . 'U16imm)
+  (rA . 'Gprc)))
  (in
   ('XER 'CR ui rA 'IP))
  (defs

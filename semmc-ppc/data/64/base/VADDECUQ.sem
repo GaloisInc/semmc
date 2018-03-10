@@ -1,9 +1,9 @@
 ;; Vector Add Extended & Write Carry Unsigned Quadword (VA-form)
 ((operands
- ((vrT. 'Vrrc)
-  (vrA. 'Vrrc)
-  (vrB. 'Vrrc)
-  (vrC. 'Vrrc)))
+ ((vrT . 'Vrrc)
+  (vrA . 'Vrrc)
+  (vrB . 'Vrrc)
+  (vrC . 'Vrrc)))
  (in
   ('VSCR vrC vrB vrA 'IP))
  (defs

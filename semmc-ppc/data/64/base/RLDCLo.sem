@@ -113,10 +113,10 @@
     ('IP
      (bvadd 'IP #x0000000000000004))))))
  ((operands
-  ((rA. 'Gprc)
-   (mb. 'U6imm)
-   (rS. 'Gprc)
-   (rB. 'Gprc)))
+  ((rA . 'Gprc)
+   (mb . 'U6imm)
+   (rS . 'Gprc)
+   (rB . 'Gprc)))
   (in
    ('XER 'CR rB rS mb 'IP))
   (var1)))

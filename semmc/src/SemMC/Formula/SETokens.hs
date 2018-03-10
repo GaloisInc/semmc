@@ -77,8 +77,9 @@ printTokens comments sexpr =
   let oguide = nativeGuide AIdent nameFor
       guide = oguide { weighting = weighter (weighting oguide)
                      , allowRecursion = True
-                     , minExprSize = 6
-                     , maxLetBinds = min 8 . (`div` 2)
+                     , minExprSize = 10
+                     -- , maxLetBinds = min 8 . (`div` 2)
+                     , maxLetBinds = id
                      }
       nameFor n e = case nameOf 0 e of
                       Nothing -> AIdent n

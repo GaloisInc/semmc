@@ -1,6 +1,6 @@
 ;; BCLR (XL-form, LK=1)
 ((operands
- ((bi. 'Crbitrc)))
+ ((bi . 'Crbitrc)))
  (in
   ('CR 'IP 'LNK))
  (defs

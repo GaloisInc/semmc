@@ -1,7 +1,7 @@
 ;; Move Condition Register Field (XL-form)
 ((operands
- ((BF. 'Crrc)
-  (BFA. 'Crrc)))
+ ((BF . 'Crrc)
+  (BFA . 'Crrc)))
  (in
   ('CR BFA BF 'IP))
  (defs

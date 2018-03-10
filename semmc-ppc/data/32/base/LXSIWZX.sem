@@ -1,7 +1,7 @@
 ;; Load VSX Scalar as Integer Word and Zero Indexed (XX1-form)
 ((operands
- ((xT. 'Vsrc)
-  (memref. 'Memrr)))
+ ((xT . 'Vsrc)
+  (memref . 'Memrr)))
  (in
   (memref 'Mem 'IP))
  (defs

@@ -1,7 +1,7 @@
 ;; Store Floating-Point Single with Update (D-form)
 ((operands
- ((memref. 'Memri)
-  (frS. 'Fprc)))
+ ((memref . 'Memri)
+  (frS . 'Fprc)))
  (in
   ('Mem memref frS 'IP))
  (defs

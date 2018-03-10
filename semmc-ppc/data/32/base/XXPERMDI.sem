@@ -1,9 +1,9 @@
 ;; VSX Permute Doubleword Immediate (XX3-form)
 ((operands
- ((xT. 'Vsrc)
-  (DM. 'U2imm)
-  (xA. 'Vsrc)
-  (xB. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (DM . 'U2imm)
+  (xA . 'Vsrc)
+  (xB . 'Vsrc)))
  (in
   (xB xA DM 'IP))
  (defs

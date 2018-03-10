@@ -2,8 +2,8 @@
 ;; This is basically LBZX with additional memory synchronization semantics
 ;; This is a variant of LBARX with a hint about future updates to the storage
 ((operands
- ((rT. 'Gprc)
-  (memref. 'Memrr)))
+ ((rT . 'Gprc)
+  (memref . 'Memrr)))
  (in
   ('Mem memref 'IP))
  (defs

@@ -6,9 +6,9 @@
   (true
    (bveq #b0 #b0)))
  ((operands
-  ((bh. 'I32imm)
-   (bi. 'Crbitrc)
-   (bo. 'U5imm)))
+  ((bh . 'I32imm)
+   (bi . 'Crbitrc)
+   (bo . 'U5imm)))
   (in
    ('CR 'CTR 'IP 'LNK))
   (defs

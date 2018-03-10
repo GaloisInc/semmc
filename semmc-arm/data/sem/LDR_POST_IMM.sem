@@ -1,40 +1,11 @@
 ;; Load Register, Post-indexed (P=0, W=0), immediate (A32), Encoding A1
 ;; doc: F7.1.69, page F7-2636
 (let
- ((var2
-  (('CPSR
-   (ite
-    (testCondition)
-    (ite
-     ((_ call "arm.is_r15")
-      gpr)
-     (ite
-      (bveq
-       #b0
-       ((_ extract 0 0)
-        ((_ call "read_mem.32")
-         'Mem
-         off)))
-      (SetT32Mode)
-      'CPSR)
-     'CPSR)
-    'CPSR))
-   (gpr
-    (ite
-     (testCondition)
-     (ite
-      ((_ call "arm.is_r15")
-       gpr)
-      gpr
-      ((_ call "read_mem.32")
-       'Mem
-       off))
-     gpr))
-   (off
-    (ite
-     (testCondition)
-     (updAddr)
-     off))))
+ ((var1
+  (ite
+   (testCondition)
+   (updAddr)
+   off))
   (updAddr
    (ite
     ((_ call "a32.am2offset_imm_add")
@@ -57,7 +28,8 @@
       ((_ extract 0 0)
        predBits))
      (bvne predBits #xf))
-    (var1)
+    (notp
+     (conditionMatch))
     (conditionMatch)))
   (conditionMatch
    (ite
@@ -140,9 +112,6 @@
           (true)))))))))
   (true
    (bveq #b0 #b0))
-  (var1
-   (notp
-    (conditionMatch)))
   (SetT32Mode
    (bvand
     #xfeffffff
@@ -189,4 +158,33 @@
   (defs
    (('PC
     (bxWritePC))
-    var2))))
+    ('CPSR
+     (ite
+      (testCondition)
+      (ite
+       ((_ call "arm.is_r15")
+        gpr)
+       (ite
+        (bveq
+         #b0
+         ((_ extract 0 0)
+          ((_ call "read_mem.32")
+           'Mem
+           off)))
+        (SetT32Mode)
+        'CPSR)
+       'CPSR)
+      'CPSR))
+    (gpr
+     (ite
+      (testCondition)
+      (ite
+       ((_ call "arm.is_r15")
+        gpr)
+       gpr
+       ((_ call "read_mem.32")
+        'Mem
+        off))
+      gpr))
+    (off
+     (var1))))))

@@ -1,7 +1,7 @@
 ((operands
- ((rT. 'Gprc)
-  (ui. 'U16imm)
-  (rA. 'Gprc)))
+ ((rT . 'Gprc)
+  (ui . 'U16imm)
+  (rA . 'Gprc)))
  (in
   (ui rA 'IP))
  (defs

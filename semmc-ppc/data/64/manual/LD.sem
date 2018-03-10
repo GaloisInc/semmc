@@ -1,7 +1,7 @@
 ;; Load Doubleword (DS-form)
 ((operands
- ((rT. 'Gprc)
-  (memref. 'Memrix)))
+ ((rT . 'Gprc)
+  (memref . 'Memrix)))
  (in
   ('Mem memref 'IP))
  (defs

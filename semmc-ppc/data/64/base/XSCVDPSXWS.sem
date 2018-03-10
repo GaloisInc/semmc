@@ -1,7 +1,7 @@
 ;; VSX Scalar Truncate Double-Precision to Integer and Convert to Signed Integer Word Format with Saturate (XX2-form)
 ((operands
- ((xT. 'Vsrc)
-  (xB. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (xB . 'Vsrc)))
  (in
   ('FPSCR xB 'IP))
  (defs

@@ -1,7 +1,7 @@
 ;; Move To VSR Word Algebraic (XX1-form)
 ((operands
- ((xT. 'Vsrc)
-  (rA. 'Gprc)))
+ ((xT . 'Vsrc)
+  (rA . 'Gprc)))
  (in
   (xT 'IP))
  (defs

@@ -1,7 +1,7 @@
 ;; Store Vector Element Byte Indexed (X-form)
 ((operands
- ((memref. 'Memrr)
-  (vrS. 'Vrrc)))
+ ((memref . 'Memrr)
+  (vrS . 'Vrrc)))
  (in
   (memref 'Mem vrS 'IP))
  (defs

@@ -1,8 +1,8 @@
 ;; Floating Copy Sign (X-form)
 ((operands
- ((frT. 'Fprc)
-  (frA. 'Fprc)
-  (frB. 'Fprc)))
+ ((frT . 'Fprc)
+  (frA . 'Fprc)
+  (frB . 'Fprc)))
  (in
   ('FPSCR frB frA 'IP))
  (defs

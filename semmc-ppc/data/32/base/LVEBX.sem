@@ -1,7 +1,7 @@
 ;; Load Vector Element Byte Indexed (X-form)
 ((operands
- ((vrT. 'Vrrc)
-  (memrr. 'Memrr)))
+ ((vrT . 'Vrrc)
+  (memrr . 'Memrr)))
  (in
   (memrr 'Mem 'IP))
  (defs

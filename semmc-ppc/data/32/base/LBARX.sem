@@ -1,8 +1,8 @@
 ;; Load Byte and Reserve Indexed (X-form)
 ;; This is basically LBZX with additional memory synchronization semantics
 ((operands
- ((rT. 'Gprc)
-  (memref. 'Memrr)))
+ ((rT . 'Gprc)
+  (memref . 'Memrr)))
  (in
   ('Mem memref 'IP))
  (defs

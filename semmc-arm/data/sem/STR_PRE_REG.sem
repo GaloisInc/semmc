@@ -1,360 +1,73 @@
 ;; Store Register, Pre-indexed (P=1, W=1), register (A32)
 ;; doc: F7.1.218, page F7-2882
 (let
- ((shiftC
-  (ite
-   (bveq
-    ((_ extract 31 0)
-     (ite
-      (bveq
-       ((_ call "a32.ldst_so_reg_shift_type")
-        ldst_so_reg)
-       #b00)
-      (concat
-       #b000
-       ((_ zero_extend 27)
-        ((_ call "a32.ldst_so_reg_immediate")
-         ldst_so_reg)))
-      (ite
-       (bveq
-        ((_ call "a32.ldst_so_reg_shift_type")
-         ldst_so_reg)
-        #b01)
-       (concat
-        #b001
-        (ite
-         (bveq
-          #b00000
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg))
-         #x00000020
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg))))
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b10)
-        (concat
-         #b010
-         (ite
-          (bveq
-           #b00000
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg))
-          #x00000020
-          ((_ zero_extend 27)
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg))))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)
-          #b00000)
-         (concat #b100 #x00000001)
-         (concat
-          #b011
-          ((_ zero_extend 27)
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg))))))))
-    #x00000000)
-   (concat
-    ((_ extract 29 29)
-     'CPSR)
-    ((_ call "a32.ldst_so_reg_offset_register")
-     ldst_so_reg))
+ ((var6
+  (((_ call "write_mem.32")
+   'Mem
+   (ite var5)
+   (ite
+    (testCondition)
+    (ite
+     ((_ call "arm.is_r15")
+      gpr)
+     'PC
+     gpr)
+    ((_ call "read_mem.32")
+     'Mem
+     (ite var5))))))
+  (var5
+   (((_ call "a32.ldst_so_reg_add")
+    ldst_so_reg)
+    (bvadd
+     ((_ call "a32.ldst_so_reg_base_register")
+      ldst_so_reg)
+     ((_ extract 31 0)
+      var4))
+    (bvsub
+     ((_ call "a32.ldst_so_reg_base_register")
+      ldst_so_reg)
+     ((_ extract 31 0)
+      var4))))
+  (var4
+   ((shiftC)))
+  (shiftC
    (ite
     (bveq
-     ((_ extract 34 32)
-      (ite
-       (bveq
-        ((_ call "a32.ldst_so_reg_shift_type")
-         ldst_so_reg)
-        #b00)
-       (concat
-        #b000
-        ((_ zero_extend 27)
-         ((_ call "a32.ldst_so_reg_immediate")
-          ldst_so_reg)))
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b01)
-        (concat
-         #b001
-         (ite
-          (bveq
-           #b00000
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg))
-          #x00000020
-          ((_ zero_extend 27)
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg))))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b10)
-         (concat
-          #b010
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg)
-           #b00000)
-          (concat #b100 #x00000001)
-          (concat
-           #b011
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))))))
-     #b000)
-    (bvshl
-     ((_ zero_extend 1)
-      ((_ call "a32.ldst_so_reg_offset_register")
-       ldst_so_reg))
-     ((_ zero_extend 1)
-      ((_ extract 31 0)
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))))))))
+     ((_ extract 31 0)
+      (immShift))
+     #x00000000)
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     ((_ call "a32.ldst_so_reg_offset_register")
+      ldst_so_reg))
     (ite
      (bveq
       ((_ extract 34 32)
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))))))
-      #b001)
-     (logicalShiftRightCarry)
+       (immShift))
+      #b000)
+     (lslC)
      (ite
       (bveq
        ((_ extract 34 32)
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b00)
-         (concat
-          #b000
-          ((_ zero_extend 27)
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg)))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b01)
-          (concat
-           #b001
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_shift_type")
-             ldst_so_reg)
-            #b10)
-           (concat
-            #b010
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))
-           (ite
-            (bveq
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg)
-             #b00000)
-            (concat #b100 #x00000001)
-            (concat
-             #b011
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))))))
-       #b010)
-      (arithmeticShiftRightCarry)
-      (ite
-       (bveq
-        ((_ extract 34 32)
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_shift_type")
-             ldst_so_reg)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))
-           (ite
-            (bveq
-             ((_ call "a32.ldst_so_reg_shift_type")
-              ldst_so_reg)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))
-            (ite
-             (bveq
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))))))
-        #b011)
-       (rorC)
-       (rrxC)))))))
+        (immShift))
+       #b001)
+      (logicalShiftRightCarry)
+      var3))))
+  (var3
+   ((ite
+    (bveq
+     ((_ extract 34 32)
+      (immShift))
+     #b010)
+    (arithmeticShiftRightCarry)
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b011)
+     (rorC)
+     (rrxC)))))
   (rrxC
    (concat
     ((_ extract 0 0)
@@ -371,117 +84,13 @@
     (ite
      (bvult
       ((_ extract 31 0)
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))))))
+       (immShift))
       #x00000020)
      (ite
       ((_ call "test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_shift_type")
-             ldst_so_reg)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))
-           (ite
-            (bveq
-             ((_ call "a32.ldst_so_reg_shift_type")
-              ldst_so_reg)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))
-            (ite
-             (bveq
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))))))
+         (immShift))
         #x00000001)
        ((_ call "a32.ldst_so_reg_offset_register")
         ldst_so_reg))
@@ -496,416 +105,109 @@
        #x00000020
        (bvurem
         ((_ extract 31 0)
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_shift_type")
-             ldst_so_reg)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))
-           (ite
-            (bveq
-             ((_ call "a32.ldst_so_reg_shift_type")
-              ldst_so_reg)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))
-            (ite
-             (bveq
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))))))
+         (immShift))
         #x00000020)))
      (bvlshr
       ((_ call "a32.ldst_so_reg_offset_register")
        ldst_so_reg)
       (bvurem
        ((_ extract 31 0)
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b00)
-         (concat
-          #b000
-          ((_ zero_extend 27)
-           ((_ call "a32.ldst_so_reg_immediate")
-            ldst_so_reg)))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b01)
-          (concat
-           #b001
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_shift_type")
-             ldst_so_reg)
-            #b10)
-           (concat
-            #b010
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))
-           (ite
-            (bveq
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg)
-             #b00000)
-            (concat #b100 #x00000001)
-            (concat
-             #b011
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))))))
+        (immShift))
        #x00000020)))))
+  (immShift
+   (ite
+    (bveq
+     ((_ call "a32.ldst_so_reg_shift_type")
+      ldst_so_reg)
+     #b00)
+    (concat
+     #b000
+     ((_ zero_extend 27)
+      ((_ call "a32.ldst_so_reg_immediate")
+       ldst_so_reg)))
+    (ite
+     (bveq
+      ((_ call "a32.ldst_so_reg_shift_type")
+       ldst_so_reg)
+      #b01)
+     (concat
+      #b001
+      (ite
+       (bveq
+        #b00000
+        ((_ call "a32.ldst_so_reg_immediate")
+         ldst_so_reg))
+       #x00000020
+       ((_ zero_extend 27)
+        ((_ call "a32.ldst_so_reg_immediate")
+         ldst_so_reg))))
+     (ite
+      (bveq
+       ((_ call "a32.ldst_so_reg_shift_type")
+        ldst_so_reg)
+       #b10)
+      (concat var2)
+      (ite
+       (bveq
+        ((_ call "a32.ldst_so_reg_immediate")
+         ldst_so_reg)
+        #b00000)
+       (concat #b100 #x00000001)
+       (concat
+        #b011
+        ((_ zero_extend 27)
+         ((_ call "a32.ldst_so_reg_immediate")
+          ldst_so_reg))))))))
+  (var2
+   (#b010
+    (ite
+     (bveq
+      #b00000
+      ((_ call "a32.ldst_so_reg_immediate")
+       ldst_so_reg))
+     #x00000020
+     ((_ zero_extend 27)
+      ((_ call "a32.ldst_so_reg_immediate")
+       ldst_so_reg)))))
   (arithmeticShiftRightCarry
    (concat
     (ite
      (bvult
       ((_ extract 31 0)
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))))))
+       (immShift))
       #x00000020)
      (ite
       ((_ call "test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_shift_type")
-             ldst_so_reg)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))
-           (ite
-            (bveq
-             ((_ call "a32.ldst_so_reg_shift_type")
-              ldst_so_reg)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))
-            (ite
-             (bveq
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))))))
+         (immShift))
         #x00000001)
        ((_ call "a32.ldst_so_reg_offset_register")
         ldst_so_reg))
       #b1
       #b0)
      #b0)
-    (bvashr
-     ((_ call "a32.ldst_so_reg_offset_register")
-      ldst_so_reg)
-     (bvurem
-      ((_ extract 31 0)
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))))))
-      #x00000020))))
+    (var1)))
+  (var1
+   (bvashr
+    ((_ call "a32.ldst_so_reg_offset_register")
+     ldst_so_reg)
+    (bvurem
+     ((_ extract 31 0)
+      (immShift))
+     #x00000020)))
   (logicalShiftRightCarry
    (concat
     (ite
      (bvult
       ((_ extract 31 0)
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))))))
+       (immShift))
       #x00000020)
      (ite
       ((_ call "test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_shift_type")
-             ldst_so_reg)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg))))
-           (ite
-            (bveq
-             ((_ call "a32.ldst_so_reg_shift_type")
-              ldst_so_reg)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))
-            (ite
-             (bveq
-              ((_ call "a32.ldst_so_reg_immediate")
-               ldst_so_reg)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.ldst_so_reg_immediate")
-                ldst_so_reg))))))))
+         (immShift))
         #x00000001)
        ((_ call "a32.ldst_so_reg_offset_register")
         ldst_so_reg))
@@ -917,60 +219,16 @@
       ldst_so_reg)
      (bvurem
       ((_ extract 31 0)
-       (ite
-        (bveq
-         ((_ call "a32.ldst_so_reg_shift_type")
-          ldst_so_reg)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.ldst_so_reg_immediate")
-           ldst_so_reg)))
-        (ite
-         (bveq
-          ((_ call "a32.ldst_so_reg_shift_type")
-           ldst_so_reg)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg))))
-         (ite
-          (bveq
-           ((_ call "a32.ldst_so_reg_shift_type")
-            ldst_so_reg)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))
-          (ite
-           (bveq
-            ((_ call "a32.ldst_so_reg_immediate")
-             ldst_so_reg)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.ldst_so_reg_immediate")
-              ldst_so_reg))))))))
+       (immShift))
       #x00000020))))
+  (lslC
+   (bvshl
+    ((_ zero_extend 1)
+     ((_ call "a32.ldst_so_reg_offset_register")
+      ldst_so_reg))
+    ((_ zero_extend 1)
+     ((_ extract 31 0)
+      (immShift)))))
   (testCondition
    (ite
     (andp
@@ -1073,41 +331,4 @@
    (('PC
     (bvadd 'PC #x00000004))
     ('CPSR 'CPSR)
-    ('Mem
-     ((_ call "write_mem.32")
-      'Mem
-      (ite
-       ((_ call "a32.ldst_so_reg_add")
-        ldst_so_reg)
-       (bvadd
-        ((_ call "a32.ldst_so_reg_base_register")
-         ldst_so_reg)
-        ((_ extract 31 0)
-         (shiftC)))
-       (bvsub
-        ((_ call "a32.ldst_so_reg_base_register")
-         ldst_so_reg)
-        ((_ extract 31 0)
-         (shiftC))))
-      (ite
-       (testCondition)
-       (ite
-        ((_ call "arm.is_r15")
-         gpr)
-        'PC
-        gpr)
-       ((_ call "read_mem.32")
-        'Mem
-        (ite
-         ((_ call "a32.ldst_so_reg_add")
-          ldst_so_reg)
-         (bvadd
-          ((_ call "a32.ldst_so_reg_base_register")
-           ldst_so_reg)
-          ((_ extract 31 0)
-           (shiftC)))
-         (bvsub
-          ((_ call "a32.ldst_so_reg_base_register")
-           ldst_so_reg)
-          ((_ extract 31 0)
-           (shiftC))))))))))))
+    ('Mem var6)))))

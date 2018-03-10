@@ -1,7 +1,7 @@
 ;; Load Byte and Zero with Update Indexed (X-form)
 ((operands
- ((rT. 'Gprc)
-  (memref. 'Memrr)))
+ ((rT . 'Gprc)
+  (memref . 'Memrr)))
  (in
   ('Mem memref 'IP))
  (defs

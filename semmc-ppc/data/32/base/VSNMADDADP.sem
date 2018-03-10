@@ -1,8 +1,8 @@
 ;; VSX Scalar Negative Multiply-Add Double-Precision (XX3-form)
 ((operands
- ((xT. 'Vsrc)
-  (xA. 'Vsrc)
-  (xB. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (xA . 'Vsrc)
+  (xB . 'Vsrc)))
  (in
   ('FPSCR xB xA 'IP))
  (defs

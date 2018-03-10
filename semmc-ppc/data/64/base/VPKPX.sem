@@ -1,8 +1,8 @@
 ;; Vector Pack Pixel (VX-form)
 ((operands
- ((vrT. 'Vrrc)
-  (vrA. 'Vrrc)
-  (vrB. 'Vrrc)))
+ ((vrT . 'Vrrc)
+  (vrA . 'Vrrc)
+  (vrB . 'Vrrc)))
  (in
   ('VSCR vrB vrA 'IP))
  (defs

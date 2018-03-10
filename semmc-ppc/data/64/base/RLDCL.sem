@@ -1,9 +1,9 @@
 ;; Rotate Left Doubleword then Clear Left (MDS-form, RC=0)
 ((operands
- ((rA. 'Gprc)
-  (mb. 'U6imm)
-  (rS. 'Gprc)
-  (rB. 'Gprc)))
+ ((rA . 'Gprc)
+  (mb . 'U6imm)
+  (rS . 'Gprc)
+  (rB . 'Gprc)))
  (in
   (rB rS mb 'IP))
  (defs

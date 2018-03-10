@@ -1,26 +1,24 @@
 ;; ADD immediate, T32, encoding T1 (F7.1.4, F7-2540)
 (let
  ((var2
-  (('CPSR
-   (ite var1))
-   (rD
+  (ite var1))
+  (var1
+   ((testCondition)
     (ite
-     (testCondition)
-     (ite
-      (notp
-       (bvne
-        #x00
+     (notp
+      (bvne
+       #x00
+       (concat
+        ((_ extract 15 12)
+         'CPSR)
         (concat
-         ((_ extract 15 12)
+         ((_ extract 11 10)
           'CPSR)
-         (concat
-          ((_ extract 11 10)
-           'CPSR)
-          ((_ extract 26 25)
-           'CPSR)))))
-      rD
-      (addResult))
-     rD))))
+         ((_ extract 26 25)
+          'CPSR)))))
+     rD
+     (addResult))
+    rD))
   (addResult
    ((_ extract 31 0)
     (bvadd
@@ -138,31 +136,6 @@
     #xe
     ((_ extract 15 12)
      'CPSR)))
-  (var1
-   ((testCondition)
-    (ite
-     (andp
-      (notp
-       ((_ call "arm.is_r15")
-        rD))
-      (notp
-       (notp
-        (bvne
-         #x00
-         (concat
-          ((_ extract 15 12)
-           'CPSR)
-          (concat
-           ((_ extract 11 10)
-            'CPSR)
-           ((_ extract 26 25)
-            'CPSR)))))))
-     (concat
-      (addCarry)
-      ((_ extract 27 0)
-       'CPSR))
-     'CPSR)
-    'CPSR))
   (addCarry
    (concat
     ((_ extract 31 31)
@@ -234,4 +207,31 @@
   (defs
    (('PC
     (bvadd 'PC #x00000002))
-    var2))))
+    ('CPSR
+     (ite
+      (testCondition)
+      (ite
+       (andp
+        (notp
+         ((_ call "arm.is_r15")
+          rD))
+        (notp
+         (notp
+          (bvne
+           #x00
+           (concat
+            ((_ extract 15 12)
+             'CPSR)
+            (concat
+             ((_ extract 11 10)
+              'CPSR)
+             ((_ extract 26 25)
+              'CPSR)))))))
+       (concat
+        (addCarry)
+        ((_ extract 27 0)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (var2))))))

@@ -1,7 +1,7 @@
 ;; Load Halfword Algebraic (D-form)
 ((operands
- ((rT. 'Gprc)
-  (memref. 'Memri)))
+ ((rT . 'Gprc)
+  (memref . 'Memri)))
  (in
   ('Mem memref 'IP))
  (defs

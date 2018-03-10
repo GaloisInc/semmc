@@ -1,7 +1,7 @@
 ;; VSX Scalar Convert Scalar Single-Precision to Vector Single-Precision Format Non-Signaling (XX2-form)
 ((operands
- ((xT. 'Vsrc)
-  (xB. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (xB . 'Vsrc)))
  (in
   ('FPSCR xB 'IP))
  (defs

@@ -1,6 +1,6 @@
 ;; Move From FPSCR (X-form, RC=1)
 ((operands
- ((FRT. 'Fprc)))
+ ((FRT . 'Fprc)))
  (in
   ('FPSCR 'IP))
  (defs

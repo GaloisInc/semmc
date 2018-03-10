@@ -1,7 +1,7 @@
 ;; Vector Unpack Low Signed Halfword (VX-form)
 ((operands
- ((vrT. 'Vrrc)
-  (vrB. 'Vrrc)))
+ ((vrT . 'Vrrc)
+  (vrB . 'Vrrc)))
  (in
   ('VSCR vrB 'IP))
  (defs

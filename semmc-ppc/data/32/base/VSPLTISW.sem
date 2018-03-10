@@ -1,7 +1,7 @@
 ;; Vector Splat Immediate Signed Word (VX-form)
 ((operands
- ((vrT. 'Vrrc)
-  (sim. 'S5imm)))
+ ((vrT . 'Vrrc)
+  (sim . 'S5imm)))
  (in
   ('VSCR 'IP))
  (defs

@@ -1,8 +1,8 @@
 ;; VSX Scalar Subtract Single-Precision (XX3-form)
 ((operands
- ((xT. 'Vsrc)
-  (xA. 'Vsrc)
-  (xB. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (xA . 'Vsrc)
+  (xB . 'Vsrc)))
  (in
   ('FPSCR xB xA 'IP))
  (defs

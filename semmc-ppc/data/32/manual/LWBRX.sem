@@ -61,8 +61,8 @@
     ('IP
      (bvadd 'IP #x00000004))))))
  ((operands
-  ((rT. 'Gprc)
-   (memref. 'Memrr)))
+  ((rT . 'Gprc)
+   (memref . 'Memrr)))
   (in
    ('Mem memref 'IP))
   (var1)))

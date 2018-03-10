@@ -1,7 +1,7 @@
 ;; Population Count Doubleword (X-form)
 ((operands
- ((rA. 'Gprc)
-  (rS. 'Gprc)))
+ ((rA . 'Gprc)
+  (rS . 'Gprc)))
  (in
   (rS 'IP))
  (defs

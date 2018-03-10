@@ -1,6 +1,6 @@
 ;; Branch (I-form, AA=0, LK=1)
 ((operands
- ((target. 'Calltarget)))
+ ((target . 'Calltarget)))
  (in
   ('IP 'IP target))
  (defs

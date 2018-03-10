@@ -1,8 +1,8 @@
 ;; Vector Compare Greater Than Unsigned Word (VC-form, RC=1)
 ((operands
- ((vrT. 'Vrrc)
-  (vrA. 'Vrrc)
-  (vrB. 'Vrrc)))
+ ((vrT . 'Vrrc)
+  (vrA . 'Vrrc)
+  (vrB . 'Vrrc)))
  (in
   ('XER 'CR 'VSCR vrB vrA 'IP))
  (defs

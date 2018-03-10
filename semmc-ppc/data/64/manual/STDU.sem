@@ -1,7 +1,7 @@
 ;; Store Doubleword with Update (DS-form)
 ((operands
- ((memref. 'Memrix)
-  (rS. 'Gprc)))
+ ((memref . 'Memrix)
+  (rS . 'Gprc)))
  (in
   ('Mem memref rS 'IP))
  (defs

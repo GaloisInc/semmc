@@ -1,22 +1,41 @@
 ;; Store Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1
 ;; doc: F7.1.217, page F7-2880
 (let
- ((addr
-  (ite
-   ((_ call "a32.imm12_add")
+ ((var1
+  (('CPSR 'CPSR)
+   (((_ call "a32.imm12_reg")
     imm12)
-   (bvadd
-    ((_ call "a32.imm12_reg")
-     imm12)
-    ((_ zero_extend 16)
-     ((_ call "a32.imm12_off")
+    (ite
+     (testCondition)
+     (rnUpd)
+     ((_ call "a32.imm12_reg")
       imm12)))
-   (bvsub
-    ((_ call "a32.imm12_reg")
+   ('Mem
+    ((_ call "write_mem.32")
+     'Mem
+     (addr)
+     (ite
+      (testCondition)
+      (wval)
+      ((_ call "read_mem.32")
+       'Mem
+       (addr)))))))
+  (addr
+   (ite
+    ((_ call "a32.imm12_add")
      imm12)
-    ((_ zero_extend 16)
-     ((_ call "a32.imm12_off")
-      imm12)))))
+    (bvadd
+     ((_ call "a32.imm12_reg")
+      imm12)
+     ((_ zero_extend 16)
+      ((_ call "a32.imm12_off")
+       imm12)))
+    (bvsub
+     ((_ call "a32.imm12_reg")
+      imm12)
+     ((_ zero_extend 16)
+      ((_ call "a32.imm12_off")
+       imm12)))))
   (wval
    (ite
     ((_ call "arm.is_r15")
@@ -148,21 +167,4 @@
   (defs
    (('PC
     (bvadd 'PC #x00000004))
-    ('CPSR 'CPSR)
-    (((_ call "a32.imm12_reg")
-     imm12)
-     (ite
-      (testCondition)
-      (rnUpd)
-      ((_ call "a32.imm12_reg")
-       imm12)))
-    ('Mem
-     ((_ call "write_mem.32")
-      'Mem
-      (addr)
-      (ite
-       (testCondition)
-       (wval)
-       ((_ call "read_mem.32")
-        'Mem
-        (addr)))))))))
+    var1))))

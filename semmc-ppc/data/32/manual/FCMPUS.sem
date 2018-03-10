@@ -1,8 +1,8 @@
 ;; Floating Compare Unordered (X-form)
 ((operands
- ((bf. 'Crrc)
-  (frA. 'Fprc)
-  (frB. 'Fprc)))
+ ((bf . 'Crrc)
+  (frA . 'Fprc)
+  (frB . 'Fprc)))
  (in
   ('FPSCR 'CR frB frA 'IP))
  (defs

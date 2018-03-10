@@ -1,8 +1,8 @@
 ;; NAND (X-form, RC=1)
 ((operands
- ((rA. 'Gprc)
-  (rS. 'Gprc)
-  (rB. 'Gprc)))
+ ((rA . 'Gprc)
+  (rS . 'Gprc)
+  (rB . 'Gprc)))
  (in
   ('XER 'CR rB rS 'IP))
  (defs

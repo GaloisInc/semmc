@@ -89,8 +89,8 @@
     ('IP
      (bvadd 'IP #x0000000000000004))))))
  ((operands
-  ((FXM. 'Crbitm)
-   (rS. 'Gprc)))
+  ((FXM . 'Crbitm)
+   (rS . 'Gprc)))
   (in
    ('CR FXM rS 'IP))
   (var1)))

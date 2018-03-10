@@ -1,7 +1,7 @@
 ;; Load Doubleword Indexed (X-form)
 ((operands
- ((rT. 'Gprc)
-  (memref. 'Memrr)))
+ ((rT . 'Gprc)
+  (memref . 'Memrr)))
  (in
   ('Mem memref 'IP))
  (defs

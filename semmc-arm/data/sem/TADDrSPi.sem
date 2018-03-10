@@ -1,26 +1,18 @@
 ;; ADD SP + immediate, T32, encoding T1 (F7.1.9, F7-2548)
 (let
- ((var2
-  ((operands
-   ((rD . 'TGPR)
-    (imm . 'T_imm0_1020s4)))
-   (in
-    ('R13 imm rD 'CPSR 'PC))
-   (defs
-    (('PC
-     (branchWritePC))
-     var1))))
-  (var1
-   (('CPSR 'CPSR)
-    (rD
+ ((var1
+  ((('PC
+   (branchWritePC))
+   ('CPSR 'CPSR)
+   (rD
+    (ite
+     (testCondition)
      (ite
-      (testCondition)
-      (ite
-       ((_ call "arm.is_r15")
-        rD)
-       rD
-       (addResult))
-      rD))))
+      ((_ call "arm.is_r15")
+       rD)
+      rD
+      (addResult))
+     rD)))))
   (addResult
    ((_ extract 31 0)
     (bvadd
@@ -149,4 +141,9 @@
      #xfffffffd
      (addResult))
     (bvadd 'PC #x00000002))))
- (var2))
+ ((operands
+  ((rD . 'TGPR)
+   (imm . 'T_imm0_1020s4)))
+  (in
+   ('R13 imm rD 'CPSR 'PC))
+  (defs var1)))

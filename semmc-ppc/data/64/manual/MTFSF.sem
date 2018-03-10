@@ -1,9 +1,9 @@
 ;; Move to FPSCR Fields (XFL-form, RC=0)
 ((operands
- ((FLM. 'I32imm)
-  (L. 'I32imm)
-  (frB. 'Fprc)
-  (W. 'I32imm)))
+ ((FLM . 'I32imm)
+  (L . 'I32imm)
+  (frB . 'Fprc)
+  (W . 'I32imm)))
  (in
   ('IP))
  (defs

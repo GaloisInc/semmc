@@ -2,8 +2,8 @@
 ;; There is no single-precision form of this because
 ;; the sign bit is always in the same place (MSB)
 ((operands
- ((frT. 'Fprc)
-  (frB. 'Fprc)))
+ ((frT . 'Fprc)
+  (frB . 'Fprc)))
  (in
   ('FPSCR frB 'IP))
  (defs

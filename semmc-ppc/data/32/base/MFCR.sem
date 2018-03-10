@@ -1,6 +1,6 @@
 ;; Move From Condition Register
 ((operands
- ((rT. 'Gprc)))
+ ((rT . 'Gprc)))
  (in
   ('CR 'IP))
  (defs

@@ -1,9 +1,9 @@
 ;; Compare Logical Immediate (D-form)
 ;; This variant is the double word variant (where L=0)
 ((operands
- ((fld. 'Crrc)
-  (imm. 'U16imm)
-  (rA. 'Gprc)))
+ ((fld . 'Crrc)
+  (imm . 'U16imm)
+  (rA . 'Gprc)))
  (in
   ('XER 'CR rA imm 'IP))
  (defs

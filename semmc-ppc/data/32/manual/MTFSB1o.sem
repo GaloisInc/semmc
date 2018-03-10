@@ -1,6 +1,6 @@
 ;; Move to FPSCR Bit 1 (X-form, RC=1)
 ((operands
- ((BT. 'U5imm)))
+ ((BT . 'U5imm)))
  (in
   ('IP))
  (defs

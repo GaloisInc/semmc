@@ -1,7 +1,7 @@
 ;; Store Word Indexed (X-form)
 ((operands
- ((memref. 'Memrr)
-  (rS. 'Gprc)))
+ ((memref . 'Memrr)
+  (rS . 'Gprc)))
  (in
   ('Mem memref rS 'IP))
  (defs

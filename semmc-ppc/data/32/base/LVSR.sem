@@ -1,7 +1,7 @@
 ;; Load Vector for Shift Right Indexed (X-form)
 ((operands
- ((vrT. 'Vrrc)
-  (memrr. 'Memrr)))
+ ((vrT . 'Vrrc)
+  (memrr . 'Memrr)))
  (in
   ('Mem memrr 'IP))
  (defs

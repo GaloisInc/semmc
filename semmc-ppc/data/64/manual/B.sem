@@ -1,6 +1,6 @@
 ;; Branch (I-form, AA=0, LK=0)
 ((operands
- ((target. 'Directbrtarget)))
+ ((target . 'Directbrtarget)))
  (in
   ('IP target))
  (defs

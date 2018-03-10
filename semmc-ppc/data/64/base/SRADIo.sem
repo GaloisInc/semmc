@@ -1,8 +1,8 @@
 ;; Shift Right Algebraic Doubleword Immediate (XS-form, RC=1)
 ((operands
- ((rA. 'Gprc)
-  (sh. 'U6imm)
-  (rS. 'Gprc)))
+ ((rA . 'Gprc)
+  (sh . 'U6imm)
+  (rS . 'Gprc)))
  (in
   ('XER 'CR 'XER rS sh 'IP))
  (defs

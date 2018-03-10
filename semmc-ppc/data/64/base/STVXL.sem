@@ -1,8 +1,8 @@
 ;; Store Vector Indexed LRU (X-form)
 ;; This form provides a cache hint
 ((operands
- ((memref. 'Memrr)
-  (vrS. 'Vrrc)))
+ ((memref . 'Memrr)
+  (vrS . 'Vrrc)))
  (in
   (memref 'Mem vrS 'IP))
  (defs

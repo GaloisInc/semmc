@@ -5,10 +5,7 @@
   (ite
    (bveq
     ((_ extract 31 0)
-     (concat
-      #b000
-      ((_ zero_extend 27)
-       #b00000)))
+     (immShift))
     #x00000000)
    (concat
     ((_ extract 29 29)
@@ -17,157 +14,127 @@
    (ite
     (bveq
      ((_ extract 34 32)
-      (concat
-       #b000
-       ((_ zero_extend 27)
-        #b00000)))
+      (immShift))
      #b000)
-    (bvshl
-     ((_ zero_extend 1)
-      rM)
-     ((_ zero_extend 1)
-      ((_ extract 31 0)
-       (concat
-        #b000
-        ((_ zero_extend 27)
-         #b00000)))))
+    (lslC)
     (ite
      (bveq
       ((_ extract 34 32)
-       (concat
-        #b000
-        ((_ zero_extend 27)
-         #b00000)))
+       (immShift))
       #b001)
-     (concat
-      (ite
-       (bvult
-        ((_ extract 31 0)
-         (concat
-          #b000
-          ((_ zero_extend 27)
-           #b00000)))
-        #x00000020)
-       (ite
-        ((_ call "test_bit_dynamic")
-         (bvsub
-          ((_ extract 31 0)
-           (concat
-            #b000
-            ((_ zero_extend 27)
-             #b00000)))
-          #x00000001)
-         rM)
-        #b1
-        #b0)
-       #b0)
-      (bvlshr
-       rM
-       (bvurem
-        ((_ extract 31 0)
-         (concat
-          #b000
-          ((_ zero_extend 27)
-           #b00000)))
-        #x00000020)))
+     (logicalShiftRightCarry)
      (ite
       (bveq
        ((_ extract 34 32)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          #b00000)))
+        (immShift))
        #b010)
-      (concat
-       (ite
-        (bvult
-         ((_ extract 31 0)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            #b00000)))
-         #x00000020)
-        (ite
-         ((_ call "test_bit_dynamic")
-          (bvsub
-           ((_ extract 31 0)
-            (concat
-             #b000
-             ((_ zero_extend 27)
-              #b00000)))
-           #x00000001)
-          rM)
-         #b1
-         #b0)
-        #b0)
-       (bvashr
-        rM
-        (bvurem
-         ((_ extract 31 0)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            #b00000)))
-         #x00000020)))
+      (arithmeticShiftRightCarry)
       (ite
        (bveq
         ((_ extract 34 32)
-         (concat
-          #b000
-          ((_ zero_extend 27)
-           #b00000)))
+         (immShift))
         #b011)
-       (concat
-        (ite
-         (bvult
-          ((_ extract 31 0)
-           (concat
-            #b000
-            ((_ zero_extend 27)
-             #b00000)))
-          #x00000020)
-         (ite
-          ((_ call "test_bit_dynamic")
-           (bvsub
-            ((_ extract 31 0)
-             (concat
-              #b000
-              ((_ zero_extend 27)
-               #b00000)))
-            #x00000001)
-           rM)
-          #b1
-          #b0)
-         #b0)
-        (bvor
-         (bvshl
-          rM
-          (bvsub
-           #x00000020
-           (bvurem
-            ((_ extract 31 0)
-             (concat
-              #b000
-              ((_ zero_extend 27)
-               #b00000)))
-            #x00000020)))
-         (bvlshr
-          rM
-          (bvurem
-           ((_ extract 31 0)
-            (concat
-             #b000
-             ((_ zero_extend 27)
-              #b00000)))
-           #x00000020))))
-       (concat
-        ((_ extract 0 0)
-         rM)
-        (concat
-         ((_ extract 29 29)
-          'CPSR)
-         ((_ extract 31 1)
-          rM)))))))))
+       (rorC)
+       (rrxC)))))))
+  (rrxC
+   (concat
+    ((_ extract 0 0)
+     rM)
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     ((_ extract 31 1)
+      rM))))
+  (rorC
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
+    (bvor
+     (bvshl
+      rM
+      (bvsub
+       #x00000020
+       (bvurem
+        ((_ extract 31 0)
+         (immShift))
+        #x00000020)))
+     (bvlshr
+      rM
+      (bvurem
+       ((_ extract 31 0)
+        (immShift))
+       #x00000020)))))
+  (immShift
+   (concat
+    #b000
+    ((_ zero_extend 27)
+     #b00000)))
+  (arithmeticShiftRightCarry
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
+    (bvashr
+     rM
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (logicalShiftRightCarry
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
+    (bvlshr
+     rM
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (lslC
+   (bvshl
+    ((_ zero_extend 1)
+     rM)
+    ((_ zero_extend 1)
+     ((_ extract 31 0)
+      (immShift)))))
   (testCondition
    (ite
     (andp
@@ -274,6 +241,22 @@
     #xe
     ((_ extract 15 12)
      'CPSR)))
+  (var3
+   ((testCondition)
+    (ite
+     (andp
+      (bveq setcc #b1)
+      (notp
+       ((_ call "arm.is_r15")
+        rD)))
+     var2)
+    'CPSR))
+  (var2
+   ((concat
+    (nzcv)
+    ((_ extract 27 0)
+     'CPSR))
+    'CPSR))
   (nzcv
    (concat
     ((_ extract 31 31)
@@ -302,13 +285,14 @@
    (ite
     ((_ call "arm.is_r15")
      rD)
+    (bvand var1)
+    (bvadd 'PC #x00000002)))
+  (var1
+   (#xfffffffd
     (bvand
-     #xfffffffd
-     (bvand
-      rN
-      ((_ extract 31 0)
-       (shiftC))))
-    (bvadd 'PC #x00000002))))
+     rN
+     ((_ extract 31 0)
+      (shiftC))))))
  ((operands
   ((rD . 'RGPR)
    (setcc . 'Cc_out)
@@ -320,20 +304,7 @@
    (('PC
     (branchWritePC))
     ('CPSR
-     (ite
-      (testCondition)
-      (ite
-       (andp
-        (bveq setcc #b1)
-        (notp
-         ((_ call "arm.is_r15")
-          rD)))
-       (concat
-        (nzcv)
-        ((_ extract 27 0)
-         'CPSR))
-       'CPSR)
-      'CPSR))
+     (ite var3))
     (rD
      (ite
       (testCondition)

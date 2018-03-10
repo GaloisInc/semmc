@@ -1,6 +1,6 @@
 ((operands
- ((rA. 'Gprc)
-  (imm. 'S16imm)))
+ ((rA . 'Gprc)
+  (imm . 'S16imm)))
  (in
   (imm rA 'IP))
  (defs

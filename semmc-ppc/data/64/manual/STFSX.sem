@@ -1,7 +1,7 @@
 ;; Store Floating-Point Single Indexed (X-form)
 ((operands
- ((memref. 'Memrr)
-  (frS. 'Fprc)))
+ ((memref . 'Memrr)
+  (frS . 'Fprc)))
  (in
   ('Mem memref frS 'IP))
  (defs

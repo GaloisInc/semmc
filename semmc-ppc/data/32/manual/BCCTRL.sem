@@ -1,7 +1,7 @@
 ;; BCCTR (XL-form, LK=1)
 ;; This variant has BO=01100, branch when the CR bit is 1
 ((operands
- ((bi. 'Crbitrc)))
+ ((bi . 'Crbitrc)))
  (in
   ('CR 'IP 'CTR))
  (defs

@@ -75,8 +75,8 @@
     ('IP
      (bvadd 'IP #x0000000000000004))))))
  ((operands
-  ((rS. 'Gprc)
-   (FXM. 'I32imm)))
+  ((rS . 'Gprc)
+   (FXM . 'I32imm)))
   (in
    ('CR rS 'IP))
   (var1)))

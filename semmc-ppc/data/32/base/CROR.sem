@@ -1,8 +1,8 @@
 ;; Condition Register OR (XL-form)
 ((operands
- ((BT. 'Crbitrc)
-  (BA. 'Crbitrc)
-  (BB. 'Crbitrc)))
+ ((BT . 'Crbitrc)
+  (BA . 'Crbitrc)
+  (BB . 'Crbitrc)))
  (in
   ('CR BB BA 'IP))
  (defs

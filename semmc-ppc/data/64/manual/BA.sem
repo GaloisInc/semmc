@@ -1,6 +1,6 @@
 ;; Branch (I-form, AA=1, LK=0)
 ((operands
- ((target. 'Absdirectbrtarget)))
+ ((target . 'Absdirectbrtarget)))
  (in
   (target))
  (defs

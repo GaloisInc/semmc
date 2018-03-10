@@ -125,11 +125,11 @@
     ('IP
      (bvadd 'IP #x00000004))))))
  ((operands
-  ((rA. 'Gprc)
-   (sh. 'U5imm)
-   (mb. 'U5imm)
-   (me. 'U5imm)
-   (rS. 'Gprc)))
+  ((rA . 'Gprc)
+   (sh . 'U5imm)
+   (mb . 'U5imm)
+   (me . 'U5imm)
+   (rS . 'Gprc)))
   (in
    ('XER 'CR rS me mb sh 'IP))
   (var1)))

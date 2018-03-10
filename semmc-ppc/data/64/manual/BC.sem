@@ -1,8 +1,8 @@
 ;; BC (B-form, AA=0, LK=0)
 ;; This form is actually equivalent to BT, which has the BO field=01100
 ((operands
- ((target. 'Condbrtarget)
-  (bi. 'Crbitrc)))
+ ((target . 'Condbrtarget)
+  (bi . 'Crbitrc)))
  (in
   ('IP 'CR 'CTR))
  (defs

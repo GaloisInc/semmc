@@ -1,7 +1,7 @@
 ;; Store VSX Vector Word*4 Indexed (XX1-form)
 ((operands
- ((memref. 'Memrr)
-  (xS. 'Vsrc)))
+ ((memref . 'Memrr)
+  (xS . 'Vsrc)))
  (in
   (memref 'Mem xS 'IP))
  (defs

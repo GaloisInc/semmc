@@ -1,7 +1,7 @@
 ;; Move From One Condition Register Field (XFX-form)
 ((operands
- ((rT. 'Gprc)
-  (FXM. 'Crbitm)))
+ ((rT . 'Gprc)
+  (FXM . 'Crbitm)))
  (in
   ('CR rT FXM 'IP))
  (defs

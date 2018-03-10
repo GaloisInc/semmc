@@ -1,7 +1,7 @@
 ;; VSX Scalar Square Root Estimate Double-Precision (XX2-form)
 ((operands
- ((xT. 'Vsrc)
-  (xB. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (xB . 'Vsrc)))
  (in
   ('FPSCR xB 'IP))
  (defs

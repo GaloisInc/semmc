@@ -1,7 +1,7 @@
 ;; VSX Scalar Convert Single-Precision to Double-Precision Format (XX2-form)
 ((operands
- ((xT. 'Vsrc)
-  (xB. 'Vsrc)))
+ ((xT . 'Vsrc)
+  (xB . 'Vsrc)))
  (in
   ('FPSCR xB 'IP))
  (defs

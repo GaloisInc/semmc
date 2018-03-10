@@ -1,9 +1,9 @@
 ;; Vector Shift Left Double by Octet Immediate (VA-form)
 ((operands
- ((vrT. 'Vrrc)
-  (shb. 'U5imm)
-  (vrA. 'Vrrc)
-  (vrB. 'Vrrc)))
+ ((vrT . 'Vrrc)
+  (shb . 'U5imm)
+  (vrA . 'Vrrc)
+  (vrB . 'Vrrc)))
  (in
   ('VSCR vrB vrA 'IP))
  (defs

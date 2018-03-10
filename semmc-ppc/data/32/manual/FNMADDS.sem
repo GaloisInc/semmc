@@ -1,9 +1,9 @@
 ;; Floating Negative Multiply-Add Single (A-form)
 ((operands
- ((frT. 'Fprc)
-  (frA. 'Fprc)
-  (frB. 'Fprc)
-  (frC. 'Fprc)))
+ ((frT . 'Fprc)
+  (frA . 'Fprc)
+  (frB . 'Fprc)
+  (frC . 'Fprc)))
  (in
   ('FPSCR frC frB frA 'IP))
  (defs

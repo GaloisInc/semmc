@@ -1,967 +1,191 @@
 ;; AND register, Encoding A1 (F7.1.14, F7-2558)
 (let
- ((shiftC
-  (ite
-   (bveq
+ ((var8
+  (rD
+   (ite
+    (testCondition)
+    (ite
+     ((_ call "arm.is_r15")
+      rD)
+     rD
+     (bvand
+      rN
+      ((_ extract 31 0)
+       (shiftC))))
+    rD)))
+  (shiftC
+   (ite var5))
+  (var5
+   ((bveq
     ((_ extract 31 0)
+     (immShift))
+    #x00000000)
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     ((_ call "a32.soregimm_reg")
+      sori))
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b000)
+     (lslC)
+     (var6))))
+  (var6
+   (ite
+    (bveq
+     ((_ extract 34 32)
+      (immShift))
+     #b001)
+    (logicalShiftRightCarry)
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b010)
+     (arithmeticShiftRightCarry)
+     (var3))))
+  (var3
+   (ite
+    (bveq
+     ((_ extract 34 32)
+      (immShift))
+     #b011)
+    (rorC)
+    (rrxC)))
+  (rrxC
+   (concat
+    ((_ extract 0 0)
+     ((_ call "a32.soregimm_reg")
+      sori))
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     ((_ extract 31 1)
+      ((_ call "a32.soregimm_reg")
+       sori)))))
+  (rorC
+   (concat
+    (var2)
+    (bvor
+     (var1)
+     (bvlshr
+      ((_ call "a32.soregimm_reg")
+       sori)
+      (bvurem
+       ((_ extract 31 0)
+        (immShift))
+       #x00000020)))))
+  (immShift
+   (ite
+    (bveq
+     ((_ call "a32.soregimm_type")
+      sori)
+     #b00)
+    (concat
+     #b000
+     ((_ zero_extend 27)
+      ((_ call "a32.soregimm_imm")
+       sori)))
+    (ite
+     (bveq
+      ((_ call "a32.soregimm_type")
+       sori)
+      #b01)
+     (concat
+      #b001
+      (ite
+       (bveq
+        #b00000
+        ((_ call "a32.soregimm_imm")
+         sori))
+       #x00000020
+       ((_ zero_extend 27)
+        ((_ call "a32.soregimm_imm")
+         sori))))
      (ite
       (bveq
        ((_ call "a32.soregimm_type")
         sori)
-       #b00)
+       #b10)
       (concat
-       #b000
-       ((_ zero_extend 27)
-        ((_ call "a32.soregimm_imm")
-         sori)))
-      (ite
-       (bveq
-        ((_ call "a32.soregimm_type")
-         sori)
-        #b01)
-       (concat
-        #b001
-        (ite
-         (bveq
-          #b00000
-          ((_ call "a32.soregimm_imm")
-           sori))
-         #x00000020
-         ((_ zero_extend 27)
-          ((_ call "a32.soregimm_imm")
-           sori))))
+       #b010
        (ite
         (bveq
-         ((_ call "a32.soregimm_type")
-          sori)
-         #b10)
-        (concat
-         #b010
-         (ite
-          (bveq
-           #b00000
-           ((_ call "a32.soregimm_imm")
-            sori))
-          #x00000020
-          ((_ zero_extend 27)
-           ((_ call "a32.soregimm_imm")
-            sori))))
-        (ite
-         (bveq
-          ((_ call "a32.soregimm_imm")
-           sori)
-          #b00000)
-         (concat #b100 #x00000001)
-         (concat
-          #b011
-          ((_ zero_extend 27)
-           ((_ call "a32.soregimm_imm")
-            sori))))))))
-    #x00000000)
-   (concat
-    ((_ extract 29 29)
-     'CPSR)
-    ((_ call "a32.soregimm_reg")
-     sori))
-   (ite
-    (bveq
-     ((_ extract 34 32)
-      (ite
-       (bveq
-        ((_ call "a32.soregimm_type")
-         sori)
-        #b00)
-       (concat
-        #b000
+         #b00000
+         ((_ call "a32.soregimm_imm")
+          sori))
+        #x00000020
         ((_ zero_extend 27)
          ((_ call "a32.soregimm_imm")
-          sori)))
-       (ite
-        (bveq
-         ((_ call "a32.soregimm_type")
-          sori)
-         #b01)
-        (concat
-         #b001
-         (ite
-          (bveq
-           #b00000
-           ((_ call "a32.soregimm_imm")
-            sori))
-          #x00000020
-          ((_ zero_extend 27)
-           ((_ call "a32.soregimm_imm")
-            sori))))
-        (ite
-         (bveq
-          ((_ call "a32.soregimm_type")
-           sori)
-          #b10)
-         (concat
-          #b010
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.soregimm_imm")
-             sori))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.soregimm_imm")
-             sori))))
-         (ite
-          (bveq
-           ((_ call "a32.soregimm_imm")
-            sori)
-           #b00000)
-          (concat #b100 #x00000001)
-          (concat
-           #b011
-           ((_ zero_extend 27)
-            ((_ call "a32.soregimm_imm")
-             sori))))))))
-     #b000)
-    (bvshl
-     ((_ zero_extend 1)
-      ((_ call "a32.soregimm_reg")
-       sori))
-     ((_ zero_extend 1)
-      ((_ extract 31 0)
-       (ite
-        (bveq
-         ((_ call "a32.soregimm_type")
-          sori)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.soregimm_imm")
-           sori)))
-        (ite
-         (bveq
-          ((_ call "a32.soregimm_type")
-           sori)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.soregimm_imm")
-             sori))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.soregimm_imm")
-             sori))))
-         (ite
-          (bveq
-           ((_ call "a32.soregimm_type")
-            sori)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.soregimm_imm")
-              sori))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.soregimm_imm")
-              sori))))
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_imm")
-             sori)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.soregimm_imm")
-              sori))))))))))
-    (ite
-     (bveq
-      ((_ extract 34 32)
-       (ite
-        (bveq
-         ((_ call "a32.soregimm_type")
-          sori)
-         #b00)
-        (concat
-         #b000
-         ((_ zero_extend 27)
-          ((_ call "a32.soregimm_imm")
-           sori)))
-        (ite
-         (bveq
-          ((_ call "a32.soregimm_type")
-           sori)
-          #b01)
-         (concat
-          #b001
-          (ite
-           (bveq
-            #b00000
-            ((_ call "a32.soregimm_imm")
-             sori))
-           #x00000020
-           ((_ zero_extend 27)
-            ((_ call "a32.soregimm_imm")
-             sori))))
-         (ite
-          (bveq
-           ((_ call "a32.soregimm_type")
-            sori)
-           #b10)
-          (concat
-           #b010
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.soregimm_imm")
-              sori))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.soregimm_imm")
-              sori))))
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_imm")
-             sori)
-            #b00000)
-           (concat #b100 #x00000001)
-           (concat
-            #b011
-            ((_ zero_extend 27)
-             ((_ call "a32.soregimm_imm")
-              sori))))))))
-      #b001)
-     (concat
-      (ite
-       (bvult
-        ((_ extract 31 0)
-         (ite
-          (bveq
-           ((_ call "a32.soregimm_type")
-            sori)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.soregimm_imm")
-             sori)))
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_type")
-             sori)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.soregimm_imm")
-               sori))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.soregimm_imm")
-               sori))))
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_type")
-              sori)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.soregimm_imm")
-                sori))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_imm")
-               sori)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))))))
-        #x00000020)
-       (ite
-        ((_ call "test_bit_dynamic")
-         (bvsub
-          ((_ extract 31 0)
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_type")
-              sori)
-             #b00)
-            (concat
-             #b000
-             ((_ zero_extend 27)
-              ((_ call "a32.soregimm_imm")
-               sori)))
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_type")
-               sori)
-              #b01)
-             (concat
-              #b001
-              (ite
-               (bveq
-                #b00000
-                ((_ call "a32.soregimm_imm")
-                 sori))
-               #x00000020
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori))))
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_type")
-                sori)
-               #b10)
-              (concat
-               #b010
-               (ite
-                (bveq
-                 #b00000
-                 ((_ call "a32.soregimm_imm")
-                  sori))
-                #x00000020
-                ((_ zero_extend 27)
-                 ((_ call "a32.soregimm_imm")
-                  sori))))
-              (ite
-               (bveq
-                ((_ call "a32.soregimm_imm")
-                 sori)
-                #b00000)
-               (concat #b100 #x00000001)
-               (concat
-                #b011
-                ((_ zero_extend 27)
-                 ((_ call "a32.soregimm_imm")
-                  sori))))))))
-          #x00000001)
-         ((_ call "a32.soregimm_reg")
-          sori))
-        #b1
-        #b0)
-       #b0)
-      (bvlshr
-       ((_ call "a32.soregimm_reg")
-        sori)
-       (bvurem
-        ((_ extract 31 0)
-         (ite
-          (bveq
-           ((_ call "a32.soregimm_type")
-            sori)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.soregimm_imm")
-             sori)))
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_type")
-             sori)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.soregimm_imm")
-               sori))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.soregimm_imm")
-               sori))))
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_type")
-              sori)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.soregimm_imm")
-                sori))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_imm")
-               sori)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))))))
-        #x00000020)))
-     (ite
-      (bveq
-       ((_ extract 34 32)
-        (ite
-         (bveq
-          ((_ call "a32.soregimm_type")
-           sori)
-          #b00)
-         (concat
-          #b000
-          ((_ zero_extend 27)
-           ((_ call "a32.soregimm_imm")
-            sori)))
-         (ite
-          (bveq
-           ((_ call "a32.soregimm_type")
-            sori)
-           #b01)
-          (concat
-           #b001
-           (ite
-            (bveq
-             #b00000
-             ((_ call "a32.soregimm_imm")
-              sori))
-            #x00000020
-            ((_ zero_extend 27)
-             ((_ call "a32.soregimm_imm")
-              sori))))
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_type")
-             sori)
-            #b10)
-           (concat
-            #b010
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.soregimm_imm")
-               sori))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.soregimm_imm")
-               sori))))
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_imm")
-              sori)
-             #b00000)
-            (concat #b100 #x00000001)
-            (concat
-             #b011
-             ((_ zero_extend 27)
-              ((_ call "a32.soregimm_imm")
-               sori))))))))
-       #b010)
-      (concat
-       (ite
-        (bvult
-         ((_ extract 31 0)
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_type")
-             sori)
-            #b00)
-           (concat
-            #b000
-            ((_ zero_extend 27)
-             ((_ call "a32.soregimm_imm")
-              sori)))
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_type")
-              sori)
-             #b01)
-            (concat
-             #b001
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.soregimm_imm")
-                sori))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_type")
-               sori)
-              #b10)
-             (concat
-              #b010
-              (ite
-               (bveq
-                #b00000
-                ((_ call "a32.soregimm_imm")
-                 sori))
-               #x00000020
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori))))
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_imm")
-                sori)
-               #b00000)
-              (concat #b100 #x00000001)
-              (concat
-               #b011
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori))))))))
-         #x00000020)
-        (ite
-         ((_ call "test_bit_dynamic")
-          (bvsub
-           ((_ extract 31 0)
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_type")
-               sori)
-              #b00)
-             (concat
-              #b000
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori)))
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_type")
-                sori)
-               #b01)
-              (concat
-               #b001
-               (ite
-                (bveq
-                 #b00000
-                 ((_ call "a32.soregimm_imm")
-                  sori))
-                #x00000020
-                ((_ zero_extend 27)
-                 ((_ call "a32.soregimm_imm")
-                  sori))))
-              (ite
-               (bveq
-                ((_ call "a32.soregimm_type")
-                 sori)
-                #b10)
-               (concat
-                #b010
-                (ite
-                 (bveq
-                  #b00000
-                  ((_ call "a32.soregimm_imm")
-                   sori))
-                 #x00000020
-                 ((_ zero_extend 27)
-                  ((_ call "a32.soregimm_imm")
-                   sori))))
-               (ite
-                (bveq
-                 ((_ call "a32.soregimm_imm")
-                  sori)
-                 #b00000)
-                (concat #b100 #x00000001)
-                (concat
-                 #b011
-                 ((_ zero_extend 27)
-                  ((_ call "a32.soregimm_imm")
-                   sori))))))))
-           #x00000001)
-          ((_ call "a32.soregimm_reg")
-           sori))
-         #b1
-         #b0)
-        #b0)
-       (bvashr
-        ((_ call "a32.soregimm_reg")
-         sori)
-        (bvurem
-         ((_ extract 31 0)
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_type")
-             sori)
-            #b00)
-           (concat
-            #b000
-            ((_ zero_extend 27)
-             ((_ call "a32.soregimm_imm")
-              sori)))
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_type")
-              sori)
-             #b01)
-            (concat
-             #b001
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.soregimm_imm")
-                sori))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_type")
-               sori)
-              #b10)
-             (concat
-              #b010
-              (ite
-               (bveq
-                #b00000
-                ((_ call "a32.soregimm_imm")
-                 sori))
-               #x00000020
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori))))
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_imm")
-                sori)
-               #b00000)
-              (concat #b100 #x00000001)
-              (concat
-               #b011
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori))))))))
-         #x00000020)))
+          sori))))
       (ite
        (bveq
-        ((_ extract 34 32)
-         (ite
-          (bveq
-           ((_ call "a32.soregimm_type")
-            sori)
-           #b00)
-          (concat
-           #b000
-           ((_ zero_extend 27)
-            ((_ call "a32.soregimm_imm")
-             sori)))
-          (ite
-           (bveq
-            ((_ call "a32.soregimm_type")
-             sori)
-            #b01)
-           (concat
-            #b001
-            (ite
-             (bveq
-              #b00000
-              ((_ call "a32.soregimm_imm")
-               sori))
-             #x00000020
-             ((_ zero_extend 27)
-              ((_ call "a32.soregimm_imm")
-               sori))))
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_type")
-              sori)
-             #b10)
-            (concat
-             #b010
-             (ite
-              (bveq
-               #b00000
-               ((_ call "a32.soregimm_imm")
-                sori))
-              #x00000020
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_imm")
-               sori)
-              #b00000)
-             (concat #b100 #x00000001)
-             (concat
-              #b011
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori))))))))
-        #b011)
+        ((_ call "a32.soregimm_imm")
+         sori)
+        #b00000)
+       (concat #b100 #x00000001)
        (concat
-        (ite
-         (bvult
-          ((_ extract 31 0)
-           (ite
-            (bveq
-             ((_ call "a32.soregimm_type")
-              sori)
-             #b00)
-            (concat
-             #b000
-             ((_ zero_extend 27)
-              ((_ call "a32.soregimm_imm")
-               sori)))
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_type")
-               sori)
-              #b01)
-             (concat
-              #b001
-              (ite
-               (bveq
-                #b00000
-                ((_ call "a32.soregimm_imm")
-                 sori))
-               #x00000020
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori))))
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_type")
-                sori)
-               #b10)
-              (concat
-               #b010
-               (ite
-                (bveq
-                 #b00000
-                 ((_ call "a32.soregimm_imm")
-                  sori))
-                #x00000020
-                ((_ zero_extend 27)
-                 ((_ call "a32.soregimm_imm")
-                  sori))))
-              (ite
-               (bveq
-                ((_ call "a32.soregimm_imm")
-                 sori)
-                #b00000)
-               (concat #b100 #x00000001)
-               (concat
-                #b011
-                ((_ zero_extend 27)
-                 ((_ call "a32.soregimm_imm")
-                  sori))))))))
-          #x00000020)
-         (ite
-          ((_ call "test_bit_dynamic")
-           (bvsub
-            ((_ extract 31 0)
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_type")
-                sori)
-               #b00)
-              (concat
-               #b000
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori)))
-              (ite
-               (bveq
-                ((_ call "a32.soregimm_type")
-                 sori)
-                #b01)
-               (concat
-                #b001
-                (ite
-                 (bveq
-                  #b00000
-                  ((_ call "a32.soregimm_imm")
-                   sori))
-                 #x00000020
-                 ((_ zero_extend 27)
-                  ((_ call "a32.soregimm_imm")
-                   sori))))
-               (ite
-                (bveq
-                 ((_ call "a32.soregimm_type")
-                  sori)
-                 #b10)
-                (concat
-                 #b010
-                 (ite
-                  (bveq
-                   #b00000
-                   ((_ call "a32.soregimm_imm")
-                    sori))
-                  #x00000020
-                  ((_ zero_extend 27)
-                   ((_ call "a32.soregimm_imm")
-                    sori))))
-                (ite
-                 (bveq
-                  ((_ call "a32.soregimm_imm")
-                   sori)
-                  #b00000)
-                 (concat #b100 #x00000001)
-                 (concat
-                  #b011
-                  ((_ zero_extend 27)
-                   ((_ call "a32.soregimm_imm")
-                    sori))))))))
-            #x00000001)
-           ((_ call "a32.soregimm_reg")
-            sori))
-          #b1
-          #b0)
-         #b0)
-        (bvor
-         (bvshl
-          ((_ call "a32.soregimm_reg")
-           sori)
-          (bvsub
-           #x00000020
-           (bvurem
-            ((_ extract 31 0)
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_type")
-                sori)
-               #b00)
-              (concat
-               #b000
-               ((_ zero_extend 27)
-                ((_ call "a32.soregimm_imm")
-                 sori)))
-              (ite
-               (bveq
-                ((_ call "a32.soregimm_type")
-                 sori)
-                #b01)
-               (concat
-                #b001
-                (ite
-                 (bveq
-                  #b00000
-                  ((_ call "a32.soregimm_imm")
-                   sori))
-                 #x00000020
-                 ((_ zero_extend 27)
-                  ((_ call "a32.soregimm_imm")
-                   sori))))
-               (ite
-                (bveq
-                 ((_ call "a32.soregimm_type")
-                  sori)
-                 #b10)
-                (concat
-                 #b010
-                 (ite
-                  (bveq
-                   #b00000
-                   ((_ call "a32.soregimm_imm")
-                    sori))
-                  #x00000020
-                  ((_ zero_extend 27)
-                   ((_ call "a32.soregimm_imm")
-                    sori))))
-                (ite
-                 (bveq
-                  ((_ call "a32.soregimm_imm")
-                   sori)
-                  #b00000)
-                 (concat #b100 #x00000001)
-                 (concat
-                  #b011
-                  ((_ zero_extend 27)
-                   ((_ call "a32.soregimm_imm")
-                    sori))))))))
-            #x00000020)))
-         (bvlshr
-          ((_ call "a32.soregimm_reg")
-           sori)
-          (bvurem
-           ((_ extract 31 0)
-            (ite
-             (bveq
-              ((_ call "a32.soregimm_type")
-               sori)
-              #b00)
-             (concat
-              #b000
-              ((_ zero_extend 27)
-               ((_ call "a32.soregimm_imm")
-                sori)))
-             (ite
-              (bveq
-               ((_ call "a32.soregimm_type")
-                sori)
-               #b01)
-              (concat
-               #b001
-               (ite
-                (bveq
-                 #b00000
-                 ((_ call "a32.soregimm_imm")
-                  sori))
-                #x00000020
-                ((_ zero_extend 27)
-                 ((_ call "a32.soregimm_imm")
-                  sori))))
-              (ite
-               (bveq
-                ((_ call "a32.soregimm_type")
-                 sori)
-                #b10)
-               (concat
-                #b010
-                (ite
-                 (bveq
-                  #b00000
-                  ((_ call "a32.soregimm_imm")
-                   sori))
-                 #x00000020
-                 ((_ zero_extend 27)
-                  ((_ call "a32.soregimm_imm")
-                   sori))))
-               (ite
-                (bveq
-                 ((_ call "a32.soregimm_imm")
-                  sori)
-                 #b00000)
-                (concat #b100 #x00000001)
-                (concat
-                 #b011
-                 ((_ zero_extend 27)
-                  ((_ call "a32.soregimm_imm")
-                   sori))))))))
-           #x00000020))))
-       (concat
-        ((_ extract 0 0)
-         ((_ call "a32.soregimm_reg")
-          sori))
-        (concat
-         ((_ extract 29 29)
-          'CPSR)
-         ((_ extract 31 1)
-          ((_ call "a32.soregimm_reg")
-           sori))))))))))
+        #b011
+        ((_ zero_extend 27)
+         ((_ call "a32.soregimm_imm")
+          sori))))))))
+  (var1
+   (bvshl
+    ((_ call "a32.soregimm_reg")
+     sori)
+    (bvsub
+     #x00000020
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (var2
+   (ite
+    (bvult
+     ((_ extract 31 0)
+      (immShift))
+     #x00000020)
+    (ite
+     ((_ call "test_bit_dynamic")
+      (bvsub
+       ((_ extract 31 0)
+        (immShift))
+       #x00000001)
+      ((_ call "a32.soregimm_reg")
+       sori))
+     #b1
+     #b0)
+    #b0))
+  (arithmeticShiftRightCarry
+   (concat
+    (var2)
+    (bvashr
+     ((_ call "a32.soregimm_reg")
+      sori)
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (logicalShiftRightCarry
+   (concat
+    (var2)
+    (bvlshr
+     ((_ call "a32.soregimm_reg")
+      sori)
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (lslC
+   (bvshl
+    ((_ zero_extend 1)
+     ((_ call "a32.soregimm_reg")
+      sori))
+    ((_ zero_extend 1)
+     ((_ extract 31 0)
+      (immShift)))))
   (testCondition
    (ite
     (andp
@@ -1058,6 +282,24 @@
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
+  (var9
+   (concat
+    (nzcv)
+    ((_ extract 27 0)
+     (ite
+      ((_ call "arm.is_r15")
+       rD)
+      (ite
+       (bveq
+        #b0
+        ((_ extract 0 0)
+         (bvand
+          rN
+          ((_ extract 31 0)
+           (shiftC)))))
+       (SetT32Mode)
+       'CPSR)
+      'CPSR))))
   (nzcv
    (concat
     ((_ extract 31 31)
@@ -1067,21 +309,27 @@
        (shiftC))))
     (concat
      (isZeroBit)
-     (concat
-      ((_ extract 32 32)
-       (shiftC))
-      ((_ extract 28 28)
-       'CPSR)))))
+     (var7))))
+  (var7
+   (concat
+    ((_ extract 32 32)
+     (shiftC))
+    ((_ extract 28 28)
+     'CPSR)))
   (isZeroBit
    (ite
-    (bveq
-     (bvand
-      rN
-      ((_ extract 31 0)
-       (shiftC)))
-     #x00000000)
+    (bveq var4)
     #b1
     #b0))
+  (var4
+   ((bvand
+    rN
+    ((_ extract 31 0)
+     (shiftC)))
+    #x00000000))
+  (var10
+   ('PC
+    (bxWritePC)))
   (bxWritePC
    (ite
     ((_ call "arm.is_r15")
@@ -1128,8 +376,7 @@
   (in
    (rN setcc sori 'CPSR 'PC))
   (defs
-   (('PC
-    (bxWritePC))
+   ((var10)
     ('CPSR
      (ite
       (testCondition)
@@ -1139,23 +386,7 @@
         (notp
          ((_ call "arm.is_r15")
           rD)))
-       (concat
-        (nzcv)
-        ((_ extract 27 0)
-         (ite
-          ((_ call "arm.is_r15")
-           rD)
-          (ite
-           (bveq
-            #b0
-            ((_ extract 0 0)
-             (bvand
-              rN
-              ((_ extract 31 0)
-               (shiftC)))))
-           (SetT32Mode)
-           'CPSR)
-          'CPSR)))
+       (var9)
        (ite
         ((_ call "arm.is_r15")
          rD)
@@ -1171,15 +402,4 @@
          'CPSR)
         'CPSR))
       'CPSR))
-    (rD
-     (ite
-      (testCondition)
-      (ite
-       ((_ call "arm.is_r15")
-        rD)
-       rD
-       (bvand
-        rN
-        ((_ extract 31 0)
-         (shiftC))))
-      rD))))))
+    (var8)))))
