@@ -5,10 +5,11 @@
 
 module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
     ( aluWritePC
-    , loadWritePC
     , branchWritePC
     , branchWritePCRel
     , bxWritePC
+    , loadWritePC
+    , pcStoreValue
     )
     where
 
@@ -16,8 +17,18 @@ import Data.Maybe
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
+import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExecState
+import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
+
+
+-- | PCStoreValue pseudocode.  Returns the PC value "stored by the
+-- instruction" (sic. not necessarily the current instruction).  This
+-- may include a constant offset (+4 prior to ARMv7, +8 normally, and
+-- +12 when the alternative is permitted.
+pcStoreValue :: Expr 'TBV
+pcStoreValue = bvadd (Loc pc) (naturalLitBV 8)
 
 
 -- | ALUWritePC pseudocode.  This is usually for arithmetic operations
