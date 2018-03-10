@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -15,6 +16,7 @@ import Data.Parameterized.Some ( Some(..) )
 import GHC.TypeLits
 import Lang.Crucible.BaseTypes
 import SemMC.Architecture.ARM.Location
+import SemMC.Architecture.ARM.UFgen
 
 
 uninterpretedFunctions :: forall proxy arm. (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
@@ -125,45 +127,9 @@ uninterpretedFunctions _ =
 
   , ("t32.t2soimm_imm", -- Extract the shift amount
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 16)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 12)))
-
-    -- Standard memory accesses
-
-  , ("read_mem.8",
-     Some (knownRepr :: Assignment BaseTypeRepr
-                       (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8)
-                                 ::> BaseBVType (ArchRegWidth arm))),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
-  , ("read_mem.16",
-     Some (knownRepr :: Assignment BaseTypeRepr
-                       (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8)
-                                 ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
-  , ("read_mem.32",
-     Some (knownRepr :: Assignment BaseTypeRepr
-                       (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8)
-                                 ::> BaseBVType (ArchRegWidth arm))),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("read_mem.64",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth arm))),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-  , ("read_mem.128",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth arm))),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 128)))
-  , ("write_mem.8",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth arm) ::> BaseBVType 8)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))))
-  , ("write_mem.16",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth arm) ::> BaseBVType 16)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))))
-  , ("write_mem.32",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth arm) ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))))
-  , ("write_mem.64",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth arm) ::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))))
-  , ("write_mem.128",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth arm) ::> BaseBVType 128)),
-     Some (knownRepr :: BaseTypeRepr (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))))
 
   ]
+  ++ $(ufGen "popcnt" [16, 32])
+  ++ $(ufRGen "read_mem" [8, 16, 32, 64])
+  ++ $(ufWGen "write_mem" [8, 16, 32, 64])

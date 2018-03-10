@@ -41,6 +41,7 @@ library
                      , SemMC.Architecture.ARM.Opcodes.InternalA32
                      , SemMC.Architecture.ARM.Opcodes.InternalT32
                      , SemMC.Architecture.ARM.UF
+                     , SemMC.Architecture.ARM.UFgen
   -- other-extensions:
   build-depends:       base >=4 && <5
                      , binary
