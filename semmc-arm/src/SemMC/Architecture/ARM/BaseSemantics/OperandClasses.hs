@@ -76,6 +76,9 @@ ldst_so_reg = "Ldst_so_reg"
 mod_imm :: String
 mod_imm = "Mod_imm"
 
+reglist :: String
+reglist = "Reglist"
+
 shift_so_reg_imm :: String
 shift_so_reg_imm = "Shift_so_reg_imm"
 
@@ -136,6 +139,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Shift_so_reg_imm" = 'TBV
   SymToExprTag "So_reg_reg" = 'TPackedOperand
   SymToExprTag "So_reg_imm" = 'TPackedOperand
+  SymToExprTag "Reglist" = 'TPackedOperand
   SymToExprTag "RGPR" = 'TBV
   SymToExprTag "T_imm0_1020s4" = 'TPackedOperand
   SymToExprTag "T2_so_imm" = 'TPackedOperand

@@ -28,6 +28,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , ldst_so_regAdd, ldst_so_regImmediate
     , ldst_so_regShiftType
     , modImm_imm, modImm_rot
+    , register_list
     , soRegReg_type, soRegReg_reg1, soRegReg_reg2
     , soRegImm_imm, soRegImm_type, soRegImm_reg
     , t2SoImm_imm
@@ -376,6 +377,10 @@ modImm_imm = unpackUF "ModImm" (EBV 8) "a32.modimm_imm"
 -- | Decoding for ModImm rotation 4 bits (ARMExpandImm(), (F4.2.4, F-2473)
 modImm_rot :: Location 'TPackedOperand -> Expr 'TBV
 modImm_rot = unpackUF "ModImm" (EBV 4) "a32.modimm_rot"
+
+-- | Decoding for Reglist register list (see PUSH/POP)
+register_list :: Location 'TPackedOperand -> Expr 'TBV
+register_list = unpackUF "Reglist" (EBV 16) "t32.reglist"
 
 -- | Extract the shift type from a so_reg_reg
 soRegReg_type :: Location 'TPackedOperand -> Expr 'TBV

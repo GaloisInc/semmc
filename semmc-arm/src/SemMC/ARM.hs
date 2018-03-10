@@ -171,6 +171,7 @@ type instance A.OperandType ARM "Imm0_4095" = BaseBVType 16
 type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
 type instance A.OperandType ARM "Pred" = BaseBVType 4
+type instance A.OperandType ARM "Reglist" = BaseBVType 16
 type instance A.OperandType ARM "RGPR" = BaseBVType 32
 type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
@@ -226,6 +227,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt (ThumbDis.Imm0_31 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.imm5ToBits v
         opVt (ThumbDis.Imm0_255 v) = S.bvLit sym knownNat $ toInteger v  -- v :: Word8
         opVt (ThumbDis.Imm0_4095 v) = S.bvLit sym knownNat $ toInteger v -- v :: Word16
+        opVt (ThumbDis.Reglist v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.regListToBits v
         opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T_imm0_1020s4 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.tImm01020S4ToBits v
         opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
@@ -355,6 +357,7 @@ locationFuncInterpretation =
     , ("t32.blxtarget_J2", A.FunctionInterpretation { A.exprInterpName = 'interpBlxTarget_J2 })
 
     , ("t32.imm0_1020S4_imm", A.FunctionInterpretation { A.exprInterpName = 'interpImm01020s4ImmExtractor })
+    , ("t32.reglist", A.FunctionInterpretation { A.exprInterpName = 'interpTReglistExtractor })
     , ("t32.t2soimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpT2soimmImmExtractor })
     ]
 
@@ -389,6 +392,7 @@ shapeReprType orep =
             ThumbDis.Imm0_31Repr -> knownRepr
             ThumbDis.Imm0_255Repr -> knownRepr
             ThumbDis.Imm0_4095Repr -> knownRepr
+            ThumbDis.ReglistRepr -> knownRepr
             ThumbDis.RGPRRepr -> knownRepr
             ThumbDis.T_imm0_1020s4Repr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr

@@ -125,6 +125,10 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 8)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
 
+  , ("t32.reglist", -- Extract the register bitmask
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 16)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
+
   , ("t32.t2soimm_imm", -- Extract the immediate value
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 16)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 12)))

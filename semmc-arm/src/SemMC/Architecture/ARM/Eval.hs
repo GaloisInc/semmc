@@ -42,6 +42,7 @@ module SemMC.Architecture.ARM.Eval
     , interpSoregregReg1
     , interpSoregregReg2
     , interpT2soimmImmExtractor
+    , interpTReglistExtractor
     )
     where
 
@@ -300,6 +301,13 @@ interpSoregregReg2 operands (F.WrappedOperand _orep ix) rep =
 
 interpT2soimmImmExtractor :: ThumbOperands.T2SoImm -> W.W 12
 interpT2soimmImmExtractor = fromInteger . toInteger . ThumbOperands.t2SoImmToBits
+
+
+------------------------------------------------------------------------
+-- | Extract values from the Thumb Reglist operand
+
+interpTReglistExtractor :: ThumbOperands.Reglist -> Int16
+interpTReglistExtractor = fromInteger . toInteger . ThumbOperands.regListToBits
 
 
 ------------------------------------------------------------------------
