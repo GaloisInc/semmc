@@ -12,6 +12,7 @@ import           Data.Parameterized.Context
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Semigroup
 import qualified Dismantle.ARM as A
+import qualified Dismantle.Thumb as T
 import           Prelude hiding ( concat, pred )
 import           SemMC.Architecture.ARM.BaseSemantics.Base
 import           SemMC.Architecture.ARM.BaseSemantics.Helpers
@@ -150,15 +151,38 @@ defineStores = do
         addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
 
+  defineT32Opcode T.TPUSH (Empty
+                          :> ParamDef "registers" reglist (EPackedOperand "Reglist")
+                          )
+                  $ \regsarg -> do
+    comment "Push register list, Encoding T1 (F7.1.137, F7-2760)"
+    input regsarg
+    let rlist = register_list regsarg
+        allowUnaligned = False
+        isUnpred = bveq rlist (naturalLitBV 0)
+    pushregs rlist allowUnaligned isUnpred
+
+
 -- ----------------------------------------------------------------------
-
-
 
 memory :: Location 'TMemory
 memory = LiteralLoc Literal { lName = "Mem"
                             , lExprType = EMemory
                             }
 
+memory' :: Integer -> Location 'TMemory
+memory' = MemoryLoc
+              -- Literal { lName = "Mem:" <> show off
+              --                    , lExprType = EMemory
+              --                    }
+
+-- n.b. The ARM documentation describes "MemA" v.s. "MemU" read and
+-- write operations, used for accessing aligned v.s. unaligned
+-- addresses, respectively.  The discussion of MemA/MemU is located on
+-- (G.2, AppxG-4956) and essentially indicates that MemA accesses are
+-- atomic and MemU accesses are "Normal" (i.e. non-atomic).  At
+-- present, this distinction is not modelled in the instruction
+-- semantics themselves.
 
 -- | Base operation to semantically read from the pseudo-location
 -- "Memory"
@@ -238,3 +262,53 @@ streg rT add offset rN pbit wbit = do
       newRn = "rnUpd" =: ite wback offAddr (Loc rN)
   defMem memory addr nBytes (ite isUnpredictable (unpredictable newMem) newMem)
   defReg rN (ite isUnpredictable (unpredictable newRn) newRn)
+
+
+-- | Implements the body of the PUSH opcode, defined (F7.1.138, F7-2761).
+pushregs :: Expr 'TBV -- ^ register list as 32-bit bitmask
+         -> Bool -- ^ true if unaligned accesses allowed
+         -> Expr 'TBool -- ^ true if unpredictable
+         -> SemARM 'Def ()
+pushregs rlist _allowUnaligned isUnpred =
+    do input memory
+       let nRegs = 15 :: Integer
+           reg n = case n of
+                     15 -> pc
+                     _ -> LiteralLoc Literal { lName = "R" <> show n, lExprType = naturalBV }
+       mapM_ (input . reg) $ filter ((/=) 15) [0..nRegs]  -- PC as input is declared by defineXOpcode
+       let regCnt = "regCnt" =: (extract 15 0 $ bvpopcnt $ zext rlist)
+           address = "newSP" =: bvsub (Loc sp) (bvmul (naturalLitBV 4) (bvpopcnt $ zext rlist))
+           nBytes = 4
+
+           stackWrite :: Integer -> SemARM 'Def ()
+           stackWrite si = let sAddr = stackPushAddr si
+                               origval = readMem (Loc memory) sAddr nBytes
+                           in defMem (memory' si) sAddr nBytes (stackVal si origval)
+           stackPushAddr si = "stack_" <> show si =: bvsub (Loc sp) (naturalLitBV (4 * (1+si)))
+           -- The `stackVal si` is the set of possible values that
+           -- could be written to this stack location (offset from the
+           -- original SP), based on the bitmask specified at runtime.
+           -- For example, 'SP - (4 * (15+1))' can only hold R0, and
+           -- only if the reglist bitmask has all of bits 0..15 set,
+           -- whereas 'SP-4' could be written with any of R0..R15,
+           -- whatever happens to be the highest bit set in the
+           -- reglist bitmask.
+           stackVal :: Integer -> Expr 'TBV -> Expr 'TBV
+           stackVal si origval = ("pshval_SPminus" <> show si) =:
+                                 let maxRegCandidate = (14 - si - 1)
+                                     target = bvsub regCnt (LitBV 16 si)
+                                     regRange = [0 .. maxRegCandidate]
+                                     regMask n = "regMask_SPminus" <> show si <> "_R" <> show n =:
+                                                 (extract 15 0 $ bvpopcnt (zext $ extract (fromInteger n) 0 rlist))
+                                     activeReg rn = "isActive_SPminus" <> show si <> "_R" <> show rn =:
+                                                    andp (bvugt regCnt (LitBV 16 si)) (bveq (regMask rn) target)
+                                     regVal n = case n of
+                                                  15 -> pcStoreValue
+                                                  13 -> ite (bveq rlist (LitBV 16 ((2^n) - 1)))
+                                                            (Loc $ reg n)
+                                                            (unpredictable $ Loc $ reg n)
+                                                  _ -> Loc $ reg n
+                                     tryReg rnum els = ite (activeReg rnum) (regVal rnum) els
+                                 in foldr tryReg origval regRange
+       mapM_ stackWrite [0..nRegs]
+       defLoc sp (ite isUnpred (unpredictable address) address)
