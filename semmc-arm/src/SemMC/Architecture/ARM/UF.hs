@@ -133,6 +133,14 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 16)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 12)))
 
+  , ("t32.addrmode_is4_imm",
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 5)))
+
+  , ("t32.addrmode_is4_reg",
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
+
   , ("t32.addrmode_pc",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 8)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 8)))
