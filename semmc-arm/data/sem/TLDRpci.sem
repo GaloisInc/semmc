@@ -1,22 +1,43 @@
-;; Load Register, Post-indexed (P=0, W=0), immediate (A32), Encoding A1
-;; doc: F7.1.69, page F7-2636
+;; Load Register literal, Encoding T1 (F7.1.70, F7-2638)
 (let
- ((testCondition
-  (ite
-   (andp
-    (bveq
-     #b1
-     ((_ extract 0 0)
-      predBits))
-    (bvne predBits #xf))
-   (notp
-    (conditionMatch))
-   (conditionMatch)))
+ ((var2
+  (ite var1))
+  (var1
+   ((testCondition)
+    (ite
+     ((_ call "arm.is_r15")
+      gpr)
+     gpr
+     ((_ call "read_mem.32")
+      'Mem
+      (updAddr)))
+    gpr))
+  (updAddr
+   (bvadd
+    (bvand #xfffffffc 'PC)
+    ((_ zero_extend 22)
+     (concat
+      ((_ call "t32.addrmode_pc")
+       addrpc)
+      #b00))))
+  (testCondition
+   (ite
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (ITState)))
+     (bvne
+      (ITState)
+      #xf))
+    (notp
+     (conditionMatch))
+    (conditionMatch)))
   (conditionMatch
    (ite
     (bveq
      ((_ extract 3 1)
-      predBits)
+      (ITState))
      #b000)
     (bveq
      #b1
@@ -25,7 +46,7 @@
     (ite
      (bveq
       ((_ extract 3 1)
-       predBits)
+       (ITState))
       #b001)
      (bveq
       #b1
@@ -34,7 +55,7 @@
      (ite
       (bveq
        ((_ extract 3 1)
-        predBits)
+        (ITState))
        #b010)
       (bveq
        #b1
@@ -43,7 +64,7 @@
       (ite
        (bveq
         ((_ extract 3 1)
-         predBits)
+         (ITState))
         #b011)
        (bveq
         #b1
@@ -52,7 +73,7 @@
        (ite
         (bveq
          ((_ extract 3 1)
-          predBits)
+          (ITState))
          #b100)
         (andp
          (bveq
@@ -67,7 +88,7 @@
         (ite
          (bveq
           ((_ extract 3 1)
-           predBits)
+           (ITState))
           #b101)
          (bveq
           ((_ extract 31 31)
@@ -77,7 +98,7 @@
          (ite
           (bveq
            ((_ extract 3 1)
-            predBits)
+            (ITState))
            #b110)
           (andp
            (bveq
@@ -93,29 +114,22 @@
           (true)))))))))
   (true
    (bveq #b0 #b0))
-  (var1
+  (ITState
    (ite
-    (testCondition)
-    (updAddr)
-    off))
-  (updAddr
-   (ite
-    ((_ call "a32.am2offset_imm_add")
-     imm)
-    (bvadd
-     off
-     ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
-       imm)))
-    (bvsub
-     off
-     ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
-       imm)))))
-  (SetT32Mode
+    (bveq
+     (concat
+      ((_ extract 11 10)
+       'CPSR)
+      ((_ extract 26 25)
+       'CPSR))
+     #x0)
+    #xe
+    ((_ extract 15 12)
+     'CPSR)))
+  (SetA32Mode
    (bvand
     #xfeffffff
-    (bvor #x00000020 'CPSR)))
+    (bvand #xffffffdf 'CPSR)))
   (bxWritePC
    (ite
     ((_ call "arm.is_r15")
@@ -126,35 +140,33 @@
       ((_ extract 0 0)
        ((_ call "read_mem.32")
         'Mem
-        off)))
+        (updAddr))))
      (bvand
       #xfffffffe
       ((_ call "read_mem.32")
        'Mem
-       off))
+       (updAddr)))
      (ite
       (bveq
        #b0
        ((_ extract 1 1)
         ((_ call "read_mem.32")
          'Mem
-         off)))
+         (updAddr))))
       (bvand
        #xfffffffd
        ((_ call "read_mem.32")
         'Mem
-        off))
+        (updAddr)))
       ((_ call "read_mem.32")
        'Mem
-       off)))
-    (bvadd 'PC #x00000004))))
+       (updAddr))))
+    (bvadd 'PC #x00000002))))
  ((operands
-  ((gpr . 'GPR)
-   (predBits . 'Pred)
-   (imm . 'Am2offset_imm)
-   (off . 'Addr_offset_none)))
+  ((gpr . 'TGPR)
+   (addrpc . 'T_addrmode_pc)))
   (in
-   ('Mem off imm 'CPSR 'PC))
+   ('Mem addrpc 'CPSR 'PC))
   (defs
    (('PC
     (bxWritePC))
@@ -170,21 +182,10 @@
          ((_ extract 0 0)
           ((_ call "read_mem.32")
            'Mem
-           off)))
-        (SetT32Mode)
-        'CPSR)
+           (updAddr))))
+        'CPSR
+        (SetA32Mode))
        'CPSR)
       'CPSR))
-    (off
-     (var1))
     (gpr
-     (ite
-      (testCondition)
-      (ite
-       ((_ call "arm.is_r15")
-        gpr)
-       gpr
-       ((_ call "read_mem.32")
-        'Mem
-        off))
-      gpr))))))
+     (var2))))))

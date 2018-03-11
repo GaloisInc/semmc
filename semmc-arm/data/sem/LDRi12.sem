@@ -173,6 +173,10 @@
         'CPSR)
        'CPSR)
       'CPSR))
+    (((_ call "a32.imm12_reg")
+     imm12)
+     ((_ call "a32.imm12_reg")
+      imm12))
     (gpr
      (ite
       (testCondition)
@@ -183,8 +187,4 @@
        ((_ call "read_mem.32")
         'Mem
         (updAddr)))
-      gpr))
-    (((_ call "a32.imm12_reg")
-     imm12)
-     ((_ call "a32.imm12_reg")
-      imm12))))))
+      gpr))))))

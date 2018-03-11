@@ -19,6 +19,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Base
 import           SemMC.Architecture.ARM.BaseSemantics.Helpers
 import           SemMC.Architecture.ARM.BaseSemantics.Natural
 import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
+import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Arithmetic
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
 import           SemMC.Architecture.ARM.BaseSemantics.Registers
@@ -50,7 +51,8 @@ defineLoads = do
         b'W = LitBV 1 0
         index = bveq b'P (LitBV 1 1)
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
-    ldr rT add rN offset index wback
+    ldri rT add rN offset index wback
+
   defineA32Opcode A.LDRi12 (Empty
                            :> ParamDef "gpr" gpr naturalBV
                            :> ParamDef "predBits" pred (EBV 4)
@@ -67,8 +69,23 @@ defineLoads = do
         b'W = LitBV 1 0
         index = bveq b'P (LitBV 1 1)
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
-    ldr rT add rN offset index wback
+    ldri rT add rN offset index wback
 
+  defineT32Opcode T.TLDRpci (Empty
+                            :> ParamDef "gpr" tgpr naturalBV
+                            :> ParamDef "addrpc" t_addrmode_pc (EPackedOperand "T_AddrMode_PC")
+                            )
+                      $ \rT addrpc -> do
+    comment "Load Register literal, Encoding T1 (F7.1.70, F7-2638)"
+    input addrpc
+    let imm8 = t_addrmode_pc_val addrpc
+        imm32 = zext $ concat imm8 (LitBV 2 0b00)
+        add = LitBool True
+        useimm32 = LitBool True
+        isUnpredictable = LitBool False
+        base = align (Loc pc) 4
+    _ <- ldr rT add base imm32 useimm32 isUnpredictable
+    return ()
 
 defineStores :: SemARM 'Top ()
 defineStores = do
@@ -242,23 +259,30 @@ defMem memloc addr nBytes expr = do
     defLoc memloc (storeMem (Loc memloc) addr nBytes updval)
 
 
-ldr :: Location 'TBV -> Expr 'TBool -> Location 'TBV
+ldri :: Location 'TBV -> Expr 'TBool -> Location 'TBV
     -> Expr 'TBV -> Expr 'TBool -> Expr 'TBool
     -> SemARM 'Def ()
-ldr rT add rN imm32 index wback = do
+ldri rT add rN imm32 index wback = do
+  let sameRegs = sameLocation rT rN
+      isUnpredictable = "isUnpredictable" =: andp sameRegs wback
+  updated_addr <- ldr rT add (Loc rN) imm32 index isUnpredictable
+  defReg rN (ite wback updated_addr (Loc rN))
+
+ldr :: Location 'TBV -> Expr 'TBool -> Expr 'TBV
+    -> Expr 'TBV -> Expr 'TBool -> Expr 'TBool
+    -> SemARM 'Def (Expr 'TBV)
+ldr rT add baseAddr imm32 index isUnpredictable = do
   input memory
-  let updated_addr = "updAddr" =: ite add (bvadd (Loc rN) imm32) (bvsub (Loc rN) imm32)
+  let updated_addr = "updAddr" =: ite add (bvadd baseAddr imm32) (bvsub baseAddr imm32)
       nBytes = 4
-      addr = ite index updated_addr (Loc rN)
+      addr = ite index updated_addr baseAddr
       result = readMem (Loc memory) addr nBytes
       alignedResult = ite (orp (tstBit 1 addr) (tstBit 0 addr)) (unpredictable result) result
-      sameRegs = sameLocation rT rN
-      isUnpredictable = "isUnpredictable" =: andp sameRegs wback
   loadWritePC (isR15 rT) alignedResult
-  defReg rN (ite wback updated_addr (Loc rN))
   defReg rT (ite (isR15 rT)
                  (Loc rT)
                  (ite isUnpredictable (unpredictable result) result))
+  return updated_addr
 
 streg :: Location 'TBV
       -> Expr 'TBool -> Expr 'TBV -> Location 'TBV
