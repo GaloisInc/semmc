@@ -1,0 +1,665 @@
+;; Pop registers, Encoding T1 (F7.1.136, F7-2756)
+(let
+ ((var8
+  (('R11 var2)
+   ('R10
+    (ite
+     (testCondition)
+     (stkVal_R10)
+     'R10))
+   (var6)
+   ('R8
+    (ite var1))
+   ('R7
+    (ite
+     (testCondition)
+     (stkVal_R7)
+     'R7))
+   ('R6
+    (var5))
+   ('R5
+    (ite
+     (testCondition)
+     (stkVal_R5)
+     'R5))
+   ('R4
+    (ite
+     (testCondition)
+     (stkVal_R4)
+     'R4))
+   ('R3
+    (ite
+     (testCondition)
+     (stkVal_R3)
+     'R3))
+   ('R2
+    (ite
+     (testCondition)
+     (stkVal_R2)
+     'R2))
+   ('R1
+    (ite
+     (testCondition)
+     (stkVal_R1)
+     'R1))
+   ('R0 var3)))
+  (var3
+   ((ite
+    (testCondition)
+    (stkVal_R0)
+    'R0)))
+  (stkVal_R0
+   (ite
+    (isActive_R0)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R0))))
+    'R0))
+  (stkOff_R0
+   (bvsub
+    (cntReg_uptoR0)
+    #x00000001))
+  (cntReg_uptoR0
+   ((_ call "popcnt.32")
+    ((_ zero_extend 31)
+     ((_ extract 0 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R0
+   (bvne
+    #x0000
+    (bvand
+     #x0001
+     ((_ call "t32.reglist")
+      registers))))
+  (testCondition
+   (ite
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (ITState)))
+     (bvne
+      (ITState)
+      #xf))
+    (notp
+     (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      (ITState))
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
+    (var4)))
+  (var4
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      (ITState))
+     #b001)
+    (bveq
+     #b1
+     ((_ extract 29 29)
+      'CPSR))
+    (ite
+     (bveq
+      ((_ extract 3 1)
+       (ITState))
+      #b010)
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       'CPSR))
+     (ite
+      (bveq
+       ((_ extract 3 1)
+        (ITState))
+       #b011)
+      (bveq
+       #b1
+       ((_ extract 28 28)
+        'CPSR))
+      (ite
+       (bveq
+        ((_ extract 3 1)
+         (ITState))
+        #b100)
+       (andp
+        (bveq
+         #b1
+         ((_ extract 29 29)
+          'CPSR))
+        (notp
+         (bveq
+          #b1
+          ((_ extract 30 30)
+           'CPSR))))
+       (ite
+        (bveq
+         ((_ extract 3 1)
+          (ITState))
+         #b101)
+        (bveq
+         ((_ extract 31 31)
+          'CPSR)
+         ((_ extract 28 28)
+          'CPSR))
+        (ite
+         (bveq
+          ((_ extract 3 1)
+           (ITState))
+          #b110)
+         (andp
+          (bveq
+           ((_ extract 31 31)
+            'CPSR)
+           ((_ extract 28 28)
+            'CPSR))
+          (notp
+           (bveq
+            #b1
+            ((_ extract 30 30)
+             'CPSR))))
+         (true))))))))
+  (true
+   (bveq #b0 #b0))
+  (ITState
+   (ite
+    (bveq
+     (concat
+      ((_ extract 11 10)
+       'CPSR)
+      ((_ extract 26 25)
+       'CPSR))
+     #x0)
+    #xe
+    ((_ extract 15 12)
+     'CPSR)))
+  (stkVal_R1
+   (ite
+    (isActive_R1)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R1))))
+    'R1))
+  (stkOff_R1
+   (bvsub
+    (cntReg_uptoR1)
+    #x00000001))
+  (cntReg_uptoR1
+   ((_ call "popcnt.32")
+    ((_ zero_extend 30)
+     ((_ extract 1 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R1
+   (bvne
+    #x0000
+    (bvand
+     #x0002
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R2
+   (ite
+    (isActive_R2)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R2))))
+    'R2))
+  (stkOff_R2
+   (bvsub
+    (cntReg_uptoR2)
+    #x00000001))
+  (cntReg_uptoR2
+   ((_ call "popcnt.32")
+    ((_ zero_extend 29)
+     ((_ extract 2 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R2
+   (bvne
+    #x0000
+    (bvand
+     #x0004
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R3
+   (ite
+    (isActive_R3)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R3))))
+    'R3))
+  (stkOff_R3
+   (bvsub
+    (cntReg_uptoR3)
+    #x00000001))
+  (cntReg_uptoR3
+   ((_ call "popcnt.32")
+    ((_ zero_extend 28)
+     ((_ extract 3 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R3
+   (bvne
+    #x0000
+    (bvand
+     #x0008
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R4
+   (ite
+    (isActive_R4)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R4))))
+    'R4))
+  (stkOff_R4
+   (bvsub
+    (cntReg_uptoR4)
+    #x00000001))
+  (cntReg_uptoR4
+   ((_ call "popcnt.32")
+    ((_ zero_extend 27)
+     ((_ extract 4 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R4
+   (bvne
+    #x0000
+    (bvand
+     #x0010
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R5
+   (ite
+    (isActive_R5)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R5))))
+    'R5))
+  (stkOff_R5
+   (bvsub
+    (cntReg_uptoR5)
+    #x00000001))
+  (cntReg_uptoR5
+   ((_ call "popcnt.32")
+    ((_ zero_extend 26)
+     ((_ extract 5 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R5
+   (bvne
+    #x0000
+    (bvand
+     #x0020
+     ((_ call "t32.reglist")
+      registers))))
+  (var5
+   (ite
+    (testCondition)
+    (stkVal_R6)
+    'R6))
+  (stkVal_R6
+   (ite
+    (isActive_R6)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R6))))
+    'R6))
+  (stkOff_R6
+   (bvsub
+    (cntReg_uptoR6)
+    #x00000001))
+  (cntReg_uptoR6
+   ((_ call "popcnt.32")
+    ((_ zero_extend 25)
+     ((_ extract 6 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R6
+   (bvne
+    #x0000
+    (bvand
+     #x0040
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R7
+   (ite
+    (isActive_R7)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R7))))
+    'R7))
+  (stkOff_R7
+   (bvsub
+    (cntReg_uptoR7)
+    #x00000001))
+  (cntReg_uptoR7
+   ((_ call "popcnt.32")
+    ((_ zero_extend 24)
+     ((_ extract 7 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R7
+   (bvne
+    #x0000
+    (bvand
+     #x0080
+     ((_ call "t32.reglist")
+      registers))))
+  (var1
+   ((testCondition)
+    (stkVal_R8)
+    'R8))
+  (stkVal_R8
+   (ite
+    (isActive_R8)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R8))))
+    'R8))
+  (stkOff_R8
+   (bvsub
+    (cntReg_uptoR8)
+    #x00000001))
+  (cntReg_uptoR8
+   ((_ call "popcnt.32")
+    ((_ zero_extend 23)
+     ((_ extract 8 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R8
+   (bvne
+    #x0000
+    (bvand
+     #x0100
+     ((_ call "t32.reglist")
+      registers))))
+  (var6
+   ('R9
+    (ite
+     (testCondition)
+     (stkVal_R9)
+     'R9)))
+  (stkVal_R9
+   (ite
+    (isActive_R9)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R9))))
+    'R9))
+  (stkOff_R9
+   (bvsub
+    (cntReg_uptoR9)
+    #x00000001))
+  (cntReg_uptoR9
+   ((_ call "popcnt.32")
+    ((_ zero_extend 22)
+     ((_ extract 9 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R9
+   (bvne
+    #x0000
+    (bvand
+     #x0200
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R10
+   (ite
+    (isActive_R10)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R10))))
+    'R10))
+  (stkOff_R10
+   (bvsub
+    (cntReg_uptoR10)
+    #x00000001))
+  (cntReg_uptoR10
+   ((_ call "popcnt.32")
+    ((_ zero_extend 21)
+     ((_ extract 10 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R10
+   (bvne
+    #x0000
+    (bvand
+     #x0400
+     ((_ call "t32.reglist")
+      registers))))
+  (var2
+   ((ite
+    (testCondition)
+    (stkVal_R11)
+    'R11)))
+  (stkVal_R11
+   (ite
+    (isActive_R11)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R11))))
+    'R11))
+  (stkOff_R11
+   (bvsub
+    (cntReg_uptoR11)
+    #x00000001))
+  (cntReg_uptoR11
+   ((_ call "popcnt.32")
+    ((_ zero_extend 20)
+     ((_ extract 11 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R11
+   (bvne
+    #x0000
+    (bvand
+     #x0800
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R12
+   (ite
+    (isActive_R12)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R12))))
+    'R12))
+  (stkOff_R12
+   (bvsub
+    (cntReg_uptoR12)
+    #x00000001))
+  (cntReg_uptoR12
+   ((_ call "popcnt.32")
+    ((_ zero_extend 19)
+     ((_ extract 12 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R12
+   (bvne
+    #x0000
+    (bvand
+     #x1000
+     ((_ call "t32.reglist")
+      registers))))
+  (stkVal_R14
+   (ite
+    (isActive_R14)
+    ((_ call "read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R14))))
+    'R14))
+  (stkOff_R14
+   (bvsub
+    (cntReg_uptoR14)
+    #x00000001))
+  (cntReg_uptoR14
+   ((_ call "popcnt.32")
+    ((_ zero_extend 17)
+     ((_ extract 14 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R14
+   (bvne
+    #x0000
+    (bvand
+     #x4000
+     ((_ call "t32.reglist")
+      registers))))
+  (newSP
+   (bvadd
+    'R13
+    (bvmul
+     #x00000004
+     ((_ call "popcnt.32")
+      ((_ zero_extend 16)
+       ((_ call "t32.reglist")
+        registers))))))
+  (var7
+   ('CPSR
+    (ite
+     (testCondition)
+     (ite
+      (isActive_R15)
+      (ite
+       (bveq
+        #b0
+        ((_ extract 0 0)
+         (pcStkVal)))
+       'CPSR
+       (SetA32Mode))
+      'CPSR)
+     'CPSR)))
+  (SetA32Mode
+   (bvand
+    #xfeffffff
+    (bvand #xffffffdf 'CPSR)))
+  (pcStkVal
+   ((_ call "read_mem.32")
+    'Mem
+    (bvadd
+     'R13
+     (bvmul
+      #x00000004
+      (stkOff_R15)))))
+  (stkOff_R15
+   (bvsub
+    (cntReg_uptoR15)
+    #x00000001))
+  (cntReg_uptoR15
+   ((_ call "popcnt.32")
+    ((_ zero_extend 16)
+     ((_ extract 15 0)
+      ((_ call "t32.reglist")
+       registers)))))
+  (isActive_R15
+   (bvne
+    #x0000
+    (bvand
+     #x8000
+     ((_ call "t32.reglist")
+      registers))))
+  (bxWritePC
+   (ite
+    (isActive_R15)
+    (ite
+     (bveq
+      #b0
+      ((_ extract 0 0)
+       (pcStkVal)))
+     (bvand
+      #xfffffffe
+      (pcStkVal))
+     (ite
+      (bveq
+       #b0
+       ((_ extract 1 1)
+        (pcStkVal)))
+      (bvand
+       #xfffffffd
+       (pcStkVal))
+      (pcStkVal)))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((registers . 'Reglist)))
+  (in
+   ('R14 'R13 'R12 'R11 'R10 'R9 'R8 'R7 'R6 'R5 'R4 'R3 'R2 'R1 'R0 'Mem registers 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    (var7)
+    ('R13
+     (newSP))
+    ('R14
+     (ite
+      (testCondition)
+      (stkVal_R14)
+      'R14))
+    ('R12
+     (ite
+      (testCondition)
+      (stkVal_R12)
+      'R12))
+    var8))))

@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -151,6 +152,20 @@ defineStores = do
         addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
 
+  defineT32Opcode T.TPOP (Empty
+                         :> ParamDef "registers" reglist (EPackedOperand "Reglist")
+                         )
+                      $ \regsarg -> do
+    comment "Pop registers, Encoding T1 (F7.1.136, F7-2756)"
+    input regsarg
+    let rlist = register_list regsarg
+        allowUnaligned = False
+        isUnpred = "isUnpredictable" =:
+                   (orp (bveq rlist (naturalLitBV 0))
+                        (andp (bveq (extract 15 15 rlist) (LitBV 1 1))
+                              (andp inITBlock (notp lastInITBlock))))
+    popregs rlist allowUnaligned isUnpred
+
   defineT32Opcode T.TPUSH (Empty
                           :> ParamDef "registers" reglist (EPackedOperand "Reglist")
                           )
@@ -262,6 +277,54 @@ streg rT add offset rN pbit wbit = do
       newRn = "rnUpd" =: ite wback offAddr (Loc rN)
   defMem memory addr nBytes (ite isUnpredictable (unpredictable newMem) newMem)
   defReg rN (ite isUnpredictable (unpredictable newRn) newRn)
+
+
+-- | Implements the body of the POP opcode, defined (F7.1.136, F7-2757).
+popregs :: Expr 'TBV -- ^ register list as 32-bit bitmask
+         -> Bool -- ^ true if unaligned accesses allowed
+         -> Expr 'TBool -- ^ true if unpredictable
+         -> SemARM 'Def ()
+popregs rlist allowUnaligned isUnpred =
+    do input memory
+       let nRegs = 15 :: Integer
+           reg n = case n of
+                     15 -> pc
+                     _ -> LiteralLoc Literal { lName = "R" <> show n, lExprType = naturalBV }
+       mapM_ (input . reg) $ filter ((/=) 15) [0..nRegs]  -- PC as input is declared by defineXOpcode
+
+       let address = "newSP" =: bvadd (Loc sp) (bvmul (naturalLitBV 4) (bvpopcnt $ zext rlist))
+           newSP = ite (isActive 13) (unpredictable address) address
+           nBytes = 4
+           stkOffAddr :: Expr 'TBV -> Expr 'TBV
+           stkOffAddr stkoff = bvadd (Loc sp) (bvmul (naturalLitBV 4) stkoff)
+           readAtOffset si = readMem (Loc $ memory' si) (stkOffAddr $ stkRegOff si) nBytes
+
+           isActive rn = "isActive_R" <> show rn =: bvne (LitBV 16 0) (bvand (rMask rn) rlist)
+           rMask rn = LitBV 16 (2^rn)
+           cntReg rn = "cntReg_uptoR" <> show rn =: (bvpopcnt $ zext $ extract (fromInteger rn) 0 rlist)
+           stkRegOff :: Integer -> Expr 'TBV
+           stkRegOff rn = "stkOff_R" <> show rn =: (bvsub (cntReg rn) (naturalLitBV 1))
+
+           setRegFromStack :: Integer -> SemARM 'Def ()
+           setRegFromStack rn = let tgt = reg rn
+                                    stkval = stackVal rn (Loc tgt)
+                                in defReg tgt (ite isUnpred (unpredictable stkval) stkval)
+
+           stackVal :: Integer -> Expr 'TBV -> Expr 'TBV
+           stackVal rn origval = ("stkVal_R" <> show rn) =:
+                                 ite (isActive rn) (readAtOffset rn) origval
+
+           pcVal = let pcStkVal = "pcStkVal" =: readAtOffset 15
+                       pcStkAddr = "pcStkAddr" =: (stkOffAddr $ stkRegOff 15)
+                   in if allowUnaligned
+                      then (ite (bveq (LitBV 2 0b00) (extract 1 0 pcStkAddr)) pcStkVal (unpredictable pcStkVal))
+                      else pcStkVal
+
+           notSPorPC n = not $ n `elem` [13, 15]
+
+       mapM_ setRegFromStack $ filter notSPorPC [0..(nRegs-1)]  -- SP and PC below:
+       loadWritePC (isActive 15) pcVal
+       defLoc sp (ite isUnpred (unpredictable newSP) newSP)
 
 
 -- | Implements the body of the PUSH opcode, defined (F7.1.138, F7-2761).
