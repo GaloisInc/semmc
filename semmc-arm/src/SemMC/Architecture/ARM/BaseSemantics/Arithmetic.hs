@@ -345,6 +345,18 @@ manualBitwise = do
         (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 1 1)
     cpsrNZCV (LitBool True) nzcv
 
+  defineT32Opcode T.TCMPi8 (Empty
+                           :> ParamDef "imm" imm0_255 (EBV 8)
+                           :> ParamDef "rN" tgpr naturalBV
+                           )
+                      $ \imm rN -> do
+    comment "Compare immediate, Encoding T1 (F7.1.36, F7-2589)"
+    input imm
+    input rN
+    let imm32 = zext $ Loc imm
+        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 1 1)
+    cpsrNZCV (LitBool True) nzcv
+
   defineT32Opcode T.TLSLri (Empty
                            :> ParamDef "rD" tgpr naturalBV
                            :> ParamDef "imm" imm0_31 (EBV 5)
