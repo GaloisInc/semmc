@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
+
 module SemMC.Architecture.ARM.BaseSemantics.Arithmetic
     ( manualArithmetic
     , manualBitwise
@@ -142,14 +143,9 @@ manualArithmetic = do
     input rM
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-        result = Loc rM
-        (_,_,c,v) = getNZCV
-        n = extract 31 31 result
-        z = isZeroBit result
-        nzcv = concat n $ concat z $ concat c v
-    defReg rD (ite (isR15 rD) (Loc rD) result)
-    aluWritePC (isR15 rD) result
-    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+        unPred = LitBool False
+    movr rD rM setflags unPred
+
   defineA32Opcode A.MOVsi (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -173,6 +169,19 @@ manualArithmetic = do
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+  defineT32Opcode T.TMOVr (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "rM" gpr naturalBV
+                          )
+                      $ \rD rM -> do
+    comment "MOV register, T32, Encoding T1  (F7.1.108, F7-2710)"
+    input rM
+    let setflags = LitBool False
+        unPred = (andp (isR15 rD)
+                       (andp inITBlock (notp lastInITBlock)))
+    return ()
+    movr rD rM setflags unPred
 
   defineA32Opcode A.SUBri (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -446,4 +455,15 @@ lsl rD shift_n rM setflags = do
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   let nzcv = "nzcv" =: concat n (concat z (concat c' v))
+  cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+movr :: Location 'TBV -> Location 'TBV -> Expr 'TBool -> Expr 'TBool -> SemARM 'Def ()
+movr rD rM setflags unPred = do
+  let result = Loc rM
+      (_,_,c,v) = getNZCV
+      n = extract 31 31 result
+      z = isZeroBit result
+      nzcv = concat n $ concat z $ concat c v
+  defReg rD (ite (isR15 rD) (Loc rD) (ite unPred (unpredictable result) result))
+  aluWritePC (isR15 rD) (ite unPred (unpredictable result) result)
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
