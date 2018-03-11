@@ -99,6 +99,18 @@ t32_branches :: SemARM 'Top ()
 t32_branches = do
   blx_t32
 
+  defineT32Opcode T.TBX (Empty
+                        :> ParamDef "rM" gpr naturalBV
+                        :> ParamDef "unpredictable" unpredictableInstrBits naturalBV
+                        )
+                      $ \rM _ -> do
+      comment "Branch and Exchange, Encoding T1 (F7.1.27, F7-2579)"
+      comment "unpredictable argument is ignored"
+      input rM
+      let unpred = andp inITBlock (notp lastInITBlock)
+      bxWritePC (LitBool True) (ite unpred (unpredictable (Loc rM)) (Loc rM))
+
+
 blx_t32 :: SemARM 'Top ()
 blx_t32 =
     defineT32Opcode T.TBLXi (Empty
