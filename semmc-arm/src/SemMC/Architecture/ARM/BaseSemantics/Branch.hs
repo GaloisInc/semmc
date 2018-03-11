@@ -119,7 +119,8 @@ blx_t32 =
           imm32 = sext $ concat tgt_S $ concat i1 $ concat i2 $
                          concat tgt_imm10H $ concat tgt_imm10L $ LitBV 2 0x00
           newlr = concat (extract 31 1 (Loc pc)) (LitBV 1 0b1)
-      label <- target_label_align4 imm32
+          unpred = andp inITBlock (notp lastInITBlock)
+      label <- target_label_align4 (ite unpred (unpredictable imm32) imm32)
       blx_ newlr label tgtarch
 
 

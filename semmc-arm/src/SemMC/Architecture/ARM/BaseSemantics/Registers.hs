@@ -59,5 +59,14 @@ itBlockState =
     itstate_3_2 = extract 11 10 sr
     itstate_1_0 = extract 26 25 sr
 
+-- | Is the current T32 instruction executing in the context of an IT
+-- (IfThen) block
 inITBlock :: Expr 'TBool
 inITBlock = bvne (LitBV 8 0x0) itBlockState
+
+
+-- | Is this the last entry in a T32 IT (IfThen) block.  At present,
+-- semmc itself does not manage the IT block so this is a noop; it may
+-- be changed to an uninterpreted function for evaluation.
+lastInITBlock :: Expr 'TBool
+lastInITBlock = uf EBool "t32.lastInITBlock" []
