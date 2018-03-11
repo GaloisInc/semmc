@@ -1,12 +1,19 @@
 ;; Push register list, Encoding T1 (F7.1.137, F7-2760)
 (let
- ((var30
+ ((var37
   (('Mem
    ((_ call "write_mem.32")
-    'Mem
-    var5))
+    var30))
    ('Mem
-    (var8))
+    ((_ call "write_mem.32")
+     'Mem
+     (stack_12)
+     (ite
+      (testCondition)
+      (pshval_SPminus12)
+      ((_ call "read_mem.32")
+       'Mem
+       (stack_12)))))
    ('Mem
     ((_ call "write_mem.32")
      'Mem
@@ -18,8 +25,8 @@
        'Mem
        (stack_11)))))
    ('Mem
-    (var13))
-   ('Mem var15)
+    (var20))
+   ('Mem var22)
    ('Mem
     ((_ call "write_mem.32")
      'Mem
@@ -34,13 +41,22 @@
     ((_ call "write_mem.32")
      'Mem
      (stack_7)
-     var18))
+     (ite
+      (testCondition)
+      (pshval_SPminus7)
+      ((_ call "read_mem.32")
+       'Mem
+       (stack_7)))))
    ('Mem
     ((_ call "write_mem.32")
      'Mem
      (stack_6)
-     (var27)))
-   ('Mem var21)
+     (var34)))
+   ('Mem
+    ((_ call "write_mem.32")
+     'Mem
+     (stack_5)
+     var28))
    ('Mem
     ((_ call "write_mem.32")
      'Mem
@@ -51,9 +67,9 @@
       ((_ call "read_mem.32")
        'Mem
        (stack_4)))))
-   (var28)
-   var29))
-  (var29
+   (var35)
+   var36))
+  (var36
    (('Mem
     ((_ call "write_mem.32")
      'Mem
@@ -68,72 +84,122 @@
      ((_ call "write_mem.32")
       'Mem
       (stack_1)
-      var25))
-    ('Mem var26)))
-  (var26
+      var32))
+    ('Mem var33)))
+  (var33
    (((_ call "write_mem.32")
     'Mem
     (stack_0)
     (ite
      (testCondition)
-     (pshval_SPminus0)
-     ((_ call "read_mem.32")
-      'Mem
-      (stack_0))))))
+     var18))))
+  (var18
+   ((pshval_SPminus0)
+    ((_ call "read_mem.32")
+     'Mem
+     (stack_0))))
   (stack_0
    (bvsub 'R13 #x00000004))
   (pshval_SPminus0
    (ite
     (isActive_SPminus0_R0)
-    'R0
+    var31))
+  (var31
+   ('R0
     (ite
      (isActive_SPminus0_R1)
-     var23)))
-  (var23
-   ('R1
-    (ite
-     (isActive_SPminus0_R2)
-     'R2
+     'R1
      (ite
-      (isActive_SPminus0_R3)
-      'R3
+      (isActive_SPminus0_R2)
+      var29))))
+  (var29
+   ('R2
+    (ite
+     (isActive_SPminus0_R3)
+     'R3
+     (ite
+      (isActive_SPminus0_R4)
+      'R4
       (ite
-       (isActive_SPminus0_R4)
-       'R4
-       (ite
-        (isActive_SPminus0_R5)
-        'R5
-        (ite
-         (isActive_SPminus0_R6)
-         'R6
-         (ite
-          (isActive_SPminus0_R7)
-          'R7
-          (ite
-           (isActive_SPminus0_R8)
-           'R8
-           (ite
-            (isActive_SPminus0_R9)
-            var10))))))))))
-  (var10
-   ('R9
+       (isActive_SPminus0_R5)
+       var25)))))
+  (var25
+   ('R5
     (ite
-     (isActive_SPminus0_R10)
-     'R10
+     (isActive_SPminus0_R6)
+     'R6
      (ite
-      (isActive_SPminus0_R11)
-      'R11
-      (var3)))))
-  (var3
-   (ite
-    (isActive_SPminus0_R12)
-    'R12
+      (isActive_SPminus0_R7)
+      'R7
+      (ite
+       (isActive_SPminus0_R8)
+       'R8
+       (ite
+        (isActive_SPminus0_R9)
+        'R9
+        (ite
+         (isActive_SPminus0_R10)
+         'R10
+         (ite
+          (isActive_SPminus0_R11)
+          'R11
+          (ite
+           (isActive_SPminus0_R12)
+           'R12
+           (ite
+            (isActive_SPminus0_R13)
+            var4))))))))))
+  (var4
+   ('R13
     (ite
-     (isActive_SPminus0_R13)
-     'R13
-     ((_ call "read_mem.32")
-      'Mem
-      (stack_0)))))
+     (isActive_SPminus0_R14)
+     'R14
+     (ite
+      (isActive_SPminus0_R15)
+      (bvadd 'PC #x00000008)
+      ((_ call "read_mem.32")
+       'Mem
+       (stack_0))))))
+  (isActive_SPminus0_R15
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R15)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regCnt
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 16)
+      ((_ call "t32.reglist")
+       registers)))))
+  (regMask_SPminus0_R15
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 16)
+      ((_ extract 15 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R14
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R14)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R14
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 17)
+      ((_ extract 14 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus0_R13
    (andp
     (bvugt
@@ -144,12 +210,6 @@
      (bvsub
       (regCnt)
       #x0000))))
-  (regCnt
-   ((_ extract 15 0)
-    ((_ call "popcnt.32")
-     ((_ zero_extend 16)
-      ((_ call "t32.reglist")
-       registers)))))
   (regMask_SPminus0_R13
    ((_ extract 15 0)
     ((_ call "popcnt.32")
@@ -428,48 +488,50 @@
         #b1
         ((_ extract 28 28)
          'CPSR))
-       (ite
+       (var8))))))
+  (var8
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      (ITState))
+     #b100)
+    (andp
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
+     (notp
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        'CPSR))))
+    (ite
+     (bveq
+      ((_ extract 3 1)
+       (ITState))
+      #b101)
+     (bveq
+      ((_ extract 31 31)
+       'CPSR)
+      ((_ extract 28 28)
+       'CPSR))
+     (ite
+      (bveq
+       ((_ extract 3 1)
+        (ITState))
+       #b110)
+      (andp
+       (bveq
+        ((_ extract 31 31)
+         'CPSR)
+        ((_ extract 28 28)
+         'CPSR))
+       (notp
         (bveq
-         ((_ extract 3 1)
-          (ITState))
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           (ITState))
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            (ITState))
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
+         #b1
+         ((_ extract 30 30)
+          'CPSR))))
+      (true)))))
   (true
    (bveq #b0 #b0))
   (ITState
@@ -484,7 +546,7 @@
     #xe
     ((_ extract 15 12)
      'CPSR)))
-  (var25
+  (var32
    ((ite
     (testCondition)
     (pshval_SPminus1)
@@ -494,54 +556,95 @@
   (stack_1
    (bvsub 'R13 #x00000008))
   (pshval_SPminus1
-   (ite
-    (isActive_SPminus1_R0)
+   (ite var15))
+  (var15
+   ((isActive_SPminus1_R0)
     'R0
+    var12))
+  (var12
+   ((ite
+    (isActive_SPminus1_R1)
+    'R1
     (ite
-     (isActive_SPminus1_R1)
-     'R1
-     var1)))
+     (isActive_SPminus1_R2)
+     'R2
+     var5))))
+  (var5
+   ((ite
+    (isActive_SPminus1_R3)
+    'R3
+    var1)))
   (var1
    ((ite
-    (isActive_SPminus1_R2)
-    'R2
+    (isActive_SPminus1_R4)
+    'R4
     (ite
-     (isActive_SPminus1_R3)
-     'R3
+     (isActive_SPminus1_R5)
+     'R5
      (ite
-      (isActive_SPminus1_R4)
-      'R4
+      (isActive_SPminus1_R6)
+      'R6
       (ite
-       (isActive_SPminus1_R5)
-       'R5
+       (isActive_SPminus1_R7)
+       'R7
        (ite
-        (isActive_SPminus1_R6)
-        'R6
+        (isActive_SPminus1_R8)
+        'R8
         (ite
-         (isActive_SPminus1_R7)
-         'R7
+         (isActive_SPminus1_R9)
+         'R9
          (ite
-          (isActive_SPminus1_R8)
-          'R8
-          (var9))))))))))
-  (var9
-   (ite
-    (isActive_SPminus1_R9)
-    'R9
-    (ite
-     (isActive_SPminus1_R10)
-     var4)))
-  (var4
-   ('R10
-    (ite
-     (isActive_SPminus1_R11)
-     'R11
-     (ite
-      (isActive_SPminus1_R12)
-      'R12
-      ((_ call "read_mem.32")
-       'Mem
-       (stack_1))))))
+          (isActive_SPminus1_R10)
+          'R10
+          (ite
+           (isActive_SPminus1_R11)
+           'R11
+           (ite
+            (isActive_SPminus1_R12)
+            'R12
+            (ite
+             (isActive_SPminus1_R13)
+             'R13
+             (ite
+              (isActive_SPminus1_R14)
+              'R14
+              ((_ call "read_mem.32")
+               'Mem
+               (stack_1)))))))))))))))
+  (isActive_SPminus1_R14
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R14)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R14
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 17)
+      ((_ extract 14 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R13
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R13)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R13
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 18)
+      ((_ extract 13 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus1_R12
    (andp
     (bvugt
@@ -772,43 +875,81 @@
     (ite
      (isActive_SPminus2_R1)
      'R1
-     (var20))))
-  (var20
-   (ite
-    (isActive_SPminus2_R2)
-    var19))
-  (var19
-   ('R2
-    (ite
-     (isActive_SPminus2_R3)
-     'R3
      (ite
-      (isActive_SPminus2_R4)
-      'R4
+      (isActive_SPminus2_R2)
+      'R2
       (ite
-       (isActive_SPminus2_R5)
-       'R5
+       (isActive_SPminus2_R3)
+       'R3
        (ite
-        (isActive_SPminus2_R6)
-        'R6
+        (isActive_SPminus2_R4)
+        var23))))))
+  (var23
+   ('R4
+    (ite
+     (isActive_SPminus2_R5)
+     'R5
+     (ite
+      (isActive_SPminus2_R6)
+      'R6
+      (ite
+       (isActive_SPminus2_R7)
+       'R7
+       (ite
+        (isActive_SPminus2_R8)
+        'R8
         (ite
-         (isActive_SPminus2_R7)
-         'R7
+         (isActive_SPminus2_R9)
+         'R9
          (ite
-          (isActive_SPminus2_R8)
-          'R8
+          (isActive_SPminus2_R10)
+          'R10
           (ite
-           (isActive_SPminus2_R9)
-           'R9
+           (isActive_SPminus2_R11)
+           'R11
            (ite
-            (isActive_SPminus2_R10)
-            'R10
+            (isActive_SPminus2_R12)
+            'R12
             (ite
-             (isActive_SPminus2_R11)
-             'R11
+             (isActive_SPminus2_R13)
+             'R13
              ((_ call "read_mem.32")
               'Mem
               (stack_2)))))))))))))
+  (isActive_SPminus2_R13
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R13)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R13
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 18)
+      ((_ extract 13 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R12
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R12)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R12
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 19)
+      ((_ extract 12 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus2_R11
    (andp
     (bvugt
@@ -1013,7 +1154,7 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var28
+  (var35
    ('Mem
     ((_ call "write_mem.32")
      'Mem
@@ -1030,47 +1171,89 @@
    (ite
     (isActive_SPminus3_R0)
     'R0
-    (ite
-     (isActive_SPminus3_R1)
-     'R1
-     (ite
-      (isActive_SPminus3_R2)
-      'R2
-      (var17)))))
-  (var17
+    (var27)))
+  (var27
    (ite
-    (isActive_SPminus3_R3)
-    var16))
-  (var16
-   ('R3
+    (isActive_SPminus3_R1)
+    var26))
+  (var26
+   ('R1
     (ite
-     (isActive_SPminus3_R4)
-     'R4
+     (isActive_SPminus3_R2)
+     'R2
      (ite
-      (isActive_SPminus3_R5)
-      'R5
+      (isActive_SPminus3_R3)
+      'R3
       (ite
-       (isActive_SPminus3_R6)
-       'R6
+       (isActive_SPminus3_R4)
+       'R4
        (ite
-        (isActive_SPminus3_R7)
-        var7))))))
-  (var7
-   ('R7
-    (var6)))
-  (var6
-   (ite
-    (isActive_SPminus3_R8)
-    'R8
+        (isActive_SPminus3_R5)
+        'R5
+        (ite
+         (isActive_SPminus3_R6)
+         var17)))))))
+  (var17
+   ('R6
     (ite
-     (isActive_SPminus3_R9)
-     'R9
+     (isActive_SPminus3_R7)
+     'R7
      (ite
-      (isActive_SPminus3_R10)
-      'R10
-      ((_ call "read_mem.32")
-       'Mem
-       (stack_3))))))
+      (isActive_SPminus3_R8)
+      var11))))
+  (var11
+   ('R8
+    (var10)))
+  (var10
+   (ite
+    (isActive_SPminus3_R9)
+    'R9
+    (ite
+     (isActive_SPminus3_R10)
+     'R10
+     (ite
+      (isActive_SPminus3_R11)
+      'R11
+      (ite
+       (isActive_SPminus3_R12)
+       'R12
+       ((_ call "read_mem.32")
+        'Mem
+        (stack_3)))))))
+  (isActive_SPminus3_R12
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R12)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R12
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 19)
+      ((_ extract 12 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R11
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R11)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R11
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 20)
+      ((_ extract 11 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus3_R10
    (andp
     (bvugt
@@ -1291,9 +1474,49 @@
             (ite
              (isActive_SPminus4_R9)
              'R9
-             ((_ call "read_mem.32")
-              'Mem
-              (stack_4)))))))))))))
+             (ite
+              (isActive_SPminus4_R10)
+              'R10
+              (ite
+               (isActive_SPminus4_R11)
+               'R11
+               ((_ call "read_mem.32")
+                'Mem
+                (stack_4)))))))))))))))
+  (isActive_SPminus4_R11
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R11)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R11
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 20)
+      ((_ extract 11 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R10)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R10
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 10 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus4_R9
    (andp
     (bvugt
@@ -1464,51 +1687,94 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var21
-   (((_ call "write_mem.32")
-    'Mem
-    (stack_5)
-    (ite
-     (testCondition)
-     (pshval_SPminus5)
-     ((_ call "read_mem.32")
-      'Mem
-      (stack_5))))))
+  (var28
+   ((ite
+    (testCondition)
+    (pshval_SPminus5)
+    ((_ call "read_mem.32")
+     'Mem
+     (stack_5)))))
   (stack_5
    (bvsub 'R13 #x00000018))
   (pshval_SPminus5
    (ite
     (isActive_SPminus5_R0)
     'R0
+    (var24)))
+  (var24
+   (ite
+    (isActive_SPminus5_R1)
+    'R1
     (ite
-     (isActive_SPminus5_R1)
-     'R1
-     (ite
-      (isActive_SPminus5_R2)
-      'R2
-      (ite
-       (isActive_SPminus5_R3)
-       var12)))))
-  (var12
-   ('R3
+     (isActive_SPminus5_R2)
+     var21)))
+  (var21
+   ('R2
     (ite
-     (isActive_SPminus5_R4)
-     'R4
+     (isActive_SPminus5_R3)
+     'R3
      (ite
-      (isActive_SPminus5_R5)
-      'R5
+      (isActive_SPminus5_R4)
+      'R4
+      (var16)))))
+  (var16
+   (ite
+    (isActive_SPminus5_R5)
+    var14))
+  (var14
+   ('R5
+    (ite
+     (isActive_SPminus5_R6)
+     'R6
+     (ite
+      (isActive_SPminus5_R7)
+      'R7
       (ite
-       (isActive_SPminus5_R6)
-       'R6
+       (isActive_SPminus5_R8)
+       'R8
        (ite
-        (isActive_SPminus5_R7)
-        'R7
+        (isActive_SPminus5_R9)
+        'R9
         (ite
-         (isActive_SPminus5_R8)
-         'R8
+         (isActive_SPminus5_R10)
+         'R10
          ((_ call "read_mem.32")
           'Mem
           (stack_5)))))))))
+  (isActive_SPminus5_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R10)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R10
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 10 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R9)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R9
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 9 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus5_R8
    (andp
     (bvugt
@@ -1662,7 +1928,7 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var27
+  (var34
    (ite
     (testCondition)
     (pshval_SPminus6)
@@ -1677,30 +1943,72 @@
     'R0
     (ite
      (isActive_SPminus6_R1)
-     var14)))
-  (var14
-   ('R1
-    (ite
-     (isActive_SPminus6_R2)
-     'R2
+     'R1
      (ite
-      (isActive_SPminus6_R3)
-      'R3
+      (isActive_SPminus6_R2)
+      var19))))
+  (var19
+   ('R2
+    (ite
+     (isActive_SPminus6_R3)
+     'R3
+     (ite
+      (isActive_SPminus6_R4)
+      'R4
+      (var13)))))
+  (var13
+   (ite
+    (isActive_SPminus6_R5)
+    'R5
+    (ite
+     (isActive_SPminus6_R6)
+     'R6
+     (ite
+      (isActive_SPminus6_R7)
+      'R7
       (ite
-       (isActive_SPminus6_R4)
-       'R4
+       (isActive_SPminus6_R8)
+       'R8
        (ite
-        (isActive_SPminus6_R5)
-        'R5
-        (ite
-         (isActive_SPminus6_R6)
-         'R6
-         (ite
-          (isActive_SPminus6_R7)
-          'R7
-          ((_ call "read_mem.32")
-           'Mem
-           (stack_6))))))))))
+        (isActive_SPminus6_R9)
+        'R9
+        ((_ call "read_mem.32")
+         'Mem
+         (stack_6))))))))
+  (isActive_SPminus6_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R9)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R9
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 9 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R8)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R8
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 8 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus6_R7
    (andp
     (bvugt
@@ -1837,13 +2145,6 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var18
-   ((ite
-    (testCondition)
-    (pshval_SPminus7)
-    ((_ call "read_mem.32")
-     'Mem
-     (stack_7)))))
   (stack_7
    (bvsub 'R13 #x00000020))
   (pshval_SPminus7
@@ -1853,26 +2154,64 @@
     (ite
      (isActive_SPminus7_R1)
      'R1
-     (var11))))
-  (var11
-   (ite
-    (isActive_SPminus7_R2)
-    'R2
-    (ite
-     (isActive_SPminus7_R3)
-     'R3
      (ite
-      (isActive_SPminus7_R4)
-      'R4
+      (isActive_SPminus7_R2)
+      'R2
       (ite
-       (isActive_SPminus7_R5)
-       'R5
+       (isActive_SPminus7_R3)
+       'R3
        (ite
-        (isActive_SPminus7_R6)
-        'R6
-        ((_ call "read_mem.32")
-         'Mem
-         (stack_7))))))))
+        (isActive_SPminus7_R4)
+        'R4
+        (ite
+         (isActive_SPminus7_R5)
+         'R5
+         (ite
+          (isActive_SPminus7_R6)
+          'R6
+          (ite
+           (isActive_SPminus7_R7)
+           'R7
+           (ite
+            (isActive_SPminus7_R8)
+            'R8
+            ((_ call "read_mem.32")
+             'Mem
+             (stack_7))))))))))))
+  (isActive_SPminus7_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R8)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R8
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 8 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R7)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R7
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 7 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus7_R6
    (andp
     (bvugt
@@ -2010,12 +2349,56 @@
        (ite
         (isActive_SPminus8_R4)
         'R4
-        (ite
-         (isActive_SPminus8_R5)
-         'R5
-         ((_ call "read_mem.32")
-          'Mem
-          (stack_8)))))))))
+        (var6)))))))
+  (var6
+   (ite
+    (isActive_SPminus8_R5)
+    'R5
+    (var2)))
+  (var2
+   (ite
+    (isActive_SPminus8_R6)
+    'R6
+    (ite
+     (isActive_SPminus8_R7)
+     'R7
+     ((_ call "read_mem.32")
+      'Mem
+      (stack_8)))))
+  (isActive_SPminus8_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R7)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R7
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 7 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R6)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R6
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 6 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus8_R5
    (andp
     (bvugt
@@ -2118,7 +2501,7 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var15
+  (var22
    (((_ call "write_mem.32")
     'Mem
     (stack_9)
@@ -2142,13 +2525,55 @@
       'R2
       (ite
        (isActive_SPminus9_R3)
-       'R3
-       (ite
-        (isActive_SPminus9_R4)
-        'R4
-        ((_ call "read_mem.32")
-         'Mem
-         (stack_9))))))))
+       var7)))))
+  (var7
+   ('R3
+    (ite
+     (isActive_SPminus9_R4)
+     'R4
+     (ite
+      (isActive_SPminus9_R5)
+      'R5
+      (ite
+       (isActive_SPminus9_R6)
+       'R6
+       ((_ call "read_mem.32")
+        'Mem
+        (stack_9)))))))
+  (isActive_SPminus9_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R6)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R6
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 6 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus9_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R5)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R5
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 5 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus9_R4
    (andp
     (bvugt
@@ -2234,7 +2659,7 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var13
+  (var20
    ((_ call "write_mem.32")
     'Mem
     (stack_10)
@@ -2258,10 +2683,52 @@
       'R2
       (ite
        (isActive_SPminus10_R3)
-       'R3
-       ((_ call "read_mem.32")
-        'Mem
-        (stack_10)))))))
+       var3)))))
+  (var3
+   ('R3
+    (ite
+     (isActive_SPminus10_R4)
+     'R4
+     (ite
+      (isActive_SPminus10_R5)
+      'R5
+      ((_ call "read_mem.32")
+       'Mem
+       (stack_10))))))
+  (isActive_SPminus10_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R5)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R5
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 5 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus10_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R4)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R4
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 4 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus10_R3
    (andp
     (bvugt
@@ -2336,17 +2803,55 @@
    (ite
     (isActive_SPminus11_R0)
     'R0
-    (var2)))
-  (var2
-   (ite
-    (isActive_SPminus11_R1)
-    'R1
     (ite
-     (isActive_SPminus11_R2)
-     'R2
-     ((_ call "read_mem.32")
-      'Mem
-      (stack_11)))))
+     (isActive_SPminus11_R1)
+     'R1
+     (ite
+      (isActive_SPminus11_R2)
+      'R2
+      (ite
+       (isActive_SPminus11_R3)
+       'R3
+       (ite
+        (isActive_SPminus11_R4)
+        'R4
+        ((_ call "read_mem.32")
+         'Mem
+         (stack_11))))))))
+  (isActive_SPminus11_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x000b)
+    (bveq
+     (regMask_SPminus11_R4)
+     (bvsub
+      (regCnt)
+      #x000b))))
+  (regMask_SPminus11_R4
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 4 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus11_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x000b)
+    (bveq
+     (regMask_SPminus11_R3)
+     (bvsub
+      (regCnt)
+      #x000b))))
+  (regMask_SPminus11_R3
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 3 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus11_R2
    (andp
     (bvugt
@@ -2398,18 +2903,6 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var8
-   ((_ call "write_mem.32")
-    var24))
-  (var24
-   ('Mem
-    (stack_12)
-    (ite
-     (testCondition)
-     (pshval_SPminus12)
-     ((_ call "read_mem.32")
-      'Mem
-      (stack_12)))))
   (stack_12
    (bvsub 'R13 #x00000034))
   (pshval_SPminus12
@@ -2419,9 +2912,49 @@
     (ite
      (isActive_SPminus12_R1)
      'R1
-     ((_ call "read_mem.32")
-      'Mem
-      (stack_12)))))
+     (ite
+      (isActive_SPminus12_R2)
+      'R2
+      (ite
+       (isActive_SPminus12_R3)
+       'R3
+       ((_ call "read_mem.32")
+        'Mem
+        (stack_12)))))))
+  (isActive_SPminus12_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x000c)
+    (bveq
+     (regMask_SPminus12_R3)
+     (bvsub
+      (regCnt)
+      #x000c))))
+  (regMask_SPminus12_R3
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 3 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus12_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x000c)
+    (bveq
+     (regMask_SPminus12_R2)
+     (bvsub
+      (regCnt)
+      #x000c))))
+  (regMask_SPminus12_R2
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 2 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus12_R1
    (andp
     (bvugt
@@ -2456,8 +2989,9 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
-  (var5
-   ((stack_13)
+  (var30
+   ('Mem
+    (stack_13)
     (ite
      (testCondition)
      (pshval_SPminus13)
@@ -2470,9 +3004,49 @@
    (ite
     (isActive_SPminus13_R0)
     'R0
-    ((_ call "read_mem.32")
-     'Mem
-     (stack_13))))
+    (ite
+     (isActive_SPminus13_R1)
+     'R1
+     (ite
+      (isActive_SPminus13_R2)
+      'R2
+      ((_ call "read_mem.32")
+       'Mem
+       (stack_13))))))
+  (isActive_SPminus13_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x000d)
+    (bveq
+     (regMask_SPminus13_R2)
+     (bvsub
+      (regCnt)
+      #x000d))))
+  (regMask_SPminus13_R2
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 2 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus13_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x000d)
+    (bveq
+     (regMask_SPminus13_R1)
+     (bvsub
+      (regCnt)
+      #x000d))))
+  (regMask_SPminus13_R1
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 1 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (isActive_SPminus13_R0
    (andp
     (bvugt
@@ -2490,29 +3064,88 @@
       ((_ extract 0 0)
        ((_ call "t32.reglist")
         registers))))))
+  (var9
+   ((_ call "write_mem.32")
+    'Mem
+    (stack_14)
+    (ite
+     (testCondition)
+     (pshval_SPminus14)
+     ((_ call "read_mem.32")
+      'Mem
+      (stack_14)))))
   (stack_14
    (bvsub 'R13 #x0000003c))
   (pshval_SPminus14
-   ((_ call "read_mem.32")
-    'Mem
-    (stack_14)))
-  (var22
-   ('Mem
-    ((_ call "write_mem.32")
-     'Mem
-     (stack_15)
-     (ite
-      (testCondition)
-      (pshval_SPminus15)
-      ((_ call "read_mem.32")
-       'Mem
-       (stack_15))))))
+   (ite
+    (isActive_SPminus14_R0)
+    'R0
+    (ite
+     (isActive_SPminus14_R1)
+     'R1
+     ((_ call "read_mem.32")
+      'Mem
+      (stack_14)))))
+  (isActive_SPminus14_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x000e)
+    (bveq
+     (regMask_SPminus14_R1)
+     (bvsub
+      (regCnt)
+      #x000e))))
+  (regMask_SPminus14_R1
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 1 0)
+       ((_ call "t32.reglist")
+        registers))))))
+  (isActive_SPminus14_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000e)
+    (bveq
+     (regMask_SPminus14_R0)
+     (bvsub
+      (regCnt)
+      #x000e))))
+  (regMask_SPminus14_R0
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 0 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (stack_15
    (bvsub 'R13 #x00000040))
   (pshval_SPminus15
-   ((_ call "read_mem.32")
-    'Mem
-    (stack_15)))
+   (ite
+    (isActive_SPminus15_R0)
+    'R0
+    ((_ call "read_mem.32")
+     'Mem
+     (stack_15))))
+  (isActive_SPminus15_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000f)
+    (bveq
+     (regMask_SPminus15_R0)
+     (bvsub
+      (regCnt)
+      #x000f))))
+  (regMask_SPminus15_R0
+   ((_ extract 15 0)
+    ((_ call "popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 0 0)
+       ((_ call "t32.reglist")
+        registers))))))
   (newSP
    (bvsub
     'R13
@@ -2532,15 +3165,16 @@
     ('CPSR 'CPSR)
     ('R13
      (newSP))
-    (var22)
     ('Mem
      ((_ call "write_mem.32")
       'Mem
-      (stack_14)
+      (stack_15)
       (ite
        (testCondition)
-       (pshval_SPminus14)
+       (pshval_SPminus15)
        ((_ call "read_mem.32")
         'Mem
-        (stack_14)))))
-    var30))))
+        (stack_15)))))
+    ('Mem
+     (var9))
+    var37))))

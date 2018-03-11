@@ -295,7 +295,7 @@ pushregs rlist _allowUnaligned isUnpred =
            -- reglist bitmask.
            stackVal :: Integer -> Expr 'TBV -> Expr 'TBV
            stackVal si origval = ("pshval_SPminus" <> show si) =:
-                                 let maxRegCandidate = (14 - si - 1)
+                                 let maxRegCandidate = (nRegs - si)
                                      target = bvsub regCnt (LitBV 16 si)
                                      regRange = [0 .. maxRegCandidate]
                                      regMask n = "regMask_SPminus" <> show si <> "_R" <> show n =:
