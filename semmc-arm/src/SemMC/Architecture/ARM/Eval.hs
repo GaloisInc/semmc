@@ -314,8 +314,8 @@ interpTaddrmodeis4ImmExtractor :: ThumbOperands.AddrModeIs4 -> W.W 5
 interpTaddrmodeis4ImmExtractor = fromInteger . toInteger . ThumbOperands.addrModeIs4Imm
 
 -- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
-interpTaddrmodeis4RegExtractor :: ThumbOperands.AddrModeIs4 -> ThumbOperands.LowGPR
-interpTaddrmodeis4RegExtractor = ThumbOperands.addrModeIs4Reg
+interpTaddrmodeis4RegExtractor :: ThumbOperands.AddrModeIs4 -> Maybe ThumbOperands.LowGPR
+interpTaddrmodeis4RegExtractor = Just . ThumbOperands.addrModeIs4Reg
 
 interpTaddrmodeis4Reg :: forall sh s arm tp
                          . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
