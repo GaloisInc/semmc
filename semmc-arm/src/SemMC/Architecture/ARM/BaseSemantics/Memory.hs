@@ -71,6 +71,21 @@ defineLoads = do
         wback = orp (bveq b'P (LitBV 1 0)) (bveq b'W (LitBV 1 1))
     ldri rT add rN offset index wback
 
+  defineT32Opcode T.TLDRi (Empty
+                          :> ParamDef "gpr" tgpr naturalBV
+                          :> ParamDef "addris" t_addrmode_is4 (EPackedOperand "T_AddrMode_IS4")
+                          )
+                      $ \rT addris4 -> do
+    comment "Load Register immediate, Encoding T1 (F7.1.68, F7-2634)"
+    input addris4
+    let rN = addrmode_is4_reg addris4
+        imm5 = addrmode_is4_imm addris4
+        imm32 = zext $ concat imm5 (LitBV 2 0b00)
+        index = LitBool True
+        add = LitBool True
+        wback = LitBool False
+    ldri rT add rN imm32 index wback
+
   defineT32Opcode T.TLDRpci (Empty
                             :> ParamDef "gpr" tgpr naturalBV
                             :> ParamDef "addrpc" t_addrmode_pc (EPackedOperand "T_AddrMode_PC")
