@@ -107,6 +107,7 @@ blx_t32 =
                         $ \tgt -> do
       comment "Branch with Link and Exchange (F7.1.25, F7-2576)"
       comment "Encoding T2"
+      input tgt
       let tgtarch = InstrSet_A32
           tgt_S = blxtgt_S tgt
           tgt_imm10H = blxtgt_imm10H tgt

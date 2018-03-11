@@ -151,7 +151,7 @@
  ((operands
   ((target . 'Thumb_blx_target)))
   (in
-   ('R14 'CPSR 'PC))
+   ('R14 target 'CPSR 'PC))
   (defs
    (('PC
     (branchWritePC))
