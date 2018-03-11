@@ -31,6 +31,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , register_list
     , soRegReg_type, soRegReg_reg1, soRegReg_reg2
     , soRegImm_imm, soRegImm_type, soRegImm_reg
+    , t_addrmode_pc_val
     , t2SoImm_imm
     , t32_imm_0_1020s4_val
     , blxtgt_S, blxtgt_imm10H, blxtgt_imm10L, blxtgt_J1, blxtgt_J2
@@ -408,6 +409,10 @@ t2SoImm_imm = unpackUF "T2_So_Imm" (EBV 12) "t32.t2soimm_imm"
 
 t32_imm_0_1020s4_val :: Location 'TPackedOperand -> Expr 'TBV
 t32_imm_0_1020s4_val = unpackUF "imm0_1020s4" (EBV 8) "t32.imm0_1020S4_imm"
+
+-- | Decoding for Thumb T_addrmode_pc operand
+t_addrmode_pc_val :: Location 'TPackedOperand -> Expr 'TBV
+t_addrmode_pc_val = unpackUF "T_AddrMode_PC" (EBV 8) "t32.addrmode_pc"
 
 -- | Decoding for the ThumbBlxTarget type: S bit
 blxtgt_S :: Location 'TPackedOperand -> Expr 'TBV

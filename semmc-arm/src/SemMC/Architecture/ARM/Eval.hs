@@ -42,6 +42,7 @@ module SemMC.Architecture.ARM.Eval
     , interpSoregregReg1
     , interpSoregregReg2
     , interpT2soimmImmExtractor
+    , interpTaddrmodepcExtractor
     , interpTReglistExtractor
     )
     where
@@ -120,6 +121,13 @@ interpImm12OffsetExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12
 
 interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Bool
 interpImm12AddFlgExtractor = (== 1) . ARMOperands.addrModeImm12Add
+
+
+------------------------------------------------------------------------
+-- | Extract values from the Thumb AddrModePc operand
+
+interpTaddrmodepcExtractor :: ThumbOperands.AddrModePc -> Int8
+interpTaddrmodepcExtractor = fromInteger . toInteger . ThumbOperands.addrModePcToBits
 
 
 ------------------------------------------------------------------------
