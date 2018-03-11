@@ -398,6 +398,7 @@ shapeReprType orep =
             ThumbDis.T2_so_immRepr -> knownRepr
             ThumbDis.Thumb_blx_targetRepr -> knownRepr
             ThumbDis.TGPRRepr -> knownRepr
+            ThumbDis.UnpredictableRepr -> knownRepr
             _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
 
 
