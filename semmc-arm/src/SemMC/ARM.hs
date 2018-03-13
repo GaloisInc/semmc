@@ -230,6 +230,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt (ThumbDis.Imm0_31 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.imm5ToBits v
         opVt (ThumbDis.Imm0_255 v) = S.bvLit sym knownNat $ toInteger v  -- v :: Word8
         opVt (ThumbDis.Imm0_4095 v) = S.bvLit sym knownNat $ toInteger v -- v :: Word16
+        opVt (ThumbDis.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.predToBits bits4
         opVt (ThumbDis.Reglist v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.regListToBits v
         opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T_addrmode_is4 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.addrModeIs4ToBits v
@@ -402,6 +403,7 @@ shapeReprType orep =
             ThumbDis.Imm0_31Repr -> knownRepr
             ThumbDis.Imm0_255Repr -> knownRepr
             ThumbDis.Imm0_4095Repr -> knownRepr
+            ThumbDis.PredRepr -> knownRepr
             ThumbDis.ReglistRepr -> knownRepr
             ThumbDis.RGPRRepr -> knownRepr
             ThumbDis.T_addrmode_is4Repr -> knownRepr
