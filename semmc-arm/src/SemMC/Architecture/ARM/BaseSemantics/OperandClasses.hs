@@ -103,6 +103,9 @@ t_imm0_1020s4 = "T_imm0_1020s4"
 thumb_blx_target :: String
 thumb_blx_target = "Thumb_blx_target"
 
+thumb_bcc_target :: String
+thumb_bcc_target = "Thumb_bcc_target"
+
 -- | The 'unpredictableInstrBits' operand is used to define bits in
 -- the instruction encoding that the architecture specification
 -- declares as "unpredictable" and which may have different values
@@ -152,5 +155,6 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "T_imm0_1020s4" = 'TPackedOperand
   SymToExprTag "T2_so_imm" = 'TPackedOperand
   SymToExprTag "TGPR" = 'TBV
+  SymToExprTag "Thumb_bcc_target" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TPackedOperand
   SymToExprTag "Unpredictable" = 'TBV
