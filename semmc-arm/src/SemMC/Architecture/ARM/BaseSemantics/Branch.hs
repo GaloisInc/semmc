@@ -55,7 +55,8 @@ a32_branches = do
     input tgt
     let imm24 = extract 23 0 (Loc tgt)
         imm32 = "imm32" =: (sext $ concat imm24 $ LitBV 2 0b00)
-    branchWritePCRel imm32
+        unPredictable = LitBool False
+    branchWritePCRel imm32 unPredictable
 
   defineA32Opcode A.BL (Empty
                        :> ParamDef "blTarget" arm_bl_target naturalBV
@@ -98,6 +99,20 @@ blx_a32 =
 t32_branches :: SemARM 'Top ()
 t32_branches = do
   blx_t32
+
+  defineT32Opcode T.TBcc (Empty
+                         :> ParamDef "predBits" pred (EBV 4)
+                         :> ParamDef "bccTarget" thumb_bcc_target (EBV 8)
+                        )
+                      $ \_ tgt -> do
+    comment "B, branch, Encoding T1"
+    comment "F7.1.18, F7-2566"
+    input tgt
+    let imm8 = tgt
+        imm32 = "imm32" =: (sext $ concat (Loc imm8) $ LitBV 1 0b0)
+    comment "Not permitted in IT block"
+    let unPredictable = inITBlock
+    branchWritePCRel imm32 unPredictable
 
   defineT32Opcode T.TBX (Empty
                         :> ParamDef "rM" gpr naturalBV
