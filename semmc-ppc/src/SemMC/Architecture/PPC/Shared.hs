@@ -397,16 +397,16 @@ locationFuncInterpretation =
                                                   , A.exprInterpName = 'E.interpMemrrOffsetExtractor
                                                   , A.exprInterp = evalMemReg Offset
                                                   })
-  , ("ppc.memrix_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp undefined
+  , ("ppc.memrix_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrixOffset
                                                    , A.exprInterpName = 'E.interpMemrixOffsetExtractor
                                                    , A.exprInterp = evalMemReg Offset
                                                    })
-  , ("ppc.memri_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp undefined
+  , ("ppc.memri_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemriOffset
                                                   , A.exprInterpName = 'E.interpMemriOffsetExtractor
                                                   , A.exprInterp = evalMemReg Offset
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'E.interpIsR0
                                            , A.exprInterp = E.Evaluator isR0
-                                           , A.locationInterp = undefined
+                                           , A.locationInterp = F.LocationFuncInterp undefined
                                            })
-    ]
+  ]

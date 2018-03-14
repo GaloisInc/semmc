@@ -87,7 +87,7 @@ data WrappedOperand arch sh s where
 -- parameter into a 'L.Location'.  These are defined per-architecture and are
 -- invoked by 'paramToLocation' during formula instantiation.
 data LocationFuncInterp arch where
-  LocationFuncInterp :: ( forall sh s tp . SL.List (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> L.Location arch tp)
+  LocationFuncInterp :: ( forall sh s tp . SL.List (A.Operand arch) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Maybe (L.Location arch tp))
                      -> LocationFuncInterp arch
 
 instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where

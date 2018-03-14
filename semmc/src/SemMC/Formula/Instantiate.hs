@@ -158,7 +158,7 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
     Nothing -> error ("No function interpretation for " ++ show fnName)
     Just interp ->
       case A.locationInterp interp of
-        LocationFuncInterp fn -> Just (fn opVals wo rep)
+        LocationFuncInterp fn -> fn opVals wo rep
 
 type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
 
