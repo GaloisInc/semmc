@@ -102,6 +102,21 @@ defineLoads = do
     _ <- ldr rT add base imm32 useimm32 isUnpredictable
     return ()
 
+  defineT32Opcode T.TPOP (Empty
+                         :> ParamDef "registers" reglist (EPackedOperand "Reglist")
+                         )
+                      $ \regsarg -> do
+    comment "Pop registers, Encoding T1 (F7.1.136, F7-2756)"
+    input regsarg
+    let rlist = register_list regsarg
+        allowUnaligned = False
+        isUnpred = "isUnpredictable" =:
+                   (orp (bveq rlist (naturalLitBV 0))
+                        (andp (bveq (extract 15 15 rlist) (LitBV 1 1))
+                              (andp inITBlock (notp lastInITBlock))))
+    popregs rlist allowUnaligned isUnpred
+
+
 defineStores :: SemARM 'Top ()
 defineStores = do
   -- Note about STR_PRE_IMM vs STR_POST_IMM:
@@ -184,19 +199,6 @@ defineStores = do
         addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
 
-  defineT32Opcode T.TPOP (Empty
-                         :> ParamDef "registers" reglist (EPackedOperand "Reglist")
-                         )
-                      $ \regsarg -> do
-    comment "Pop registers, Encoding T1 (F7.1.136, F7-2756)"
-    input regsarg
-    let rlist = register_list regsarg
-        allowUnaligned = False
-        isUnpred = "isUnpredictable" =:
-                   (orp (bveq rlist (naturalLitBV 0))
-                        (andp (bveq (extract 15 15 rlist) (LitBV 1 1))
-                              (andp inITBlock (notp lastInITBlock))))
-    popregs rlist allowUnaligned isUnpred
 
   defineT32Opcode T.TPUSH (Empty
                           :> ParamDef "registers" reglist (EPackedOperand "Reglist")
