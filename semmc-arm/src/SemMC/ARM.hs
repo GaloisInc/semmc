@@ -316,6 +316,9 @@ instance A.Architecture ARM where
     locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
 
+-- FIXME: kinda gross hack
+interpMaybe :: (a -> b -> c -> d) -> a -> b -> c -> Maybe d
+interpMaybe = (.).(.).(.) $ Just
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
 locationFuncInterpretation =
@@ -324,17 +327,17 @@ locationFuncInterpretation =
     , ("a32.am2offset_imm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpAm2offsetimmImmExtractor })
     , ("a32.am2offset_imm_add", A.FunctionInterpretation { A.exprInterpName = 'interpAm2offsetimmAddExtractor })
 
-    , ("a32.imm12_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpImm12Reg
+    , ("a32.imm12_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp $ interpMaybe interpImm12Reg
                                                  , A.exprInterpName = 'interpImm12RegExtractor
                                                  })
     , ("a32.imm12_off", A.FunctionInterpretation { A.exprInterpName = 'interpImm12OffsetExtractor })
     , ("a32.imm12_add", A.FunctionInterpretation { A.exprInterpName = 'interpImm12AddFlgExtractor })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
-                                          { A.locationInterp = F.LocationFuncInterp interpLdstsoregBaseReg
+                                          { A.locationInterp = F.LocationFuncInterp $ interpMaybe interpLdstsoregBaseReg
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
-                                            { A.locationInterp = F.LocationFuncInterp interpLdstsoregOffReg
+                                            { A.locationInterp = F.LocationFuncInterp $ interpMaybe interpLdstsoregOffReg
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor })
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation { A.exprInterpName = 'interpLdstsoregAddExtractor })
     , ("a32.ldst_so_reg_immediate", A.FunctionInterpretation { A.exprInterpName = 'interpLdstsoregImmExtractor })
@@ -345,13 +348,13 @@ locationFuncInterpretation =
 
     , ("a32.soregimm_type", A.FunctionInterpretation { A.exprInterpName = 'interpSoregimmTypeExtractor })
     , ("a32.soregimm_imm",  A.FunctionInterpretation { A.exprInterpName = 'interpSoregimmImmExtractor })
-    , ("a32.soregimm_reg",  A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpSoregimmReg
+    , ("a32.soregimm_reg",  A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp $ interpMaybe interpSoregimmReg
                                                      , A.exprInterpName = 'interpSoregimmRegExtractor })
 
     , ("a32.soregreg_type", A.FunctionInterpretation { A.exprInterpName = 'interpSoregregTypeExtractor })
-    , ("a32.soregreg_reg1", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpSoregregReg1
+    , ("a32.soregreg_reg1", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp $ interpMaybe interpSoregregReg1
                                                      , A.exprInterpName = 'interpSoregregReg1Extractor })
-    , ("a32.soregreg_reg2", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
+    , ("a32.soregreg_reg2", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp $ interpMaybe interpSoregregReg2
                                                      , A.exprInterpName = 'interpSoregregReg2Extractor })
 
     , ("t32.blxtarget_S", A.FunctionInterpretation { A.exprInterpName = 'interpBlxTarget_S })
@@ -363,7 +366,7 @@ locationFuncInterpretation =
     , ("t32.imm0_1020S4_imm", A.FunctionInterpretation { A.exprInterpName = 'interpImm01020s4ImmExtractor })
     , ("t32.reglist", A.FunctionInterpretation { A.exprInterpName = 'interpTReglistExtractor })
     , ("t32.addrmode_is4_imm", A.FunctionInterpretation { A.exprInterpName = 'interpTaddrmodeis4ImmExtractor })
-    , ("t32.addrmode_is4_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp interpTaddrmodeis4Reg
+    , ("t32.addrmode_is4_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp $ interpMaybe interpTaddrmodeis4Reg
                                                         , A.exprInterpName = 'interpTaddrmodeis4RegExtractor })
     , ("t32.addrmode_pc", A.FunctionInterpretation { A.exprInterpName = 'interpTaddrmodepcExtractor })
     , ("t32.t2soimm_imm", A.FunctionInterpretation { A.exprInterpName = 'interpT2soimmImmExtractor })
