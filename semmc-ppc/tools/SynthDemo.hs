@@ -1,49 +1,53 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
 
-import qualified Control.Concurrent.Async as A
-import           Data.Bool ( bool )
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base16 as BSHex
-import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.UTF8 as BS8
-import qualified Data.Foldable as F
-import qualified Data.Functor.Identity as I
+import qualified Control.Concurrent.Async           as A
+import qualified Data.ByteString                    as BS
+import qualified Data.ByteString.Base16             as BSHex
+import qualified Data.ByteString.Lazy               as BSL
+import qualified Data.ByteString.UTF8               as BS8
+import qualified Data.Foldable                      as F
+import qualified Data.Functor.Identity              as I
 import           Data.Monoid
-import           Data.Word ( Word32 )
-import qualified Options.Applicative as O
-import           Text.Printf ( printf )
+import           Data.Word                          ( Word32 )
+import qualified Options.Applicative                as O
+import           Text.Printf                        ( printf )
 
-import qualified Data.ElfEdit as E
-
-import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
-import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.Nonce as N
-import           Data.Parameterized.Some ( Some (..) )
+import qualified Data.ElfEdit                       as E
+import           Data.Parameterized.Classes         ( OrdF, ShowF(..) )
+import qualified Data.Parameterized.Map             as MapF
+import qualified Data.Parameterized.Nonce           as N
+import           Data.Parameterized.Some            ( Some (..) )
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
-import qualified Dismantle.PPC as DPPC
+import qualified Dismantle.PPC                      as DPPC
 
-import           SemMC.Architecture ( Architecture, Instruction, Location, Opcode, Operand )
-import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
-import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
-import qualified SemMC.Formula as F
-import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, unTemplate )
-import qualified SemMC.Synthesis as SemMC
-import qualified SemMC.Synthesis.Core as SemMC
-import qualified SemMC.Util as U
+import           SemMC.Architecture ( Architecture
+                                    , Instruction
+                                    , Location
+                                    , Opcode
+                                    , Operand
+                                    )
+import qualified SemMC.Architecture.PPC32.Opcodes   as PPC32
+import qualified SemMC.Formula                      as F
+import           SemMC.Synthesis.Template           ( BaseSet, TemplatedArch, unTemplate )
+import qualified SemMC.Synthesis                    as SemMC
+import qualified SemMC.Synthesis.Core               as SemMC
+import qualified SemMC.Util                         as U
 
-import qualified SemMC.Architecture.PPC32 as PPC32
+import qualified SemMC.Architecture.PPC32           as PPC32
 
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
                        , oOriginalWithReturn :: Maybe FilePath
-                       , oBaseArch :: String
                        , oAppendReturn :: Bool
                        }
 
@@ -57,10 +61,6 @@ options = Options <$> O.strArgument ( O.metavar "FILE"
                   <*> O.optional ( O.strOption ( O.long "with-return"
                                                <> O.metavar "FILE"
                                                <> O.help "The file to save the original program with a return instruction appended" ))
-                  <*> O.strOption ( O.long "arch"
-                                  <> O.short 'a'
-                                  <> O.metavar "ARCH"
-                                  <> O.help "The architecture of instructions to disassemble (PPC32 or PPC64)" )
                   <*> O.switch ( O.long "append-return"
                                <> O.short 'r'
                                <> O.help "Append a return instruction to the synthesized program" )
@@ -98,7 +98,7 @@ instantiateFormula' :: (Architecture arch)
                     -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.SimpleBuilder t st) arch)
                     -> Instruction arch
                     -> IO (F.Formula (SB.SimpleBuilder t st) arch)
-instantiateFormula' sym m (DPPC.Instruction op params) =
+instantiateFormula' sym m (DPPC.Instruction op params) = do
   case MapF.lookup op m of
     Just pf -> snd <$> F.instantiateFormula sym pf params
     Nothing -> fail (printf "Couldn't find semantics for opcode \"%s\"" (showF op))
@@ -125,11 +125,15 @@ loadBaseSet ops sym = do
       synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
 
-symbolicallyExecute :: (Architecture arch, Traversable t)
-                    => SB.SimpleBuilder s st
-                    -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.SimpleBuilder s st) arch)
-                    -> t (DPPC.GenericInstruction (Opcode arch) (Operand arch))
-                    -> IO (F.Formula (SB.SimpleBuilder s st) arch)
+symbolicallyExecute
+  :: (Architecture arch, Traversable t1)
+  => SB.SimpleBuilder t2 st
+  -> MapF.MapF
+       (SemMC.Architecture.Opcode arch (SemMC.Architecture.Operand arch))
+       (F.ParameterizedFormula (SB.SimpleBuilder t2 st) arch)
+  -> t1 (DPPC.GenericInstruction
+           (SemMC.Architecture.Opcode arch) (SemMC.Architecture.Operand arch))
+  -> IO (F.Formula (SB.SimpleBuilder t2 st) arch)
 symbolicallyExecute sym plainBaseSet insns = do
   formulas <- traverse (instantiateFormula' sym plainBaseSet) insns
   F.foldrM (F.sequenceFormulas sym) F.emptyFormula formulas
@@ -138,7 +142,7 @@ rewriteElfText :: E.ElfSection w -> E.Elf 32 -> [DPPC.Instruction] -> BSL.ByteSt
 rewriteElfText textSection elf newInsns =
   E.renderElf newElf
   where
-    newInsnBytes = BSL.toStrict (mconcat (map DPPC.assembleInstruction newInsns))
+    newInsnBytes = BSL.toStrict (foldMap DPPC.assembleInstruction newInsns)
     newElf = I.runIdentity (E.updateSections upd elf)
     upd sect
       | E.elfSectionIndex sect == E.elfSectionIndex textSection =
@@ -148,7 +152,7 @@ rewriteElfText textSection elf newInsns =
       | otherwise = pure (Just sect)
 
 printProgram :: [DPPC.Instruction] -> String
-printProgram insns = unlines (map (("  " ++) . show . DPPC.ppInstruction) insns)
+printProgram insns = unlines (Prelude.map (("  " ++) . show . DPPC.ppInstruction) insns)
 
 main :: IO ()
 main = do
@@ -180,8 +184,7 @@ mainWith r opts = do
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
   sym <- SB.newSimpleBackend r
-  let semantics = bool PPC32.allSemantics PPC64.allSemantics (oBaseArch opts == "PPC64")
-  (plainBaseSet, synthEnv) <- loadBaseSet semantics sym
+  (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
 
   -- Turn it into a formula
   formula <- symbolicallyExecute sym plainBaseSet insns

@@ -125,7 +125,7 @@ data FunctionInterpretation t arch =
                          -- to apply statically during formula translation (at
                          -- the value level) to eliminate an uninterpreted
                          -- function appearing in a semantics expression.
-                         , exprInterp :: Evaluator t
+                         , exprInterp :: Evaluator arch t
                          -- ^ The evaluator to apply to uninterpreted functions
                          -- during formula instantiation (in Formula.Instantiate)
                          }

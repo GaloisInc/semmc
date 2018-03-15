@@ -1,8 +1,12 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE PolyKinds           #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Definitions of evaluators over parameterized formulas
 --
 -- This module defines a function that can be used to evaluate uninterpreted
@@ -17,65 +21,101 @@ module SemMC.Formula.Eval (
   evaluateFunctions
   ) where
 
-import           GHC.Prim ( RealWorld )
-import           Control.Monad.ST ( stToIO )
+import           Control.Arrow                      ( first )
+import           Control.Monad.State
+import qualified Data.Parameterized.Context         as Ctx
+import qualified Data.Parameterized.List            as SL
+import qualified Data.Parameterized.Map             as M
+import           Data.Parameterized.TraversableFC
 
-import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.HashTable as PH
-import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.Nonce as PN
-import qualified Data.Parameterized.List as SL
-import qualified Lang.Crucible.Solver.Interface as SI
+import qualified Data.Text                          as T
+import           Lang.Crucible.Solver.Interface
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
-
-import qualified SemMC.Architecture.Internal as A
-import qualified SemMC.BoundVar as BV
+import qualified Lang.Crucible.Solver.Symbol        as S
+import           Lang.Crucible.Types
+import qualified SemMC.Architecture.Internal        as A
+import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula
 
 type Sym t st = S.SimpleBuilder t st
 
-data Evaluator t = Evaluator (forall tp . S.NonceApp t (S.Elt t) tp -> IO (S.Elt t tp))
+type Literals arch sym = M.MapF (Location arch) (BoundVar sym)
 
-evaluateFunctions :: Sym t st
-                  -> ParameterizedFormula (Sym t st) arch sh
-                  -> SL.List (A.Operand arch) sh
-                  -> S.Elt t ret
-                  -> [(String, Evaluator t)]
-                  -> IO (S.Elt t ret)
-evaluateFunctions sym pf operands e0 rewriters = do
-  tbl <- stToIO (PH.newSized 100)
-  fnTab <- stToIO PH.new
-  let tbls = EvalHashTables { eltTable = tbl
-                            , fnTable = fnTab
-                            }
-  evaluateFunctions' tbls operandIndex sym e0
-  where
-    operandIndex = SL.ifoldr (indexOperands operands) MapF.empty (pfOperandVars pf)
+-- | Type used to encapsulate rewriting of formulas related to register unpacking across different ISAs.
+data Evaluator arch t =
+  Evaluator (forall tp u st sh
+               . Sym t st
+              -> ParameterizedFormula (Sym t st) arch sh
+              -> SL.List (A.Operand arch) sh
+              -> Ctx.Assignment (S.Elt t) u
+              -> BaseTypeRepr tp
+              -> IO (S.Elt t tp, Literals arch (Sym t st)))
 
-indexOperands :: (OrdF (SI.BoundVar (Sym t st)))
-              => SL.List (A.Operand arch) sh
-              -> SL.Index sh tp
-              -> BV.BoundVar (Sym t st) arch tp
-              -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
-              -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
-indexOperands operands ix opVar = MapF.insert opVar (operands SL.!! ix)
+-- | See `evaluateFunctions'`
+evaluateFunctions
+  :: M.OrdF (Location arch)
+  => Sym t st
+  -> ParameterizedFormula (Sym t st) arch sh
+  -> SL.List (A.Operand arch) sh
+  -> [(String, Evaluator arch t)]
+  -> S.Elt t tp
+  -> IO (S.Elt t tp, M.MapF (Location arch) (S.SimpleBoundVar t))
+evaluateFunctions sym pf operands rewriters elt =
+  flip runStateT M.empty
+    (evaluateFunctions' sym pf operands rewriters elt)
 
-data CachedSymFn t c where
-  CachedSymFn :: (c ~ (a Ctx.::> r)) => CachedSymFn Bool (S.SimpleSymFn t a r)
+-- | Recursively applies rewrite rules to all uninterpreted functions present in a formula.
+evaluateFunctions'
+  :: M.OrdF (Location arch)
+  => Sym t st
+  -> ParameterizedFormula (Sym t st) arch sh
+  -> SL.List (A.Operand arch) sh
+  -> [(String, Evaluator arch t)]
+  -> S.Elt t tp
+  -> StateT (Literals arch (Sym t st)) IO (S.Elt t tp)
+evaluateFunctions' sym pf operands rewriters e =
+  case e of
+    S.SemiRingLiteral {} -> return e
+    S.BVElt {} -> return e
+    S.BoundVarElt {} -> return e
+    S.AppElt a -> do
+      app <- S.traverseApp (evaluateFunctions' sym pf operands rewriters) (S.appEltApp a)
+      liftIO $ S.sbMakeElt sym app
+    S.NonceAppElt nonceApp -> do
+      case S.nonceEltApp nonceApp of
+        S.Forall{} -> error "evaluateFunctions: Forall Not implemented"
+        S.Exists{} -> error "evaluateFunctions: Exists Not implemented"
+        S.ArrayFromFn{} ->
+          error "evaluateFunctions: ArrayFromFn Not implemented"
+        S.MapOverArrays{} ->
+          error "evaluateFunctions: MapOverArrays Not implemented"
+        S.ArrayTrueOnEntries{} ->
+          error "evaluateFunctions: ArrayTrueOnEntries Not implemented"
+        S.FnApp symFun assignment -> do
+          let key = T.unpack $ S.solverSymbolAsText (S.symFnName symFun)
+              rs = first normalizeUFName <$> rewriters
+          assignment' <- traverseFC (evaluateFunctions' sym pf operands rs) assignment
+          case lookup key rewriters of
+            Just (Evaluator evaluator) -> do
+              (e',m') <- liftIO $ evaluator sym pf operands assignment' (S.exprType e)
+              modify' (m' `M.union`)
+              pure e'
+            Nothing ->
+              liftIO $ applySymFn sym symFun assignment
 
-data EvalHashTables t =
-  EvalHashTables { eltTable :: PH.HashTable RealWorld (S.Elt t) (S.Elt t)
-                 , fnTable :: PH.HashTable RealWorld (PN.Nonce t) (CachedSymFn t)
-                 }
-
-evaluateFunctions' :: EvalHashTables t
-                   -> MapF.MapF (BV.BoundVar (Sym t st) arch) (A.Operand arch)
-                   -> Sym t st
-                   -> S.Elt t ret
-                   -> IO (S.Elt t ret)
-evaluateFunctions' tbls operandIndex sym e0 =
-  case e0 of
-    S.SemiRingLiteral {} -> return e0
-    S.BVElt {} -> return e0
-    _ -> undefined
+-- | Normalize the name of an uninterpreted function to the SimpleBuilder-friendly form
+--
+-- Our mapping from uninterpreted function names to evaluators uses names in the
+-- format they appear in our semantics files.  Those names sometimes contain
+-- periods.
+--
+-- SimpleBuilder has a restriction where user-provided uninterpreted function
+-- names cannot contain periods (it replaces all periods it finds with
+-- underscores).  As we traverse an expression (an 'S.Elt'), we will find
+-- uninterpreted functions with names in the SimpleBuilder format.  To correctly
+-- match the functions we find in expressions to the evaluators in the table, we
+-- need to /normalize/ the names in the table so that they are consistent with
+-- the names in the expression tree.  To do that, we need to replace every
+-- period in the name with an underscore.
+normalizeUFName :: String -> String
+normalizeUFName = map (\c -> if c == '.' then '_' else c)
