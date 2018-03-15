@@ -1,0 +1,22 @@
+;; Hints (F3.2.5, F3-2440)
+;; All hints are handled by an architecture-specific instruction implementation at higher levels of semantic evaluation (e.g. Macaw) because the semantics are outside of the scope of individual instruction effects on machine state.
+;; imm == 0: NOP hint (F7.1.124, F7-2734)
+;;           Does nothing.  Useful for instruction alignment purposes.
+;; imm == 1: YIELD hint (F7.1.291, F7-3026)
+;;           Indicates an advantageous processor yield point, no semantic content.
+;; imm == 2: WFE (Wait For Event) hint (F7-3022)
+;;           Enter low-power state until one of a particular events occurs, including SEV events.
+;; imm == 3: WFI (Wait For Interrupt) hint (F7-3024)
+;;           Enter low-power state until one of a number of asynchronous events occurs.
+;; imm == 4: SEV (Send Event) hint (F7-2804)
+;;           Signal an event to all PEs in the multiprocessor system.
+;; imm == 5: SEVL (Send Event Local) hint (F7-2805)
+;;           Signal an event locally, but not necessarily to all PEs in the multiprocessor system.
+((operands
+ ((imm . 'Imm0_15)))
+ (in
+  ('CPSR 'PC))
+ (defs
+  (('PC
+   (bvadd 'PC #x00000002))
+   ('CPSR 'CPSR))))
