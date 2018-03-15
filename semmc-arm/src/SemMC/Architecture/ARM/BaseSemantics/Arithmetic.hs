@@ -115,6 +115,10 @@ manualArithmetic = do
         imm32 = zext $ concat imm8 (LitBV 2 0b00)
     addSP rD imm32 setflags
 
+  -- FIXME: Why is there no immediate value input here? ADDrr is supposed to
+  -- conditionally shift Rm.
+  -- TODO: I think the answer to the above is that the other ADD variants cover the
+  -- situation where we want to shift.
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -128,6 +132,22 @@ manualArithmetic = do
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         (result, nzcv) = addWithCarry (Loc rN) (Loc rM) (LitBV 32 0)
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+  defineT32Opcode T.TADDrr (Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "rM" gpr naturalBV
+                           :> ParamDef "rN" gpr naturalBV
+                           ) $ \rD rM rN -> do
+    comment "ADD register, T32, Encoding T1 (F7.1.6, F7-2544)"
+    input rM
+    input rN
+    let setflags  = notp inITBlock
+        (_,_,c,_) = getNZCV
+        shiftedM  = shift (Loc rM) srtLSL (LitBV 32 0) c
+        (result, nzcv) = addWithCarry (Loc rN) shiftedM (LitBV 32 0)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -170,6 +190,8 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+  -- TODO Ben: MOVsi encoding A2, thumb encodings
+
   defineT32Opcode T.TMOVr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "rM" gpr naturalBV
@@ -202,6 +224,8 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+  -- TODO Ben: finish all sub encodings
+
   defineA32Opcode A.SUBrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -222,6 +246,7 @@ manualArithmetic = do
 
 ------------------------------------------------------------------------
 
+-- TODO Ben: finish out all thumb encodings in here
 manualBitwise :: (HasCallStack) => SemARM 'Top ()
 manualBitwise = do
 
@@ -397,6 +422,7 @@ manualBitwise = do
 
 -- ----------------------------------------------------------------------
 
+-- TODO: create similar functions for ADD and use them to implement all the variants
 andrr :: (HasCallStack) =>
          Location 'TBV
       -> Location 'TBV
