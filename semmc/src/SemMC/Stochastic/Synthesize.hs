@@ -468,8 +468,11 @@ compareTargetOutToCandidateOut targetSt candidateSt
               | view <- semvCongruentViews
               , let weight = weigh (V.peekMS candidateSt view) ]
     rdRvwpPlaces = map (== 0) wrongPlaceWeights
-    minWrongPlaceWeight = minimum wrongPlaceWeights
-    rdWeight = rightPlaceWeight `min` (minWrongPlaceWeight + wrongPlacePenalty)
+    rdWeight =
+      if null wrongPlaceWeights
+      then rightPlaceWeight
+      else let minWrongPlaceWeight = minimum wrongPlaceWeights
+           in rightPlaceWeight `min` (minWrongPlaceWeight + wrongPlacePenalty)
     weigh candidateVal = fromIntegral $ semvDiff targetVal candidateVal
     targetVal = V.peekMS targetSt semvView
 
