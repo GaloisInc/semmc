@@ -8,10 +8,13 @@ module SemMC.Architecture.PPC.Eval (
   interpMemriReg,
   interpMemriRegExtractor,
   interpMemriOffsetExtractor,
+  interpMemriOffset,
   interpMemrixReg,
   interpMemrixRegExtractor,
   interpMemrixOffsetExtractor,
+  interpMemrixOffset,
   interpMemrrBase,
+  interpMemrrOffset,
   interpMemrrBaseExtractor,
   interpMemrrOffsetExtractor,
   interpIsR0,
@@ -55,14 +58,14 @@ interpMemriReg :: forall sh s ppc tp
                => SL.List PPC.Operand sh
                -> F.WrappedOperand ppc sh s
                -> BaseTypeRepr tp
-               -> L.Location ppc tp
+               -> Maybe (L.Location ppc tp)
 interpMemriReg operands (F.WrappedOperand _orep ix) rep =
   case operands SL.!! ix of
     PPC.Memri (PPC.MemRI (Just base) _) ->
       let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
           loc = LocGPR base
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'memri_reg' at index " ++ show ix)
     PPC.Memri (PPC.MemRI Nothing _) -> error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
@@ -78,17 +81,33 @@ interpMemrixReg :: forall sh s ppc tp
                 => SL.List PPC.Operand sh
                 -> F.WrappedOperand ppc sh s
                 -> BaseTypeRepr tp
-                -> L.Location ppc tp
+                -> Maybe (L.Location ppc tp)
 interpMemrixReg operands (F.WrappedOperand _orep ix) rep =
   case operands SL.!! ix of
     PPC.Memrix (PPC.MemRIX (Just base) _) ->
       let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
           loc = LocGPR base
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'memrix_reg' at index " ++ show ix)
     PPC.Memrix (PPC.MemRIX Nothing _) -> error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
+
+interpMemrixOffset :: forall sh s ppc tp
+                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
+                => SL.List PPC.Operand sh
+                -> F.WrappedOperand ppc sh s
+                -> BaseTypeRepr tp
+                -> Maybe (L.Location ppc tp)
+interpMemrixOffset _ _ _ = Nothing
+
+interpMemriOffset :: forall sh s ppc tp
+                 . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
+                => SL.List PPC.Operand sh
+                -> F.WrappedOperand ppc sh s
+                -> BaseTypeRepr tp
+                -> Maybe (L.Location ppc tp)
+interpMemriOffset _ _ _ = Nothing
 
 interpMemrixRegExtractor :: PPC.MemRIX -> Maybe PPC.GPR
 interpMemrixRegExtractor (PPC.MemRIX mgpr _) = mgpr
@@ -101,16 +120,32 @@ interpMemrrBase :: forall sh s ppc tp
                => SL.List PPC.Operand sh
                -> F.WrappedOperand ppc sh s
                -> BaseTypeRepr tp
-               -> L.Location ppc tp
+               -> Maybe (L.Location ppc tp)
 interpMemrrBase operands (F.WrappedOperand _orep ix) rep =
   case operands SL.!! ix of
     PPC.Memrr (PPC.MemRR (Just base) _) ->
       let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
           loc = LocGPR base
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'memrr_base' at index " ++ show ix)
     PPC.Memrr (PPC.MemRR Nothing _) -> error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
+    _ -> error ("Invalid operand type at index " ++ show ix)
+
+interpMemrrOffset
+  :: forall sh s ppc tp . (L.IsLocation (Location ppc), L.Location ppc ~ Location ppc)
+  => SL.List PPC.Operand sh
+  -> F.WrappedOperand ppc sh s
+  -> BaseTypeRepr tp
+  -> Maybe (L.Location ppc tp)
+interpMemrrOffset operands (F.WrappedOperand _orep ix) rep =
+  case operands SL.!! ix of
+    PPC.Memrr (PPC.MemRR _ offset) ->
+      let loc :: Location ppc (BaseBVType (ArchRegWidth ppc))
+          loc = LocGPR offset
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
+          | otherwise -> error ("Invalid return type for location function 'memrr_offset' at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
 interpMemrrBaseExtractor :: PPC.MemRR -> Maybe PPC.GPR

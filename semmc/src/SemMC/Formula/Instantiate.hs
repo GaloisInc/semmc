@@ -19,29 +19,30 @@ module SemMC.Formula.Instantiate
   , paramToLocation
   ) where
 
-import           Data.Foldable ( foldlM, foldrM )
-import           Data.IORef ( IORef, readIORef, writeIORef )
-import           Data.Maybe ( fromJust, isNothing )
+import           Control.Monad.State
+import           Data.Foldable                      ( foldlM, foldrM )
+import           Data.Maybe                         ( fromJust, isNothing )
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Context         as Ctx
 import           Data.Parameterized.Ctx
-import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Pair ( Pair(..) )
-import qualified Data.Parameterized.List as SL
-import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.List            as SL
+import qualified Data.Parameterized.Map             as MapF
+import           Data.Parameterized.Pair            ( Pair(..) )
+import           Data.Parameterized.Some            ( Some(..) )
 import           Data.Parameterized.TraversableF
-import           Data.Proxy ( Proxy(..) )
-import           GHC.TypeLits ( Symbol )
-import           Text.Printf ( printf )
+import           Data.Proxy                         ( Proxy(..) )
+import           GHC.TypeLits                       ( Symbol )
+import           Text.Printf                        ( printf )
 
 import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Solver.Interface     as S
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
-import qualified SemMC.Architecture as A
-import qualified SemMC.BoundVar as BV
+import qualified SemMC.Architecture                 as A
+import qualified SemMC.BoundVar                     as BV
+import qualified SemMC.Formula.Eval                 as FE
 import           SemMC.Formula.Formula
-import qualified SemMC.Util as U
+import qualified SemMC.Util                         as U
 
 -- I got tired of typing this.
 type SB t st = S.SimpleBuilder t st
@@ -157,25 +158,9 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
     Nothing -> error ("No function interpretation for " ++ show fnName)
     Just interp ->
       case A.locationInterp interp of
-        LocationFuncInterp fn -> Just (fn opVals wo rep)
+        LocationFuncInterp fn -> fn opVals wo rep
 
--- | Return the bound variable corresponding to the given location, by either
--- looking it up in the given map or creating it then inserting it if it doesn't
--- exist yet.
-lookupOrCreateVar :: (S.IsSymInterface sym,
-                      A.IsLocation loc)
-                  => sym
-                  -> IORef (MapF.MapF loc (S.BoundVar sym))
-                  -> loc tp
-                  -> IO (S.BoundVar sym tp)
-lookupOrCreateVar sym litVarsRef loc = do
-  litVars <- readIORef litVarsRef
-  case MapF.lookup loc litVars of
-    Just bVar -> return bVar
-    Nothing -> do
-      bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
-      writeIORef litVarsRef (MapF.insert loc bVar litVars)
-      return bVar
+type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
 
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each
@@ -188,11 +173,15 @@ instantiateFormula :: forall arch t st sh.
                    -> IO (SL.List (A.TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
 instantiateFormula
   sym
-  (ParameterizedFormula { pfOperandVars = opVars
-                        , pfLiteralVars = litVars
-                        , pfDefs = defs
-                        })
+  pf@(ParameterizedFormula { pfOperandVars = opVars
+                           , pfLiteralVars = litVars
+                           , pfDefs = defs
+                           })
   opVals = do
+    let rewrite :: forall tp . S.Elt t tp -> IO (S.Elt t tp, Literals arch (SB t st))
+        rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
+    (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
+      fmap (`MapF.union` m) <$> rewrite e
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
@@ -211,10 +200,11 @@ instantiateFormula
             Just loc -> return loc
             Nothing -> fail $ printf "parameter %s is not a valid location" (show definingParam)
           opVarsReplaced <- S.evalBoundVars sym definition opVarsAssn opExprsAssn
-          litVarsReplaced <- replaceLitVars sym newLitExprLookup litVars opVarsReplaced
+          litVarsReplaced <-
+            replaceLitVars sym newLitExprLookup litVars' opVarsReplaced
           return (definingLoc, litVarsReplaced)
 
-    newDefs <- U.mapFMapBothM instantiateDefn defs
+    newDefs <- U.mapFMapBothM instantiateDefn defs'
     -- 'newLitVars' has variables for /all/ of the machine locations. Here we
     -- extract only the ones that are actually used.
     let newActualLitVars = foldrF (MapF.union . U.extractUsedLocs newLitVars) MapF.empty newDefs
@@ -292,3 +282,14 @@ condenseFormulas :: forall t f st arch.
                  -> f (Formula (SB t st) arch)
                  -> IO (Formula (SB t st) arch)
 condenseFormulas sym = foldrM (sequenceFormulas sym) emptyFormula
+
+mapAccumLMF :: forall acc m t a .
+  (Monad m, TraversableF t) =>
+  acc ->
+  t a ->
+  (forall z. acc -> a z -> m (a z, acc)) ->
+  m (t a, acc)
+mapAccumLMF acc0 tea f = runStateT (traverseF go tea) acc0
+  where
+    go :: forall z . a z -> StateT acc m (a z)
+    go x = StateT $ \acc -> f acc x
