@@ -245,6 +245,10 @@ isR0 sym pf operands assignment typeRepr =
               case testEquality g (PPC.Gprc (PPC.GPR 0x0)) of
                 Just Refl -> S.truePred sym
                 Nothing -> S.falsePred sym
+            Just (Some g@(PPC.Gprc_nor0 _)) -> returnElt $
+              case testEquality g (PPC.Gprc_nor0 (PPC.GPR 0x0)) of
+                Just Refl -> S.truePred sym
+                Nothing -> S.falsePred sym
             Just x -> error $ "Expected a GPRC but got: " ++ show x
             Nothing -> error "Index out of range in operandVars"
    where
@@ -407,6 +411,6 @@ locationFuncInterpretation =
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'E.interpIsR0
                                            , A.exprInterp = E.Evaluator isR0
-                                           , A.locationInterp = F.LocationFuncInterp undefined
+                                           , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
                                            })
   ]
