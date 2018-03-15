@@ -42,6 +42,9 @@ module SemMC.Architecture.ARM.Eval
     , interpSoregregReg1
     , interpSoregregReg2
     , interpT2soimmImmExtractor
+    , interpTaddrmodeis2ImmExtractor
+    , interpTaddrmodeis2RegExtractor
+    , interpTaddrmodeis2Reg
     , interpTaddrmodeis4ImmExtractor
     , interpTaddrmodeis4RegExtractor
     , interpTaddrmodeis4Reg
@@ -305,6 +308,33 @@ interpSoregregReg2 operands (F.WrappedOperand _orep ix) rep =
         _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
           | otherwise -> error ("Invalid return type for location function 'soregreg_reg' 2 at index " ++ show ix)
     _ -> error ("Invalid operand type 2 at index " ++ show ix)
+
+
+------------------------------------------------------------------------
+-- | Extract values from the Thumb AddrModeIs4 operand
+
+interpTaddrmodeis2ImmExtractor :: ThumbOperands.AddrModeIs2 -> W.W 5
+interpTaddrmodeis2ImmExtractor = fromInteger . toInteger . ThumbOperands.addrModeIs2Imm
+
+-- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
+interpTaddrmodeis2RegExtractor :: ThumbOperands.AddrModeIs2 -> Maybe ThumbOperands.LowGPR
+interpTaddrmodeis2RegExtractor = Just . ThumbOperands.addrModeIs2Reg
+
+interpTaddrmodeis2Reg :: forall sh s arm tp
+                         . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                         PL.List ARMOperand sh
+                      -> F.WrappedOperand arm sh s
+                      -> BaseTypeRepr tp
+                      -> L.Location arm tp
+interpTaddrmodeis2Reg operands (F.WrappedOperand _orep ix) rep =
+  case operands PL.!! ix of
+    T32Operand (ThumbDis.T_addrmode_is2 oprnd) ->
+      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
+          loc = LocGPR $ ThumbOperands.unLowGPR $ ThumbOperands.addrModeIs2Reg oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+          | otherwise -> error ("Invalid return type for location function 'addrmode_is2_reg' at index " ++ show ix)
+    _ -> error ("Invalid operand type at index " ++ show ix)
 
 
 ------------------------------------------------------------------------
