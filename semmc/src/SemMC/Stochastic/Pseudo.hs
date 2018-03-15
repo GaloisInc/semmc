@@ -79,8 +79,7 @@ pseudoAbsurd = \case
 instance D.ArbitraryOperands EmptyPseudo o where
   arbitraryOperands _gen = pseudoAbsurd
 
-instance ShowF (EmptyPseudo o) where
-  showF = pseudoAbsurd
+instance ShowF (EmptyPseudo o)
 
 instance TestEquality (EmptyPseudo o) where
   testEquality = pseudoAbsurd
@@ -104,11 +103,9 @@ data SynthOpcode arch sh = RealOpcode (A.Opcode arch (A.Operand arch) sh)
                          | PseudoOpcode (Pseudo arch (A.Operand arch) sh)
                          -- ^ A pseudo-op
 
-instance (Show (A.Opcode arch (A.Operand arch) sh),
+deriving instance (Show (A.Opcode arch (A.Operand arch) sh),
           Show (Pseudo arch (A.Operand arch) sh)) =>
-         Show (SynthOpcode arch sh) where
-  show (RealOpcode op) = printf "RealOpcode %s" (show op)
-  show (PseudoOpcode pseudo) = printf "PseudoOpcode (%s)" (show pseudo)
+         Show (SynthOpcode arch sh)
 
 instance forall arch . (ShowF (A.Opcode arch (A.Operand arch)),
                         ShowF (Pseudo arch (A.Operand arch))) =>
@@ -189,11 +186,13 @@ instance (OrdF (A.Opcode arch (A.Operand arch)),
     toOrdering (compareF op1 op2) <> toOrdering (compareF list1 list2)
 
 instance (ShowF (A.Operand arch), ShowF (A.Opcode arch (A.Operand arch)), ShowF (Pseudo arch (A.Operand arch))) => Show (SynthInstruction arch) where
-  show (SynthInstruction op lst) =
-    unwords [ "SynthInstruction"
-            , showF op
-            , show lst
-            ]
+  showsPrec p (SynthInstruction op lst) = showParen (p > app_prec) $
+    showString "SynthInstruction " .
+    showsPrecF (app_prec+1) op .
+    showString " " .
+    showsPrec (app_prec+1) lst
+    where
+      app_prec = 10
 
 -- | Convert a 'SynthInstruction' into a list of 'Instruction's, either by
 -- pulling out the real opcode, or by assembling the pseudo-opcode into real
