@@ -11,7 +11,7 @@ handling.
 
 To generate static semantics definitions, create the static definition
 and then run the ``semmc-arm-genbase`` executable (see the
-:file:`src/SemMC/Architecture/ARM/BaseSemantics/README.org` file.
+`BaseSemantics README <src/SemMC/Architecture/ARM/BaseSemantics/README.org>` file.
 
 To dynamically learn semantics:
 
