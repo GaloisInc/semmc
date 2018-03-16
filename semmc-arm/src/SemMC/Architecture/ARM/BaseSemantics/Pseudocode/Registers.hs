@@ -52,12 +52,17 @@ branchWritePC tgtRegIsPC addr =
     updatePC $ \oldMod suba curpc -> "branchWritePC" =:
     ite tgtRegIsPC (maskPCForSubArch suba addr) (oldMod suba curpc)
 
+
 -- | BranchWritePC pseudocode for handling relative branch arguments
 -- (PC + offset), where this is just passed the offset.  (D1.2.3,
 -- E1-2296)
-branchWritePCRel :: Expr 'TBV -> SemARM 'Def ()
-branchWritePCRel offset = updatePC $ \_oldMod subarch curpc -> "branchWritePCrel" =:
-                          maskPCForSubArch subarch (bvadd curpc offset)
+branchWritePCRel :: Expr 'TBV -> Expr 'TBool -> SemARM 'Def ()
+branchWritePCRel offset isUnpredictable =
+    updatePC $ \_oldMod subarch curpc ->
+        "branchWritePCrel" =:
+        let newAddr = bvadd curpc offset
+            newPC = ite isUnpredictable (unpredictable newAddr) newAddr
+        in maskPCForSubArch subarch newPC
 
 
 maskPCForSubArch :: ArchSubtype -> Expr 'TBV -> Expr 'TBV

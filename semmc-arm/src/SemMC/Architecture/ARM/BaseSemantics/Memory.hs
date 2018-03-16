@@ -102,6 +102,21 @@ defineLoads = do
     _ <- ldr rT add base imm32 useimm32 isUnpredictable
     return ()
 
+  defineT32Opcode T.TPOP (Empty
+                         :> ParamDef "registers" reglist (EPackedOperand "Reglist")
+                         )
+                      $ \regsarg -> do
+    comment "Pop registers, Encoding T1 (F7.1.136, F7-2756)"
+    input regsarg
+    let rlist = register_list regsarg
+        allowUnaligned = False
+        isUnpred = "isUnpredictable" =:
+                   (orp (bveq rlist (naturalLitBV 0))
+                        (andp (bveq (extract 15 15 rlist) (LitBV 1 1))
+                              (andp inITBlock (notp lastInITBlock))))
+    popregs rlist allowUnaligned isUnpred
+
+
 defineStores :: SemARM 'Top ()
 defineStores = do
   -- Note about STR_PRE_IMM vs STR_POST_IMM:
@@ -184,19 +199,39 @@ defineStores = do
         addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
 
-  defineT32Opcode T.TPOP (Empty
-                         :> ParamDef "registers" reglist (EPackedOperand "Reglist")
-                         )
-                      $ \regsarg -> do
-    comment "Pop registers, Encoding T1 (F7.1.136, F7-2756)"
-    input regsarg
-    let rlist = register_list regsarg
-        allowUnaligned = False
-        isUnpred = "isUnpredictable" =:
-                   (orp (bveq rlist (naturalLitBV 0))
-                        (andp (bveq (extract 15 15 rlist) (LitBV 1 1))
-                              (andp inITBlock (notp lastInITBlock))))
-    popregs rlist allowUnaligned isUnpred
+  defineT32Opcode T.TSTRi (Empty
+                          :> ParamDef "addris" t_addrmode_is4 (EPackedOperand "T_AddrMode_IS4")
+                          :> ParamDef "gpr" tgpr naturalBV
+                          )
+                      $ \addris4 rT -> do
+    comment "Store Register immediate, Encoding T1"
+    comment "doc: F7.1.216, page F7-2878"
+    input addris4
+    let rN = addrmode_is4_reg addris4
+        imm5 = addrmode_is4_imm addris4
+        imm32 = zext $ concat imm5 (LitBV 2 0b00)
+        index = LitBool True
+        add = LitBool True
+        wback = LitBool False
+    stri rT add imm32 rN index wback (LitBool False)
+
+  defineT32Opcode T.TSTRHi (Empty
+                          :> ParamDef "addris" t_addrmode_is2 (EPackedOperand "T_AddrMode_IS2")
+                          :> ParamDef "gpr" tgpr naturalBV
+                          )
+                      $ \addris2 rT -> do
+    comment "Store Register HalfWord immediate, Encoding T1"
+    comment "doc: F7.1.229, page F7-2904"
+    input addris2
+    let rN = addrmode_is2_reg addris2
+        imm5 = addrmode_is2_imm addris2
+        imm32 = zext $ concat imm5 (LitBV 1 0b0)
+        index = LitBool True
+        add = LitBool True
+        wback = LitBool False
+    -- n.b. stri has checks for if rT is 15; rT encoding here is a
+    -- TGPR (0-7) and can never be 15.
+    stri rT add imm32 rN index wback (LitBool False)
 
   defineT32Opcode T.TPUSH (Empty
                           :> ParamDef "registers" reglist (EPackedOperand "Reglist")
@@ -304,13 +339,20 @@ streg :: Location 'TBV
       -> Expr 'TBV -> Expr 'TBV
     -> SemARM 'Def ()
 streg rT add offset rN pbit wbit = do
-  input memory
-  input rT
   let index = bveq pbit (LitBV 1 1)
       wback = "wback" =: orp (bveq pbit (LitBV 1 0)) (bveq wbit (LitBV 1 1))
-      offAddr = "offAddr" =: ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
-      addr = "addr" =: ite index offAddr (Loc rN)
       isUnpredictable = "isUnpredictable" =: (andp wback (orp (isR15 rN) (sameLocation rN rT)))
+  stri rT add offset rN index wback isUnpredictable
+
+stri :: Location 'TBV
+      -> Expr 'TBool -> Expr 'TBV -> Location 'TBV
+      -> Expr 'TBool -> Expr 'TBool -> Expr 'TBool
+    -> SemARM 'Def ()
+stri rT add offset rN index wback isUnpredictable = do
+  input memory
+  input rT
+  let offAddr = "offAddr" =: ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
+      addr = "addr" =: ite index offAddr (Loc rN)
       nBytes = 4
       newMem = "wval" =: ite (isR15 rT) (Loc pc) (Loc rT)
       newRn = "rnUpd" =: ite wback offAddr (Loc rN)

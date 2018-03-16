@@ -23,6 +23,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     , bvset, bvclr, tstBit
     -- * Opcode unpacking
     , imm12Reg, imm12Off, imm12Add
+    , addrmode_is2_reg, addrmode_is2_imm
     , addrmode_is4_reg, addrmode_is4_imm
     , am2offset_immAdd, am2offset_immImm
     , ldst_so_regBaseRegister, ldst_so_regOffsetRegister
@@ -410,6 +411,12 @@ t2SoImm_imm = unpackUF "T2_So_Imm" (EBV 12) "t32.t2soimm_imm"
 
 t32_imm_0_1020s4_val :: Location 'TPackedOperand -> Expr 'TBV
 t32_imm_0_1020s4_val = unpackUF "imm0_1020s4" (EBV 8) "t32.imm0_1020S4_imm"
+
+addrmode_is2_imm :: Location 'TPackedOperand -> Expr 'TBV
+addrmode_is2_imm = unpackUF "T_AddrMode_IS2" (EBV 5) "t32.addrmode_is2_imm"
+
+addrmode_is2_reg :: Location 'TPackedOperand -> Location 'TBV
+addrmode_is2_reg = unpackLocUF "T_AddrMode_IS2" naturalBV "t32.addrmode_is2_reg"
 
 addrmode_is4_imm :: Location 'TPackedOperand -> Expr 'TBV
 addrmode_is4_imm = unpackUF "T_AddrMode_IS4" (EBV 5) "t32.addrmode_is4_imm"
