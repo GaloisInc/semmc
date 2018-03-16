@@ -123,9 +123,9 @@ Example direct operands are
   * A 16-bit immediate value that can be used directly
 
 Example packed operands are
-  * A t_addrmode_is4 that encodes both an offset and a register
-  * a modimm opcode that has 12 bits representing an 8 bit value that
-    is rotated by the remaining 4 bit value.
+  * A ~t_addrmode_is4~ that encodes both an offset and a register
+  * a ~modimm~ opcode that has 12 bits representing an 8 bit value
+    that is rotated by the remaining 4 bit value.
 
 * Defining Semantics
 
