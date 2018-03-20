@@ -151,6 +151,25 @@ manualArithmetic = do
     let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
     addrr rD rM rN setflags shift_t shift_n
 
+  defineA32Opcode A.ANDrsr (  Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "sorr" so_reg_reg (EPackedOperand "SoRegReg")
+                           :> ParamDef "rN" gpr naturalBV
+                           )
+                 $ \rD setcc _ sorr rN -> do
+    comment "ADD (register-shifted register), Encoding A1 (F7.1.8, F7-2547)"
+    input rD
+    input sorr
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    let shift_t = decodeRegShift (soRegReg_type sorr)
+    let rS = soRegReg_reg1 sorr
+    let rM = soRegReg_reg2 sorr
+    addrsr rD rM rN setflags shift_t rS
+
   defineT32Opcode T.TADDrr (Empty
                            :> ParamDef "rD" tgpr naturalBV
                            :> ParamDef "rM" tgpr naturalBV
@@ -469,6 +488,20 @@ andrr rD rM rN setflags shift_t shift_n = do
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+addrsr :: (HasCallStack) =>
+          Location 'TBV
+       -> Location 'TBV
+       -> Location 'TBV -> Expr 'TBool -> SRType -> Location 'TBV -> SemARM 'Def ()
+addrsr rD rM rN setflags shift_t rS = do
+  let (_, _, c, _) = getNZCV
+      shift_n = zext $ extract 7 0 (Loc rS)
+  let shifted = shift (Loc rM) shift_t shift_n c
+  let (result, nzcv') = addWithCarry (Loc rN) shifted (LitBV 1 0)
+  let nzcv = "nzcv" =: nzcv'
+  let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
+  defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
+  cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
 
 andrsr :: (HasCallStack) =>
           Location 'TBV
