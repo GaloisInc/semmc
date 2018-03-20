@@ -122,7 +122,7 @@ manualArithmetic = do
                           :> ParamDef "rM" gpr naturalBV
                           :> ParamDef "rN" gpr naturalBV
                           ) $ \rD setcc _ rM rN -> do
-    comment "ADD register, A32, Encoding A1  (F7.1.7, F7-2546)"
+    comment "ADD register, A32, Encoding A1 (F7.1.7, F7-2546)"
     input rM
     input rN
     input setcc
@@ -140,7 +140,7 @@ manualArithmetic = do
                            :> ParamDef "rN" gpr naturalBV
                            )
                  $ \rD setcc _ sori rN -> do
-    comment "ADD register, Encoding A1 (F7.1.7, F7-2546)"
+    comment "ADD register, A32, Encoding A1 (F7.1.7, F7-2546)"
     input sori
     input setcc
     input rN
@@ -151,7 +151,7 @@ manualArithmetic = do
     let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
     addrr rD rM rN setflags shift_t shift_n
 
-  defineA32Opcode A.ANDrsr (  Empty
+  defineA32Opcode A.ADDrsr (  Empty
                            :> ParamDef "rD" gpr naturalBV
                            :> ParamDef "setcc" cc_out (EBV 1)
                            :> ParamDef "predBits" pred (EBV 4)
