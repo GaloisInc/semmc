@@ -1,5 +1,25 @@
-This package currently contains a demonstration of using the remote runner to run test vectors on remote hosts.
+This package is used for statically defining and/or dynamically
+learning the semantics of ARM processor instructions, both ARM/AArch32
+(a.k.a. A32) and Thumb (a.k.a. T32, which largely consists of
+instructions using a 16-bit Thumb encoding, but which execute in a
+32-bit memory space).
 
-It supports the integer registers for x86_64.  The defined machine state (see SemMC.X86) has space for the floating point and vector registers, but the remote runner executable doesn't currently populate them.
+The semantics are defined in terms of effects on Memory and local
+processor registers; any unusual effects on processor state
+(e.g. wait-for-event, low-power, syscall) are deferred to higher-level
+handling.
 
-To run this binary, build the remote runner and put it in the ``PATH`` on the remote machine.  Invoke the test binary (``semmc-x86-test``) with the remote hostname as its argument.  The test binary currently sends two machine states over the network and prints the results when they come back.
+To generate static semantics definitions, create the static definition
+and then run the ``semmc-arm-genbase`` executable (see the
+`BaseSemantics README <https://github.com/GaloisInc/semmc/blob/master/semmc-arm/src/SemMC/Architecture/ARM/BaseSemantics/README.org>`_ file.
+
+To dynamically learn semantics:
+
+  #. Build the remote runner
+  #. Put the remote runner it in the ``PATH`` on the remote machine
+  #. Invoke the test binary (``semmc-arm-test``) with the remote hostname as its argument.
+
+.. warning:: The ``semmc-arm-test`` binary is not currently fully implemented.
+
+The test binary currently sends two machine states over the network
+and prints the results when they come back.

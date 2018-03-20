@@ -42,6 +42,9 @@ module SemMC.Architecture.ARM.Eval
     , interpSoregregReg1
     , interpSoregregReg2
     , interpT2soimmImmExtractor
+    , interpTaddrmodeis2ImmExtractor
+    , interpTaddrmodeis2RegExtractor
+    , interpTaddrmodeis2Reg
     , interpTaddrmodeis4ImmExtractor
     , interpTaddrmodeis4RegExtractor
     , interpTaddrmodeis4Reg
@@ -104,14 +107,14 @@ interpImm12Reg :: forall sh s arm tp
                    => PL.List ARMOperand sh
                  -> F.WrappedOperand arm sh s
                  -> BaseTypeRepr tp
-                 -> L.Location arm tp
+                 -> Maybe (L.Location arm tp)
 interpImm12Reg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     A32Operand (ARMDis.Addrmode_imm12_pre oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.addrModeImm12Register oprnd
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'imm12_reg' at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
@@ -166,14 +169,14 @@ interpLdstsoregBaseReg :: forall sh s arm tp
                           PL.List ARMOperand sh
                        -> F.WrappedOperand arm sh s
                        -> BaseTypeRepr tp
-                       -> L.Location arm tp
+                       -> Maybe (L.Location arm tp)
 interpLdstsoregBaseReg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     A32Operand (ARMDis.Ldst_so_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.ldstSoRegBaseRegister oprnd
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'ldst_so_reg' base reg at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
@@ -182,14 +185,14 @@ interpLdstsoregOffReg :: forall sh s arm tp
                          PL.List ARMOperand sh
                       -> F.WrappedOperand arm sh s
                       -> BaseTypeRepr tp
-                      -> L.Location arm tp
+                      -> Maybe (L.Location arm tp)
 interpLdstsoregOffReg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     A32Operand (ARMDis.Ldst_so_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.ldstSoRegOffsetRegister oprnd
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'ldst_so_reg' offset reg at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
@@ -243,14 +246,14 @@ interpSoregimmReg :: forall sh s arm tp
                      PL.List ARMOperand sh
                   -> F.WrappedOperand arm sh s
                   -> BaseTypeRepr tp
-                  -> L.Location arm tp
+                  -> Maybe (L.Location arm tp)
 interpSoregimmReg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     A32Operand (ARMDis.So_reg_imm oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegImmReg oprnd
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'soregimm_reg' at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
@@ -276,14 +279,14 @@ interpSoregregReg1 :: forall sh s arm tp
                       PL.List ARMOperand sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
-                   -> L.Location arm tp
+                   -> Maybe (L.Location arm tp)
 interpSoregregReg1 operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     A32Operand (ARMDis.So_reg_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegRegReg1 oprnd
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'soregreg_reg' 1 at index " ++ show ix)
     _ -> error ("Invalid operand type 1 at index " ++ show ix)
 
@@ -295,16 +298,43 @@ interpSoregregReg2 :: forall sh s arm tp
                       PL.List ARMOperand sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
-                   -> L.Location arm tp
+                   -> Maybe (L.Location arm tp)
 interpSoregregReg2 operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     A32Operand (ARMDis.So_reg_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegRegReg2 oprnd
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'soregreg_reg' 2 at index " ++ show ix)
     _ -> error ("Invalid operand type 2 at index " ++ show ix)
+
+
+------------------------------------------------------------------------
+-- | Extract values from the Thumb AddrModeIs4 operand
+
+interpTaddrmodeis2ImmExtractor :: ThumbOperands.AddrModeIs2 -> W.W 5
+interpTaddrmodeis2ImmExtractor = fromInteger . toInteger . ThumbOperands.addrModeIs2Imm
+
+-- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
+interpTaddrmodeis2RegExtractor :: ThumbOperands.AddrModeIs2 -> Maybe ThumbOperands.LowGPR
+interpTaddrmodeis2RegExtractor = Just . ThumbOperands.addrModeIs2Reg
+
+interpTaddrmodeis2Reg :: forall sh s arm tp
+                         . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                         PL.List ARMOperand sh
+                      -> F.WrappedOperand arm sh s
+                      -> BaseTypeRepr tp
+                      -> Maybe (L.Location arm tp)
+interpTaddrmodeis2Reg operands (F.WrappedOperand _orep ix) rep =
+  case operands PL.!! ix of
+    T32Operand (ThumbDis.T_addrmode_is2 oprnd) ->
+      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
+          loc = LocGPR $ ThumbOperands.unLowGPR $ ThumbOperands.addrModeIs2Reg oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
+          | otherwise -> error ("Invalid return type for location function 'addrmode_is2_reg' at index " ++ show ix)
+    _ -> error ("Invalid operand type at index " ++ show ix)
 
 
 ------------------------------------------------------------------------
@@ -322,14 +352,14 @@ interpTaddrmodeis4Reg :: forall sh s arm tp
                          PL.List ARMOperand sh
                       -> F.WrappedOperand arm sh s
                       -> BaseTypeRepr tp
-                      -> L.Location arm tp
+                      -> Maybe (L.Location arm tp)
 interpTaddrmodeis4Reg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     T32Operand (ThumbDis.T_addrmode_is4 oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ThumbOperands.unLowGPR $ ThumbOperands.addrModeIs4Reg oprnd
       in case () of
-        _ | Just Refl <- testEquality (L.locationType loc) rep -> loc
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'addrmode_is4_reg' at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 

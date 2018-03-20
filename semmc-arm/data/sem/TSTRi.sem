@@ -1,0 +1,157 @@
+;; Store Register immediate, Encoding T1
+;; doc: F7.1.216, page F7-2878
+(let
+ ((var1
+  ((var2)))
+  (var2
+   (ite
+    (testCondition)
+    (wval)
+    ((_ call "read_mem.32")
+     'Mem
+     (addr))))
+  (addr
+   (bvadd
+    ((_ call "t32.addrmode_is4_reg")
+     addris)
+    ((_ zero_extend 25)
+     (concat
+      ((_ call "t32.addrmode_is4_imm")
+       addris)
+      #b00))))
+  (wval
+   (ite
+    ((_ call "arm.is_r15")
+     gpr)
+    'PC
+    gpr))
+  (testCondition
+   (ite
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (ITState)))
+     (bvne
+      (ITState)
+      #xf))
+    (notp
+     (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      (ITState))
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
+    (ite
+     (bveq
+      ((_ extract 3 1)
+       (ITState))
+      #b001)
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
+     (ite
+      (bveq
+       ((_ extract 3 1)
+        (ITState))
+       #b010)
+      (bveq
+       #b1
+       ((_ extract 31 31)
+        'CPSR))
+      (ite
+       (bveq
+        ((_ extract 3 1)
+         (ITState))
+        #b011)
+       (bveq
+        #b1
+        ((_ extract 28 28)
+         'CPSR))
+       (ite
+        (bveq
+         ((_ extract 3 1)
+          (ITState))
+         #b100)
+        (andp
+         (bveq
+          #b1
+          ((_ extract 29 29)
+           'CPSR))
+         (notp
+          (bveq
+           #b1
+           ((_ extract 30 30)
+            'CPSR))))
+        (ite
+         (bveq
+          ((_ extract 3 1)
+           (ITState))
+          #b101)
+         (bveq
+          ((_ extract 31 31)
+           'CPSR)
+          ((_ extract 28 28)
+           'CPSR))
+         (ite
+          (bveq
+           ((_ extract 3 1)
+            (ITState))
+           #b110)
+          (andp
+           (bveq
+            ((_ extract 31 31)
+             'CPSR)
+            ((_ extract 28 28)
+             'CPSR))
+           (notp
+            (bveq
+             #b1
+             ((_ extract 30 30)
+              'CPSR))))
+          (true)))))))))
+  (true
+   (bveq #b0 #b0))
+  (ITState
+   (ite
+    (bveq
+     (concat
+      ((_ extract 11 10)
+       'CPSR)
+      ((_ extract 26 25)
+       'CPSR))
+     #x0)
+    #xe
+    ((_ extract 15 12)
+     'CPSR)))
+  (rnUpd
+   ((_ call "t32.addrmode_is4_reg")
+    addris)))
+ ((operands
+  ((addris . 'T_addrmode_is4)
+   (gpr . 'TGPR)))
+  (in
+   (gpr 'Mem addris 'CPSR 'PC))
+  (defs
+   (('PC
+    (bvadd 'PC #x00000002))
+    ('CPSR 'CPSR)
+    (((_ call "t32.addrmode_is4_reg")
+     addris)
+     (ite
+      (testCondition)
+      (rnUpd)
+      ((_ call "t32.addrmode_is4_reg")
+       addris)))
+    ('Mem
+     ((_ call "write_mem.32")
+      'Mem
+      (addr)
+      var1))))))

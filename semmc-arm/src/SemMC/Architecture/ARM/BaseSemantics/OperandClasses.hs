@@ -61,6 +61,9 @@ cc_out = "Cc_out"
 imm0_7 :: String
 imm0_7 = "Imm0_7"
 
+imm0_15 :: String
+imm0_15 = "Imm0_15"
+
 imm0_31 :: String
 imm0_31 = "Imm0_31"
 
@@ -91,6 +94,9 @@ so_reg_imm = "So_reg_imm"
 t2_so_imm :: String
 t2_so_imm = "T2_so_imm"
 
+t_addrmode_is2 :: String
+t_addrmode_is2 = "T_addrmode_is2"
+
 t_addrmode_is4 :: String
 t_addrmode_is4 = "T_addrmode_is4"
 
@@ -102,6 +108,9 @@ t_imm0_1020s4 = "T_imm0_1020s4"
 
 thumb_blx_target :: String
 thumb_blx_target = "Thumb_blx_target"
+
+thumb_bcc_target :: String
+thumb_bcc_target = "Thumb_bcc_target"
 
 -- | The 'unpredictableInstrBits' operand is used to define bits in
 -- the instruction encoding that the architecture specification
@@ -129,6 +138,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "GPRnopc" = 'TBV
   SymToExprTag "Mod_imm" = 'TPackedOperand
   SymToExprTag "Imm0_7" = 'TBV
+  SymToExprTag "Imm0_15" = 'TBV
   SymToExprTag "Imm0_31" = 'TBV
   SymToExprTag "Imm0_255" = 'TBV
   SymToExprTag "Imm0_4095" = 'TBV
@@ -147,10 +157,12 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "So_reg_imm" = 'TPackedOperand
   SymToExprTag "Reglist" = 'TPackedOperand
   SymToExprTag "RGPR" = 'TBV
+  SymToExprTag "T_addrmode_is2" = 'TPackedOperand
   SymToExprTag "T_addrmode_is4" = 'TPackedOperand
   SymToExprTag "T_addrmode_pc" = 'TPackedOperand
   SymToExprTag "T_imm0_1020s4" = 'TPackedOperand
   SymToExprTag "T2_so_imm" = 'TPackedOperand
   SymToExprTag "TGPR" = 'TBV
+  SymToExprTag "Thumb_bcc_target" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TPackedOperand
   SymToExprTag "Unpredictable" = 'TBV

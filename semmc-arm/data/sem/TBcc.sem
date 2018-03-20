@@ -1,0 +1,22 @@
+;; B, branch, Encoding T1
+;; F7.1.18, F7-2566
+;; Not permitted in IT block
+(let
+ ((branchWritePCrel
+  (bvand
+   #xfffffffd
+   (bvadd
+    'PC
+    (imm32))))
+  (imm32
+   ((_ sign_extend 23)
+    (concat bccTarget #b0))))
+ ((operands
+  ((predBits . 'Pred)
+   (bccTarget . 'Thumb_bcc_target)))
+  (in
+   (bccTarget 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePCrel))
+    ('CPSR 'CPSR)))))

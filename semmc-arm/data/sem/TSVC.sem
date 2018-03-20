@@ -1,0 +1,10 @@
+;; Supervisor Call (F7.1.241, F7-2926)
+;; All SVC calls are handled by an architecture-specific instruction implementation at higher levels of semantic evaluation (e.g. Macaw) because the semantics are outside of the scope of individual instruction effects on machine state.
+((operands
+ ((imm . 'Imm0_255)))
+ (in
+  ('CPSR 'PC))
+ (defs
+  (('PC
+   (bvadd 'PC #x00000002))
+   ('CPSR 'CPSR))))
