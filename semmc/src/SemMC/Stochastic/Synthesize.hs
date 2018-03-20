@@ -21,6 +21,8 @@ module SemMC.Stochastic.Synthesize
   ( -- * API
     synthesize
     -- * Exports for testing
+  , TargetData(..)
+  , R.checkIfRvwpOptimizationApplies
   , mkTargetData
   , wrongPlacePenalty
   , weighCandidate

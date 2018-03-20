@@ -363,6 +363,47 @@ test_synthesizeCandidate = do
     (res, _) <- withTimeout (S.synthesize instruction)
     return (fmap CP.cpInstructions res)
 
+----------------------------------------------------------------
+
+-- | Check that we recognize that the rvwp optimization doesn't apply.
+--
+-- Returns whether the optimization applies, how many places it
+-- applies, and how many places we expect it to apply.
+test_rvwpOptimizationDoesntApply :: (U.HasLogCfg) => IO (Bool, Int, Int)
+test_rvwpOptimizationDoesntApply = do
+  runSynToy defaultRunSynToyCfg "tests/data/test_rightValueWrongPlace" $ do
+    td <- S.mkTargetData rvwpTarget
+    (_, mCombinedDeltas) <- S.weighCandidate td candidate
+    let mFilteredSemvs = S.checkIfRvwpOptimizationApplies (S.tdOutMasks td) =<< mCombinedDeltas
+    let (doesOptApply, howManyPlaces) = case mFilteredSemvs of
+          Nothing -> (False,0)
+          Just svs -> (True,length svs)
+    let expectedNumberOfPlaces = 0
+    return (doesOptApply, howManyPlaces, expectedNumberOfPlaces)
+  where
+    candidate :: S.Seq (Maybe (P.SynthInstruction Toy))
+    candidate = S.fromList $ map (Just . P.actualInsnToSynth) $
+      -- Zero out the result register, r1. The target program stores
+      -- r1+r2 in r1, and it's very unlikely that all randomly
+      -- generated test inputs sum to zero.
+      [ D.Instruction SubRr (R32 Reg1 SL.:< R32 Reg1 SL.:< SL.Nil) ]
+
+-- | Check that we recognize that the rvwp optimization applies.
+--
+-- Returns whether the optimization applies, how many places it
+-- applies, and how many places we expect it to apply.
+test_rvwpOptimizationApplies :: (U.HasLogCfg) => IO (Bool, Int, Int)
+test_rvwpOptimizationApplies = do
+  runSynToy defaultRunSynToyCfg "tests/data/test_rightValueWrongPlace" $ do
+    td <- S.mkTargetData rvwpTarget
+    (_, mCombinedDeltas) <- S.weighCandidate td rvwpCandidate
+    let mFilteredSemvs = S.checkIfRvwpOptimizationApplies (S.tdOutMasks td) =<< mCombinedDeltas
+    let (doesOptApply, howManyPlaces) = case mFilteredSemvs of
+          Nothing -> (False,0)
+          Just svs -> (True,length svs)
+    let expectedNumberOfPlaces = 1
+    return (doesOptApply, howManyPlaces, expectedNumberOfPlaces)
+
 -- | Weigh a candidate that produces the right value in the wrong
 -- place.
 --
