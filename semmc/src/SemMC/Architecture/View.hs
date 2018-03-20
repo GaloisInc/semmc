@@ -1,3 +1,4 @@
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
@@ -175,9 +176,10 @@ data SemanticView arch =
                           }
 
 instance (P.ShowF (L.Location arch), P.ShowF (View arch)) => Show (SemanticView arch) where
-  show SemanticView{..} =
+  showsPrec p SemanticView{..} = showParen (p > 0) $
+    showString $
     -- We can't show the 'Diff' function.
-    printf "SemanticView { semvView = %s, semvCongruentViews = %s }"
+    printf "SemanticView { semvView = %s, semvCongruentViews = %s, semvDiff = <fun> }"
     (show semvView) (show semvCongruentViews)
 
 type Parser = P.Parsec String String
@@ -241,7 +243,8 @@ instance (P.TestEquality (L.Location arch)) => P.TestEquality (View arch) where
     return P.Refl
 
 instance (P.ShowF (L.Location arch)) => Show (View arch m) where
-  show (View s loc) = "View " ++ P.showF s ++ " " ++ P.showF loc
+  showsPrec p (View s loc) = showParen (p > 0) $
+    showString "View " . P.showsPrecF 11 s . showString " " . P.showsPrecF 11 loc
 instance (P.ShowF (L.Location arch)) => P.ShowF (View arch)
 
 compareSliceF :: Slice m1 n1 -> Slice m2 n2 -> P.OrderingF m1 m2
@@ -267,13 +270,7 @@ instance (P.OrdF (L.Location arch)) => P.OrdF (View arch) where
       P.GTF -> P.GTF
       P.EQF -> compareSliceF s1 s2
 
-instance Show (Slice m n) where
-  show (Slice m n a b) = unwords [ "Slice"
-                                 , show m
-                                 , show n
-                                 , show a
-                                 , show b
-                                 ]
+deriving instance Show (Slice m n)
 instance P.ShowF (Slice m)
 
 instance Eq (Slice m n) where
