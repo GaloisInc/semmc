@@ -21,6 +21,8 @@ module SemMC.Stochastic.Synthesize
   ( -- * API
     synthesize
     -- * Exports for testing
+  , TargetData(..)
+  , R.checkIfRvwpOptimizationApplies
   , mkTargetData
   , wrongPlacePenalty
   , weighCandidate
@@ -187,7 +189,7 @@ mcmcSynthesizeOne target = do
   candidate <- emptyCandidate progLen
   -- let candidate = fromList [Just $ actualInsnToSynth @arch target]
   td <- mkTargetData target
-  cost0 <- weighCandidate td candidate
+  (cost0, _) <- weighCandidate td candidate
   let round0 = 0
   let mCanOpt0 = Nothing
   evolve td round0 cost0 mCanOpt0 candidate
@@ -224,7 +226,8 @@ mcmcSynthesizeOne target = do
           chooseNextCandidate td candidate cost candidate'
 
         let mRvwps = R.combineDeltas <$> mRvwpss
-        let mNumRvwps = R.checkIfRvwpOptimizationApplies =<< mRvwps
+        let mRvwpSemViews = R.checkIfRvwpOptimizationApplies tdOutMasks =<< mRvwps
+        let mNumRvwps = length <$> mRvwpSemViews
 
         -- Compute @Just (round, numRvwps)@ for the min round where
         -- the rvwp optimization applies. This is just for the
@@ -236,20 +239,35 @@ mcmcSynthesizeOne target = do
         let mCanOpt' = (k+1,) <$> mNumRvwps
         let !mCanOpt'' = mCanOpt <|> mCanOpt'
 
+        let rvwpSummaryMsg rvwpSemViews =
+              let viewShows = unlines
+                    [ printf "%s: %s" (show semvView) (show semvCongruentViews)
+                    | V.SemanticView{..} <- rvwpSemViews ]
+                  msg = unlines
+                    [ printf "The rvwp optimization applies with %i rvwps!"
+                      (length rvwpSemViews)
+                    , printf "The locations with the rvs in the wps are:"
+                    , viewShows ]
+              in msg
+
         (cost''', candidate''') <- case mNumRvwps of
           Just 1 -> do
             let Just rvwps = mRvwps
+            let Just rvwpSemViews = mRvwpSemViews
+            U.logM U.Debug (rvwpSummaryMsg rvwpSemViews)
             logCfg <- U.getLogCfgM
-            let mEpilogue = U.withLogCfg logCfg $ R.fixRvwps 1 tdOutMasks rvwps
+            let mEpilogue = U.withLogCfg logCfg $ R.fixRvwps rvwpSemViews
             case mEpilogue of
-              Nothing -> return (cost'', candidate'')
+              Nothing -> do
+                U.logM U.Warn "The backend's fixRvwps returned Nothing!"
+                return (cost'', candidate'')
               Just epilogue -> do
                 -- Although this fixed candidate is longer than
                 -- @progLen@, none of the code that manipulates
                 -- candidates is actually aware of the fixed
                 -- size @progLen@.
                 let fixedCandidate = candidate'' S.>< S.fromList (map Just epilogue)
-                fixedCost <- weighCandidate td fixedCandidate
+                (fixedCost, _) <- weighCandidate td fixedCandidate
                 when (fixedCost /= 0) $ do
                   let msg = unlines
                         [ "The rvwp optimization failed!"
@@ -262,14 +280,17 @@ mcmcSynthesizeOne target = do
                         , printf "Fixed candidate: %s" (show fixedCandidate) ]
                   U.logM U.Error msg
                   U.throwIO (userError msg)
+                U.logM U.Debug "The rvwp optimization fixed the candidate!"
                 return (fixedCost, fixedCandidate)
           Just numRvwps -> do
-            U.logM U.Warn $
-              printf "The rvwp optimization applies with %i > 1 rvwps!" numRvwps
+            let Just rvwpSemViews = mRvwpSemViews
+            -- Warn here since we don't handle this case.
+            U.logM U.Warn (rvwpSummaryMsg rvwpSemViews)
             return (cost'', candidate'')
           _ -> return (cost'', candidate'')
 
         evolve td (k+1) cost''' mCanOpt'' candidate'''
+
 {-
 import qualified Data.List as L
 import Control.Monad
@@ -292,19 +313,22 @@ import Control.Monad
 weighCandidate :: SynC arch
                => TargetData arch
                -> Candidate arch
-               -> Syn t arch Double
+               -> Syn t arch (Double, Maybe [R.RvwpDelta arch])
 weighCandidate td@TargetData{..} candidate = do
   (testPairs, candidateResults) <- computeCandidateResults candidate tdTargetTests
   -- The @sequence@ collapses the 'Maybe's.
   mRvwpss <- sequence <$>
     mapM (compareTargetToCandidate td candidateResults) testPairs
-  let weight = case mRvwpss of
-        -- Infinity. A candidate that causes test failures is
-        -- undesirable.
-        Nothing -> 1 / 0
-        Just rvwpss -> sum $ map R.rdWeight $ R.combineDeltas rvwpss
-  return weight
+  case mRvwpss of
+    -- Infinity. A candidate that causes test failures is
+    -- undesirable.
+    Nothing -> return (1 / 0, Nothing)
+    Just rvwpss -> do
+      let combinedDeltas = R.combineDeltas rvwpss
+          weight = sum $ map R.rdWeight combinedDeltas
+      return (weight, Just combinedDeltas)
 
+-- | Render candidate indented, with one instruction per line.
 prettyCandidate :: Show (SynthInstruction arch)
                 => Candidate arch -> String
 prettyCandidate = unlines . map (("    "++) . show) . catMaybes . F.toList
