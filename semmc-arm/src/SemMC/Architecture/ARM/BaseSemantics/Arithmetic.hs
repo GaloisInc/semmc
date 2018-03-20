@@ -115,10 +115,6 @@ manualArithmetic = do
         imm32 = zext $ concat imm8 (LitBV 2 0b00)
     addSP rD imm32 setflags
 
-  -- FIXME: Why is there no immediate value input here? ADDrr is supposed to
-  -- conditionally shift Rm.
-  -- TODO: I think the answer to the above is that the other ADD variants cover the
-  -- situation where we want to shift.
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -136,10 +132,29 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-  defineT32Opcode T.TADDrr (Empty
+  defineA32Opcode A.ADDrsi (  Empty
                            :> ParamDef "rD" gpr naturalBV
-                           :> ParamDef "rM" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "sori" so_reg_imm (EPackedOperand "SoRegImm")
                            :> ParamDef "rN" gpr naturalBV
+                           )
+                 $ \rD setcc _ sori rN -> do
+    comment "ADD register, Encoding A1 (F7.1.7, F7-2546)"
+    input sori
+    input setcc
+    input rN
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    let ty = soRegImm_type sori
+    let rM = soRegImm_reg sori
+    let imm = soRegImm_imm sori
+    let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
+    addrr rD rM rN setflags shift_t shift_n
+
+  defineT32Opcode T.TADDrr (Empty
+                           :> ParamDef "rD" tgpr naturalBV
+                           :> ParamDef "rM" tgpr naturalBV
+                           :> ParamDef "rN" tgpr naturalBV
                            ) $ \rD rM rN -> do
     comment "ADD register, T32, Encoding T1 (F7.1.6, F7-2544)"
     input rM
@@ -423,6 +438,19 @@ manualBitwise = do
 -- ----------------------------------------------------------------------
 
 -- TODO: create similar functions for ADD and use them to implement all the variants
+addrr :: (HasCallStack)
+      => Location 'TBV
+      -> Location 'TBV
+      -> Location 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
+addrr rD rM rN setflags shift_t shift_n = do
+  let (_, _, c, _) = getNZCV
+  let shifted = shift (Loc rM) shift_t shift_n c
+  let (result, nzcv') = addWithCarry (Loc rN) shifted (LitBV 1 0)
+  let nzcv = "nzcv" =: nzcv'
+  defReg rD (ite (isR15 rD) (Loc rD) result)
+  aluWritePC (isR15 rD) result
+  cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
 andrr :: (HasCallStack) =>
          Location 'TBV
       -> Location 'TBV
