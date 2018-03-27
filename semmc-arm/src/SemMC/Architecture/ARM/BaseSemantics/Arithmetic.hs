@@ -57,9 +57,7 @@ manualArithmetic = do
     comment "ADD immediate, T32, encoding T1 (F7.1.4, F7-2540)"
     input rN
     input imm3
-    let setflags = notp inITBlock
-        imm32    = zext (Loc imm3)
-    tadd rD rN imm32 (LitBool True) setflags
+    taddri rD rN (zext (Loc imm3)) (LitBool True) (notp inITBlock)
 
 
   defineT32Opcode T.TADDi8 (Empty
@@ -69,13 +67,13 @@ manualArithmetic = do
                        $ \rDn imm8 -> do
     comment "Add immediate, T32, encoding T2 (F7.1.4, F7-2540)"
     input imm8
-    let setflags = notp inITBlock
-        imm32   = zext (Loc imm8)
-    tadd rDn rDn imm32 (LitBool True) setflags
+    taddri rDn rDn (zext (Loc imm8)) (LitBool True) (notp inITBlock)
 
   defineT32Opcode T.T2ADDri (Empty
                             :> ParamDef "rD" gprnopc naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
+                            -- TODO: Ask Kevin why we have to use two slightly
+                            -- different strings here...
                             :> ParamDef "imm" t2_so_imm (EPackedOperand "T2_So_Imm")
                             :> ParamDef "rN" gprnopc naturalBV
                             )
@@ -88,7 +86,7 @@ manualArithmetic = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm32    = thumbExpandImm imm16
         undef    = orp (andp (isR15 rD) (notp setflags)) (isR15 rN)
-    tadd rD rN imm32 undef setflags
+    taddri rD rN imm32 undef setflags
 
   defineT32Opcode T.T2ADDri12 (Empty
                                :> ParamDef "rD" gprnopc naturalBV
@@ -99,8 +97,7 @@ manualArithmetic = do
     comment "Add immediate, T32, encoding T4 (F7.1.4, F7-2540)"
     input rN
     input imm12  -- n.b. encodes 12 bits, but Dismantle provides 16 bits (assumed zext)
-    let imm32 = zext (Loc imm12)
-    tadd rD rN imm32 (LitBool False) (LitBool False)
+    taddri rD rN (zext (Loc imm12)) (LitBool False) (LitBool False)
 
   defineT32Opcode T.TADDrSPi (Empty
                              :> ParamDef "rD" tgpr naturalBV
@@ -149,7 +146,7 @@ manualArithmetic = do
     let rM = soRegImm_reg sori
     let imm = soRegImm_imm sori
     let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
-    addrr rD rM rN setflags shift_t shift_n
+    addrr rD rM (Loc rN) setflags shift_t shift_n
 
   defineA32Opcode A.ADDrsr (  Empty
                            :> ParamDef "rD" gpr naturalBV
@@ -178,13 +175,51 @@ manualArithmetic = do
     comment "ADD register, T32, Encoding T1 (F7.1.6, F7-2544)"
     input rM
     input rN
-    let setflags  = notp inITBlock
-        (_,_,c,_) = getNZCV
-        shiftedM  = shift (Loc rM) srtLSL (LitBV 32 0) c
-        (result, nzcv) = addWithCarry (Loc rN) shiftedM (LitBV 32 0)
-    defReg rD (ite (isR15 rD) (Loc rD) result)
-    aluWritePC (isR15 rD) result
-    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+    addrr rD rM (Loc rN) (notp inITBlock) srtLSL (LitBV 32 0)
+
+  defineT32Opcode T.TADDhirr (Empty
+                             :> ParamDef "rDN" gpr naturalBV
+                             :> ParamDef "rM"  gpr naturalBV
+                             ) $ \rDN rM -> do
+    comment "ADD register, T32, Encoding T2 (F7.1.6, F7-2544)"
+    input rM
+    input rDN
+
+    addrr rDN rM (Loc rDN) (LitBool False) srtLSL (LitBV 32 0)
+
+  defineT32Opcode T.T2ADDrr (Empty
+                             :> ParamDef "rD" gprnopc naturalBV
+                             :> ParamDef "setcc" cc_out (EBV 1)
+                             :> ParamDef "rN" rgpr naturalBV
+                             :> ParamDef "rM" gprnopc naturalBV
+                            ) $ \rD setcc rN rM -> do
+    comment "ADD register, T32, encoding T3 [no shift] (F7.1.6, F7-2544)"
+    input rM
+    input rN
+    input setcc
+
+    addrr rD rM (Loc rN) (bveq (Loc setcc) (LitBV 1 0b1)) srtLSL (LitBV 32 0)
+
+  defineT32Opcode T.T2ADDrs (Empty
+                             :> ParamDef "rD" gprnopc naturalBV
+                             :> ParamDef "setcc" cc_out (EBV 1)
+                             -- TODO: Ask Kevin why we use slightly different strings here.
+                             :> ParamDef "rN" t2_so_reg (EPackedOperand "T2_So_Reg")
+                             :> ParamDef "rM" gprnopc naturalBV
+                            ) $ \rD setcc rN_so_reg rM -> do
+    comment "ADD register, T32, encoding T3 [no shift] (F7.1.6, F7-2544)"
+    input rM
+    input rN_so_reg
+    input setcc
+
+    -- TODO: Ask Kevin if we should create a helper function somewhere for this
+    -- (probably would need to go in Pseudocode)
+    let rNexpr  = t2SoReg_reg  rN_so_reg
+        shift_n = zext (t2SoReg_imm  rN_so_reg)
+        shift_t = SRType (t2SoReg_type rN_so_reg)
+
+    addrr rD rM rNexpr (bveq (Loc setcc) (LitBV 1 0b1)) shift_t shift_n
 
   defineA32Opcode A.MOVr (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -456,16 +491,19 @@ manualBitwise = do
 
 -- ----------------------------------------------------------------------
 
--- TODO: create similar functions for ADD and use them to implement all the variants
+-- Note: the rN argument is an Expr 'TBV rather than Location 'TBV. The reason for
+-- this is that the actual register id is sometimes inside a packed operand, and we
+-- can only extract in in Expr form. Therefore, if we call this function on a
+-- Location 'TBV for rN, we need to wrap it up with (Loc rN).
 addrr :: (HasCallStack)
       => Location 'TBV
       -> Location 'TBV
-      -> Location 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
-addrr rD rM rN setflags shift_t shift_n = do
+      -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
+addrr rD rM rNexpr setflags shift_t shift_n = do
   let (_, _, c, _) = getNZCV
-  let shifted = shift (Loc rM) shift_t shift_n c
-  let (result, nzcv') = addWithCarry (Loc rN) shifted (LitBV 1 0)
-  let nzcv = "nzcv" =: nzcv'
+      shifted = shift (Loc rM) shift_t shift_n c
+      (result, nzcv') = addWithCarry rNexpr shifted (LitBV 32 0)
+      nzcv = "nzcv" =: nzcv'
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -521,15 +559,15 @@ andrsr rD rM rN setflags shift_t rS = do
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
 
-tadd :: (HasCallStack)
+taddri :: (HasCallStack)
      => Location 'TBV
      -> Location 'TBV
      -> Expr 'TBV
      -> Expr 'TBool
      -> Expr 'TBool
      -> SemARM 'Def ()
-tadd rD rN imm32 setflags undef = do
-  let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 1 0b0)
+taddri rD rN imm32 setflags undef = do
+  let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 

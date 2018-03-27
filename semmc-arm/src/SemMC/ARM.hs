@@ -178,6 +178,9 @@ type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
 type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
 type instance A.OperandType ARM "T2_so_imm" = BaseBVType 16
+-- TODO: Is this the right width for T2_so_reg? Ask Kevin how to figure this out
+-- myself.
+type instance A.OperandType ARM "T2_so_reg" = BaseBVType 32
 type instance A.OperandType ARM "T_addrmode_is2" = BaseBVType 32
 type instance A.OperandType ARM "T_addrmode_is4" = BaseBVType 32
 type instance A.OperandType ARM "T_addrmode_pc" = BaseBVType 8
@@ -504,6 +507,7 @@ shapeReprType orep =
             ThumbDis.T_addrmode_pcRepr -> knownRepr
             ThumbDis.T_imm0_1020s4Repr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr
+            ThumbDis.T2_so_regRepr -> knownRepr
             ThumbDis.Thumb_blx_targetRepr -> knownRepr
             ThumbDis.Thumb_bcc_targetRepr -> knownRepr
             ThumbDis.TGPRRepr -> knownRepr

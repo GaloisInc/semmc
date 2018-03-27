@@ -133,6 +133,18 @@ uninterpretedFunctions _ =
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 16)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 12)))
 
+  , ("t32.t2soreg_reg", -- Extract the register value
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+
+  , ("t32.t2soreg_imm", -- Extract the immediate value
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 5)))
+
+  , ("t32.t2soreg_type", -- Extract the immediate value
+     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 3)))
+
   , ("t32.addrmode_is2_imm",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 5)))

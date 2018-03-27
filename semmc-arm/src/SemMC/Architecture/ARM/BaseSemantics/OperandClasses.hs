@@ -94,6 +94,9 @@ so_reg_imm = "So_reg_imm"
 t2_so_imm :: String
 t2_so_imm = "T2_so_imm"
 
+t2_so_reg :: String
+t2_so_reg = "T2_so_reg"
+
 t_addrmode_is2 :: String
 t_addrmode_is2 = "T_addrmode_is2"
 
@@ -162,6 +165,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "T_addrmode_pc" = 'TPackedOperand
   SymToExprTag "T_imm0_1020s4" = 'TPackedOperand
   SymToExprTag "T2_so_imm" = 'TPackedOperand
+  SymToExprTag "T2_so_reg" = 'TPackedOperand
   SymToExprTag "TGPR" = 'TBV
   SymToExprTag "Thumb_bcc_target" = 'TBV
   SymToExprTag "Thumb_blx_target" = 'TPackedOperand
