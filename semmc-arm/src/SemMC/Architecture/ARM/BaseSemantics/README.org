@@ -10,7 +10,7 @@ ID090413).  Various page and section references in the comments found
 herein should be relative to this document.  Note that the first half
 of this document refers to the AArch64 architecture, which is not
 supported by semmc-arm: be sure that all references are to section E,
-F, or G.  
+F, or G.
 
 Semantics definitions compile the Haskell DSL descriptions in the
 BaseSemantics directory to generate semantics definitions files in
