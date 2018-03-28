@@ -109,6 +109,9 @@ t_addrmode_pc = "T_addrmode_pc"
 t_imm0_1020s4 :: String
 t_imm0_1020s4 = "T_imm0_1020s4"
 
+t_imm0_508s4 :: String
+t_imm0_508s4 = "T_imm0_508s4"
+
 thumb_blx_target :: String
 thumb_blx_target = "Thumb_blx_target"
 
@@ -164,6 +167,7 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "T_addrmode_is4" = 'TPackedOperand
   SymToExprTag "T_addrmode_pc" = 'TPackedOperand
   SymToExprTag "T_imm0_1020s4" = 'TPackedOperand
+  SymToExprTag "T_imm0_508s4" = 'TPackedOperand
   SymToExprTag "T2_so_imm" = 'TPackedOperand
   SymToExprTag "T2_so_reg" = 'TPackedOperand
   SymToExprTag "TGPR" = 'TBV

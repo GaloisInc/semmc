@@ -23,6 +23,7 @@ module SemMC.Architecture.ARM.Eval
     , interpImm12OffsetExtractor
     , interpImm12AddFlgExtractor
     , interpImm01020s4ImmExtractor
+    , interpImm0508s4ImmExtractor
     , interpLdstsoregAddExtractor
     , interpLdstsoregImmExtractor
     , interpLdstsoregTypeExtractor
@@ -141,6 +142,12 @@ interpTaddrmodepcExtractor = fromInteger . toInteger . ThumbOperands.addrModePcT
 
 interpImm01020s4ImmExtractor :: ThumbOperands.TImm01020S4 -> Int8
 interpImm01020s4ImmExtractor = fromInteger . toInteger . ThumbOperands.tImm01020S4ToBits
+
+------------------------------------------------------------------------
+-- | Extract values from the Thumb Imm0_508S4 operand
+
+interpImm0508s4ImmExtractor :: ThumbOperands.TImm0508S4 -> Int8
+interpImm0508s4ImmExtractor = fromInteger . toInteger . ThumbOperands.tImm0508S4ToBits
 
 
 ------------------------------------------------------------------------

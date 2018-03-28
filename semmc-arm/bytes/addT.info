@@ -11,26 +11,26 @@ ADDW   R0, R0, #2048 [T4] // T2ADDri12 *
 -- ADD register
 
 ADD    R0, R0, R0      [T1] // TADDrr *
-ADD    R0, R0          [T2] // TADDhirr
-ADD    R8, R0          [T2] // TADDhirr
-ADD.W  R0, R0, R0      [T3] // T2ADDrr
-ADDS.W R0, R0, R0      [T3] // T2ADDrr
-ADD.W  R0, R0, R0, #16 [T3] // T2ADDrs
-ADDS.W R0, R0, R0, #16 [T3] // T2ADDrs
+ADD    R0, R0          [T2] // TADDhirr *
+ADD    R8, R0          [T2] // TADDhirr *
+ADD.W  R0, R0, R0      [T3] // T2ADDrr *
+ADDS.W R0, R0, R0      [T3] // T2ADDrr *
+ADD.W  R0, R0, R0, #16 [T3] // T2ADDrs *
+ADDS.W R0, R0, R0, #16 [T3] // T2ADDrs *
 
 ----------------------------------------
 -- ADD SP plus immediate
 
-ADD     R0  SP, #128  [T1] // TADDrSPi
-ADD     SP  SP, #64   [T2] // TADDspi
-ADD.W   R0, SP, #2048 [T3] // T2ADDri
-ADDS.W  R0, SP, #2048 [T3] // T2ADDri
-ADDW    R0, SP, #2048 [T4] // T2ADDri12
+ADD     R0  SP, #128  [T1] // TADDrSPi *
+ADD     SP  SP, #64   [T2] // TADDspi *
+ADD.W   R0, SP, #2048 [T3] // T2ADDri *
+ADDS.W  R0, SP, #2048 [T3] // T2ADDri *
+ADDW    R0, SP, #2048 [T4] // T2ADDri12 *
 
 ----------------------------------------
 -- ADD SP plus register
 
-ADD    R0, SP, R0      [T1] // TADDhirr
-ADD    SP, R0          [T2] // TADDhirr
-ADD.W  R0, SP, R0, #16 [T3] // T2ADDrs
-ADDS.W R0, SP, R0, #16 [T3] // T2ADDrs
+ADD    R0, SP, R0      [T1] // TADDhirr *
+ADD    SP, R0          [T2] // TADDhirr *
+ADD.W  R0, SP, R0, #16 [T3] // T2ADDrs *
+ADDS.W R0, SP, R0, #16 [T3] // T2ADDrs *

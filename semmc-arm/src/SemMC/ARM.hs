@@ -185,6 +185,7 @@ type instance A.OperandType ARM "T_addrmode_is2" = BaseBVType 32
 type instance A.OperandType ARM "T_addrmode_is4" = BaseBVType 32
 type instance A.OperandType ARM "T_addrmode_pc" = BaseBVType 8
 type instance A.OperandType ARM "T_imm0_1020s4" = BaseBVType 8
+type instance A.OperandType ARM "T_imm0_508s4" = BaseBVType 8
 type instance A.OperandType ARM "Thumb_bcc_target" = BaseBVType 8
 type instance A.OperandType ARM "Thumb_blx_target" = BaseBVType 32 -- double-instr val
 type instance A.OperandType ARM "TGPR" = BaseBVType 32
@@ -436,6 +437,10 @@ locationFuncInterpretation =
                                 { A.locationInterp = F.LocationFuncInterp noLocation
                                 , A.exprInterpName = 'interpImm01020s4ImmExtractor
                                 })
+    , ("t32.imm0_508S4_imm", A.FunctionInterpretation
+                             { A.locationInterp = F.LocationFuncInterp noLocation
+                             , A.exprInterpName = 'interpImm0508s4ImmExtractor
+                             })
     , ("t32.reglist", A.FunctionInterpretation
                         { A.locationInterp = F.LocationFuncInterp noLocation
                         , A.exprInterpName = 'interpTReglistExtractor
@@ -506,6 +511,7 @@ shapeReprType orep =
             ThumbDis.T_addrmode_is4Repr -> knownRepr
             ThumbDis.T_addrmode_pcRepr -> knownRepr
             ThumbDis.T_imm0_1020s4Repr -> knownRepr
+            ThumbDis.T_imm0_508s4Repr -> knownRepr
             ThumbDis.T2_so_immRepr -> knownRepr
             ThumbDis.T2_so_regRepr -> knownRepr
             ThumbDis.Thumb_blx_targetRepr -> knownRepr

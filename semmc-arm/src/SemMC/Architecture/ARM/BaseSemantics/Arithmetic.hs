@@ -110,7 +110,18 @@ manualArithmetic = do
     let setflags = LitBool False
         imm8 = t32_imm_0_1020s4_val imm0_1020s4
         imm32 = zext $ concat imm8 (LitBV 2 0b00)
-    addSP rD imm32 setflags
+    taddSP rD imm32 setflags
+
+  defineT32Opcode T.TADDspi (Empty
+                             :> ParamDef "imm" t_imm0_508s4 (EPackedOperand "imm0_508s4")
+                            )
+                      $ \imm0_508s4 -> do
+    comment "ADD SP + immediate, T32, encoding T2 (F7.1.9, F7-2548)"
+    input imm0_508s4
+    let setflags = LitBool False
+        imm7 = t32_imm_0_508s4_val imm0_508s4
+        imm32 = zext $ concat imm7 (LitBV 2 0b00)
+    taddSP sp imm32 setflags
 
   defineA32Opcode A.ADDrr (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -571,12 +582,12 @@ taddri rD rN imm32 setflags undef = do
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 
-addSP :: (HasCallStack) =>
+taddSP :: (HasCallStack) =>
          Location 'TBV
       -> Expr 'TBV
       -> Expr 'TBool
       -> SemARM 'Def ()
-addSP rD imm32 setflags = do
+taddSP rD imm32 setflags = do
   input sp
   let (result, nzcv) = addWithCarry (Loc sp) imm32 (LitBV 1 0b0)
   defReg rD $ ite (isR15 rD) (Loc rD) result
