@@ -1,0 +1,409 @@
+;; ADD register, A32, Encoding A1 (F7.1.7, F7-2546)
+(let
+ ((addResult
+  ((_ extract 31 0)
+   var6))
+  (var6
+   ((bvadd
+    (var8)
+    ((_ zero_extend 1)
+     #x00000000))))
+  (var8
+   (bvadd
+    ((_ zero_extend 1)
+     rN)
+    ((_ zero_extend 1)
+     var5)))
+  (var5
+   (((_ extract 31 0)
+    (shiftC))))
+  (shiftC
+   (ite var4))
+  (var4
+   ((bveq
+    ((_ extract 31 0)
+     (immShift))
+    #x00000000)
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     ((_ call "a32.soregimm_reg")
+      sori))
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b000)
+     (lslC)
+     (ite
+      (bveq
+       ((_ extract 34 32)
+        (immShift))
+       #b001)
+      var3))))
+  (var3
+   ((logicalShiftRightCarry)
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b010)
+     (arithmeticShiftRightCarry)
+     (ite
+      (bveq
+       ((_ extract 34 32)
+        (immShift))
+       #b011)
+      (rorC)
+      (rrxC)))))
+  (rrxC
+   (concat
+    ((_ extract 0 0)
+     ((_ call "a32.soregimm_reg")
+      sori))
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     ((_ extract 31 1)
+      ((_ call "a32.soregimm_reg")
+       sori)))))
+  (rorC
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       ((_ call "a32.soregimm_reg")
+        sori))
+      #b1
+      #b0)
+     #b0)
+    (bvor
+     (bvshl
+      ((_ call "a32.soregimm_reg")
+       sori)
+      (bvsub
+       #x00000020
+       (bvurem
+        ((_ extract 31 0)
+         (immShift))
+        #x00000020)))
+     (bvlshr
+      ((_ call "a32.soregimm_reg")
+       sori)
+      (bvurem
+       ((_ extract 31 0)
+        (immShift))
+       #x00000020)))))
+  (immShift
+   (ite
+    (bveq
+     ((_ call "a32.soregimm_type")
+      sori)
+     #b00)
+    (concat
+     #b000
+     ((_ zero_extend 27)
+      ((_ call "a32.soregimm_imm")
+       sori)))
+    (ite
+     (bveq
+      ((_ call "a32.soregimm_type")
+       sori)
+      #b01)
+     (concat #b001 var2)
+     (ite
+      (bveq
+       ((_ call "a32.soregimm_type")
+        sori)
+       #b10)
+      (concat #b010 var2)
+      (ite
+       (bveq
+        ((_ call "a32.soregimm_imm")
+         sori)
+        #b00000)
+       (concat #b100 #x00000001)
+       (concat
+        #b011
+        ((_ zero_extend 27)
+         ((_ call "a32.soregimm_imm")
+          sori))))))))
+  (var2
+   ((ite
+    (bveq
+     #b00000
+     ((_ call "a32.soregimm_imm")
+      sori))
+    #x00000020
+    ((_ zero_extend 27)
+     ((_ call "a32.soregimm_imm")
+      sori)))))
+  (arithmeticShiftRightCarry
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       ((_ call "a32.soregimm_reg")
+        sori))
+      #b1
+      #b0)
+     #b0)
+    (bvashr
+     ((_ call "a32.soregimm_reg")
+      sori)
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (logicalShiftRightCarry
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       ((_ call "a32.soregimm_reg")
+        sori))
+      #b1
+      #b0)
+     #b0)
+    (bvlshr
+     ((_ call "a32.soregimm_reg")
+      sori)
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (lslC
+   (bvshl
+    ((_ zero_extend 1)
+     ((_ call "a32.soregimm_reg")
+      sori))
+    ((_ zero_extend 1)
+     ((_ extract 31 0)
+      (immShift)))))
+  (testCondition
+   (ite
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       predBits))
+     (bvne predBits #xf))
+    (notp
+     (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      predBits)
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
+    (var1)))
+  (var1
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      predBits)
+     #b001)
+    (bveq
+     #b1
+     ((_ extract 29 29)
+      'CPSR))
+    (ite
+     (bveq
+      ((_ extract 3 1)
+       predBits)
+      #b010)
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       'CPSR))
+     (ite
+      (bveq
+       ((_ extract 3 1)
+        predBits)
+       #b011)
+      (bveq
+       #b1
+       ((_ extract 28 28)
+        'CPSR))
+      (ite
+       (bveq
+        ((_ extract 3 1)
+         predBits)
+        #b100)
+       (andp
+        (bveq
+         #b1
+         ((_ extract 29 29)
+          'CPSR))
+        (notp
+         (bveq
+          #b1
+          ((_ extract 30 30)
+           'CPSR))))
+       (ite
+        (bveq
+         ((_ extract 3 1)
+          predBits)
+         #b101)
+        (bveq
+         ((_ extract 31 31)
+          'CPSR)
+         ((_ extract 28 28)
+          'CPSR))
+        (ite
+         (bveq
+          ((_ extract 3 1)
+           predBits)
+          #b110)
+         (andp
+          (bveq
+           ((_ extract 31 31)
+            'CPSR)
+           ((_ extract 28 28)
+            'CPSR))
+          (notp
+           (bveq
+            #b1
+            ((_ extract 30 30)
+             'CPSR))))
+         (true))))))))
+  (true
+   (bveq #b0 #b0))
+  (var11
+   ((ite
+    (testCondition)
+    (ite
+     (andp
+      (bveq setcc #b1)
+      (notp
+       ((_ call "arm.is_r15")
+        rD)))
+     (concat
+      (nzcv)
+      ((_ extract 27 0)
+       (ite
+        ((_ call "arm.is_r15")
+         rD)
+        (ite
+         (bveq
+          #b0
+          ((_ extract 0 0)
+           (addResult)))
+         (SetT32Mode)
+         'CPSR)
+        'CPSR)))
+     (ite
+      ((_ call "arm.is_r15")
+       rD)
+      (ite
+       (bveq
+        #b0
+        ((_ extract 0 0)
+         (addResult)))
+       (SetT32Mode)
+       'CPSR)
+      'CPSR))
+    'CPSR)))
+  (SetT32Mode
+   (bvand
+    #xfeffffff
+    (bvor #x00000020 'CPSR)))
+  (nzcv
+   (concat
+    ((_ extract 31 31)
+     ((_ extract 31 0)
+      var6))
+    (concat
+     (ite
+      (bveq
+       ((_ extract 31 0)
+        var6)
+       #x00000000)
+      #b1
+      #b0)
+     var9)))
+  (var9
+   ((concat
+    ((_ extract 32 32)
+     var6)
+    (bvand
+     ((_ extract 31 31)
+      ((_ extract 31 0)
+       var6))
+     ((_ extract 32 32)
+      var6)))))
+  (bxWritePC
+   (ite
+    ((_ call "arm.is_r15")
+     rD)
+    var10))
+  (var10
+   ((ite
+    (bveq
+     #b0
+     ((_ extract 0 0)
+      (addResult)))
+    (bvand
+     #xfffffffe
+     (addResult))
+    (ite
+     (bveq
+      #b0
+      ((_ extract 1 1)
+       (addResult)))
+     (bvand var7)
+     (addResult)))
+    (bvadd 'PC #x00000004)))
+  (var7
+   (#xfffffffd
+    (addResult))))
+ ((operands
+  ((rD . 'GPR)
+   (setcc . 'Cc_out)
+   (predBits . 'Pred)
+   (sori . 'So_reg_imm)
+   (rN . 'GPR)))
+  (in
+   (rN setcc sori 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR var11)
+    (rD
+     (ite
+      (testCondition)
+      (ite
+       ((_ call "arm.is_r15")
+        rD)
+       rD
+       (addResult))
+      rD))))))

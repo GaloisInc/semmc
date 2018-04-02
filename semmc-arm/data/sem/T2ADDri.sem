@@ -10,8 +10,8 @@
       rN)
      ((_ zero_extend 1)
       (thumbExpandImm)))
-    ((_ zero_extend 32)
-     #b0)))
+    ((_ zero_extend 1)
+     #x00000000)))
   (thumbExpandImm
    (ite var1))
   (var1

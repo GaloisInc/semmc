@@ -1,24 +1,14 @@
-;; ADD immediate, T32, encoding T1 (F7.1.4, F7-2540)
+;; ADC register, A32, Encoding A1 (F7.1.2, F7-2536)
 (let
- ((var2
-  (ite var1))
-  (var1
-   ((testCondition)
-    (ite
-     (notp
-      (bvne
-       #x00
-       (concat
-        ((_ extract 15 12)
-         'CPSR)
-        (concat
-         ((_ extract 11 10)
-          'CPSR)
-         ((_ extract 26 25)
-          'CPSR)))))
-     rD
-     (addResult))
-    rD))
+ ((var1
+  (ite
+   (testCondition)
+   (ite
+    ((_ call "arm.is_r15")
+     rD)
+    rD
+    (addResult))
+   rD))
   (addResult
    ((_ extract 31 0)
     (bvadd
@@ -26,20 +16,19 @@
       ((_ zero_extend 1)
        rN)
       ((_ zero_extend 1)
-       ((_ zero_extend 29)
-        imm)))
+       rM))
      ((_ zero_extend 1)
-      #x00000000))))
+      ((_ zero_extend 31)
+       ((_ extract 29 29)
+        'CPSR))))))
   (testCondition
    (ite
     (andp
      (bveq
       #b1
       ((_ extract 0 0)
-       (ITState)))
-     (bvne
-      (ITState)
-      #xf))
+       predBits))
+     (bvne predBits #xf))
     (notp
      (conditionMatch))
     (conditionMatch)))
@@ -47,7 +36,7 @@
    (ite
     (bveq
      ((_ extract 3 1)
-      (ITState))
+      predBits)
      #b000)
     (bveq
      #b1
@@ -56,7 +45,7 @@
     (ite
      (bveq
       ((_ extract 3 1)
-       (ITState))
+       predBits)
       #b001)
      (bveq
       #b1
@@ -65,7 +54,7 @@
      (ite
       (bveq
        ((_ extract 3 1)
-        (ITState))
+        predBits)
        #b010)
       (bveq
        #b1
@@ -74,7 +63,7 @@
       (ite
        (bveq
         ((_ extract 3 1)
-         (ITState))
+         predBits)
         #b011)
        (bveq
         #b1
@@ -83,7 +72,7 @@
        (ite
         (bveq
          ((_ extract 3 1)
-          (ITState))
+          predBits)
          #b100)
         (andp
          (bveq
@@ -98,7 +87,7 @@
         (ite
          (bveq
           ((_ extract 3 1)
-           (ITState))
+           predBits)
           #b101)
          (bveq
           ((_ extract 31 31)
@@ -108,7 +97,7 @@
          (ite
           (bveq
            ((_ extract 3 1)
-            (ITState))
+            predBits)
            #b110)
           (andp
            (bveq
@@ -124,18 +113,10 @@
           (true)))))))))
   (true
    (bveq #b0 #b0))
-  (ITState
-   (ite
-    (bveq
-     (concat
-      ((_ extract 11 10)
-       'CPSR)
-      ((_ extract 26 25)
-       'CPSR))
-     #x0)
-    #xe
-    ((_ extract 15 12)
-     'CPSR)))
+  (SetT32Mode
+   (bvand
+    #xfeffffff
+    (bvor #x00000020 'CPSR)))
   (addCarry
    (concat
     ((_ extract 31 31)
@@ -145,10 +126,11 @@
         ((_ zero_extend 1)
          rN)
         ((_ zero_extend 1)
-         ((_ zero_extend 29)
-          imm)))
+         rM))
        ((_ zero_extend 1)
-        #x00000000))))
+        ((_ zero_extend 31)
+         ((_ extract 29 29)
+          'CPSR))))))
     (concat
      (ite
       (bveq
@@ -158,10 +140,11 @@
           ((_ zero_extend 1)
            rN)
           ((_ zero_extend 1)
-           ((_ zero_extend 29)
-            imm)))
+           rM))
          ((_ zero_extend 1)
-          #x00000000)))
+          ((_ zero_extend 31)
+           ((_ extract 29 29)
+            'CPSR)))))
        #x00000000)
       #b1
       #b0)
@@ -172,10 +155,11 @@
          ((_ zero_extend 1)
           rN)
          ((_ zero_extend 1)
-          ((_ zero_extend 29)
-           imm)))
+          rM))
         ((_ zero_extend 1)
-         #x00000000)))
+         ((_ zero_extend 31)
+          ((_ extract 29 29)
+           'CPSR)))))
       (bvand
        ((_ extract 31 31)
         ((_ extract 31 0)
@@ -184,54 +168,89 @@
            ((_ zero_extend 1)
             rN)
            ((_ zero_extend 1)
-            ((_ zero_extend 29)
-             imm)))
+            rM))
           ((_ zero_extend 1)
-           #x00000000))))
+           ((_ zero_extend 31)
+            ((_ extract 29 29)
+             'CPSR))))))
        ((_ extract 32 32)
         (bvadd
          (bvadd
           ((_ zero_extend 1)
            rN)
           ((_ zero_extend 1)
-           ((_ zero_extend 29)
-            imm)))
+           rM))
          ((_ zero_extend 1)
-          #x00000000)))))))))
+          ((_ zero_extend 31)
+           ((_ extract 29 29)
+            'CPSR))))))))))
+  (bxWritePC
+   (ite
+    ((_ call "arm.is_r15")
+     rD)
+    (ite
+     (bveq
+      #b0
+      ((_ extract 0 0)
+       (addResult)))
+     (bvand
+      #xfffffffe
+      (addResult))
+     (ite
+      (bveq
+       #b0
+       ((_ extract 1 1)
+        (addResult)))
+      (bvand
+       #xfffffffd
+       (addResult))
+      (addResult)))
+    (bvadd 'PC #x00000004))))
  ((operands
-  ((rD . 'TGPR)
-   (imm . 'Imm0_7)
-   (rN . 'TGPR)))
+  ((rD . 'GPR)
+   (setcc . 'Cc_out)
+   (predBits . 'Pred)
+   (rM . 'GPR)
+   (rN . 'GPR)))
   (in
-   (imm rN 'CPSR 'PC))
+   (setcc rN rM 'CPSR 'PC))
   (defs
    (('PC
-    (bvadd 'PC #x00000002))
+    (bxWritePC))
     ('CPSR
      (ite
       (testCondition)
       (ite
        (andp
+        (bveq setcc #b1)
         (notp
          ((_ call "arm.is_r15")
-          rD))
-        (notp
-         (notp
-          (bvne
-           #x00
-           (concat
-            ((_ extract 15 12)
-             'CPSR)
-            (concat
-             ((_ extract 11 10)
-              'CPSR)
-             ((_ extract 26 25)
-              'CPSR)))))))
+          rD)))
        (concat
         (addCarry)
         ((_ extract 27 0)
-         'CPSR))
-       'CPSR)
+         (ite
+          ((_ call "arm.is_r15")
+           rD)
+          (ite
+           (bveq
+            #b0
+            ((_ extract 0 0)
+             (addResult)))
+           (SetT32Mode)
+           'CPSR)
+          'CPSR)))
+       (ite
+        ((_ call "arm.is_r15")
+         rD)
+        (ite
+         (bveq
+          #b0
+          ((_ extract 0 0)
+           (addResult)))
+         (SetT32Mode)
+         'CPSR)
+        'CPSR))
       'CPSR))
     (rD
-     (var2))))))
+     (var1))))))

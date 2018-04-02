@@ -1,4 +1,4 @@
-;; ADD register, A32, Encoding A1  (F7.1.7, F7-2546)
+;; ADD register, A32, Encoding A1 (F7.1.7, F7-2546)
 (let
  ((var1
   (('CPSR

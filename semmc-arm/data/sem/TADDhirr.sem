@@ -1,81 +1,34 @@
-;; Compare immediate, Encoding T1 (F7.1.36, F7-2589)
+;; ADD register, T32, Encoding T2 (F7.1.6, F7-2544)
 (let
  ((var1
-  (('CPSR
-   (ite
-    (testCondition)
-    (concat
-     (addCarry)
-     ((_ extract 27 0)
-      'CPSR))
-    'CPSR))))
-  (addCarry
-   (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
-      (bvadd
-       (bvadd
-        ((_ zero_extend 1)
-         rN)
-        ((_ zero_extend 1)
-         (bvnot
-          ((_ zero_extend 24)
-           imm))))
-       ((_ zero_extend 1)
-        #x00000001))))
-    (concat
+  ((('PC
+   (branchWritePC))
+   ('CPSR 'CPSR)
+   (rDN
+    (ite
+     (testCondition)
      (ite
-      (bveq
+      ((_ call "arm.is_r15")
+       rDN)
+      rDN
+      (addResult))
+     rDN)))))
+  (addResult
+   ((_ extract 31 0)
+    (bvadd
+     (bvadd
+      ((_ zero_extend 1)
+       rDN)
+      ((_ zero_extend 1)
        ((_ extract 31 0)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           (bvnot
-            ((_ zero_extend 24)
-             imm))))
-         ((_ zero_extend 1)
-          #x00000001)))
-       #x00000000)
-      #b1
-      #b0)
-     (concat
-      ((_ extract 32 32)
-       (bvadd
-        (bvadd
-         ((_ zero_extend 1)
-          rN)
-         ((_ zero_extend 1)
-          (bvnot
-           ((_ zero_extend 24)
-            imm))))
-        ((_ zero_extend 1)
-         #x00000001)))
-      (bvand
-       ((_ extract 31 31)
-        ((_ extract 31 0)
-         (bvadd
-          (bvadd
-           ((_ zero_extend 1)
-            rN)
-           ((_ zero_extend 1)
-            (bvnot
-             ((_ zero_extend 24)
-              imm))))
-          ((_ zero_extend 1)
-           #x00000001))))
-       ((_ extract 32 32)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           (bvnot
-            ((_ zero_extend 24)
-             imm))))
-         ((_ zero_extend 1)
-          #x00000001))))))))
+        (shiftC))))
+     ((_ zero_extend 1)
+      #x00000000))))
+  (shiftC
+   (concat
+    ((_ extract 29 29)
+     'CPSR)
+    rM))
   (testCondition
    (ite
     (andp
@@ -181,13 +134,18 @@
      #x0)
     #xe
     ((_ extract 15 12)
-     'CPSR))))
+     'CPSR)))
+  (branchWritePC
+   (ite
+    ((_ call "arm.is_r15")
+     rDN)
+    (bvand
+     #xfffffffd
+     (addResult))
+    (bvadd 'PC #x00000002))))
  ((operands
-  ((imm . 'Imm0_255)
-   (rN . 'TGPR)))
+  ((rDN . 'GPR)
+   (rM . 'GPR)))
   (in
-   (rN imm 'CPSR 'PC))
-  (defs
-   (('PC
-    (bvadd 'PC #x00000002))
-    var1))))
+   (rDN rM 'CPSR 'PC))
+  (defs var1)))

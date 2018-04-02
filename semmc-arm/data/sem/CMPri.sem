@@ -22,8 +22,8 @@
         ((_ zero_extend 1)
          (bvnot
           (armExpandImm))))
-       ((_ zero_extend 32)
-        #b1))))
+       ((_ zero_extend 1)
+        #x00000001))))
     (concat
      (ite
       (var1)
@@ -38,8 +38,8 @@
          ((_ zero_extend 1)
           (bvnot
            (armExpandImm))))
-        ((_ zero_extend 32)
-         #b1)))
+        ((_ zero_extend 1)
+         #x00000001)))
       (bvand
        ((_ extract 31 31)
         ((_ extract 31 0)
@@ -50,8 +50,8 @@
            ((_ zero_extend 1)
             (bvnot
              (armExpandImm))))
-          ((_ zero_extend 32)
-           #b1))))
+          ((_ zero_extend 1)
+           #x00000001))))
        ((_ extract 32 32)
         (bvadd
          (bvadd
@@ -60,8 +60,8 @@
           ((_ zero_extend 1)
            (bvnot
             (armExpandImm))))
-         ((_ zero_extend 32)
-          #b1))))))))
+         ((_ zero_extend 1)
+          #x00000001))))))))
   (armExpandImm
    ((_ extract 31 0)
     (shiftC)))
@@ -140,8 +140,8 @@
        ((_ zero_extend 1)
         (bvnot
          (armExpandImm))))
-      ((_ zero_extend 32)
-       #b1)))
+      ((_ zero_extend 1)
+       #x00000001)))
     #x00000000))
   (testCondition
    (ite

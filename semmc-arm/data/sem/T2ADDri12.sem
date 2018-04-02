@@ -19,8 +19,8 @@
       ((_ zero_extend 1)
        ((_ zero_extend 16)
         imm)))
-     ((_ zero_extend 32)
-      #b0))))
+     ((_ zero_extend 1)
+      #x00000000))))
   (testCondition
    (ite
     (andp
