@@ -1,0 +1,16 @@
+----------------------------------------
+-- ADC immediate
+
+ADC  R0, R0, #0    [A1] // ADCri *
+ADC  R0, R0, #2048 [A1] // ADCri *
+
+----------------------------------------
+-- ADC register
+
+ADC  R0, R0, R0      [A1] // ADCrr  *
+ADC  R0, R0, R0, #16 [A1] // ADCrsi *
+
+----------------------------------------
+-- ADC register-shifted register
+
+ADC  R0, R0, R0, ASR R0 // ADCrsr

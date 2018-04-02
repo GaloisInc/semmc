@@ -1,33 +1,27 @@
 ----------------------------------------
 -- ADD immediate
 
-ADD    R0, R0, #2048 [A1]
-ADDS   R0, R0, #2048 [A1]
+ADD    R0, R0, #2048 [A1] // ADDri
+ADDS   R0, R0, #2048 [A1] // ADDri
 
 ----------------------------------------
 -- ADD register
 
-ADD    R0, R0, R0      [A1]
-ADDS   R0, R0, R0      [A1]
-ADD    R0, R0, R0, #16 [A1]
-ADDS   R0, R0, R0, #16 [A1]
+ADD    R0, R0, R0      [A1] // ADDrr
+ADD    R0, R0, R0, #16 [A1] // ADDrsi
 
 ----------------------------------------
 -- ADD register-shifted register
 
-ADD  R0, R0, R0, ASR R0 [A1]
-ADDs R0, R0, R0, ASR R0 [A1]
+ADD  R0, R0, R0, LSL R0 [A1] // ADDrsr
 
 ----------------------------------------
 -- ADD SP plus immediate
 
-ADD     R0, SP, #2048 [A1]
-ADDS    R0, SP, #2048 [A1]
+ADD     R0, SP, #2048 [A1] // ADDri
 
 ----------------------------------------
 -- ADD SP plus register
 
-ADD.W  R0, SP, R0      [A1]
-ADDS.W R0, SP, R0      [A1]
-ADD.W  R0, SP, R0, #16 [A1]
-ADDS.W R0, SP, R0, #16 [A1]
+ADD  R0, SP, R0      [A1] // ADDrr
+ADD  R0, SP, R0, #16 [A1] // ADDrsi

@@ -29,6 +29,26 @@ import           SemMC.DSL
 
 manualArithmetic :: SemARM 'Top ()
 manualArithmetic = do
+  -- TODO: abstract this to merge with the Thumb encodings? Same with ADDri?
+  defineA32Opcode A.ADCri (Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "mimm" mod_imm (EPackedOperand "ModImm")
+                           :> ParamDef "rN" gpr naturalBV
+                          ) $ \rD setcc _ imm12 rN -> do
+    comment "ADC immediate, A32, Encoding A1 (F7.1.1, F7-2534)"
+    input rN
+    input setcc
+    input imm12
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        imm32 = armExpandImm imm12
+        (_,_,c,_) = getNZCV
+        (result, nzcv) = addWithCarry (Loc rN) imm32 (zext c)
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
   defineA32Opcode A.ADDri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -123,12 +143,31 @@ manualArithmetic = do
         imm32 = zext $ concat imm7 (LitBV 2 0b00)
     taddSP sp imm32 setflags
 
+  -- TODO: abstract this with ADDrr?? TADC?
+  defineA32Opcode A.ADCrr (Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "rM" gpr naturalBV
+                           :> ParamDef "rN" gpr naturalBV
+                          ) $ \rD setcc _ rM rN -> do
+    comment "ADC register, A32, Encoding A1 (F7.1.2, F7-2536)"
+    input rM
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        (_,_,c,_) = getNZCV
+        (result, nzcv) = addWithCarry (Loc rN) (Loc rM) (zext c)
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
   defineA32Opcode A.ADDrr (Empty
-                          :> ParamDef "rD" gpr naturalBV
-                          :> ParamDef "setcc" cc_out (EBV 1)
-                          :> ParamDef "predBits" pred (EBV 4)
-                          :> ParamDef "rM" gpr naturalBV
-                          :> ParamDef "rN" gpr naturalBV
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "rM" gpr naturalBV
+                           :> ParamDef "rN" gpr naturalBV
                           ) $ \rD setcc _ rM rN -> do
     comment "ADD register, A32, Encoding A1 (F7.1.7, F7-2546)"
     input rM
@@ -139,6 +178,25 @@ manualArithmetic = do
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+  defineA32Opcode A.ADCrsi (  Empty
+                           :> ParamDef "rD" gpr naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "sori" so_reg_imm (EPackedOperand "SoRegImm")
+                           :> ParamDef "rN" gpr naturalBV
+                           )
+                 $ \rD setcc _ sori rN -> do
+    comment "ADC register, A32, Encoding A1 (F7.1.2, F7-2536)"
+    input sori
+    input setcc
+    input rN
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        ty = soRegImm_type sori
+        rM = soRegImm_reg sori
+        imm = soRegImm_imm sori
+        (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
+    adcrr rD rM (Loc rN) setflags shift_t shift_n
 
   defineA32Opcode A.ADDrsi (  Empty
                            :> ParamDef "rD" gpr naturalBV
@@ -153,11 +211,30 @@ manualArithmetic = do
     input setcc
     input rN
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-    let ty = soRegImm_type sori
-    let rM = soRegImm_reg sori
-    let imm = soRegImm_imm sori
-    let (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
+        ty = soRegImm_type sori
+        rM = soRegImm_reg sori
+        imm = soRegImm_imm sori
+        (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
     addrr rD rM (Loc rN) setflags shift_t shift_n
+
+  defineA32Opcode A.ADCrsr (  Empty
+                           :> ParamDef "rD" gprnopc naturalBV
+                           :> ParamDef "setcc" cc_out (EBV 1)
+                           :> ParamDef "predBits" pred (EBV 4)
+                           :> ParamDef "sorr" so_reg_reg (EPackedOperand "SoRegReg")
+                           :> ParamDef "rN" gprnopc naturalBV
+                           )
+                 $ \rD setcc _ sorr rN -> do
+    comment "ADC (register-shifted register), Encoding A1 (F7.1.3, F7-2538)"
+    input rD
+    input sorr
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    let shift_t = decodeRegShift (soRegReg_type sorr)
+    let rS = soRegReg_reg1 sorr
+    let rM = soRegReg_reg2 sorr
+    adcrsr rD rM rN setflags shift_t rS
 
   defineA32Opcode A.ADDrsr (  Empty
                            :> ParamDef "rD" gpr naturalBV
@@ -447,7 +524,7 @@ manualBitwise = do
     input mimm
     input rN
     let imm32 = armExpandImm mimm
-        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 1 1)
+        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     cpsrNZCV (LitBool True) nzcv
 
   defineT32Opcode T.TCMPi8 (Empty
@@ -459,7 +536,7 @@ manualBitwise = do
     input imm
     input rN
     let imm32 = zext $ Loc imm
-        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 1 1)
+        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     cpsrNZCV (LitBool True) nzcv
 
   defineT32Opcode T.TLSLri (Empty
@@ -501,6 +578,18 @@ manualBitwise = do
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
 -- ----------------------------------------------------------------------
+adcrr :: (HasCallStack)
+      => Location 'TBV
+      -> Location 'TBV
+      -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
+adcrr rD rM rNexpr setflags shift_t shift_n = do
+  let (_, _, c, _) = getNZCV
+      shifted = shift (Loc rM) shift_t shift_n c
+      (result, nzcv') = addWithCarry rNexpr shifted (zext c)
+      nzcv = "nzcv" =: nzcv'
+  defReg rD (ite (isR15 rD) (Loc rD) result)
+  aluWritePC (isR15 rD) result
+  cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
 -- Note: the rN argument is an Expr 'TBV rather than Location 'TBV. The reason for
 -- this is that the actual register id is sometimes inside a packed operand, and we
@@ -538,6 +627,20 @@ andrr rD rM rN setflags shift_t shift_n = do
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+adcrsr :: (HasCallStack) =>
+          Location 'TBV
+       -> Location 'TBV
+       -> Location 'TBV -> Expr 'TBool -> SRType -> Location 'TBV -> SemARM 'Def ()
+adcrsr rD rM rN setflags shift_t rS = do
+  let (_, _, c, _) = getNZCV
+      shift_n = zext $ extract 7 0 (Loc rS)
+  let shifted = shift (Loc rM) shift_t shift_n c
+  let (result, nzcv') = addWithCarry (Loc rN) shifted (zext c)
+  let nzcv = "nzcv" =: nzcv'
+  let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
+  defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
+  cpsrNZCV (andp setflags (notp writesOrReadsR15)) nzcv
+
 addrsr :: (HasCallStack) =>
           Location 'TBV
        -> Location 'TBV
@@ -546,7 +649,7 @@ addrsr rD rM rN setflags shift_t rS = do
   let (_, _, c, _) = getNZCV
       shift_n = zext $ extract 7 0 (Loc rS)
   let shifted = shift (Loc rM) shift_t shift_n c
-  let (result, nzcv') = addWithCarry (Loc rN) shifted (LitBV 1 0)
+  let (result, nzcv') = addWithCarry (Loc rN) shifted (LitBV 32 0)
   let nzcv = "nzcv" =: nzcv'
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
@@ -589,7 +692,7 @@ taddSP :: (HasCallStack) =>
       -> SemARM 'Def ()
 taddSP rD imm32 setflags = do
   input sp
-  let (result, nzcv) = addWithCarry (Loc sp) imm32 (LitBV 1 0b0)
+  let (result, nzcv) = addWithCarry (Loc sp) imm32 (LitBV 32 0b0)
   defReg rD $ ite (isR15 rD) (Loc rD) result
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv

@@ -219,6 +219,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVa (ARMDis.Arm_br_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
         opVa (ARMDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v -- KWQ: Bool? size?
         opVa (ARMDis.GPR gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
+        opVa (ARMDis.GPRnopc gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
         opVa (ARMDis.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
         opVa (ARMDis.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
         opVa (ARMDis.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
@@ -486,6 +487,7 @@ shapeReprType orep =
             ARMDis.Arm_br_targetRepr -> knownRepr
             ARMDis.Cc_outRepr -> knownRepr
             ARMDis.GPRRepr -> knownRepr
+            ARMDis.GPRnopcRepr -> knownRepr
             ARMDis.Ldst_so_regRepr -> knownRepr
             ARMDis.Mod_immRepr -> knownRepr
             ARMDis.PredRepr -> knownRepr
