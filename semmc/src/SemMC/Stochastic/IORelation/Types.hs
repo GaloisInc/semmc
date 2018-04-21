@@ -40,6 +40,7 @@ import qualified Control.Monad.Reader as Rd
 import           Control.Monad.Trans ( MonadIO, liftIO )
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Proxy ( Proxy(..) )
+import qualified Data.Semigroup as SG
 import qualified Data.Set as S
 import           Data.Typeable ( Typeable )
 import           Data.Word ( Word64 )
@@ -188,9 +189,11 @@ data IORelation arch sh =
              }
   deriving (Show)
 
+instance (A.Architecture arch) => SG.Semigroup (IORelation arch sh) where
+  (<>) = mergeIORelations
+
 instance (A.Architecture arch) => Monoid (IORelation arch sh) where
   mempty = emptyIORelation
-  mappend = mergeIORelations
 
 emptyIORelation  :: IORelation arch sh
 emptyIORelation = IORelation { inputs = S.empty, outputs = S.empty }
