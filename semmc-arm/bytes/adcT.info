@@ -1,0 +1,12 @@
+----------------------------------------
+-- ADC immediate
+
+ADC R0, R0, #0    [T1] // T2ADCri *
+ADC R0, R0, #2048 [T1] // T2ADCri *
+
+----------------------------------------
+-- ADC register
+
+ADC   R0, R0          [T1] // TADC    *
+ADC.W R0, R0, R0      [T2] // T2ADCrr *
+ADC.W R0, R0, R0, #16 [T2] // T2ADCrs

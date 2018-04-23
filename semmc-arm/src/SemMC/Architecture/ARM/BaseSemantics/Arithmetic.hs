@@ -301,8 +301,6 @@ manualArithmetic = do
     input rN_so_reg
     input setcc
 
-    -- TODO: Ask Kevin if we should create a helper function somewhere for this
-    -- (probably would need to go in Pseudocode)
     let rNexpr  = t2SoReg_reg  rN_so_reg
         shift_n = zext (t2SoReg_imm  rN_so_reg)
         shift_t = SRType (t2SoReg_type rN_so_reg)

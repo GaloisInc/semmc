@@ -410,7 +410,6 @@ soRegImm_imm = unpackUF "SoRegImm" (EBV 5) "a32.soregimm_imm"
 t2SoImm_imm :: Location 'TPackedOperand -> Expr 'TBV
 t2SoImm_imm = unpackUF "T2_So_Imm" (EBV 12) "t32.t2soimm_imm"
 
--- TODO: Add the following three UFs to UF.hs
 t2SoReg_reg :: Location 'TPackedOperand -> Expr 'TBV
 t2SoReg_reg = unpackUF "T2_So_Reg" naturalBV "t32.t2soreg_reg"
 
