@@ -29,14 +29,15 @@ import qualified GHC.Err.Located as L
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.HasRepr as HR
+import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.NatRepr
-import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
+import qualified Lang.Crucible.Solver.BoolInterface as SB
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SimpleBackend
 
@@ -91,7 +92,7 @@ doThing = do
 -- > AddRr r2, r1
 -- > AddRr r2, r1
 --
-fooFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
+fooFormula :: (ShowF (S.SymExpr sym)) => (SB.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 fooFormula sym = do
   reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
   twoLit <- S.bvLit sym (knownNat :: NatRepr 32) 2
@@ -103,7 +104,7 @@ fooFormula sym = do
                               $ MapF.empty
                    }
 
-independentFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
+independentFormula :: (ShowF (S.SymExpr sym)) => (SB.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 independentFormula sym = do
   reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
   reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (A.locationType (RegLoc Reg2))
@@ -120,7 +121,7 @@ independentFormula sym = do
                               $ MapF.empty
                    }
 
-dependentFormula :: (ShowF (S.SymExpr sym)) => (S.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
+dependentFormula :: (ShowF (S.SymExpr sym)) => (SB.IsSymInterface sym, S.IsExprBuilder sym) => sym -> IO (Formula sym Toy)
 dependentFormula sym = do
   reg1 <- S.freshBoundVar sym (makeSymbol (show Reg1)) (A.locationType (RegLoc Reg1))
   -- reg2 <- S.freshBoundVar sym (makeSymbol (show Reg2)) (A.locationType (RegLoc Reg2))
