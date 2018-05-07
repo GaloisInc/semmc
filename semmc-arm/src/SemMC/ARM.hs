@@ -55,6 +55,7 @@ import qualified Dismantle.Thumb as ThumbDis
 import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
 import           Lang.Crucible.BaseTypes
+import qualified Lang.Crucible.Solver.BoolInterface as SB
 import qualified Lang.Crucible.Solver.Interface as S
 import           Language.Haskell.TH hiding ( recover )
 import qualified SemMC.Architecture as A
@@ -198,7 +199,7 @@ instance A.IsOperandTypeRepr ARM where
 
 
 operandValue :: forall sym s.
-                (S.IsSymInterface sym,
+                (SB.IsSymInterface sym,
                  S.IsExprBuilder sym)
              => sym
              -> (forall tp. Location ARM tp -> IO (S.SymExpr sym tp))
