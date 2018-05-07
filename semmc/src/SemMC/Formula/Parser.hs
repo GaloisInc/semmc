@@ -387,7 +387,7 @@ bvBinop        _ = Nothing
 data BoolBinop sym where
   BoolBinop :: (sym -> S.Pred sym -> S.Pred sym -> IO (S.Pred sym)) -> BoolBinop sym
 
-boolBinop :: (S.IsBoolExprBuilder sym) => String -> Maybe (BoolBinop sym)
+boolBinop :: (S.IsExprBuilder sym) => String -> Maybe (BoolBinop sym)
 boolBinop s =
   case s of
     "andp" -> Just $ BoolBinop S.andPred
@@ -398,7 +398,7 @@ boolBinop s =
 data BoolUnop sym where
   BoolUnop :: (sym -> S.Pred sym -> IO (S.Pred sym)) -> BoolUnop sym
 
-boolUnop :: (S.IsBoolExprBuilder sym) => String -> Maybe (BoolUnop sym)
+boolUnop :: (S.IsExprBuilder sym) => String -> Maybe (BoolUnop sym)
 boolUnop s =
   case s of
     "notp" -> Just $ BoolUnop S.notPred

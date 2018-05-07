@@ -19,9 +19,10 @@ import qualified Data.Word.Indexed as W
 
 import qualified Dismantle.Instruction as I
 
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import qualified Lang.Crucible.Solver.Interface as SI
 import qualified Lang.Crucible.BaseTypes as BT
+import qualified Lang.Crucible.Solver.BoolInterface as SB
+import qualified Lang.Crucible.Solver.Interface as SI
+import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Value as AV
@@ -31,7 +32,9 @@ import qualified SemMC.Formula as F
 -- | Evaluate an instruction against the architecture's semantics for
 -- that instruction, using an initial state as input and producing a
 -- final state.
-evaluateInstruction :: (A.Architecture arch, MapF.OrdF (A.Opcode arch (A.Operand arch)))
+evaluateInstruction :: (A.Architecture arch
+                       , MapF.OrdF (A.Opcode arch (A.Operand arch))
+                       , SB.IsBoolSolver (S.SimpleBuilder t st))
                     => S.SimpleBuilder t st
                     -- ^ The symbolic backend
                     -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (S.SimpleBuilder t st) arch)

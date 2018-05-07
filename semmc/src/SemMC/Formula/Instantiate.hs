@@ -36,6 +36,7 @@ import           Text.Printf                        ( printf )
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface     as S
+import qualified Lang.Crucible.Solver.BoolInterface as SBI
 import qualified Lang.Crucible.Solver.SimpleBuilder as S
 
 import qualified SemMC.Architecture                 as A
@@ -85,7 +86,7 @@ extendAssn newExpr newVar oldAssn =
 --    operand
 buildOpAssignment :: forall sym arch sh.
                   (A.Architecture arch,
-                   S.IsSymInterface sym)
+                   SBI.IsSymInterface sym)
                 => sym
                 -- ^ Symbolic expression builder
                 -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
@@ -166,7 +167,8 @@ type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
 -- operand list. The first result is the list of created 'TaggedExpr's for each
 -- operand that are used within the returned formula.
 instantiateFormula :: forall arch t st sh.
-                      (A.Architecture arch)
+                      ( A.Architecture arch
+                      , SBI.IsSymInterface (SB t st))
                    => SB t st
                    -> ParameterizedFormula (SB t st) arch sh
                    -> SL.List (A.Operand arch) sh
