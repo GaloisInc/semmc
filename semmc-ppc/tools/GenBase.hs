@@ -20,6 +20,7 @@ import           Data.Text.Encoding ( encodeUtf8 )
 import qualified Data.Text.IO as TIO
 import qualified Dismantle.PPC as PPC
 import qualified Lang.Crucible.Solver.Interface as CRU
+import qualified Lang.Crucible.Solver.BoolInterface as CRUB
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 import qualified Options.Applicative as O
 import           SemMC.Architecture
@@ -128,7 +129,7 @@ checkFormula arch sem op =
                       \(e :: SomeException) -> return $ Just $ show e
 
 
-loadFormula :: ( CRU.IsSymInterface sym
+loadFormula :: ( CRUB.IsSymInterface sym
                , ShowF (CRU.SymExpr sym)
                , Architecture arch
                , HasRepr (PPC.Opcode PPC.Operand) (SL.List (OperandTypeRepr arch))

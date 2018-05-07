@@ -25,6 +25,7 @@ import           Data.Parameterized.Classes         ( OrdF, ShowF(..) )
 import qualified Data.Parameterized.Map             as MapF
 import qualified Data.Parameterized.Nonce           as N
 import           Data.Parameterized.Some            ( Some (..) )
+import qualified Lang.Crucible.Solver.BoolInterface as CRUB
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
 import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
@@ -93,7 +94,7 @@ makePlain = MapF.foldrWithKey f MapF.empty
           -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
         f op pf = MapF.insert op (unTemplate pf)
 
-instantiateFormula' :: (Architecture arch)
+instantiateFormula' :: (Architecture arch, CRUB.IsBoolSolver (SB.SimpleBuilder t st))
                     => SB.SimpleBuilder t st
                     -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.SimpleBuilder t st) arch)
                     -> Instruction arch
@@ -126,7 +127,7 @@ loadBaseSet ops sym = do
   return (plainBaseSet, synthEnv)
 
 symbolicallyExecute
-  :: (Architecture arch, Traversable t1)
+  :: (Architecture arch, Traversable t1, CRUB.IsBoolSolver (SB.SimpleBuilder t2 st))
   => SB.SimpleBuilder t2 st
   -> MapF.MapF
        (SemMC.Architecture.Opcode arch (SemMC.Architecture.Operand arch))

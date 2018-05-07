@@ -39,6 +39,7 @@ import qualified Dismantle.PPC                          as PPC
 import           Dismantle.PPC.Random                   ()
 import qualified GHC.Err.Located                        as L
 import           Lang.Crucible.BaseTypes
+import qualified Lang.Crucible.Solver.BoolInterface     as SB
 import qualified Lang.Crucible.Solver.Interface         as S
 import qualified SemMC.Architecture                     as A
 import qualified SemMC.Architecture.Concrete            as AC
@@ -329,7 +330,7 @@ instance A.IsOperandTypeRepr PPC where
   operandTypeReprSymbol _ = PPC.operandReprString
 
 operandValue :: forall sym s.
-                (S.IsSymInterface sym,
+                (SB.IsSymInterface sym,
                  S.IsExprBuilder sym)
              => sym
              -> (forall tp. Location PPC tp -> IO (S.SymExpr sym tp))
