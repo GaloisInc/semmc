@@ -13,6 +13,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Semigroup
+import qualified Lang.Crucible.Solver.BoolInterface as CRUB
 import qualified Lang.Crucible.Solver.Interface as CRU
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 import qualified SemMC.ARM as ARM
@@ -79,10 +80,10 @@ testFormula a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
      MapF.size fm @?= 1
     where opname (Some op) = showF op
 
-loadFormula :: ( CRU.IsSymInterface sym
-                  , ShowF (CRU.SymExpr sym)
-                  , U.HasLogCfg) =>
-                  sym
-               -> (Some (ARMOpcode ARMOperand), BS.ByteString)
-               -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.ARM))
+loadFormula :: ( CRUB.IsSymInterface sym
+               , ShowF (CRU.SymExpr sym)
+               , U.HasLogCfg) =>
+               sym
+            -> (Some (ARMOpcode ARMOperand), BS.ByteString)
+            -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.ARM))
 loadFormula sym a = FL.loadFormulas sym [a]
