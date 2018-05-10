@@ -360,6 +360,8 @@ manualArithmetic = do
     return ()
     movr rD rM setflags unPred
 
+  -- TODO Ben: finish all sub encodings
+
   defineA32Opcode A.SUBri (Empty
                           :> ParamDef "rD" gpr naturalBV
                           :> ParamDef "setcc" cc_out (EBV 1)
@@ -379,7 +381,54 @@ manualArithmetic = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
-  -- TODO Ben: finish all sub encodings
+  defineT32Opcode T.TSUBi3 (Empty
+                           :> ParamDef "rD" tgpr naturalBV
+                           :> ParamDef "imm" imm0_7 (EBV 3)
+                           :> ParamDef "rN" tgpr naturalBV
+                           )
+                       $ \rD imm3 rN -> do
+    comment "SUB immediate, T32, encoding T1 (F7.1.234, F7-2914)"
+    input rN
+    input imm3
+    tsubri rD rN (zext (Loc imm3)) (LitBool True) (notp inITBlock)
+
+
+  defineT32Opcode T.TSUBi8 (Empty
+                           :> ParamDef "rDn" tgpr naturalBV
+                           :> ParamDef "imm" imm0_255 (EBV 8)
+                           )
+                       $ \rDn imm8 -> do
+    comment "SUB immediate, T32, encoding T2 (F7.1.234, F7-2914)"
+    input imm8
+    tsubri rDn rDn (zext (Loc imm8)) (LitBool True) (notp inITBlock)
+
+  defineT32Opcode T.T2SUBri (Empty
+                            :> ParamDef "rD" gprnopc naturalBV
+                            :> ParamDef "setcc" cc_out (EBV 1)
+                            -- TODO: Ask Kevin why we have to use two slightly
+                            -- different strings here...
+                            :> ParamDef "imm" t2_so_imm (EPackedOperand "T2_So_Imm")
+                            :> ParamDef "rN" gprnopc naturalBV
+                            )
+                        $ \rD setcc imm16 rN -> do
+    comment "SUB immediate, T32, encoding T3 (F7.1.234, F7-2914)"
+    input rN
+    input imm16
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        imm32    = thumbExpandImm imm16
+        undef    = orp (andp (isR15 rD) (notp setflags)) (isR15 rN)
+    tsubri rD rN imm32 undef setflags
+
+  defineT32Opcode T.T2SUBri12 (Empty
+                               :> ParamDef "rD" gprnopc naturalBV
+                               :> ParamDef "imm" imm0_4095 (EBV 16)
+                               :> ParamDef "rN" gpr naturalBV
+                              )
+                        $ \rD imm12 rN -> do
+    comment "SUB immediate, T32, encoding T4 (F7.1.4, F7-2540)"
+    input rN
+    input imm12  -- n.b. encodes 12 bits, but Dismantle provides 16 bits (assumed zext)
+    tsubri rD rN (zext (Loc imm12)) (LitBool False) (LitBool False)
 
   defineA32Opcode A.SUBrr (Empty
                           :> ParamDef "rD" gpr naturalBV
@@ -680,6 +729,18 @@ taddri :: (HasCallStack)
      -> SemARM 'Def ()
 taddri rD rN imm32 setflags undef = do
   let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
+  defReg rD (ite undef (unpredictable (Loc rD)) result)
+  cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
+
+tsubri :: (HasCallStack)
+     => Location 'TBV
+     -> Location 'TBV
+     -> Expr 'TBV
+     -> Expr 'TBool
+     -> Expr 'TBool
+     -> SemARM 'Def ()
+tsubri rD rN imm32 setflags undef = do
+  let (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 
