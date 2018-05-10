@@ -27,6 +27,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF
 import qualified Data.Set as Set
 
+import qualified Lang.Crucible.Solver.BoolInterface as SB
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SatResult
 import qualified Lang.Crucible.Solver.SimpleBackend as S
@@ -204,7 +205,8 @@ tryExtractingConcrete _ Unsat = return Nothing
 tryExtractingConcrete _ Unknown = fail "got Unknown when checking sat-ness"
 
 -- | Build a formula for the given concrete instruction.
-instantiateFormula' :: (Architecture arch)
+instantiateFormula' :: (Architecture arch
+                       , SB.IsBoolSolver (S.SimpleBuilder t st))
                     => TemplatableInstruction arch
                     -> Cegis (S.SimpleBuilder t st) arch (Formula (S.SimpleBuilder t st) arch)
 instantiateFormula' (TemplatableInstruction op oplist) = do
@@ -214,7 +216,8 @@ instantiateFormula' (TemplatableInstruction op oplist) = do
   liftIO (snd <$> instantiateFormula sym pf oplist)
 
 -- | Condense a series of instructions in sequential execution into one formula.
-condenseInstructions :: (Architecture arch)
+condenseInstructions :: (Architecture arch
+                       , SB.IsBoolSolver (S.SimpleBuilder t st))
                      => [TemplatableInstruction arch]
                      -> Cegis (S.SimpleBuilder t st) arch (Formula (S.SimpleBuilder t st) arch)
 condenseInstructions insns = do

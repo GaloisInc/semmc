@@ -19,6 +19,7 @@ import           Data.Parameterized.Some
 import           Data.Proxy
 import           Data.Text.Encoding ( encodeUtf8 )
 import qualified Data.Text.IO as TIO
+import qualified Lang.Crucible.Solver.BoolInterface as CRUB
 import qualified Lang.Crucible.Solver.Interface as CRU
 import qualified Lang.Crucible.Solver.SimpleBackend as S
 import qualified Options.Applicative as O
@@ -123,7 +124,7 @@ checkFormula arch sem op =
                       \(e :: SomeException) -> return $ Just $ show e
 
 
-loadFormula :: ( CRU.IsSymInterface sym
+loadFormula :: ( CRUB.IsSymInterface sym
                , ShowF (CRU.SymExpr sym)
                , Architecture arch
                , HasRepr (ARMSem.ARMOpcode ARMSem.ARMOperand) (SL.List (OperandTypeRepr arch))

@@ -46,6 +46,7 @@ import qualified Language.Haskell.TH as TH
 
 import           Lang.Crucible.BaseTypes
 import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Solver.BoolInterface as SBI
 
 import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location
@@ -85,7 +86,7 @@ class (IsOperand (Operand arch),
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
   operandValue :: forall proxy sym s.
-                  (S.IsSymInterface sym,
+                  (SBI.IsSymInterface sym,
                    S.IsExprBuilder sym)
                => proxy arch
                -> sym

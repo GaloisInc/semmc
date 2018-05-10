@@ -29,7 +29,6 @@ import qualified Data.Word.Indexed as W
 import qualified System.IO as IO
 
 import           Lang.Crucible.BaseTypes
-import           Lang.Crucible.Config ( initialConfig )
 import           Lang.Crucible.Solver.Adapter
 import qualified Lang.Crucible.Solver.Interface as S
 import           Lang.Crucible.Solver.SatResult
@@ -179,6 +178,4 @@ checkSatZ3 sym testExpr handler = do
     -- for use with the explicit type application below I get errors
     -- related to the monad @m@ here being ambiguous.
     check :: forall m. MonadVerbosity m => m a
-    check = do
-      cfg <- liftIO $ (initialConfig @ m) 1 z3Options
-      liftIO $ solver_adapter_check_sat z3Adapter sym cfg (\_ _ -> return ()) testExpr handler
+    check = liftIO $ solver_adapter_check_sat z3Adapter sym (\_ _ -> return ()) testExpr handler

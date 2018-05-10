@@ -59,7 +59,8 @@ test-suite semmc-toy-tests
                  , semmc-toy
                  , base
                  , containers
-                 , tasty >= 0.10 && < 0.12
+                 , tasty
                  , tasty-hunit
                  , async
                  , directory
+                 

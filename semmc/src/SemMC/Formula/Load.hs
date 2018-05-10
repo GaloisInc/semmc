@@ -27,6 +27,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Lang.Crucible.BaseTypes
 
 import qualified Lang.Crucible.Solver.Interface as CRU
+import qualified Lang.Crucible.Solver.BoolInterface as CRUB
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula.Env as FE
@@ -36,7 +37,7 @@ import qualified SemMC.Log as L
 import qualified SemMC.Util as U
 
 formulaEnv :: forall sym arch
-            . (A.Architecture arch, CRU.IsExprBuilder sym, CRU.IsSymInterface sym)
+            . (A.Architecture arch, CRU.IsExprBuilder sym, CRUB.IsSymInterface sym)
            => Proxy arch
            -> sym
            -> IO (FE.FormulaEnv sym arch)
@@ -63,7 +64,7 @@ instance E.Exception FormulaParseError
 -- This will throw an exception if any of the formula strings is malformed
 loadFormulas :: forall sym arch a
                 . ( CRU.IsExprBuilder sym
-                  , CRU.IsSymInterface sym
+                  , CRUB.IsSymInterface sym
                   , A.Architecture arch
                   , HR.HasRepr a (A.ShapeRepr arch)
                   , ShowF a
@@ -105,7 +106,7 @@ loadFormulas sym contents = do
 -- load.
 loadFormulasFromFiles :: forall sym arch a
                        . ( CRU.IsExprBuilder sym
-                         , CRU.IsSymInterface sym
+                         , CRUB.IsSymInterface sym
                          , A.Architecture arch
                          , HR.HasRepr a (A.ShapeRepr arch)
                          , MapF.OrdF a
