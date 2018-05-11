@@ -74,11 +74,16 @@ arm32Arch :: ArchImpl
 arm32Arch =
     ArchImpl "arm32" (Proxy @ARM.ARM) ARM.allA32Opcodes ARM.allA32Semantics
 
+thumb32Arch :: ArchImpl
+thumb32Arch =
+    ArchImpl "thumb32" (Proxy @ARM.ARM) ARM.allT32Opcodes ARM.allT32Semantics
+
 knownArchs :: [ArchImpl]
 knownArchs =
     [ ppc32Arch
     , ppc64Arch
     , arm32Arch
+    , thumb32Arch
     ]
 
 allArchNames :: [String]
