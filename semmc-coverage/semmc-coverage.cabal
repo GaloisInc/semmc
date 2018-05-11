@@ -1,0 +1,22 @@
+name:                semmc-coverage
+version:             0.1
+synopsis:            Tool for checking semantics coverage for ISAs
+license:             BSD3
+license-file:        LICENSE
+author:              Jonathan Daugherty
+maintainer:          jtd@galois.com
+category:            Testing
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable semmc-coverage
+  main-is:             CoverageMain.hs
+  hs-source-dirs:      programs
+  ghc-options:         -Wall -threaded
+  default-language:    Haskell2010
+  build-depends:       base >=4.9 && <5,
+                       semmc,
+                       semmc-ppc,
+                       semmc-arm,
+                       utf8-string,
+                       parameterized-utils

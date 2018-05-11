@@ -1,0 +1,11 @@
+
+semmc-coverage
+==============
+
+This package provides a command-line tool, semmc-coverage, that
+prints out lists of instructions for a given architecture that have
+no semantics in the corresponding SemMC architecture package. This is
+primarily a development aid to tell where we have more semantics work to
+do but should also be useful whenever the ISA changes in dismantle so we
+can tell whether we have coverage of the new instructions in the SemMC
+semantics for that architecture.

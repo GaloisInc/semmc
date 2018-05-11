@@ -5,6 +5,7 @@ packages:
   semmc-x86_64/
   semmc-arm/
   semmc-toy/
+  semmc-coverage/
   submodules/dismantle/dismantle-tablegen/
   submodules/dismantle/dismantle-arm/
   submodules/dismantle/dismantle-thumb/
