@@ -15,8 +15,15 @@ import           System.Console.GetOpt
 import           Data.Parameterized.Some (Some(..))
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Architecture.PPC32 as PPCS
-import qualified SemMC.Architecture.PPC32.Opcodes as PPCS
+
+import qualified SemMC.Architecture.PPC32 as PPC32
+import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
+
+import qualified SemMC.Architecture.PPC64 as PPC64
+import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
+
+import qualified SemMC.ARM as ARM
+import qualified SemMC.Architecture.ARM.Opcodes as ARM
 
 data Arg =
     Help
@@ -57,11 +64,21 @@ archImplName (ArchImpl n _ _ _) = n
 
 ppc32Arch :: ArchImpl
 ppc32Arch =
-    ArchImpl "ppc32" (Proxy @PPCS.PPC) PPCS.allOpcodes PPCS.allSemantics
+    ArchImpl "ppc32" (Proxy @PPC32.PPC) PPC32.allOpcodes PPC32.allSemantics
+
+ppc64Arch :: ArchImpl
+ppc64Arch =
+    ArchImpl "ppc64" (Proxy @PPC64.PPC) PPC64.allOpcodes PPC64.allSemantics
+
+arm32Arch :: ArchImpl
+arm32Arch =
+    ArchImpl "arm32" (Proxy @ARM.ARM) ARM.allA32Opcodes ARM.allA32Semantics
 
 knownArchs :: [ArchImpl]
 knownArchs =
     [ ppc32Arch
+    , ppc64Arch
+    , arm32Arch
     ]
 
 allArchNames :: [String]
