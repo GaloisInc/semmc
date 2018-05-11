@@ -199,39 +199,39 @@ defineStores = do
         addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
 
-  defineT32Opcode T.TSTRi (Empty
-                          :> ParamDef "addris" t_addrmode_is4 (EPackedOperand "T_AddrMode_IS4")
-                          :> ParamDef "gpr" tgpr naturalBV
-                          )
-                      $ \addris4 rT -> do
-    comment "Store Register immediate, Encoding T1"
-    comment "doc: F7.1.216, page F7-2878"
-    input addris4
-    let rN = addrmode_is4_reg addris4
-        imm5 = addrmode_is4_imm addris4
-        imm32 = zext $ concat imm5 (LitBV 2 0b00)
-        index = LitBool True
-        add = LitBool True
-        wback = LitBool False
-    stri rT add imm32 rN index wback (LitBool False)
+  -- defineT32Opcode T.TSTRi (Empty
+  --                         :> ParamDef "addris" t_addrmode_is4 (EPackedOperand "T_AddrMode_IS4")
+  --                         :> ParamDef "gpr" tgpr naturalBV
+  --                         )
+  --                     $ \addris4 rT -> do
+  --   comment "Store Register immediate, Encoding T1"
+  --   comment "doc: F7.1.216, page F7-2878"
+  --   input addris4
+  --   let rN = addrmode_is4_reg addris4
+  --       imm5 = addrmode_is4_imm addris4
+  --       imm32 = zext $ concat imm5 (LitBV 2 0b00)
+  --       index = LitBool True
+  --       add = LitBool True
+  --       wback = LitBool False
+  --   stri rT add imm32 rN index wback (LitBool False)
 
-  defineT32Opcode T.TSTRHi (Empty
-                          :> ParamDef "addris" t_addrmode_is2 (EPackedOperand "T_AddrMode_IS2")
-                          :> ParamDef "gpr" tgpr naturalBV
-                          )
-                      $ \addris2 rT -> do
-    comment "Store Register HalfWord immediate, Encoding T1"
-    comment "doc: F7.1.229, page F7-2904"
-    input addris2
-    let rN = addrmode_is2_reg addris2
-        imm5 = addrmode_is2_imm addris2
-        imm32 = zext $ concat imm5 (LitBV 1 0b0)
-        index = LitBool True
-        add = LitBool True
-        wback = LitBool False
-    -- n.b. stri has checks for if rT is 15; rT encoding here is a
-    -- TGPR (0-7) and can never be 15.
-    stri rT add imm32 rN index wback (LitBool False)
+  -- defineT32Opcode T.TSTRHi (Empty
+  --                         :> ParamDef "addris" t_addrmode_is2 (EPackedOperand "T_AddrMode_IS2")
+  --                         :> ParamDef "gpr" tgpr naturalBV
+  --                         )
+  --                     $ \addris2 rT -> do
+  --   comment "Store Register HalfWord immediate, Encoding T1"
+  --   comment "doc: F7.1.229, page F7-2904"
+  --   input addris2
+  --   let rN = addrmode_is2_reg addris2
+  --       imm5 = addrmode_is2_imm addris2
+  --       imm32 = zext $ concat imm5 (LitBV 1 0b0)
+  --       index = LitBool True
+  --       add = LitBool True
+  --       wback = LitBool False
+  --   -- n.b. stri has checks for if rT is 15; rT encoding here is a
+  --   -- TGPR (0-7) and can never be 15.
+  --   stri rT add imm32 rN index wback (LitBool False)
 
   defineT32Opcode T.TPUSH (Empty
                           :> ParamDef "registers" reglist (EPackedOperand "Reglist")
