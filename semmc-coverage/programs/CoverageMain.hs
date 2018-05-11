@@ -145,12 +145,10 @@ main = do
     when (configShowHelp cfg) $
         usage >> IO.exitFailure
 
-    case configArchName cfg of
+    case configArchName cfg >>= findArch of
         Nothing -> usage >> IO.exitFailure
-        Just an -> case findArch an of
-            Nothing -> usage >> IO.exitFailure
-            Just (ArchImpl _ _ opcodes semantics) -> do
-                forM_ opcodes $ \opc ->
-                    case lookup opc semantics of
-                        Nothing -> when (not $ configShowDefined cfg) $ print opc
-                        Just _ -> when (configShowDefined cfg) $ print opc
+        Just (ArchImpl _ _ opcodes semantics) -> do
+            forM_ opcodes $ \opc ->
+                case lookup opc semantics of
+                    Nothing -> when (not $ configShowDefined cfg) $ print opc
+                    Just _ -> when (configShowDefined cfg) $ print opc
