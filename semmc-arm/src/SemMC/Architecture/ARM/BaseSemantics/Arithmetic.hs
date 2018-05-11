@@ -402,6 +402,21 @@ manualArithmetic = do
     input imm8
     tsubri rDn rDn (zext (Loc imm8)) (LitBool True) (notp inITBlock)
 
+  defineT32Opcode T.T2SUBrr (Empty
+                            :> ParamDef "rD" gprnopc naturalBV
+                            :> ParamDef "setcc" cc_out (EBV 1)
+                            :> ParamDef "rN" rgpr naturalBV
+                            :> ParamDef "rM" gprnopc naturalBV
+                            )
+                        $ \rD setcc rN rM -> do
+    comment "SUB (register), T32, encoding T2 (F7.1.236, F7-2918)"
+    input rM
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        undef    = orp (orp (andp (isR15 rD) (notp setflags)) (isR15 rN)) (isR15 rM)
+    tsubrr rD rN rM undef setflags
+
   defineT32Opcode T.T2SUBri (Empty
                             :> ParamDef "rD" gprnopc naturalBV
                             :> ParamDef "setcc" cc_out (EBV 1)
@@ -731,6 +746,25 @@ taddri rD rN imm32 setflags undef = do
   let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
+
+tsubrr :: (HasCallStack)
+     => Location 'TBV
+     -> Location 'TBV
+     -> Location 'TBV
+     -> Expr 'TBool
+     -> Expr 'TBool
+     -> SemARM 'Def ()
+tsubrr rD rN rM setflags undef = do
+  let (_, _, c, _) = getNZCV
+      (shift_t, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 0) (LitBV 5 0)
+      shifted = shiftC (Loc rM) shift_t shift_n c
+      (result, nzcv) = addWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
+
+  aluWritePC (isR15 rD) result
+  defReg rD (ite undef (unpredictable (Loc rD))
+                       (ite (isR15 rD) (Loc rD) result))
+
+  cpsrNZCV (andp setflags (notp undef)) nzcv
 
 tsubri :: (HasCallStack)
      => Location 'TBV
