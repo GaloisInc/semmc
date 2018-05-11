@@ -28,6 +28,8 @@ import qualified SemMC.Architecture.ARM.Opcodes as ARM
 data Arg =
     Help
     | Arch String
+    | DefinedOnly
+    | UndefinedOnly
     deriving (Eq, Show)
 
 arguments :: [OptDescr Arg]
@@ -38,17 +40,25 @@ arguments =
     , Option "a" ["arch"] (ReqArg Arch "ARCHNAME")
       ("The name of the architecture to test (choices: " <>
       intercalate ", " allArchNames <> ")")
+
+    , Option "m" ["missing-only"] (NoArg UndefinedOnly)
+      "Show only opcodes with no semantics (default behavior)"
+
+    , Option "d" ["defined-only"] (NoArg DefinedOnly)
+      "Show only opcodes with semantics"
     ]
 
 data Config =
     Config { configShowHelp   :: Bool
            , configArchName   :: Maybe String
+           , configShowDefined :: Bool
            }
 
 defaultConfig :: Config
 defaultConfig =
     Config { configShowHelp   = False
            , configArchName   = Nothing
+           , configShowDefined = False
            }
 
 data ArchImpl where
@@ -113,6 +123,10 @@ configFromArgs = do
                     return $ c { configShowHelp = True }
                 Arch a ->
                     return $ c { configArchName = Just a }
+                UndefinedOnly ->
+                    return $ c { configShowDefined = False }
+                DefinedOnly ->
+                    return $ c { configShowDefined = True }
 
     case foldr processArg (Just defaultConfig) args of
         Nothing -> usage >> IO.exitFailure
@@ -139,5 +153,5 @@ main = do
                 -- Get list of all opcodes with no semantics
                 forM_ opcodes $ \opc ->
                     case lookup opc semantics of
-                        Nothing -> print opc
-                        Just _ -> return ()
+                        Nothing -> when (not $ configShowDefined cfg) $ print opc
+                        Just _ -> when (configShowDefined cfg) $ print opc
