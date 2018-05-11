@@ -43,6 +43,10 @@ module SemMC.Architecture.ARM.Eval
     , interpSoregregReg1
     , interpSoregregReg2
     , interpT2soimmImmExtractor
+    , interpT2soregImmExtractor
+    , interpT2soregRegExtractor
+    , interpT2soregTypeExtractor
+    , interpT2soregReg
     , interpTaddrmodeis2ImmExtractor
     , interpTaddrmodeis2RegExtractor
     , interpTaddrmodeis2Reg
@@ -372,10 +376,38 @@ interpTaddrmodeis4Reg operands (F.WrappedOperand _orep ix) rep =
 
 
 ------------------------------------------------------------------------
--- | Extract values from the Thumb SoRegImm operand
+-- | Extract values from the Thumb T2SoImm operand
 
 interpT2soimmImmExtractor :: ThumbOperands.T2SoImm -> W.W 12
 interpT2soimmImmExtractor = fromInteger . toInteger . ThumbOperands.t2SoImmToBits
+
+------------------------------------------------------------------------
+-- | Extract values from Thumb T2SoReg operand
+
+interpT2soregImmExtractor :: ThumbOperands.T2SoReg -> W.W 5
+interpT2soregImmExtractor = fromInteger . toInteger . ThumbOperands.t2SoRegImm5
+
+interpT2soregRegExtractor :: ThumbOperands.T2SoReg -> Maybe ThumbOperands.GPR
+interpT2soregRegExtractor = Just . ThumbOperands.t2SoRegRm
+
+interpT2soregTypeExtractor :: ThumbOperands.T2SoReg -> W.W 2
+interpT2soregTypeExtractor = fromInteger . toInteger . ThumbOperands.t2SoRegShiftType
+
+interpT2soregReg :: forall sh s arm tp
+                    . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                    PL.List ARMOperand sh
+                 -> F.WrappedOperand arm sh s
+                 -> BaseTypeRepr tp
+                 -> Maybe (L.Location arm tp)
+interpT2soregReg operands (F.WrappedOperand _orep ix) rep =
+  case operands PL.!! ix of
+    T32Operand (ThumbDis.T2_so_reg oprnd) ->
+      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
+          loc = LocGPR $ ThumbOperands.unGPR $ ThumbOperands.t2SoRegRm oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
+          | otherwise -> error ("Invalid return type for location function 't2_so_reg_reg' at index " ++ show ix)
+    _ -> error ("Invalid operand type at index " ++ show ix)
 
 
 ------------------------------------------------------------------------
