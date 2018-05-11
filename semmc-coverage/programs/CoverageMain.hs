@@ -150,7 +150,6 @@ main = do
         Just an -> case findArch an of
             Nothing -> usage >> IO.exitFailure
             Just (ArchImpl _ _ opcodes semantics) -> do
-                -- Get list of all opcodes with no semantics
                 forM_ opcodes $ \opc ->
                     case lookup opc semantics of
                         Nothing -> when (not $ configShowDefined cfg) $ print opc
