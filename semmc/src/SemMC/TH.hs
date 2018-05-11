@@ -10,11 +10,14 @@
 -- We want to capture semantics files as bytestrings so that we can easily
 -- access them from other packages without having to rely on their on-disk
 -- locations being stable.
-module SemMC.TH (
-  attachSemantics
-  ) where
+module SemMC.TH
+  ( attachSemantics
+  , loadSemantics
+  )
+where
 
 import qualified Control.Exception as E
+import           Control.Monad ( forM_ )
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as UBS
 import           Data.Maybe ( catMaybes )
@@ -40,11 +43,23 @@ attachSemantics :: (LiftF a)
                 -- ^ A list of directories to search for the produced filenames
                 -> Q Exp
 attachSemantics toFP elts dirs = do
-  ops <- catMaybes <$> mapM (findCorrespondingFile toFP dirs) elts
+  ops <- runIO $ loadSemantics toFP elts dirs
+  forM_ ops $ \(f, _, _) -> qAddDependentFile f
   listE (map toOpcodePair ops)
 
-toOpcodePair :: (LiftF a) => (Some a, BS.ByteString) -> ExpQ
-toOpcodePair (Some o, bs) = tupE [ [| Some $(liftF o) |], bsE]
+-- | The IO-only version of attachSemantics.
+loadSemantics :: (Some a -> FilePath)
+              -- ^ A function to convert opcodes to filenames
+              -> [Some a]
+              -- ^ A list of opcodes
+              -> [FilePath]
+              -- ^ A list of directories to search for the produced filenames
+              -> IO [(FilePath, Some a, BS.ByteString)]
+loadSemantics toFP elts dirs =
+    catMaybes <$> mapM (findCorrespondingFile toFP dirs) elts
+
+toOpcodePair :: (LiftF a) => (FilePath, Some a, BS.ByteString) -> ExpQ
+toOpcodePair (_, Some o, bs) = tupE [ [| Some $(liftF o) |], bsE]
   where
     len = BS.length bs
     bsE = [| IO.unsafePerformIO (UBS.unsafePackAddressLen len $(litE (StringPrimL (BS.unpack bs)))) |]
@@ -52,16 +67,14 @@ toOpcodePair (Some o, bs) = tupE [ [| Some $(liftF o) |], bsE]
 findCorrespondingFile :: (Some a  -> FilePath)
                       -> [FilePath]
                       -> Some a
-                      -> Q (Maybe (Some a, BS.ByteString))
+                      -> IO (Maybe (FilePath, Some a, BS.ByteString))
 findCorrespondingFile toFP dirs elt = go files
   where
     files = [ dir </> toFP elt | dir <- dirs ]
     go [] = return Nothing
     go (f:rest) = do
-      mbs <- runIO ((Just <$> BS.readFile f) `E.catch` (\(_ex :: E.IOException) -> return Nothing))
+      mbs <- E.try (BS.readFile f)
       case mbs of
-        Just bs -> do
-          qAddDependentFile f
-          return (Just (elt, bs))
-        Nothing -> go rest
-
+        Left (_::E.SomeException) -> go rest
+        Right bs -> do
+          return (Just (f, elt, bs))
