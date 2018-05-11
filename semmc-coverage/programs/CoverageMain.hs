@@ -10,11 +10,13 @@ import           Data.Monoid ((<>))
 import           Data.Proxy (Proxy(Proxy))
 import qualified System.Exit as IO
 import qualified System.Environment as IO
+import           System.FilePath ( (<.>) )
 import           System.Console.GetOpt
 
 import           Data.Parameterized.Some (Some(..))
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.TH as A
 
 import qualified SemMC.Architecture.PPC32 as PPC32
 import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
@@ -30,6 +32,7 @@ data Arg =
     | Arch String
     | DefinedOnly
     | UndefinedOnly
+    | LoadPath FilePath
     deriving (Eq, Show)
 
 arguments :: [OptDescr Arg]
@@ -38,7 +41,7 @@ arguments =
       "Show this help"
 
     , Option "a" ["arch"] (ReqArg Arch "ARCHNAME")
-      ("The name of the architecture to test (choices: " <>
+      ("The name of the architecture to test\n(choices: " <>
       intercalate ", " allArchNames <> ")")
 
     , Option "m" ["missing-only"] (NoArg UndefinedOnly)
@@ -46,12 +49,18 @@ arguments =
 
     , Option "d" ["defined-only"] (NoArg DefinedOnly)
       "Show only opcodes with semantics"
+
+    , Option "p" ["path"] (ReqArg LoadPath "PATH")
+      ("Load semantics files from the specified directory\n(if " <>
+       "omitted, use the compiled-in semantics; otherwise\nif " <>
+       "specifies multiple times, load from specified paths in order)")
     ]
 
 data Config =
     Config { configShowHelp   :: Bool
            , configArchName   :: Maybe String
            , configShowDefined :: Bool
+           , configPaths :: [FilePath]
            }
 
 defaultConfig :: Config
@@ -59,6 +68,7 @@ defaultConfig =
     Config { configShowHelp   = False
            , configArchName   = Nothing
            , configShowDefined = False
+           , configPaths      = []
            }
 
 data ArchImpl where
@@ -67,26 +77,31 @@ data ArchImpl where
              -> proxy arch
              -> [Some ((A.Opcode arch) (A.Operand arch))]
              -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
+             -> (Some ((A.Opcode arch) (A.Operand arch)) -> String)
              -> ArchImpl
 
 archImplName :: ArchImpl -> String
-archImplName (ArchImpl n _ _ _) = n
+archImplName (ArchImpl n _ _ _ _) = n
 
 ppc32Arch :: ArchImpl
 ppc32Arch =
     ArchImpl "ppc32" (Proxy @PPC32.PPC) PPC32.allOpcodes PPC32.allSemantics
+             (\(Some x) -> show x)
 
 ppc64Arch :: ArchImpl
 ppc64Arch =
     ArchImpl "ppc64" (Proxy @PPC64.PPC) PPC64.allOpcodes PPC64.allSemantics
+             (\(Some x) -> show x)
 
 arm32Arch :: ArchImpl
 arm32Arch =
     ArchImpl "arm32" (Proxy @ARM.ARM) ARM.allA32Opcodes ARM.allA32Semantics
+             (\(Some x) -> show x)
 
 thumb32Arch :: ArchImpl
 thumb32Arch =
     ArchImpl "thumb32" (Proxy @ARM.ARM) ARM.allT32Opcodes ARM.allT32Semantics
+             (\(Some x) -> show x)
 
 knownArchs :: [ArchImpl]
 knownArchs =
@@ -127,6 +142,8 @@ configFromArgs = do
                     return $ c { configShowDefined = False }
                 DefinedOnly ->
                     return $ c { configShowDefined = True }
+                LoadPath p ->
+                    return $ c { configPaths = configPaths c <> [p] }
 
     case foldr processArg (Just defaultConfig) args of
         Nothing -> usage >> IO.exitFailure
@@ -147,7 +164,13 @@ main = do
 
     case configArchName cfg >>= findArch of
         Nothing -> usage >> IO.exitFailure
-        Just (ArchImpl _ _ opcodes semantics) -> do
+        Just (ArchImpl _ _ opcodes builtInSemantics showOpc) -> do
+            semantics <- case configPaths cfg of
+                [] -> return builtInSemantics
+                paths -> do
+                    let getPair (_, b, c) = (b, c)
+                    fmap getPair <$> A.loadSemantics ((<.> "sem") . showOpc) opcodes paths
+
             forM_ opcodes $ \opc ->
                 case lookup opc semantics of
                     Nothing -> when (not $ configShowDefined cfg) $ print opc
