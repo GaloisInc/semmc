@@ -4,6 +4,10 @@ learning the semantics of ARM processor instructions, both ARM/AArch32
 instructions using a 16-bit Thumb encoding, but which execute in a
 32-bit memory space).
 
+The details on adding new semantics to this package, including
+information about the version of the ARM manual referenced in many
+modules and comments, can be found in `README.semantics.org`.
+
 The semantics are defined in terms of effects on Memory and local
 processor registers; any unusual effects on processor state
 (e.g. wait-for-event, low-power, syscall) are deferred to higher-level
@@ -11,7 +15,7 @@ handling.
 
 To generate static semantics definitions, create the static definition
 and then run the ``semmc-arm-genbase`` executable (see the
-`BaseSemantics README <https://github.com/GaloisInc/semmc/blob/master/semmc-arm/src/SemMC/Architecture/ARM/BaseSemantics/README.org>`_ file.
+`BaseSemantics README, `README.semantics.org`.
 
 To dynamically learn semantics:
 
