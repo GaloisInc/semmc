@@ -7,6 +7,7 @@ packages:
 - semmc-x86_64
 - semmc-arm
 - semmc-fuzzer
+- semmc-coverage
 - location: submodules/dismantle/dismantle-arm
 - location: submodules/dismantle/dismantle-aarch64
 - location: submodules/dismantle/dismantle-ppc
