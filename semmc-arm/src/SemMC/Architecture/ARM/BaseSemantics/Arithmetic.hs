@@ -3,6 +3,12 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- Note:
+--
+-- The semantics definitions here reference sections of the ARM
+-- Architecture Reference Manual. The version of the ARM ARM used was
+-- ARM DDI 0487A.a.
+
 module SemMC.Architecture.ARM.BaseSemantics.Arithmetic
     ( manualArithmetic
     , manualBitwise
