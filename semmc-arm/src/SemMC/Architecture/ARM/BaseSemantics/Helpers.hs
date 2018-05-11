@@ -49,6 +49,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
 
 import           Control.Monad ( when )
 import           Data.Bits hiding (shift)
+import           Data.List (isPrefixOf)
 import           Data.Maybe
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Context
@@ -148,13 +149,14 @@ defineT32Opcode opc defargs defbody =
 
 a32OpcodeNameLooksValid :: String -> Bool
 a32OpcodeNameLooksValid name =
-    take 1 name /= "T" ||
-    take 3 name == "TEQ" ||
-    take 4 name == "TRAP" ||
-    take 3 name == "TST"
+    or [ not ("T" `isPrefixOf` name)
+       , "TEQ" `isPrefixOf` name
+       , "TRAP" `isPrefixOf` name
+       , "TST" `isPrefixOf` name
+       ]
 
 t32OpcodeNameLooksValid :: String -> Bool
-t32OpcodeNameLooksValid name = take 1 name == "T"
+t32OpcodeNameLooksValid name = "T" `isPrefixOf` name
 
 
 -- ----------------------------------------------------------------------
