@@ -486,6 +486,7 @@ locationFuncInterpretation =
                             })
     ]
 
+
 shapeReprType :: forall tp . ARMOperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
 shapeReprType orep =
     case orep of
