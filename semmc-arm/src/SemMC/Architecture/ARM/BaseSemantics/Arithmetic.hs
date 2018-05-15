@@ -143,6 +143,17 @@ manualArithmetic = do
         imm32 = zext $ concat imm7 (LitBV 2 0b00)
     taddSP sp imm32 setflags
 
+  defineT32Opcode T.TSUBspi (Empty
+                             :> ParamDef "imm" t_imm0_508s4 (EPackedOperand "imm0_508s4")
+                            )
+                      $ \imm0_508s4 -> do
+    comment "SUB SP - immediate, T32, encoding T1 (F7.1.238, F7-2922)"
+    input imm0_508s4
+    let setflags = LitBool False
+        imm7 = t32_imm_0_508s4_val imm0_508s4
+        imm32 = zext $ concat imm7 (LitBV 2 0b00)
+    tsubSP sp imm32 setflags
+
   -- TODO: abstract this with ADDrr?? TADC?
   defineA32Opcode A.ADCrr (Empty
                            :> ParamDef "rD" gpr naturalBV
@@ -798,6 +809,18 @@ taddSP :: (HasCallStack) =>
 taddSP rD imm32 setflags = do
   input sp
   let (result, nzcv) = addWithCarry (Loc sp) imm32 (LitBV 32 0b0)
+  defReg rD $ ite (isR15 rD) (Loc rD) result
+  aluWritePC (isR15 rD) result
+  cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
+tsubSP :: (HasCallStack) =>
+         Location 'TBV
+      -> Expr 'TBV
+      -> Expr 'TBool
+      -> SemARM 'Def ()
+tsubSP rD imm32 setflags = do
+  input sp
+  let (result, nzcv) = addWithCarry (Loc sp) (bvnot imm32) (LitBV 32 0b1)
   defReg rD $ ite (isR15 rD) (Loc rD) result
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
