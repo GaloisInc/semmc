@@ -414,6 +414,18 @@ manualArithmetic = do
     input rN
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+    tsubrr rD rN rM (LitBool False) setflags
+
+  defineT32Opcode T.TSUBrr (Empty
+                           :> ParamDef "rD" tgpr naturalBV
+                           :> ParamDef "rN" tgpr naturalBV
+                           :> ParamDef "rM" tgpr naturalBV
+                           )
+                       $ \rD rN rM -> do
+    comment "SUB (register), T32, encoding T1 (F7.1.236, F7-2918)"
+    input rM
+    input rN
+    let setflags = notp inITBlock
         undef    = orp (orp (andp (isR15 rD) (notp setflags)) (isR15 rN)) (isR15 rM)
     tsubrr rD rN rM undef setflags
 
