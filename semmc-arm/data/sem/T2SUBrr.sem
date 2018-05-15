@@ -1,17 +1,21 @@
 ;; SUB (register), T32, encoding T2 (F7.1.236, F7-2918)
 (let
- ((addResult
-  ((_ extract 31 0)
-   (var2)))
-  (var2
-   (bvadd
+ ((var2
+  (ite
+   ((_ call "arm.is_r15")
+    rD)
+   rD
+   (addResult)))
+  (addResult
+   ((_ extract 31 0)
     (bvadd
+     (bvadd
+      ((_ zero_extend 1)
+       rN)
+      (bvnot
+       (shiftC)))
      ((_ zero_extend 1)
-      rN)
-     (bvnot
-      (shiftC)))
-    ((_ zero_extend 1)
-     #x00000001)))
+      #x00000001))))
   (shiftC
    (ite
     (bveq
@@ -22,33 +26,33 @@
      ((_ extract 29 29)
       'CPSR)
      rM)
-    (var1)))
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b000)
+     (lslC)
+     (var1))))
   (var1
    (ite
     (bveq
      ((_ extract 34 32)
       (immShift))
-     #b000)
-    (lslC)
+     #b001)
+    (logicalShiftRightCarry)
     (ite
      (bveq
       ((_ extract 34 32)
        (immShift))
-      #b001)
-     (logicalShiftRightCarry)
+      #b010)
+     (arithmeticShiftRightCarry)
      (ite
       (bveq
        ((_ extract 34 32)
         (immShift))
-       #b010)
-      (arithmeticShiftRightCarry)
-      (ite
-       (bveq
-        ((_ extract 34 32)
-         (immShift))
-        #b011)
-       (rorC)
-       (rrxC))))))
+       #b011)
+      (rorC)
+      (rrxC)))))
   (rrxC
    (concat
     ((_ extract 0 0)
@@ -257,20 +261,7 @@
   (var4
    ((testCondition)
     (ite
-     (andp
-      (orp
-       (orp
-        (andp
-         ((_ call "arm.is_r15")
-          rD)
-         (notp
-          (bveq setcc #b1)))
-        ((_ call "arm.is_r15")
-         rN))
-       ((_ call "arm.is_r15")
-        rM))
-      (notp
-       (bveq setcc #b1)))
+     (bveq setcc #b1)
      (concat
       (addCarry)
       ((_ extract 27 0)
@@ -281,12 +272,26 @@
    (concat
     ((_ extract 31 31)
      ((_ extract 31 0)
-      (var2)))
+      (bvadd
+       (bvadd
+        ((_ zero_extend 1)
+         rN)
+        (bvnot
+         (shiftC)))
+       ((_ zero_extend 1)
+        #x00000001))))
     (concat
      (ite
       (bveq
        ((_ extract 31 0)
-        (var2))
+        (bvadd
+         (bvadd
+          ((_ zero_extend 1)
+           rN)
+          (bvnot
+           (shiftC)))
+         ((_ zero_extend 1)
+          #x00000001)))
        #x00000000)
       #b1
       #b0)
@@ -294,13 +299,34 @@
   (var3
    (concat
     ((_ extract 32 32)
-     (var2))
+     (bvadd
+      (bvadd
+       ((_ zero_extend 1)
+        rN)
+       (bvnot
+        (shiftC)))
+      ((_ zero_extend 1)
+       #x00000001)))
     (bvand
      ((_ extract 31 31)
       ((_ extract 31 0)
-       (var2)))
+       (bvadd
+        (bvadd
+         ((_ zero_extend 1)
+          rN)
+         (bvnot
+          (shiftC)))
+        ((_ zero_extend 1)
+         #x00000001))))
      ((_ extract 32 32)
-      (var2)))))
+      (bvadd
+       (bvadd
+        ((_ zero_extend 1)
+         rN)
+        (bvnot
+         (shiftC)))
+       ((_ zero_extend 1)
+        #x00000001))))))
   (branchWritePC
    (ite
     ((_ call "arm.is_r15")
@@ -324,12 +350,5 @@
     (rD
      (ite
       (testCondition)
-      (ite
-       (bveq setcc #b1)
-       rD
-       (ite
-        ((_ call "arm.is_r15")
-         rD)
-        rD
-        (addResult)))
+      (var2)
       rD))))))
