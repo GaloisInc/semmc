@@ -754,7 +754,7 @@ tsubrr :: (HasCallStack)
      -> Expr 'TBool
      -> Expr 'TBool
      -> SemARM 'Def ()
-tsubrr rD rN rM setflags undef = do
+tsubrr rD rN rM undef setflags = do
   let (_, _, c, _) = getNZCV
       (shift_t, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 0) (LitBV 5 0)
       shifted = shiftC (Loc rM) shift_t shift_n c
