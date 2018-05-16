@@ -468,23 +468,24 @@ manualArithmetic = do
     input imm12  -- n.b. encodes 12 bits, but Dismantle provides 16 bits (assumed zext)
     tsubri rD rN (zext (Loc imm12)) (LitBool False) (LitBool False)
 
-  defineA32Opcode A.SUBrr (Empty
-                          :> ParamDef "rD" gpr naturalBV
-                          :> ParamDef "setcc" cc_out (EBV 1)
-                          :> ParamDef "predBits" pred (EBV 4)
-                          :> ParamDef "rM" gpr naturalBV
-                          :> ParamDef "rN" gpr naturalBV
-                          ) $ \rD setcc _ rM rN -> do
-    comment "SUB register, A32, Encoding A1  (F7.1.236, F7-2918?)"
-    input rM
-    input rN
-    input setcc
-    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-        (result, nzcv) = addWithCarry (Loc rN) (bvnot (Loc rM)) (LitBV 32 1)
-    defReg rD (ite (isR15 rD) (Loc rD) result)
-    aluWritePC (isR15 rD) result
-    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
-
+  -- defineA32Opcode A.SUBri (Empty
+  --                         :> ParamDef "rD" gpr naturalBV
+  --                         :> ParamDef "setcc" cc_out (EBV 1)
+  --                         :> ParamDef "predBits" pred (EBV 4)
+  --                         :> ParamDef "mimm" mod_imm (EPackedOperand "ModImm")
+  --                         :> ParamDef "rN" gpr naturalBV
+  --                         )
+  --                     $ \rD setcc _ imm12 rN -> do
+  --   comment "SUB immediate, A32, Encoding A1  (F7.1.235, F7-2916)"
+  --   input rN
+  --   input setcc
+  --   input imm12
+  --   let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+  --       imm32 = armExpandImm imm12
+  --       (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+  --   defReg rD (ite (isR15 rD) (Loc rD) result)
+  --   aluWritePC (isR15 rD) result
+  --   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
 ------------------------------------------------------------------------
 

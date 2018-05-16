@@ -18,6 +18,7 @@ module SemMC.Stochastic.Initialize (
 import qualified Control.Concurrent.STM as STM
 import           Control.Monad
 import qualified Data.Foldable as F
+import qualified Data.List as DL
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import           System.FilePath ( (</>), (<.>) )
@@ -208,7 +209,16 @@ mkFormulaFilename :: (P.ShowF a)
                   -> a sh
                   -- ^ The opcode to store a formula for
                   -> FilePath
-mkFormulaFilename dir oc = dir </> P.showF oc <.> "sem"
+mkFormulaFilename dir oc =
+  -- NOTE: There is a name clash between ARM's TSTri and Thumb's TSTRi opcodes on
+  -- case-insensitive file systems (Mac in particular). Therefore, we are using a
+  -- slightly different filename for the Thumb store instruction to circumvent this
+  -- problem. It is an ugly hack.
+  let showOC = P.showF oc
+      ocName = if "TSTR" `DL.isPrefixOf` showOC
+               then "TSTOR" ++ drop 4 showOC
+               else showOC
+  in dir </> ocName <.> "sem"
 
 -- | The worklist consists of all of the opcodes for which we do not already
 -- have a formula (and that we actually want to learn)
