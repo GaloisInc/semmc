@@ -113,7 +113,7 @@ decodeImmShift ty imm5 = ImmShift $ "immShift" =:
         ] (concat (LitBV 3 0b011) (zext imm5))
 
 -- | The Shift function from the ARM manual (v8).
-shift :: Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+shift :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 shift value srtype shift_n carry_in =
     extract 31 0 $ shiftC value srtype shift_n carry_in
 
