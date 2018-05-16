@@ -62,7 +62,7 @@ newtype ImmShift = ImmShift (Expr 'TBV)
 --
 -- The first element of the pair is the SRType, while the second is a 32 bit
 -- bitvector encoding the shift amount.
-splitImmShift :: ImmShift -> (SRType, Expr 'TBV)
+splitImmShift :: (HasCallStack) => ImmShift -> (SRType, Expr 'TBV)
 splitImmShift (ImmShift is) = (SRType (extract 34 32 is), extract 31 0 is)
 
 -- | Convert a two bit shift type into our SRType
