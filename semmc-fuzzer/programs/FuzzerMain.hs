@@ -47,7 +47,7 @@ import           Data.Parameterized.HasRepr (HasRepr)
 import qualified Data.Parameterized.List as L
 
 import qualified Lang.Crucible.Solver.SimpleBackend as SB
-import qualified Lang.Crucible.Solver.Interface as SB
+import qualified Lang.Crucible.Solver.SimpleBuilder as SB
 
 import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction(Instruction))
