@@ -16,7 +16,7 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     SemMC.ARM
+  exposed-modules:     SemMC.Architecture.AArch32
                      , SemMC.Architecture.A32
                      , SemMC.Architecture.ARM.BaseSemantics
                      , SemMC.Architecture.ARM.Combined

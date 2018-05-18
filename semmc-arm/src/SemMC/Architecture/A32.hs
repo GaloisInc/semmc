@@ -40,8 +40,8 @@ import qualified Dismantle.ARM.Operands as ARMOperands
 import           GHC.TypeLits
 import qualified Lang.Crucible.Backend as SB
 import           Language.Haskell.TH hiding ( recover )
-import           SemMC.ARM hiding ( testSerializer )
 import qualified SemMC.Architecture as A
+import           SemMC.Architecture.AArch32 hiding ( testSerializer )
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR )
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
@@ -97,7 +97,7 @@ type instance A.OperandType A32 "Reglist" = BaseBVType 16
 type instance A.OperandType A32 "Shift_so_reg_imm" = BaseBVType 16
 type instance A.OperandType A32 "So_reg_imm" = BaseBVType 32
 type instance A.OperandType A32 "So_reg_reg" = BaseBVType 32
-type instance A.OperandType A32 "Unpredictable" = A.OperandType ARM "Unpredictable"
+type instance A.OperandType A32 "Unpredictable" = A.OperandType AArch32 "Unpredictable"
 
 instance A.IsOperandTypeRepr A32 where
     type OperandTypeRepr A32 = ARMDis.OperandRepr
