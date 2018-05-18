@@ -1,0 +1,374 @@
+;; SUB (register), T32, encoding T1 (F7.1.236, F7-2918)
+(let
+ ((addResult
+  ((_ extract 31 0)
+   (var2)))
+  (var2
+   (bvadd
+    (bvadd
+     ((_ zero_extend 1)
+      rN)
+     (bvnot
+      (shiftC)))
+    ((_ zero_extend 1)
+     #x00000001)))
+  (shiftC
+   (ite
+    (bveq
+     ((_ extract 31 0)
+      (immShift))
+     #x00000000)
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     rM)
+    (var1)))
+  (var1
+   (ite
+    (bveq
+     ((_ extract 34 32)
+      (immShift))
+     #b000)
+    (lslC)
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b001)
+     (logicalShiftRightCarry)
+     (ite
+      (bveq
+       ((_ extract 34 32)
+        (immShift))
+       #b010)
+      (arithmeticShiftRightCarry)
+      (ite
+       (bveq
+        ((_ extract 34 32)
+         (immShift))
+        #b011)
+       (rorC)
+       (rrxC))))))
+  (rrxC
+   (concat
+    ((_ extract 0 0)
+     rM)
+    (concat
+     ((_ extract 29 29)
+      'CPSR)
+     ((_ extract 31 1)
+      rM))))
+  (rorC
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
+    (bvor
+     (bvshl
+      rM
+      (bvsub
+       #x00000020
+       (bvurem
+        ((_ extract 31 0)
+         (immShift))
+        #x00000020)))
+     (bvlshr
+      rM
+      (bvurem
+       ((_ extract 31 0)
+        (immShift))
+       #x00000020)))))
+  (immShift
+   (concat
+    #b000
+    ((_ zero_extend 27)
+     #b00000)))
+  (arithmeticShiftRightCarry
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
+    (bvashr
+     rM
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (logicalShiftRightCarry
+   (concat
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
+    (bvlshr
+     rM
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (lslC
+   (bvshl
+    ((_ zero_extend 1)
+     rM)
+    ((_ zero_extend 1)
+     ((_ extract 31 0)
+      (immShift)))))
+  (testCondition
+   (ite
+    (andp
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (ITState)))
+     (bvne
+      (ITState)
+      #xf))
+    (notp
+     (conditionMatch))
+    (conditionMatch)))
+  (conditionMatch
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      (ITState))
+     #b000)
+    (bveq
+     #b1
+     ((_ extract 30 30)
+      'CPSR))
+    (ite
+     (bveq
+      ((_ extract 3 1)
+       (ITState))
+      #b001)
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
+     (ite
+      (bveq
+       ((_ extract 3 1)
+        (ITState))
+       #b010)
+      (bveq
+       #b1
+       ((_ extract 31 31)
+        'CPSR))
+      (ite
+       (bveq
+        ((_ extract 3 1)
+         (ITState))
+        #b011)
+       (bveq
+        #b1
+        ((_ extract 28 28)
+         'CPSR))
+       (ite
+        (bveq
+         ((_ extract 3 1)
+          (ITState))
+         #b100)
+        (andp
+         (bveq
+          #b1
+          ((_ extract 29 29)
+           'CPSR))
+         (notp
+          (bveq
+           #b1
+           ((_ extract 30 30)
+            'CPSR))))
+        (ite
+         (bveq
+          ((_ extract 3 1)
+           (ITState))
+          #b101)
+         (bveq
+          ((_ extract 31 31)
+           'CPSR)
+          ((_ extract 28 28)
+           'CPSR))
+         (ite
+          (bveq
+           ((_ extract 3 1)
+            (ITState))
+           #b110)
+          (andp
+           (bveq
+            ((_ extract 31 31)
+             'CPSR)
+            ((_ extract 28 28)
+             'CPSR))
+           (notp
+            (bveq
+             #b1
+             ((_ extract 30 30)
+              'CPSR))))
+          (true)))))))))
+  (true
+   (bveq #b0 #b0))
+  (ITState
+   (ite
+    (bveq
+     (concat
+      ((_ extract 11 10)
+       'CPSR)
+      ((_ extract 26 25)
+       'CPSR))
+     #x0)
+    #xe
+    ((_ extract 15 12)
+     'CPSR)))
+  (var4
+   ((testCondition)
+    (ite
+     (andp
+      (notp
+       (bvne
+        #x00
+        (concat
+         ((_ extract 15 12)
+          'CPSR)
+         (concat
+          ((_ extract 11 10)
+           'CPSR)
+          ((_ extract 26 25)
+           'CPSR)))))
+      (notp
+       (orp
+        (orp
+         (andp
+          ((_ call "arm.is_r15")
+           rD)
+          (notp
+           (notp
+            (bvne
+             #x00
+             (concat
+              ((_ extract 15 12)
+               'CPSR)
+              (concat
+               ((_ extract 11 10)
+                'CPSR)
+               ((_ extract 26 25)
+                'CPSR)))))))
+         ((_ call "arm.is_r15")
+          rN))
+        ((_ call "arm.is_r15")
+         rM))))
+     (concat
+      (addCarry)
+      ((_ extract 27 0)
+       'CPSR))
+     'CPSR)
+    'CPSR))
+  (addCarry
+   (concat
+    ((_ extract 31 31)
+     ((_ extract 31 0)
+      (var2)))
+    (concat
+     (ite
+      (bveq
+       ((_ extract 31 0)
+        (var2))
+       #x00000000)
+      #b1
+      #b0)
+     (var3))))
+  (var3
+   (concat
+    ((_ extract 32 32)
+     (var2))
+    (bvand
+     ((_ extract 31 31)
+      ((_ extract 31 0)
+       (var2)))
+     ((_ extract 32 32)
+      (var2)))))
+  (branchWritePC
+   (ite
+    ((_ call "arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     (addResult))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'TGPR)
+   (rN . 'TGPR)
+   (rM . 'TGPR)))
+  (in
+   (rN rM 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite var4))
+    (rD
+     (ite
+      (testCondition)
+      (ite
+       (orp
+        (orp
+         (andp
+          ((_ call "arm.is_r15")
+           rD)
+          (notp
+           (notp
+            (bvne
+             #x00
+             (concat
+              ((_ extract 15 12)
+               'CPSR)
+              (concat
+               ((_ extract 11 10)
+                'CPSR)
+               ((_ extract 26 25)
+                'CPSR)))))))
+         ((_ call "arm.is_r15")
+          rN))
+        ((_ call "arm.is_r15")
+         rM))
+       rD
+       (ite
+        ((_ call "arm.is_r15")
+         rD)
+        rD
+        (addResult)))
+      rD))))))
