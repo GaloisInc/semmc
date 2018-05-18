@@ -1,61 +1,55 @@
 ;; ADD register, T32, encoding T3 [no shift] (F7.1.6, F7-2544)
 (let
- ((var2
-  (ite
-   ((_ call "arm.is_r15")
-    rD)
-   rD
-   (addResult)))
-  (addResult
-   ((_ extract 31 0)
+ ((addResult
+  ((_ extract 31 0)
+   (bvadd
     (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       ((_ call "t32.t2soreg_reg")
-        rN))
-      ((_ zero_extend 1)
-       ((_ extract 31 0)
-        (shiftC))))
      ((_ zero_extend 1)
-      #x00000000))))
+      ((_ call "t32.t2soreg_reg")
+       rN))
+     ((_ zero_extend 1)
+      ((_ extract 31 0)
+       (shiftC))))
+    ((_ zero_extend 1)
+     #x00000000))))
   (shiftC
    (ite
     (bveq
-     ((_ zero_extend 27)
-      ((_ call "t32.t2soreg_imm")
-       rN))
+     ((_ extract 31 0)
+      (immShift))
      #x00000000)
-    (concat
-     ((_ extract 29 29)
-      'CPSR)
-     rM)
+    var4))
+  (var4
+   ((concat
+    ((_ extract 29 29)
+     'CPSR)
+    rM)
     (ite
      (bveq
-      ((_ call "t32.t2soreg_type")
-       rN)
+      ((_ extract 34 32)
+       (immShift))
       #b000)
      (lslC)
-     (var1))))
-  (var1
-   (ite
-    (bveq
-     ((_ call "t32.t2soreg_type")
-      rN)
-     #b001)
-    (logicalShiftRightCarry)
-    (ite
-     (bveq
-      ((_ call "t32.t2soreg_type")
-       rN)
-      #b010)
-     (arithmeticShiftRightCarry)
      (ite
       (bveq
-       ((_ call "t32.t2soreg_type")
-        rN)
-       #b011)
-      (rorC)
-      (rrxC)))))
+       ((_ extract 34 32)
+        (immShift))
+       #b001)
+      (logicalShiftRightCarry)
+      (ite var3)))))
+  (var3
+   ((bveq
+    ((_ extract 34 32)
+     (immShift))
+    #b010)
+    (arithmeticShiftRightCarry)
+    (ite
+     (bveq
+      ((_ extract 34 32)
+       (immShift))
+      #b011)
+     (rorC)
+     (rrxC))))
   (rrxC
    (concat
     ((_ extract 0 0)
@@ -67,100 +61,119 @@
       rM))))
   (rorC
    (concat
-    (ite
-     (bvult
-      ((_ zero_extend 27)
-       ((_ call "t32.t2soreg_imm")
-        rN))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ zero_extend 27)
-         ((_ call "t32.t2soreg_imm")
-          rN))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
+    (var2)
     (bvor
-     (bvshl
-      rM
-      (bvsub
-       #x00000020
-       (bvurem
-        ((_ zero_extend 27)
-         ((_ call "t32.t2soreg_imm")
-          rN))
-        #x00000020)))
+     (var1)
      (bvlshr
       rM
       (bvurem
-       ((_ zero_extend 27)
+       ((_ extract 31 0)
+        (immShift))
+       #x00000020)))))
+  (immShift
+   (ite
+    (bveq
+     ((_ call "t32.t2soreg_type")
+      rN)
+     #b00)
+    (concat
+     #b000
+     ((_ zero_extend 27)
+      ((_ call "t32.t2soreg_imm")
+       rN)))
+    (ite
+     (bveq
+      ((_ call "t32.t2soreg_type")
+       rN)
+      #b01)
+     (concat
+      #b001
+      (ite
+       (bveq
+        #b00000
         ((_ call "t32.t2soreg_imm")
          rN))
-       #x00000020)))))
-  (arithmeticShiftRightCarry
-   (concat
-    (ite
-     (bvult
-      ((_ zero_extend 27)
-       ((_ call "t32.t2soreg_imm")
-        rN))
-      #x00000020)
+       #x00000020
+       ((_ zero_extend 27)
+        ((_ call "t32.t2soreg_imm")
+         rN))))
      (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ zero_extend 27)
+      (bveq
+       ((_ call "t32.t2soreg_type")
+        rN)
+       #b10)
+      (concat
+       #b010
+       (ite
+        (bveq
+         #b00000
          ((_ call "t32.t2soreg_imm")
           rN))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
+        #x00000020
+        ((_ zero_extend 27)
+         ((_ call "t32.t2soreg_imm")
+          rN))))
+      (ite
+       (bveq
+        ((_ call "t32.t2soreg_imm")
+         rN)
+        #b00000)
+       (concat #b100 #x00000001)
+       (concat
+        #b011
+        ((_ zero_extend 27)
+         ((_ call "t32.t2soreg_imm")
+          rN))))))))
+  (var1
+   (bvshl
+    rM
+    (bvsub
+     #x00000020
+     (bvurem
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020))))
+  (var2
+   (ite
+    (bvult
+     ((_ extract 31 0)
+      (immShift))
+     #x00000020)
+    (ite
+     ((_ call "test_bit_dynamic")
+      (bvsub
+       ((_ extract 31 0)
+        (immShift))
+       #x00000001)
+      rM)
+     #b1
      #b0)
+    #b0))
+  (arithmeticShiftRightCarry
+   (concat
+    (var2)
     (bvashr
      rM
      (bvurem
-      ((_ zero_extend 27)
-       ((_ call "t32.t2soreg_imm")
-        rN))
+      ((_ extract 31 0)
+       (immShift))
       #x00000020))))
   (logicalShiftRightCarry
    (concat
-    (ite
-     (bvult
-      ((_ zero_extend 27)
-       ((_ call "t32.t2soreg_imm")
-        rN))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ zero_extend 27)
-         ((_ call "t32.t2soreg_imm")
-          rN))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
+    (var2)
     (bvlshr
      rM
      (bvurem
-      ((_ zero_extend 27)
-       ((_ call "t32.t2soreg_imm")
-        rN))
+      ((_ extract 31 0)
+       (immShift))
       #x00000020))))
   (lslC
    (bvshl
     ((_ zero_extend 1)
      rM)
     ((_ zero_extend 1)
-     ((_ zero_extend 27)
-      ((_ call "t32.t2soreg_imm")
-       rN)))))
+     ((_ extract 31 0)
+      (immShift)))))
   (testCondition
    (ite
     (andp
@@ -267,7 +280,7 @@
     #xe
     ((_ extract 15 12)
      'CPSR)))
-  (var4
+  (var9
    ((testCondition)
     (ite
      (andp
@@ -282,20 +295,9 @@
      'CPSR)
     'CPSR))
   (nzcv
-   (concat var3))
-  (var3
-   (((_ extract 31 31)
-    ((_ extract 31 0)
-     (bvadd
-      (bvadd
-       ((_ zero_extend 1)
-        ((_ call "t32.t2soreg_reg")
-         rN))
-       ((_ zero_extend 1)
-        ((_ extract 31 0)
-         (shiftC))))
-      ((_ zero_extend 1)
-       #x00000000))))
+   (concat
+    ((_ extract 31 31)
+     var5)
     (concat
      (ite
       (bveq
@@ -313,42 +315,50 @@
        #x00000000)
       #b1
       #b0)
-     (concat
-      ((_ extract 32 32)
-       (bvadd
-        (bvadd
-         ((_ zero_extend 1)
-          ((_ call "t32.t2soreg_reg")
-           rN))
-         ((_ zero_extend 1)
-          ((_ extract 31 0)
-           (shiftC))))
-        ((_ zero_extend 1)
-         #x00000000)))
-      (bvand
-       ((_ extract 31 31)
+     (var8))))
+  (var8
+   (concat
+    ((_ extract 32 32)
+     (bvadd
+      (bvadd
+       ((_ zero_extend 1)
+        ((_ call "t32.t2soreg_reg")
+         rN))
+       ((_ zero_extend 1)
         ((_ extract 31 0)
-         (bvadd
-          (bvadd
-           ((_ zero_extend 1)
-            ((_ call "t32.t2soreg_reg")
-             rN))
-           ((_ zero_extend 1)
-            ((_ extract 31 0)
-             (shiftC))))
-          ((_ zero_extend 1)
-           #x00000000))))
-       ((_ extract 32 32)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           ((_ call "t32.t2soreg_reg")
-            rN))
-          ((_ zero_extend 1)
-           ((_ extract 31 0)
-            (shiftC))))
-         ((_ zero_extend 1)
-          #x00000000))))))))
+         (shiftC))))
+      ((_ zero_extend 1)
+       #x00000000)))
+    (bvand
+     ((_ extract 31 31)
+      var5)
+     ((_ extract 32 32)
+      (bvadd
+       (bvadd
+        ((_ zero_extend 1)
+         ((_ call "t32.t2soreg_reg")
+          rN))
+        ((_ zero_extend 1)
+         ((_ extract 31 0)
+          (shiftC))))
+       ((_ zero_extend 1)
+        #x00000000))))))
+  (var5
+   (((_ extract 31 0)
+    (bvadd
+     (bvadd
+      ((_ zero_extend 1)
+       ((_ call "t32.t2soreg_reg")
+        rN))
+      ((_ zero_extend 1)
+       ((_ extract 31 0)
+        (shiftC))))
+     ((_ zero_extend 1)
+      #x00000000)))))
+  (var7
+   ('PC var6))
+  (var6
+   ((branchWritePC)))
   (branchWritePC
    (ite
     ((_ call "arm.is_r15")
@@ -365,12 +375,15 @@
   (in
    (setcc rN rM 'CPSR 'PC))
   (defs
-   (('PC
-    (branchWritePC))
+   ((var7)
     ('CPSR
-     (ite var4))
+     (ite var9))
     (rD
      (ite
       (testCondition)
-      (var2)
+      (ite
+       ((_ call "arm.is_r15")
+        rD)
+       rD
+       (addResult))
       rD))))))

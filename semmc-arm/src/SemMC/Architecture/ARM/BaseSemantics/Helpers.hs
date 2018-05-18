@@ -416,7 +416,7 @@ t2SoReg_reg :: Location 'TPackedOperand -> Expr 'TBV
 t2SoReg_reg = unpackUF "T2_So_Reg" naturalBV "t32.t2soreg_reg"
 
 t2SoReg_type :: Location 'TPackedOperand -> Expr 'TBV
-t2SoReg_type = unpackUF "T2_So_Reg" (EBV 3) "t32.t2soreg_type"
+t2SoReg_type = unpackUF "T2_So_Reg" (EBV 2) "t32.t2soreg_type"
 
 t2SoReg_imm :: Location 'TPackedOperand -> Expr 'TBV
 t2SoReg_imm = unpackUF "T2_So_Reg" (EBV 5) "t32.t2soreg_imm"

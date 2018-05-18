@@ -147,7 +147,7 @@ uninterpretedFunctions _ =
 
   , ("t32.t2soreg_type", -- Extract the immediate value
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 3)))
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 2)))
 
   , ("t32.addrmode_is2_imm",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),

@@ -313,8 +313,9 @@ manualArithmetic = do
     input setcc
 
     let rNexpr  = t2SoReg_reg  rN_so_reg
-        shift_n = zext (t2SoReg_imm  rN_so_reg)
-        shift_t = SRType (t2SoReg_type rN_so_reg)
+        ty = t2SoReg_type rN_so_reg
+        imm = t2SoReg_imm rN_so_reg
+        (shift_t, shift_n) = splitImmShift (decodeImmShift ty imm)
 
     addrr rD rM rNexpr (bveq (Loc setcc) (LitBV 1 0b1)) shift_t shift_n
 
