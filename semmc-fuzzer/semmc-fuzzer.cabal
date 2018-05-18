@@ -26,7 +26,8 @@ library
                        containers,
                        dismantle-tablegen,
                        utf8-string,
-                       aeson
+                       aeson,
+                       what4
 
 executable semmc-fuzzer
   main-is:             FuzzerMain.hs

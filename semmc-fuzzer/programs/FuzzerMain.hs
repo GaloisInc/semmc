@@ -46,8 +46,9 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.HasRepr (HasRepr)
 import qualified Data.Parameterized.List as L
 
-import qualified Lang.Crucible.Solver.SimpleBackend as SB
-import qualified Lang.Crucible.Solver.Interface as SB
+import qualified Lang.Crucible.Backend as SB
+import qualified Lang.Crucible.Backend.Simple as SB
+import qualified What4.Expr.Builder as SB
 
 import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction(Instruction))
