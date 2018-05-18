@@ -21,6 +21,8 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -32,6 +34,8 @@ module SemMC.ARM
     , ARMOperand(..)
     , numGPR
     , testSerializer
+    , machineStateToBS
+    , machineStateFromBS
     , module SemMC.Architecture.ARM.Combined  -- for the instances
     )
     where
@@ -102,13 +106,13 @@ data MachineState =
 type Instruction = LB.ByteString
 
 testSerializer :: CE.TestSerializer MachineState Instruction
-testSerializer = CE.TestSerializer { CE.flattenMachineState = toBS
-                                   , CE.parseMachineState = fromBS
+testSerializer = CE.TestSerializer { CE.flattenMachineState = machineStateToBS
+                                   , CE.parseMachineState = machineStateFromBS
                                    , CE.flattenProgram = mconcat
                                    }
 
-toBS :: MachineState -> B.ByteString
-toBS ms = LB.toStrict (B.toLazyByteString bld)
+machineStateToBS :: MachineState -> B.ByteString
+machineStateToBS ms = LB.toStrict (B.toLazyByteString bld)
   where
     bld = mconcat [ mconcat (map B.word32LE (V.toList (gprs ms)))
                   , B.word32LE (pctr ms)
@@ -119,8 +123,8 @@ toBS ms = LB.toStrict (B.toLazyByteString bld)
                   , mconcat (map B.word8 (V.toList (mem2 ms)))
                   ]
 
-fromBS :: B.ByteString -> Maybe MachineState
-fromBS bs =
+machineStateFromBS :: B.ByteString -> Maybe MachineState
+machineStateFromBS bs =
   case G.pushChunk (G.runGetIncremental getMachineState) bs of
     G.Done _ _ ms -> Just ms
     G.Fail {} -> Nothing
@@ -349,7 +353,7 @@ locationFuncInterpretation =
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
-                          { A.locationInterp = F.LocationFuncInterp interpImm12Reg
+                          { A.locationInterp = F.LocationFuncInterp (interpImm12Reg getArmDisOperand)
                           , A.exprInterpName = 'interpImm12RegExtractor
                           })
     , ("a32.imm12_off", A.FunctionInterpretation
@@ -362,11 +366,11 @@ locationFuncInterpretation =
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
-                                          { A.locationInterp = F.LocationFuncInterp interpLdstsoregBaseReg
+                                          { A.locationInterp = F.LocationFuncInterp (interpLdstsoregBaseReg getArmDisOperand)
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor
                                           })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
-                                            { A.locationInterp = F.LocationFuncInterp interpLdstsoregOffReg
+                                            { A.locationInterp = F.LocationFuncInterp (interpLdstsoregOffReg getArmDisOperand)
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor
                                             })
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation
@@ -400,7 +404,7 @@ locationFuncInterpretation =
                              , A.exprInterpName = 'interpSoregimmImmExtractor
                              })
     , ("a32.soregimm_reg", A.FunctionInterpretation
-                             { A.locationInterp = F.LocationFuncInterp interpSoregimmReg
+                             { A.locationInterp = F.LocationFuncInterp (interpSoregimmReg getArmDisOperand)
                              , A.exprInterpName = 'interpSoregimmRegExtractor })
 
     , ("a32.soregreg_type", A.FunctionInterpretation
@@ -408,10 +412,10 @@ locationFuncInterpretation =
                               , A.exprInterpName = 'interpSoregregTypeExtractor
                               })
     , ("a32.soregreg_reg1", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg1
+                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg1 getArmDisOperand)
                               , A.exprInterpName = 'interpSoregregReg1Extractor })
     , ("a32.soregreg_reg2", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
+                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg2 getArmDisOperand)
                               , A.exprInterpName = 'interpSoregregReg2Extractor })
 
     , ("t32.blxtarget_S", A.FunctionInterpretation
@@ -486,6 +490,9 @@ locationFuncInterpretation =
                             })
     ]
 
+getArmDisOperand :: ARMOperand s -> Maybe (ARMDis.Operand s)
+getArmDisOperand (A32Operand a) = Just a
+getArmDisOperand _ = Nothing
 
 shapeReprType :: forall tp . ARMOperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
 shapeReprType orep =

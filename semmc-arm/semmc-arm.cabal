@@ -17,6 +17,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     SemMC.ARM
+                     , SemMC.Architecture.A32
                      , SemMC.Architecture.ARM.BaseSemantics
                      , SemMC.Architecture.ARM.Combined
                      , SemMC.Architecture.ARM.Eval
