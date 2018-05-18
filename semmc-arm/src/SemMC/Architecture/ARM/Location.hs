@@ -21,7 +21,7 @@ import           Data.Word ( Word8 )
 import qualified Dismantle.ARM.Operands as ARMOprnds
 import qualified Dismantle.Thumb.Operands as ThumbOprnds
 import           GHC.TypeLits
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 
 type family ArchRegWidth arch :: Nat

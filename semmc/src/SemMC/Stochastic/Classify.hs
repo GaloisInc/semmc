@@ -39,9 +39,9 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.TraversableFC as FC
-import qualified Lang.Crucible.Solver.Interface as S
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import qualified Lang.Crucible.BaseTypes as S
+import qualified What4.Interface as S
+import qualified What4.Expr.Builder as S
+import qualified What4.BaseTypes as S
 
 import qualified Dismantle.Instruction as D
 
@@ -443,30 +443,30 @@ summarizeFormula f = F.foldl' (summarizeExpr) (0, 0, 0) someExprs
   where
     someExprs = MapF.elems (F.formDefs f)
 
-summarizeExpr :: (Int, Int, Int) -> Some (S.Elt t) -> (Int, Int, Int)
+summarizeExpr :: (Int, Int, Int) -> Some (S.Expr t) -> (Int, Int, Int)
 summarizeExpr acc@(uf, nl, sz) (Some se) =
   case se of
     S.SemiRingLiteral {} -> acc
-    S.BVElt {} -> acc
-    S.BoundVarElt {} -> acc
-    S.NonceAppElt ne ->
-      case S.nonceEltApp ne of
+    S.BVExpr {} -> acc
+    S.BoundVarExpr {} -> acc
+    S.NonceAppExpr ne ->
+      case S.nonceExprApp ne of
         S.FnApp {} -> (uf + 1, nl, sz + 1)
         _ -> (uf, nl, sz + 1)
-    S.AppElt ae -> FC.foldlFC' summarizeElt acc (S.appEltApp ae)
+    S.AppExpr ae -> FC.foldlFC' summarizeElt acc (S.appExprApp ae)
 
-summarizeElt :: (Int, Int, Int) -> S.Elt t tp -> (Int, Int, Int)
+summarizeElt :: (Int, Int, Int) -> S.Expr t tp -> (Int, Int, Int)
 summarizeElt acc@(uf, nl, sz) elt =
   case elt of
     S.SemiRingLiteral {} -> acc
-    S.BVElt {} -> acc
-    S.BoundVarElt {} -> acc
-    S.NonceAppElt ne ->
-      case S.nonceEltApp ne of
+    S.BVExpr {} -> acc
+    S.BoundVarExpr {} -> acc
+    S.NonceAppExpr ne ->
+      case S.nonceExprApp ne of
         S.FnApp {} -> (uf + 1, nl, sz + 1)
         _ -> (uf, nl, sz + 1)
-    S.AppElt ae ->
-      case S.appEltApp ae of
+    S.AppExpr ae ->
+      case S.appExprApp ae of
         -- According to crucible, any occurrence of this constructor is non-linear
         S.SemiRingMul {} -> (uf, nl + 1, sz + 1)
         S.BVMul _ lhs rhs -> addIfNonlinear lhs rhs acc
@@ -480,18 +480,18 @@ summarizeElt acc@(uf, nl, sz) elt =
 -- op count.
 --
 -- The operation is non-linear if one of the operands is /not/ a constant.
-addIfNonlinear :: S.Elt t (S.BaseBVType w)
-               -> S.Elt t (S.BaseBVType w)
+addIfNonlinear :: S.Expr t (S.BaseBVType w)
+               -> S.Expr t (S.BaseBVType w)
                -> (Int, Int, Int)
                -> (Int, Int, Int)
 addIfNonlinear lhs rhs (uf, nl, sz)
   | isBVConstant lhs || isBVConstant rhs = (uf, nl, sz + 1)
   | otherwise = (uf, nl + 1, sz + 1)
 
-isBVConstant :: S.Elt t (S.BaseBVType w) -> Bool
+isBVConstant :: S.Expr t (S.BaseBVType w) -> Bool
 isBVConstant e =
   case e of
-    S.BVElt {} -> True
+    S.BVExpr {} -> True
     _ -> False
 
 -- | Flatten a set of equivalence classes into one equivalence class

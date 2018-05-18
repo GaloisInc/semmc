@@ -11,8 +11,8 @@ module SemMC.Formula.Env
 
 import qualified Data.Map.Strict as Map
 
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.Interface as S
+import           What4.BaseTypes
+import qualified What4.Interface as S
 
 -- | Like 'Data.Parameterized.Some.Some', but for doubly-parameterized types.
 data SomeSome (f :: k1 -> k2 -> *) = forall x y. SomeSome (f x y)

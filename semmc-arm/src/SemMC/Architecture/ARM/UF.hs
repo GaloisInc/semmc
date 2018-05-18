@@ -14,9 +14,9 @@ module SemMC.Architecture.ARM.UF
 import Data.Parameterized.Context
 import Data.Parameterized.Some ( Some(..) )
 import GHC.TypeLits
-import Lang.Crucible.BaseTypes
 import SemMC.Architecture.ARM.Location
 import SemMC.Architecture.ARM.UFgen
+import What4.BaseTypes
 
 
 uninterpretedFunctions :: forall proxy arm. (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>

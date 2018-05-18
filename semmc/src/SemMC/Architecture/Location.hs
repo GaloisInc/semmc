@@ -10,8 +10,9 @@ module SemMC.Architecture.Location (
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.Interface as S
+import           What4.BaseTypes
+import qualified What4.Interface as S
+
 
 type ArchState arch ex = MapF.MapF (Location arch) ex
 

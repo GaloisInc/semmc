@@ -46,10 +46,10 @@ import           Data.Parameterized.Some ( Some(..), mapSome, viewSome )
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.TraversableFC ( traverseFC )
 import qualified Data.Parameterized.Map as MapF
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.BoolInterface as S
-import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.Symbol ( userSymbol )
+import           What4.BaseTypes
+import qualified Lang.Crucible.Backend as S
+import qualified What4.Interface as S
+import           What4.Symbol ( userSymbol )
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.BoundVar as BV

@@ -13,7 +13,7 @@ import           Data.Parameterized.Context ( Assignment
                                             , SingleCtx
                                             , (::>))
 import           Data.Parameterized.Some ( Some(..) )
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 import           SemMC.Architecture.PPC.Location
 

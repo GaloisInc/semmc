@@ -59,10 +59,10 @@ import           Data.Typeable
 import           GHC.TypeLits ( Symbol )
 import           Unsafe.Coerce ( unsafeCoerce )
 
-import qualified Lang.Crucible.Solver.Interface as S
-import qualified Lang.Crucible.Solver.BoolInterface as SB
-import           Lang.Crucible.Solver.SimpleBackend.GroundEval
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import qualified What4.Interface as S
+import qualified Lang.Crucible.Backend as SB
+import           What4.Expr.GroundEval
+import qualified What4.Expr.Builder as S
 
 import           SemMC.Architecture
 import qualified SemMC.BoundVar as BV
@@ -351,9 +351,9 @@ tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
 tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
 
 genTemplatedFormula :: (TemplateConstraints arch
-                       , SB.IsBoolSolver (S.SimpleBuilder t st))
-                    => S.SimpleBuilder t st
-                    -> TemplatedInstruction (S.SimpleBuilder t st) arch sh
-                    -> IO (TemplatedInstructionFormula (S.SimpleBuilder t st) arch)
+                       , SB.IsBoolSolver (S.ExprBuilder t st))
+                    => S.ExprBuilder t st
+                    -> TemplatedInstruction (S.ExprBuilder t st) arch sh
+                    -> IO (TemplatedInstructionFormula (S.ExprBuilder t st) arch)
 genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
   TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist

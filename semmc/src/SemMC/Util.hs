@@ -37,14 +37,14 @@ import           Text.Printf ( printf )
 import qualified UnliftIO as U
 import qualified Control.Exception as E
 
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import qualified Lang.Crucible.Utils.Hashable as Hash
-import qualified Lang.Crucible.Solver.Interface as S
-import qualified Lang.Crucible.Solver.SimpleBackend.GroundEval as GE
-import           Lang.Crucible.Solver.Symbol ( SolverSymbol, userSymbol )
+import           What4.BaseTypes
+import qualified What4.Expr.Builder as B
+import qualified What4.Expr.GroundEval as GE
+import qualified What4.Interface as S
+import           What4.Symbol ( SolverSymbol, userSymbol )
+import qualified What4.Utils.Hashable as Hash
 
-import SemMC.Log
+import           SemMC.Log
 
 ----------------------------------------------------------------
 -- * Async
@@ -139,8 +139,8 @@ sequenceMaybes [] = return Nothing
 sequenceMaybes (x : xs) = x >>= maybe (sequenceMaybes xs) (return . Just)
 
 -- | Find all the bound variables in a symbolic expression.
-allBoundVars :: S.Elt t tp -> Set.Set (Some (S.SimpleBoundVar t))
-allBoundVars e = runST (S.boundVars e >>= H.foldM f Set.empty)
+allBoundVars :: B.Expr t tp -> Set.Set (Some (B.ExprBoundVar t))
+allBoundVars e = runST (B.boundVars e >>= H.foldM f Set.empty)
   where f s (_, v) = return (Set.union s v)
 
 -- | Given a map from location to bound variable, return all of the locations
@@ -148,12 +148,12 @@ allBoundVars e = runST (S.boundVars e >>= H.foldM f Set.empty)
 -- variables).
 extractUsedLocs :: forall t loc tp
                  . (OrdF loc)
-                => MapF.MapF loc (S.SimpleBoundVar t)
-                -> S.Elt t tp
-                -> MapF.MapF loc (S.SimpleBoundVar t)
+                => MapF.MapF loc (B.ExprBoundVar t)
+                -> B.Expr t tp
+                -> MapF.MapF loc (B.ExprBoundVar t)
 extractUsedLocs locMapping expr = MapF.mapMaybe keepIfNeeded locMapping
   where
-    keepIfNeeded :: forall tp' . S.SimpleBoundVar t tp' -> Maybe (S.SimpleBoundVar t tp')
+    keepIfNeeded :: forall tp' . B.ExprBoundVar t tp' -> Maybe (B.ExprBoundVar t tp')
     keepIfNeeded bv' =
       case Set.member (Some bv') bvs of
         False -> Nothing

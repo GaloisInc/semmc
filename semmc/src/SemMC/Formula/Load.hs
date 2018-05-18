@@ -24,10 +24,10 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
-import qualified Lang.Crucible.Solver.Interface as CRU
-import qualified Lang.Crucible.Solver.BoolInterface as CRUB
+import qualified What4.Interface as CRU
+import qualified Lang.Crucible.Backend as CRUB
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula.Env as FE

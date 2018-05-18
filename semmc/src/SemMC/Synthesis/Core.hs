@@ -18,7 +18,7 @@ import           Data.Foldable
 import qualified Data.Set as Set
 import           Data.Typeable
 
-import qualified Lang.Crucible.Solver.SimpleBackend as S
+import qualified Lang.Crucible.Backend.Simple as S
 
 import           SemMC.Architecture
 import           SemMC.Formula

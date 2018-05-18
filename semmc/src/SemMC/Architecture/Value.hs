@@ -16,7 +16,6 @@ module SemMC.Architecture.Value (
   arbitraryBV
   ) where
 
-import           GHC.TypeLits
 import           Data.Bits
 import qualified Data.ByteString as B
 import           Data.Maybe ( isJust )
@@ -24,8 +23,10 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import qualified Data.Word.Indexed as W
-import           Lang.Crucible.BaseTypes ( BaseBVType, BaseArrayType )
 import qualified Dismantle.Arbitrary as DA
+import           GHC.TypeLits
+import           What4.BaseTypes ( BaseBVType, BaseArrayType )
+
 
 -- | Type of concrete values.
 data Value tp where

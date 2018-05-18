@@ -10,18 +10,17 @@ import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
 import           Data.Monoid
 import           Data.Parameterized.Classes
+import           Data.Parameterized.HasRepr
+import           Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some
-import           Data.Parameterized.HasRepr
-import           Data.Parameterized.List as SL
 import           Data.Proxy
 import           Data.Text.Encoding ( encodeUtf8 )
 import qualified Data.Text.IO as TIO
 import qualified Dismantle.PPC as PPC
-import qualified Lang.Crucible.Solver.Interface as CRU
-import qualified Lang.Crucible.Solver.BoolInterface as CRUB
-import qualified Lang.Crucible.Solver.SimpleBackend as S
+import qualified Lang.Crucible.Backend as CRUB
+import qualified Lang.Crucible.Backend.Simple as S
 import qualified Options.Applicative as O
 import           SemMC.Architecture
 import qualified SemMC.Architecture.PPC.Base as B
@@ -35,6 +34,7 @@ import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Util as U
 import qualified System.Directory as D
 import           System.FilePath ( (<.>), (</>) )
+import qualified What4.Interface as CRU
 
 data Options = Options { oManualDir :: FilePath
                        , oBaseDir :: FilePath

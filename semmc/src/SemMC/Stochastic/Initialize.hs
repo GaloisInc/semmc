@@ -32,7 +32,7 @@ import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Arbitrary as DA
 
-import qualified Lang.Crucible.Solver.SimpleBackend as SB
+import qualified Lang.Crucible.Backend.Simple as SB
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC

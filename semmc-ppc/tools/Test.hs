@@ -15,13 +15,13 @@ import           Text.Printf ( printf )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.PPC as PPC
-import           Lang.Crucible.BaseTypes ( BaseBVType )
 import qualified SemMC.Architecture.Concrete as AC
 import           SemMC.Architecture.PPC32
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Log as L
+import           What4.BaseTypes ( BaseBVType )
 
 type PPCState = V.ConcreteState PPC
 

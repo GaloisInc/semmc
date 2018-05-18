@@ -15,7 +15,7 @@ module SemMC.Architecture.Internal (
 import           GHC.TypeLits ( Symbol )
 
 import qualified Dismantle.Instruction as I
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 type Instruction arch = I.GenericInstruction (Opcode arch) (Operand arch)
 

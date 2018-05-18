@@ -22,8 +22,8 @@ import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC ( fmapFC, foldrFC, traverseFC )
 import qualified Data.Parameterized.List as SL
-import qualified Lang.Crucible.Solver.Interface as C
-import qualified Lang.Crucible.Solver.SimpleBuilder as SB
+import qualified What4.Interface as C
+import qualified What4.Expr.Builder as SB
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
@@ -121,12 +121,12 @@ renameVariables oplist pf0 = do
                           . VarPair (BV.BoundVar (Sym t) arch) (BV.BoundVar (Sym t) arch) tp
                          -> IO (VarPair (BV.BoundVar (Sym t) arch) (EltWrapper t arch) tp)
     convertToVarExprPair (VarPair oldVar (BV.BoundVar newVar)) =
-      return $ VarPair oldVar (EltWrapper (SB.BoundVarElt newVar))
+      return $ VarPair oldVar (EltWrapper (SB.BoundVarExpr newVar))
 
     addToAssignmentPair (VarPair (BV.BoundVar v) (EltWrapper e)) (Pair vars exprs) =
       Pair (Ctx.extend vars v) (Ctx.extend exprs e)
 
-newtype EltWrapper sym arch op = EltWrapper (SB.Elt sym (A.OperandType arch op))
+newtype EltWrapper sym arch op = EltWrapper (SB.Expr sym (A.OperandType arch op))
 data VarPair a b tp = VarPair (a tp) (b tp)
 
 secondVar :: VarPair a b tp -> b tp
@@ -153,7 +153,7 @@ defineLocation :: forall t arch tp
                 . (AC.ConcreteArchitecture arch)
                => F.Formula (Sym t) arch
                -> A.Location arch tp
-               -> SB.Elt t tp
+               -> SB.Expr t tp
                -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t)), MapF.MapF (A.Location arch) (C.BoundVar (Sym t)))
                -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t)), MapF.MapF (A.Location arch) (C.BoundVar (Sym t)))
 defineLocation frm loc expr (defs, vars) =
@@ -162,7 +162,7 @@ defineLocation frm loc expr (defs, vars) =
 collectVars :: forall t tp arch
              . (C.TestEquality (C.BoundVar (Sym t)), P.OrdF (A.Location arch))
             => F.Formula (Sym t) arch
-            -> SB.Elt t tp
+            -> SB.Expr t tp
             -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t))
             -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t))
 collectVars frm expr m = MapF.union m neededVars

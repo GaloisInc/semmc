@@ -11,7 +11,7 @@ import qualified Data.Parameterized.Classes as P
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import           Data.Parameterized.Some ( Some(..) )
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 import qualified Dismantle.Arbitrary as DA
 

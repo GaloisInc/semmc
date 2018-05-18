@@ -54,9 +54,7 @@ import qualified Dismantle.ARM.Operands as ARMOperands
 import qualified Dismantle.Thumb as ThumbDis
 import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.BoolInterface as SB
-import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Backend as SB
 import           Language.Haskell.TH hiding ( recover )
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, regWidth )
@@ -72,6 +70,8 @@ import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 import qualified Text.Megaparsec.Char.Lexer as P
+import           What4.BaseTypes
+import qualified What4.Interface as S
 
 
 -- | Define the arch type for this processor.  There are no

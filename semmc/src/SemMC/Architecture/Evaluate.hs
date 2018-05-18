@@ -19,10 +19,10 @@ import qualified Data.Word.Indexed as W
 
 import qualified Dismantle.Instruction as I
 
-import qualified Lang.Crucible.BaseTypes as BT
-import qualified Lang.Crucible.Solver.BoolInterface as SB
-import qualified Lang.Crucible.Solver.Interface as SI
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import qualified What4.BaseTypes as BT
+import qualified Lang.Crucible.Backend as SB
+import qualified What4.Interface as SI
+import qualified What4.Expr.Builder as S
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Value as AV
@@ -34,10 +34,10 @@ import qualified SemMC.Formula as F
 -- final state.
 evaluateInstruction :: (A.Architecture arch
                        , MapF.OrdF (A.Opcode arch (A.Operand arch))
-                       , SB.IsBoolSolver (S.SimpleBuilder t st))
-                    => S.SimpleBuilder t st
+                       , SB.IsBoolSolver (S.ExprBuilder t st))
+                    => S.ExprBuilder t st
                     -- ^ The symbolic backend
-                    -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (S.SimpleBuilder t st) arch)
+                    -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (S.ExprBuilder t st) arch)
                     -- ^ A collection of all of our semantics
                     -> A.Instruction arch
                     -- ^ The instruction being tested
@@ -63,27 +63,27 @@ sndPairF (PairF _ b) = b
 
 evaluateFormula :: forall t st arch .
                    (MapF.OrdF (A.Location arch), ShowF (A.Location arch), A.IsLocation (A.Location arch))
-                => S.SimpleBuilder t st
-                -> F.Formula (S.SimpleBuilder t st) arch
+                => S.ExprBuilder t st
+                -> F.Formula (S.ExprBuilder t st) arch
                 -> V.ConcreteState arch
                 -> IO (V.ConcreteState arch)
 evaluateFormula sb formula initialState =
     -- Make an initial assignment of pairs (Location, BoundVar).
-    let assignment0 :: Some (Ctx.Assignment (PairF (A.Location arch) (S.SimpleBoundVar t)))
+    let assignment0 :: Some (Ctx.Assignment (PairF (A.Location arch) (S.ExprBoundVar t)))
         assignment0 = Ctx.fromList (pairToPairF <$> (MapF.toList (F.formParamVars formula)))
     in case assignment0 of
         Some assignment0' -> do
             -- Make another sequence of the same shape with the concrete
             -- values for each location (taken from the initial concrete
             -- state)
-            let bindMatchingLocation :: forall tp . PairF (A.Location arch) (S.SimpleBoundVar t) tp -> IO (S.Elt t tp)
+            let bindMatchingLocation :: forall tp . PairF (A.Location arch) (S.ExprBoundVar t) tp -> IO (S.Expr t tp)
                 bindMatchingLocation (PairF loc bv) =
                     case MapF.lookup loc initialState of
-                        Nothing -> return $ S.BoundVarElt bv
+                        Nothing -> return $ S.BoundVarExpr bv
                         Just val -> valueToCrucibleElt val
                 vars = fmapFC sndPairF assignment0'
 
-                valueToCrucibleElt :: AV.Value tp -> IO (S.Elt t tp)
+                valueToCrucibleElt :: AV.Value tp -> IO (S.Expr t tp)
                 valueToCrucibleElt v =
                     case v of
                         AV.ValueMem _ -> error "ValueMem not supported by valueToCrucibleElt"
@@ -97,7 +97,7 @@ evaluateFormula sb formula initialState =
                              (\e -> S.evalBoundVars sb e vars substitutions)
                              (F.formDefs formula)
 
-            let f :: A.Location arch tp -> S.Elt t tp -> V.ConcreteState arch -> V.ConcreteState arch
+            let f :: A.Location arch tp -> S.Expr t tp -> V.ConcreteState arch -> V.ConcreteState arch
                 f loc expr m =
                     case A.locationType loc of
                         BT.BaseBVRepr (repr::BT.NatRepr n) ->
