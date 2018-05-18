@@ -37,43 +37,43 @@ module SemMC.Architecture.PPC.Shared (
   isR0
   ) where
 
-import           Data.Bits                          ( shiftR, shiftL, (.|.), (.&.) )
-import qualified Data.ByteString.Builder            as B
-import           Data.Int                           ( Int16 )
-import qualified Data.Int.Indexed                   as I
+import           Data.Bits ( shiftR, shiftL, (.|.), (.&.) )
+import qualified Data.ByteString.Builder as B
+import           Data.Int ( Int16 )
+import qualified Data.Int.Indexed as I
 import           Data.List
-import qualified Data.List.NonEmpty                 as NEL
-import           Data.Monoid                        ( (<>) )
+import qualified Data.List.NonEmpty as NEL
+import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.Context
-import qualified Data.Parameterized.Map             as M
-import qualified Data.Parameterized.Map             as MapF
-import           Data.Parameterized.Some            ( Some(..) )
+import qualified Data.Parameterized.Map as M
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
 import           Data.Proxy
-import qualified Data.Serialize.Get                 as G
-import qualified Data.Set                           as S
-import           Data.Type.Equality                 ((:~:)(Refl), testEquality)
-import           Data.Word                          ( Word16 )
-import qualified Data.Word.Indexed                  as W
-import qualified Dismantle.PPC                      as PPC
+import qualified Data.Serialize.Get as G
+import qualified Data.Set as S
+import           Data.Type.Equality ((:~:)(Refl), testEquality)
+import           Data.Word ( Word16 )
+import qualified Data.Word.Indexed as W
+import qualified Dismantle.PPC as PPC
 import           GHC.TypeLits
-import           Lang.Crucible.BaseTypes            ( BaseBVType, NatRepr, knownNat, BaseTypeRepr )
-import qualified Lang.Crucible.Solver.Interface     as S
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import           Numeric.Natural                    ( Natural )
-import qualified SemMC.Architecture                 as A
-import qualified SemMC.Architecture.PPC.Eval        as E
+import           Numeric.Natural ( Natural )
+import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.PPC.Eval as E
 import           SemMC.Architecture.PPC.Location
-import qualified SemMC.Architecture.Value           as V
-import qualified SemMC.BoundVar                     as BoundVar
-import qualified SemMC.Formula                      as F
-import qualified SemMC.Formula.Eval                 as E
-import qualified SemMC.Synthesis.Template           as T
-import qualified SemMC.Util                         as U
-import qualified Text.Megaparsec                    as P
-import qualified Text.Megaparsec.Char               as P
-import qualified Text.Megaparsec.Char.Lexer         as P
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.BoundVar as BoundVar
+import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Eval as E
+import qualified SemMC.Synthesis.Template as T
+import qualified SemMC.Util as U
+import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec.Char as P
+import qualified Text.Megaparsec.Char.Lexer as P
+import           What4.BaseTypes ( BaseBVType, NatRepr, knownNat, BaseTypeRepr )
+import qualified What4.Expr.Builder as S
+import qualified What4.Interface as S
 
 repr32 :: NatRepr 32
 repr32 = knownNat
@@ -221,15 +221,15 @@ evalMemReg access = E.Evaluator (rewrite access)
 
 isR0
   :: forall t st sh u tp arch . (A.Location arch ~ Location arch, A.Operand arch ~ PPC.Operand) =>
-  S.SimpleBuilder t st
-  -> F.ParameterizedFormula (S.SimpleBuilder t st) arch sh
+  S.ExprBuilder t st
+  -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
   -> PPC.List (A.Operand arch) sh
-  -> Assignment (S.Elt t) u
+  -> Assignment (S.Expr t) u
   -> BaseTypeRepr tp
-  -> IO (S.Elt t tp, Literals arch (S.SimpleBuilder t st))
+  -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
 isR0 sym pf operands assignment typeRepr =
   case assignment of
-    Empty :> S.BoundVarElt b ->
+    Empty :> S.BoundVarExpr b ->
       case Some b `boundVarElemIndex` (toListFC Some (F.pfOperandVars pf)) of
         Nothing ->
          returnElt $
@@ -253,8 +253,8 @@ isR0 sym pf operands assignment typeRepr =
             Nothing -> error "Index out of range in operandVars"
    where
      returnElt
-       :: S.Pred (S.SimpleBuilder t st)
-       -> IO (S.Elt t tp, Literals arch (S.SimpleBuilder t st))
+       :: S.Pred (S.ExprBuilder t st)
+       -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
      returnElt b' =
        case testEquality (S.exprType b') typeRepr of
          Just Refl -> do
@@ -269,15 +269,15 @@ rewrite
                                 , A.IsLocation (Location arch)
                                 ) =>
      MemoryAccess
-  -> S.SimpleBuilder t st
-  -> F.ParameterizedFormula (S.SimpleBuilder t st) arch sh
+  -> S.ExprBuilder t st
+  -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
   -> PPC.List (A.Operand arch) sh
-  -> Assignment (S.Elt t) u
+  -> Assignment (S.Expr t) u
   -> BaseTypeRepr tp
-  -> IO (S.Elt t tp, Literals arch (S.SimpleBuilder t st))
+  -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
 rewrite access sym pf operands assignment baseTypeRepr =
   case assignment of
-    Empty :> S.BoundVarElt b ->
+    Empty :> S.BoundVarExpr b ->
       case Some b `boundVarElemIndex` (toListFC Some (F.pfOperandVars pf)) of
         Nothing -> error "BoundVar not present in ParameterizedFormula"
         Just index ->
@@ -306,7 +306,7 @@ rewrite access sym pf operands assignment baseTypeRepr =
                 , 1 <= n
                 ) => Integer
                   -> NatRepr n
-                  -> IO (S.Elt t tp, Literals arch (S.SimpleBuilder t st))
+                  -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
            handleOffset offset natRepr = do
              s <- S.bvLit sym natRepr offset
              case S.exprType s `testEquality` baseTypeRepr of
@@ -322,7 +322,7 @@ rewrite access sym pf operands assignment baseTypeRepr =
              :: A.IsLocation (Location arch)
              => PPC.GPR
              -> S.SolverSymbol
-             -> IO (S.Elt t tp, Literals arch (S.SimpleBuilder t st))
+             -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
            findAtRegister reg symbol =
              case MapF.lookup (LocGPR reg) (F.pfLiteralVars pf) of
                Nothing ->
@@ -338,7 +338,7 @@ rewrite access sym pf operands assignment baseTypeRepr =
                      case testEquality (A.locationType loc) (S.bvarType s) of
                        Just Refl -> do
                          let map' = M.singleton loc s
-                         pure (S.BoundVarElt s, map')
+                         pure (S.BoundVarExpr s, map')
                        Nothing -> error "Type equality failure"
                Just k ->
                  pure $ case testEquality baseTypeRepr (S.bvarType k) of

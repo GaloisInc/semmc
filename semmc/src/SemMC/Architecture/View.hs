@@ -44,7 +44,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Word.Indexed as W
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 import qualified SemMC.Architecture.Location as L
 import SemMC.Architecture.Value

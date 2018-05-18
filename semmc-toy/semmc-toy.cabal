@@ -25,10 +25,11 @@ library
                      , filepath
                      , located-base
                      , text >= 1 && < 2
-                     , crucible == 0.3.2
+                     , crucible >= 0.4
                      , dismantle-tablegen
                      , parameterized-utils >= 1 && < 2
                      , semmc
+                     , what4 >= 0.4
                      
 executable semmc-toy-stratify
   hs-source-dirs:      semmc-toy-stratify
@@ -46,6 +47,7 @@ executable semmc-toy-stratify
                      , async
                      , directory
                      , optparse-applicative
+                     , what4
 
 test-suite semmc-toy-tests
   default-language: Haskell2010

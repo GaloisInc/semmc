@@ -39,9 +39,9 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
-import qualified Lang.Crucible.Solver.Interface as S
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import           Lang.Crucible.BaseTypes
+import qualified What4.Interface as S
+import qualified What4.Expr.Builder as S
+import           What4.BaseTypes
 
 import qualified SemMC.Architecture.Internal as A
 import qualified SemMC.Architecture.Location as L
@@ -242,7 +242,7 @@ formOutputs :: (OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.
 formOutputs = Set.fromList . MapF.keys . formDefs
 
 -- | Check if a given 'Formula' obeys the stated invariant.
-validFormula :: Formula (S.SimpleBuilder t st) arch -> Bool
+validFormula :: Formula (S.ExprBuilder t st) arch -> Bool
 validFormula (Formula { formParamVars = paramVars, formDefs = defs }) =
   mconcat (map (viewSome U.allBoundVars) (MapF.elems defs))
   == Set.fromAscList (MapF.elems paramVars)

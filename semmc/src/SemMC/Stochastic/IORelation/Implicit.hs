@@ -21,7 +21,7 @@ import qualified Data.Set as S
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D

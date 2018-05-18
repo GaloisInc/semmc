@@ -65,11 +65,11 @@ import qualified Dismantle.ARM as ARMDis
 import qualified Dismantle.ARM.Operands as ARMOperands
 import qualified Dismantle.Thumb as ThumbDis
 import qualified Dismantle.Thumb.Operands as ThumbOperands
-import           Lang.Crucible.BaseTypes
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Location
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula as F
+import           What4.BaseTypes
 
 
 -- | Uninterpreted function names are mangled in SimpleBuilder, so we need to
@@ -107,15 +107,16 @@ interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
 
 -- | Extract the register value from an addrmode_imm12[_pre] via
 -- the a32.imm12_reg user function.
-interpImm12Reg :: forall sh s arm tp
-                   . (L.IsLocation (Location arm), L.Location arm ~ Location arm)
-                   => PL.List ARMOperand sh
+interpImm12Reg :: forall sh s arm tp opty
+                   . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                    (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                 -> PL.List opty sh
                  -> F.WrappedOperand arm sh s
                  -> BaseTypeRepr tp
                  -> Maybe (L.Location arm tp)
-interpImm12Reg operands (F.WrappedOperand _orep ix) rep =
-  case operands PL.!! ix of
-    A32Operand (ARMDis.Addrmode_imm12_pre oprnd) ->
+interpImm12Reg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+  case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.Addrmode_imm12_pre oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.addrModeImm12Register oprnd
       in case () of
@@ -175,15 +176,16 @@ interpLdstsoregOffRegExtractor :: ARMOperands.LdstSoReg -> Maybe ARMOperands.GPR
 interpLdstsoregOffRegExtractor = Just . ARMOperands.ldstSoRegOffsetRegister
 
 
-interpLdstsoregBaseReg :: forall sh s arm tp
+interpLdstsoregBaseReg :: forall sh s arm tp opty
                           . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
-                          PL.List ARMOperand sh
+                          (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                       -> PL.List opty sh
                        -> F.WrappedOperand arm sh s
                        -> BaseTypeRepr tp
                        -> Maybe (L.Location arm tp)
-interpLdstsoregBaseReg operands (F.WrappedOperand _orep ix) rep =
-  case operands PL.!! ix of
-    A32Operand (ARMDis.Ldst_so_reg oprnd) ->
+interpLdstsoregBaseReg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+  case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.Ldst_so_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.ldstSoRegBaseRegister oprnd
       in case () of
@@ -191,15 +193,16 @@ interpLdstsoregBaseReg operands (F.WrappedOperand _orep ix) rep =
           | otherwise -> error ("Invalid return type for location function 'ldst_so_reg' base reg at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
-interpLdstsoregOffReg :: forall sh s arm tp
+interpLdstsoregOffReg :: forall sh s arm tp opty
                          . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
-                         PL.List ARMOperand sh
+                         (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                      -> PL.List opty sh
                       -> F.WrappedOperand arm sh s
                       -> BaseTypeRepr tp
                       -> Maybe (L.Location arm tp)
-interpLdstsoregOffReg operands (F.WrappedOperand _orep ix) rep =
-  case operands PL.!! ix of
-    A32Operand (ARMDis.Ldst_so_reg oprnd) ->
+interpLdstsoregOffReg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+  case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.Ldst_so_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.ldstSoRegOffsetRegister oprnd
       in case () of
@@ -252,15 +255,16 @@ interpSoregimmRegExtractor = Just . ARMOperands.soRegImmReg
 
 -- | Extract the register value from a SoRegReg via the
 -- a32.soregimm_reg user function.
-interpSoregimmReg :: forall sh s arm tp
+interpSoregimmReg :: forall sh s arm tp opty
                      . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
-                     PL.List ARMOperand sh
+                     (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                  -> PL.List opty sh
                   -> F.WrappedOperand arm sh s
                   -> BaseTypeRepr tp
                   -> Maybe (L.Location arm tp)
-interpSoregimmReg operands (F.WrappedOperand _orep ix) rep =
-  case operands PL.!! ix of
-    A32Operand (ARMDis.So_reg_imm oprnd) ->
+interpSoregimmReg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+  case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.So_reg_imm oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegImmReg oprnd
       in case () of
@@ -285,15 +289,16 @@ interpSoregregTypeExtractor = fromInteger . toInteger . ARMOperands.soRegRegShif
 
 -- | Extract the register value from a SoRegReg via the
 -- a32.soregreg_reg user function.
-interpSoregregReg1 :: forall sh s arm tp
+interpSoregregReg1 :: forall sh s arm tp opty
                       . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
-                      PL.List ARMOperand sh
+                      (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                   -> PL.List opty sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
                    -> Maybe (L.Location arm tp)
-interpSoregregReg1 operands (F.WrappedOperand _orep ix) rep =
-  case operands PL.!! ix of
-    A32Operand (ARMDis.So_reg_reg oprnd) ->
+interpSoregregReg1 getArmOperand operands (F.WrappedOperand _orep ix) rep =
+  case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.So_reg_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegRegReg1 oprnd
       in case () of
@@ -304,15 +309,16 @@ interpSoregregReg1 operands (F.WrappedOperand _orep ix) rep =
 
 -- | Extract the register value from a SoRegReg via the
 -- a32.soregreg_reg user function.
-interpSoregregReg2 :: forall sh s arm tp
+interpSoregregReg2 :: forall sh s arm tp opty
                       . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
-                      PL.List ARMOperand sh
+                      (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                   -> PL.List opty sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
                    -> Maybe (L.Location arm tp)
-interpSoregregReg2 operands (F.WrappedOperand _orep ix) rep =
-  case operands PL.!! ix of
-    A32Operand (ARMDis.So_reg_reg oprnd) ->
+interpSoregregReg2 getArmOperand operands (F.WrappedOperand _orep ix) rep =
+  case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.So_reg_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
           loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegRegReg2 oprnd
       in case () of

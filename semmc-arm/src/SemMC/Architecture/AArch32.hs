@@ -21,17 +21,21 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module SemMC.ARM
-    ( ARM
+module SemMC.Architecture.AArch32
+    ( AArch32
     , MachineState(..)
     , Instruction
     , ARMOpcode(..)
     , ARMOperand(..)
     , numGPR
     , testSerializer
+    , machineStateToBS
+    , machineStateFromBS
     , module SemMC.Architecture.ARM.Combined  -- for the instances
     )
     where
@@ -54,9 +58,7 @@ import qualified Dismantle.ARM.Operands as ARMOperands
 import qualified Dismantle.Thumb as ThumbDis
 import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.BoolInterface as SB
-import qualified Lang.Crucible.Solver.Interface as S
+import qualified Lang.Crucible.Backend as SB
 import           Language.Haskell.TH hiding ( recover )
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, regWidth )
@@ -72,12 +74,14 @@ import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 import qualified Text.Megaparsec.Char.Lexer as P
+import           What4.BaseTypes
+import qualified What4.Interface as S
 
 
 -- | Define the arch type for this processor.  There are no
 -- inhabitants, but this is used as a phantom type selector.  This
 -- includes both A32 and T32 instruction modes.
-data ARM  -- arch type
+data AArch32  -- arch type
 
 
 -- ----------------------------------------------------------------------
@@ -102,13 +106,13 @@ data MachineState =
 type Instruction = LB.ByteString
 
 testSerializer :: CE.TestSerializer MachineState Instruction
-testSerializer = CE.TestSerializer { CE.flattenMachineState = toBS
-                                   , CE.parseMachineState = fromBS
+testSerializer = CE.TestSerializer { CE.flattenMachineState = machineStateToBS
+                                   , CE.parseMachineState = machineStateFromBS
                                    , CE.flattenProgram = mconcat
                                    }
 
-toBS :: MachineState -> B.ByteString
-toBS ms = LB.toStrict (B.toLazyByteString bld)
+machineStateToBS :: MachineState -> B.ByteString
+machineStateToBS ms = LB.toStrict (B.toLazyByteString bld)
   where
     bld = mconcat [ mconcat (map B.word32LE (V.toList (gprs ms)))
                   , B.word32LE (pctr ms)
@@ -119,8 +123,8 @@ toBS ms = LB.toStrict (B.toLazyByteString bld)
                   , mconcat (map B.word8 (V.toList (mem2 ms)))
                   ]
 
-fromBS :: B.ByteString -> Maybe MachineState
-fromBS bs =
+machineStateFromBS :: B.ByteString -> Maybe MachineState
+machineStateFromBS bs =
   case G.pushChunk (G.runGetIncremental getMachineState) bs of
     G.Done _ _ ms -> Just ms
     G.Fail {} -> Nothing
@@ -148,52 +152,52 @@ getMachineState = do
 
 -- ----------------------------------------------------------------------
 
-type instance A.Opcode   ARM = ARMOpcode
-type instance A.Operand  ARM = ARMOperand
-type instance A.Location ARM = Location ARM
+type instance A.Opcode   AArch32 = ARMOpcode
+type instance A.Operand  AArch32 = ARMOperand
+type instance A.Location AArch32 = Location AArch32
 
 instance A.IsOpcode  ARMOpcode
 instance A.IsOperand ARMOperand
 
-type instance A.OperandType ARM "Addr_offset_none" = BaseBVType 32
-type instance A.OperandType ARM "Addrmode_imm12" = BaseBVType 32
-type instance A.OperandType ARM "Addrmode_imm12_pre" = BaseBVType 32
-type instance A.OperandType ARM "Am2offset_imm" = BaseBVType 32
-type instance A.OperandType ARM "Arm_bl_target" = BaseBVType 32 -- 24 bits in instr
-type instance A.OperandType ARM "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
-type instance A.OperandType ARM "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
-type instance A.OperandType ARM "Cc_out" = BaseBVType 1
-type instance A.OperandType ARM "GPR" = BaseBVType 32
-type instance A.OperandType ARM "GPRnopc" = BaseBVType 32
-type instance A.OperandType ARM "Imm0_7" = BaseBVType 3
-type instance A.OperandType ARM "Imm0_15" = BaseBVType 4
-type instance A.OperandType ARM "Imm0_31" = BaseBVType 5
-type instance A.OperandType ARM "Imm0_255" = BaseBVType 8
-type instance A.OperandType ARM "Imm0_4095" = BaseBVType 16
-type instance A.OperandType ARM "Ldst_so_reg" = BaseBVType 32
-type instance A.OperandType ARM "Mod_imm" = BaseBVType 32
-type instance A.OperandType ARM "Pred" = BaseBVType 4
-type instance A.OperandType ARM "Reglist" = BaseBVType 16
-type instance A.OperandType ARM "RGPR" = BaseBVType 32
-type instance A.OperandType ARM "Shift_so_reg_imm" = BaseBVType 16
-type instance A.OperandType ARM "So_reg_imm" = BaseBVType 32
-type instance A.OperandType ARM "So_reg_reg" = BaseBVType 32
-type instance A.OperandType ARM "T2_so_imm" = BaseBVType 16
+type instance A.OperandType AArch32 "Addr_offset_none" = BaseBVType 32
+type instance A.OperandType AArch32 "Addrmode_imm12" = BaseBVType 32
+type instance A.OperandType AArch32 "Addrmode_imm12_pre" = BaseBVType 32
+type instance A.OperandType AArch32 "Am2offset_imm" = BaseBVType 32
+type instance A.OperandType AArch32 "Arm_bl_target" = BaseBVType 32 -- 24 bits in instr
+type instance A.OperandType AArch32 "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
+type instance A.OperandType AArch32 "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
+type instance A.OperandType AArch32 "Cc_out" = BaseBVType 1
+type instance A.OperandType AArch32 "GPR" = BaseBVType 32
+type instance A.OperandType AArch32 "GPRnopc" = BaseBVType 32
+type instance A.OperandType AArch32 "Imm0_7" = BaseBVType 3
+type instance A.OperandType AArch32 "Imm0_15" = BaseBVType 4
+type instance A.OperandType AArch32 "Imm0_31" = BaseBVType 5
+type instance A.OperandType AArch32 "Imm0_255" = BaseBVType 8
+type instance A.OperandType AArch32 "Imm0_4095" = BaseBVType 16
+type instance A.OperandType AArch32 "Ldst_so_reg" = BaseBVType 32
+type instance A.OperandType AArch32 "Mod_imm" = BaseBVType 32
+type instance A.OperandType AArch32 "Pred" = BaseBVType 4
+type instance A.OperandType AArch32 "Reglist" = BaseBVType 16
+type instance A.OperandType AArch32 "RGPR" = BaseBVType 32
+type instance A.OperandType AArch32 "Shift_so_reg_imm" = BaseBVType 16
+type instance A.OperandType AArch32 "So_reg_imm" = BaseBVType 32
+type instance A.OperandType AArch32 "So_reg_reg" = BaseBVType 32
+type instance A.OperandType AArch32 "T2_so_imm" = BaseBVType 16
 -- TODO: Is this the right width for T2_so_reg? Ask Kevin how to figure this out
 -- myself.
-type instance A.OperandType ARM "T2_so_reg" = BaseBVType 32
-type instance A.OperandType ARM "T_addrmode_is2" = BaseBVType 32
-type instance A.OperandType ARM "T_addrmode_is4" = BaseBVType 32
-type instance A.OperandType ARM "T_addrmode_pc" = BaseBVType 8
-type instance A.OperandType ARM "T_imm0_1020s4" = BaseBVType 8
-type instance A.OperandType ARM "T_imm0_508s4" = BaseBVType 8
-type instance A.OperandType ARM "Thumb_bcc_target" = BaseBVType 8
-type instance A.OperandType ARM "Thumb_blx_target" = BaseBVType 32 -- double-instr val
-type instance A.OperandType ARM "TGPR" = BaseBVType 32
-type instance A.OperandType ARM "Unpredictable" = BaseBVType 32
+type instance A.OperandType AArch32 "T2_so_reg" = BaseBVType 32
+type instance A.OperandType AArch32 "T_addrmode_is2" = BaseBVType 32
+type instance A.OperandType AArch32 "T_addrmode_is4" = BaseBVType 32
+type instance A.OperandType AArch32 "T_addrmode_pc" = BaseBVType 8
+type instance A.OperandType AArch32 "T_imm0_1020s4" = BaseBVType 8
+type instance A.OperandType AArch32 "T_imm0_508s4" = BaseBVType 8
+type instance A.OperandType AArch32 "Thumb_bcc_target" = BaseBVType 8
+type instance A.OperandType AArch32 "Thumb_blx_target" = BaseBVType 32 -- double-instr val
+type instance A.OperandType AArch32 "TGPR" = BaseBVType 32
+type instance A.OperandType AArch32 "Unpredictable" = BaseBVType 32
 
-instance A.IsOperandTypeRepr ARM where
-    type OperandTypeRepr ARM = ARMOperandRepr
+instance A.IsOperandTypeRepr AArch32 where
+    type OperandTypeRepr AArch32 = ARMOperandRepr
     operandTypeReprSymbol _ (A32OperandRepr o) = ARMDis.operandReprString o
     operandTypeReprSymbol _ (T32OperandRepr o) = ThumbDis.operandReprString o
 
@@ -202,15 +206,15 @@ operandValue :: forall sym s.
                 (SB.IsSymInterface sym,
                  S.IsExprBuilder sym)
              => sym
-             -> (forall tp. Location ARM tp -> IO (S.SymExpr sym tp))
+             -> (forall tp. Location AArch32 tp -> IO (S.SymExpr sym tp))
              -> ARMOperand s
-             -> IO (A.TaggedExpr ARM sym s)
+             -> IO (A.TaggedExpr AArch32 sym s)
 operandValue sym locLookup op = TaggedExpr <$> opV op
-  where opV :: ARMOperand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+  where opV :: ARMOperand s -> IO (S.SymExpr sym (A.OperandType AArch32 s))
         opV (A32Operand o) = opVa o
         opV (T32Operand o) = opVt o
 
-        opVa :: ARMDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opVa :: ARMDis.Operand s -> IO (S.SymExpr sym (A.OperandType AArch32 s))
         opVa (ARMDis.Addr_offset_none gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
         opVa (ARMDis.Addrmode_imm12 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opVa (ARMDis.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
@@ -230,7 +234,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVa (ARMDis.Unpredictable v) = S.bvLit sym knownNat $ toInteger v
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
-        opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType ARM s))
+        opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType AArch32 s))
         opVt (ThumbDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
         opVt (ThumbDis.GPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
@@ -253,7 +257,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt x = error $ "operandValue T32 not implemented for " <> show x
 
 
-operandToLocation :: ARMOperand s -> Maybe (Location ARM (A.OperandType ARM s))
+operandToLocation :: ARMOperand s -> Maybe (Location AArch32 (A.OperandType AArch32 s))
 operandToLocation (A32Operand (ARMDis.GPR gpr)) = Just $ LocGPR $ ARMOperands.unGPR gpr
 operandToLocation (T32Operand (ThumbDis.GPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
 operandToLocation (T32Operand (ThumbDis.GPRnopc gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
@@ -263,7 +267,8 @@ operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
 
-instance A.IsLocation (Location ARM) where
+instance (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
+         A.IsLocation (Location arm) where
 
   isMemoryLocation LocMem = True
   isMemoryLocation _ = False
@@ -291,7 +296,7 @@ instance A.IsLocation (Location ARM) where
 
   registerizationLocations = [] -- map (Some . LocGPR . ARMDis.GPR) (0 : [3..4])
 
-parseLocation :: ARMComp.Parser (Some (Location ARM))
+parseLocation :: ARMComp.Parser (Some (Location arm))
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
@@ -317,11 +322,11 @@ parsePrefixedRegister f c = do
 --             OrdF (A.Opcode ARM (A.Operand ARM))
 --                  (Data.EnumF.EnumF (A.Opcode ARM (A.Operand ARM)))
 
-type instance ArchRegWidth ARM = $(litT $ numTyLit regWidth)
+type instance ArchRegWidth AArch32 = $(litT $ numTyLit regWidth)
 
 
-instance A.Architecture ARM where
-    data TaggedExpr ARM sym s = TaggedExpr (S.SymExpr sym (A.OperandType ARM s))
+instance A.Architecture AArch32 where
+    data TaggedExpr AArch32 sym s = TaggedExpr (S.SymExpr sym (A.OperandType AArch32 s))
     unTagged (TaggedExpr e) = e
     operandValue _ = operandValue
     operandToLocation _ = operandToLocation
@@ -332,7 +337,7 @@ instance A.Architecture ARM where
 
 noLocation _ _ _ = Nothing
 
-locationFuncInterpretation :: [(String, A.FunctionInterpretation t ARM)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t AArch32)]
 locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation
@@ -349,7 +354,7 @@ locationFuncInterpretation =
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
-                          { A.locationInterp = F.LocationFuncInterp interpImm12Reg
+                          { A.locationInterp = F.LocationFuncInterp (interpImm12Reg getArmDisOperand)
                           , A.exprInterpName = 'interpImm12RegExtractor
                           })
     , ("a32.imm12_off", A.FunctionInterpretation
@@ -362,11 +367,11 @@ locationFuncInterpretation =
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
-                                          { A.locationInterp = F.LocationFuncInterp interpLdstsoregBaseReg
+                                          { A.locationInterp = F.LocationFuncInterp (interpLdstsoregBaseReg getArmDisOperand)
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor
                                           })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
-                                            { A.locationInterp = F.LocationFuncInterp interpLdstsoregOffReg
+                                            { A.locationInterp = F.LocationFuncInterp (interpLdstsoregOffReg getArmDisOperand)
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor
                                             })
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation
@@ -400,7 +405,7 @@ locationFuncInterpretation =
                              , A.exprInterpName = 'interpSoregimmImmExtractor
                              })
     , ("a32.soregimm_reg", A.FunctionInterpretation
-                             { A.locationInterp = F.LocationFuncInterp interpSoregimmReg
+                             { A.locationInterp = F.LocationFuncInterp (interpSoregimmReg getArmDisOperand)
                              , A.exprInterpName = 'interpSoregimmRegExtractor })
 
     , ("a32.soregreg_type", A.FunctionInterpretation
@@ -408,10 +413,10 @@ locationFuncInterpretation =
                               , A.exprInterpName = 'interpSoregregTypeExtractor
                               })
     , ("a32.soregreg_reg1", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg1
+                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg1 getArmDisOperand)
                               , A.exprInterpName = 'interpSoregregReg1Extractor })
     , ("a32.soregreg_reg2", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
+                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg2 getArmDisOperand)
                               , A.exprInterpName = 'interpSoregregReg2Extractor })
 
     , ("t32.blxtarget_S", A.FunctionInterpretation
@@ -486,8 +491,11 @@ locationFuncInterpretation =
                             })
     ]
 
+getArmDisOperand :: ARMOperand s -> Maybe (ARMDis.Operand s)
+getArmDisOperand (A32Operand a) = Just a
+getArmDisOperand _ = Nothing
 
-shapeReprType :: forall tp . ARMOperandRepr tp -> BaseTypeRepr (A.OperandType ARM tp)
+shapeReprType :: forall tp . ARMOperandRepr tp -> BaseTypeRepr (A.OperandType AArch32 tp)
 shapeReprType orep =
     case orep of
       A32OperandRepr a32rep ->
@@ -509,7 +517,7 @@ shapeReprType orep =
             ARMDis.So_reg_immRepr -> knownRepr
             ARMDis.So_reg_regRepr -> knownRepr
             ARMDis.UnpredictableRepr -> knownRepr
-            _ -> error $ "Unknown A32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
+            _ -> error $ "Unknown A32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @AArch32) orep)
       T32OperandRepr t32rep ->
           case t32rep of
             ThumbDis.Cc_outRepr -> knownRepr
@@ -534,31 +542,31 @@ shapeReprType orep =
             ThumbDis.Thumb_bcc_targetRepr -> knownRepr
             ThumbDis.TGPRRepr -> knownRepr
             ThumbDis.UnpredictableRepr -> knownRepr
-            _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @ARM) orep)
+            _ -> error $ "Unknown T32 OperandRepr: " <> show (A.operandTypeReprSymbol (Proxy @AArch32) orep)
 
 
 -- ----------------------------------------------------------------------
 
 data Signed = Signed | Unsigned deriving (Eq, Show)
 
-instance T.TemplatableOperand ARM where
+instance T.TemplatableOperand AArch32 where
   opTemplates sr =
       case sr of
         (A32OperandRepr a) -> a32template a
         (T32OperandRepr a) -> t32template a
 
-a32template :: ARMDis.OperandRepr s -> [T.TemplatedOperand ARM s]
+a32template :: ARMDis.OperandRepr s -> [T.TemplatedOperand AArch32 s]
 a32template a32sr =
     case a32sr of
       ARMDis.Addrmode_imm12Repr ->
           mkTemplate <$> [0..numGPR-1]
               where mkTemplate gprNum = T.TemplatedOperand Nothing
                                         (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
-                                            :: T.TemplatedOperand ARM "Addrmode_imm12"
-                        where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12"
+                                            :: T.TemplatedOperand AArch32 "Addrmode_imm12"
+                        where mkTemplate' :: T.TemplatedOperandFn AArch32 "Addrmode_imm12"
                               mkTemplate' sym locLookup = do
                                 let gprN = ARMOperands.gpr gprNum
-                                base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup
+                                base <- A.unTagged <$> A.operandValue (Proxy @AArch32) sym locLookup
                                                           (A32Operand $ ARMDis.GPR gprN)
                                 offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
                                 addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
@@ -573,11 +581,11 @@ a32template a32sr =
           mkTemplate <$> [0..numGPR-1]
             where mkTemplate gprNum = T.TemplatedOperand Nothing
                                       (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
-                                          :: T.TemplatedOperand ARM "Addrmode_imm12_pre"
-                    where mkTemplate' :: T.TemplatedOperandFn ARM "Addrmode_imm12_pre"
+                                          :: T.TemplatedOperand AArch32 "Addrmode_imm12_pre"
+                    where mkTemplate' :: T.TemplatedOperandFn AArch32 "Addrmode_imm12_pre"
                           mkTemplate' sym locLookup = do
                             let gprN = ARMOperands.gpr $ gprNum
-                            base <- A.unTagged <$> A.operandValue (Proxy @ARM) sym locLookup (A32Operand $ ARMDis.GPR gprN)
+                            base <- A.unTagged <$> A.operandValue (Proxy @AArch32) sym locLookup (A32Operand $ ARMDis.GPR gprN)
                             offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
                             addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
                             expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
@@ -614,7 +622,7 @@ a32template a32sr =
       --                       return (expr, T.WrappedRecoverOperandFn recover)
       ARMDis.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
 
-t32template :: ThumbDis.OperandRepr s -> [T.TemplatedOperand ARM s]
+t32template :: ThumbDis.OperandRepr s -> [T.TemplatedOperand AArch32 s]
 t32template t32sr =
     case t32sr of
       _ -> error "opTemplate T32 ?? TBD"

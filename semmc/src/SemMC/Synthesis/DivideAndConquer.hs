@@ -18,8 +18,8 @@ import           Data.Parameterized.TraversableF
 import qualified Data.Set as Set
 import           Data.Typeable
 
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import qualified Lang.Crucible.Solver.SimpleBackend as S
+import qualified What4.Expr.Builder as S
+import qualified Lang.Crucible.Backend.Simple as S
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -29,14 +29,14 @@ import           SemMC.Util
 
 truncateFormula :: forall t st arch.
                    (OrdF (Location arch))
-                => Formula (S.SimpleBuilder t st) arch
+                => Formula (S.ExprBuilder t st) arch
                 -> Set.Set (Some (Location arch))
-                -> Formula (S.SimpleBuilder t st) arch
+                -> Formula (S.ExprBuilder t st) arch
 truncateFormula form keepLocs =
   let filterDef :: Location arch tp
-                -> S.Elt t tp
-                -> MapF.MapF (Location arch) (S.Elt t)
-                -> MapF.MapF (Location arch) (S.Elt t)
+                -> S.Expr t tp
+                -> MapF.MapF (Location arch) (S.Expr t)
+                -> MapF.MapF (Location arch) (S.Expr t)
       filterDef loc expr
         | Set.member (Some loc) keepLocs = MapF.insert loc expr
         | otherwise = id
@@ -47,9 +47,9 @@ truncateFormula form keepLocs =
              }
 
 makeSplit :: (OrdF (Location arch))
-          => Formula (S.SimpleBuilder t st) arch
+          => Formula (S.ExprBuilder t st) arch
           -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
-          -> Maybe (Formula (S.SimpleBuilder t st) arch, Formula (S.SimpleBuilder t st) arch)
+          -> Maybe (Formula (S.ExprBuilder t st) arch, Formula (S.ExprBuilder t st) arch)
 makeSplit form (locs1, locs2)
   | Set.null locs1 || Set.null locs2 = Nothing
   | otherwise = let form1 = truncateFormula form locs1
@@ -64,8 +64,8 @@ splits (x:xs) = [ s' | (left, right) <- splits xs
                      , s' <- [(Set.insert x left, right), (left, Set.insert x right)]]
 
 enumerateSplits :: (OrdF (Location arch))
-                => Formula (S.SimpleBuilder t st) arch
-                -> [(Formula (S.SimpleBuilder t st) arch, Formula (S.SimpleBuilder t st) arch)]
+                => Formula (S.ExprBuilder t st) arch
+                -> [(Formula (S.ExprBuilder t st) arch, Formula (S.ExprBuilder t st) arch)]
 enumerateSplits form = mapMaybe (makeSplit form)
                      $ splits (MapF.keys (formDefs form))
 

@@ -24,7 +24,7 @@ import           GHC.TypeLits (type (<=))
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.List as SL
-import qualified Lang.Crucible.BaseTypes as S
+import qualified What4.BaseTypes as S
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC

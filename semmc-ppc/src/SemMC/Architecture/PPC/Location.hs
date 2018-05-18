@@ -20,7 +20,7 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
 import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 import qualified Dismantle.PPC as PPC
 

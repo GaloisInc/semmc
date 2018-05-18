@@ -28,14 +28,14 @@ import qualified Data.Set as Set
 import qualified Data.Word.Indexed as W
 import qualified System.IO as IO
 
-import           Lang.Crucible.BaseTypes
-import           Lang.Crucible.Solver.Adapter
-import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.SatResult
-import           Lang.Crucible.Solver.SimpleBackend
-import           Lang.Crucible.Solver.SimpleBackend.GroundEval
-import           Lang.Crucible.Solver.SimpleBackend.Z3
-import           Lang.Crucible.Solver.SimpleBuilder
+import           What4.BaseTypes
+import           What4.Solver.Adapter
+import qualified What4.Interface as S
+import           What4.SatResult
+import           Lang.Crucible.Backend.Simple
+import           What4.Expr.GroundEval
+import           What4.Solver.Z3
+import           What4.Expr.Builder
 import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
 
 import qualified SemMC.Architecture as A
@@ -64,9 +64,9 @@ formulasEquivSym :: forall arch t.
                  => SimpleBackend t
                  -> F.Formula (SimpleBackend t) arch
                  -> F.Formula (SimpleBackend t) arch
-                 -> IO (EquivalenceResult arch (Elt t))
+                 -> IO (EquivalenceResult arch (Expr t))
 formulasEquivSym sym =
-  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (Elt t tp)
+  let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (Expr t tp)
       eval (GroundEvalFn evalFn) e = U.groundValToExpr sym (S.exprType e) =<< evalFn e
   in formulasEquiv eval sym
 
@@ -78,7 +78,7 @@ formulasEquivConcrete :: forall arch t.
                       -> F.Formula (SimpleBackend t) arch
                       -> IO (EquivalenceResult arch V.Value)
 formulasEquivConcrete =
-  let eval :: forall tp. GroundEvalFn t -> Elt t tp -> IO (V.Value tp)
+  let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (V.Value tp)
       eval (GroundEvalFn evalFn) e =
         case S.exprType e of
           BaseBVRepr w -> V.ValueBV . W.wRep w <$> evalFn e
@@ -96,7 +96,7 @@ allPairwiseEquality sym = foldrM andPairEquality (S.truePred sym)
 -- expression values for the counterexample.
 formulasEquiv :: forall t arch ex.
                  (A.Architecture arch)
-              => (forall tp. GroundEvalFn t -> Elt t tp -> IO (ex tp))
+              => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
               -> SimpleBackend t
               -> F.Formula (SimpleBackend t) arch
               -> F.Formula (SimpleBackend t) arch
@@ -123,16 +123,16 @@ formulasEquiv
     varConstants <- foldrM mkConstant MapF.empty allLocs
     let -- This 'fromJust' is total because all of the used variables are in
         -- 'varConstants'.
-        varLookup :: forall tp . A.Location arch tp -> IO (Elt t tp)
+        varLookup :: forall tp . A.Location arch tp -> IO (Expr t tp)
         varLookup = return . fromJust . flip MapF.lookup varConstants
         replaceVars vars = traverseF (FI.replaceLitVars sym varLookup vars)
 
     defs1' <- replaceVars bvars1 defs1
     defs2' <- replaceVars bvars2 defs2
 
-    let lookupDefn :: MapF.MapF (A.Location arch) (Elt t)
+    let lookupDefn :: MapF.MapF (A.Location arch) (Expr t)
                    -> A.Location arch tp
-                   -> Elt t tp
+                   -> Expr t tp
         lookupDefn defs loc =
           case MapF.lookup loc defs of
             Just defn -> defn
@@ -168,8 +168,8 @@ formulasEquiv
 -- The @handler@ receives the result of the satisfiability check.
 checkSatZ3 :: forall t a.
               SimpleBackend t
-           -> BoolElt t
-           -> (SatResult (GroundEvalFn t, Maybe (EltRangeBindings t)) -> IO a)
+           -> BoolExpr t
+           -> (SatResult (GroundEvalFn t, Maybe (ExprRangeBindings t)) -> IO a)
            -> IO a
 checkSatZ3 sym testExpr handler = do
   withVerbosity IO.stderr 1 check

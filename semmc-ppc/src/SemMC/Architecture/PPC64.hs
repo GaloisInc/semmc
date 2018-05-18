@@ -24,39 +24,39 @@ module SemMC.Architecture.PPC64
   , PPCP.PseudoOpcode(..)
   ) where
 
-import qualified Data.Int.Indexed                       as I
-import qualified Data.List.NonEmpty                     as NEL
+import qualified Data.Int.Indexed as I
+import qualified Data.List.NonEmpty as NEL
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.List                as SL
-import qualified Data.Parameterized.Map                 as MapF
-import           Data.Parameterized.Some                ( Some(..) )
-import           Data.Proxy                             ( Proxy(..) )
-import qualified Data.Set                               as Set
-import qualified Data.Word.Indexed                      as W
-import qualified Dismantle.Instruction                  as D
-import qualified Dismantle.PPC                          as PPC
-import           Dismantle.PPC.Random                   ()
-import qualified GHC.Err.Located                        as L
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.BoolInterface     as SB
-import qualified Lang.Crucible.Solver.Interface         as S
-import qualified SemMC.Architecture                     as A
-import qualified SemMC.Architecture.Concrete            as AC
+import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.Some ( Some(..) )
+import           Data.Proxy ( Proxy(..) )
+import qualified Data.Set as Set
+import qualified Data.Word.Indexed as W
+import qualified Dismantle.Instruction as D
+import qualified Dismantle.PPC as PPC
+import           Dismantle.PPC.Random ()
+import qualified GHC.Err.Located as L
+import qualified Lang.Crucible.Backend as SB
+import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Concrete as AC
 import           SemMC.Architecture.PPC.Eval
 import           SemMC.Architecture.PPC.Location
-import qualified SemMC.Architecture.PPC.Pseudo          as PPCP
-import qualified SemMC.Architecture.PPC.Shared          as PPCS
-import qualified SemMC.Architecture.PPC.UF              as UF
+import qualified SemMC.Architecture.PPC.Pseudo as PPCP
+import qualified SemMC.Architecture.PPC.Shared as PPCS
+import qualified SemMC.Architecture.PPC.UF as UF
 import qualified SemMC.Architecture.PPC64.ConcreteState as PPCS
-import qualified SemMC.Architecture.Value               as V
-import qualified SemMC.Architecture.View                as V
-import qualified SemMC.Concrete.Execution               as CE
-import           SemMC.Stochastic.Pseudo                ( Pseudo, ArchitectureWithPseudo(..) )
-import qualified SemMC.Stochastic.RvwpOptimization      as R
-import qualified SemMC.Synthesis.Template               as T
-import qualified SemMC.Util                             as U
-import qualified Text.Megaparsec                        as P
-import qualified Text.Megaparsec.Char                   as P
+import qualified SemMC.Architecture.Value as V
+import qualified SemMC.Architecture.View as V
+import qualified SemMC.Concrete.Execution as CE
+import           SemMC.Stochastic.Pseudo ( Pseudo, ArchitectureWithPseudo(..) )
+import qualified SemMC.Stochastic.RvwpOptimization as R
+import qualified SemMC.Synthesis.Template as T
+import qualified SemMC.Util as U
+import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec.Char as P
+import           What4.BaseTypes
+import qualified What4.Interface as S
 
 data PPC
 

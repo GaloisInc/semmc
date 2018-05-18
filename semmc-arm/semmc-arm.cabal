@@ -16,7 +16,8 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     SemMC.ARM
+  exposed-modules:     SemMC.Architecture.AArch32
+                     , SemMC.Architecture.A32
                      , SemMC.Architecture.ARM.BaseSemantics
                      , SemMC.Architecture.ARM.Combined
                      , SemMC.Architecture.ARM.Eval
@@ -60,6 +61,7 @@ library
                      , template-haskell
                      , text
                      , vector-sized >= 0.5 && < 0.7
+                     , what4
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall
@@ -83,6 +85,7 @@ executable semmc-arm-genbase
                , semmc
                , semmc-arm
                , text
+               , what4
 
 executable semmc-arm-test
   default-language: Haskell2010
@@ -113,5 +116,6 @@ test-suite test_formulas
                   , tasty-hunit
                   , tasty
                   , text
+                  , what4
   -- dismantle-tablegen needed for Data.Parameterized.HasRepr
   ghc-options:      -Wall

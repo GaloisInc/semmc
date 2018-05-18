@@ -2,11 +2,15 @@
 
 module SemMC.Architecture.ARM.Opcodes
     ( allA32Semantics
+    , a32Semantics
     , allA32OpcodeInfo
     , allA32Opcodes
+    , a32Opcodes
     , allT32Semantics
+    , t32Semantics
     , allT32OpcodeInfo
     , allT32Opcodes
+    , t32Opcodes
     )
     where
 

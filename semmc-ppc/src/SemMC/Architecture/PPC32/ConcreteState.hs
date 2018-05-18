@@ -30,7 +30,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Serialize.Get as G
 import qualified Data.Word.Indexed as W
 
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.PPC as PPC

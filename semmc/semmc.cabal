@@ -95,7 +95,7 @@ library
                        s-cargot >= 0.1.4.0 && < 0.2,
                        s-cargot-letbind >= 0.2.2.0 && < 0.3,
                        dismantle-tablegen,
-                       crucible == 0.3.2,
+                       crucible >= 0.4,
                        parameterized-utils >= 1 && < 2,
                        process >= 1.4 && < 1.7,
                        async >= 2 && < 2.3,
@@ -107,7 +107,8 @@ library
                        transformers >= 0.5.2 && < 0.6,
                        sqlite-simple >= 0.4 && < 0.5,
                        directory,
-                       unliftio
+                       unliftio,
+                       what4 >= 0.4
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall

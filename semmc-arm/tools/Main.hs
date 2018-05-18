@@ -10,7 +10,7 @@ import qualified System.IO as IO
 import           Text.Printf ( printf )
 
 import qualified SemMC.Concrete.Execution as CE
-import           SemMC.ARM ( MachineState(..), Instruction, testSerializer )
+import           SemMC.Architecture.AArch32 ( MachineState(..), Instruction, testSerializer )
 import qualified SemMC.Util as U
 
 main :: IO ()

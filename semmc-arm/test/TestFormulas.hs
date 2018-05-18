@@ -13,9 +13,8 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Semigroup
-import qualified Lang.Crucible.Solver.BoolInterface as CRUB
-import qualified Lang.Crucible.Solver.Interface as CRU
-import qualified Lang.Crucible.Solver.SimpleBackend as S
+import qualified Lang.Crucible.Backend as CRUB
+import qualified Lang.Crucible.Backend.Simple as S
 import qualified SemMC.ARM as ARM
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics )
@@ -25,6 +24,7 @@ import qualified SemMC.Util as U
 import           System.IO
 import           Test.Tasty
 import           Test.Tasty.HUnit
+import qualified What4.Interface as CRU
 
 
 main :: IO ()

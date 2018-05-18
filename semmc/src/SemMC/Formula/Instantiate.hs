@@ -34,10 +34,10 @@ import           Data.Proxy                         ( Proxy(..) )
 import           GHC.TypeLits                       ( Symbol )
 import           Text.Printf                        ( printf )
 
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.Interface     as S
-import qualified Lang.Crucible.Solver.BoolInterface as SBI
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
+import           What4.BaseTypes
+import qualified What4.Interface     as S
+import qualified Lang.Crucible.Backend as SBI
+import qualified What4.Expr.Builder as S
 
 import qualified SemMC.Architecture                 as A
 import qualified SemMC.BoundVar                     as BV
@@ -46,7 +46,7 @@ import           SemMC.Formula.Formula
 import qualified SemMC.Util                         as U
 
 -- I got tired of typing this.
-type SB t st = S.SimpleBuilder t st
+type SB t st = S.ExprBuilder t st
 
 -- | Convert a type-level list of operands to a Crucible-style context of
 -- operand types. This reverses it, but we don't care about that for our use
@@ -125,8 +125,8 @@ buildLitAssignment _ exprLookup = foldlM f (MapF.Pair Ctx.empty Ctx.empty) . Map
 replaceVars :: forall t st tp
              . SB t st
             -> SomeVarAssignment (SB t st)
-            -> S.Elt t tp
-            -> IO (S.Elt t tp)
+            -> S.Expr t tp
+            -> IO (S.Expr t tp)
 replaceVars sym (Pair varAssn exprAssn) expr =
   S.evalBoundVars sym expr varAssn exprAssn
 
@@ -136,10 +136,10 @@ replaceVars sym (Pair varAssn exprAssn) expr =
 replaceLitVars :: forall loc t st tp.
                   (OrdF loc)
                => SB t st
-               -> (forall tp'. loc tp' -> IO (S.Elt t tp'))
-               -> MapF.MapF loc (S.SimpleBoundVar t)
-               -> S.Elt t tp
-               -> IO (S.Elt t tp)
+               -> (forall tp'. loc tp' -> IO (S.Expr t tp'))
+               -> MapF.MapF loc (S.ExprBoundVar t)
+               -> S.Expr t tp
+               -> IO (S.Expr t tp)
 replaceLitVars sym newExprs oldVars expr = do
   assn <- buildLitAssignment (Proxy @(SB t st)) newExprs oldVars
   replaceVars sym assn expr
@@ -180,7 +180,7 @@ instantiateFormula
                            , pfDefs = defs
                            })
   opVals = do
-    let rewrite :: forall tp . S.Elt t tp -> IO (S.Elt t tp, Literals arch (SB t st))
+    let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp, Literals arch (SB t st))
         rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
     (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
       fmap (`MapF.union` m) <$> rewrite e
@@ -188,7 +188,7 @@ instantiateFormula
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
     newLitVars <- foldrM addLitVar MapF.empty A.allLocations
-    let newLitExprLookup :: A.Location arch tp -> IO (S.Elt t tp)
+    let newLitExprLookup :: A.Location arch tp -> IO (S.Expr t tp)
         -- 'newLitVars' has all locations in it, so this 'fromJust' is total.
         newLitExprLookup = return . S.varExpr sym . fromJust . flip MapF.lookup newLitVars
 
@@ -196,7 +196,7 @@ instantiateFormula
                       , opAssnVars = opVarsAssn
                       , opAssnBareExprs = opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
-    let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Elt t tp -> IO (A.Location arch tp, S.Elt t tp)
+    let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Expr t tp -> IO (A.Location arch tp, S.Expr t tp)
         instantiateDefn definingParam definition = do
           definingLoc <- case paramToLocation opVals definingParam of
             Just loc -> return loc
@@ -225,10 +225,10 @@ copyFormula :: forall t st arch.
             -> Formula (SB t st) arch
             -> IO (Formula (SB t st) arch)
 copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
-  let mkVar :: forall tp. A.Location arch tp -> IO (S.SimpleBoundVar t tp)
+  let mkVar :: forall tp. A.Location arch tp -> IO (S.ExprBoundVar t tp)
       mkVar loc = S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
   newVars <- MapF.traverseWithKey (const . mkVar) vars
-  let lookupNewVar :: forall tp. A.Location arch tp -> S.Elt t tp
+  let lookupNewVar :: forall tp. A.Location arch tp -> S.Expr t tp
       lookupNewVar = S.varExpr sym . fromJust . flip MapF.lookup newVars
   assn <- buildLitAssignment (Proxy @(SB t st)) (return . lookupNewVar) vars
   newDefs <- traverseF (replaceVars sym assn) defs
@@ -253,7 +253,7 @@ sequenceFormulas sym form1 form2 = do
           , formDefs = defs2
           } <- copyFormula sym form2
 
-  let varReplace :: forall tp. A.Location arch tp -> S.Elt t tp
+  let varReplace :: forall tp. A.Location arch tp -> S.Expr t tp
       varReplace loc
         -- If this location is defined in the first formula, use the new
         -- definition.

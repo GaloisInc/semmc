@@ -44,9 +44,9 @@ import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
 import qualified Language.Haskell.TH as TH
 
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.Interface as S
-import qualified Lang.Crucible.Solver.BoolInterface as SBI
+import           What4.BaseTypes
+import qualified What4.Interface as S
+import qualified Lang.Crucible.Backend as SBI
 
 import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location

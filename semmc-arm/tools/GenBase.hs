@@ -19,13 +19,12 @@ import           Data.Parameterized.Some
 import           Data.Proxy
 import           Data.Text.Encoding ( encodeUtf8 )
 import qualified Data.Text.IO as TIO
-import qualified Lang.Crucible.Solver.BoolInterface as CRUB
-import qualified Lang.Crucible.Solver.Interface as CRU
-import qualified Lang.Crucible.Solver.SimpleBackend as S
+import qualified Lang.Crucible.Backend as CRUB
+import qualified Lang.Crucible.Backend.Simple as S
 import qualified Options.Applicative as O
 import qualified Options.Applicative.Help as OH
-import qualified SemMC.ARM as ARMSem
 import           SemMC.Architecture
+import qualified SemMC.Architecture.AArch32 as ARMSem
 import qualified SemMC.Architecture.ARM.BaseSemantics as B
 import           SemMC.Architecture.ARM.Opcodes ( allA32Opcodes, allT32Opcodes )
 import qualified SemMC.DSL as DSL
@@ -35,6 +34,7 @@ import qualified SemMC.Util as U
 import qualified System.Directory as D
 import           System.Exit
 import           System.FilePath ( (<.>), (</>) )
+import qualified What4.Interface as CRU
 
 
 data Options = Options { oRootDir :: FilePath
@@ -97,7 +97,7 @@ genOpDefs d chk l = F.foldlM writeDef (0, 0) l
                                           opName <> "\" (-> " <> d <> ")"
                                  return (s, e+1)
                    Just op -> if chk
-                              then checkFormula (Proxy @ARMSem.ARM) semdefB op >>= \case
+                              then checkFormula (Proxy @ARMSem.AArch32) semdefB op >>= \case
                                      Nothing -> writeIt >> return (s+1, e)
                                      Just err -> do putStrLn $ "Error for " <> opName <> ": " <> err
                                                     return (s, e+1)

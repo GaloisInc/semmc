@@ -25,7 +25,7 @@ import           Data.Int ( Int16 )
 import qualified Data.Int.Indexed as I
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as SL
-import           Lang.Crucible.BaseTypes
+import           What4.BaseTypes
 
 import qualified Dismantle.PPC as PPC
 

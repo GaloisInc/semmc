@@ -29,15 +29,15 @@ import qualified Data.Parameterized.Map             as M
 import           Data.Parameterized.TraversableFC
 
 import qualified Data.Text                          as T
-import           Lang.Crucible.Solver.Interface
-import qualified Lang.Crucible.Solver.SimpleBuilder as S
-import qualified Lang.Crucible.Solver.Symbol        as S
+import           What4.Interface
+import qualified What4.Expr.Builder as S
+import qualified What4.Symbol as S
 import           Lang.Crucible.Types
 import qualified SemMC.Architecture.Internal        as A
 import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula
 
-type Sym t st = S.SimpleBuilder t st
+type Sym t st = S.ExprBuilder t st
 
 type Literals arch sym = M.MapF (Location arch) (BoundVar sym)
 
@@ -47,9 +47,9 @@ data Evaluator arch t =
                . Sym t st
               -> ParameterizedFormula (Sym t st) arch sh
               -> SL.List (A.Operand arch) sh
-              -> Ctx.Assignment (S.Elt t) u
+              -> Ctx.Assignment (S.Expr t) u
               -> BaseTypeRepr tp
-              -> IO (S.Elt t tp, Literals arch (Sym t st)))
+              -> IO (S.Expr t tp, Literals arch (Sym t st)))
 
 -- | See `evaluateFunctions'`
 evaluateFunctions
@@ -58,8 +58,8 @@ evaluateFunctions
   -> ParameterizedFormula (Sym t st) arch sh
   -> SL.List (A.Operand arch) sh
   -> [(String, Evaluator arch t)]
-  -> S.Elt t tp
-  -> IO (S.Elt t tp, M.MapF (Location arch) (S.SimpleBoundVar t))
+  -> S.Expr t tp
+  -> IO (S.Expr t tp, M.MapF (Location arch) (S.ExprBoundVar t))
 evaluateFunctions sym pf operands rewriters elt =
   flip runStateT M.empty
     (evaluateFunctions' sym pf operands rewriters elt)
@@ -71,18 +71,18 @@ evaluateFunctions'
   -> ParameterizedFormula (Sym t st) arch sh
   -> SL.List (A.Operand arch) sh
   -> [(String, Evaluator arch t)]
-  -> S.Elt t tp
-  -> StateT (Literals arch (Sym t st)) IO (S.Elt t tp)
+  -> S.Expr t tp
+  -> StateT (Literals arch (Sym t st)) IO (S.Expr t tp)
 evaluateFunctions' sym pf operands rewriters e =
   case e of
     S.SemiRingLiteral {} -> return e
-    S.BVElt {} -> return e
-    S.BoundVarElt {} -> return e
-    S.AppElt a -> do
-      app <- S.traverseApp (evaluateFunctions' sym pf operands rewriters) (S.appEltApp a)
-      liftIO $ S.sbMakeElt sym app
-    S.NonceAppElt nonceApp -> do
-      case S.nonceEltApp nonceApp of
+    S.BVExpr {} -> return e
+    S.BoundVarExpr {} -> return e
+    S.AppExpr a -> do
+      app <- S.traverseApp (evaluateFunctions' sym pf operands rewriters) (S.appExprApp a)
+      liftIO $ S.sbMakeExpr sym app
+    S.NonceAppExpr nonceApp -> do
+      case S.nonceExprApp nonceApp of
         S.Forall{} -> error "evaluateFunctions: Forall Not implemented"
         S.Exists{} -> error "evaluateFunctions: Exists Not implemented"
         S.ArrayFromFn{} ->
