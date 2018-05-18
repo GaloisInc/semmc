@@ -267,7 +267,8 @@ operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
 
-instance A.IsLocation (Location ARM) where
+instance (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
+         A.IsLocation (Location arm) where
 
   isMemoryLocation LocMem = True
   isMemoryLocation _ = False
@@ -295,7 +296,7 @@ instance A.IsLocation (Location ARM) where
 
   registerizationLocations = [] -- map (Some . LocGPR . ARMDis.GPR) (0 : [3..4])
 
-parseLocation :: ARMComp.Parser (Some (Location ARM))
+parseLocation :: ARMComp.Parser (Some (Location arm))
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
