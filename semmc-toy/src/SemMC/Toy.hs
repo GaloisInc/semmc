@@ -54,9 +54,9 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.Arbitrary as D
 
-import           Lang.Crucible.BaseTypes
-import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.SimpleBackend.GroundEval
+import           What4.BaseTypes
+import qualified What4.Interface as S
+import           What4.Expr.GroundEval
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC

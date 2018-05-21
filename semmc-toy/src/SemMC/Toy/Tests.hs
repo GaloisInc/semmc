@@ -37,9 +37,9 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.Instruction as D
 import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
-import qualified Lang.Crucible.Solver.BoolInterface as SB
-import qualified Lang.Crucible.Solver.Interface as S
-import           Lang.Crucible.Solver.SimpleBackend
+import qualified Lang.Crucible.Backend as SB
+import qualified What4.Interface as S
+import           Lang.Crucible.Backend.Simple
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
