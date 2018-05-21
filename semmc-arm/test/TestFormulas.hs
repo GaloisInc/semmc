@@ -15,7 +15,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Semigroup
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Simple as S
-import qualified SemMC.ARM as ARM
+import qualified SemMC.Architecture.AArch32 as ARM
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics )
 import qualified SemMC.Formula.Formula as F
@@ -85,5 +85,5 @@ loadFormula :: ( CRUB.IsSymInterface sym
                , U.HasLogCfg) =>
                sym
             -> (Some (ARMOpcode ARMOperand), BS.ByteString)
-            -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.ARM))
+            -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.AArch32))
 loadFormula sym a = FL.loadFormulas sym [a]
