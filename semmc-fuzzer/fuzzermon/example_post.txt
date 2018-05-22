@@ -1,7 +1,7 @@
 {
   "fuzzer-host": "x",
   "fuzzer-user": "y",
-  "testing-host": "helium",
+  "testing-host": "powerpc.example.com",
   "arch": "ppc32",
   "entries": [
     {

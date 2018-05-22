@@ -2,9 +2,11 @@
 arch = ppc32
 opcodes = AllOpcodes
 strategy = Randomized
-report-url = http://fuzzermon.dev.galois.com
+# Assuming that the fuzzermon service is running on port 8000
+report-url = http://localhost:8000
 
-[host:helium.proj.galois.com]
-runner-path = /home/cygnus/bin/remote-runner.ppc32
+[host:arm.example.com]
+# This is the path to the remote runner binary on the remote machine
+runner-path = /path/to/remote-runner
 chunk-size = 100
 threads = 1
