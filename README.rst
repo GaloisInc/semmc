@@ -3,7 +3,7 @@ Overview
 
 This repository contains implementations of, and tools supporting, the Semantics of Machine Code (SemMC).
 
-Beyond machine code semantics, two different approaches to synthesis are implemented.  The first is *stratified synthesis* (based on a 2016 paper [PLDI16]_), which learns the semantics of machine code instructions from a manually-specified base set.  The second is a search-based synthesis of machine code programs from semantics using a technique called Counter-Example Guided Inductive Synthesis (CEGIS) [TR1814]_, [OOPSLA16]_.
+Beyond machine code semantics, two different approaches to synthesis are implemented.  The first is *stratified synthesis* (based on a 2016 paper [PLDI16]_), which learns the semantics of machine code instructions from a manually-specified base set and concrete executions on the hardware of the target architecture.  The second is a search-based synthesis of machine code programs from semantics using a technique called Counter-Example Guided Inductive Synthesis (CEGIS) [TR1814]_, [OOPSLA16]_.  The input to the search-based synthesis is a formula describing a transformation of machine state, while the output is a machine code program.
 
 Repository Layout
 -----------------
