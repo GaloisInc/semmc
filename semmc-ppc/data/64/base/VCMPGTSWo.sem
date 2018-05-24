@@ -14,16 +14,20 @@
       (bvshl
        #x0000000f
        (bvmul
-        ((_ zero_extend 29)
-         #b110)
+        (bvsub
+         #x00000007
+         ((_ zero_extend 29)
+          #b110))
         #x00000004))))
     (bvshl
      ((_ zero_extend 28)
       ((_ call "undefined")
        #x00000004))
      (bvmul
-      ((_ zero_extend 29)
-       #b110)
+      (bvsub
+       #x00000007
+       ((_ zero_extend 29)
+        #b110))
       #x00000004))))
    ('VSCR
     ((_ extract 159 128)

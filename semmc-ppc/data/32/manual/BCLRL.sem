@@ -8,11 +8,10 @@
    (bvadd 'IP #x00000004))
    ('IP
     (ite
-     (notp
-      ((_ call "test_bit_dynamic")
-       ((_ zero_extend 27)
-        bi)
-       'CR))
+     ((_ call "test_bit_dynamic")
+      'CR
+      ((_ zero_extend 27)
+       (bvsub #b11111 bi)))
      (concat
       ((_ extract 29 0)
        'LNK)

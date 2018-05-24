@@ -15,8 +15,10 @@
       (bvshl
        #x0000000f
        (bvmul
-        ((_ zero_extend 29)
-         fld)
+        (bvsub
+         #x00000007
+         ((_ zero_extend 29)
+          fld))
         #x00000004))))
     (bvshl
      ((_ zero_extend 28)
@@ -37,8 +39,10 @@
        ((_ extract 32 32)
         'XER)))
      (bvmul
-      ((_ zero_extend 29)
-       fld)
+      (bvsub
+       #x00000007
+       ((_ zero_extend 29)
+        fld))
       #x00000004))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

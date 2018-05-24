@@ -14,8 +14,10 @@
       (bvshl
        #x0000000f
        (bvmul
-        ((_ zero_extend 29)
-         #b000)
+        (bvsub
+         #x00000007
+         ((_ zero_extend 29)
+          #b000))
         #x00000004))))
     (bvshl
      ((_ zero_extend 28)
@@ -34,8 +36,10 @@
        ((_ extract 0 0)
         'XER)))
      (bvmul
-      ((_ zero_extend 29)
-       #b000)
+      (bvsub
+       #x00000007
+       ((_ zero_extend 29)
+        #b000))
       #x00000004))))
    (rT
     (bvsdiv rA rB))

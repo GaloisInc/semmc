@@ -2,12 +2,19 @@
 ;; This is a specialized unconditional BCLR
 ((operands ())
  (in
-  ('IP 'LNK))
+  ('CR 'IP 'LNK))
  (defs
   (('LNK
    (bvadd 'IP #x0000000000000004))
    ('IP
-    (concat
-     ((_ extract 61 0)
-      'LNK)
-     #b00)))))
+    (ite
+     (notp
+      ((_ call "test_bit_dynamic")
+       'CR
+       ((_ zero_extend 27)
+        (bvsub #b11111 #b00000))))
+     (concat
+      ((_ extract 61 0)
+       'LNK)
+      #b00)
+     (bvadd 'IP #x0000000000000004))))))

@@ -17,35 +17,35 @@
      (andp
       (ite
        ((_ call "test_bit_dynamic")
-        #x00000000
         ((_ zero_extend 27)
-         bo))
+         bo)
+        #x00000004)
        (true)
        (ite
         ((_ call "test_bit_dynamic")
-         #x00000001
          ((_ zero_extend 27)
-          bo))
+          bo)
+         #x00000003)
         ((_ call "test_bit_dynamic")
+         'CR
          ((_ zero_extend 27)
-          bi)
-         'CR)
+          (bvsub #b11111 bi)))
         (notp
          ((_ call "test_bit_dynamic")
+          'CR
           ((_ zero_extend 27)
-           bi)
-          'CR))))
+           (bvsub #b11111 bi))))))
       (ite
        ((_ call "test_bit_dynamic")
-        #x00000002
         ((_ zero_extend 27)
-         bo))
+         bo)
+        #x00000002)
        (true)
        (ite
         ((_ call "test_bit_dynamic")
-         #x00000003
          ((_ zero_extend 27)
-          bo))
+          bo)
+         #x00000001)
         (xorp
          (notp
           (bveq 'CTR #x0000000000000000))

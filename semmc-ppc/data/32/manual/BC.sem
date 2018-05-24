@@ -8,10 +8,11 @@
  (defs
   (('IP
    (ite
-    ((_ call "test_bit_dynamic")
-     ((_ zero_extend 27)
-      bi)
-     'CR)
+    (notp
+     ((_ call "test_bit_dynamic")
+      'CR
+      ((_ zero_extend 27)
+       (bvsub #b11111 bi))))
     (bvadd
      ((_ sign_extend 16)
       (concat target #b00))
