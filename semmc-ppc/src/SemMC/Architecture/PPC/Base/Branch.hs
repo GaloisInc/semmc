@@ -363,7 +363,7 @@ genericBranchConditional aa lk bo bi target = do
   input cr
   input ip
 
-  let isCtrDec = notp (testBitDynamic (LitBV 32 0x2) (zext' 32 bo))
+  let isCtrDec = notp (testBitDynamic (zext' 32 bo) (LitBV 32 0x2))
   let newCtr = ite isCtrDec (bvsub (Loc ctr) (naturalLitBV 0x1)) (Loc ctr)
   defLoc ctr newCtr
 
@@ -383,11 +383,11 @@ falsePred = LitBool False
 
 generic_cond_ok :: Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_cond_ok bo bi =
-  ite (testBitDynamic (LitBV 32 0x0) (zext' 32 bo))
+  ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x0))
       truePred
-      (ite (testBitDynamic (LitBV 32 0x1) (zext' 32 bo))
-           (testBitDynamic (zext' 32 bi) (Loc cr))
-           (notp (testBitDynamic (zext' 32 bi) (Loc cr))))
+      (ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x1))
+           (testBitDynamic (Loc cr) (zext' 32 bi))
+           (notp (testBitDynamic (Loc cr) (zext' 32 bi))))
 
 cond_ok :: W 5 -> Expr 'TBV -> Expr 'TBool
 cond_ok bo bi =
@@ -399,13 +399,13 @@ cond_ok bo bi =
   -- is always 32 bits, and BI is wide enough to address any of them.
   else if testBit bo 1
        then testBitDynamic (zext' 32 bi) (Loc cr)
-       else notp (testBitDynamic (zext' 32 bi) (Loc cr))
+       else notp (testBitDynamic (Loc cr) (zext' 32 bi))
 
 generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_ctr_ok bo newCtr =
-  ite (testBitDynamic (LitBV 32 0x2) (zext' 32 bo))
+  ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x2))
       truePred
-      (ite (testBitDynamic (LitBV 32 0x3) (zext' 32 bo))
+      (ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x3))
            (xorp ctr_ne_zero truePred)
            (xorp ctr_ne_zero falsePred))
   where
