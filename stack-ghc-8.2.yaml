@@ -17,7 +17,7 @@ packages:
 - location: submodules/crucible
   subdirs:
   - crucible
-  - galois-matlab
+  - what4
   # The 'exra-dep' here means don't actually build this package unless
   # needed as a dependency, and don't load it into GHCi.
   extra-dep: true
