@@ -24,7 +24,7 @@ import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
 import qualified SemMC.Architecture.PPC64 as PPC64
 import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
 
-import qualified SemMC.ARM as ARM
+import qualified SemMC.Architecture.AArch32 as ARM
 import qualified SemMC.Architecture.ARM.Opcodes as ARM
 
 data Arg =
@@ -95,12 +95,12 @@ ppc64Arch =
 
 arm32Arch :: ArchImpl
 arm32Arch =
-    ArchImpl "arm32" (Proxy @ARM.ARM) ARM.allA32Opcodes ARM.allA32Semantics
+    ArchImpl "arm32" (Proxy @ARM.AArch32) ARM.allA32Opcodes ARM.allA32Semantics
              (\(Some x) -> show x)
 
 thumb32Arch :: ArchImpl
 thumb32Arch =
-    ArchImpl "thumb32" (Proxy @ARM.ARM) ARM.allT32Opcodes ARM.allT32Semantics
+    ArchImpl "thumb32" (Proxy @ARM.AArch32) ARM.allT32Opcodes ARM.allT32Semantics
              (\(Some x) -> show x)
 
 knownArchs :: [ArchImpl]
