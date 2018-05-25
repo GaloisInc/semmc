@@ -386,8 +386,8 @@ generic_cond_ok bo bi =
   ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x0))
       truePred
       (ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x1))
-           (testBitDynamic (Loc cr) (zext' 32 bi))
-           (notp (testBitDynamic (Loc cr) (zext' 32 bi))))
+           (testBitDynamic (Loc cr) (translate_bi bi))
+           (notp (testBitDynamic (Loc cr) (translate_bi bi))))
 
 cond_ok :: W 5 -> Expr 'TBV -> Expr 'TBool
 cond_ok bo bi =
@@ -398,8 +398,21 @@ cond_ok bo bi =
   -- Otherwise, we have to check the CR field (the BI'th bit of the CR).  The CR
   -- is always 32 bits, and BI is wide enough to address any of them.
   else if testBit bo 1
-       then testBitDynamic (zext' 32 bi) (Loc cr)
-       else notp (testBitDynamic (Loc cr) (zext' 32 bi))
+       then testBitDynamic (Loc cr) (translate_bi bi)
+       else notp (testBitDynamic (Loc cr) (translate_bi bi))
+
+-- | The PowerPC ISA manual numbers the bits in the condition register from
+-- 32-63 (most significant to least significant), but macaw numbers bits in its
+-- values from 0-31 (least significant to most significant). As an additional
+-- wrinkle, the BI field in the instruction is added to 32 to give the
+-- condition register bit to read.
+--
+-- This function translates from an instruction's BI field to Macaw numbering.
+--
+-- While we're at it, we convert from five bits to 32 as well, since that's how
+-- every caller uses it.
+translate_bi :: Expr 'TBV -> Expr 'TBV
+translate_bi = zext' 32 . bvsub (LitBV 5 31)
 
 generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_ctr_ok bo newCtr =
