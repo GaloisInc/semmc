@@ -287,6 +287,7 @@ branchConditionalLNK lk bo bi = do
   input lnk
   input ip
   when (not (boBit bo 0)) $ input cr
+  when (not (boBit bo 2)) $ input ctr
 
   let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
   let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc lnk)) (LitBV 2 0x0)
