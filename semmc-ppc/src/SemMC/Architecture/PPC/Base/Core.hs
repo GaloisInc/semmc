@@ -121,7 +121,7 @@ cmpImm :: (HasCallStack, ?bitSize :: BitSize)
        -- ^ The register expression
        -> Expr 'TBV
 cmpImm lt gt fld ximm reg =
-  bvor crFld0 shiftedNibble
+  updateCRField fld crnibble
   where
     c = ite (lt reg ximm)
             (LitBV 3 0b100)
@@ -129,8 +129,6 @@ cmpImm lt gt fld ximm reg =
                  (LitBV 3 0b010)
                  (LitBV 3 0b001))
     crnibble = concat c (xerBit SO (Loc xer))
-    shiftedNibble = bvshl (zext' 32 crnibble) (bvmul (zext' 32 fld) (LitBV 32 0x4))
-    crFld0 = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fld) (LitBV 32 0x4))))
 
 -- | Produce an expression that extracts the given field from the CR as a four
 -- bit bitvector
@@ -139,7 +137,7 @@ crField :: Expr 'TBV
         -> Expr 'TBV
 crField fldNum = lowBits' 4 shiftedCR
   where
-    shiftedCR = bvlshr (Loc cr) (bvmul (zext' 32 fldNum) (LitBV 32 0x4))
+    shiftedCR = bvlshr (Loc cr) (crFieldIndex fldNum)
 
 -- | Update the named CR field with the given four bit value; returns a new CR value
 --
@@ -155,9 +153,16 @@ updateCRField :: Expr 'TBV
               -> Expr 'TBV
 updateCRField fldNum newFldVal = bvor clearedCR shiftedVal
   where
-    fieldMask = bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fldNum) (LitBV 32 0x4)))
+    fieldMask = bvnot (bvshl (LitBV 32 0xf) (crFieldIndex fldNum))
     clearedCR = bvand (Loc cr) fieldMask
-    shiftedVal = bvshl (zext' 32 newFldVal) (bvmul (zext' 32 fldNum) (LitBV 32 0x4))
+    shiftedVal = bvshl (zext' 32 newFldVal) (crFieldIndex fldNum)
+
+-- | Given a condition register field number, produce the macaw index of the
+-- least significant bit of that field -- that is, the index of the summary
+-- overflow bit of that field. The remaining bits of the field are in larger
+-- indices.
+crFieldIndex :: Expr 'TBV -> Expr 'TBV
+crFieldIndex fld = bvmul (bvsub (LitBV 32 7) (zext' 32 fld)) (LitBV 32 4)
 
 -- Common operations
 
