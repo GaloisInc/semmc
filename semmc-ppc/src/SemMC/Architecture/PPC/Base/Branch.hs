@@ -248,7 +248,7 @@ branchConditionalCTR :: (?bitSize :: BitSize)
 branchConditionalCTR lk bo bi = do
   input ctr
   input ip
-  when (not (testBit bo 0)) $ input cr
+  when (not (boBit bo 0)) $ input cr
 
   let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc ctr)) (LitBV 2 0x0)
   let nextInsn = (bvadd (Loc ip) (naturalLitBV 0x4))
@@ -286,7 +286,7 @@ branchConditionalLNK :: (?bitSize :: BitSize)
 branchConditionalLNK lk bo bi = do
   input lnk
   input ip
-  when (not (testBit bo 0)) $ input cr
+  when (not (boBit bo 0)) $ input cr
 
   let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
   let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc lnk)) (LitBV 2 0x0)
@@ -329,12 +329,12 @@ branchConditional :: (?bitSize :: BitSize)
                   -> SemM 'Def ()
 branchConditional aa lk bo bi target = do
   input ctr
-  when (not (testBit bo 0)) $ input cr
+  when (not (boBit bo 0)) $ input cr
   when (lk == Link || aa == Relative) $ input ip
 
   -- If bit 2 of BO is set, we decrement the CTR.  We do this in a let binding
   -- so that we can re-use the correct value later on in some expressions.
-  let isCtrDec = not (testBit bo 2)
+  let isCtrDec = not (boBit bo 2)
   let newCtr = if isCtrDec then bvsub (Loc ctr) (naturalLitBV 0x1) else Loc ctr
   when isCtrDec $ do
     defLoc ctr newCtr
@@ -363,7 +363,7 @@ genericBranchConditional aa lk bo bi target = do
   input cr
   input ip
 
-  let isCtrDec = notp (testBitDynamic (zext' 32 bo) (LitBV 32 0x2))
+  let isCtrDec = notp (boBitDynamic bo 2)
   let newCtr = ite isCtrDec (bvsub (Loc ctr) (naturalLitBV 0x1)) (Loc ctr)
   defLoc ctr newCtr
 
@@ -383,21 +383,21 @@ falsePred = LitBool False
 
 generic_cond_ok :: Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_cond_ok bo bi =
-  ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x0))
+  ite (boBitDynamic bo 0)
       truePred
-      (ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x1))
+      (ite (boBitDynamic bo 1)
            (testBitDynamic (Loc cr) (translate_bi bi))
            (notp (testBitDynamic (Loc cr) (translate_bi bi))))
 
 cond_ok :: W 5 -> Expr 'TBV -> Expr 'TBool
 cond_ok bo bi =
-  if testBit bo 0
+  if boBit bo 0
   -- If BO_0 is set, the cond is always true and this is unconditional (modulo
   -- the CTR check)
   then truePred
   -- Otherwise, we have to check the CR field (the BI'th bit of the CR).  The CR
   -- is always 32 bits, and BI is wide enough to address any of them.
-  else if testBit bo 1
+  else if boBit bo 1
        then testBitDynamic (Loc cr) (translate_bi bi)
        else notp (testBitDynamic (Loc cr) (translate_bi bi))
 
@@ -414,11 +414,23 @@ cond_ok bo bi =
 translate_bi :: Expr 'TBV -> Expr 'TBV
 translate_bi = zext' 32 . bvsub (LitBV 5 31)
 
+-- | The PowerPC ISA manual numbers the bits in the BO field from 0-4 (most
+-- significant to least significant), but macaw numbers bits from 0-4 (least
+-- significant to most significant). This function translates an ISA bit index
+-- for a BO field to macaw numbering, and tests the associated bit. See also
+-- 'boBitDynamic'.
+boBit :: W 5 -> Int -> Bool
+boBit bo n = testBit bo (4-n)
+
+-- | See 'boBit'.
+boBitDynamic :: Expr 'TBV -> Integer -> Expr 'TBool
+boBitDynamic bo n = testBitDynamic (zext' 32 bo) (LitBV 32 (4-n))
+
 generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_ctr_ok bo newCtr =
-  ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x2))
+  ite (boBitDynamic bo 2)
       truePred
-      (ite (testBitDynamic (zext' 32 bo) (LitBV 32 0x3))
+      (ite (boBitDynamic bo 3)
            (xorp ctr_ne_zero truePred)
            (xorp ctr_ne_zero falsePred))
   where
@@ -426,14 +438,14 @@ generic_ctr_ok bo newCtr =
 
 ctr_ok :: (?bitSize :: BitSize) => W 5 -> Expr 'TBV -> Expr 'TBool
 ctr_ok bo newCtr =
-   if testBit bo 2
+   if boBit bo 2
    -- If bit 2 is set, we don't check the CTR at all, so ctr_ok is trivially true
    then truePred
    -- Otherwise, we compute (CTR /= 0 ^ BO_3).  Note that BO_3 is
    -- statically known, so we don't generate an XOR -- we compute it
    -- in SemM.  If @CTR /= 0@ is treated as an opaque predicate P
    -- and @P ^ BO_3@ is opaque predicate Q:
-   else if testBit bo 3
+   else if boBit bo 3
         then xorp ctr_ne_zero truePred
         else xorp ctr_ne_zero falsePred
   where
