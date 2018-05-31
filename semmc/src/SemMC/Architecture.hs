@@ -144,10 +144,10 @@ data FunctionInterpretation t arch =
 createSymbolicEntries :: [(String, a)] -> [(String, a)]
 createSymbolicEntries = foldr duplicateIfDotted []
   where
-    duplicateIfDotted elt@(s, e) acc =
+    duplicateIfDotted (s, e) acc =
       case '.' `elem` s of
         False -> acc
         True ->
-          let newElt = (map (\c -> if c == '.' then '_' else c) s, e)
-          in newElt : elt : acc
+          let newElt = ("uf." ++ map (\c -> if c == '.' then '_' else c) s, e)
+          in newElt : ("uf." ++ s, e) : acc
 
