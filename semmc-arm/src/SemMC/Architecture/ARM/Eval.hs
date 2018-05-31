@@ -9,8 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module SemMC.Architecture.ARM.Eval
-    ( createSymbolicEntries
-    , interpIsR15
+    ( interpIsR15
     , interpAm2offsetimmImmExtractor
     , interpAm2offsetimmAddExtractor
     , interpBlxTarget_S
@@ -70,26 +69,6 @@ import           SemMC.Architecture.ARM.Location
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula as F
 import           What4.BaseTypes
-
-
--- | Uninterpreted function names are mangled in SimpleBuilder, so we need to
--- create extra entries to match their mangled names.
---
--- In particular, periods in names are converted to underscores.
---
--- This function creates copies of entries with periods in their names with the
--- escaped version as it appears in a SimpleBuilder symbolic function.  For
--- example, if there is an entry with the name @arm.foo@, this function retains
--- that entry in the input list and adds an additional entry under @arm_foo@.
-createSymbolicEntries :: [(String, a)] -> [(String, a)]
-createSymbolicEntries = foldr duplicateIfDotted []
-  where
-    duplicateIfDotted elt@(s, e) acc =
-      case '.' `elem` s of
-        False -> acc
-        True ->
-          let newElt = (map (\c -> if c == '.' then '_' else c) s, e)
-          in newElt : elt : acc
 
 
 ------------------------------------------------------------------------

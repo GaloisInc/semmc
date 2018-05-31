@@ -5,7 +5,7 @@
   (ite
    (testCondition)
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     rD
     ((_ extract 31 0)
@@ -154,7 +154,7 @@
        'CPSR)))))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (bvand
      #xfffffffd
@@ -187,7 +187,7 @@
             ((_ extract 26 25)
              'CPSR)))))
         (notp
-         ((_ call "arm.is_r15")
+         ((_ call "uf.arm.is_r15")
           rD)))
        (concat
         (nzcv)

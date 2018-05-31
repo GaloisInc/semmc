@@ -209,7 +209,7 @@
   ((rDn . 'TGPR)
    (imm . 'Imm0_255)))
   (in
-   (imm 'CPSR 'PC))
+   (imm rDn 'CPSR 'PC))
   (defs
    (('PC
     (bvadd 'PC #x00000002))
@@ -219,7 +219,7 @@
       (ite
        (andp
         (notp
-         ((_ call "arm.is_r15")
+         ((_ call "uf.arm.is_r15")
           rDn))
         (notp
          (notp

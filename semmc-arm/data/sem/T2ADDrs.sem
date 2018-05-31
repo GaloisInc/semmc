@@ -5,7 +5,7 @@
    (bvadd
     (bvadd
      ((_ zero_extend 1)
-      ((_ call "t32.t2soreg_reg")
+      ((_ call "uf.t32.t2soreg_reg")
        rN))
      ((_ zero_extend 1)
       ((_ extract 31 0)
@@ -73,17 +73,17 @@
   (immShift
    (ite
     (bveq
-     ((_ call "t32.t2soreg_type")
+     ((_ call "uf.t32.t2soreg_type")
       rN)
      #b00)
     (concat
      #b000
      ((_ zero_extend 27)
-      ((_ call "t32.t2soreg_imm")
+      ((_ call "uf.t32.t2soreg_imm")
        rN)))
     (ite
      (bveq
-      ((_ call "t32.t2soreg_type")
+      ((_ call "uf.t32.t2soreg_type")
        rN)
       #b01)
      (concat
@@ -91,15 +91,15 @@
       (ite
        (bveq
         #b00000
-        ((_ call "t32.t2soreg_imm")
+        ((_ call "uf.t32.t2soreg_imm")
          rN))
        #x00000020
        ((_ zero_extend 27)
-        ((_ call "t32.t2soreg_imm")
+        ((_ call "uf.t32.t2soreg_imm")
          rN))))
      (ite
       (bveq
-       ((_ call "t32.t2soreg_type")
+       ((_ call "uf.t32.t2soreg_type")
         rN)
        #b10)
       (concat
@@ -107,22 +107,22 @@
        (ite
         (bveq
          #b00000
-         ((_ call "t32.t2soreg_imm")
+         ((_ call "uf.t32.t2soreg_imm")
           rN))
         #x00000020
         ((_ zero_extend 27)
-         ((_ call "t32.t2soreg_imm")
+         ((_ call "uf.t32.t2soreg_imm")
           rN))))
       (ite
        (bveq
-        ((_ call "t32.t2soreg_imm")
+        ((_ call "uf.t32.t2soreg_imm")
          rN)
         #b00000)
        (concat #b100 #x00000001)
        (concat
         #b011
         ((_ zero_extend 27)
-         ((_ call "t32.t2soreg_imm")
+         ((_ call "uf.t32.t2soreg_imm")
           rN))))))))
   (var1
    (bvshl
@@ -140,7 +140,7 @@
       (immShift))
      #x00000020)
     (ite
-     ((_ call "test_bit_dynamic")
+     ((_ call "uf.test_bit_dynamic")
       (bvsub
        ((_ extract 31 0)
         (immShift))
@@ -286,7 +286,7 @@
      (andp
       (bveq setcc #b1)
       (notp
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)))
      (concat
       (nzcv)
@@ -305,7 +305,7 @@
         (bvadd
          (bvadd
           ((_ zero_extend 1)
-           ((_ call "t32.t2soreg_reg")
+           ((_ call "uf.t32.t2soreg_reg")
             rN))
           ((_ zero_extend 1)
            ((_ extract 31 0)
@@ -322,7 +322,7 @@
      (bvadd
       (bvadd
        ((_ zero_extend 1)
-        ((_ call "t32.t2soreg_reg")
+        ((_ call "uf.t32.t2soreg_reg")
          rN))
        ((_ zero_extend 1)
         ((_ extract 31 0)
@@ -336,7 +336,7 @@
       (bvadd
        (bvadd
         ((_ zero_extend 1)
-         ((_ call "t32.t2soreg_reg")
+         ((_ call "uf.t32.t2soreg_reg")
           rN))
         ((_ zero_extend 1)
          ((_ extract 31 0)
@@ -348,7 +348,7 @@
     (bvadd
      (bvadd
       ((_ zero_extend 1)
-       ((_ call "t32.t2soreg_reg")
+       ((_ call "uf.t32.t2soreg_reg")
         rN))
       ((_ zero_extend 1)
        ((_ extract 31 0)
@@ -361,7 +361,7 @@
    ((branchWritePC)))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (bvand
      #xfffffffd
@@ -382,7 +382,7 @@
      (ite
       (testCondition)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)
        rD
        (addResult))

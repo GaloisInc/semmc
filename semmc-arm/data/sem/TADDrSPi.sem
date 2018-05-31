@@ -8,7 +8,7 @@
     (ite
      (testCondition)
      (ite
-      ((_ call "arm.is_r15")
+      ((_ call "uf.arm.is_r15")
        rD)
       rD
       (addResult))
@@ -22,7 +22,7 @@
       ((_ zero_extend 1)
        ((_ zero_extend 22)
         (concat
-         ((_ call "t32.imm0_1020S4_imm")
+         ((_ call "uf.t32.imm0_1020S4_imm")
           imm)
          #b00))))
      ((_ zero_extend 1)
@@ -135,7 +135,7 @@
      'CPSR)))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (bvand
      #xfffffffd

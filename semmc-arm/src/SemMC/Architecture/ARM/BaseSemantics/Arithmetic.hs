@@ -149,6 +149,7 @@ manualArithmetic = do
                       $ \imm0_508s4 -> do
     comment "SUB SP - immediate, T32, encoding T1 (F7.1.238, F7-2922)"
     input imm0_508s4
+    input sp
     let setflags = LitBool False
         imm7 = t32_imm_0_508s4_val imm0_508s4
         imm32 = zext $ concat imm7 (LitBV 2 0b00)
@@ -401,6 +402,7 @@ manualArithmetic = do
                        $ \rD imm3 rN -> do
     comment "SUB immediate, T32, encoding T1 (F7.1.234, F7-2914)"
     input rN
+    input rD
     input imm3
     tsubri rD rN (zext (Loc imm3)) (LitBool True) (notp inITBlock)
 
@@ -411,6 +413,7 @@ manualArithmetic = do
                            )
                        $ \rDn imm8 -> do
     comment "SUB immediate, T32, encoding T2 (F7.1.234, F7-2914)"
+    input rDn
     input imm8
     tsubri rDn rDn (zext (Loc imm8)) (LitBool True) (notp inITBlock)
 
@@ -435,6 +438,7 @@ manualArithmetic = do
                            )
                        $ \rD rN rM -> do
     comment "SUB (register), T32, encoding T1 (F7.1.236, F7-2918)"
+    input rD
     input rM
     input rN
     let setflags = notp inITBlock

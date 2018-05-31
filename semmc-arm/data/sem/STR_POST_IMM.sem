@@ -3,7 +3,7 @@
 (let
  ((wval
   (ite
-   ((_ call "arm.is_r15")
+   ((_ call "uf.arm.is_r15")
     gpr)
    'PC
    gpr))
@@ -108,17 +108,17 @@
     off))
   (offAddr
    (ite
-    ((_ call "a32.am2offset_imm_add")
+    ((_ call "uf.a32.am2offset_imm_add")
      imm)
     (bvadd
      off
      ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
+      ((_ call "uf.a32.am2offset_imm_imm")
        imm)))
     (bvsub
      off
      ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
+      ((_ call "uf.a32.am2offset_imm_imm")
        imm)))))
   (wback
    (bveq #b0 #b0)))
@@ -139,12 +139,12 @@
       (rnUpd)
       off))
     ('Mem
-     ((_ call "write_mem.32")
+     ((_ call "uf.write_mem.32")
       'Mem
       off
       (ite
        (testCondition)
        (wval)
-       ((_ call "read_mem.32")
+       ((_ call "uf.read_mem.32")
         'Mem
         off))))))))

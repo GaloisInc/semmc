@@ -53,7 +53,7 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
@@ -90,7 +90,7 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
@@ -113,7 +113,7 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
@@ -247,7 +247,7 @@
      (andp
       (bveq setcc #b1)
       (notp
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)))
      var2)
     'CPSR))
@@ -283,7 +283,7 @@
     #b0))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (bvand var1)
     (bvadd 'PC #x00000002)))
@@ -309,7 +309,7 @@
      (ite
       (testCondition)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)
        rD
        (bvand

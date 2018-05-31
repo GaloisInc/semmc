@@ -124,27 +124,27 @@
     (bvadd
      ((_ sign_extend 7)
       (concat
-       ((_ call "t32.blxtarget_S")
+       ((_ call "uf.t32.blxtarget_S")
         target)
        (concat
         (bvnot
          (bvxor
-          ((_ call "t32.blxtarget_J1")
+          ((_ call "uf.t32.blxtarget_J1")
            target)
-          ((_ call "t32.blxtarget_S")
+          ((_ call "uf.t32.blxtarget_S")
            target)))
         (concat
          (bvnot
           (bvxor
-           ((_ call "t32.blxtarget_J2")
+           ((_ call "uf.t32.blxtarget_J2")
             target)
-           ((_ call "t32.blxtarget_S")
+           ((_ call "uf.t32.blxtarget_S")
             target)))
          (concat
-          ((_ call "t32.blxtarget_imm10H")
+          ((_ call "uf.t32.blxtarget_imm10H")
            target)
           (concat
-           ((_ call "t32.blxtarget_imm10L")
+           ((_ call "uf.t32.blxtarget_imm10L")
             target)
            #b00))))))
      (bvand #xfffffffc 'PC)))))

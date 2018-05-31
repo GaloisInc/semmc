@@ -26,7 +26,7 @@
     (concat
      ((_ extract 29 29)
       'CPSR)
-     ((_ call "a32.soregimm_reg")
+     ((_ call "uf.a32.soregimm_reg")
       sori))
     (ite
      (bveq
@@ -58,13 +58,13 @@
   (rrxC
    (concat
     ((_ extract 0 0)
-     ((_ call "a32.soregimm_reg")
+     ((_ call "uf.a32.soregimm_reg")
       sori))
     (concat
      ((_ extract 29 29)
       'CPSR)
      ((_ extract 31 1)
-      ((_ call "a32.soregimm_reg")
+      ((_ call "uf.a32.soregimm_reg")
        sori)))))
   (rorC
    (concat
@@ -74,19 +74,19 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
         #x00000001)
-       ((_ call "a32.soregimm_reg")
+       ((_ call "uf.a32.soregimm_reg")
         sori))
       #b1
       #b0)
      #b0)
     (bvor
      (bvshl
-      ((_ call "a32.soregimm_reg")
+      ((_ call "uf.a32.soregimm_reg")
        sori)
       (bvsub
        #x00000020
@@ -95,7 +95,7 @@
          (immShift))
         #x00000020)))
      (bvlshr
-      ((_ call "a32.soregimm_reg")
+      ((_ call "uf.a32.soregimm_reg")
        sori)
       (bvurem
        ((_ extract 31 0)
@@ -104,46 +104,46 @@
   (immShift
    (ite
     (bveq
-     ((_ call "a32.soregimm_type")
+     ((_ call "uf.a32.soregimm_type")
       sori)
      #b00)
     (concat
      #b000
      ((_ zero_extend 27)
-      ((_ call "a32.soregimm_imm")
+      ((_ call "uf.a32.soregimm_imm")
        sori)))
     (ite
      (bveq
-      ((_ call "a32.soregimm_type")
+      ((_ call "uf.a32.soregimm_type")
        sori)
       #b01)
      (concat #b001 var2)
      (ite
       (bveq
-       ((_ call "a32.soregimm_type")
+       ((_ call "uf.a32.soregimm_type")
         sori)
        #b10)
       (concat #b010 var2)
       (ite
        (bveq
-        ((_ call "a32.soregimm_imm")
+        ((_ call "uf.a32.soregimm_imm")
          sori)
         #b00000)
        (concat #b100 #x00000001)
        (concat
         #b011
         ((_ zero_extend 27)
-         ((_ call "a32.soregimm_imm")
+         ((_ call "uf.a32.soregimm_imm")
           sori))))))))
   (var2
    ((ite
     (bveq
      #b00000
-     ((_ call "a32.soregimm_imm")
+     ((_ call "uf.a32.soregimm_imm")
       sori))
     #x00000020
     ((_ zero_extend 27)
-     ((_ call "a32.soregimm_imm")
+     ((_ call "uf.a32.soregimm_imm")
       sori)))))
   (arithmeticShiftRightCarry
    (concat
@@ -153,18 +153,18 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
         #x00000001)
-       ((_ call "a32.soregimm_reg")
+       ((_ call "uf.a32.soregimm_reg")
         sori))
       #b1
       #b0)
      #b0)
     (bvashr
-     ((_ call "a32.soregimm_reg")
+     ((_ call "uf.a32.soregimm_reg")
       sori)
      (bvurem
       ((_ extract 31 0)
@@ -178,18 +178,18 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
         #x00000001)
-       ((_ call "a32.soregimm_reg")
+       ((_ call "uf.a32.soregimm_reg")
         sori))
       #b1
       #b0)
      #b0)
     (bvlshr
-     ((_ call "a32.soregimm_reg")
+     ((_ call "uf.a32.soregimm_reg")
       sori)
      (bvurem
       ((_ extract 31 0)
@@ -198,7 +198,7 @@
   (lslC
    (bvshl
     ((_ zero_extend 1)
-     ((_ call "a32.soregimm_reg")
+     ((_ call "uf.a32.soregimm_reg")
       sori))
     ((_ zero_extend 1)
      ((_ extract 31 0)
@@ -304,13 +304,13 @@
      (andp
       (bveq setcc #b1)
       (notp
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)))
      (concat
       (nzcv)
       ((_ extract 27 0)
        (ite
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rD)
         (ite
          (var8)
@@ -318,7 +318,7 @@
          'CPSR)
         'CPSR)))
      (ite
-      ((_ call "arm.is_r15")
+      ((_ call "uf.arm.is_r15")
        rD)
       (ite
        (var8)
@@ -362,7 +362,7 @@
     #b0))
   (bxWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     var10))
   (var10
@@ -398,7 +398,7 @@
      (ite
       (testCondition)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)
        rD
        (addResult))

@@ -148,7 +148,7 @@ instance A.Architecture A32 where
     operandValue _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
-    locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
+    locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
 
 
