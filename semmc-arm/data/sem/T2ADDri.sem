@@ -17,29 +17,29 @@
   (var1
    ((bveq
     ((_ extract 11 10)
-     ((_ call "t32.t2soimm_imm")
+     ((_ call "uf.t32.t2soimm_imm")
       imm))
     #b00)
     (ite
      (bveq
       ((_ extract 9 8)
-       ((_ call "t32.t2soimm_imm")
+       ((_ call "uf.t32.t2soimm_imm")
         imm))
       #b00)
      ((_ zero_extend 24)
       ((_ extract 7 0)
-       ((_ call "t32.t2soimm_imm")
+       ((_ call "uf.t32.t2soimm_imm")
         imm)))
      (ite
       (bveq
        ((_ extract 9 8)
-        ((_ call "t32.t2soimm_imm")
+        ((_ call "uf.t32.t2soimm_imm")
          imm))
        #b01)
       (ite
        (bveq
         ((_ extract 7 0)
-         ((_ call "t32.t2soimm_imm")
+         ((_ call "uf.t32.t2soimm_imm")
           imm))
         #x00)
        ((_ extract 31 0)
@@ -49,22 +49,22 @@
          (concat
           #x00
           ((_ extract 7 0)
-           ((_ call "t32.t2soimm_imm")
+           ((_ call "uf.t32.t2soimm_imm")
             imm)))
          #x00)
         ((_ extract 7 0)
-         ((_ call "t32.t2soimm_imm")
+         ((_ call "uf.t32.t2soimm_imm")
           imm))))
       (ite
        (bveq
         ((_ extract 9 8)
-         ((_ call "t32.t2soimm_imm")
+         ((_ call "uf.t32.t2soimm_imm")
           imm))
         #b10)
        (ite
         (bveq
          ((_ extract 7 0)
-          ((_ call "t32.t2soimm_imm")
+          ((_ call "uf.t32.t2soimm_imm")
            imm))
          #x00)
         ((_ extract 31 0)
@@ -73,17 +73,17 @@
          (concat
           (concat
            ((_ extract 7 0)
-            ((_ call "t32.t2soimm_imm")
+            ((_ call "uf.t32.t2soimm_imm")
              imm))
            #x00)
           ((_ extract 7 0)
-           ((_ call "t32.t2soimm_imm")
+           ((_ call "uf.t32.t2soimm_imm")
             imm)))
          #x00))
        (ite
         (bveq
          ((_ extract 7 0)
-          ((_ call "t32.t2soimm_imm")
+          ((_ call "uf.t32.t2soimm_imm")
            imm))
          #x00)
         ((_ extract 31 0)
@@ -92,16 +92,16 @@
          (concat
           (concat
            ((_ extract 7 0)
-            ((_ call "t32.t2soimm_imm")
+            ((_ call "uf.t32.t2soimm_imm")
              imm))
            ((_ extract 7 0)
-            ((_ call "t32.t2soimm_imm")
+            ((_ call "uf.t32.t2soimm_imm")
              imm)))
           ((_ extract 7 0)
-           ((_ call "t32.t2soimm_imm")
+           ((_ call "uf.t32.t2soimm_imm")
             imm)))
          ((_ extract 7 0)
-          ((_ call "t32.t2soimm_imm")
+          ((_ call "uf.t32.t2soimm_imm")
            imm)))))))
     ((_ extract 31 0)
      (rorC))))
@@ -111,22 +111,22 @@
      (bvult
       ((_ zero_extend 27)
        ((_ extract 11 7)
-        ((_ call "t32.t2soimm_imm")
+        ((_ call "uf.t32.t2soimm_imm")
          imm)))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ zero_extend 27)
          ((_ extract 11 7)
-          ((_ call "t32.t2soimm_imm")
+          ((_ call "uf.t32.t2soimm_imm")
            imm)))
         #x00000001)
        ((_ zero_extend 24)
         (concat
          #b1
          ((_ extract 6 0)
-          ((_ call "t32.t2soimm_imm")
+          ((_ call "uf.t32.t2soimm_imm")
            imm)))))
       #b1
       #b0)
@@ -137,14 +137,14 @@
        (concat
         #b1
         ((_ extract 6 0)
-         ((_ call "t32.t2soimm_imm")
+         ((_ call "uf.t32.t2soimm_imm")
           imm))))
       (bvsub
        #x00000020
        (bvurem
         ((_ zero_extend 27)
          ((_ extract 11 7)
-          ((_ call "t32.t2soimm_imm")
+          ((_ call "uf.t32.t2soimm_imm")
            imm)))
         #x00000020)))
      (bvlshr
@@ -152,12 +152,12 @@
        (concat
         #b1
         ((_ extract 6 0)
-         ((_ call "t32.t2soimm_imm")
+         ((_ call "uf.t32.t2soimm_imm")
           imm))))
       (bvurem
        ((_ zero_extend 27)
         ((_ extract 11 7)
-         ((_ call "t32.t2soimm_imm")
+         ((_ call "uf.t32.t2soimm_imm")
           imm)))
        #x00000020)))))
   (testCondition
@@ -274,15 +274,15 @@
      (andp
       (orp
        (andp
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rD)
         (notp
          (bveq setcc #b1)))
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rN))
       (andp
        (notp
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rD))
        (notp
         (bveq setcc #b1))))

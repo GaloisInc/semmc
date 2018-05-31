@@ -8,7 +8,7 @@
      (andp
       (bveq setcc #b1)
       (notp
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)))
      (concat
       (concat
@@ -23,7 +23,7 @@
           'CPSR))))
       ((_ extract 27 0)
        (ite
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rD)
         (ite
          (bveq
@@ -34,7 +34,7 @@
          'CPSR)
         'CPSR)))
      (ite
-      ((_ call "arm.is_r15")
+      ((_ call "uf.arm.is_r15")
        rD)
       (ite
        (bveq
@@ -49,7 +49,7 @@
     (ite
      (testCondition)
      (ite
-      ((_ call "arm.is_r15")
+      ((_ call "uf.arm.is_r15")
        rD)
       rD
       rM)
@@ -157,7 +157,7 @@
     #b0))
   (bxWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (ite
      (bveq

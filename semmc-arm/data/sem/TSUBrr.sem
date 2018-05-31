@@ -66,7 +66,7 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
@@ -103,7 +103,7 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
@@ -126,7 +126,7 @@
        (immShift))
       #x00000020)
      (ite
-      ((_ call "test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic")
        (bvsub
         ((_ extract 31 0)
          (immShift))
@@ -273,7 +273,7 @@
        (orp
         (orp
          (andp
-          ((_ call "arm.is_r15")
+          ((_ call "uf.arm.is_r15")
            rD)
           (notp
            (notp
@@ -287,9 +287,9 @@
                 'CPSR)
                ((_ extract 26 25)
                 'CPSR)))))))
-         ((_ call "arm.is_r15")
+         ((_ call "uf.arm.is_r15")
           rN))
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rM))))
      (concat
       (addCarry)
@@ -323,7 +323,7 @@
       (var2)))))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (bvand
      #xfffffffd
@@ -334,7 +334,7 @@
    (rN . 'TGPR)
    (rM . 'TGPR)))
   (in
-   (rN rM 'CPSR 'PC))
+   (rN rM rD 'CPSR 'PC))
   (defs
    (('PC
     (branchWritePC))
@@ -347,7 +347,7 @@
        (orp
         (orp
          (andp
-          ((_ call "arm.is_r15")
+          ((_ call "uf.arm.is_r15")
            rD)
           (notp
            (notp
@@ -361,13 +361,13 @@
                 'CPSR)
                ((_ extract 26 25)
                 'CPSR)))))))
-         ((_ call "arm.is_r15")
+         ((_ call "uf.arm.is_r15")
           rN))
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rM))
        rD
        (ite
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rD)
         rD
         (addResult)))

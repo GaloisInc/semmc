@@ -11,34 +11,34 @@
      ((_ call "a32.imm12_reg")
       imm12)))
    ('Mem
-    ((_ call "write_mem.32")
+    ((_ call "uf.write_mem.32")
      'Mem
      (addr)
      (ite
       (testCondition)
       (wval)
-      ((_ call "read_mem.32")
+      ((_ call "uf.read_mem.32")
        'Mem
        (addr)))))))
   (addr
    (ite
-    ((_ call "a32.imm12_add")
+    ((_ call "uf.a32.imm12_add")
      imm12)
     (bvadd
      ((_ call "a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
-      ((_ call "a32.imm12_off")
+      ((_ call "uf.a32.imm12_off")
        imm12)))
     (bvsub
      ((_ call "a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
-      ((_ call "a32.imm12_off")
+      ((_ call "uf.a32.imm12_off")
        imm12)))))
   (wval
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      gpr)
     'PC
     gpr))
@@ -142,19 +142,19 @@
      imm12)))
   (offAddr
    (ite
-    ((_ call "a32.imm12_add")
+    ((_ call "uf.a32.imm12_add")
      imm12)
     (bvadd
      ((_ call "a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
-      ((_ call "a32.imm12_off")
+      ((_ call "uf.a32.imm12_off")
        imm12)))
     (bvsub
      ((_ call "a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
-      ((_ call "a32.imm12_off")
+      ((_ call "uf.a32.imm12_off")
        imm12)))))
   (wback
    (bvne #b0 #b0)))

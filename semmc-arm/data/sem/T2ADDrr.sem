@@ -7,7 +7,7 @@
    (ite
     (testCondition)
     (ite
-     ((_ call "arm.is_r15")
+     ((_ call "uf.arm.is_r15")
       rD)
      rD
      (addResult))
@@ -198,7 +198,7 @@
           #x00000000))))))))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (bvand
      #xfffffffd
@@ -221,7 +221,7 @@
        (andp
         (bveq setcc #b1)
         (notp
-         ((_ call "arm.is_r15")
+         ((_ call "uf.arm.is_r15")
           rD)))
        (concat
         (nzcv)

@@ -100,17 +100,17 @@
     off))
   (updAddr
    (ite
-    ((_ call "a32.am2offset_imm_add")
+    ((_ call "uf.a32.am2offset_imm_add")
      imm)
     (bvadd
      off
      ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
+      ((_ call "uf.a32.am2offset_imm_imm")
        imm)))
     (bvsub
      off
      ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
+      ((_ call "uf.a32.am2offset_imm_imm")
        imm)))))
   (SetT32Mode
    (bvand
@@ -118,33 +118,33 @@
     (bvor #x00000020 'CPSR)))
   (bxWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      gpr)
     (ite
      (bveq
       #b0
       ((_ extract 0 0)
-       ((_ call "read_mem.32")
+       ((_ call "uf.read_mem.32")
         'Mem
         off)))
      (bvand
       #xfffffffe
-      ((_ call "read_mem.32")
+      ((_ call "uf.read_mem.32")
        'Mem
        off))
      (ite
       (bveq
        #b0
        ((_ extract 1 1)
-        ((_ call "read_mem.32")
+        ((_ call "uf.read_mem.32")
          'Mem
          off)))
       (bvand
        #xfffffffd
-       ((_ call "read_mem.32")
+       ((_ call "uf.read_mem.32")
         'Mem
         off))
-      ((_ call "read_mem.32")
+      ((_ call "uf.read_mem.32")
        'Mem
        off)))
     (bvadd 'PC #x00000004))))
@@ -162,13 +162,13 @@
      (ite
       (testCondition)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         gpr)
        (ite
         (bveq
          #b0
          ((_ extract 0 0)
-          ((_ call "read_mem.32")
+          ((_ call "uf.read_mem.32")
            'Mem
            off)))
         (SetT32Mode)
@@ -181,10 +181,10 @@
      (ite
       (testCondition)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         gpr)
        gpr
-       ((_ call "read_mem.32")
+       ((_ call "uf.read_mem.32")
         'Mem
         off))
       gpr))))))

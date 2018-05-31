@@ -9,7 +9,7 @@
      (ite
       (testCondition)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)
        rD
        rM)
@@ -122,7 +122,7 @@
      'CPSR)))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
     (bvand #xfffffffd rM)
     (bvadd 'PC #x00000002))))

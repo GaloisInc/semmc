@@ -213,7 +213,7 @@
       (ite
        (andp
         (notp
-         ((_ call "arm.is_r15")
+         ((_ call "uf.arm.is_r15")
           rD))
         (notp
          (notp

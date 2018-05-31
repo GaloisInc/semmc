@@ -438,7 +438,7 @@ instance A.Architecture PPC where
   operandValue _ = operandValue
   operandToLocation _ = operandToLocation
   uninterpretedFunctions = UF.uninterpretedFunctions
-  locationFuncInterpretation _proxy = createSymbolicEntries PPCS.locationFuncInterpretation
+  locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation
   shapeReprToTypeRepr _proxy = shapeReprType
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)

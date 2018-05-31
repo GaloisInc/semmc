@@ -8,7 +8,7 @@
     (ite
      (testCondition)
      (ite
-      ((_ call "arm.is_r15")
+      ((_ call "uf.arm.is_r15")
        'R13)
       'R13
       (addResult))
@@ -23,7 +23,7 @@
        (bvnot
         ((_ zero_extend 22)
          (concat
-          ((_ call "t32.imm0_508S4_imm")
+          ((_ call "uf.t32.imm0_508S4_imm")
            imm)
           #b00)))))
      ((_ zero_extend 1)
@@ -136,7 +136,7 @@
      'CPSR)))
   (branchWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      'R13)
     (bvand
      #xfffffffd
@@ -145,5 +145,5 @@
  ((operands
   ((imm . 'T_imm0_508s4)))
   (in
-   ('R13 imm 'CPSR 'PC))
+   ('R13 'R13 imm 'CPSR 'PC))
   (defs var1)))

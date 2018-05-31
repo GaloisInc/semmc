@@ -29,6 +29,7 @@ module SemMC.DSL (
   ite,
   cases,
   uf,
+  df,
   locUF,
   unpackUF,
   unpackLocUF,
@@ -123,6 +124,7 @@ exprType e =
     Builtin t _ _ -> t
     TheoryFunc t _ _ _ -> t
     UninterpretedFunc t _ _ -> t
+    DefinedFunc t _ _ -> t
     NamedSubExpr _ sube -> exprType sube
     PackedOperand s -> EPackedOperand s
 
@@ -137,6 +139,7 @@ exprBVSize e =
     Builtin (EBV w) _ _ -> w
     TheoryFunc (EBV w) _ _ _ -> w
     UninterpretedFunc (EBV w) _ _ -> w
+    DefinedFunc (EBV w) _ _ -> w
     NamedSubExpr _ sube -> exprBVSize sube
 
 
@@ -328,9 +331,13 @@ modifyArchData adf = RWS.modify (\s -> s { fArchData = adf (fArchData s) })
 -- ----------------------------------------------------------------------
 -- Expressions
 
--- | Allow for user-defined functions over expressions
+-- | Allow for user-defined uninterpreted functions over expressions
 uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
+
+-- | Allow for defined functions over expressions
+df :: ExprType tp -> String -> [Some Expr] -> Expr tp
+df = DefinedFunc
 
 -- | Allow for user-defined functions over locations
 locUF :: ExprType tp -> String -> Location tp' -> Location tp
@@ -625,7 +632,9 @@ convertExpr (Some e) =
     TheoryFunc _ name conParams appParams ->
       fromFoldable' (fromFoldable' (ident "_" : ident name : map convertExpr conParams) : map convertExpr appParams)
     UninterpretedFunc _ name params ->
-      fromFoldable' (fromFoldable' [ident "_", ident "call", string name] : map convertExpr params)
+      fromFoldable' (fromFoldable' [ident "_", ident "call", string ("uf." ++ name)] : map convertExpr params)
+    DefinedFunc _ name params ->
+      fromFoldable' (fromFoldable' [ident "_", ident "call", string ("df." ++ name)] : map convertExpr params)
     NamedSubExpr name expr ->
         let tag d = \case
                     SC.SNil -> SC.SNil  -- no tagging of nil elements
@@ -642,7 +651,7 @@ convertLoc loc =
     LiteralLoc ll -> quoted $ lName ll
     MemoryLoc _ident -> quoted "Mem"
     LocationFunc _ func loc' ->
-      fromFoldable' [fromFoldable' [ident "_", ident "call", string func], convertLoc loc']
+      fromFoldable' [fromFoldable' [ident "_", ident "call", string ("uf." ++ func)], convertLoc loc']
 
 convertDefs :: [(Some Location, Some Expr)] -> SC.SExpr FAtom
 convertDefs = fromFoldable' . map convertDef

@@ -607,9 +607,17 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
   prefixError ("in reading call '" <> fnName <> "' expression: ") $ do
     sym <- MR.reader getSym
     fns <- MR.reader (envFunctions . getEnv)
-    SomeSome fn <- case Map.lookup fnName fns of
-                     Just (fn, _) -> return fn
-                     Nothing -> E.throwError $ printf "uninterpreted function '%s' is not defined" fnName
+    SomeSome fn <- case (take 3 fnName) of
+      "uf." ->
+        case Map.lookup (drop 3 fnName) fns of
+          Just (fn, _) -> return fn
+          Nothing -> E.throwError $ printf "uninterpreted function '%s' is not defined" fnName
+      -- TODO: Change below
+      "df." ->
+        case Map.lookup (drop 3 fnName) fns of
+          Just (fn, _) -> return fn
+          Nothing -> E.throwError $ printf "uninterpreted function '%s' is not defined" fnName
+      _ -> E.throwError $ printf "unrecognized function prefix: '%s'" fnName
     assn <- exprAssignment (S.fnArgTypes fn) args
     liftIO (Just . Some <$> S.applySymFn sym fn assn)
 readCall _ _ = return Nothing

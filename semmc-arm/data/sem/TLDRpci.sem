@@ -5,10 +5,10 @@
   (var1
    ((testCondition)
     (ite
-     ((_ call "arm.is_r15")
+     ((_ call "uf.arm.is_r15")
       gpr)
      gpr
-     ((_ call "read_mem.32")
+     ((_ call "uf.read_mem.32")
       'Mem
       (updAddr)))
     gpr))
@@ -17,7 +17,7 @@
     (bvand #xfffffffc 'PC)
     ((_ zero_extend 22)
      (concat
-      ((_ call "t32.addrmode_pc")
+      ((_ call "uf.t32.addrmode_pc")
        addrpc)
       #b00))))
   (testCondition
@@ -132,33 +132,33 @@
     (bvand #xffffffdf 'CPSR)))
   (bxWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      gpr)
     (ite
      (bveq
       #b0
       ((_ extract 0 0)
-       ((_ call "read_mem.32")
+       ((_ call "uf.read_mem.32")
         'Mem
         (updAddr))))
      (bvand
       #xfffffffe
-      ((_ call "read_mem.32")
+      ((_ call "uf.read_mem.32")
        'Mem
        (updAddr)))
      (ite
       (bveq
        #b0
        ((_ extract 1 1)
-        ((_ call "read_mem.32")
+        ((_ call "uf.read_mem.32")
          'Mem
          (updAddr))))
       (bvand
        #xfffffffd
-       ((_ call "read_mem.32")
+       ((_ call "uf.read_mem.32")
         'Mem
         (updAddr)))
-      ((_ call "read_mem.32")
+      ((_ call "uf.read_mem.32")
        'Mem
        (updAddr))))
     (bvadd 'PC #x00000002))))
@@ -174,13 +174,13 @@
      (ite
       (testCondition)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         gpr)
        (ite
         (bveq
          #b0
          ((_ extract 0 0)
-          ((_ call "read_mem.32")
+          ((_ call "uf.read_mem.32")
            'Mem
            (updAddr))))
         'CPSR

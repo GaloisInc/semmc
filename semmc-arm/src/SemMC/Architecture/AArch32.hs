@@ -77,7 +77,6 @@ import qualified Text.Megaparsec.Char.Lexer as P
 import           What4.BaseTypes
 import qualified What4.Interface as S
 
-
 -- | Define the arch type for this processor.  There are no
 -- inhabitants, but this is used as a phantom type selector.  This
 -- includes both A32 and T32 instruction modes.
@@ -303,8 +302,10 @@ parseLocation = do
     'C' -> Some LocCPSR <$ P.string "CPSR"
     'M' -> Some LocMem <$ P.string "Mem"
     'P' -> Some LocPC <$ P.string "PC"
-    'R' -> parsePrefixedRegister (Some . LocGPR) 'R'
-    _ -> P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
+    'R' -> do
+      parsePrefixedRegister (Some . LocGPR) 'R'
+    _ -> do
+      P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
 parsePrefixedRegister :: (Word8 -> b) -> Char -> ARMComp.Parser b
 parsePrefixedRegister f c = do
@@ -331,7 +332,7 @@ instance A.Architecture AArch32 where
     operandValue _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
-    locationFuncInterpretation _proxy = createSymbolicEntries locationFuncInterpretation
+    locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
 
 
