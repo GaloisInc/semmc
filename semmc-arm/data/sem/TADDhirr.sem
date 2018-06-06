@@ -11,19 +11,13 @@
       ((_ call "uf.arm.is_r15")
        rDN)
       rDN
-      (addResult))
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rDN
+        ((_ extract 31 0)
+         (shiftC))
+        #x00000000)))
      rDN)))))
-  (addResult
-   ((_ extract 31 0)
-    (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       rDN)
-      ((_ zero_extend 1)
-       ((_ extract 31 0)
-        (shiftC))))
-     ((_ zero_extend 1)
-      #x00000000))))
   (shiftC
    (concat
     ((_ extract 29 29)
@@ -141,7 +135,12 @@
      rDN)
     (bvand
      #xfffffffd
-     (addResult))
+     ((_ extract 31 0)
+      ((_ call "df.addWithCarry")
+       rDN
+       ((_ extract 31 0)
+        (shiftC))
+       #x00000000)))
     (bvadd 'PC #x00000002))))
  ((operands
   ((rDN . 'GPR)

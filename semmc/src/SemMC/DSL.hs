@@ -84,7 +84,8 @@ module SemMC.DSL (
   runSem,
   Parameter,
   Definition,
-  printDefinition
+  printDefinition,
+  LibraryFunction(..)
   ) where
 
 import           GHC.Stack ( HasCallStack )

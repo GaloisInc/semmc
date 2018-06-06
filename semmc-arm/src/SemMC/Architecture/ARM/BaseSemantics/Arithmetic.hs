@@ -44,7 +44,7 @@ manualArithmetic = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm32 = armExpandImm imm12
         (_,_,c,_) = getNZCV
-        (result, nzcv) = addWithCarry (Loc rN) imm32 (zext c)
+    (result, nzcv) <- addWithCarry (Loc rN) imm32 (zext c)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -63,7 +63,7 @@ manualArithmetic = do
     input imm12
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm32 = armExpandImm imm12
-        (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
+    (result, nzcv) <- addWithCarry (Loc rN) imm32 (LitBV 32 0)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -169,7 +169,7 @@ manualArithmetic = do
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         (_,_,c,_) = getNZCV
-        (result, nzcv) = addWithCarry (Loc rN) (Loc rM) (zext c)
+    (result, nzcv) <- addWithCarry (Loc rN) (Loc rM) (zext c)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -186,7 +186,7 @@ manualArithmetic = do
     input rN
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-        (result, nzcv) = addWithCarry (Loc rN) (Loc rM) (LitBV 32 0)
+    (result, nzcv) <- addWithCarry (Loc rN) (Loc rM) (LitBV 32 0)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -389,7 +389,7 @@ manualArithmetic = do
     input imm12
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm32 = armExpandImm imm12
-        (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+    (result, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -487,7 +487,7 @@ manualArithmetic = do
   --   input imm12
   --   let setflags = bveq (Loc setcc) (LitBV 1 0b1)
   --       imm32 = armExpandImm imm12
-  --       (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+--       (result, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
   --   defReg rD (ite (isR15 rD) (Loc rD) result)
   --   aluWritePC (isR15 rD) result
   --   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -615,7 +615,7 @@ manualBitwise = do
     input mimm
     input rN
     let imm32 = armExpandImm mimm
-        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+    (_, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     cpsrNZCV (LitBool True) nzcv
 
   defineT32Opcode T.TCMPi8 (Empty
@@ -627,7 +627,7 @@ manualBitwise = do
     input imm
     input rN
     let imm32 = zext $ Loc imm
-        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+    (_, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     cpsrNZCV (LitBool True) nzcv
 
   defineT32Opcode T.TLSLri (Empty
@@ -676,8 +676,8 @@ adcrr :: (HasCallStack)
 adcrr rD rM rNexpr setflags shift_t shift_n = do
   let (_, _, c, _) = getNZCV
       shifted = shift (Loc rM) shift_t shift_n c
-      (result, nzcv') = addWithCarry rNexpr shifted (zext c)
-      nzcv = "nzcv" =: nzcv'
+  (result, nzcv') <- addWithCarry rNexpr shifted (zext c)
+  let nzcv = "nzcv" =: nzcv'
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -693,8 +693,8 @@ addrr :: (HasCallStack)
 addrr rD rM rNexpr setflags shift_t shift_n = do
   let (_, _, c, _) = getNZCV
       shifted = shift (Loc rM) shift_t shift_n c
-      (result, nzcv') = addWithCarry rNexpr shifted (LitBV 32 0)
-      nzcv = "nzcv" =: nzcv'
+  (result, nzcv') <- addWithCarry rNexpr shifted (LitBV 32 0)
+  let nzcv = "nzcv" =: nzcv'
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -726,7 +726,7 @@ adcrsr rD rM rN setflags shift_t rS = do
   let (_, _, c, _) = getNZCV
       shift_n = zext $ extract 7 0 (Loc rS)
   let shifted = shift (Loc rM) shift_t shift_n c
-  let (result, nzcv') = addWithCarry (Loc rN) shifted (zext c)
+  (result, nzcv') <- addWithCarry (Loc rN) shifted (zext c)
   let nzcv = "nzcv" =: nzcv'
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
@@ -740,7 +740,7 @@ addrsr rD rM rN setflags shift_t rS = do
   let (_, _, c, _) = getNZCV
       shift_n = zext $ extract 7 0 (Loc rS)
   let shifted = shift (Loc rM) shift_t shift_n c
-  let (result, nzcv') = addWithCarry (Loc rN) shifted (LitBV 32 0)
+  (result, nzcv') <- addWithCarry (Loc rN) shifted (LitBV 32 0)
   let nzcv = "nzcv" =: nzcv'
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
@@ -772,7 +772,7 @@ taddri :: (HasCallStack)
      -> Expr 'TBool
      -> SemARM 'Def ()
 taddri rD rN imm32 setflags undef = do
-  let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
+  (result, nzcv) <- addWithCarry (Loc rN) imm32 (LitBV 32 0)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 
@@ -787,7 +787,7 @@ tsubrr rD rN rM undef setflags = do
   let (_, _, c, _) = getNZCV
       (shift_t, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 0) (LitBV 5 0)
       shifted = shiftC (Loc rM) shift_t shift_n c
-      (result, nzcv) = addWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
+  (result, nzcv) <- addWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
 
   aluWritePC (isR15 rD) result
   defReg rD (ite undef (unpredictable (Loc rD))
@@ -803,7 +803,7 @@ tsubri :: (HasCallStack)
      -> Expr 'TBool
      -> SemARM 'Def ()
 tsubri rD rN imm32 setflags undef = do
-  let (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+  (result, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 
@@ -814,7 +814,7 @@ taddSP :: (HasCallStack) =>
       -> SemARM 'Def ()
 taddSP rD imm32 setflags = do
   input sp
-  let (result, nzcv) = addWithCarry (Loc sp) imm32 (LitBV 32 0b0)
+  (result, nzcv) <- addWithCarry (Loc sp) imm32 (LitBV 32 0b0)
   defReg rD $ ite (isR15 rD) (Loc rD) result
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -826,7 +826,7 @@ tsubSP :: (HasCallStack) =>
       -> SemARM 'Def ()
 tsubSP rD imm32 setflags = do
   input sp
-  let (result, nzcv) = addWithCarry (Loc sp) (bvnot imm32) (LitBV 32 0b1)
+  (result, nzcv) <- addWithCarry (Loc sp) (bvnot imm32) (LitBV 32 0b1)
   defReg rD $ ite (isR15 rD) (Loc rD) result
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv

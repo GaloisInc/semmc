@@ -11,7 +11,11 @@
        ((_ call "uf.arm.is_r15")
         rD)))
      (concat
-      (addCarry)
+      ((_ extract 35 32)
+       ((_ call "df.addWithCarry")
+        rN
+        rM
+        #x00000000))
       ((_ extract 27 0)
        (ite
         ((_ call "uf.arm.is_r15")
@@ -20,7 +24,11 @@
          (bveq
           #b0
           ((_ extract 0 0)
-           (addResult)))
+           ((_ extract 31 0)
+            ((_ call "df.addWithCarry")
+             rN
+             rM
+             #x00000000))))
          (SetT32Mode)
          'CPSR)
         'CPSR)))
@@ -31,7 +39,11 @@
        (bveq
         #b0
         ((_ extract 0 0)
-         (addResult)))
+         ((_ extract 31 0)
+          ((_ call "df.addWithCarry")
+           rN
+           rM
+           #x00000000))))
        (SetT32Mode)
        'CPSR)
       'CPSR))
@@ -43,18 +55,12 @@
       ((_ call "uf.arm.is_r15")
        rD)
       rD
-      (addResult))
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rN
+        rM
+        #x00000000)))
      rD))))
-  (addResult
-   ((_ extract 31 0)
-    (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       rN)
-      ((_ zero_extend 1)
-       rM))
-     ((_ zero_extend 1)
-      #x00000000))))
   (testCondition
    (ite
     (andp
@@ -151,63 +157,6 @@
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
-  (addCarry
-   (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
-      (bvadd
-       (bvadd
-        ((_ zero_extend 1)
-         rN)
-        ((_ zero_extend 1)
-         rM))
-       ((_ zero_extend 1)
-        #x00000000))))
-    (concat
-     (ite
-      (bveq
-       ((_ extract 31 0)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           rM))
-         ((_ zero_extend 1)
-          #x00000000)))
-       #x00000000)
-      #b1
-      #b0)
-     (concat
-      ((_ extract 32 32)
-       (bvadd
-        (bvadd
-         ((_ zero_extend 1)
-          rN)
-         ((_ zero_extend 1)
-          rM))
-        ((_ zero_extend 1)
-         #x00000000)))
-      (bvand
-       ((_ extract 31 31)
-        ((_ extract 31 0)
-         (bvadd
-          (bvadd
-           ((_ zero_extend 1)
-            rN)
-           ((_ zero_extend 1)
-            rM))
-          ((_ zero_extend 1)
-           #x00000000))))
-       ((_ extract 32 32)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           rM))
-         ((_ zero_extend 1)
-          #x00000000))))))))
   (bxWritePC
    (ite
     ((_ call "uf.arm.is_r15")
@@ -216,19 +165,39 @@
      (bveq
       #b0
       ((_ extract 0 0)
-       (addResult)))
+       ((_ extract 31 0)
+        ((_ call "df.addWithCarry")
+         rN
+         rM
+         #x00000000))))
      (bvand
       #xfffffffe
-      (addResult))
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rN
+        rM
+        #x00000000)))
      (ite
       (bveq
        #b0
        ((_ extract 1 1)
-        (addResult)))
+        ((_ extract 31 0)
+         ((_ call "df.addWithCarry")
+          rN
+          rM
+          #x00000000))))
       (bvand
        #xfffffffd
-       (addResult))
-      (addResult)))
+       ((_ extract 31 0)
+        ((_ call "df.addWithCarry")
+         rN
+         rM
+         #x00000000)))
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rN
+        rM
+        #x00000000))))
     (bvadd 'PC #x00000004))))
  ((operands
   ((rD . 'GPR)

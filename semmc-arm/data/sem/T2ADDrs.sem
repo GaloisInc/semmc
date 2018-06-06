@@ -1,25 +1,30 @@
 ;; ADD register, T32, encoding T3 [no shift] (F7.1.6, F7-2544)
 (let
- ((addResult
-  ((_ extract 31 0)
-   (bvadd
-    (bvadd
-     ((_ zero_extend 1)
+ ((var6
+  (ite
+   (testCondition)
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    var5)
+   rD))
+  (var5
+   (rD
+    ((_ extract 31 0)
+     ((_ call "df.addWithCarry")
       ((_ call "uf.t32.t2soreg_reg")
-       rN))
-     ((_ zero_extend 1)
+       rN)
       ((_ extract 31 0)
-       (shiftC))))
-    ((_ zero_extend 1)
-     #x00000000))))
+       (shiftC))
+      #x00000000))))
   (shiftC
    (ite
     (bveq
      ((_ extract 31 0)
       (immShift))
      #x00000000)
-    var4))
-  (var4
+    var3))
+  (var3
    ((concat
     ((_ extract 29 29)
      'CPSR)
@@ -36,20 +41,19 @@
         (immShift))
        #b001)
       (logicalShiftRightCarry)
-      (ite var3)))))
-  (var3
-   ((bveq
-    ((_ extract 34 32)
-     (immShift))
-    #b010)
-    (arithmeticShiftRightCarry)
-    (ite
-     (bveq
-      ((_ extract 34 32)
-       (immShift))
-      #b011)
-     (rorC)
-     (rrxC))))
+      (ite
+       (bveq
+        ((_ extract 34 32)
+         (immShift))
+        #b010)
+       (arithmeticShiftRightCarry)
+       (ite
+        (bveq
+         ((_ extract 34 32)
+          (immShift))
+         #b011)
+        (rorC)
+        (rrxC)))))))
   (rrxC
    (concat
     ((_ extract 0 0)
@@ -61,9 +65,30 @@
       rM))))
   (rorC
    (concat
-    (var2)
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "uf.test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
     (bvor
-     (var1)
+     (bvshl
+      rM
+      (bvsub
+       #x00000020
+       (bvurem
+        ((_ extract 31 0)
+         (immShift))
+        #x00000020)))
      (bvlshr
       rM
       (bvurem
@@ -113,45 +138,36 @@
         ((_ zero_extend 27)
          ((_ call "uf.t32.t2soreg_imm")
           rN))))
-      (ite
-       (bveq
-        ((_ call "uf.t32.t2soreg_imm")
-         rN)
-        #b00000)
-       (concat #b100 #x00000001)
-       (concat
-        #b011
-        ((_ zero_extend 27)
-         ((_ call "uf.t32.t2soreg_imm")
-          rN))))))))
+      (var1)))))
   (var1
-   (bvshl
-    rM
-    (bvsub
-     #x00000020
-     (bvurem
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020))))
-  (var2
    (ite
-    (bvult
-     ((_ extract 31 0)
-      (immShift))
-     #x00000020)
-    (ite
-     ((_ call "uf.test_bit_dynamic")
-      (bvsub
-       ((_ extract 31 0)
-        (immShift))
-       #x00000001)
-      rM)
-     #b1
-     #b0)
-    #b0))
+    (bveq
+     ((_ call "uf.t32.t2soreg_imm")
+      rN)
+     #b00000)
+    (concat #b100 #x00000001)
+    (concat
+     #b011
+     ((_ zero_extend 27)
+      ((_ call "uf.t32.t2soreg_imm")
+       rN)))))
   (arithmeticShiftRightCarry
    (concat
-    (var2)
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "uf.test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
     (bvashr
      rM
      (bvurem
@@ -160,7 +176,21 @@
       #x00000020))))
   (logicalShiftRightCarry
    (concat
-    (var2)
+    (ite
+     (bvult
+      ((_ extract 31 0)
+       (immShift))
+      #x00000020)
+     (ite
+      ((_ call "uf.test_bit_dynamic")
+       (bvsub
+        ((_ extract 31 0)
+         (immShift))
+        #x00000001)
+       rM)
+      #b1
+      #b0)
+     #b0)
     (bvlshr
      rM
      (bvurem
@@ -184,8 +214,7 @@
      (bvne
       (ITState)
       #xf))
-    (notp
-     (conditionMatch))
+    (var2)
     (conditionMatch)))
   (conditionMatch
    (ite
@@ -280,92 +309,34 @@
     #xe
     ((_ extract 15 12)
      'CPSR)))
-  (var9
-   ((testCondition)
-    (ite
-     (andp
-      (bveq setcc #b1)
-      (notp
-       ((_ call "uf.arm.is_r15")
-        rD)))
-     (concat
-      (nzcv)
-      ((_ extract 27 0)
-       'CPSR))
-     'CPSR)
-    'CPSR))
+  (var2
+   (notp
+    (conditionMatch)))
+  (var4
+   ((nzcv)
+    ((_ extract 27 0)
+     'CPSR)))
   (nzcv
-   (concat
-    ((_ extract 31 31)
-     var5)
-    (concat
-     (ite
-      (bveq
-       ((_ extract 31 0)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           ((_ call "uf.t32.t2soreg_reg")
-            rN))
-          ((_ zero_extend 1)
-           ((_ extract 31 0)
-            (shiftC))))
-         ((_ zero_extend 1)
-          #x00000000)))
-       #x00000000)
-      #b1
-      #b0)
-     (var8))))
-  (var8
-   (concat
-    ((_ extract 32 32)
-     (bvadd
-      (bvadd
-       ((_ zero_extend 1)
-        ((_ call "uf.t32.t2soreg_reg")
-         rN))
-       ((_ zero_extend 1)
-        ((_ extract 31 0)
-         (shiftC))))
-      ((_ zero_extend 1)
-       #x00000000)))
-    (bvand
-     ((_ extract 31 31)
-      var5)
-     ((_ extract 32 32)
-      (bvadd
-       (bvadd
-        ((_ zero_extend 1)
-         ((_ call "uf.t32.t2soreg_reg")
-          rN))
-        ((_ zero_extend 1)
-         ((_ extract 31 0)
-          (shiftC))))
-       ((_ zero_extend 1)
-        #x00000000))))))
-  (var5
-   (((_ extract 31 0)
-    (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       ((_ call "uf.t32.t2soreg_reg")
-        rN))
-      ((_ zero_extend 1)
-       ((_ extract 31 0)
-        (shiftC))))
-     ((_ zero_extend 1)
-      #x00000000)))))
-  (var7
-   ('PC var6))
-  (var6
-   ((branchWritePC)))
+   ((_ extract 35 32)
+    ((_ call "df.addWithCarry")
+     ((_ call "uf.t32.t2soreg_reg")
+      rN)
+     ((_ extract 31 0)
+      (shiftC))
+     #x00000000)))
   (branchWritePC
    (ite
     ((_ call "uf.arm.is_r15")
      rD)
     (bvand
      #xfffffffd
-     (addResult))
+     ((_ extract 31 0)
+      ((_ call "df.addWithCarry")
+       ((_ call "uf.t32.t2soreg_reg")
+        rN)
+       ((_ extract 31 0)
+        (shiftC))
+       #x00000000)))
     (bvadd 'PC #x00000002))))
  ((operands
   ((rD . 'GPRnopc)
@@ -375,15 +346,19 @@
   (in
    (setcc rN rM 'CPSR 'PC))
   (defs
-   ((var7)
+   (('PC
+    (branchWritePC))
     ('CPSR
-     (ite var9))
-    (rD
      (ite
       (testCondition)
       (ite
-       ((_ call "uf.arm.is_r15")
-        rD)
-       rD
-       (addResult))
-      rD))))))
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat var4)
+       'CPSR)
+      'CPSR))
+    (rD
+     (var6))))))

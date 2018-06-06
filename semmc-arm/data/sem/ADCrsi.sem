@@ -1,19 +1,13 @@
 ;; ADC register, A32, Encoding A1 (F7.1.2, F7-2536)
 (let
- ((addResult
-  ((_ extract 31 0)
-   var6))
-  (var6
-   ((bvadd
-    (bvadd
-     ((_ zero_extend 1)
-      rN)
-     ((_ zero_extend 1)
-      (var4)))
-    ((_ zero_extend 1)
-     ((_ zero_extend 31)
-      ((_ extract 29 29)
-       'CPSR))))))
+ ((var5
+  (((_ extract 31 0)
+   ((_ call "df.addWithCarry")
+    rN
+    (var4)
+    ((_ zero_extend 31)
+     ((_ extract 29 29)
+      'CPSR))))))
   (var4
    ((_ extract 31 0)
     (shiftC)))
@@ -28,33 +22,35 @@
       'CPSR)
      ((_ call "uf.a32.soregimm_reg")
       sori))
+    (var6)))
+  (var6
+   (ite
+    (bveq
+     ((_ extract 34 32)
+      (immShift))
+     #b000)
+    (lslC)
     (ite
      (bveq
       ((_ extract 34 32)
        (immShift))
-      #b000)
-     (lslC)
+      #b001)
+     (logicalShiftRightCarry)
      (ite
       (bveq
        ((_ extract 34 32)
         (immShift))
-       #b001)
-      var3))))
-  (var3
-   ((logicalShiftRightCarry)
+       #b010)
+      var2))))
+  (var2
+   ((arithmeticShiftRightCarry)
     (ite
      (bveq
       ((_ extract 34 32)
        (immShift))
-      #b010)
-     (arithmeticShiftRightCarry)
-     (ite
-      (bveq
-       ((_ extract 34 32)
-        (immShift))
-       #b011)
-      (rorC)
-      (rrxC)))))
+      #b011)
+     (rorC)
+     (rrxC))))
   (rrxC
    (concat
     ((_ extract 0 0)
@@ -117,13 +113,17 @@
       ((_ call "uf.a32.soregimm_type")
        sori)
       #b01)
-     (concat #b001 var2)
+     (concat
+      #b001
+      (var3))
      (ite
       (bveq
        ((_ call "uf.a32.soregimm_type")
         sori)
        #b10)
-      (concat #b010 var2)
+      (concat
+       #b010
+       (var3))
       (ite
        (bveq
         ((_ call "uf.a32.soregimm_imm")
@@ -135,8 +135,8 @@
         ((_ zero_extend 27)
          ((_ call "uf.a32.soregimm_imm")
           sori))))))))
-  (var2
-   ((ite
+  (var3
+   (ite
     (bveq
      #b00000
      ((_ call "uf.a32.soregimm_imm")
@@ -144,7 +144,7 @@
     #x00000020
     ((_ zero_extend 27)
      ((_ call "uf.a32.soregimm_imm")
-      sori)))))
+      sori))))
   (arithmeticShiftRightCarry
    (concat
     (ite
@@ -224,164 +224,138 @@
      #b1
      ((_ extract 30 30)
       'CPSR))
-    (var1)))
+    (ite
+     (bveq
+      ((_ extract 3 1)
+       predBits)
+      #b001)
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
+     (var1))))
   (var1
    (ite
     (bveq
      ((_ extract 3 1)
       predBits)
-     #b001)
+     #b010)
     (bveq
      #b1
-     ((_ extract 29 29)
+     ((_ extract 31 31)
       'CPSR))
     (ite
      (bveq
       ((_ extract 3 1)
        predBits)
-      #b010)
+      #b011)
      (bveq
       #b1
-      ((_ extract 31 31)
+      ((_ extract 28 28)
        'CPSR))
      (ite
       (bveq
        ((_ extract 3 1)
         predBits)
-       #b011)
-      (bveq
-       #b1
-       ((_ extract 28 28)
-        'CPSR))
+       #b100)
+      (andp
+       (bveq
+        #b1
+        ((_ extract 29 29)
+         'CPSR))
+       (notp
+        (bveq
+         #b1
+         ((_ extract 30 30)
+          'CPSR))))
       (ite
        (bveq
         ((_ extract 3 1)
          predBits)
-        #b100)
-       (andp
-        (bveq
-         #b1
-         ((_ extract 29 29)
-          'CPSR))
-        (notp
-         (bveq
-          #b1
-          ((_ extract 30 30)
-           'CPSR))))
+        #b101)
+       (bveq
+        ((_ extract 31 31)
+         'CPSR)
+        ((_ extract 28 28)
+         'CPSR))
        (ite
         (bveq
          ((_ extract 3 1)
           predBits)
-         #b101)
-        (bveq
-         ((_ extract 31 31)
-          'CPSR)
-         ((_ extract 28 28)
-          'CPSR))
-        (ite
+         #b110)
+        (andp
          (bveq
-          ((_ extract 3 1)
-           predBits)
-          #b110)
-         (andp
+          ((_ extract 31 31)
+           'CPSR)
+          ((_ extract 28 28)
+           'CPSR))
+         (notp
           (bveq
-           ((_ extract 31 31)
-            'CPSR)
-           ((_ extract 28 28)
-            'CPSR))
-          (notp
-           (bveq
-            #b1
-            ((_ extract 30 30)
-             'CPSR))))
-         (true))))))))
+           #b1
+           ((_ extract 30 30)
+            'CPSR))))
+        (true)))))))
   (true
    (bveq #b0 #b0))
-  (var11
-   ((ite
-    (testCondition)
-    (ite
-     (andp
-      (bveq setcc #b1)
-      (notp
-       ((_ call "uf.arm.is_r15")
-        rD)))
-     (concat
-      (nzcv)
-      ((_ extract 27 0)
-       (ite
-        ((_ call "uf.arm.is_r15")
-         rD)
-        (ite
-         (var8)
-         (SetT32Mode)
-         'CPSR)
-        'CPSR)))
-     (ite
-      ((_ call "uf.arm.is_r15")
-       rD)
+  (var8
+   ((andp
+    (bveq setcc #b1)
+    (notp
+     ((_ call "uf.arm.is_r15")
+      rD)))
+    (concat
+     (nzcv)
+     ((_ extract 27 0)
       (ite
-       (var8)
-       (SetT32Mode)
-       'CPSR)
-      'CPSR))
-    'CPSR)))
+       ((_ call "uf.arm.is_r15")
+        rD)
+       (ite
+        (var7)
+        (SetT32Mode)
+        'CPSR)
+       'CPSR)))
+    (ite
+     ((_ call "uf.arm.is_r15")
+      rD)
+     (ite
+      (var7)
+      (SetT32Mode)
+      'CPSR)
+     'CPSR)))
   (SetT32Mode
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
-  (var8
+  (var7
    (bveq
     #b0
     ((_ extract 0 0)
-     (addResult))))
+     var5)))
   (nzcv
-   (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
-      var6))
-    (concat
-     (ite var5)
-     var9)))
-  (var9
-   ((concat
-    ((_ extract 32 32)
-     var6)
-    (bvand
-     ((_ extract 31 31)
-      ((_ extract 31 0)
-       var6))
-     ((_ extract 32 32)
-      var6)))))
-  (var5
-   ((bveq
-    ((_ extract 31 0)
-     var6)
-    #x00000000)
-    #b1
-    #b0))
+   ((_ extract 35 32)
+    ((_ call "df.addWithCarry")
+     rN
+     (var4)
+     ((_ zero_extend 31)
+      ((_ extract 29 29)
+       'CPSR)))))
   (bxWritePC
    (ite
     ((_ call "uf.arm.is_r15")
      rD)
-    var10))
-  (var10
+    var9))
+  (var9
    ((ite
-    (var8)
-    (bvand
-     #xfffffffe
-     (addResult))
+    (var7)
+    (bvand #xfffffffe var5)
     (ite
      (bveq
       #b0
       ((_ extract 1 1)
-       (addResult)))
-     (bvand var7)
-     (addResult)))
-    (bvadd 'PC #x00000004)))
-  (var7
-   (#xfffffffd
-    (addResult))))
+       var5))
+     (bvand #xfffffffd var5)
+     var5))
+    (bvadd 'PC #x00000004))))
  ((operands
   ((rD . 'GPR)
    (setcc . 'Cc_out)
@@ -393,7 +367,11 @@
   (defs
    (('PC
     (bxWritePC))
-    ('CPSR var11)
+    ('CPSR
+     (ite
+      (testCondition)
+      (ite var8)
+      'CPSR))
     (rD
      (ite
       (testCondition)
@@ -401,5 +379,5 @@
        ((_ call "uf.arm.is_r15")
         rD)
        rD
-       (addResult))
+       var5)
       rD))))))
