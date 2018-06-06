@@ -11,23 +11,17 @@
       ((_ call "uf.arm.is_r15")
        'R13)
       'R13
-      (addResult))
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        'R13
+        (bvnot
+         ((_ zero_extend 22)
+          (concat
+           ((_ call "uf.t32.imm0_508S4_imm")
+            imm)
+           #b00)))
+        #x00000001)))
      'R13)))))
-  (addResult
-   ((_ extract 31 0)
-    (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       'R13)
-      ((_ zero_extend 1)
-       (bvnot
-        ((_ zero_extend 22)
-         (concat
-          ((_ call "uf.t32.imm0_508S4_imm")
-           imm)
-          #b00)))))
-     ((_ zero_extend 1)
-      #x00000001))))
   (testCondition
    (ite
     (andp
@@ -140,7 +134,16 @@
      'R13)
     (bvand
      #xfffffffd
-     (addResult))
+     ((_ extract 31 0)
+      ((_ call "df.addWithCarry")
+       'R13
+       (bvnot
+        ((_ zero_extend 22)
+         (concat
+          ((_ call "uf.t32.imm0_508S4_imm")
+           imm)
+          #b00)))
+       #x00000001)))
     (bvadd 'PC #x00000002))))
  ((operands
   ((imm . 'T_imm0_508s4)))

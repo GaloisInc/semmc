@@ -8,20 +8,14 @@
     (rD
      (ite
       (testCondition)
-      (addResult)
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rN
+        (bvnot
+         ((_ zero_extend 16)
+          imm))
+        #x00000001))
       rD))))))
-  (addResult
-   ((_ extract 31 0)
-    (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       rN)
-      ((_ zero_extend 1)
-       (bvnot
-        ((_ zero_extend 16)
-         imm))))
-     ((_ zero_extend 1)
-      #x00000001))))
   (testCondition
    (ite
     (andp

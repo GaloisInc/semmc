@@ -1,81 +1,23 @@
 ;; Compare immediate, Encoding T1 (F7.1.36, F7-2589)
 (let
  ((var1
-  (('CPSR
-   (ite
-    (testCondition)
-    (concat
-     (addCarry)
-     ((_ extract 27 0)
-      'CPSR))
-    'CPSR))))
-  (addCarry
-   (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
-      (bvadd
-       (bvadd
-        ((_ zero_extend 1)
-         rN)
-        ((_ zero_extend 1)
+  ((defs
+   (('PC
+    (bvadd 'PC #x00000002))
+    ('CPSR
+     (ite
+      (testCondition)
+      (concat
+       ((_ extract 35 32)
+        ((_ call "df.addWithCarry")
+         rN
          (bvnot
           ((_ zero_extend 24)
-           imm))))
-       ((_ zero_extend 1)
-        #x00000001))))
-    (concat
-     (ite
-      (bveq
-       ((_ extract 31 0)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           (bvnot
-            ((_ zero_extend 24)
-             imm))))
-         ((_ zero_extend 1)
-          #x00000001)))
-       #x00000000)
-      #b1
-      #b0)
-     (concat
-      ((_ extract 32 32)
-       (bvadd
-        (bvadd
-         ((_ zero_extend 1)
-          rN)
-         ((_ zero_extend 1)
-          (bvnot
-           ((_ zero_extend 24)
-            imm))))
-        ((_ zero_extend 1)
-         #x00000001)))
-      (bvand
-       ((_ extract 31 31)
-        ((_ extract 31 0)
-         (bvadd
-          (bvadd
-           ((_ zero_extend 1)
-            rN)
-           ((_ zero_extend 1)
-            (bvnot
-             ((_ zero_extend 24)
-              imm))))
-          ((_ zero_extend 1)
-           #x00000001))))
-       ((_ extract 32 32)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           (bvnot
-            ((_ zero_extend 24)
-             imm))))
-         ((_ zero_extend 1)
-          #x00000001))))))))
+           imm))
+         #x00000001))
+       ((_ extract 27 0)
+        'CPSR))
+      'CPSR))))))
   (testCondition
    (ite
     (andp
@@ -187,7 +129,4 @@
    (rN . 'TGPR)))
   (in
    (rN imm 'CPSR 'PC))
-  (defs
-   (('PC
-    (bvadd 'PC #x00000002))
-    var1))))
+  var1))

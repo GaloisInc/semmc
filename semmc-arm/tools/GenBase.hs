@@ -74,7 +74,7 @@ main = O.execParser optParser >>= mainWithOptions
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   let odir = oRootDir opts
-      genTo d (s,e) (t,l) = do
+      genTo d (s,e) (t,(l,_)) = do
         (s', e') <- genOpDefs d (not $ oNoCheck opts) l
         putStrLn $ "Wrote " <> (show s') <> " " <> t <> " semantics files to " <> d <>
                        (if 0 == e' then "" else " (" <> show e' <> " errors!)")
@@ -99,8 +99,9 @@ genOpDefs d chk l = F.foldlM writeDef (0, 0) l
                    Just op -> if chk
                               then checkFormula (Proxy @ARMSem.AArch32) semdefB op >>= \case
                                      Nothing -> writeIt >> return (s+1, e)
-                                     Just err -> do putStrLn $ "Error for " <> opName <> ": " <> err
-                                                    return (s, e+1)
+                                     Just err -> do writeIt
+                                                    putStrLn $ "Error for " <> opName <> ": " <> err
+                                                    return (s+1, e+1)
 
                               else do writeIt
                                       return (s+1, e)

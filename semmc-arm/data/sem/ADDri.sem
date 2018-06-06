@@ -1,18 +1,66 @@
 ;; ADD immediate, A32, Encoding A1  (F7.1.5, F7-2542)
 (let
- ((var1
-  (rD
-   (addResult)))
-  (addResult
-   ((_ extract 31 0)
-    (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       rN)
-      ((_ zero_extend 1)
-       (armExpandImm)))
-     ((_ zero_extend 1)
-      #x00000000))))
+ ((var3
+  (('CPSR
+   (ite
+    (testCondition)
+    (ite
+     (andp
+      (bveq setcc #b1)
+      (notp
+       ((_ call "uf.arm.is_r15")
+        rD)))
+     (concat
+      ((_ extract 35 32)
+       ((_ call "df.addWithCarry")
+        rN
+        (armExpandImm)
+        #x00000000))
+      ((_ extract 27 0)
+       (ite
+        ((_ call "uf.arm.is_r15")
+         rD)
+        (ite
+         (bveq
+          #b0
+          ((_ extract 0 0)
+           ((_ extract 31 0)
+            ((_ call "df.addWithCarry")
+             rN
+             (armExpandImm)
+             #x00000000))))
+         (SetT32Mode)
+         'CPSR)
+        'CPSR)))
+     (ite
+      ((_ call "uf.arm.is_r15")
+       rD)
+      (ite
+       (bveq
+        #b0
+        ((_ extract 0 0)
+         ((_ extract 31 0)
+          ((_ call "df.addWithCarry")
+           rN
+           (armExpandImm)
+           #x00000000))))
+       (SetT32Mode)
+       'CPSR)
+      'CPSR))
+    'CPSR))
+   (rD
+    (ite
+     (testCondition)
+     (ite
+      ((_ call "uf.arm.is_r15")
+       rD)
+      rD
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rN
+        (armExpandImm)
+        #x00000000)))
+     rD))))
   (armExpandImm
    ((_ extract 31 0)
     (shiftC)))
@@ -102,178 +150,126 @@
      #b1
      ((_ extract 30 30)
       'CPSR))
+    (var2)))
+  (var2
+   (ite
+    (bveq
+     ((_ extract 3 1)
+      predBits)
+     #b001)
+    (bveq
+     #b1
+     ((_ extract 29 29)
+      'CPSR))
     (ite
      (bveq
       ((_ extract 3 1)
        predBits)
-      #b001)
+      #b010)
      (bveq
       #b1
-      ((_ extract 29 29)
+      ((_ extract 31 31)
        'CPSR))
      (ite
       (bveq
        ((_ extract 3 1)
         predBits)
-       #b010)
+       #b011)
       (bveq
        #b1
-       ((_ extract 31 31)
+       ((_ extract 28 28)
         'CPSR))
       (ite
        (bveq
         ((_ extract 3 1)
          predBits)
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
+        #b100)
+       (andp
+        (bveq
+         #b1
+         ((_ extract 29 29)
+          'CPSR))
+        (notp
+         (bveq
+          #b1
+          ((_ extract 30 30)
+           'CPSR))))
        (ite
         (bveq
          ((_ extract 3 1)
           predBits)
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
+         #b101)
+        (bveq
+         ((_ extract 31 31)
+          'CPSR)
+         ((_ extract 28 28)
+          'CPSR))
         (ite
          (bveq
           ((_ extract 3 1)
            predBits)
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
+          #b110)
+         (andp
           (bveq
-           ((_ extract 3 1)
-            predBits)
-           #b110)
-          (andp
+           ((_ extract 31 31)
+            'CPSR)
+           ((_ extract 28 28)
+            'CPSR))
+          (notp
            (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
+            #b1
+            ((_ extract 30 30)
+             'CPSR))))
+         (true))))))))
   (true
    (bveq #b0 #b0))
   (SetT32Mode
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
-  (var4
-   (concat
-    (addCarry)
-    ((_ extract 27 0)
-     (ite
-      ((_ call "uf.arm.is_r15")
-       rD)
-      (ite
-       (bveq
-        #b0
-        ((_ extract 0 0)
-         (addResult)))
-       (SetT32Mode)
-       'CPSR)
-      'CPSR))))
-  (addCarry
-   (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
-      (bvadd
-       (bvadd
-        ((_ zero_extend 1)
-         rN)
-        ((_ zero_extend 1)
-         (armExpandImm)))
-       ((_ zero_extend 1)
-        #x00000000))))
-    (concat
-     (ite
-      (bveq
-       ((_ extract 31 0)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           (armExpandImm)))
-         ((_ zero_extend 1)
-          #x00000000)))
-       #x00000000)
-      #b1
-      #b0)
-     (concat
-      ((_ extract 32 32)
-       (bvadd
-        (bvadd
-         ((_ zero_extend 1)
-          rN)
-         ((_ zero_extend 1)
-          (armExpandImm)))
-        ((_ zero_extend 1)
-         #x00000000)))
-      (bvand
-       ((_ extract 31 31)
-        ((_ extract 31 0)
-         (bvadd
-          (bvadd
-           ((_ zero_extend 1)
-            rN)
-           ((_ zero_extend 1)
-            (armExpandImm)))
-          ((_ zero_extend 1)
-           #x00000000))))
-       ((_ extract 32 32)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rN)
-          ((_ zero_extend 1)
-           (armExpandImm)))
-         ((_ zero_extend 1)
-          #x00000000))))))))
   (bxWritePC
-   (ite var2))
-  (var2
-   (((_ call "uf.arm.is_r15")
-    rD)
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
     (ite
      (bveq
       #b0
       ((_ extract 0 0)
-       (addResult)))
-     (bvand
-      #xfffffffe
-      (addResult))
-     (var3))
+       ((_ extract 31 0)
+        ((_ call "df.addWithCarry")
+         rN
+         (armExpandImm)
+         #x00000000))))
+     (bvand var1)
+     (ite
+      (bveq
+       #b0
+       ((_ extract 1 1)
+        ((_ extract 31 0)
+         ((_ call "df.addWithCarry")
+          rN
+          (armExpandImm)
+          #x00000000))))
+      (bvand
+       #xfffffffd
+       ((_ extract 31 0)
+        ((_ call "df.addWithCarry")
+         rN
+         (armExpandImm)
+         #x00000000)))
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rN
+        (armExpandImm)
+        #x00000000))))
     (bvadd 'PC #x00000004)))
-  (var3
-   (ite
-    (bveq
-     #b0
-     ((_ extract 1 1)
-      (addResult)))
-    (bvand
-     #xfffffffd
-     (addResult))
-    (addResult))))
+  (var1
+   (#xfffffffe
+    ((_ extract 31 0)
+     ((_ call "df.addWithCarry")
+      rN
+      (armExpandImm)
+      #x00000000)))))
  ((operands
   ((rD . 'GPR)
    (setcc . 'Cc_out)
@@ -285,33 +281,4 @@
   (defs
    (('PC
     (bxWritePC))
-    ('CPSR
-     (ite
-      (testCondition)
-      (ite
-       (andp
-        (bveq setcc #b1)
-        (notp
-         ((_ call "uf.arm.is_r15")
-          rD)))
-       (var4)
-       (ite
-        ((_ call "uf.arm.is_r15")
-         rD)
-        (ite
-         (bveq
-          #b0
-          ((_ extract 0 0)
-           (addResult)))
-         (SetT32Mode)
-         'CPSR)
-        'CPSR))
-      'CPSR))
-    (rD
-     (ite
-      (testCondition)
-      (ite
-       ((_ call "uf.arm.is_r15")
-        rD)
-       var1)
-      rD))))))
+    var3))))

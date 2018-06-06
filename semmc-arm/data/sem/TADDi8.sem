@@ -1,35 +1,28 @@
 ;; Add immediate, T32, encoding T2 (F7.1.4, F7-2540)
 (let
- ((var2
-  (ite var1))
-  (var1
-   ((testCondition)
-    (ite
-     (notp
-      (bvne
-       #x00
+ ((var1
+  (ite
+   (testCondition)
+   (ite
+    (notp
+     (bvne
+      #x00
+      (concat
+       ((_ extract 15 12)
+        'CPSR)
        (concat
-        ((_ extract 15 12)
+        ((_ extract 11 10)
          'CPSR)
-        (concat
-         ((_ extract 11 10)
-          'CPSR)
-         ((_ extract 26 25)
-          'CPSR)))))
-     rDn
-     (addResult))
-    rDn))
-  (addResult
-   ((_ extract 31 0)
-    (bvadd
-     (bvadd
-      ((_ zero_extend 1)
-       rDn)
-      ((_ zero_extend 1)
-       ((_ zero_extend 24)
-        imm)))
-     ((_ zero_extend 1)
-      #x00000000))))
+        ((_ extract 26 25)
+         'CPSR)))))
+    rDn
+    ((_ extract 31 0)
+     ((_ call "df.addWithCarry")
+      rDn
+      ((_ zero_extend 24)
+       imm)
+      #x00000000)))
+   rDn))
   (testCondition
    (ite
     (andp
@@ -135,69 +128,7 @@
      #x0)
     #xe
     ((_ extract 15 12)
-     'CPSR)))
-  (addCarry
-   (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
-      (bvadd
-       (bvadd
-        ((_ zero_extend 1)
-         rDn)
-        ((_ zero_extend 1)
-         ((_ zero_extend 24)
-          imm)))
-       ((_ zero_extend 1)
-        #x00000000))))
-    (concat
-     (ite
-      (bveq
-       ((_ extract 31 0)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rDn)
-          ((_ zero_extend 1)
-           ((_ zero_extend 24)
-            imm)))
-         ((_ zero_extend 1)
-          #x00000000)))
-       #x00000000)
-      #b1
-      #b0)
-     (concat
-      ((_ extract 32 32)
-       (bvadd
-        (bvadd
-         ((_ zero_extend 1)
-          rDn)
-         ((_ zero_extend 1)
-          ((_ zero_extend 24)
-           imm)))
-        ((_ zero_extend 1)
-         #x00000000)))
-      (bvand
-       ((_ extract 31 31)
-        ((_ extract 31 0)
-         (bvadd
-          (bvadd
-           ((_ zero_extend 1)
-            rDn)
-           ((_ zero_extend 1)
-            ((_ zero_extend 24)
-             imm)))
-          ((_ zero_extend 1)
-           #x00000000))))
-       ((_ extract 32 32)
-        (bvadd
-         (bvadd
-          ((_ zero_extend 1)
-           rDn)
-          ((_ zero_extend 1)
-           ((_ zero_extend 24)
-            imm)))
-         ((_ zero_extend 1)
-          #x00000000)))))))))
+     'CPSR))))
  ((operands
   ((rDn . 'TGPR)
    (imm . 'Imm0_255)))
@@ -227,10 +158,15 @@
              ((_ extract 26 25)
               'CPSR)))))))
        (concat
-        (addCarry)
+        ((_ extract 35 32)
+         ((_ call "df.addWithCarry")
+          rDn
+          ((_ zero_extend 24)
+           imm)
+          #x00000000))
         ((_ extract 27 0)
          'CPSR))
        'CPSR)
       'CPSR))
     (rDn
-     (var2))))))
+     (var1))))))
