@@ -252,5 +252,5 @@ reverseBytes e
   where
     (nBytes, remBits) = exprBVSize e `divMod` 8
     go acc lowIdx
-      | lowIdx >= nBytes * 8 = reverse acc
+      | lowIdx >= nBytes * 8 = acc
       | otherwise = go (extract (lowIdx + 7) lowIdx e : acc) (lowIdx + 8)

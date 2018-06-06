@@ -531,10 +531,14 @@ testBitDynamic bitNum e = uf EBool "test_bit_dynamic" [Some bitNum, Some e]
 -- Checks to ensure that the requested bits are in bounds and marks the size of
 -- the new bitvector.
 --
--- The SMTLib operation is:
+-- Takes arguments using the PPC specification's bit numbering (0 is the most
+-- significant bit) and converts it to SMTLib numbering (0 is the least
+-- significant bit).
 --
+-- If you call @extract i j bv@ and @bv@ has bit-width @m@, the SMTLib
+-- operation is:
 --
--- >      ((_ extract i j) (_ BitVec m) (_ BitVec n))
+-- >      ((_ extract (m-1 - j) (m-1 - i)) (_ BitVec m) (_ BitVec n))
 -- >    where
 -- >    - i, j, m, n are numerals
 -- >    - m > i ≥ j ≥ 0,
@@ -549,11 +553,13 @@ extract :: (HasCallStack)
         -> Expr 'TBV
 extract i j e =
   case exprType e of
-    EBV w ->
-      let newWidth = i - j + 1
-      in case w > i && i >= j && i >= 0 of
-        True -> TheoryFunc (EBV newWidth) "extract" [Some (LitInt (fromIntegral i)), Some (LitInt (fromIntegral j))] [Some e]
-        False -> error (printf "Invalid slice (%d,%d) of a %d-bit vector" i j w)
+    EBV m ->
+      let n = i - j + 1
+          i' = Some . LitInt . fromIntegral $ m-1 - j
+          j' = Some . LitInt . fromIntegral $ m-1 - i
+      in case m > i && i >= j && j >= 0 of
+        True -> TheoryFunc (EBV n) "extract" [i', j'] [Some e]
+        False -> error (printf "Invalid slice (%d,%d) of a %d-bit vector" i j m)
 
 -- | Zero extend a value (add the requested number of zeros on the left)
 --
