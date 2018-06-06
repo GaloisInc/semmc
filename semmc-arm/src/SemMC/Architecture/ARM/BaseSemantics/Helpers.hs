@@ -68,7 +68,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
 
 
-data OpcodeParamDef t = ParamDef String String (ExprType t)
+data OpcodeParamDef t = ParamDef String String (ExprTypeRepr t)
 
 defineA32Opcode :: (CurryAssignmentClass args, TL.SameShape args (TL.Map SymToExprTagWrapper sh))
                 => A.Opcode A.Operand sh

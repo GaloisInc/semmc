@@ -6,7 +6,7 @@
 
 module SemMC.DSL.Internal
     ( ExprTag(..)
-    , ExprType(..)
+    , ExprTypeRepr(..)
     , Parameter(..)
     , Location(..)
     , Literal(..)
@@ -30,37 +30,37 @@ data ExprTag = TBool
               | TString
               | TPackedOperand
 
-data ExprType tp where
+data ExprTypeRepr (tp :: ExprTag) where
   -- | A type of bitvectors of a fixed width
-  EBV :: Int -> ExprType 'TBV
-  EInt :: ExprType 'TInt
-  EFloat :: ExprType 'TFloat
-  EDouble :: ExprType 'TDouble
-  EBool :: ExprType 'TBool
-  EMemory :: ExprType 'TMemory
-  EMemRef :: ExprType 'TMemRef
-  EString :: ExprType 'TString
-  EPackedOperand :: String -> ExprType 'TPackedOperand
+  EBV :: Int -> ExprTypeRepr 'TBV
+  EInt :: ExprTypeRepr 'TInt
+  EFloat :: ExprTypeRepr 'TFloat
+  EDouble :: ExprTypeRepr 'TDouble
+  EBool :: ExprTypeRepr 'TBool
+  EMemory :: ExprTypeRepr 'TMemory
+  EMemRef :: ExprTypeRepr 'TMemRef
+  EString :: ExprTypeRepr 'TString
+  EPackedOperand :: String -> ExprTypeRepr 'TPackedOperand
 
-deriving instance Eq (ExprType tp)
-deriving instance Show (ExprType tp)
+deriving instance Eq (ExprTypeRepr tp)
+deriving instance Show (ExprTypeRepr tp)
 
-instance ShowF ExprType
+instance ShowF ExprTypeRepr
 
 $(return [])
 
-instance TestEquality ExprType where
-  testEquality = $(structuralTypeEquality [t| ExprType |] [])
+instance TestEquality ExprTypeRepr where
+  testEquality = $(structuralTypeEquality [t| ExprTypeRepr |] [])
 
 -- | A parameter and its type
 --
 -- The type is a string corresponding to an operand type from the architecture
--- (e.g., Gprc), rather than an 'ExprType'.
-data Parameter tp = Parameter { pName :: String
-                              , pType :: String
-                              , pExprType :: ExprType tp
-                              }
-               deriving (Show)
+-- (e.g., Gprc), rather than an 'ExprTypeRepr'.
+data Parameter (tp :: ExprTag) = Parameter { pName :: String
+                                           , pType :: String
+                                           , pExprTypeRepr :: ExprTypeRepr tp
+                                           }
+  deriving (Show)
 
 instance ShowF Parameter
 
@@ -70,11 +70,11 @@ instance TestEquality Parameter where
   testEquality p1 p2 = do
     guard (pName p1 == pName p2)
     guard (pType p1 == pType p2)
-    Refl <- testEquality (pExprType p1) (pExprType p2)
+    Refl <- testEquality (pExprTypeRepr p1) (pExprTypeRepr p2)
     return Refl
 
 data Literal tp = Literal { lName :: String
-                          , lExprType :: ExprType tp
+                          , lExprType :: ExprTypeRepr tp
                           }
                deriving (Show)
 
@@ -103,7 +103,7 @@ data Location tp where
   -- the local identifier must be unique to ensure each location is
   -- written only once.
   MemoryLoc :: Integer -> Location 'TMemory
-  LocationFunc :: ExprType tp -> String -> Location tp' -> Location tp
+  LocationFunc :: ExprTypeRepr tp -> String -> Location tp' -> Location tp
 
 deriving instance Show (Location tp)
 instance ShowF Location
@@ -149,15 +149,15 @@ data Expr (tp :: ExprTag) where
   LitString :: String -> Expr 'TString
   Loc :: Location tp -> Expr tp
   -- | Built-in operations (e.g., bitvector ops)
-  Builtin :: ExprType tp -> String -> [Some Expr] -> Expr tp
+  Builtin :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
   -- | Functions provided by theory backends that are called with the underscore
   -- syntax in smt (e.g., extract and extend)
-  TheoryFunc :: ExprType tp -> String -> [Some Expr] -> [Some Expr] -> Expr tp
+  TheoryFunc :: ExprTypeRepr tp -> String -> [Some Expr] -> [Some Expr] -> Expr tp
   -- | User-defined uninterpreted functions called with the @call@ SMTLib
   -- primitive
-  UninterpretedFunc :: ExprType tp -> String -> [Some Expr] -> Expr tp
+  UninterpretedFunc :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
   -- | Defined functions called with the @call@ SMTLib primitive
-  DefinedFunc :: ExprType tp -> String -> [Some Expr] -> Expr tp
+  DefinedFunc :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
   -- | Assign an advisory name to a sub-expression.  This can be used
   -- (for example) to guide let-binding for output S-expression forms
   -- of this expression.

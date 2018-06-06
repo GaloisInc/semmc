@@ -3,12 +3,12 @@
 (let
  ((var1
   (('CPSR 'CPSR)
-   (((_ call "a32.imm12_reg")
+   (((_ call "uf.a32.imm12_reg")
     imm12)
     (ite
      (testCondition)
      (rnUpd)
-     ((_ call "a32.imm12_reg")
+     ((_ call "uf.a32.imm12_reg")
       imm12)))
    ('Mem
     ((_ call "uf.write_mem.32")
@@ -25,13 +25,13 @@
     ((_ call "uf.a32.imm12_add")
      imm12)
     (bvadd
-     ((_ call "a32.imm12_reg")
+     ((_ call "uf.a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
       ((_ call "uf.a32.imm12_off")
        imm12)))
     (bvsub
-     ((_ call "a32.imm12_reg")
+     ((_ call "uf.a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
       ((_ call "uf.a32.imm12_off")
@@ -138,20 +138,20 @@
    (ite
     (wback)
     (offAddr)
-    ((_ call "a32.imm12_reg")
+    ((_ call "uf.a32.imm12_reg")
      imm12)))
   (offAddr
    (ite
     ((_ call "uf.a32.imm12_add")
      imm12)
     (bvadd
-     ((_ call "a32.imm12_reg")
+     ((_ call "uf.a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
       ((_ call "uf.a32.imm12_off")
        imm12)))
     (bvsub
-     ((_ call "a32.imm12_reg")
+     ((_ call "uf.a32.imm12_reg")
       imm12)
      ((_ zero_extend 16)
       ((_ call "uf.a32.imm12_off")

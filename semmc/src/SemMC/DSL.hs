@@ -71,7 +71,7 @@ module SemMC.DSL (
   -- * Expressions
   Expr(..),
   ExprTag(..),
-  ExprType(..),
+  ExprTypeRepr(..),
   exprType,
   exprBVSize,
   Location(..),
@@ -105,15 +105,15 @@ import           SemMC.Formula.SETokens ( FAtom(..), fromFoldable', printTokens
                                         , ident, int, quoted, string )
 
 
-locationType :: Location tp -> ExprType tp
+locationType :: Location tp -> ExprTypeRepr tp
 locationType loc =
   case loc of
-    ParamLoc p -> pExprType p
+    ParamLoc p -> pExprTypeRepr p
     LiteralLoc ll -> lExprType ll
     MemoryLoc _ -> EMemory
     LocationFunc t _ _ -> t
 
-exprType :: Expr tp -> ExprType tp
+exprType :: Expr tp -> ExprTypeRepr tp
 exprType e =
   case e of
     LitBool _ -> EBool
@@ -282,11 +282,11 @@ comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
 -- specifies the type (strings are types via TypeLits), and the 'ety'
 -- specifies the expression type for this parameter.  The result is a
 -- Location reference to that parameter.
-param :: String -> String -> ExprType tp -> SemMD 'Def d (Location tp)
+param :: String -> String -> ExprTypeRepr tp -> SemMD 'Def d (Location tp)
 param name ty ety = do
   let p = Parameter { pName = name
                     , pType = ty
-                    , pExprType = ety
+                    , pExprTypeRepr = ety
                     }
   RWS.modify' $ \f -> f { fOperands = fOperands f Seq.|> Some p }
   return (ParamLoc p)
@@ -332,20 +332,20 @@ modifyArchData adf = RWS.modify (\s -> s { fArchData = adf (fArchData s) })
 -- Expressions
 
 -- | Allow for user-defined uninterpreted functions over expressions
-uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
+uf :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
 
 -- | Allow for defined functions over expressions
-df :: ExprType tp -> String -> [Some Expr] -> Expr tp
+df :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
 df = DefinedFunc
 
 -- | Allow for user-defined functions over locations
-locUF :: ExprType tp -> String -> Location tp' -> Location tp
+locUF :: ExprTypeRepr tp -> String -> Location tp' -> Location tp
 locUF = LocationFunc
 
 -- | Unpack a specific operand type using an architecture-specific
 -- uninterpreted function
-unpackUF :: String -> ExprType tp -> String -> Location 'TPackedOperand -> Expr tp
+unpackUF :: String -> ExprTypeRepr tp -> String -> Location 'TPackedOperand -> Expr tp
 unpackUF operandName rtype ufname fromParam =
     case exprType (Loc fromParam) of
       EPackedOperand o | operandName == o -> uf rtype ufname [Some $ Loc fromParam]
@@ -353,7 +353,7 @@ unpackUF operandName rtype ufname fromParam =
 
 -- | Unpack a specific operand type using an architecture-specific
 -- undefined function
-unpackLocUF :: String -> ExprType tp -> String -> Location 'TPackedOperand -> Location tp
+unpackLocUF :: String -> ExprTypeRepr tp -> String -> Location 'TPackedOperand -> Location tp
 unpackLocUF operandName rtype ufname fromParam =
     case exprType (Loc fromParam) of
       EPackedOperand o | operandName == o -> locUF rtype ufname fromParam

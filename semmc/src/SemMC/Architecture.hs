@@ -141,6 +141,9 @@ data FunctionInterpretation t arch =
 -- escaped version as it appears in a SimpleBuilder symbolic function.  For
 -- example, if there is an entry with the name @arm.foo@, this function retains
 -- that entry in the input list and adds an additional entry under @arm_foo@.
+--
+-- We also prepend a "uf_"/"uf." prefix to the names of the function to
+-- distinguish it from defined functions.
 createSymbolicEntries :: [(String, a)] -> [(String, a)]
 createSymbolicEntries = foldr duplicateIfDotted []
   where
@@ -148,6 +151,6 @@ createSymbolicEntries = foldr duplicateIfDotted []
       case '.' `elem` s of
         False -> acc
         True ->
-          let newElt = ("uf." ++ map (\c -> if c == '.' then '_' else c) s, e)
+          let newElt = ("uf_" ++ map (\c -> if c == '.' then '_' else c) s, e)
           in newElt : ("uf." ++ s, e) : acc
 
