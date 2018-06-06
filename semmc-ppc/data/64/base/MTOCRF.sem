@@ -82,7 +82,7 @@
              FXM))
            #x00000004)
           #x00000003)))
-       ((_ extract 63 32)
+       ((_ extract 31 0)
         rS)))
      ((_ call "undefined")
       #x00000020)))

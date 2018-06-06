@@ -25,12 +25,12 @@
             (bvand
              (bvor
               (bvshl
-               ((_ extract 63 32)
+               ((_ extract 31 0)
                 rS)
                ((_ zero_extend 27)
                 sh))
               (bvlshr
-               ((_ extract 63 32)
+               ((_ extract 31 0)
                 rS)
                (bvsub
                 #x00000020
@@ -55,7 +55,7 @@
                ((_ zero_extend 27)
                 me))))
             (bvand
-             ((_ extract 63 32)
+             ((_ extract 31 0)
               rA)
              (bvnot
               (bvshl
@@ -85,12 +85,12 @@
              (bvand
               (bvor
                (bvshl
-                ((_ extract 63 32)
+                ((_ extract 31 0)
                  rS)
                 ((_ zero_extend 27)
                  sh))
                (bvlshr
-                ((_ extract 63 32)
+                ((_ extract 31 0)
                  rS)
                 (bvsub
                  #x00000020
@@ -115,7 +115,7 @@
                 ((_ zero_extend 27)
                  me))))
              (bvand
-              ((_ extract 63 32)
+              ((_ extract 31 0)
                rA)
               (bvnot
                (bvshl
@@ -139,7 +139,7 @@
            #x0000000000000000)
           #b010
           #b001))
-        ((_ extract 32 32)
+        ((_ extract 31 31)
          'XER)))
       (bvmul
        (bvsub
@@ -153,12 +153,12 @@
        (bvand
         (bvor
          (bvshl
-          ((_ extract 63 32)
+          ((_ extract 31 0)
            rS)
           ((_ zero_extend 27)
            sh))
          (bvlshr
-          ((_ extract 63 32)
+          ((_ extract 31 0)
            rS)
           (bvsub
            #x00000020
@@ -183,7 +183,7 @@
           ((_ zero_extend 27)
            me))))
        (bvand
-        ((_ extract 63 32)
+        ((_ extract 31 0)
          rA)
         (bvnot
          (bvshl

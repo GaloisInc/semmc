@@ -57,7 +57,7 @@
            (bveq 'CTR #x00000000))
           (false)))))
       (concat
-       ((_ extract 29 0)
+       ((_ extract 31 2)
         'LNK)
        #b00)
       (bvadd 'IP #x00000004)))))))

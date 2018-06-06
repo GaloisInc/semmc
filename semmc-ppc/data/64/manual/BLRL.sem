@@ -14,7 +14,7 @@
        ((_ zero_extend 27)
         (bvsub #b11111 #b00000))))
      (concat
-      ((_ extract 61 0)
+      ((_ extract 63 2)
        'LNK)
       #b00)
      (bvadd 'IP #x0000000000000004))))))

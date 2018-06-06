@@ -8,7 +8,7 @@
  (defs
   (('XER
    (concat
-    ((_ extract 33 0)
+    ((_ extract 63 30)
      'XER)
     (concat
      (ite
@@ -19,24 +19,24 @@
          (bvsub
           #x0000000000000040
           ((_ zero_extend 58)
-           ((_ extract 63 58)
+           ((_ extract 5 0)
             rB))))
         (bvsub
          #x0000000000000040
          ((_ zero_extend 58)
-          ((_ extract 63 58)
+          ((_ extract 5 0)
            rB))))
        #x0000000000000000)
-      ((_ extract 0 0)
+      ((_ extract 63 63)
        rS)
       #b0)
-     ((_ extract 63 35)
+     ((_ extract 28 0)
       'XER))))
    (rA
     (bvashr
      rS
      ((_ zero_extend 58)
-      ((_ extract 63 58)
+      ((_ extract 5 0)
        rB))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

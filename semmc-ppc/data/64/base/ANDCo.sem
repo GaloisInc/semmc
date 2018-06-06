@@ -37,7 +37,7 @@
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub

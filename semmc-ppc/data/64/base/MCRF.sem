@@ -20,7 +20,7 @@
         #x00000004))))
     (bvshl
      ((_ zero_extend 28)
-      ((_ extract 31 28)
+      ((_ extract 3 0)
        (bvlshr
         'CR
         (bvmul

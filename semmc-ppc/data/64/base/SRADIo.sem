@@ -39,7 +39,7 @@
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -49,7 +49,7 @@
       #x00000004))))
    ('XER
     (concat
-     ((_ extract 33 0)
+     ((_ extract 63 30)
       'XER)
      (concat
       (ite
@@ -66,13 +66,13 @@
           ((_ zero_extend 58)
            sh)))
         #x0000000000000000)
-       ((_ extract 0 0)
+       ((_ extract 63 63)
         (bvashr
          rS
          ((_ zero_extend 58)
           sh)))
        #b0)
-      ((_ extract 63 35)
+      ((_ extract 28 0)
        'XER))))
    (rA
     (bvashr

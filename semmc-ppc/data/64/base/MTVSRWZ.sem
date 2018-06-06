@@ -8,7 +8,7 @@
   ((xT
    (concat
     ((_ zero_extend 32)
-     ((_ extract 63 32)
+     ((_ extract 31 0)
       rA))
     ((_ call "undefined")
      #x00000040)))

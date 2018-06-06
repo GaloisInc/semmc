@@ -8,13 +8,13 @@
  (defs
   ((rT
    ((_ zero_extend 32)
-    ((_ extract 31 0)
+    ((_ extract 63 32)
      (bvmul
       ((_ zero_extend 32)
-       ((_ extract 63 32)
+       ((_ extract 31 0)
         rA))
       ((_ zero_extend 32)
-       ((_ extract 63 32)
+       ((_ extract 31 0)
         rB))))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

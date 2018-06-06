@@ -8,10 +8,10 @@
  (defs
   (('XER
    (concat
-    ((_ extract 33 0)
+    ((_ extract 63 30)
      'XER)
     (concat
-     ((_ extract 0 0)
+     ((_ extract 64 64)
       (bvadd
        ((_ zero_extend 1)
         rA)
@@ -19,10 +19,10 @@
         #b0
         ((_ sign_extend 48)
          si))))
-     ((_ extract 63 35)
+     ((_ extract 28 0)
       'XER))))
    (rT
-    ((_ extract 64 1)
+    ((_ extract 63 0)
      (bvadd
       ((_ zero_extend 1)
        rA)

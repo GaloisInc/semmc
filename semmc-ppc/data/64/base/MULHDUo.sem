@@ -24,7 +24,7 @@
       (concat
        (ite
         (bvslt
-         ((_ extract 63 0)
+         ((_ extract 127 64)
           (bvmul
            ((_ zero_extend 64)
             rA)
@@ -34,7 +34,7 @@
         #b100
         (ite
          (bvsgt
-          ((_ extract 63 0)
+          ((_ extract 127 64)
            (bvmul
             ((_ zero_extend 64)
              rA)
@@ -43,7 +43,7 @@
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -52,7 +52,7 @@
         #b000))
       #x00000004))))
    (rT
-    ((_ extract 63 0)
+    ((_ extract 127 64)
      (bvmul
       ((_ zero_extend 64)
        rA)

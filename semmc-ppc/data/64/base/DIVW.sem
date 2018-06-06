@@ -9,10 +9,10 @@
   ((rT
    (bvsdiv
     ((_ sign_extend 32)
-     ((_ extract 63 32)
+     ((_ extract 31 0)
       rA))
     ((_ sign_extend 32)
-     ((_ extract 63 32)
+     ((_ extract 31 0)
       rB))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

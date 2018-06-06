@@ -8,7 +8,7 @@
   ('VSCR vrC vrB vrA 'IP))
  (defs
   (('VSCR
-   ((_ extract 159 128)
+   ((_ extract 31 0)
     ((_ call "ppc.vec3")
      "VADDEUQM"
      vrA
@@ -16,7 +16,7 @@
      vrC
      'VSCR)))
    (vrT
-    ((_ extract 127 0)
+    ((_ extract 159 32)
      ((_ call "ppc.vec3")
       "VADDEUQM"
       vrA

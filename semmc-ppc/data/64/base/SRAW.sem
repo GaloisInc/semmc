@@ -8,39 +8,39 @@
  (defs
   (('XER
    (concat
-    ((_ extract 33 0)
+    ((_ extract 63 30)
      'XER)
     (concat
      (ite
       (bvne
        (bvlshr
         (bvshl
-         ((_ extract 63 32)
+         ((_ extract 31 0)
           rS)
          (bvsub
           #x00000020
           ((_ zero_extend 27)
-           ((_ extract 63 59)
+           ((_ extract 4 0)
             rB))))
         (bvsub
          #x00000020
          ((_ zero_extend 27)
-          ((_ extract 63 59)
+          ((_ extract 4 0)
            rB))))
        #x00000000)
-      ((_ extract 0 0)
-       ((_ extract 63 32)
+      ((_ extract 31 31)
+       ((_ extract 31 0)
         rS))
       #b0)
-     ((_ extract 63 35)
+     ((_ extract 28 0)
       'XER))))
    (rA
     ((_ sign_extend 32)
      (bvashr
-      ((_ extract 63 32)
+      ((_ extract 31 0)
        rS)
       ((_ zero_extend 27)
-       ((_ extract 63 59)
+       ((_ extract 4 0)
         rB)))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

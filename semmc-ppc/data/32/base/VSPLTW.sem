@@ -7,7 +7,7 @@
   ('VSCR vrB 'IP))
  (defs
   (('VSCR
-   ((_ extract 159 128)
+   ((_ extract 31 0)
     ((_ call "ppc.vec2")
      "VSPLTW"
      ((_ zero_extend 123)
@@ -15,7 +15,7 @@
      vrB
      'VSCR)))
    (vrT
-    ((_ extract 127 0)
+    ((_ extract 159 32)
      ((_ call "ppc.vec2")
       "VSPLTW"
       ((_ zero_extend 123)

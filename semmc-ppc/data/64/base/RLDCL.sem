@@ -13,14 +13,14 @@
      (bvshl
       rS
       ((_ zero_extend 58)
-       ((_ extract 63 58)
+       ((_ extract 5 0)
         rB)))
      (bvlshr
       rS
       (bvsub
        #x0000000000000040
        ((_ zero_extend 58)
-        ((_ extract 63 58)
+        ((_ extract 5 0)
          rB)))))
     (bvshl
      (bvlshr

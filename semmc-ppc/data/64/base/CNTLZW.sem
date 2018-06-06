@@ -8,7 +8,7 @@
   ((rA
    ((_ zero_extend 32)
     ((_ call "clz.32")
-     ((_ extract 63 32)
+     ((_ extract 31 0)
       rS))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

@@ -21,7 +21,7 @@
        #x0000000000000000
        ((_ call "ppc.memrr_base")
         memref))))
-    ((_ extract 127 112)
+    ((_ extract 15 0)
      vrS)))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

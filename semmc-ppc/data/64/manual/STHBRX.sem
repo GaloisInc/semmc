@@ -20,10 +20,10 @@
       memref))
     (concat
      ((_ extract 7 0)
-      ((_ extract 63 48)
+      ((_ extract 15 0)
        rS))
      ((_ extract 15 8)
-      ((_ extract 63 48)
+      ((_ extract 15 0)
        rS)))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

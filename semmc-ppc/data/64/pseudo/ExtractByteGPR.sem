@@ -8,7 +8,7 @@
   ((target
    (concat
     #x00000000000000
-    ((_ extract 63 56)
+    ((_ extract 7 0)
      (bvlshr
       source
       (bvshl

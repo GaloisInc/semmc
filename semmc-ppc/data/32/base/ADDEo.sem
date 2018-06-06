@@ -24,7 +24,7 @@
       (concat
        (ite
         (bvslt
-         ((_ extract 32 1)
+         ((_ extract 31 0)
           (bvadd
            (bvadd
             ((_ zero_extend 1)
@@ -32,13 +32,13 @@
             ((_ zero_extend 1)
              rB))
            ((_ zero_extend 32)
-            ((_ extract 2 2)
+            ((_ extract 29 29)
              'XER))))
          #x00000000)
         #b100
         (ite
          (bvsgt
-          ((_ extract 32 1)
+          ((_ extract 31 0)
            (bvadd
             (bvadd
              ((_ zero_extend 1)
@@ -46,12 +46,12 @@
              ((_ zero_extend 1)
               rB))
             ((_ zero_extend 32)
-             ((_ extract 2 2)
+             ((_ extract 29 29)
               'XER))))
           #x00000000)
          #b010
          #b001))
-       ((_ extract 0 0)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -61,10 +61,10 @@
       #x00000004))))
    ('XER
     (concat
-     ((_ extract 1 0)
+     ((_ extract 31 30)
       'XER)
      (concat
-      ((_ extract 0 0)
+      ((_ extract 32 32)
        (bvadd
         (bvadd
          ((_ zero_extend 1)
@@ -72,12 +72,12 @@
          ((_ zero_extend 1)
           rB))
         ((_ zero_extend 32)
-         ((_ extract 2 2)
+         ((_ extract 29 29)
           'XER))))
-      ((_ extract 31 3)
+      ((_ extract 28 0)
        'XER))))
    (rT
-    ((_ extract 32 1)
+    ((_ extract 31 0)
      (bvadd
       (bvadd
        ((_ zero_extend 1)
@@ -85,7 +85,7 @@
        ((_ zero_extend 1)
         rB))
       ((_ zero_extend 32)
-       ((_ extract 2 2)
+       ((_ extract 29 29)
         'XER)))))
    ('IP
     (bvadd 'IP #x00000004)))))

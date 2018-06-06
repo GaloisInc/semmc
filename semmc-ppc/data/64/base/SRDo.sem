@@ -27,7 +27,7 @@
          (bvlshr
           rS
           ((_ zero_extend 58)
-           ((_ extract 63 58)
+           ((_ extract 5 0)
             rB)))
          #x0000000000000000)
         #b100
@@ -36,12 +36,12 @@
           (bvlshr
            rS
            ((_ zero_extend 58)
-            ((_ extract 63 58)
+            ((_ extract 5 0)
              rB)))
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -53,7 +53,7 @@
     (bvlshr
      rS
      ((_ zero_extend 58)
-      ((_ extract 63 58)
+      ((_ extract 5 0)
        rB))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

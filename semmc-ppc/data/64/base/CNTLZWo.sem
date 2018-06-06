@@ -25,7 +25,7 @@
         (bvslt
          ((_ zero_extend 32)
           ((_ call "clz.32")
-           ((_ extract 63 32)
+           ((_ extract 31 0)
             rS)))
          #x0000000000000000)
         #b100
@@ -33,12 +33,12 @@
          (bvsgt
           ((_ zero_extend 32)
            ((_ call "clz.32")
-            ((_ extract 63 32)
+            ((_ extract 31 0)
              rS)))
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -49,7 +49,7 @@
    (rA
     ((_ zero_extend 32)
      ((_ call "clz.32")
-      ((_ extract 63 32)
+      ((_ extract 31 0)
        rS))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

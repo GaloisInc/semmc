@@ -26,23 +26,23 @@
        (ite
         (bvult
          ((_ zero_extend 32)
-          ((_ extract 63 32)
+          ((_ extract 31 0)
            rB))
          ((_ zero_extend 32)
-          ((_ extract 63 32)
+          ((_ extract 31 0)
            rA)))
         #b100
         (ite
          (bvugt
           ((_ zero_extend 32)
-           ((_ extract 63 32)
+           ((_ extract 31 0)
             rB))
           ((_ zero_extend 32)
-           ((_ extract 63 32)
+           ((_ extract 31 0)
             rA)))
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub

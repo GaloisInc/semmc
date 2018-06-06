@@ -8,10 +8,10 @@
   ((rA
    (concat
     ((_ call "popcnt.32")
-     ((_ extract 31 0)
+     ((_ extract 63 32)
       rS))
     ((_ call "popcnt.32")
-     ((_ extract 63 32)
+     ((_ extract 31 0)
       rS))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

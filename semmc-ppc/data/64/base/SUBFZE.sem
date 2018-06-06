@@ -9,7 +9,7 @@
    (bvadd
     (bvnot rA)
     ((_ zero_extend 63)
-     ((_ extract 34 34)
+     ((_ extract 29 29)
       'XER))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

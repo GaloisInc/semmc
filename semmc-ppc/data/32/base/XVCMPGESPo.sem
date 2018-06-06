@@ -30,14 +30,14 @@
         #b110))
       #x00000004))))
    ('FPSCR
-    ((_ extract 159 128)
+    ((_ extract 31 0)
      ((_ call "ppc.vec2")
       "XVCMPGESP"
       xA
       xB
       'FPSCR)))
    (xT
-    ((_ extract 127 0)
+    ((_ extract 159 32)
      ((_ call "ppc.vec2")
       "XVCMPGESP"
       xA

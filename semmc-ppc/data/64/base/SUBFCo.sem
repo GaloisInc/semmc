@@ -24,7 +24,7 @@
       (concat
        (ite
         (bvslt
-         ((_ extract 64 1)
+         ((_ extract 63 0)
           (bvadd
            (bvadd
             (bvnot
@@ -37,7 +37,7 @@
         #b100
         (ite
          (bvsgt
-          ((_ extract 64 1)
+          ((_ extract 63 0)
            (bvadd
             (bvadd
              (bvnot
@@ -49,7 +49,7 @@
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -59,10 +59,10 @@
       #x00000004))))
    ('XER
     (concat
-     ((_ extract 33 0)
+     ((_ extract 63 30)
       'XER)
      (concat
-      ((_ extract 0 0)
+      ((_ extract 64 64)
        (bvadd
         (bvadd
          (bvnot
@@ -71,10 +71,10 @@
          ((_ zero_extend 1)
           rB))
         #b00000000000000000000000000000000000000000000000000000000000000001))
-      ((_ extract 63 35)
+      ((_ extract 28 0)
        'XER))))
    (rT
-    ((_ extract 64 1)
+    ((_ extract 63 0)
      (bvadd
       (bvadd
        (bvnot

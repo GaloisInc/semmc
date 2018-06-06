@@ -25,14 +25,14 @@
             (bvshl
              rS
              ((_ zero_extend 27)
-              ((_ extract 31 27)
+              ((_ extract 4 0)
                rB)))
             (bvlshr
              rS
              (bvsub
               #x00000020
               ((_ zero_extend 27)
-               ((_ extract 31 27)
+               ((_ extract 4 0)
                 rB)))))
            (bvshl
             (bvlshr
@@ -61,14 +61,14 @@
              (bvshl
               rS
               ((_ zero_extend 27)
-               ((_ extract 31 27)
+               ((_ extract 4 0)
                 rB)))
              (bvlshr
               rS
               (bvsub
                #x00000020
                ((_ zero_extend 27)
-                ((_ extract 31 27)
+                ((_ extract 4 0)
                  rB)))))
             (bvshl
              (bvlshr
@@ -91,7 +91,7 @@
            #x00000000)
           #b010
           #b001))
-        ((_ extract 0 0)
+        ((_ extract 31 31)
          'XER)))
       (bvmul
        (bvsub
@@ -105,14 +105,14 @@
        (bvshl
         rS
         ((_ zero_extend 27)
-         ((_ extract 31 27)
+         ((_ extract 4 0)
           rB)))
        (bvlshr
         rS
         (bvsub
          #x00000020
          ((_ zero_extend 27)
-          ((_ extract 31 27)
+          ((_ extract 4 0)
            rB)))))
       (bvshl
        (bvlshr

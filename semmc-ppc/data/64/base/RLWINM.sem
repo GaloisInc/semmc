@@ -13,12 +13,12 @@
     (bvand
      (bvor
       (bvshl
-       ((_ extract 63 32)
+       ((_ extract 31 0)
         rS)
        ((_ zero_extend 27)
         sh))
       (bvlshr
-       ((_ extract 63 32)
+       ((_ extract 31 0)
         rS)
        (bvsub
         #x00000020

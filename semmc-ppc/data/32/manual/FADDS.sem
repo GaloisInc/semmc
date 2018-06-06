@@ -7,14 +7,14 @@
   ('FPSCR frB frA 'IP))
  (defs
   (('FPSCR
-   ((_ extract 159 128)
+   ((_ extract 31 0)
     ((_ call "ppc.vec2")
      "FADDS"
      frA
      frB
      'FPSCR)))
    (frT
-    ((_ extract 127 0)
+    ((_ extract 159 32)
      ((_ call "ppc.vec2")
       "FADDS"
       frA

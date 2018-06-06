@@ -19,7 +19,7 @@
      ((_ sign_extend 48)
       ((_ call "ppc.memri_offset")
        memref)))
-    ((_ extract 63 0)
+    ((_ extract 127 64)
      frS)))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

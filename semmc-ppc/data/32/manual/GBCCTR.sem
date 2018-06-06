@@ -33,7 +33,7 @@
          ((_ zero_extend 27)
           (bvsub #b11111 bi))))))
      (concat
-      ((_ extract 29 0)
+      ((_ extract 31 2)
        'CTR)
       #b00)
      (bvadd 'IP #x00000004)))))))

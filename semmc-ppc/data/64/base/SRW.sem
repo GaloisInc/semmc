@@ -9,10 +9,10 @@
   ((rA
    ((_ zero_extend 32)
     (bvlshr
-     ((_ extract 63 32)
+     ((_ extract 31 0)
       rS)
      ((_ zero_extend 27)
-      ((_ extract 63 59)
+      ((_ extract 4 0)
        rB)))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

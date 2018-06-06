@@ -19,7 +19,7 @@
       ((_ call "ppc.memrr_base")
        memref)))
     ((_ call "fp.round_single")
-     ((_ extract 63 0)
+     ((_ extract 127 64)
       xS))))
    ('IP
     (bvadd 'IP #x00000004)))))

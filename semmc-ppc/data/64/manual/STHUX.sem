@@ -20,7 +20,7 @@
        memref)
       ((_ call "ppc.memrr_offset")
        memref))
-     ((_ extract 63 48)
+     ((_ extract 15 0)
       rS)))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

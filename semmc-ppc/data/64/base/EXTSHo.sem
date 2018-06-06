@@ -24,19 +24,19 @@
        (ite
         (bvslt
          ((_ sign_extend 48)
-          ((_ extract 63 48)
+          ((_ extract 15 0)
            rS))
          #x0000000000000000)
         #b100
         (ite
          (bvsgt
           ((_ sign_extend 48)
-           ((_ extract 63 48)
+           ((_ extract 15 0)
             rS))
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -46,7 +46,7 @@
       #x00000004))))
    (rA
     ((_ sign_extend 48)
-     ((_ extract 63 48)
+     ((_ extract 15 0)
       rS)))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

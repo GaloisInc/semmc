@@ -26,7 +26,7 @@
          (bvadd
           (bvnot rA)
           ((_ zero_extend 63)
-           ((_ extract 34 34)
+           ((_ extract 29 29)
             'XER)))
          #x0000000000000000)
         #b100
@@ -35,12 +35,12 @@
           (bvadd
            (bvnot rA)
            ((_ zero_extend 63)
-            ((_ extract 34 34)
+            ((_ extract 29 29)
              'XER)))
           #x0000000000000000)
          #b010
          #b001))
-       ((_ extract 32 32)
+       ((_ extract 31 31)
         'XER)))
      (bvmul
       (bvsub
@@ -52,7 +52,7 @@
     (bvadd
      (bvnot rA)
      ((_ zero_extend 63)
-      ((_ extract 34 34)
+      ((_ extract 29 29)
        'XER))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

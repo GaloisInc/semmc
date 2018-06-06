@@ -10,7 +10,7 @@
    (bvshl
     rS
     ((_ zero_extend 58)
-     ((_ extract 63 58)
+     ((_ extract 5 0)
       rB))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

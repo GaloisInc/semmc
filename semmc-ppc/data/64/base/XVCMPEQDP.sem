@@ -7,14 +7,14 @@
   ('FPSCR xB xA 'IP))
  (defs
   (('FPSCR
-   ((_ extract 159 128)
+   ((_ extract 31 0)
     ((_ call "ppc.vec2")
      "XVCMPEQDP"
      xA
      xB
      'FPSCR)))
    (xT
-    ((_ extract 127 0)
+    ((_ extract 159 32)
      ((_ call "ppc.vec2")
       "XVCMPEQDP"
       xA

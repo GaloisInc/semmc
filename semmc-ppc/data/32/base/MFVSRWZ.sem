@@ -6,7 +6,7 @@
   ('IP))
  (defs
   ((rA
-   ((_ extract 31 0)
+   ((_ extract 127 96)
     xS))
    ('IP
     (bvadd 'IP #x00000004)))))
