@@ -15,7 +15,7 @@
     gpr))
   (updAddr
    (bvadd
-    ((_ call "t32.addrmode_is4_reg")
+    ((_ call "uf.t32.addrmode_is4_reg")
      addris)
     ((_ zero_extend 25)
      (concat
@@ -189,8 +189,8 @@
         (SetA32Mode))
        'CPSR)
       'CPSR))
-    (((_ call "t32.addrmode_is4_reg")
+    (((_ call "uf.t32.addrmode_is4_reg")
      addris)
-     ((_ call "t32.addrmode_is4_reg")
+     ((_ call "uf.t32.addrmode_is4_reg")
       addris))
     (gpr var1)))))

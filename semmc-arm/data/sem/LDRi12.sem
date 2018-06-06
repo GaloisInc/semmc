@@ -6,13 +6,13 @@
    ((_ call "uf.a32.imm12_add")
     imm12)
    (bvadd
-    ((_ call "a32.imm12_reg")
+    ((_ call "uf.a32.imm12_reg")
      imm12)
     ((_ zero_extend 16)
      ((_ call "uf.a32.imm12_off")
       imm12)))
    (bvsub
-    ((_ call "a32.imm12_reg")
+    ((_ call "uf.a32.imm12_reg")
      imm12)
     ((_ zero_extend 16)
      ((_ call "uf.a32.imm12_off")
@@ -173,9 +173,9 @@
         'CPSR)
        'CPSR)
       'CPSR))
-    (((_ call "a32.imm12_reg")
+    (((_ call "uf.a32.imm12_reg")
      imm12)
-     ((_ call "a32.imm12_reg")
+     ((_ call "uf.a32.imm12_reg")
       imm12))
     (gpr
      (ite

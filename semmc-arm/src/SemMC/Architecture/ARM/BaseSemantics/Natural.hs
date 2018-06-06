@@ -21,5 +21,5 @@ naturalLitBV :: Integer -> Expr 'TBV
 naturalLitBV n = LitBV naturalBitSize n
 
 -- | A value as a bitvector of the full register width
-naturalBV :: ExprType 'TBV
+naturalBV :: ExprTypeRepr 'TBV
 naturalBV = EBV naturalBitSize
