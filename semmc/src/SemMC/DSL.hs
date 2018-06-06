@@ -19,6 +19,7 @@ module SemMC.DSL (
   getArchData,
   setArchData,
   modifyArchData,
+  addLibraryFunction,
   -- * Operations
   (=:),
   testBitDynamic,
@@ -92,6 +93,7 @@ import           Prelude hiding ( concat )
 
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
+import qualified Data.Map as M
 import qualified Data.SCargot.Repr as SC
 import           Data.Semigroup
 import qualified Data.Sequence as Seq
@@ -202,13 +204,22 @@ newFormula name = Formula { fName = name
 -- impossible.
 --
 newtype SemMD (t :: Phase) d a =
-    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (Formula d) a }
+    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (SemMDState d) a }
           deriving (Functor,
                     Applicative,
                     Monad,
                     RWS.MonadWriter (Seq.Seq (Formula d)),
-                    RWS.MonadState (Formula d))
+                    RWS.MonadState (SemMDState d))
 
+data SemMDState d = SemMDState { smdFormula :: Formula d
+                               , smdLibraryFunctions :: M.Map String LibraryFunction
+                               }
+
+emptySemMDState :: SemMDState d
+emptySemMDState = SemMDState (newFormula "") M.empty
+
+data LibraryFunction = LibraryFunction
+  { lfName :: String }
 
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
@@ -224,8 +235,9 @@ data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
 --
 -- The result is an association list from opcode name to the s-expression
 -- representing it.
-runSem :: SemMD 'Top d () -> [(String, Definition)]
-runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () (newFormula "")))
+runSem :: SemMD 'Top d () -> ([(String, Definition)], M.Map String LibraryFunction)
+runSem act = (mkSExprs formulas, lfs)
+  where (SemMDState _ lfs, formulas) = RWS.execRWS (unSem act) () emptySemMDState
     -- The initial dummy formula here is never used.  It is just a standin until
     -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
     -- this will never be used since 'defineOpcode' handles adding the result to
@@ -237,9 +249,10 @@ runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () (newFormula "")))
 -- The body is executed to produce a definition.
 defineOpcode :: String -> SemMD 'Def d () -> SemMD 'Top d ()
 defineOpcode name (SemM def) = do
-  RWS.put $ newFormula name
+  SemMDState _ lfs <- RWS.get
+  RWS.put $ SemMDState (newFormula name) lfs
   SemM def
-  formula <- RWS.get
+  SemMDState formula _ <- RWS.get -- get newly-defined formula
   RWS.tell (Seq.singleton formula)
   return ()
 
@@ -259,23 +272,23 @@ defineOpcode name (SemM def) = do
 -- >     defLoc eflags ...
 forkDefinition :: String -> SemMD 'Def d () -> SemMD 'Def d ()
 forkDefinition name (SemM def) = do
-  origFormula <- RWS.get
+  SemMDState origFormula lfs <- RWS.get
   let modFormula = origFormula { fName = name
                                , fComment = Seq.empty
                                }
-  RWS.put modFormula
+  RWS.put (SemMDState modFormula lfs)
   SemM def
-  forkedFormula <- RWS.get
+  SemMDState forkedFormula lfs' <- RWS.get
   RWS.tell (Seq.singleton forkedFormula)
   -- Restore the original formula so that 'definOpcode' can finish it off
-  RWS.put origFormula
+  RWS.put (SemMDState origFormula lfs')
 
 -- | Add a descriptive comment to the output file
 --
 -- Each call appends a new comment line.  Individual calls to comment should not
 -- contain newlines.
 comment :: String -> SemMD 'Def d ()
-comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
+comment c = RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fComment = fComment f Seq.|> c }) lfs
 
 -- | Declare a named parameter; the 'name' string provided is used as
 -- the variable name in the produced formula, the 'ty' string
@@ -288,20 +301,20 @@ param name ty ety = do
                     , pType = ty
                     , pExprTypeRepr = ety
                     }
-  RWS.modify' $ \f -> f { fOperands = fOperands f Seq.|> Some p }
+  RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fOperands = fOperands f Seq.|> Some p }) lfs
   return (ParamLoc p)
 
 -- | Mark a parameter as an input
 input :: Location tp -> SemMD 'Def d ()
-input loc = RWS.modify' $ \f -> f { fInputs = Some loc : fInputs f }
+input loc = RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fInputs = Some loc : fInputs f }) lfs
 
 -- | Define a location as an expression
 defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemMD 'Def d ()
 defLoc loc e
   | locationType loc == exprType e = do
-      curDefs <- RWS.gets fDefs
+      curDefs <- RWS.gets (fDefs . smdFormula)
       case lookup (Some loc) curDefs of
-        Nothing -> RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
+        Nothing -> RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fDefs = (Some loc, Some e) : fDefs f }) lfs
         Just _ -> error (printf "Location is already defined: %s" (show loc))
   | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
 
@@ -315,17 +328,22 @@ name =: expr = NamedSubExpr name expr
 
 -- | Get the current architecture-specific data in the DSL computation
 getArchData :: SemMD t d (Maybe d)
-getArchData = fArchData <$> RWS.get
+getArchData = fArchData <$> smdFormula <$> RWS.get
 
 
 -- | Set the current architecture-specific data in the DSL computation
 setArchData :: Maybe d -> SemMD t d ()
-setArchData m'ad = RWS.modify (\s -> s { fArchData = m'ad })
+setArchData m'ad = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = m'ad }) lfs)
 
 
 -- | Modify the current architecture-specific data in the DSL computation
 modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
-modifyArchData adf = RWS.modify (\s -> s { fArchData = adf (fArchData s) })
+modifyArchData adf = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = adf (fArchData f) }) lfs)
+
+addLibraryFunction :: LibraryFunction -> SemMD t d ()
+addLibraryFunction lf@(LibraryFunction name) = do
+  SemMDState f lfs <- RWS.get
+  RWS.put (SemMDState f (M.insert name lf lfs))
 
 
 -- ----------------------------------------------------------------------
