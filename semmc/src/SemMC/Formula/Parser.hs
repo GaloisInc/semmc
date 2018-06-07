@@ -607,13 +607,14 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
   prefixError ("in reading call '" <> fnName <> "' expression: ") $ do
     sym <- MR.reader getSym
     fns <- MR.reader (envFunctions . getEnv)
-    SomeSome fn <- case (take 3 fnName) of
-      "uf." ->
-        case Map.lookup fnName fns of
-          Just (fn, _) -> return fn
-          Nothing -> E.throwError $ printf "uninterpreted function '%s' is not defined" fnName
-      -- TODO: Change below
-      "df." -> E.throwError $ "no support for defined functions yet"
+    SomeSome fn <- case Map.lookup fnName fns of
+      Just (fn, _) -> return fn
+      Nothing ->
+        let template = case take 3 fnName of
+              "uf." -> "uninterpreted function '%s' is not defined"
+              "df." -> "library function '%s' is not defined"
+              _     -> "unrecognized function prefix: '%s'"
+        in E.throwError $ printf template fnName
       _ -> E.throwError $ printf "unrecognized function prefix: '%s'" fnName
     assn <- exprAssignment (S.fnArgTypes fn) args
     liftIO (Just . Some <$> S.applySymFn sym fn assn)
