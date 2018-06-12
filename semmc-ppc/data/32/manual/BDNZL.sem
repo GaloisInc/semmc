@@ -4,24 +4,18 @@
  ((operands
   ((target . 'Condbrtarget)))
   (in
-   ('IP 'CR 'CTR))
+   ('IP 'CTR))
   (defs
    (('LNK
     (bvadd 'IP #x00000004))
     ('IP
      (ite
-      (andp
+      (xorp
        (notp
-        ((_ call "test_bit_dynamic")
-         'CR
-         ((_ zero_extend 27)
-          (bvsub #b11111 #b00000))))
-       (xorp
-        (notp
-         (bveq
-          (bvsub 'CTR #x00000001)
-          #x00000000))
-        (false)))
+        (bveq
+         (bvsub 'CTR #x00000001)
+         #x00000000))
+       (false))
       (bvadd
        ((_ sign_extend 16)
         (concat target #b00))

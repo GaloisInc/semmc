@@ -2,17 +2,10 @@
 ;; This is a specialized unconditional BCCTR
 ((operands ())
  (in
-  ('CR 'IP 'CTR))
+  ('IP 'CTR))
  (defs
   (('IP
-   (ite
-    (notp
-     ((_ call "test_bit_dynamic")
-      'CR
-      ((_ zero_extend 27)
-       (bvsub #b11111 #b00000))))
-    (concat
-     ((_ extract 31 2)
-      'CTR)
-     #b00)
-    (bvadd 'IP #x00000004))))))
+   (concat
+    ((_ extract 31 2)
+     'CTR)
+    #b00)))))
