@@ -1,7 +1,7 @@
 ;; BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero (with BH=0b11)
 (let
- ((true
-  (bveq #b0 #b0)))
+ ((false
+  (bvne #b0 #b0)))
  ((operands
   ((target . 'Condbrtarget)))
   (in
@@ -14,7 +14,7 @@
        (bveq
         (bvsub 'CTR #x00000001)
         #x00000000))
-      (true))
+      (false))
      (bvadd
       ((_ sign_extend 16)
        (concat target #b00))

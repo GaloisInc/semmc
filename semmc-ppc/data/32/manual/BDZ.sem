@@ -1,25 +1,20 @@
 ;; BDZ - Branch Conditional after decrementing CTR and CTR is 0
 (let
- ((false
-  (bvne #b0 #b0)))
+ ((true
+  (bveq #b0 #b0)))
  ((operands
   ((target . 'Condbrtarget)))
   (in
-   ('IP 'CR 'CTR))
+   ('IP 'CTR))
   (defs
    (('IP
     (ite
-     (andp
-      ((_ call "test_bit_dynamic")
-       'CR
-       ((_ zero_extend 27)
-        (bvsub #b11111 #b00000)))
-      (xorp
-       (notp
-        (bveq
-         (bvsub 'CTR #x00000001)
-         #x00000000))
-       (false)))
+     (xorp
+      (notp
+       (bveq
+        (bvsub 'CTR #x00000001)
+        #x00000000))
+      (true))
      (bvadd
       ((_ sign_extend 16)
        (concat target #b00))
