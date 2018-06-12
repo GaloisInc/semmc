@@ -34,21 +34,29 @@ manualBranch = do
   defineOpcode "BLR" $ do
     comment "BLR : BCLR (XL-form, LK=0)"
     comment "This is a specialized unconditional BCLR"
-    branchConditionalLNK NoLink 0b00101 (LitBV 5 0x0)
+    branchConditionalLNK NoLink 0b10100 (LitBV 5 0x0)
 
   defineOpcode "BLRL" $ do
     comment "BLRL : BCLR (XL-form, LK=1)"
     comment "This is a specialized unconditional BCLR"
-    branchConditionalLNK Link 0b00101 (LitBV 5 0x0)
+    branchConditionalLNK Link 0b10100 (LitBV 5 0x0)
 
   defineOpcode "BCLR" $ do
     comment "BCLR (XL-form, LK=0)"
     crbit <- param "bi" crbitrc (EBV 5)
+    -- TODO: Is this constant right? I don't know because I couldn't find a
+    -- bit-pattern that caused dismantle to choose the BCLR opcode (as opposed
+    -- to GBCLR below), so I don't know what part of the manual to read to
+    -- check it.
     branchConditionalLNK NoLink 0b01100 (Loc crbit)
 
   defineOpcode "BCLRL" $ do
-    comment "BCLR (XL-form, LK=1)"
+    comment "BCLRL (XL-form, LK=1)"
     crbit <- param "bi" crbitrc (EBV 5)
+    -- TODO: Is this constant right? I don't know because I couldn't find a
+    -- bit-pattern that caused dismantle to choose the BCLRL opcode (as opposed
+    -- to GBCLRL below), so I don't know what part of the manual to read to
+    -- check it.
     branchConditionalLNK Link 0b01100 (Loc crbit)
 
   defineOpcode "GBCLR" $ do
@@ -74,12 +82,12 @@ manualBranch = do
     comment "This is a specialized unconditional BCCTR"
     -- Note that this is unconditional (per the BO field), so the BI field is
     -- unused and passed as zero
-    branchConditionalCTR NoLink 0b00101 (LitBV 5 0x0)
+    branchConditionalCTR NoLink 0b10100 (LitBV 5 0x0)
 
   defineOpcode "BCTRL" $ do
     comment "BCTR : BCCTR (XL-form, LK=0)"
     comment "This is a specialized unconditional BCCTR"
-    branchConditionalCTR Link 0b00101 (LitBV 5 0x0)
+    branchConditionalCTR Link 0b10100 (LitBV 5 0x0)
 
   defineOpcode "BCCTR" $ do
     comment "BCCTR (XL-form, LK=0)"
@@ -146,6 +154,9 @@ manualBranch = do
     comment "This form is actually equivalent to BT, which has the BO field=01100"
     target <- param "target" condbrtarget (EBV 14)
     crbit <- param "bi" crbitrc (EBV 5)
+    -- TODO: Is this constant right? I don't know because I couldn't find a
+    -- bit-pattern that caused dismantle to choose the BC opcode (as opposed to
+    -- GBC below), so I don't know what part of the manual to read to check it.
     branchConditional Relative NoLink 0b00110 (Loc crbit) (Loc target)
 
   defineOpcode "BCL" $ do
@@ -153,6 +164,10 @@ manualBranch = do
     comment "This form is actually equivalent to BT, which has the BO field=01100"
     target <- param "target" condbrtarget (EBV 14)
     crbit <- param "bi" crbitrc (EBV 5)
+    -- TODO: Is this constant right? I don't know because I couldn't find a
+    -- bit-pattern that caused dismantle to choose the BCL opcode (as opposed
+    -- to GBCL below), so I don't know what part of the manual to read to check
+    -- it.
     branchConditional Relative Link 0b00110 (Loc crbit) (Loc target)
 
   defineOpcode "BDZ" $ do
@@ -160,7 +175,7 @@ manualBranch = do
     target <- param "target" condbrtarget (EBV 14)
     -- The BO_0 bit is set, so the CR is ignored -- we pass in bit 0 for the CR
     -- to just have something
-    branchConditional Relative NoLink 0b01001 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative NoLink 0b10010 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDZp" $ do
     comment "BDZ - Branch Conditional after decrementing CTR and CTR is 0 (with BH=0b11)"
@@ -174,7 +189,7 @@ manualBranch = do
 
   defineOpcode "BDZL" $ do
     target <- param "target" condbrtarget (EBV 14)
-    branchConditional Relative Link 0b01001 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative Link 0b10010 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDZLp" $ do
     comment "BDZL - Branch Conditional and Link after decrementing CTR and CTR is 0 (with BH=0b11)"
@@ -189,31 +204,31 @@ manualBranch = do
   defineOpcode "BDNZ" $ do
     comment "BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero"
     target <- param "target" condbrtarget (EBV 14)
-    branchConditional Relative NoLink 0b00001 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative NoLink 0b10000 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDNZp" $ do
     comment "BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero (with BH=0b11)"
     target <- param "target" condbrtarget (EBV 14)
-    branchConditional Relative NoLink 0b10011 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative NoLink 0b11001 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDNZm" $ do
     comment "BDNZ - Branch Conditional after decrementing CTR and CTR is non-zero (with BH=0b10)"
     target <- param "target" condbrtarget (EBV 14)
-    branchConditional Relative NoLink 0b00011 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative NoLink 0b11000 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDNZL" $ do
     target <- param "target" condbrtarget (EBV 14)
-    branchConditional Relative Link 0b00001 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative Link 0b10000 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDNZLp" $ do
     comment "BDNZ - Branch Conditional and Link after decrementing CTR and CTR is non-zero (with BH=0b11)"
     target <- param "target" condbrtarget (EBV 14)
-    branchConditional Relative Link 0b10011 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative Link 0b11001 (LitBV 5 0x0) (Loc target)
 
   defineOpcode "BDNZLm" $ do
     comment "BDNZ - Branch Conditional and Link after decrementing CTR and CTR is non-zero (with BH=0b10)"
     target <- param "target" condbrtarget (EBV 14)
-    branchConditional Relative Link 0b00011 (LitBV 5 0x0) (Loc target)
+    branchConditional Relative Link 0b11000 (LitBV 5 0x0) (Loc target)
 
 data AA = Absolute | Relative
   deriving (Eq, Show)
