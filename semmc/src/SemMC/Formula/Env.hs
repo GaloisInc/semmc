@@ -10,6 +10,8 @@ module SemMC.Formula.Env
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Parameterized.List as SL
+import           Data.Type.List ( ToContext )
 
 import           What4.BaseTypes
 import qualified What4.Interface as S

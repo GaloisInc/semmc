@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as Map
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text.Encoding as T
 import qualified System.Directory as S
+import qualified System.FilePath as S
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -79,6 +80,7 @@ loadFormulas :: forall sym arch a
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
 loadFormulas sym contents = do
   env <- formulaEnv (Proxy @arch) sym
+  -- TODO load functions, presumably from a new argument
   F.foldlM (parseFormulaBS env) MapF.empty contents
   where
     parseFormulaBS :: FE.FormulaEnv sym arch
@@ -106,6 +108,9 @@ loadFormulas sym contents = do
 -- skip it. So, the list of shapes can simply be all possible opcodes,
 -- and what files actually exist on disk determine what we actually
 -- load.
+--
+-- The funDir argument gives a directory whose defined functions will be
+-- loaded. All files with extension `.fun` in this directory will be loaded.
 loadFormulasFromFiles :: forall sym arch a
                        . ( CRU.IsExprBuilder sym
                          , CRUB.IsSymInterface sym
@@ -118,9 +123,13 @@ loadFormulasFromFiles :: forall sym arch a
                       => sym
                       -> (forall sh' . a sh' -> FilePath)
                       -> [Some a]
+                      -> Maybe FilePath
                       -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulasFromFiles sym toFP shapes = do
-  env <- formulaEnv (Proxy @arch) sym
+loadFormulasFromFiles sym toFP shapes funDir = do
+  initEnv <- formulaEnv (Proxy @arch) sym
+  env <- case funDir of
+    Just dir -> loadDefinedFunctionsFromFiles sym initEnv dir
+    Nothing -> return initEnv
   F.foldlM (\m (Some (op :: a sh)) -> addIfJust (readFormulaForOpcode env) m op) MapF.empty shapes
   where
     readFormulaForOpcode :: FE.FormulaEnv sym arch
@@ -151,3 +160,39 @@ addIfJust f m a = do
   case mval of
     Nothing -> return m
     Just val -> return (MapF.insert a val m)
+
+loadDefinedFunctionsFromFiles :: forall sym arch
+                               . ( CRU.IsExprBuilder sym
+                                 , CRUB.IsSymInterface sym
+                                 , A.Architecture arch
+                                 , ShowF (CRU.SymExpr sym)
+                                 , U.HasCallStack
+                                 , L.HasLogCfg )
+                              => sym
+                              -> FE.FormulaEnv sym arch
+                              -> FilePath
+                              -> IO (FE.FormulaEnv sym arch)
+loadDefinedFunctionsFromFiles sym env dir = do
+  let isFunctionFile f = snd (S.splitExtension f) == ".fun"
+  files <- filter isFunctionFile <$> S.listDirectory dir
+  -- TODO Allow functions to call other functions by somehow loading in
+  -- dependency order and adding to the environment as we go. For now, for
+  -- predictability's sake, we load everything in the initial environment.
+  funMap <- Map.fromList <$> mapM (loadFile env) files
+  return (env { FE.envFunctions = FE.envFunctions env `Map.union` funMap })
+  where
+    loadFile :: FE.FormulaEnv sym arch
+             -> FilePath
+             -> IO (String, (FE.SomeSome (CRU.SymFn sym), Some BaseTypeRepr))
+    loadFile env origFile = do
+      file <- S.canonicalizePath origFile
+      U.logIO U.Info $ "loading function file: "++file
+      ef <- FP.readDefinedFunctionFromFile sym env file
+      case ef of
+        Left err -> do
+          let msg = "Failed to parse function from " ++ file ++ ": " ++ err
+          L.logIO L.Error msg
+          error msg
+        Right (FE.SomeSome fun) ->
+          return (F.ffName fun,
+                  (FE.SomeSome (F.ffDef fun), Some (F.ffRetTypeRepr fun)))

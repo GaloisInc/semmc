@@ -213,14 +213,18 @@ newtype SemMD (t :: Phase) d a =
                     RWS.MonadState (SemMDState d))
 
 data SemMDState d = SemMDState { smdFormula :: Formula d
-                               , smdLibraryFunctions :: M.Map String LibraryFunction
+                               , smdLibraryFunctions :: M.Map String (LibraryFunction d)
                                }
 
 emptySemMDState :: SemMDState d
 emptySemMDState = SemMDState (newFormula "") M.empty
 
-data LibraryFunction = LibraryFunction
-  { lfName :: String }
+data LibraryFunction d = LibraryFunction
+  { lfName :: String
+  , lfArgs :: Seq.Seq (Some Parameter)
+  , lfBody :: Some Expr
+  , lfComment :: Seq.Seq String
+  , lfArchData :: Maybe d }
 
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
@@ -236,7 +240,7 @@ data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
 --
 -- The result is an association list from opcode name to the s-expression
 -- representing it.
-runSem :: SemMD 'Top d () -> ([(String, Definition)], M.Map String LibraryFunction)
+runSem :: SemMD 'Top d () -> ([(String, Definition)], M.Map String (LibraryFunction d))
 runSem act = (mkSExprs formulas, lfs)
   where (SemMDState _ lfs, formulas) = RWS.execRWS (unSem act) () emptySemMDState
     -- The initial dummy formula here is never used.  It is just a standin until
@@ -341,10 +345,10 @@ setArchData m'ad = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData 
 modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
 modifyArchData adf = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = adf (fArchData f) }) lfs)
 
-addLibraryFunction :: LibraryFunction -> SemMD t d ()
-addLibraryFunction lf@(LibraryFunction name) = do
+addLibraryFunction :: LibraryFunction d -> SemMD t d ()
+addLibraryFunction lf = do
   SemMDState f lfs <- RWS.get
-  RWS.put (SemMDState f (M.insert name lf lfs))
+  RWS.put (SemMDState f (M.insert (lfName lf) lf lfs))
 
 
 -- ----------------------------------------------------------------------
