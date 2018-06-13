@@ -9,10 +9,12 @@ module Data.Type.List (
   Reverse,
   Map,
   ToContext,
-  SameShape
+  SameShape,
+  toAssignment
   ) where
 
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.List as SL
 
 data TyFun :: k1 -> k2 -> *
 type family Apply (f :: TyFun k1 k2 -> *) (x :: k1) :: k2
@@ -33,3 +35,7 @@ type family ToContext (lst :: [k]) :: Ctx.Ctx k where
 
 type family SameShape args sh where
   SameShape args sh = args ~ ToContext (Reverse sh)
+
+toAssignment :: SL.List f lst -> Ctx.Assignment f (ToContext lst)
+toAssignment SL.Nil = Ctx.empty
+toAssignment (a SL.:< rest) = toAssignment rest `Ctx.extend` a

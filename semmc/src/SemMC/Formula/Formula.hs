@@ -27,6 +27,7 @@ module SemMC.Formula.Formula
   , validFormula
   , emptyFormula
   , coerceFormula
+  , FunctionFormula(..)
   ) where
 
 import           GHC.TypeLits ( Symbol )
@@ -43,6 +44,7 @@ import qualified What4.Interface as S
 import qualified What4.Expr.Builder as S
 import           What4.BaseTypes
 
+import           Data.Type.List ( ToContext )
 import qualified SemMC.Architecture.Internal as A
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.BoundVar as BV
@@ -258,4 +260,12 @@ coerceFormula f =
   Formula { formParamVars = formParamVars f
           , formDefs = formDefs f
           }
+
+-- TODO This is in the wrong place but putting it in Formula makes a dependency cycle
+data FunctionFormula sym arch (tps :: [BaseType]) tp =
+  FunctionFormula { ffName :: String
+                  , ffArgTypeReprs :: SL.List BaseTypeRepr tps
+                  , ffRetTypeRepr :: BaseTypeRepr tp
+                  , ffDef :: S.SymFn sym (ToContext tps) tp
+                  }
 
