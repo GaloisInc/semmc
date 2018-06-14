@@ -23,7 +23,6 @@ module SemMC.DSL (
   -- * Library functions
   ArgDef(..),
   LibraryFunction(..),
-  addLibraryFunction,
   defineLibraryFunction,
   -- * Operations
   (=:),
@@ -35,8 +34,8 @@ module SemMC.DSL (
   ite,
   cases,
   uf,
-  df,
   locUF,
+  df,
   unpackUF,
   unpackLocUF,
   -- * Logical operations
@@ -226,12 +225,6 @@ data SemMDState d = SemMDState { smdFormula :: Formula d
 emptySemMDState :: SemMDState d
 emptySemMDState = SemMDState (newFormula "") M.empty
 
-data LibraryFunction = LibraryFunction
-  { lfName :: String
-  , lfArgs :: Seq.Seq (Some Parameter)
-  , lfBody :: Some Expr
-  }
-
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
 type SemM (t :: Phase) a = SemMD t () a
@@ -247,8 +240,8 @@ data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
 -- The result is an association list from opcode name to the s-expression
 -- representing it.
 runSem :: SemMD 'Top d () -> ([(String, Definition)], M.Map String LibraryFunction)
-runSem act = (mkSExprs formulas, lfs)
-  where (SemMDState _ lfs, formulas) = RWS.execRWS (unSem act) () emptySemMDState
+runSem act = (mkSExprs formulas, smdLibraryFunctions state)
+  where (state, formulas) = RWS.execRWS (unSem act) () emptySemMDState
     -- The initial dummy formula here is never used.  It is just a standin until
     -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
     -- this will never be used since 'defineOpcode' handles adding the result to
@@ -351,23 +344,41 @@ setArchData m'ad = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData 
 modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
 modifyArchData adf = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = adf (fArchData f) }) lfs)
 
--- Like Parameter but not abstract
+data LibraryFunction = LibraryFunction
+  { lfName :: String
+  , lfArgs :: Seq.Seq (Some Parameter)
+  , lfBody :: Some Expr
+  }
+
+-- | An argument to a library function being defined
 data ArgDef tp = ArgDef String String (ExprTypeRepr tp)
 
-addLibraryFunction :: LibraryFunction -> SemMD t d ()
-addLibraryFunction lf = do
-  SemMDState f lfs <- RWS.get
-  RWS.put (SemMDState f (M.insert (lfName lf) lf lfs))
-
+-- | Create and register a library function, unless it has already been defined.
+-- The function's sexp will be emitted in a separate file.
+--
+-- Use defined functions for commonly-used sequences to cut down on file size in
+-- the output.
+--
+-- > defineLibraryFunction "frob" (Empty :> ArgDef "x" "int" EInt
+-- >                                     :> ArgDef "y" "float" EFloat) EBool $
+-- >   \(x :: Expr 'TInt) (y :: Expr 'TFloat) -> ... -- body returns Expr 'TBool
 defineLibraryFunction :: forall (args :: Ctx.Ctx ExprTag) tp t d
                        . (Ctx.CurryAssignmentClass args)
                       => String
+                      -- ^ The name of the function. If there is already a
+                      -- function with this name, 'defineLibraryFunction' does
+                      -- nothing.
                       -> Ctx.Assignment ArgDef args
+                      -- ^ The name and type for each argument to the function
                       -> ExprTypeRepr tp
+                      -- ^ The function's return type
                       -> Ctx.CurryAssignment args Expr (Expr tp)
+                      -- ^ A function from expressions representing the
+                      -- arguments to an expression for the body. The arity of
+                      -- the function is determined by @args@.
                       -> SemMD t d ()
 defineLibraryFunction name args _retType f = do
-  lfs <- RWS.gets smdLibraryFunctions
+  SemMDState form lfs <- RWS.get
   unless (name `M.member` lfs) $ do
     let params :: Ctx.Assignment Parameter args
         params = fmapFC (\(ArgDef name tpStr tpRepr) ->
@@ -376,9 +387,10 @@ defineLibraryFunction name args _retType f = do
         argExprs = fmapFC (\param -> Loc (ParamLoc param)) params
         body :: Expr tp
         body = Ctx.uncurryAssignment f argExprs
-    addLibraryFunction $ LibraryFunction { lfName = name
-                                         , lfArgs = Seq.fromList (toListFC Some params)
-                                         , lfBody = Some body }
+        lf = LibraryFunction { lfName = name
+                             , lfArgs = Seq.fromList (toListFC Some params)
+                             , lfBody = Some body }
+    RWS.put (SemMDState form (M.insert name lf lfs))
 
 -- ----------------------------------------------------------------------
 -- Expressions
@@ -387,13 +399,15 @@ defineLibraryFunction name args _retType f = do
 uf :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
 
--- | Allow for defined functions over expressions
-df :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
-df = DefinedFunc
-
--- | Allow for user-defined functions over locations
+-- | Allow for user-defined uninterpreted functions over locations
 locUF :: ExprTypeRepr tp -> String -> Location tp' -> Location tp
 locUF = LocationFunc
+
+-- | Allow for defined functions over expressions
+
+-- TODO Type safety?
+df :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
+df = DefinedFunc
 
 -- | Unpack a specific operand type using an architecture-specific
 -- uninterpreted function

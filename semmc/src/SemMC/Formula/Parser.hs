@@ -54,7 +54,7 @@ import qualified Lang.Crucible.Backend as S
 import qualified What4.Interface as S
 import           What4.Symbol ( userSymbol )
 
-import qualified Data.Type.List as DTL -- in this package
+import qualified Data.Type.List as TL -- in this package
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.BoundVar as BV
@@ -63,11 +63,13 @@ import           SemMC.Formula.Formula
 import           SemMC.Formula.SETokens
 import qualified SemMC.Util as U
 
--- TODO Can probably use some type-level combinator or another
 type family OperandTypes arch sh :: [BaseType] where
   OperandTypes arch '[] = '[]
   OperandTypes arch (s ': sh) = A.OperandType arch s ': OperandTypes arch sh
 
+-- | A counterpart to 'SemMC.Formula.Parameter' for use in the parser, where we
+-- might know only a parameter's base type (such as when parsing a defined
+-- function).
 data ParsedParameter arch (tps :: [BaseType]) (tp :: BaseType) where
   ParsedOperandParameter :: BaseTypeRepr tp -> SL.Index tps tp
                          -> ParsedParameter arch tps tp
@@ -89,8 +91,7 @@ data IndexByArchType arch sh tp where
   IndexByArchType :: A.OperandType arch s ~ tp => SL.Index sh s -> IndexByArchType arch sh tp
 
 -- TODO This is all very silly. It's an expensive identity function.
-indexByArchType :: forall proxy arch tp sh
-                 . proxy arch
+indexByArchType :: proxy arch
                 -> A.ShapeRepr arch sh
                 -> SL.Index (OperandTypes arch sh) tp
                 -> IndexByArchType arch sh tp
@@ -1085,7 +1086,7 @@ readDefinedFunction' sym env text = do
       " but found " ++ show actualTypeRepr
 
   let symbol = U.makeSymbol name
-      argVarAssignment = DTL.toAssignment argVarList
+      argVarAssignment = TL.toAssignment argVarList
       expand _args = False
 
   symFn <- liftIO $ S.definedFn sym symbol argVarAssignment body expand
