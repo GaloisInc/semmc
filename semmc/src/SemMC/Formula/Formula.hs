@@ -261,11 +261,10 @@ coerceFormula f =
           , formDefs = formDefs f
           }
 
--- TODO This is in the wrong place but putting it in Formula makes a dependency cycle
+-- | A formula representing a defined function.
 data FunctionFormula sym arch (tps :: [BaseType]) tp =
   FunctionFormula { ffName :: String
                   , ffArgTypeReprs :: SL.List BaseTypeRepr tps
                   , ffRetTypeRepr :: BaseTypeRepr tp
                   , ffDef :: S.SymFn sym (ToContext tps) tp
                   }
-
