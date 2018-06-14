@@ -8,15 +8,17 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
     )
     where
 
+import Data.Parameterized.Context
 import Data.Parameterized.Some
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
+import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import SemMC.DSL
 
 -- What4 only allows defined functions to return single values, so we have to
--- pack together the result and the NZCV bits into a single 36-bit vector. We 
+-- pack together the result and the NZCV bits into a single 36-bit vector.
 
 addWithCarry_impl :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
                   -> Expr 'TBV
@@ -39,7 +41,11 @@ addWithCarry' :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
               -> SemARM 'Def (Expr 'TBV)
                  -- ^ 32-bit result, NZCV result bits  (E1-2292 or F2-2423)
 addWithCarry' x y carry_in = do
-  --addLibraryFunction (LibraryFunction "addWithCarry")
+  defineLibraryFunction "addWithCarry" (Empty
+                                        :> ArgDef "x" gpr naturalBV
+                                        :> ArgDef "y" gpr naturalBV
+                                        :> ArgDef "carry_in" gpr naturalBV
+                                       ) (EBV 36) addWithCarry_impl
   return (DefinedFunc (EBV 36) "addWithCarry" [Some x, Some y, Some carry_in])
 
 addWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
