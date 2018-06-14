@@ -32,7 +32,7 @@ import SemMC.Architecture.PPC.Base.VSX
 -- Defs
 
 base :: BitSize -> [(String, Definition)]
-base bitSize = runSem $ do
+base bitSize = fst $ runSem $ do
   let ?bitSize = bitSize
   baseArithmetic
   baseBitwise
@@ -43,7 +43,7 @@ base bitSize = runSem $ do
   baseVSX
 
 pseudo :: BitSize -> [(String, Definition)]
-pseudo bitSize = runSem $ do
+pseudo bitSize = fst $ runSem $ do
   let ?bitSize = bitSize
   defineOpcode "Move" $ do
     target <- param "target" gprc naturalBV
@@ -75,7 +75,7 @@ pseudo bitSize = runSem $ do
   return ()
 
 manual :: BitSize -> [(String, Definition)]
-manual bitSize = runSem $ do
+manual bitSize = fst $ runSem $ do
   let ?bitSize = bitSize
   manualBranch
   manualMemory
