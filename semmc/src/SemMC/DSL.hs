@@ -4,6 +4,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | A DSL to help defining instruction semantics to populate the base set (and manual set)
 
@@ -19,7 +20,11 @@ module SemMC.DSL (
   getArchData,
   setArchData,
   modifyArchData,
+  -- * Library functions
+  ArgDef(..),
+  LibraryFunction(..),
   addLibraryFunction,
+  defineLibraryFunction,
   -- * Operations
   (=:),
   testBitDynamic,
@@ -84,14 +89,14 @@ module SemMC.DSL (
   runSem,
   Parameter,
   Definition,
-  printDefinition,
-  LibraryFunction(..)
+  printDefinition
   ) where
 
 import           GHC.Stack ( HasCallStack )
 
 import           Prelude hiding ( concat )
 
+import           Control.Monad
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
 import qualified Data.Map as M
@@ -101,7 +106,9 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Text.Printf ( printf )
 
+import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.TraversableFC ( fmapFC, toListFC )
 
 import           SemMC.DSL.Internal
 import           SemMC.Formula.SETokens ( FAtom(..), fromFoldable', printTokens
@@ -213,18 +220,17 @@ newtype SemMD (t :: Phase) d a =
                     RWS.MonadState (SemMDState d))
 
 data SemMDState d = SemMDState { smdFormula :: Formula d
-                               , smdLibraryFunctions :: M.Map String (LibraryFunction d)
+                               , smdLibraryFunctions :: M.Map String LibraryFunction
                                }
 
 emptySemMDState :: SemMDState d
 emptySemMDState = SemMDState (newFormula "") M.empty
 
-data LibraryFunction d = LibraryFunction
+data LibraryFunction = LibraryFunction
   { lfName :: String
   , lfArgs :: Seq.Seq (Some Parameter)
   , lfBody :: Some Expr
-  , lfComment :: Seq.Seq String
-  , lfArchData :: Maybe d }
+  }
 
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
@@ -240,7 +246,7 @@ data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
 --
 -- The result is an association list from opcode name to the s-expression
 -- representing it.
-runSem :: SemMD 'Top d () -> ([(String, Definition)], M.Map String (LibraryFunction d))
+runSem :: SemMD 'Top d () -> ([(String, Definition)], M.Map String LibraryFunction)
 runSem act = (mkSExprs formulas, lfs)
   where (SemMDState _ lfs, formulas) = RWS.execRWS (unSem act) () emptySemMDState
     -- The initial dummy formula here is never used.  It is just a standin until
@@ -345,11 +351,34 @@ setArchData m'ad = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData 
 modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
 modifyArchData adf = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = adf (fArchData f) }) lfs)
 
-addLibraryFunction :: LibraryFunction d -> SemMD t d ()
+-- Like Parameter but not abstract
+data ArgDef tp = ArgDef String String (ExprTypeRepr tp)
+
+addLibraryFunction :: LibraryFunction -> SemMD t d ()
 addLibraryFunction lf = do
   SemMDState f lfs <- RWS.get
   RWS.put (SemMDState f (M.insert (lfName lf) lf lfs))
 
+defineLibraryFunction :: forall (args :: Ctx.Ctx ExprTag) tp t d
+                       . (Ctx.CurryAssignmentClass args)
+                      => String
+                      -> Ctx.Assignment ArgDef args
+                      -> ExprTypeRepr tp
+                      -> Ctx.CurryAssignment args Expr (Expr tp)
+                      -> SemMD t d ()
+defineLibraryFunction name args _retType f = do
+  lfs <- RWS.gets smdLibraryFunctions
+  unless (name `M.member` lfs) $ do
+    let params :: Ctx.Assignment Parameter args
+        params = fmapFC (\(ArgDef name tpStr tpRepr) ->
+                           Parameter name tpStr tpRepr) args
+        argExprs :: Ctx.Assignment Expr args
+        argExprs = fmapFC (\param -> Loc (ParamLoc param)) params
+        body :: Expr tp
+        body = Ctx.uncurryAssignment f argExprs
+    addLibraryFunction $ LibraryFunction { lfName = name
+                                         , lfArgs = Seq.fromList (toListFC Some params)
+                                         , lfBody = Some body }
 
 -- ----------------------------------------------------------------------
 -- Expressions
