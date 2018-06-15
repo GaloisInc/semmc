@@ -2,6 +2,8 @@
 -- (page F4-2423) of the ARMv8 Architecture Reference Manual.
 
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
     ( addWithCarry
@@ -9,13 +11,17 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
     where
 
 import Data.Parameterized.Context
+import Data.Parameterized.NatRepr
 import Data.Parameterized.Some
+import qualified What4.BaseTypes as CRU
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import SemMC.DSL
+
+naturalBVBT :: CRU.BaseTypeRepr (CRU.BaseBVType NaturalBitSize)
+naturalBVBT = CRU.BaseBVRepr knownNat
 
 -- What4 only allows defined functions to return single values, so we have to
 -- pack together the result and the NZCV bits into a single 36-bit vector.
@@ -41,12 +47,14 @@ addWithCarry' :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
               -> SemARM 'Def (Expr 'TBV)
                  -- ^ 32-bit result, NZCV result bits  (E1-2292 or F2-2423)
 addWithCarry' x y carry_in = do
-  defineLibraryFunction "addWithCarry" (Empty
-                                        :> ArgDef "x" gpr naturalBV
-                                        :> ArgDef "y" gpr naturalBV
-                                        :> ArgDef "carry_in" gpr naturalBV
-                                       ) (EBV 36) addWithCarry_impl
-  return (DefinedFunc (EBV 36) "addWithCarry" [Some x, Some y, Some carry_in])
+  defineLibraryFunction "addWithCarry"
+    (Empty :> Arg "x" naturalBVBT naturalBV
+           :> Arg "y" naturalBVBT naturalBV
+           :> Arg "carry_in" naturalBVBT naturalBV)
+    (CRU.BaseBVRepr (knownNat @(NaturalBitSize + 4))) (EBV (naturalBitSize + 4))
+    addWithCarry_impl
+  return (DefinedFunc (EBV (naturalBitSize + 4)) "addWithCarry"
+          [Some x, Some y, Some carry_in])
 
 addWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
              -> SemARM 'Def (Expr 'TBV, Expr 'TBV)

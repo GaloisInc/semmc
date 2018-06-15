@@ -8,9 +8,12 @@ import Data.Word
 import SemMC.DSL
 
 
--- | All ARM registers are 32-bits wide for both A32 and T32.
+-- | All ARM registers are 32 bits wide for both A32 and T32.
 naturalBitSize :: Num a => a
 naturalBitSize = 32
+
+-- | Type-level 'naturalBitSize'
+type NaturalBitSize = 32
 
 -- | A zero value of the full register width
 naturalZero :: Word32

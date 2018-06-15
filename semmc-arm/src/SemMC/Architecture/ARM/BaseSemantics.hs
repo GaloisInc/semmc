@@ -13,7 +13,7 @@ import SemMC.DSL
 
 
 -- TODO: Change this value type from a pair to something nicer
-semdefs :: [ (String, ([(String, Definition)], M.Map String LibraryFunction)) ]
+semdefs :: [ (String, ([(String, Definition)], [(String, FunctionDefinition)])) ]
 semdefs = [ ("memory", memory)
           , ("arithmetic", arithmetic)
           , ("bitwise", bitwise)
@@ -21,25 +21,22 @@ semdefs = [ ("memory", memory)
           , ("miscellaneous", misc)
           ]
 
-memory :: ([(String, Definition)], M.Map String LibraryFunction)
+memory, arithmetic, bitwise, branches, misc
+  :: ([(String, Definition)], [(String, FunctionDefinition)])
 memory = runSem $ do
             manualMemory
             return ()
 
-arithmetic :: ([(String, Definition)], M.Map String LibraryFunction)
 arithmetic = runSem $ do
              manualArithmetic
              return ()
 
-bitwise :: ([(String, Definition)], M.Map String LibraryFunction)
 bitwise = runSem $ do
             manualBitwise
             return ()
 
-branches :: ([(String, Definition)], M.Map String LibraryFunction)
 branches = runSem $ do
              manualBranches
              return ()
 
-misc :: ([(String, Definition)], M.Map String LibraryFunction)
 misc = runSem miscSemantics
