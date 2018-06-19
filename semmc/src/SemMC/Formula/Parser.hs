@@ -172,7 +172,7 @@ buildArgumentList' sexpr =
     SC.SAtom _ -> E.throwError $ "Expected SNil or SCons but got SAtom: " ++ show sexpr
     SC.SCons s rest -> do
       (operand, tyRaw) <- case s of
-        SC.SCons (SC.SAtom (AIdent operand)) ty
+        SC.SCons (SC.SAtom (AIdent operand)) (SC.SCons ty SC.SNil)
           -> return (operand, ty)
         _ -> E.throwError $ "Expected (operand . 'type) pair: " ++ show s
       Some tp <- readBaseType tyRaw
@@ -1028,7 +1028,7 @@ readDefinedFunction' :: forall sym arch m.
                      => sym
                      -> FormulaEnv sym arch
                      -> T.Text
-                     -> m (SomeSome (FunctionFormula sym arch))
+                     -> m (Some (FunctionFormula sym))
 readDefinedFunction' sym env text = do
   sexpr <- case parseLL text of
              Left err -> E.throwError err
@@ -1036,7 +1036,7 @@ readDefinedFunction' sym env text = do
   let firstLine = show $ fmap T.unpack $ take 1 $ T.lines text
   liftIO $ U.logIO U.Info $
     "readDefinedFunction' of " ++ (show $ T.length text) ++ " bytes " ++ firstLine
-  -- Extract the raw s-expressions for the three components.
+  -- Extract the raw s-expressions for the four components.
   (name, argsRaw, retTypeRaw, bodyRaw) <- case sexpr of
     SC.SCons (SC.SCons (SC.SAtom (AIdent "function"))
               (SC.SCons (SC.SAtom (AIdent name)) SC.SNil))
@@ -1090,10 +1090,10 @@ readDefinedFunction' sym env text = do
       expand _args = False
 
   symFn <- liftIO $ S.definedFn sym symbol argVarAssignment body expand
-  return $ SomeSome (FunctionFormula { ffName = name
-                                     , ffArgTypeReprs = argTypeReprs
-                                     , ffRetTypeRepr = retTypeRepr
-                                     , ffDef = symFn })
+  return $ Some (FunctionFormula { ffName = name
+                                 , ffArgTypeReprs = argTypeReprs
+                                 , ffRetTypeRepr = retTypeRepr
+                                 , ffDef = symFn })
 
 -- | Parse the definition of a templated formula.
 readDefinedFunction :: (S.IsExprBuilder sym,
@@ -1104,7 +1104,7 @@ readDefinedFunction :: (S.IsExprBuilder sym,
                     => sym
                     -> FormulaEnv sym arch
                     -> T.Text
-                    -> IO (Either String (SomeSome (FunctionFormula sym arch)))
+                    -> IO (Either String (Some (FunctionFormula sym)))
 readDefinedFunction sym env text = E.runExceptT $ readDefinedFunction' sym env text
 
 -- | Read a defined function definition from a file, then parse it.
@@ -1116,7 +1116,7 @@ readDefinedFunctionFromFile :: (S.IsExprBuilder sym,
                     => sym
                     -> FormulaEnv sym arch
                     -> FilePath
-                    -> IO (Either String (SomeSome (FunctionFormula sym arch)))
+                    -> IO (Either String (Some (FunctionFormula sym)))
 readDefinedFunctionFromFile sym env fp = do
   liftIO $ U.logIO U.Info $ "readDefinedFunctionFromFile " ++ fp
   readDefinedFunction sym env =<< T.readFile fp

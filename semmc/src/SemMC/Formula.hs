@@ -32,6 +32,13 @@ module SemMC.Formula
   , formulasEquivSym
   , checkSatZ3
 
+  -- * Functions and libraries
+  , FunctionFormula(..)
+  , FunctionRef(..)
+  , functionRef
+  , Library
+  , emptyLibrary
+
     -- * SemMC.Formula.Env
   , FormulaEnv(..)
 
@@ -57,6 +64,11 @@ import SemMC.Formula.Formula
   , paramType
   , WrappedOperand(..)
   , LocationFuncInterp(..)
+  , FunctionFormula(..)
+  , FunctionRef(..)
+  , functionRef
+  , Library
+  , emptyLibrary
   )
 import SemMC.Formula.Env ( FormulaEnv(..) )
 import SemMC.Formula.Instantiate ( instantiateFormula,
