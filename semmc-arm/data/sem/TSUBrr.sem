@@ -1,6 +1,6 @@
 ;; SUB (register), T32, encoding T1 (F7.1.236, F7-2918)
 (let
- ((var3
+ ((var6
   (ite
    (testCondition)
    (ite
@@ -31,12 +31,56 @@
       rD)
      rD
      ((_ extract 31 0)
-      ((_ call "df.addWithCarry")
-       rN
-       (bvnot
-        (shiftC))
-       #x00000001))))
+      (concat
+       (addResult)
+       var3))))
    rD))
+  (var3
+   ((addCarry)))
+  (addCarry
+   (concat
+    ((_ extract 31 31)
+     ((_ extract 31 0)
+      (bvadd
+       (bvadd
+        ((_ zero_extend 1)
+         rN)
+        (bvnot
+         (shiftC)))
+       ((_ zero_extend 1)
+        #x00000001))))
+    (concat
+     (var2)
+     (concat
+      ((_ extract 32 32)
+       (bvadd
+        (bvadd
+         ((_ zero_extend 1)
+          rN)
+         (bvnot
+          (shiftC)))
+        ((_ zero_extend 1)
+         #x00000001)))
+      (bvand
+       ((_ extract 31 31)
+        ((_ extract 31 0)
+         (bvadd
+          (bvadd
+           ((_ zero_extend 1)
+            rN)
+           (bvnot
+            (shiftC)))
+          ((_ zero_extend 1)
+           #x00000001))))
+       ((_ extract 32 32)
+        (bvadd
+         (bvadd
+          ((_ zero_extend 1)
+           rN)
+          (bvnot
+           (shiftC)))
+         ((_ zero_extend 1)
+          #x00000001))))))))
   (shiftC
    (ite
     (bveq
@@ -171,6 +215,31 @@
     ((_ zero_extend 1)
      ((_ extract 31 0)
       (immShift)))))
+  (var2
+   (ite
+    (bveq
+     ((_ extract 31 0)
+      (bvadd
+       (bvadd
+        ((_ zero_extend 1)
+         rN)
+        (bvnot
+         (shiftC)))
+       ((_ zero_extend 1)
+        #x00000001)))
+     #x00000000)
+    #b1
+    #b0))
+  (addResult
+   ((_ extract 31 0)
+    (bvadd
+     (bvadd
+      ((_ zero_extend 1)
+       rN)
+      (bvnot
+       (shiftC)))
+     ((_ zero_extend 1)
+      #x00000001))))
   (testCondition
    (ite
     (andp
@@ -212,59 +281,59 @@
        #b1
        ((_ extract 31 31)
         'CPSR))
-      (var1)))))
+      (ite
+       (bveq
+        ((_ extract 3 1)
+         (ITState))
+        #b011)
+       (bveq
+        #b1
+        ((_ extract 28 28)
+         'CPSR))
+       (var1))))))
   (var1
    (ite
     (bveq
      ((_ extract 3 1)
       (ITState))
-     #b011)
-    (bveq
-     #b1
-     ((_ extract 28 28)
-      'CPSR))
+     #b100)
+    (andp
+     (bveq
+      #b1
+      ((_ extract 29 29)
+       'CPSR))
+     (notp
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        'CPSR))))
     (ite
      (bveq
       ((_ extract 3 1)
        (ITState))
-      #b100)
-     (andp
-      (bveq
-       #b1
-       ((_ extract 29 29)
-        'CPSR))
-      (notp
-       (bveq
-        #b1
-        ((_ extract 30 30)
-         'CPSR))))
+      #b101)
+     (bveq
+      ((_ extract 31 31)
+       'CPSR)
+      ((_ extract 28 28)
+       'CPSR))
      (ite
       (bveq
        ((_ extract 3 1)
         (ITState))
-       #b101)
-      (bveq
-       ((_ extract 31 31)
-        'CPSR)
-       ((_ extract 28 28)
-        'CPSR))
-      (ite
+       #b110)
+      (andp
        (bveq
-        ((_ extract 3 1)
-         (ITState))
-        #b110)
-       (andp
+        ((_ extract 31 31)
+         'CPSR)
+        ((_ extract 28 28)
+         'CPSR))
+       (notp
         (bveq
-         ((_ extract 31 31)
-          'CPSR)
-         ((_ extract 28 28)
-          'CPSR))
-        (notp
-         (bveq
-          #b1
-          ((_ extract 30 30)
-           'CPSR))))
-       (true))))))
+         #b1
+         ((_ extract 30 30)
+          'CPSR))))
+      (true)))))
   (true
    (bveq #b0 #b0))
   (ITState
@@ -279,14 +348,15 @@
     #xe
     ((_ extract 15 12)
      'CPSR)))
-  (var2
+  (var4
+   ((var5)
+    'CPSR))
+  (var5
    (concat
     ((_ extract 35 32)
-     ((_ call "df.addWithCarry")
-      rN
-      (bvnot
-       (shiftC))
-      #x00000001))
+     (concat
+      (addResult)
+      var3))
     ((_ extract 27 0)
      'CPSR)))
   (branchWritePC
@@ -296,11 +366,9 @@
     (bvand
      #xfffffffd
      ((_ extract 31 0)
-      ((_ call "df.addWithCarry")
-       rN
-       (bvnot
-        (shiftC))
-       #x00000001)))
+      (concat
+       (addResult)
+       var3)))
     (bvadd 'PC #x00000002))))
  ((operands
   ((rD . 'TGPR)
@@ -349,8 +417,7 @@
             rN))
           ((_ call "uf.arm.is_r15")
            rM))))
-       (var2)
-       'CPSR)
+       var4)
       'CPSR))
     (rD
-     (var3))))))
+     (var6))))))

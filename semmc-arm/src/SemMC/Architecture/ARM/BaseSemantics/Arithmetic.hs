@@ -787,7 +787,7 @@ tsubrr rD rN rM undef setflags = do
   let (_, _, c, _) = getNZCV
       (shift_t, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 0) (LitBV 5 0)
       shifted = shiftC (Loc rM) shift_t shift_n c
-  (result, nzcv) <- addWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
+      (result, nzcv) = inlineAddWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
 
   aluWritePC (isR15 rD) result
   defReg rD (ite undef (unpredictable (Loc rD))

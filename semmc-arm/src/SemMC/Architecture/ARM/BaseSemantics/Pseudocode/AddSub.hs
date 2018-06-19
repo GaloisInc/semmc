@@ -7,6 +7,7 @@
 
 module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
     ( addWithCarry
+    , inlineAddWithCarry
     )
     where
 
@@ -43,22 +44,27 @@ addWithCarry_impl x y carry_in =
     in concat ("addResult" =: res) ("addCarry" =: nzcv)
 
 -- | Pseudocode AddWithCarry (E1-2292 or F2-2423)
-addWithCarry' :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-              -> SemARM 'Def (Expr 'TBV)
+addWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+             -> SemARM 'Def (Expr 'TBV, Expr 'TBV)
                  -- ^ 32-bit result, NZCV result bits  (E1-2292 or F2-2423)
-addWithCarry' x y carry_in = do
+addWithCarry x y carry_in = do
   defineLibraryFunction "addWithCarry"
     (Empty :> Arg "x" naturalBVBT naturalBV
            :> Arg "y" naturalBVBT naturalBV
            :> Arg "carry_in" naturalBVBT naturalBV)
     (CRU.BaseBVRepr (knownNat @(NaturalBitSize + 4))) (EBV (naturalBitSize + 4))
     addWithCarry_impl
-  return (DefinedFunc (EBV (naturalBitSize + 4)) "addWithCarry"
-          [Some x, Some y, Some carry_in])
-
-addWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-             -> SemARM 'Def (Expr 'TBV, Expr 'TBV)
-addWithCarry x y carry_in = do
-  res_nzcv <- addWithCarry' x y carry_in
+  let res_nzcv =
+        DefinedFunc (EBV (naturalBitSize + 4)) "addWithCarry"
+          [Some x, Some y, Some carry_in]
   return (extract 31 0 res_nzcv, extract 35 32 res_nzcv)
 
+-- | Version of 'addWithCarry' that inlines the addition code into the formula
+-- rather than relying on a defined function. Useful when one of the operands
+-- is actually a 33-bit value, which isn't allowed by the static type of
+-- the 'addWithCarry' defined function.
+inlineAddWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+                   -> (Expr 'TBV, Expr 'TBV)
+inlineAddWithCarry x y carry_in =
+  let res_nzcv = addWithCarry_impl x y carry_in in
+  (extract 31 0 res_nzcv, extract 35 32 res_nzcv)

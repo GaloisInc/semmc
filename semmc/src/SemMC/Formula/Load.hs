@@ -8,6 +8,8 @@
 module SemMC.Formula.Load (
   loadFormulas,
   loadFormulasFromFiles,
+  loadLibrary,
+  loadLibraryFromFiles,
   FormulaParseError(..)
   ) where
 
@@ -24,6 +26,7 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.Pair as Pair
 import           Data.Parameterized.Some ( Some(..) )
 import           What4.BaseTypes
 
@@ -76,11 +79,12 @@ loadFormulas :: forall sym arch a
                   , U.HasCallStack
                   , L.HasLogCfg )
                 => sym
+             -> F.Library sym
              -> [(Some a, BS.ByteString)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulas sym contents = do
-  env <- formulaEnv (Proxy @arch) sym
-  -- TODO load functions, presumably from a new argument
+loadFormulas sym lib contents = do
+  initEnv <- formulaEnv (Proxy @arch) sym
+  let env = FE.addLibrary initEnv lib
   F.foldlM (parseFormulaBS env) MapF.empty contents
   where
     parseFormulaBS :: FE.FormulaEnv sym arch
@@ -121,15 +125,13 @@ loadFormulasFromFiles :: forall sym arch a
                          , U.HasCallStack
                          , L.HasLogCfg )
                       => sym
+                      -> F.Library sym
                       -> (forall sh' . a sh' -> FilePath)
                       -> [Some a]
-                      -> Maybe FilePath
                       -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulasFromFiles sym toFP shapes funDir = do
+loadFormulasFromFiles sym lib toFP shapes = do
   initEnv <- formulaEnv (Proxy @arch) sym
-  env <- case funDir of
-    Just dir -> loadDefinedFunctionsFromFiles sym initEnv dir
-    Nothing -> return initEnv
+  let env = FE.addLibrary initEnv lib
   F.foldlM (\m (Some (op :: a sh)) -> addIfJust (readFormulaForOpcode env) m op) MapF.empty shapes
   where
     readFormulaForOpcode :: FE.FormulaEnv sym arch
@@ -161,29 +163,61 @@ addIfJust f m a = do
     Nothing -> return m
     Just val -> return (MapF.insert a val m)
 
-loadDefinedFunctionsFromFiles :: forall sym arch
-                               . ( CRU.IsExprBuilder sym
-                                 , CRUB.IsSymInterface sym
-                                 , A.Architecture arch
-                                 , ShowF (CRU.SymExpr sym)
-                                 , U.HasCallStack
-                                 , L.HasLogCfg )
-                              => sym
-                              -> FE.FormulaEnv sym arch
-                              -> FilePath
-                              -> IO (FE.FormulaEnv sym arch)
-loadDefinedFunctionsFromFiles sym env dir = do
-  let isFunctionFile f = snd (S.splitExtension f) == ".fun"
-  files <- filter isFunctionFile <$> S.listDirectory dir
+-- | Load library when contents are already held in memory.
+--
+-- This will throw an exception if any of the strings is malformed
+loadLibrary :: forall sym arch
+             . ( CRU.IsExprBuilder sym
+               , CRUB.IsSymInterface sym
+               , A.Architecture arch
+               , ShowF (CRU.SymExpr sym)
+               , U.HasCallStack
+               , L.HasLogCfg )
+            => Proxy arch
+            -> sym
+            -> [(String, BS.ByteString)]
+            -> IO (F.Library sym)
+loadLibrary proxy sym contents = do
   -- TODO Allow functions to call other functions by somehow loading in
   -- dependency order and adding to the environment as we go. For now, for
   -- predictability's sake, we load everything in the initial environment.
-  funMap <- Map.fromList <$> mapM (loadFile env) files
-  return (env { FE.envFunctions = FE.envFunctions env `Map.union` funMap })
+  env <- formulaEnv proxy sym
+  MapF.fromList <$> mapM (parseFunctionBS env) contents
+  where
+    parseFunctionBS :: FE.FormulaEnv sym arch
+                    -> (String, BS.ByteString)
+                    -> IO (Pair.Pair F.FunctionRef (F.FunctionFormula sym))
+    parseFunctionBS env (name, bs) = do
+      U.logIO U.Info $ "reading formula for defined function " ++ show name
+      ef <- FP.readDefinedFunction sym env (T.decodeUtf8 bs)
+      case ef of
+        Right (Some ff) ->
+          return $ Pair.Pair (F.functionRef ff) ff
+        Left e -> E.throwIO (FormulaParseError name e)
+
+loadLibraryFromFiles :: forall sym arch
+                      . ( CRU.IsExprBuilder sym
+                        , CRUB.IsSymInterface sym
+                        , A.Architecture arch
+                        , ShowF (CRU.SymExpr sym)
+                        , U.HasCallStack
+                        , L.HasLogCfg )
+                     => Proxy arch
+                     -> sym
+                     -> FilePath
+                     -> IO (F.Library sym)
+loadLibraryFromFiles proxy sym dir = do
+  let isFunctionFile f = snd (S.splitExtension f) == ".fun"
+  files <- filter isFunctionFile <$> S.listDirectory dir
+  env <- formulaEnv proxy sym
+  -- TODO Allow functions to call other functions by somehow loading in
+  -- dependency order and adding to the environment as we go. For now, for
+  -- predictability's sake, we load everything in the initial environment.
+  MapF.fromList <$> mapM (loadFile env) files
   where
     loadFile :: FE.FormulaEnv sym arch
              -> FilePath
-             -> IO (String, (FE.SomeSome (CRU.SymFn sym), Some BaseTypeRepr))
+             -> IO (Pair.Pair F.FunctionRef (F.FunctionFormula sym))
     loadFile env origFile = do
       file <- S.canonicalizePath origFile
       U.logIO U.Info $ "loading function file: "++file
@@ -193,6 +227,5 @@ loadDefinedFunctionsFromFiles sym env dir = do
           let msg = "Failed to parse function from " ++ file ++ ": " ++ err
           L.logIO L.Error msg
           error msg
-        Right (FE.SomeSome fun) ->
-          return (F.ffName fun,
-                  (FE.SomeSome (F.ffDef fun), Some (F.ffRetTypeRepr fun)))
+        Right (Some fun) ->
+          return $ Pair.Pair (F.functionRef fun) fun

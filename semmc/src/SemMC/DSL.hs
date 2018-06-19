@@ -85,6 +85,8 @@ module SemMC.DSL (
   SemMD,
   Phase(..),
   runSem,
+  evalSem,
+  gather,
   Parameter,
   Definition,
   printDefinition,
@@ -226,6 +228,10 @@ data SemMDState d = SemMDState { smdFormula :: Formula d
 
 emptySemMDState :: SemMDState d
 emptySemMDState = SemMDState (newFormula "") M.empty
+    -- The initial dummy formula here is never used.  It is just a standin until
+    -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
+    -- this will never be used since 'defineOpcode' handles adding the result to
+    -- the writer output.
 
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
@@ -240,21 +246,27 @@ data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
 data FunctionDefinition = FunctionDefinition (SC.SExpr FAtom)
   deriving (Show)
 
--- | Run a semantics defining action and return the defined formulas and any
+-- | Run a semantics-defining action and return the defined formulas and any
 -- library functions required.
 --
 -- The result is an association list from opcode name to the s-expression
 -- representing it, plus an association list from function name to its
 -- s-expression.
 runSem :: SemMD 'Top d () -> ([(String, Definition)], [(String, FunctionDefinition)])
-runSem act = (mkSExprs formulas, mkFunSExprs (smdLibraryFunctions state))
-  where (state, formulas) = RWS.execRWS (unSem act) () emptySemMDState
-    -- The initial dummy formula here is never used.  It is just a standin until
-    -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
-    -- this will never be used since 'defineOpcode' handles adding the result to
-    -- the writer output.
+runSem act = (defs, funDefs)
+  where (_, defs, funDefs) = evalSem act
 
+-- | Run a semantics-defining action and return the defined formulas and library
+-- functions, along with anything returned by the action itself.
+evalSem :: SemMD 'Top d a -> (a, [(String, Definition)], [(String, FunctionDefinition)])
+evalSem act = (a, mkSExprs formulas, mkFunSExprs (smdLibraryFunctions state))
+  where (a, state, formulas) = RWS.runRWS (unSem act) () emptySemMDState
 
+-- | Return the formulas defined by an action without propagating them outward.
+gather :: SemMD 'Top d () -> SemMD 'Top d [(String, Definition)]
+gather act = SemM $ RWS.mapRWS moveFormulas $ unSem act
+  where
+    moveFormulas (~(), state, formulas) = (mkSExprs formulas, state, Seq.empty)
 -- | Define an opcode with a given name.
 --
 -- The body is executed to produce a definition.
@@ -762,13 +774,15 @@ mkFunSExprs = map funToSExpr . M.elems
 funToSExpr :: LibraryFunction -> (String, FunctionDefinition)
 funToSExpr lf = (lfName lf, FunctionDefinition sexpr)
   where
-    sexpr = extractFunSExpr (F.toList (lfArgs lf)) (lfRetBaseType lf) (lfBody lf)
+    sexpr = extractFunSExpr (lfName lf) (F.toList (lfArgs lf)) (lfRetBaseType lf) (lfBody lf)
 
-extractFunSExpr :: [Some Argument] -> Some CRU.BaseTypeRepr -> Some Expr -> SC.SExpr FAtom
-extractFunSExpr args (Some retType) (Some body) =
-  fromFoldable' [ SC.SCons (SC.SAtom (AIdent "arguments")) (SC.SCons (convertArguments args) SC.SNil)
-                , SC.SCons (SC.SAtom (AIdent "return")) (SC.SCons (convertBaseType retType) SC.SNil)
-                , SC.SCons (SC.SAtom (AIdent "body")) (SC.SCons (convertExpr (Some body)) SC.SNil)
+extractFunSExpr :: String -> [Some Argument] -> Some CRU.BaseTypeRepr
+                -> Some Expr -> SC.SExpr FAtom
+extractFunSExpr name args (Some retType) (Some body) =
+  fromFoldable' [ fromFoldable' [ ident "function", ident name ]
+                , fromFoldable' [ ident "arguments", convertArguments args ]
+                , fromFoldable' [ ident "return", convertBaseType retType ]
+                , fromFoldable' [ ident "body", convertExpr (Some body) ]
                 ]
 
 -- Subtle difference between this and 'convertOperands': Here we output the
@@ -777,8 +791,8 @@ convertArguments :: [Some Argument] -> SC.SExpr FAtom
 convertArguments =
   fromFoldable' . map argToDecl
   where
-    argToDecl (Some (Arg name baseType _)) = SC.SCons (ident name) (convertBaseType baseType)
-
+    argToDecl (Some (Arg name baseType _)) =
+      fromFoldable' [ ident name, convertBaseType baseType ]
 convertBaseType :: CRU.BaseTypeRepr tp -> SC.SExpr FAtom
 convertBaseType repr =
   case repr of
