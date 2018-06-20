@@ -74,14 +74,6 @@ data ParsedParameter arch (tps :: [BaseType]) (tp :: BaseType) where
   ParsedOperandParameter :: BaseTypeRepr tp -> SL.Index tps tp
                          -> ParsedParameter arch tps tp
   ParsedLiteralParameter :: L.Location arch tp -> ParsedParameter arch tps tp
-  ParsedFunctionParameter :: String
-                          -> ParsedWrappedOperand tps tp
-                          -> BaseTypeRepr tp
-                          -> ParsedParameter arch tps tp
-
-data ParsedWrappedOperand tps tp where
-  ParsedWrappedOperand :: BaseTypeRepr tp -> SL.Index tps tp
-                       -> ParsedWrappedOperand tps tp
 
 -- Translating from 'SL.Index' on 'BaseType' to 'SL.Index' on 'Symbol' is
 -- tricky.  Need this view to show that when we translate some @SL.Index tps tp@
@@ -110,10 +102,6 @@ toParameter shapeRepr (ParsedOperandParameter tpRepr ix) =
     IndexByArchType ix' -> OperandParameter tpRepr ix'
 toParameter _ (ParsedLiteralParameter loc) =
   LiteralParameter loc
-toParameter shapeRepr (ParsedFunctionParameter name (ParsedWrappedOperand opTpRepr ix) retTpRepr) =
-  case indexByArchType (Proxy @arch) shapeRepr ix of
-    IndexByArchType ix' ->
-      FunctionParameter name (WrappedOperand opTpRepr ix') retTpRepr
 
 -- * First pass of parsing turns the raw text into s-expressions.
 --   This pass is handled by the code in SemMC.Formula.SELang
@@ -791,7 +779,6 @@ readExpr (SC.SAtom paramRaw) = do
     Some (ParsedOperandParameter _ idx) -> return . Some . S.varExpr sym $ (opVars SL.!! idx)
     Some (ParsedLiteralParameter lit) -> maybe (E.throwError ("not declared as input but saw unknown literal param: " ++ showF lit))
                                    (return . Some) $ litLookup lit
-    Some (ParsedFunctionParameter fname _ _) -> E.throwError ("Functions cannot appear as atoms: " ++ fname)
 readExpr (SC.SCons opRaw argsRaw) = do
   -- This is a function application.
   args <- readExprs argsRaw
@@ -954,7 +941,6 @@ readFormula' sym env repr text = do
                      -> m (MapF.MapF (A.Location arch) (S.BoundVar sym))
       buildLitVarMap (Some (ParsedLiteralParameter loc)) m = (\v -> MapF.insert loc v m) <$> mkLiteralVar (A.locationType loc) loc
       buildLitVarMap (Some (ParsedOperandParameter _ _))        m = return m
-      buildLitVarMap (Some (ParsedFunctionParameter {}))        m = return m
 
   litVars :: MapF.MapF (A.Location arch) (S.BoundVar sym)
     <- foldrM buildLitVarMap MapF.empty inputs
@@ -1080,7 +1066,7 @@ readDefinedFunction' sym env text = do
       " but found " ++ show actualTypeRepr
 
   let symbol = U.makeSymbol name
-      argVarAssignment = TL.toAssignment argVarList
+      argVarAssignment = TL.toAssignmentFwd argVarList
       expand _args = False
 
   symFn <- liftIO $ S.definedFn sym symbol argVarAssignment body expand
