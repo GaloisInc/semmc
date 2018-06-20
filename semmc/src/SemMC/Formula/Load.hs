@@ -55,8 +55,6 @@ formulaEnv proxy sym = do
     toUF :: (String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)
          -> IO (String, (FE.SomeSome (CRU.SymFn sym), Some BaseTypeRepr))
     toUF (name, Some args, retRep@(Some ret)) = do
-      -- uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol ("uf." ++ name)) args ret
-      -- return (("uf." ++ name), (uf, retRep))
       uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol ("uf." ++ name)) args ret
       return (("uf." ++ name), (uf, retRep))
 

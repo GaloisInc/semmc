@@ -63,9 +63,9 @@ import           SemMC.Formula.Formula
 import           SemMC.Formula.SETokens
 import qualified SemMC.Util as U
 
-type family OperandTypes arch sh :: [BaseType] where
-  OperandTypes arch '[] = '[]
-  OperandTypes arch (s ': sh) = A.OperandType arch s ': OperandTypes arch sh
+data OperandTypeWrapper (arch :: *) :: TL.TyFun Symbol BaseType -> *
+type instance TL.Apply (OperandTypeWrapper arch) s = A.OperandType arch s
+type OperandTypes arch sh = TL.Map (OperandTypeWrapper arch) sh
 
 -- | A counterpart to 'SemMC.Formula.Parameter' for use in the parser, where we
 -- might know only a parameter's base type (such as when parsing a defined
@@ -83,10 +83,10 @@ data ParsedWrappedOperand tps tp where
   ParsedWrappedOperand :: BaseTypeRepr tp -> SL.Index tps tp
                        -> ParsedWrappedOperand tps tp
 
--- Translating from `SL.Index` on `BaseType` to `SL.Index` on `Symbol` is
--- tricky.  Need this view to show that when we translate some `SL.Index tps tp`
--- to an `SL.Index sh s`, the symbol `s` maps to the base type `tp` (assuming
--- that `tps ~ OperandTypes arch sh`).
+-- Translating from 'SL.Index' on 'BaseType' to 'SL.Index' on 'Symbol' is
+-- tricky.  Need this view to show that when we translate some @SL.Index tps tp@
+-- to an @SL.Index sh s@, the symbol @s@ maps to the base type @tp@ (assuming
+-- that @tps ~ OperandTypes arch sh@).
 data IndexByArchType arch sh tp where
   IndexByArchType :: A.OperandType arch s ~ tp => SL.Index sh s -> IndexByArchType arch sh tp
 
@@ -970,15 +970,9 @@ readFormula' sym env repr text = do
   let finalInputs :: [Some (Parameter arch sh)]
       finalInputs = mapSome (toParameter repr) <$> inputs
       finalOpVarList :: SL.List (BV.BoundVar sym arch) sh
-      finalOpVarList = go repr opVarList
-        where
-          -- TODO Should probably use a combinator of some kind but I couldn't find one that types
-          go :: forall sh
-              . A.ShapeRepr arch sh
-             -> SL.List (S.BoundVar sym) (OperandTypes arch sh)
-             -> SL.List (BV.BoundVar sym arch) sh
-          go SL.Nil SL.Nil = SL.Nil
-          go (_ SL.:< repr') (var SL.:< vars) = BV.BoundVar var SL.:< go repr' vars
+      finalOpVarList =
+        -- Wrap each operand variable using 'BV.BoundVar'
+        TL.mapFromMapped (Proxy @(OperandTypeWrapper arch)) BV.BoundVar repr opVarList
 
   return $
     ParameterizedFormula { pfUses = Set.fromList finalInputs
