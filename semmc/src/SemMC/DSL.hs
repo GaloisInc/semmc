@@ -797,7 +797,8 @@ convertBaseType :: CRU.BaseTypeRepr tp -> SC.SExpr FAtom
 convertBaseType repr =
   case repr of
     CRU.BaseBoolRepr -> quoted "bool"
-    CRU.BaseBVRepr n -> fromFoldable' [quoted "bv", int (fromIntegral (CRU.natValue n))]
+    CRU.BaseBVRepr n ->
+      fromFoldable' [ quoted "bv", int (fromIntegral (CRU.natValue n)) ]
     CRU.BaseNatRepr -> quoted "nat"
     CRU.BaseIntegerRepr -> quoted "int"
     CRU.BaseRealRepr -> quoted "real"
