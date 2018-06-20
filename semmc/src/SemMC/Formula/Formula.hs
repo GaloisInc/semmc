@@ -49,7 +49,7 @@ import qualified What4.Interface as S
 import qualified What4.Expr.Builder as S
 import           What4.BaseTypes
 
-import           Data.Type.List ( ToContext )
+import           Data.Type.List ( ToContextFwd )
 import qualified SemMC.Architecture.Internal as A
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.BoundVar as BV
@@ -271,7 +271,7 @@ data FunctionFormula sym (sig :: ([BaseType], BaseType)) where
   FunctionFormula :: { ffName :: String
                      , ffArgTypeReprs :: SL.List BaseTypeRepr tps
                      , ffRetTypeRepr :: BaseTypeRepr tp
-                     , ffDef :: S.SymFn sym (ToContext tps) tp
+                     , ffDef :: S.SymFn sym (ToContextFwd tps) tp
                      } -> FunctionFormula sym '(tps, tp)
 
 data FunctionRef (sig :: ([BaseType], BaseType)) where

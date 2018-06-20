@@ -788,6 +788,9 @@ tsubrr rD rN rM undef setflags = do
       (shift_t, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 0) (LitBV 5 0)
       shifted = shiftC (Loc rM) shift_t shift_n c
       (result, nzcv) = inlineAddWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
+                       -- TODO check if this is doing the right thing
+                       -- (middle operand is 33 bits?); if not, get rid of
+                       -- inlineAddWithCurry as this is the only place using it
 
   aluWritePC (isR15 rD) result
   defReg rD (ite undef (unpredictable (Loc rD))
