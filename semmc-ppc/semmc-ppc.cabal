@@ -72,7 +72,6 @@ library
   hs-source-dirs: tools/lib
   build-depends: base,
                  time,
-                 regex >= 1 && < 2,
                  parameterized-utils,
                  dismantle-tablegen,
                  dismantle-ppc,

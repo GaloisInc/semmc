@@ -5,7 +5,7 @@ module Util (
 
 import qualified Data.List as L
 import Text.Printf ( printf )
-import qualified Text.RE.TDFA as RE
+import qualified Dismantle.Testing.Regex as RE
 
 import qualified Data.Parameterized.Classes as P
 import qualified Dismantle.PPC as PPC
@@ -15,18 +15,18 @@ toIORelFP op = printf "%s.iorel" (P.showF op)
 
 matchConstructor :: String -> Bool
 matchConstructor s = and [ notElem '8' s
-                         , RE.anyMatches (s RE.*=~ rx)
-                         , not (RE.anyMatches (s RE.*=~ erx))
+                         , RE.hasMatches s rx
+                         , not (RE.hasMatches s erx)
                          ]
   where
-    Just erx = RE.compileRegex (L.intercalate "|" exclude)
+    Right erx = RE.mkRegex (L.intercalate "|" exclude)
     exclude = [ "^DIV.*E.*$"
               , "^ATTN$"
               , "^CMPEQB$"
               , "^CMPRB$"
               , "^CNTT.*"
               ]
-    Just rx = RE.compileRegex (L.intercalate "|" matchers)
+    Right rx = RE.mkRegex (L.intercalate "|" matchers)
     matchers = [ "^A.*"
                , "^CNT.*"
                , "^DIV.*[^E]$"
