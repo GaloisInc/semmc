@@ -1071,8 +1071,9 @@ readDefinedFunction' sym env text = do
 
   symFn <- liftIO $ S.definedFn sym symbol argVarAssignment body expand
   return $ Some (FunctionFormula { ffName = name
-                                 , ffArgTypeReprs = argTypeReprs
-                                 , ffRetTypeRepr = retTypeRepr
+                                 , ffArgTypes = argTypeReprs
+                                 , ffArgVars = argVarList
+                                 , ffRetType = retTypeRepr
                                  , ffDef = symFn })
 
 -- | Parse the definition of a templated formula.

@@ -47,6 +47,10 @@ module SemMC.Formula
   , loadFormulasFromFiles
   , readFormula
   , readFormulaFromFile
+  , loadLibrary
+  , loadLibraryFromFiles
+  , readDefinedFunction
+  , readDefinedFunctionFromFile
 
     -- * SemMC.Formula.Printer
   , printFormula
@@ -78,8 +82,10 @@ import SemMC.Formula.Instantiate ( instantiateFormula,
                                    replaceVars,
                                    replaceLitVars
                                  )
-import SemMC.Formula.Load ( loadFormulas, loadFormulasFromFiles )
-import SemMC.Formula.Parser ( readFormula, readFormulaFromFile )
+import SemMC.Formula.Load ( loadFormulas, loadFormulasFromFiles
+                          , loadLibrary, loadLibraryFromFiles )
+import SemMC.Formula.Parser ( readFormula, readFormulaFromFile,
+                              readDefinedFunction, readDefinedFunctionFromFile )
 import SemMC.Formula.Printer ( printParameterizedFormula, printFormula )
 import SemMC.Formula.Equivalence ( EquivalenceResult(..),
                                    formulasEquiv,

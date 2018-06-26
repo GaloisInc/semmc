@@ -29,9 +29,10 @@ type Functions sym arch = Map.Map String (SomeSome (S.SymFn sym), Some BaseTypeR
 -- global information that must be shared across multiple formulas.
 data FormulaEnv sym arch =
   FormulaEnv { envFunctions :: Functions sym arch
-               -- ^ A mapping of all functions (either uninterpreted or defined) to
-               -- be used in the formulas. This is necessary so that different
-               -- formulas still refer to the same underlying function.
+               -- ^ A mapping of all functions (either uninterpreted or defined)
+               -- to be used in the formulas. This is necessary so that
+               -- different formulas still refer to the same underlying
+               -- function.
              , envUndefinedBit :: S.SymExpr sym (BaseBVType 1)
                -- ^ A 1-bit wide bitvector representing undefined parts of
                -- registers after some operation. This is globally necessary so
@@ -47,4 +48,4 @@ addLibrary env funs =
     addFun :: FunctionRef sig -> FunctionFormula sym sig
            -> Functions sym arch -> Functions sym arch
     addFun (FunctionRef name _ _) ff m =
-      Map.insert ("df." ++ name) (SomeSome (ffDef ff), Some (ffRetTypeRepr ff)) m
+      Map.insert ("df." ++ name) (SomeSome (ffDef ff), Some (ffRetType ff)) m

@@ -269,15 +269,16 @@ coerceFormula f =
 -- | A formula representing a defined function.
 data FunctionFormula sym (sig :: ([BaseType], BaseType)) where
   FunctionFormula :: { ffName :: String
-                     , ffArgTypeReprs :: SL.List BaseTypeRepr tps
-                     , ffRetTypeRepr :: BaseTypeRepr tp
+                     , ffArgTypes :: SL.List BaseTypeRepr tps
+                     , ffArgVars :: SL.List (S.BoundVar sym) tps
+                     , ffRetType :: BaseTypeRepr tp
                      , ffDef :: S.SymFn sym (ToContextFwd tps) tp
                      } -> FunctionFormula sym '(tps, tp)
 
 data FunctionRef (sig :: ([BaseType], BaseType)) where
   FunctionRef :: { frName :: String
-                 , frArgTypeReprs :: SL.List BaseTypeRepr tps
-                 , frRetTypeRepr :: BaseTypeRepr tp
+                 , frArgTypes :: SL.List BaseTypeRepr tps
+                 , frRetType :: BaseTypeRepr tp
                  } -> FunctionRef '(tps, tp)
 
 deriving instance Show (FunctionRef sig)
@@ -305,7 +306,12 @@ instance OrdF FunctionRef where
       LT -> LTF; GT -> GTF
 
 functionRef :: FunctionFormula sym sig -> FunctionRef sig
-functionRef (FunctionFormula name args ret _) = FunctionRef name args ret
+functionRef (FunctionFormula { ffName = name
+                             , ffArgTypes = argTypes
+                             , ffRetType = retType }) =
+  FunctionRef { frName = name
+              , frArgTypes = argTypes
+              , frRetType = retType }
 
 type Library sym = MapF.MapF FunctionRef (FunctionFormula sym)
 
