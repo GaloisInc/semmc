@@ -10,6 +10,7 @@ module SemMC.Formula.Load (
   loadFormulasFromFiles,
   loadLibrary,
   loadLibraryFromFiles,
+  listFunctionFiles,
   FormulaParseError(..)
   ) where
 
@@ -205,8 +206,7 @@ loadLibraryFromFiles :: forall sym arch
                      -> FilePath
                      -> IO (F.Library sym)
 loadLibraryFromFiles proxy sym dir = do
-  let isFunctionFile f = snd (S.splitExtension f) == ".fun"
-  files <- filter isFunctionFile <$> S.listDirectory dir
+  files <- listFunctionFiles dir
   env <- formulaEnv proxy sym
   -- TODO Allow functions to call other functions by somehow loading in
   -- dependency order and adding to the environment as we go. For now, for
@@ -227,3 +227,8 @@ loadLibraryFromFiles proxy sym dir = do
           error msg
         Right (Some fun) ->
           return $ Pair.Pair (F.functionRef fun) fun
+
+listFunctionFiles :: FilePath -> IO [FilePath]
+listFunctionFiles dir =
+  filter isFunctionFile <$> S.listDirectory dir
+  where isFunctionFile f = snd (S.splitExtension f) == ".fun"

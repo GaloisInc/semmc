@@ -13,22 +13,25 @@
 module SemMC.TH
   ( attachSemantics
   , loadSemantics
+  , attachDefinedFunctions
+  , loadDefinedFunctions
   )
 where
 
 import qualified Control.Exception as E
-import           Control.Monad ( forM_ )
+import           Control.Monad ( forM, forM_ )
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Unsafe as UBS
 import           Data.Maybe ( catMaybes )
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax ( qAddDependentFile )
-import           System.FilePath ( (</>) )
+import           System.FilePath ( (</>), dropExtension )
 import qualified System.IO.Unsafe as IO
 
 import           Data.Parameterized.Lift ( LiftF(..) )
 import           Data.Parameterized.Some ( Some(..) )
 
+import           SemMC.Formula.Load ( listFunctionFiles )
 
 -- | Given a list of opcodes and a function for turning each opcode into a file
 -- name, search for the file with that name in each of the directories.  If it
@@ -59,10 +62,13 @@ loadSemantics toFP elts dirs =
     catMaybes <$> mapM (findCorrespondingFile toFP dirs) elts
 
 toOpcodePair :: (LiftF a) => (FilePath, Some a, BS.ByteString) -> ExpQ
-toOpcodePair (_, Some o, bs) = tupE [ [| Some $(liftF o) |], bsE]
+toOpcodePair (_, Some o, bs) = tupE [ [| Some $(liftF o) |], embedByteString bs ]
+
+embedByteString :: BS.ByteString -> ExpQ
+embedByteString bs =
+  [| IO.unsafePerformIO (UBS.unsafePackAddressLen len $(litE (StringPrimL (BS.unpack bs)))) |]
   where
     len = BS.length bs
-    bsE = [| IO.unsafePerformIO (UBS.unsafePackAddressLen len $(litE (StringPrimL (BS.unpack bs)))) |]
 
 findCorrespondingFile :: (Some a  -> FilePath)
                       -> [FilePath]
@@ -78,3 +84,28 @@ findCorrespondingFile toFP dirs elt = go files
         Left (_::E.SomeException) -> go rest
         Right bs -> do
           return (Just (f, elt, bs))
+
+attachDefinedFunctions :: [FilePath]
+                       -- ^ A list of directories to search for .fun files
+                       -> Q Exp
+attachDefinedFunctions dirs = do
+  funs <- runIO $ loadDefinedFunctions dirs
+  forM_ funs $ \(f, _, _) -> qAddDependentFile f
+  listE (map toFunctionPair funs)
+
+loadDefinedFunctions :: [FilePath]
+                     -> IO [(FilePath, String, BS.ByteString)]
+loadDefinedFunctions dirs =
+  concat <$> mapM findFunctionFiles dirs
+
+findFunctionFiles :: FilePath
+                  -> IO [(FilePath, String, BS.ByteString)]
+findFunctionFiles dir = do
+  fs <- listFunctionFiles dir
+  forM fs $ \f -> do
+    let funName = dropExtension f
+    bs <- BS.readFile (dir </> f)
+    return (dir </> f, funName, bs)
+
+toFunctionPair :: (FilePath, String, BS.ByteString) -> ExpQ
+toFunctionPair (_, name, bs) = tupE [ [| $(litE (StringL name)) |], embedByteString bs ]
