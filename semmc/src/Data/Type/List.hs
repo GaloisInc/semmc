@@ -5,6 +5,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Data.Type.List (
+  FunctionOver,
+  applyFunctionOver,
   TyFun,
   Apply,
   Reverse,
@@ -25,6 +27,14 @@ import Prelude hiding (reverse)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
+
+type family FunctionOver f xs y where
+  FunctionOver f '[] y = y
+  FunctionOver f (x ': xs) y = f x -> FunctionOver f xs y
+
+applyFunctionOver :: FunctionOver f xs y -> SL.List f xs -> y
+applyFunctionOver f SL.Nil = f
+applyFunctionOver f (x SL.:< xs) = applyFunctionOver (f x) xs
 
 data TyFun :: k1 -> k2 -> *
 type family Apply (f :: TyFun k1 k2 -> *) (x :: k1) :: k2

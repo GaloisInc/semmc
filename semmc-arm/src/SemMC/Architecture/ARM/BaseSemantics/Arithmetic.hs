@@ -42,9 +42,9 @@ manualArithmetic = do
     input setcc
     input imm12
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-    imm32 <- armExpandImm imm12
-    let (_,_,c,_) = getNZCV
-    (result, nzcv) <- addWithCarry (Loc rN) imm32 (zext c)
+        imm32 = armExpandImm imm12
+        (_,_,c,_) = getNZCV
+        (result, nzcv) = addWithCarry (Loc rN) imm32 (zext c)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -62,8 +62,8 @@ manualArithmetic = do
     input setcc
     input imm12
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-    imm32 <- armExpandImm imm12
-    (result, nzcv) <- addWithCarry (Loc rN) imm32 (LitBV 32 0)
+        imm32 = armExpandImm imm12
+        (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -169,7 +169,7 @@ manualArithmetic = do
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         (_,_,c,_) = getNZCV
-    (result, nzcv) <- addWithCarry (Loc rN) (Loc rM) (zext c)
+        (result, nzcv) = addWithCarry (Loc rN) (Loc rM) (zext c)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -186,7 +186,7 @@ manualArithmetic = do
     input rN
     input setcc
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-    (result, nzcv) <- addWithCarry (Loc rN) (Loc rM) (LitBV 32 0)
+        (result, nzcv) = addWithCarry (Loc rN) (Loc rM) (LitBV 32 0)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -349,8 +349,8 @@ manualArithmetic = do
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         imm12 = extract 11 0 (Loc imm)
         (_,_,c,v) = getNZCV
-    (imm32, c') <- armExpandImmC' imm12 c
-    let result = imm32
+        (imm32, c') = armExpandImmC' imm12 c
+        result = imm32
         n = extract 31 31 result
         z = isZeroBit result
         nzcv = concat n $ concat z $ concat c' v
@@ -388,8 +388,8 @@ manualArithmetic = do
     input setcc
     input imm12
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
-    imm32 <- armExpandImm imm12
-    (result, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+        imm32 = armExpandImm imm12
+        (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     defReg rD (ite (isR15 rD) (Loc rD) result)
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -487,7 +487,7 @@ manualArithmetic = do
   --   input imm12
   --   let setflags = bveq (Loc setcc) (LitBV 1 0b1)
   --       imm32 = armExpandImm imm12
---       (result, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+  --       (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
   --   defReg rD (ite (isR15 rD) (Loc rD) result)
   --   aluWritePC (isR15 rD) result
   --   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -512,8 +512,8 @@ manualBitwise = do
     input imm12
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         (_, _, c, v) = getNZCV
-    (imm32, c') <- armExpandImmC imm12 c
-    let result = bvand (Loc rN) imm32
+        (imm32, c') = armExpandImmC imm12 c
+        result = bvand (Loc rN) imm32
         n' = extract 31 31 result
         z' = isZeroBit result
         v' = v
@@ -614,8 +614,8 @@ manualBitwise = do
     comment "unpredictable argument is ignored"
     input mimm
     input rN
-    imm32 <- armExpandImm mimm
-    (_, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+    let imm32 = armExpandImm mimm
+        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     cpsrNZCV (LitBool True) nzcv
 
   defineT32Opcode T.TCMPi8 (Empty
@@ -627,7 +627,7 @@ manualBitwise = do
     input imm
     input rN
     let imm32 = zext $ Loc imm
-    (_, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+        (_, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
     cpsrNZCV (LitBool True) nzcv
 
   defineT32Opcode T.TLSLri (Empty
@@ -658,8 +658,8 @@ manualBitwise = do
     input imm12
     let setflags = bveq (Loc setcc) (LitBV 1 0b1)
         (_, _, c, v) = getNZCV
-    (imm32, c') <- armExpandImmC imm12 c
-    let result = bvor (Loc rN) imm32
+        (imm32, c') = armExpandImmC imm12 c
+        result = bvor (Loc rN) imm32
         n' = extract 31 31 result
         z' = isZeroBit result
         v' = v
@@ -675,9 +675,9 @@ adcrr :: (HasCallStack)
       -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
 adcrr rD rM rNexpr setflags shift_t shift_n = do
   let (_, _, c, _) = getNZCV
-  shifted <- shift (Loc rM) shift_t shift_n c
-  (result, nzcv') <- addWithCarry rNexpr shifted (zext c)
-  let nzcv = "nzcv" =: nzcv'
+      shifted = shift (Loc rM) shift_t shift_n c
+      (result, nzcv') = addWithCarry rNexpr shifted (zext c)
+      nzcv = "nzcv" =: nzcv'
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -692,9 +692,9 @@ addrr :: (HasCallStack)
       -> Expr 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
 addrr rD rM rNexpr setflags shift_t shift_n = do
   let (_, _, c, _) = getNZCV
-  shifted <- shift (Loc rM) shift_t shift_n c
-  (result, nzcv') <- addWithCarry rNexpr shifted (LitBV 32 0)
-  let nzcv = "nzcv" =: nzcv'
+      shifted = shift (Loc rM) shift_t shift_n c
+      (result, nzcv') = addWithCarry rNexpr shifted (LitBV 32 0)
+      nzcv = "nzcv" =: nzcv'
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -705,7 +705,7 @@ andrr :: (HasCallStack) =>
       -> Location 'TBV -> Expr 'TBool -> SRType -> Expr 'TBV -> SemARM 'Def ()
 andrr rD rM rN setflags shift_t shift_n = do
   let (_, _, c, v) = getNZCV
-  shiftedWithCarry <- shiftC (Loc rM) shift_t shift_n c
+  let shiftedWithCarry = shiftC (Loc rM) shift_t shift_n c
   let shifted = extract 31 0 shiftedWithCarry
   let carry = extract 32 32 shiftedWithCarry
   let result = bvand (Loc rN) shifted
@@ -725,8 +725,8 @@ adcrsr :: (HasCallStack) =>
 adcrsr rD rM rN setflags shift_t rS = do
   let (_, _, c, _) = getNZCV
       shift_n = zext $ extract 7 0 (Loc rS)
-  shifted <- shift (Loc rM) shift_t shift_n c
-  (result, nzcv') <- addWithCarry (Loc rN) shifted (zext c)
+  let shifted = shift (Loc rM) shift_t shift_n c
+  let (result, nzcv') = addWithCarry (Loc rN) shifted (zext c)
   let nzcv = "nzcv" =: nzcv'
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
@@ -739,8 +739,8 @@ addrsr :: (HasCallStack) =>
 addrsr rD rM rN setflags shift_t rS = do
   let (_, _, c, _) = getNZCV
       shift_n = zext $ extract 7 0 (Loc rS)
-  shifted <- shift (Loc rM) shift_t shift_n c
-  (result, nzcv') <- addWithCarry (Loc rN) shifted (LitBV 32 0)
+  let shifted = shift (Loc rM) shift_t shift_n c
+  let (result, nzcv') = addWithCarry (Loc rN) shifted (LitBV 32 0)
   let nzcv = "nzcv" =: nzcv'
   let writesOrReadsR15 = anyp $ fmap isR15 [ rD, rM, rN, rS ]
   defReg rD (ite writesOrReadsR15 (unpredictable (Loc rD)) result)
@@ -753,7 +753,7 @@ andrsr :: (HasCallStack) =>
 andrsr rD rM rN setflags shift_t rS = do
   let (_, _, c, v) = getNZCV
       shift_n = zext $ extract 7 0 (Loc rS)
-  shiftedWithCarry <- shiftC (Loc rM) shift_t shift_n c
+  let shiftedWithCarry = shiftC (Loc rM) shift_t shift_n c
   let shifted = extract 31 0 shiftedWithCarry
   let carry = extract 32 32 shiftedWithCarry
   let result = bvand (Loc rN) shifted
@@ -772,7 +772,7 @@ taddri :: (HasCallStack)
      -> Expr 'TBool
      -> SemARM 'Def ()
 taddri rD rN imm32 setflags undef = do
-  (result, nzcv) <- addWithCarry (Loc rN) imm32 (LitBV 32 0)
+  let (result, nzcv) = addWithCarry (Loc rN) imm32 (LitBV 32 0)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 
@@ -786,11 +786,11 @@ tsubrr :: (HasCallStack)
 tsubrr rD rN rM undef setflags = do
   let (_, _, c, _) = getNZCV
       (shift_t, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 0) (LitBV 5 0)
-  shifted <- shiftC (Loc rM) shift_t shift_n c
-  let (result, nzcv) = inlineAddWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
+      shifted = shiftC (Loc rM) shift_t shift_n c
+      (result, nzcv) = inlineAddWithCarry (Loc rN) (bvnot shifted) (LitBV 32 1)
                        -- TODO check if this is doing the right thing
                        -- (middle operand is 33 bits?); if not, get rid of
-                       -- inlineAddWithCurry as this is the only place using it
+                       -- inlineAddWithCarry as this is the only place using it
 
   aluWritePC (isR15 rD) result
   defReg rD (ite undef (unpredictable (Loc rD))
@@ -806,7 +806,7 @@ tsubri :: (HasCallStack)
      -> Expr 'TBool
      -> SemARM 'Def ()
 tsubri rD rN imm32 setflags undef = do
-  (result, nzcv) <- addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
+  let (result, nzcv) = addWithCarry (Loc rN) (bvnot imm32) (LitBV 32 1)
   defReg rD (ite undef (unpredictable (Loc rD)) result)
   cpsrNZCV (andp setflags (andp (notp (isR15 rD)) (notp undef))) nzcv
 
@@ -817,7 +817,7 @@ taddSP :: (HasCallStack) =>
       -> SemARM 'Def ()
 taddSP rD imm32 setflags = do
   input sp
-  (result, nzcv) <- addWithCarry (Loc sp) imm32 (LitBV 32 0b0)
+  let (result, nzcv) = addWithCarry (Loc sp) imm32 (LitBV 32 0b0)
   defReg rD $ ite (isR15 rD) (Loc rD) result
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -829,7 +829,7 @@ tsubSP :: (HasCallStack) =>
       -> SemARM 'Def ()
 tsubSP rD imm32 setflags = do
   input sp
-  (result, nzcv) <- addWithCarry (Loc sp) (bvnot imm32) (LitBV 32 0b1)
+  let (result, nzcv) = addWithCarry (Loc sp) (bvnot imm32) (LitBV 32 0b1)
   defReg rD $ ite (isR15 rD) (Loc rD) result
   aluWritePC (isR15 rD) result
   cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
@@ -837,8 +837,8 @@ tsubSP rD imm32 setflags = do
 lsl :: Location 'TBV -> Expr 'TBV -> Location 'TBV -> Expr 'TBool -> SemARM 'Def ()
 lsl rD shift_n rM setflags = do
   let (n,z,c,v) = getNZCV
-  shiftres <- shiftC (Loc rM) srtLSL shift_n c
-  let result = extract 31 0 shiftres
+  let shiftres = shiftC (Loc rM) srtLSL shift_n c
+      result = extract 31 0 shiftres
       c' = extract 32 32 shiftres
   defReg rD (ite (isR15 rD) (Loc rD) result)
   aluWritePC (isR15 rD) result
