@@ -49,7 +49,8 @@ addWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
              -> (Expr 'TBV, Expr 'TBV)
                  -- ^ 32-bit result, NZCV result bits  (E1-2292 or F2-2423)
 addWithCarry x y carry_in =
-  let res_nzcv = LibraryFunc addWithCarry_lf (x :< y :< carry_in :< Nil)
+  let res_nzcv = "res_nzcv" =:
+        LibraryFunc addWithCarry_lf (x :< y :< carry_in :< Nil)
   in (extract 31 0 res_nzcv, extract 35 32 res_nzcv)
 
 -- | Version of 'addWithCarry' that inlines the addition code into the formula

@@ -12,11 +12,7 @@
         rD)))
      (concat
       ((_ extract 35 32)
-       ((_ call "df.addWithCarry")
-        rN
-        (bvnot
-         (armExpandImm))
-        #x00000001))
+       (res_nzcv))
       ((_ extract 27 0)
        (ite
         ((_ call "uf.arm.is_r15")
@@ -26,11 +22,7 @@
           #b0
           ((_ extract 0 0)
            ((_ extract 31 0)
-            ((_ call "df.addWithCarry")
-             rN
-             (bvnot
-              (armExpandImm))
-             #x00000001))))
+            (res_nzcv))))
          (SetT32Mode)
          'CPSR)
         'CPSR)))
@@ -42,11 +34,7 @@
         #b0
         ((_ extract 0 0)
          ((_ extract 31 0)
-          ((_ call "df.addWithCarry")
-           rN
-           (bvnot
-            (armExpandImm))
-           #x00000001))))
+          (res_nzcv))))
        (SetT32Mode)
        'CPSR)
       'CPSR))
@@ -59,12 +47,14 @@
        rD)
       rD
       ((_ extract 31 0)
-       ((_ call "df.addWithCarry")
-        rN
-        (bvnot
-         (armExpandImm))
-        #x00000001)))
+       (res_nzcv)))
      rD))))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    rN
+    (bvnot
+     (armExpandImm))
+    #x00000001))
   (armExpandImm
    ((_ extract 31 0)
     ((_ call "df.shiftC")
@@ -183,43 +173,23 @@
       #b0
       ((_ extract 0 0)
        ((_ extract 31 0)
-        ((_ call "df.addWithCarry")
-         rN
-         (bvnot
-          (armExpandImm))
-         #x00000001))))
+        (res_nzcv))))
      (bvand
       #xfffffffe
       ((_ extract 31 0)
-       ((_ call "df.addWithCarry")
-        rN
-        (bvnot
-         (armExpandImm))
-        #x00000001)))
+       (res_nzcv)))
      (ite
       (bveq
        #b0
        ((_ extract 1 1)
         ((_ extract 31 0)
-         ((_ call "df.addWithCarry")
-          rN
-          (bvnot
-           (armExpandImm))
-          #x00000001))))
+         (res_nzcv))))
       (bvand
        #xfffffffd
        ((_ extract 31 0)
-        ((_ call "df.addWithCarry")
-         rN
-         (bvnot
-          (armExpandImm))
-         #x00000001)))
+        (res_nzcv)))
       ((_ extract 31 0)
-       ((_ call "df.addWithCarry")
-        rN
-        (bvnot
-         (armExpandImm))
-        #x00000001))))
+       (res_nzcv))))
     (bvadd 'PC #x00000004))))
  ((operands
   ((rD . 'GPR)

@@ -2,19 +2,25 @@
 ;; doc: F7.1.36, page F7-2589
 ;; unpredictable argument is ignored
 (let
- ((armExpandImm
-  ((_ extract 31 0)
-   ((_ call "df.shiftC")
-    ((_ zero_extend 24)
-     ((_ call "uf.a32.modimm_imm")
-      modimm))
-    #b011
-    (bvshl
-     #x00000001
-     ((_ zero_extend 28)
-      ((_ call "uf.a32.modimm_rot")
-       modimm)))
-    #b0)))
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   (bvnot
+    (armExpandImm))
+   #x00000001))
+  (armExpandImm
+   ((_ extract 31 0)
+    ((_ call "df.shiftC")
+     ((_ zero_extend 24)
+      ((_ call "uf.a32.modimm_imm")
+       modimm))
+     #b011
+     (bvshl
+      #x00000001
+      ((_ zero_extend 28)
+       ((_ call "uf.a32.modimm_rot")
+        modimm)))
+     #b0)))
   (testCondition
    (ite
     (andp
@@ -122,11 +128,7 @@
       (testCondition)
       (concat
        ((_ extract 35 32)
-        ((_ call "df.addWithCarry")
-         rN
-         (bvnot
-          (armExpandImm))
-         #x00000001))
+        (res_nzcv))
        ((_ extract 27 0)
         'CPSR))
       'CPSR))))))

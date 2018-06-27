@@ -17,12 +17,14 @@
          'CPSR)))))
     rDn
     ((_ extract 31 0)
-     ((_ call "df.addWithCarry")
-      rDn
-      ((_ zero_extend 24)
-       imm)
-      #x00000000)))
+     (res_nzcv)))
    rDn))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    rDn
+    ((_ zero_extend 24)
+     imm)
+    #x00000000))
   (testCondition
    (ite
     (andp
@@ -159,11 +161,7 @@
               'CPSR)))))))
        (concat
         ((_ extract 35 32)
-         ((_ call "df.addWithCarry")
-          rDn
-          ((_ zero_extend 24)
-           imm)
-          #x00000000))
+         (res_nzcv))
         ((_ extract 27 0)
          'CPSR))
        'CPSR)

@@ -7,20 +7,21 @@
     (bveq setcc #b1)
     rD
     ((_ extract 31 0)
-     ((_ call "df.addWithCarry")
-      rN
-      var1)))
+     (res_nzcv)))
    rD))
-  (var1
-   ((thumbExpandImm)
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    rN
+    (thumbExpandImm)
     #x00000000))
   (thumbExpandImm
-   (ite
-    (bveq
-     ((_ extract 11 10)
-      ((_ call "uf.t32.t2soimm_imm")
-       imm))
-     #b00)
+   (ite var1))
+  (var1
+   ((bveq
+    ((_ extract 11 10)
+     ((_ call "uf.t32.t2soimm_imm")
+      imm))
+    #b00)
     (var3)
     ((_ extract 31 0)
      (rorC))))
@@ -287,9 +288,7 @@
       (bveq setcc #b1))))
     (concat
      ((_ extract 35 32)
-      ((_ call "df.addWithCarry")
-       rN
-       var1))
+      (res_nzcv))
      ((_ extract 27 0)
       'CPSR))
     'CPSR)))

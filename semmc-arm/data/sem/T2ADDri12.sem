@@ -9,12 +9,14 @@
      (ite
       (testCondition)
       ((_ extract 31 0)
-       ((_ call "df.addWithCarry")
-        rN
-        ((_ zero_extend 16)
-         imm)
-        #x00000000))
+       (res_nzcv))
       rD))))))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    rN
+    ((_ zero_extend 16)
+     imm)
+    #x00000000))
   (testCondition
    (ite
     (andp

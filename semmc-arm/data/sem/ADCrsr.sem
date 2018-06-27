@@ -46,26 +46,28 @@
            sorr)))))
       rD
       ((_ extract 31 0)
-       ((_ call "df.addWithCarry")
-        rN
-        ((_ extract 31 0)
-         ((_ call "df.shiftC")
-          ((_ call "uf.a32.soregreg_reg2")
-           sorr)
-          (concat
-           #b0
-           ((_ call "uf.a32.soregreg_type")
-            sorr))
-          ((_ zero_extend 24)
-           ((_ extract 7 0)
-            ((_ call "uf.a32.soregreg_reg1")
-             sorr)))
-          ((_ extract 29 29)
-           'CPSR)))
-        ((_ zero_extend 31)
-         ((_ extract 29 29)
-          'CPSR)))))
+       (res_nzcv)))
      rD))))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    rN
+    ((_ extract 31 0)
+     ((_ call "df.shiftC")
+      ((_ call "uf.a32.soregreg_reg2")
+       sorr)
+      (concat
+       #b0
+       ((_ call "uf.a32.soregreg_type")
+        sorr))
+      ((_ zero_extend 24)
+       ((_ extract 7 0)
+        ((_ call "uf.a32.soregreg_reg1")
+         sorr)))
+      ((_ extract 29 29)
+       'CPSR)))
+    ((_ zero_extend 31)
+     ((_ extract 29 29)
+      'CPSR))))
   (testCondition
    (ite
     (andp
@@ -160,25 +162,7 @@
    (bveq #b0 #b0))
   (nzcv
    ((_ extract 35 32)
-    ((_ call "df.addWithCarry")
-     rN
-     ((_ extract 31 0)
-      ((_ call "df.shiftC")
-       ((_ call "uf.a32.soregreg_reg2")
-        sorr)
-       (concat
-        #b0
-        ((_ call "uf.a32.soregreg_type")
-         sorr))
-       ((_ zero_extend 24)
-        ((_ extract 7 0)
-         ((_ call "uf.a32.soregreg_reg1")
-          sorr)))
-       ((_ extract 29 29)
-        'CPSR)))
-     ((_ zero_extend 31)
-      ((_ extract 29 29)
-       'CPSR))))))
+    (res_nzcv))))
  ((operands
   ((rD . 'GPRnopc)
    (setcc . 'Cc_out)
