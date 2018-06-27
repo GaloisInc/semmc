@@ -9,26 +9,14 @@
      rD)
     rD
     ((_ extract 31 0)
-     (shiftC)))
+     ((_ call "df.shiftC")
+      rM
+      #b000
+      ((_ extract 31 0)
+       (immShift))
+      ((_ extract 29 29)
+       'CPSR))))
    rD))
-  (shiftC
-   (ite
-    (bveq
-     ((_ extract 31 0)
-      (immShift))
-     #x00000000)
-    (concat
-     ((_ extract 29 29)
-      'CPSR)
-     rM)
-    (lslC)))
-  (lslC
-   (bvshl
-    ((_ zero_extend 1)
-     rM)
-    ((_ zero_extend 1)
-     ((_ extract 31 0)
-      (immShift)))))
   (immShift
    (concat
     #b000
@@ -149,7 +137,13 @@
       'CPSR)
      (concat
       ((_ extract 32 32)
-       (shiftC))
+       ((_ call "df.shiftC")
+        rM
+        #b000
+        ((_ extract 31 0)
+         (immShift))
+        ((_ extract 29 29)
+         'CPSR)))
       ((_ extract 28 28)
        'CPSR)))))
   (branchWritePC
@@ -159,7 +153,13 @@
     (bvand
      #xfffffffd
      ((_ extract 31 0)
-      (shiftC)))
+      ((_ call "df.shiftC")
+       rM
+       #b000
+       ((_ extract 31 0)
+        (immShift))
+       ((_ extract 29 29)
+        'CPSR))))
     (bvadd 'PC #x00000002))))
  ((operands
   ((rD . 'TGPR)

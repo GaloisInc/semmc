@@ -3,6 +3,8 @@
 
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
@@ -22,6 +24,11 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
 
 import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat, pred )
+import Data.Parameterized.Context
+import Data.Parameterized.NatRepr
+import Data.Parameterized.Some
+import qualified What4.BaseTypes as CRU
+import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Arithmetic
@@ -113,9 +120,10 @@ decodeImmShift ty imm5 = ImmShift $ "immShift" =:
         ] (concat (LitBV 3 0b011) (zext imm5))
 
 -- | The Shift function from the ARM manual (v8).
-shift :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+shift :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV
+      -> SemARM 'Def (Expr 'TBV)
 shift value srtype shift_n carry_in =
-    extract 31 0 $ shiftC value srtype shift_n carry_in
+    extract 31 0 <$> shiftC value srtype shift_n carry_in
 
 
 -- | Shift with carry out.  (F2.4.3, F-2420)
@@ -124,14 +132,27 @@ shift value srtype shift_n carry_in =
 -- representation (we don't have pairs). Instead, when the input bitvector is N
 -- bits, we return an N+1 bit bitvector where the top bit is the carry out
 -- bit. The caller can dissect it (e.g. see 'shift' which discards the carry out).
-shiftC :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-shiftC value (unSRType -> shift_t) shift_n c = "shiftC" =:
+shiftCImpl :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+shiftCImpl value shift_t shift_n c =
   cases [ (bveq shift_n (naturalLitBV 0x0), concat c value)
         , (bveq shift_t (LitBV 3 0b000), lslC value shift_n)
         , (bveq shift_t (LitBV 3 0b001), lsrC value shift_n)
         , (bveq shift_t (LitBV 3 0b010), asrC value shift_n)
         , (bveq shift_t (LitBV 3 0b011), rorC value shift_n)
         ] (rrxC value c)
+
+shiftC :: Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV
+       -> SemARM 'Def (Expr 'TBV)
+shiftC value (unSRType -> shift_t) shift_n c = do
+  defineLibraryFunction "shiftC"
+    (Empty :> Arg "value" (CRU.BaseBVRepr (knownNat @NaturalBitSize)) naturalBV
+           :> Arg "shift_t" (CRU.BaseBVRepr (knownNat @3)) (EBV 3)
+           :> Arg "shift_n" (CRU.BaseBVRepr (knownNat @NaturalBitSize)) naturalBV
+           :> Arg "c" (CRU.BaseBVRepr (knownNat @1)) (EBV 1))
+    (CRU.BaseBVRepr (knownNat @(NaturalBitSize + 1))) (EBV (naturalBitSize + 1))
+    shiftCImpl
+  return $ DefinedFunc (EBV (naturalBitSize + 1)) "shiftC"
+             [ Some value, Some shift_t, Some shift_n, Some c ]
 
 -- | Logical Shift Left (with carry out)  AppxG-5008 and (E1.2.2, E1-2290)
 --

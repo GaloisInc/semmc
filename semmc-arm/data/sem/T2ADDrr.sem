@@ -11,14 +11,14 @@
      ((_ call "df.addWithCarry")
       rN
       ((_ extract 31 0)
-       (shiftC))
+       ((_ call "df.shiftC")
+        rM
+        #b000
+        #x00000000
+        ((_ extract 29 29)
+         'CPSR)))
       #x00000000)))
    rD))
-  (shiftC
-   (concat
-    ((_ extract 29 29)
-     'CPSR)
-    rM))
   (testCondition
    (ite
     (andp
@@ -130,7 +130,12 @@
     ((_ call "df.addWithCarry")
      rN
      ((_ extract 31 0)
-      (shiftC))
+      ((_ call "df.shiftC")
+       rM
+       #b000
+       #x00000000
+       ((_ extract 29 29)
+        'CPSR)))
      #x00000000)))
   (branchWritePC
    (ite
@@ -142,7 +147,12 @@
       ((_ call "df.addWithCarry")
        rN
        ((_ extract 31 0)
-        (shiftC))
+        ((_ call "df.shiftC")
+         rM
+         #b000
+         #x00000000
+         ((_ extract 29 29)
+          'CPSR)))
        #x00000000)))
     (bvadd 'PC #x00000002))))
  ((operands

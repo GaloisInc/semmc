@@ -1,140 +1,31 @@
 ;; AND register, Encoding T1 (F7.1.14, F7-2558)
 ;; This encoding has no shift; fixed to 0
 (let
- ((shiftC
-  (ite
-   (bveq
-    ((_ extract 31 0)
-     (immShift))
-    #x00000000)
-   (concat
-    ((_ extract 29 29)
-     'CPSR)
-    rM)
-   (ite
-    (bveq
-     ((_ extract 34 32)
-      (immShift))
-     #b000)
-    (lslC)
+ ((var2
+  (ite var1))
+  (var1
+   ((testCondition)
     (ite
-     (bveq
-      ((_ extract 34 32)
-       (immShift))
-      #b001)
-     (logicalShiftRightCarry)
-     (ite
-      (bveq
-       ((_ extract 34 32)
-        (immShift))
-       #b010)
-      (arithmeticShiftRightCarry)
-      (ite
-       (bveq
+     ((_ call "uf.arm.is_r15")
+      rDN)
+     rDN
+     (bvand
+      rDN
+      ((_ extract 31 0)
+       ((_ call "df.shiftC")
+        rM
         ((_ extract 34 32)
          (immShift))
-        #b011)
-       (rorC)
-       (rrxC)))))))
-  (rrxC
-   (concat
-    ((_ extract 0 0)
-     rM)
-    (concat
-     ((_ extract 29 29)
-      'CPSR)
-     ((_ extract 31 1)
-      rM))))
-  (rorC
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "uf.test_bit_dynamic")
-       (bvsub
         ((_ extract 31 0)
          (immShift))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
-    (bvor
-     (bvshl
-      rM
-      (bvsub
-       #x00000020
-       (bvurem
-        ((_ extract 31 0)
-         (immShift))
-        #x00000020)))
-     (bvlshr
-      rM
-      (bvurem
-       ((_ extract 31 0)
-        (immShift))
-       #x00000020)))))
+        ((_ extract 29 29)
+         'CPSR)))))
+    rDN))
   (immShift
    (concat
     #b000
     ((_ zero_extend 27)
      #b00000)))
-  (arithmeticShiftRightCarry
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "uf.test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
-    (bvashr
-     rM
-     (bvurem
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020))))
-  (logicalShiftRightCarry
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "uf.test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
-    (bvlshr
-     rM
-     (bvurem
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020))))
-  (lslC
-   (bvshl
-    ((_ zero_extend 1)
-     rM)
-    ((_ zero_extend 1)
-     ((_ extract 31 0)
-      (immShift)))))
   (testCondition
    (ite
     (andp
@@ -241,44 +132,32 @@
     #xe
     ((_ extract 15 12)
      'CPSR)))
-  (var3
-   ((testCondition)
-    (ite
-     (andp
-      (notp
-       (bvne
-        #x00
-        (concat
-         ((_ extract 15 12)
-          'CPSR)
-         (concat
-          ((_ extract 11 10)
-           'CPSR)
-          ((_ extract 26 25)
-           'CPSR)))))
-      (notp
-       ((_ call "uf.arm.is_r15")
-        rDN)))
-     var2)
-    'CPSR))
-  (var2
-   ((concat
-    (nzcv)
-    ((_ extract 27 0)
-     'CPSR))
-    'CPSR))
   (nzcv
    (concat
     ((_ extract 31 31)
      (bvand
       rDN
       ((_ extract 31 0)
-       (shiftC))))
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 34 32)
+         (immShift))
+        ((_ extract 31 0)
+         (immShift))
+        ((_ extract 29 29)
+         'CPSR)))))
     (concat
      (isZeroBit)
      (concat
       ((_ extract 32 32)
-       (shiftC))
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 34 32)
+         (immShift))
+        ((_ extract 31 0)
+         (immShift))
+        ((_ extract 29 29)
+         'CPSR)))
       ((_ extract 28 28)
        'CPSR)))))
   (isZeroBit
@@ -287,7 +166,14 @@
      (bvand
       rDN
       ((_ extract 31 0)
-       (shiftC)))
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 34 32)
+         (immShift))
+        ((_ extract 31 0)
+         (immShift))
+        ((_ extract 29 29)
+         'CPSR))))
      #x00000000)
     #b1
     #b0))
@@ -295,14 +181,20 @@
    (ite
     ((_ call "uf.arm.is_r15")
      rDN)
-    (bvand var1)
-    (bvadd 'PC #x00000002)))
-  (var1
-   (#xfffffffd
     (bvand
-     rDN
-     ((_ extract 31 0)
-      (shiftC))))))
+     #xfffffffd
+     (bvand
+      rDN
+      ((_ extract 31 0)
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 34 32)
+         (immShift))
+        ((_ extract 31 0)
+         (immShift))
+        ((_ extract 29 29)
+         'CPSR)))))
+    (bvadd 'PC #x00000002))))
  ((operands
   ((rDN . 'TGPR)
    (rM . 'TGPR)))
@@ -312,16 +204,29 @@
    (('PC
     (branchWritePC))
     ('CPSR
-     (ite var3))
-    (rDN
      (ite
       (testCondition)
       (ite
-       ((_ call "uf.arm.is_r15")
-        rDN)
-       rDN
-       (bvand
-        rDN
-        ((_ extract 31 0)
-         (shiftC))))
-      rDN))))))
+       (andp
+        (notp
+         (bvne
+          #x00
+          (concat
+           ((_ extract 15 12)
+            'CPSR)
+           (concat
+            ((_ extract 11 10)
+             'CPSR)
+            ((_ extract 26 25)
+             'CPSR)))))
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rDN)))
+       (concat
+        (nzcv)
+        ((_ extract 27 0)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rDN
+     (var2))))))
