@@ -24,11 +24,7 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
 
 import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat, pred )
-import Data.Parameterized.Context
-import Data.Parameterized.NatRepr
-import Data.Parameterized.Some
-import qualified What4.BaseTypes as CRU
-import SemMC.Architecture.ARM.BaseSemantics.Base
+import Data.Parameterized.List
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Arithmetic
@@ -121,9 +117,9 @@ decodeImmShift ty imm5 = ImmShift $ "immShift" =:
 
 -- | The Shift function from the ARM manual (v8).
 shift :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV
-      -> SemARM 'Def (Expr 'TBV)
+      -> Expr 'TBV
 shift value srtype shift_n carry_in =
-    extract 31 0 <$> shiftC value srtype shift_n carry_in
+    extract 31 0 $ shiftC value srtype shift_n carry_in
 
 
 -- | Shift with carry out.  (F2.4.3, F-2420)
@@ -141,18 +137,19 @@ shiftCImpl value shift_t shift_n c =
         , (bveq shift_t (LitBV 3 0b011), rorC value shift_n)
         ] (rrxC value c)
 
-shiftC :: Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV
-       -> SemARM 'Def (Expr 'TBV)
-shiftC value (unSRType -> shift_t) shift_n c = do
+shiftCLF :: LibraryFunctionDef '(['TBV, 'TBV, 'TBV, 'TBV], 'TBV)
+shiftCLF =
   defineLibraryFunction "shiftC"
-    (Empty :> Arg "value" (CRU.BaseBVRepr (knownNat @NaturalBitSize)) naturalBV
-           :> Arg "shift_t" (CRU.BaseBVRepr (knownNat @3)) (EBV 3)
-           :> Arg "shift_n" (CRU.BaseBVRepr (knownNat @NaturalBitSize)) naturalBV
-           :> Arg "c" (CRU.BaseBVRepr (knownNat @1)) (EBV 1))
-    (CRU.BaseBVRepr (knownNat @(NaturalBitSize + 1))) (EBV (naturalBitSize + 1))
+    (Arg "value" naturalBV :<
+     Arg "shift_t" (EBV 3) :<
+     Arg "shift_n" naturalBV :<
+     Arg "c" (EBV 1) :< Nil)
     shiftCImpl
-  return $ DefinedFunc (EBV (naturalBitSize + 1)) "shiftC"
-             [ Some value, Some shift_t, Some shift_n, Some c ]
+
+shiftC :: Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV
+       -> Expr 'TBV
+shiftC value (unSRType -> shift_t) shift_n c =
+  lf shiftCLF (value :< shift_t :< shift_n :< c :< Nil)
 
 -- | Logical Shift Left (with carry out)  AppxG-5008 and (E1.2.2, E1-2290)
 --

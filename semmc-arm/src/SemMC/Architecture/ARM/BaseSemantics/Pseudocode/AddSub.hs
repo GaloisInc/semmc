@@ -11,18 +11,10 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
     )
     where
 
-import Data.Parameterized.Context
-import Data.Parameterized.NatRepr
-import Data.Parameterized.Some
-import qualified What4.BaseTypes as CRU
 import Prelude hiding ( concat, pred )
-import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.DSL
-
-naturalBVBT :: CRU.BaseTypeRepr (CRU.BaseBVType NaturalBitSize)
-naturalBVBT = CRU.BaseBVRepr knownNat
 
 -- What4 only allows defined functions to return single values, so we have to
 -- pack together the result and the NZCV bits into a single 36-bit vector.
@@ -43,21 +35,22 @@ addWithCarry_impl x y carry_in =
         nzcv = concat n $ concat z $ concat c v
     in concat ("addResult" =: res) ("addCarry" =: nzcv)
 
+addWithCarry_lf :: LibraryFunctionDef '(['TBV, 'TBV, 'TBV], 'TBV)
+addWithCarry_lf =
+  defineLibraryFunction "addWithCarry"
+    (Arg "x" naturalBV :<
+     Arg "y" naturalBV :<
+     Arg "carry_in" naturalBV :<
+     Nil)
+    addWithCarry_impl
+
 -- | Pseudocode AddWithCarry (E1-2292 or F2-2423)
 addWithCarry :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
-             -> SemARM 'Def (Expr 'TBV, Expr 'TBV)
+             -> (Expr 'TBV, Expr 'TBV)
                  -- ^ 32-bit result, NZCV result bits  (E1-2292 or F2-2423)
-addWithCarry x y carry_in = do
-  defineLibraryFunction "addWithCarry"
-    (Empty :> Arg "x" naturalBVBT naturalBV
-           :> Arg "y" naturalBVBT naturalBV
-           :> Arg "carry_in" naturalBVBT naturalBV)
-    (CRU.BaseBVRepr (knownNat @(NaturalBitSize + 4))) (EBV (naturalBitSize + 4))
-    addWithCarry_impl
-  let res_nzcv =
-        DefinedFunc (EBV (naturalBitSize + 4)) "addWithCarry"
-          [Some x, Some y, Some carry_in]
-  return (extract 31 0 res_nzcv, extract 35 32 res_nzcv)
+addWithCarry x y carry_in =
+  let res_nzcv = LibraryFunc addWithCarry_lf (x :< y :< carry_in :< Nil)
+  in (extract 31 0 res_nzcv, extract 35 32 res_nzcv)
 
 -- | Version of 'addWithCarry' that inlines the addition code into the formula
 -- rather than relying on a defined function. Useful when one of the operands

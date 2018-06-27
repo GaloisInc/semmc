@@ -193,7 +193,7 @@ defineStores = do
         (_,_,c,_) = getNZCV
 
         (shift_t, shift_n) = splitImmShift (decodeImmShift st imm5)
-    offset <- shift (Loc rM) shift_t shift_n c
+        offset = shift (Loc rM) shift_t shift_n c
 
     let nBytes = 4
         addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)

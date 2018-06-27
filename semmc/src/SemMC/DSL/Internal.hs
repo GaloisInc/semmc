@@ -10,15 +10,17 @@ module SemMC.DSL.Internal
     , Parameter(..)
     , Location(..)
     , Literal(..)
+    , Argument(..)
+    , LibraryFunctionDef(..)
     , Expr(..)
     , litEq
   ) where
 
 import Control.Monad ( guard )
 import Data.Parameterized.Classes
+import Data.Parameterized.List as SL
 import Data.Parameterized.Some ( Some(..) )
 import Data.Parameterized.TH.GADT ( structuralTypeEquality )
-
 
 data ExprTag = TBool
               | TBV
@@ -138,6 +140,21 @@ instance TestEquality Location where
             return Refl
           _ -> Nothing
 
+data Argument tp = Arg String (ExprTypeRepr tp)
+  deriving (Show)
+
+instance ShowF Argument
+
+data LibraryFunctionDef (sig :: ([ExprTag], ExprTag)) where
+  LibFuncDef :: { lfdName :: String,
+                  lfdArgs :: SL.List Argument args,
+                  lfdRetType :: ExprTypeRepr ret,
+                  lfdBody :: Expr ret
+                } -> LibraryFunctionDef '(args, ret)
+
+deriving instance Show (LibraryFunctionDef sig)
+instance ShowF LibraryFunctionDef
+
 -- | An expression representing an SMT formula.  It can reference parameters
 --
 -- Note that there are some GADT type tags -- unlike crucible, we never need to
@@ -157,7 +174,7 @@ data Expr (tp :: ExprTag) where
   -- primitive
   UninterpretedFunc :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
   -- | Defined functions called with the @call@ SMTLib primitive
-  DefinedFunc :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
+  LibraryFunc :: LibraryFunctionDef '(args, ret) -> SL.List Expr args -> Expr ret
   -- | Assign an advisory name to a sub-expression.  This can be used
   -- (for example) to guide let-binding for output S-expression forms
   -- of this expression.
