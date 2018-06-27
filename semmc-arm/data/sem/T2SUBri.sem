@@ -7,12 +7,14 @@
     (bveq setcc #b1)
     rD
     ((_ extract 31 0)
-     (var1)))
+     (res_nzcv)))
    rD))
-  (var1
+  (res_nzcv
    ((_ call "df.addWithCarry")
     rN
-    (var3)
+    var1))
+  (var1
+   ((var3)
     #x00000001))
   (var3
    (bvnot
@@ -303,7 +305,7 @@
           (bveq setcc #b1))))
        (concat
         ((_ extract 35 32)
-         (var1))
+         (res_nzcv))
         ((_ extract 27 0)
          'CPSR))
        'CPSR)

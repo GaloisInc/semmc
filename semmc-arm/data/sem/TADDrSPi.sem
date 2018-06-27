@@ -12,15 +12,17 @@
        rD)
       rD
       ((_ extract 31 0)
-       ((_ call "df.addWithCarry")
-        'R13
-        ((_ zero_extend 22)
-         (concat
-          ((_ call "uf.t32.imm0_1020S4_imm")
-           imm)
-          #b00))
-        #x00000000)))
+       (res_nzcv)))
      rD)))))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    'R13
+    ((_ zero_extend 22)
+     (concat
+      ((_ call "uf.t32.imm0_1020S4_imm")
+       imm)
+      #b00))
+    #x00000000))
   (testCondition
    (ite
     (andp
@@ -134,14 +136,7 @@
     (bvand
      #xfffffffd
      ((_ extract 31 0)
-      ((_ call "df.addWithCarry")
-       'R13
-       ((_ zero_extend 22)
-        (concat
-         ((_ call "uf.t32.imm0_1020S4_imm")
-          imm)
-         #b00))
-       #x00000000)))
+      (res_nzcv)))
     (bvadd 'PC #x00000002))))
  ((operands
   ((rD . 'TGPR)

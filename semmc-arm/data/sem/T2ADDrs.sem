@@ -8,20 +8,22 @@
      rD)
     rD
     ((_ extract 31 0)
-     ((_ call "df.addWithCarry")
-      ((_ call "uf.t32.t2soreg_reg")
-       rN)
-      ((_ extract 31 0)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 34 32)
-         (immShift))
-        ((_ extract 31 0)
-         (immShift))
-        ((_ extract 29 29)
-         'CPSR)))
-      #x00000000)))
+     (res_nzcv)))
    rD))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    ((_ call "uf.t32.t2soreg_reg")
+     rN)
+    ((_ extract 31 0)
+     ((_ call "df.shiftC")
+      rM
+      ((_ extract 34 32)
+       (immShift))
+      ((_ extract 31 0)
+       (immShift))
+      ((_ extract 29 29)
+       'CPSR)))
+    #x00000000))
   (immShift
    (ite
     (bveq
@@ -189,19 +191,7 @@
      'CPSR)))
   (nzcv
    ((_ extract 35 32)
-    ((_ call "df.addWithCarry")
-     ((_ call "uf.t32.t2soreg_reg")
-      rN)
-     ((_ extract 31 0)
-      ((_ call "df.shiftC")
-       rM
-       ((_ extract 34 32)
-        (immShift))
-       ((_ extract 31 0)
-        (immShift))
-       ((_ extract 29 29)
-        'CPSR)))
-     #x00000000)))
+    (res_nzcv)))
   (branchWritePC
    (ite
     ((_ call "uf.arm.is_r15")
@@ -209,19 +199,7 @@
     (bvand
      #xfffffffd
      ((_ extract 31 0)
-      ((_ call "df.addWithCarry")
-       ((_ call "uf.t32.t2soreg_reg")
-        rN)
-       ((_ extract 31 0)
-        ((_ call "df.shiftC")
-         rM
-         ((_ extract 34 32)
-          (immShift))
-         ((_ extract 31 0)
-          (immShift))
-         ((_ extract 29 29)
-          'CPSR)))
-       #x00000000)))
+      (res_nzcv)))
     (bvadd 'PC #x00000002))))
  ((operands
   ((rD . 'GPRnopc)

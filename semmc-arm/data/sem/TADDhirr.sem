@@ -12,17 +12,19 @@
        rDN)
       rDN
       ((_ extract 31 0)
-       ((_ call "df.addWithCarry")
-        rDN
-        ((_ extract 31 0)
-         ((_ call "df.shiftC")
-          rM
-          #b000
-          #x00000000
-          ((_ extract 29 29)
-           'CPSR)))
-        #x00000000)))
+       (res_nzcv)))
      rDN)))))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    rDN
+    ((_ extract 31 0)
+     ((_ call "df.shiftC")
+      rM
+      #b000
+      #x00000000
+      ((_ extract 29 29)
+       'CPSR)))
+    #x00000000))
   (testCondition
    (ite
     (andp
@@ -136,16 +138,7 @@
     (bvand
      #xfffffffd
      ((_ extract 31 0)
-      ((_ call "df.addWithCarry")
-       rDN
-       ((_ extract 31 0)
-        ((_ call "df.shiftC")
-         rM
-         #b000
-         #x00000000
-         ((_ extract 29 29)
-          'CPSR)))
-       #x00000000)))
+      (res_nzcv)))
     (bvadd 'PC #x00000002))))
  ((operands
   ((rDN . 'GPR)
