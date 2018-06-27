@@ -1,6 +1,6 @@
 ;; ADC immediate, A32, Encoding A1 (F7.1.1, F7-2534)
 (let
- ((var3
+ ((var1
   (('CPSR
    (ite
     (testCondition)
@@ -23,7 +23,16 @@
         ((_ call "uf.arm.is_r15")
          rD)
         (ite
-         (var2)
+         (bveq
+          #b0
+          ((_ extract 0 0)
+           ((_ extract 31 0)
+            ((_ call "df.addWithCarry")
+             rN
+             (armExpandImm)
+             ((_ zero_extend 31)
+              ((_ extract 29 29)
+               'CPSR))))))
          (SetT32Mode)
          'CPSR)
         'CPSR)))
@@ -31,7 +40,16 @@
       ((_ call "uf.arm.is_r15")
        rD)
       (ite
-       (var2)
+       (bveq
+        #b0
+        ((_ extract 0 0)
+         ((_ extract 31 0)
+          ((_ call "df.addWithCarry")
+           rN
+           (armExpandImm)
+           ((_ zero_extend 31)
+            ((_ extract 29 29)
+             'CPSR))))))
        (SetT32Mode)
        'CPSR)
       'CPSR))
@@ -42,85 +60,28 @@
      (ite
       ((_ call "uf.arm.is_r15")
        rD)
-      var1)
+      rD
+      ((_ extract 31 0)
+       ((_ call "df.addWithCarry")
+        rN
+        (armExpandImm)
+        ((_ zero_extend 31)
+         ((_ extract 29 29)
+          'CPSR)))))
      rD))))
-  (var1
-   (rD
-    ((_ extract 31 0)
-     ((_ call "df.addWithCarry")
-      rN
-      (armExpandImm)
-      ((_ zero_extend 31)
-       ((_ extract 29 29)
-        'CPSR))))))
   (armExpandImm
    ((_ extract 31 0)
-    (shiftC)))
-  (shiftC
-   (ite
-    (bveq
+    ((_ call "df.shiftC")
+     ((_ zero_extend 24)
+      ((_ call "uf.a32.modimm_imm")
+       mimm))
+     #b011
      (bvshl
       #x00000001
       ((_ zero_extend 28)
        ((_ call "uf.a32.modimm_rot")
         mimm)))
-     #x00000000)
-    (concat
-     #b0
-     ((_ zero_extend 24)
-      ((_ call "uf.a32.modimm_imm")
-       mimm)))
-    (rorC)))
-  (rorC
-   (concat
-    (ite
-     (bvult
-      (bvshl
-       #x00000001
-       ((_ zero_extend 28)
-        ((_ call "uf.a32.modimm_rot")
-         mimm)))
-      #x00000020)
-     (ite
-      ((_ call "uf.test_bit_dynamic")
-       (bvsub
-        (bvshl
-         #x00000001
-         ((_ zero_extend 28)
-          ((_ call "uf.a32.modimm_rot")
-           mimm)))
-        #x00000001)
-       ((_ zero_extend 24)
-        ((_ call "uf.a32.modimm_imm")
-         mimm)))
-      #b1
-      #b0)
-     #b0)
-    (bvor
-     (bvshl
-      ((_ zero_extend 24)
-       ((_ call "uf.a32.modimm_imm")
-        mimm))
-      (bvsub
-       #x00000020
-       (bvurem
-        (bvshl
-         #x00000001
-         ((_ zero_extend 28)
-          ((_ call "uf.a32.modimm_rot")
-           mimm)))
-        #x00000020)))
-     (bvlshr
-      ((_ zero_extend 24)
-       ((_ call "uf.a32.modimm_imm")
-        mimm))
-      (bvurem
-       (bvshl
-        #x00000001
-        ((_ zero_extend 28)
-         ((_ call "uf.a32.modimm_rot")
-          mimm)))
-       #x00000020)))))
+     #b0)))
   (testCondition
    (ite
     (andp
@@ -217,23 +178,21 @@
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
-  (var2
-   (bveq
-    #b0
-    ((_ extract 0 0)
-     ((_ extract 31 0)
-      ((_ call "df.addWithCarry")
-       rN
-       (armExpandImm)
-       ((_ zero_extend 31)
-        ((_ extract 29 29)
-         'CPSR)))))))
   (bxWritePC
    (ite
     ((_ call "uf.arm.is_r15")
      rD)
     (ite
-     (var2)
+     (bveq
+      #b0
+      ((_ extract 0 0)
+       ((_ extract 31 0)
+        ((_ call "df.addWithCarry")
+         rN
+         (armExpandImm)
+         ((_ zero_extend 31)
+          ((_ extract 29 29)
+           'CPSR))))))
      (bvand
       #xfffffffe
       ((_ extract 31 0)
@@ -282,4 +241,4 @@
   (defs
    (('PC
     (bxWritePC))
-    var3))))
+    var1))))

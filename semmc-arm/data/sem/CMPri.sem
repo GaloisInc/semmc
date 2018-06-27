@@ -4,72 +4,17 @@
 (let
  ((armExpandImm
   ((_ extract 31 0)
-   (shiftC)))
-  (shiftC
-   (ite
-    (bveq
-     (bvshl
-      #x00000001
-      ((_ zero_extend 28)
-       ((_ call "uf.a32.modimm_rot")
-        modimm)))
-     #x00000000)
-    (concat
-     #b0
-     ((_ zero_extend 24)
-      ((_ call "uf.a32.modimm_imm")
+   ((_ call "df.shiftC")
+    ((_ zero_extend 24)
+     ((_ call "uf.a32.modimm_imm")
+      modimm))
+    #b011
+    (bvshl
+     #x00000001
+     ((_ zero_extend 28)
+      ((_ call "uf.a32.modimm_rot")
        modimm)))
-    (rorC)))
-  (rorC
-   (concat
-    (ite
-     (bvult
-      (bvshl
-       #x00000001
-       ((_ zero_extend 28)
-        ((_ call "uf.a32.modimm_rot")
-         modimm)))
-      #x00000020)
-     (ite
-      ((_ call "uf.test_bit_dynamic")
-       (bvsub
-        (bvshl
-         #x00000001
-         ((_ zero_extend 28)
-          ((_ call "uf.a32.modimm_rot")
-           modimm)))
-        #x00000001)
-       ((_ zero_extend 24)
-        ((_ call "uf.a32.modimm_imm")
-         modimm)))
-      #b1
-      #b0)
-     #b0)
-    (bvor
-     (bvshl
-      ((_ zero_extend 24)
-       ((_ call "uf.a32.modimm_imm")
-        modimm))
-      (bvsub
-       #x00000020
-       (bvurem
-        (bvshl
-         #x00000001
-         ((_ zero_extend 28)
-          ((_ call "uf.a32.modimm_rot")
-           modimm)))
-        #x00000020)))
-     (bvlshr
-      ((_ zero_extend 24)
-       ((_ call "uf.a32.modimm_imm")
-        modimm))
-      (bvurem
-       (bvshl
-        #x00000001
-        ((_ zero_extend 28)
-         ((_ call "uf.a32.modimm_rot")
-          modimm)))
-       #x00000020)))))
+    #b0)))
   (testCondition
    (ite
     (andp
