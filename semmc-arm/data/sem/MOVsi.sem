@@ -1,145 +1,9 @@
 ;; MOV immediate, A32, Encoding A1  (F7.1.107, F7-2708)
 (let
- ((var1
-  (ite
-   (testCondition)
-   (ite
-    ((_ call "uf.arm.is_r15")
-     rD)
-    rD
-    ((_ extract 31 0)
-     ((_ call "df.shiftC")
-      ((_ zero_extend 24)
-       ((_ extract 7 0)
-        ((_ extract 11 0)
-         regimm)))
-      #b011
-      (bvshl
-       #x00000001
-       ((_ zero_extend 28)
-        ((_ extract 11 8)
-         ((_ extract 11 0)
-          regimm))))
-      ((_ extract 29 29)
-       'CPSR))))
-   rD))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       predBits))
-     (bvne predBits #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        predBits)
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         predBits)
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          predBits)
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           predBits)
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            predBits)
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
-  (true
-   (bveq #b0 #b0))
-  (SetT32Mode
-   (bvand
-    #xfeffffff
-    (bvor #x00000020 'CPSR)))
-  (isZeroBit
-   (ite
-    (bveq
-     ((_ extract 31 0)
-      ((_ call "df.shiftC")
-       ((_ zero_extend 24)
-        ((_ extract 7 0)
-         ((_ extract 11 0)
-          regimm)))
-       #b011
-       (bvshl
-        #x00000001
-        ((_ zero_extend 28)
-         ((_ extract 11 8)
-          ((_ extract 11 0)
-           regimm))))
-       ((_ extract 29 29)
-        'CPSR)))
-     #x00000000)
-    #b1
-    #b0))
+ ((SetT32Mode
+  (bvand
+   #xfeffffff
+   (bvor #x00000020 'CPSR)))
   (bxWritePC
    (ite
     ((_ call "uf.arm.is_r15")
@@ -244,7 +108,9 @@
     (bxWritePC))
     ('CPSR
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
       (ite
        (andp
         (bveq setcc #b1)
@@ -270,7 +136,22 @@
             ((_ extract 29 29)
              'CPSR))))
          (concat
-          (isZeroBit)
+          ((_ call "df.isZeroBit")
+           ((_ extract 31 0)
+            ((_ call "df.shiftC")
+             ((_ zero_extend 24)
+              ((_ extract 7 0)
+               ((_ extract 11 0)
+                regimm)))
+             #b011
+             (bvshl
+              #x00000001
+              ((_ zero_extend 28)
+               ((_ extract 11 8)
+                ((_ extract 11 0)
+                 regimm))))
+             ((_ extract 29 29)
+              'CPSR))))
           (concat
            ((_ extract 32 32)
             ((_ call "df.shiftC")
@@ -342,4 +223,27 @@
         'CPSR))
       'CPSR))
     (rD
-     (var1))))))
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       ((_ extract 31 0)
+        ((_ call "df.shiftC")
+         ((_ zero_extend 24)
+          ((_ extract 7 0)
+           ((_ extract 11 0)
+            regimm)))
+         #b011
+         (bvshl
+          #x00000001
+          ((_ zero_extend 28)
+           ((_ extract 11 8)
+            ((_ extract 11 0)
+             regimm))))
+         ((_ extract 29 29)
+          'CPSR))))
+      rD))))))

@@ -1,137 +1,11 @@
 ;; AND register, Encoding T1 (F7.1.14, F7-2558)
 ;; This encoding has no shift; fixed to 0
 (let
- ((var2
-  (ite var1))
-  (var1
-   ((testCondition)
-    (ite
-     ((_ call "uf.arm.is_r15")
-      rDN)
-     rDN
-     (bvand
-      rDN
-      ((_ extract 31 0)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 34 32)
-         (immShift))
-        ((_ extract 31 0)
-         (immShift))
-        ((_ extract 29 29)
-         'CPSR)))))
-    rDN))
-  (immShift
-   (concat
-    #b000
-    ((_ zero_extend 27)
-     #b00000)))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       (ITState)))
-     (bvne
-      (ITState)
-      #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      (ITState))
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       (ITState))
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        (ITState))
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         (ITState))
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          (ITState))
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           (ITState))
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            (ITState))
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
-  (true
-   (bveq #b0 #b0))
-  (ITState
-   (ite
-    (bveq
-     (concat
-      ((_ extract 11 10)
-       'CPSR)
-      ((_ extract 26 25)
-       'CPSR))
-     #x0)
-    #xe
-    ((_ extract 15 12)
-     'CPSR)))
+ ((immShift
+  (concat
+   #b000
+   ((_ zero_extend 27)
+    #b00000)))
   (nzcv
    (concat
     ((_ extract 31 31)
@@ -147,7 +21,18 @@
         ((_ extract 29 29)
          'CPSR)))))
     (concat
-     (isZeroBit)
+     ((_ call "df.isZeroBit")
+      (bvand
+       rDN
+       ((_ extract 31 0)
+        ((_ call "df.shiftC")
+         rM
+         ((_ extract 34 32)
+          (immShift))
+         ((_ extract 31 0)
+          (immShift))
+         ((_ extract 29 29)
+          'CPSR)))))
      (concat
       ((_ extract 32 32)
        ((_ call "df.shiftC")
@@ -160,23 +45,6 @@
          'CPSR)))
       ((_ extract 28 28)
        'CPSR)))))
-  (isZeroBit
-   (ite
-    (bveq
-     (bvand
-      rDN
-      ((_ extract 31 0)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 34 32)
-         (immShift))
-        ((_ extract 31 0)
-         (immShift))
-        ((_ extract 29 29)
-         'CPSR))))
-     #x00000000)
-    #b1
-    #b0))
   (branchWritePC
    (ite
     ((_ call "uf.arm.is_r15")
@@ -205,7 +73,10 @@
     (branchWritePC))
     ('CPSR
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
       (ite
        (andp
         (notp
@@ -229,4 +100,24 @@
        'CPSR)
       'CPSR))
     (rDN
-     (var2))))))
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rDN)
+       rDN
+       (bvand
+        rDN
+        ((_ extract 31 0)
+         ((_ call "df.shiftC")
+          rM
+          ((_ extract 34 32)
+           (immShift))
+          ((_ extract 31 0)
+           (immShift))
+          ((_ extract 29 29)
+           'CPSR)))))
+      rDN))))))
