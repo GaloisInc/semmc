@@ -5,25 +5,25 @@
  (in
   (memref 'Mem 'IP))
  (defs
-  ((((_ call "ppc.memrix_reg")
+  ((((_ call "uf.ppc.memrix_reg")
    memref)
    (bvadd
-    ((_ call "ppc.memrix_reg")
+    ((_ call "uf.ppc.memrix_reg")
      memref)
     ((_ sign_extend 48)
      (concat
-      ((_ call "ppc.memrix_offset")
+      ((_ call "uf.ppc.memrix_offset")
        memref)
       #b00))))
    (rT
-    ((_ call "read_mem.64")
+    ((_ call "uf.read_mem.64")
      'Mem
      (bvadd
-      ((_ call "ppc.memrix_reg")
+      ((_ call "uf.ppc.memrix_reg")
        memref)
       ((_ sign_extend 48)
        (concat
-        ((_ call "ppc.memrix_offset")
+        ((_ call "uf.ppc.memrix_offset")
          memref)
         #b00)))))
    ('IP

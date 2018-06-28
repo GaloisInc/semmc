@@ -1,7 +1,7 @@
 ((operands
- ((target. 'Gprc)
-  (source. 'Gprc)
-  (n. 'U2imm)))
+ ((target . 'Gprc)
+  (source . 'Gprc)
+  (n . 'U2imm)))
  (in
   (n source))
  (defs

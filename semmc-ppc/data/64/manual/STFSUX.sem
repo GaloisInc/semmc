@@ -5,22 +5,22 @@
  (in
   ('Mem memref frS 'IP))
  (defs
-  ((((_ call "ppc.memrr_base")
+  ((((_ call "uf.ppc.memrr_base")
    memref)
    (bvadd
-    ((_ call "ppc.memrr_base")
+    ((_ call "uf.ppc.memrr_base")
      memref)
-    ((_ call "ppc.memrr_offset")
+    ((_ call "uf.ppc.memrr_offset")
      memref)))
    ('Mem
-    ((_ call "write_mem.32")
+    ((_ call "uf.write_mem.32")
      'Mem
      (bvadd
-      ((_ call "ppc.memrr_base")
+      ((_ call "uf.ppc.memrr_base")
        memref)
-      ((_ call "ppc.memrr_offset")
+      ((_ call "uf.ppc.memrr_offset")
        memref))
-     ((_ call "fp.round_single")
+     ((_ call "uf.fp.round_single")
       ((_ extract 127 64)
        frS))))
    ('IP

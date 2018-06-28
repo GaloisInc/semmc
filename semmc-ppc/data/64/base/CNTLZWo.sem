@@ -24,7 +24,7 @@
        (ite
         (bvslt
          ((_ zero_extend 32)
-          ((_ call "clz.32")
+          ((_ call "uf.clz.32")
            ((_ extract 31 0)
             rS)))
          #x0000000000000000)
@@ -32,7 +32,7 @@
         (ite
          (bvsgt
           ((_ zero_extend 32)
-           ((_ call "clz.32")
+           ((_ call "uf.clz.32")
             ((_ extract 31 0)
              rS)))
           #x0000000000000000)
@@ -48,7 +48,7 @@
       #x00000004))))
    (rA
     ((_ zero_extend 32)
-     ((_ call "clz.32")
+     ((_ call "uf.clz.32")
       ((_ extract 31 0)
        rS))))
    ('IP

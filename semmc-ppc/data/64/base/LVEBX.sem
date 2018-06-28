@@ -7,19 +7,19 @@
  (defs
   ((vrT
    (concat
-    ((_ call "undefined")
+    ((_ call "uf.undefined")
      #x00000078)
-    ((_ call "read_mem.8")
+    ((_ call "uf.read_mem.8")
      'Mem
      (bvadd
       (ite
-       ((_ call "ppc.is_r0")
-        ((_ call "ppc.memrr_base")
+       ((_ call "uf.ppc.is_r0")
+        ((_ call "uf.ppc.memrr_base")
          memrr))
        #x0000000000000000
-       ((_ call "ppc.memrr_base")
+       ((_ call "uf.ppc.memrr_base")
         memrr))
-      ((_ call "ppc.memrr_offset")
+      ((_ call "uf.ppc.memrr_offset")
        memrr)))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

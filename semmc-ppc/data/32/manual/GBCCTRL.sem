@@ -15,22 +15,22 @@
     ('IP
      (ite
       (ite
-       ((_ call "test_bit_dynamic")
+       ((_ call "uf.test_bit_dynamic")
         ((_ zero_extend 27)
          bo)
         #x00000004)
        (true)
        (ite
-        ((_ call "test_bit_dynamic")
+        ((_ call "uf.test_bit_dynamic")
          ((_ zero_extend 27)
           bo)
          #x00000003)
-        ((_ call "test_bit_dynamic")
+        ((_ call "uf.test_bit_dynamic")
          'CR
          ((_ zero_extend 27)
           (bvsub #b11111 bi)))
         (notp
-         ((_ call "test_bit_dynamic")
+         ((_ call "uf.test_bit_dynamic")
           'CR
           ((_ zero_extend 27)
            (bvsub #b11111 bi))))))

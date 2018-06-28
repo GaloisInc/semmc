@@ -5,24 +5,24 @@
  (in
   (memref 'Mem 'IP))
  (defs
-  ((((_ call "ppc.memri_reg")
+  ((((_ call "uf.ppc.memri_reg")
    memref)
    (bvadd
-    ((_ call "ppc.memri_reg")
+    ((_ call "uf.ppc.memri_reg")
      memref)
     ((_ sign_extend 48)
-     ((_ call "ppc.memri_offset")
+     ((_ call "uf.ppc.memri_offset")
       memref))))
    (frT
     (concat
      #x0000000000000000
-     ((_ call "read_mem.64")
+     ((_ call "uf.read_mem.64")
       'Mem
       (bvadd
-       ((_ call "ppc.memri_reg")
+       ((_ call "uf.ppc.memri_reg")
         memref)
        ((_ sign_extend 48)
-        ((_ call "ppc.memri_offset")
+        ((_ call "uf.ppc.memri_offset")
          memref))))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

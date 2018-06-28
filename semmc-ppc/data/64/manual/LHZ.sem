@@ -7,18 +7,18 @@
  (defs
   ((rT
    ((_ zero_extend 48)
-    ((_ call "read_mem.16")
+    ((_ call "uf.read_mem.16")
      'Mem
      (bvadd
       (ite
-       ((_ call "ppc.is_r0")
-        ((_ call "ppc.memri_reg")
+       ((_ call "uf.ppc.is_r0")
+        ((_ call "uf.ppc.memri_reg")
          memref))
        #x0000000000000000
-       ((_ call "ppc.memri_reg")
+       ((_ call "uf.ppc.memri_reg")
         memref))
       ((_ sign_extend 48)
-       ((_ call "ppc.memri_offset")
+       ((_ call "uf.ppc.memri_offset")
         memref))))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))
