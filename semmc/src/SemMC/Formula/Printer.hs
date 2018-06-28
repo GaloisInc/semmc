@@ -175,7 +175,7 @@ convertFnApp :: ParamLookup t -> S.ExprSymFn t args ret -> Ctx.Assignment (S.Exp
 convertFnApp paramLookup fn args
   | name == "undefined"
   , BaseBVRepr nr <- S.fnReturnType fn =
-      let call = fromFoldable' [ ident "_", ident "call", quoted "undefined" ]
+      let call = fromFoldable' [ ident "_", ident "call", quoted "uf.undefined" ]
       in fromFoldable' [ call, int (NR.natValue nr) ]
   | otherwise =
     let call = fromFoldable' [ ident "_", ident "call", quoted (prefix ++ T.unpack name) ]

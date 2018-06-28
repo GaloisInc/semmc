@@ -691,7 +691,7 @@ exprAssignment tpAssn exs = exprAssignment' tpAssn (reverse exs)
 readUndefined :: forall sym arch sh m . ExprParser sym arch sh m
 readUndefined (SC.SCons (SC.SAtom (AIdent "_"))
                 (SC.SCons (SC.SAtom (AIdent "call"))
-                  (SC.SCons (SC.SAtom (AString "undefined"))
+                  (SC.SCons (SC.SAtom (AString "uf.undefined"))
                     SC.SNil))) args =
   case args of
     [Some ex] ->
@@ -710,7 +710,7 @@ readUndefined (SC.SCons (SC.SAtom (AIdent "_"))
       case NR.testLeq (knownNat @1) nr of
         Just NR.LeqProof -> do
           let rty = BaseBVRepr nr
-          fn <- liftIO (S.freshTotalUninterpFn sym (U.makeSymbol "undefined") Ctx.empty rty)
+          fn <- liftIO (S.freshTotalUninterpFn sym (U.makeSymbol "uf.undefined") Ctx.empty rty)
           assn <- exprAssignment (S.fnArgTypes fn) []
           (Just . Some) <$> liftIO (S.applySymFn sym fn assn)
         Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" (NR.widthVal nr)
