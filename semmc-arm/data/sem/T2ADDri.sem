@@ -1,6 +1,6 @@
 ;; Add immediate, T32, encoding T3 (F7.1.4, F7-2540)
 (let
- ((var4
+ ((var1
   (ite
    (testCondition)
    (ite
@@ -15,155 +15,13 @@
     (thumbExpandImm)
     #x00000000))
   (thumbExpandImm
-   (ite var1))
-  (var1
-   ((bveq
-    ((_ extract 11 10)
-     ((_ call "uf.t32.t2soimm_imm")
-      imm))
-    #b00)
-    (var3)
-    ((_ extract 31 0)
-     (rorC))))
-  (rorC
-   (concat
-    (ite
-     (bvult
-      ((_ zero_extend 27)
-       ((_ extract 11 7)
-        ((_ call "uf.t32.t2soimm_imm")
-         imm)))
-      #x00000020)
-     (ite
-      ((_ call "uf.test_bit_dynamic")
-       (bvsub
-        ((_ zero_extend 27)
-         ((_ extract 11 7)
-          ((_ call "uf.t32.t2soimm_imm")
-           imm)))
-        #x00000001)
-       ((_ zero_extend 24)
-        (concat
-         #b1
-         ((_ extract 6 0)
-          ((_ call "uf.t32.t2soimm_imm")
-           imm)))))
-      #b1
-      #b0)
-     #b0)
-    (bvor
-     (bvshl
-      ((_ zero_extend 24)
-       (concat
-        #b1
-        ((_ extract 6 0)
-         ((_ call "uf.t32.t2soimm_imm")
-          imm))))
-      (bvsub
-       #x00000020
-       (bvurem
-        ((_ zero_extend 27)
-         ((_ extract 11 7)
-          ((_ call "uf.t32.t2soimm_imm")
-           imm)))
-        #x00000020)))
-     (bvlshr
-      ((_ zero_extend 24)
-       (concat
-        #b1
-        ((_ extract 6 0)
-         ((_ call "uf.t32.t2soimm_imm")
-          imm))))
-      (bvurem
-       ((_ zero_extend 27)
-        ((_ extract 11 7)
-         ((_ call "uf.t32.t2soimm_imm")
-          imm)))
-       #x00000020)))))
-  (var3
-   (ite
-    (bveq
-     ((_ extract 9 8)
-      ((_ call "uf.t32.t2soimm_imm")
-       imm))
-     #b00)
-    ((_ zero_extend 24)
-     ((_ extract 7 0)
-      ((_ call "uf.t32.t2soimm_imm")
-       imm)))
-    (ite
-     (bveq
-      ((_ extract 9 8)
-       ((_ call "uf.t32.t2soimm_imm")
-        imm))
-      #b01)
-     (ite
-      (bveq
-       ((_ extract 7 0)
-        ((_ call "uf.t32.t2soimm_imm")
-         imm))
-       #x00)
-      ((_ extract 31 0)
-       (rorC))
-      (concat
-       (concat
-        (concat
-         #x00
-         ((_ extract 7 0)
-          ((_ call "uf.t32.t2soimm_imm")
-           imm)))
-        #x00)
-       ((_ extract 7 0)
-        ((_ call "uf.t32.t2soimm_imm")
-         imm))))
-     (ite
-      (bveq
-       ((_ extract 9 8)
-        ((_ call "uf.t32.t2soimm_imm")
-         imm))
-       #b10)
-      (ite
-       (bveq
-        ((_ extract 7 0)
-         ((_ call "uf.t32.t2soimm_imm")
-          imm))
-        #x00)
-       ((_ extract 31 0)
-        (rorC))
-       (concat
-        (concat
-         (concat
-          ((_ extract 7 0)
-           ((_ call "uf.t32.t2soimm_imm")
-            imm))
-          #x00)
-         ((_ extract 7 0)
-          ((_ call "uf.t32.t2soimm_imm")
-           imm)))
-        #x00))
-      (ite
-       (bveq
-        ((_ extract 7 0)
-         ((_ call "uf.t32.t2soimm_imm")
-          imm))
-        #x00)
-       ((_ extract 31 0)
-        (rorC))
-       (concat
-        (concat
-         (concat
-          ((_ extract 7 0)
-           ((_ call "uf.t32.t2soimm_imm")
-            imm))
-          ((_ extract 7 0)
-           ((_ call "uf.t32.t2soimm_imm")
-            imm)))
-         ((_ extract 7 0)
-          ((_ call "uf.t32.t2soimm_imm")
-           imm)))
-        ((_ extract 7 0)
-         ((_ call "uf.t32.t2soimm_imm")
-          imm))))))))
+   ((_ extract 31 0)
+    (imm32_carry_out)))
+  (imm32_carry_out
+   ((_ call "df.thumbexpandimm_c")
+    ((_ call "uf.t32.t2soimm_imm")
+     imm)
+    #b0))
   (testCondition
    (ite
     (andp
@@ -269,29 +127,7 @@
      #x0)
     #xe
     ((_ extract 15 12)
-     'CPSR)))
-  (var2
-   ((andp
-    (orp
-     (andp
-      ((_ call "uf.arm.is_r15")
-       rD)
-      (notp
-       (bveq setcc #b1)))
-     ((_ call "uf.arm.is_r15")
-      rN))
-    (andp
-     (notp
-      ((_ call "uf.arm.is_r15")
-       rD))
-     (notp
-      (bveq setcc #b1))))
-    (concat
-     ((_ extract 35 32)
-      (res_nzcv))
-     ((_ extract 27 0)
-      'CPSR))
-    'CPSR)))
+     'CPSR))))
  ((operands
   ((rD . 'GPRnopc)
    (setcc . 'Cc_out)
@@ -305,7 +141,28 @@
     ('CPSR
      (ite
       (testCondition)
-      (ite var2)
+      (ite
+       (andp
+        (orp
+         (andp
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (notp
+           (bveq setcc #b1)))
+         ((_ call "uf.arm.is_r15")
+          rN))
+        (andp
+         (notp
+          ((_ call "uf.arm.is_r15")
+           rD))
+         (notp
+          (bveq setcc #b1))))
+       (concat
+        ((_ extract 35 32)
+         (res_nzcv))
+        ((_ extract 27 0)
+         'CPSR))
+       'CPSR)
       'CPSR))
     (rD
-     (var4))))))
+     (var1))))))

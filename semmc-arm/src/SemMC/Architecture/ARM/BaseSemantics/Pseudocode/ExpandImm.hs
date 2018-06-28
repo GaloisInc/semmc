@@ -68,8 +68,8 @@ thumbExpandImm t2_so_imm =
   let imm12 = t2SoImm_imm t2_so_imm
   in "thumbExpandImm" =: (fst $ thumbexpandimm_c imm12 (LitBV 1 0))
 
-thumbexpandimm_c :: Expr 'TBV -> Expr 'TBV -> (Expr 'TBV, Expr 'TBV)
-thumbexpandimm_c imm12 carry_in =
+thumbexpandimm_c_impl :: Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+thumbexpandimm_c_impl imm12 carry_in =
   let sel1 = extract 11 10 imm12
       sel2 = extract  9  8 imm12
       top5 = extract 11  7 imm12
@@ -98,4 +98,17 @@ thumbexpandimm_c imm12 carry_in =
             ( unpredictable imm32')
             ( val `concat` val `concat` val `concat` val ) ) )
         imm32'
-  in (imm32, carry_out)
+  in imm32 `concat` carry_out
+
+thumbexpandimm_c_lf :: LibraryFunctionDef '(['TBV, 'TBV], 'TBV)
+thumbexpandimm_c_lf =
+  defineLibraryFunction "thumbexpandimm_c"
+    (Arg "imm12" (EBV 12) :<
+     Arg "carry_in" (EBV 1) :< Nil)
+    thumbexpandimm_c_impl
+
+thumbexpandimm_c :: Expr 'TBV -> Expr 'TBV -> (Expr 'TBV, Expr 'TBV)
+thumbexpandimm_c imm12 carry_in =
+  let packed = "imm32_carry_out" =:
+        lf thumbexpandimm_c_lf (imm12 :< carry_in :< Nil)
+  in (extract 31 0 packed, extract 32 32 packed)
