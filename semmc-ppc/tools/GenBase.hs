@@ -96,10 +96,9 @@ genOpDefs :: forall sym
           -> IO (Int, Int)
 genOpDefs sym d sz chk (dl, fl) = do
   (s, e, lib) :: (Int, Int, SF.Library sym)
-    <- F.foldlM (writeFunDef sym) (0, 0, SF.emptyLibrary) fl
-  F.foldlM (writeDef sym lib) (s, e) dl
-    where writeFunDef :: sym -> (Int, Int, SF.Library sym) -> (String, DSL.FunctionDefinition) -> IO (Int, Int, SF.Library sym)
-          writeFunDef sym (s,e,lib) (funName, def) =
+    <- F.foldlM writeFunDef (0, 0, SF.emptyLibrary) fl
+  F.foldlM (writeDef lib) (s, e) dl
+    where writeFunDef (s,e,lib) (funName, def) =
               let fundef = DSL.printFunctionDefinition def
                   fundefB = encodeUtf8 fundef
                   writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
@@ -112,7 +111,7 @@ genOpDefs sym d sz chk (dl, fl) = do
                            Left err -> do putStrLn ("Error for function " <> funName <> ": " <> err)
                                           return (s, e+1, lib)
                  else writeIt >> return (s+1, e, lib)
-          writeDef sym lib (s,e) (opName, def) =
+          writeDef lib (s,e) (opName, def) =
               let opcode = F.find ((==) opName . show) opcodes
                   semdef = DSL.printDefinition def
                   semdefB = encodeUtf8 semdef
