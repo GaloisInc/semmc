@@ -1,20 +1,11 @@
 ;; SUB immediate, T32, encoding T3 (F7.1.234, F7-2914)
 (let
- ((var1
-  (ite
-   (testCondition)
-   (ite
-    (bveq setcc #b1)
-    rD
-    ((_ extract 31 0)
-     (res_nzcv)))
-   rD))
-  (res_nzcv
-   ((_ call "df.addWithCarry")
-    rN
-    (bvnot
-     (thumbExpandImm))
-    #x00000001))
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   (bvnot
+    (thumbExpandImm))
+   #x00000001))
   (thumbExpandImm
    ((_ extract 31 0)
     (imm32_carry_out)))
@@ -22,113 +13,7 @@
    ((_ call "df.thumbexpandimm_c")
     ((_ call "uf.t32.t2soimm_imm")
      imm)
-    #b0))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       (ITState)))
-     (bvne
-      (ITState)
-      #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      (ITState))
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       (ITState))
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        (ITState))
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         (ITState))
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          (ITState))
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           (ITState))
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            (ITState))
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
-  (true
-   (bveq #b0 #b0))
-  (ITState
-   (ite
-    (bveq
-     (concat
-      ((_ extract 11 10)
-       'CPSR)
-      ((_ extract 26 25)
-       'CPSR))
-     #x0)
-    #xe
-    ((_ extract 15 12)
-     'CPSR))))
+    #b0)))
  ((operands
   ((rD . 'GPRnopc)
    (setcc . 'Cc_out)
@@ -141,7 +26,10 @@
     (bvadd 'PC #x00000002))
     ('CPSR
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
       (ite
        (andp
         (orp
@@ -166,4 +54,14 @@
        'CPSR)
       'CPSR))
     (rD
-     (var1))))))
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (bveq setcc #b1)
+       rD
+       ((_ extract 31 0)
+        (res_nzcv)))
+      rD))))))

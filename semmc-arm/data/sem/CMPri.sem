@@ -20,99 +20,7 @@
       ((_ zero_extend 28)
        ((_ call "uf.a32.modimm_rot")
         modimm)))
-     #b0)))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       predBits))
-     (bvne predBits #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        predBits)
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         predBits)
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          predBits)
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           predBits)
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            predBits)
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
-  (true
-   (bveq #b0 #b0)))
+     #b0))))
  ((operands
   ((predBits . 'Pred)
    (modimm . 'Mod_imm)
@@ -125,7 +33,9 @@
     (bvadd 'PC #x00000004))
     ('CPSR
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
       (concat
        ((_ extract 35 32)
         (res_nzcv))

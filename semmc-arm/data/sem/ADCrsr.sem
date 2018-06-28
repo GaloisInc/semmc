@@ -1,165 +1,25 @@
 ;; ADC (register-shifted register), Encoding A1 (F7.1.3, F7-2538)
 (let
- ((var1
-  (('CPSR
-   (ite
-    (testCondition)
-    (ite
-     (andp
-      (bveq setcc #b1)
-      (notp
-       (orp
-        ((_ call "uf.arm.is_r15")
-         rD)
-        (orp
-         ((_ call "uf.arm.is_r15")
-          ((_ call "uf.a32.soregreg_reg2")
-           sorr))
-         (orp
-          ((_ call "uf.arm.is_r15")
-           rN)
-          ((_ call "uf.arm.is_r15")
-           ((_ call "uf.a32.soregreg_reg1")
-            sorr)))))))
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   ((_ extract 31 0)
+    ((_ call "df.shiftC")
+     ((_ call "uf.a32.soregreg_reg2")
+      sorr)
      (concat
-      (nzcv)
-      ((_ extract 27 0)
-       'CPSR))
-     'CPSR)
-    'CPSR))
-   (rD
-    (ite
-     (testCondition)
-     (ite
-      (orp
-       ((_ call "uf.arm.is_r15")
-        rD)
-       (orp
-        ((_ call "uf.arm.is_r15")
-         ((_ call "uf.a32.soregreg_reg2")
-          sorr))
-        (orp
-         ((_ call "uf.arm.is_r15")
-          rN)
-         ((_ call "uf.arm.is_r15")
-          ((_ call "uf.a32.soregreg_reg1")
-           sorr)))))
-      rD
-      ((_ extract 31 0)
-       (res_nzcv)))
-     rD))))
-  (res_nzcv
-   ((_ call "df.addWithCarry")
-    rN
-    ((_ extract 31 0)
-     ((_ call "df.shiftC")
-      ((_ call "uf.a32.soregreg_reg2")
-       sorr)
-      (concat
-       #b0
-       ((_ call "uf.a32.soregreg_type")
-        sorr))
-      ((_ zero_extend 24)
-       ((_ extract 7 0)
-        ((_ call "uf.a32.soregreg_reg1")
-         sorr)))
-      ((_ extract 29 29)
-       'CPSR)))
-    ((_ zero_extend 31)
+      #b0
+      ((_ call "uf.a32.soregreg_type")
+       sorr))
+     ((_ zero_extend 24)
+      ((_ extract 7 0)
+       ((_ call "uf.a32.soregreg_reg1")
+        sorr)))
      ((_ extract 29 29)
-      'CPSR))))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       predBits))
-     (bvne predBits #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        predBits)
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         predBits)
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          predBits)
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           predBits)
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            predBits)
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
-  (true
-   (bveq #b0 #b0))
+      'CPSR)))
+   ((_ zero_extend 31)
+    ((_ extract 29 29)
+     'CPSR))))
   (nzcv
    ((_ extract 35 32)
     (res_nzcv))))
@@ -174,4 +34,54 @@
   (defs
    (('PC
     (bvadd 'PC #x00000004))
-    var1))))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         (orp
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (orp
+           ((_ call "uf.arm.is_r15")
+            ((_ call "uf.a32.soregreg_reg2")
+             sorr))
+           (orp
+            ((_ call "uf.arm.is_r15")
+             rN)
+            ((_ call "uf.arm.is_r15")
+             ((_ call "uf.a32.soregreg_reg1")
+              sorr)))))))
+       (concat
+        (nzcv)
+        ((_ extract 27 0)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (orp
+        ((_ call "uf.arm.is_r15")
+         rD)
+        (orp
+         ((_ call "uf.arm.is_r15")
+          ((_ call "uf.a32.soregreg_reg2")
+           sorr))
+         (orp
+          ((_ call "uf.arm.is_r15")
+           rN)
+          ((_ call "uf.arm.is_r15")
+           ((_ call "uf.a32.soregreg_reg1")
+            sorr)))))
+       rD
+       ((_ extract 31 0)
+        (res_nzcv)))
+      rD))))))

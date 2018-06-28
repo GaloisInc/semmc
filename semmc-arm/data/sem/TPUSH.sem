@@ -1,130 +1,143 @@
 ;; Push register list, Encoding T1 (F7.1.137, F7-2760)
 (let
- ((var37
+ ((var31
   (('Mem
    ((_ call "uf.write_mem.32")
-    var30))
-   ('Mem
-    ((_ call "uf.write_mem.32")
-     'Mem
-     (stack_12)
-     (ite
-      (testCondition)
-      (pshval_SPminus12)
-      ((_ call "uf.read_mem.32")
-       'Mem
-       (stack_12)))))
+    'Mem
+    (stack_13)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus13)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_13)))))
+   (var12)
    ('Mem
     ((_ call "uf.write_mem.32")
      'Mem
      (stack_11)
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
       (pshval_SPminus11)
       ((_ call "uf.read_mem.32")
        'Mem
        (stack_11)))))
    ('Mem
-    (var20))
-   ('Mem var22)
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_10)
+     (var18)))
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_9)
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus9)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_9)))))
    ('Mem
     ((_ call "uf.write_mem.32")
      'Mem
      (stack_8)
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
       (pshval_SPminus8)
       ((_ call "uf.read_mem.32")
        'Mem
        (stack_8)))))
    ('Mem
     ((_ call "uf.write_mem.32")
-     'Mem
-     (stack_7)
-     (ite
-      (testCondition)
-      (pshval_SPminus7)
-      ((_ call "uf.read_mem.32")
-       'Mem
-       (stack_7)))))
+     var24))
    ('Mem
     ((_ call "uf.write_mem.32")
      'Mem
      (stack_6)
-     (var34)))
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus6)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_6)))))
+   ('Mem
+    (var4))
+   ('Mem
+    (var8))
    ('Mem
     ((_ call "uf.write_mem.32")
      'Mem
-     (stack_5)
-     var28))
-   ('Mem
-    ((_ call "uf.write_mem.32")
-     'Mem
-     (stack_4)
-     (ite
-      (testCondition)
-      (pshval_SPminus4)
-      ((_ call "uf.read_mem.32")
-       'Mem
-       (stack_4)))))
-   (var35)
-   var36))
-  (var36
-   (('Mem
-    ((_ call "uf.write_mem.32")
-     'Mem
-     (stack_2)
-     (ite
-      (testCondition)
-      (pshval_SPminus2)
-      ((_ call "uf.read_mem.32")
-       'Mem
-       (stack_2)))))
+     (stack_3)
+     (ite var11)))
+   var30))
+  (var30
+   (('Mem var15)
     ('Mem
      ((_ call "uf.write_mem.32")
       'Mem
       (stack_1)
-      var32))
-    ('Mem var33)))
-  (var33
-   (((_ call "uf.write_mem.32")
-    'Mem
-    (stack_0)
-    (ite
-     (testCondition)
-     var18))))
-  (var18
-   ((pshval_SPminus0)
-    ((_ call "uf.read_mem.32")
-     'Mem
-     (stack_0))))
+      (ite
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
+       (pshval_SPminus1)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_1)))))
+    ('Mem
+     ((_ call "uf.write_mem.32")
+      'Mem
+      (stack_0)
+      (ite
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
+       (pshval_SPminus0)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_0)))))))
   (stack_0
    (bvsub 'R13 #x00000004))
   (pshval_SPminus0
    (ite
     (isActive_SPminus0_R0)
-    var31))
-  (var31
-   ('R0
+    'R0
     (ite
      (isActive_SPminus0_R1)
      'R1
      (ite
       (isActive_SPminus0_R2)
-      var29))))
-  (var29
-   ('R2
+      'R2
+      var9))))
+  (var9
+   ((ite
+    (isActive_SPminus0_R3)
+    'R3
     (ite
-     (isActive_SPminus0_R3)
-     'R3
-     (ite
-      (isActive_SPminus0_R4)
-      'R4
-      (ite
-       (isActive_SPminus0_R5)
-       var25)))))
-  (var25
-   ('R5
+     (isActive_SPminus0_R4)
+     'R4
+     var1))))
+  (var1
+   ((ite
+    (isActive_SPminus0_R5)
+    'R5
     (ite
      (isActive_SPminus0_R6)
      'R6
@@ -133,33 +146,33 @@
       'R7
       (ite
        (isActive_SPminus0_R8)
-       'R8
-       (ite
-        (isActive_SPminus0_R9)
-        'R9
-        (ite
-         (isActive_SPminus0_R10)
-         'R10
-         (ite
-          (isActive_SPminus0_R11)
-          'R11
-          (ite
-           (isActive_SPminus0_R12)
-           'R12
-           (ite
-            (isActive_SPminus0_R13)
-            var4))))))))))
-  (var4
-   ('R13
+       var20))))))
+  (var20
+   ('R8
     (ite
-     (isActive_SPminus0_R14)
-     'R14
+     (isActive_SPminus0_R9)
+     'R9
      (ite
-      (isActive_SPminus0_R15)
-      (bvadd 'PC #x00000008)
-      ((_ call "uf.read_mem.32")
-       'Mem
-       (stack_0))))))
+      (isActive_SPminus0_R10)
+      'R10
+      (ite
+       (isActive_SPminus0_R11)
+       'R11
+       (ite
+        (isActive_SPminus0_R12)
+        'R12
+        (ite
+         (isActive_SPminus0_R13)
+         'R13
+         (ite
+          (isActive_SPminus0_R14)
+          'R14
+          (ite
+           (isActive_SPminus0_R15)
+           (bvadd 'PC #x00000008)
+           ((_ call "uf.read_mem.32")
+            'Mem
+            (stack_0)))))))))))
   (isActive_SPminus0_R15
    (andp
     (bvugt
@@ -438,146 +451,30 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       (ITState)))
-     (bvne
-      (ITState)
-      #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      (ITState))
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       (ITState))
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        (ITState))
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         (ITState))
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (var8))))))
-  (var8
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      (ITState))
-     #b100)
-    (andp
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (notp
-      (bveq
-       #b1
-       ((_ extract 30 30)
-        'CPSR))))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       (ITState))
-      #b101)
-     (bveq
-      ((_ extract 31 31)
-       'CPSR)
-      ((_ extract 28 28)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        (ITState))
-       #b110)
-      (andp
-       (bveq
-        ((_ extract 31 31)
-         'CPSR)
-        ((_ extract 28 28)
-         'CPSR))
-       (notp
-        (bveq
-         #b1
-         ((_ extract 30 30)
-          'CPSR))))
-      (true)))))
-  (true
-   (bveq #b0 #b0))
-  (ITState
-   (ite
-    (bveq
-     (concat
-      ((_ extract 11 10)
-       'CPSR)
-      ((_ extract 26 25)
-       'CPSR))
-     #x0)
-    #xe
-    ((_ extract 15 12)
-     'CPSR)))
-  (var32
-   ((ite
-    (testCondition)
-    (pshval_SPminus1)
-    ((_ call "uf.read_mem.32")
-     'Mem
-     (stack_1)))))
   (stack_1
    (bvsub 'R13 #x00000008))
   (pshval_SPminus1
-   (ite var15))
-  (var15
-   ((isActive_SPminus1_R0)
+   (ite
+    (isActive_SPminus1_R0)
     'R0
-    var12))
-  (var12
-   ((ite
-    (isActive_SPminus1_R1)
-    'R1
+    (ite
+     (isActive_SPminus1_R1)
+     var28)))
+  (var28
+   ('R1
     (ite
      (isActive_SPminus1_R2)
      'R2
-     var5))))
+     var5)))
   (var5
    ((ite
     (isActive_SPminus1_R3)
     'R3
-    var1)))
-  (var1
-   ((ite
-    (isActive_SPminus1_R4)
-    'R4
+    (ite
+     (isActive_SPminus1_R4)
+     var25))))
+  (var25
+   ('R4
     (ite
      (isActive_SPminus1_R5)
      'R5
@@ -610,7 +507,7 @@
               'R14
               ((_ call "uf.read_mem.32")
                'Mem
-               (stack_1)))))))))))))))
+               (stack_1))))))))))))))
   (isActive_SPminus1_R14
    (andp
     (bvugt
@@ -866,6 +763,21 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
+  (var15
+   (((_ call "uf.write_mem.32")
+    var29)))
+  (var29
+   ('Mem
+    (stack_2)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus2)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_2)))))
   (stack_2
    (bvsub 'R13 #x0000000c))
   (pshval_SPminus2
@@ -883,39 +795,45 @@
        'R3
        (ite
         (isActive_SPminus2_R4)
-        var23))))))
+        'R4
+        (var23)))))))
   (var23
-   ('R4
+   (ite
+    (isActive_SPminus2_R5)
+    var22))
+  (var22
+   ('R5
     (ite
-     (isActive_SPminus2_R5)
-     'R5
+     (isActive_SPminus2_R6)
+     'R6
+     (var19))))
+  (var19
+   (ite
+    (isActive_SPminus2_R7)
+    'R7
+    (ite
+     (isActive_SPminus2_R8)
+     'R8
      (ite
-      (isActive_SPminus2_R6)
-      'R6
+      (isActive_SPminus2_R9)
+      'R9
+      (var10)))))
+  (var10
+   (ite
+    (isActive_SPminus2_R10)
+    'R10
+    (ite
+     (isActive_SPminus2_R11)
+     'R11
+     (ite
+      (isActive_SPminus2_R12)
+      'R12
       (ite
-       (isActive_SPminus2_R7)
-       'R7
-       (ite
-        (isActive_SPminus2_R8)
-        'R8
-        (ite
-         (isActive_SPminus2_R9)
-         'R9
-         (ite
-          (isActive_SPminus2_R10)
-          'R10
-          (ite
-           (isActive_SPminus2_R11)
-           'R11
-           (ite
-            (isActive_SPminus2_R12)
-            'R12
-            (ite
-             (isActive_SPminus2_R13)
-             'R13
-             ((_ call "uf.read_mem.32")
-              'Mem
-              (stack_2)))))))))))))
+       (isActive_SPminus2_R13)
+       'R13
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_2)))))))
   (isActive_SPminus2_R13
    (andp
     (bvugt
@@ -1154,28 +1072,26 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (var35
-   ('Mem
-    ((_ call "uf.write_mem.32")
+  (var11
+   (((_ call "df.testCondition")
+    ((_ call "df.ITState")
+     'CPSR)
+    'CPSR)
+    (pshval_SPminus3)
+    ((_ call "uf.read_mem.32")
      'Mem
-     (stack_3)
-     (ite
-      (testCondition)
-      (pshval_SPminus3)
-      ((_ call "uf.read_mem.32")
-       'Mem
-       (stack_3))))))
+     (stack_3))))
   (stack_3
    (bvsub 'R13 #x00000010))
   (pshval_SPminus3
    (ite
     (isActive_SPminus3_R0)
-    'R0
-    (var27)))
+    var27))
   (var27
-   (ite
-    (isActive_SPminus3_R1)
-    var26))
+   ('R0
+    (ite
+     (isActive_SPminus3_R1)
+     var26)))
   (var26
    ('R1
     (ite
@@ -1192,34 +1108,28 @@
         'R5
         (ite
          (isActive_SPminus3_R6)
-         var17)))))))
-  (var17
-   ('R6
-    (ite
-     (isActive_SPminus3_R7)
-     'R7
-     (ite
-      (isActive_SPminus3_R8)
-      var11))))
-  (var11
-   ('R8
-    (var10)))
-  (var10
-   (ite
-    (isActive_SPminus3_R9)
-    'R9
-    (ite
-     (isActive_SPminus3_R10)
-     'R10
-     (ite
-      (isActive_SPminus3_R11)
-      'R11
-      (ite
-       (isActive_SPminus3_R12)
-       'R12
-       ((_ call "uf.read_mem.32")
-        'Mem
-        (stack_3)))))))
+         'R6
+         (ite
+          (isActive_SPminus3_R7)
+          'R7
+          (ite
+           (isActive_SPminus3_R8)
+           'R8
+           (ite
+            (isActive_SPminus3_R9)
+            'R9
+            (ite
+             (isActive_SPminus3_R10)
+             'R10
+             (ite
+              (isActive_SPminus3_R11)
+              'R11
+              (ite
+               (isActive_SPminus3_R12)
+               'R12
+               ((_ call "uf.read_mem.32")
+                'Mem
+                (stack_3)))))))))))))))
   (isActive_SPminus3_R12
    (andp
     (bvugt
@@ -1441,6 +1351,19 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
+  (var8
+   ((_ call "uf.write_mem.32")
+    'Mem
+    (stack_4)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus4)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_4)))))
   (stack_4
    (bvsub 'R13 #x00000014))
   (pshval_SPminus4
@@ -1461,28 +1384,32 @@
         'R4
         (ite
          (isActive_SPminus4_R5)
-         'R5
-         (ite
-          (isActive_SPminus4_R6)
-          'R6
-          (ite
-           (isActive_SPminus4_R7)
-           'R7
-           (ite
-            (isActive_SPminus4_R8)
-            'R8
-            (ite
-             (isActive_SPminus4_R9)
-             'R9
-             (ite
-              (isActive_SPminus4_R10)
-              'R10
-              (ite
-               (isActive_SPminus4_R11)
-               'R11
-               ((_ call "uf.read_mem.32")
-                'Mem
-                (stack_4)))))))))))))))
+         var17)))))))
+  (var17
+   ('R5
+    (ite
+     (isActive_SPminus4_R6)
+     'R6
+     (ite
+      (isActive_SPminus4_R7)
+      'R7
+      (ite
+       (isActive_SPminus4_R8)
+       'R8
+       (ite
+        (isActive_SPminus4_R9)
+        'R9
+        (var2)))))))
+  (var2
+   (ite
+    (isActive_SPminus4_R10)
+    'R10
+    (ite
+     (isActive_SPminus4_R11)
+     'R11
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_4)))))
   (isActive_SPminus4_R11
    (andp
     (bvugt
@@ -1687,40 +1614,40 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (var28
-   ((ite
-    (testCondition)
-    (pshval_SPminus5)
-    ((_ call "uf.read_mem.32")
-     'Mem
-     (stack_5)))))
+  (var4
+   ((_ call "uf.write_mem.32")
+    'Mem
+    (stack_5)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus5)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_5)))))
   (stack_5
    (bvsub 'R13 #x00000018))
   (pshval_SPminus5
    (ite
     (isActive_SPminus5_R0)
     'R0
-    (var24)))
-  (var24
-   (ite
-    (isActive_SPminus5_R1)
-    'R1
     (ite
-     (isActive_SPminus5_R2)
-     var21)))
-  (var21
-   ('R2
-    (ite
-     (isActive_SPminus5_R3)
-     'R3
+     (isActive_SPminus5_R1)
+     'R1
      (ite
-      (isActive_SPminus5_R4)
-      'R4
-      (var16)))))
-  (var16
-   (ite
-    (isActive_SPminus5_R5)
-    var14))
+      (isActive_SPminus5_R2)
+      'R2
+      (ite
+       (isActive_SPminus5_R3)
+       'R3
+       (ite
+        (isActive_SPminus5_R4)
+        'R4
+        (ite
+         (isActive_SPminus5_R5)
+         var14)))))))
   (var14
    ('R5
     (ite
@@ -1729,18 +1656,20 @@
      (ite
       (isActive_SPminus5_R7)
       'R7
-      (ite
-       (isActive_SPminus5_R8)
-       'R8
-       (ite
-        (isActive_SPminus5_R9)
-        'R9
-        (ite
-         (isActive_SPminus5_R10)
-         'R10
-         ((_ call "uf.read_mem.32")
-          'Mem
-          (stack_5)))))))))
+      (var6)))))
+  (var6
+   (ite
+    (isActive_SPminus5_R8)
+    'R8
+    (ite
+     (isActive_SPminus5_R9)
+     'R9
+     (ite
+      (isActive_SPminus5_R10)
+      'R10
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_5))))))
   (isActive_SPminus5_R10
    (andp
     (bvugt
@@ -1928,13 +1857,6 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (var34
-   (ite
-    (testCondition)
-    (pshval_SPminus6)
-    ((_ call "uf.read_mem.32")
-     'Mem
-     (stack_6))))
   (stack_6
    (bvsub 'R13 #x0000001c))
   (pshval_SPminus6
@@ -1944,37 +1866,43 @@
     (ite
      (isActive_SPminus6_R1)
      'R1
-     (ite
-      (isActive_SPminus6_R2)
-      var19))))
-  (var19
-   ('R2
+     (var21))))
+  (var21
+   (ite
+    (isActive_SPminus6_R2)
+    'R2
     (ite
      (isActive_SPminus6_R3)
      'R3
-     (ite
-      (isActive_SPminus6_R4)
-      'R4
-      (var13)))))
+     (var16))))
+  (var16
+   (ite
+    (isActive_SPminus6_R4)
+    'R4
+    (var13)))
   (var13
    (ite
     (isActive_SPminus6_R5)
     'R5
     (ite
      (isActive_SPminus6_R6)
-     'R6
+     var7)))
+  (var7
+   ('R6
+    (ite
+     (isActive_SPminus6_R7)
+     var3)))
+  (var3
+   ('R7
+    (ite
+     (isActive_SPminus6_R8)
+     'R8
      (ite
-      (isActive_SPminus6_R7)
-      'R7
-      (ite
-       (isActive_SPminus6_R8)
-       'R8
-       (ite
-        (isActive_SPminus6_R9)
-        'R9
-        ((_ call "uf.read_mem.32")
-         'Mem
-         (stack_6))))))))
+      (isActive_SPminus6_R9)
+      'R9
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_6))))))
   (isActive_SPminus6_R9
    (andp
     (bvugt
@@ -2145,6 +2073,18 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
+  (var24
+   ('Mem
+    (stack_7)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus7)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_7)))))
   (stack_7
    (bvsub 'R13 #x00000020))
   (pshval_SPminus7
@@ -2349,22 +2289,18 @@
        (ite
         (isActive_SPminus8_R4)
         'R4
-        (var6)))))))
-  (var6
-   (ite
-    (isActive_SPminus8_R5)
-    'R5
-    (var2)))
-  (var2
-   (ite
-    (isActive_SPminus8_R6)
-    'R6
-    (ite
-     (isActive_SPminus8_R7)
-     'R7
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (stack_8)))))
+        (ite
+         (isActive_SPminus8_R5)
+         'R5
+         (ite
+          (isActive_SPminus8_R6)
+          'R6
+          (ite
+           (isActive_SPminus8_R7)
+           'R7
+           ((_ call "uf.read_mem.32")
+            'Mem
+            (stack_8)))))))))))
   (isActive_SPminus8_R7
    (andp
     (bvugt
@@ -2501,16 +2437,6 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (var22
-   (((_ call "uf.write_mem.32")
-    'Mem
-    (stack_9)
-    (ite
-     (testCondition)
-     (pshval_SPminus9)
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (stack_9))))))
   (stack_9
    (bvsub 'R13 #x00000028))
   (pshval_SPminus9
@@ -2525,21 +2451,19 @@
       'R2
       (ite
        (isActive_SPminus9_R3)
-       var7)))))
-  (var7
-   ('R3
-    (ite
-     (isActive_SPminus9_R4)
-     'R4
-     (ite
-      (isActive_SPminus9_R5)
-      'R5
-      (ite
-       (isActive_SPminus9_R6)
-       'R6
-       ((_ call "uf.read_mem.32")
-        'Mem
-        (stack_9)))))))
+       'R3
+       (ite
+        (isActive_SPminus9_R4)
+        'R4
+        (ite
+         (isActive_SPminus9_R5)
+         'R5
+         (ite
+          (isActive_SPminus9_R6)
+          'R6
+          ((_ call "uf.read_mem.32")
+           'Mem
+           (stack_9))))))))))
   (isActive_SPminus9_R6
    (andp
     (bvugt
@@ -2659,16 +2583,16 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (var20
-   ((_ call "uf.write_mem.32")
-    'Mem
-    (stack_10)
-    (ite
-     (testCondition)
-     (pshval_SPminus10)
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (stack_10)))))
+  (var18
+   (ite
+    ((_ call "df.testCondition")
+     ((_ call "df.ITState")
+      'CPSR)
+     'CPSR)
+    (pshval_SPminus10)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (stack_10))))
   (stack_10
    (bvsub 'R13 #x0000002c))
   (pshval_SPminus10
@@ -2683,18 +2607,16 @@
       'R2
       (ite
        (isActive_SPminus10_R3)
-       var3)))))
-  (var3
-   ('R3
-    (ite
-     (isActive_SPminus10_R4)
-     'R4
-     (ite
-      (isActive_SPminus10_R5)
-      'R5
-      ((_ call "uf.read_mem.32")
-       'Mem
-       (stack_10))))))
+       'R3
+       (ite
+        (isActive_SPminus10_R4)
+        'R4
+        (ite
+         (isActive_SPminus10_R5)
+         'R5
+         ((_ call "uf.read_mem.32")
+          'Mem
+          (stack_10)))))))))
   (isActive_SPminus10_R5
    (andp
     (bvugt
@@ -2903,6 +2825,20 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
+  (var12
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_12)
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus12)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_12))))))
   (stack_12
    (bvsub 'R13 #x00000034))
   (pshval_SPminus12
@@ -2989,15 +2925,6 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (var30
-   ('Mem
-    (stack_13)
-    (ite
-     (testCondition)
-     (pshval_SPminus13)
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (stack_13)))))
   (stack_13
    (bvsub 'R13 #x00000038))
   (pshval_SPminus13
@@ -3064,16 +2991,6 @@
       ((_ extract 0 0)
        ((_ call "uf.t32.reglist")
         registers))))))
-  (var9
-   ((_ call "uf.write_mem.32")
-    'Mem
-    (stack_14)
-    (ite
-     (testCondition)
-     (pshval_SPminus14)
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (stack_14)))))
   (stack_14
    (bvsub 'R13 #x0000003c))
   (pshval_SPminus14
@@ -3170,11 +3087,25 @@
       'Mem
       (stack_15)
       (ite
-       (testCondition)
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
        (pshval_SPminus15)
        ((_ call "uf.read_mem.32")
         'Mem
         (stack_15)))))
     ('Mem
-     (var9))
-    var37))))
+     ((_ call "uf.write_mem.32")
+      'Mem
+      (stack_14)
+      (ite
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
+       (pshval_SPminus14)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_14)))))
+    var31))))

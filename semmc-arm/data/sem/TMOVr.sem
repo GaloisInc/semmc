@@ -1,134 +1,29 @@
 ;; MOV register, T32, Encoding T1  (F7.1.108, F7-2710)
 (let
- ((var1
-  ((defs
+ ((branchWritePC
+  (ite
+   ((_ call "uf.arm.is_r15")
+    rD)
+   (bvand #xfffffffd rM)
+   (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'GPR)
+   (rM . 'GPR)))
+  (in
+   (rM 'CPSR 'PC))
+  (defs
    (('PC
     (branchWritePC))
     ('CPSR 'CPSR)
     (rD
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
       (ite
        ((_ call "uf.arm.is_r15")
         rD)
        rD
        rM)
       rD))))))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       (ITState)))
-     (bvne
-      (ITState)
-      #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      (ITState))
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       (ITState))
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        (ITState))
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         (ITState))
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          (ITState))
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           (ITState))
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            (ITState))
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
-  (true
-   (bveq #b0 #b0))
-  (ITState
-   (ite
-    (bveq
-     (concat
-      ((_ extract 11 10)
-       'CPSR)
-      ((_ extract 26 25)
-       'CPSR))
-     #x0)
-    #xe
-    ((_ extract 15 12)
-     'CPSR)))
-  (branchWritePC
-   (ite
-    ((_ call "uf.arm.is_r15")
-     rD)
-    (bvand #xfffffffd rM)
-    (bvadd 'PC #x00000002))))
- ((operands
-  ((rD . 'GPR)
-   (rM . 'GPR)))
-  (in
-   (rM 'CPSR 'PC))
-  var1))

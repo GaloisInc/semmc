@@ -1,39 +1,18 @@
 ;; ADC register, A32, Encoding A1 (F7.1.2, F7-2536)
 (let
- ((var4
-  (('CPSR
+ ((var2
+  (rD
    (ite
-    (testCondition)
+    ((_ call "df.testCondition")
+     predBits
+     'CPSR)
     (ite
-     (andp
-      (bveq setcc #b1)
-      (notp
-       ((_ call "uf.arm.is_r15")
-        rD)))
-     (var3)
-     (ite
-      ((_ call "uf.arm.is_r15")
-       rD)
-      (ite
-       (bveq
-        #b0
-        ((_ extract 0 0)
-         ((_ extract 31 0)
-          (res_nzcv))))
-       (SetT32Mode)
-       'CPSR)
-      'CPSR))
-    'CPSR))
-   (rD
-    (ite
-     (testCondition)
-     (ite
-      ((_ call "uf.arm.is_r15")
-       rD)
-      rD
-      ((_ extract 31 0)
-       (res_nzcv)))
-     rD))))
+     ((_ call "uf.arm.is_r15")
+      rD)
+     rD
+     ((_ extract 31 0)
+      (res_nzcv)))
+    rD)))
   (res_nzcv
    ((_ call "df.addWithCarry")
     rN
@@ -104,120 +83,44 @@
         ((_ zero_extend 27)
          ((_ call "uf.a32.soregimm_imm")
           sori))))))))
-  (testCondition
+  (var3
    (ite
     (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       predBits))
-     (bvne predBits #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (var1))))
-  (var1
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b010)
-    (bveq
-     #b1
-     ((_ extract 31 31)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b011)
-     (bveq
-      #b1
-      ((_ extract 28 28)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        predBits)
-       #b100)
-      (andp
-       (bveq
-        #b1
-        ((_ extract 29 29)
-         'CPSR))
-       (notp
-        (bveq
-         #b1
-         ((_ extract 30 30)
-          'CPSR))))
+     (bveq setcc #b1)
+     (notp
+      ((_ call "uf.arm.is_r15")
+       rD)))
+    (concat
+     (nzcv)
+     ((_ extract 27 0)
       (ite
-       (bveq
-        ((_ extract 3 1)
-         predBits)
-        #b101)
-       (bveq
-        ((_ extract 31 31)
-         'CPSR)
-        ((_ extract 28 28)
-         'CPSR))
+       ((_ call "uf.arm.is_r15")
+        rD)
        (ite
         (bveq
-         ((_ extract 3 1)
-          predBits)
-         #b110)
-        (andp
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (true)))))))
-  (true
-   (bveq #b0 #b0))
+         #b0
+         ((_ extract 0 0)
+          ((_ extract 31 0)
+           (res_nzcv))))
+        (SetT32Mode)
+        'CPSR)
+       'CPSR)))
+    (ite
+     ((_ call "uf.arm.is_r15")
+      rD)
+     (ite
+      (bveq
+       #b0
+       ((_ extract 0 0)
+        ((_ extract 31 0)
+         (res_nzcv))))
+      (SetT32Mode)
+      'CPSR)
+     'CPSR)))
   (SetT32Mode
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
-  (var3
-   (concat
-    (nzcv)
-    ((_ extract 27 0)
-     (ite
-      ((_ call "uf.arm.is_r15")
-       rD)
-      (ite
-       (bveq
-        #b0
-        ((_ extract 0 0)
-         ((_ extract 31 0)
-          (res_nzcv))))
-       (SetT32Mode)
-       'CPSR)
-      'CPSR))))
   (nzcv
    ((_ extract 35 32)
     (res_nzcv)))
@@ -231,23 +134,22 @@
       ((_ extract 0 0)
        ((_ extract 31 0)
         (res_nzcv))))
-     (var2)
+     (bvand
+      #xfffffffe
+      ((_ extract 31 0)
+       (res_nzcv)))
      (ite
       (bveq
        #b0
        ((_ extract 1 1)
         ((_ extract 31 0)
          (res_nzcv))))
-      (bvand
-       #xfffffffd
-       ((_ extract 31 0)
-        (res_nzcv)))
+      (bvand var1)
       ((_ extract 31 0)
        (res_nzcv))))
     (bvadd 'PC #x00000004)))
-  (var2
-   (bvand
-    #xfffffffe
+  (var1
+   (#xfffffffd
     ((_ extract 31 0)
      (res_nzcv)))))
  ((operands
@@ -261,4 +163,11 @@
   (defs
    (('PC
     (bxWritePC))
-    var4))))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (var3)
+      'CPSR))
+    (var2)))))
