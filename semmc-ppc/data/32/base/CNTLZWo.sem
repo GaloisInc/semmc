@@ -21,13 +21,13 @@
       (concat
        (ite
         (bvslt
-         ((_ call "clz.32")
+         ((_ call "uf.clz.32")
           rS)
          #x00000000)
         #b100
         (ite
          (bvsgt
-          ((_ call "clz.32")
+          ((_ call "uf.clz.32")
            rS)
           #x00000000)
          #b010
@@ -39,7 +39,7 @@
        #b000)
       #x00000004))))
    (rA
-    ((_ call "clz.32")
+    ((_ call "uf.clz.32")
      rS))
    ('IP
     (bvadd 'IP #x00000004)))))

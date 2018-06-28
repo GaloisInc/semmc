@@ -10,10 +10,10 @@
    (bvor
     (ite
      (orp
-      ((_ call "fp.is_snan64")
+      ((_ call "uf.fp.is_snan64")
        ((_ extract 63 0)
         frA))
-      ((_ call "fp.is_snan64")
+      ((_ call "uf.fp.is_snan64")
        ((_ extract 63 0)
         frB)))
      #x00000080
@@ -26,10 +26,10 @@
      (bvor
       (ite
        (orp
-        ((_ call "fp.is_snan64")
+        ((_ call "uf.fp.is_snan64")
          ((_ extract 63 0)
           frA))
-        ((_ call "fp.is_snan64")
+        ((_ call "uf.fp.is_snan64")
          ((_ extract 63 0)
           frB)))
        #x00000001

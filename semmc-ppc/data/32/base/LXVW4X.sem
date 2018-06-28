@@ -7,60 +7,60 @@
  (defs
   ((xT
    (concat
-    ((_ call "read_mem.32")
+    ((_ call "uf.read_mem.32")
      'Mem
      (bvadd
-      ((_ call "ppc.memrr_offset")
+      ((_ call "uf.ppc.memrr_offset")
        memref)
       (ite
-       ((_ call "ppc.is_r0")
-        ((_ call "ppc.memrr_base")
+       ((_ call "uf.ppc.is_r0")
+        ((_ call "uf.ppc.memrr_base")
          memref))
        #x00000000
-       ((_ call "ppc.memrr_base")
+       ((_ call "uf.ppc.memrr_base")
         memref))))
     (concat
-     ((_ call "read_mem.32")
+     ((_ call "uf.read_mem.32")
       'Mem
       (bvadd
        (bvadd
-        ((_ call "ppc.memrr_offset")
+        ((_ call "uf.ppc.memrr_offset")
          memref)
         (ite
-         ((_ call "ppc.is_r0")
-          ((_ call "ppc.memrr_base")
+         ((_ call "uf.ppc.is_r0")
+          ((_ call "uf.ppc.memrr_base")
            memref))
          #x00000000
-         ((_ call "ppc.memrr_base")
+         ((_ call "uf.ppc.memrr_base")
           memref)))
        #x00000004))
      (concat
-      ((_ call "read_mem.32")
+      ((_ call "uf.read_mem.32")
        'Mem
        (bvadd
         (bvadd
-         ((_ call "ppc.memrr_offset")
+         ((_ call "uf.ppc.memrr_offset")
           memref)
          (ite
-          ((_ call "ppc.is_r0")
-           ((_ call "ppc.memrr_base")
+          ((_ call "uf.ppc.is_r0")
+           ((_ call "uf.ppc.memrr_base")
             memref))
           #x00000000
-          ((_ call "ppc.memrr_base")
+          ((_ call "uf.ppc.memrr_base")
            memref)))
         #x00000008))
-      ((_ call "read_mem.32")
+      ((_ call "uf.read_mem.32")
        'Mem
        (bvadd
         (bvadd
-         ((_ call "ppc.memrr_offset")
+         ((_ call "uf.ppc.memrr_offset")
           memref)
          (ite
-          ((_ call "ppc.is_r0")
-           ((_ call "ppc.memrr_base")
+          ((_ call "uf.ppc.is_r0")
+           ((_ call "uf.ppc.memrr_base")
             memref))
           #x00000000
-          ((_ call "ppc.memrr_base")
+          ((_ call "uf.ppc.memrr_base")
            memref)))
         #x00000012))))))
    ('IP

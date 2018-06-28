@@ -121,7 +121,7 @@ loadBaseSet :: U.HasLogCfg
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.ExprBuilder t SB.SimpleBackendState) PPC32.PPC),
                    SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC32.PPC)
 loadBaseSet ops sym = do
-  baseSet <- F.loadFormulas sym ops
+  baseSet <- F.loadFormulas sym F.emptyLibrary ops
   let plainBaseSet = makePlain baseSet
       synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)

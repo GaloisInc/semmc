@@ -15,17 +15,17 @@
       ((_ extract 32 32)
        'XER)))))
    ('Mem
-    ((_ call "write_mem.32")
+    ((_ call "uf.write_mem.32")
      'Mem
      (bvadd
       (ite
-       ((_ call "ppc.is_r0")
-        ((_ call "ppc.memrr_base")
+       ((_ call "uf.ppc.is_r0")
+        ((_ call "uf.ppc.memrr_base")
          memref))
        #x0000000000000000
-       ((_ call "ppc.memrr_base")
+       ((_ call "uf.ppc.memrr_base")
         memref))
-      ((_ call "ppc.memrr_offset")
+      ((_ call "uf.ppc.memrr_offset")
        memref))
      ((_ extract 63 32)
       rS)))

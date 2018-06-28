@@ -19,7 +19,7 @@
         #x00000004))))
     (bvshl
      ((_ zero_extend 28)
-      ((_ call "undefined")
+      ((_ call "uf.undefined")
        #x00000004))
      (bvmul
       ((_ zero_extend 29)
@@ -27,14 +27,14 @@
       #x00000004))))
    ('FPSCR
     ((_ extract 159 128)
-     ((_ call "ppc.vec2")
+     ((_ call "uf.ppc.vec2")
       "XVCMPGESP"
       xA
       xB
       'FPSCR)))
    (xT
     ((_ extract 127 0)
-     ((_ call "ppc.vec2")
+     ((_ call "uf.ppc.vec2")
       "XVCMPGESP"
       xA
       xB

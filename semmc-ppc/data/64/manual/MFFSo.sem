@@ -5,12 +5,12 @@
   ('FPSCR 'IP))
  (defs
   (('CR
-   ((_ call "undefined")
+   ((_ call "uf.undefined")
     #x00000020))
    (FRT
     (concat
      'FPSCR
-     ((_ call "undefined")
+     ((_ call "uf.undefined")
       #x00000060)))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

@@ -19,7 +19,7 @@
         #x00000004))))
     (bvshl
      ((_ zero_extend 28)
-      ((_ call "undefined")
+      ((_ call "uf.undefined")
        #x00000004))
      (bvmul
       ((_ zero_extend 29)
@@ -27,14 +27,14 @@
       #x00000004))))
    ('VSCR
     ((_ extract 159 128)
-     ((_ call "ppc.vec2")
+     ((_ call "uf.ppc.vec2")
       "VCMPEQUW"
       vrA
       vrB
       'VSCR)))
    (vrT
     ((_ extract 127 0)
-     ((_ call "ppc.vec2")
+     ((_ call "uf.ppc.vec2")
       "VCMPEQUW"
       vrA
       vrB

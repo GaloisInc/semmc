@@ -6,7 +6,7 @@
   (rS 'IP))
  (defs
   ((rA
-   ((_ call "popcnt.32")
+   ((_ call "uf.popcnt.32")
     rS))
    ('IP
     (bvadd 'IP #x00000004)))))

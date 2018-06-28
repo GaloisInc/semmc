@@ -7,13 +7,13 @@
  (defs
   (('FPSCR
    ((_ extract 159 128)
-    ((_ call "ppc.vec1")
+    ((_ call "uf.ppc.vec1")
      "FRIPS"
      frB
      'FPSCR)))
    (frT
     ((_ extract 127 0)
-     ((_ call "ppc.vec1")
+     ((_ call "uf.ppc.vec1")
       "FRIPS"
       frB
       'FPSCR)))

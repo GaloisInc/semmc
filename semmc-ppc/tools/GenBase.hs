@@ -75,20 +75,44 @@ main = O.execParser optParser >>= mainWithOptions
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
+  Some ng <- PN.newIONonceGenerator
+  sym <- S.newSimpleBackend ng
   D.createDirectoryIfMissing True (oManualDir opts)
   D.createDirectoryIfMissing True (oBaseDir opts)
   D.createDirectoryIfMissing True (oPseudoDir opts)
   let sz = oBitSize opts
-  genTo (oManualDir opts) sz (B.manual sz)
-  genTo (oBaseDir   opts) sz (B.base   sz)
-  genTo (oPseudoDir opts) sz (B.pseudo sz)
-      where genTo d sz l = do (s, e) <- genOpDefs d sz (not $ oNoCheck opts) l
-                              putStrLn $ "Wrote " <> show s <> " files to " <> d <>
-                                           (if 0 == e then "" else " (" <> show e <> " errors!)")
+  genTo sym (oManualDir opts) sz (B.manual sz)
+  genTo sym (oBaseDir   opts) sz (B.base   sz)
+  genTo sym (oPseudoDir opts) sz (B.pseudo sz)
+      where genTo sym d sz l = do (s, e) <- genOpDefs sym d sz (not $ oNoCheck opts) l
+                                  putStrLn $ "Wrote " <> show s <> " files to " <> d <>
+                                               (if 0 == e then "" else " (" <> show e <> " errors!)")
 
-genOpDefs :: FilePath -> B.BitSize -> Bool -> [(String, DSL.Definition)] -> IO (Int, Int)
-genOpDefs d sz chk l = F.foldlM writeDef (0, 0) l
-    where writeDef (s,e) (opName, def) =
+genOpDefs :: forall sym
+           . ( CRUB.IsSymInterface sym
+             , ShowF (CRU.SymExpr sym) )
+          => sym -> FilePath -> B.BitSize -> Bool
+          -> ([(String, DSL.Definition)], [(String, DSL.FunctionDefinition)])
+          -> IO (Int, Int)
+genOpDefs sym d sz chk (dl, fl) = do
+  (s, e, lib) :: (Int, Int, SF.Library sym)
+    <- F.foldlM (writeFunDef sym) (0, 0, SF.emptyLibrary) fl
+  F.foldlM (writeDef sym lib) (s, e) dl
+    where writeFunDef :: sym -> (Int, Int, SF.Library sym) -> (String, DSL.FunctionDefinition) -> IO (Int, Int, SF.Library sym)
+          writeFunDef sym (s,e,lib) (funName, def) =
+              let fundef = DSL.printFunctionDefinition def
+                  fundefB = encodeUtf8 fundef
+                  writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
+              in if chk
+                 then do r <- case sz of
+                                B.Size32 -> checkFunction (Proxy @PPC32Sem.PPC) sym fundefB funName
+                                B.Size64 -> checkFunction (Proxy @PPC64Sem.PPC) sym fundefB funName
+                         case r of
+                           Right lib' -> writeIt >> return (s+1,e,lib' `MapF.union` lib)
+                           Left err -> do putStrLn ("Error for function " <> funName <> ": " <> err)
+                                          return (s, e+1, lib)
+                 else writeIt >> return (s+1, e, lib)
+          writeDef sym lib (s,e) (opName, def) =
               let opcode = F.find ((==) opName . show) opcodes
                   semdef = DSL.printDefinition def
                   semdefB = encodeUtf8 semdef
@@ -101,8 +125,8 @@ genOpDefs d sz chk l = F.foldlM writeDef (0, 0) l
                    Just op -> if chk
                               -- then checkFormula arch semdefB op >>= \case
                               then do r <- case sz of
-                                             B.Size32 -> checkFormula (Proxy @PPC32Sem.PPC) semdefB op
-                                             B.Size64 -> checkFormula (Proxy @PPC64Sem.PPC) semdefB op
+                                             B.Size32 -> checkFormula (Proxy @PPC32Sem.PPC) sym lib semdefB op
+                                             B.Size64 -> checkFormula (Proxy @PPC64Sem.PPC) sym lib semdefB op
                                       case r of
                                         Nothing -> writeIt >> return (s+1, e)
                                         Just err -> do putStrLn ("Error for " <> opName <> ": " <> err)
@@ -112,20 +136,45 @@ genOpDefs d sz chk l = F.foldlM writeDef (0, 0) l
                       B.Size32 -> PPC32.allOpcodes
                       B.Size64 -> PPC64.allOpcodes
 
+checkFunction :: ( CRUB.IsSymInterface sym
+                 , ShowF (CRU.SymExpr sym)
+                 , Architecture arch )
+              => Proxy arch
+              -> sym
+              -> BS.ByteString
+              -> String
+              -> IO (Either String (SF.Library sym))
+checkFunction arch sym sem name =
+  U.withLogging "semmc-ppc-genbase"
+      (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
+      catch (Right <$> loadFunction arch sym (name, sem)) $
+                 \(e :: SomeException) -> return $ Left $ show e   
+
+loadFunction :: ( CRUB.IsSymInterface sym
+                , ShowF (CRU.SymExpr sym)
+                , Architecture arch
+                , U.HasLogCfg )
+             => Proxy arch
+             -> sym
+             -> (String, BS.ByteString)
+             -> IO (SF.Library sym)
+loadFunction arch sym pair = FL.loadLibrary arch sym [pair]
+
 checkFormula :: ( Architecture arch
-                , HasRepr (PPC.Opcode PPC.Operand) (SL.List (OperandTypeRepr arch))
+                , HasRepr (PPC.Opcode PPC.Operand) (SL.List (OperandTypeRepr arch))       , CRUB.IsSymInterface sym
+                , ShowF (CRU.SymExpr sym)
                 ) =>
                 Proxy arch
+             -> sym
+             -> SF.Library sym
              -> BS.ByteString
              -> Some (PPC.Opcode PPC.Operand)
              -> IO (Maybe String)
-checkFormula arch sem op =
-    do Some ng <- PN.newIONonceGenerator
-       sym <- S.newSimpleBackend ng
-       -- If the semantics are bad, loadFormula will throw an exception
+checkFormula arch sym lib sem op =
+    do -- If the semantics are bad, loadFormula will throw an exception
        U.withLogging "semmc-ppc-genbase"
             (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
-            catch (loadFormula arch sym (op, sem) >> return Nothing) $
+            catch (loadFormula arch sym lib (op, sem) >> return Nothing) $
                       \(e :: SomeException) -> return $ Just $ show e
 
 
@@ -137,6 +186,7 @@ loadFormula :: ( CRUB.IsSymInterface sym
                ) =>
                Proxy arch
             -> sym
+            -> SF.Library sym
             -> (Some (PPC.Opcode PPC.Operand), BS.ByteString)
             -> IO (MapF.MapF (PPC.Opcode PPC.Operand) (SF.ParameterizedFormula sym arch))
-loadFormula _ sym a = FL.loadFormulas sym [a]
+loadFormula _ sym lib a = FL.loadFormulas sym lib [a]

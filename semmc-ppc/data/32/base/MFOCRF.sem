@@ -8,7 +8,7 @@
   ((rT
    (ite
     (bveq
-     ((_ call "popcnt.32")
+     ((_ call "uf.popcnt.32")
       ((_ zero_extend 24)
        FXM))
      #x00000001)
@@ -21,12 +21,12 @@
           ((_ sign_extend 31)
            #b1)
           (bvmul
-           ((_ call "clz.32")
+           ((_ call "uf.clz.32")
             ((_ zero_extend 24)
              FXM))
            #x00000004))
          (bvmul
-          ((_ call "clz.32")
+          ((_ call "uf.clz.32")
            ((_ zero_extend 24)
             FXM))
           #x00000004))
@@ -34,7 +34,7 @@
          #x0000001f
          (bvadd
           (bvmul
-           ((_ call "clz.32")
+           ((_ call "uf.clz.32")
             ((_ zero_extend 24)
              FXM))
            #x00000004)
@@ -43,7 +43,7 @@
         #x0000001f
         (bvadd
          (bvmul
-          ((_ call "clz.32")
+          ((_ call "uf.clz.32")
            ((_ zero_extend 24)
             FXM))
           #x00000004)

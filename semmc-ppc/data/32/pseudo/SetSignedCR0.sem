@@ -2,7 +2,7 @@
 ;; This pseudo-opcode sets the value of CR0 based on a comparison
 ;; of the value in the input register against zero, as in CMPDI or CMPWI
 ((operands
- ((rA. 'Gprc)))
+ ((rA . 'Gprc)))
  (in
   (rA 'XER 'CR))
  (defs

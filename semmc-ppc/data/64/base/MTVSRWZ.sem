@@ -10,7 +10,7 @@
     ((_ zero_extend 32)
      ((_ extract 63 32)
       rA))
-    ((_ call "undefined")
+    ((_ call "uf.undefined")
      #x00000040)))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

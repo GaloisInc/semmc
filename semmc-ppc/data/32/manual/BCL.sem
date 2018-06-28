@@ -10,7 +10,7 @@
    (bvadd 'IP #x00000004))
    ('IP
     (ite
-     ((_ call "test_bit_dynamic")
+     ((_ call "uf.test_bit_dynamic")
       ((_ zero_extend 27)
        bi)
       'CR)

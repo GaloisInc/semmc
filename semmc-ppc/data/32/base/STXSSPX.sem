@@ -6,19 +6,19 @@
   (memref 'Mem xS 'IP))
  (defs
   (('Mem
-   ((_ call "write_mem.32")
+   ((_ call "uf.write_mem.32")
     'Mem
     (bvadd
-     ((_ call "ppc.memrr_offset")
+     ((_ call "uf.ppc.memrr_offset")
       memref)
      (ite
-      ((_ call "ppc.is_r0")
-       ((_ call "ppc.memrr_base")
+      ((_ call "uf.ppc.is_r0")
+       ((_ call "uf.ppc.memrr_base")
         memref))
       #x00000000
-      ((_ call "ppc.memrr_base")
+      ((_ call "uf.ppc.memrr_base")
        memref)))
-    ((_ call "fp.round_single")
+    ((_ call "uf.fp.round_single")
      ((_ extract 63 0)
       xS))))
    ('IP
