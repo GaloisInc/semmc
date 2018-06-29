@@ -23,23 +23,10 @@
        ((_ zero_extend 27)
         ((_ extract 31 27)
          rB)))))
-    (bvshl
-     (bvlshr
-      (bvlshr
-       (bvshl
-        ((_ sign_extend 31)
-         #b1)
-        ((_ zero_extend 27)
-         mb))
-       ((_ zero_extend 27)
-        mb))
-      (bvsub
-       #x0000001f
-       ((_ zero_extend 27)
-        me)))
-     (bvsub
-      #x0000001f
-      ((_ zero_extend 27)
-       me)))))
+    ((_ call "df.mask_32")
+     ((_ zero_extend 27)
+      mb)
+     ((_ zero_extend 27)
+      me))))
    ('IP
     (bvadd 'IP #x00000004)))))

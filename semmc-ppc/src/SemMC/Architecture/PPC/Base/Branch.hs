@@ -7,6 +7,7 @@ module SemMC.Architecture.PPC.Base.Branch (
 
 import Prelude hiding ( concat )
 import Data.Bits
+import Data.Proxy ( Proxy(..) )
 import Data.Word.Indexed ( W )
 import Control.Monad ( when )
 import SemMC.DSL
@@ -381,13 +382,21 @@ truePred = LitBool True
 falsePred :: Expr 'TBool
 falsePred = LitBool False
 
-generic_cond_ok :: Expr 'TBV -> Expr 'TBV -> Expr 'TBool
-generic_cond_ok bo bi =
-  ite (testBitDynamic (LitBV 32 0x0) (zext' 32 bo))
-      truePred
-      (ite (testBitDynamic (LitBV 32 0x1) (zext' 32 bo))
-           (testBitDynamic (zext' 32 bi) (Loc cr))
-           (notp (testBitDynamic (zext' 32 bi) (Loc cr))))
+generic_cond_ok :: (?bitSize :: BitSize)
+                => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+generic_cond_ok = generic_cond_ok_pure (Loc cr)
+
+generic_cond_ok_pure :: (?bitSize :: BitSize)
+                     => Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+generic_cond_ok_pure =
+  wrapAsLibraryFunction Proxy "generic_cond_ok"
+    (Arg "cr" (EBV 32) :< Arg "bo" (EBV 5) :< Arg "bi" (EBV 5) :< Nil) $
+  \crValue bo bi ->
+    ite (testBitDynamic (LitBV 32 0x0) (zext' 32 bo))
+        truePred
+        (ite (testBitDynamic (LitBV 32 0x1) (zext' 32 bo))
+             (testBitDynamic (zext' 32 bi) crValue)
+             (notp (testBitDynamic (zext' 32 bi) crValue)))
 
 cond_ok :: W 5 -> Expr 'TBV -> Expr 'TBool
 cond_ok bo bi =
@@ -402,7 +411,13 @@ cond_ok bo bi =
        else notp (testBitDynamic (zext' 32 bi) (Loc cr))
 
 generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
-generic_ctr_ok bo newCtr =
+generic_ctr_ok =
+  wrapAsLibraryFunction Proxy "generic_ctr_ok"
+    (Arg "bo" (EBV 5) :< Arg "newCtr" naturalBV :< Nil) $
+    generic_ctr_ok_impl
+
+generic_ctr_ok_impl :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+generic_ctr_ok_impl bo newCtr =
   ite (testBitDynamic (LitBV 32 0x2) (zext' 32 bo))
       truePred
       (ite (testBitDynamic (LitBV 32 0x3) (zext' 32 bo))

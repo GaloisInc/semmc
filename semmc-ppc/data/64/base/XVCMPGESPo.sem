@@ -7,24 +7,11 @@
   ('XER 'CR 'FPSCR xB xA 'IP))
  (defs
   (('CR
-   (bvor
-    (bvand
-     'CR
-     (bvnot
-      (bvshl
-       #x0000000f
-       (bvmul
-        ((_ zero_extend 29)
-         #b110)
-        #x00000004))))
-    (bvshl
-     ((_ zero_extend 28)
-      ((_ call "uf.undefined")
-       #x00000004))
-     (bvmul
-      ((_ zero_extend 29)
-       #b110)
-      #x00000004))))
+   ((_ call "df.updateCRField")
+    'CR
+    #b110
+    ((_ call "uf.undefined")
+     #x00000004)))
    ('FPSCR
     ((_ extract 159 128)
      ((_ call "uf.ppc.vec2")

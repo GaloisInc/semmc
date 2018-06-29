@@ -22,17 +22,9 @@
        ((_ zero_extend 58)
         ((_ extract 63 58)
          rB)))))
-    (bvshl
-     (bvlshr
-      (bvlshr
-       (bvshl
-        ((_ sign_extend 63)
-         #b1)
-        ((_ zero_extend 58)
-         mb))
-       ((_ zero_extend 58)
-        mb))
-      (bvsub #x000000000000003f #x000000000000003f))
-     (bvsub #x000000000000003f #x000000000000003f))))
+    ((_ call "df.mask_64")
+     ((_ zero_extend 58)
+      mb)
+     #x000000000000003f)))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

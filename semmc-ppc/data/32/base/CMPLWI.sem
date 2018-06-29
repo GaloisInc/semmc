@@ -8,37 +8,17 @@
   ('XER 'CR rA imm 'IP))
  (defs
   (('CR
-   (bvor
-    (bvand
-     'CR
-     (bvnot
-      (bvshl
-       #x0000000f
-       (bvmul
-        ((_ zero_extend 29)
-         fld)
-        #x00000004))))
-    (bvshl
-     ((_ zero_extend 28)
-      (concat
-       (ite
-        (bvult
-         rA
-         ((_ zero_extend 16)
-          imm))
-        #b100
-        (ite
-         (bvugt
-          rA
-          ((_ zero_extend 16)
-           imm))
-         #b010
-         #b001))
-       ((_ extract 0 0)
-        'XER)))
-     (bvmul
-      ((_ zero_extend 29)
-       fld)
-      #x00000004))))
+   ((_ call "df.cmpImm")
+    (bvult
+     rA
+     ((_ zero_extend 16)
+      imm))
+    (bvugt
+     rA
+     ((_ zero_extend 16)
+      imm))
+    fld
+    'XER
+    'CR))
    ('IP
     (bvadd 'IP #x00000004)))))

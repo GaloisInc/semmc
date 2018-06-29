@@ -1,85 +1,15 @@
 ;; Rotate Left Doubleword Immediate then Clear Left (MD-form, RC=1)
-(let
- ((var1
-  (defs
-   (('CR
-    (bvor
-     (bvand
-      'CR
-      (bvnot
-       (bvshl
-        #x0000000f
-        (bvmul
-         ((_ zero_extend 29)
-          #b000)
-         #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       (concat
-        (ite
-         (bvslt
-          (bvand
-           (bvor
-            (bvshl
-             rS
-             ((_ zero_extend 58)
-              sh))
-            (bvlshr
-             rS
-             (bvsub
-              #x0000000000000040
-              ((_ zero_extend 58)
-               sh))))
-           (bvshl
-            (bvlshr
-             (bvlshr
-              (bvshl
-               ((_ sign_extend 63)
-                #b1)
-               ((_ zero_extend 58)
-                mb))
-              ((_ zero_extend 58)
-               mb))
-             (bvsub #x000000000000003f #x000000000000003f))
-            (bvsub #x000000000000003f #x000000000000003f)))
-          #x0000000000000000)
-         #b100
-         (ite
-          (bvsgt
-           (bvand
-            (bvor
-             (bvshl
-              rS
-              ((_ zero_extend 58)
-               sh))
-             (bvlshr
-              rS
-              (bvsub
-               #x0000000000000040
-               ((_ zero_extend 58)
-                sh))))
-            (bvshl
-             (bvlshr
-              (bvlshr
-               (bvshl
-                ((_ sign_extend 63)
-                 #b1)
-                ((_ zero_extend 58)
-                 mb))
-               ((_ zero_extend 58)
-                mb))
-              (bvsub #x000000000000003f #x000000000000003f))
-             (bvsub #x000000000000003f #x000000000000003f)))
-           #x0000000000000000)
-          #b010
-          #b001))
-        ((_ extract 32 32)
-         'XER)))
-      (bvmul
-       ((_ zero_extend 29)
-        #b000)
-       #x00000004))))
-    (rA
+((operands
+ ((rA . 'Gprc)
+  (mb . 'U6imm)
+  (sh . 'U6imm)
+  (rS . 'Gprc)))
+ (in
+  ('XER 'CR mb sh rS 'IP))
+ (defs
+  (('CR
+   ((_ call "df.cmpImm")
+    (bvslt
      (bvand
       (bvor
        (bvshl
@@ -92,25 +22,48 @@
          #x0000000000000040
          ((_ zero_extend 58)
           sh))))
-      (bvshl
+      ((_ call "df.mask_64")
+       ((_ zero_extend 58)
+        mb)
+       #x000000000000003f))
+     #x0000000000000000)
+    (bvsgt
+     (bvand
+      (bvor
+       (bvshl
+        rS
+        ((_ zero_extend 58)
+         sh))
        (bvlshr
-        (bvlshr
-         (bvshl
-          ((_ sign_extend 63)
-           #b1)
-          ((_ zero_extend 58)
-           mb))
+        rS
+        (bvsub
+         #x0000000000000040
          ((_ zero_extend 58)
-          mb))
-        (bvsub #x000000000000003f #x000000000000003f))
-       (bvsub #x000000000000003f #x000000000000003f))))
-    ('IP
-     (bvadd 'IP #x0000000000000004))))))
- ((operands
-  ((rA . 'Gprc)
-   (mb . 'U6imm)
-   (sh . 'U6imm)
-   (rS . 'Gprc)))
-  (in
-   ('XER 'CR mb sh rS 'IP))
-  (var1)))
+          sh))))
+      ((_ call "df.mask_64")
+       ((_ zero_extend 58)
+        mb)
+       #x000000000000003f))
+     #x0000000000000000)
+    #b000
+    'XER
+    'CR))
+   (rA
+    (bvand
+     (bvor
+      (bvshl
+       rS
+       ((_ zero_extend 58)
+        sh))
+      (bvlshr
+       rS
+       (bvsub
+        #x0000000000000040
+        ((_ zero_extend 58)
+         sh))))
+     ((_ call "df.mask_64")
+      ((_ zero_extend 58)
+       mb)
+      #x000000000000003f)))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))
