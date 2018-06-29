@@ -19,7 +19,9 @@ module Data.Type.List (
   ToContextFwd,
   SameShape,
   toAssignment,
-  toAssignmentFwd
+  toAssignmentFwd,
+  ArgsToList(..),
+  argsToList
   ) where
 
 import Prelude hiding (reverse)
@@ -84,3 +86,17 @@ toAssignment (a SL.:< rest) = toAssignment rest `Ctx.extend` a
 
 toAssignmentFwd :: SL.List f lst -> Ctx.Assignment f (ToContextFwd lst)
 toAssignmentFwd lst = toAssignment (reverse lst)
+
+class ArgsToList xs where
+  argsToListK :: Proxy f -> Proxy xs -> (SL.List f xs -> a)
+              -> FunctionOver f xs a
+
+instance ArgsToList '[] where
+  argsToListK _ _ k = k SL.Nil
+
+instance ArgsToList xs => ArgsToList (x ': xs) where
+  argsToListK _ _ k = \x -> argsToListK Proxy Proxy (\xs -> k (x SL.:< xs))
+
+argsToList :: forall f xs. ArgsToList xs
+           => Proxy f -> Proxy xs -> FunctionOver f xs (SL.List f xs)
+argsToList p1 p2 = argsToListK p1 p2 id
