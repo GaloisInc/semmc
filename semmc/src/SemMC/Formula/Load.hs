@@ -230,5 +230,6 @@ loadLibraryFromFiles proxy sym dir = do
 
 listFunctionFiles :: FilePath -> IO [FilePath]
 listFunctionFiles dir =
-  filter isFunctionFile <$> S.listDirectory dir
+  filter isFunctionFile <$>
+    E.catch (S.listDirectory dir) (\(_::E.SomeException) -> return [])
   where isFunctionFile f = snd (S.splitExtension f) == ".fun"
