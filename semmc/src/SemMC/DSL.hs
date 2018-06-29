@@ -5,6 +5,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | A DSL to help defining instruction semantics to populate the base set (and manual set)
 
@@ -24,6 +25,7 @@ module SemMC.DSL (
   Argument(..),
   LibraryFunctionDef,
   defineLibraryFunction,
+  wrapAsLibraryFunction,
   SL.List (..),
   -- * Operations
   (=:),
@@ -103,6 +105,7 @@ import           Prelude hiding ( concat )
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
 import qualified Data.Map as M
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.SCargot.Repr as SC
 import           Data.Semigroup hiding ( Arg )
 import qualified Data.Sequence as Seq
@@ -377,11 +380,10 @@ setArchData m'ad = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData 
 modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
 modifyArchData adf = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = adf (fArchData f) }) lfs)
 
--- | Create and register a library function, unless it has already been defined.
--- The function's sexp will be emitted in a separate file.
+-- | Create a library function. The function's sexp will be emitted in a separate file.
 --
--- Use defined functions for commonly-used sequences to cut down on file size in
--- the output.
+-- Use defined functions for commonly-used sequences to cut down on the sizes of
+-- expressions even after conversion to What4.
 --
 -- > defineLibraryFunction "frob"
 -- >   (Arg "x" EInt :<
@@ -413,6 +415,28 @@ defineLibraryFunction name args f =
       Parameter { pName = argName
                 , pType = "<unknown>" -- not used for anything
                 , pExprTypeRepr = exprTp }
+
+-- | Wrap a function as a library function. Defines the function and applies it
+-- to the given arguments in one go. Convenient for making library functions out
+-- of existing code.
+--
+-- > frob :: Expr 'BV -> 'Expr Bool -> 'Expr Int
+-- > frob = wrapAsLibraryFunction "frob"
+-- >          (Arg "x" (EBV 32) :< Arg "y" EBool :< Nil) $
+-- >          \x y -> ... -- original code for function body
+wrapAsLibraryFunction :: forall (args :: [ExprTag]) (tp :: ExprTag)
+                       . DL.ArgsToList args
+                      => Proxy tp
+                      -> String
+                      -> SL.List Argument args
+                      -> DL.FunctionOver Expr args (Expr tp)
+                      -> DL.FunctionOver Expr args (Expr tp)
+wrapAsLibraryFunction _ name formalArgs f =
+  DL.argsToListK (Proxy @Expr) (Proxy @args) $
+    \actualArgs ->
+      let lfd :: LibraryFunctionDef '(args, tp)
+          lfd = defineLibraryFunction name formalArgs f
+      in lf lfd actualArgs
 
 -- ----------------------------------------------------------------------
 -- Expressions
