@@ -1,61 +1,24 @@
 ;; BCLR (XL-form, LK=0, AA=0)
 ;; Generic branch conditional to LR with arbitrary BO field
-(let
- ((false
-  (bvne #b0 #b0))
-  (true
-   (bveq #b0 #b0)))
- ((operands
-  ((bh . 'I32imm)
-   (bi . 'Crbitrc)
-   (bo . 'U5imm)))
-  (in
-   ('CR 'CTR 'IP 'LNK))
-  (defs
-   (('IP
-    (ite
-     (andp
-      (ite
-       ((_ call "uf.test_bit_dynamic")
-        ((_ zero_extend 27)
-         bo)
-        #x00000004)
-       (true)
-       (ite
-        ((_ call "uf.test_bit_dynamic")
-         ((_ zero_extend 27)
-          bo)
-         #x00000003)
-        ((_ call "uf.test_bit_dynamic")
-         'CR
-         ((_ zero_extend 27)
-          (bvsub #b11111 bi)))
-        (notp
-         ((_ call "uf.test_bit_dynamic")
-          'CR
-          ((_ zero_extend 27)
-           (bvsub #b11111 bi))))))
-      (ite
-       ((_ call "uf.test_bit_dynamic")
-        ((_ zero_extend 27)
-         bo)
-        #x00000002)
-       (true)
-       (ite
-        ((_ call "uf.test_bit_dynamic")
-         ((_ zero_extend 27)
-          bo)
-         #x00000001)
-        (xorp
-         (notp
-          (bveq 'CTR #x00000000))
-         (true))
-        (xorp
-         (notp
-          (bveq 'CTR #x00000000))
-         (false)))))
-     (concat
-      ((_ extract 31 2)
-       'LNK)
-      #b00)
-     (bvadd 'IP #x00000004)))))))
+((operands
+ ((bh . 'I32imm)
+  (bi . 'Crbitrc)
+  (bo . 'U5imm)))
+ (in
+  ('CR 'CTR 'IP 'LNK))
+ (defs
+  (('IP
+   (ite
+    (andp
+     ((_ call "df.generic_cond_ok")
+      'CR
+      bo
+      bi)
+     ((_ call "df.generic_ctr_ok")
+      bo
+      'CTR))
+    (concat
+     ((_ extract 31 2)
+      'LNK)
+     #b00)
+    (bvadd 'IP #x00000004))))))

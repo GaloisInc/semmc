@@ -1,41 +1,22 @@
 ;; BCCTR (XL-form, LK=1)
 ;; This is a generic version of BCCTR
-(let
- ((true
-  (bveq #b0 #b0)))
- ((operands
-  ((bh . 'I32imm)
-   (bi . 'Crbitrc)
-   (bo . 'U5imm)))
-  (in
-   ('CR 'IP 'LNK 'CTR))
-  (defs
-   (('LNK
-    (bvadd 'IP #x0000000000000004))
-    ('IP
-     (ite
-      (ite
-       ((_ call "uf.test_bit_dynamic")
-        ((_ zero_extend 27)
-         bo)
-        #x00000004)
-       (true)
-       (ite
-        ((_ call "uf.test_bit_dynamic")
-         ((_ zero_extend 27)
-          bo)
-         #x00000003)
-        ((_ call "uf.test_bit_dynamic")
-         'CR
-         ((_ zero_extend 27)
-          (bvsub #b11111 bi)))
-        (notp
-         ((_ call "uf.test_bit_dynamic")
-          'CR
-          ((_ zero_extend 27)
-           (bvsub #b11111 bi))))))
-      (concat
-       ((_ extract 63 2)
-        'CTR)
-       #b00)
-      (bvadd 'IP #x0000000000000004)))))))
+((operands
+ ((bh . 'I32imm)
+  (bi . 'Crbitrc)
+  (bo . 'U5imm)))
+ (in
+  ('CR 'IP 'LNK 'CTR))
+ (defs
+  (('LNK
+   (bvadd 'IP #x0000000000000004))
+   ('IP
+    (ite
+     ((_ call "df.generic_cond_ok")
+      'CR
+      bo
+      bi)
+     (concat
+      ((_ extract 63 2)
+       'CTR)
+      #b00)
+     (bvadd 'IP #x0000000000000004))))))

@@ -21,44 +21,18 @@
         #x0000000000000040
         ((_ zero_extend 58)
          sh))))
-     (bvshl
-      (bvlshr
-       (bvlshr
-        (bvshl
-         ((_ sign_extend 63)
-          #b1)
-         ((_ zero_extend 58)
-          mb))
-        ((_ zero_extend 58)
-         mb))
-       (bvsub
-        #x000000000000003f
-        ((_ zero_extend 58)
-         (bvsub #b111111 sh))))
-      (bvsub
-       #x000000000000003f
-       ((_ zero_extend 58)
-        (bvsub #b111111 sh)))))
+     ((_ call "df.mask_64")
+      ((_ zero_extend 58)
+       mb)
+      ((_ zero_extend 58)
+       (bvsub #b111111 sh))))
     (bvand
      rA
      (bvnot
-      (bvshl
-       (bvlshr
-        (bvlshr
-         (bvshl
-          ((_ sign_extend 63)
-           #b1)
-          ((_ zero_extend 58)
-           mb))
-         ((_ zero_extend 58)
-          mb))
-        (bvsub
-         #x000000000000003f
-         ((_ zero_extend 58)
-          (bvsub #b111111 sh))))
-       (bvsub
-        #x000000000000003f
-        ((_ zero_extend 58)
-         (bvsub #b111111 sh))))))))
+      ((_ call "df.mask_64")
+       ((_ zero_extend 58)
+        mb)
+       ((_ zero_extend 58)
+        (bvsub #b111111 sh)))))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))
