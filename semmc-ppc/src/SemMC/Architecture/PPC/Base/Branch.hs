@@ -402,8 +402,8 @@ generic_cond_ok bo bi =
   ite (boBitDynamic bo 0)
       truePred
       (ite (boBitDynamic bo 1)
-           (testBitDynamic (Loc cr) (translate_bi bi))
-           (notp (testBitDynamic (Loc cr) (translate_bi bi))))
+           (testBitDynamic32 (Loc cr) (translate_bi bi))
+           (notp (testBitDynamic32 (Loc cr) (translate_bi bi))))
 
 cond_ok :: W 5 -> Expr 'TBV -> Expr 'TBool
 cond_ok bo bi =
@@ -414,8 +414,8 @@ cond_ok bo bi =
   -- Otherwise, we have to check the CR field (the BI'th bit of the CR).  The CR
   -- is always 32 bits, and BI is wide enough to address any of them.
   else if boBit bo 1
-       then testBitDynamic (Loc cr) (translate_bi bi)
-       else notp (testBitDynamic (Loc cr) (translate_bi bi))
+       then testBitDynamic32 (Loc cr) (translate_bi bi)
+       else notp (testBitDynamic32 (Loc cr) (translate_bi bi))
 
 -- | The PowerPC ISA manual numbers the bits in the condition register from
 -- 32-63 (most significant to least significant), but macaw numbers bits in its
@@ -440,7 +440,7 @@ boBit bo n = testBit bo (4-n)
 
 -- | See 'boBit'.
 boBitDynamic :: Expr 'TBV -> Integer -> Expr 'TBool
-boBitDynamic bo n = testBitDynamic (zext' 32 bo) (LitBV 32 (4-n))
+boBitDynamic bo n = testBitDynamic32 (zext' 32 bo) (LitBV 32 (4-n))
 
 generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_ctr_ok bo newCtr =

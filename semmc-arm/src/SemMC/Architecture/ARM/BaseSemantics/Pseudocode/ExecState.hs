@@ -29,8 +29,8 @@ import SemMC.DSL
 -- of returning the string form.]
 instrSetState :: Location 'TBV -> Expr 'TString
 instrSetState cpsReg =
-    let cpsr_j = testBitDynamic (LitBV 32 24) (Loc cpsReg)
-        cpsr_t = testBitDynamic (LitBV 32 5) (Loc cpsReg)
+    let cpsr_j = testBitDynamic32 (LitBV 32 24) (Loc cpsReg)
+        cpsr_t = testBitDynamic32 (LitBV 32 5) (Loc cpsReg)
         isT32 = andp cpsr_t (notp cpsr_j)
         isA32 = andp (notp cpsr_t) (notp cpsr_j)
         -- isJazelle = andp (notp cpsr_t) cpsr_j

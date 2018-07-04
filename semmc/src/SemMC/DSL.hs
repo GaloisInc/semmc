@@ -21,7 +21,8 @@ module SemMC.DSL (
   modifyArchData,
   -- * Operations
   (=:),
-  testBitDynamic,
+  testBitDynamic32,
+  testBitDynamic64,
   extract,
   zeroExtend,
   signExtend,
@@ -520,11 +521,28 @@ binTestBuiltin s e1 e2
 
 -- | Test a dynamically-chosen bit number (i.e., the bit number to test is an
 -- expr and not an 'Int')
-testBitDynamic :: (HasCallStack)
-               => Expr 'TBV -- ^ Bit number to test
-               -> Expr 'TBV
-               -> Expr 'TBool
-testBitDynamic bitNum e = uf EBool "test_bit_dynamic" [Some bitNum, Some e]
+testBitDynamic32 :: (HasCallStack)
+                 => Expr 'TBV -- ^ Bit number to test
+                 -> Expr 'TBV
+                 -> Expr 'TBool
+testBitDynamic32 bitNum e
+  | t1 == t2 = uf EBool "test_bit_dynamic.32" [Some bitNum, Some e]
+  | otherwise = error (printf "Type mismatch for test_bit_dynamic.32 lhs type is %s while rhs type is %s" (show t1) (show t2))
+  where
+    t1 = exprType bitNum
+    t2 = exprType e
+
+testBitDynamic64 :: (HasCallStack)
+                 => Expr 'TBV -- ^ Bit number to test
+                 -> Expr 'TBV
+                 -> Expr 'TBool
+testBitDynamic64 bitNum e
+  | t1 == t2 = uf EBool "test_bit_dynamic.64" [Some bitNum, Some e]
+  | otherwise = error (printf "Type mismatch for test_bit_dynamic.64 lhs type is %s while rhs type is %s" (show t1) (show t2))
+  where
+    t1 = exprType bitNum
+    t2 = exprType e
+
 
 -- | The extract operation defined on bitvectors in SMTLib
 --

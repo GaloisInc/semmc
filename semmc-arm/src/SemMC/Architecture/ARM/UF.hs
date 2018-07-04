@@ -32,7 +32,7 @@ uninterpretedFunctions _ =
                                                          ::> BaseBVType 4)),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
 
-  , ("test_bit_dynamic",
+  , ("test_bit_dynamic.32",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32
                                                          ::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))

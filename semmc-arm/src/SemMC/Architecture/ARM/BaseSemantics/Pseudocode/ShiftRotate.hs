@@ -182,7 +182,7 @@ srC op x shft = concat carry_out rs
     nBits = LitBV (exprBVSize x) (fromIntegral (exprBVSize x))
     m = shft `pMOD` nBits
     rs = op x m
-    co = ite (testBitDynamic (bvsub shft (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
+    co = ite (testBitDynamic32 (bvsub shft (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
     carry_out = ite (bvult shft (naturalLitBV 32)) co (LitBV 1 0)
 
 -- | Rotate right with carry in? (and with carry out) AppxG-4947
@@ -216,7 +216,7 @@ rorC x shft = "rorC" =: concat carry_out (bvor ls rs)
     m = shft `pMOD` nBits
     rs = bvlshr x m
     ls = bvshl x (bvsub nBits m)
-    co = ite (testBitDynamic (bvsub shft (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
+    co = ite (testBitDynamic32 (bvsub shft (naturalLitBV 1)) x) (LitBV 1 1) (LitBV 1 0)
     carry_out = ite (bvult shft (naturalLitBV 32)) co (LitBV 1 0)
 
 ror :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
