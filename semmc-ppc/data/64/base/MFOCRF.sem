@@ -9,46 +9,25 @@
    ((_ zero_extend 32)
     (ite
      (bveq
-      ((_ call "popcnt.32")
+      ((_ call "uf.popcnt.32")
        ((_ zero_extend 24)
         FXM))
       #x00000001)
      (bvand
       (bvnot
-       (bvshl
-        (bvlshr
-         (bvlshr
-          (bvshl
-           ((_ sign_extend 31)
-            #b1)
-           (bvmul
-            ((_ call "clz.32")
-             ((_ zero_extend 24)
-              FXM))
-            #x00000004))
-          (bvmul
-           ((_ call "clz.32")
-            ((_ zero_extend 24)
-             FXM))
-           #x00000004))
-         (bvsub
-          #x0000001f
-          (bvadd
-           (bvmul
-            ((_ call "clz.32")
-             ((_ zero_extend 24)
-              FXM))
-            #x00000004)
-           #x00000003)))
-        (bvsub
-         #x0000001f
-         (bvadd
-          (bvmul
-           ((_ call "clz.32")
-            ((_ zero_extend 24)
-             FXM))
-           #x00000004)
-          #x00000003))))
+       ((_ call "df.mask_32")
+        (bvmul
+         ((_ call "uf.clz.32")
+          ((_ zero_extend 24)
+           FXM))
+         #x00000004)
+        (bvadd
+         (bvmul
+          ((_ call "uf.clz.32")
+           ((_ zero_extend 24)
+            FXM))
+          #x00000004)
+         #x00000003)))
       'CR)
      #x00000000)))
    ('IP

@@ -7,38 +7,21 @@
   ('XER 'CR 'VSCR vrB vrA 'IP))
  (defs
   (('CR
-   (bvor
-    (bvand
-     'CR
-     (bvnot
-      (bvshl
-       #x0000000f
-       (bvmul
-        (bvsub
-         #x00000007
-         ((_ zero_extend 29)
-          #b110))
-        #x00000004))))
-    (bvshl
-     ((_ zero_extend 28)
-      ((_ call "undefined")
-       #x00000004))
-     (bvmul
-      (bvsub
-       #x00000007
-       ((_ zero_extend 29)
-        #b110))
-      #x00000004))))
+   ((_ call "df.updateCRField")
+    'CR
+    #b110
+    ((_ call "uf.undefined")
+     #x00000004)))
    ('VSCR
     ((_ extract 31 0)
-     ((_ call "ppc.vec2")
+     ((_ call "uf.ppc.vec2")
       "VCMPGTSH"
       vrA
       vrB
       'VSCR)))
    (vrT
     ((_ extract 159 32)
-     ((_ call "ppc.vec2")
+     ((_ call "uf.ppc.vec2")
       "VCMPGTSH"
       vrA
       vrB

@@ -5,10 +5,10 @@
   ('IP))
  (defs
   (('CR
-   ((_ call "undefined")
+   ((_ call "uf.undefined")
     #x00000020))
    ('FPSCR
-    ((_ call "undefined")
+    ((_ call "uf.undefined")
      #x00000020))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

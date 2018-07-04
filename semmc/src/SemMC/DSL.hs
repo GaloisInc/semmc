@@ -4,6 +4,8 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | A DSL to help defining instruction semantics to populate the base set (and manual set)
 
@@ -19,6 +21,12 @@ module SemMC.DSL (
   getArchData,
   setArchData,
   modifyArchData,
+  -- * Library functions
+  Argument(..),
+  LibraryFunctionDef,
+  defineLibraryFunction,
+  wrapAsLibraryFunction,
+  SL.List (..),
   -- * Operations
   (=:),
   testBitDynamic32,
@@ -31,6 +39,7 @@ module SemMC.DSL (
   cases,
   uf,
   locUF,
+  lf,
   unpackUF,
   unpackLocUF,
   -- * Logical operations
@@ -71,7 +80,7 @@ module SemMC.DSL (
   -- * Expressions
   Expr(..),
   ExprTag(..),
-  ExprType(..),
+  ExprTypeRepr(..),
   exprType,
   exprBVSize,
   Location(..),
@@ -81,9 +90,13 @@ module SemMC.DSL (
   SemMD,
   Phase(..),
   runSem,
+  evalSem,
+  gather,
   Parameter,
   Definition,
-  printDefinition
+  printDefinition,
+  FunctionDefinition,
+  printFunctionDefinition
   ) where
 
 import           GHC.Stack ( HasCallStack )
@@ -92,28 +105,35 @@ import           Prelude hiding ( concat )
 
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
+import qualified Data.Map as M
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.SCargot.Repr as SC
-import           Data.Semigroup
+import           Data.Semigroup hiding ( Arg )
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Text.Printf ( printf )
 
-import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.NatRepr as NR
+import           Data.Parameterized.Some ( Some(..), viewSome )
+import           Data.Parameterized.TraversableFC ( fmapFC, foldMapFC, toListFC )
+import qualified Data.Type.List as DL
 
 import           SemMC.DSL.Internal
 import           SemMC.Formula.SETokens ( FAtom(..), fromFoldable', printTokens
                                         , ident, int, quoted, string )
+import qualified What4.BaseTypes as CRU
 
 
-locationType :: Location tp -> ExprType tp
+locationType :: Location tp -> ExprTypeRepr tp
 locationType loc =
   case loc of
-    ParamLoc p -> pExprType p
+    ParamLoc p -> pExprTypeRepr p
     LiteralLoc ll -> lExprType ll
     MemoryLoc _ -> EMemory
     LocationFunc t _ _ -> t
 
-exprType :: Expr tp -> ExprType tp
+exprType :: Expr tp -> ExprTypeRepr tp
 exprType e =
   case e of
     LitBool _ -> EBool
@@ -124,6 +144,7 @@ exprType e =
     Builtin t _ _ -> t
     TheoryFunc t _ _ _ -> t
     UninterpretedFunc t _ _ -> t
+    LibraryFunc (LibFuncDef { lfdRetType = t }) _ -> t
     NamedSubExpr _ sube -> exprType sube
     PackedOperand s -> EPackedOperand s
 
@@ -138,6 +159,7 @@ exprBVSize e =
     Builtin (EBV w) _ _ -> w
     TheoryFunc (EBV w) _ _ _ -> w
     UninterpretedFunc (EBV w) _ _ -> w
+    LibraryFunc (LibFuncDef { lfdRetType = EBV w })  _ -> w
     NamedSubExpr _ sube -> exprBVSize sube
 
 
@@ -200,13 +222,27 @@ newFormula name = Formula { fName = name
 -- impossible.
 --
 newtype SemMD (t :: Phase) d a =
-    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (Formula d) a }
+    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (SemMDState d) a }
           deriving (Functor,
                     Applicative,
                     Monad,
                     RWS.MonadWriter (Seq.Seq (Formula d)),
-                    RWS.MonadState (Formula d))
+                    RWS.MonadState (SemMDState d))
 
+data SemMDState d = SemMDState { smdFormula :: Formula d
+                               , smdLibraryFunctions :: M.Map String FunctionDefinition
+                                 -- ^ Functions defined by formulas previously
+                                 -- returned by 'gather'. Needed so that we only
+                                 -- generate each function once, even across
+                                 -- calls to 'gather'.
+                               }
+
+emptySemMDState :: SemMDState d
+emptySemMDState = SemMDState (newFormula "") M.empty
+    -- The initial dummy formula here is never used.  It is just a standin until
+    -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
+    -- this will never be used since 'defineOpcode' handles adding the result to
+    -- the writer output.
 
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
@@ -218,26 +254,46 @@ data Phase = Top | Def
 data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
   deriving (Show)
 
--- | Run a semantics defining action and return the defined formulas.
+data FunctionDefinition = FunctionDefinition (SC.SExpr FAtom)
+  deriving (Show)
+
+-- | Run a semantics-defining action and return the defined formulas and any
+-- library functions required.
 --
 -- The result is an association list from opcode name to the s-expression
--- representing it.
-runSem :: SemMD 'Top d () -> [(String, Definition)]
-runSem act = mkSExprs (snd (RWS.execRWS (unSem act) () (newFormula "")))
-    -- The initial dummy formula here is never used.  It is just a standin until
-    -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
-    -- this will never be used since 'defineOpcode' handles adding the result to
-    -- the writer output.
+-- representing it, plus an association list from function name to its
+-- s-expression.
+runSem :: SemMD 'Top d () -> ([(String, Definition)], [(String, FunctionDefinition)])
+runSem act = (defs, funDefs)
+  where (_, defs, funDefs) = evalSem act
 
+-- | Run a semantics-defining action and return the defined formulas and library
+-- functions, along with anything returned by the action itself.
+evalSem :: SemMD 'Top d a -> (a, [(String, Definition)], [(String, FunctionDefinition)])
+evalSem act = (a, defs, M.toList (M.union (smdLibraryFunctions state) funcDefs))
+  where
+    (a, state, formulas) = RWS.runRWS (unSem act) () emptySemMDState
+    (defs, funcDefs) = mkSExprs formulas
+
+-- | Return the formulas defined by an action without propagating them outward.
+gather :: SemMD 'Top d () -> SemMD 'Top d [(String, Definition)]
+gather act = SemM $ RWS.mapRWS moveFormulas $ unSem act
+  where
+    moveFormulas (~(), state, formulas) =
+      (defs, state { smdLibraryFunctions = libFuncs' }, Seq.empty)
+      where
+        (defs, funcDefs) = mkSExprs formulas
+        libFuncs' = M.union (smdLibraryFunctions state) funcDefs
 
 -- | Define an opcode with a given name.
 --
 -- The body is executed to produce a definition.
 defineOpcode :: String -> SemMD 'Def d () -> SemMD 'Top d ()
 defineOpcode name (SemM def) = do
-  RWS.put $ newFormula name
+  SemMDState _ lfs <- RWS.get
+  RWS.put $ SemMDState (newFormula name) lfs
   SemM def
-  formula <- RWS.get
+  SemMDState formula _ <- RWS.get -- get newly-defined formula
   RWS.tell (Seq.singleton formula)
   return ()
 
@@ -257,49 +313,49 @@ defineOpcode name (SemM def) = do
 -- >     defLoc eflags ...
 forkDefinition :: String -> SemMD 'Def d () -> SemMD 'Def d ()
 forkDefinition name (SemM def) = do
-  origFormula <- RWS.get
+  SemMDState origFormula lfs <- RWS.get
   let modFormula = origFormula { fName = name
                                , fComment = Seq.empty
                                }
-  RWS.put modFormula
+  RWS.put (SemMDState modFormula lfs)
   SemM def
-  forkedFormula <- RWS.get
+  SemMDState forkedFormula lfs' <- RWS.get
   RWS.tell (Seq.singleton forkedFormula)
   -- Restore the original formula so that 'definOpcode' can finish it off
-  RWS.put origFormula
+  RWS.put (SemMDState origFormula lfs')
 
 -- | Add a descriptive comment to the output file
 --
 -- Each call appends a new comment line.  Individual calls to comment should not
 -- contain newlines.
 comment :: String -> SemMD 'Def d ()
-comment c = RWS.modify' $ \f -> f { fComment = fComment f Seq.|> c }
+comment c = RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fComment = fComment f Seq.|> c }) lfs
 
 -- | Declare a named parameter; the 'name' string provided is used as
 -- the variable name in the produced formula, the 'ty' string
 -- specifies the type (strings are types via TypeLits), and the 'ety'
 -- specifies the expression type for this parameter.  The result is a
 -- Location reference to that parameter.
-param :: String -> String -> ExprType tp -> SemMD 'Def d (Location tp)
+param :: String -> String -> ExprTypeRepr tp -> SemMD 'Def d (Location tp)
 param name ty ety = do
   let p = Parameter { pName = name
                     , pType = ty
-                    , pExprType = ety
+                    , pExprTypeRepr = ety
                     }
-  RWS.modify' $ \f -> f { fOperands = fOperands f Seq.|> Some p }
+  RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fOperands = fOperands f Seq.|> Some p }) lfs
   return (ParamLoc p)
 
 -- | Mark a parameter as an input
 input :: Location tp -> SemMD 'Def d ()
-input loc = RWS.modify' $ \f -> f { fInputs = Some loc : fInputs f }
+input loc = RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fInputs = Some loc : fInputs f }) lfs
 
 -- | Define a location as an expression
 defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemMD 'Def d ()
 defLoc loc e
   | locationType loc == exprType e = do
-      curDefs <- RWS.gets fDefs
+      curDefs <- RWS.gets (fDefs . smdFormula)
       case lookup (Some loc) curDefs of
-        Nothing -> RWS.modify' $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
+        Nothing -> RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fDefs = (Some loc, Some e) : fDefs f }) lfs
         Just _ -> error (printf "Location is already defined: %s" (show loc))
   | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
 
@@ -313,33 +369,95 @@ name =: expr = NamedSubExpr name expr
 
 -- | Get the current architecture-specific data in the DSL computation
 getArchData :: SemMD t d (Maybe d)
-getArchData = fArchData <$> RWS.get
+getArchData = fArchData <$> smdFormula <$> RWS.get
 
 
 -- | Set the current architecture-specific data in the DSL computation
 setArchData :: Maybe d -> SemMD t d ()
-setArchData m'ad = RWS.modify (\s -> s { fArchData = m'ad })
+setArchData m'ad = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = m'ad }) lfs)
 
 
 -- | Modify the current architecture-specific data in the DSL computation
 modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
-modifyArchData adf = RWS.modify (\s -> s { fArchData = adf (fArchData s) })
+modifyArchData adf = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = adf (fArchData f) }) lfs)
 
+-- | Create a library function. The function's sexp will be emitted in a separate file.
+--
+-- Use defined functions for commonly-used sequences to cut down on the sizes of
+-- expressions even after conversion to What4.
+--
+-- > defineLibraryFunction "frob"
+-- >   (Arg "x" EInt :<
+-- >    Arg "y" (EBV 32) :< Nil) EBool $
+-- >   \(x :: Expr 'TInt) (y :: Expr 'TBV) -> ... -- body returns Expr 'TBool
+defineLibraryFunction :: forall (args :: [ExprTag]) (tp :: ExprTag)
+                       . String
+                      -- ^ The name of the function. If there is already a
+                      -- function with this name, 'defineLibraryFunction' does
+                      -- nothing.
+                      -> SL.List Argument args
+                      -- ^ The name and type for each argument to the function
+                      -> DL.FunctionOver Expr args (Expr tp)
+                      -- ^ A function from expressions representing the
+                      -- arguments to an expression for the body. The arity of
+                      -- the function is determined by @sig@.
+                      -> LibraryFunctionDef '(args, tp)
+defineLibraryFunction name args f =
+  LibFuncDef { lfdName = name
+             , lfdArgs = args
+             , lfdRetType = exprType body
+             , lfdBody = body }
+  where
+    body = DL.applyFunctionOver f argExprs
+    argExprs = fmapFC (\arg -> Loc (ParamLoc (toParam arg))) args
+
+    toParam :: forall argTp. Argument argTp -> Parameter argTp
+    toParam (Arg argName exprTp) =
+      Parameter { pName = argName
+                , pType = "<unknown>" -- not used for anything
+                , pExprTypeRepr = exprTp }
+
+-- | Wrap a function as a library function. Defines the function and applies it
+-- to the given arguments in one go. Convenient for making library functions out
+-- of existing code.
+--
+-- > frob :: Expr 'BV -> 'Expr Bool -> 'Expr Int
+-- > frob = wrapAsLibraryFunction "frob"
+-- >          (Arg "x" (EBV 32) :< Arg "y" EBool :< Nil) $
+-- >          \x y -> ... -- original code for function body
+wrapAsLibraryFunction :: forall (args :: [ExprTag]) (tp :: ExprTag)
+                       . DL.ArgsToList args
+                      => Proxy tp
+                      -> String
+                      -> SL.List Argument args
+                      -> DL.FunctionOver Expr args (Expr tp)
+                      -> DL.FunctionOver Expr args (Expr tp)
+wrapAsLibraryFunction _ name formalArgs f =
+  DL.argsToListK (Proxy @Expr) (Proxy @args) $
+    \actualArgs ->
+      let lfd :: LibraryFunctionDef '(args, tp)
+          lfd = defineLibraryFunction name formalArgs f
+      in lf lfd actualArgs
 
 -- ----------------------------------------------------------------------
 -- Expressions
 
--- | Allow for user-defined functions over expressions
-uf :: ExprType tp -> String -> [Some Expr] -> Expr tp
+-- | Allow for user-defined uninterpreted functions over expressions
+uf :: ExprTypeRepr tp -> String -> [Some Expr] -> Expr tp
 uf = UninterpretedFunc
 
--- | Allow for user-defined functions over locations
-locUF :: ExprType tp -> String -> Location tp' -> Location tp
+-- | Allow for user-defined uninterpreted functions over locations
+locUF :: ExprTypeRepr tp -> String -> Location tp' -> Location tp
 locUF = LocationFunc
+
+-- | Allow for library functions over expressions
+
+lf :: LibraryFunctionDef '(args, ret) -> SL.List Expr args -> Expr ret
+lf = LibraryFunc
 
 -- | Unpack a specific operand type using an architecture-specific
 -- uninterpreted function
-unpackUF :: String -> ExprType tp -> String -> Location 'TPackedOperand -> Expr tp
+unpackUF :: String -> ExprTypeRepr tp -> String -> Location 'TPackedOperand -> Expr tp
 unpackUF operandName rtype ufname fromParam =
     case exprType (Loc fromParam) of
       EPackedOperand o | operandName == o -> uf rtype ufname [Some $ Loc fromParam]
@@ -347,7 +465,7 @@ unpackUF operandName rtype ufname fromParam =
 
 -- | Unpack a specific operand type using an architecture-specific
 -- undefined function
-unpackLocUF :: String -> ExprType tp -> String -> Location 'TPackedOperand -> Location tp
+unpackLocUF :: String -> ExprTypeRepr tp -> String -> Location 'TPackedOperand -> Location tp
 unpackLocUF operandName rtype ufname fromParam =
     case exprType (Loc fromParam) of
       EPackedOperand o | operandName == o -> locUF rtype ufname fromParam
@@ -612,8 +730,10 @@ concat e1 e2 =
 -- ----------------------------------------------------------------------
 -- SExpression conversion
 
-mkSExprs :: Seq.Seq (Formula d) -> [(String, Definition)]
-mkSExprs = map toSExpr . F.toList
+mkSExprs :: Seq.Seq (Formula d) -> ([(String, Definition)], M.Map String FunctionDefinition)
+mkSExprs formulas = (map toSExpr list, gatherFunSExprs list)
+  where
+    list = F.toList formulas
 
 toSExpr :: (Formula d) -> (String, Definition)
 toSExpr f = (fName f, Definition (fComment f) (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
@@ -643,7 +763,9 @@ convertExpr (Some e) =
     TheoryFunc _ name conParams appParams ->
       fromFoldable' (fromFoldable' (ident "_" : ident name : map convertExpr conParams) : map convertExpr appParams)
     UninterpretedFunc _ name params ->
-      fromFoldable' (fromFoldable' [ident "_", ident "call", string name] : map convertExpr params)
+      fromFoldable' (fromFoldable' [ident "_", ident "call", string ("uf." ++ name)] : map convertExpr params)
+    LibraryFunc (LibFuncDef { lfdName = name }) params ->
+      fromFoldable' (fromFoldable' [ident "_", ident "call", string ("df." ++ name)] : map convertExpr (toListFC Some params))
     NamedSubExpr name expr ->
         let tag d = \case
                     SC.SNil -> SC.SNil  -- no tagging of nil elements
@@ -660,7 +782,7 @@ convertLoc loc =
     LiteralLoc ll -> quoted $ lName ll
     MemoryLoc _ident -> quoted "Mem"
     LocationFunc _ func loc' ->
-      fromFoldable' [fromFoldable' [ident "_", ident "call", string func], convertLoc loc']
+      fromFoldable' [fromFoldable' [ident "_", ident "call", string ("uf." ++ func)], convertLoc loc']
 
 convertDefs :: [(Some Location, Some Expr)] -> SC.SExpr FAtom
 convertDefs = fromFoldable' . map convertDef
@@ -677,6 +799,101 @@ convertInputs = fromFoldable' . map locToExpr
   where
     locToExpr (Some l) = convertLoc l
 
-
 printDefinition :: Definition -> T.Text
 printDefinition (Definition mc sexpr) = printTokens mc sexpr
+
+-- ----------------------------------------------------------------------
+-- SExpression conversion for library functions
+
+gatherFunSExprs :: [Formula d] -> M.Map String FunctionDefinition
+gatherFunSExprs = M.map (viewSome funToSExpr) . gatherFunctions
+
+funToSExpr :: LibraryFunctionDef sig -> FunctionDefinition
+funToSExpr lfd@(LibFuncDef {}) =
+  FunctionDefinition $ extractFunSExpr (lfdName lfd) (lfdArgs lfd) (lfdRetType lfd) (lfdBody lfd)
+
+extractFunSExpr :: String -> SL.List Argument args -> ExprTypeRepr ret
+                -> Expr ret -> SC.SExpr FAtom
+extractFunSExpr name args retType body =
+  fromFoldable' [ fromFoldable' [ ident "function", ident name ]
+                , fromFoldable' [ ident "arguments", convertArguments args ]
+                , fromFoldable' [ ident "return", convertExprType retType ]
+                , fromFoldable' [ ident "body", convertExpr (Some body) ]
+                ]
+
+-- Subtle difference between this and 'convertOperands': Here we output the
+-- *base* type rather than the architecture-specific symbol
+convertArguments :: SL.List Argument tps -> SC.SExpr FAtom
+convertArguments =
+  fromFoldable' . toListFC argToDecl
+  where
+    argToDecl (Arg name tp) =
+      fromFoldable' [ ident name, convertExprType tp ]
+
+convertExprType :: ExprTypeRepr tp -> SC.SExpr FAtom
+convertExprType = viewSome convertBaseType . exprTypeToBaseType
+
+exprTypeToBaseType :: ExprTypeRepr tp -> Some CRU.BaseTypeRepr
+exprTypeToBaseType repr =
+  case repr of
+    EBool -> Some CRU.BaseBoolRepr
+    EInt -> Some CRU.BaseIntegerRepr
+    EBV n | Just (Some n') <- NR.someNat (fromIntegral n)
+          , Just NR.LeqProof <- NR.isPosNat n'
+          -> Some (CRU.BaseBVRepr n')
+    _ -> error $ "cannot convert to What4 type: " ++ show repr
+
+-- This supports all base types, not just those that we convert from ExprTypes,
+-- as a historical accident.
+convertBaseType :: CRU.BaseTypeRepr tp -> SC.SExpr FAtom
+convertBaseType repr =
+  case repr of
+    CRU.BaseBoolRepr -> quoted "bool"
+    CRU.BaseBVRepr n ->
+      fromFoldable' [ quoted "bv", int (fromIntegral (CRU.natValue n)) ]
+    CRU.BaseNatRepr -> quoted "nat"
+    CRU.BaseIntegerRepr -> quoted "int"
+    CRU.BaseRealRepr -> quoted "real"
+    CRU.BaseStringRepr -> quoted "string"
+    CRU.BaseComplexRepr -> quoted "complex"
+    CRU.BaseStructRepr reprs ->
+      fromFoldable' [ quoted "struct", fromFoldable' (toListFC convertBaseType reprs) ]
+    CRU.BaseArrayRepr ixs elt ->
+      fromFoldable' [ quoted "array", fromFoldable' (toListFC convertBaseType ixs),
+                      convertBaseType elt ]
+
+printFunctionDefinition :: FunctionDefinition -> T.Text
+printFunctionDefinition (FunctionDefinition sexpr) = printTokens Seq.empty sexpr
+
+-- ----------------------------------------------------------------------
+-- Gather all library functions from the given formulas
+
+gatherFunctions :: [Formula d] -> M.Map String (Some LibraryFunctionDef)
+gatherFunctions = F.foldMap doFormula
+  -- Note that the Monoid instance for M.Map is a left-biased union, so the first
+  -- definition will be used and the second thrown away
+  where
+    doFormula f = F.foldMap (viewSome doExpr . snd) (fDefs f)
+
+    doSomeExpr :: Some Expr -> M.Map String (Some LibraryFunctionDef)
+    doSomeExpr (Some expr) = doExpr expr
+
+    doExpr :: Expr tp -> M.Map String (Some LibraryFunctionDef)
+    doExpr expr = case expr of
+      LibraryFunc def args ->
+        M.insertWith keepOld (lfdName def) (Some def) $ foldMapFC doExpr args
+      Builtin _ _ args ->
+        foldMap doSomeExpr args
+      TheoryFunc _ _ conParams appParams ->
+        foldMap doSomeExpr (conParams ++ appParams)
+      UninterpretedFunc _ _ params ->
+        foldMap doSomeExpr params
+      NamedSubExpr _ e -> doExpr e
+      LitBool _ -> M.empty
+      LitBV _ _ -> M.empty
+      LitInt _ -> M.empty
+      LitString _ -> M.empty
+      Loc _ -> M.empty
+      PackedOperand _ -> M.empty
+
+    keepOld _new old = old

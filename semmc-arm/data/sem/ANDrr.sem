@@ -1,237 +1,11 @@
 ;; AND register, Encoding A1  (F7.1.14, F7-2558)
 ;; Note that this encoding fixes the shift to 0
 (let
- ((var2
-  (bvand
-   rN
-   ((_ extract 31 0)
-    (shiftC))))
-  (shiftC
-   (ite
-    (bveq
-     ((_ extract 31 0)
-      (immShift))
-     #x00000000)
-    (concat
-     ((_ extract 29 29)
-      'CPSR)
-     rM)
-    (ite
-     (bveq
-      ((_ extract 34 32)
-       (immShift))
-      #b000)
-     (lslC)
-     (ite
-      (bveq
-       ((_ extract 34 32)
-        (immShift))
-       #b001)
-      (logicalShiftRightCarry)
-      (ite
-       (bveq
-        ((_ extract 34 32)
-         (immShift))
-        #b010)
-       (arithmeticShiftRightCarry)
-       (ite
-        (bveq
-         ((_ extract 34 32)
-          (immShift))
-         #b011)
-        (rorC)
-        (rrxC)))))))
-  (rrxC
-   (concat
-    ((_ extract 0 0)
-     rM)
-    (concat
-     ((_ extract 29 29)
-      'CPSR)
-     ((_ extract 31 1)
-      rM))))
-  (rorC
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
-    (bvor
-     (bvshl
-      rM
-      (bvsub
-       #x00000020
-       (bvurem
-        ((_ extract 31 0)
-         (immShift))
-        #x00000020)))
-     (bvlshr
-      rM
-      (bvurem
-       ((_ extract 31 0)
-        (immShift))
-       #x00000020)))))
-  (immShift
-   (concat
-    #b000
-    ((_ zero_extend 27)
-     #b00000)))
-  (arithmeticShiftRightCarry
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
-    (bvashr
-     rM
-     (bvurem
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020))))
-  (logicalShiftRightCarry
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       rM)
-      #b1
-      #b0)
-     #b0)
-    (bvlshr
-     rM
-     (bvurem
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020))))
-  (lslC
-   (bvshl
-    ((_ zero_extend 1)
-     rM)
-    ((_ zero_extend 1)
-     ((_ extract 31 0)
-      (immShift)))))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       predBits))
-     (bvne predBits #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b001)
-     (bveq
-      #b1
-      ((_ extract 29 29)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        predBits)
-       #b010)
-      (bveq
-       #b1
-       ((_ extract 31 31)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         predBits)
-        #b011)
-       (bveq
-        #b1
-        ((_ extract 28 28)
-         'CPSR))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          predBits)
-         #b100)
-        (andp
-         (bveq
-          #b1
-          ((_ extract 29 29)
-           'CPSR))
-         (notp
-          (bveq
-           #b1
-           ((_ extract 30 30)
-            'CPSR))))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           predBits)
-          #b101)
-         (bveq
-          ((_ extract 31 31)
-           'CPSR)
-          ((_ extract 28 28)
-           'CPSR))
-         (ite
-          (bveq
-           ((_ extract 3 1)
-            predBits)
-           #b110)
-          (andp
-           (bveq
-            ((_ extract 31 31)
-             'CPSR)
-            ((_ extract 28 28)
-             'CPSR))
-           (notp
-            (bveq
-             #b1
-             ((_ extract 30 30)
-              'CPSR))))
-          (true)))))))))
-  (true
-   (bveq #b0 #b0))
+ ((immShift
+  (concat
+   #b000
+   ((_ zero_extend 27)
+    #b00000)))
   (SetT32Mode
    (bvand
     #xfeffffff
@@ -239,49 +13,114 @@
   (nzcv
    (concat
     ((_ extract 31 31)
-     (var2))
+     (bvand
+      rN
+      ((_ extract 31 0)
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 34 32)
+         (immShift))
+        ((_ extract 31 0)
+         (immShift))
+        ((_ extract 29 29)
+         'CPSR)))))
     (concat
-     (isZeroBit)
+     ((_ call "df.isZeroBit")
+      (bvand
+       rN
+       ((_ extract 31 0)
+        ((_ call "df.shiftC")
+         rM
+         ((_ extract 34 32)
+          (immShift))
+         ((_ extract 31 0)
+          (immShift))
+         ((_ extract 29 29)
+          'CPSR)))))
      (concat
       ((_ extract 32 32)
-       (shiftC))
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 34 32)
+         (immShift))
+        ((_ extract 31 0)
+         (immShift))
+        ((_ extract 29 29)
+         'CPSR)))
       ((_ extract 28 28)
        'CPSR)))))
-  (isZeroBit
-   (ite
-    (bveq
-     (var2)
-     #x00000000)
-    #b1
-    #b0))
-  (var4
-   ('PC
-    (bxWritePC)))
   (bxWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
-    (ite var3)
-    (bvadd 'PC #x00000004)))
-  (var3
-   ((bveq
-    #b0
-    ((_ extract 0 0)
-     (var2)))
-    (var1)
     (ite
      (bveq
       #b0
-      ((_ extract 1 1)
-       (var2)))
+      ((_ extract 0 0)
+       (bvand
+        rN
+        ((_ extract 31 0)
+         ((_ call "df.shiftC")
+          rM
+          ((_ extract 34 32)
+           (immShift))
+          ((_ extract 31 0)
+           (immShift))
+          ((_ extract 29 29)
+           'CPSR))))))
      (bvand
-      #xfffffffd
-      (var2))
-     (var2))))
-  (var1
-   (bvand
-    #xfffffffe
-    (var2))))
+      #xfffffffe
+      (bvand
+       rN
+       ((_ extract 31 0)
+        ((_ call "df.shiftC")
+         rM
+         ((_ extract 34 32)
+          (immShift))
+         ((_ extract 31 0)
+          (immShift))
+         ((_ extract 29 29)
+          'CPSR)))))
+     (ite
+      (bveq
+       #b0
+       ((_ extract 1 1)
+        (bvand
+         rN
+         ((_ extract 31 0)
+          ((_ call "df.shiftC")
+           rM
+           ((_ extract 34 32)
+            (immShift))
+           ((_ extract 31 0)
+            (immShift))
+           ((_ extract 29 29)
+            'CPSR))))))
+      (bvand
+       #xfffffffd
+       (bvand
+        rN
+        ((_ extract 31 0)
+         ((_ call "df.shiftC")
+          rM
+          ((_ extract 34 32)
+           (immShift))
+          ((_ extract 31 0)
+           (immShift))
+          ((_ extract 29 29)
+           'CPSR)))))
+      (bvand
+       rN
+       ((_ extract 31 0)
+        ((_ call "df.shiftC")
+         rM
+         ((_ extract 34 32)
+          (immShift))
+         ((_ extract 31 0)
+          (immShift))
+         ((_ extract 29 29)
+          'CPSR))))))
+    (bvadd 'PC #x00000004))))
  ((operands
   ((rD . 'GPR)
    (setcc . 'Cc_out)
@@ -291,48 +130,83 @@
   (in
    (setcc rN rM 'CPSR 'PC))
   (defs
-   ((var4)
+   (('PC
+    (bxWritePC))
     ('CPSR
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
       (ite
        (andp
         (bveq setcc #b1)
         (notp
-         ((_ call "arm.is_r15")
+         ((_ call "uf.arm.is_r15")
           rD)))
        (concat
         (nzcv)
         ((_ extract 27 0)
          (ite
-          ((_ call "arm.is_r15")
+          ((_ call "uf.arm.is_r15")
            rD)
           (ite
            (bveq
             #b0
             ((_ extract 0 0)
-             (var2)))
+             (bvand
+              rN
+              ((_ extract 31 0)
+               ((_ call "df.shiftC")
+                rM
+                ((_ extract 34 32)
+                 (immShift))
+                ((_ extract 31 0)
+                 (immShift))
+                ((_ extract 29 29)
+                 'CPSR))))))
            (SetT32Mode)
            'CPSR)
           'CPSR)))
        (ite
-        ((_ call "arm.is_r15")
+        ((_ call "uf.arm.is_r15")
          rD)
         (ite
          (bveq
           #b0
           ((_ extract 0 0)
-           (var2)))
+           (bvand
+            rN
+            ((_ extract 31 0)
+             ((_ call "df.shiftC")
+              rM
+              ((_ extract 34 32)
+               (immShift))
+              ((_ extract 31 0)
+               (immShift))
+              ((_ extract 29 29)
+               'CPSR))))))
          (SetT32Mode)
          'CPSR)
         'CPSR))
       'CPSR))
     (rD
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
       (ite
-       ((_ call "arm.is_r15")
+       ((_ call "uf.arm.is_r15")
         rD)
        rD
-       (var2))
+       (bvand
+        rN
+        ((_ extract 31 0)
+         ((_ call "df.shiftC")
+          rM
+          ((_ extract 34 32)
+           (immShift))
+          ((_ extract 31 0)
+           (immShift))
+          ((_ extract 29 29)
+           'CPSR)))))
       rD))))))

@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module SemMC.Architecture.PPC32.Opcodes (
   baseOpcodes,
+  allDefinedFunctions,
   pseudoOpcodes,
   allOpcodes,
   allOpcodeInfo,
@@ -28,6 +29,12 @@ import           SemMC.Architecture.PPC32.Opcodes.Internal ( allOpcodes, allOpco
 -- available (determined at compile time).
 baseOpcodes :: [Some (PPC.Opcode PPC.Operand)]
 baseOpcodes = map fst $(STH.attachSemantics (\(Some x) -> show x <.> "sem") allOpcodes ["data/32/base"])
+
+-- | Defined functions used by the semantics
+allDefinedFunctions :: [(String, BS.ByteString)]
+allDefinedFunctions = $(STH.attachDefinedFunctions [ "data/32/base"
+                                                   , "data/32/manual"
+                                                   , "data/32/learned" ])
 
 -- | Every opcode with a defined semantics (either from the base set, the
 -- learned set, or manually defined)

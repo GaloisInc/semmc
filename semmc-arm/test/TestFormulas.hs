@@ -4,6 +4,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 import           Control.Concurrent
 import           Control.Exception
@@ -12,12 +13,14 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Proxy ( Proxy(..) )
 import           Data.Semigroup
 import qualified Lang.Crucible.Backend as CRUB
 import qualified Lang.Crucible.Backend.Simple as S
 import qualified SemMC.Architecture.AArch32 as ARM
 import           SemMC.Architecture.ARM.Combined
-import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics )
+import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semantics
+                                                , a32DefinedFunctions, t32DefinedFunctions )
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Load as FL
 import qualified SemMC.Util as U
@@ -64,17 +67,19 @@ tests = testGroup "Read Formulas"
 
 testA32Formulas :: TestTree
 testA32Formulas = testGroup "A32 Formulas" $
-                  fmap testFormula allA32Semantics
+                  fmap (testFormula a32DefinedFunctions) allA32Semantics
 
 testT32Formulas :: TestTree
 testT32Formulas = testGroup "T32 Formulas" $
-                  fmap testFormula allT32Semantics
+                  fmap (testFormula t32DefinedFunctions) allT32Semantics
 
-testFormula :: (Some (ARMOpcode ARMOperand), BS.ByteString) -> TestTree
-testFormula a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
+testFormula :: [(String, BS.ByteString)]
+            -> (Some (ARMOpcode ARMOperand), BS.ByteString) -> TestTree
+testFormula dfs a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
   do Some ng <- PN.newIONonceGenerator
      sym <- S.newSimpleBackend ng
-     fm <- withTestLogging $ loadFormula sym a
+     lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym dfs
+     fm <- withTestLogging $ loadFormula sym lib a
      -- The Main test is loadFormula doesn't generate an exception.
      -- The result should be a MapF with a valid entry in it.
      MapF.size fm @?= 1
@@ -84,6 +89,7 @@ loadFormula :: ( CRUB.IsSymInterface sym
                , ShowF (CRU.SymExpr sym)
                , U.HasLogCfg) =>
                sym
+            -> F.Library sym
             -> (Some (ARMOpcode ARMOperand), BS.ByteString)
             -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.AArch32))
-loadFormula sym a = FL.loadFormulas sym [a]
+loadFormula sym lib a = FL.loadFormulas sym lib [a]

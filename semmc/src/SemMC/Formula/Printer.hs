@@ -173,13 +173,19 @@ convertElt paramLookup (S.BoundVarExpr var) = fromJust $ paramLookup var
 
 convertFnApp :: ParamLookup t -> S.ExprSymFn t args ret -> Ctx.Assignment (S.Expr t) args -> SC.SExpr FAtom
 convertFnApp paramLookup fn args
-  | S.solverSymbolAsText (S.symFnName fn) == "undefined"
+  | name == "undefined"
   , BaseBVRepr nr <- S.fnReturnType fn =
-      let call = fromFoldable' [ ident "_", ident "call", quoted "undefined" ]
+      let call = fromFoldable' [ ident "_", ident "call", quoted "uf.undefined" ]
       in fromFoldable' [ call, int (NR.natValue nr) ]
   | otherwise =
-    let call = fromFoldable' [ ident "_", ident "call", quoted (T.unpack (S.solverSymbolAsText (S.symFnName fn))) ]
+    let call = fromFoldable' [ ident "_", ident "call", quoted (prefix ++ T.unpack name) ]
     in fromFoldable' (call : FC.toListFC (convertElt paramLookup) args)
+  where
+    name = S.solverSymbolAsText (S.symFnName fn)
+    prefix = case S.symFnInfo fn of
+      S.UninterpFnInfo _ _ -> "uf."
+      S.DefinedFnInfo _ _ _ -> "df."
+      _ -> error ("Unsupported function: " ++ T.unpack name)
 
 convertAppElt :: ParamLookup t -> S.AppExpr t tp -> SC.SExpr FAtom
 convertAppElt paramLookup = convertApp paramLookup . S.appExprApp

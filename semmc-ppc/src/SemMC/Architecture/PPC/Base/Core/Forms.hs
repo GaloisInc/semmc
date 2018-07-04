@@ -31,7 +31,7 @@ import SemMC.Architecture.PPC.Base.Core.BitSize
 import SemMC.Architecture.PPC.Base.Core.OperandClasses
 import SemMC.Architecture.PPC.Base.Core.Registers
 
-vectorBV :: ExprType 'TBV
+vectorBV :: ExprTypeRepr 'TBV
 vectorBV = EBV 128
 
 -- | The XL-form for the CR logical operations

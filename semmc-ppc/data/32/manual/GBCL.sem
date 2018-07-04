@@ -1,90 +1,42 @@
 ;; GBC (B-form, AA=0, LK=1)
 ;; Generic branch conditional with arbitrary BO
-(let
- ((false
-  (bvne #b0 #b0))
-  (true
-   (bveq #b0 #b0)))
- ((operands
-  ((target . 'Condbrtarget)
-   (bi . 'Crbitrc)
-   (bo . 'U5imm)))
-  (in
-   ('IP 'CR 'CTR))
-  (defs
-   (('LNK
-    (bvadd 'IP #x00000004))
-    ('IP
-     (ite
-      (andp
+((operands
+ ((target . 'Condbrtarget)
+  (bi . 'Crbitrc)
+  (bo . 'U5imm)))
+ (in
+  ('IP 'CR 'CTR))
+ (defs
+  (('LNK
+   (bvadd 'IP #x00000004))
+   ('IP
+    (ite
+     (andp
+      ((_ call "df.generic_cond_ok")
+       'CR
+       bo
+       bi)
+      ((_ call "df.generic_ctr_ok")
+       bo
        (ite
-        ((_ call "test_bit_dynamic.32")
-         ((_ zero_extend 27)
-          bo)
-         #x00000004)
-        (true)
-        (ite
-         ((_ call "test_bit_dynamic.32")
+        (notp
+         ((_ call "uf.test_bit_dynamic.32")
           ((_ zero_extend 27)
            bo)
-          #x00000003)
-         ((_ call "test_bit_dynamic.32")
-          'CR
-          ((_ zero_extend 27)
-           (bvsub #b11111 bi)))
-         (notp
-          ((_ call "test_bit_dynamic.32")
-           'CR
-           ((_ zero_extend 27)
-            (bvsub #b11111 bi))))))
-       (ite
-        ((_ call "test_bit_dynamic.32")
-         ((_ zero_extend 27)
-          bo)
-         #x00000002)
-        (true)
-        (ite
-         ((_ call "test_bit_dynamic.32")
-          ((_ zero_extend 27)
-           bo)
-          #x00000001)
-         (xorp
-          (notp
-           (bveq
-            (ite
-             (notp
-              ((_ call "test_bit_dynamic.32")
-               ((_ zero_extend 27)
-                bo)
-               #x00000002))
-             (bvsub 'CTR #x00000001)
-             'CTR)
-            #x00000000))
-          (true))
-         (xorp
-          (notp
-           (bveq
-            (ite
-             (notp
-              ((_ call "test_bit_dynamic.32")
-               ((_ zero_extend 27)
-                bo)
-               #x00000002))
-             (bvsub 'CTR #x00000001)
-             'CTR)
-            #x00000000))
-          (false)))))
-      (bvadd
-       ((_ sign_extend 16)
-        (concat target #b00))
-       'IP)
-      (bvadd 'IP #x00000004)))
-    ('CTR
-     (ite
-      (notp
-       ((_ call "test_bit_dynamic.32")
-        ((_ zero_extend 27)
-         bo)
-        #x00000002))
-      (bvsub 'CTR #x00000001)
-      'CTR))))))
+          #x00000002))
+        (bvsub 'CTR #x00000001)
+        'CTR)))
+     (bvadd
+      ((_ sign_extend 16)
+       (concat target #b00))
+      'IP)
+     (bvadd 'IP #x00000004)))
+   ('CTR
+    (ite
+     (notp
+      ((_ call "uf.test_bit_dynamic.32")
+       ((_ zero_extend 27)
+        bo)
+       #x00000002))
+     (bvsub 'CTR #x00000001)
+     'CTR)))))

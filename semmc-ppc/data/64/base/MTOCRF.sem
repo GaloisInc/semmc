@@ -1,96 +1,51 @@
 ;; Move To One Condition Register Field (XFX-form)
-(let
- ((var1
-  (defs
-   (('CR
-    (ite
-     (bveq
-      ((_ call "popcnt.32")
-       ((_ zero_extend 24)
-        FXM))
-      #x00000001)
-     (bvor
-      (bvand
-       (bvnot
-        (bvshl
-         (bvlshr
-          (bvlshr
-           (bvshl
-            ((_ sign_extend 31)
-             #b1)
-            (bvmul
-             ((_ call "clz.32")
-              ((_ zero_extend 24)
-               FXM))
-             #x00000004))
-           (bvmul
-            ((_ call "clz.32")
-             ((_ zero_extend 24)
-              FXM))
-            #x00000004))
-          (bvsub
-           #x0000001f
-           (bvadd
-            (bvmul
-             ((_ call "clz.32")
-              ((_ zero_extend 24)
-               FXM))
-             #x00000004)
-            #x00000003)))
-         (bvsub
-          #x0000001f
-          (bvadd
-           (bvmul
-            ((_ call "clz.32")
-             ((_ zero_extend 24)
-              FXM))
-            #x00000004)
-           #x00000003))))
-       'CR)
-      (bvand
-       (bvshl
-        (bvlshr
-         (bvlshr
-          (bvshl
-           ((_ sign_extend 31)
-            #b1)
-           (bvmul
-            ((_ call "clz.32")
-             ((_ zero_extend 24)
-              FXM))
-            #x00000004))
-          (bvmul
-           ((_ call "clz.32")
-            ((_ zero_extend 24)
-             FXM))
-           #x00000004))
-         (bvsub
-          #x0000001f
-          (bvadd
-           (bvmul
-            ((_ call "clz.32")
-             ((_ zero_extend 24)
-              FXM))
-            #x00000004)
-           #x00000003)))
-        (bvsub
-         #x0000001f
-         (bvadd
-          (bvmul
-           ((_ call "clz.32")
-            ((_ zero_extend 24)
-             FXM))
-           #x00000004)
-          #x00000003)))
-       ((_ extract 31 0)
-        rS)))
-     ((_ call "undefined")
-      #x00000020)))
-    ('IP
-     (bvadd 'IP #x0000000000000004))))))
- ((operands
-  ((FXM . 'Crbitm)
-   (rS . 'Gprc)))
-  (in
-   ('CR FXM rS 'IP))
-  (var1)))
+((operands
+ ((FXM . 'Crbitm)
+  (rS . 'Gprc)))
+ (in
+  ('CR FXM rS 'IP))
+ (defs
+  (('CR
+   (ite
+    (bveq
+     ((_ call "uf.popcnt.32")
+      ((_ zero_extend 24)
+       FXM))
+     #x00000001)
+    (bvor
+     (bvand
+      (bvnot
+       ((_ call "df.mask_32")
+        (bvmul
+         ((_ call "uf.clz.32")
+          ((_ zero_extend 24)
+           FXM))
+         #x00000004)
+        (bvadd
+         (bvmul
+          ((_ call "uf.clz.32")
+           ((_ zero_extend 24)
+            FXM))
+          #x00000004)
+         #x00000003)))
+      'CR)
+     (bvand
+      ((_ call "df.mask_32")
+       (bvmul
+        ((_ call "uf.clz.32")
+         ((_ zero_extend 24)
+          FXM))
+        #x00000004)
+       (bvadd
+        (bvmul
+         ((_ call "uf.clz.32")
+          ((_ zero_extend 24)
+           FXM))
+         #x00000004)
+        #x00000003))
+      ((_ extract 31 0)
+       rS)))
+    ((_ call "uf.undefined")
+     #x00000020)))
+   ('IP
+    (bvadd 'IP #x0000000000000004)))))

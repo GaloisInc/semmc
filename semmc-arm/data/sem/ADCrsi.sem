@@ -1,387 +1,157 @@
 ;; ADC register, A32, Encoding A1 (F7.1.2, F7-2536)
 (let
- ((addResult
-  ((_ extract 31 0)
-   var6))
-  (var6
-   ((bvadd
-    (bvadd
-     ((_ zero_extend 1)
-      rN)
-     ((_ zero_extend 1)
-      (var4)))
-    ((_ zero_extend 1)
-     ((_ zero_extend 31)
-      ((_ extract 29 29)
-       'CPSR))))))
-  (var4
-   ((_ extract 31 0)
-    (shiftC)))
-  (shiftC
+ ((var2
+  (rD
    (ite
-    (bveq
+    ((_ call "df.testCondition")
+     predBits
+     'CPSR)
+    (ite
+     ((_ call "uf.arm.is_r15")
+      rD)
+     rD
      ((_ extract 31 0)
-      (immShift))
-     #x00000000)
-    (concat
-     ((_ extract 29 29)
-      'CPSR)
-     ((_ call "a32.soregimm_reg")
-      sori))
-    (ite
-     (bveq
+      (res_nzcv)))
+    rD)))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    rN
+    ((_ extract 31 0)
+     ((_ call "df.shiftC")
+      ((_ call "uf.a32.soregimm_reg")
+       sori)
       ((_ extract 34 32)
        (immShift))
-      #b000)
-     (lslC)
-     (ite
-      (bveq
-       ((_ extract 34 32)
-        (immShift))
-       #b001)
-      var3))))
-  (var3
-   ((logicalShiftRightCarry)
-    (ite
-     (bveq
-      ((_ extract 34 32)
-       (immShift))
-      #b010)
-     (arithmeticShiftRightCarry)
-     (ite
-      (bveq
-       ((_ extract 34 32)
-        (immShift))
-       #b011)
-      (rorC)
-      (rrxC)))))
-  (rrxC
-   (concat
-    ((_ extract 0 0)
-     ((_ call "a32.soregimm_reg")
-      sori))
-    (concat
-     ((_ extract 29 29)
-      'CPSR)
-     ((_ extract 31 1)
-      ((_ call "a32.soregimm_reg")
-       sori)))))
-  (rorC
-   (concat
-    (ite
-     (bvult
       ((_ extract 31 0)
        (immShift))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       ((_ call "a32.soregimm_reg")
-        sori))
-      #b1
-      #b0)
-     #b0)
-    (bvor
-     (bvshl
-      ((_ call "a32.soregimm_reg")
-       sori)
-      (bvsub
-       #x00000020
-       (bvurem
-        ((_ extract 31 0)
-         (immShift))
-        #x00000020)))
-     (bvlshr
-      ((_ call "a32.soregimm_reg")
-       sori)
-      (bvurem
-       ((_ extract 31 0)
-        (immShift))
-       #x00000020)))))
+      ((_ extract 29 29)
+       'CPSR)))
+    ((_ zero_extend 31)
+     ((_ extract 29 29)
+      'CPSR))))
   (immShift
    (ite
     (bveq
-     ((_ call "a32.soregimm_type")
+     ((_ call "uf.a32.soregimm_type")
       sori)
      #b00)
     (concat
      #b000
      ((_ zero_extend 27)
-      ((_ call "a32.soregimm_imm")
+      ((_ call "uf.a32.soregimm_imm")
        sori)))
     (ite
      (bveq
-      ((_ call "a32.soregimm_type")
+      ((_ call "uf.a32.soregimm_type")
        sori)
       #b01)
-     (concat #b001 var2)
-     (ite
-      (bveq
-       ((_ call "a32.soregimm_type")
-        sori)
-       #b10)
-      (concat #b010 var2)
+     (concat
+      #b001
       (ite
        (bveq
-        ((_ call "a32.soregimm_imm")
+        #b00000
+        ((_ call "uf.a32.soregimm_imm")
+         sori))
+       #x00000020
+       ((_ zero_extend 27)
+        ((_ call "uf.a32.soregimm_imm")
+         sori))))
+     (ite
+      (bveq
+       ((_ call "uf.a32.soregimm_type")
+        sori)
+       #b10)
+      (concat
+       #b010
+       (ite
+        (bveq
+         #b00000
+         ((_ call "uf.a32.soregimm_imm")
+          sori))
+        #x00000020
+        ((_ zero_extend 27)
+         ((_ call "uf.a32.soregimm_imm")
+          sori))))
+      (ite
+       (bveq
+        ((_ call "uf.a32.soregimm_imm")
          sori)
         #b00000)
        (concat #b100 #x00000001)
        (concat
         #b011
         ((_ zero_extend 27)
-         ((_ call "a32.soregimm_imm")
+         ((_ call "uf.a32.soregimm_imm")
           sori))))))))
-  (var2
-   ((ite
-    (bveq
-     #b00000
-     ((_ call "a32.soregimm_imm")
-      sori))
-    #x00000020
-    ((_ zero_extend 27)
-     ((_ call "a32.soregimm_imm")
-      sori)))))
-  (arithmeticShiftRightCarry
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       ((_ call "a32.soregimm_reg")
-        sori))
-      #b1
-      #b0)
-     #b0)
-    (bvashr
-     ((_ call "a32.soregimm_reg")
-      sori)
-     (bvurem
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020))))
-  (logicalShiftRightCarry
-   (concat
-    (ite
-     (bvult
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020)
-     (ite
-      ((_ call "test_bit_dynamic")
-       (bvsub
-        ((_ extract 31 0)
-         (immShift))
-        #x00000001)
-       ((_ call "a32.soregimm_reg")
-        sori))
-      #b1
-      #b0)
-     #b0)
-    (bvlshr
-     ((_ call "a32.soregimm_reg")
-      sori)
-     (bvurem
-      ((_ extract 31 0)
-       (immShift))
-      #x00000020))))
-  (lslC
-   (bvshl
-    ((_ zero_extend 1)
-     ((_ call "a32.soregimm_reg")
-      sori))
-    ((_ zero_extend 1)
-     ((_ extract 31 0)
-      (immShift)))))
-  (testCondition
+  (var3
    (ite
     (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       predBits))
-     (bvne predBits #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (var1)))
-  (var1
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b001)
-    (bveq
-     #b1
-     ((_ extract 29 29)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b010)
-     (bveq
-      #b1
-      ((_ extract 31 31)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        predBits)
-       #b011)
-      (bveq
-       #b1
-       ((_ extract 28 28)
-        'CPSR))
+     (bveq setcc #b1)
+     (notp
+      ((_ call "uf.arm.is_r15")
+       rD)))
+    (concat
+     (nzcv)
+     ((_ extract 27 0)
       (ite
-       (bveq
-        ((_ extract 3 1)
-         predBits)
-        #b100)
-       (andp
-        (bveq
-         #b1
-         ((_ extract 29 29)
-          'CPSR))
-        (notp
-         (bveq
-          #b1
-          ((_ extract 30 30)
-           'CPSR))))
+       ((_ call "uf.arm.is_r15")
+        rD)
        (ite
         (bveq
-         ((_ extract 3 1)
-          predBits)
-         #b101)
-        (bveq
-         ((_ extract 31 31)
-          'CPSR)
-         ((_ extract 28 28)
-          'CPSR))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           predBits)
-          #b110)
-         (andp
-          (bveq
-           ((_ extract 31 31)
-            'CPSR)
-           ((_ extract 28 28)
-            'CPSR))
-          (notp
-           (bveq
-            #b1
-            ((_ extract 30 30)
-             'CPSR))))
-         (true))))))))
-  (true
-   (bveq #b0 #b0))
-  (var11
-   ((ite
-    (testCondition)
+         #b0
+         ((_ extract 0 0)
+          ((_ extract 31 0)
+           (res_nzcv))))
+        (SetT32Mode)
+        'CPSR)
+       'CPSR)))
     (ite
-     (andp
-      (bveq setcc #b1)
-      (notp
-       ((_ call "arm.is_r15")
-        rD)))
-     (concat
-      (nzcv)
-      ((_ extract 27 0)
-       (ite
-        ((_ call "arm.is_r15")
-         rD)
-        (ite
-         (var8)
-         (SetT32Mode)
-         'CPSR)
-        'CPSR)))
+     ((_ call "uf.arm.is_r15")
+      rD)
      (ite
-      ((_ call "arm.is_r15")
-       rD)
-      (ite
-       (var8)
-       (SetT32Mode)
-       'CPSR)
-      'CPSR))
-    'CPSR)))
+      (bveq
+       #b0
+       ((_ extract 0 0)
+        ((_ extract 31 0)
+         (res_nzcv))))
+      (SetT32Mode)
+      'CPSR)
+     'CPSR)))
   (SetT32Mode
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
-  (var8
-   (bveq
-    #b0
-    ((_ extract 0 0)
-     (addResult))))
   (nzcv
-   (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
-      var6))
-    (concat
-     (ite var5)
-     var9)))
-  (var9
-   ((concat
-    ((_ extract 32 32)
-     var6)
-    (bvand
-     ((_ extract 31 31)
-      ((_ extract 31 0)
-       var6))
-     ((_ extract 32 32)
-      var6)))))
-  (var5
-   ((bveq
-    ((_ extract 31 0)
-     var6)
-    #x00000000)
-    #b1
-    #b0))
+   ((_ extract 35 32)
+    (res_nzcv)))
   (bxWritePC
    (ite
-    ((_ call "arm.is_r15")
+    ((_ call "uf.arm.is_r15")
      rD)
-    var10))
-  (var10
-   ((ite
-    (var8)
-    (bvand
-     #xfffffffe
-     (addResult))
     (ite
      (bveq
       #b0
-      ((_ extract 1 1)
-       (addResult)))
-     (bvand var7)
-     (addResult)))
+      ((_ extract 0 0)
+       ((_ extract 31 0)
+        (res_nzcv))))
+     (bvand
+      #xfffffffe
+      ((_ extract 31 0)
+       (res_nzcv)))
+     (ite
+      (bveq
+       #b0
+       ((_ extract 1 1)
+        ((_ extract 31 0)
+         (res_nzcv))))
+      (bvand var1)
+      ((_ extract 31 0)
+       (res_nzcv))))
     (bvadd 'PC #x00000004)))
-  (var7
+  (var1
    (#xfffffffd
-    (addResult))))
+    ((_ extract 31 0)
+     (res_nzcv)))))
  ((operands
   ((rD . 'GPR)
    (setcc . 'Cc_out)
@@ -393,13 +163,11 @@
   (defs
    (('PC
     (bxWritePC))
-    ('CPSR var11)
-    (rD
+    ('CPSR
      (ite
-      (testCondition)
-      (ite
-       ((_ call "arm.is_r15")
-        rD)
-       rD
-       (addResult))
-      rD))))))
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (var3)
+      'CPSR))
+    (var2)))))

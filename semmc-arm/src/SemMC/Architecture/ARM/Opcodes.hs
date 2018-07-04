@@ -6,11 +6,13 @@ module SemMC.Architecture.ARM.Opcodes
     , allA32OpcodeInfo
     , allA32Opcodes
     , a32Opcodes
+    , a32DefinedFunctions
     , allT32Semantics
     , t32Semantics
     , allT32OpcodeInfo
     , allT32Opcodes
     , t32Opcodes
+    , t32DefinedFunctions
     )
     where
 
@@ -46,6 +48,9 @@ allA32OpcodeInfo = map (mapSome intoARMOpcode) a32OpcodeInfo
 allA32Opcodes :: [Some (ARMOpcode ARMOperand)]
 allA32Opcodes = map (mapSome A32Opcode) a32Opcodes
 
+a32DefinedFunctions :: [(String, BS.ByteString)]
+a32DefinedFunctions = $(STH.attachDefinedFunctions [ "data/sem" ])
+
 -- ----------------------------------------------------------------------
 
 -- | Every T32 opcode with a defined semantics (either from the base set, the
@@ -68,3 +73,6 @@ allT32OpcodeInfo = map (mapSome intoARMOpcode) t32OpcodeInfo
 -- | All opcodes known for the architecture
 allT32Opcodes :: [Some (ARMOpcode ARMOperand)]
 allT32Opcodes = map (mapSome T32Opcode) t32Opcodes
+
+t32DefinedFunctions :: [(String, BS.ByteString)]
+t32DefinedFunctions = $(STH.attachDefinedFunctions [ "data/sem" ])

@@ -9,7 +9,7 @@
  (defs
   (('VSCR
    ((_ extract 31 0)
-    ((_ call "ppc.vec3")
+    ((_ call "uf.ppc.vec3")
      "VADDEUQM"
      vrA
      vrB
@@ -17,7 +17,7 @@
      'VSCR)))
    (vrT
     ((_ extract 159 32)
-     ((_ call "ppc.vec3")
+     ((_ call "uf.ppc.vec3")
       "VADDEUQM"
       vrA
       vrB

@@ -3,104 +3,10 @@
 (let
  ((wval
   (ite
-   ((_ call "arm.is_r15")
+   ((_ call "uf.arm.is_r15")
     gpr)
    'PC
    gpr))
-  (testCondition
-   (ite
-    (andp
-     (bveq
-      #b1
-      ((_ extract 0 0)
-       predBits))
-     (bvne predBits #xf))
-    (notp
-     (conditionMatch))
-    (conditionMatch)))
-  (conditionMatch
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b000)
-    (bveq
-     #b1
-     ((_ extract 30 30)
-      'CPSR))
-    (var1)))
-  (var1
-   (ite
-    (bveq
-     ((_ extract 3 1)
-      predBits)
-     #b001)
-    (bveq
-     #b1
-     ((_ extract 29 29)
-      'CPSR))
-    (ite
-     (bveq
-      ((_ extract 3 1)
-       predBits)
-      #b010)
-     (bveq
-      #b1
-      ((_ extract 31 31)
-       'CPSR))
-     (ite
-      (bveq
-       ((_ extract 3 1)
-        predBits)
-       #b011)
-      (bveq
-       #b1
-       ((_ extract 28 28)
-        'CPSR))
-      (ite
-       (bveq
-        ((_ extract 3 1)
-         predBits)
-        #b100)
-       (andp
-        (bveq
-         #b1
-         ((_ extract 29 29)
-          'CPSR))
-        (notp
-         (bveq
-          #b1
-          ((_ extract 30 30)
-           'CPSR))))
-       (ite
-        (bveq
-         ((_ extract 3 1)
-          predBits)
-         #b101)
-        (bveq
-         ((_ extract 31 31)
-          'CPSR)
-         ((_ extract 28 28)
-          'CPSR))
-        (ite
-         (bveq
-          ((_ extract 3 1)
-           predBits)
-          #b110)
-         (andp
-          (bveq
-           ((_ extract 31 31)
-            'CPSR)
-           ((_ extract 28 28)
-            'CPSR))
-          (notp
-           (bveq
-            #b1
-            ((_ extract 30 30)
-             'CPSR))))
-         (true))))))))
-  (true
-   (bveq #b0 #b0))
   (rnUpd
    (ite
     (wback)
@@ -108,17 +14,17 @@
     off))
   (offAddr
    (ite
-    ((_ call "a32.am2offset_imm_add")
+    ((_ call "uf.a32.am2offset_imm_add")
      imm)
     (bvadd
      off
      ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
+      ((_ call "uf.a32.am2offset_imm_imm")
        imm)))
     (bvsub
      off
      ((_ zero_extend 16)
-      ((_ call "a32.am2offset_imm_imm")
+      ((_ call "uf.a32.am2offset_imm_imm")
        imm)))))
   (wback
    (bveq #b0 #b0)))
@@ -135,16 +41,20 @@
     ('CPSR 'CPSR)
     (off
      (ite
-      (testCondition)
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
       (rnUpd)
       off))
     ('Mem
-     ((_ call "write_mem.32")
+     ((_ call "uf.write_mem.32")
       'Mem
       off
       (ite
-       (testCondition)
+       ((_ call "df.testCondition")
+        predBits
+        'CPSR)
        (wval)
-       ((_ call "read_mem.32")
+       ((_ call "uf.read_mem.32")
         'Mem
         off))))))))

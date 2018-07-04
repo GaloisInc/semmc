@@ -31,7 +31,8 @@ import SemMC.Architecture.PPC.Base.VSX
 
 -- Defs
 
-base :: BitSize -> [(String, Definition)]
+base :: BitSize -> ([(String, Definition)],
+                    [(String, FunctionDefinition)])
 base bitSize = runSem $ do
   let ?bitSize = bitSize
   baseArithmetic
@@ -42,7 +43,8 @@ base bitSize = runSem $ do
   baseVector
   baseVSX
 
-pseudo :: BitSize -> [(String, Definition)]
+pseudo :: BitSize -> ([(String, Definition)],
+                      [(String, FunctionDefinition)])
 pseudo bitSize = runSem $ do
   let ?bitSize = bitSize
   defineOpcode "Move" $ do
@@ -74,7 +76,8 @@ pseudo bitSize = runSem $ do
     defLoc cr newCR
   return ()
 
-manual :: BitSize -> [(String, Definition)]
+manual :: BitSize -> ([(String, Definition)],
+                      [(String, FunctionDefinition)])
 manual bitSize = runSem $ do
   let ?bitSize = bitSize
   manualBranch

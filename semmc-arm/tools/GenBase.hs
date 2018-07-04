@@ -73,20 +73,49 @@ main = O.execParser optParser >>= mainWithOptions
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
+  Some ng <- PN.newIONonceGenerator
+  sym <- S.newSimpleBackend ng
   let odir = oRootDir opts
-      genTo d (s,e) (t,l) = do
-        (s', e') <- genOpDefs d (not $ oNoCheck opts) l
+      genFunsTo d l = do
+        ans@(s, e, _lib) <- genFunDefs sym d (not $ oNoCheck opts) l
+        putStrLn $ "Wrote " <> (show s) <> " function files to " <> d <>
+                       (if 0 == e then "" else " (" <> show e <> " errors!)")
+        return ans
+      genTo d lib (s,e) (t,l) = do
+        (s', e') <- genOpDefs sym lib d (not $ oNoCheck opts) l
         putStrLn $ "Wrote " <> (show s') <> " " <> t <> " semantics files to " <> d <>
                        (if 0 == e' then "" else " (" <> show e' <> " errors!)")
         return (s+s', e+e')
   D.createDirectoryIfMissing True odir
-  (s,e) <- F.foldlM (genTo odir) (0,0) B.semdefs
-  putStrLn $ "Finished writing " <> show s <> " semantics files with " <> show e <> " errors."
+  (s0,e0,lib) <- genFunsTo odir B.fundefs
+  (s,e) <- F.foldlM (genTo odir lib) (s0,e0) B.semdefs
+  putStrLn $ "Finished writing " <> show s <> " files with " <> show e <> " errors."
   if e > 0 then exitFailure else exitSuccess
 
 
-genOpDefs :: FilePath -> Bool -> [(String, DSL.Definition)] -> IO (Int, Int)
-genOpDefs d chk l = F.foldlM writeDef (0, 0) l
+genFunDefs :: ( CRUB.IsSymInterface sym
+              , ShowF (CRU.SymExpr sym) )
+           => sym -> FilePath -> Bool -> [(String, DSL.FunctionDefinition)]
+           -> IO (Int, Int, SF.Library sym)
+genFunDefs sym d chk l = F.foldlM writeFunDef (0, 0, SF.emptyLibrary) l
+    where writeFunDef (s,e,lib) (funName, def) =
+              let fundef  = DSL.printFunctionDefinition def
+                  fundefB = encodeUtf8 fundef
+                  writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
+              in if chk
+                 then checkFunction (Proxy @ARMSem.AArch32) sym fundefB funName >>= \case
+                         Right lib' -> writeIt >> return (s+1, e, lib' `MapF.union` lib)
+                         Left err -> do writeIt
+                                        putStrLn $ "Error for function " <> funName <> ": " <> err
+                                        return (s+1, e+1, lib)
+                 else do writeIt
+                         return (s+1, e, lib)
+
+
+genOpDefs :: ( CRUB.IsSymInterface sym
+             , ShowF (CRU.SymExpr sym) )
+          => sym -> SF.Library sym -> FilePath -> Bool -> [(String, DSL.Definition)] -> IO (Int, Int)
+genOpDefs sym lib d chk l = F.foldlM writeDef (0, 0) l
     where writeDef (s,e) (opName, def) =
               let semdef  = DSL.printDefinition def
                   semdefB = encodeUtf8 semdef
@@ -97,31 +126,57 @@ genOpDefs d chk l = F.foldlM writeDef (0, 0) l
                                           opName <> "\" (-> " <> d <> ")"
                                  return (s, e+1)
                    Just op -> if chk
-                              then checkFormula (Proxy @ARMSem.AArch32) semdefB op >>= \case
+                              then checkFormula (Proxy @ARMSem.AArch32) sym lib semdefB op >>= \case
                                      Nothing -> writeIt >> return (s+1, e)
-                                     Just err -> do putStrLn $ "Error for " <> opName <> ": " <> err
-                                                    return (s, e+1)
+                                     Just err -> do writeIt
+                                                    putStrLn $ "Error for " <> opName <> ": " <> err
+                                                    return (s+1, e+1)
 
                               else do writeIt
                                       return (s+1, e)
           opcodes = allA32Opcodes ++ allT32Opcodes
 
+checkFunction :: ( CRUB.IsSymInterface sym
+                 , ShowF (CRU.SymExpr sym)
+                 , Architecture arch )
+              => Proxy arch
+              -> sym
+              -> BS.ByteString
+              -> String
+              -> IO (Either String (SF.Library sym))
+checkFunction arch sym sem name =
+  U.withLogging "semmc-ppc-genbase"
+      (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
+      catch (Right <$> loadFunction arch sym (name, sem)) $
+                 \(e :: SomeException) -> return $ Left $ show e
+
+loadFunction :: ( CRUB.IsSymInterface sym
+                , ShowF (CRU.SymExpr sym)
+                , Architecture arch
+                , U.HasLogCfg )
+             => Proxy arch
+             -> sym
+             -> (String, BS.ByteString)
+             -> IO (SF.Library sym)
+loadFunction arch sym pair = FL.loadLibrary arch sym [pair]
 
 checkFormula :: ( Architecture arch
+                , CRUB.IsSymInterface sym
+                , ShowF (CRU.SymExpr sym)
                 , HasRepr (ARMSem.ARMOpcode ARMSem.ARMOperand) (SL.List (OperandTypeRepr arch))
                 ) =>
                 Proxy arch
+             -> sym
+             -> SF.Library sym
              -> BS.ByteString
              -> Some (ARMSem.ARMOpcode ARMSem.ARMOperand)
              -> IO (Maybe String)
-checkFormula arch sem op =
-    do Some ng <- PN.newIONonceGenerator
-       sym <- S.newSimpleBackend ng
-       -- If the semantics are bad, loadFormula will throw an exception
-       U.withLogging "semmc-ppc-genbase"
-            (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
-            catch (loadFormula arch sym (op, sem) >> return Nothing) $
-                      \(e :: SomeException) -> return $ Just $ show e
+checkFormula arch sym lib sem op =
+  -- If the semantics are bad, loadFormula will throw an exception
+  U.withLogging "semmc-ppc-genbase"
+      (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
+      catch (loadFormula arch sym lib (op, sem) >> return Nothing) $
+          \(e :: SomeException) -> return $ Just $ show e
 
 
 loadFormula :: ( CRUB.IsSymInterface sym
@@ -132,6 +187,7 @@ loadFormula :: ( CRUB.IsSymInterface sym
                ) =>
                Proxy arch
             -> sym
+            -> SF.Library sym
             -> (Some (ARMSem.ARMOpcode ARMSem.ARMOperand), BS.ByteString)
             -> IO (MapF.MapF (ARMSem.ARMOpcode ARMSem.ARMOperand) (SF.ParameterizedFormula sym arch))
-loadFormula _ sym a = FL.loadFormulas sym [a]
+loadFormula _ sym lib a = FL.loadFormulas sym lib [a]

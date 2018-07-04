@@ -195,7 +195,7 @@ defineStores = do
         (shift_t, shift_n) = splitImmShift (decodeImmShift st imm5)
         offset = shift (Loc rM) shift_t shift_n c
 
-        nBytes = 4
+    let nBytes = 4
         addr = ite add (bvadd (Loc rN) offset) (bvsub (Loc rN) offset)
     defMem memory addr nBytes (ite (isR15 rT) (Loc pc) (Loc rT))
 

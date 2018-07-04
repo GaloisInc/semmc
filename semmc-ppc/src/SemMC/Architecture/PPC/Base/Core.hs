@@ -60,6 +60,7 @@ module SemMC.Architecture.PPC.Base.Core (
 import GHC.Stack ( HasCallStack )
 
 import Prelude hiding ( concat )
+import Data.Proxy ( Proxy(..) )
 import Text.Printf ( printf )
 import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
@@ -121,14 +122,32 @@ cmpImm :: (HasCallStack, ?bitSize :: BitSize)
        -- ^ The register expression
        -> Expr 'TBV
 cmpImm lt gt fld ximm reg =
-  updateCRField fld crnibble
+  lf cmpImmLF (lt reg ximm :< gt reg ximm :< fld :< Loc xer :< Loc cr :< Nil)
+
+cmpImmLF :: (?bitSize :: BitSize)
+         => LibraryFunctionDef '(['TBool, 'TBool, 'TBV, 'TBV, 'TBV], 'TBV)
+cmpImmLF =
+  defineLibraryFunction "cmpImm"
+    (Arg "lt" EBool :<
+     Arg "gt" EBool :<
+     Arg "fld" (EBV 3) :<
+     Arg "xer" naturalBV :<
+     Arg "cr" (EBV 32) :< Nil)
+    cmpImmImpl
+
+cmpImmImpl :: (?bitSize::BitSize)
+           => Expr 'TBool -> Expr 'TBool -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
+           -> Expr 'TBV
+cmpImmImpl lt gt fld xerValue crValue =
+  updateCRFieldImpl crValue fld crnibble
+  -- Use impl because we can't (yet) call one library function from another
   where
-    c = ite (lt reg ximm)
+    c = ite lt
             (LitBV 3 0b100)
-            (ite (gt reg ximm)
+            (ite gt
                  (LitBV 3 0b010)
                  (LitBV 3 0b001))
-    crnibble = concat c (xerBit SO (Loc xer))
+    crnibble = concat c (xerBit SO xerValue)
 
 -- | Produce an expression that extracts the given field from the CR as a four
 -- bit bitvector
@@ -146,15 +165,29 @@ crField fldNum = lowBits' 4 shiftedCR
 -- Generates a mask of four ones shifted to the field slot, then negates the
 -- mask to clear that field.  Shifts the new field into the correct slot and
 -- does an or.
-updateCRField :: Expr 'TBV
+updateCRField :: (?bitSize :: BitSize)
+              => Expr 'TBV
               -- ^ A three bit crrc value naming the field to update
               -> Expr 'TBV
               -- ^ A four bit replacement field value
               -> Expr 'TBV
-updateCRField fldNum newFldVal = bvor clearedCR shiftedVal
+updateCRField =
+  (wrapAsLibraryFunction Proxy "updateCRField"
+     (Arg "cr" (EBV 32) :<
+      Arg "fldNum" (EBV 3) :<
+      Arg "newFldVal" (EBV 4) :< Nil)
+   updateCRFieldImpl) (Loc cr)
+
+updateCRFieldImpl :: (?bitSize :: BitSize)
+                  => Expr 'TBV
+                  -- ^ The current value of CR
+                  -> Expr 'TBV
+                  -> Expr 'TBV
+                  -> Expr 'TBV
+updateCRFieldImpl crValue fldNum newFldVal = bvor clearedCR shiftedVal
   where
     fieldMask = bvnot (bvshl (LitBV 32 0xf) (crFieldIndex fldNum))
-    clearedCR = bvand (Loc cr) fieldMask
+    clearedCR = bvand crValue fieldMask
     shiftedVal = bvshl (zext' 32 newFldVal) (crFieldIndex fldNum)
 
 -- | Given a condition register field number, produce the macaw index of the
@@ -219,12 +252,20 @@ mask :: (HasCallStack, ?bitSize :: BitSize)
      -> Expr 'TBV
      -> Expr 'TBV
      -> Expr 'TBV
-mask k b0 b1 =
-  let allOnes = sext' k (LitBV 1 0x1)
-      clearLeft = bvlshr (bvshl allOnes b0) b0
-      shmax = LitBV k (toInteger (k - 1))
-      shr = bvsub shmax b1
-  in bvshl (bvlshr clearLeft shr) shr
+mask k b0 b1 = lf (maskLF k) (b0 :< b1 :< Nil)
+
+maskLF :: (?bitSize :: BitSize) => Int
+       -> LibraryFunctionDef '(['TBV, 'TBV], 'TBV)
+maskLF k =
+  defineLibraryFunction ("mask_" ++ show k)
+    (Arg "b0" (EBV k) :<
+     Arg "b1" (EBV k) :< Nil) $
+  \b0 b1 ->
+    let allOnes = sext' k (LitBV 1 0x1)
+        clearLeft = bvlshr (bvshl allOnes b0) b0
+        shmax = LitBV k (toInteger (k - 1))
+        shr = bvsub shmax b1
+    in bvshl (bvlshr clearLeft shr) shr
 
 -- Helpers for endianness isolation
 

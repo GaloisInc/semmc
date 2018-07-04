@@ -7,7 +7,7 @@
  (defs
   ((rA
    ((_ zero_extend 32)
-    ((_ call "clz.32")
+    ((_ call "uf.clz.32")
      ((_ extract 31 0)
       rS))))
    ('IP

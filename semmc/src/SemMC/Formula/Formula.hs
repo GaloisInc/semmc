@@ -27,6 +27,12 @@ module SemMC.Formula.Formula
   , validFormula
   , emptyFormula
   , coerceFormula
+    -- * Functions and libraries
+  , FunctionFormula(..)
+  , FunctionRef(..)
+  , functionRef
+  , Library
+  , emptyLibrary
   ) where
 
 import           GHC.TypeLits ( Symbol )
@@ -43,6 +49,7 @@ import qualified What4.Interface as S
 import qualified What4.Expr.Builder as S
 import           What4.BaseTypes
 
+import           Data.Type.List ( ToContextFwd )
 import qualified SemMC.Architecture.Internal as A
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.BoundVar as BV
@@ -259,3 +266,54 @@ coerceFormula f =
           , formDefs = formDefs f
           }
 
+-- | A formula representing a defined function.
+data FunctionFormula sym (sig :: ([BaseType], BaseType)) where
+  FunctionFormula :: { ffName :: String
+                     , ffArgTypes :: SL.List BaseTypeRepr tps
+                     , ffArgVars :: SL.List (S.BoundVar sym) tps
+                     , ffRetType :: BaseTypeRepr tp
+                     , ffDef :: S.SymFn sym (ToContextFwd tps) tp
+                     } -> FunctionFormula sym '(tps, tp)
+
+data FunctionRef (sig :: ([BaseType], BaseType)) where
+  FunctionRef :: { frName :: String
+                 , frArgTypes :: SL.List BaseTypeRepr tps
+                 , frRetType :: BaseTypeRepr tp
+                 } -> FunctionRef '(tps, tp)
+
+deriving instance Show (FunctionRef sig)
+
+instance Eq (FunctionRef sig) where
+  FunctionRef n1 ats1 rt1 == FunctionRef n2 ats2 rt2 =
+    n1 == n2 &&
+    isJust (testEquality ats1 ats2) &&
+    isJust (testEquality rt1 rt2)
+
+instance TestEquality FunctionRef where
+  testEquality (FunctionRef n1 ats1 rt1) (FunctionRef n2 ats2 rt2) = do
+    guard (n1 == n2)
+    Refl <- testEquality ats1 ats2
+    Refl <- testEquality rt1 rt2
+    return Refl
+
+instance OrdF FunctionRef where
+  FunctionRef n1 ats1 rt1 `compareF` FunctionRef n2 ats2 rt2 =
+    case n1 `compare` n2 of
+      EQ -> case ats1 `compareF` ats2 of
+        EQF -> case rt1 `compareF` rt2 of
+          EQF -> EQF; LTF -> LTF; GTF -> GTF
+        LTF -> LTF; GTF -> GTF
+      LT -> LTF; GT -> GTF
+
+functionRef :: FunctionFormula sym sig -> FunctionRef sig
+functionRef (FunctionFormula { ffName = name
+                             , ffArgTypes = argTypes
+                             , ffRetType = retType }) =
+  FunctionRef { frName = name
+              , frArgTypes = argTypes
+              , frRetType = retType }
+
+type Library sym = MapF.MapF FunctionRef (FunctionFormula sym)
+
+emptyLibrary :: Library sym
+emptyLibrary = MapF.empty

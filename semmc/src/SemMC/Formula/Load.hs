@@ -8,6 +8,9 @@
 module SemMC.Formula.Load (
   loadFormulas,
   loadFormulasFromFiles,
+  loadLibrary,
+  loadLibraryFromFiles,
+  listFunctionFiles,
   FormulaParseError(..)
   ) where
 
@@ -18,11 +21,13 @@ import qualified Data.Map.Strict as Map
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text.Encoding as T
 import qualified System.Directory as S
+import qualified System.FilePath as S
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.Pair as Pair
 import           Data.Parameterized.Some ( Some(..) )
 import           What4.BaseTypes
 
@@ -51,8 +56,8 @@ formulaEnv proxy sym = do
     toUF :: (String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)
          -> IO (String, (FE.SomeSome (CRU.SymFn sym), Some BaseTypeRepr))
     toUF (name, Some args, retRep@(Some ret)) = do
-      uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol name) args ret
-      return (name, (uf, retRep))
+      uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol ("uf." ++ name)) args ret
+      return (("uf." ++ name), (uf, retRep))
 
 data FormulaParseError = FormulaParseError String String
   deriving (Show)
@@ -73,10 +78,12 @@ loadFormulas :: forall sym arch a
                   , U.HasCallStack
                   , L.HasLogCfg )
                 => sym
+             -> F.Library sym
              -> [(Some a, BS.ByteString)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulas sym contents = do
-  env <- formulaEnv (Proxy @arch) sym
+loadFormulas sym lib contents = do
+  initEnv <- formulaEnv (Proxy @arch) sym
+  let env = FE.addLibrary initEnv lib
   F.foldlM (parseFormulaBS env) MapF.empty contents
   where
     parseFormulaBS :: FE.FormulaEnv sym arch
@@ -104,6 +111,9 @@ loadFormulas sym contents = do
 -- skip it. So, the list of shapes can simply be all possible opcodes,
 -- and what files actually exist on disk determine what we actually
 -- load.
+--
+-- The funDir argument gives a directory whose defined functions will be
+-- loaded. All files with extension `.fun` in this directory will be loaded.
 loadFormulasFromFiles :: forall sym arch a
                        . ( CRU.IsExprBuilder sym
                          , CRUB.IsSymInterface sym
@@ -114,11 +124,13 @@ loadFormulasFromFiles :: forall sym arch a
                          , U.HasCallStack
                          , L.HasLogCfg )
                       => sym
+                      -> F.Library sym
                       -> (forall sh' . a sh' -> FilePath)
                       -> [Some a]
                       -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulasFromFiles sym toFP shapes = do
-  env <- formulaEnv (Proxy @arch) sym
+loadFormulasFromFiles sym lib toFP shapes = do
+  initEnv <- formulaEnv (Proxy @arch) sym
+  let env = FE.addLibrary initEnv lib
   F.foldlM (\m (Some (op :: a sh)) -> addIfJust (readFormulaForOpcode env) m op) MapF.empty shapes
   where
     readFormulaForOpcode :: FE.FormulaEnv sym arch
@@ -149,3 +161,75 @@ addIfJust f m a = do
   case mval of
     Nothing -> return m
     Just val -> return (MapF.insert a val m)
+
+-- | Load library when contents are already held in memory.
+--
+-- This will throw an exception if any of the strings is malformed
+loadLibrary :: forall sym arch
+             . ( CRU.IsExprBuilder sym
+               , CRUB.IsSymInterface sym
+               , A.Architecture arch
+               , ShowF (CRU.SymExpr sym)
+               , U.HasCallStack
+               , L.HasLogCfg )
+            => Proxy arch
+            -> sym
+            -> [(String, BS.ByteString)]
+            -> IO (F.Library sym)
+loadLibrary proxy sym contents = do
+  -- TODO Allow functions to call other functions by somehow loading in
+  -- dependency order and adding to the environment as we go. For now, for
+  -- predictability's sake, we load everything in the initial environment.
+  env <- formulaEnv proxy sym
+  MapF.fromList <$> mapM (parseFunctionBS env) contents
+  where
+    parseFunctionBS :: FE.FormulaEnv sym arch
+                    -> (String, BS.ByteString)
+                    -> IO (Pair.Pair F.FunctionRef (F.FunctionFormula sym))
+    parseFunctionBS env (name, bs) = do
+      U.logIO U.Info $ "reading formula for defined function " ++ show name
+      ef <- FP.readDefinedFunction sym env (T.decodeUtf8 bs)
+      case ef of
+        Right (Some ff) ->
+          return $ Pair.Pair (F.functionRef ff) ff
+        Left e -> E.throwIO (FormulaParseError name e)
+
+loadLibraryFromFiles :: forall sym arch
+                      . ( CRU.IsExprBuilder sym
+                        , CRUB.IsSymInterface sym
+                        , A.Architecture arch
+                        , ShowF (CRU.SymExpr sym)
+                        , U.HasCallStack
+                        , L.HasLogCfg )
+                     => Proxy arch
+                     -> sym
+                     -> FilePath
+                     -> IO (F.Library sym)
+loadLibraryFromFiles proxy sym dir = do
+  files <- listFunctionFiles dir
+  env <- formulaEnv proxy sym
+  -- TODO Allow functions to call other functions by somehow loading in
+  -- dependency order and adding to the environment as we go. For now, for
+  -- predictability's sake, we load everything in the initial environment.
+  MapF.fromList <$> mapM (loadFile env) files
+  where
+    loadFile :: FE.FormulaEnv sym arch
+             -> FilePath
+             -> IO (Pair.Pair F.FunctionRef (F.FunctionFormula sym))
+    loadFile env origFile = do
+      file <- S.canonicalizePath origFile
+      U.logIO U.Info $ "loading function file: "++file
+      ef <- FP.readDefinedFunctionFromFile sym env file
+      case ef of
+        Left err -> do
+          let msg = "Failed to parse function from " ++ file ++ ": " ++ err
+          L.logIO L.Error msg
+          error msg
+        Right (Some fun) ->
+          return $ Pair.Pair (F.functionRef fun) fun
+
+listFunctionFiles :: FilePath -> IO [FilePath]
+listFunctionFiles dir =
+  filter isFunctionFile <$>
+    E.catch (S.listDirectory dir) (\(_::E.SomeException) -> return [])
+  where isFunctionFile f = snd (S.splitExtension f) == ".fun"

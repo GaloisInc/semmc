@@ -30,7 +30,8 @@ module SemMC.Architecture (
   IsOperandTypeRepr(..),
   ArchRepr,
   ShapeRepr,
-  showShapeRepr
+  showShapeRepr,
+  createSymbolicEntries
   ) where
 
 import           Data.EnumF
@@ -130,4 +131,26 @@ data FunctionInterpretation t arch =
                          -- ^ The evaluator to apply to uninterpreted functions
                          -- during formula instantiation (in Formula.Instantiate)
                          }
+
+-- | Uninterpreted function names are mangled in SimpleBuilder, so we need to
+-- create extra entries to match their mangled names.
+--
+-- In particular, periods in names are converted to underscores.
+--
+-- This function creates copies of entries with periods in their names with the
+-- escaped version as it appears in a SimpleBuilder symbolic function.  For
+-- example, if there is an entry with the name @arm.foo@, this function retains
+-- that entry in the input list and adds an additional entry under @arm_foo@.
+--
+-- We also prepend a "uf_"/"uf." prefix to the names of the function to
+-- distinguish it from defined functions.
+createSymbolicEntries :: [(String, a)] -> [(String, a)]
+createSymbolicEntries = foldr duplicateIfDotted []
+  where
+    duplicateIfDotted (s, e) acc =
+      case '.' `elem` s of
+        False -> acc
+        True ->
+          let newElt = ("uf_" ++ map (\c -> if c == '.' then '_' else c) s, e)
+          in newElt : ("uf." ++ s, e) : acc
 

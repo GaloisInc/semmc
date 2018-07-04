@@ -55,7 +55,7 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.Context
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
-import           Data.Semigroup
+import           Data.Semigroup hiding ( Arg )
 import qualified Data.Type.List as TL
 import qualified Dismantle.ARM as A
 import qualified Dismantle.Thumb as T
@@ -68,7 +68,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
 
 
-data OpcodeParamDef t = ParamDef String String (ExprType t)
+data OpcodeParamDef t = ParamDef String String (ExprTypeRepr t)
 
 defineA32Opcode :: (CurryAssignmentClass args, TL.SameShape args (TL.Map SymToExprTagWrapper sh))
                 => A.Opcode A.Operand sh
@@ -126,17 +126,7 @@ defineT32Opcode opc defargs defbody =
       -- concerned with the discrete semantics of individual opcodes;
       -- the ITSTATE updates form the machine state that must be
       -- maintained by the evaluator of these instructions.
-      let itstate_7_4 = extract 15 12 (Loc cpsr)
-          itstate_3_2 = extract 11 10 (Loc cpsr)
-          itstate_1_0 = extract 26 25 (Loc cpsr)
-          itstate_3_0 = concat itstate_3_2 itstate_1_0
-          -- CurrentCond() for T32 except T1 and T3 encodings of the Branch instruction (F2.3.1, F2-2417)
-          predV = "ITState" =:
-                  ite (bveq itstate_3_0 (LitBV 4 0b0000))
-                  (ite (bveq itstate_7_4 (LitBV 4 0b0000))
-                   (LitBV 4 0b1110)
-                   (unpredictable (LitBV 4 0b1110))) -- ARM doc doesn't cover this case...
-                  itstate_7_4
+      let predV = lf itStateLF (Loc cpsr :< Nil)
       testForConditionPassed predV
       defineOp'Core defbody =<< traverseFC param' defargs
       finalizeCPSR
@@ -146,6 +136,20 @@ defineT32Opcode opc defargs defbody =
               param' (ParamDef pname ty ety) = param pname ty ety
 
               name = show opc
+
+itStateLF :: LibraryFunctionDef '( '[ 'TBV], 'TBV)
+itStateLF = defineLibraryFunction "ITState" (Arg "cpsr" naturalBV :< Nil) $
+  \cpsrValue ->
+    let itstate_7_4 = extract 15 12 cpsrValue
+        itstate_3_2 = extract 11 10 cpsrValue
+        itstate_1_0 = extract 26 25 cpsrValue
+        itstate_3_0 = concat itstate_3_2 itstate_1_0
+        -- CurrentCond() for T32 except T1 and T3 encodings of the Branch instruction (F2.3.1, F2-2417)
+    in ite (bveq itstate_3_0 (LitBV 4 0b0000))
+       (ite (bveq itstate_7_4 (LitBV 4 0b0000))
+        (LitBV 4 0b1110)
+        (unpredictable (LitBV 4 0b1110))) -- ARM doc doesn't cover this case...
+       itstate_7_4
 
 a32OpcodeNameLooksValid :: String -> Bool
 a32OpcodeNameLooksValid name =
@@ -206,11 +210,16 @@ cpsrNZCV isEnabled nzcv =
 -- | Extracts the N[31], Z[30], C[29], and V[28] bits from the CPSR
 -- (E1.2.4, E1-2297)
 getNZCV :: HasCallStack => (Expr 'TBV, Expr 'TBV, Expr 'TBV, Expr 'TBV)
-getNZCV = let n = extract 31 31 (Loc cpsr)
-              z = extract 30 30 (Loc cpsr)
-              c = extract 29 29 (Loc cpsr)
-              v = extract 28 28 (Loc cpsr)
-          in (n, z, c, v)
+getNZCV = splitNZCV (Loc cpsr)
+
+splitNZCV :: HasCallStack
+          => Expr 'TBV
+          -> (Expr 'TBV, Expr 'TBV, Expr 'TBV, Expr 'TBV)
+splitNZCV bv = let n = extract 31 31 bv
+                   z = extract 30 30 bv
+                   c = extract 29 29 bv
+                   v = extract 28 28 bv
+               in (n, z, c, v)
 
 -- ----------------------------------------------------------------------
 -- PC management
@@ -249,16 +258,16 @@ finalizePC = do
 
 -- ----------------------------------------------------------------------
 
--- | Stores the expression that calculates the ConditionPassed result
--- (see the ARM documentation pseudocode) for the current instruction
--- so that subsequent defLoc operations can use this to determine if
--- they are enabled to effect the changes from the Opcode.
---
--- This is the predication check.
-testForConditionPassed :: Expr 'TBV -> SemARM 'Def ()
-testForConditionPassed instrPred = do
-    -- assumes already: input cpsr
-    let (n,z,c,v) = getNZCV  -- (E1.2.4, E1-2297)
+testConditionLF :: LibraryFunctionDef '(['TBV, 'TBV], 'TBool)
+testConditionLF =
+  -- TODO Would be easier to use getNZCV inside the library function, but then
+  -- the formula parser complains that CPSR wasn't declared as an input.
+  -- Effectively, library functions must be pure functions of their arguments.
+  defineLibraryFunction "testCondition"
+    (Arg "instrPred" (EBV 4) :<
+     Arg "cpsr" (EBV 32) :< Nil) $
+  \instrPred cpsrValue ->
+    let (n,z,c,v) = splitNZCV cpsrValue  -- (E1.2.4, E1-2297)
         cond_3_1 = extract 3 1 instrPred
         cond_0   = extract 0 0 instrPred
         isBitSet = bveq (LitBV 1 0b1)
@@ -274,11 +283,21 @@ testForConditionPassed instrPred = do
                       (ite (bveq cond_3_1 (LitBV 3 0b110)) (andp (bveq n v)
                                                                  (notp $ isBitSet z)) -- GT or LE
                        {- (bveq cond_3_1 (LitBV 3 0b111)) -} (LitBool True))))))) -- AL
-        result' = "testCondition" =: ite (andp (isBitSet cond_0)
-                                          (bvne instrPred (LitBV 4 0b1111))) (notp result) result
+    in ite (andp (isBitSet cond_0) (bvne instrPred (LitBV 4 0b1111))) (notp result) result
+
+-- | Stores the expression that calculates the ConditionPassed result
+-- (see the ARM documentation pseudocode) for the current instruction
+-- so that subsequent defLoc operations can use this to determine if
+-- they are enabled to effect the changes from the Opcode.
+--
+-- This is the predication check.
+testForConditionPassed :: Expr 'TBV -> SemARM 'Def ()
+testForConditionPassed instrPred = do
+    -- assumes already: input cpsr
+    let result = lf testConditionLF (instrPred :< Loc cpsr :< Nil)
     modifyArchData (\m'ad -> case m'ad of
-                              Nothing -> Just $ newARMData { condPassed = result' }
-                              Just ad -> Just $ ad { condPassed = result' })
+                              Nothing -> Just $ newARMData { condPassed = result }
+                              Just ad -> Just $ ad { condPassed = result })
 
 
 -- | Performs an assignment for a conditional Opcode when the target

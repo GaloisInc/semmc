@@ -6,34 +6,17 @@
   ('CR BFA BF 'IP))
  (defs
   (('CR
-   (bvor
-    (bvand
-     'CR
-     (bvnot
-      (bvshl
-       #x0000000f
-       (bvmul
-        (bvsub
-         #x00000007
-         ((_ zero_extend 29)
-          BF))
-        #x00000004))))
-    (bvshl
-     ((_ zero_extend 28)
-      ((_ extract 3 0)
-       (bvlshr
-        'CR
-        (bvmul
-         (bvsub
-          #x00000007
-          ((_ zero_extend 29)
-           BFA))
-         #x00000004))))
-     (bvmul
-      (bvsub
-       #x00000007
-       ((_ zero_extend 29)
-        BF))
-      #x00000004))))
+   ((_ call "df.updateCRField")
+    'CR
+    BF
+    ((_ extract 3 0)
+     (bvlshr
+      'CR
+      (bvmul
+       (bvsub
+        #x00000007
+        ((_ zero_extend 29)
+         BFA))
+       #x00000004)))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

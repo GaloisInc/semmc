@@ -7,7 +7,8 @@ module SemMC.Architecture.PPC64.Opcodes (
   pseudoOpcodes,
   allOpcodes,
   allOpcodeInfo,
-  allSemantics
+  allSemantics,
+  allDefinedFunctions
   ) where
 
 import qualified Data.ByteString as BS
@@ -28,6 +29,12 @@ import           SemMC.Architecture.PPC64.Opcodes.Internal ( allOpcodes, allOpco
 -- available (determined at compile time).
 baseOpcodes :: [Some (PPC.Opcode PPC.Operand)]
 baseOpcodes = map fst $(STH.attachSemantics (\(Some x) -> show x <.> "sem") allOpcodes ["data/64/base"])
+
+-- | Defined functions used by the semantics
+allDefinedFunctions :: [(String, BS.ByteString)]
+allDefinedFunctions = $(STH.attachDefinedFunctions [ "data/64/base"
+                                                   , "data/64/manual"
+                                                   , "data/64/learned" ])
 
 -- | Every opcode with a defined semantics (either from the base set, the
 -- learned set, or manually defined)

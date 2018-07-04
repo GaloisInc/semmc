@@ -16,5 +16,5 @@ bitSizeValue :: BitSize -> Int
 bitSizeValue Size32 = 32
 bitSizeValue Size64 = 64
 
-naturalBV :: (?bitSize :: BitSize) => ExprType 'TBV
+naturalBV :: (?bitSize :: BitSize) => ExprTypeRepr 'TBV
 naturalBV = EBV (bitSizeValue ?bitSize)
