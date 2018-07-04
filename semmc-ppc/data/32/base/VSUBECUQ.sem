@@ -1,0 +1,27 @@
+;; Vector Subtract Extended & Write Carry Unsigned Quadword (VA-form)
+((operands
+ ((vrT . 'Vrrc)
+  (vrA . 'Vrrc)
+  (vrB . 'Vrrc)
+  (vrC . 'Vrrc)))
+ (in
+  ('VSCR vrC vrB vrA 'IP))
+ (defs
+  (('VSCR
+   ((_ extract 31 0)
+    ((_ call "ppc.vec3")
+     "VSUBECUQ"
+     vrA
+     vrB
+     vrC
+     'VSCR)))
+   (vrT
+    ((_ extract 159 32)
+     ((_ call "ppc.vec3")
+      "VSUBECUQ"
+      vrA
+      vrB
+      vrC
+      'VSCR)))
+   ('IP
+    (bvadd 'IP #x00000004)))))
