@@ -290,6 +290,16 @@ special = do
       (rA, rS) <- xform2
       defLoc rA (bvpopcnt (Loc rS))
 
+    defineOpcodeWithIP "BPERMD" $ do
+      comment "Bit Permute Doubleword (X-form)"
+      (rA, rS, rB) <- xform3
+      let computePermBit i =
+            let idx = extract (8 * i + 7) (8 * i) (Loc rS)
+                rbVal = ite (testBitDynamic64 (zext idx) (Loc rB)) (LitBV 1 1) (LitBV 1 0)
+            in ite (bvult idx (LitBV 8 64)) rbVal (LitBV 1 0)
+      let perm_i = map computePermBit [0..7]
+      defLoc rA (concat (LitBV 56 0x0) (foldr1 concat perm_i))
+
 -- | Operations we are temporarily defining, but would like to eventually learn
 temporary :: (?bitSize :: BitSize) => SemM 'Top ()
 temporary = do

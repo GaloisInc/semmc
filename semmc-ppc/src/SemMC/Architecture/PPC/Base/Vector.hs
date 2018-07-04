@@ -72,6 +72,9 @@ baseVector = do
   vecArith
   vecBitwise
   vecCompare
+  vecMinMax
+  vecSum
+  vecAverage
 
   defineOpcodeWithIP "VPERM" $ do
     comment "Vector Permute (VA-form)"
@@ -217,6 +220,66 @@ vecArith = do
   defineOpcodeWithIP "VADDECUQ" $ do
     comment "Vector Add Extended & Write Carry Unsigned Quadword (VA-form)"
     vec3op "VADDECUQ"
+
+  defineOpcodeWithIP "VSUBCUW" $ do
+    comment "Vector Subtract and Write Carry-Out Unsigned Word (VX-form)"
+    vec2op "VSUBCUW"
+
+  defineOpcodeWithIP "VSUBSBS" $ do
+    comment "Vector Subtract Signed Byte Saturate (VX-form)"
+    vec2op "VSUBSBS"
+
+  defineOpcodeWithIP "VSUBSHS" $ do
+    comment "Vector Subtract Signed Halfword Saturate (VX-form)"
+    vec2op "VSUBSHS"
+
+  defineOpcodeWithIP "VSUBSWS" $ do
+    comment "Vector Subtract Signed Word Saturate (VX-form)"
+    vec2op "VSUBSWS"
+
+  defineOpcodeWithIP "VSUBUBM" $ do
+    comment "Vector Subtract Unsigned Byte Modulo (VX-form)"
+    vec2op "VSUBUBM"
+
+  defineOpcodeWithIP "VSUBUDM" $ do
+    comment "Vector Subtract Unsigned Doubleword Modulo (VX-form)"
+    vec2op "VSUBUDM"
+
+  defineOpcodeWithIP "VSUBUHM" $ do
+    comment "Vector Subtract Unsigned Halfword Modulo (VX-form)"
+    vec2op "VSUBUHM"
+
+  defineOpcodeWithIP "VSUBUWM" $ do
+    comment "Vector Subtract Unsigned Word Modulo (VX-form)"
+    vec2op "VSUBUWM"
+
+  defineOpcodeWithIP "VSUBUBS" $ do
+    comment "Vector Subtract Unsigned Byte Saturate (VX-form)"
+    vec2op "VSUBUBS"
+
+  defineOpcodeWithIP "VSUBUHS" $ do
+    comment "Vector Subtract Unsigned Halfword Saturate (VX-form)"
+    vec2op "VSUBUHS"
+
+  defineOpcodeWithIP "VSUBUWS" $ do
+    comment "Vector Subtract Unsigned Word Saturate (VX-form)"
+    vec2op "VSUBUWS"
+
+  defineOpcodeWithIP "VSUBUQM" $ do
+    comment "Vector Subtract Unsigned Quadword Modulo (VX-form)"
+    vec2op "VSUBUQM"
+
+  defineOpcodeWithIP "VSUBEUQM" $ do
+    comment "Vector Subtract Extended Unsigned Quadword Modulo (VA-form)"
+    vec3op "VSUBEUQM"
+
+  defineOpcodeWithIP "VSUBCUQ" $ do
+    comment "Vector Subtract & Write Carry Unsigned Quadword (VX-form)"
+    vec2op "VSUBCUQ"
+
+  defineOpcodeWithIP "VSUBECUQ" $ do
+    comment "Vector Subtract Extended & Write Carry Unsigned Quadword (VA-form)"
+    vec3op "VSUBECUQ"
 
 vecBitwise :: (?bitSize :: BitSize) => SemM 'Top ()
 vecBitwise = do
@@ -427,6 +490,97 @@ vecSplat = do
   defineOpcodeWithIP "VSPLTISW" $ do
     comment "Vector Splat Immediate Signed Word (VX-form)"
     vec1ops "VSPLTISW"
+
+vecSum :: (?bitSize :: BitSize) => SemM 'Top ()
+vecSum = do
+  defineOpcodeWithIP "VSUMSWS" $ do
+    comment "Vector Sum Across Signed Word Saturate (VX-form)"
+    vec2op "VSUMSWS"
+  defineOpcodeWithIP "VSUM2SWS" $ do
+    comment "Vector Sum Across Half Signed Word Saturate (VX-form)"
+    vec2op "VSUM2SWS"
+  defineOpcodeWithIP "VSUM4SBS" $ do
+    comment "Vector Sum Across Quarter Signed Byte Saturate (VX-form)"
+    vec2op "VSUM4SBS"
+  defineOpcodeWithIP "VSUM4SHS" $ do
+    comment "Vector Sum Across Quarter Signed Halfword Saturate (VX-form)"
+    vec2op "VSUM4SHS"
+  defineOpcodeWithIP "VSUM4UBS" $ do
+    comment "Vector Sum Across Quarter Unsigned Byte Saturate (VX-form)"
+    vec2op "VSUM4UBS"
+
+vecAverage :: (?bitSize :: BitSize) => SemM 'Top ()
+vecAverage = do
+  defineOpcodeWithIP "VAVGSB" $ do
+    comment "Vector Average Signed Byte (VX-form)"
+    vec2op "VAVGSB"
+  defineOpcodeWithIP "VAVGSW" $ do
+    comment "Vector Average Signed Word (VX-form)"
+    vec2op "VAVGSW"
+  defineOpcodeWithIP "VAVGSH" $ do
+    comment "Vector Average Signed Halfword (VX-form)"
+    vec2op "VAVGSH"
+  defineOpcodeWithIP "VAVGUB" $ do
+    comment "Vector Average Unsigned Byte (VX-form)"
+    vec2op "VAVGUB"
+  defineOpcodeWithIP "VAVGUW" $ do
+    comment "Vector Average Unsigned Word (VX-form)"
+    vec2op "VAVGUW"
+  defineOpcodeWithIP "VAVGUH" $ do
+    comment "Vector Average Unsigned Halfword (VX-form)"
+    vec2op "VAVGUH"
+
+vecMinMax :: (?bitSize :: BitSize) => SemM 'Top ()
+vecMinMax = do
+  defineOpcodeWithIP "VMAXSB" $ do
+    comment "Vector Maximum Signed Byte (VX-form)"
+    vec2op "VMAXSB"
+  defineOpcodeWithIP "VMAXUB" $ do
+    comment "Vector Maximum Unsigned Byte (VX-form)"
+    vec2op "VMAXUB"
+  defineOpcodeWithIP "VMAXSD" $ do
+    comment "Vector Maximum Signed Doubleword (VX-form)"
+    vec2op "VMAXSD"
+  defineOpcodeWithIP "VMAXUD" $ do
+    comment "Vector Maximum Unsigned Doubleword (VX-form)"
+    vec2op "VMAXUD"
+  defineOpcodeWithIP "VMAXSH" $ do
+    comment "Vector Maximum Signed Halfword (VX-form)"
+    vec2op "VMAXSH"
+  defineOpcodeWithIP "VMAXUH" $ do
+    comment "Vector Maximum Unsigned Halfword (VX-form)"
+    vec2op "VMAXUH"
+  defineOpcodeWithIP "VMAXSW" $ do
+    comment "Vector Maximum Signed Word (VX-form)"
+    vec2op "VMAXSW"
+  defineOpcodeWithIP "VMAXUW" $ do
+    comment "Vector Maximum Unsigned Word (VX-form)"
+    vec2op "VMAXUW"
+  defineOpcodeWithIP "VMINSB" $ do
+    comment "Vector Minimum Signed Byte (VX-form)"
+    vec2op "VMINSB"
+  defineOpcodeWithIP "VMINUB" $ do
+    comment "Vector Minimum Unsigned Byte (VX-form)"
+    vec2op "VMINUB"
+  defineOpcodeWithIP "VMINSD" $ do
+    comment "Vector Minimum Signed Doubleword (VX-form)"
+    vec2op "VMINSD"
+  defineOpcodeWithIP "VMINUD" $ do
+    comment "Vector Minimum Unsigned Doubleword (VX-form)"
+    vec2op "VMINUD"
+  defineOpcodeWithIP "VMINSH" $ do
+    comment "Vector Minimum Signed Halfword (VX-form)"
+    vec2op "VMINSH"
+  defineOpcodeWithIP "VMINUH" $ do
+    comment "Vector Minimum Unsigned Halfword (VX-form)"
+    vec2op "VMINUH"
+  defineOpcodeWithIP "VMINSW" $ do
+    comment "Vector Minimum Signed Word (VX-form)"
+    vec2op "VMINSW"
+  defineOpcodeWithIP "VMINUW" $ do
+    comment "Vector Minimum Unsigned Word (VX-form)"
+    vec2op "VMINUW"
+
 
 vecPack :: (?bitSize :: BitSize) => SemM 'Top ()
 vecPack = do
