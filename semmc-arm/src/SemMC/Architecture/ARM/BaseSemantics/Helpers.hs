@@ -168,7 +168,7 @@ t32OpcodeNameLooksValid name = "T" `isPrefixOf` name
 -- | As described for the 'SemM_ARMData' datatype, the DSL state is
 -- used to store the current instruction set type (normally A32 or
 -- T32).
-subarch :: ArchSubtype -> SemARM t ()
+subarch :: ArchSubtype -> SemARM 'Def ()
 subarch sa =
     modifyArchData (\m'ad -> case m'ad of
                               Nothing -> Just $ newARMData { subArch = sa }
@@ -185,7 +185,7 @@ subarch sa =
 -- function adds another expression updating the CPSR value.  There is
 -- no protection against multiple updates to the same location, and
 -- the effects of this are unpredictable.
-updateCPSR :: (Expr 'TBV -> Expr 'TBV) -> SemARM t ()
+updateCPSR :: (Expr 'TBV -> Expr 'TBV) -> SemARM 'Def ()
 updateCPSR updExp =
     modifyArchData (\m'ad -> case m'ad of
                               Nothing -> Just $ newARMData { cpsrUpdates = updExp }
@@ -234,7 +234,7 @@ splitNZCV bv = let n = extract 31 31 bv
 -- be performed (e.g. isR15), so the new update is passed the old
 -- update so that it can choose to use the original functionality or
 -- its new functionality.
-updatePC :: (PCUpdateExpr -> PCUpdateExpr) -> SemARM t ()
+updatePC :: (PCUpdateExpr -> PCUpdateExpr) -> SemARM 'Def ()
 updatePC pcf =
     let mod_pcf m'ad = let ad = maybe newARMData id m'ad
                            oldUpd = pcUpdate ad

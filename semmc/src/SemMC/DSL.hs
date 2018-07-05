@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -91,8 +92,8 @@ module SemMC.DSL (
   Phase(..),
   runSem,
   evalSem,
-  gather,
   Parameter,
+  Package(..),
   Definition,
   printDefinition,
   FunctionDefinition,
@@ -222,27 +223,16 @@ newFormula name = Formula { fName = name
 -- impossible.
 --
 newtype SemMD (t :: Phase) d a =
-    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (SemMDState d) a }
+    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (SemMDState d t) a }
           deriving (Functor,
                     Applicative,
                     Monad,
                     RWS.MonadWriter (Seq.Seq (Formula d)),
-                    RWS.MonadState (SemMDState d))
+                    RWS.MonadState (SemMDState d t))
 
-data SemMDState d = SemMDState { smdFormula :: Formula d
-                               , smdLibraryFunctions :: M.Map String FunctionDefinition
-                                 -- ^ Functions defined by formulas previously
-                                 -- returned by 'gather'. Needed so that we only
-                                 -- generate each function once, even across
-                                 -- calls to 'gather'.
-                               }
-
-emptySemMDState :: SemMDState d
-emptySemMDState = SemMDState (newFormula "") M.empty
-    -- The initial dummy formula here is never used.  It is just a standin until
-    -- the first call to 'defineOpcode'.  If 'defineOpcode' is never called,
-    -- this will never be used since 'defineOpcode' handles adding the result to
-    -- the writer output.
+data SemMDState d t where
+  DefState :: { smdFormula :: Formula d } -> SemMDState d 'Def
+  TopState :: SemMDState d 'Top
 
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
@@ -254,8 +244,12 @@ data Phase = Top | Def
 data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
   deriving (Show)
 
-data FunctionDefinition = FunctionDefinition (SC.SExpr FAtom)
+newtype FunctionDefinition = FunctionDefinition (SC.SExpr FAtom)
   deriving (Show)
+
+data Package = Package { pkgFormulas :: [(String, Definition)]
+                       , pkgFunctions :: [(String, FunctionDefinition)]
+                       }
 
 -- | Run a semantics-defining action and return the defined formulas and any
 -- library functions required.
@@ -263,39 +257,25 @@ data FunctionDefinition = FunctionDefinition (SC.SExpr FAtom)
 -- The result is an association list from opcode name to the s-expression
 -- representing it, plus an association list from function name to its
 -- s-expression.
-runSem :: SemMD 'Top d () -> ([(String, Definition)], [(String, FunctionDefinition)])
-runSem act = (defs, funDefs)
-  where (_, defs, funDefs) = evalSem act
+runSem :: SemMD 'Top d () -> Package
+runSem act = snd $ evalSem act
 
 -- | Run a semantics-defining action and return the defined formulas and library
 -- functions, along with anything returned by the action itself.
-evalSem :: SemMD 'Top d a -> (a, [(String, Definition)], [(String, FunctionDefinition)])
-evalSem act = (a, defs, M.toList (M.union (smdLibraryFunctions state) funcDefs))
+evalSem :: SemMD 'Top d a -> (a, Package)
+evalSem act = (a, Package defs (M.toList functions))
   where
-    (a, state, formulas) = RWS.runRWS (unSem act) () emptySemMDState
-    (defs, funcDefs) = mkSExprs formulas
-
--- | Return the formulas defined by an action without propagating them outward.
-gather :: SemMD 'Top d () -> SemMD 'Top d [(String, Definition)]
-gather act = SemM $ RWS.mapRWS moveFormulas $ unSem act
-  where
-    moveFormulas (~(), state, formulas) =
-      (defs, state { smdLibraryFunctions = libFuncs' }, Seq.empty)
-      where
-        (defs, funcDefs) = mkSExprs formulas
-        libFuncs' = M.union (smdLibraryFunctions state) funcDefs
+    (a, ~TopState, formulas) = RWS.runRWS (unSem act) () TopState
+    (defs, functions) = mkSExprs formulas
 
 -- | Define an opcode with a given name.
 --
 -- The body is executed to produce a definition.
 defineOpcode :: String -> SemMD 'Def d () -> SemMD 'Top d ()
 defineOpcode name (SemM def) = do
-  SemMDState _ lfs <- RWS.get
-  RWS.put $ SemMDState (newFormula name) lfs
-  SemM def
-  SemMDState formula _ <- RWS.get -- get newly-defined formula
-  RWS.tell (Seq.singleton formula)
-  return ()
+  let state = DefState { smdFormula = newFormula name }
+      !(~(), state', formulas) = RWS.runRWS def () state
+  RWS.tell (formulas Seq.|> smdFormula state')
 
 -- | Fork a definition into a second definition under a different name
 --
@@ -313,23 +293,23 @@ defineOpcode name (SemM def) = do
 -- >     defLoc eflags ...
 forkDefinition :: String -> SemMD 'Def d () -> SemMD 'Def d ()
 forkDefinition name (SemM def) = do
-  SemMDState origFormula lfs <- RWS.get
+  DefState origFormula <- RWS.get
   let modFormula = origFormula { fName = name
                                , fComment = Seq.empty
                                }
-  RWS.put (SemMDState modFormula lfs)
+  RWS.put (DefState modFormula)
   SemM def
-  SemMDState forkedFormula lfs' <- RWS.get
+  DefState forkedFormula <- RWS.get
   RWS.tell (Seq.singleton forkedFormula)
   -- Restore the original formula so that 'definOpcode' can finish it off
-  RWS.put (SemMDState origFormula lfs')
+  RWS.put (DefState origFormula)
 
 -- | Add a descriptive comment to the output file
 --
 -- Each call appends a new comment line.  Individual calls to comment should not
 -- contain newlines.
 comment :: String -> SemMD 'Def d ()
-comment c = RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fComment = fComment f Seq.|> c }) lfs
+comment c = modifyFormula $ \f -> f { fComment = fComment f Seq.|> c }
 
 -- | Declare a named parameter; the 'name' string provided is used as
 -- the variable name in the produced formula, the 'ty' string
@@ -342,12 +322,12 @@ param name ty ety = do
                     , pType = ty
                     , pExprTypeRepr = ety
                     }
-  RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fOperands = fOperands f Seq.|> Some p }) lfs
+  modifyFormula $ \f -> f { fOperands = fOperands f Seq.|> Some p }
   return (ParamLoc p)
 
 -- | Mark a parameter as an input
 input :: Location tp -> SemMD 'Def d ()
-input loc = RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fInputs = Some loc : fInputs f }) lfs
+input loc = modifyFormula $ \f -> f { fInputs = Some loc : fInputs f }
 
 -- | Define a location as an expression
 defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemMD 'Def d ()
@@ -355,10 +335,13 @@ defLoc loc e
   | locationType loc == exprType e = do
       curDefs <- RWS.gets (fDefs . smdFormula)
       case lookup (Some loc) curDefs of
-        Nothing -> RWS.modify' $ \(SemMDState f lfs) -> SemMDState (f { fDefs = (Some loc, Some e) : fDefs f }) lfs
+        Nothing -> modifyFormula $ \f -> f { fDefs = (Some loc, Some e) : fDefs f }
         Just _ -> error (printf "Location is already defined: %s" (show loc))
   | otherwise = error (printf "Type mismatch; got %s but expected %s" (show (exprType e)) (show (locationType loc)))
 
+-- Internal helper
+modifyFormula :: (Formula d -> Formula d) -> SemMD 'Def d ()
+modifyFormula f = RWS.modify' $ \(DefState form) -> DefState (f form)
 
 -- | Define a subphrase that is a natural candidate for a let binding
 -- with the associated variable name.
@@ -368,18 +351,18 @@ name =: expr = NamedSubExpr name expr
 
 
 -- | Get the current architecture-specific data in the DSL computation
-getArchData :: SemMD t d (Maybe d)
+getArchData :: SemMD 'Def d (Maybe d)
 getArchData = fArchData <$> smdFormula <$> RWS.get
 
 
 -- | Set the current architecture-specific data in the DSL computation
-setArchData :: Maybe d -> SemMD t d ()
-setArchData m'ad = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = m'ad }) lfs)
+setArchData :: Maybe d -> SemMD 'Def d ()
+setArchData m'ad = RWS.modify (\(DefState f) -> DefState (f { fArchData = m'ad }))
 
 
 -- | Modify the current architecture-specific data in the DSL computation
-modifyArchData :: (Maybe d -> Maybe d) -> SemMD t d ()
-modifyArchData adf = RWS.modify (\(SemMDState f lfs) -> SemMDState (f { fArchData = adf (fArchData f) }) lfs)
+modifyArchData :: (Maybe d -> Maybe d) -> SemMD 'Def d ()
+modifyArchData adf = RWS.modify (\(DefState f) -> DefState (f { fArchData = adf (fArchData f) }))
 
 -- | Create a library function. The function's sexp will be emitted in a separate file.
 --
@@ -873,7 +856,7 @@ gatherFunctions = F.foldMap doFormula
   -- Note that the Monoid instance for M.Map is a left-biased union, so the first
   -- definition will be used and the second thrown away
   where
-    doFormula f = F.foldMap (viewSome doExpr . snd) (fDefs f)
+    doFormula f = F.foldMap (doSomeExpr . snd) (fDefs f)
 
     doSomeExpr :: Some Expr -> M.Map String (Some LibraryFunctionDef)
     doSomeExpr (Some expr) = doExpr expr

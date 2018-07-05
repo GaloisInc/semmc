@@ -92,9 +92,9 @@ genOpDefs :: forall sym
            . ( CRUB.IsSymInterface sym
              , ShowF (CRU.SymExpr sym) )
           => sym -> FilePath -> B.BitSize -> Bool
-          -> ([(String, DSL.Definition)], [(String, DSL.FunctionDefinition)])
+          -> DSL.Package
           -> IO (Int, Int)
-genOpDefs sym d sz chk (dl, fl) = do
+genOpDefs sym d sz chk (DSL.Package { DSL.pkgFormulas = dl, DSL.pkgFunctions = fl }) = do
   (s, e, lib) :: (Int, Int, SF.Library sym)
     <- F.foldlM writeFunDef (0, 0, SF.emptyLibrary) fl
   F.foldlM (writeDef lib) (s, e) dl

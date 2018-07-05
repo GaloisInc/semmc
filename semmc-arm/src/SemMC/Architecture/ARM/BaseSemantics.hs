@@ -3,6 +3,7 @@ module SemMC.Architecture.ARM.BaseSemantics
     )
     where
 
+import qualified Data.Map as Map
 import SemMC.Architecture.ARM.BaseSemantics.Arithmetic
 import SemMC.Architecture.ARM.BaseSemantics.Branch
 import SemMC.Architecture.ARM.BaseSemantics.Memory
@@ -11,18 +12,30 @@ import SemMC.DSL
 
 
 semdefs :: [ (String, [(String, Definition)]) ]
+semdefs = [ ("memory", pkgFormulas memory)
+          , ("arithmetic", pkgFormulas arithmetic)
+          , ("bitwise", pkgFormulas bitwise)
+          , ("branches", pkgFormulas branches)
+          , ("miscellaneous", pkgFormulas misc)
+          ]
+
 fundefs :: [ (String, FunctionDefinition) ]
-(semdefs, [], fundefs) = evalSem $ do
-  -- We expect to match the empty list above because all the formulas
-  -- here are generated underneath calls to gather.
-  memory <- gather manualMemory
-  arithmetic <- gather manualArithmetic
-  bitwise <- gather manualBitwise
-  branches <- gather manualBranches
-  misc <- gather miscSemantics
-  return [ ("memory", memory)
-         , ("arithmetic", arithmetic)
-         , ("bitwise", bitwise)
-         , ("branches", branches)
-         , ("miscellaneous", misc)
-         ]
+fundefs =
+  -- Map.unions will keep the first instance of each function it finds
+  Map.toList $ Map.unions $ map (Map.fromList . pkgFunctions) $
+    [ memory, arithmetic, bitwise, branches, misc ]
+
+memory :: Package
+memory = runSem manualMemory
+
+arithmetic :: Package
+arithmetic = runSem manualArithmetic
+
+bitwise :: Package
+bitwise = runSem manualBitwise
+
+branches :: Package
+branches = runSem manualBranches
+
+misc :: Package
+misc = runSem miscSemantics
