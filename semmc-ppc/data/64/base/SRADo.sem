@@ -1,8 +1,8 @@
 ;; Shift Right Algebraic Doubleword (X-form, RC=1)
 ((operands
  ((rA . 'Gprc)
-  (rS . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rS . 'Gprc)))
  (in
   ('XER 'CR 'XER rB rS 'IP))
  (defs

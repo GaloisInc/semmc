@@ -100,7 +100,7 @@ baseBitwise = do
   defineOpcodeWithIP "SLW" $ do
     comment "Shift Left Word (X-form, RC=0)"
     (rA, rS, rB) <- xform3
-    let n = zext' 32 (lowBits 5 (Loc rB))
+    let n = zext' 32 (lowBits 6 (Loc rB))
     let w = lowBits 32 (Loc rS)
     let res = zext (bvshl w n)
     defLoc rA res
@@ -109,7 +109,7 @@ baseBitwise = do
   defineOpcodeWithIP "SRW" $ do
     comment "Shift Right Word (X-form, RC=0)"
     (rA, rS, rB) <- xform3
-    let n = zext' 32 (lowBits 5 (Loc rB))
+    let n = zext' 32 (lowBits 6 (Loc rB))
     let w = lowBits 32 (Loc rS)
     let res = zext (bvlshr w n)
     defLoc rA res
@@ -137,11 +137,14 @@ baseBitwise = do
     comment "Shift Right Algebraic Word (X-form, RC=0)"
     (rA, rS, rB) <- xform3
     input xer
-    let n = lowBits 5 (Loc rB)
+    let n = lowBits 6 (Loc rB)
     let w = lowBits 32 (Loc rS)
     let r = sext (bvashr w (zext' 32 n))
     let s = highBits 1 w
-    let nShiftedOutBits = bvsub (LitBV 32 32) (zext' 32 n)
+    let nShiftedOutBits = ite
+          (bvuge n (LitBV 6 32))
+          (LitBV 32 0)
+          (bvsub (LitBV 32 32) (zext' 32 n))
     let shiftedOutBits = bvlshr (bvshl w nShiftedOutBits) nShiftedOutBits
     let hasShiftedOutOnes = bvne shiftedOutBits (LitBV 32 0x0)
     defLoc rA r
@@ -354,9 +357,9 @@ rotates = do
 
     let k = 32
     let n = zext' k (Loc sh)
-    let r = rotl k (lowBits k (Loc rS)) n
-    let m = mask k (zext' k (Loc mb)) (zext' k (Loc me))
-    let res = zext (bvor (bvand r m) (bvand (lowBits 32 (Loc rA)) (bvnot m)))
+    let r = zext (rotl k (lowBits k (Loc rS)) n)
+    let m = zext (mask k (zext' k (Loc mb)) (zext' k (Loc me)))
+    let res = bvor (bvand r m) (bvand (Loc rA) (bvnot m))
     defLoc rA res
     defineRCVariant "RLWIMIo" res $ do
       comment "Rotate Left Word Immediate then Mask Insert (M-form, RC=1)"

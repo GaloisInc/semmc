@@ -1,8 +1,8 @@
 ;; Shift Left Word (X-form, RC=1)
 ((operands
  ((rA . 'Gprc)
-  (rS . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rS . 'Gprc)))
  (in
   ('XER 'CR rB rS 'IP))
  (defs
@@ -11,15 +11,15 @@
     (bvslt
      (bvshl
       rS
-      ((_ zero_extend 27)
-       ((_ extract 4 0)
+      ((_ zero_extend 26)
+       ((_ extract 5 0)
         rB)))
      #x00000000)
     (bvsgt
      (bvshl
       rS
-      ((_ zero_extend 27)
-       ((_ extract 4 0)
+      ((_ zero_extend 26)
+       ((_ extract 5 0)
         rB)))
      #x00000000)
     #b000
@@ -28,8 +28,8 @@
    (rA
     (bvshl
      rS
-     ((_ zero_extend 27)
-      ((_ extract 4 0)
+     ((_ zero_extend 26)
+      ((_ extract 5 0)
        rB))))
    ('IP
     (bvadd 'IP #x00000004)))))

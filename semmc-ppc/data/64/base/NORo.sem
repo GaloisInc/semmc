@@ -1,8 +1,8 @@
 ;; NOR (X-form, RC=1)
 ((operands
  ((rA . 'Gprc)
-  (rS . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rS . 'Gprc)))
  (in
   ('XER 'CR rB rS 'IP))
  (defs

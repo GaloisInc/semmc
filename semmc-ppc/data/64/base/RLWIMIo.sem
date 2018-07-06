@@ -1,9 +1,9 @@
 ;; Rotate Left Word Immediate then Mask Insert (M-form, RC=1)
 ((operands
  ((rA . 'Gprc)
-  (sh . 'U5imm)
-  (mb . 'U5imm)
   (me . 'U5imm)
+  (mb . 'U5imm)
+  (sh . 'U5imm)
   (rS . 'Gprc)))
  (in
   ('XER 'CR rA rS me mb sh 'IP))
@@ -11,9 +11,9 @@
   (('CR
    ((_ call "df.cmpImm")
     (bvslt
-     ((_ zero_extend 32)
-      (bvor
-       (bvand
+     (bvor
+      (bvand
+       ((_ zero_extend 32)
         (bvor
          (bvshl
           ((_ extract 31 0)
@@ -26,16 +26,17 @@
           (bvsub
            #x00000020
            ((_ zero_extend 27)
-            sh))))
+            sh)))))
+       ((_ zero_extend 32)
         ((_ call "df.mask_32")
          ((_ zero_extend 27)
           mb)
          ((_ zero_extend 27)
-          me)))
-       (bvand
-        ((_ extract 31 0)
-         rA)
-        (bvnot
+          me))))
+      (bvand
+       rA
+       (bvnot
+        ((_ zero_extend 32)
          ((_ call "df.mask_32")
           ((_ zero_extend 27)
            mb)
@@ -43,9 +44,9 @@
            me))))))
      #x0000000000000000)
     (bvsgt
-     ((_ zero_extend 32)
-      (bvor
-       (bvand
+     (bvor
+      (bvand
+       ((_ zero_extend 32)
         (bvor
          (bvshl
           ((_ extract 31 0)
@@ -58,16 +59,17 @@
           (bvsub
            #x00000020
            ((_ zero_extend 27)
-            sh))))
+            sh)))))
+       ((_ zero_extend 32)
         ((_ call "df.mask_32")
          ((_ zero_extend 27)
           mb)
          ((_ zero_extend 27)
-          me)))
-       (bvand
-        ((_ extract 31 0)
-         rA)
-        (bvnot
+          me))))
+      (bvand
+       rA
+       (bvnot
+        ((_ zero_extend 32)
          ((_ call "df.mask_32")
           ((_ zero_extend 27)
            mb)
@@ -78,9 +80,9 @@
     'XER
     'CR))
    (rA
-    ((_ zero_extend 32)
-     (bvor
-      (bvand
+    (bvor
+     (bvand
+      ((_ zero_extend 32)
        (bvor
         (bvshl
          ((_ extract 31 0)
@@ -93,16 +95,17 @@
          (bvsub
           #x00000020
           ((_ zero_extend 27)
-           sh))))
+           sh)))))
+      ((_ zero_extend 32)
        ((_ call "df.mask_32")
         ((_ zero_extend 27)
          mb)
         ((_ zero_extend 27)
-         me)))
-      (bvand
-       ((_ extract 31 0)
-        rA)
-       (bvnot
+         me))))
+     (bvand
+      rA
+      (bvnot
+       ((_ zero_extend 32)
         ((_ call "df.mask_32")
          ((_ zero_extend 27)
           mb)

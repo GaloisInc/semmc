@@ -1,9 +1,9 @@
 ;; Rotate Left Word Immediate then AND with Mask (M-form, RC=0)
 ((operands
  ((rA . 'Gprc)
-  (sh . 'U5imm)
-  (mb . 'U5imm)
   (me . 'U5imm)
+  (mb . 'U5imm)
+  (sh . 'U5imm)
   (rS . 'Gprc)))
  (in
   (rS me mb sh 'IP))

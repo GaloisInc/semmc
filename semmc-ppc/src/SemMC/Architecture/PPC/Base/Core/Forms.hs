@@ -49,9 +49,9 @@ xlformcr = do
 mform5i :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV, Location 'TBV)
 mform5i = do
   rA <- param "rA" gprc naturalBV
-  sh <- param "sh" u5imm (EBV 5)
-  mb <- param "mb" u5imm (EBV 5)
   me <- param "me" u5imm (EBV 5)
+  mb <- param "mb" u5imm (EBV 5)
+  sh <- param "sh" u5imm (EBV 5)
   rS <- param "rS" gprc naturalBV
   input sh
   input mb
@@ -165,8 +165,8 @@ xoform2 = do
 xform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xform3 = do
   rA <- param "rA" gprc naturalBV
-  rS <- param "rS" gprc naturalBV
   rB <- param "rB" gprc naturalBV
+  rS <- param "rS" gprc naturalBV
   input rS
   input rB
   return (rA, rS, rB)

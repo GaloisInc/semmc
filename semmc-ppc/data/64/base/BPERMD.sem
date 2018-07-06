@@ -128,8 +128,8 @@
      (bvadd 'IP #x0000000000000004))))))
  ((operands
   ((rA . 'Gprc)
-   (rS . 'Gprc)
-   (rB . 'Gprc)))
+   (rB . 'Gprc)
+   (rS . 'Gprc)))
   (in
    (rB rS 'IP))
   (var1)))

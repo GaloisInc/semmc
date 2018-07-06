@@ -1,8 +1,8 @@
 ;; Shift Right Algebraic Word (X-form, RC=0)
 ((operands
  ((rA . 'Gprc)
-  (rS . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rS . 'Gprc)))
  (in
   ('XER rB rS 'IP))
  (defs
@@ -16,16 +16,28 @@
        (bvlshr
         (bvshl
          rS
+         (ite
+          (bvuge
+           ((_ extract 5 0)
+            rB)
+           #b100000)
+          #x00000000
+          (bvsub
+           #x00000020
+           ((_ zero_extend 26)
+            ((_ extract 5 0)
+             rB)))))
+        (ite
+         (bvuge
+          ((_ extract 5 0)
+           rB)
+          #b100000)
+         #x00000000
          (bvsub
           #x00000020
-          ((_ zero_extend 27)
-           ((_ extract 4 0)
-            rB))))
-        (bvsub
-         #x00000020
-         ((_ zero_extend 27)
-          ((_ extract 4 0)
-           rB))))
+          ((_ zero_extend 26)
+           ((_ extract 5 0)
+            rB)))))
        #x00000000)
       ((_ extract 31 31)
        rS)
@@ -35,8 +47,8 @@
    (rA
     (bvashr
      rS
-     ((_ zero_extend 27)
-      ((_ extract 4 0)
+     ((_ zero_extend 26)
+      ((_ extract 5 0)
        rB))))
    ('IP
     (bvadd 'IP #x00000004)))))

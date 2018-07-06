@@ -244,7 +244,7 @@ rotl k v n =
       w2 = bvlshr v (bvsub (LitBV k (toInteger k)) n)
   in bvor w1 w2
 
--- | Generate a mask of all ones from b0 to b1
+-- | Generate a mask of all ones from b0 to b1, wrapping around if b0 > b1
 --
 -- > mask b0 b1
 mask :: (HasCallStack, ?bitSize :: BitSize)
@@ -260,7 +260,13 @@ maskLF k =
   defineLibraryFunction ("mask_" ++ show k)
     (Arg "b0" (EBV k) :<
      Arg "b1" (EBV k) :< Nil) $
-  \b0 b1 ->
+  \b0 b1 -> ite
+    (bvule b0 b1)
+    (maskLE b0 b1)
+    (bvnot (maskLE (bvadd b1 (LitBV k 1)) (bvsub b0 (LitBV k 1))))
+  where
+  -- produces the all-zero mask unless b0 <= b1
+  maskLE b0 b1 =
     let allOnes = sext' k (LitBV 1 0x1)
         clearLeft = bvlshr (bvshl allOnes b0) b0
         shmax = LitBV k (toInteger (k - 1))
