@@ -8,13 +8,13 @@
   (('FPSCR
    ((_ extract 31 0)
     ((_ call "uf.ppc.vec1")
-     "FSQRT"
+     "FSQRTS"
      frB
      'FPSCR)))
    (frT
     ((_ extract 159 32)
      ((_ call "uf.ppc.vec1")
-      "FSQRT"
+      "FSQRTS"
       frB
       'FPSCR)))
    ('IP

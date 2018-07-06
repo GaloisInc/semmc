@@ -19,6 +19,7 @@ module SemMC.DSL (
   forkDefinition,
   param,
   input,
+  markStub,
   defLoc,
   comment,
   -- * Architecture-specific Data support
@@ -314,10 +315,7 @@ defineOpcodeWithParams name params def =
 -- definition simply writes an uninterpreted function call to the output
 -- register.
 stubDefineOpcode :: String -> SemMD 'Def d () -> SemMD 'Top d ()
-stubDefineOpcode name def = do
-  defineOpcode name $ do
-    modifyFormula $ \f -> f { fStub = True }
-    def
+stubDefineOpcode name def = defineOpcode name $ markStub >> def
 
 -- | Fork a definition into a second definition under a different name
 --
@@ -370,6 +368,10 @@ param name ty ety = do
 -- | Mark a parameter as an input
 input :: Location tp -> SemMD 'Def d ()
 input loc = modifyFormula $ \f -> f { fInputs = Some loc : fInputs f }
+
+-- | Mark the definition as a stub (see 'stubDefineOpcode')
+markStub :: SemMD 'Def d ()
+markStub = modifyFormula $ \f -> f { fStub = True }
 
 -- | Define a location as an expression
 defLoc :: (HasCallStack) => Location tp -> Expr tp -> SemMD 'Def d ()

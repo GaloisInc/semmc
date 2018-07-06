@@ -226,229 +226,79 @@ floatingPointCompare = do
 -- FIXME: None of these are defining the status or control registers yet
 floatingPoint :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPoint = do
-  defineOpcodeWithIP "FADD" $ do
-    comment "Floating Add (A-form)"
-    fp2op "FADD"
+  let stubWith f code comms =
+        defineOpcodeWithIP code $ do
+          markStub
+          mapM_ comment comms
+          f code
+      stub1 = stubWith fp1op
+      stub2 = stubWith fp2op
+      stub3 = stubWith fp3op
 
-  defineOpcodeWithIP "FADDS" $ do
-    comment "Floating Add Single (A-form)"
-    fp2op "FADDS"
-
-  defineOpcodeWithIP "FSUB" $ do
-    comment "Floating Subtract (A-form)"
-    fp2op "FSUB"
-
-  defineOpcodeWithIP "FSUBS" $ do
-    comment "Floating Subtract Single (A-form)"
-    fp2op "FSUBS"
-
-  defineOpcodeWithIP "FMUL" $ do
-    comment "Floating Multiply (A-form)"
-    fp2op "FMUL"
-
-  defineOpcodeWithIP "FMULS" $ do
-    comment "Floating Multiply Single (A-form)"
-    fp2op "FMULS"
-
-  defineOpcodeWithIP "FDIV" $ do
-    comment "Floating Divide (A-form)"
-    fp2op "FDIV"
-
-  defineOpcodeWithIP "FDIVS" $ do
-    comment "Floating Divide Single (A-form)"
-    fp2op "FDIVS"
-
-  defineOpcodeWithIP "FMADD" $ do
-    comment "Floating Multiply-Add (A-form)"
-    fp3op "FMADD"
-
-  defineOpcodeWithIP "FMADDS" $ do
-    comment "Floating Multiply-Add Single (A-form)"
-    fp3op "FMADDS"
-
+  stub2 "FADD" ["Floating Add (A-form)"]
+  stub2 "FADDS" ["Floating Add Single (A-form)"]
+  stub2 "FSUB" ["Floating Subtract (A-form)"]
+  stub2 "FSUBS" ["Floating Subtract Single (A-form)"]
+  stub2 "FMUL" ["Floating Multiply (A-form)"]
+  stub2 "FMULS" ["Floating Multiply Single (A-form)"]
+  stub2 "FDIV" ["Floating Divide (A-form)"]
+  stub2 "FDIVS" ["Floating Divide Single (A-form)"]
+  stub3 "FMADD" ["Floating Multiply-Add (A-form)"]
+  stub3 "FMADDS" ["Floating Multiply-Add Single (A-form)"]
   -- NOTE: This functions were previously defined in terms of lower-level operations
   -- like negation and multiply-add, but our new encoding just pushes the opcode
   -- through for consistency.
-  defineOpcodeWithIP "FMSUB" $ do
-    comment "Floating Multiply-Subtract (A-form)"
-    fp3op "FMSUB"
-
-  defineOpcodeWithIP "FMSUBS" $ do
-    comment "Floating Multiply-Subtract Single (A-form)"
-    fp3op "FMSUBS"
-
-  defineOpcodeWithIP "FNMADD" $ do
-    comment "Floating Negative Multiply-Add (A-form)"
-    fp3op "FNMADD"
-
-  defineOpcodeWithIP "FNMADDS" $ do
-    comment "Floating Negative Multiply-Add Single (A-form)"
-    fp3op "FNMADDS"
-
-  defineOpcodeWithIP "FNMSUB" $ do
-    comment "Floating Negative Multiply-Subtract (A-form)"
-    fp3op "FNMSUB"
-
-  defineOpcodeWithIP "FNMSUBS" $ do
-    comment "Floating Negative Multiply-Subtract Single (A-form)"
-    fp3op "FNMSUBS"
-
-  defineOpcodeWithIP "FRSP" $ do
-    comment "Floating Round to Single-Precision (X-form)"
-    fp1op "FRSP"
-
-  defineOpcodeWithIP "FCTID" $ do
-    comment "Floating Point Convert to Integer Doubleword (X-form)"
-    fp1op "FCTID"
-
-  defineOpcodeWithIP "FCTIDZ" $ do
-    comment "Floating Point Convert to Integer Doubleword with Round Towards Zero (X-form)"
-    fp1op "FCTIDZ"
-
-  defineOpcodeWithIP "FCTIDU" $ do
-    comment "Floating Point Convert to Integer Doubleword Unsigned (X-form)"
-    fp1op "FCTIDU"
-
-  defineOpcodeWithIP "FCTIDUZ" $ do
-    comment "Floating Point Convert to Integer Doubleword Unsigned with Round Towards Zero (X-form)"
-    fp1op "FCTIDUZ"
-
-  defineOpcodeWithIP "FCTIW" $ do
-    comment "Floating Point Convert to Integer Word (X-form)"
-    fp1op "FCTIW"
-
-  defineOpcodeWithIP "FCTIWZ" $ do
-    comment "Floating Point Convert to Integer Word with Round Towards Zero (X-form)"
-    fp1op "FCTIWZ"
-
-  defineOpcodeWithIP "FCTIWU" $ do
-    comment "Floating Point Convert to Integer Word Unsigned (X-form)"
-    fp1op "FCTIWU"
-
-  defineOpcodeWithIP "FCTIWUZ" $ do
-    comment "Floating Point Convert to Integer Word Unsigned with Round Towards Zero (X-form)"
-    fp1op "FCTIWUZ"
-
-  defineOpcodeWithIP "FCFID" $ do
-    comment "Floating Point Convert from Integer Doubleword (X-form)"
-    fp1op "FCFID"
-
-  defineOpcodeWithIP "FCFIDU" $ do
-    comment "Floating Point Convert from Integer Doubleword Unsigned (X-form)"
-    fp1op "FCFIDU"
-
-  defineOpcodeWithIP "FCFIDS" $ do
-    comment "Floating Point Convert from Integer Doubleword Single (X-form)"
-    fp1op "FCFIDS"
-
-  defineOpcodeWithIP "FCFIDUS" $ do
-    comment "Floating Point Convert from Integer Doubleword Unsigned Single (X-form)"
-    fp1op "FCFIDUS"
-
-  defineOpcodeWithIP "FRIND" $ do
-    comment "Floating Round to Integer Nearest (X-form)"
-    fp1op "FRIND"
-
-  defineOpcodeWithIP "FRINS" $ do
-    comment "Floating Round to Integer Nearest Single (X-form)"
-    fp1op "FRINS"
-
-  defineOpcodeWithIP "FRIPD" $ do
-    comment "Floating Round to Integer Plus (X-form)"
-    fp1op "FRIPD"
-
-  defineOpcodeWithIP "FRIPS" $ do
-    comment "Floating Round to Integer Plus Single (X-form)"
-    fp1op "FRIPS"
-
-  defineOpcodeWithIP "FRIZD" $ do
-    comment "Floating Round to Integer Toward Zero (X-form)"
-    fp1op "FRIZD"
-
-  defineOpcodeWithIP "FRIZS" $ do
-    comment "Floating Round to Integer Toward Zero Single (X-form)"
-    fp1op "FRIZS"
-
-  defineOpcodeWithIP "FRIMD" $ do
-    comment "Floating Round to Integer Minus (X-form)"
-    fp1op "FRIMD"
-
-  defineOpcodeWithIP "FRIMS" $ do
-    comment "Floating Round to Integer Minus Single (X-form)"
-    fp1op "FRIMS"
-
-  defineOpcodeWithIP "FNEGD" $ do
-    comment "Floating Negate (X-form)"
-    comment "There is no single-precision form of this because"
-    comment "the sign bit is always in the same place (MSB)"
-    fp1op "FNEGD"
-
-  defineOpcodeWithIP "FNEGS" $ do
-    comment "Floating Negate (X-form)"
-    comment "There is no single-precision form of this because"
-    comment "the sign bit is always in the same place (MSB)"
-    fp1op "FNEGS"
-
-  defineOpcodeWithIP "FMR" $ do
-    comment "Floating Move Register (X-form)"
-    fp1op "FMR"
-
+  stub3 "FMSUB" ["Floating Multiply-Subtract (A-form)"]
+  stub3 "FMSUBS" ["Floating Multiply-Subtract Single (A-form)"]
+  stub3 "FNMADD" ["Floating Negative Multiply-Add (A-form)"]
+  stub3 "FNMADDS" ["Floating Negative Multiply-Add Single (A-form)"]
+  stub3 "FNMSUB" ["Floating Negative Multiply-Subtract (A-form)"]
+  stub3 "FNMSUBS" ["Floating Negative Multiply-Subtract Single (A-form)"]
+  stub1 "FRSP" ["Floating Round to Single-Precision (X-form)"]
+  stub1 "FCTID" ["Floating Point Convert to Integer Doubleword (X-form)"]
+  stub1 "FCTIDZ" ["Floating Point Convert to Integer Doubleword with Round Towards Zero (X-form)"]
+  stub1 "FCTIDU" ["Floating Point Convert to Integer Doubleword Unsigned (X-form)"]
+  stub1 "FCTIDUZ" ["Floating Point Convert to Integer Doubleword Unsigned with Round Towards Zero (X-form)"]
+  stub1 "FCTIW" ["Floating Point Convert to Integer Word (X-form)"]
+  stub1 "FCTIWZ" ["Floating Point Convert to Integer Word with Round Towards Zero (X-form)"]
+  stub1 "FCTIWU" ["Floating Point Convert to Integer Word Unsigned (X-form)"]
+  stub1 "FCTIWUZ" ["Floating Point Convert to Integer Word Unsigned with Round Towards Zero (X-form)"]
+  stub1 "FCFID" ["Floating Point Convert from Integer Doubleword (X-form)"]
+  stub1 "FCFIDU" ["Floating Point Convert from Integer Doubleword Unsigned (X-form)"]
+  stub1 "FCFIDS" ["Floating Point Convert from Integer Doubleword Single (X-form)"]
+  stub1 "FCFIDUS" ["Floating Point Convert from Integer Doubleword Unsigned Single (X-form)"]
+  stub1 "FRIND" ["Floating Round to Integer Nearest (X-form)"]
+  stub1 "FRINS" ["Floating Round to Integer Nearest Single (X-form)"]
+  stub1 "FRIPD" ["Floating Round to Integer Plus (X-form)"]
+  stub1 "FRIPS" ["Floating Round to Integer Plus Single (X-form)"]
+  stub1 "FRIZD" ["Floating Round to Integer Toward Zero (X-form)"]
+  stub1 "FRIZS" ["Floating Round to Integer Toward Zero Single (X-form)"]
+  stub1 "FRIMD" ["Floating Round to Integer Minus (X-form)"]
+  stub1 "FRIMS" ["Floating Round to Integer Minus Single (X-form)"]
+  stub1 "FNEGD"
+    [ "Floating Negate (X-form)"
+    , "There is no single-precision form of this because"
+    , "the sign bit is always in the same place (MSB)" ]
+  stub1 "FNEGS"
+    [ "Floating Negate (X-form)"
+    , "There is no single-precision form of this because"
+    , "the sign bit is always in the same place (MSB)" ]
+  stub1 "FMR" ["Floating Move Register (X-form)"]
   -- See Note [FABS]
-  defineOpcodeWithIP "FABSD" $ do
-    comment "Floating Absolute Value (X-form)"
-    fp1op "FABSD"
-
-  defineOpcodeWithIP "FNABSD" $ do
-    comment "Floating Negative Absolute Value (X-form)"
-    fp1op "FNABSD"
-
-  defineOpcodeWithIP "FABSS" $ do
-    comment "Floating Absolute Value (X-form)"
-    fp1op "FABSS"
-
-  defineOpcodeWithIP "FNABSS" $ do
-    comment "Floating Negative Absolute Value (X-form)"
-    fp1op "FNABSS"
-
-  defineOpcodeWithIP "FCPSGND" $ do
-    comment "Floating Copy Sign (X-form)"
-    fp2op "FCPSGND"
-
-  defineOpcodeWithIP "FCPSGNS" $ do
-    comment "Floating Copy Sign Single (X-form)"
-    fp2op "FCPSGNS"
-
-  defineOpcodeWithIP "FSQRT" $ do
-    comment "Floating Square Root (A-form)"
-    fp1op "FSQRT"
-
-  defineOpcodeWithIP "FSQRTS" $ do
-    comment "Floating Square Root Single (A-form)"
-    fp1op "FSQRT"
-
-  defineOpcodeWithIP "FRE" $ do
-    comment "Floating Reciprocal Estimate (A-form)"
-    fp1op "FRE"
-
-  defineOpcodeWithIP "FRES" $ do
-    comment "Floating Reciprocal Estimate Single (A-form)"
-    fp1op "FRES"
-
-  defineOpcodeWithIP "FRSQRTE" $ do
-    comment "Floating Reciprocal Square Root Estimate (A-form)"
-    fp1op "FRSQRTE"
-
-  defineOpcodeWithIP "FRSQRTES" $ do
-    comment "Floating Reciprocal Square Root Estimate Single (A-form)"
-    fp1op "FRSQRTES"
-
-  defineOpcodeWithIP "FSELD" $ do
-    comment "Floating-Point Select (A-form)"
-    fp3op "FSELD"
-
-  defineOpcodeWithIP "FSELS" $ do
-    comment "Floating-Point Select Single (A-form)"
-    fp3op "FSELS"
+  stub1 "FABSD" ["Floating Absolute Value (X-form)"]
+  stub1 "FNABSD" ["Floating Negative Absolute Value (X-form)"]
+  stub1 "FABSS" ["Floating Absolute Value (X-form)"]
+  stub1 "FNABSS" ["Floating Negative Absolute Value (X-form)"]
+  stub2 "FCPSGND" ["Floating Copy Sign (X-form)"]
+  stub2 "FCPSGNS" ["Floating Copy Sign Single (X-form)"]
+  stub1 "FSQRT" ["Floating Square Root (A-form)"]
+  stub1 "FSQRTS" ["Floating Square Root Single (A-form)"]
+  stub1 "FRE" ["Floating Reciprocal Estimate (A-form)"]
+  stub1 "FRES" ["Floating Reciprocal Estimate Single (A-form)"]
+  stub1 "FRSQRTE" ["Floating Reciprocal Square Root Estimate (A-form)"]
+  stub1 "FRSQRTES" ["Floating Reciprocal Square Root Estimate Single (A-form)"]
+  stub3 "FSELD" ["Floating-Point Select (A-form)"]
+  stub3 "FSELS" ["Floating-Point Select Single (A-form)"]
 
 -- | Define a load and double conversion of a single floating-point (D-form)
 loadFloat :: (?bitSize :: BitSize)
