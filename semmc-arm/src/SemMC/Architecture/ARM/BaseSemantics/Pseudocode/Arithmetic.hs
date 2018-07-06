@@ -23,7 +23,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Arithmetic
 
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Natural
-import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.DSL
 
 

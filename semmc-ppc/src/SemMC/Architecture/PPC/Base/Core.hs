@@ -33,9 +33,7 @@ module SemMC.Architecture.PPC.Base.Core (
   xerBit,
   updateXER,
   sext,
-  sext',
   zext,
-  zext',
   rotl,
   mask,
   crField,
@@ -60,7 +58,6 @@ module SemMC.Architecture.PPC.Base.Core (
 import GHC.Stack ( HasCallStack )
 
 import Prelude hiding ( concat )
-import Data.Proxy ( Proxy(..) )
 import Text.Printf ( printf )
 import Data.Parameterized.Some ( Some(..) )
 import SemMC.DSL
@@ -172,7 +169,7 @@ updateCRField :: (?bitSize :: BitSize)
               -- ^ A four bit replacement field value
               -> Expr 'TBV
 updateCRField =
-  (wrapAsLibraryFunction Proxy "updateCRField"
+  (wrapAsLibraryFunction "updateCRField"
      (Arg "cr" (EBV 32) :<
       Arg "fldNum" (EBV 3) :<
       Arg "newFldVal" (EBV 4) :< Nil)
@@ -207,25 +204,9 @@ naturalLitBV n = LitBV (bitSizeValue ?bitSize) n
 sext :: (HasCallStack, ?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV
 sext = sext' (bitSizeValue ?bitSize)
 
--- | Generalized sign extension to arbitrary bit width
-sext' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-sext' fullWidth e
-  | extendBy == 0 = e
-  | otherwise = signExtend extendBy e
-  where
-    extendBy = fullWidth - exprBVSize e
-
 -- | Zero extension to the full native bit width of registers
 zext :: (HasCallStack, ?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV
 zext = zext' (bitSizeValue ?bitSize)
-
--- | Generalized zero extension to arbitrary width
-zext' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-zext' fullWidth e
-  | extendBy == 0 = e
-  | otherwise = zeroExtend extendBy e
-  where
-    extendBy = fullWidth - exprBVSize e
 
 -- | Rotate a K bit value left
 --

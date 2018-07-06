@@ -18,9 +18,8 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     -- * Result definition via instruction predicate control
     , defReg
     -- * Manipulation of bit values (BV)
-    , zext, zext'
-    , sext, sext'
-    , bvset, bvclr, tstBit
+    , zext
+    , sext
     -- * Opcode unpacking
     , imm12Reg, imm12Off, imm12Add
     , addrmode_is2_reg, addrmode_is2_imm
@@ -48,7 +47,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Helpers
     where
 
 import           Control.Monad ( when )
-import           Data.Bits hiding (shift)
 import           Data.List (isPrefixOf)
 import           Data.Maybe
 import           Data.Parameterized.Classes
@@ -316,39 +314,9 @@ zext :: Expr 'TBV -> Expr 'TBV
 zext = zext' naturalBitSize
 
 
--- | Generalized zero extension to arbitrary width
-zext' :: Int -> Expr 'TBV -> Expr 'TBV
-zext' fullWidth e
-  | extendBy == 0 = e
-  | otherwise = zeroExtend extendBy e
-  where
-    extendBy = fullWidth - exprBVSize e
-
 -- | Zero extension to the full native bit width of registers
 sext :: Expr 'TBV -> Expr 'TBV
 sext = sext' naturalBitSize
-
-
--- | Generalized zero extension to arbitrary width
-sext' :: Int -> Expr 'TBV -> Expr 'TBV
-sext' fullWidth e
-  | extendBy == 0 = e
-  | otherwise = signExtend extendBy e
-  where
-    extendBy = fullWidth - exprBVSize e
-
-
--- | Set bits, specifying the list of bit numbers to set (0-based)
-bvset :: [Int] -> Expr 'TBV -> Expr 'TBV
-bvset bitnums = bvor (naturalLitBV $ toInteger $ foldl setBit naturalZero bitnums)
-
--- | Clear bits, specifying the list of bit numbers to clear (0-based)
-bvclr :: [Int] -> Expr 'TBV -> Expr 'TBV
-bvclr bitnums = bvand (naturalLitBV $ toInteger $ complement $ foldl setBit naturalZero bitnums)
-
--- | Test if a specific bit is set
-tstBit :: Int -> Expr 'TBV -> Expr 'TBool
-tstBit n = bveq (LitBV 1 0) . extract n n
 
 -- ----------------------------------------------------------------------
 -- Opcode unpacking
@@ -514,7 +482,3 @@ sameLocation l = LitBool . maybe False (const True) . testEquality l
 -- | Is the current register R15 (aka PC)?
 isR15 :: Location 'TBV -> Expr 'TBool
 isR15 = uf EBool "arm.is_r15" . ((:[]) . Some) . Loc
-
-anyp :: [Expr 'TBool] -> Expr 'TBool
-anyp [] = LitBool False
-anyp (r : rs) = orp r (anyp rs)

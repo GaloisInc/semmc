@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
@@ -13,6 +14,7 @@
 module SemMC.DSL (
   -- * Definitions
   defineOpcode,
+  defineOpcodeWithParams,
   forkDefinition,
   param,
   input,
@@ -30,11 +32,12 @@ module SemMC.DSL (
   SL.List (..),
   -- * Operations
   (=:),
+  testBit,
   testBitDynamic32,
   testBitDynamic64,
   extract,
-  zeroExtend,
-  signExtend,
+  zeroExtend, zeroExtendTo, zext',
+  signExtend, signExtendTo, sext',
   concat,
   ite,
   cases,
@@ -48,6 +51,8 @@ module SemMC.DSL (
   orp,
   xorp,
   notp,
+  anyp,
+  allp,
   -- ** Arithmetic bitvector ops
   bvadd,
   bvsub,
@@ -65,6 +70,8 @@ module SemMC.DSL (
   bvnot,
   bvclz,
   bvpopcnt,
+  bvset,
+  bvclr,
   -- ** Bitwise bitvector comparisons
   bvule,
   bvult,
@@ -92,7 +99,7 @@ module SemMC.DSL (
   Phase(..),
   runSem,
   evalSem,
-  Parameter,
+  Parameter(..),
   Package(..),
   Definition,
   printDefinition,
@@ -106,8 +113,8 @@ import           Prelude hiding ( concat )
 
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
+import qualified Data.Bits as B
 import qualified Data.Map as M
-import           Data.Proxy ( Proxy(..) )
 import qualified Data.SCargot.Repr as SC
 import           Data.Semigroup hiding ( Arg )
 import qualified Data.Sequence as Seq
@@ -117,7 +124,8 @@ import           Text.Printf ( printf )
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..), viewSome )
-import           Data.Parameterized.TraversableFC ( fmapFC, foldMapFC, toListFC )
+import           Data.Parameterized.TraversableFC ( fmapFC, foldMapFC
+                                                  , traverseFC, toListFC )
 import qualified Data.Type.List as DL
 
 import           SemMC.DSL.Internal
@@ -277,6 +285,16 @@ defineOpcode name (SemM def) = do
       !(~(), state', formulas) = RWS.runRWS def () state
   RWS.tell (formulas Seq.|> smdFormula state')
 
+defineOpcodeWithParams :: DL.Arguments tps
+                       => String
+                       -> SL.List Parameter tps
+                       -> DL.Function Location tps (SemMD 'Def d ())
+                       -> SemMD 'Top d ()
+defineOpcodeWithParams name params def =
+  defineOpcode name $ do
+    locs <- traverseFC (\(Parameter n t r) -> param n t r) params
+    DL.applyFunction def locs
+
 -- | Fork a definition into a second definition under a different name
 --
 -- This is designed to allow defining an instruction that is a strict extension
@@ -380,7 +398,7 @@ defineLibraryFunction :: forall (args :: [ExprTag]) (tp :: ExprTag)
                       -- nothing.
                       -> SL.List Argument args
                       -- ^ The name and type for each argument to the function
-                      -> DL.FunctionOver Expr args (Expr tp)
+                      -> DL.Function Expr args (Expr tp)
                       -- ^ A function from expressions representing the
                       -- arguments to an expression for the body. The arity of
                       -- the function is determined by @sig@.
@@ -391,7 +409,7 @@ defineLibraryFunction name args f =
              , lfdRetType = exprType body
              , lfdBody = body }
   where
-    body = DL.applyFunctionOver f argExprs
+    body = DL.applyFunction f argExprs
     argExprs = fmapFC (\arg -> Loc (ParamLoc (toParam arg))) args
 
     toParam :: forall argTp. Argument argTp -> Parameter argTp
@@ -409,18 +427,16 @@ defineLibraryFunction name args f =
 -- >          (Arg "x" (EBV 32) :< Arg "y" EBool :< Nil) $
 -- >          \x y -> ... -- original code for function body
 wrapAsLibraryFunction :: forall (args :: [ExprTag]) (tp :: ExprTag)
-                       . DL.ArgsToList args
-                      => Proxy tp
-                      -> String
+                       . DL.Arguments args
+                      => String
                       -> SL.List Argument args
-                      -> DL.FunctionOver Expr args (Expr tp)
-                      -> DL.FunctionOver Expr args (Expr tp)
-wrapAsLibraryFunction _ name formalArgs f =
-  DL.argsToListK (Proxy @Expr) (Proxy @args) $
-    \actualArgs ->
-      let lfd :: LibraryFunctionDef '(args, tp)
-          lfd = defineLibraryFunction name formalArgs f
-      in lf lfd actualArgs
+                      -> DL.Function Expr args (Expr tp)
+                      -> DL.Function Expr args (Expr tp)
+wrapAsLibraryFunction name formalArgs f =
+  DL.function $ \actualArgs ->
+    let lfd :: LibraryFunctionDef '(args, tp)
+        lfd = defineLibraryFunction name formalArgs f
+    in lf lfd actualArgs
 
 -- ----------------------------------------------------------------------
 -- Expressions
@@ -559,6 +575,14 @@ orp e1 e2 =
 xorp :: (HasCallStack) => Expr 'TBool -> Expr 'TBool -> Expr 'TBool
 xorp = boolBinopBuiltin "xorp"
 
+anyp :: (HasCallStack) => [Expr 'TBool] -> Expr 'TBool
+anyp [] = LitBool False
+anyp (r : rs) = orp r (anyp rs)
+
+allp :: (HasCallStack) => [Expr 'TBool] -> Expr 'TBool
+allp [] = LitBool True
+allp (r : rs) = andp r (allp rs)
+
 boolBinopBuiltin :: (HasCallStack) => String -> Expr 'TBool -> Expr 'TBool -> Expr 'TBool
 boolBinopBuiltin s e1 e2 = Builtin EBool  s [Some e1, Some e2]
 
@@ -619,6 +643,10 @@ binTestBuiltin s e1 e2
   where
     t1 = exprType e1
     t2 = exprType e2
+
+-- | Test if a specific bit is set
+testBit :: Int -> Expr 'TBV -> Expr 'TBool
+testBit n = bveq (LitBV 1 0) . extract n n
 
 -- | Test a dynamically-chosen bit number (i.e., the bit number to test is an
 -- expr and not an 'Int')
@@ -693,6 +721,23 @@ zeroExtend n e =
   case exprType e of
     EBV w -> TheoryFunc (EBV (w + n)) "zero_extend" [Some (LitInt (fromIntegral n))] [Some e]
 
+-- | Zero extend a value so that it has the specified width
+zeroExtendTo :: (HasCallStack)
+             => Int
+             -- ^ The number of bits to extend to
+             -> Expr 'TBV
+             -- ^ The expression to extend
+             -> Expr 'TBV
+zeroExtendTo fullWidth e
+  | extendBy == 0 = e
+  | otherwise = zeroExtend extendBy e
+  where
+    extendBy = fullWidth - exprBVSize e
+
+-- | Abbreviation for 'zeroExtendTo'
+zext' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
+zext' = zeroExtendTo
+
 signExtend :: (HasCallStack)
            => Int
            -- ^ The number of bits to extend by
@@ -703,12 +748,44 @@ signExtend n e =
   case exprType e of
     EBV w -> TheoryFunc (EBV (w + n)) "sign_extend" [Some (LitInt (fromIntegral n))] [Some e]
 
+signExtendTo :: (HasCallStack)
+             => Int
+             -- ^ The number of bits to extend to
+             -> Expr 'TBV
+             -- ^ The expression to extend
+             -> Expr 'TBV
+signExtendTo fullWidth e
+  | extendBy == 0 = e
+  | otherwise = signExtend extendBy e
+  where
+    extendBy = fullWidth - exprBVSize e
+
+-- | Abbreviation for 'signExtendTo'
+sext' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
+sext' = signExtendTo
+
 -- | Concatenate two bitvectors
 concat :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 concat e1 e2 =
   case (exprType e1, exprType e2) of
     (EBV w1, EBV w2) -> Builtin (EBV (w1 + w2)) "concat" [Some e1, Some e2]
 
+-- | Set bits, specifying the list of bit numbers to set (0-based)
+bvset :: [Int] -> Expr 'TBV -> Expr 'TBV
+bvset bitnums e = LitBV n mask `bvor` e
+  where
+    n = exprBVSize e
+    mask = foldl B.setBit 0 bitnums
+
+-- | Clear bits, specifying the list of bit numbers to clear (0-based)
+bvclr :: [Int] -> Expr 'TBV -> Expr 'TBV
+bvclr bitnums e = LitBV n mask `bvand` e
+  where
+    n = exprBVSize e
+    -- Note that Data.Bits considers -1 as an Integer to be an infinite stream
+    -- of 1 bits
+    mask = foldl B.clearBit (-1 :: Integer) bitnums B..&. ones
+    ones = (1 `B.shiftL` n) - 1
 
 -- ----------------------------------------------------------------------
 -- SExpression conversion

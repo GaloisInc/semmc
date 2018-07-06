@@ -327,7 +327,7 @@ ldr rT add baseAddr imm32 index isUnpredictable = do
       nBytes = 4
       addr = ite index updated_addr baseAddr
       result = readMem (Loc memory) addr nBytes
-      alignedResult = ite (orp (tstBit 1 addr) (tstBit 0 addr)) (unpredictable result) result
+      alignedResult = ite (orp (testBit 1 addr) (testBit 0 addr)) (unpredictable result) result
   loadWritePC (isR15 rT) alignedResult
   defReg rT (ite (isR15 rT)
                  (Loc rT)

@@ -7,7 +7,6 @@ module SemMC.Architecture.PPC.Base.Branch (
 
 import Prelude hiding ( concat )
 import Data.Bits
-import Data.Proxy ( Proxy(..) )
 import Data.Word.Indexed ( W )
 import Control.Monad ( when )
 import SemMC.DSL
@@ -405,7 +404,7 @@ generic_cond_ok = generic_cond_ok_pure (Loc cr)
 generic_cond_ok_pure :: (?bitSize :: BitSize)
                      => Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_cond_ok_pure =
-  wrapAsLibraryFunction Proxy "generic_cond_ok"
+  wrapAsLibraryFunction "generic_cond_ok"
     (Arg "cr" (EBV 32) :< Arg "bo" (EBV 5) :< Arg "bi" (EBV 5) :< Nil) $
   \crValue bo bi ->
   ite (boBitDynamic bo 0)
@@ -445,7 +444,7 @@ translate_bi = zext' 32 . bvsub (LitBV 5 31)
 -- for a BO field to macaw numbering, and tests the associated bit. See also
 -- 'boBitDynamic'.
 boBit :: W 5 -> Int -> Bool
-boBit bo n = testBit bo (4-n)
+boBit bo n = Data.Bits.testBit bo (4-n)
 
 -- | See 'boBit'.
 boBitDynamic :: Expr 'TBV -> Integer -> Expr 'TBool
@@ -453,7 +452,7 @@ boBitDynamic bo n = testBitDynamic32 (zext' 32 bo) (LitBV 32 (4-n))
 
 generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_ctr_ok =
-  wrapAsLibraryFunction Proxy "generic_ctr_ok"
+  wrapAsLibraryFunction "generic_ctr_ok"
     (Arg "bo" (EBV 5) :< Arg "newCtr" naturalBV :< Nil) $
     generic_ctr_ok_impl
 

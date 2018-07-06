@@ -73,13 +73,13 @@ maskPCForSubArch subarch addr = if subarch == InstrSet_A32
 -- | BxWritePC pseudocode  (E1.2.3, E1-2296)
 bxWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
 bxWritePC tgtRegIsPC addr =
-    let toT32 = tstBit 0 addr
+    let toT32 = testBit 0 addr
         setAddr curarch = case curarch of
                             InstrSet_T32EE -> error "TBD: bxWritePC for T32EE mode"
                             InstrSet_Jazelle -> error "TBD: bxWritePC for Jazelle mode"
                             _ -> ite toT32
                                     (bvclr [0] addr)
-                                    (ite (andp (tstBit 1 addr) constrainUnpredictable)
+                                    (ite (andp (testBit 1 addr) constrainUnpredictable)
                                          (bvclr [1] addr)
                                          addr)
     in do selectInstrSet tgtRegIsPC toT32

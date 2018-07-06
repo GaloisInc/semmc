@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -5,8 +6,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Data.Type.List (
-  FunctionOver,
-  applyFunctionOver,
   TyFun,
   Apply,
   Reverse,
@@ -20,8 +19,9 @@ module Data.Type.List (
   SameShape,
   toAssignment,
   toAssignmentFwd,
-  ArgsToList(..),
-  argsToList
+  Function,
+  Arguments(..),
+  applyFunction
   ) where
 
 import Prelude hiding (reverse)
@@ -29,14 +29,6 @@ import Prelude hiding (reverse)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
-
-type family FunctionOver f xs y where
-  FunctionOver f '[] y = y
-  FunctionOver f (x ': xs) y = f x -> FunctionOver f xs y
-
-applyFunctionOver :: FunctionOver f xs y -> SL.List f xs -> y
-applyFunctionOver f SL.Nil = f
-applyFunctionOver f (x SL.:< xs) = applyFunctionOver (f x) xs
 
 data TyFun :: k1 -> k2 -> *
 type family Apply (f :: TyFun k1 k2 -> *) (x :: k1) :: k2
@@ -87,16 +79,32 @@ toAssignment (a SL.:< rest) = toAssignment rest `Ctx.extend` a
 toAssignmentFwd :: SL.List f lst -> Ctx.Assignment f (ToContextFwd lst)
 toAssignmentFwd lst = toAssignment (reverse lst)
 
-class ArgsToList xs where
-  argsToListK :: Proxy f -> Proxy xs -> (SL.List f xs -> a)
-              -> FunctionOver f xs a
+-- | A function taking arguments with the given type parameters. For a known
+-- argument list, this evaluates to a plain Haskell function type:
+--
+-- > Function f '[] x = x
+-- > Function f '[a, b, c] x = f a -> f b -> f c -> x
+--
+-- Apply a function of arbitrary arguments using 'applyFunction'. Construct one
+-- using 'function' (from the 'Arguments' class).
+type family Function f xs y where
+  Function f '[] y = y
+  Function f (x ': xs) y = f x -> Function f xs y
 
-instance ArgsToList '[] where
-  argsToListK _ _ k = k SL.Nil
+-- Apply a function over a parameterized type to the given list of arguments.
+-- (This of course is just n-ary uncurrying.)
+applyFunction :: Function f xs y -> SL.List f xs -> y
+applyFunction f SL.Nil = f
+applyFunction f (x SL.:< xs) = applyFunction (f x) xs
 
-instance ArgsToList xs => ArgsToList (x ': xs) where
-  argsToListK _ _ k = \x -> argsToListK Proxy Proxy (\xs -> k (x SL.:< xs))
+class Arguments xs where
+  -- Construct a multi-parameter function with parameterized arguments out of
+  -- a function taking a parameterized list. (This of course is just n-ary
+  -- currying.)
+  function :: (SL.List f xs -> a) -> Function f xs a
 
-argsToList :: forall f xs. ArgsToList xs
-           => Proxy f -> Proxy xs -> FunctionOver f xs (SL.List f xs)
-argsToList p1 p2 = argsToListK p1 p2 id
+instance Arguments '[] where
+  function k = k SL.Nil
+
+instance Arguments xs => Arguments (x ': xs) where
+  function k = \x -> function (\xs -> k (x SL.:< xs))
