@@ -95,11 +95,12 @@ mainWithOptions opts = do
 
 genFunDefs :: ( CRUB.IsSymInterface sym
               , ShowF (CRU.SymExpr sym) )
-           => sym -> FilePath -> Bool -> [(String, DSL.FunctionDefinition)]
+           => sym -> FilePath -> Bool -> [DSL.FunctionDefinition]
            -> IO (Int, Int, SF.Library sym)
 genFunDefs sym d chk l = F.foldlM writeFunDef (0, 0, SF.emptyLibrary) l
-    where writeFunDef (s,e,lib) (funName, def) =
-              let fundef  = DSL.printFunctionDefinition def
+    where writeFunDef (s,e,lib) def =
+              let funName = DSL.fdName def
+                  fundef  = DSL.printFunctionDefinition def
                   fundefB = encodeUtf8 fundef
                   writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
               in if chk
@@ -114,13 +115,16 @@ genFunDefs sym d chk l = F.foldlM writeFunDef (0, 0, SF.emptyLibrary) l
 
 genOpDefs :: ( CRUB.IsSymInterface sym
              , ShowF (CRU.SymExpr sym) )
-          => sym -> SF.Library sym -> FilePath -> Bool -> [(String, DSL.Definition)] -> IO (Int, Int)
+          => sym -> SF.Library sym -> FilePath -> Bool -> [DSL.Definition] -> IO (Int, Int)
 genOpDefs sym lib d chk l = F.foldlM writeDef (0, 0) l
-    where writeDef (s,e) (opName, def) =
-              let semdef  = DSL.printDefinition def
+    where writeDef (s,e) def =
+              let opName  = DSL.defName def
+                  semdef  = DSL.printDefinition def
                   semdefB = encodeUtf8 semdef
                   opcode = F.find ((==) opName . show) opcodes
-                  writeIt = TIO.writeFile (d </> opName <.> "sem") $ semdef <> "\n"
+                  extension | DSL.defStub def = "stub.sem"
+                            | otherwise = "sem"
+                  writeIt = TIO.writeFile (d </> opName <.> extension) $ semdef <> "\n"
               in case opcode of
                    Nothing -> do putStrLn $ "ERR: ignoring unknown DSL defined opcode \"" <>
                                           opName <> "\" (-> " <> d <> ")"

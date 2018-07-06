@@ -98,8 +98,9 @@ genOpDefs sym d sz chk (DSL.Package { DSL.pkgFormulas = dl, DSL.pkgFunctions = f
   (s, e, lib) :: (Int, Int, SF.Library sym)
     <- F.foldlM writeFunDef (0, 0, SF.emptyLibrary) fl
   F.foldlM (writeDef lib) (s, e) dl
-    where writeFunDef (s,e,lib) (funName, def) =
-              let fundef = DSL.printFunctionDefinition def
+    where writeFunDef (s,e,lib) def =
+              let funName = DSL.fdName def
+                  fundef = DSL.printFunctionDefinition def
                   fundefB = encodeUtf8 fundef
                   writeIt = TIO.writeFile (d </> funName <.> "fun") $ fundef <> "\n"
               in if chk
@@ -111,11 +112,14 @@ genOpDefs sym d sz chk (DSL.Package { DSL.pkgFormulas = dl, DSL.pkgFunctions = f
                            Left err -> do putStrLn ("Error for function " <> funName <> ": " <> err)
                                           return (s, e+1, lib)
                  else writeIt >> return (s+1, e, lib)
-          writeDef lib (s,e) (opName, def) =
-              let opcode = F.find ((==) opName . show) opcodes
+          writeDef lib (s,e) def =
+              let opName = DSL.defName def
+                  opcode = F.find ((==) opName . show) opcodes
                   semdef = DSL.printDefinition def
                   semdefB = encodeUtf8 semdef
-                  writeIt = TIO.writeFile (d </> opName <.> "sem") $ semdef <> "\n"
+                  extension | DSL.defStub def = "stub.sem"
+                            | otherwise = "sem"
+                  writeIt = TIO.writeFile (d </> opName <.> extension) $ semdef <> "\n"
               in case opcode of
                    Nothing -> do putStrLn ("Warning: unknown DSL defined opcode \"" <>
                                            opName <> "\" (-> " <> d <> ")")

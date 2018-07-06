@@ -15,6 +15,7 @@ module SemMC.DSL (
   -- * Definitions
   defineOpcode,
   defineOpcodeWithParams,
+  stubDefineOpcode,
   forkDefinition,
   param,
   input,
@@ -101,9 +102,9 @@ module SemMC.DSL (
   evalSem,
   Parameter(..),
   Package(..),
-  Definition,
+  Definition(defName, defStub),
   printDefinition,
-  FunctionDefinition,
+  FunctionDefinition(fdName),
   printFunctionDefinition
   ) where
 
@@ -202,6 +203,7 @@ data Formula d = Formula { fName :: String
                          , fComment :: Seq.Seq String
                          -- ^ Comments stored as individual lines
                          , fArchData :: Maybe d
+                         , fStub :: Bool
                          }
     -- n.b. it could be convenient to automatically derive a Show
     -- instance for Formula, but this would require a Show d
@@ -218,6 +220,7 @@ newFormula name = Formula { fName = name
                           , fInputs = []
                           , fDefs = []
                           , fArchData = Nothing
+                          , fStub = False
                           }
 
 -- | The state component of the monad is a Formula that is built up during a
@@ -231,16 +234,16 @@ newFormula name = Formula { fName = name
 -- impossible.
 --
 newtype SemMD (t :: Phase) d a =
-    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (SemMDState d t) a }
+    SemM { unSem :: RWS.RWS () (Seq.Seq (Formula d)) (SemMDState t d) a }
           deriving (Functor,
                     Applicative,
                     Monad,
                     RWS.MonadWriter (Seq.Seq (Formula d)),
-                    RWS.MonadState (SemMDState d t))
+                    RWS.MonadState (SemMDState t d))
 
-data SemMDState d t where
-  DefState :: { smdFormula :: Formula d } -> SemMDState d 'Def
-  TopState :: SemMDState d 'Top
+data SemMDState t d where
+  DefState :: { smdFormula :: Formula d } -> SemMDState 'Def d
+  TopState :: SemMDState 'Top d
 
 -- | Simpler form of 'SemMD' for for architectures that do not need
 -- any architectore-specific data maintained.
@@ -249,14 +252,20 @@ type SemM (t :: Phase) a = SemMD t () a
 -- | Tags used as phantom types to prevent nested opcode definitions
 data Phase = Top | Def
 
-data Definition = Definition (Seq.Seq String) (SC.SExpr FAtom)
+data Definition = Definition { defName :: String -- public
+                             , defStub :: Bool -- public
+                             , defComment :: Seq.Seq String
+                             , defSExpr :: SC.SExpr FAtom
+                             }
   deriving (Show)
 
-newtype FunctionDefinition = FunctionDefinition (SC.SExpr FAtom)
+data FunctionDefinition = FunctionDefinition { fdName :: String -- public
+                                             , fdSExpr :: SC.SExpr FAtom
+                                             }
   deriving (Show)
 
-data Package = Package { pkgFormulas :: [(String, Definition)]
-                       , pkgFunctions :: [(String, FunctionDefinition)]
+data Package = Package { pkgFormulas :: [Definition]
+                       , pkgFunctions :: [FunctionDefinition]
                        }
 
 -- | Run a semantics-defining action and return the defined formulas and any
@@ -271,10 +280,9 @@ runSem act = snd $ evalSem act
 -- | Run a semantics-defining action and return the defined formulas and library
 -- functions, along with anything returned by the action itself.
 evalSem :: SemMD 'Top d a -> (a, Package)
-evalSem act = (a, Package defs (M.toList functions))
+evalSem act = (a, mkSExprs formulas)
   where
     (a, ~TopState, formulas) = RWS.runRWS (unSem act) () TopState
-    (defs, functions) = mkSExprs formulas
 
 -- | Define an opcode with a given name.
 --
@@ -294,6 +302,22 @@ defineOpcodeWithParams name params def =
   defineOpcode name $ do
     locs <- traverseFC (\(Parameter n t r) -> param n t r) params
     DL.applyFunction def locs
+
+-- | Give a stub definition for the given opcode.
+--
+-- An opcode can have both a stub definition and a full definition. This is
+-- especially useful for having two implementations of floating-point opcodes
+-- where one version uses uninterpreted functions and the other approximates the
+-- results using functions on real numbers.
+--
+-- There is no built-in meaning for "stub", but the intention is that a stub
+-- definition simply writes an uninterpreted function call to the output
+-- register.
+stubDefineOpcode :: String -> SemMD 'Def d () -> SemMD 'Top d ()
+stubDefineOpcode name def = do
+  defineOpcode name $ do
+    modifyFormula $ \f -> f { fStub = True }
+    def
 
 -- | Fork a definition into a second definition under a different name
 --
@@ -790,13 +814,18 @@ bvclr bitnums e = LitBV n mask `bvand` e
 -- ----------------------------------------------------------------------
 -- SExpression conversion
 
-mkSExprs :: Seq.Seq (Formula d) -> ([(String, Definition)], M.Map String FunctionDefinition)
-mkSExprs formulas = (map toSExpr list, gatherFunSExprs list)
+mkSExprs :: Seq.Seq (Formula d) -> Package
+mkSExprs formulas = Package defs funDefs
   where
     list = F.toList formulas
+    defs = map toSExpr list
+    funDefs = gatherFunSExprs list
 
-toSExpr :: (Formula d) -> (String, Definition)
-toSExpr f = (fName f, Definition (fComment f) (extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f)))
+toSExpr :: (Formula d) -> Definition
+toSExpr f = Definition { defName = fName f
+                       , defStub = fStub f
+                       , defComment = fComment f
+                       , defSExpr = extractSExpr (F.toList (fOperands f)) (fInputs f) (fDefs f) }
 
 extractSExpr :: [Some Parameter] -> [Some Location] -> [(Some Location, Some Expr)] -> SC.SExpr FAtom
 extractSExpr operands inputs defs =
@@ -860,17 +889,19 @@ convertInputs = fromFoldable' . map locToExpr
     locToExpr (Some l) = convertLoc l
 
 printDefinition :: Definition -> T.Text
-printDefinition (Definition mc sexpr) = printTokens mc sexpr
+printDefinition (Definition { defComment = mc, defSExpr = sexpr }) = printTokens mc sexpr
 
 -- ----------------------------------------------------------------------
 -- SExpression conversion for library functions
 
-gatherFunSExprs :: [Formula d] -> M.Map String FunctionDefinition
-gatherFunSExprs = M.map (viewSome funToSExpr) . gatherFunctions
+gatherFunSExprs :: [Formula d] -> [FunctionDefinition]
+gatherFunSExprs = map (viewSome funToSExpr) . gatherFunctions
 
 funToSExpr :: LibraryFunctionDef sig -> FunctionDefinition
 funToSExpr lfd@(LibFuncDef {}) =
-  FunctionDefinition $ extractFunSExpr (lfdName lfd) (lfdArgs lfd) (lfdRetType lfd) (lfdBody lfd)
+  FunctionDefinition { fdName = lfdName lfd, fdSExpr = sexpr }
+  where
+    sexpr = extractFunSExpr (lfdName lfd) (lfdArgs lfd) (lfdRetType lfd) (lfdBody lfd)
 
 extractFunSExpr :: String -> SL.List Argument args -> ExprTypeRepr ret
                 -> Expr ret -> SC.SExpr FAtom
@@ -923,13 +954,13 @@ convertBaseType repr =
                       convertBaseType elt ]
 
 printFunctionDefinition :: FunctionDefinition -> T.Text
-printFunctionDefinition (FunctionDefinition sexpr) = printTokens Seq.empty sexpr
+printFunctionDefinition fd = printTokens Seq.empty (fdSExpr fd)
 
 -- ----------------------------------------------------------------------
 -- Gather all library functions from the given formulas
 
-gatherFunctions :: [Formula d] -> M.Map String (Some LibraryFunctionDef)
-gatherFunctions = F.foldMap doFormula
+gatherFunctions :: [Formula d] -> [Some LibraryFunctionDef]
+gatherFunctions = M.elems . F.foldMap doFormula
   -- Note that the Monoid instance for M.Map is a left-biased union, so the first
   -- definition will be used and the second thrown away
   where
