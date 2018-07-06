@@ -28,7 +28,7 @@ import           SemMC.Architecture.PPC32.Opcodes.Internal ( allOpcodes, allOpco
 -- The base set is the set of all opcodes that have on-disk base definitions
 -- available (determined at compile time).
 baseOpcodes :: [Some (PPC.Opcode PPC.Operand)]
-baseOpcodes = map fst $(STH.attachSemantics (\(Some x) -> show x <.> "sem") allOpcodes ["data/32/base"])
+baseOpcodes = map fst $(STH.attachSemantics (\(Some x) -> [ show x <.> "sem", show x <.> "stub.sem" ]) allOpcodes ["data/32/base"])
 
 -- | Defined functions used by the semantics
 allDefinedFunctions :: [(String, BS.ByteString)]
@@ -39,7 +39,7 @@ allDefinedFunctions = $(STH.attachDefinedFunctions [ "data/32/base"
 -- | Every opcode with a defined semantics (either from the base set, the
 -- learned set, or manually defined)
 allSemantics :: [(Some (PPC.Opcode PPC.Operand), BS.ByteString)]
-allSemantics = $(STH.attachSemantics (\(Some x) -> show x <.> "sem") allOpcodes [ "data/32/base"
+allSemantics = $(STH.attachSemantics (\(Some x) -> [ show x <.> "sem", show x <.> "stub.sem" ]) allOpcodes [ "data/32/base"
                                                                          , "data/32/manual"
                                                                          , "data/32/learned"
                                                                          ])

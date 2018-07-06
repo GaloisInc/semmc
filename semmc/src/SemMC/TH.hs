@@ -38,7 +38,7 @@ import           SemMC.Formula.Load ( listFunctionFiles )
 -- is found, pair the original opcode with a bytestring containing the file's
 -- contents.
 attachSemantics :: (LiftF a)
-                => (Some a -> FilePath)
+                => (Some a -> [FilePath])
                 -- ^ A function to convert opcodes to filenames
                 -> [Some a]
                 -- ^ A list of opcodes
@@ -51,7 +51,7 @@ attachSemantics toFP elts dirs = do
   listE (map toOpcodePair ops)
 
 -- | The IO-only version of attachSemantics.
-loadSemantics :: (Some a -> FilePath)
+loadSemantics :: (Some a -> [FilePath])
               -- ^ A function to convert opcodes to filenames
               -> [Some a]
               -- ^ A list of opcodes
@@ -70,13 +70,13 @@ embedByteString bs =
   where
     len = BS.length bs
 
-findCorrespondingFile :: (Some a  -> FilePath)
+findCorrespondingFile :: (Some a -> [FilePath])
                       -> [FilePath]
                       -> Some a
                       -> IO (Maybe (FilePath, Some a, BS.ByteString))
 findCorrespondingFile toFP dirs elt = go files
   where
-    files = [ dir </> toFP elt | dir <- dirs ]
+    files = [ dir </> file | dir <- dirs, file <- toFP elt ]
     go [] = return Nothing
     go (f:rest) = do
       mbs <- E.try (BS.readFile f)

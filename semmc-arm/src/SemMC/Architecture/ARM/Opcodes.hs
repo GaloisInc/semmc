@@ -31,7 +31,7 @@ import           System.FilePath ( (<.>) )
 -- | Every A32 opcode with a defined semantics (either from the base set, the
 -- learned set, or manually defined)
 a32Semantics :: [(Some (A32.Opcode A32.Operand), BS.ByteString)]
-a32Semantics = $(STH.attachSemantics (\(Some x) -> show x <.> "sem") a32Opcodes [ "data/sem" ])
+a32Semantics = $(STH.attachSemantics (\(Some x) -> [ show x <.> "sem", show x <.> "stub.sem" ]) a32Opcodes [ "data/sem" ])
 
 allA32Semantics :: [(Some (ARMOpcode ARMOperand), BS.ByteString)]
 allA32Semantics = fmap aconv a32Semantics
@@ -56,7 +56,7 @@ a32DefinedFunctions = $(STH.attachDefinedFunctions [ "data/sem" ])
 -- | Every T32 opcode with a defined semantics (either from the base set, the
 -- learned set, or manually defined)
 t32Semantics :: [(Some (T32.Opcode T32.Operand), BS.ByteString)]
-t32Semantics = $(STH.attachSemantics (\(Some x) -> show x <.> "sem") t32Opcodes [ "data/sem" ])
+t32Semantics = $(STH.attachSemantics (\(Some x) -> [ show x <.> "sem", show x <.> "stub.sem" ]) t32Opcodes [ "data/sem" ])
 
 
 allT32Semantics :: [(Some (ARMOpcode ARMOperand), BS.ByteString)]
