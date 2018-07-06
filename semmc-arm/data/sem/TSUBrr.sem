@@ -17,12 +17,12 @@
          (bvne
           #x00
           (concat
-           ((_ extract 15 12)
+           ((_ extract 19 16)
             'CPSR)
            (concat
-            ((_ extract 11 10)
+            ((_ extract 21 20)
              'CPSR)
-            ((_ extract 26 25)
+            ((_ extract 6 5)
              'CPSR)))))))
       ((_ call "uf.arm.is_r15")
        rN))
@@ -33,15 +33,15 @@
      ((_ call "uf.arm.is_r15")
       rD)
      rD
-     ((_ extract 31 0)
+     ((_ extract 35 4)
       (concat
        (addResult)
        (addCarry)))))
    rD))
   (addCarry
    (concat
-    ((_ extract 31 31)
-     ((_ extract 31 0)
+    ((_ extract 0 0)
+     ((_ extract 32 1)
       (bvadd
        (bvadd
         ((_ zero_extend 1)
@@ -49,11 +49,11 @@
         (bvnot
          ((_ call "df.shiftC")
           rM
-          ((_ extract 34 32)
+          ((_ extract 2 0)
            (immShift))
-          ((_ extract 31 0)
+          ((_ extract 34 3)
            (immShift))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR))))
        ((_ zero_extend 1)
         #x00000001))))
@@ -62,7 +62,7 @@
    (concat
     (ite
      (bveq
-      ((_ extract 31 0)
+      ((_ extract 32 1)
        (bvadd
         (bvadd
          ((_ zero_extend 1)
@@ -70,11 +70,11 @@
          (bvnot
           ((_ call "df.shiftC")
            rM
-           ((_ extract 34 32)
+           ((_ extract 2 0)
             (immShift))
-           ((_ extract 31 0)
+           ((_ extract 34 3)
             (immShift))
-           ((_ extract 29 29)
+           ((_ extract 2 2)
             'CPSR))))
         ((_ zero_extend 1)
          #x00000001)))
@@ -82,7 +82,7 @@
      #b1
      #b0)
     (concat
-     ((_ extract 32 32)
+     ((_ extract 0 0)
       (bvadd
        (bvadd
         ((_ zero_extend 1)
@@ -90,17 +90,17 @@
         (bvnot
          ((_ call "df.shiftC")
           rM
-          ((_ extract 34 32)
+          ((_ extract 2 0)
            (immShift))
-          ((_ extract 31 0)
+          ((_ extract 34 3)
            (immShift))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR))))
        ((_ zero_extend 1)
         #x00000001)))
      (bvand
-      ((_ extract 31 31)
-       ((_ extract 31 0)
+      ((_ extract 0 0)
+       ((_ extract 32 1)
         (bvadd
          (bvadd
           ((_ zero_extend 1)
@@ -108,15 +108,15 @@
           (bvnot
            ((_ call "df.shiftC")
             rM
-            ((_ extract 34 32)
+            ((_ extract 2 0)
              (immShift))
-            ((_ extract 31 0)
+            ((_ extract 34 3)
              (immShift))
-            ((_ extract 29 29)
+            ((_ extract 2 2)
              'CPSR))))
          ((_ zero_extend 1)
           #x00000001))))
-      ((_ extract 32 32)
+      ((_ extract 0 0)
        (bvadd
         (bvadd
          ((_ zero_extend 1)
@@ -124,11 +124,11 @@
          (bvnot
           ((_ call "df.shiftC")
            rM
-           ((_ extract 34 32)
+           ((_ extract 2 0)
             (immShift))
-           ((_ extract 31 0)
+           ((_ extract 34 3)
             (immShift))
-           ((_ extract 29 29)
+           ((_ extract 2 2)
             'CPSR))))
         ((_ zero_extend 1)
          #x00000001)))))))
@@ -138,7 +138,7 @@
     ((_ zero_extend 27)
      #b00000)))
   (addResult
-   ((_ extract 31 0)
+   ((_ extract 32 1)
     (bvadd
      (bvadd
       ((_ zero_extend 1)
@@ -146,11 +146,11 @@
       (bvnot
        ((_ call "df.shiftC")
         rM
-        ((_ extract 34 32)
+        ((_ extract 2 0)
          (immShift))
-        ((_ extract 31 0)
+        ((_ extract 34 3)
          (immShift))
-        ((_ extract 29 29)
+        ((_ extract 2 2)
          'CPSR))))
      ((_ zero_extend 1)
       #x00000001))))
@@ -160,7 +160,7 @@
      rD)
     (bvand
      #xfffffffd
-     ((_ extract 31 0)
+     ((_ extract 35 4)
       (concat
        (addResult)
        (addCarry))))
@@ -186,12 +186,12 @@
          (bvne
           #x00
           (concat
-           ((_ extract 15 12)
+           ((_ extract 19 16)
             'CPSR)
            (concat
-            ((_ extract 11 10)
+            ((_ extract 21 20)
              'CPSR)
-            ((_ extract 26 25)
+            ((_ extract 6 5)
              'CPSR)))))
         (notp
          (orp
@@ -204,23 +204,23 @@
               (bvne
                #x00
                (concat
-                ((_ extract 15 12)
+                ((_ extract 19 16)
                  'CPSR)
                 (concat
-                 ((_ extract 11 10)
+                 ((_ extract 21 20)
                   'CPSR)
-                 ((_ extract 26 25)
+                 ((_ extract 6 5)
                   'CPSR)))))))
            ((_ call "uf.arm.is_r15")
             rN))
           ((_ call "uf.arm.is_r15")
            rM))))
        (concat
-        ((_ extract 35 32)
+        ((_ extract 3 0)
          (concat
           (addResult)
           (addCarry)))
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          'CPSR))
        'CPSR)
       'CPSR))

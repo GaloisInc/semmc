@@ -3,12 +3,12 @@
  ((res_nzcv
   ((_ call "df.addWithCarry")
    rDN
-   ((_ extract 31 0)
+   ((_ extract 32 1)
     ((_ call "df.shiftC")
      rM
      #b000
      #x00000000
-     ((_ extract 29 29)
+     ((_ extract 2 2)
       'CPSR)))
    #x00000000))
   (branchWritePC
@@ -17,7 +17,7 @@
      rDN)
     (bvand
      #xfffffffd
-     ((_ extract 31 0)
+     ((_ extract 35 4)
       (res_nzcv)))
     (bvadd 'PC #x00000002))))
  ((operands
@@ -39,6 +39,6 @@
        ((_ call "uf.arm.is_r15")
         rDN)
        rDN
-       ((_ extract 31 0)
+       ((_ extract 35 4)
         (res_nzcv)))
       rDN))))))

@@ -18,10 +18,10 @@
   (imm32
    ((_ sign_extend 6)
     (concat
-     ((_ extract 23 0)
+     ((_ extract 31 8)
       target)
      (concat
-      ((_ extract 24 24)
+      ((_ extract 7 7)
        target)
       #b0)))))
  ((operands

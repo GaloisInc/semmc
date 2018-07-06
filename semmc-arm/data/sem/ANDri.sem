@@ -11,10 +11,10 @@
     (ite
      (bveq
       #b0
-      ((_ extract 0 0)
+      ((_ extract 31 31)
        (bvand
         rN
-        ((_ extract 31 0)
+        ((_ extract 32 1)
          ((_ call "df.shiftC")
           ((_ zero_extend 24)
            ((_ call "uf.a32.modimm_imm")
@@ -25,13 +25,13 @@
            ((_ zero_extend 28)
             ((_ call "uf.a32.modimm_rot")
              mimm)))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR))))))
      (bvand
       #xfffffffe
       (bvand
        rN
-       ((_ extract 31 0)
+       ((_ extract 32 1)
         ((_ call "df.shiftC")
          ((_ zero_extend 24)
           ((_ call "uf.a32.modimm_imm")
@@ -42,15 +42,15 @@
           ((_ zero_extend 28)
            ((_ call "uf.a32.modimm_rot")
             mimm)))
-         ((_ extract 29 29)
+         ((_ extract 2 2)
           'CPSR)))))
      (ite
       (bveq
        #b0
-       ((_ extract 1 1)
+       ((_ extract 30 30)
         (bvand
          rN
-         ((_ extract 31 0)
+         ((_ extract 32 1)
           ((_ call "df.shiftC")
            ((_ zero_extend 24)
             ((_ call "uf.a32.modimm_imm")
@@ -61,13 +61,13 @@
             ((_ zero_extend 28)
              ((_ call "uf.a32.modimm_rot")
               mimm)))
-           ((_ extract 29 29)
+           ((_ extract 2 2)
             'CPSR))))))
       (bvand
        #xfffffffd
        (bvand
         rN
-        ((_ extract 31 0)
+        ((_ extract 32 1)
          ((_ call "df.shiftC")
           ((_ zero_extend 24)
            ((_ call "uf.a32.modimm_imm")
@@ -78,11 +78,11 @@
            ((_ zero_extend 28)
             ((_ call "uf.a32.modimm_rot")
              mimm)))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR)))))
       (bvand
        rN
-       ((_ extract 31 0)
+       ((_ extract 32 1)
         ((_ call "df.shiftC")
          ((_ zero_extend 24)
           ((_ call "uf.a32.modimm_imm")
@@ -93,7 +93,7 @@
           ((_ zero_extend 28)
            ((_ call "uf.a32.modimm_rot")
             mimm)))
-         ((_ extract 29 29)
+         ((_ extract 2 2)
           'CPSR))))))
     (bvadd 'PC #x00000004))))
  ((operands
@@ -120,10 +120,10 @@
           rD)))
        (concat
         (concat
-         ((_ extract 31 31)
+         ((_ extract 0 0)
           (bvand
            rN
-           ((_ extract 31 0)
+           ((_ extract 32 1)
             ((_ call "df.shiftC")
              ((_ zero_extend 24)
               ((_ call "uf.a32.modimm_imm")
@@ -134,13 +134,13 @@
               ((_ zero_extend 28)
                ((_ call "uf.a32.modimm_rot")
                 mimm)))
-             ((_ extract 29 29)
+             ((_ extract 2 2)
               'CPSR)))))
          (concat
           ((_ call "df.isZeroBit")
            (bvand
             rN
-            ((_ extract 31 0)
+            ((_ extract 32 1)
              ((_ call "df.shiftC")
               ((_ zero_extend 24)
                ((_ call "uf.a32.modimm_imm")
@@ -151,10 +151,10 @@
                ((_ zero_extend 28)
                 ((_ call "uf.a32.modimm_rot")
                  mimm)))
-              ((_ extract 29 29)
+              ((_ extract 2 2)
                'CPSR)))))
           (concat
-           ((_ extract 32 32)
+           ((_ extract 0 0)
             ((_ call "df.shiftC")
              ((_ zero_extend 24)
               ((_ call "uf.a32.modimm_imm")
@@ -165,21 +165,21 @@
               ((_ zero_extend 28)
                ((_ call "uf.a32.modimm_rot")
                 mimm)))
-             ((_ extract 29 29)
+             ((_ extract 2 2)
               'CPSR)))
-           ((_ extract 28 28)
+           ((_ extract 3 3)
             'CPSR))))
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          (ite
           ((_ call "uf.arm.is_r15")
            rD)
           (ite
            (bveq
             #b0
-            ((_ extract 0 0)
+            ((_ extract 31 31)
              (bvand
               rN
-              ((_ extract 31 0)
+              ((_ extract 32 1)
                ((_ call "df.shiftC")
                 ((_ zero_extend 24)
                  ((_ call "uf.a32.modimm_imm")
@@ -190,7 +190,7 @@
                  ((_ zero_extend 28)
                   ((_ call "uf.a32.modimm_rot")
                    mimm)))
-                ((_ extract 29 29)
+                ((_ extract 2 2)
                  'CPSR))))))
            (SetT32Mode)
            'CPSR)
@@ -201,10 +201,10 @@
         (ite
          (bveq
           #b0
-          ((_ extract 0 0)
+          ((_ extract 31 31)
            (bvand
             rN
-            ((_ extract 31 0)
+            ((_ extract 32 1)
              ((_ call "df.shiftC")
               ((_ zero_extend 24)
                ((_ call "uf.a32.modimm_imm")
@@ -215,7 +215,7 @@
                ((_ zero_extend 28)
                 ((_ call "uf.a32.modimm_rot")
                  mimm)))
-              ((_ extract 29 29)
+              ((_ extract 2 2)
                'CPSR))))))
          (SetT32Mode)
          'CPSR)
@@ -232,7 +232,7 @@
        rD
        (bvand
         rN
-        ((_ extract 31 0)
+        ((_ extract 32 1)
          ((_ call "df.shiftC")
           ((_ zero_extend 24)
            ((_ call "uf.a32.modimm_imm")
@@ -243,6 +243,6 @@
            ((_ zero_extend 28)
             ((_ call "uf.a32.modimm_rot")
              mimm)))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR)))))
       rD))))))

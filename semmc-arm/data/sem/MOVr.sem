@@ -11,13 +11,13 @@
     (ite
      (bveq
       #b0
-      ((_ extract 0 0)
+      ((_ extract 31 31)
        rM))
      (bvand #xfffffffe rM)
      (ite
       (bveq
        #b0
-       ((_ extract 1 1)
+       ((_ extract 30 30)
         rM))
       (bvand #xfffffffd rM)
       rM))
@@ -45,24 +45,24 @@
           rD)))
        (concat
         (concat
-         ((_ extract 31 31)
+         ((_ extract 0 0)
           rM)
          (concat
           ((_ call "df.isZeroBit")
            rM)
           (concat
-           ((_ extract 29 29)
+           ((_ extract 2 2)
             'CPSR)
-           ((_ extract 28 28)
+           ((_ extract 3 3)
             'CPSR))))
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          (ite
           ((_ call "uf.arm.is_r15")
            rD)
           (ite
            (bveq
             #b0
-            ((_ extract 0 0)
+            ((_ extract 31 31)
              rM))
            (SetT32Mode)
            'CPSR)
@@ -73,7 +73,7 @@
         (ite
          (bveq
           #b0
-          ((_ extract 0 0)
+          ((_ extract 31 31)
            rM))
          (SetT32Mode)
          'CPSR)

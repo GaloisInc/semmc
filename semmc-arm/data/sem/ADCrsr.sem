@@ -3,7 +3,7 @@
  ((res_nzcv
   ((_ call "df.addWithCarry")
    rN
-   ((_ extract 31 0)
+   ((_ extract 32 1)
     ((_ call "df.shiftC")
      ((_ call "uf.a32.soregreg_reg2")
       sorr)
@@ -12,16 +12,16 @@
       ((_ call "uf.a32.soregreg_type")
        sorr))
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 31 24)
        ((_ call "uf.a32.soregreg_reg1")
         sorr)))
-     ((_ extract 29 29)
+     ((_ extract 2 2)
       'CPSR)))
    ((_ zero_extend 31)
-    ((_ extract 29 29)
+    ((_ extract 2 2)
      'CPSR))))
   (nzcv
-   ((_ extract 35 32)
+   ((_ extract 3 0)
     (res_nzcv))))
  ((operands
   ((rD . 'GPRnopc)
@@ -58,7 +58,7 @@
               sorr)))))))
        (concat
         (nzcv)
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          'CPSR))
        'CPSR)
       'CPSR))
@@ -82,6 +82,6 @@
            ((_ call "uf.a32.soregreg_reg1")
             sorr)))))
        rD
-       ((_ extract 31 0)
+       ((_ extract 35 4)
         (res_nzcv)))
       rD))))))

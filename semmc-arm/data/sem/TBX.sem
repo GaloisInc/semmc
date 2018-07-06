@@ -9,13 +9,13 @@
    (ite
     (bveq
      #b0
-     ((_ extract 0 0)
+     ((_ extract 31 31)
       rM))
     (bvand #xfffffffe rM)
     (ite
      (bveq
       #b0
-      ((_ extract 1 1)
+      ((_ extract 30 30)
        rM))
      (bvand #xfffffffd rM)
      rM))))
@@ -36,7 +36,7 @@
       (ite
        (bveq
         #b0
-        ((_ extract 0 0)
+        ((_ extract 31 31)
          rM))
        'CPSR
        (SetA32Mode))
