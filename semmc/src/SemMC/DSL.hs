@@ -253,6 +253,8 @@ type SemM (t :: Phase) a = SemMD t () a
 -- | Tags used as phantom types to prevent nested opcode definitions
 data Phase = Top | Def
 
+-- | The complete definition of an instruction, ready to be output as a sexp.
+-- Use 'printDefinition' to get the textual form.
 data Definition = Definition { defName :: String -- public
                              , defStub :: Bool -- public
                              , defComment :: Seq.Seq String
@@ -260,26 +262,26 @@ data Definition = Definition { defName :: String -- public
                              }
   deriving (Show)
 
+-- | The complete definition of a library function, ready to be output as a
+-- sexp. Use 'printFunctionDefinition' to get the textual form.
 data FunctionDefinition = FunctionDefinition { fdName :: String -- public
                                              , fdSExpr :: SC.SExpr FAtom
                                              }
   deriving (Show)
 
+-- | A set of formulas, plus definitions for any library functions referred to
+-- by the formulas.
 data Package = Package { pkgFormulas :: [Definition]
                        , pkgFunctions :: [FunctionDefinition]
                        }
 
--- | Run a semantics-defining action and return the defined formulas and any
--- library functions required.
---
--- The result is an association list from opcode name to the s-expression
--- representing it, plus an association list from function name to its
--- s-expression.
+-- | Run a semantics-defining action and return a 'Package' of the defined
+-- formulas and any library functions required.
 runSem :: SemMD 'Top d () -> Package
 runSem act = snd $ evalSem act
 
--- | Run a semantics-defining action and return the defined formulas and library
--- functions, along with anything returned by the action itself.
+-- | Run a semantics-defining action and return the resulting package along
+-- with anything returned by the action itself.
 evalSem :: SemMD 'Top d a -> (a, Package)
 evalSem act = (a, mkSExprs formulas)
   where
@@ -291,9 +293,25 @@ evalSem act = (a, mkSExprs formulas)
 defineOpcode :: String -> SemMD 'Def d () -> SemMD 'Top d ()
 defineOpcode name (SemM def) = do
   let state = DefState { smdFormula = newFormula name }
+      -- Looks odd to call 'RWS.runRWS' from inside the monad, but we have to
+      -- because the state type is changing (from @SemMDState 'Top d@ to
+      -- @SemMDState 'Def d@).
       !(~(), state', formulas) = RWS.runRWS def () state
   RWS.tell (formulas Seq.|> smdFormula state')
 
+-- | Define an opcode with a given name and parameters.
+--
+-- The third argument is a function taking a 'Location' argument for each
+-- 'Parameter'.
+--
+-- > defineOpcodeWithParams "frob"
+-- >   ( Parameter "r1" "gpr" (EBV 64) :<
+-- >     Parameter "r2" "gpr" (EBV 64) :<
+-- >     Parameter "r3" "bbq" EBool :< Nil ) $
+-- >   \(r1 :: Location 'TBV) (r2 :: Location 'TBV) (r3 :: Location 'TBool) ->
+-- >     do input r1
+-- >        input r2
+-- >        ...
 defineOpcodeWithParams :: DL.Arguments tps
                        => String
                        -> SL.List Parameter tps
@@ -964,7 +982,7 @@ printFunctionDefinition fd = printTokens Seq.empty (fdSExpr fd)
 gatherFunctions :: [Formula d] -> [Some LibraryFunctionDef]
 gatherFunctions = M.elems . F.foldMap doFormula
   -- Note that the Monoid instance for M.Map is a left-biased union, so the first
-  -- definition will be used and the second thrown away
+  -- definition for each function will be used and subsequent ones thrown away
   where
     doFormula f = F.foldMap (doSomeExpr . snd) (fDefs f)
 
