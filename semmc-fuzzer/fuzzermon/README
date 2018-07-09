@@ -46,6 +46,11 @@ To set up a database schema,
  0) cd fuzzermon
  1) python manage.py migrate
 
+To run a web server that will automatically reload the application
+as you change the source files:
+
+  python manage.py runserver
+
 Production deployment
 =====================
 
