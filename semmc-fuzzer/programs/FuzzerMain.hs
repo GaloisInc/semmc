@@ -471,7 +471,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
           <- SB.newSimpleBackend nonceGen
       SB.stopCaching sym
 
-      baseSet <- F.loadFormulas sym semantics
+      baseSet <- F.loadFormulas sym F.emptyLibrary semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
 
