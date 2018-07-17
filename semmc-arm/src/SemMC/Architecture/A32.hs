@@ -153,8 +153,65 @@ instance AC.ConcreteArchitecture A32 where
 operandTypeA32 :: ARMDis.Operand s -> BaseTypeRepr (A.OperandType A32 s)
 operandTypeA32 o =
   case o of
-      _ -> error "not implemented"
-      -- PPC.Fprc {}              -> knownRepr
+      ARMDis.Addr_offset_none {}   -> knownRepr
+      ARMDis.Addrmode3 {}          -> knownRepr
+      ARMDis.Addrmode3_pre {}      -> knownRepr
+      ARMDis.Addrmode5 {}          -> knownRepr
+      ARMDis.Addrmode5_pre {}      -> knownRepr
+      ARMDis.Addrmode_imm12 {}     -> knownRepr
+      ARMDis.Addrmode_imm12_pre {} -> knownRepr
+      ARMDis.Adrlabel {}           -> knownRepr
+      ARMDis.Am2offset_imm {}      -> knownRepr
+      ARMDis.Am2offset_reg {}      -> knownRepr
+      ARMDis.Am3offset {}          -> knownRepr
+      ARMDis.Arm_bl_target {}      -> knownRepr
+      ARMDis.Arm_blx_target {}     -> knownRepr
+      ARMDis.Arm_br_target {}      -> knownRepr
+      ARMDis.Bf_inv_mask_imm {}    -> knownRepr
+      ARMDis.C_imm {}              -> knownRepr
+      ARMDis.Cc_out {}             -> knownRepr
+      ARMDis.Coproc_option_imm {}  -> knownRepr
+      ARMDis.Dpr {}                -> knownRepr
+      ARMDis.GPR {}                -> knownRepr
+      ARMDis.GPRPairOp {}          -> knownRepr
+      ARMDis.GPRnopc {}            -> knownRepr
+      ARMDis.Iflags_op {}          -> knownRepr
+      ARMDis.Imm0_1 {}             -> knownRepr
+      ARMDis.Imm0_15 {}            -> knownRepr
+      ARMDis.Imm0_31 {}            -> knownRepr
+      ARMDis.Imm0_65535 {}         -> knownRepr
+      ARMDis.Imm0_7 {}             -> knownRepr
+      ARMDis.Imm0_239 {}           -> knownRepr
+      ARMDis.Imm0_65535_expr {}    -> knownRepr
+      ARMDis.Imm1_16 {}            -> knownRepr
+      ARMDis.Imm1_32 {}            -> knownRepr
+      ARMDis.Imm24b {}             -> knownRepr
+      ARMDis.Imod_op {}            -> knownRepr
+      ARMDis.Ldst_so_reg {}        -> knownRepr
+      ARMDis.Memb_opt {}           -> knownRepr
+      ARMDis.Instsyncb_opt {}      -> knownRepr
+      ARMDis.Mod_imm {}            -> knownRepr
+      ARMDis.Msr_mask {}           -> knownRepr
+      ARMDis.P_imm {}              -> knownRepr
+      ARMDis.Pkh_asr_amt {}        -> knownRepr
+      ARMDis.Pkh_lsl_amt {}        -> knownRepr
+      ARMDis.Postidx_imm8 {}       -> knownRepr
+      ARMDis.Postidx_imm8s4 {}     -> knownRepr
+      ARMDis.Postidx_reg {}        -> knownRepr
+      ARMDis.Pred {}               -> knownRepr
+      ARMDis.Qpr {}                -> knownRepr
+      ARMDis.Qqpr {}               -> knownRepr
+      ARMDis.GPRwithAPSR {}        -> knownRepr
+      ARMDis.Reglist {}            -> knownRepr
+      ARMDis.Rot_imm {}            -> knownRepr
+      ARMDis.Setend_op {}          -> knownRepr
+      ARMDis.Shift_imm {}          -> knownRepr
+      ARMDis.Shift_so_reg_imm {}   -> knownRepr
+      ARMDis.Shift_so_reg_reg {}   -> knownRepr
+      ARMDis.So_reg_imm {}         -> knownRepr
+      ARMDis.So_reg_reg {}         -> knownRepr
+      ARMDis.TcGPR {}              -> knownRepr
+      ARMDis.Unpredictable {}      -> knownRepr
 
 registerizeInstructionA32 :: AC.RegisterizedInstruction A32
                           -> V.ConcreteState A32
@@ -199,25 +256,63 @@ instance A.IsOpcode  ARMDis.Opcode
 instance A.IsOperand ARMDis.Operand
 
 type instance A.OperandType A32 "Addr_offset_none" = BaseBVType 32
+type instance A.OperandType A32 "Addrmode3" = BaseBVType 14
+type instance A.OperandType A32 "Addrmode3_pre" = BaseBVType 14
+type instance A.OperandType A32 "Addrmode5" = BaseBVType 13
+type instance A.OperandType A32 "Addrmode5_pre" = BaseBVType 13
 type instance A.OperandType A32 "Addrmode_imm12" = BaseBVType 32
 type instance A.OperandType A32 "Addrmode_imm12_pre" = BaseBVType 32
+type instance A.OperandType A32 "Adrlabel" = BaseBVType 14
 type instance A.OperandType A32 "Am2offset_imm" = BaseBVType 32
+type instance A.OperandType A32 "Am2offset_reg" = BaseBVType 12
+type instance A.OperandType A32 "Am3offset" = BaseBVType 10
 type instance A.OperandType A32 "Arm_bl_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType A32 "Arm_blx_target" = BaseBVType 32 -- 24 bits in instr
 type instance A.OperandType A32 "Arm_br_target" = BaseBVType 32 -- 24 bits in instr
+type instance A.OperandType A32 "Bf_inv_mask_imm" = BaseBVType 16
+type instance A.OperandType A32 "C_imm" = BaseBVType 8
 type instance A.OperandType A32 "Cc_out" = BaseBVType 1
+type instance A.OperandType A32 "Coproc_option_imm" = BaseBVType 8
+type instance A.OperandType A32 "Dpr" = BaseBVType 64
 type instance A.OperandType A32 "GPR" = BaseBVType 32
+type instance A.OperandType A32 "GPRPairOp" = BaseBVType 64
 type instance A.OperandType A32 "GPRnopc" = BaseBVType 32
-type instance A.OperandType A32 "Imm0_7" = BaseBVType 3
+type instance A.OperandType A32 "GPRwithAPSR" = BaseBVType 32
+type instance A.OperandType A32 "Iflags_op" = BaseBVType 8
+type instance A.OperandType A32 "Imm0_1" = BaseBVType 1
 type instance A.OperandType A32 "Imm0_15" = BaseBVType 4
+type instance A.OperandType A32 "Imm0_239" = BaseBVType 8
 type instance A.OperandType A32 "Imm0_31" = BaseBVType 5
+type instance A.OperandType A32 "Imm0_65535" = BaseBVType 16
+type instance A.OperandType A32 "Imm0_65535_expr" = BaseBVType 16
+type instance A.OperandType A32 "Imm0_7" = BaseBVType 3
+type instance A.OperandType A32 "Imm1_16" = BaseBVType 8
+type instance A.OperandType A32 "Imm1_32" = BaseBVType 5
+type instance A.OperandType A32 "Imm24b" = BaseBVType 32
+type instance A.OperandType A32 "Imod_op" = BaseBVType 8
+type instance A.OperandType A32 "Instsyncb_opt" = BaseBVType 4
 type instance A.OperandType A32 "Ldst_so_reg" = BaseBVType 32
+type instance A.OperandType A32 "Memb_opt" = BaseBVType 4
 type instance A.OperandType A32 "Mod_imm" = BaseBVType 32
+type instance A.OperandType A32 "Msr_mask" = BaseBVType 5
+type instance A.OperandType A32 "P_imm" = BaseBVType 8
+type instance A.OperandType A32 "Pkh_asr_amt" = BaseBVType 8
+type instance A.OperandType A32 "Pkh_lsl_amt" = BaseBVType 8
+type instance A.OperandType A32 "Postidx_imm8" = BaseBVType 10
+type instance A.OperandType A32 "Postidx_imm8s4" = BaseBVType 9
+type instance A.OperandType A32 "Postidx_reg" = BaseBVType 5
 type instance A.OperandType A32 "Pred" = BaseBVType 4
+type instance A.OperandType A32 "Qpr" = BaseBVType 128
+type instance A.OperandType A32 "Qqpr" = BaseBVType 256
 type instance A.OperandType A32 "Reglist" = BaseBVType 16
+type instance A.OperandType A32 "Rot_imm" = BaseBVType 8
+type instance A.OperandType A32 "Setend_op" = BaseBVType 1
+type instance A.OperandType A32 "Shift_imm" = BaseBVType 6
 type instance A.OperandType A32 "Shift_so_reg_imm" = BaseBVType 16
+type instance A.OperandType A32 "Shift_so_reg_reg" = BaseBVType 16
 type instance A.OperandType A32 "So_reg_imm" = BaseBVType 32
 type instance A.OperandType A32 "So_reg_reg" = BaseBVType 32
+type instance A.OperandType A32 "TcGPR" = BaseBVType 32
 type instance A.OperandType A32 "Unpredictable" = BaseBVType 32
 
 instance A.IsOperandTypeRepr A32 where
