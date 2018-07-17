@@ -54,6 +54,7 @@ import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction(Instruction))
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
+import qualified Dismantle.ARM as ARMDis
 
 import           SemMC.Fuzzer.Types
 import           SemMC.Fuzzer.Util
@@ -68,6 +69,9 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.PPC32 as PPCS
 import qualified SemMC.Architecture.PPC32.Opcodes as PPCS
+import qualified SemMC.Architecture.A32 as A32
+import qualified SemMC.Architecture.AArch32 as ARM
+import qualified SemMC.Architecture.ARM.Opcodes as ARM
 import           SemMC.Synthesis.Template ( TemplatableOperand
                                           , TemplatedOperand
                                           )
@@ -218,9 +222,23 @@ ppc32OpcodeFilter o =
         blacklist = [ "BCL"
                     ]
 
+a32Arch :: ArchImpl
+a32Arch =
+    ArchImpl "a32"
+             (Proxy @A32.A32)
+             ARM.a32Opcodes
+             ARM.a32Semantics
+             undefined -- A32.testSerializer
+             ARMDis.ppInstruction
+             a32OpcodeFilter
+
+a32OpcodeFilter :: Some (ARMDis.Opcode ARMDis.Operand) -> Bool
+a32OpcodeFilter = const True
+
 knownArchs :: [ArchImpl]
 knownArchs =
     [ ppc32Arch
+    , a32Arch
     ]
 
 allArchNames :: [String]
