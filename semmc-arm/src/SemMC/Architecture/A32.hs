@@ -28,7 +28,6 @@ import qualified Data.Binary.Get as G
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
-import           Data.Int ( Int32 )
 import           Data.List.NonEmpty ( NonEmpty(..), fromList )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -48,7 +47,6 @@ import qualified Dismantle.Instruction as D
 import           GHC.TypeLits
 import qualified GHC.Err.Located as L
 import qualified Lang.Crucible.Backend as SB
-import           Language.Haskell.TH hiding ( recover )
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR )
 import qualified SemMC.Architecture.ARM.Components as ARMComp
@@ -777,19 +775,3 @@ gprList = fmap LocGPR [0..31]
 
 -- vrs :: [Location A32 (BaseBVType 128)]
 -- vrs = fmap (LocVSR . PPC.VSReg) [32..63]
-
--- specialRegs32 :: [Location A32 (BaseBVType 32)]
--- specialRegs32 = [ LocFPSCR
---                 , LocCR
---                 , LocVSCR
---                   -- Lets not randomly generate an MSR.  That would
---                   -- be problematic (e.g., it would switch endianness)
---                   --
---                   -- , LocMSR
---                 ]
-
--- specialRegs64 :: [Location A32 (BaseBVType 32)]
--- specialRegs64 = [ LocCTR
---                 , LocLNK
---                 , LocXER
---                 ]
