@@ -141,13 +141,13 @@ getMachineState = do
 instance AC.ConcreteArchitecture A32 where
   registerizeInstruction = registerizeInstructionA32
   operandType _proxy = operandTypeA32
-  zeroState _proxy = undefined -- PPCS.zeroState
-  randomState _proxy = undefined -- PPCS.randomState
-  serialize _proxy = undefined -- PPCS.serialize
-  deserialize _proxy = undefined -- PPCS.deserialize
+  zeroState _proxy = zeroState
+  randomState _proxy = mkRandomState
+  serialize _proxy = serializeState
+  deserialize _proxy = deserializeState
   operandToSemanticView _proxy = undefined -- operandToSemanticViewPPC
-  heuristicallyInterestingStates _proxy = undefined -- PPCS.interestingStates
-  readView = undefined -- P.parseMaybe (V.parseView parseLocation)
+  heuristicallyInterestingStates _proxy = interestingStates
+  readView = P.parseMaybe (V.parseView parseLocation)
   showView = V.printView show
 
 operandTypeA32 :: ARMDis.Operand s -> BaseTypeRepr (A.OperandType A32 s)
@@ -553,8 +553,8 @@ symbolicTemplatedOperand Proxy signed name constr =
 type ConcreteState = MapF.MapF (Location A32) V.Value
 
 -- | FIXME: Does not include memory
-randomState :: DA.Gen -> IO ConcreteState
-randomState gen = St.execStateT randomize MapF.empty
+mkRandomState :: DA.Gen -> IO ConcreteState
+mkRandomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprList
@@ -589,26 +589,7 @@ randomState gen = St.execStateT randomize MapF.empty
 --
 -- FIXME: Doesn't include FP registers yet.  We'll want NaN and INF values there
 interestingStates :: [ConcreteState]
-interestingStates = gprStates -- ++ fprStates
-  where
-    i32Min :: Int32
-    i32Min = minBound
-    i32Max :: Int32
-    i32Max = maxBound
-    bvVals = [ V.ValueBV (W.w 0)
-             , V.ValueBV (W.w 1)
-             , V.ValueBV (W.w (fromIntegral i32Min))
-             , V.ValueBV (W.w (fromIntegral i32Max))
-             ]
-    gprStates = [ mkState r1 v1 r2 v2
-                | r1 <- gprList
-                , r2 <- gprList
-                , Nothing == testEquality r1 r2
-                , v1 <- bvVals
-                , v2 <- bvVals
-                ]
-    mkState r1 v1 r2 v2 =
-      MapF.insert r1 v1 $ MapF.insert r2 v2 zeroState
+interestingStates = []
 
 -- | FIXME: Does not include memory
 zeroState :: ConcreteState
@@ -628,8 +609,8 @@ zeroState = St.execState addZeros MapF.empty
 -- Note that we perform a byte swap to put data in big endian so that the
 -- machine on the receiving end doesn't need to do anything special besides map
 -- the data.
-serialize :: ConcreteState -> B.ByteString
-serialize s = mempty
+serializeState :: ConcreteState -> B.ByteString
+serializeState s = mempty
   -- LB.toStrict (B.toLazyByteString b)
   -- where
   --   b = mconcat [ mconcat (map (PPCS.serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprList))
@@ -653,8 +634,8 @@ extractLocs s locs = map extractLoc locs
       let Just v = MapF.lookup l s
       in v
 
-deserialize :: B.ByteString -> Maybe ConcreteState
-deserialize bs =
+deserializeState :: B.ByteString -> Maybe ConcreteState
+deserializeState bs =
   case G.runGetOrFail getArchState (LB.fromStrict bs) of
     Left _ -> Nothing
     Right (_, _, s) -> Just s
