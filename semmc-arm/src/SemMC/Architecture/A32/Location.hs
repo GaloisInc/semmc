@@ -29,6 +29,8 @@ import           What4.BaseTypes
 
 data Location arm :: BaseType -> * where
   LocGPR :: Word8 -> Location arm (BaseBVType 32)
+  LocGPRMask :: Word8 -> Location arm (BaseBVType 32)
+  LocFPR :: Word8 -> Location arm (BaseBVType 32)
   LocPC :: Location arm (BaseBVType 32)
   LocCPSR :: Location arm (BaseBVType 32)
   LocMem :: Location arm (BaseArrayType (SingleCtx (BaseBVType 32)) (BaseBVType 8))
@@ -45,6 +47,8 @@ instance Show (Location arm tp) where
   show LocPC = "PC"
   show LocCPSR = "CPSR"
   show LocMem = "Mem"
+  show (LocGPRMask gpr) = show (LocGPR gpr)
+  show (LocFPR fpr) = "s" <> show fpr
 
 instance ShowF (Location arm)
 
