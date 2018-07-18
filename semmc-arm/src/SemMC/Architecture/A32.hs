@@ -10,10 +10,10 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module SemMC.Architecture.A32
     ( A32
-    , MachineState(..)
     , Instruction
     , ConcreteState
     , numGPR
@@ -21,7 +21,8 @@ module SemMC.Architecture.A32
     )
     where
 
-import           Control.Monad ( replicateM )
+import           Control.Applicative ( (<|>) )
+import           Control.Monad ( replicateM, forM )
 import qualified Control.Monad.State.Strict as St
 import           Control.Monad.Trans ( liftIO )
 import qualified Data.Binary.Get as G
@@ -38,7 +39,7 @@ import           Data.Proxy ( Proxy(..) )
 import           Data.Semigroup ((<>))
 import qualified Data.Set as Set
 import qualified Data.Vector.Sized as V
-import           Data.Word ( Word8, Word32 )
+import           Data.Word ( Word8 )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.ARM as ARMDis
@@ -73,66 +74,13 @@ data A32
 
 type Instruction = LB.ByteString
 
-data MachineState =
-  MachineState { gprs :: V.Vector 16 Word32
-               , pctr :: Word32  -- ^ the current Program Counter (PC)
-               -- ^ 16 general purpose registers
-               , gprs_mask :: V.Vector 16 Word32
-               , fprs :: V.Vector 32 Word32
-               -- ^ 32 32-bit locations
-               , cpsr :: Word32
-               -- ^ Current program status register (CPSR)
-               , mem1 :: V.Vector 32 Word8
-               -- ^ 32 bytes
-               , mem2 :: V.Vector 32 Word8
-               -- ^ 32 bytes
-               }
-               deriving (Show,Eq)
+type ConcreteState = MapF.MapF (Location A32) V.Value
 
-testSerializer :: CE.TestSerializer MachineState LB.ByteString
-testSerializer = CE.TestSerializer { CE.flattenMachineState = machineStateToBS
-                                   , CE.parseMachineState = machineStateFromBS
-                                   , CE.flattenProgram = mconcat
+testSerializer :: CE.TestSerializer (V.ConcreteState A32) (A.Instruction A32)
+testSerializer = CE.TestSerializer { CE.flattenMachineState = serializeState
+                                   , CE.parseMachineState = deserializeState
+                                   , CE.flattenProgram = mconcat . fmap ARMDis.assembleInstruction
                                    }
-
-machineStateToBS :: MachineState -> B.ByteString
-machineStateToBS ms = LB.toStrict (B.toLazyByteString bld)
-  where
-    bld = mconcat [ mconcat (map B.word32LE (V.toList (gprs ms)))
-                  , B.word32LE (pctr ms)
-                  , mconcat (map B.word32LE (V.toList (gprs_mask ms)))
-                  , mconcat (map B.word32LE (V.toList (fprs ms)))
-                  , B.word32LE (cpsr ms)
-                  , mconcat (map B.word8 (V.toList (mem1 ms)))
-                  , mconcat (map B.word8 (V.toList (mem2 ms)))
-                  ]
-
-machineStateFromBS :: B.ByteString -> Maybe MachineState
-machineStateFromBS bs =
-  case G.pushChunk (G.runGetIncremental getMachineState) bs of
-    G.Done _ _ ms -> Just ms
-    G.Fail {} -> Nothing
-    G.Partial {} -> Nothing
-
-getMachineState :: G.Get MachineState
-getMachineState = do
-  Just grs <- V.fromList <$> replicateM 16 G.getWord32le
-  pcv <- G.getWord32le
-  -- Note that we have to parse out the mask, even though it isn't populated
-  -- here.
-  Just grs_mask <- V.fromList <$> replicateM 16 G.getWord32le
-  Just frs <- V.fromList <$> replicateM 32 G.getWord32le
-  cpsr_reg <- G.getWord32le
-  Just m1 <- V.fromList <$> replicateM 32 G.getWord8
-  Just m2 <- V.fromList <$> replicateM 32 G.getWord8
-  return MachineState { gprs = grs
-                      , pctr = pcv
-                      , gprs_mask = grs_mask
-                      , fprs = frs
-                      , cpsr = cpsr_reg
-                      , mem1 = m1
-                      , mem2 = m2
-                      }
 
 -- ----------------------------------------------------------------------
 
@@ -351,27 +299,37 @@ operandToLocation (ARMDis.GPR gpr) = Just $ LocGPR $ ARMOperands.unGPR gpr
 operandToLocation _ = Nothing
 
 instance A.IsLocation (Location A32) where
-  isMemoryLocation LocMem = True
+  isMemoryLocation LocMem1 = True
+  isMemoryLocation LocMem2 = True
   isMemoryLocation _ = False
 
   readLocation = P.parseMaybe parseLocation
 
   locationType (LocGPR _) = knownRepr
+  locationType (LocFPR _) = knownRepr
+  locationType (LocGPRMask _) = knownRepr
   locationType LocPC = knownRepr
   locationType LocCPSR = knownRepr
-  locationType LocMem = knownRepr
+  locationType LocMem1 = knownRepr
+  locationType LocMem2 = knownRepr
 
   defaultLocationExpr sym (LocGPR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocFPR _) = S.bvLit sym knownNat 0
+  defaultLocationExpr sym (LocGPRMask _) = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocPC = S.bvLit sym knownNat 0
   defaultLocationExpr sym LocCPSR = S.bvLit sym knownNat 0
-  defaultLocationExpr sym LocMem =
+  defaultLocationExpr sym LocMem1 =
+      S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
+  defaultLocationExpr sym LocMem2 =
       S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
   allLocations = concat
-    [ map (Some . LocGPR) [0..numGPR-1],
-      [ Some LocPC
+    [ map (Some . LocGPR) [0..numGPR-1]
+    , map (Some . LocGPRMask) [0..numGPR-1]
+    , [ Some LocPC
       , Some LocCPSR
-      , Some LocMem
+      , Some LocMem1
+      , Some LocMem2
       ]
     ]
 
@@ -381,11 +339,12 @@ parseLocation :: ARMComp.Parser (Some (Location A32))
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
-    'C' -> Some LocCPSR <$ P.string "CPSR"
-    'M' -> Some LocMem <$ P.string "Mem"
-    'P' -> Some LocPC <$ P.string "PC"
-    'R' -> do
-      parsePrefixedRegister (Some . LocGPR) 'R'
+    'c' -> Some LocCPSR <$ P.string "cpsr"
+    'm' -> (Some LocMem1 <$ P.string "mem1") <|>
+           (Some LocMem2 <$ P.string "mem2")
+    'p' -> Some LocPC <$ P.string "pc"
+    'r' -> do
+      parsePrefixedRegister (Some . LocGPR) 'r'
     _ -> do
       P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
@@ -643,59 +602,64 @@ symbolicTemplatedOperand Proxy signed name constr =
 ----------------------------------------------------------------------
 -- Concrete state functionality
 
-type ConcreteState = MapF.MapF (Location A32) V.Value
-
--- | FIXME: Does not include memory
 mkRandomState :: DA.Gen -> IO ConcreteState
 mkRandomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprList
-      -- mapM_ addRandomBV64 frs
-      -- mapM_ addRandomBV vsrs
-      -- mapM_ addZeroBV specialRegs32
-      -- mapM_ addZeroBV specialRegs64
---      St.modify' $ MapF.insert LocMem (V.ValueMem (B.replicate 64 0))
-
-    -- | Create a random 128 bit bitvector with the high 64 bits as zero.  We
-    -- want this for the FRs, which would normally overlap with the VSRs.  If we
-    -- had the VSRs, then we would want to generate full 128 bit values instead.
-    -- addRandomBV64 :: Location A32 (BaseBVType 128) -> St.StateT (ConcreteState arm) IO ()
-    -- addRandomBV64 loc = do
-    --   bv :: V.Value (BaseBVType 64)
-    --      <- V.ValueBV <$> liftIO (DA.arbitrary gen)
-    --   St.modify' $ MapF.insert loc (PPCS.extendBV bv)
+      mapM_ addRandomBV fprList
 
     addRandomBV :: Location A32 (BaseBVType 32) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
       bv <- V.ValueBV <$> liftIO (DA.arbitrary gen)
       St.modify' $ MapF.insert loc bv
 
-    addZeroBV :: Location A32 (BaseBVType 32) -> St.StateT ConcreteState IO ()
-    addZeroBV loc = do
-      let bv = V.ValueBV (W.w 0)
-      St.modify' $ MapF.insert loc bv
-
 -- | States that include (pairs of) registers with interesting bit patterns.
 -- For each pair of registers, combinations of interesting bit patterns are
 -- chosen.  The other registers all have zeros.
---
--- FIXME: Doesn't include FP registers yet.  We'll want NaN and INF values there
 interestingStates :: [ConcreteState]
 interestingStates = []
 
--- | FIXME: Does not include memory
 zeroState :: ConcreteState
 zeroState = St.execState addZeros MapF.empty
   where
     addZero :: Location A32 (BaseBVType 32) -> St.State ConcreteState ()
     addZero loc = St.modify' $ MapF.insert loc (V.ValueBV (W.w 0))
+
     addZeros = do
       mapM_ addZero gprList
-      -- mapM_ addZero vsrs
-      -- mapM_ addZero specialRegs32
-      -- mapM_ addZero specialRegs64
---      St.modify' $ MapF.insert LocMem (V.ValueMem (B.replicate 64 0))
+      mapM_ addZero fprList
+
+deserializeState :: B.ByteString -> Maybe ConcreteState
+deserializeState bs =
+    case G.pushChunk (G.runGetIncremental getMachineState) bs of
+        G.Done _ _ ms -> Just ms
+        G.Fail {} -> Nothing
+        G.Partial {} -> Nothing
+
+getMachineState :: G.Get ConcreteState
+getMachineState = do
+  gprs <- forM gprList $ \loc ->
+      (MapF.Pair loc . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
+
+  pc <- (MapF.Pair LocPC . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
+
+  gprs_mask <- forM gprMaskList $ \loc ->
+      (MapF.Pair loc . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
+
+  fprs <- forM fprList $ \loc ->
+      (MapF.Pair loc . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
+
+  cpsr <- (MapF.Pair LocCPSR . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
+
+  m1 <- (MapF.Pair LocMem1 . V.ValueMem . B.pack) <$> replicateM 32 G.getWord8
+  m2 <- (MapF.Pair LocMem1 . V.ValueMem . B.pack) <$> replicateM 32 G.getWord8
+
+  return $ MapF.fromList $ concat [ gprs
+                                  , gprs_mask
+                                  , fprs
+                                  , [m1, m2, pc, cpsr]
+                                  ]
 
 -- | Convert a machine state to the wire protocol.
 --
@@ -704,74 +668,44 @@ zeroState = St.execState addZeros MapF.empty
 -- the data.
 serializeState :: ConcreteState -> B.ByteString
 serializeState s = mempty
-  -- LB.toStrict (B.toLazyByteString b)
-  -- where
-  --   b = mconcat [ mconcat (map (PPCS.serializeSymVal (B.word32BE . fromInteger)) (extractLocs s gprList))
-  --               , mconcat (map (PPCS.serializeSymVal (B.word32BE . fromInteger)) (extractLocs s specialRegs32))
-  --               , mconcat (map (PPCS.serializeSymVal (B.word64BE . fromInteger)) (extractLocs s specialRegs64))
-  --               , mconcat (map (PPCS.serializeSymVal PPCS.serializeVec) (extractLocs s vsrs))
-  --               -- , mconcat (map serializeMem (extractLocs s [LocMem]))
-  --               ]
+  LB.toStrict (B.toLazyByteString b)
+  where
+    b = mconcat [ mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s gprList))
+                , serializeSymVal (B.word32LE . fromInteger) (extractLoc s LocPC)
+                , mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s gprMaskList))
+                , mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s fprList))
+                , serializeSymVal (B.word32LE . fromInteger) (extractLoc s LocCPSR)
+                , serializeMem (extractLoc s LocMem1)
+                , serializeMem (extractLoc s LocMem2)
+                ]
+
+serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> V.Value (BaseBVType n) -> B.Builder
+serializeSymVal toBuilder sv =
+  case sv of
+    V.ValueBV (W.unW -> w) -> toBuilder (toInteger w)
 
 serializeMem :: V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> B.Builder
 serializeMem val =
   case val of
     V.ValueMem bs -> B.byteString bs
 
+extractLoc :: ConcreteState
+           -> Location A32 tp
+           -> V.Value tp
+extractLoc s l =
+    let Just v = MapF.lookup l s
+    in v
+
 extractLocs :: ConcreteState
             -> [Location A32 tp]
             -> [V.Value tp]
-extractLocs s locs = map extractLoc locs
-  where
-    extractLoc l =
-      let Just v = MapF.lookup l s
-      in v
-
-deserializeState :: B.ByteString -> Maybe ConcreteState
-deserializeState bs =
-  case G.runGetOrFail getArchState (LB.fromStrict bs) of
-    Left _ -> Nothing
-    Right (_, _, s) -> Just s
-
-getArchState :: G.Get ConcreteState
-getArchState = do
-    return MapF.empty
-
-  -- gprs' <- mapM (getWith (PPCS.getValue G.getWord32be 32)) gprs
-  -- spregs32' <- mapM (getWith (PPCS.getValue G.getWord32be PPCS.repr32)) specialRegs32
-  -- spregs64' <- mapM (getWith (PPCS.getValue G.getWord64be 32)) specialRegs64
-  -- frs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.IgnoreHighBits) PPCS.repr128)) frs
-  -- vsrs' <- mapM (getWith (PPCS.getValue (PPCS.getWord128be PPCS.KeepHighBits) PPCS.repr128)) vsrs
-  -- -- mem' <- getBS
-  -- return (St.execState (addLocs gprs' spregs32' spregs64' (frs' ++ vsrs') {- >> addLoc (LocMem, mem') -}) MapF.empty)
-  -- where
-  --   addLoc :: forall tp . (Location A32 tp, V.Value tp) -> St.State (ConcreteState A32) ()
-  --   addLoc (loc, v) = St.modify' $ MapF.insert loc v
-
-  --   addLocs gprs' spregs32' spregs64' vsrs' = do
-  --     mapM_ addLoc gprs'
-  --     mapM_ addLoc spregs32'
-  --     mapM_ addLoc spregs64'
-  --     mapM_ addLoc vsrs'
-
-getWith :: G.Get (V.Value tp)
-        -> Location A32 tp
-        -> G.Get (Location A32 tp, V.Value tp)
-getWith g loc = do
-  w <- g
-  return (loc, w)
-
-getBS :: G.Get (V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
-getBS = V.ValueMem <$> G.getBytes 32
+extractLocs s locs = map (extractLoc s) locs
 
 gprList :: [Location A32 (BaseBVType 32)]
 gprList = fmap LocGPR [0..31]
 
--- vsrs :: [Location A32 (BaseBVType 128)]
--- vsrs = fmap (LocVSR . PPC.VSReg) [0..63]
+gprMaskList :: [Location A32 (BaseBVType 32)]
+gprMaskList = fmap LocGPRMask [0..31]
 
--- frs :: [Location A32 (BaseBVType 128)]
--- frs = fmap (LocVSR . PPC.VSReg) [0..31]
-
--- vrs :: [Location A32 (BaseBVType 128)]
--- vrs = fmap (LocVSR . PPC.VSReg) [32..63]
+fprList :: [Location A32 (BaseBVType 32)]
+fprList = fmap LocFPR [0..31]

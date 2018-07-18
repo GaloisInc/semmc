@@ -33,7 +33,8 @@ data Location arm :: BaseType -> * where
   LocFPR :: Word8 -> Location arm (BaseBVType 32)
   LocPC :: Location arm (BaseBVType 32)
   LocCPSR :: Location arm (BaseBVType 32)
-  LocMem :: Location arm (BaseArrayType (SingleCtx (BaseBVType 32)) (BaseBVType 8))
+  LocMem1 :: Location arm (BaseArrayType (SingleCtx (BaseBVType 32)) (BaseBVType 8))
+  LocMem2 :: Location arm (BaseArrayType (SingleCtx (BaseBVType 32)) (BaseBVType 8))
 
 instance Show (Location arm tp) where
   show (LocGPR gpr) = case gpr of
@@ -46,7 +47,8 @@ instance Show (Location arm tp) where
                         _ -> "r" <> show gpr
   show LocPC = "pc"
   show LocCPSR = "cpsr"
-  show LocMem = "mem"
+  show LocMem1 = "mem1"
+  show LocMem2 = "mem2"
   show (LocGPRMask gpr) = show (LocGPR gpr)
   show (LocFPR fpr) = "s" <> show fpr
 
