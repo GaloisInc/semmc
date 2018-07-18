@@ -44,9 +44,9 @@ instance Show (Location arm tp) where
                         14 -> "lr"
                         15 -> "pc"
                         _ -> "r" <> show gpr
-  show LocPC = "PC"
-  show LocCPSR = "CPSR"
-  show LocMem = "Mem"
+  show LocPC = "pc"
+  show LocCPSR = "cpsr"
+  show LocMem = "mem"
   show (LocGPRMask gpr) = show (LocGPR gpr)
   show (LocFPR fpr) = "s" <> show fpr
 
