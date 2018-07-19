@@ -16,10 +16,12 @@ import qualified Control.Exception as E
 import qualified Data.Ini.Config as CI
 import qualified Data.Aeson as AE
 import qualified Data.Foldable as F
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSC8
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Word.Indexed as W
+import           Data.Proxy ( Proxy(..) )
 import           Data.List (intercalate)
 import           Data.Maybe (catMaybes)
 import           Data.Monoid ((<>))
@@ -210,6 +212,7 @@ ppc32Arch =
              (Proxy @PPCS.PPC)
              PPCS.allOpcodes
              PPCS.allSemantics
+             PPCS.allDefinedFunctions
              PPCS.testSerializer
              PPC.ppInstruction
              ppc32OpcodeFilter
@@ -227,6 +230,7 @@ a32Arch =
              (Proxy @A32.A32)
              ARM.a32Opcodes
              ARM.a32Semantics
+             ARM.a32DefinedFunctions
              A32.testSerializer
              ARMDis.ppInstruction
              a32OpcodeFilter
@@ -362,9 +366,9 @@ main = do
 defaultRunnerPath :: FilePath
 defaultRunnerPath = "remote-runner"
 
-filterOpcodes :: forall proxy arch .
+filterOpcodes :: forall arch .
                  (ShowF (A.Opcode arch (A.Operand arch)))
-              => proxy arch
+              => Proxy arch
               -> OpcodeMatch
               -> [Some ((A.Opcode arch) (A.Operand arch))]
               -> [Some ((A.Opcode arch) (A.Operand arch))]
@@ -395,7 +399,7 @@ startHostThreads logCfg fc = do
           mapM_ CA.wait (concat hostThreads)
 
 testHost :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
-testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer ppInst opcodeFilter) = do
+testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics allFunctions testSerializer ppInst opcodeFilter) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
@@ -416,7 +420,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
           testRunner mainConfig hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
-                     allSemantics ppInst caseChan resChan
+                     allSemantics allFunctions ppInst caseChan resChan
 
   CA.link runThread
 
@@ -428,7 +432,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
 
   L.logEndWith logCfg
 
-testRunner :: forall proxy arch .
+testRunner :: forall arch .
               ( TemplatableOperand arch
               , A.Architecture arch
               , C.ConcreteArchitecture arch
@@ -443,15 +447,16 @@ testRunner :: forall proxy arch .
               )
            => FuzzerConfig
            -> FuzzerTestHost
-           -> proxy arch
+           -> Proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> TestStrategy
            -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
+           -> [(String, BS.ByteString)]
            -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseChan resChan = do
+testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst caseChan resChan = do
     user <- getLoginName
     hostname <- getHostName
 
@@ -470,7 +475,8 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
           <- SB.newSimpleBackend nonceGen
       SB.stopCaching sym
 
-      baseSet <- F.loadFormulas sym F.emptyLibrary semantics
+      lib <- F.loadLibrary proxy sym funcs
+      baseSet <- F.loadFormulas sym lib semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
 
