@@ -75,6 +75,7 @@ data FuzzerConfig =
 
 data FuzzerTestHost =
     FuzzerTestHost { fuzzerTestHostname :: String
+                   , fuzzerTestUser :: Maybe String
                    , fuzzerTestChunkSize :: Int
                    , fuzzerRunnerPath :: FilePath
                    , fuzzerTestThreads :: Int

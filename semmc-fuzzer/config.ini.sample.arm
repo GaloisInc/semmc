@@ -10,3 +10,4 @@ report-url = http://fuzzermon.dev.galois.com
 runner-path = /home/odroid/remote-runner
 chunk-size = 100
 threads = 1
+username = odroid

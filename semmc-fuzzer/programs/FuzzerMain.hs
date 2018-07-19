@@ -23,7 +23,7 @@ import qualified Data.Set.NonEmpty as NES
 import qualified Data.Word.Indexed as W
 import           Data.Proxy ( Proxy(..) )
 import           Data.List (intercalate)
-import           Data.Maybe (catMaybes)
+import           Data.Maybe (catMaybes, fromMaybe)
 import           Data.Monoid ((<>))
 import qualified Data.Map as M
 import           Data.EnumF (EnumF)
@@ -152,6 +152,7 @@ data Config =
            , configLogLevel   :: L.LogLevel
            , configNumThreads :: Int
            , configReportURL  :: Maybe String
+           , configUsername   :: Maybe String
            }
 
 defaultConfig :: Config
@@ -167,6 +168,7 @@ defaultConfig =
            , configLogLevel   = L.Info
            , configNumThreads = 1
            , configReportURL  = Nothing
+           , configUsername   = Nothing
            }
 
 loadConfig :: FilePath -> IO (Either String FuzzerConfig)
@@ -194,7 +196,8 @@ parser = do
     let hostSection = T.stripPrefix hostSectionPrefix
     hosts <- CI.sectionsOf hostSection $ \hostname -> do
         FuzzerTestHost (T.unpack hostname)
-            <$> CI.fieldDefOf "chunk-size" CI.readable (configChunkSize defaultConfig)
+            <$> (CI.fieldMbOf "username" CI.string)
+            <*> CI.fieldDefOf "chunk-size" CI.readable (configChunkSize defaultConfig)
             <*> (T.unpack <$> CI.fieldDef "runner-path" (T.pack $ configBinaryPath defaultConfig))
             <*> (CI.fieldDefOf "threads" CI.readable (configNumThreads defaultConfig))
 
@@ -306,9 +309,10 @@ configFromArgs = do
         Just c -> return c
 
 simpleFuzzerConfig :: Config -> Maybe FuzzerConfig
-simpleFuzzerConfig cfg =
+simpleFuzzerConfig cfg = do
     FuzzerConfig <$> configArchName cfg
                  <*> (pure <$> (FuzzerTestHost <$> (configHost cfg)
+                                               <*> (pure Nothing)
                                                <*> (pure $ configChunkSize cfg)
                                                <*> (pure $ configBinaryPath cfg)
                                                <*> (pure $ configNumThreads cfg)))
@@ -322,9 +326,10 @@ mkFuzzerConfig cfg =
     -- Either load a configuration file from disk or build a simple one
     -- from command line arguments.
     case configPath cfg of
-        Nothing -> case simpleFuzzerConfig cfg of
-            Nothing -> usage >> IO.exitFailure
-            Just fc -> return fc
+        Nothing -> do
+            case simpleFuzzerConfig cfg of
+                Nothing -> usage >> IO.exitFailure
+                Just fc -> return fc
         Just path -> do
             -- Load a configuration from the specified path, then build
             -- a fuzzer config from that.
@@ -457,7 +462,7 @@ testRunner :: forall arch .
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
 testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst caseChan resChan = do
-    user <- getLoginName
+    self <- getLoginName
     hostname <- getHostName
 
     let chunkSize = fuzzerTestChunkSize hostConfig
@@ -542,7 +547,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                       Nothing -> return ()
                       Just reportURL -> do
                           let b = Batch { batchFuzzerHost = hostname
-                                        , batchFuzzerUser = user
+                                        , batchFuzzerUser = fromMaybe self $ fuzzerTestUser hostConfig
                                         , batchTestingHost = fuzzerTestHostname hostConfig
                                         , batchArch = fuzzerArchName mainConfig
                                         , batchEntries = catMaybes entries
