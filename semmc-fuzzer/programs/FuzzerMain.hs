@@ -228,7 +228,7 @@ a32Arch =
              (Proxy @A32.A32)
              ARM.a32Opcodes
              ARM.a32Semantics
-             undefined -- A32.testSerializer
+             A32.testSerializer
              ARMDis.ppInstruction
              a32OpcodeFilter
 
