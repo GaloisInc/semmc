@@ -46,7 +46,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.HasRepr (HasRepr)
 import qualified Data.Parameterized.List as L
 
-import qualified Lang.Crucible.Backend as SB
 import qualified Lang.Crucible.Backend.Simple as SB
 import qualified What4.Expr.Builder as SB
 
@@ -70,7 +69,6 @@ import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.PPC32 as PPCS
 import qualified SemMC.Architecture.PPC32.Opcodes as PPCS
 import qualified SemMC.Architecture.A32 as A32
-import qualified SemMC.Architecture.AArch32 as ARM
 import qualified SemMC.Architecture.ARM.Opcodes as ARM
 import           SemMC.Synthesis.Template ( TemplatableOperand
                                           , TemplatedOperand
