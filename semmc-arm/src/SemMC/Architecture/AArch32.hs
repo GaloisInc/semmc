@@ -468,7 +468,6 @@ locationFuncInterpretation =
     , ("t32.addrmode_is4_reg", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp interpTaddrmodeis4Reg
                                  , A.exprInterpName = 'interpTaddrmodeis4RegExtractor
-                                 , A.exprInterp = undefined
                                  })
     , ("t32.addrmode_pc", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp noLocation
