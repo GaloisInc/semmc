@@ -54,6 +54,7 @@ import           Dismantle.Instruction (GenericInstruction(Instruction))
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
 import qualified Dismantle.ARM as ARMDis
+import           Dismantle.ARM.Random ()
 
 import           SemMC.Fuzzer.Types
 import           SemMC.Fuzzer.Util
