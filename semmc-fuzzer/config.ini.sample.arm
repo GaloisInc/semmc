@@ -1,0 +1,12 @@
+[fuzzer]
+arch = a32
+opcodes = AllOpcodes
+strategy = Randomized
+# Assuming that the fuzzermon service is running on port 8000
+report-url = http://fuzzermon.dev.galois.com
+
+[host:odroid1.proj.galois.com]
+# This is the path to the remote runner binary on the remote machine
+runner-path = /home/odroid/remote-runner
+chunk-size = 100
+threads = 1
