@@ -339,12 +339,14 @@ parseLocation :: ARMComp.Parser (Some (Location A32))
 parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
-    'c' -> Some LocCPSR <$ P.string "cpsr"
-    'm' -> (Some LocMem1 <$ P.string "mem1") <|>
-           (Some LocMem2 <$ P.string "mem2")
-    'p' -> Some LocPC <$ P.string "pc"
+    'C' -> Some LocCPSR <$ P.string "CPSR"
+    'M' -> (Some LocMem1 <$ P.string "MEM1") <|>
+           (Some LocMem2 <$ P.string "MEM2")
+    'P' -> Some LocPC <$ P.string "PC"
     'r' -> do
       parsePrefixedRegister (Some . LocGPR) 'r'
+    'S' -> do
+      parsePrefixedRegister (Some . LocFPR) 'S'
     _ -> do
       P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
