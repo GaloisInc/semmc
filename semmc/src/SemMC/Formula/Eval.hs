@@ -64,6 +64,10 @@ type Literals arch sym = M.MapF (Location arch) (BoundVar sym)
 -- * The 'Ctx.Assignment' is the list of operands of the uninterpreted function being interpreted
 -- * The 'BaseTypeRepr' is the expected return type of the uninterpreted function
 --
+-- Note that the type parameters for the *instruction* operand list and the
+-- *uninterpreted function* operand list (@sh@ and @u@, respectively) explicitly
+-- do /not/ match up, as the UF and instructions take different operands.
+--
 -- We need to pass the return type 'BaseTypeRepr' in so that we can know at the
 -- call site that the expression produced by the evaluator is correctly-typed.
 data Evaluator arch t =
