@@ -401,12 +401,39 @@ isR15 sym pf operands ufArguments resultRepr =
           case testEquality (S.exprType p) resultRepr of
             Just Refl -> return (p, MapF.empty)
             Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
-        Just (Some idx)
-          | ARMDis.GPR rnum <- operands SL.!! idx -> do
-              let p = if ARMOperands.unGPR rnum == 15 then S.truePred sym else S.falsePred sym
-              case testEquality (S.exprType p) resultRepr of
-                Just Refl -> return (p, MapF.empty)
-                Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
+        Just (Some idx) -> do
+          let ARMDis.GPR rnum = operands SL.!! idx
+          let p = if ARMOperands.unGPR rnum == 15 then S.truePred sym else S.falsePred sym
+          case testEquality (S.exprType p) resultRepr of
+            Just Refl -> return (p, MapF.empty)
+            Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
+
+-- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value
+-- and extracts the immediate value as a @BaseBVType 12@ (i.e., a 12 bit bitvector)
+--
+-- Note that this function can only be applied to instruction operands, as these
+-- immediate types only appear as function operands.  This means that we only
+-- need to look found the bound variable in the 'Ctx.Assignment' in the argument
+-- list and can disregard the literals.
+eval_am2offset_imm_imm :: forall t st sh u tp
+                        . WEB.ExprBuilder t st
+                       -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+                       -> SL.List (A.Operand A32) sh
+                       -> Ctx.Assignment (WEB.Expr t) u
+                       -> BaseTypeRepr tp
+                       -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_am2offset_imm_imm sym pf operands ufArguments resultRepr =
+  case ufArguments of
+    Ctx.Empty Ctx.:> WEB.BoundVarExpr ufArg ->
+      case ufArg `FE.lookupVarInFormulaOperandList` pf of
+        Nothing -> error "Argument to am2offset_imm_imm is not a formula parameter"
+        Just (Some idx) -> do
+          case operands SL.!! idx of
+            ARMDis.Am2offset_imm oimm -> do
+              bv <- S.bvLit sym (knownNat @12) (fromIntegral (ARMOperands.am2OffsetImmImmediate oimm))
+              case testEquality (S.exprType bv) resultRepr of
+                Just Refl -> return (bv, MapF.empty)
+                Nothing -> error ("am2offset_imm_imm returns a BaseBVType 12, but the caller expected " ++ show resultRepr)
 
 noLocation _ _ _ = Nothing
 
@@ -421,6 +448,7 @@ locationFuncInterpretation =
     , ("a32.am2offset_imm_imm", A.FunctionInterpretation
                                   { A.locationInterp = F.LocationFuncInterp noLocation
                                   , A.exprInterpName = 'interpAm2offsetimmImmExtractor
+                                  , A.exprInterp = FE.Evaluator eval_am2offset_imm_imm
                                   })
     , ("a32.am2offset_imm_add", A.FunctionInterpretation
                                   { A.locationInterp = F.LocationFuncInterp noLocation
