@@ -435,6 +435,29 @@ eval_am2offset_imm_imm sym pf operands ufArguments resultRepr =
                 Just Refl -> return (bv, MapF.empty)
                 Nothing -> error ("am2offset_imm_imm returns a BaseBVType 12, but the caller expected " ++ show resultRepr)
 
+-- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
+-- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
+eval_am2offset_imm_add :: forall t st sh u tp
+                        . WEB.ExprBuilder t st
+                       -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+                       -> SL.List (A.Operand A32) sh
+                       -> Ctx.Assignment (WEB.Expr t) u
+                       -> BaseTypeRepr tp
+                       -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_am2offset_imm_add sym pf operands ufArguments resultRepr =
+  case ufArguments of
+    Ctx.Empty Ctx.:> WEB.BoundVarExpr ufArg ->
+      case ufArg `FE.lookupVarInFormulaOperandList` pf of
+        Nothing -> error "Argument to am2offset_imm_add is not a formula parameter"
+        Just (Some idx) -> do
+          case operands SL.!! idx of
+            ARMDis.Am2offset_imm oimm -> do
+              bv <- S.bvLit sym (knownNat @1) (fromIntegral (ARMOperands.am2OffsetImmAdd oimm))
+              case testEquality (S.exprType bv) resultRepr of
+                Just Refl -> return (bv, MapF.empty)
+                Nothing -> error ("am2offset_imm_add returns a BaseBVType 1, but the caller expected " ++ show resultRepr)
+
+
 noLocation _ _ _ = Nothing
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t A32)]
@@ -453,6 +476,7 @@ locationFuncInterpretation =
     , ("a32.am2offset_imm_add", A.FunctionInterpretation
                                   { A.locationInterp = F.LocationFuncInterp noLocation
                                   , A.exprInterpName = 'interpAm2offsetimmAddExtractor
+                                  , A.exprInterp = FE.Evaluator eval_am2offset_imm_add
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
