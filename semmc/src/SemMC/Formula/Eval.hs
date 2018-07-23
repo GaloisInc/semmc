@@ -18,30 +18,54 @@
 -- "static").
 module SemMC.Formula.Eval (
   Evaluator(..),
+  lookupVarInFormulaOperandList,
   evaluateFunctions
   ) where
 
 import           Control.Arrow                      ( first )
 import           Control.Monad.State
+import           Data.Functor.Product  ( Product(Pair) )
 import qualified Data.Parameterized.Context         as Ctx
 import qualified Data.Parameterized.List            as SL
 import qualified Data.Parameterized.Map             as M
+import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
 
 import qualified Data.Text                          as T
-import           What4.Interface
+import           What4.Interface as S
 import qualified What4.Expr.Builder as S
 import qualified What4.Symbol as S
 import           Lang.Crucible.Types
 import qualified SemMC.Architecture.Internal        as A
 import           SemMC.Architecture.Location
-import           SemMC.Formula.Formula
+import qualified SemMC.BoundVar as BV
+import           SemMC.Formula.Formula as F
 
 type Sym t st = S.ExprBuilder t st
 
 type Literals arch sym = M.MapF (Location arch) (BoundVar sym)
 
--- | Type used to encapsulate rewriting of formulas related to register unpacking across different ISAs.
+-- | This type encapsulates an evaluator for operations represented as
+-- uninterpreted functions in semantics.  It may seem strange to interpret
+-- "uninterpreted functions" (UFs); we use UFs to represent operations in the
+-- semantics that can't be expressed using more typical SMT operations.  The most
+-- common examples in the codebase are:
+--
+-- 1) Extracting sub-components from compound operands in instructions (like a
+--    literal bundled with a shift amount)
+-- 2) Testing the number of a register (e.g., testing if a register is r0)
+--
+-- While the type isn't much of an abstraction barrier, it is convenient to hide
+-- the forall under a data constructor rather than a type alias.
+--
+-- * The 'Sym' is a symbolic expression builder from the what4 library
+-- * The 'ParameterizedFormula' is the formula whose semantics we are currently evaluating
+-- * The 'SL.List' contains the concrete operands to the instruction whose semantics we are evaluating
+-- * The 'Ctx.Assignment' is the list of operands of the uninterpreted function being interpreted
+-- * The 'BaseTypeRepr' is the expected return type of the uninterpreted function
+--
+-- We need to pass the return type 'BaseTypeRepr' in so that we can know at the
+-- call site that the expression produced by the evaluator is correctly-typed.
 data Evaluator arch t =
   Evaluator (forall tp u st sh
                . Sym t st
@@ -50,6 +74,30 @@ data Evaluator arch t =
               -> Ctx.Assignment (S.Expr t) u
               -> BaseTypeRepr tp
               -> IO (S.Expr t tp, Literals arch (Sym t st)))
+
+-- | Given a 'S.BoundVar', attempt to find its index in the operand list for the
+-- 'F.ParameterizedFormula'
+--
+-- This is meant to be used in definitions of 'Evaluator's, where we need to
+-- match actual operands to their bound variables in a parameterized formula.
+lookupVarInFormulaOperandList :: (TestEquality (S.BoundVar sym))
+                              => S.BoundVar sym tp
+                              -> F.ParameterizedFormula sym arch sh
+                              -> Maybe (Some (SL.Index sh))
+lookupVarInFormulaOperandList b pf =
+  b `elemIndexSL` F.pfOperandVars pf
+
+elemIndexSL :: forall sym arch sh tp . (TestEquality (S.BoundVar sym)) => S.BoundVar sym tp -> SL.List (BV.BoundVar sym arch) sh -> Maybe (Some (SL.Index sh))
+elemIndexSL target = go . SL.imap Pair
+  where
+    go :: forall sh' . SL.List (Product (SL.Index sh) (BV.BoundVar sym arch)) sh' -> Maybe (Some (SL.Index sh))
+    go l =
+      case l of
+        SL.Nil -> Nothing
+        Pair idx (BV.BoundVar elt) SL.:< rest
+          | Just Refl <- testEquality elt target -> Just (Some idx)
+          | otherwise -> go rest
+
 
 -- | See `evaluateFunctions'`
 evaluateFunctions

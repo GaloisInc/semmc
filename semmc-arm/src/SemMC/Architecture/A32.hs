@@ -21,7 +21,6 @@ module SemMC.Architecture.A32
     )
     where
 
-import           Control.Applicative ( (<|>) )
 import           Control.Monad ( replicateM, forM )
 import qualified Control.Monad.State.Strict as St
 import           Control.Monad.Trans ( liftIO )
@@ -38,7 +37,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Proxy ( Proxy(..) )
 import           Data.Semigroup ((<>))
 import qualified Data.Set as Set
-import qualified Data.Vector.Sized as V
 import           Data.Word ( Word8 )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.Arbitrary as DA
@@ -60,12 +58,14 @@ import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
+import qualified SemMC.Formula.Eval as FE
 import qualified SemMC.Synthesis.Template as T
 import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 import qualified Text.Megaparsec.Char.Lexer as P
 import           What4.BaseTypes
+import qualified What4.Expr.Builder as WEB
 import qualified What4.Interface as S
 
 
@@ -372,6 +372,42 @@ instance A.Architecture A32 where
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
 
+-- | Deconstruct an argument list for the 'a32.is_r15' pseudo-operation and
+-- interpret the arguments.
+--
+-- The expected argument list is a single 'S.BoundVarExpr' that corresponds to a
+-- GPR.  If we find exactly that, we check to see if the register number is 15
+-- (returning the True symbolic expression if it is).
+--
+-- Note that this doesn't need to be polymorphic across architectures, as Thumb
+-- mode can't access r15 this way.
+isR15 :: forall t st sh u tp
+       . WEB.ExprBuilder t st
+      -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+      -> SL.List (A.Operand A32) sh
+      -> Ctx.Assignment (WEB.Expr t) u
+      -> BaseTypeRepr tp
+      -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+isR15 sym pf operands ufArguments resultRepr =
+  case ufArguments of
+    Ctx.Empty Ctx.:> WEB.BoundVarExpr gprArg ->
+      case gprArg `FE.lookupVarInFormulaOperandList` pf of
+        Nothing -> do
+          p <- case MapF.lookup (LocGPR 15) (F.pfLiteralVars pf) of
+            Nothing -> return (S.falsePred sym)
+            Just r15Var
+              | Just Refl <- testEquality r15Var gprArg -> return (S.truePred sym)
+              | otherwise -> return (S.falsePred sym)
+          case testEquality (S.exprType p) resultRepr of
+            Just Refl -> return (p, MapF.empty)
+            Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
+        Just (Some idx)
+          | ARMDis.GPR rnum <- operands SL.!! idx -> do
+              let p = if ARMOperands.unGPR rnum == 15 then S.truePred sym else S.falsePred sym
+              case testEquality (S.exprType p) resultRepr of
+                Just Refl -> return (p, MapF.empty)
+                Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
+
 noLocation _ _ _ = Nothing
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t A32)]
@@ -379,6 +415,7 @@ locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation
                        , A.exprInterpName = 'interpIsR15
+                       , A.exprInterp = FE.Evaluator isR15
                        })
 
     , ("a32.am2offset_imm_imm", A.FunctionInterpretation
