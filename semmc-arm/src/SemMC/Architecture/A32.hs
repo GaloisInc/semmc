@@ -381,14 +381,14 @@ instance A.Architecture A32 where
 --
 -- Note that this doesn't need to be polymorphic across architectures, as Thumb
 -- mode can't access r15 this way.
-isR15 :: forall t st sh u tp
-       . WEB.ExprBuilder t st
-      -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-      -> SL.List (A.Operand A32) sh
-      -> Ctx.Assignment (WEB.Expr t) u
-      -> BaseTypeRepr tp
-      -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
-isR15 sym pf operands ufArguments resultRepr =
+eval_isR15 :: forall t st sh u tp
+            . WEB.ExprBuilder t st
+           -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+           -> SL.List (A.Operand A32) sh
+           -> Ctx.Assignment (WEB.Expr t) u
+           -> BaseTypeRepr tp
+           -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_isR15 sym pf operands ufArguments resultRepr =
   case ufArguments of
     Ctx.Empty Ctx.:> WEB.BoundVarExpr gprArg ->
       case gprArg `FE.lookupVarInFormulaOperandList` pf of
@@ -458,6 +458,8 @@ eval_am2offset_imm_add sym pf operands ufArguments resultRepr =
                 Nothing -> error ("am2offset_imm_add returns a BaseBVType 1, but the caller expected " ++ show resultRepr)
 
 
+
+
 noLocation _ _ _ = Nothing
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t A32)]
@@ -465,7 +467,7 @@ locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation
                        , A.exprInterpName = 'interpIsR15
-                       , A.exprInterp = FE.Evaluator isR15
+                       , A.exprInterp = FE.Evaluator eval_isR15
                        })
 
     , ("a32.am2offset_imm_imm", A.FunctionInterpretation
