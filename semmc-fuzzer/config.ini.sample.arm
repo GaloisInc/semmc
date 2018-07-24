@@ -1,6 +1,6 @@
 [fuzzer]
 arch = a32
-opcodes = AllOpcodes
+opcodes = SpecificOpcodes ["ADCri", "ADCrr", "ADCrsi", "ADCrsr", "ADDri", "ADDrr", "ADDrsi", "ADDrsr", "ANDri", "ANDrr", "ANDrsi", "ANDrsr", "Bcc", "BL", "BLXi", "BX_RET", "CMPri", "LDRi12", "LDR_POST_IMM", "MOVr", "MOVsi", "ORRri", "STRi12", "STR_POST_IMM", "STR_PRE_IMM", "STR_PRE_REG", "SUBri", "T2ADDri12", "T2ADDri", "T2ADDrr", "T2ADDrs", "T2ANDrr", "T2SUBri12", "T2SUBri", "T2SUBrr", "TADDhirr", "TADDi3", "TADDi8", "TADDrr", "TADDrSPi", "TADDspi", "TAND", "TBcc", "TBLXi", "TBX", "TCMPi8", "THINT", "TLDRi", "TLDRpci", "TLSLri", "TMOVr", "TPOP", "TPUSH", "TSUBi3", "TSUBi8", "TSUBrr", "TSUBspi", "TSVC"]
 strategy = Randomized
 # Assuming that the fuzzermon service is running on port 8000
 report-url = http://fuzzermon.dev.galois.com
