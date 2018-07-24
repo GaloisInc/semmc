@@ -82,7 +82,7 @@ mainWithOptions opt = do
                                , IOR.lcTestGen = AC.randomState (Proxy @PPC32.PPC) gen
                                , IOR.lcTimeoutSeconds = oTimeoutSeconds opt
                                , IOR.lcTestRunner =
-                                   CE.runRemote (Just (oRemoteRunner opt)) (oRemoteHost opt) PPC32.testSerializer
+                                   CE.runRemote (Just (oRemoteRunner opt)) (oRemoteHost opt) Nothing PPC32.testSerializer
                                , IOR.lcLogCfg = logCfg
                                }
   DIR.createDirectoryIfMissing True (oRelDir opt)
