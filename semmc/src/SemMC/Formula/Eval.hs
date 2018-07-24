@@ -187,13 +187,8 @@ evalRegExtractor :: (M.ShowF (A.Operand arch), A.IsLocation (A.Location arch))
                  => String
                  -> (forall tp1 tp2 . A.Location arch tp1 -> A.Operand arch tp2 -> Bool)
                  -> (forall tp . A.Operand arch tp -> Maybe (Some (A.Location arch)))
-                 -> S.ExprBuilder t st
-                 -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
-                 -> SL.List (A.Operand arch) sh
-                 -> Ctx.Assignment (S.Expr t) u
-                 -> BaseTypeRepr tp
-                 -> IO (S.Expr t tp, M.MapF (A.Location arch) (S.BoundVar (S.ExprBuilder t st)))
-evalRegExtractor operationName testEq match = \sym pf operands ufArguments resultRepr ->
+                 -> Evaluator arch t
+evalRegExtractor operationName testEq match = Evaluator $ \sym pf operands ufArguments resultRepr ->
   case ufArguments of
     Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
       case ufArg `lookupVarInFormulaOperandList` pf of
@@ -211,13 +206,8 @@ evalBitvectorExtractor :: (1 <= n, M.ShowF (A.Operand arch))
                        => String
                        -> NatRepr n
                        -> (forall x . A.Operand arch x -> Maybe Integer)
-                       -> S.ExprBuilder t st
-                       -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
-                       -> SL.List (A.Operand arch) sh
-                       -> Ctx.Assignment (S.Expr t) u
-                       -> BaseTypeRepr tp
-                       -> IO (S.Expr t tp, M.MapF (A.Location arch) (S.BoundVar (S.ExprBuilder t st)))
-evalBitvectorExtractor operationName litRep match sym pf operands ufArguments resultRepr =
+                       -> Evaluator arch t
+evalBitvectorExtractor operationName litRep match = Evaluator $ \sym pf operands ufArguments resultRepr ->
   case ufArguments of
     Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
       case ufArg `lookupVarInFormulaOperandList` pf of

@@ -417,13 +417,7 @@ eval_isR15 sym pf operands ufArguments resultRepr =
 -- immediate types only appear as function operands.  This means that we only
 -- need to look found the bound variable in the 'Ctx.Assignment' in the argument
 -- list and can disregard the literals.
-eval_am2offset_imm_imm :: forall t st sh u tp
-                        . WEB.ExprBuilder t st
-                       -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                       -> SL.List (A.Operand A32) sh
-                       -> Ctx.Assignment (WEB.Expr t) u
-                       -> BaseTypeRepr tp
-                       -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_am2offset_imm_imm :: FE.Evaluator A32 t
 eval_am2offset_imm_imm =
   FE.evalBitvectorExtractor "am2offset_imm_imm" (knownNat @12) $ \case
     ARMDis.Am2offset_imm oimm -> Just (toInteger (ARMOperands.am2OffsetImmImmediate oimm))
@@ -431,208 +425,103 @@ eval_am2offset_imm_imm =
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
 -- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
-eval_am2offset_imm_add :: forall t st sh u tp
-                        . WEB.ExprBuilder t st
-                       -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                       -> SL.List (A.Operand A32) sh
-                       -> Ctx.Assignment (WEB.Expr t) u
-                       -> BaseTypeRepr tp
-                       -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_am2offset_imm_add :: FE.Evaluator A32 t
 eval_am2offset_imm_add =
   FE.evalBitvectorExtractor "am2offset_imm_add" (knownNat @1) $ \case
     ARMDis.Am2offset_imm oimm -> Just (toInteger (ARMOperands.am2OffsetImmAdd oimm))
     _ -> Nothing
 
-eval_imm12_reg :: forall t st sh u tp
-                . WEB.ExprBuilder t st
-               -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-               -> SL.List (A.Operand A32) sh
-               -> Ctx.Assignment (WEB.Expr t) u
-               -> BaseTypeRepr tp
-               -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_imm12_reg :: FE.Evaluator A32 t
 eval_imm12_reg =
   FE.evalRegExtractor "imm12_reg" testRegisterEquality $ \case
     ARMDis.Addrmode_imm12 ami12 -> Just (rewrapRegister (ARMOperands.addrModeImm12Register ami12))
     _ -> Nothing
 
-eval_imm12_off :: forall t st sh u tp
-                . WEB.ExprBuilder t st
-               -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-               -> SL.List (A.Operand A32) sh
-               -> Ctx.Assignment (WEB.Expr t) u
-               -> BaseTypeRepr tp
-               -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_imm12_off :: FE.Evaluator A32 t
 eval_imm12_off =
   FE.evalBitvectorExtractor "imm12_off" (knownNat @12) $ \case
     ARMDis.Addrmode_imm12 ami12 -> Just (toInteger (ARMOperands.addrModeImm12Immediate ami12))
     _ -> Nothing
 
-eval_imm12_add :: forall t st sh u tp
-                . WEB.ExprBuilder t st
-               -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-               -> SL.List (A.Operand A32) sh
-               -> Ctx.Assignment (WEB.Expr t) u
-               -> BaseTypeRepr tp
-               -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_imm12_add :: FE.Evaluator A32 t
 eval_imm12_add =
   FE.evalBitvectorExtractor "imm12_add" (knownNat @1) $ \case
     ARMDis.Addrmode_imm12 ami12 -> Just (toInteger (ARMOperands.addrModeImm12Add ami12))
     _ -> Nothing
 
-rewrapRegister :: ARMOperands.GPR -> Some (Location arm)
-rewrapRegister = Some . LocGPR . ARMOperands.unGPR
-
-eval_ldst_so_reg_base_register :: forall t st sh u tp
-                                . WEB.ExprBuilder t st
-                               -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                               -> SL.List (A.Operand A32) sh
-                               -> Ctx.Assignment (WEB.Expr t) u
-                               -> BaseTypeRepr tp
-                               -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_base_register :: FE.Evaluator A32 t
 eval_ldst_so_reg_base_register =
   FE.evalRegExtractor "ldst_so_reg_base_register" testRegisterEquality $ \case
     ARMDis.Ldst_so_reg lsr -> Just (rewrapRegister (ARMOperands.ldstSoRegBaseRegister lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_offset_register :: forall t st sh u tp
-                                  . WEB.ExprBuilder t st
-                                 -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                                 -> SL.List (A.Operand A32) sh
-                                 -> Ctx.Assignment (WEB.Expr t) u
-                                 -> BaseTypeRepr tp
-                                 -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_offset_register :: FE.Evaluator A32 t
 eval_ldst_so_reg_offset_register =
   FE.evalRegExtractor "ldst_so_reg_offset_register" testRegisterEquality $ \case
     ARMDis.Ldst_so_reg lsr -> Just (rewrapRegister (ARMOperands.ldstSoRegOffsetRegister lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_add :: forall t st sh u tp
-                      . WEB.ExprBuilder t st
-                     -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                     -> SL.List (A.Operand A32) sh
-                     -> Ctx.Assignment (WEB.Expr t) u
-                     -> BaseTypeRepr tp
-                     -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_add :: FE.Evaluator A32 t
 eval_ldst_so_reg_add =
   FE.evalBitvectorExtractor "ldst_so_reg_add" (knownNat @1) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegAdd lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_imm :: forall t st sh u tp
-                      . WEB.ExprBuilder t st
-                     -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                     -> SL.List (A.Operand A32) sh
-                     -> Ctx.Assignment (WEB.Expr t) u
-                     -> BaseTypeRepr tp
-                     -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_imm :: FE.Evaluator A32 t
 eval_ldst_so_reg_imm =
   FE.evalBitvectorExtractor "ldst_so_reg_imm" (knownNat @5) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegImmediate lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_st :: forall t st sh u tp
-                     . WEB.ExprBuilder t st
-                    -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                    -> SL.List (A.Operand A32) sh
-                    -> Ctx.Assignment (WEB.Expr t) u
-                    -> BaseTypeRepr tp
-                    -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_st :: FE.Evaluator A32 t
 eval_ldst_so_reg_st =
   FE.evalBitvectorExtractor "ldst_so_reg_shift_type" (knownNat @2) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegShiftType lsr))
     _ -> Nothing
 
-eval_modimm_imm :: forall t st sh u tp
-                 . WEB.ExprBuilder t st
-                -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                -> SL.List (A.Operand A32) sh
-                -> Ctx.Assignment (WEB.Expr t) u
-                -> BaseTypeRepr tp
-                -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_modimm_imm :: FE.Evaluator A32 t
 eval_modimm_imm =
   FE.evalBitvectorExtractor "modimm_imm" (knownNat @8) $ \case
     ARMDis.Mod_imm mi -> Just (toInteger (ARMOperands.modImmOrigImmediate mi))
     _ -> Nothing
 
-eval_modimm_rot :: forall t st sh u tp
-                 . WEB.ExprBuilder t st
-                -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                -> SL.List (A.Operand A32) sh
-                -> Ctx.Assignment (WEB.Expr t) u
-                -> BaseTypeRepr tp
-                -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_modimm_rot :: FE.Evaluator A32 t
 eval_modimm_rot =
   FE.evalBitvectorExtractor "modimm_rot" (knownNat @4) $ \case
     ARMDis.Mod_imm mi -> Just (toInteger (ARMOperands.modImmOrigRotate mi))
     _ -> Nothing
 
-eval_soregimm_type :: forall t st sh u tp
-                    . WEB.ExprBuilder t st
-                   -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                   -> SL.List (A.Operand A32) sh
-                   -> Ctx.Assignment (WEB.Expr t) u
-                   -> BaseTypeRepr tp
-                   -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_soregimm_type :: FE.Evaluator A32 t
 eval_soregimm_type =
   FE.evalBitvectorExtractor "soregimm_type" (knownNat @2) $ \case
     ARMDis.So_reg_imm sri -> Just (toInteger (ARMOperands.soRegImmShiftType sri))
     _ -> Nothing
 
-eval_soregimm_imm :: forall t st sh u tp
-                   . WEB.ExprBuilder t st
-                  -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                  -> SL.List (A.Operand A32) sh
-                  -> Ctx.Assignment (WEB.Expr t) u
-                  -> BaseTypeRepr tp
-                  -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_soregimm_imm :: FE.Evaluator A32 t
 eval_soregimm_imm =
   FE.evalBitvectorExtractor "soregimm_imm" (knownNat @5) $ \case
     ARMDis.So_reg_imm sri -> Just (toInteger (ARMOperands.soRegImmImmediate sri))
     _ -> Nothing
 
-eval_soregimm_reg :: forall t st sh u tp
-                   . WEB.ExprBuilder t st
-                  -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                  -> SL.List (A.Operand A32) sh
-                  -> Ctx.Assignment (WEB.Expr t) u
-                  -> BaseTypeRepr tp
-                  -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_soregimm_reg :: FE.Evaluator A32 t
 eval_soregimm_reg =
   FE.evalRegExtractor "soregimm_reg" testRegisterEquality $ \case
     ARMDis.So_reg_imm sri -> Just (rewrapRegister (ARMOperands.soRegImmReg sri))
     _ -> Nothing
 
-eval_soregreg_type :: forall t st sh u tp
-                     . WEB.ExprBuilder t st
-                    -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                    -> SL.List (A.Operand A32) sh
-                    -> Ctx.Assignment (WEB.Expr t) u
-                    -> BaseTypeRepr tp
-                    -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_soregreg_type :: FE.Evaluator A32 t
 eval_soregreg_type =
   FE.evalBitvectorExtractor "soregreg_type" (knownNat @2) $ \case
     ARMDis.So_reg_reg srr -> Just (toInteger (ARMOperands.soRegRegShiftType srr))
     _ -> Nothing
 
-eval_soregreg_reg1 :: forall t st sh u tp
-                    . WEB.ExprBuilder t st
-                   -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                   -> SL.List (A.Operand A32) sh
-                   -> Ctx.Assignment (WEB.Expr t) u
-                   -> BaseTypeRepr tp
-                   -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_soregreg_reg1 :: FE.Evaluator A32 t
 eval_soregreg_reg1 =
   FE.evalRegExtractor "soregreg_reg1" testRegisterEquality $ \case
     ARMDis.So_reg_reg srr -> Just (rewrapRegister (ARMOperands.soRegRegReg1 srr))
     _ -> Nothing
 
-eval_soregreg_reg2 :: forall t st sh u tp
-                    . WEB.ExprBuilder t st
-                   -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-                   -> SL.List (A.Operand A32) sh
-                   -> Ctx.Assignment (WEB.Expr t) u
-                   -> BaseTypeRepr tp
-                   -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_soregreg_reg2 :: FE.Evaluator A32 t
 eval_soregreg_reg2 =
   FE.evalRegExtractor "soregreg_reg2" testRegisterEquality $ \case
     ARMDis.So_reg_reg srr -> Just (rewrapRegister (ARMOperands.soRegRegReg2 srr))
@@ -644,6 +533,9 @@ testRegisterEquality reg op =
     ARMDis.GPR gpr
       | Just Refl <- testEquality reg (LocGPR (ARMOperands.unGPR gpr)) -> True
     _ -> False
+
+rewrapRegister :: ARMOperands.GPR -> Some (Location arm)
+rewrapRegister = Some . LocGPR . ARMOperands.unGPR
 
 noLocation :: SL.List (A.Operand arch) sh
            -> F.WrappedOperand arch sh s
@@ -662,97 +554,97 @@ locationFuncInterpretation =
     , ("a32.am2offset_imm_imm", A.FunctionInterpretation
                                   { A.locationInterp = F.LocationFuncInterp noLocation
                                   , A.exprInterpName = 'interpAm2offsetimmImmExtractor
-                                  , A.exprInterp = FE.Evaluator eval_am2offset_imm_imm
+                                  , A.exprInterp = eval_am2offset_imm_imm
                                   })
     , ("a32.am2offset_imm_add", A.FunctionInterpretation
                                   { A.locationInterp = F.LocationFuncInterp noLocation
                                   , A.exprInterpName = 'interpAm2offsetimmAddExtractor
-                                  , A.exprInterp = FE.Evaluator eval_am2offset_imm_add
+                                  , A.exprInterp = eval_am2offset_imm_add
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp (interpImm12Reg Just LocGPR)
                           , A.exprInterpName = 'interpImm12RegExtractor
-                          , A.exprInterp = FE.Evaluator eval_imm12_reg
+                          , A.exprInterp = eval_imm12_reg
                           })
     , ("a32.imm12_off", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp noLocation
                           , A.exprInterpName = 'interpImm12OffsetExtractor
-                          , A.exprInterp = FE.Evaluator eval_imm12_off
+                          , A.exprInterp = eval_imm12_off
                           })
     , ("a32.imm12_add", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp noLocation
                           , A.exprInterpName = 'interpImm12AddFlgExtractor
-                          , A.exprInterp = FE.Evaluator eval_imm12_add
+                          , A.exprInterp = eval_imm12_add
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
                                           { A.locationInterp = F.LocationFuncInterp (interpLdstsoregBaseReg Just LocGPR)
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor
-                                          , A.exprInterp = FE.Evaluator eval_ldst_so_reg_base_register
+                                          , A.exprInterp = eval_ldst_so_reg_base_register
                                           })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
                                             { A.locationInterp = F.LocationFuncInterp (interpLdstsoregOffReg Just LocGPR)
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor
-                                            , A.exprInterp = FE.Evaluator eval_ldst_so_reg_offset_register
+                                            , A.exprInterp = eval_ldst_so_reg_offset_register
                                             })
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation
                                 { A.locationInterp = F.LocationFuncInterp noLocation
                                 , A.exprInterpName = 'interpLdstsoregAddExtractor
-                                , A.exprInterp = FE.Evaluator eval_ldst_so_reg_add
+                                , A.exprInterp = eval_ldst_so_reg_add
                                 })
     , ("a32.ldst_so_reg_immediate", A.FunctionInterpretation
                                       { A.locationInterp = F.LocationFuncInterp noLocation
                                       , A.exprInterpName = 'interpLdstsoregImmExtractor
-                                      , A.exprInterp = FE.Evaluator eval_ldst_so_reg_imm
+                                      , A.exprInterp = eval_ldst_so_reg_imm
                                       })
     , ("a32.ldst_so_reg_shift_type", A.FunctionInterpretation
                                        { A.locationInterp = F.LocationFuncInterp noLocation
                                        , A.exprInterpName = 'interpLdstsoregTypeExtractor
-                                       , A.exprInterp = FE.Evaluator eval_ldst_so_reg_st
+                                       , A.exprInterp = eval_ldst_so_reg_st
                                        })
 
     , ("a32.modimm_imm", A.FunctionInterpretation
                            { A.locationInterp = F.LocationFuncInterp noLocation
                            , A.exprInterpName = 'interpModimmImmExtractor
-                           , A.exprInterp = FE.Evaluator eval_modimm_imm
+                           , A.exprInterp = eval_modimm_imm
                            })
     , ("a32.modimm_rot", A.FunctionInterpretation
                            { A.locationInterp = F.LocationFuncInterp noLocation
                            , A.exprInterpName = 'interpModimmRotExtractor
-                           , A.exprInterp = FE.Evaluator eval_modimm_rot
+                           , A.exprInterp = eval_modimm_rot
                            })
 
     , ("a32.soregimm_type", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp noLocation
                               , A.exprInterpName = 'interpSoregimmTypeExtractor
-                              , A.exprInterp = FE.Evaluator eval_soregimm_type
+                              , A.exprInterp = eval_soregimm_type
                               })
     , ("a32.soregimm_imm", A.FunctionInterpretation
                              { A.locationInterp = F.LocationFuncInterp noLocation
                              , A.exprInterpName = 'interpSoregimmImmExtractor
-                             , A.exprInterp = FE.Evaluator eval_soregimm_imm
+                             , A.exprInterp = eval_soregimm_imm
                              })
     , ("a32.soregimm_reg", A.FunctionInterpretation
                              { A.locationInterp = F.LocationFuncInterp (interpSoregimmReg Just LocGPR)
                              , A.exprInterpName = 'interpSoregimmRegExtractor
-                             , A.exprInterp = FE.Evaluator eval_soregimm_reg
+                             , A.exprInterp = eval_soregimm_reg
                              })
 
     , ("a32.soregreg_type", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp noLocation
                               , A.exprInterpName = 'interpSoregregTypeExtractor
-                              , A.exprInterp = FE.Evaluator eval_soregreg_type
+                              , A.exprInterp = eval_soregreg_type
                               })
     , ("a32.soregreg_reg1", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp (interpSoregregReg1 Just LocGPR)
                               , A.exprInterpName = 'interpSoregregReg1Extractor
-                              , A.exprInterp = FE.Evaluator eval_soregreg_reg1
+                              , A.exprInterp = eval_soregreg_reg1
                               })
     , ("a32.soregreg_reg2", A.FunctionInterpretation
                               { A.locationInterp = F.LocationFuncInterp (interpSoregregReg2 Just LocGPR)
                               , A.exprInterpName = 'interpSoregregReg2Extractor
-                              , A.exprInterp = FE.Evaluator eval_soregreg_reg2
+                              , A.exprInterp = eval_soregreg_reg2
                               })
 
     ]
