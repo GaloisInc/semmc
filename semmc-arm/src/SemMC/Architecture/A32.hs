@@ -278,7 +278,7 @@ operandValue :: forall sym s.
 operandValue sym locLookup op = TaggedExpr <$> opVa op
     where
         opVa :: ARMDis.Operand s -> IO (S.SymExpr sym (A.OperandType A32 s))
-        opVa (ARMDis.Addr_offset_none gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
+        opVa (ARMDis.Addr_offset_none gpr) = locLookup (LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr)
         opVa (ARMDis.Addrmode_imm12 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opVa (ARMDis.Addrmode_imm12_pre v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
         opVa (ARMDis.Am2offset_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
@@ -286,8 +286,8 @@ operandValue sym locLookup op = TaggedExpr <$> opVa op
         opVa (ARMDis.Arm_blx_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
         opVa (ARMDis.Arm_br_target v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
         opVa (ARMDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v -- KWQ: Bool? size?
-        opVa (ARMDis.GPR gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
-        opVa (ARMDis.GPRnopc gpr) = locLookup (LocGPR $ ARMOperands.unGPR gpr)
+        opVa (ARMDis.GPR gpr) = locLookup (LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr)
+        opVa (ARMDis.GPRnopc gpr) = locLookup (LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr)
         opVa (ARMDis.Ldst_so_reg v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
         opVa (ARMDis.Mod_imm v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
         opVa (ARMDis.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
@@ -298,7 +298,7 @@ operandValue sym locLookup op = TaggedExpr <$> opVa op
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
 operandToLocation :: ARMDis.Operand s -> Maybe (Location A32 (A.OperandType A32 s))
-operandToLocation (ARMDis.GPR gpr) = Just $ LocGPR $ ARMOperands.unGPR gpr
+operandToLocation (ARMDis.GPR gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
 operandToLocation _ = Nothing
 
 instance A.IsLocation (Location A32) where
@@ -421,7 +421,7 @@ eval_isR15 sym pf operands ufArguments resultRepr =
 eval_am2offset_imm_imm :: FE.Evaluator A32 t
 eval_am2offset_imm_imm =
   FE.evalBitvectorExtractor "am2offset_imm_imm" (knownNat @12) $ \case
-    ARMDis.Am2offset_imm oimm -> Just (toInteger (ARMOperands.am2OffsetImmImmediate oimm))
+    ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmImmediate oimm)
     _ -> Nothing
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
@@ -429,7 +429,7 @@ eval_am2offset_imm_imm =
 eval_am2offset_imm_add :: FE.Evaluator A32 t
 eval_am2offset_imm_add =
   FE.evalBitvectorExtractor "am2offset_imm_add" (knownNat @1) $ \case
-    ARMDis.Am2offset_imm oimm -> Just (toInteger (ARMOperands.am2OffsetImmAdd oimm))
+    ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmAdd oimm)
     _ -> Nothing
 
 eval_imm12_reg :: FE.Evaluator A32 t
@@ -441,13 +441,13 @@ eval_imm12_reg =
 eval_imm12_off :: FE.Evaluator A32 t
 eval_imm12_off =
   FE.evalBitvectorExtractor "imm12_off" (knownNat @12) $ \case
-    ARMDis.Addrmode_imm12 ami12 -> Just (toInteger (ARMOperands.addrModeImm12Immediate ami12))
+    ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     _ -> Nothing
 
 eval_imm12_add :: FE.Evaluator A32 t
 eval_imm12_add =
   FE.evalBitvectorExtractor "imm12_add" (knownNat @1) $ \case
-    ARMDis.Addrmode_imm12 ami12 -> Just (toInteger (ARMOperands.addrModeImm12Add ami12))
+    ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     _ -> Nothing
 
 eval_ldst_so_reg_base_register :: FE.Evaluator A32 t
@@ -465,43 +465,43 @@ eval_ldst_so_reg_offset_register =
 eval_ldst_so_reg_add :: FE.Evaluator A32 t
 eval_ldst_so_reg_add =
   FE.evalBitvectorExtractor "ldst_so_reg_add" (knownNat @1) $ \case
-    ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegAdd lsr))
+    ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegAdd lsr)
     _ -> Nothing
 
 eval_ldst_so_reg_imm :: FE.Evaluator A32 t
 eval_ldst_so_reg_imm =
   FE.evalBitvectorExtractor "ldst_so_reg_imm" (knownNat @5) $ \case
-    ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegImmediate lsr))
+    ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegImmediate lsr)
     _ -> Nothing
 
 eval_ldst_so_reg_st :: FE.Evaluator A32 t
 eval_ldst_so_reg_st =
   FE.evalBitvectorExtractor "ldst_so_reg_shift_type" (knownNat @2) $ \case
-    ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegShiftType lsr))
+    ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegShiftType lsr)
     _ -> Nothing
 
 eval_modimm_imm :: FE.Evaluator A32 t
 eval_modimm_imm =
   FE.evalBitvectorExtractor "modimm_imm" (knownNat @8) $ \case
-    ARMDis.Mod_imm mi -> Just (toInteger (ARMOperands.modImmOrigImmediate mi))
+    ARMDis.Mod_imm mi -> Just (fromIntegral $ W.unW $ ARMOperands.modImmOrigImmediate mi)
     _ -> Nothing
 
 eval_modimm_rot :: FE.Evaluator A32 t
 eval_modimm_rot =
   FE.evalBitvectorExtractor "modimm_rot" (knownNat @4) $ \case
-    ARMDis.Mod_imm mi -> Just (toInteger (ARMOperands.modImmOrigRotate mi))
+    ARMDis.Mod_imm mi -> Just (fromIntegral $ W.unW $ ARMOperands.modImmOrigRotate mi)
     _ -> Nothing
 
 eval_soregimm_type :: FE.Evaluator A32 t
 eval_soregimm_type =
   FE.evalBitvectorExtractor "soregimm_type" (knownNat @2) $ \case
-    ARMDis.So_reg_imm sri -> Just (toInteger (ARMOperands.soRegImmShiftType sri))
+    ARMDis.So_reg_imm sri -> Just (fromIntegral $ W.unW $ ARMOperands.soRegImmShiftType sri)
     _ -> Nothing
 
 eval_soregimm_imm :: FE.Evaluator A32 t
 eval_soregimm_imm =
   FE.evalBitvectorExtractor "soregimm_imm" (knownNat @5) $ \case
-    ARMDis.So_reg_imm sri -> Just (toInteger (ARMOperands.soRegImmImmediate sri))
+    ARMDis.So_reg_imm sri -> Just (fromIntegral $ W.unW $ ARMOperands.soRegImmImmediate sri)
     _ -> Nothing
 
 eval_soregimm_reg :: FE.Evaluator A32 t
@@ -513,7 +513,7 @@ eval_soregimm_reg =
 eval_soregreg_type :: FE.Evaluator A32 t
 eval_soregreg_type =
   FE.evalBitvectorExtractor "soregreg_type" (knownNat @2) $ \case
-    ARMDis.So_reg_reg srr -> Just (toInteger (ARMOperands.soRegRegShiftType srr))
+    ARMDis.So_reg_reg srr -> Just (fromIntegral $ W.unW $ ARMOperands.soRegRegShiftType srr)
     _ -> Nothing
 
 eval_soregreg_reg1 :: FE.Evaluator A32 t
@@ -532,11 +532,11 @@ testRegisterEquality :: A.Location A32 tp1 -> ARMDis.Operand tp2 -> Bool
 testRegisterEquality reg op =
   case op of
     ARMDis.GPR gpr
-      | Just Refl <- testEquality reg (LocGPR (ARMOperands.unGPR gpr)) -> True
+      | Just Refl <- testEquality reg (LocGPR (fromIntegral $ W.unW $ ARMOperands.unGPR gpr)) -> True
     _ -> False
 
 rewrapRegister :: ARMOperands.GPR -> Some (Location arm)
-rewrapRegister = Some . LocGPR . ARMOperands.unGPR
+rewrapRegister = Some . LocGPR . fromIntegral . W.unW . ARMOperands.unGPR
 
 noLocation :: SL.List (A.Operand arch) sh
            -> F.WrappedOperand arch sh s
@@ -689,7 +689,7 @@ a32template a32sr =
                                             :: T.TemplatedOperand A32 "Addrmode_imm12"
                         where mkTemplate' :: T.TemplatedOperandFn A32 "Addrmode_imm12"
                               mkTemplate' sym locLookup = do
-                                let gprN = ARMOperands.gpr gprNum
+                                let gprN = ARMOperands.gpr $ fromIntegral gprNum
                                 base <- A.unTagged <$> A.operandValue (Proxy @A32) sym locLookup
                                                           (ARMDis.GPR gprN)
                                 offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
@@ -708,7 +708,7 @@ a32template a32sr =
                                           :: T.TemplatedOperand A32 "Addrmode_imm12_pre"
                     where mkTemplate' :: T.TemplatedOperandFn A32 "Addrmode_imm12_pre"
                           mkTemplate' sym locLookup = do
-                            let gprN = ARMOperands.gpr $ gprNum
+                            let gprN = ARMOperands.gpr $ fromIntegral gprNum
                             base <- A.unTagged <$> A.operandValue (Proxy @A32) sym locLookup (ARMDis.GPR gprN)
                             offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
                             addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
@@ -723,7 +723,7 @@ a32template a32sr =
       ARMDis.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
       ARMDis.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
       ARMDis.Cc_outRepr -> error "opTemplate ARM_Cc_outRepr TBD"
-      ARMDis.GPRRepr -> concreteTemplatedOperand (ARMDis.GPR . ARMOperands.gpr) LocGPR <$> [0..numGPR-1]
+      ARMDis.GPRRepr -> concreteTemplatedOperand (ARMDis.GPR . ARMOperands.gpr . fromIntegral) LocGPR <$> [0..numGPR-1]
       ARMDis.Mod_immRepr -> error "opTemplate ARM_Mod_immRepr TBD"
       ARMDis.PredRepr -> [symbolicTemplatedOperand (Proxy @4) Unsigned "Pred"
                           (ARMDis.Pred . ARMDis.mkPred . fromInteger)]
