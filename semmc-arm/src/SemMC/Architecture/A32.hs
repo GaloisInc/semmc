@@ -484,6 +484,10 @@ testRegisterEquality regNum op =
       | gpr == regNum -> True
     _ -> False
 
+noLocation :: SL.List (A.Operand arch) sh
+           -> F.WrappedOperand arch sh s
+           -> BaseTypeRepr tp
+           -> Maybe (Location arch tp)
 noLocation _ _ _ = Nothing
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t A32)]
