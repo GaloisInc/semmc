@@ -20,6 +20,8 @@ module SemMC.Formula.Eval (
   Evaluator(..),
   lookupVarInFormulaOperandList,
   exprForRegister,
+  evalBitvectorExtractor,
+  evalRegExtractor,
   evaluateFunctions
   ) where
 
@@ -180,6 +182,55 @@ findOperandVarForRegister pf operands0 test = go (SL.imap Pair operands0)
         Pair idx op SL.:< rest
           | test op -> Just (Some (F.pfOperandVars pf SL.!! idx))
           | otherwise -> go rest
+
+evalRegExtractor :: (M.ShowF (A.Operand arch), A.IsLocation (A.Location arch))
+                 => String
+                 -> (forall tp1 tp2 . A.Location arch tp1 -> A.Operand arch tp2 -> Bool)
+                 -> (forall tp . A.Operand arch tp -> Maybe (Some (A.Location arch)))
+                 -> S.ExprBuilder t st
+                 -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
+                 -> SL.List (A.Operand arch) sh
+                 -> Ctx.Assignment (S.Expr t) u
+                 -> BaseTypeRepr tp
+                 -> IO (S.Expr t tp, M.MapF (A.Location arch) (S.BoundVar (S.ExprBuilder t st)))
+evalRegExtractor operationName testEq match = \sym pf operands ufArguments resultRepr ->
+  case ufArguments of
+    Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
+      case ufArg `lookupVarInFormulaOperandList` pf of
+        Nothing -> error ("Argument to " ++ operationName ++ " is not a formula parameter")
+        Just (Some idx) -> do
+          let operand = operands SL.!! idx
+          case match operand of
+            Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ M.showF operand)
+            Just (Some reg) -> exprForRegister sym pf operands (testEq reg) reg resultRepr
+
+-- | A generic skeleton for evaluation functions that extract bitvector fields from operands
+--
+-- This isn't suitable for the versions that extract registers
+evalBitvectorExtractor :: (1 <= n, M.ShowF (A.Operand arch))
+                       => String
+                       -> NatRepr n
+                       -> (forall x . A.Operand arch x -> Maybe Integer)
+                       -> S.ExprBuilder t st
+                       -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
+                       -> SL.List (A.Operand arch) sh
+                       -> Ctx.Assignment (S.Expr t) u
+                       -> BaseTypeRepr tp
+                       -> IO (S.Expr t tp, M.MapF (A.Location arch) (S.BoundVar (S.ExprBuilder t st)))
+evalBitvectorExtractor operationName litRep match sym pf operands ufArguments resultRepr =
+  case ufArguments of
+    Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
+      case ufArg `lookupVarInFormulaOperandList` pf of
+        Nothing -> error ("Argument to " ++ operationName ++ " is not a formula parameter: " ++ M.showF ufArg)
+        Just (Some idx) -> do
+          let op = operands SL.!! idx
+          case match op of
+            Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ M.showF op)
+            Just val -> do
+              bv <- S.bvLit sym litRep val
+              case testEquality (S.exprType bv) resultRepr of
+                Just Refl -> return (bv, M.empty)
+                Nothing -> error (operationName ++ " returns a " ++ show (S.exprType bv) ++ " but the caller expected " ++ show resultRepr)
 
 -- | See `evaluateFunctions'`
 evaluateFunctions
