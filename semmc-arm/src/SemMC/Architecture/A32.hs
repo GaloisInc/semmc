@@ -23,6 +23,7 @@ module SemMC.Architecture.A32
     )
     where
 
+import           Control.Applicative ( (<|>) )
 import           Control.Monad ( replicateM, forM )
 import qualified Control.Monad.State.Strict as St
 import           Control.Monad.Trans ( liftIO )
@@ -330,8 +331,6 @@ instance A.IsLocation (Location A32) where
     , map (Some . LocGPRMask) [0..numGPR-1]
     , [ Some LocPC
       , Some LocCPSR
-      , Some LocMem1
-      , Some LocMem2
       ]
     ]
 
@@ -342,19 +341,20 @@ parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
     'C' -> Some LocCPSR <$ P.string "CPSR"
-    'M' -> (Some LocMem1 <$ P.string "Mem")
+    'M' -> (Some LocMem1 <$ P.string "Mem") <|>
+           (parsePrefixedRegister (Some . LocGPRMask) "Mask_R")
            -- <|> (Some LocMem2 <$ P.string "Mem2")
     'P' -> Some LocPC <$ P.string "PC"
     'R' -> do
-      parsePrefixedRegister (Some . LocGPR) 'R'
+      parsePrefixedRegister (Some . LocGPR) "R"
     'S' -> do
-      parsePrefixedRegister (Some . LocFPR) 'S'
+      parsePrefixedRegister (Some . LocFPR) "S"
     _ -> do
       P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
-parsePrefixedRegister :: (Word8 -> b) -> Char -> ARMComp.Parser b
-parsePrefixedRegister f c = do
-  _ <- P.char c
+parsePrefixedRegister :: (Word8 -> b) -> String -> ARMComp.Parser b
+parsePrefixedRegister f prefix = do
+  _ <- P.string prefix
   n <- P.decimal
   case n >= 0 && n <= (numGPR-1) of
     True -> return (f n)
@@ -801,7 +801,11 @@ mkRandomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprList
+      mapM_ addZero gprMaskList
       mapM_ addRandomBV fprList
+
+    addZero :: Location A32 (BaseBVType 32) -> St.StateT ConcreteState IO ()
+    addZero loc = St.modify' $ MapF.insert loc (V.ValueBV (W.w 0))
 
     addRandomBV :: Location A32 (BaseBVType 32) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
@@ -861,16 +865,17 @@ getMachineState = do
 -- machine on the receiving end doesn't need to do anything special besides map
 -- the data.
 serializeState :: ConcreteState -> B.ByteString
-serializeState s = mempty
-  LB.toStrict (B.toLazyByteString b)
+serializeState s = LB.toStrict (B.toLazyByteString b)
   where
     b = mconcat [ mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s gprList))
-                , serializeSymVal (B.word32LE . fromInteger) (extractLoc s LocPC)
                 , mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s gprMaskList))
                 , mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s fprList))
-                , serializeSymVal (B.word32LE . fromInteger) (extractLoc s LocCPSR)
-                , serializeMem (extractLoc s LocMem1)
-                , serializeMem (extractLoc s LocMem2)
+                -- CPSR, unused
+                , B.word32LE 0
+                -- , serializeMem (extractLoc s LocMem1)
+                , serializeMem (V.ValueMem $ B.replicate 32 0)
+                -- , serializeMem (extractLoc s LocMem2)
+                , serializeMem (V.ValueMem $ B.replicate 32 0)
                 ]
 
 serializeSymVal :: (KnownNat n) => (Integer -> B.Builder) -> V.Value (BaseBVType n) -> B.Builder
@@ -887,8 +892,9 @@ extractLoc :: ConcreteState
            -> Location A32 tp
            -> V.Value tp
 extractLoc s l =
-    let Just v = MapF.lookup l s
-    in v
+    case MapF.lookup l s of
+        Nothing -> error $ "extractLoc: not found: " <> show l <> ", " <> show s
+        Just v -> v
 
 extractLocs :: ConcreteState
             -> [Location A32 tp]
@@ -896,10 +902,10 @@ extractLocs :: ConcreteState
 extractLocs s locs = map (extractLoc s) locs
 
 gprList :: [Location A32 (BaseBVType 32)]
-gprList = fmap LocGPR [0..31]
+gprList = fmap LocGPR [0..15]
 
 gprMaskList :: [Location A32 (BaseBVType 32)]
-gprMaskList = fmap LocGPRMask [0..31]
+gprMaskList = fmap LocGPRMask [0..15]
 
 fprList :: [Location A32 (BaseBVType 32)]
 fprList = fmap LocFPR [0..31]
