@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -423,18 +424,10 @@ eval_am2offset_imm_imm :: forall t st sh u tp
                        -> Ctx.Assignment (WEB.Expr t) u
                        -> BaseTypeRepr tp
                        -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
-eval_am2offset_imm_imm sym pf operands ufArguments resultRepr =
-  case ufArguments of
-    Ctx.Empty Ctx.:> WEB.BoundVarExpr ufArg ->
-      case ufArg `FE.lookupVarInFormulaOperandList` pf of
-        Nothing -> error "Argument to am2offset_imm_imm is not a formula parameter"
-        Just (Some idx) -> do
-          case operands SL.!! idx of
-            ARMDis.Am2offset_imm oimm -> do
-              bv <- S.bvLit sym (knownNat @12) (fromIntegral (ARMOperands.am2OffsetImmImmediate oimm))
-              case testEquality (S.exprType bv) resultRepr of
-                Just Refl -> return (bv, MapF.empty)
-                Nothing -> error ("am2offset_imm_imm returns a BaseBVType 12, but the caller expected " ++ show resultRepr)
+eval_am2offset_imm_imm =
+  evalBitvectorExtractor "am2offset_imm_imm" (knownNat @12) $ \case
+    ARMDis.Am2offset_imm oimm -> Just (toInteger (ARMOperands.am2OffsetImmImmediate oimm))
+    _ -> Nothing
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
 -- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
@@ -445,18 +438,10 @@ eval_am2offset_imm_add :: forall t st sh u tp
                        -> Ctx.Assignment (WEB.Expr t) u
                        -> BaseTypeRepr tp
                        -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
-eval_am2offset_imm_add sym pf operands ufArguments resultRepr =
-  case ufArguments of
-    Ctx.Empty Ctx.:> WEB.BoundVarExpr ufArg ->
-      case ufArg `FE.lookupVarInFormulaOperandList` pf of
-        Nothing -> error "Argument to am2offset_imm_add is not a formula parameter"
-        Just (Some idx) -> do
-          case operands SL.!! idx of
-            ARMDis.Am2offset_imm oimm -> do
-              bv <- S.bvLit sym (knownNat @1) (fromIntegral (ARMOperands.am2OffsetImmAdd oimm))
-              case testEquality (S.exprType bv) resultRepr of
-                Just Refl -> return (bv, MapF.empty)
-                Nothing -> error ("am2offset_imm_add returns a BaseBVType 1, but the caller expected " ++ show resultRepr)
+eval_am2offset_imm_add =
+  evalBitvectorExtractor "am2offset_imm_add" (knownNat @1) $ \case
+    ARMDis.Am2offset_imm oimm -> Just (toInteger (ARMOperands.am2OffsetImmAdd oimm))
+    _ -> Nothing
 
 eval_imm12_reg :: forall t st sh u tp
                 . WEB.ExprBuilder t st
@@ -476,6 +461,95 @@ eval_imm12_reg sym pf operands ufArguments resultRepr =
               let reg = ARMOperands.addrModeImm12Register ami12
               let regNum = ARMOperands.unGPR reg
               FE.exprForRegister sym pf operands (testRegisterEquality reg) (LocGPR regNum) resultRepr
+            _ -> error ("Unexpected operand type in eval_imm12_reg: " ++ show (operands SL.!! idx))
+
+eval_imm12_off :: forall t st sh u tp
+                . WEB.ExprBuilder t st
+               -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+               -> SL.List (A.Operand A32) sh
+               -> Ctx.Assignment (WEB.Expr t) u
+               -> BaseTypeRepr tp
+               -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_imm12_off =
+  evalBitvectorExtractor "imm12_off" (knownNat @12) $ \case
+    ARMDis.Addrmode_imm12 ami12 -> Just (toInteger (ARMOperands.addrModeImm12Immediate ami12))
+    _ -> Nothing
+
+eval_imm12_add :: forall t st sh u tp
+                . WEB.ExprBuilder t st
+               -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+               -> SL.List (A.Operand A32) sh
+               -> Ctx.Assignment (WEB.Expr t) u
+               -> BaseTypeRepr tp
+               -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_imm12_add =
+  evalBitvectorExtractor "imm12_add" (knownNat @1) $ \case
+    ARMDis.Addrmode_imm12 ami12 -> Just (toInteger (ARMOperands.addrModeImm12Add ami12))
+    _ -> Nothing
+
+eval_ldst_so_reg_add :: forall t st sh u tp
+                      . WEB.ExprBuilder t st
+                     -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+                     -> SL.List (A.Operand A32) sh
+                     -> Ctx.Assignment (WEB.Expr t) u
+                     -> BaseTypeRepr tp
+                     -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_add =
+  evalBitvectorExtractor "ldst_so_reg_add" (knownNat @1) $ \case
+    ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegAdd lsr))
+    _ -> Nothing
+
+eval_ldst_so_reg_imm :: forall t st sh u tp
+                      . WEB.ExprBuilder t st
+                     -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+                     -> SL.List (A.Operand A32) sh
+                     -> Ctx.Assignment (WEB.Expr t) u
+                     -> BaseTypeRepr tp
+                     -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_imm =
+  evalBitvectorExtractor "ldst_so_reg_imm" (knownNat @5) $ \case
+    ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegImmediate lsr))
+    _ -> Nothing
+
+eval_ldst_so_reg_st :: forall t st sh u tp
+                     . WEB.ExprBuilder t st
+                    -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+                    -> SL.List (A.Operand A32) sh
+                    -> Ctx.Assignment (WEB.Expr t) u
+                    -> BaseTypeRepr tp
+                    -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_ldst_so_reg_st =
+  evalBitvectorExtractor "ldst_so_reg_shift_type" (knownNat @2) $ \case
+    ARMDis.Ldst_so_reg lsr -> Just (toInteger (ARMOperands.ldstSoRegShiftType lsr))
+    _ -> Nothing
+
+-- | A generic skeleton for evaluation functions that extract bitvector fields from operands
+--
+-- This isn't suitable for the versions that extract registers
+evalBitvectorExtractor :: (1 <= n, ShowF (A.Operand arch))
+                       => String
+                       -> NatRepr n
+                       -> (forall x . A.Operand arch x -> Maybe Integer)
+                       -> WEB.ExprBuilder t st
+                       -> F.ParameterizedFormula (WEB.ExprBuilder t st) arch sh
+                       -> SL.List (A.Operand arch) sh
+                       -> Ctx.Assignment (WEB.Expr t) u
+                       -> BaseTypeRepr tp
+                       -> IO (WEB.Expr t tp, MapF.MapF (A.Location arch) (S.BoundVar (WEB.ExprBuilder t st)))
+evalBitvectorExtractor operationName litRep match sym pf operands ufArguments resultRepr =
+  case ufArguments of
+    Ctx.Empty Ctx.:> WEB.BoundVarExpr ufArg ->
+      case ufArg `FE.lookupVarInFormulaOperandList` pf of
+        Nothing -> error ("Argument to " ++ operationName ++ " is not a formula parameter: " ++ showF ufArg)
+        Just (Some idx) -> do
+          let op = operands SL.!! idx
+          case match op of
+            Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ showF op)
+            Just val -> do
+              bv <- S.bvLit sym litRep val
+              case testEquality (S.exprType bv) resultRepr of
+                Just Refl -> return (bv, MapF.empty)
+                Nothing -> error (operationName ++ " returns a " ++ show (S.exprType bv) ++ " but the caller expected " ++ show resultRepr)
 
 testRegisterEquality :: ARMOperands.GPR -> ARMDis.Operand tp -> Bool
 testRegisterEquality regNum op =
@@ -517,10 +591,12 @@ locationFuncInterpretation =
     , ("a32.imm12_off", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp noLocation
                           , A.exprInterpName = 'interpImm12OffsetExtractor
+                          , A.exprInterp = FE.Evaluator eval_imm12_off
                           })
     , ("a32.imm12_add", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp noLocation
                           , A.exprInterpName = 'interpImm12AddFlgExtractor
+                          , A.exprInterp = FE.Evaluator eval_imm12_add
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
@@ -534,14 +610,17 @@ locationFuncInterpretation =
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation
                                 { A.locationInterp = F.LocationFuncInterp noLocation
                                 , A.exprInterpName = 'interpLdstsoregAddExtractor
+                                , A.exprInterp = FE.Evaluator eval_ldst_so_reg_add
                                 })
     , ("a32.ldst_so_reg_immediate", A.FunctionInterpretation
                                       { A.locationInterp = F.LocationFuncInterp noLocation
                                       , A.exprInterpName = 'interpLdstsoregImmExtractor
+                                      , A.exprInterp = FE.Evaluator eval_ldst_so_reg_imm
                                       })
     , ("a32.ldst_so_reg_shift_type", A.FunctionInterpretation
                                        { A.locationInterp = F.LocationFuncInterp noLocation
                                        , A.exprInterpName = 'interpLdstsoregTypeExtractor
+                                       , A.exprInterp = FE.Evaluator eval_ldst_so_reg_st
                                        })
 
     , ("a32.modimm_imm", A.FunctionInterpretation
