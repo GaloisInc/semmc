@@ -1,18 +1,18 @@
 (let
  ((rrxC
   (concat
-   ((_ extract 0 0)
+   ((_ extract 31 31)
     value)
    (concat
     c
-    ((_ extract 31 1)
+    ((_ extract 30 0)
      value))))
   (rorC
    (concat
     (ite
      (bvult shift_n #x00000020)
      (ite
-      ((_ call "uf.test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic.32")
        (bvsub shift_n #x00000001)
        value)
       #b1
@@ -32,7 +32,7 @@
     (ite
      (bvult shift_n #x00000020)
      (ite
-      ((_ call "uf.test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic.32")
        (bvsub shift_n #x00000001)
        value)
       #b1
@@ -46,7 +46,7 @@
     (ite
      (bvult shift_n #x00000020)
      (ite
-      ((_ call "uf.test_bit_dynamic")
+      ((_ call "uf.test_bit_dynamic.32")
        (bvsub shift_n #x00000001)
        value)
       #b1

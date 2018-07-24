@@ -10,24 +10,24 @@
      ((_ call "uf.arm.is_r15")
       rD)
      rD
-     ((_ extract 31 0)
+     ((_ extract 35 4)
       (res_nzcv)))
     rD)))
   (res_nzcv
    ((_ call "df.addWithCarry")
     rN
-    ((_ extract 31 0)
+    ((_ extract 32 1)
      ((_ call "df.shiftC")
       ((_ call "uf.a32.soregimm_reg")
        sori)
-      ((_ extract 34 32)
+      ((_ extract 2 0)
        (immShift))
-      ((_ extract 31 0)
+      ((_ extract 34 3)
        (immShift))
-      ((_ extract 29 29)
+      ((_ extract 2 2)
        'CPSR)))
     ((_ zero_extend 31)
-     ((_ extract 29 29)
+     ((_ extract 2 2)
       'CPSR))))
   (immShift
    (ite
@@ -92,15 +92,15 @@
        rD)))
     (concat
      (nzcv)
-     ((_ extract 27 0)
+     ((_ extract 31 4)
       (ite
        ((_ call "uf.arm.is_r15")
         rD)
        (ite
         (bveq
          #b0
-         ((_ extract 0 0)
-          ((_ extract 31 0)
+         ((_ extract 31 31)
+          ((_ extract 35 4)
            (res_nzcv))))
         (SetT32Mode)
         'CPSR)
@@ -111,8 +111,8 @@
      (ite
       (bveq
        #b0
-       ((_ extract 0 0)
-        ((_ extract 31 0)
+       ((_ extract 31 31)
+        ((_ extract 35 4)
          (res_nzcv))))
       (SetT32Mode)
       'CPSR)
@@ -122,7 +122,7 @@
     #xfeffffff
     (bvor #x00000020 'CPSR)))
   (nzcv
-   ((_ extract 35 32)
+   ((_ extract 3 0)
     (res_nzcv)))
   (bxWritePC
    (ite
@@ -131,26 +131,26 @@
     (ite
      (bveq
       #b0
-      ((_ extract 0 0)
-       ((_ extract 31 0)
+      ((_ extract 31 31)
+       ((_ extract 35 4)
         (res_nzcv))))
      (bvand
       #xfffffffe
-      ((_ extract 31 0)
+      ((_ extract 35 4)
        (res_nzcv)))
      (ite
       (bveq
        #b0
-       ((_ extract 1 1)
-        ((_ extract 31 0)
+       ((_ extract 30 30)
+        ((_ extract 35 4)
          (res_nzcv))))
       (bvand var1)
-      ((_ extract 31 0)
+      ((_ extract 35 4)
        (res_nzcv))))
     (bvadd 'PC #x00000004)))
   (var1
    (#xfffffffd
-    ((_ extract 31 0)
+    ((_ extract 35 4)
      (res_nzcv)))))
  ((operands
   ((rD . 'GPR)

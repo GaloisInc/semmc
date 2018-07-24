@@ -8,11 +8,11 @@
   (ite
    (bveq
     (concat
-     ((_ extract 11 10)
+     ((_ extract 21 20)
       cpsr)
-     ((_ extract 26 25)
+     ((_ extract 6 5)
       cpsr))
     #x0)
    #xe
-   ((_ extract 15 12)
+   ((_ extract 19 16)
     cpsr))))

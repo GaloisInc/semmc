@@ -15,7 +15,7 @@
      rD)
     (bvand
      #xfffffffd
-     ((_ extract 31 0)
+     ((_ extract 35 4)
       (res_nzcv)))
     (bvadd 'PC #x00000002))))
  ((operands
@@ -37,6 +37,6 @@
        ((_ call "uf.arm.is_r15")
         rD)
        rD
-       ((_ extract 31 0)
+       ((_ extract 35 4)
         (res_nzcv)))
       rD))))))

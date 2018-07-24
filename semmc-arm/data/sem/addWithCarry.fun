@@ -1,8 +1,8 @@
 (let
  ((addCarry
   (concat
-   ((_ extract 31 31)
-    ((_ extract 31 0)
+   ((_ extract 0 0)
+    ((_ extract 32 1)
      (bvadd
       (bvadd
        ((_ zero_extend 1)
@@ -14,7 +14,7 @@
    (concat
     (ite
      (bveq
-      ((_ extract 31 0)
+      ((_ extract 32 1)
        (bvadd
         (bvadd
          ((_ zero_extend 1)
@@ -27,7 +27,7 @@
      #b1
      #b0)
     (concat
-     ((_ extract 32 32)
+     ((_ extract 0 0)
       (bvadd
        (bvadd
         ((_ zero_extend 1)
@@ -37,8 +37,8 @@
        ((_ zero_extend 1)
         carry_in)))
      (bvand
-      ((_ extract 31 31)
-       ((_ extract 31 0)
+      ((_ extract 0 0)
+       ((_ extract 32 1)
         (bvadd
          (bvadd
           ((_ zero_extend 1)
@@ -47,7 +47,7 @@
            y))
          ((_ zero_extend 1)
           carry_in))))
-      ((_ extract 32 32)
+      ((_ extract 0 0)
        (bvadd
         (bvadd
          ((_ zero_extend 1)
@@ -57,7 +57,7 @@
         ((_ zero_extend 1)
          carry_in))))))))
   (addResult
-   ((_ extract 31 0)
+   ((_ extract 32 1)
     (bvadd
      (bvadd
       ((_ zero_extend 1)

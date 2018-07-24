@@ -2,20 +2,20 @@
 (let
  ((var1
   (rD
-   ((_ extract 31 0)
+   ((_ extract 35 4)
     (res_nzcv))))
   (res_nzcv
    ((_ call "df.addWithCarry")
     ((_ call "uf.t32.t2soreg_reg")
      rN)
-    ((_ extract 31 0)
+    ((_ extract 32 1)
      ((_ call "df.shiftC")
       rM
-      ((_ extract 34 32)
+      ((_ extract 2 0)
        (immShift))
-      ((_ extract 31 0)
+      ((_ extract 34 3)
        (immShift))
-      ((_ extract 29 29)
+      ((_ extract 2 2)
        'CPSR)))
     #x00000000))
   (immShift
@@ -73,7 +73,7 @@
          ((_ call "uf.t32.t2soreg_imm")
           rN))))))))
   (nzcv
-   ((_ extract 35 32)
+   ((_ extract 3 0)
     (res_nzcv)))
   (branchWritePC
    (ite
@@ -81,7 +81,7 @@
      rD)
     (bvand
      #xfffffffd
-     ((_ extract 31 0)
+     ((_ extract 35 4)
       (res_nzcv)))
     (bvadd 'PC #x00000002))))
  ((operands
@@ -108,7 +108,7 @@
           rD)))
        (concat
         (nzcv)
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          'CPSR))
        'CPSR)
       'CPSR))
