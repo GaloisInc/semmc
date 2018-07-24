@@ -198,6 +198,7 @@ evalRegExtractor operationName testEq match = Evaluator $ \sym pf operands ufArg
           case match operand of
             Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ M.showF operand)
             Just (Some reg) -> exprForRegister sym pf operands (testEq reg) reg resultRepr
+    _ -> error ("Unexpected argument list to " ++ operationName)
 
 -- | A generic skeleton for evaluation functions that extract bitvector fields from operands
 --
@@ -221,6 +222,7 @@ evalBitvectorExtractor operationName litRep match = Evaluator $ \sym pf operands
               case testEquality (S.exprType bv) resultRepr of
                 Just Refl -> return (bv, M.empty)
                 Nothing -> error (operationName ++ " returns a " ++ show (S.exprType bv) ++ " but the caller expected " ++ show resultRepr)
+    _ -> error ("Unexpected argument list to " ++ operationName)
 
 -- | See `evaluateFunctions'`
 evaluateFunctions

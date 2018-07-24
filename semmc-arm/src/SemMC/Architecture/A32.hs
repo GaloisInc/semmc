@@ -409,6 +409,7 @@ eval_isR15 sym pf operands ufArguments resultRepr =
           case testEquality (S.exprType p) resultRepr of
             Just Refl -> return (p, MapF.empty)
             Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
+    _ -> error "Unexpected argument list to isR15"
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value
 -- and extracts the immediate value as a @BaseBVType 12@ (i.e., a 12 bit bitvector)
