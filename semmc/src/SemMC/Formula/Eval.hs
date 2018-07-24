@@ -19,6 +19,7 @@
 module SemMC.Formula.Eval (
   Evaluator(..),
   lookupVarInFormulaOperandList,
+  exprForRegister,
   evaluateFunctions
   ) where
 
@@ -37,9 +38,10 @@ import qualified What4.Expr.Builder as S
 import qualified What4.Symbol as S
 import           Lang.Crucible.Types
 import qualified SemMC.Architecture.Internal        as A
-import           SemMC.Architecture.Location
+import           SemMC.Architecture.Location        as A
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Formula as F
+import           SemMC.Util ( makeSymbol )
 
 type Sym t st = S.ExprBuilder t st
 
@@ -102,6 +104,82 @@ elemIndexSL target = go . SL.imap Pair
           | Just Refl <- testEquality elt target -> Just (Some idx)
           | otherwise -> go rest
 
+-- | Find a symbolic expression that represents the register passed in (as an 'A.Location')
+--
+-- This function checks to see if the register has already been referenced in
+-- the formula literals map or the operand list.  If it has, the corresponding
+-- expression is re-used.
+--
+-- If the register hasn't yet been assigned an expression, this function
+-- allocates a new symbolic expression for it and maps the register to the new
+-- expression in the returned map of locations to bound variables.  The returned
+-- map is merged into the literals map in the outer evaluation logic.
+exprForRegister :: forall arch t st sh tp tp0
+                 . (A.IsLocation (A.Location arch))
+                => S.ExprBuilder t st
+                -- ^ The symbolic backend
+                -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
+                -- ^ The semantics formula for the instruction being interpreted
+                -> SL.List (A.Operand arch) sh
+                -- ^ The actual arguments we are instantiating the parameterized formula with
+                -> (forall tp1 . A.Operand arch tp1 -> Bool)
+                -- ^ A predicate to test whether the 'A.Location' (below)
+                -- matches an 'A.Operand' in the operands list; this is an
+                -- opaque predicate because translating a 'A.Location' into an
+                -- 'A.Operand' is inherently architecture-specific, and must be
+                -- done by an architecture-specific backend.
+                -> A.Location arch tp0
+                -- ^ The register whose value (expression) should be looked up
+                -> BaseTypeRepr tp
+                -- ^ The return type of the 'S.Expr' that the caller is expecting.
+                -> IO (S.Expr t tp, M.MapF (A.Location arch) (S.BoundVar (S.ExprBuilder t st)))
+exprForRegister sym pf operands test reg resultRepr =
+  case M.lookup reg (F.pfLiteralVars pf) of
+    -- If the variable has already been allocated a LiteralVar (in
+    -- pfLiteralVars), we use that variable as our expression.
+    Just bvar ->
+      case testEquality resultRepr (S.bvarType bvar) of
+        Just Refl -> return (S.varExpr sym bvar, M.empty)
+        Nothing -> error ("The expression for " ++ M.showF reg ++ " has the wrong type; the caller expected " ++ show resultRepr)
+    -- Otherwise, We check the operands list to see if there was a variable
+    -- allocated in there for the same register.  If not, we allocate a fresh
+    -- variable and return it in the extra mapping that will be merged with the
+    -- literal vars.  Note that this is the only case where we actually return a
+    -- non-empty map.
+    Nothing
+      | Just (Some (BV.BoundVar bvar)) <- findOperandVarForRegister pf operands test ->
+        case testEquality (S.bvarType bvar) resultRepr of
+          Just Refl -> return (S.varExpr sym bvar, M.empty)
+          Nothing -> error ("Register operand has type " ++ show (S.bvarType bvar) ++ " but the caller expected " ++ show resultRepr)
+      | otherwise -> do
+          let usym = makeSymbol ("reg_" ++ M.showF reg)
+          s <- S.freshBoundVar sym usym (A.locationType reg)
+          case testEquality (S.bvarType s) resultRepr of
+            Just Refl -> return (S.varExpr sym s, M.singleton reg s)
+            Nothing -> error ("Created a fresh variable of type " ++ show (S.bvarType s) ++ " but the caller expected " ++ show resultRepr)
+
+-- | Look a 'A.Location' in the operand list (@'SL.List' ('A.Operand' arch) sh@)
+-- and, if it is found, return the corresponding 'BV.BoundVar' from the
+-- 'F.ParameterizedFormula'
+--
+-- Because we cannot generically convert a 'A.Location' to an 'A.Operand', we
+-- pass in a predicate to test if an 'A.Operand' matches the target
+-- 'A.Location'.  This predicate must be provided by an architecture-specific
+-- backend.
+findOperandVarForRegister :: forall t st arch sh
+                           . F.ParameterizedFormula (S.ExprBuilder t st) arch sh
+                          -> SL.List (A.Operand arch) sh
+                          -> (forall tp1 . A.Operand arch tp1 -> Bool)
+                          -> Maybe (Some (BV.BoundVar (S.ExprBuilder t st) arch))
+findOperandVarForRegister pf operands0 test = go (SL.imap Pair operands0)
+  where
+    go :: forall sh' . SL.List (Product (SL.Index sh) (A.Operand arch)) sh' -> Maybe (Some (BV.BoundVar (S.ExprBuilder t st) arch))
+    go operands =
+      case operands of
+        SL.Nil -> Nothing
+        Pair idx op SL.:< rest
+          | test op -> Just (Some (F.pfOperandVars pf SL.!! idx))
+          | otherwise -> go rest
 
 -- | See `evaluateFunctions'`
 evaluateFunctions

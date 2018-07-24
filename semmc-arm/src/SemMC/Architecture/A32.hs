@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -457,8 +458,31 @@ eval_am2offset_imm_add sym pf operands ufArguments resultRepr =
                 Just Refl -> return (bv, MapF.empty)
                 Nothing -> error ("am2offset_imm_add returns a BaseBVType 1, but the caller expected " ++ show resultRepr)
 
+eval_imm12_reg :: forall t st sh u tp
+                . WEB.ExprBuilder t st
+               -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+               -> SL.List (A.Operand A32) sh
+               -> Ctx.Assignment (WEB.Expr t) u
+               -> BaseTypeRepr tp
+               -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
+eval_imm12_reg sym pf operands ufArguments resultRepr =
+  case ufArguments of
+    Ctx.Empty Ctx.:> WEB.BoundVarExpr  ufArg ->
+      case ufArg `FE.lookupVarInFormulaOperandList` pf of
+        Nothing -> error "Argument to imm12_reg is not a formula parameter"
+        Just (Some idx) -> do
+          case operands SL.!! idx of
+            ARMDis.Addrmode_imm12 ami12 -> do
+              let reg = ARMOperands.addrModeImm12Register ami12
+              let regNum = ARMOperands.unGPR reg
+              FE.exprForRegister sym pf operands (testRegisterEquality reg) (LocGPR regNum) resultRepr
 
-
+testRegisterEquality :: ARMOperands.GPR -> ARMDis.Operand tp -> Bool
+testRegisterEquality regNum op =
+  case op of
+    ARMDis.GPR gpr
+      | gpr == regNum -> True
+    _ -> False
 
 noLocation _ _ _ = Nothing
 
@@ -484,6 +508,7 @@ locationFuncInterpretation =
     , ("a32.imm12_reg", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp (interpImm12Reg Just LocGPR)
                           , A.exprInterpName = 'interpImm12RegExtractor
+                          , A.exprInterp = FE.Evaluator eval_imm12_reg
                           })
     , ("a32.imm12_off", A.FunctionInterpretation
                           { A.locationInterp = F.LocationFuncInterp noLocation
