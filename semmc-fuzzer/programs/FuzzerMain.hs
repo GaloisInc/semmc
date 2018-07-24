@@ -431,7 +431,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
 
   L.withLogCfg logCfg $
       CE.runRemote (Just $ fuzzerRunnerPath hostConfig) (fuzzerTestHostname hostConfig)
-                   testSerializer caseChan resChan
+                   (fuzzerTestUser hostConfig) testSerializer caseChan resChan
 
   CA.wait runThread
 
