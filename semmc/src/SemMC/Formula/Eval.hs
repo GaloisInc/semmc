@@ -208,6 +208,7 @@ evaluateFunctions' sym pf operands rewriters e =
     S.SemiRingLiteral {} -> return e
     S.BVExpr {} -> return e
     S.BoundVarExpr {} -> return e
+    S.StringExpr {} -> return e
     S.AppExpr a -> do
       app <- S.traverseApp (evaluateFunctions' sym pf operands rewriters) (S.appExprApp a)
       liftIO $ S.sbMakeExpr sym app
