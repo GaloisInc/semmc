@@ -221,7 +221,7 @@ instantiateFormula
 
 -- | Create a new formula with the same semantics, but with fresh bound vars.
 copyFormula :: forall t st arch.
-               (A.IsLocation (A.Location arch))
+               (A.IsLocation (A.Location arch), U.HasCallStack)
             => SB t st
             -> Formula (SB t st) arch
             -> IO (Formula (SB t st) arch)
