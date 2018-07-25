@@ -344,9 +344,9 @@ parseLocation = do
   c <- P.lookAhead (P.anyChar)
   case c of
     'C' -> Some LocCPSR <$ P.string "CPSR"
-    'M' -> (Some LocMem1 <$ P.string "Mem") <|>
-           (parsePrefixedRegister (Some . LocGPRMask) "Mask_R")
-           -- <|> (Some LocMem2 <$ P.string "Mem2")
+    'M' -> (Some LocMem1 <$ P.string "Mem")
+           <|> (Some LocMem2 <$ P.string "Mem2")
+           <|> (parsePrefixedRegister (Some . LocGPRMask) "Mask_R")
     'P' -> Some LocPC <$ P.string "PC"
     'R' -> do
       parsePrefixedRegister (Some . LocGPR) "R"
