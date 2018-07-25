@@ -97,6 +97,12 @@ interpImm12Reg :: forall sh s arm tp opty
                  -> Maybe (L.Location arm tp)
 interpImm12Reg getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep =
   case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.Addrmode_imm12 oprnd) ->
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.addrModeImm12Register oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
+          | otherwise -> error ("Invalid return type for location function 'imm12_reg' at index " ++ show ix)
     Just (ARMDis.Addrmode_imm12_pre oprnd) ->
       let loc :: L.Location arm (BaseBVType 32)
           loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.addrModeImm12Register oprnd
