@@ -329,7 +329,7 @@ imm12Reg = unpackLocUF "Imm12" naturalBV "a32.imm12_reg"
 
 -- | Returns the immediate offset value in the addrmode_imm12_[pre]
 imm12Off :: Location 'TPackedOperand -> Expr 'TBV
-imm12Off = unpackUF "Imm12" (EBV 16) "a32.imm12_off"
+imm12Off = unpackUF "Imm12" (EBV 12) "a32.imm12_off"
 
 -- | Returns the addition flag in the addrmode_imm12_[pre]
 imm12Add :: Location 'TPackedOperand -> Expr 'TBool
@@ -341,7 +341,7 @@ am2offset_immAdd = unpackUF "Am2Offset_Imm" EBool "a32.am2offset_imm_add"
 
 -- | Returns the immediate flag in the am2offset_imm
 am2offset_immImm :: Location 'TPackedOperand -> Expr 'TBV
-am2offset_immImm = unpackUF "Am2Offset_Imm" (EBV 16) "a32.am2offset_imm_imm"
+am2offset_immImm = unpackUF "Am2Offset_Imm" (EBV 12) "a32.am2offset_imm_imm"
 
 -- | Returns the base register in ldst_so_reg
 ldst_so_regBaseRegister :: Location 'TPackedOperand -> Location 'TBV

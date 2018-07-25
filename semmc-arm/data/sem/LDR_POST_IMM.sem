@@ -7,12 +7,12 @@
     imm)
    (bvadd
     off
-    ((_ zero_extend 16)
+    ((_ zero_extend 20)
      ((_ call "uf.a32.am2offset_imm_imm")
       imm)))
    (bvsub
     off
-    ((_ zero_extend 16)
+    ((_ zero_extend 20)
      ((_ call "uf.a32.am2offset_imm_imm")
       imm)))))
   (SetT32Mode
