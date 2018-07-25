@@ -300,6 +300,7 @@ operandValue sym locLookup op = TaggedExpr <$> opVa op
 
 operandToLocation :: ARMDis.Operand s -> Maybe (Location A32 (A.OperandType A32 s))
 operandToLocation (ARMDis.GPR gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
+operandToLocation (ARMDis.Addr_offset_none gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
 operandToLocation _ = Nothing
 
 instance A.IsLocation (Location A32) where
