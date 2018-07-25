@@ -21,6 +21,7 @@ module SemMC.Formula.Eval (
   lookupVarInFormulaOperandList,
   exprForRegister,
   evalBitvectorExtractor,
+  evalBitvectorExtractorWith,
   evalRegExtractor,
   evaluateFunctions
   ) where
@@ -208,7 +209,19 @@ evalBitvectorExtractor :: (1 <= n, M.ShowF (A.Operand arch))
                        -> NatRepr n
                        -> (forall x . A.Operand arch x -> Maybe Integer)
                        -> Evaluator arch t
-evalBitvectorExtractor operationName litRep match = Evaluator $ \sym pf operands ufArguments resultRepr ->
+evalBitvectorExtractor =
+  evalBitvectorExtractorWith identityTransform
+
+identityTransform :: (1 <= n) => sym -> S.SymExpr sym (BaseBVType n) -> IO (S.SymExpr sym (BaseBVType n))
+identityTransform _ e = return e
+
+evalBitvectorExtractorWith :: (1 <= n, M.ShowF (A.Operand arch))
+                           => (forall st . Sym t st -> S.SymExpr (Sym t st) (BaseBVType n) -> IO (S.SymExpr (Sym t st) tp))
+                           -> String
+                           -> NatRepr n
+                           -> (forall x . A.Operand arch x -> Maybe Integer)
+                           -> Evaluator arch t
+evalBitvectorExtractorWith wrapResultWith operationName litRep match = Evaluator $ \sym pf operands ufArguments resultRepr ->
   case ufArguments of
     Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
       case ufArg `lookupVarInFormulaOperandList` pf of
@@ -219,10 +232,12 @@ evalBitvectorExtractor operationName litRep match = Evaluator $ \sym pf operands
             Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ M.showF op)
             Just val -> do
               bv <- S.bvLit sym litRep val
-              case testEquality (S.exprType bv) resultRepr of
-                Just Refl -> return (bv, M.empty)
-                Nothing -> error (operationName ++ " returns a " ++ show (S.exprType bv) ++ " but the caller expected " ++ show resultRepr)
+              res <- wrapResultWith sym bv
+              case testEquality (S.exprType res) resultRepr of
+                Just Refl -> return (res, M.empty)
+                Nothing -> error (operationName ++ " returns a " ++ show (S.exprType res) ++ " but the caller expected " ++ show resultRepr)
     _ -> error ("Unexpected argument list to " ++ operationName)
+
 
 -- | See `evaluateFunctions'`
 evaluateFunctions

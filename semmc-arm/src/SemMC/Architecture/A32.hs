@@ -428,7 +428,7 @@ eval_am2offset_imm_imm =
 -- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
 eval_am2offset_imm_add :: FE.Evaluator A32 t
 eval_am2offset_imm_add =
-  FE.evalBitvectorExtractor "am2offset_imm_add" (knownNat @1) $ \case
+  FE.evalBitvectorExtractorWith bitToBool "am2offset_imm_add" (knownNat @1) $ \case
     ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmAdd oimm)
     _ -> Nothing
 
@@ -446,7 +446,7 @@ eval_imm12_off =
 
 eval_imm12_add :: FE.Evaluator A32 t
 eval_imm12_add =
-  FE.evalBitvectorExtractor "imm12_add" (knownNat @1) $ \case
+  FE.evalBitvectorExtractorWith bitToBool "imm12_add" (knownNat @1) $ \case
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     _ -> Nothing
 
@@ -464,7 +464,7 @@ eval_ldst_so_reg_offset_register =
 
 eval_ldst_so_reg_add :: FE.Evaluator A32 t
 eval_ldst_so_reg_add =
-  FE.evalBitvectorExtractor "ldst_so_reg_add" (knownNat @1) $ \case
+  FE.evalBitvectorExtractorWith bitToBool "ldst_so_reg_add" (knownNat @1) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegAdd lsr)
     _ -> Nothing
 
@@ -534,6 +534,12 @@ testRegisterEquality reg op =
     ARMDis.GPR gpr
       | Just Refl <- testEquality reg (LocGPR (fromIntegral $ W.unW $ ARMOperands.unGPR gpr)) -> True
     _ -> False
+
+bitToBool :: (S.IsExprBuilder sym, 1 <= w)
+          => sym
+          -> S.SymExpr sym (BaseBVType w)
+          -> IO (S.SymExpr sym BaseBoolType)
+bitToBool sym = S.testBitBV sym 0
 
 rewrapRegister :: ARMOperands.GPR -> Some (Location arm)
 rewrapRegister = Some . LocGPR . fromIntegral . W.unW . ARMOperands.unGPR
