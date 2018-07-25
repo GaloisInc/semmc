@@ -64,6 +64,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Natural
 import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
+import           SemMC.Util ( fromJust' )
 
 
 data OpcodeParamDef t = ParamDef String String (ExprTypeRepr t)
@@ -194,7 +195,7 @@ updateCPSR updExp =
 -- expression.
 finalizeCPSR :: SemARM 'Def ()
 finalizeCPSR = do
-    updExp <- (cpsrUpdates . fromJust) <$> getArchData
+    updExp <- (cpsrUpdates . fromJust' "finalizeCPSR") <$> getArchData
     defReg cpsr (updExp (Loc cpsr))
 
 
@@ -249,8 +250,8 @@ updatePC pcf =
 -- instruction execution.
 finalizePC :: HasCallStack => SemARM 'Def ()
 finalizePC = do
-  instrSet <- (subArch  . fromJust) <$> getArchData
-  updExp   <- (pcUpdate . fromJust) <$> getArchData
+  instrSet <- (subArch  . fromJust' "finalizePC 1") <$> getArchData
+  updExp   <- (pcUpdate . fromJust' "finalizePC 2") <$> getArchData
   defLoc pc $ updExp instrSet (Loc pc)
 
 
@@ -302,7 +303,7 @@ testForConditionPassed instrPred = do
 -- is a register location.
 defReg :: HasCallStack => Location a -> Expr a -> SemARM 'Def ()
 defReg loc expr = do
-  isOK <- (condPassed . fromJust) <$> getArchData
+  isOK <- (condPassed . fromJust' "defReg") <$> getArchData
   defLoc loc $ ite isOK expr (Loc loc)
 
 

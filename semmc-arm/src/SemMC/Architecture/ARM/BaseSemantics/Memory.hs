@@ -24,6 +24,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ShiftRotate
 import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
+import           SemMC.Util ( fromJust' )
 
 
 manualMemory :: SemARM 'Top ()
@@ -303,7 +304,7 @@ defMem :: Location 'TMemory -- ^ The memory target
        -> Expr 'TBV -- ^ The bitvector value to store (size is checked)
        -> SemARM 'Def ()
 defMem memloc addr nBytes expr = do
-    isOK <- (condPassed . fromJust) <$> getArchData
+    isOK <- (condPassed . fromJust' "defMem") <$> getArchData
     let origval = readMem (Loc memloc) addr nBytes
         updval = ite isOK expr origval
     defLoc memloc (storeMem (Loc memloc) addr nBytes updval)

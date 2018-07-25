@@ -21,6 +21,7 @@ import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExecState
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 import SemMC.DSL
+import SemMC.Util ( fromJust' )
 
 
 -- | PCStoreValue pseudocode.  Returns the PC value "stored by the
@@ -35,7 +36,7 @@ pcStoreValue = bvadd (Loc pc) (naturalLitBV 8)
 -- when they target R15/PC. (E1.2.3, E1-2297)
 aluWritePC :: Expr 'TBool -> Expr 'TBV -> SemARM 'Def ()
 aluWritePC tgtRegIsPC addr = do
-    curarch <- (subArch . fromJust) <$> getArchData
+    curarch <- (subArch . fromJust' "aluWritePC") <$> getArchData
     if curarch == InstrSet_A32
     then bxWritePC tgtRegIsPC addr
     else branchWritePC tgtRegIsPC addr

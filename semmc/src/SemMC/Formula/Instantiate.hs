@@ -190,7 +190,8 @@ instantiateFormula
     newLitVars <- foldrM addLitVar MapF.empty A.allLocations
     let newLitExprLookup :: A.Location arch tp -> IO (S.Expr t tp)
         -- 'newLitVars' has all locations in it, so this 'fromJust' is total.
-        newLitExprLookup = return . S.varExpr sym . fromJust . flip MapF.lookup newLitVars
+        newLitExprLookup loc =
+            (return . S.varExpr sym . U.fromJust' ("newLitExprLookup: " ++ showF loc) . flip MapF.lookup newLitVars) loc
 
     OperandAssignment { opAssnTaggedExprs = opTaggedExprs
                       , opAssnVars = opVarsAssn
@@ -229,7 +230,7 @@ copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
       mkVar loc = S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
   newVars <- MapF.traverseWithKey (const . mkVar) vars
   let lookupNewVar :: forall tp. A.Location arch tp -> S.Expr t tp
-      lookupNewVar = S.varExpr sym . fromJust . flip MapF.lookup newVars
+      lookupNewVar = S.varExpr sym . U.fromJust' "copyFormula" . flip MapF.lookup newVars
   assn <- buildLitAssignment (Proxy @(SB t st)) (return . lookupNewVar) vars
   newDefs <- traverseF (replaceVars sym assn) defs
   return $ Formula { formParamVars = newVars
@@ -262,7 +263,7 @@ sequenceFormulas sym form1 form2 = do
         -- it, use the first formula's variable.
         | Just newVar <- MapF.lookup loc vars1 = S.varExpr sym newVar
         -- Otherwise, use the original variable.
-        | otherwise = S.varExpr sym $ fromJust $ MapF.lookup loc vars2
+        | otherwise = S.varExpr sym $ U.fromJust' "sequenceFormulas" $ MapF.lookup loc vars2
   assn <- buildLitAssignment (Proxy @(SB t st)) (return . varReplace) vars2
   newDefs2 <- traverseF (replaceVars sym assn) defs2
 

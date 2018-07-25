@@ -124,7 +124,7 @@ formulasEquiv
     let -- This 'fromJust' is total because all of the used variables are in
         -- 'varConstants'.
         varLookup :: forall tp . A.Location arch tp -> IO (Expr t tp)
-        varLookup = return . fromJust . flip MapF.lookup varConstants
+        varLookup = return . U.fromJust' "varLookup" . flip MapF.lookup varConstants
         replaceVars vars = traverseF (FI.replaceLitVars sym varLookup vars)
 
     defs1' <- replaceVars bvars1 defs1
@@ -140,7 +140,7 @@ formulasEquiv
             -- implicitly preserves the same value. This 'fromJust' is total
             -- because 'varConstants' has all locations ever mentioned (that is,
             -- both uses and definitions) in the formula in it.
-            Nothing -> fromJust (MapF.lookup loc varConstants)
+            Nothing -> U.fromJust' "lookupDefn" (MapF.lookup loc varConstants)
         lookupDefns (Some loc) =
           Pair (lookupDefn defs1' loc) (lookupDefn defs2' loc)
 

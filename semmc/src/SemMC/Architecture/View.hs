@@ -48,6 +48,7 @@ import           What4.BaseTypes
 
 import qualified SemMC.Architecture.Location as L
 import SemMC.Architecture.Value
+import SemMC.Util ( fromJust' )
 
 -- | A slice of a bit vector.
 --
@@ -145,7 +146,7 @@ type ConcreteState arch = L.ArchState arch Value
 
 -- | Read machine states.
 peekMS :: (P.OrdF (L.Location arch), 1 <= n) => ConcreteState arch -> View arch n -> Value (BaseBVType n)
-peekMS cs (View sl loc) = peekSlice sl $ fromJust $ MapF.lookup loc cs
+peekMS cs (View sl loc) = peekSlice sl $ fromJust' "peekMS" $ MapF.lookup loc cs
 
 -- | Write machine states.
 --
@@ -153,7 +154,7 @@ peekMS cs (View sl loc) = peekSlice sl $ fromJust $ MapF.lookup loc cs
 -- e.g. zeroing out the upper bits of VSX12 when writing F12.
 pokeMS :: (P.OrdF (L.Location arch)) => ConcreteState arch -> View arch n -> Value (BaseBVType n) -> ConcreteState arch
 pokeMS m (View sl loc) newPart = MapF.insert loc new m
-  where orig = fromJust (MapF.lookup loc m)
+  where orig = fromJust' "pokeMS" (MapF.lookup loc m)
         new = pokeSlice sl orig newPart
 
 -- | A 'View' along with more information about how it should be interepreted.
