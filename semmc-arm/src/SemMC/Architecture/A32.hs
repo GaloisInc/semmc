@@ -332,6 +332,8 @@ instance A.IsLocation (Location A32) where
     , map (Some . LocGPRMask) [0..numGPR-1]
     , [ Some LocPC
       , Some LocCPSR
+      , Some LocMem1
+      , Some LocMem2
       ]
     ]
 
