@@ -301,6 +301,7 @@ operandValue sym locLookup op = TaggedExpr <$> opVa op
 operandToLocation :: ARMDis.Operand s -> Maybe (Location A32 (A.OperandType A32 s))
 operandToLocation (ARMDis.GPR gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
 operandToLocation (ARMDis.Addr_offset_none gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
+operandToLocation (ARMDis.GPRnopc gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
 operandToLocation _ = Nothing
 
 instance A.IsLocation (Location A32) where
@@ -408,7 +409,10 @@ eval_isR15 sym pf operands ufArguments resultRepr =
             Just Refl -> return (p, MapF.empty)
             Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
         Just (Some idx) -> do
-          let ARMDis.GPR rnum = operands SL.!! idx
+          let rnum = case operands SL.!! idx of
+                ARMDis.GPR n -> n
+                ARMDis.GPRnopc n -> n
+                other -> error $ "eval_isR15: got unexpected value in rnum extraction: " ++ show other
           let p = if ARMOperands.unGPR rnum == 15 then S.truePred sym else S.falsePred sym
           case testEquality (S.exprType p) resultRepr of
             Just Refl -> return (p, MapF.empty)
