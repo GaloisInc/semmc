@@ -436,18 +436,21 @@ eval_am2offset_imm_add =
 eval_imm12_reg :: FE.Evaluator A32 t
 eval_imm12_reg =
   FE.evalRegExtractor "imm12_reg" testRegisterEquality $ \case
+    ARMDis.Addrmode_imm12_pre ami12 -> Just (rewrapRegister (ARMOperands.addrModeImm12Register ami12))
     ARMDis.Addrmode_imm12 ami12 -> Just (rewrapRegister (ARMOperands.addrModeImm12Register ami12))
     _ -> Nothing
 
 eval_imm12_off :: FE.Evaluator A32 t
 eval_imm12_off =
   FE.evalBitvectorExtractor "imm12_off" (knownNat @12) $ \case
+    ARMDis.Addrmode_imm12_pre ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     _ -> Nothing
 
 eval_imm12_add :: HasCallStack => FE.Evaluator A32 t
 eval_imm12_add =
   FE.evalBitvectorExtractorWith bitToBool "imm12_add" (knownNat @1) $ \case
+    ARMDis.Addrmode_imm12_pre ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     _ -> Nothing
 
