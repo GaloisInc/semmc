@@ -46,6 +46,7 @@ import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.ARM as ARMDis
 import qualified Dismantle.ARM.Operands as ARMOperands
 import qualified Dismantle.Instruction as D
+import           GHC.Stack ( HasCallStack )
 import           GHC.TypeLits
 import qualified GHC.Err.Located as L
 import qualified Lang.Crucible.Backend as SB
@@ -426,7 +427,7 @@ eval_am2offset_imm_imm =
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
 -- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
-eval_am2offset_imm_add :: FE.Evaluator A32 t
+eval_am2offset_imm_add :: HasCallStack => FE.Evaluator A32 t
 eval_am2offset_imm_add =
   FE.evalBitvectorExtractorWith bitToBool "am2offset_imm_add" (knownNat @1) $ \case
     ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmAdd oimm)
@@ -444,7 +445,7 @@ eval_imm12_off =
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     _ -> Nothing
 
-eval_imm12_add :: FE.Evaluator A32 t
+eval_imm12_add :: HasCallStack => FE.Evaluator A32 t
 eval_imm12_add =
   FE.evalBitvectorExtractorWith bitToBool "imm12_add" (knownNat @1) $ \case
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
@@ -462,7 +463,7 @@ eval_ldst_so_reg_offset_register =
     ARMDis.Ldst_so_reg lsr -> Just (rewrapRegister (ARMOperands.ldstSoRegOffsetRegister lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_add :: FE.Evaluator A32 t
+eval_ldst_so_reg_add :: HasCallStack => FE.Evaluator A32 t
 eval_ldst_so_reg_add =
   FE.evalBitvectorExtractorWith bitToBool "ldst_so_reg_add" (knownNat @1) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegAdd lsr)

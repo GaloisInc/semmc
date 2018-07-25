@@ -34,6 +34,7 @@ import qualified Data.Parameterized.List            as SL
 import qualified Data.Parameterized.Map             as M
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
+import           GHC.Stack ( HasCallStack )
 
 import qualified Data.Text                          as T
 import           What4.Interface as S
@@ -204,7 +205,7 @@ evalRegExtractor operationName testEq match = Evaluator $ \sym pf operands ufArg
 -- | A generic skeleton for evaluation functions that extract bitvector fields from operands
 --
 -- This isn't suitable for the versions that extract registers
-evalBitvectorExtractor :: (1 <= n, M.ShowF (A.Operand arch))
+evalBitvectorExtractor :: (1 <= n, M.ShowF (A.Operand arch), HasCallStack)
                        => String
                        -> NatRepr n
                        -> (forall x . A.Operand arch x -> Maybe Integer)
@@ -215,7 +216,7 @@ evalBitvectorExtractor =
 identityTransform :: (1 <= n) => sym -> S.SymExpr sym (BaseBVType n) -> IO (S.SymExpr sym (BaseBVType n))
 identityTransform _ e = return e
 
-evalBitvectorExtractorWith :: (1 <= n, M.ShowF (A.Operand arch))
+evalBitvectorExtractorWith :: (1 <= n, M.ShowF (A.Operand arch), HasCallStack)
                            => (forall st . Sym t st -> S.SymExpr (Sym t st) (BaseBVType n) -> IO (S.SymExpr (Sym t st) tp))
                            -> String
                            -> NatRepr n
