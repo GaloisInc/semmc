@@ -5,13 +5,16 @@ from django.utils.html import conditional_escape
 register = template.Library()
 
 def num(value, ty='dec'):
-    if ty == 'dec':
-        return str(int(value))
-    elif ty == 'bin':
-        return bin(int(value))
-    elif ty == 'hex':
-        return hex(int(value))
-    else:
+    try:
+        if ty == 'dec':
+            return str(int(value))
+        elif ty == 'bin':
+            return bin(int(value))
+        elif ty == 'hex':
+            return hex(int(value))
+        else:
+            return str(ty)
+    except ValueError:
         return str(ty)
 
 @register.filter(needs_autoescape=True)
