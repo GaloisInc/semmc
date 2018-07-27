@@ -5,7 +5,9 @@ from django.utils.html import conditional_escape
 register = template.Library()
 
 def group(s, chunk_size):
-    if len(s) < chunk_size:
+    if len(s) == 0:
+        return ''
+    elif len(s) < chunk_size:
         return (('0' * (chunk_size - len(s))) + s)
     else:
         chunk = ""
@@ -13,7 +15,12 @@ def group(s, chunk_size):
         for i in range(chunkStart, len(s)):
             chunk += s[i]
 
-        return (group(s[0:chunkStart], chunk_size) + " " + chunk)
+        if chunkStart > 0:
+            rest = group(s[0:chunkStart], chunk_size) + " "
+        else:
+            rest = ''
+
+        return (rest + chunk)
 
 def num(value, ty='dec'):
     inbase = 10
