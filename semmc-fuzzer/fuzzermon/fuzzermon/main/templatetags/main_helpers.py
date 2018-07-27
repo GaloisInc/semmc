@@ -5,13 +5,17 @@ from django.utils.html import conditional_escape
 register = template.Library()
 
 def num(value, ty='dec'):
+    inbase = 10
+    if value.startswith("0x"):
+        inbase = 16
+
     try:
         if ty == 'dec':
-            return str(int(value))
+            return str(int(value), inbase)
         elif ty == 'bin':
-            return bin(int(value))
+            return bin(int(value), inbase)
         elif ty == 'hex':
-            return hex(int(value))
+            return hex(int(value), inbase)
         else:
             return str(value)
     except ValueError:
