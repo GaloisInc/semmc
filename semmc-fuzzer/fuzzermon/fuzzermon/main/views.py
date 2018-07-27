@@ -188,10 +188,15 @@ def arch_list(request):
     for arch in archs:
         host_data = []
         for h in arch.host_set.all():
-            last_batch = Batch.objects.filter(testing_host__id=h.id).order_by('-submitted_at')[0]
+            all_batches = Batch.objects.filter(testing_host__id=h.id).order_by('-submitted_at') 
+            if all_batches:
+                last_batch_time = all_batches[0].submitted_at
+            else:
+                last_batch_time = None
+
             host_data.append({
                 'host': h,
-                'last_batch_time': last_batch.submitted_at,
+                'last_batch_time': last_batch_time,
                 'num_failures': TestFailure.objects.filter(batch__testing_host__id=h.id).count() +
                                 TestSignalError.objects.filter(batch__testing_host__id=h.id).count(),
                 'num_successes': TestSuccess.objects.filter(batch__testing_host__id=h.id).count(),
