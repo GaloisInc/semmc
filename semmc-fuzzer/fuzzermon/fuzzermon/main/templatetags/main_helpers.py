@@ -13,9 +13,9 @@ def num(value, ty='dec'):
         elif ty == 'hex':
             return hex(int(value))
         else:
-            return str(ty)
+            return str(value)
     except ValueError:
-        return str(ty)
+        return str(value)
 
 @register.filter(needs_autoescape=True)
 def mono(value, autoescape=True):
