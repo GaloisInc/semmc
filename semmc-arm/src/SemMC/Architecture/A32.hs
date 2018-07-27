@@ -821,9 +821,14 @@ mkRandomState gen = St.execStateT randomize MapF.empty
 
       mapM_ addZero gprMaskList
       mapM_ addZero fprList
-      addZero LocCPSR
+
       addZeroMem LocMem1
       addZeroMem LocMem2
+
+      -- We don't want to set these at all
+      addZero LocCPSR
+      -- PC
+      addZero $ LocGPR 15
 
     addZero :: Location A32 (BaseBVType 32) -> St.StateT ConcreteState IO ()
     addZero loc = St.modify' $ MapF.insert loc (V.ValueBV (W.w 0))
