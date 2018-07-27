@@ -13,7 +13,7 @@ def group(s, chunk_size):
         for i in range(chunkStart, len(s)):
             chunk += s[i]
 
-        return (group(s[0:chunkStart]) + " " + chunk, chunk_size)
+        return (group(s[0:chunkStart], chunk_size) + " " + chunk)
 
 def num(value, ty='dec'):
     inbase = 10
