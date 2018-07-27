@@ -818,11 +818,18 @@ mkRandomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
       mapM_ addRandomBV gprList
+
       mapM_ addZero gprMaskList
-      mapM_ addRandomBV fprList
+      mapM_ addZero fprList
+      addZero LocCPSR
+      addZeroMem LocMem1
+      addZeroMem LocMem2
 
     addZero :: Location A32 (BaseBVType 32) -> St.StateT ConcreteState IO ()
     addZero loc = St.modify' $ MapF.insert loc (V.ValueBV (W.w 0))
+
+    addZeroMem :: Location A32 (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> St.StateT ConcreteState IO ()
+    addZeroMem loc = St.modify' $ MapF.insert loc (V.ValueMem $ B.replicate 32 0)
 
     addRandomBV :: Location A32 (BaseBVType 32) -> St.StateT ConcreteState IO ()
     addRandomBV loc = do
@@ -857,8 +864,6 @@ getMachineState = do
   gprs <- forM gprList $ \loc ->
       (MapF.Pair loc . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
 
-  pc <- (MapF.Pair LocPC . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
-
   gprs_mask <- forM gprMaskList $ \loc ->
       (MapF.Pair loc . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
 
@@ -868,12 +873,12 @@ getMachineState = do
   cpsr <- (MapF.Pair LocCPSR . V.ValueBV . W.w . fromIntegral) <$> G.getWord32le
 
   m1 <- (MapF.Pair LocMem1 . V.ValueMem . B.pack) <$> replicateM 32 G.getWord8
-  m2 <- (MapF.Pair LocMem1 . V.ValueMem . B.pack) <$> replicateM 32 G.getWord8
+  m2 <- (MapF.Pair LocMem2 . V.ValueMem . B.pack) <$> replicateM 32 G.getWord8
 
   return $ MapF.fromList $ concat [ gprs
                                   , gprs_mask
                                   , fprs
-                                  , [m1, m2, pc, cpsr]
+                                  , [m1, m2, cpsr]
                                   ]
 
 -- | Convert a machine state to the wire protocol.
