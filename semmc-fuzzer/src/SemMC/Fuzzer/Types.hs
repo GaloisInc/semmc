@@ -30,6 +30,7 @@ import qualified Data.Text as T
 import           Data.Proxy ( Proxy(..) )
 import           Text.PrettyPrint.HughesPJ (Doc)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy.Char8 as BSC8
 
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Map as MapF
@@ -101,11 +102,12 @@ data ArchImpl where
              -> [(String, BS.ByteString)]
              -> CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
              -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
+             -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> BSC8.ByteString)
              -> (Some ((A.Opcode arch) (A.Operand arch)) -> Bool)
              -> ArchImpl
 
 archImplName :: ArchImpl -> String
-archImplName (ArchImpl n _ _ _ _ _ _ _) = n
+archImplName (ArchImpl n _ _ _ _ _ _ _ _) = n
 
 -- Note: the JSON encodings of the types below must match the decoder
 -- implementation in the 'fuzzermon' web service.
@@ -154,6 +156,7 @@ instance AE.ToJSON TestSuccess where
 data TestSignalError =
     TestSignalError { testSignalOpcode :: String
                     , testSignalPretty :: String
+                    , testSignalInstructionBytes :: String
                     , testSignalNum :: Int32
                     , testSignalInputs :: [TestInput]
                     }
@@ -165,6 +168,7 @@ instance AE.ToJSON TestSignalError where
                   , "pretty" AE..= testSignalPretty s
                   , "signal" AE..= testSignalNum s
                   , "inputs" AE..= testSignalInputs s
+                  , "bytes" AE..= testSignalInstructionBytes s
                   ]
 
 data TestInput =
@@ -182,6 +186,7 @@ data TestFailure =
     TestFailure { testFailureOpcode :: String
                 , testFailureRawOperands :: String
                 , testFailurePretty :: String
+                , testFailureInstructionBytes :: String
                 , testFailureStates :: [TestFailureState]
                 , testFailureInputs :: [TestInput]
                 }
@@ -194,6 +199,7 @@ instance AE.ToJSON TestFailure where
                   , "pretty" AE..= testFailurePretty s
                   , "state" AE..= testFailureStates s
                   , "inputs" AE..= testFailureInputs s
+                  , "bytes" AE..= testFailureInstructionBytes s
                   ]
 
 data TestFailureState =

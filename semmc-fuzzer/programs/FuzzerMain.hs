@@ -218,6 +218,7 @@ ppc32Arch =
              PPCS.allDefinedFunctions
              PPCS.testSerializer
              PPC.ppInstruction
+             PPC.assembleInstruction
              ppc32OpcodeFilter
 
 ppc32OpcodeFilter :: Some (PPC.Opcode PPC.Operand) -> Bool
@@ -236,6 +237,7 @@ a32Arch =
              ARM.a32DefinedFunctions
              A32.testSerializer
              ARMDis.ppInstruction
+             ARMDis.assembleInstruction
              a32OpcodeFilter
 
 a32OpcodeFilter :: Some (ARMDis.Opcode ARMDis.Operand) -> Bool
@@ -404,7 +406,7 @@ startHostThreads logCfg fc = do
           mapM_ CA.wait (concat hostThreads)
 
 testHost :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
-testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics allFunctions testSerializer ppInst opcodeFilter) = do
+testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics allFunctions testSerializer ppInst assemble opcodeFilter) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
@@ -425,7 +427,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
           testRunner mainConfig hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
-                     allSemantics allFunctions ppInst caseChan resChan
+                     allSemantics allFunctions ppInst assemble caseChan resChan
 
   CA.link runThread
 
@@ -458,10 +460,11 @@ testRunner :: forall arch .
            -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
            -> [(String, BS.ByteString)]
            -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
+           -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> BSC8.ByteString)
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst caseChan resChan = do
+testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst assemble caseChan resChan = do
     self <- getLoginName
     hostname <- getHostName
 
@@ -489,6 +492,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
               where
                   go = do
                     inst <- D.randomInstruction gen fromOpcodes
+                    let instBytes = assemble inst
                     initialState <- C.randomState proxy gen
                     nonce <- N.indexValue <$> N.freshNonce nonceGen
                     evalResult <- E.try $ evaluateInstruction sym plainBaseSet inst initialState
@@ -512,6 +516,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                                                         , CE.testContext = initialState
                                                         }
                                           , inst
+                                          , instBytes
                                           , initialState
                                           , finalState
                                           )
@@ -520,7 +525,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
           L.logIO L.Info $ printf "Generating %d test cases" chunkSize
           mCases <- replicateM chunkSize (generateTestCase opcodes)
 
-          let caseMap = M.fromList [ (CE.testNonce tc, (inst, is, fs)) | (tc, inst, is, fs) <- cases ]
+          let caseMap = M.fromList [ (CE.testNonce tc, (inst, instBytes, is, fs)) | (tc, inst, instBytes, is, fs) <- cases ]
               cases = catMaybes mCases
 
           case null cases of
@@ -534,7 +539,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
               False -> do
                   -- Send test cases
                   L.logIO L.Info $ printf "Sending %d test cases to remote host" chunkSize
-                  C.writeChan caseChan (Just $ (\(tc, _, _, _) -> tc) <$> cases)
+                  C.writeChan caseChan (Just $ (\(tc, _, _, _, _) -> tc) <$> cases)
 
                   -- Process results
                   L.logIO L.Info "Processing test results"
@@ -581,7 +586,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
               return Nothing
             CE.TestSignalError nonce sig -> do
               L.logIO L.Error $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
-              let Just (inst, initialState, _) = M.lookup nonce caseMap
+              let Just (inst, instBytes, initialState, _) = M.lookup nonce caseMap
               case inst of
                   Instruction opcode _ -> do
                       let inputs = uncurry TestInput <$> statePairs proxy initialState
@@ -589,13 +594,14 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                           TestSignalError { testSignalNum = sig
                                           , testSignalOpcode = showF opcode
                                           , testSignalPretty = render $ ppInst inst
+                                          , testSignalInstructionBytes = showBS $ BSC8.toStrict instBytes
                                           , testSignalInputs = inputs
                                           }
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
               return Nothing
             CE.TestSuccess tr ->
-              let Just (inst, initialState, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
+              let Just (inst, instBytes, initialState, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
               in case inst of
                   Instruction opcode operands ->
                       if (expectedFinal /= CE.resultContext tr)
@@ -617,6 +623,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                                  TestFailure { testFailureOpcode = showF opcode
                                              , testFailureRawOperands = show operands
                                              , testFailurePretty = render $ ppInst inst
+                                             , testFailureInstructionBytes = showBS $ BSC8.toStrict instBytes
                                              , testFailureStates = mkState <$> sd
                                              , testFailureInputs = inputs
                                              }

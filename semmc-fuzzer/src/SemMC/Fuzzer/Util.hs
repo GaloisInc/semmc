@@ -7,6 +7,7 @@ module SemMC.Fuzzer.Util
   ( stateDiff
   , statePairs
   , makePlain
+  , showBS
   )
 where
 
@@ -16,6 +17,7 @@ import           Data.Maybe (catMaybes)
 import qualified Data.ByteString as BS
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Map as MapF
+import           Data.Word ( Word8 )
 import qualified Data.Word.Indexed as W
 import           Numeric ( showHex )
 
@@ -38,11 +40,14 @@ showValue val =
     case val of
         V.ValueBV v -> show $ W.unW v
         V.ValueMem bs -> showBS bs
-    where
-        showBS bs = "0x" ++ (concat $ showByte <$> (BS.unpack bs))
-        showByte b =
-            let s = showHex b ""
-            in (if length s == 1 then "0" else "") ++ s
+
+showBS :: BS.ByteString -> String
+showBS bs = "0x" ++ (concat $ showByte <$> (BS.unpack bs))
+
+showByte :: Word8 -> String
+showByte b =
+    let s = showHex b ""
+    in (if length s == 1 then "0" else "") ++ s
 
 stateDiff :: (A.Architecture arch)
           => proxy arch
