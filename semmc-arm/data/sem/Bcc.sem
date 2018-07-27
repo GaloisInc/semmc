@@ -10,7 +10,7 @@
   (imm32
    ((_ sign_extend 6)
     (concat
-     ((_ extract 23 0)
+     ((_ extract 31 8)
       brTarget)
      #b00))))
  ((operands

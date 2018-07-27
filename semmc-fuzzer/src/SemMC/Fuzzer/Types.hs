@@ -27,7 +27,9 @@ import qualified Data.ByteString.UTF8 as BS8
 import           Data.Int (Int32)
 import           Data.EnumF (EnumF)
 import qualified Data.Text as T
+import           Data.Proxy ( Proxy(..) )
 import           Text.PrettyPrint.HughesPJ (Doc)
+import qualified Data.ByteString as BS
 
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Map as MapF
@@ -73,6 +75,7 @@ data FuzzerConfig =
 
 data FuzzerTestHost =
     FuzzerTestHost { fuzzerTestHostname :: String
+                   , fuzzerTestUser :: Maybe String
                    , fuzzerTestChunkSize :: Int
                    , fuzzerRunnerPath :: FilePath
                    , fuzzerTestThreads :: Int
@@ -80,7 +83,7 @@ data FuzzerTestHost =
                    deriving (Show)
 
 data ArchImpl where
-    ArchImpl :: forall proxy arch .
+    ArchImpl :: forall arch .
                 ( TemplatableOperand arch
                 , A.Architecture arch
                 , C.ConcreteArchitecture arch
@@ -92,16 +95,17 @@ data ArchImpl where
                 , HasRepr (A.Opcode arch (A.Operand arch)) (L.List (A.OperandTypeRepr arch))
                 )
              => String
-             -> proxy arch
+             -> Proxy arch
              -> [Some ((A.Opcode arch) (A.Operand arch))]
              -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
+             -> [(String, BS.ByteString)]
              -> CE.TestSerializer (V.ConcreteState arch) (A.Instruction arch)
              -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
              -> (Some ((A.Opcode arch) (A.Operand arch)) -> Bool)
              -> ArchImpl
 
 archImplName :: ArchImpl -> String
-archImplName (ArchImpl n _ _ _ _ _ _) = n
+archImplName (ArchImpl n _ _ _ _ _ _ _) = n
 
 -- Note: the JSON encodings of the types below must match the decoder
 -- implementation in the 'fuzzermon' web service.

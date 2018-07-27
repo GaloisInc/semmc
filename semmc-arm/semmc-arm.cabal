@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     SemMC.Architecture.AArch32
                      , SemMC.Architecture.A32
+                     , SemMC.Architecture.A32.Location
                      , SemMC.Architecture.ARM.BaseSemantics
                      , SemMC.Architecture.ARM.Combined
                      , SemMC.Architecture.ARM.Eval
@@ -46,6 +47,7 @@ library
                      , SemMC.Architecture.ARM.UFgen
   -- other-extensions:
   build-depends:       base >=4 && <5
+                     , mtl
                      , binary
                      , bytestring
                      , containers
@@ -53,6 +55,8 @@ library
                      , dismantle-arm
                      , dismantle-tablegen
                      , dismantle-thumb
+                     , located-base
+                     , cereal
                      , filepath
                      , megaparsec
                      , parameterized-utils

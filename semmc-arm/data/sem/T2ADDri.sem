@@ -6,7 +6,7 @@
    (thumbExpandImm)
    #x00000000))
   (thumbExpandImm
-   ((_ extract 31 0)
+   ((_ extract 32 1)
     (imm32_carry_out)))
   (imm32_carry_out
    ((_ call "df.thumbexpandimm_c")
@@ -46,9 +46,9 @@
          (notp
           (bveq setcc #b1))))
        (concat
-        ((_ extract 35 32)
+        ((_ extract 3 0)
          (res_nzcv))
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          'CPSR))
        'CPSR)
       'CPSR))
@@ -61,6 +61,6 @@
       (ite
        (bveq setcc #b1)
        rD
-       ((_ extract 31 0)
+       ((_ extract 35 4)
         (res_nzcv)))
       rD))))))

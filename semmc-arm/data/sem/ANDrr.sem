@@ -12,42 +12,42 @@
     (bvor #x00000020 'CPSR)))
   (nzcv
    (concat
-    ((_ extract 31 31)
+    ((_ extract 0 0)
      (bvand
       rN
-      ((_ extract 31 0)
+      ((_ extract 32 1)
        ((_ call "df.shiftC")
         rM
-        ((_ extract 34 32)
+        ((_ extract 2 0)
          (immShift))
-        ((_ extract 31 0)
+        ((_ extract 34 3)
          (immShift))
-        ((_ extract 29 29)
+        ((_ extract 2 2)
          'CPSR)))))
     (concat
      ((_ call "df.isZeroBit")
       (bvand
        rN
-       ((_ extract 31 0)
+       ((_ extract 32 1)
         ((_ call "df.shiftC")
          rM
-         ((_ extract 34 32)
+         ((_ extract 2 0)
           (immShift))
-         ((_ extract 31 0)
+         ((_ extract 34 3)
           (immShift))
-         ((_ extract 29 29)
+         ((_ extract 2 2)
           'CPSR)))))
      (concat
-      ((_ extract 32 32)
+      ((_ extract 0 0)
        ((_ call "df.shiftC")
         rM
-        ((_ extract 34 32)
+        ((_ extract 2 0)
          (immShift))
-        ((_ extract 31 0)
+        ((_ extract 34 3)
          (immShift))
-        ((_ extract 29 29)
+        ((_ extract 2 2)
          'CPSR)))
-      ((_ extract 28 28)
+      ((_ extract 3 3)
        'CPSR)))))
   (bxWritePC
    (ite
@@ -56,69 +56,69 @@
     (ite
      (bveq
       #b0
-      ((_ extract 0 0)
+      ((_ extract 31 31)
        (bvand
         rN
-        ((_ extract 31 0)
+        ((_ extract 32 1)
          ((_ call "df.shiftC")
           rM
-          ((_ extract 34 32)
+          ((_ extract 2 0)
            (immShift))
-          ((_ extract 31 0)
+          ((_ extract 34 3)
            (immShift))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR))))))
      (bvand
       #xfffffffe
       (bvand
        rN
-       ((_ extract 31 0)
+       ((_ extract 32 1)
         ((_ call "df.shiftC")
          rM
-         ((_ extract 34 32)
+         ((_ extract 2 0)
           (immShift))
-         ((_ extract 31 0)
+         ((_ extract 34 3)
           (immShift))
-         ((_ extract 29 29)
+         ((_ extract 2 2)
           'CPSR)))))
      (ite
       (bveq
        #b0
-       ((_ extract 1 1)
+       ((_ extract 30 30)
         (bvand
          rN
-         ((_ extract 31 0)
+         ((_ extract 32 1)
           ((_ call "df.shiftC")
            rM
-           ((_ extract 34 32)
+           ((_ extract 2 0)
             (immShift))
-           ((_ extract 31 0)
+           ((_ extract 34 3)
             (immShift))
-           ((_ extract 29 29)
+           ((_ extract 2 2)
             'CPSR))))))
       (bvand
        #xfffffffd
        (bvand
         rN
-        ((_ extract 31 0)
+        ((_ extract 32 1)
          ((_ call "df.shiftC")
           rM
-          ((_ extract 34 32)
+          ((_ extract 2 0)
            (immShift))
-          ((_ extract 31 0)
+          ((_ extract 34 3)
            (immShift))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR)))))
       (bvand
        rN
-       ((_ extract 31 0)
+       ((_ extract 32 1)
         ((_ call "df.shiftC")
          rM
-         ((_ extract 34 32)
+         ((_ extract 2 0)
           (immShift))
-         ((_ extract 31 0)
+         ((_ extract 34 3)
           (immShift))
-         ((_ extract 29 29)
+         ((_ extract 2 2)
           'CPSR))))))
     (bvadd 'PC #x00000004))))
  ((operands
@@ -145,24 +145,24 @@
           rD)))
        (concat
         (nzcv)
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          (ite
           ((_ call "uf.arm.is_r15")
            rD)
           (ite
            (bveq
             #b0
-            ((_ extract 0 0)
+            ((_ extract 31 31)
              (bvand
               rN
-              ((_ extract 31 0)
+              ((_ extract 32 1)
                ((_ call "df.shiftC")
                 rM
-                ((_ extract 34 32)
+                ((_ extract 2 0)
                  (immShift))
-                ((_ extract 31 0)
+                ((_ extract 34 3)
                  (immShift))
-                ((_ extract 29 29)
+                ((_ extract 2 2)
                  'CPSR))))))
            (SetT32Mode)
            'CPSR)
@@ -173,17 +173,17 @@
         (ite
          (bveq
           #b0
-          ((_ extract 0 0)
+          ((_ extract 31 31)
            (bvand
             rN
-            ((_ extract 31 0)
+            ((_ extract 32 1)
              ((_ call "df.shiftC")
               rM
-              ((_ extract 34 32)
+              ((_ extract 2 0)
                (immShift))
-              ((_ extract 31 0)
+              ((_ extract 34 3)
                (immShift))
-              ((_ extract 29 29)
+              ((_ extract 2 2)
                'CPSR))))))
          (SetT32Mode)
          'CPSR)
@@ -200,13 +200,13 @@
        rD
        (bvand
         rN
-        ((_ extract 31 0)
+        ((_ extract 32 1)
          ((_ call "df.shiftC")
           rM
-          ((_ extract 34 32)
+          ((_ extract 2 0)
            (immShift))
-          ((_ extract 31 0)
+          ((_ extract 34 3)
            (immShift))
-          ((_ extract 29 29)
+          ((_ extract 2 2)
            'CPSR)))))
       rD))))))

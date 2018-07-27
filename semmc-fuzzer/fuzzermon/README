@@ -29,13 +29,27 @@ To set up an Ubuntu Xenial development system:
  1) ./setup_dev.sh
 
 This will install system packages and set up the python sandbox.
+The default configuration will use a Postrges database but this is
+not necessary for development. Instead, an SQLite database should
+be used. To do this, check that fuzzermon/settings.py sets
+DATABASES as follows:
 
-It may be desirable to switch to Sqlite for development; there are
-Sqlite settings commented out in fuzzermon/settings.py. To set up a
-database schema,
+  DATABASES = {
+      'default': {
+          'ENGINE': 'django.db.backends.sqlite3',
+          'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+      }
+  }
+
+To set up a database schema,
 
  0) cd fuzzermon
  1) python manage.py migrate
+
+To run a web server that will automatically reload the application
+as you change the source files:
+
+  python manage.py runserver
 
 Production deployment
 =====================
@@ -66,6 +80,16 @@ database and initializing its schema. The setup process also equips the
 'fuzzermon' account with shell configuration to ensure that the python
 environment necessary for running and working with the service is active
 in the shell upon login.
+
+To ensure that the Python application uses the correct database and
+backend, check that fuzzermon/settings.py sets DATABASES accordingly:
+
+  DATABASES = {
+      'default': {
+          'ENGINE': 'django.db.backends.postgresql',
+          'NAME': 'fuzzermon',
+      }
+  }
 
 Migrating the database
 ======================

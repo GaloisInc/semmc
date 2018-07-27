@@ -16,12 +16,14 @@ import qualified Control.Exception as E
 import qualified Data.Ini.Config as CI
 import qualified Data.Aeson as AE
 import qualified Data.Foldable as F
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSC8
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Word.Indexed as W
+import           Data.Proxy ( Proxy(..) )
 import           Data.List (intercalate)
-import           Data.Maybe (catMaybes)
+import           Data.Maybe (catMaybes, fromMaybe)
 import           Data.Monoid ((<>))
 import qualified Data.Map as M
 import           Data.EnumF (EnumF)
@@ -46,7 +48,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.HasRepr (HasRepr)
 import qualified Data.Parameterized.List as L
 
-import qualified Lang.Crucible.Backend as SB
 import qualified Lang.Crucible.Backend.Simple as SB
 import qualified What4.Expr.Builder as SB
 
@@ -54,6 +55,8 @@ import qualified Dismantle.Arbitrary as DA
 import           Dismantle.Instruction (GenericInstruction(Instruction))
 import qualified Dismantle.Instruction.Random as D
 import qualified Dismantle.PPC as PPC
+import qualified Dismantle.ARM as ARMDis
+import           Dismantle.ARM.Random ()
 
 import           SemMC.Fuzzer.Types
 import           SemMC.Fuzzer.Util
@@ -68,6 +71,8 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.PPC32 as PPCS
 import qualified SemMC.Architecture.PPC32.Opcodes as PPCS
+import qualified SemMC.Architecture.A32 as A32
+import qualified SemMC.Architecture.ARM.Opcodes as ARM
 import           SemMC.Synthesis.Template ( TemplatableOperand
                                           , TemplatedOperand
                                           )
@@ -147,6 +152,7 @@ data Config =
            , configLogLevel   :: L.LogLevel
            , configNumThreads :: Int
            , configReportURL  :: Maybe String
+           , configUsername   :: Maybe String
            }
 
 defaultConfig :: Config
@@ -162,6 +168,7 @@ defaultConfig =
            , configLogLevel   = L.Info
            , configNumThreads = 1
            , configReportURL  = Nothing
+           , configUsername   = Nothing
            }
 
 loadConfig :: FilePath -> IO (Either String FuzzerConfig)
@@ -189,7 +196,8 @@ parser = do
     let hostSection = T.stripPrefix hostSectionPrefix
     hosts <- CI.sectionsOf hostSection $ \hostname -> do
         FuzzerTestHost (T.unpack hostname)
-            <$> CI.fieldDefOf "chunk-size" CI.readable (configChunkSize defaultConfig)
+            <$> (CI.fieldMbOf "username" CI.string)
+            <*> CI.fieldDefOf "chunk-size" CI.readable (configChunkSize defaultConfig)
             <*> (T.unpack <$> CI.fieldDef "runner-path" (T.pack $ configBinaryPath defaultConfig))
             <*> (CI.fieldDefOf "threads" CI.readable (configNumThreads defaultConfig))
 
@@ -207,6 +215,7 @@ ppc32Arch =
              (Proxy @PPCS.PPC)
              PPCS.allOpcodes
              PPCS.allSemantics
+             PPCS.allDefinedFunctions
              PPCS.testSerializer
              PPC.ppInstruction
              ppc32OpcodeFilter
@@ -218,9 +227,24 @@ ppc32OpcodeFilter o =
         blacklist = [ "BCL"
                     ]
 
+a32Arch :: ArchImpl
+a32Arch =
+    ArchImpl "a32"
+             (Proxy @A32.A32)
+             ARM.a32Opcodes
+             ARM.a32Semantics
+             ARM.a32DefinedFunctions
+             A32.testSerializer
+             ARMDis.ppInstruction
+             a32OpcodeFilter
+
+a32OpcodeFilter :: Some (ARMDis.Opcode ARMDis.Operand) -> Bool
+a32OpcodeFilter = const True
+
 knownArchs :: [ArchImpl]
 knownArchs =
     [ ppc32Arch
+    , a32Arch
     ]
 
 allArchNames :: [String]
@@ -285,9 +309,10 @@ configFromArgs = do
         Just c -> return c
 
 simpleFuzzerConfig :: Config -> Maybe FuzzerConfig
-simpleFuzzerConfig cfg =
+simpleFuzzerConfig cfg = do
     FuzzerConfig <$> configArchName cfg
                  <*> (pure <$> (FuzzerTestHost <$> (configHost cfg)
+                                               <*> (pure Nothing)
                                                <*> (pure $ configChunkSize cfg)
                                                <*> (pure $ configBinaryPath cfg)
                                                <*> (pure $ configNumThreads cfg)))
@@ -301,9 +326,10 @@ mkFuzzerConfig cfg =
     -- Either load a configuration file from disk or build a simple one
     -- from command line arguments.
     case configPath cfg of
-        Nothing -> case simpleFuzzerConfig cfg of
-            Nothing -> usage >> IO.exitFailure
-            Just fc -> return fc
+        Nothing -> do
+            case simpleFuzzerConfig cfg of
+                Nothing -> usage >> IO.exitFailure
+                Just fc -> return fc
         Just path -> do
             -- Load a configuration from the specified path, then build
             -- a fuzzer config from that.
@@ -345,9 +371,9 @@ main = do
 defaultRunnerPath :: FilePath
 defaultRunnerPath = "remote-runner"
 
-filterOpcodes :: forall proxy arch .
+filterOpcodes :: forall arch .
                  (ShowF (A.Opcode arch (A.Operand arch)))
-              => proxy arch
+              => Proxy arch
               -> OpcodeMatch
               -> [Some ((A.Opcode arch) (A.Operand arch))]
               -> [Some ((A.Opcode arch) (A.Operand arch))]
@@ -378,7 +404,7 @@ startHostThreads logCfg fc = do
           mapM_ CA.wait (concat hostThreads)
 
 testHost :: L.LogCfg -> FuzzerConfig -> FuzzerTestHost -> ArchImpl -> IO ()
-testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics testSerializer ppInst opcodeFilter) = do
+testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics allFunctions testSerializer ppInst opcodeFilter) = do
   caseChan <- C.newChan
   resChan <- C.newChan
 
@@ -399,19 +425,19 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
           testRunner mainConfig hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
-                     allSemantics ppInst caseChan resChan
+                     allSemantics allFunctions ppInst caseChan resChan
 
   CA.link runThread
 
   L.withLogCfg logCfg $
       CE.runRemote (Just $ fuzzerRunnerPath hostConfig) (fuzzerTestHostname hostConfig)
-                   testSerializer caseChan resChan
+                   (fuzzerTestUser hostConfig) testSerializer caseChan resChan
 
   CA.wait runThread
 
   L.logEndWith logCfg
 
-testRunner :: forall proxy arch .
+testRunner :: forall arch .
               ( TemplatableOperand arch
               , A.Architecture arch
               , C.ConcreteArchitecture arch
@@ -426,16 +452,17 @@ testRunner :: forall proxy arch .
               )
            => FuzzerConfig
            -> FuzzerTestHost
-           -> proxy arch
+           -> Proxy arch
            -> NES.Set (Some ((A.Opcode arch) (A.Operand arch)))
            -> TestStrategy
            -> [(Some ((A.Opcode arch) (A.Operand arch)), BS8.ByteString)]
+           -> [(String, BS.ByteString)]
            -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseChan resChan = do
-    user <- getLoginName
+testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst caseChan resChan = do
+    self <- getLoginName
     hostname <- getHostName
 
     let chunkSize = fuzzerTestChunkSize hostConfig
@@ -453,7 +480,8 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
           <- SB.newSimpleBackend nonceGen
       SB.stopCaching sym
 
-      baseSet <- F.loadFormulas sym semantics
+      lib <- F.loadLibrary proxy sym funcs
+      baseSet <- F.loadFormulas sym lib semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
 
@@ -519,7 +547,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics ppInst caseC
                       Nothing -> return ()
                       Just reportURL -> do
                           let b = Batch { batchFuzzerHost = hostname
-                                        , batchFuzzerUser = user
+                                        , batchFuzzerUser = fromMaybe self $ fuzzerTestUser hostConfig
                                         , batchTestingHost = fuzzerTestHostname hostConfig
                                         , batchArch = fuzzerArchName mainConfig
                                         , batchEntries = catMaybes entries

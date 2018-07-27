@@ -22,8 +22,8 @@
         'CPSR)
        'CPSR)
       (concat
-       ((_ extract 35 32)
+       ((_ extract 3 0)
         (res_nzcv))
-       ((_ extract 27 0)
+       ((_ extract 31 4)
         'CPSR))
       'CPSR))))))

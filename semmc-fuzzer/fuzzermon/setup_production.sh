@@ -24,6 +24,9 @@ fi
 # Create a postgres role for the new user
 (sudo -u postgres createuser -d fuzzermon || true)
 
+# Create a postgres database
+(sudo -u fuzzermon createdb fuzzermon || true)
+
 # Clone the project sources from the tree where we are running this script
 REPO=$(cd $HERE/../../ && pwd)
 if [ ! -d ~fuzzermon/semmc ]

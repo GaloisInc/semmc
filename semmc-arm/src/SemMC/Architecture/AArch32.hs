@@ -355,7 +355,7 @@ locationFuncInterpretation =
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
-                          { A.locationInterp = F.LocationFuncInterp (interpImm12Reg getArmDisOperand)
+                          { A.locationInterp = F.LocationFuncInterp (interpImm12Reg getArmDisOperand LocGPR)
                           , A.exprInterpName = 'interpImm12RegExtractor
                           })
     , ("a32.imm12_off", A.FunctionInterpretation
@@ -368,11 +368,11 @@ locationFuncInterpretation =
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
-                                          { A.locationInterp = F.LocationFuncInterp (interpLdstsoregBaseReg getArmDisOperand)
+                                          { A.locationInterp = F.LocationFuncInterp (interpLdstsoregBaseReg getArmDisOperand LocGPR)
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor
                                           })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
-                                            { A.locationInterp = F.LocationFuncInterp (interpLdstsoregOffReg getArmDisOperand)
+                                            { A.locationInterp = F.LocationFuncInterp (interpLdstsoregOffReg getArmDisOperand LocGPR)
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor
                                             })
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation
@@ -406,7 +406,7 @@ locationFuncInterpretation =
                              , A.exprInterpName = 'interpSoregimmImmExtractor
                              })
     , ("a32.soregimm_reg", A.FunctionInterpretation
-                             { A.locationInterp = F.LocationFuncInterp (interpSoregimmReg getArmDisOperand)
+                             { A.locationInterp = F.LocationFuncInterp (interpSoregimmReg getArmDisOperand LocGPR)
                              , A.exprInterpName = 'interpSoregimmRegExtractor })
 
     , ("a32.soregreg_type", A.FunctionInterpretation
@@ -414,10 +414,10 @@ locationFuncInterpretation =
                               , A.exprInterpName = 'interpSoregregTypeExtractor
                               })
     , ("a32.soregreg_reg1", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg1 getArmDisOperand)
+                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg1 getArmDisOperand LocGPR)
                               , A.exprInterpName = 'interpSoregregReg1Extractor })
     , ("a32.soregreg_reg2", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg2 getArmDisOperand)
+                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg2 getArmDisOperand LocGPR)
                               , A.exprInterpName = 'interpSoregregReg2Extractor })
 
     , ("t32.blxtarget_S", A.FunctionInterpretation
@@ -468,7 +468,6 @@ locationFuncInterpretation =
     , ("t32.addrmode_is4_reg", A.FunctionInterpretation
                                  { A.locationInterp = F.LocationFuncInterp interpTaddrmodeis4Reg
                                  , A.exprInterpName = 'interpTaddrmodeis4RegExtractor
-                                 , A.exprInterp = undefined
                                  })
     , ("t32.addrmode_pc", A.FunctionInterpretation
                             { A.locationInterp = F.LocationFuncInterp noLocation

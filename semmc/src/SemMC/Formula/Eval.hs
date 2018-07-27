@@ -18,30 +18,62 @@
 -- "static").
 module SemMC.Formula.Eval (
   Evaluator(..),
+  lookupVarInFormulaOperandList,
+  exprForRegister,
+  evalBitvectorExtractor,
+  evalRegExtractor,
   evaluateFunctions
   ) where
 
 import           Control.Arrow                      ( first )
 import           Control.Monad.State
+import           Data.Functor.Product  ( Product(Pair) )
 import qualified Data.Parameterized.Context         as Ctx
 import qualified Data.Parameterized.List            as SL
 import qualified Data.Parameterized.Map             as M
+import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableFC
 
 import qualified Data.Text                          as T
-import           What4.Interface
+import           What4.Interface as S
 import qualified What4.Expr.Builder as S
 import qualified What4.Symbol as S
 import           Lang.Crucible.Types
 import qualified SemMC.Architecture.Internal        as A
-import           SemMC.Architecture.Location
-import           SemMC.Formula.Formula
+import           SemMC.Architecture.Location        as A
+import qualified SemMC.BoundVar as BV
+import           SemMC.Formula.Formula as F
+import           SemMC.Util ( makeSymbol )
 
 type Sym t st = S.ExprBuilder t st
 
 type Literals arch sym = M.MapF (Location arch) (BoundVar sym)
 
--- | Type used to encapsulate rewriting of formulas related to register unpacking across different ISAs.
+-- | This type encapsulates an evaluator for operations represented as
+-- uninterpreted functions in semantics.  It may seem strange to interpret
+-- "uninterpreted functions" (UFs); we use UFs to represent operations in the
+-- semantics that can't be expressed using more typical SMT operations.  The most
+-- common examples in the codebase are:
+--
+-- 1) Extracting sub-components from compound operands in instructions (like a
+--    literal bundled with a shift amount)
+-- 2) Testing the number of a register (e.g., testing if a register is r0)
+--
+-- While the type isn't much of an abstraction barrier, it is convenient to hide
+-- the forall under a data constructor rather than a type alias.
+--
+-- * The 'Sym' is a symbolic expression builder from the what4 library
+-- * The 'ParameterizedFormula' is the formula whose semantics we are currently evaluating
+-- * The 'SL.List' contains the concrete operands to the instruction whose semantics we are evaluating
+-- * The 'Ctx.Assignment' is the list of operands of the uninterpreted function being interpreted
+-- * The 'BaseTypeRepr' is the expected return type of the uninterpreted function
+--
+-- Note that the type parameters for the *instruction* operand list and the
+-- *uninterpreted function* operand list (@sh@ and @u@, respectively) explicitly
+-- do /not/ match up, as the UF and instructions take different operands.
+--
+-- We need to pass the return type 'BaseTypeRepr' in so that we can know at the
+-- call site that the expression produced by the evaluator is correctly-typed.
 data Evaluator arch t =
   Evaluator (forall tp u st sh
                . Sym t st
@@ -50,6 +82,147 @@ data Evaluator arch t =
               -> Ctx.Assignment (S.Expr t) u
               -> BaseTypeRepr tp
               -> IO (S.Expr t tp, Literals arch (Sym t st)))
+
+-- | Given a 'S.BoundVar', attempt to find its index in the operand list for the
+-- 'F.ParameterizedFormula'
+--
+-- This is meant to be used in definitions of 'Evaluator's, where we need to
+-- match actual operands to their bound variables in a parameterized formula.
+lookupVarInFormulaOperandList :: (TestEquality (S.BoundVar sym))
+                              => S.BoundVar sym tp
+                              -> F.ParameterizedFormula sym arch sh
+                              -> Maybe (Some (SL.Index sh))
+lookupVarInFormulaOperandList b pf =
+  b `elemIndexSL` F.pfOperandVars pf
+
+elemIndexSL :: forall sym arch sh tp . (TestEquality (S.BoundVar sym)) => S.BoundVar sym tp -> SL.List (BV.BoundVar sym arch) sh -> Maybe (Some (SL.Index sh))
+elemIndexSL target = go . SL.imap Pair
+  where
+    go :: forall sh' . SL.List (Product (SL.Index sh) (BV.BoundVar sym arch)) sh' -> Maybe (Some (SL.Index sh))
+    go l =
+      case l of
+        SL.Nil -> Nothing
+        Pair idx (BV.BoundVar elt) SL.:< rest
+          | Just Refl <- testEquality elt target -> Just (Some idx)
+          | otherwise -> go rest
+
+-- | Find a symbolic expression that represents the register passed in (as an 'A.Location')
+--
+-- This function checks to see if the register has already been referenced in
+-- the formula literals map or the operand list.  If it has, the corresponding
+-- expression is re-used.
+--
+-- If the register hasn't yet been assigned an expression, this function
+-- allocates a new symbolic expression for it and maps the register to the new
+-- expression in the returned map of locations to bound variables.  The returned
+-- map is merged into the literals map in the outer evaluation logic.
+exprForRegister :: forall arch t st sh tp tp0
+                 . (A.IsLocation (A.Location arch))
+                => S.ExprBuilder t st
+                -- ^ The symbolic backend
+                -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
+                -- ^ The semantics formula for the instruction being interpreted
+                -> SL.List (A.Operand arch) sh
+                -- ^ The actual arguments we are instantiating the parameterized formula with
+                -> (forall tp1 . A.Operand arch tp1 -> Bool)
+                -- ^ A predicate to test whether the 'A.Location' (below)
+                -- matches an 'A.Operand' in the operands list; this is an
+                -- opaque predicate because translating a 'A.Location' into an
+                -- 'A.Operand' is inherently architecture-specific, and must be
+                -- done by an architecture-specific backend.
+                -> A.Location arch tp0
+                -- ^ The register whose value (expression) should be looked up
+                -> BaseTypeRepr tp
+                -- ^ The return type of the 'S.Expr' that the caller is expecting.
+                -> IO (S.Expr t tp, M.MapF (A.Location arch) (S.BoundVar (S.ExprBuilder t st)))
+exprForRegister sym pf operands test reg resultRepr =
+  case M.lookup reg (F.pfLiteralVars pf) of
+    -- If the variable has already been allocated a LiteralVar (in
+    -- pfLiteralVars), we use that variable as our expression.
+    Just bvar ->
+      case testEquality resultRepr (S.bvarType bvar) of
+        Just Refl -> return (S.varExpr sym bvar, M.empty)
+        Nothing -> error ("The expression for " ++ M.showF reg ++ " has the wrong type; the caller expected " ++ show resultRepr)
+    -- Otherwise, We check the operands list to see if there was a variable
+    -- allocated in there for the same register.  If not, we allocate a fresh
+    -- variable and return it in the extra mapping that will be merged with the
+    -- literal vars.  Note that this is the only case where we actually return a
+    -- non-empty map.
+    Nothing
+      | Just (Some (BV.BoundVar bvar)) <- findOperandVarForRegister pf operands test ->
+        case testEquality (S.bvarType bvar) resultRepr of
+          Just Refl -> return (S.varExpr sym bvar, M.empty)
+          Nothing -> error ("Register operand has type " ++ show (S.bvarType bvar) ++ " but the caller expected " ++ show resultRepr)
+      | otherwise -> do
+          let usym = makeSymbol ("reg_" ++ M.showF reg)
+          s <- S.freshBoundVar sym usym (A.locationType reg)
+          case testEquality (S.bvarType s) resultRepr of
+            Just Refl -> return (S.varExpr sym s, M.singleton reg s)
+            Nothing -> error ("Created a fresh variable of type " ++ show (S.bvarType s) ++ " but the caller expected " ++ show resultRepr)
+
+-- | Look a 'A.Location' in the operand list (@'SL.List' ('A.Operand' arch) sh@)
+-- and, if it is found, return the corresponding 'BV.BoundVar' from the
+-- 'F.ParameterizedFormula'
+--
+-- Because we cannot generically convert a 'A.Location' to an 'A.Operand', we
+-- pass in a predicate to test if an 'A.Operand' matches the target
+-- 'A.Location'.  This predicate must be provided by an architecture-specific
+-- backend.
+findOperandVarForRegister :: forall t st arch sh
+                           . F.ParameterizedFormula (S.ExprBuilder t st) arch sh
+                          -> SL.List (A.Operand arch) sh
+                          -> (forall tp1 . A.Operand arch tp1 -> Bool)
+                          -> Maybe (Some (BV.BoundVar (S.ExprBuilder t st) arch))
+findOperandVarForRegister pf operands0 test = go (SL.imap Pair operands0)
+  where
+    go :: forall sh' . SL.List (Product (SL.Index sh) (A.Operand arch)) sh' -> Maybe (Some (BV.BoundVar (S.ExprBuilder t st) arch))
+    go operands =
+      case operands of
+        SL.Nil -> Nothing
+        Pair idx op SL.:< rest
+          | test op -> Just (Some (F.pfOperandVars pf SL.!! idx))
+          | otherwise -> go rest
+
+evalRegExtractor :: (M.ShowF (A.Operand arch), A.IsLocation (A.Location arch))
+                 => String
+                 -> (forall tp1 tp2 . A.Location arch tp1 -> A.Operand arch tp2 -> Bool)
+                 -> (forall tp . A.Operand arch tp -> Maybe (Some (A.Location arch)))
+                 -> Evaluator arch t
+evalRegExtractor operationName testEq match = Evaluator $ \sym pf operands ufArguments resultRepr ->
+  case ufArguments of
+    Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
+      case ufArg `lookupVarInFormulaOperandList` pf of
+        Nothing -> error ("Argument to " ++ operationName ++ " is not a formula parameter")
+        Just (Some idx) -> do
+          let operand = operands SL.!! idx
+          case match operand of
+            Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ M.showF operand)
+            Just (Some reg) -> exprForRegister sym pf operands (testEq reg) reg resultRepr
+    _ -> error ("Unexpected argument list to " ++ operationName)
+
+-- | A generic skeleton for evaluation functions that extract bitvector fields from operands
+--
+-- This isn't suitable for the versions that extract registers
+evalBitvectorExtractor :: (1 <= n, M.ShowF (A.Operand arch))
+                       => String
+                       -> NatRepr n
+                       -> (forall x . A.Operand arch x -> Maybe Integer)
+                       -> Evaluator arch t
+evalBitvectorExtractor operationName litRep match = Evaluator $ \sym pf operands ufArguments resultRepr ->
+  case ufArguments of
+    Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
+      case ufArg `lookupVarInFormulaOperandList` pf of
+        Nothing -> error ("Argument to " ++ operationName ++ " is not a formula parameter: " ++ M.showF ufArg)
+        Just (Some idx) -> do
+          let op = operands SL.!! idx
+          case match op of
+            Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ M.showF op)
+            Just val -> do
+              bv <- S.bvLit sym litRep val
+              case testEquality (S.exprType bv) resultRepr of
+                Just Refl -> return (bv, M.empty)
+                Nothing -> error (operationName ++ " returns a " ++ show (S.exprType bv) ++ " but the caller expected " ++ show resultRepr)
+    _ -> error ("Unexpected argument list to " ++ operationName)
 
 -- | See `evaluateFunctions'`
 evaluateFunctions
@@ -78,6 +251,7 @@ evaluateFunctions' sym pf operands rewriters e =
     S.SemiRingLiteral {} -> return e
     S.BVExpr {} -> return e
     S.BoundVarExpr {} -> return e
+    S.StringExpr {} -> return e
     S.AppExpr a -> do
       app <- S.traverseApp (evaluateFunctions' sym pf operands rewriters) (S.appExprApp a)
       liftIO $ S.sbMakeExpr sym app
