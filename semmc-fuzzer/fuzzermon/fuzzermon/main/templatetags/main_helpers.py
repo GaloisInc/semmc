@@ -11,11 +11,11 @@ def num(value, ty='dec'):
 
     try:
         if ty == 'dec':
-            return str(int(value), inbase)
+            return str(int(value, inbase))
         elif ty == 'bin':
-            return bin(int(value), inbase)
+            return bin(int(value, inbase))
         elif ty == 'hex':
-            return hex(int(value), inbase)
+            return hex(int(value, inbase))
         else:
             return str(value)
     except ValueError:
