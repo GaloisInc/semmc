@@ -91,6 +91,14 @@ instance P.TestEquality Value where
                 | w1 == w2 -> Just P.Refl
                 | otherwise -> Nothing
               Nothing -> Nothing
+          ValueMem _ -> Nothing
+      ValueMem bs1 ->
+        case bv2 of
+          ValueMem bs2 ->
+            if bs1 == bs2
+            then Just P.Refl
+            else Nothing
+          ValueBV _ -> Nothing
 
 instance P.EqF Value where
   eqF bv1 bv2 = isJust (P.testEquality bv1 bv2)
