@@ -73,8 +73,8 @@
             <div>
                 <a href="/test_signal_error/{{ error.id }}/">{{ error.pretty|mono }}</a>
             </div>
-            <div>
-                {{ error.bytes|num }}
+            <div class="bytes">
+                {{ error.bytes|num:numty }}
             </div>
             <div>
                 <span class="lighthost">{{ error.batch.testing_host.hostname|mono }}</span>
