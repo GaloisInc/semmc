@@ -995,7 +995,7 @@ int main(int argc, char* argv[]) {
 
   childPid = fork();
   if(childPid == -1) {
-    writeReadErrorResult(stdout, WORK_ERROR_FORK_FAILED, "Failed to fork runner");
+    writeReadErrorResult(stderr, WORK_ERROR_FORK_FAILED, "Failed to fork runner");
     return -1;
   } else if(childPid == 0) {
     // This is the child process that will map programs and generate SIGTRAPs
