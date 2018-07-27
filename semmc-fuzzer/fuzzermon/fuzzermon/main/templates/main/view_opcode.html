@@ -32,8 +32,8 @@
             <div>
                 <a href="/test_failure/{{ failure.id }}/">{{ failure.pretty|mono }}</a>
             </div>
-            <div>
-                {{ failure.bytes|num }}
+            <div class="bytes">
+                {{ failure.bytes|num:'bin' }}
             </div>
             <div>
                 <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
