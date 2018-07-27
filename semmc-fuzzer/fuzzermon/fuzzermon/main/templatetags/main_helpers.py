@@ -4,6 +4,17 @@ from django.utils.html import conditional_escape
 
 register = template.Library()
 
+def group(s, chunk_size):
+    if len(s) < chunk_size:
+        return (('0' * (chunk_size - len(s))) + s)
+    else:
+        chunk = ""
+        chunkStart = len(s) - chunk_size
+        for i in range(chunkStart, len(s)):
+            chunk += s[i]
+
+        return (group(s[0:chunkStart]) + " " + chunk, chunk_size)
+
 def num(value, ty='dec'):
     inbase = 10
     if value.startswith("0x"):
@@ -13,9 +24,9 @@ def num(value, ty='dec'):
         if ty == 'dec':
             return str(int(value, inbase))
         elif ty == 'bin':
-            return bin(int(value, inbase))
+            return group(bin(int(value, inbase))[2:], 8)
         elif ty == 'hex':
-            return hex(int(value, inbase))
+            return group(hex(int(value, inbase))[2:], 4)
         else:
             return str(value)
     except ValueError:
