@@ -51,10 +51,10 @@ import           SemMC.Stochastic.Monad
 -- This function can fail (with an error) if we do not have enough registers to
 -- act as stand ins for immediates; that seems highly unlikely, but something to
 -- watch out for.
-instantiateInstruction :: forall arch sh t
+instantiateInstruction :: forall arch sh t solver
                         . (SynC arch)
                        => A.Opcode arch (A.Operand arch) sh
-                       -> Syn t arch (AC.RegisterizedInstruction arch)
+                       -> Syn t solver arch (AC.RegisterizedInstruction arch)
 instantiateInstruction op = do
   gen <- askGen
   miorel <- opcodeIORelation op

@@ -6,7 +6,8 @@ module SemMC.Synthesis
 
 import           Data.Typeable
 
-import qualified Lang.Crucible.Backend.Simple as S
+import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend.Online as CBO
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -35,9 +36,9 @@ setupEnvironment :: (Architecture arch,
                      ArchRepr arch,
                      TemplatableOperand arch,
                      Typeable arch)
-                 => S.SimpleBackend t
-                 -> BaseSet (S.SimpleBackend t) arch
-                 -> SynthesisEnvironment (S.SimpleBackend t) arch
+                 => CBO.OnlineBackend t solver
+                 -> BaseSet (CBO.OnlineBackend t solver) arch
+                 -> SynthesisEnvironment (CBO.OnlineBackend t solver) arch
 setupEnvironment sym baseSet =
   let insns = templatedInstructions baseSet
   in SynthesisEnvironment { synthSym = sym
@@ -49,9 +50,11 @@ mcSynth :: (Architecture arch,
             Architecture (TemplatedArch arch),
             ArchRepr arch,
             TemplatableOperand arch,
-            Typeable arch)
-        => SynthesisEnvironment (S.SimpleBackend t) arch
-        -> Formula (S.SimpleBackend t) arch
+            Typeable arch,
+            WPO.OnlineSolver t solver
+            )
+        => SynthesisEnvironment (CBO.OnlineBackend t solver) arch
+        -> Formula (CBO.OnlineBackend t solver) arch
         -> IO (Maybe [Instruction arch])
 mcSynth env target = do
   let params = SynthesisParams { synthEnv = env

@@ -159,6 +159,7 @@ convertElt :: ParamLookup t -> S.Expr t tp -> SC.SExpr FAtom
 convertElt _ (S.SemiRingLiteral S.SemiRingNat _ _) = error "NatElt not supported"
 convertElt _ (S.SemiRingLiteral S.SemiRingInt _ _) = error "IntElt not supported"
 convertElt _ (S.SemiRingLiteral S.SemiRingReal _ _) = error "RatElt not supported"
+convertElt _ (S.StringExpr {}) = error "StringExpr is not supported"
 convertElt _ (S.BVExpr sz val _) = SC.SAtom (ABV (widthVal sz) val)
 convertElt paramLookup (S.AppExpr appElt) = convertAppElt paramLookup appElt
 convertElt paramLookup (S.NonceAppExpr nae) =

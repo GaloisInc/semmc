@@ -32,7 +32,6 @@ import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
 import           GHC.TypeLits ( Symbol )
-import           Text.Printf ( printf )
 
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.Instruction as D

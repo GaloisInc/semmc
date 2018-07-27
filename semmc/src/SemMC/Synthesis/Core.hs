@@ -18,7 +18,8 @@ import           Data.Foldable
 import qualified Data.Set as Set
 import           Data.Typeable
 
-import qualified Lang.Crucible.Backend.Simple as S
+import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend.Online as CBO
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -82,10 +83,10 @@ footprintFilter target candidate =
   in candInputs `Set.isSubsetOf` targetInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
 
-instantiate :: (TemplateConstraints arch, ArchRepr arch)
-            => Formula (S.SimpleBackend t) arch
-            -> [Some (TemplatedInstruction (S.SimpleBackend t) arch)]
-            -> Synth (S.SimpleBackend t) arch (Maybe [Instruction arch])
+instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solver)
+            => Formula (CBO.OnlineBackend t solver) arch
+            -> [Some (TemplatedInstruction (CBO.OnlineBackend t solver) arch)]
+            -> Synth (CBO.OnlineBackend t solver) arch (Maybe [Instruction arch])
 instantiate target trial
   | footprintFilter target trial = do
       sym <- askSym
@@ -119,9 +120,11 @@ instantiate target trial
 synthesizeFormula' :: (Architecture arch,
                        TemplatableOperand arch,
                        ArchRepr arch,
-                       Architecture (TemplatedArch arch))
-                   => Formula (S.SimpleBackend t) arch
-                   -> Synth (S.SimpleBackend t) arch (Maybe [Instruction arch])
+                       Architecture (TemplatedArch arch),
+                       WPO.OnlineSolver t solver
+                       )
+                   => Formula (CBO.OnlineBackend t solver) arch
+                   -> Synth (CBO.OnlineBackend t solver) arch (Maybe [Instruction arch])
 synthesizeFormula' target = do
   st <- get
   case Seq.viewl (synthPrefixes st) of
@@ -141,14 +144,16 @@ synthesizeFormula' target = do
     -- If there are no more possible prefixes, we can't synthesize this formula.
     Seq.EmptyL -> return Nothing
 
-synthesizeFormula :: forall t arch.
+synthesizeFormula :: forall t solver arch .
                      (Architecture arch,
                       TemplatableOperand arch,
                       ArchRepr arch,
                       Architecture (TemplatedArch arch),
-                      Typeable arch)
-                  => SynthesisParams (S.SimpleBackend t) arch
-                  -> Formula (S.SimpleBackend t) arch
+                      Typeable arch,
+                      WPO.OnlineSolver t solver
+                     )
+                  => SynthesisParams (CBO.OnlineBackend t solver) arch
+                  -> Formula (CBO.OnlineBackend t solver) arch
                   -> IO (Maybe [Instruction arch])
 synthesizeFormula params target = do
   evalStateT (runReaderT (synthesizeFormula' target) params) $

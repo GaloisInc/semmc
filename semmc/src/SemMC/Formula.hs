@@ -30,7 +30,7 @@ module SemMC.Formula
   , formulasEquiv
   , formulasEquivConcrete
   , formulasEquivSym
-  , checkSatZ3
+  , checkSat
 
   -- * Functions and libraries
   , FunctionFormula(..)
@@ -91,5 +91,5 @@ import SemMC.Formula.Equivalence ( EquivalenceResult(..),
                                    formulasEquiv,
                                    formulasEquivConcrete,
                                    formulasEquivSym,
-                                   checkSatZ3
+                                   checkSat
                                  )

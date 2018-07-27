@@ -37,10 +37,8 @@ import qualified Dismantle.Instruction as D
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified GHC.Err.Located as L
-import qualified Lang.Crucible.Backend as SB
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
-import           SemMC.Architecture.PPC.Eval
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
@@ -331,7 +329,7 @@ instance T.TemplatableOperand PPC where
 type instance A.Location PPC = Location PPC
 
 operandValue :: forall sym s.
-                (SB.IsSymInterface sym,
+                (S.IsSymExprBuilder sym,
                  S.IsExprBuilder sym)
              => sym
              -> (forall tp. Location PPC tp -> IO (S.SymExpr sym tp))

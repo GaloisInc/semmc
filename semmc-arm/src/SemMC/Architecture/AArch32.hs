@@ -203,7 +203,7 @@ instance A.IsOperandTypeRepr AArch32 where
 
 
 operandValue :: forall sym s.
-                (SB.IsSymInterface sym,
+                (S.IsSymExprBuilder sym,
                  S.IsExprBuilder sym)
              => sym
              -> (forall tp. Location AArch32 tp -> IO (S.SymExpr sym tp))

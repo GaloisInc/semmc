@@ -34,6 +34,8 @@ import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Dismantle.Instruction as D
 
+import qualified What4.Protocol.Online as WPO
+
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Formula as F
@@ -64,10 +66,10 @@ caller controls the number and placement of threads.
 -- The different synthesis threads are independent, except that they
 -- all draw work (opcodes to synthesize semantics for) from the same
 -- shared work list.
-stratifiedSynthesis :: forall arch t
-                     . (SynC arch, L.HasCallStack, L.HasLogCfg)
-                    => SynEnv t arch
-                    -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t) arch))
+stratifiedSynthesis :: forall arch t solver
+                     . (SynC arch, L.HasCallStack, L.HasLogCfg, WPO.OnlineSolver t solver)
+                    => SynEnv t solver arch
+                    -> IO (MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (Sym t solver) arch))
 stratifiedSynthesis env0 = do
   A.replicateConcurrently_ (parallelOpcodes (seConfig env0)) $
     (L.namedIO "strata" $ runSynInNewLocalEnv env0 go)
@@ -82,8 +84,8 @@ stratifiedSynthesis env0 = do
 -- list, because some instructions can't be learned effectively
 -- yet. This "timing out" is handled by the orchestration code (not in
 -- this module) that calls 'stratifiedSynthesis' itself.
-processWorklist :: (SynC arch, L.HasCallStack)
-                => Syn t arch ()
+processWorklist :: (SynC arch, L.HasCallStack, WPO.OnlineSolver t solver)
+                => Syn t solver arch ()
 processWorklist = do
   mwork <- takeWork
   case mwork of
@@ -95,8 +97,8 @@ processWorklist = do
 
 -- | Process a single opcode, requeueing it on the work list if
 -- synthesis times out.
-processOpcode :: (SynC arch, L.HasCallStack)
-              => A.Opcode arch (A.Operand arch) sh -> Syn t arch ()
+processOpcode :: (SynC arch, L.HasCallStack, WPO.OnlineSolver t solver)
+              => A.Opcode arch (A.Operand arch) sh -> Syn t solver arch ()
 processOpcode op = do
   rinstr <- instantiateInstruction op
   let instr = AC.riInstruction rinstr
@@ -129,18 +131,18 @@ processOpcode op = do
 -- | Attempt to learn a formula for the given opcode
 --
 -- Return 'Nothing' if we timed out before learning any candidates.
-strataOne :: (SynC arch, L.HasCallStack)
+strataOne :: (SynC arch, L.HasCallStack, WPO.OnlineSolver t solver)
           => A.Opcode arch (A.Operand arch) sh
           -> AC.RegisterizedInstruction arch
-          -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh ))
+          -> Syn t solver arch (Maybe (F.ParameterizedFormula (Sym t solver) arch sh ))
 strataOne op rinstr = strataOneLoop op rinstr (C.emptyEquivalenceClasses)
 
 -- | Main loop of stratified synthesis for a single instruction.
-strataOneLoop :: (SynC arch, L.HasCallStack)
+strataOneLoop :: (SynC arch, L.HasCallStack, WPO.OnlineSolver t solver)
               => A.Opcode arch (A.Operand arch) sh
               -> AC.RegisterizedInstruction arch
-              -> C.EquivalenceClasses (CP.CandidateProgram t arch)
-              -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
+              -> C.EquivalenceClasses (CP.CandidateProgram t solver arch)
+              -> Syn t solver arch (Maybe (F.ParameterizedFormula (Sym t solver) arch sh))
 strataOneLoop op rinstr eqclasses = do
   let instr = AC.riInstruction rinstr
   cfg <- askConfig
@@ -188,8 +190,8 @@ strataOneLoop op rinstr eqclasses = do
 finishStrataOne :: (SynC arch, L.HasCallStack)
                 => A.Opcode arch (A.Operand arch) sh
                 -> AC.RegisterizedInstruction arch
-                -> C.EquivalenceClasses (CP.CandidateProgram t arch)
-                -> Syn t arch (Maybe (F.ParameterizedFormula (Sym t) arch sh))
+                -> C.EquivalenceClasses (CP.CandidateProgram t solver arch)
+                -> Syn t solver arch (Maybe (F.ParameterizedFormula (Sym t solver) arch sh))
 finishStrataOne op instr eqclasses = do
   L.logM L.Info ("Equivalence classes: " ++ show eqclasses)
   mBestClass <- C.chooseClass eqclasses
@@ -205,8 +207,8 @@ finishStrataOne op instr eqclasses = do
 buildFormula :: (SynC arch)
              => A.Opcode arch (A.Operand arch) sh
              -> AC.RegisterizedInstruction arch
-             -> F.Formula (Sym t) arch
-             -> Syn t arch (F.ParameterizedFormula (Sym t) arch sh)
+             -> F.Formula (Sym t solver) arch
+             -> Syn t solver arch (F.ParameterizedFormula (Sym t solver) arch sh)
 buildFormula o i progFormula = do
   Just iorel <- opcodeIORelation o
   case AC.riInstruction i of

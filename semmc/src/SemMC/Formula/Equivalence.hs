@@ -10,13 +10,12 @@
 
 module SemMC.Formula.Equivalence
   ( EquivalenceResult(..)
-  , checkSatZ3
+  , checkSat
   , formulasEquiv
   , formulasEquivSym
   , formulasEquivConcrete
   ) where
 
-import           Control.Monad.IO.Class ( liftIO )
 import           Data.Foldable ( foldrM )
 import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Classes
@@ -26,17 +25,17 @@ import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF ( traverseF )
 import qualified Data.Set as Set
 import qualified Data.Word.Indexed as W
-import qualified System.IO as IO
 
 import           What4.BaseTypes
-import           What4.Solver.Adapter
 import qualified What4.Interface as S
 import           What4.SatResult
-import           Lang.Crucible.Backend.Simple
+import qualified Lang.Crucible.Backend.Online as CBO
 import           What4.Expr.GroundEval
-import           What4.Solver.Z3
 import           What4.Expr.Builder
-import           Lang.Crucible.Utils.MonadVerbosity ( MonadVerbosity, withVerbosity )
+import qualified What4.Expr as WE
+import qualified What4.Protocol.Online as WPO
+import qualified What4.Protocol.SMTWriter as WPS
+
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
@@ -59,11 +58,11 @@ data EquivalenceResult arch ex
 deriving instance (ShowF (A.Location arch), ShowF ex) => Show (EquivalenceResult arch ex)
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Elt's.
-formulasEquivSym :: forall arch t.
-                    (A.Architecture arch)
-                 => SimpleBackend t
-                 -> F.Formula (SimpleBackend t) arch
-                 -> F.Formula (SimpleBackend t) arch
+formulasEquivSym :: forall arch t solver .
+                    (A.Architecture arch, WPO.OnlineSolver t solver)
+                 => CBO.OnlineBackend t solver
+                 -> F.Formula (CBO.OnlineBackend t solver) arch
+                 -> F.Formula (CBO.OnlineBackend t solver) arch
                  -> IO (EquivalenceResult arch (Expr t))
 formulasEquivSym sym =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (Expr t tp)
@@ -71,11 +70,11 @@ formulasEquivSym sym =
   in formulasEquiv eval sym
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Value's.
-formulasEquivConcrete :: forall arch t.
-                         (A.Architecture arch)
-                      => SimpleBackend t
-                      -> F.Formula (SimpleBackend t) arch
-                      -> F.Formula (SimpleBackend t) arch
+formulasEquivConcrete :: forall arch t solver .
+                         (A.Architecture arch, WPO.OnlineSolver t solver)
+                      => CBO.OnlineBackend t solver
+                      -> F.Formula (CBO.OnlineBackend t solver) arch
+                      -> F.Formula (CBO.OnlineBackend t solver) arch
                       -> IO (EquivalenceResult arch V.Value)
 formulasEquivConcrete =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (V.Value tp)
@@ -94,12 +93,12 @@ allPairwiseEquality sym = foldrM andPairEquality (S.truePred sym)
 
 -- | Check the equivalence of two formulas, using the first parameter to extract
 -- expression values for the counterexample.
-formulasEquiv :: forall t arch ex.
-                 (A.Architecture arch)
+formulasEquiv :: forall t solver arch ex.
+                 (A.Architecture arch, WPO.OnlineSolver t solver)
               => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
-              -> SimpleBackend t
-              -> F.Formula (SimpleBackend t) arch
-              -> F.Formula (SimpleBackend t) arch
+              -> CBO.OnlineBackend t solver
+              -> F.Formula (CBO.OnlineBackend t solver) arch
+              -> F.Formula (CBO.OnlineBackend t solver) arch
               -> IO (EquivalenceResult arch ex)
 formulasEquiv
   eval
@@ -155,27 +154,28 @@ formulasEquiv
     -- ~((d1 = d1') /\ ... /\ (dm = dm'))
     testExpr <- S.notPred sym allDefsEqual
 
-    let handler (Sat (evalFn, _)) = do
+    let handler (Sat evalFn) = do
           -- Extract the failing test case.
           DifferentBehavior <$> traverseF (eval evalFn) varConstants
         handler Unsat = return Equivalent
         handler Unknown = return Timeout
 
-    checkSatZ3 sym testExpr handler
+    checkSat sym testExpr handler
 
--- | Check satisfiability using Z3.
+-- | Check the satisfiability of a formula using the given solver backend.
 --
--- The @handler@ receives the result of the satisfiability check.
-checkSatZ3 :: forall t a.
-              SimpleBackend t
-           -> BoolExpr t
-           -> (SatResult (GroundEvalFn t, Maybe (ExprRangeBindings t)) -> IO a)
-           -> IO a
-checkSatZ3 sym testExpr handler = do
-  withVerbosity IO.stderr 1 check
-  where
-    -- Without factoring this out and giving it an explicit type sig
-    -- for use with the explicit type application below I get errors
-    -- related to the monad @m@ here being ambiguous.
-    check :: forall m. MonadVerbosity m => m a
-    check = liftIO $ solver_adapter_check_sat z3Adapter sym (\_ _ -> return ()) testExpr handler
+-- We are requiring the online solver here, as most of this library requires
+-- lots of small queries.
+checkSat :: (WPO.OnlineSolver t solver)
+         => CBO.OnlineBackend t solver
+         -> WE.BoolExpr t
+         -> (SatResult (GroundEvalFn t) -> IO a)
+         -> IO a
+checkSat sym testExpr handler = do
+  sp <- CBO.getSolverProcess sym
+  let conn = WPO.solverConn sp
+  WPO.inNewFrame conn $ do
+    f <- WPS.mkFormula conn testExpr
+    WPS.assumeFormula conn f
+    res <- WPO.checkAndGetModel sp
+    handler res

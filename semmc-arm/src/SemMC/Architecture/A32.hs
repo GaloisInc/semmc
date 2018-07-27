@@ -270,7 +270,7 @@ instance A.IsOperandTypeRepr A32 where
     operandTypeReprSymbol _ = ARMDis.operandReprString
 
 operandValue :: forall sym s.
-                (SB.IsSymInterface sym,
+                (S.IsSymExprBuilder sym,
                  S.IsExprBuilder sym)
              => sym
              -> (forall tp. Location A32 tp -> IO (S.SymExpr sym tp))

@@ -36,7 +36,6 @@ import           Text.Printf                        ( printf )
 
 import           What4.BaseTypes
 import qualified What4.Interface     as S
-import qualified Lang.Crucible.Backend as SBI
 import qualified What4.Expr.Builder as S
 
 import qualified SemMC.Architecture                 as A
@@ -86,7 +85,7 @@ extendAssn newExpr newVar oldAssn =
 --    operand
 buildOpAssignment :: forall sym arch sh.
                   (A.Architecture arch,
-                   SBI.IsSymInterface sym)
+                   S.IsSymExprBuilder sym)
                 => sym
                 -- ^ Symbolic expression builder
                 -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
@@ -168,7 +167,7 @@ type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
 -- operand that are used within the returned formula.
 instantiateFormula :: forall arch t st sh.
                       ( A.Architecture arch
-                      , SBI.IsSymInterface (SB t st))
+                      , S.IsSymExprBuilder (SB t st))
                    => SB t st
                    -> ParameterizedFormula (SB t st) arch sh
                    -> SL.List (A.Operand arch) sh

@@ -60,7 +60,6 @@ import           GHC.TypeLits ( Symbol )
 import           Unsafe.Coerce ( unsafeCoerce )
 
 import qualified What4.Interface as S
-import qualified Lang.Crucible.Backend as SB
 import           What4.Expr.GroundEval
 import qualified What4.Expr.Builder as S
 
@@ -94,7 +93,7 @@ newtype WrappedRecoverOperandFn sym op =
 -- formula generation time.
 type TemplatedOperandFn arch s = forall sym.
                                  (S.IsExprBuilder sym,
-                                  SB.IsSymInterface sym)
+                                  S.IsSymExprBuilder sym)
                               => sym
                               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                               -> IO (S.SymExpr sym (OperandType arch s),
@@ -351,7 +350,7 @@ tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
 tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
 
 genTemplatedFormula :: (TemplateConstraints arch
-                       , SB.IsBoolSolver (S.ExprBuilder t st))
+                       , S.IsSymExprBuilder (S.ExprBuilder t st))
                     => S.ExprBuilder t st
                     -> TemplatedInstruction (S.ExprBuilder t st) arch sh
                     -> IO (TemplatedInstructionFormula (S.ExprBuilder t st) arch)
