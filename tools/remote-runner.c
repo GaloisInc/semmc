@@ -383,7 +383,11 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 
   memcpy(&rs->mem1, memSpace, sizeof(rs->mem1));
   memcpy(&rs->mem2, memSpace + sizeof(rs->mem1), sizeof(rs->mem2));
-  rs->cpsr = regs[IDX_CPSR];
+
+  // Reset the CPSR and PC values after the test because we don't have a
+  // sensible way of dealing with those register values.
+  rs->cpsr = 0;
+  rs->gprs[15] = 0;
 }
 
 
