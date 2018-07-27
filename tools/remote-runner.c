@@ -356,7 +356,7 @@ void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace
   //LOG("cpsr_q = %s\n", ((regs[IDX_CPSR] >> 27) & 1) ? "Q" : "-");
 
   // Need to check that format of cpsr is valid
-  regs[IDX_CPSR] = rs->cpsr;
+  // regs[IDX_CPSR] = rs->cpsr;
 
   // Apply the reg mask; this modifies the test vector, but that is fine.  We
   // won't need the original values ever again.
