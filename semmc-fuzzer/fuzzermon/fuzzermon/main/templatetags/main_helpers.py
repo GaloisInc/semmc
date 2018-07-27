@@ -4,15 +4,40 @@ from django.utils.html import conditional_escape
 
 register = template.Library()
 
-def num(value, ty='dec'):
-    if ty == 'dec':
-        return str(int(value))
-    elif ty == 'bin':
-        return bin(int(value))
-    elif ty == 'hex':
-        return hex(int(value))
+def group(s, chunk_size):
+    if len(s) == 0:
+        return ''
+    elif len(s) < chunk_size:
+        return (('0' * (chunk_size - len(s))) + s)
     else:
-        return str(ty)
+        chunk = ""
+        chunkStart = len(s) - chunk_size
+        for i in range(chunkStart, len(s)):
+            chunk += s[i]
+
+        if chunkStart > 0:
+            rest = group(s[0:chunkStart], chunk_size) + " "
+        else:
+            rest = ''
+
+        return (rest + chunk)
+
+def num(value, ty='dec'):
+    inbase = 10
+    if value.startswith("0x"):
+        inbase = 16
+
+    try:
+        if ty == 'dec':
+            return str(int(value, inbase))
+        elif ty == 'bin':
+            return group(bin(int(value, inbase))[2:], 8)
+        elif ty == 'hex':
+            return group(hex(int(value, inbase))[2:], 4)
+        else:
+            return str(value)
+    except ValueError:
+        return str(value)
 
 @register.filter(needs_autoescape=True)
 def mono(value, autoescape=True):

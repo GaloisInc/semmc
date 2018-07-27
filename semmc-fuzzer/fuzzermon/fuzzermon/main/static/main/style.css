@@ -54,6 +54,10 @@ div.testValue {
     font-family: monospace;
 }
 
+div.bytes {
+    font-family: monospace;
+}
+
 span.typeTag {
     display: inline-block;
     float: left;

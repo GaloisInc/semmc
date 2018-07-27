@@ -26,6 +26,9 @@
             <div>
                 {{ failure.pretty|mono }}
             </div>
+            <div class="bytes">
+                {{ failure.bytes|num:numty }}
+            </div>
             <div>
                 <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
             </div>

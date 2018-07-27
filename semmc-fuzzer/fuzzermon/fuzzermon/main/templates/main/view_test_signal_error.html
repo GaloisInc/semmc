@@ -22,6 +22,9 @@
             <div>
                 {{ signal_error.pretty|mono }}
             </div>
+            <div class="bytes">
+                {{ signal_error.bytes|num:numty }}
+            </div>
             <div>
                 <span class="lighthost">{{ signal_error.batch.testing_host.hostname|mono }}</span>
             </div>

@@ -22,6 +22,7 @@ class BatchEntry(object):
         self.count = None
         self.opcode = None
         self.pretty = None
+        self.bytes = None
         self.operands = None
         self.state_values = []
         self.signal_num = None
@@ -58,6 +59,7 @@ def parse_batch_json(body):
         elif be.type == 'failure':
             be.operands = entry['raw-operands']
             be.pretty = entry['pretty']
+            be.bytes = entry['bytes']
 
             for sval in entry['state']:
                 be.state_values.append(StateValue(sval['location'], sval['expected'], sval['actual']))
@@ -67,6 +69,7 @@ def parse_batch_json(body):
 
         elif be.type == 'unexpectedSignal':
             be.pretty = entry['pretty']
+            be.bytes = entry['bytes']
             be.signal_num = entry['signal']
 
             for ival in entry['inputs']:
@@ -134,6 +137,7 @@ def upload_batch(request):
                 e = TestSignalError()
                 e.opcode = opcode
                 e.pretty = entry.pretty
+                e.bytes = entry.bytes
                 e.signal = entry.signal_num
                 e.batch = b
                 e.save()
@@ -145,6 +149,7 @@ def upload_batch(request):
                 e = TestFailure()
                 e.opcode = opcode
                 e.pretty = entry.pretty
+                e.bytes = entry.bytes
                 e.arguments = entry.operands
                 e.batch = b
                 e.save()
@@ -188,10 +193,15 @@ def arch_list(request):
     for arch in archs:
         host_data = []
         for h in arch.host_set.all():
-            last_batch = Batch.objects.filter(testing_host__id=h.id).order_by('-submitted_at')[0]
+            all_batches = Batch.objects.filter(testing_host__id=h.id).order_by('-submitted_at') 
+            if all_batches:
+                last_batch_time = all_batches[0].submitted_at
+            else:
+                last_batch_time = None
+
             host_data.append({
                 'host': h,
-                'last_batch_time': last_batch.submitted_at,
+                'last_batch_time': last_batch_time,
                 'num_failures': TestFailure.objects.filter(batch__testing_host__id=h.id).count() +
                                 TestSignalError.objects.filter(batch__testing_host__id=h.id).count(),
                 'num_successes': TestSuccess.objects.filter(batch__testing_host__id=h.id).count(),
