@@ -63,6 +63,7 @@ library
                        SemMC.Synthesis.Core
                        SemMC.Synthesis.DivideAndConquer
                        SemMC.Synthesis.Template
+                       SemMC.Synthesis.Testing
                        SemMC.Symbolic
                        SemMC.TH
                        SemMC.Util

@@ -1,7 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 module SemMC.Synthesis
   ( setupEnvironment
+  , SynthesisEnvironment
+  , synthSym
   , mcSynth
+  , TemplatedArch
+  , TemplatedOperand
+  -- * Constraints
+  , TemplatableOperand
   ) where
 
 import           Data.Typeable
