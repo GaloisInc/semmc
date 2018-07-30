@@ -39,7 +39,7 @@ import qualified Dismantle.Instruction as D
 import           Dismantle.Tablegen.TH.Capture ( captureDictionaries )
 import qualified Lang.Crucible.Backend as SB
 import qualified What4.Interface as S
-import           Lang.Crucible.Backend.Simple
+import qualified Lang.Crucible.Backend.Online as CBO
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
@@ -61,10 +61,14 @@ import           Debug.Trace
 allOperands :: [Some (T.Opcode T.Operand)]
 allOperands = $(captureDictionaries (const True) ''T.Opcode)
 
-readBinOpc :: (U.HasLogCfg) =>
-              SimpleBackend t
+readBinOpc :: ( U.HasLogCfg
+              , S.IsSymExprBuilder sym
+              , SB.IsBoolSolver sym
+              , ShowF (S.SymExpr sym)
+              ) =>
+              sym
            -> Opcode Operand sh
-           -> IO (Either String (ParameterizedFormula (SimpleBackend t) Toy sh))
+           -> IO (Either String (ParameterizedFormula sym Toy sh))
 readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semantics" </> show opc <.> "sem")
   where
     env = FormulaEnv Map.empty undefined
@@ -72,7 +76,7 @@ readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semanti
 doThing :: (U.HasLogCfg) => IO ()
 doThing = do
   Some r <- newIONonceGenerator
-  sym <- newSimpleBackend r
+  CBO.withYicesOnlineBackend r $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -140,7 +144,7 @@ dependentFormula sym = do
 doThing2 :: (U.HasLogCfg) => IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
-  sym <- newSimpleBackend r
+  CBO.withYicesOnlineBackend r $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -158,14 +162,14 @@ doThing2 = do
 doThing3 :: (U.HasLogCfg) => IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
-  sym <- newSimpleBackend r
+  CBO.withYicesOnlineBackend r $ \sym -> do
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
 doThing4 :: (U.HasLogCfg) => IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
-  sym <- newSimpleBackend r
+  CBO.withYicesOnlineBackend r $ \sym -> do
   Right add <- readBinOpc sym AddRr
   print add
   Right sub <- readBinOpc sym SubRr
@@ -271,7 +275,7 @@ defaultRunSynToyCfg = RunSynToyCfg
 runSynToy :: (U.HasLogCfg)
           => RunSynToyCfg
           -> FilePath -- ^ Root dir for test data, e.g. semantics.
-          -> (forall t. Syn t Toy a)
+          -> (forall t solver. Syn t solver Toy a)
           -> IO a
 runSynToy rstCfg dataRoot action = do
   stThread <- newStatisticsThread (dataRoot </> "stats.sqlite")
