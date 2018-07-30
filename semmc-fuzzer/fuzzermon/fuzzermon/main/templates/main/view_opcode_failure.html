@@ -1,0 +1,45 @@
+{% load main_helpers %}
+
+<table>
+    <tr>
+        <th rowspan="2">Instruction</th>
+        <th colspan="2">State Mismatches</th>
+    </tr>
+    <tr>
+        <th>Location</th>
+        <th>(S)emantics vs. (H)ardware</th>
+    </tr>
+    {% for case in cases %}
+    <tr>
+        {% if case.testmachinestate_set.all|length > 0 %}
+        <td valign="top" rowspan="{{ case.testmachinestate_set.all|length }}">
+        {% else %}
+        <td valign="top">
+        {% endif %}
+        {% include "main/opcode_info.html" %}
+        </td>
+        {% if case.testmachinestate_set.all|length > 0 %}
+          {% for state in case.testmachinestate_set.all %}
+          {% if forloop.counter0 > 0 %}<tr>{% endif %}
+              <td>{{ state.location|mono }}</td>
+              <td>
+                  <div class="testValue">
+                      <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
+                  </div>
+                  <div class="testValue">
+                      <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
+                  </div>
+              </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          {% if case.passed %}
+            <td colspan="2">Passed</td>
+            </tr>
+          {% else %}
+            <td colspan="2">Failed with signal {{ case.signal }}</td>
+            </tr>
+          {% endif %}
+        {% endif %}
+    {% endfor %}
+</table>

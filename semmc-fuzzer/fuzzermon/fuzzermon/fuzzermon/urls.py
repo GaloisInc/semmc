@@ -22,6 +22,7 @@ urlpatterns = [
     path('', views.arch_list),
     path('arch/<int:arch_id>/', views.view_arch),
     path('opcode/<int:opcode_id>/', views.view_opcode),
+    path('opcode/<int:opcode_id>/<str:result_type>/', views.view_opcode),
     path('test/<int:test_id>/', views.view_test),
     path('upload_batch', views.upload_batch),
     # path('admin/', admin.site.urls),

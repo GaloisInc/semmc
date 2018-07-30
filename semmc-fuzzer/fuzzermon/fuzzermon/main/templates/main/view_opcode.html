@@ -18,69 +18,37 @@
     {% include "main/display_mode.html" %}
 </div>
 
+<ul id="opcodeTabs">
+    <li {% if result_type == 'success' %}class="activeTab"{% endif %}>
+        <a href="/opcode/{{ opcode.id }}/success/">Successes</a> ({{ num_successes }})</li>
+    <li {% if result_type == 'failure' %}class="activeTab"{% endif %}>
+        <a href="/opcode/{{ opcode.id }}/failure/">Failures</a> ({{ num_failures }})</li>
+    <li {% if result_type == 'signal' %}class="activeTab"{% endif %}>
+        <a href="/opcode/{{ opcode.id }}/signal/">Signals</a> ({{ num_signals }})</li>
+</ul>
+
 <p>
 {% if limit %}
-Showing {{ limit }} results (<a href="?limit=none">show all results</a>)
+  {% if cases|length < limit %}
+  Showing all {{ cases|length }} results
+  {% else %}
+  Showing first {{ cases|length }} results (<a href="?limit=none">show all results</a>)
+  {% endif %}
 {% else %}
-Showing all {{ cases|length }} results (<a href="?limit=50">show 50 results</a>)
+  {% if cases|length < limit %}
+  Showing all {{ cases|length }} results
+  {% else %}
+  Showing all {{ cases|length }} results (<a href="?limit=50">show first 50 results</a>)
+  {% endif %}
 {% endif %}
 </p>
 
-<table>
-    <tr>
-        <th rowspan="2">Instruction</th>
-        <th colspan="2">State Mismatches</th>
-    </tr>
-    <tr>
-        <th>Location</th>
-        <th>(S)emantics vs. (H)ardware</th>
-    </tr>
-    {% if cases|length == 0 %}
-    <tr>
-        <td colspan="3">No test results.</td>
-    </tr>
-    {% endif %}
-    {% for case in cases %}
-    <tr>
-        {% if case.testmachinestate_set.all|length > 0 %}
-        <td valign="top" rowspan="{{ case.testmachinestate_set.all|length }}">
-        {% else %}
-        <td valign="top">
-        {% endif %}
-            <div>
-                <a href="/test/{{ case.id }}/">{{ case.pretty|mono }}</a>
-            </div>
-            <div class="bytes">
-                {{ case.bytes|num:numty }}
-            </div>
-            <div>
-                <span class="lighthost">{{ case.batch.testing_host.hostname|mono }}</span>
-            </div>
-        </td>
-        {% if case.testmachinestate_set.all|length > 0 %}
-          {% for state in case.testmachinestate_set.all %}
-          {% if forloop.counter0 > 0 %}<tr>{% endif %}
-              <td>{{ state.location|mono }}</td>
-              <td>
-                  <div class="testValue">
-                      <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
-                  </div>
-                  <div class="testValue">
-                      <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
-                  </div>
-              </td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          {% if case.passed %}
-            <td colspan="2">Passed</td>
-            </tr>
-          {% else %}
-            <td colspan="2">Failed with signal {{ case.signal }}</td>
-            </tr>
-          {% endif %}
-        {% endif %}
-    {% endfor %}
-</table>
+{% if result_type == "failure" %}
+{% include "main/view_opcode_failure.html" %}
+{% elif result_type == "success" %}
+{% include "main/view_opcode_success.html" %}
+{% elif result_type == "signal" %}
+{% include "main/view_opcode_signal.html" %}
+{% endif %}
 
 {% endblock %}

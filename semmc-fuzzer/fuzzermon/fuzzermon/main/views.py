@@ -255,7 +255,7 @@ def view_arch(request, arch_id):
 
     return render(request, 'main/view_arch.html', context)
 
-def view_opcode(request, opcode_id):
+def view_opcode(request, opcode_id, result_type='success'):
     # User clicked the 'delete all opcodes' button:
     if request.POST.get('delete-all'):
         Test.objects.filter(opcode__id=opcode_id).delete()
@@ -272,7 +272,20 @@ def view_opcode(request, opcode_id):
     except:
         limit = 50
 
-    cases = Test.objects.filter(opcode__id=o.id).order_by('-batch__submitted_at')
+    cases = Test.objects.filter(opcode__id=o.id)
+
+    successes = cases.filter(passed=True)
+    failures = cases.filter(signal__isnull=True, passed=False)
+    signals = cases.filter(signal__isnull=False)
+
+    if result_type == 'success':
+        cases = successes
+    elif result_type == 'signal':
+        cases = signals
+    elif result_type == 'failure':
+        cases = failures
+
+    cases = cases.order_by('-batch__submitted_at')
     if limit:
         cases = cases[:limit]
 
@@ -281,6 +294,10 @@ def view_opcode(request, opcode_id):
             'cases': cases,
             'numty': request.session['numeric_display'],
             'limit': limit,
+            'result_type': result_type,
+            'num_successes': successes.count(),
+            'num_signals': signals.count(),
+            'num_failures': failures.count(),
             }
 
     return render(request, 'main/view_opcode.html', context)
