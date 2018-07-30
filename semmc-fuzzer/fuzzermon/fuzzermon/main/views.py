@@ -263,12 +263,24 @@ def view_opcode(request, opcode_id):
     set_display_mode(request)
     o = Opcode.objects.get(pk=opcode_id)
 
-    cases = Test.objects.filter(opcode__id=o.id)
+    try:
+        limit_str = request.GET.get('limit')
+        if limit_str == 'none':
+            limit = None
+        else:
+            limit = int(request.GET.get('limit'))
+    except:
+        limit = 50
+
+    cases = Test.objects.filter(opcode__id=o.id).order_by('-batch__submitted_at')
+    if limit:
+        cases = cases[:limit]
 
     context = {
             'opcode': o,
             'cases': cases,
             'numty': request.session['numeric_display'],
+            'limit': limit,
             }
 
     return render(request, 'main/view_opcode.html', context)

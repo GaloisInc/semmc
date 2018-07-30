@@ -18,6 +18,14 @@
            onClick="if (confirm('Are you sure you want to delete all results for this opcode?')) { document.getElementById('deleteAllForm').submit(); }"/>
 </form>
 
+<p>
+{% if limit %}
+Showing {{ limit }} results (<a href="?limit=none">show all results</a>)
+{% else %}
+Showing all {{ cases|length }} results (<a href="?limit=50">show 50 results</a>)
+{% endif %}
+</p>
+
 <table>
     <tr>
         <th rowspan="2">Instruction</th>
