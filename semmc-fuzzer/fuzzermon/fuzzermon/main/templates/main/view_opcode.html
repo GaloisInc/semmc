@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block body %}
-<h1>Test Failures for {{ opcode.name|mono }}</h1>
+<h1>Test results for {{ opcode.name|mono }}</h1>
 
 {% include "main/display_mode.html" %}
 
@@ -27,69 +27,52 @@
         <th>Location</th>
         <th>(S)emantics vs. (H)ardware</th>
     </tr>
-    {% if failures|length == 0 %}
+    {% if cases|length == 0 %}
     <tr>
-        <td colspan="3">No test failures.</td>
+        <td colspan="3">No test results.</td>
     </tr>
     {% endif %}
-    {% for failure in failures %}
+    {% for case in cases %}
     <tr>
-        <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
+        {% if case.testmachinestate_set.all|length > 0 %}
+        <td valign="top" rowspan="{{ case.testmachinestate_set.all|length }}">
+        {% else %}
+        <td valign="top">
+        {% endif %}
             <div>
-                <a href="/test_failure/{{ failure.id }}/">{{ failure.pretty|mono }}</a>
+                <a href="/test/{{ case.id }}/">{{ case.pretty|mono }}</a>
             </div>
             <div class="bytes">
-                {{ failure.bytes|num:numty }}
+                {{ case.bytes|num:numty }}
             </div>
             <div>
-                <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
+                <span class="lighthost">{{ case.batch.testing_host.hostname|mono }}</span>
             </div>
         </td>
-        {% for state in failure.testfailurestate_set.all %}
-        {% if forloop.counter0 > 0 %}<tr>{% endif %}
-            <td>{{ state.location|mono }}</td>
-            <td>
-                <div class="testValue">
-                    <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
-                </div>
-                <div class="testValue">
-                    <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
-                </div>
-            </td>
-        </tr>
-        {% endfor %}
+        {% if case.testmachinestate_set.all|length > 0 %}
+          {% for state in case.testmachinestate_set.all %}
+          {% if forloop.counter0 > 0 %}<tr>{% endif %}
+              <td>{{ state.location|mono }}</td>
+              <td>
+                  <div class="testValue">
+                      <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
+                  </div>
+                  <div class="testValue">
+                      <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
+                  </div>
+              </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          {% if case.passed %}
+            <td colspan="2">Passed</td>
+            </tr>
+          {% else %}
+            <td colspan="2">Failed with signal {{ case.signal }}</td>
+            </tr>
+          {% endif %}
+        {% endif %}
     {% endfor %}
 </table>
 
-<h1>Test Signal Errors for {{ opcode.name|mono }}</h1>
-
-<table>
-    <tr>
-        <th>Instruction</th>
-        <th>Signal</th>
-    </tr>
-    {% if signal_errors|length == 0 %}
-    <tr>
-        <td colspan="2">No test failures due to unexpected signals.</td>
-    </tr>
-    {% endif %}
-    {% for error in signal_errors %}
-    <tr>
-        <td>
-            <div>
-                <a href="/test_signal_error/{{ error.id }}/">{{ error.pretty|mono }}</a>
-            </div>
-            <div class="bytes">
-                {{ error.bytes|num:numty }}
-            </div>
-            <div>
-                <span class="lighthost">{{ error.batch.testing_host.hostname|mono }}</span>
-            </div>
-        </td>
-        <td>
-            {{ error.signal|mono }} ({{ error.signame|mono }})
-        </td>
-    </tr>
-    {% endfor %}
-</table>
 {% endblock %}

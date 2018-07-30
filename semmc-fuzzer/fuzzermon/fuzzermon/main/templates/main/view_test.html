@@ -8,9 +8,11 @@
 {% endblock %}
 
 {% block body %}
-<h1>Test Failure for {{ failure.opcode.name|mono }}</h1>
+<h1>Test Result for {{ failure.opcode.name|mono }}</h1>
 
 {% include "main/display_mode.html" %}
+
+<h2>Test status: {% if failure.passed %}Passed{% elif failure.signal %}killed, signal {{ failure.signal }}{% else %}Failed{% endif %}</h2>
 
 <table>
     <tr>
@@ -22,7 +24,11 @@
         <th>(S)emantics vs. (H)ardware</th>
     </tr>
     <tr>
-        <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
+        {% if failure.testmachinestate_set.all|length > 0 %}
+        <td valign="top" rowspan="{{ failure.testmachinestate_set.all|length }}">
+        {% else %}
+        <td valign="top">
+        {% endif %}
             <div>
                 {{ failure.pretty|mono }}
             </div>
@@ -33,19 +39,24 @@
                 <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
             </div>
         </td>
-        {% for state in failure.testfailurestate_set.all %}
-        {% if forloop.counter0 > 0 %}<tr>{% endif %}
-            <td>{{ state.location|mono }}</td>
-            <td>
-                <div class="testValue">
-                    <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
-                </div>
-                <div class="testValue">
-                    <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
-                </div>
-            </td>
-        </tr>
-        {% endfor %}
+        {% if failure.testmachinestate_set.all|length > 0 %}
+          {% for state in failure.testmachinestate_set.all %}
+          {% if forloop.counter0 > 0 %}<tr>{% endif %}
+              <td>{{ state.location|mono }}</td>
+              <td>
+                  <div class="testValue">
+                      <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
+                  </div>
+                  <div class="testValue">
+                      <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
+                  </div>
+              </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <td colspan="2">(no data)</td>
+          </tr>
+        {% endif %}
 </table>
 
 <h2>Test Inputs</h2>

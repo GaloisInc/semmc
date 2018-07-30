@@ -21,6 +21,7 @@ import qualified Data.ByteString.UTF8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as BSC8
 import qualified Data.Set.NonEmpty as NES
 import qualified Data.Word.Indexed as W
+import           Data.Word ( Word64 )
 import           Data.Proxy ( Proxy(..) )
 import           Data.List (intercalate)
 import           Data.Maybe (catMaybes, fromMaybe)
@@ -585,51 +586,53 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
               L.logIO L.Error "Test context parse failure"
               return Nothing
             CE.TestSignalError nonce sig -> do
-              L.logIO L.Error $ printf "Failed with unexpected signal (%d) on test case %d" sig nonce
-              let Just (inst, instBytes, initialState, _) = M.lookup nonce caseMap
-              case inst of
-                  Instruction opcode _ -> do
-                      let inputs = uncurry TestInput <$> statePairs proxy initialState
-                      return $ Just $ UnexpectedSignal $
-                          TestSignalError { testSignalNum = sig
-                                          , testSignalOpcode = showF opcode
-                                          , testSignalPretty = render $ ppInst inst
-                                          , testSignalInstructionBytes = showBS $ BSC8.toStrict instBytes
-                                          , testSignalInputs = inputs
-                                          }
+              let mkOutcome = const $ UnexpectedSignal sig
+              return $ Just $ testInfoForNonce proxy ppInst caseMap nonce MapF.empty mkOutcome
             CE.TestReadError tag -> do
               L.logIO L.Error $ printf "Failed with a read error (%d)" tag
               return Nothing
-            CE.TestSuccess tr ->
-              let Just (inst, instBytes, initialState, expectedFinal) = M.lookup (CE.resultNonce tr) caseMap
-              in case inst of
-                  Instruction opcode operands ->
-                      if (expectedFinal /= CE.resultContext tr)
-                         then do
-                             let sd = stateDiff proxy expectedFinal (CE.resultContext tr)
-                                 mkState :: (Some (A.Location arch), (Maybe (Some V.Value), Maybe (Some V.Value))) -> TestFailureState
-                                 mkState (loc, (Just (Some (V.ValueBV expected)), Just (Some (V.ValueBV actual)))) =
-                                     TestFailureState { testFailureLocation = show loc
-                                                      , testFailureExpected = show $ W.unW expected
-                                                      , testFailureActual = show $ W.unW actual
-                                                      }
-                                 mkState t =
-                                     error $ "BUG: mkState got invalid tuple " <> show t
-                             L.logIO L.Error $ printf "ERROR: Context mismatch for instruction %s: diff: %s"
-                                  (show inst) (show sd)
+            CE.TestSuccess tr -> do
+              let mkOutcome finalSt = if finalSt /= CE.resultContext tr
+                                      then Failure
+                                      else Success
+              return $ Just $ testInfoForNonce proxy ppInst caseMap (CE.resultNonce tr) (CE.resultContext tr) mkOutcome
 
-                             let inputs = uncurry TestInput <$> statePairs proxy initialState
-                             return $ Just $ Failure $
-                                 TestFailure { testFailureOpcode = showF opcode
-                                             , testFailureRawOperands = show operands
-                                             , testFailurePretty = render $ ppInst inst
-                                             , testFailureInstructionBytes = showBS $ BSC8.toStrict instBytes
-                                             , testFailureStates = mkState <$> sd
-                                             , testFailureInputs = inputs
-                                             }
-                         else do
-                             L.logIO L.Info "SUCCESS"
-                             return $ Just $ Success $
-                                 TestSuccess { testSuccessOpcode = showF opcode
-                                             , testSuccessCount = 1
-                                             }
+testInfoForNonce :: forall arch .
+                    ( A.Architecture arch
+                    , ShowF (A.Opcode arch (A.Operand arch))
+                    , ShowF (A.Operand arch)
+                    , ShowF (A.Location arch)
+                    )
+                 => Proxy arch
+                 -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
+                 -> M.Map Word64 ( GenericInstruction (A.Opcode arch) (A.Operand arch)
+                                 , BSC8.ByteString
+                                 , MapF.MapF (A.Location arch) V.Value
+                                 , MapF.MapF (A.Location arch) V.Value
+                                 )
+                 -> Word64
+                 -> MapF.MapF (A.Location arch) V.Value
+                 -> (MapF.MapF (A.Location arch) V.Value -> TestOutcome)
+                 -> TestInfo
+testInfoForNonce proxy ppInst caseMap nonce actualFinal mkOutcome =
+    let Just (inst, instBytes, initialState, expectedFinal) = M.lookup nonce caseMap
+    in case inst of
+        Instruction opcode operands ->
+            let inputs = uncurry TestInput <$> statePairs proxy initialState
+                sd = stateDiff proxy expectedFinal actualFinal
+                states = catMaybes $ mkState <$> sd
+                mkState :: (Some (A.Location arch), (Maybe (Some V.Value), Maybe (Some V.Value))) -> Maybe TestState
+                mkState (loc, (Just (Some (V.ValueBV expected)), Just (Some (V.ValueBV actual)))) =
+                    Just $ TestState { testLocation = show loc
+                                     , testExpected = show $ W.unW expected
+                                     , testActual = show $ W.unW actual
+                                     }
+                mkState _ = Nothing
+            in TestInfo { testOutcome = mkOutcome expectedFinal
+                        , testInfoOpcode = showF opcode
+                        , testInfoRawOperands = show operands
+                        , testInfoPretty = render $ ppInst inst
+                        , testInfoInstructionBytes = showBS $ BSC8.toStrict instBytes
+                        , testInfoStates = states
+                        , testInfoInputs = inputs
+                        }

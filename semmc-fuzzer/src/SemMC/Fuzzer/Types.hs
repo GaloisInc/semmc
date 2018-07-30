@@ -7,11 +7,9 @@ module SemMC.Fuzzer.Types
   , TestStrategy(..)
 
   , Batch(..)
-  , BatchEntry(..)
-  , TestSuccess(..)
-  , TestSignalError(..)
-  , TestFailure(..)
-  , TestFailureState(..)
+  , TestInfo(..)
+  , TestState(..)
+  , TestOutcome(..)
   , TestInput(..)
 
   , FuzzerConfig(..)
@@ -120,7 +118,7 @@ data Batch =
           , batchTestingHost :: String
           -- ^ The architecture-specific hardware used to run the test case.
           , batchArch :: String
-          , batchEntries :: [BatchEntry]
+          , batchEntries :: [TestInfo]
           }
 
 instance AE.ToJSON Batch where
@@ -132,44 +130,34 @@ instance AE.ToJSON Batch where
                   , "entries" AE..= batchEntries b
                   ]
 
-data BatchEntry = Success TestSuccess
-                | Failure TestFailure
-                | UnexpectedSignal TestSignalError
+data TestOutcome = Success
+                 | Failure
+                 | UnexpectedSignal Int32
 
-instance AE.ToJSON BatchEntry where
-    toJSON (Success s) = AE.toJSON s
-    toJSON (Failure f) = AE.toJSON f
-    toJSON (UnexpectedSignal s) = AE.toJSON s
+data TestInfo =
+    TestInfo { testInfoOpcode :: String
+             , testInfoPretty :: String
+             , testInfoInstructionBytes :: String
+             , testInfoInputs :: [TestInput]
+             , testInfoRawOperands :: String
+             , testInfoStates :: [TestState]
+             , testOutcome :: TestOutcome
+             }
 
-data TestSuccess =
-    TestSuccess { testSuccessOpcode :: String
-                , testSuccessCount :: Int
-                }
-
-instance AE.ToJSON TestSuccess where
-    toJSON s =
-        AE.object [ "type" AE..= ("success"::T.Text)
-                  , "opcode" AE..= testSuccessOpcode s
-                  , "count" AE..= testSuccessCount s
-                  ]
-
-data TestSignalError =
-    TestSignalError { testSignalOpcode :: String
-                    , testSignalPretty :: String
-                    , testSignalInstructionBytes :: String
-                    , testSignalNum :: Int32
-                    , testSignalInputs :: [TestInput]
-                    }
-
-instance AE.ToJSON TestSignalError where
-    toJSON s =
-        AE.object [ "type" AE..= ("unexpectedSignal"::T.Text)
-                  , "opcode" AE..= testSignalOpcode s
-                  , "pretty" AE..= testSignalPretty s
-                  , "signal" AE..= testSignalNum s
-                  , "inputs" AE..= testSignalInputs s
-                  , "bytes" AE..= testSignalInstructionBytes s
-                  ]
+instance AE.ToJSON TestInfo where
+    toJSON i =
+        let (ty, extra) = case testOutcome i of
+              Success -> ("success", [])
+              Failure -> ("failure", [])
+              UnexpectedSignal num -> ("unexpectedSignal", ["signal" AE..= num])
+        in AE.object $ [ "type" AE..= (ty :: T.Text)
+                       , "opcode" AE..= testInfoOpcode i
+                       , "pretty" AE..= testInfoPretty i
+                       , "inputs" AE..= testInfoInputs i
+                       , "bytes" AE..= testInfoInstructionBytes i
+                       , "state" AE..= testInfoStates i
+                       , "raw-operands" AE..= testInfoRawOperands i
+                       ] ++ extra
 
 data TestInput =
     TestInput { testInputLocation :: String
@@ -182,35 +170,15 @@ instance AE.ToJSON TestInput where
                   , "value" AE..= testInputValue i
                   ]
 
-data TestFailure =
-    TestFailure { testFailureOpcode :: String
-                , testFailureRawOperands :: String
-                , testFailurePretty :: String
-                , testFailureInstructionBytes :: String
-                , testFailureStates :: [TestFailureState]
-                , testFailureInputs :: [TestInput]
-                }
+data TestState =
+    TestState { testLocation :: String
+              , testExpected :: String
+              , testActual :: String
+              }
 
-instance AE.ToJSON TestFailure where
+instance AE.ToJSON TestState where
     toJSON s =
-        AE.object [ "type" AE..= ("failure"::T.Text)
-                  , "opcode" AE..= testFailureOpcode s
-                  , "raw-operands" AE..= testFailureRawOperands s
-                  , "pretty" AE..= testFailurePretty s
-                  , "state" AE..= testFailureStates s
-                  , "inputs" AE..= testFailureInputs s
-                  , "bytes" AE..= testFailureInstructionBytes s
-                  ]
-
-data TestFailureState =
-    TestFailureState { testFailureLocation :: String
-                     , testFailureExpected :: String
-                     , testFailureActual :: String
-                     }
-
-instance AE.ToJSON TestFailureState where
-    toJSON s =
-        AE.object [ "location" AE..= testFailureLocation s
-                  , "expected" AE..= testFailureExpected s
-                  , "actual" AE..= testFailureActual s
+        AE.object [ "location" AE..= testLocation s
+                  , "expected" AE..= testExpected s
+                  , "actual" AE..= testActual s
                   ]
