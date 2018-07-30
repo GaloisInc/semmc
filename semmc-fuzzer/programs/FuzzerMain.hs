@@ -489,9 +489,13 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
           plainBaseSet = makePlain baseSet
 
-          generateTestCase fromOpcodes = go
+          generateTestCase fromOpcodes = go maxRetries
               where
-                  go = do
+                  maxRetries = 100 :: Int
+                  go retries | retries < 1 = do
+                    L.logIO L.Error $ printf "Giving up after %d retries!" maxRetries
+                    return Nothing
+                  go retries = do
                     inst <- D.randomInstruction gen fromOpcodes
                     let instBytes = assemble inst
                     initialState <- C.randomState proxy gen
@@ -502,15 +506,13 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                         Left (e::E.SomeException) -> do
                             -- If we get an exception and we're in
                             -- RoundRobin mode, we can't recover!
-                            L.logIO L.Error $ printf "Exception evaluating instruction %s: %s" (show inst) (show e)
+                            L.logIO L.Error $ printf "Exception evaluating instruction %s: %s (%d retries remaining)" (show inst) (show e) retries
                             if strat == RoundRobin
                                then return Nothing
-                               else do
-                                   L.logIO L.Error $ printf "Exception evaluating instruction %s: %s" (show inst) (show e)
-                                   go
+                               else go (retries-1)
                         Right (Left e) -> do
-                            L.logIO L.Error $ printf "Error evaluating instruction %s: %s" (show inst) (show e)
-                            go
+                            L.logIO L.Error $ printf "Error evaluating instruction %s: %s (%d retries remaining)" (show inst) (show e) retries
+                            go (retries-1)
                         Right (Right finalState) -> do
                             return $ Just ( CE.TestCase { CE.testNonce = nonce
                                                         , CE.testProgram = [inst]
