@@ -148,7 +148,7 @@ mainWithOptions opts = do
                        , SST.opcodeTimeoutSeconds = oOpcodeTimeoutSeconds opts
                        , SST.parallelOpcodes = oParallelOpcodes opts
                        , SST.parallelSynth = oParallelSynth opts
-                       , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) serializer
+                       , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) Nothing serializer
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
                        }
