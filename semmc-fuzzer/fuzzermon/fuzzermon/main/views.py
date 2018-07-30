@@ -285,6 +285,12 @@ def view_arch(request, arch_id):
     return render(request, 'main/view_arch.html', context)
 
 def view_opcode(request, opcode_id):
+    # User clicked the 'delete all opcodes' button:
+    if request.POST.get('delete-all'):
+        TestFailure.objects.filter(opcode__id=opcode_id).delete()
+        TestSignalError.objects.filter(opcode__id=opcode_id).delete()
+        TestSuccess.objects.filter(opcode__id=opcode_id).delete()
+
     set_display_mode(request)
     o = Opcode.objects.get(pk=opcode_id)
 
