@@ -19,6 +19,14 @@ body {
     color: black;
 }
 
+a.archLink {
+    font-size: 24px;
+}
+
+#deleteAllForm {
+    float: right;
+}
+
 .mono {
     font-family: monospace;
 }

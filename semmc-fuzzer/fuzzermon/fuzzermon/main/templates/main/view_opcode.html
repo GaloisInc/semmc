@@ -8,15 +8,15 @@
 {% endblock %}
 
 {% block body %}
-<h1>Test results for {{ opcode.name|mono }}</h1>
 
-{% include "main/display_mode.html" %}
-
-<form id="deleteAllForm" action="" method="post">
-    <input type="hidden" name="delete-all" value="yes"/>
-    <input type="button" value="Delete all {{ opcode.name }} results"
-           onClick="if (confirm('Are you sure you want to delete all results for this opcode?')) { document.getElementById('deleteAllForm').submit(); }"/>
-</form>
+<div>
+    <form id="deleteAllForm" action="" method="post">
+        <input type="hidden" name="delete-all" value="yes"/>
+        <input type="button" value="Delete all {{ opcode.name }} results"
+                             onClick="if (confirm('Are you sure you want to delete all results for this opcode?')) { document.getElementById('deleteAllForm').submit(); }"/>
+    </form>
+    {% include "main/display_mode.html" %}
+</div>
 
 <p>
 {% if limit %}
