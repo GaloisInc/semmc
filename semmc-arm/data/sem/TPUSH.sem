@@ -184,13 +184,13 @@
       (regCnt)
       #x0000))))
   (regCnt
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 16)
       ((_ call "uf.t32.reglist")
        registers)))))
   (regMask_SPminus0_R15
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 16)
       ((_ extract 15 0)
@@ -207,10 +207,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R14
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 17)
-      ((_ extract 14 0)
+      ((_ extract 15 1)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R13
@@ -224,10 +224,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R13
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 18)
-      ((_ extract 13 0)
+      ((_ extract 15 2)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R12
@@ -241,10 +241,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R12
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 19)
-      ((_ extract 12 0)
+      ((_ extract 15 3)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R11
@@ -258,10 +258,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R11
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 20)
-      ((_ extract 11 0)
+      ((_ extract 15 4)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R10
@@ -275,10 +275,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R10
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 21)
-      ((_ extract 10 0)
+      ((_ extract 15 5)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R9
@@ -292,10 +292,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R9
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 22)
-      ((_ extract 9 0)
+      ((_ extract 15 6)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R8
@@ -309,10 +309,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R7
@@ -326,10 +326,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R6
@@ -343,10 +343,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R5
@@ -360,10 +360,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R4
@@ -377,10 +377,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R3
@@ -394,10 +394,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R2
@@ -411,10 +411,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R1
@@ -428,10 +428,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus0_R0
@@ -445,10 +445,10 @@
       (regCnt)
       #x0000))))
   (regMask_SPminus0_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_1
@@ -519,10 +519,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R14
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 17)
-      ((_ extract 14 0)
+      ((_ extract 15 1)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R13
@@ -536,10 +536,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R13
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 18)
-      ((_ extract 13 0)
+      ((_ extract 15 2)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R12
@@ -553,10 +553,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R12
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 19)
-      ((_ extract 12 0)
+      ((_ extract 15 3)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R11
@@ -570,10 +570,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R11
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 20)
-      ((_ extract 11 0)
+      ((_ extract 15 4)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R10
@@ -587,10 +587,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R10
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 21)
-      ((_ extract 10 0)
+      ((_ extract 15 5)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R9
@@ -604,10 +604,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R9
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 22)
-      ((_ extract 9 0)
+      ((_ extract 15 6)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R8
@@ -621,10 +621,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R7
@@ -638,10 +638,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R6
@@ -655,10 +655,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R5
@@ -672,10 +672,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R4
@@ -689,10 +689,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R3
@@ -706,10 +706,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R2
@@ -723,10 +723,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R1
@@ -740,10 +740,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus1_R0
@@ -757,10 +757,10 @@
       (regCnt)
       #x0001))))
   (regMask_SPminus1_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (var15
@@ -845,10 +845,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R13
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 18)
-      ((_ extract 13 0)
+      ((_ extract 15 2)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R12
@@ -862,10 +862,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R12
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 19)
-      ((_ extract 12 0)
+      ((_ extract 15 3)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R11
@@ -879,10 +879,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R11
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 20)
-      ((_ extract 11 0)
+      ((_ extract 15 4)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R10
@@ -896,10 +896,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R10
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 21)
-      ((_ extract 10 0)
+      ((_ extract 15 5)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R9
@@ -913,10 +913,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R9
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 22)
-      ((_ extract 9 0)
+      ((_ extract 15 6)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R8
@@ -930,10 +930,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R7
@@ -947,10 +947,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R6
@@ -964,10 +964,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R5
@@ -981,10 +981,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R4
@@ -998,10 +998,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R3
@@ -1015,10 +1015,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R2
@@ -1032,10 +1032,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R1
@@ -1049,10 +1049,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus2_R0
@@ -1066,10 +1066,10 @@
       (regCnt)
       #x0002))))
   (regMask_SPminus2_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (var11
@@ -1141,10 +1141,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R12
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 19)
-      ((_ extract 12 0)
+      ((_ extract 15 3)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R11
@@ -1158,10 +1158,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R11
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 20)
-      ((_ extract 11 0)
+      ((_ extract 15 4)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R10
@@ -1175,10 +1175,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R10
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 21)
-      ((_ extract 10 0)
+      ((_ extract 15 5)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R9
@@ -1192,10 +1192,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R9
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 22)
-      ((_ extract 9 0)
+      ((_ extract 15 6)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R8
@@ -1209,10 +1209,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R7
@@ -1226,10 +1226,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R6
@@ -1243,10 +1243,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R5
@@ -1260,10 +1260,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R4
@@ -1277,10 +1277,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R3
@@ -1294,10 +1294,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R2
@@ -1311,10 +1311,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R1
@@ -1328,10 +1328,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus3_R0
@@ -1345,10 +1345,10 @@
       (regCnt)
       #x0003))))
   (regMask_SPminus3_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (var8
@@ -1421,10 +1421,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R11
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 20)
-      ((_ extract 11 0)
+      ((_ extract 15 4)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R10
@@ -1438,10 +1438,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R10
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 21)
-      ((_ extract 10 0)
+      ((_ extract 15 5)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R9
@@ -1455,10 +1455,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R9
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 22)
-      ((_ extract 9 0)
+      ((_ extract 15 6)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R8
@@ -1472,10 +1472,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R7
@@ -1489,10 +1489,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R6
@@ -1506,10 +1506,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R5
@@ -1523,10 +1523,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R4
@@ -1540,10 +1540,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R3
@@ -1557,10 +1557,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R2
@@ -1574,10 +1574,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R1
@@ -1591,10 +1591,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus4_R0
@@ -1608,10 +1608,10 @@
       (regCnt)
       #x0004))))
   (regMask_SPminus4_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (var4
@@ -1681,10 +1681,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R10
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 21)
-      ((_ extract 10 0)
+      ((_ extract 15 5)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R9
@@ -1698,10 +1698,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R9
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 22)
-      ((_ extract 9 0)
+      ((_ extract 15 6)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R8
@@ -1715,10 +1715,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R7
@@ -1732,10 +1732,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R6
@@ -1749,10 +1749,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R5
@@ -1766,10 +1766,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R4
@@ -1783,10 +1783,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R3
@@ -1800,10 +1800,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R2
@@ -1817,10 +1817,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R1
@@ -1834,10 +1834,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus5_R0
@@ -1851,10 +1851,10 @@
       (regCnt)
       #x0005))))
   (regMask_SPminus5_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_6
@@ -1914,10 +1914,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R9
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 22)
-      ((_ extract 9 0)
+      ((_ extract 15 6)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R8
@@ -1931,10 +1931,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R7
@@ -1948,10 +1948,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R6
@@ -1965,10 +1965,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R5
@@ -1982,10 +1982,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R4
@@ -1999,10 +1999,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R3
@@ -2016,10 +2016,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R2
@@ -2033,10 +2033,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R1
@@ -2050,10 +2050,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus6_R0
@@ -2067,10 +2067,10 @@
       (regCnt)
       #x0006))))
   (regMask_SPminus6_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (var24
@@ -2129,10 +2129,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R8
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 23)
-      ((_ extract 8 0)
+      ((_ extract 15 7)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R7
@@ -2146,10 +2146,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R6
@@ -2163,10 +2163,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R5
@@ -2180,10 +2180,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R4
@@ -2197,10 +2197,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R3
@@ -2214,10 +2214,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R2
@@ -2231,10 +2231,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R1
@@ -2248,10 +2248,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus7_R0
@@ -2265,10 +2265,10 @@
       (regCnt)
       #x0007))))
   (regMask_SPminus7_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_8
@@ -2312,10 +2312,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R7
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 24)
-      ((_ extract 7 0)
+      ((_ extract 15 8)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus8_R6
@@ -2329,10 +2329,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus8_R5
@@ -2346,10 +2346,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus8_R4
@@ -2363,10 +2363,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus8_R3
@@ -2380,10 +2380,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus8_R2
@@ -2397,10 +2397,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus8_R1
@@ -2414,10 +2414,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus8_R0
@@ -2431,10 +2431,10 @@
       (regCnt)
       #x0008))))
   (regMask_SPminus8_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_9
@@ -2475,10 +2475,10 @@
       (regCnt)
       #x0009))))
   (regMask_SPminus9_R6
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 25)
-      ((_ extract 6 0)
+      ((_ extract 15 9)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus9_R5
@@ -2492,10 +2492,10 @@
       (regCnt)
       #x0009))))
   (regMask_SPminus9_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus9_R4
@@ -2509,10 +2509,10 @@
       (regCnt)
       #x0009))))
   (regMask_SPminus9_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus9_R3
@@ -2526,10 +2526,10 @@
       (regCnt)
       #x0009))))
   (regMask_SPminus9_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus9_R2
@@ -2543,10 +2543,10 @@
       (regCnt)
       #x0009))))
   (regMask_SPminus9_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus9_R1
@@ -2560,10 +2560,10 @@
       (regCnt)
       #x0009))))
   (regMask_SPminus9_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus9_R0
@@ -2577,10 +2577,10 @@
       (regCnt)
       #x0009))))
   (regMask_SPminus9_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (var18
@@ -2628,10 +2628,10 @@
       (regCnt)
       #x000a))))
   (regMask_SPminus10_R5
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 26)
-      ((_ extract 5 0)
+      ((_ extract 15 10)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus10_R4
@@ -2645,10 +2645,10 @@
       (regCnt)
       #x000a))))
   (regMask_SPminus10_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus10_R3
@@ -2662,10 +2662,10 @@
       (regCnt)
       #x000a))))
   (regMask_SPminus10_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus10_R2
@@ -2679,10 +2679,10 @@
       (regCnt)
       #x000a))))
   (regMask_SPminus10_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus10_R1
@@ -2696,10 +2696,10 @@
       (regCnt)
       #x000a))))
   (regMask_SPminus10_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus10_R0
@@ -2713,10 +2713,10 @@
       (regCnt)
       #x000a))))
   (regMask_SPminus10_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_11
@@ -2751,10 +2751,10 @@
       (regCnt)
       #x000b))))
   (regMask_SPminus11_R4
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 27)
-      ((_ extract 4 0)
+      ((_ extract 15 11)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus11_R3
@@ -2768,10 +2768,10 @@
       (regCnt)
       #x000b))))
   (regMask_SPminus11_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus11_R2
@@ -2785,10 +2785,10 @@
       (regCnt)
       #x000b))))
   (regMask_SPminus11_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus11_R1
@@ -2802,10 +2802,10 @@
       (regCnt)
       #x000b))))
   (regMask_SPminus11_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus11_R0
@@ -2819,10 +2819,10 @@
       (regCnt)
       #x000b))))
   (regMask_SPminus11_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (var12
@@ -2868,10 +2868,10 @@
       (regCnt)
       #x000c))))
   (regMask_SPminus12_R3
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 28)
-      ((_ extract 3 0)
+      ((_ extract 15 12)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus12_R2
@@ -2885,10 +2885,10 @@
       (regCnt)
       #x000c))))
   (regMask_SPminus12_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus12_R1
@@ -2902,10 +2902,10 @@
       (regCnt)
       #x000c))))
   (regMask_SPminus12_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus12_R0
@@ -2919,10 +2919,10 @@
       (regCnt)
       #x000c))))
   (regMask_SPminus12_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_13
@@ -2951,10 +2951,10 @@
       (regCnt)
       #x000d))))
   (regMask_SPminus13_R2
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 29)
-      ((_ extract 2 0)
+      ((_ extract 15 13)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus13_R1
@@ -2968,10 +2968,10 @@
       (regCnt)
       #x000d))))
   (regMask_SPminus13_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus13_R0
@@ -2985,10 +2985,10 @@
       (regCnt)
       #x000d))))
   (regMask_SPminus13_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_14
@@ -3014,10 +3014,10 @@
       (regCnt)
       #x000e))))
   (regMask_SPminus14_R1
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 30)
-      ((_ extract 1 0)
+      ((_ extract 15 14)
        ((_ call "uf.t32.reglist")
         registers))))))
   (isActive_SPminus14_R0
@@ -3031,10 +3031,10 @@
       (regCnt)
       #x000e))))
   (regMask_SPminus14_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (stack_15
@@ -3057,10 +3057,10 @@
       (regCnt)
       #x000f))))
   (regMask_SPminus15_R0
-   ((_ extract 15 0)
+   ((_ extract 31 16)
     ((_ call "uf.popcnt.32")
      ((_ zero_extend 31)
-      ((_ extract 0 0)
+      ((_ extract 15 15)
        ((_ call "uf.t32.reglist")
         registers))))))
   (newSP

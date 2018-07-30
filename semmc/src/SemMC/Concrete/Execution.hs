@@ -87,11 +87,16 @@ runRemote :: (U.HasLogCfg)
           -- ^ Optionally, a different name for the remote runner executable
           -> String
           -- ^ The hostname to run test cases on
+          -> Maybe String
+          -- ^ The username to use to connect to the remote host
+          -- (default: $USER)
           -> TestSerializer c i
           -- ^ Functions for converting to and from machine states
           -> TestRunner c i
-runRemote mexe hostName ts testCases testResults = do
-  sshHdl <- SSH.ssh SSH.defaultSSHConfig hostName [fromMaybe "remote-runner" mexe]
+runRemote mexe hostName mUser ts testCases testResults = do
+  let cfg = SSH.defaultSSHConfig { SSH.sshUsername = mUser
+                                 }
+  sshHdl <- SSH.ssh cfg hostName [fromMaybe "remote-runner" mexe]
   let logger = logRemoteStderr hostName (SSH.sshStderr sshHdl)
   let sendCases = sendTestCases ts testCases (SSH.sshStdin sshHdl)
   U.withAsyncLinked logger $ \_ -> do

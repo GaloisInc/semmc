@@ -32,6 +32,9 @@
             <div>
                 <a href="/test_failure/{{ failure.id }}/">{{ failure.pretty|mono }}</a>
             </div>
+            <div class="bytes">
+                {{ failure.bytes|num:numty }}
+            </div>
             <div>
                 <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
             </div>
@@ -69,6 +72,9 @@
         <td>
             <div>
                 <a href="/test_signal_error/{{ error.id }}/">{{ error.pretty|mono }}</a>
+            </div>
+            <div class="bytes">
+                {{ error.bytes|num:numty }}
             </div>
             <div>
                 <span class="lighthost">{{ error.batch.testing_host.hostname|mono }}</span>

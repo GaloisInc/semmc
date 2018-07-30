@@ -31,17 +31,17 @@
           (bvne
            #x00
            (concat
-            ((_ extract 15 12)
+            ((_ extract 19 16)
              'CPSR)
             (concat
-             ((_ extract 11 10)
+             ((_ extract 21 20)
               'CPSR)
-             ((_ extract 26 25)
+             ((_ extract 6 5)
               'CPSR)))))))
        (concat
-        ((_ extract 35 32)
+        ((_ extract 3 0)
          (res_nzcv))
-        ((_ extract 27 0)
+        ((_ extract 31 4)
          'CPSR))
        'CPSR)
       'CPSR))
@@ -56,14 +56,14 @@
         (bvne
          #x00
          (concat
-          ((_ extract 15 12)
+          ((_ extract 19 16)
            'CPSR)
           (concat
-           ((_ extract 11 10)
+           ((_ extract 21 20)
             'CPSR)
-           ((_ extract 26 25)
+           ((_ extract 6 5)
             'CPSR)))))
        rDn
-       ((_ extract 31 0)
+       ((_ extract 35 4)
         (res_nzcv)))
       rDn))))))

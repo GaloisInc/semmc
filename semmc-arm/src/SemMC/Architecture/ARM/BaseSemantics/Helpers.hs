@@ -64,6 +64,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Natural
 import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
 import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
+import           SemMC.Util ( fromJust' )
 
 
 data OpcodeParamDef t = ParamDef String String (ExprTypeRepr t)
@@ -194,7 +195,7 @@ updateCPSR updExp =
 -- expression.
 finalizeCPSR :: SemARM 'Def ()
 finalizeCPSR = do
-    updExp <- (cpsrUpdates . fromJust) <$> getArchData
+    updExp <- (cpsrUpdates . fromJust' "finalizeCPSR") <$> getArchData
     defReg cpsr (updExp (Loc cpsr))
 
 
@@ -249,8 +250,8 @@ updatePC pcf =
 -- instruction execution.
 finalizePC :: HasCallStack => SemARM 'Def ()
 finalizePC = do
-  instrSet <- (subArch  . fromJust) <$> getArchData
-  updExp   <- (pcUpdate . fromJust) <$> getArchData
+  instrSet <- (subArch  . fromJust' "finalizePC 1") <$> getArchData
+  updExp   <- (pcUpdate . fromJust' "finalizePC 2") <$> getArchData
   defLoc pc $ updExp instrSet (Loc pc)
 
 
@@ -302,7 +303,7 @@ testForConditionPassed instrPred = do
 -- is a register location.
 defReg :: HasCallStack => Location a -> Expr a -> SemARM 'Def ()
 defReg loc expr = do
-  isOK <- (condPassed . fromJust) <$> getArchData
+  isOK <- (condPassed . fromJust' "defReg") <$> getArchData
   defLoc loc $ ite isOK expr (Loc loc)
 
 
@@ -329,7 +330,7 @@ imm12Reg = unpackLocUF "Imm12" naturalBV "a32.imm12_reg"
 
 -- | Returns the immediate offset value in the addrmode_imm12_[pre]
 imm12Off :: Location 'TPackedOperand -> Expr 'TBV
-imm12Off = unpackUF "Imm12" (EBV 16) "a32.imm12_off"
+imm12Off = unpackUF "Imm12" (EBV 12) "a32.imm12_off"
 
 -- | Returns the addition flag in the addrmode_imm12_[pre]
 imm12Add :: Location 'TPackedOperand -> Expr 'TBool
@@ -341,7 +342,7 @@ am2offset_immAdd = unpackUF "Am2Offset_Imm" EBool "a32.am2offset_imm_add"
 
 -- | Returns the immediate flag in the am2offset_imm
 am2offset_immImm :: Location 'TPackedOperand -> Expr 'TBV
-am2offset_immImm = unpackUF "Am2Offset_Imm" (EBV 16) "a32.am2offset_imm_imm"
+am2offset_immImm = unpackUF "Am2Offset_Imm" (EBV 12) "a32.am2offset_imm_imm"
 
 -- | Returns the base register in ldst_so_reg
 ldst_so_regBaseRegister :: Location 'TPackedOperand -> Location 'TBV

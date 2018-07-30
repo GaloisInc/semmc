@@ -15,6 +15,7 @@ import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.DSL
+import SemMC.Util ( fromJust' )
 
 
 -- | The processor mode can be determined by examining the ISETSTATE
@@ -65,7 +66,7 @@ selectInstrSet' tgtarch =
 
 cpsrA32, cpsrT32, cpsrT32EE, cpsrJazelle :: SemARM 'Def (Expr 'TBV -> Expr 'TBV)
 cpsrA32 = do
-    curarch <- (subArch . fromJust) <$> getArchData
+    curarch <- (subArch . fromJust' "cpsrA32") <$> getArchData
     if curarch == InstrSet_A32
     then return id
     else if curarch == InstrSet_T32EE
@@ -73,13 +74,13 @@ cpsrA32 = do
          else return (("SetA32Mode" =:) . (cpsr_jt $ arch_jt InstrSet_A32))
 
 cpsrT32 = do
-    curarch <- (subArch . fromJust) <$> getArchData
+    curarch <- (subArch . fromJust' "cpsrT32") <$> getArchData
     if curarch == InstrSet_T32
     then return id
     else return (("SetT32Mode" =:) . (cpsr_jt $ arch_jt InstrSet_T32))
 
 cpsrT32EE = do
-    curarch <- (subArch . fromJust) <$> getArchData
+    curarch <- (subArch . fromJust' "cpsrT32EE") <$> getArchData
     if curarch == InstrSet_T32EE
     then return id
     else if curarch == InstrSet_A32

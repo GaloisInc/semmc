@@ -21,7 +21,7 @@ main = do
   lcfg <- U.mkLogCfg "main"
   U.withLogCfg lcfg $ do
   U.withAsyncLinked (testRunner caseChan resChan) $ \_ -> do
-  CE.runRemote Nothing hostname testSerializer caseChan resChan
+  CE.runRemote Nothing hostname Nothing testSerializer caseChan resChan
 
 testRunner :: C.Chan (Maybe [CE.TestCase MachineState Instruction])
            -> C.Chan (CE.ResultOrError MachineState)

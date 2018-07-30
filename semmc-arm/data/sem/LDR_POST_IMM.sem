@@ -7,12 +7,12 @@
     imm)
    (bvadd
     off
-    ((_ zero_extend 16)
+    ((_ zero_extend 20)
      ((_ call "uf.a32.am2offset_imm_imm")
       imm)))
    (bvsub
     off
-    ((_ zero_extend 16)
+    ((_ zero_extend 20)
      ((_ call "uf.a32.am2offset_imm_imm")
       imm)))))
   (SetT32Mode
@@ -26,7 +26,7 @@
     (ite
      (bveq
       #b0
-      ((_ extract 0 0)
+      ((_ extract 31 31)
        ((_ call "uf.read_mem.32")
         'Mem
         off)))
@@ -38,7 +38,7 @@
      (ite
       (bveq
        #b0
-       ((_ extract 1 1)
+       ((_ extract 30 30)
         ((_ call "uf.read_mem.32")
          'Mem
          off)))
@@ -72,7 +72,7 @@
        (ite
         (bveq
          #b0
-         ((_ extract 0 0)
+         ((_ extract 31 31)
           ((_ call "uf.read_mem.32")
            'Mem
            off)))

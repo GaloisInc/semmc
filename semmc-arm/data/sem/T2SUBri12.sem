@@ -23,6 +23,6 @@
        ((_ call "df.ITState")
         'CPSR)
        'CPSR)
-      ((_ extract 31 0)
+      ((_ extract 35 4)
        (res_nzcv))
       rD))))))

@@ -23,6 +23,7 @@ import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExecState
 import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
 import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
+import           SemMC.Util ( fromJust' )
 
 
 manualBranches :: SemARM 'Top ()
@@ -66,7 +67,7 @@ a32_branches = do
     comment "F7.1.25, F7-2576"
     input tgt
     input pc
-    curarch <- (subArch . fromJust) <$> getArchData
+    curarch <- (subArch . fromJust' "curarch") <$> getArchData
     let imm24 = extract 23 0 (Loc tgt)
         imm32 = "imm32" =: (sext $ concat imm24 $ LitBV 2 0b00)
         tgtarch = InstrSet_A32
@@ -158,7 +159,7 @@ blx_ :: Expr 'TBV  -- ^ new LR value
      -> ArchSubtype  -- ^ target architecture subtype
      -> SemARM 'Def ()
 blx_ newlr tgtaddr tgtarch = do
-    curarch <- (subArch . fromJust) <$> getArchData
+    curarch <- (subArch . fromJust' "blx_") <$> getArchData
     let switching = curarch /= tgtarch
         switchmsg = if switching
                     then " and switch from " <> show curarch <> " to " <> show tgtarch

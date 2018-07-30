@@ -9,13 +9,13 @@
    (ite
     (bveq
      #b0
-     ((_ extract 0 0)
+     ((_ extract 31 31)
       'R14))
     (bvand #xfffffffe 'R14)
     (ite
      (bveq
       #b0
-      ((_ extract 1 1)
+      ((_ extract 30 30)
        'R14))
      (bvand #xfffffffd 'R14)
      'R14))))
@@ -34,7 +34,7 @@
       (ite
        (bveq
         #b0
-        ((_ extract 0 0)
+        ((_ extract 31 31)
          'R14))
        (SetT32Mode)
        'CPSR)

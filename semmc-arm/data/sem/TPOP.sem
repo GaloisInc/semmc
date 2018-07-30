@@ -131,7 +131,7 @@
   (cntReg_uptoR0
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 31)
-     ((_ extract 0 0)
+     ((_ extract 15 15)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R0
@@ -159,7 +159,7 @@
   (cntReg_uptoR1
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 30)
-     ((_ extract 1 0)
+     ((_ extract 15 14)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R1
@@ -187,7 +187,7 @@
   (cntReg_uptoR2
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 29)
-     ((_ extract 2 0)
+     ((_ extract 15 13)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R2
@@ -215,7 +215,7 @@
   (cntReg_uptoR3
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 28)
-     ((_ extract 3 0)
+     ((_ extract 15 12)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R3
@@ -243,7 +243,7 @@
   (cntReg_uptoR4
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 27)
-     ((_ extract 4 0)
+     ((_ extract 15 11)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R4
@@ -271,7 +271,7 @@
   (cntReg_uptoR5
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 26)
-     ((_ extract 5 0)
+     ((_ extract 15 10)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R5
@@ -299,7 +299,7 @@
   (cntReg_uptoR6
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 25)
-     ((_ extract 6 0)
+     ((_ extract 15 9)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R6
@@ -327,7 +327,7 @@
   (cntReg_uptoR7
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 24)
-     ((_ extract 7 0)
+     ((_ extract 15 8)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R7
@@ -355,7 +355,7 @@
   (cntReg_uptoR8
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 23)
-     ((_ extract 8 0)
+     ((_ extract 15 7)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R8
@@ -383,7 +383,7 @@
   (cntReg_uptoR9
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 22)
-     ((_ extract 9 0)
+     ((_ extract 15 6)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R9
@@ -411,7 +411,7 @@
   (cntReg_uptoR10
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 21)
-     ((_ extract 10 0)
+     ((_ extract 15 5)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R10
@@ -439,7 +439,7 @@
   (cntReg_uptoR11
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 20)
-     ((_ extract 11 0)
+     ((_ extract 15 4)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R11
@@ -467,7 +467,7 @@
   (cntReg_uptoR12
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 19)
-     ((_ extract 12 0)
+     ((_ extract 15 3)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R12
@@ -495,7 +495,7 @@
   (cntReg_uptoR14
    ((_ call "uf.popcnt.32")
     ((_ zero_extend 17)
-     ((_ extract 14 0)
+     ((_ extract 15 1)
       ((_ call "uf.t32.reglist")
        registers)))))
   (isActive_R14
@@ -549,7 +549,7 @@
     (ite
      (bveq
       #b0
-      ((_ extract 0 0)
+      ((_ extract 31 31)
        (pcStkVal)))
      (bvand
       #xfffffffe
@@ -557,7 +557,7 @@
      (ite
       (bveq
        #b0
-       ((_ extract 1 1)
+       ((_ extract 30 30)
         (pcStkVal)))
       (bvand
        #xfffffffd
@@ -582,7 +582,7 @@
        (ite
         (bveq
          #b0
-         ((_ extract 0 0)
+         ((_ extract 31 31)
           (pcStkVal)))
         'CPSR
         (SetA32Mode))

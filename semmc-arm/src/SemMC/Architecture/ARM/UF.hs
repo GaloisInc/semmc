@@ -44,7 +44,7 @@ uninterpretedFunctions _ =
      Some (knownRepr :: BaseTypeRepr (BaseBVType (ArchRegWidth arm))))
   , ("a32.imm12_off", -- reference to immediate offset value from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 12)))
   , ("a32.imm12_add", -- reference to U flag bit from an addrmode_imm12_pre operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
@@ -54,7 +54,7 @@ uninterpretedFunctions _ =
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
   , ("a32.am2offset_imm_imm", -- reference to immediate offset value from an am2offset_imm operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 16)))
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 12)))
 
   , ("a32.ldst_so_reg_base_register", -- ref to base register from ldst_so_reg operand
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth arm))),

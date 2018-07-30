@@ -356,7 +356,7 @@ void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace
   //LOG("cpsr_q = %s\n", ((regs[IDX_CPSR] >> 27) & 1) ? "Q" : "-");
 
   // Need to check that format of cpsr is valid
-  regs[IDX_CPSR] = rs->cpsr;
+  // regs[IDX_CPSR] = rs->cpsr;
 
   // Apply the reg mask; this modifies the test vector, but that is fine.  We
   // won't need the original values ever again.
@@ -383,7 +383,11 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 
   memcpy(&rs->mem1, memSpace, sizeof(rs->mem1));
   memcpy(&rs->mem2, memSpace + sizeof(rs->mem1), sizeof(rs->mem2));
-  rs->cpsr = regs[IDX_CPSR];
+
+  // Reset the CPSR and PC values after the test because we don't have a
+  // sensible way of dealing with those register values.
+  rs->cpsr = 0;
+  rs->gprs[15] = 0;
 }
 
 
@@ -995,7 +999,7 @@ int main(int argc, char* argv[]) {
 
   childPid = fork();
   if(childPid == -1) {
-    writeReadErrorResult(stdout, WORK_ERROR_FORK_FAILED, "Failed to fork runner");
+    writeReadErrorResult(stderr, WORK_ERROR_FORK_FAILED, "Failed to fork runner");
     return -1;
   } else if(childPid == 0) {
     // This is the child process that will map programs and generate SIGTRAPs

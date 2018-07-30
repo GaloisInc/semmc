@@ -59,7 +59,7 @@
         'CPSR)
        'CPSR)
       (concat
-       ((_ extract 31 1)
+       ((_ extract 30 0)
         'PC)
        #b1)
       'R14))))))

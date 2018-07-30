@@ -19,3 +19,8 @@ optional-packages:
   submodules/elf-edit/
   submodules/dismantle/dismantle-ppc/
   submodules/dismantle/dismantle-arm/
+
+constraints:
+  regex == 1.0.1.3
+allow-newer:
+  regex:template-haskell

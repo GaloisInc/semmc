@@ -30,6 +30,7 @@ class TestFailure(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, db_index=True)
     opcode = models.ForeignKey(Opcode, on_delete=models.CASCADE, db_index=True)
     pretty = models.CharField(max_length=256)
+    bytes = models.CharField(max_length=256, default='')
     arguments = models.TextField()
 
 class TestFailureInput(models.Model):
@@ -41,6 +42,7 @@ class TestSignalError(models.Model):
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, db_index=True)
     opcode = models.ForeignKey(Opcode, on_delete=models.CASCADE, db_index=True)
     pretty = models.CharField(max_length=256)
+    bytes = models.CharField(max_length=256, default='')
     signal = models.IntegerField()
 
     def signame(self):

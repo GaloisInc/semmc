@@ -19,6 +19,7 @@ module SemMC.Util
   , extractUsedLocs
   , mapFMapBothM
   , filterMapF
+  , fromJust'
     -- * Async
   , asyncLinked
   , withAsyncLinked
@@ -28,6 +29,7 @@ module SemMC.Util
 
 import           Control.Monad.ST ( runST )
 import qualified Data.HashTable.Class as H
+import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
@@ -180,3 +182,9 @@ filterMapF f = MapF.foldrWithKey go MapF.empty
         go key value m
           | f key value = MapF.insert key value m
           | otherwise   = m
+
+-- | Traceback-friendly fromJust alternative.
+fromJust' :: (HasCallStack) => String -> Maybe a -> a
+fromJust' label x =
+    let msg = "fromJust': got Nothing (" ++ label ++ ")"
+    in fromMaybe (error msg) x

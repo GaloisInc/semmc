@@ -36,7 +36,6 @@ import           Text.Printf                        ( printf )
 
 import           What4.BaseTypes
 import qualified What4.Interface     as S
-import qualified Lang.Crucible.Backend as SBI
 import qualified What4.Expr.Builder as S
 
 import qualified SemMC.Architecture                 as A
@@ -86,7 +85,7 @@ extendAssn newExpr newVar oldAssn =
 --    operand
 buildOpAssignment :: forall sym arch sh.
                   (A.Architecture arch,
-                   SBI.IsSymInterface sym)
+                   S.IsSymExprBuilder sym)
                 => sym
                 -- ^ Symbolic expression builder
                 -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
@@ -168,7 +167,7 @@ type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
 -- operand that are used within the returned formula.
 instantiateFormula :: forall arch t st sh.
                       ( A.Architecture arch
-                      , SBI.IsSymInterface (SB t st))
+                      , S.IsSymExprBuilder (SB t st))
                    => SB t st
                    -> ParameterizedFormula (SB t st) arch sh
                    -> SL.List (A.Operand arch) sh
@@ -190,7 +189,8 @@ instantiateFormula
     newLitVars <- foldrM addLitVar MapF.empty A.allLocations
     let newLitExprLookup :: A.Location arch tp -> IO (S.Expr t tp)
         -- 'newLitVars' has all locations in it, so this 'fromJust' is total.
-        newLitExprLookup = return . S.varExpr sym . fromJust . flip MapF.lookup newLitVars
+        newLitExprLookup loc =
+            (return . S.varExpr sym . U.fromJust' ("newLitExprLookup: " ++ showF loc) . flip MapF.lookup newLitVars) loc
 
     OperandAssignment { opAssnTaggedExprs = opTaggedExprs
                       , opAssnVars = opVarsAssn
@@ -220,7 +220,7 @@ instantiateFormula
 
 -- | Create a new formula with the same semantics, but with fresh bound vars.
 copyFormula :: forall t st arch.
-               (A.IsLocation (A.Location arch))
+               (A.IsLocation (A.Location arch), U.HasCallStack)
             => SB t st
             -> Formula (SB t st) arch
             -> IO (Formula (SB t st) arch)
@@ -229,7 +229,7 @@ copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
       mkVar loc = S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
   newVars <- MapF.traverseWithKey (const . mkVar) vars
   let lookupNewVar :: forall tp. A.Location arch tp -> S.Expr t tp
-      lookupNewVar = S.varExpr sym . fromJust . flip MapF.lookup newVars
+      lookupNewVar = S.varExpr sym . U.fromJust' "copyFormula" . flip MapF.lookup newVars
   assn <- buildLitAssignment (Proxy @(SB t st)) (return . lookupNewVar) vars
   newDefs <- traverseF (replaceVars sym assn) defs
   return $ Formula { formParamVars = newVars
@@ -262,7 +262,7 @@ sequenceFormulas sym form1 form2 = do
         -- it, use the first formula's variable.
         | Just newVar <- MapF.lookup loc vars1 = S.varExpr sym newVar
         -- Otherwise, use the original variable.
-        | otherwise = S.varExpr sym $ fromJust $ MapF.lookup loc vars2
+        | otherwise = S.varExpr sym $ U.fromJust' "sequenceFormulas" $ MapF.lookup loc vars2
   assn <- buildLitAssignment (Proxy @(SB t st)) (return . varReplace) vars2
   newDefs2 <- traverseF (replaceVars sym assn) defs2
 

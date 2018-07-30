@@ -39,19 +39,19 @@ import           SemMC.Stochastic.Pseudo
                  )
 import qualified SemMC.Util as U
 
-data CandidateProgram t arch =
+data CandidateProgram t solver arch =
   CandidateProgram { cpInstructions :: [SynthInstruction arch]
-                   , cpFormula :: F.Formula (Sym t) arch
+                   , cpFormula :: F.Formula (Sym t solver) arch
                    }
 
-deriving instance (SynC arch) => Show (CandidateProgram t arch)
+deriving instance (SynC arch) => Show (CandidateProgram t solver arch)
 
 -- | Convert an instruction into a 'F.Formula'
-instructionFormula :: forall arch t .
+instructionFormula :: forall arch t solver .
                       (SynC arch)
-                   => Sym t
+                   => Sym t solver
                    -> SynthInstruction arch
-                   -> Syn t arch (F.Formula (Sym t) arch)
+                   -> Syn t solver arch (F.Formula (Sym t solver) arch)
 instructionFormula sym i = do
   case i of
     SynthInstruction sop operands -> do
@@ -65,7 +65,7 @@ instructionFormula sym i = do
     realInstructionFormula :: Maybe (Pseudo arch (A.Operand arch) sh')
                            -> A.Opcode arch (A.Operand arch) sh
                            -> SL.List (A.Operand arch) sh
-                           -> Syn t arch (F.Formula (Sym t) arch)
+                           -> Syn t solver arch (F.Formula (Sym t solver) arch)
     realInstructionFormula mop op operands = do
       mpf <- MapF.lookup op <$> askFormulas
       pf <- maybe (die mop op) return mpf
@@ -74,7 +74,7 @@ instructionFormula sym i = do
 
     pseudoInstructionFormula :: Pseudo arch (A.Operand arch) sh
                              -> SL.List (A.Operand arch) sh
-                             -> Syn t arch (F.Formula (Sym t) arch)
+                             -> Syn t solver arch (F.Formula (Sym t solver) arch)
     pseudoInstructionFormula op operands = do
       -- Some pseudo ops have handwritten generic (parameterized) .sem
       -- files on disk, so we try looking those up first. If there are
@@ -111,9 +111,9 @@ instructionFormula sym i = do
 
 -- | Convert a program into a formula
 programFormula :: (SynC arch)
-               => Sym t
+               => Sym t solver
                -> [SynthInstruction arch]
-               -> Syn t arch (F.Formula (Sym t) arch)
+               -> Syn t solver arch (F.Formula (Sym t solver) arch)
 programFormula sym insns = do
   fs <- mapM (instructionFormula sym) insns
   liftIO $ F.foldlM (F.sequenceFormulas sym) F.emptyFormula fs
@@ -122,6 +122,6 @@ lookupCongruentOpcodes :: (HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr
                            HasRepr (Pseudo arch (A.Operand arch)) (A.ShapeRepr arch),
                            MapF.OrdF (A.OperandTypeRepr arch))
                        => SynthOpcode arch sh
-                       -> Syn t arch (Seq.Seq (SynthOpcode arch sh))
+                       -> Syn t solver arch (Seq.Seq (SynthOpcode arch sh))
 lookupCongruentOpcodes op = maybe Seq.empty SeqF.unSeqF . MapF.lookup (typeRepr op) <$> askKnownCongruentOps
 

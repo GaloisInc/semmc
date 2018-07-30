@@ -58,6 +58,7 @@ module SemMC.Architecture.ARM.Eval
     where
 
 import           Data.Int ( Int16, Int8 )
+import           Data.Word ( Word8 )
 import qualified Data.Parameterized.List as PL
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.ARM as ARMDis
@@ -75,7 +76,7 @@ import           What4.BaseTypes
 -- | Extract values from the ARM Am2offset_imm operand
 
 interpAm2offsetimmImmExtractor :: ARMOperands.Am2OffsetImm -> Int16
-interpAm2offsetimmImmExtractor = fromInteger . toInteger . ARMOperands.am2OffsetImmImmediate
+interpAm2offsetimmImmExtractor = fromIntegral . W.unW . ARMOperands.am2OffsetImmImmediate
 
 interpAm2offsetimmAddExtractor :: ARMOperands.Am2OffsetImm -> Bool
 interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
@@ -87,17 +88,24 @@ interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
 -- | Extract the register value from an addrmode_imm12[_pre] via
 -- the a32.imm12_reg user function.
 interpImm12Reg :: forall sh s arm tp opty
-                   . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                   . (L.IsLocation (L.Location arm)) =>
                     (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                 -> (Word8 -> L.Location arm (BaseBVType 32))
                  -> PL.List opty sh
                  -> F.WrappedOperand arm sh s
                  -> BaseTypeRepr tp
                  -> Maybe (L.Location arm tp)
-interpImm12Reg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+interpImm12Reg getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep =
   case getArmOperand (operands PL.!! ix) of
+    Just (ARMDis.Addrmode_imm12 oprnd) ->
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.addrModeImm12Register oprnd
+      in case () of
+        _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
+          | otherwise -> error ("Invalid return type for location function 'imm12_reg' at index " ++ show ix)
     Just (ARMDis.Addrmode_imm12_pre oprnd) ->
-      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.addrModeImm12Register oprnd
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.addrModeImm12Register oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'imm12_reg' at index " ++ show ix)
@@ -108,7 +116,7 @@ interpImm12RegExtractor :: ARMOperands.AddrModeImm12 -> Maybe ARMOperands.GPR
 interpImm12RegExtractor = Just . ARMOperands.addrModeImm12Register
 
 interpImm12OffsetExtractor :: ARMOperands.AddrModeImm12 -> Int16
-interpImm12OffsetExtractor = fromInteger . toInteger . ARMOperands.addrModeImm12Immediate
+interpImm12OffsetExtractor = fromIntegral . W.unW . ARMOperands.addrModeImm12Immediate
 
 interpImm12AddFlgExtractor :: ARMOperands.AddrModeImm12 -> Bool
 interpImm12AddFlgExtractor = (== 1) . ARMOperands.addrModeImm12Add
@@ -141,10 +149,10 @@ interpLdstsoregAddExtractor :: ARMOperands.LdstSoReg -> Bool
 interpLdstsoregAddExtractor = (== 1) . ARMOperands.ldstSoRegAdd
 
 interpLdstsoregImmExtractor :: ARMOperands.LdstSoReg -> W.W 5
-interpLdstsoregImmExtractor = fromInteger . toInteger . ARMOperands.ldstSoRegImmediate
+interpLdstsoregImmExtractor = ARMOperands.ldstSoRegImmediate
 
 interpLdstsoregTypeExtractor :: ARMOperands.LdstSoReg -> W.W 2
-interpLdstsoregTypeExtractor = fromInteger . toInteger . ARMOperands.ldstSoRegShiftType
+interpLdstsoregTypeExtractor = ARMOperands.ldstSoRegShiftType
 
 -- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
 interpLdstsoregBaseRegExtractor :: ARMOperands.LdstSoReg -> Maybe ARMOperands.GPR
@@ -156,34 +164,36 @@ interpLdstsoregOffRegExtractor = Just . ARMOperands.ldstSoRegOffsetRegister
 
 
 interpLdstsoregBaseReg :: forall sh s arm tp opty
-                          . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                          . (L.IsLocation (L.Location arm)) =>
                           (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                       -> (Word8 -> L.Location arm (BaseBVType 32))
                        -> PL.List opty sh
                        -> F.WrappedOperand arm sh s
                        -> BaseTypeRepr tp
                        -> Maybe (L.Location arm tp)
-interpLdstsoregBaseReg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+interpLdstsoregBaseReg getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep =
   case getArmOperand (operands PL.!! ix) of
     Just (ARMDis.Ldst_so_reg oprnd) ->
-      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.ldstSoRegBaseRegister oprnd
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.ldstSoRegBaseRegister oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'ldst_so_reg' base reg at index " ++ show ix)
     _ -> error ("Invalid operand type at index " ++ show ix)
 
 interpLdstsoregOffReg :: forall sh s arm tp opty
-                         . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                         . (L.IsLocation (L.Location arm)) =>
                          (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                      -> (Word8 -> L.Location arm (BaseBVType 32))
                       -> PL.List opty sh
                       -> F.WrappedOperand arm sh s
                       -> BaseTypeRepr tp
                       -> Maybe (L.Location arm tp)
-interpLdstsoregOffReg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+interpLdstsoregOffReg getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep =
   case getArmOperand (operands PL.!! ix) of
     Just (ARMDis.Ldst_so_reg oprnd) ->
-      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.ldstSoRegOffsetRegister oprnd
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.ldstSoRegOffsetRegister oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'ldst_so_reg' offset reg at index " ++ show ix)
@@ -193,10 +203,10 @@ interpLdstsoregOffReg getArmOperand operands (F.WrappedOperand _orep ix) rep =
 -- | Extract values from the ARM Mod_imm operand
 
 interpModimmImmExtractor :: ARMOperands.ModImm -> Int8
-interpModimmImmExtractor = fromInteger . toInteger . ARMOperands.modImmOrigImmediate
+interpModimmImmExtractor = fromIntegral . W.unW . ARMOperands.modImmOrigImmediate
 
 interpModimmRotExtractor :: ARMOperands.ModImm -> W.W 4
-interpModimmRotExtractor = fromInteger . toInteger . ARMOperands.modImmOrigRotate
+interpModimmRotExtractor = ARMOperands.modImmOrigRotate
 
 
 ------------------------------------------------------------------------
@@ -222,10 +232,10 @@ interpBlxTarget_imm10L = fromInteger . toInteger . ThumbOperands.thumbBlxTargetI
 -- | Extract values from the ARM SoRegImm operand
 
 interpSoregimmTypeExtractor :: ARMOperands.SoRegImm -> W.W 2
-interpSoregimmTypeExtractor = fromInteger . toInteger . ARMOperands.soRegImmShiftType
+interpSoregimmTypeExtractor = ARMOperands.soRegImmShiftType
 
 interpSoregimmImmExtractor :: ARMOperands.SoRegImm -> W.W 5
-interpSoregimmImmExtractor = fromInteger . toInteger . ARMOperands.soRegImmImmediate
+interpSoregimmImmExtractor = ARMOperands.soRegImmImmediate
 
 -- n.b. there is no Nothing, but the call in macaw.SemMC.TH expects a Maybe result.
 interpSoregimmRegExtractor :: ARMOperands.SoRegImm -> Maybe ARMOperands.GPR
@@ -235,17 +245,18 @@ interpSoregimmRegExtractor = Just . ARMOperands.soRegImmReg
 -- | Extract the register value from a SoRegReg via the
 -- a32.soregimm_reg user function.
 interpSoregimmReg :: forall sh s arm tp opty
-                     . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                     . (L.IsLocation (L.Location arm)) =>
                      (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                  -> (Word8 -> L.Location arm (BaseBVType 32))
                   -> PL.List opty sh
                   -> F.WrappedOperand arm sh s
                   -> BaseTypeRepr tp
                   -> Maybe (L.Location arm tp)
-interpSoregimmReg getArmOperand operands (F.WrappedOperand _orep ix) rep =
+interpSoregimmReg getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep =
   case getArmOperand (operands PL.!! ix) of
     Just (ARMDis.So_reg_imm oprnd) ->
-      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegImmReg oprnd
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.soRegImmReg oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'soregimm_reg' at index " ++ show ix)
@@ -264,22 +275,23 @@ interpSoregregReg2Extractor :: ARMOperands.SoRegReg -> Maybe ARMOperands.GPR
 interpSoregregReg2Extractor = Just . ARMOperands.soRegRegReg2
 
 interpSoregregTypeExtractor :: ARMOperands.SoRegReg -> W.W 2
-interpSoregregTypeExtractor = fromInteger . toInteger . ARMOperands.soRegRegShiftType
+interpSoregregTypeExtractor = ARMOperands.soRegRegShiftType
 
 -- | Extract the register value from a SoRegReg via the
 -- a32.soregreg_reg user function.
 interpSoregregReg1 :: forall sh s arm tp opty
-                      . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                      . (L.IsLocation (L.Location arm)) =>
                       (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                   -> (Word8 -> L.Location arm (BaseBVType 32))
                    -> PL.List opty sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
                    -> Maybe (L.Location arm tp)
-interpSoregregReg1 getArmOperand operands (F.WrappedOperand _orep ix) rep =
+interpSoregregReg1 getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep =
   case getArmOperand (operands PL.!! ix) of
     Just (ARMDis.So_reg_reg oprnd) ->
-      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegRegReg1 oprnd
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.soRegRegReg1 oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'soregreg_reg' 1 at index " ++ show ix)
@@ -289,17 +301,18 @@ interpSoregregReg1 getArmOperand operands (F.WrappedOperand _orep ix) rep =
 -- | Extract the register value from a SoRegReg via the
 -- a32.soregreg_reg user function.
 interpSoregregReg2 :: forall sh s arm tp opty
-                      . (L.IsLocation (Location arm), L.Location arm ~ Location arm) =>
+                      . (L.IsLocation (L.Location arm)) =>
                       (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
+                   -> (Word8 -> L.Location arm (BaseBVType 32))
                    -> PL.List opty sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
                    -> Maybe (L.Location arm tp)
-interpSoregregReg2 getArmOperand operands (F.WrappedOperand _orep ix) rep =
+interpSoregregReg2 getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep =
   case getArmOperand (operands PL.!! ix) of
     Just (ARMDis.So_reg_reg oprnd) ->
-      let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ARMOperands.unGPR $ ARMOperands.soRegRegReg2 oprnd
+      let loc :: L.Location arm (BaseBVType 32)
+          loc = mkLoc $ fromIntegral $ W.unW $ ARMOperands.unGPR $ ARMOperands.soRegRegReg2 oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'soregreg_reg' 2 at index " ++ show ix)

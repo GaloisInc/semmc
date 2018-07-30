@@ -18,8 +18,9 @@ import           Data.Parameterized.TraversableF
 import qualified Data.Set as Set
 import           Data.Typeable
 
-import qualified What4.Expr.Builder as S
-import qualified Lang.Crucible.Backend.Simple as S
+import qualified What4.Expr as WE
+import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend.Online as CBO
 
 import           SemMC.Architecture
 import           SemMC.Formula
@@ -27,16 +28,16 @@ import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.Template
 import           SemMC.Util
 
-truncateFormula :: forall t st arch.
+truncateFormula :: forall t solver arch.
                    (OrdF (Location arch))
-                => Formula (S.ExprBuilder t st) arch
+                => Formula (CBO.OnlineBackend t solver) arch
                 -> Set.Set (Some (Location arch))
-                -> Formula (S.ExprBuilder t st) arch
+                -> Formula (CBO.OnlineBackend t solver) arch
 truncateFormula form keepLocs =
   let filterDef :: Location arch tp
-                -> S.Expr t tp
-                -> MapF.MapF (Location arch) (S.Expr t)
-                -> MapF.MapF (Location arch) (S.Expr t)
+                -> WE.Expr t tp
+                -> MapF.MapF (Location arch) (WE.Expr t)
+                -> MapF.MapF (Location arch) (WE.Expr t)
       filterDef loc expr
         | Set.member (Some loc) keepLocs = MapF.insert loc expr
         | otherwise = id
@@ -47,9 +48,9 @@ truncateFormula form keepLocs =
              }
 
 makeSplit :: (OrdF (Location arch))
-          => Formula (S.ExprBuilder t st) arch
+          => Formula (CBO.OnlineBackend t solver) arch
           -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
-          -> Maybe (Formula (S.ExprBuilder t st) arch, Formula (S.ExprBuilder t st) arch)
+          -> Maybe (Formula (CBO.OnlineBackend t solver) arch, Formula (CBO.OnlineBackend t solver) arch)
 makeSplit form (locs1, locs2)
   | Set.null locs1 || Set.null locs2 = Nothing
   | otherwise = let form1 = truncateFormula form locs1
@@ -63,9 +64,9 @@ splits [] = [(Set.empty, Set.empty)]
 splits (x:xs) = [ s' | (left, right) <- splits xs
                      , s' <- [(Set.insert x left, right), (left, Set.insert x right)]]
 
-enumerateSplits :: (OrdF (Location arch))
-                => Formula (S.ExprBuilder t st) arch
-                -> [(Formula (S.ExprBuilder t st) arch, Formula (S.ExprBuilder t st) arch)]
+enumerateSplits :: (OrdF (Location arch), WPO.OnlineSolver t solver)
+                => Formula (CBO.OnlineBackend t solver) arch
+                -> [(Formula (CBO.OnlineBackend t solver) arch, Formula (CBO.OnlineBackend t solver) arch)]
 enumerateSplits form = mapMaybe (makeSplit form)
                      $ splits (MapF.keys (formDefs form))
 
@@ -73,9 +74,11 @@ divideAndConquer :: (Architecture arch,
                      TemplatableOperand arch,
                      ArchRepr arch,
                      Architecture (TemplatedArch arch),
-                     Typeable arch)
-                 => SynthesisParams (S.SimpleBackend t) arch
-                 -> Formula (S.SimpleBackend t) arch
+                     Typeable arch,
+                     WPO.OnlineSolver t solver
+                     )
+                 => SynthesisParams (CBO.OnlineBackend t solver) arch
+                 -> Formula (CBO.OnlineBackend t solver) arch
                  -- ^ Formula to synthesize.
                  -> IO (Maybe [Instruction arch])
 divideAndConquer params form =

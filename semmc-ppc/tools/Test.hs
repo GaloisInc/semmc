@@ -33,7 +33,7 @@ main = do
   _ <- C.forkIO (testRunner caseChan resChan)
   logCfg <- L.mkLogCfg "main"
   L.withLogCfg logCfg $
-    CE.runRemote (Just "remote-runner.ppc32") hostname testSerializer caseChan resChan
+    CE.runRemote (Just "remote-runner.ppc32") hostname Nothing testSerializer caseChan resChan
 
 testRunner :: C.Chan (Maybe [CE.TestCase PPCState PPC.Instruction])
            -> C.Chan (CE.ResultOrError PPCState)
