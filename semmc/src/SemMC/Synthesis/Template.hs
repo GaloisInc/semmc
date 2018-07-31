@@ -103,9 +103,14 @@ type TemplatedOperandFn arch s = forall sym.
                               -> IO (S.SymExpr sym (OperandType arch s),
                                      WrappedRecoverOperandFn sym (Operand arch s))
 
+data family TemplatedOperandContents arch :: Symbol -> *
+
 -- | An operand for 'TemplatedArch'.
 data TemplatedOperand (arch :: *) (s :: Symbol) =
-  TemplatedOperand { templOpLocation :: Maybe (Location arch (OperandType arch s))
+  TemplatedOperand { -- templOpName :: String
+                   -- , templOpContents :: TemplatedOperandContents arch s
+                   -- , 
+                     templOpLocation :: Maybe (Location arch (OperandType arch s))
                    -- ^ If this operand represents a location, this is it.
                    , templUsedLocations :: Set.Set (Some (Location arch))
                    -- ^ Locations used by this operand.
@@ -206,6 +211,18 @@ more useful here would probably be great.  Actually, it is used in a few places,
 but they could easily be replaced with a call to operandToLocation (of the
 underlying architecture) to achieve the same effect.
 
+It looks like there is a more fundamental problem: the evaluation of functions
+inside of the formula instantiator happens *before* the IO action to allocate
+symbolic variables in templates (operandValue) is ever executed.  Fundamentally,
+this means that we can't implement the interpreters for templated instructions.
+However, it looks like we can re-arrange instantiateFormula to call
+buildOpAsignment earlier - this would let us fully instantiate the symbolic
+variables that make up a templated instruction *before* we do our function
+evaluation.  We still need a place to store the generated variables, but we
+should be able to modify the definition of OperandValue to support saving a
+parallel structure to each operand that will let us store symbolic variables
+that represent e.g. offsets in compound operands.
+
 -}
 
 templatedEvaluator :: forall arch t st sh u tp
@@ -221,7 +238,7 @@ templatedEvaluator (SFE.Evaluator e0) = \sym pf ops actuals tp -> do
   let toTemplatedOperand :: forall s . TemplatedOperand arch s -> Operand arch s
       toTemplatedOperand top =
         case templOpLocation top of
-          Just loc -> -- Location to Operand
+          Just loc -> undefined -- Location to Operand
           Nothing -> error "Unexpected non-location operand as function argument"
   let ops' = fmapFC toTemplatedOperand ops
   (expr, lits) <- e0 sym (unTemplate pf) ops' actuals tp
