@@ -47,6 +47,7 @@ module SemMC.Synthesis.Template
 
 import           Data.EnumF
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
@@ -56,9 +57,11 @@ import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Typeable
+import           GHC.Stack ( HasCallStack )
 import           GHC.TypeLits ( Symbol )
 import           Unsafe.Coerce ( unsafeCoerce )
 
+import qualified What4.BaseTypes as WT
 import qualified What4.Interface as S
 import           What4.Expr.GroundEval
 import qualified What4.Expr.Builder as S
@@ -66,6 +69,7 @@ import qualified What4.Expr.Builder as S
 import           SemMC.Architecture
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula
+import qualified SemMC.Formula.Eval as SFE
 
 --
 -- First, an overview about how the templating system works.
@@ -153,7 +157,75 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 
   operandToLocation _ (TemplatedOperand loc _ _) = loc
   shapeReprToTypeRepr _ = shapeReprToTypeRepr (Proxy @arch)
-  locationFuncInterpretation _ = error "locationFuncInterpretation shouldn't need to be used from a TemplatedArch"
+  locationFuncInterpretation _ = [ (funcName, templatizeInterp funcName fi)
+                                 | (funcName, fi) <- locationFuncInterpretation (Proxy @arch)
+                                 ]
+  -- error "locationFuncInterpretation shouldn't need to be used from a TemplatedArch"
+
+templatizeInterp :: (HasCallStack, OrdF (Location arch))
+                 => String
+                 -> FunctionInterpretation t arch
+                 -> FunctionInterpretation t (TemplatedArch arch)
+templatizeInterp funcName fi =
+  FunctionInterpretation { locationInterp = error ("Templated locationInterp for " ++ funcName)
+                         , exprInterpName = exprInterpName fi
+                         , exprInterp = SFE.Evaluator (templatedEvaluator (exprInterp fi))
+                           -- case exprInterp fi of
+                           --   SFE.Evaluator e0 ->
+                           --     SFE.Evaluator (\s pf ops actuals tp -> e0 s (unTemplate pf) ops actuals tp)
+                           -- error ("Templated exprInterp for " ++ funcName)
+                         }
+
+{- Note [Evaluating Functions on Templated Operands]
+
+The problem here is that we need to be able to call the evaluator on
+TemplatedFormulas.  In this case, the *operands* list is a list of
+TemplatedOperand, which is not very closely related to a normal operand, and in
+fact might be missing entirely for symbolic operands.
+
+That said, we might be able to evaluate the necessary cases.
+
+UFs should *only* appear in cases where the TemplatedOperand actually has a
+concrete location.  SO.  Can we provide some extra argument or infrastructure to
+unwrap the TemplatedOperand (assert that it has a Just Location of some kind)
+and then apply the non-templated evaluator?
+
+It doesn't seem like it will be possible to write the "location to operand"
+translator for types like Memri, which are logically a Gpr + offset bundle.  The
+templated operand doesn't have a simple Location that we can translate (it
+actually has a Nothing).  Is there more information we can include in the
+templated operand to make this possible?  It seems like we could include the
+actual Operand type that we could just grab from the TemplatedOperand and use
+in-place.  If there is none, we could have a more structured representation with
+a good error message (that should never be seen if all else goes according to
+plan).  There is enough information at the template definition sites to actually
+construct this value.
+
+Note: templOpLocation doesn't seem to be used, so replacing that with something
+more useful here would probably be great.  Actually, it is used in a few places,
+but they could easily be replaced with a call to operandToLocation (of the
+underlying architecture) to achieve the same effect.
+
+-}
+
+templatedEvaluator :: forall arch t st sh u tp
+                    . (OrdF (Location arch))
+                   => SFE.Evaluator arch t
+                   -> S.ExprBuilder t st
+                   -> ParameterizedFormula (S.ExprBuilder t st) (TemplatedArch arch) sh
+                   -> SL.List (TemplatedOperand arch) sh
+                   -> Ctx.Assignment (S.Expr t) u
+                   -> WT.BaseTypeRepr tp
+                   -> IO (S.Expr t tp, MapF.MapF (Location (TemplatedArch arch)) (S.BoundVar (S.ExprBuilder t st)))
+templatedEvaluator (SFE.Evaluator e0) = \sym pf ops actuals tp -> do
+  let toTemplatedOperand :: forall s . TemplatedOperand arch s -> Operand arch s
+      toTemplatedOperand top =
+        case templOpLocation top of
+          Just loc -> -- Location to Operand
+          Nothing -> error "Unexpected non-location operand as function argument"
+  let ops' = fmapFC toTemplatedOperand ops
+  (expr, lits) <- e0 sym (unTemplate pf) ops' actuals tp
+  return (expr, undefined)
 
 instance Show (S.SymExpr sym (OperandType arch s)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
   show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
