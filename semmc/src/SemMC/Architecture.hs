@@ -85,6 +85,9 @@ class (IsOperand (Operand arch),
 
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
+  --
+  -- This is used during formula instantiation to find a symbolic expression for
+  -- each operand.
   operandValue :: forall proxy sym s.
                   (S.IsSymExprBuilder sym,
                    S.IsExprBuilder sym)

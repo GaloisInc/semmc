@@ -85,6 +85,31 @@ data Evaluator arch t =
               -> BaseTypeRepr tp
               -> IO (S.Expr t tp, Literals arch (Sym t st)))
 
+{-
+
+In addition to the `List (Operand arch) sh` (which has bound variables
+corresponding to references to our compound operands), we will also need:
+
+> List (OperandComponents arch) sh
+
+where `OperandComponents` is an arch-keyed type family.  A PowerPC example might
+look like:
+
+data OperandComponents sym s where
+  GprcComponents :: SymExpr sym (BVType w) -> OperandComponents sym "gprc"
+  MemriComponents :: SymExpr sym (BVType w1) -> SymExpr sym (BVType w2) -> OperandComponents sym "memri"
+
+Each constructor will have the symbolic values allocated for the sub-components
+of the operand.  What that will be depends on whether we are instantiating a
+concrete instruction or an instruction template.
+
+Instead of the `List (Operand arch) sh`, we could now have `List (TaggedExpr
+arch) sh`, which could contain all of the expressions we need.  This would also
+simplify the extractors, as they won't have to actually look at operands at all
+(or know about registers).
+
+-}
+
 -- | Given a 'S.BoundVar', attempt to find its index in the operand list for the
 -- 'F.ParameterizedFormula'
 --
