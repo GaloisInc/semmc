@@ -100,17 +100,14 @@ type TemplatedOperandFn arch s = forall sym.
                                   S.IsSymExprBuilder sym)
                               => sym
                               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
-                              -> IO (S.SymExpr sym (OperandType arch s),
+                              -> IO (AllocatedOperand arch sym s,
                                      WrappedRecoverOperandFn sym (Operand arch s))
 
 data family TemplatedOperandContents arch :: Symbol -> *
 
 -- | An operand for 'TemplatedArch'.
 data TemplatedOperand (arch :: *) (s :: Symbol) =
-  TemplatedOperand { -- templOpName :: String
-                   -- , templOpContents :: TemplatedOperandContents arch s
-                   -- , 
-                     templOpLocation :: Maybe (Location arch (OperandType arch s))
+  TemplatedOperand { templOpLocation :: Maybe (Location arch (OperandType arch s))
                    -- ^ If this operand represents a location, this is it.
                    , templUsedLocations :: Set.Set (Some (Location arch))
                    -- ^ Locations used by this operand.
@@ -149,11 +146,14 @@ type TemplateConstraints arch = (Architecture arch,
 
 instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
   data TaggedExpr (TemplatedArch arch) sym s =
-    TaggedExpr { taggedExpr :: S.SymExpr sym (OperandType arch s)
+    TaggedExpr { taggedExpr :: AllocatedOperand arch sym s
                , taggedRecover :: WrappedRecoverOperandFn sym (Operand arch s)
                }
 
-  unTagged = taggedExpr
+  unTagged te = case taggedExpr te of
+    ValueOperand se -> Just se
+    LocationOperand _ se -> Just se
+    CompoundOperand {} -> Nothing
 
   uninterpretedFunctions _ = uninterpretedFunctions (Proxy @arch)
 
@@ -175,10 +175,6 @@ templatizeInterp funcName fi =
   FunctionInterpretation { locationInterp = error ("Templated locationInterp for " ++ funcName)
                          , exprInterpName = exprInterpName fi
                          , exprInterp = SFE.Evaluator (templatedEvaluator (exprInterp fi))
-                           -- case exprInterp fi of
-                           --   SFE.Evaluator e0 ->
-                           --     SFE.Evaluator (\s pf ops actuals tp -> e0 s (unTemplate pf) ops actuals tp)
-                           -- error ("Templated exprInterp for " ++ funcName)
                          }
 
 {- Note [Evaluating Functions on Templated Operands]

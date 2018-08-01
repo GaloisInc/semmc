@@ -18,6 +18,7 @@
 
 module SemMC.Architecture (
   Architecture(..),
+  AllocatedOperand(..),
   Location,
   IsLocation(..),
   FunctionInterpretation(..),
@@ -56,6 +57,20 @@ import           SemMC.Formula.Eval ( Evaluator )
 type ShapeRepr arch = SL.List (OperandTypeRepr arch)
 
 type ArchRepr arch = (HR.HasRepr (Opcode arch (Operand arch)) (ShapeRepr arch))
+
+-- | This is a deconstructed version of an operand that contains symbolic
+-- expressions ('S.SymExpr') for each constituent component of the operand.  It
+-- is intended to be the payload of the 'TaggedExpr' for each instance of the
+-- 'Architecture'.
+data AllocatedOperand arch sym (s :: Symbol) where
+  -- | A simple operand that represents an immediate value
+  ValueOperand :: S.SymExpr sym (OperandType arch s) -> AllocatedOperand arch sym s
+  -- | A value representing an operand backed by a Location
+  LocationOperand :: Location arch (OperandType arch s)
+                  -> S.SymExpr sym (OperandType arch s)
+                  -> AllocatedOperand arch sym s
+  -- | A compound operand with an arch-specific representation
+  CompoundOperand :: OperandComponents arch sym s -> AllocatedOperand arch sym s
 
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.
@@ -96,7 +111,7 @@ class (IsOperand (Operand arch),
   type OperandComponents arch sym :: Symbol -> *
 
   -- | Untag a tagged expression.
-  unTagged :: TaggedExpr arch sym s -> S.SymExpr sym (OperandType arch s)
+  unTagged :: TaggedExpr arch sym s -> Maybe (S.SymExpr sym (OperandType arch s))
 
   -- | The uninterpreted functions referred to by this architecture
   uninterpretedFunctions :: proxy arch -> [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
@@ -128,7 +143,7 @@ class (IsOperand (Operand arch),
                              -- should) return a previously allocated version
                              -- (if there was one).
                              -> Operand arch s
-                             -> IO (OperandComponents arch sym s)
+                             -> IO (TaggedExpr arch sym s)
 
   -- | Map an operand to a specific state variable, if possible.
   operandToLocation :: forall proxy s.
