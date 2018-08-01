@@ -1,8 +1,8 @@
 ;; Subtract From Extended (XO-form, RC=0)
 ((operands
  ((rT . 'Gprc)
-  (rA . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rA . 'Gprc)))
  (in
   ('XER rB rA 'IP))
  (defs

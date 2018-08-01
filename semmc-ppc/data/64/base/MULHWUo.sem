@@ -1,8 +1,8 @@
 ;; Multiply High Word Unsigned (XO-form, RC=1)
 ((operands
  ((rT . 'Gprc)
-  (rA . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rA . 'Gprc)))
  (in
   ('XER 'CR rB rA 'IP))
  (defs
