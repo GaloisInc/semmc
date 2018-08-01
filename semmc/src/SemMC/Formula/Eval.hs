@@ -90,7 +90,7 @@ data Evaluator arch t =
 In addition to the `List (Operand arch) sh` (which has bound variables
 corresponding to references to our compound operands), we will also need:
 
-> List (OperandComponents arch) sh
+> List (OperandComponents arch sym) sh
 
 where `OperandComponents` is an arch-keyed type family.  A PowerPC example might
 look like:
@@ -107,6 +107,9 @@ Instead of the `List (Operand arch) sh`, we could now have `List (TaggedExpr
 arch) sh`, which could contain all of the expressions we need.  This would also
 simplify the extractors, as they won't have to actually look at operands at all
 (or know about registers).
+
+* The register extractor doesn't actually require the operand list (if we had the list of OperandComponents at least)
+* The bitvector extractor doesn't either (assuming OperandComponents)
 
 -}
 

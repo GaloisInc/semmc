@@ -77,6 +77,24 @@ class (IsOperand (Operand arch),
   -- This is a bit of a hack to add extra metadata needed for the templating stuff.
   data TaggedExpr arch sym :: Symbol -> *
 
+  -- | A data type that contains broken out /symbolic/ components for each operand type.
+  --
+  -- This is used for instantiating formulas and during evaluation of functions
+  -- embedded in instruction semantics (e.g., the helpers that de-construct
+  -- compound data types).
+  --
+  -- This type is also closely tied to the instruction templates used for synthesis.
+  --
+  -- Each operand type should have a corresponding constructor in this type
+  -- where /concrete/ operand components are stored alongside the symbolic
+  -- values that correspond to them.  In the case of register values (i.e.,
+  -- Locations), these will be symbolic expressions that stand for those
+  -- locations (uniquely allocated per-instruction).  For immediates held in
+  -- operands, there are two cases. In the case of concrete instructions, these
+  -- will just be literal SymExprs.  For instruction templates used in
+  -- synthesis, they will be symbolic values (which are also SymExprs).
+  type OperandComponents arch sym :: Symbol -> *
+
   -- | Untag a tagged expression.
   unTagged :: TaggedExpr arch sym s -> S.SymExpr sym (OperandType arch s)
 
@@ -96,6 +114,21 @@ class (IsOperand (Operand arch),
                -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                -> Operand arch s
                -> IO (TaggedExpr arch sym s)
+
+  -- |
+  --
+  -- FIXME: Add a way to allocate (sharable) exprs for non-locations
+  allocateSymExprsForOperand :: forall proxy sym s
+                              . (S.IsSymExprBuilder sym, S.IsExprBuilder sym)
+                             => proxy arch
+                             -> sym
+                             -> (forall tp . Location arch tp -> IO (S.SymExpr sym tp))
+                             -- ^ A function to return the allocate a
+                             -- 'S.SymExpr' for a Location, which can (and
+                             -- should) return a previously allocated version
+                             -- (if there was one).
+                             -> Operand arch s
+                             -> IO (OperandComponents arch sym s)
 
   -- | Map an operand to a specific state variable, if possible.
   operandToLocation :: forall proxy s.

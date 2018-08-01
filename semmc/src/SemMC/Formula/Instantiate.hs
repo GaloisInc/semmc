@@ -242,6 +242,15 @@ instantiateFormula
     (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
       fmap (`MapF.union` m) <$> rewrite e
 
+    -- After rewriting, it should be the case that all references to the bound
+    -- variables corresponding to compound operands (for which we don't have
+    -- valid expressions) should be gone.
+    --
+    -- We could change 'opAssnBareExprs' so that simple operands for which
+    -- substitution makes sense are present in the assignment (with some kind of
+    -- MaybeF wrapper), while operands with no simple SymExpr (i.e., compound
+    -- operands) are not present, and we can raise an error if we try to do a
+    -- substitution for one.
     let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Expr t tp -> IO (A.Location arch tp, S.Expr t tp)
         instantiateDefn definingParam definition = do
           definingLoc <- case paramToLocation opVals definingParam of
