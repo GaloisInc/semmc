@@ -179,10 +179,6 @@ instantiateFormula
                            , pfDefs = defs
                            })
   opVals = do
-    let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp, Literals arch (SB t st))
-        rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
-    (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
-      fmap (`MapF.union` m) <$> rewrite e
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
@@ -196,6 +192,56 @@ instantiateFormula
                       , opAssnVars = opVarsAssn
                       , opAssnBareExprs = opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
+
+    let rewrite :: forall tp . (HasCallStack) => S.Expr t tp -> IO (S.Expr t tp, Literals arch (SB t st))
+        rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
+    -- Here, the formula rewriter walks over the formula AST and replaces calls
+    -- to functions that we know something about with concrete values.  Most
+    -- often, these functions are predicates testing something about operands
+    -- (e.g., is the operand a specific register) or splitting apart a compound
+    -- operand (e.g., some memory references are a combination of a register and
+    -- an offset).
+    --
+    -- For normal instructions, this is simple: look at the operand(s) of the
+    -- function and evaluate them statically.
+    --
+    -- For templated instructions, this is more complicated.  For templated
+    -- instructions, the register portions of compound operands are all static
+    -- (as part of the template), but the literals are *symbolic* variables
+    -- (which cannot be stored in the original operand type).  Moreover, the
+    -- variables standing in for the constant portions have not been allocated
+    -- yet, as that happens in `buildOpAssignment`.
+    --
+    -- Additionally, the representation in `buildOpAssignment` doesn't seem to
+    -- be very useful: it generates symbolic expressions that combine the
+    -- register and offset automatically (using addition or other bitvector
+    -- operations).  I think it hasn't ended up mattering, as the variables
+    -- allocated for the compound operands are actually never used (since the
+    -- rewriting pass eliminates direct references to them).  Noting especially
+    -- that the extractors for the current set of architectures allocate fresh
+    -- solver expressions (as bvLits) for extracted constants held in compound
+    -- operands.
+    --
+    -- It seems like (solver) values must be allocated *before* rewriting, and
+    -- there should not be any solver values for composite operands.  Instead,
+    -- there should be solver values allocated for each *component* of each
+    -- operand.  We need to make sure that e.g., an offset contained in a
+    -- compound operand has only a single variable allocated for it while
+    -- instantiating a templated instruction (so that all references are to the
+    -- same value).
+    --
+    -- Maybe this pre-processing pass to allocate all of the necessary
+    -- variables/values could eliminate the need to return the partial map from
+    -- the evaluator - we can just make sure that everything is pre-allocated.
+    -- This extra structure would have to be passed in to the evaluators.  It
+    -- should be able to have the same type for both the templated case and the
+    -- non-templated case, as the values in the map would just be SymExprs.  It
+    -- will probably require an arch-specific data type to key the map (to
+    -- represent "lenses" into the compound operands).  This system should
+    -- probably subsume operandValues (and extend buildOpAssignment)
+    (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
+      fmap (`MapF.union` m) <$> rewrite e
+
     let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Expr t tp -> IO (A.Location arch tp, S.Expr t tp)
         instantiateDefn definingParam definition = do
           definingLoc <- case paramToLocation opVals definingParam of
