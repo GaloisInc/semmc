@@ -40,3 +40,4 @@ type family OperandType (arch :: *) (op :: Symbol) :: BaseType
 class IsOperandTypeRepr arch where
   type OperandTypeRepr (arch :: *) :: Symbol -> *
   operandTypeReprSymbol :: proxy arch -> OperandTypeRepr arch s -> String
+

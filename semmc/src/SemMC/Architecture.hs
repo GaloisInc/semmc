@@ -19,6 +19,7 @@
 module SemMC.Architecture (
   Architecture(..),
   AllocatedOperand(..),
+  OperandComponents,
   Location,
   IsLocation(..),
   Evaluator(..),
@@ -51,6 +52,7 @@ import           What4.BaseTypes
 import qualified What4.Interface as S
 import qualified What4.Expr as S
 
+import           SemMC.Architecture.AllocatedOperand
 import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula ( LocationFuncInterp, ParameterizedFormula )
@@ -60,32 +62,6 @@ type Sym t st = S.ExprBuilder t st
 type ShapeRepr arch = SL.List (OperandTypeRepr arch)
 
 type ArchRepr arch = (HR.HasRepr (Opcode arch (Operand arch)) (ShapeRepr arch))
-
--- | This is a deconstructed version of an operand that contains symbolic
--- expressions ('S.SymExpr') for each constituent component of the operand.  It
--- is intended to be the payload of the 'TaggedExpr' for each instance of the
--- 'Architecture'.
-data AllocatedOperand arch sym (s :: Symbol) where
-  -- | A simple operand that represents an immediate value
-  ValueOperand :: (OperandType arch s ~ BaseBVType n)
-               => S.SymExpr sym (OperandType arch s)
-               -> AllocatedOperand arch sym s
-  -- | A value representing an operand backed by a Location
-  --
-  -- FIXME: Can we add a constraint indicating that this really is a bitvector type?
-  LocationOperand :: (OperandType arch s ~ BaseBVType n)
-                  => Location arch (OperandType arch s)
-                  -> S.SymExpr sym (OperandType arch s)
-                  -> AllocatedOperand arch sym s
-  -- | A compound operand with an arch-specific representation
-  CompoundOperand :: OperandComponents arch sym s -> AllocatedOperand arch sym s
-
-instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (OperandComponents arch sym)) => Show (AllocatedOperand arch sym s) where
-  show ao =
-    case ao of
-      ValueOperand s -> "ValueOperand " ++ show (S.printSymExpr s)
-      LocationOperand l s -> "LocationOperand " ++ showF l ++ " " ++ show (S.printSymExpr s)
-      CompoundOperand oc -> "CompoundOperand " ++ showF oc
 
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.
@@ -106,24 +82,6 @@ class (IsOperand (Operand arch),
   --
   -- This is a bit of a hack to add extra metadata needed for the templating stuff.
   data TaggedExpr arch sym :: Symbol -> *
-
-  -- | A data type that contains broken out /symbolic/ components for each operand type.
-  --
-  -- This is used for instantiating formulas and during evaluation of functions
-  -- embedded in instruction semantics (e.g., the helpers that de-construct
-  -- compound data types).
-  --
-  -- This type is also closely tied to the instruction templates used for synthesis.
-  --
-  -- Each operand type should have a corresponding constructor in this type
-  -- where /concrete/ operand components are stored alongside the symbolic
-  -- values that correspond to them.  In the case of register values (i.e.,
-  -- Locations), these will be symbolic expressions that stand for those
-  -- locations (uniquely allocated per-instruction).  For immediates held in
-  -- operands, there are two cases. In the case of concrete instructions, these
-  -- will just be literal SymExprs.  For instruction templates used in
-  -- synthesis, they will be symbolic values (which are also SymExprs).
-  type OperandComponents arch sym :: Symbol -> *
 
   -- | Untag a tagged expression.
   unTagged :: TaggedExpr arch sym s -> Maybe (S.SymExpr sym (OperandType arch s))

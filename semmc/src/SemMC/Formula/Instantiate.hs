@@ -140,13 +140,16 @@ replaceLitVars sym newExprs oldVars expr = do
 
 -- | Get the corresponding location of a parameter, if it actually corresponds
 -- to one.
-paramToLocation :: forall arch sh tp.
-                   (A.Architecture arch)
-                => SL.List (A.Operand arch) sh
+paramToLocation :: forall arch sh tp sym
+                 . (A.Architecture arch)
+                => SL.List (A.AllocatedOperand arch sym) sh
                 -> Parameter arch sh tp
                 -> Maybe (A.Location arch tp)
-paramToLocation opVals (OperandParameter _ idx) =
- A.operandToLocation (Proxy @arch) (opVals SL.!! idx)
+paramToLocation opVals op@(OperandParameter _ idx) =
+  case opVals SL.!! idx of
+    A.LocationOperand l _ -> Just l
+    A.ValueOperand {} -> error ("Unexpected ValueOperand while extracting location for " ++ show op)
+    A.CompoundOperand {} -> error ("Unexpected CompoundOperand while extracting location for " ++ show op)
 paramToLocation _ (LiteralParameter loc) = Just loc
 paramToLocation opVals (FunctionParameter fnName wo rep) =
   case fnName `lookup` A.locationFuncInterpretation (Proxy @arch) of
@@ -184,7 +187,8 @@ instantiateFormula
     OperandAssignment { opAssnTaggedExprs = opTaggedExprs
                       , opAssnVars = Pair opVarsAssn opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
-    let allocOpers = FC.fmapFC A.taggedOperand opTaggedExprs
+    let allocOpers :: SL.List (A.AllocatedOperand arch (SB t st)) sh
+        allocOpers = FC.fmapFC A.taggedOperand opTaggedExprs
     let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp)
         rewrite = FE.evaluateFunctions sym pf allocOpers newLitExprLookup (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
     -- Here, the formula rewriter walks over the formula AST and replaces calls
@@ -244,7 +248,7 @@ instantiateFormula
     -- substitution for one.
     let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Expr t tp -> IO (A.Location arch tp, S.Expr t tp)
         instantiateDefn definingParam definition = do
-          definingLoc <- case paramToLocation opVals definingParam of
+          definingLoc <- case paramToLocation allocOpers definingParam of
             Just loc -> return loc
             Nothing -> fail $ printf "parameter %s is not a valid location" (show definingParam)
           opVarsReplaced <- S.evalBoundVars sym definition opVarsAssn opExprsAssn

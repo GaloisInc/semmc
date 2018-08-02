@@ -124,6 +124,7 @@ instance IsOperand (TemplatedOperand arch)
 -- instantiating a formula, rather than all concrete operands.
 data TemplatedArch (arch :: *)
 
+type instance OperandComponents (TemplatedArch arch) sym = OperandComponents arch sym
 type instance Operand (TemplatedArch arch) = TemplatedOperand arch
 type instance Opcode (TemplatedArch arch) = Opcode arch
 type instance OperandType (TemplatedArch arch) s = OperandType arch s
@@ -146,7 +147,6 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
     TaggedExpr { taggedExpr :: AllocatedOperand arch sym s
                , taggedRecover :: WrappedRecoverOperandFn sym (Operand arch s)
                }
-  type OperandComponents (TemplatedArch arch) sym = OperandComponents arch sym
 
   unTagged te = case taggedExpr te of
     ValueOperand se -> Just se
@@ -163,17 +163,25 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
   locationFuncInterpretation _ = [ (funcName, templatizeInterp funcName fi)
                                  | (funcName, fi) <- locationFuncInterpretation (Proxy @arch)
                                  ]
-  -- error "locationFuncInterpretation shouldn't need to be used from a TemplatedArch"
 
 templatizeInterp :: (HasCallStack, OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
                  => String
                  -> FunctionInterpretation t st arch
                  -> FunctionInterpretation t st (TemplatedArch arch)
 templatizeInterp funcName fi =
-  FunctionInterpretation { locationInterp = error ("Templated locationInterp for " ++ funcName)
+  FunctionInterpretation { locationInterp = LocationFuncInterp (templatedLocationInterp (locationInterp fi))
                          , exprInterpName = exprInterpName fi
                          , exprInterp = Evaluator (templatedEvaluator (exprInterp fi))
                          }
+
+templatedLocationInterp :: LocationFuncInterp arch
+                        -> SL.List (AllocatedOperand (TemplatedArch arch) sym) sh
+                        -> WrappedOperand (TemplatedArch arch) sh s
+                        -> WT.BaseTypeRepr tp
+                        -> Maybe (Location (TemplatedArch arch) tp)
+templatedLocationInterp (LocationFuncInterp fi) operands (WrappedOperand orep ix) rep = do
+  let ops' = fmapFC toTemplatedOperand operands
+  fi ops' (WrappedOperand orep ix) rep
 
 {- Note [Evaluating Functions on Templated Operands]
 
@@ -230,17 +238,16 @@ templatedEvaluator :: forall arch t st sh u tp
                    -> WT.BaseTypeRepr tp
                    -> IO (S.Expr t tp)
 templatedEvaluator (Evaluator e0) = \sym pf ops actuals locExpr tp -> do
-  let toTemplatedOperand :: forall s
-                          . AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st) s
-                         -> AllocatedOperand arch (S.ExprBuilder t st) s
-      toTemplatedOperand top =
-        case top of
-          ValueOperand s -> ValueOperand s
-          LocationOperand l s -> LocationOperand l s
-          CompoundOperand oc -> CompoundOperand oc
-
   let ops' = fmapFC toTemplatedOperand ops
   e0 sym (unTemplate pf) ops' actuals locExpr tp
+
+toTemplatedOperand :: AllocatedOperand (TemplatedArch arch) sym s
+                   -> AllocatedOperand arch sym s
+toTemplatedOperand top =
+  case top of
+    ValueOperand s -> ValueOperand s
+    LocationOperand l s -> LocationOperand l s
+    CompoundOperand oc -> CompoundOperand oc
 
 instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (OperandComponents arch sym)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
   show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
