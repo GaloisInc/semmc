@@ -30,6 +30,7 @@ import qualified Data.Parameterized.Map             as MapF
 import           Data.Parameterized.Pair            ( Pair(..) )
 import           Data.Parameterized.Some            ( Some(..) )
 import           Data.Parameterized.TraversableF
+import qualified Data.Parameterized.TraversableFC   as FC
 import           Data.Proxy                         ( Proxy(..) )
 import           GHC.TypeLits                       ( Symbol )
 import           Text.Printf                        ( printf )
@@ -186,9 +187,9 @@ instantiateFormula
     OperandAssignment { opAssnTaggedExprs = opTaggedExprs
                       , opAssnVars = Pair opVarsAssn opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
-
+    let allocOpers = FC.fmapFC A.taggedOperand opTaggedExprs
     let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp, Literals arch (SB t st))
-        rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
+        rewrite = FE.evaluateFunctions sym pf allocOpers newLitExprLookup (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
     -- Here, the formula rewriter walks over the formula AST and replaces calls
     -- to functions that we know something about with concrete values.  Most
     -- often, these functions are predicates testing something about operands

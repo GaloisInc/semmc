@@ -69,7 +69,6 @@ import qualified What4.Expr.Builder as S
 import           SemMC.Architecture
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula
-import qualified SemMC.Formula.Eval as SFE
 
 --
 -- First, an overview about how the templating system works.
@@ -102,8 +101,6 @@ type TemplatedOperandFn arch s = forall sym.
                               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                               -> IO (AllocatedOperand arch sym s,
                                      WrappedRecoverOperandFn sym (Operand arch s))
-
-data family TemplatedOperandContents arch :: Symbol -> *
 
 -- | An operand for 'TemplatedArch'.
 data TemplatedOperand (arch :: *) (s :: Symbol) =
@@ -149,6 +146,7 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
     TaggedExpr { taggedExpr :: AllocatedOperand arch sym s
                , taggedRecover :: WrappedRecoverOperandFn sym (Operand arch s)
                }
+  type OperandComponents (TemplatedArch arch) sym = OperandComponents arch sym
 
   unTagged te = case taggedExpr te of
     ValueOperand se -> Just se
@@ -167,14 +165,14 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
                                  ]
   -- error "locationFuncInterpretation shouldn't need to be used from a TemplatedArch"
 
-templatizeInterp :: (HasCallStack, OrdF (Location arch))
+templatizeInterp :: (HasCallStack, OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
                  => String
-                 -> FunctionInterpretation t arch
-                 -> FunctionInterpretation t (TemplatedArch arch)
+                 -> FunctionInterpretation t st arch
+                 -> FunctionInterpretation t st (TemplatedArch arch)
 templatizeInterp funcName fi =
   FunctionInterpretation { locationInterp = error ("Templated locationInterp for " ++ funcName)
                          , exprInterpName = exprInterpName fi
-                         , exprInterp = SFE.Evaluator (templatedEvaluator (exprInterp fi))
+                         , exprInterp = Evaluator (templatedEvaluator (exprInterp fi))
                          }
 
 {- Note [Evaluating Functions on Templated Operands]
@@ -223,27 +221,31 @@ that represent e.g. offsets in compound operands.
 
 templatedEvaluator :: forall arch t st sh u tp
                     . (OrdF (Location arch))
-                   => SFE.Evaluator arch t
+                   => Evaluator arch t st
                    -> S.ExprBuilder t st
                    -> ParameterizedFormula (S.ExprBuilder t st) (TemplatedArch arch) sh
-                   -> SL.List (TemplatedOperand arch) sh
+                   -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st)) sh
                    -> Ctx.Assignment (S.Expr t) u
+                   -> (forall ltp . Location (TemplatedArch arch) ltp -> IO (S.Expr t ltp))
                    -> WT.BaseTypeRepr tp
-                   -> IO (S.Expr t tp, MapF.MapF (Location (TemplatedArch arch)) (S.BoundVar (S.ExprBuilder t st)))
-templatedEvaluator (SFE.Evaluator e0) = \sym pf ops actuals tp -> do
-  let toTemplatedOperand :: forall s . TemplatedOperand arch s -> Operand arch s
+                   -> IO (S.Expr t tp)
+templatedEvaluator (Evaluator e0) = \sym pf ops actuals locExpr tp -> do
+  let toTemplatedOperand :: forall s
+                          . AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st) s
+                         -> AllocatedOperand arch (S.ExprBuilder t st) s
       toTemplatedOperand top =
-        case templOpLocation top of
-          Just loc -> undefined -- Location to Operand
-          Nothing -> error "Unexpected non-location operand as function argument"
-  let ops' = fmapFC toTemplatedOperand ops
-  (expr, lits) <- e0 sym (unTemplate pf) ops' actuals tp
-  return (expr, undefined)
+        case top of
+          ValueOperand s -> ValueOperand s
+          LocationOperand l s -> LocationOperand l s
+          CompoundOperand oc -> CompoundOperand oc
 
-instance Show (S.SymExpr sym (OperandType arch s)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
+  let ops' = fmapFC toTemplatedOperand ops
+  e0 sym (unTemplate pf) ops' actuals locExpr tp
+
+instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (OperandComponents arch sym)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
   show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
 
-instance ShowF (S.SymExpr sym) => ShowF (TaggedExpr (TemplatedArch arch) sym) where
+instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (S.SymExpr sym), ShowF (OperandComponents arch sym)) => ShowF (TaggedExpr (TemplatedArch arch) sym) where
   withShow (_ :: p (TaggedExpr (TemplatedArch arch) sym)) (_ :: q s) x =
     withShow (Proxy @(S.SymExpr sym)) (Proxy @(OperandType arch s)) x
 
@@ -327,9 +329,25 @@ data TemplatedFormula sym arch sh =
   TemplatedFormula { tfOperandExprs :: SL.List (TaggedExpr (TemplatedArch arch) sym) sh
                    , tfFormula :: Formula sym (TemplatedArch arch)
                    }
-deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (TemplatedFormula sym arch sh)
+deriving instance ( IsLocation (Location arch)
+                  , S.IsExprBuilder sym
+                  , ShowF (OperandComponents arch sym)
+                  , ShowF (Operand arch)
+                  , ShowF (TemplatedOperand arch)
+                  , ShowF (S.SymExpr sym)
+                  , ShowF (S.BoundVar sym)
+                  , ShowF (Location arch))
+                 => Show (TemplatedFormula sym arch sh)
 
-instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => ShowF (TemplatedFormula sym arch) where
+instance ( IsLocation (Location arch)
+         , S.IsExprBuilder sym
+         , ShowF (OperandComponents arch sym)
+         , ShowF (Operand arch)
+         , ShowF (TemplatedOperand arch)
+         , ShowF (S.SymExpr sym)
+         , ShowF (S.BoundVar sym)
+         , ShowF (Location arch))
+        => ShowF (TemplatedFormula sym arch) where
   showF = show
 
 -- | A specific type of operand of which you can generate templates.

@@ -21,6 +21,7 @@ module SemMC.Architecture (
   AllocatedOperand(..),
   Location,
   IsLocation(..),
+  Evaluator(..),
   FunctionInterpretation(..),
   Instruction,
   Operand,
@@ -48,11 +49,13 @@ import qualified Language.Haskell.TH as TH
 
 import           What4.BaseTypes
 import qualified What4.Interface as S
+import qualified What4.Expr as S
 
 import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location
-import           SemMC.Formula.Formula ( LocationFuncInterp )
-import           SemMC.Formula.Eval ( Evaluator )
+import           SemMC.Formula.Formula ( LocationFuncInterp, ParameterizedFormula )
+
+type Sym t st = S.ExprBuilder t st
 
 type ShapeRepr arch = SL.List (OperandTypeRepr arch)
 
@@ -64,13 +67,25 @@ type ArchRepr arch = (HR.HasRepr (Opcode arch (Operand arch)) (ShapeRepr arch))
 -- 'Architecture'.
 data AllocatedOperand arch sym (s :: Symbol) where
   -- | A simple operand that represents an immediate value
-  ValueOperand :: S.SymExpr sym (OperandType arch s) -> AllocatedOperand arch sym s
+  ValueOperand :: (OperandType arch s ~ BaseBVType n)
+               => S.SymExpr sym (OperandType arch s)
+               -> AllocatedOperand arch sym s
   -- | A value representing an operand backed by a Location
-  LocationOperand :: Location arch (OperandType arch s)
+  --
+  -- FIXME: Can we add a constraint indicating that this really is a bitvector type?
+  LocationOperand :: (OperandType arch s ~ BaseBVType n)
+                  => Location arch (OperandType arch s)
                   -> S.SymExpr sym (OperandType arch s)
                   -> AllocatedOperand arch sym s
   -- | A compound operand with an arch-specific representation
   CompoundOperand :: OperandComponents arch sym s -> AllocatedOperand arch sym s
+
+instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (OperandComponents arch sym)) => Show (AllocatedOperand arch sym s) where
+  show ao =
+    case ao of
+      ValueOperand s -> "ValueOperand " ++ show (S.printSymExpr s)
+      LocationOperand l s -> "LocationOperand " ++ showF l ++ " " ++ show (S.printSymExpr s)
+      CompoundOperand oc -> "CompoundOperand " ++ showF oc
 
 -- | An architecture is the top-level interface for specifying a semantics
 -- implementation. It has specific operands, opcodes, and state variables.
@@ -113,6 +128,9 @@ class (IsOperand (Operand arch),
   -- | Untag a tagged expression.
   unTagged :: TaggedExpr arch sym s -> Maybe (S.SymExpr sym (OperandType arch s))
 
+  -- | Extract the 'AllocatedOperand' from a 'TaggedExpr'
+  taggedOperand :: TaggedExpr arch sym s -> AllocatedOperand arch sym s
+
   -- | The uninterpreted functions referred to by this architecture
   uninterpretedFunctions :: proxy arch -> [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
 
@@ -154,7 +172,7 @@ class (IsOperand (Operand arch),
   -- | Functions used to simplify defined locations in parameterized formulas
   -- that are defined as functions of an input parameter into a concrete
   -- location
-  locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t arch)]
+  locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t st arch)]
 
   shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
 
@@ -166,8 +184,42 @@ showShapeRepr _ rep =
       (r SL.:< rep') -> let showr = operandTypeReprSymbol (Proxy @arch) r
                        in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
 
+-- | This type encapsulates an evaluator for operations represented as
+-- uninterpreted functions in semantics.  It may seem strange to interpret
+-- "uninterpreted functions" (UFs); we use UFs to represent operations in the
+-- semantics that can't be expressed using more typical SMT operations.  The most
+-- common examples in the codebase are:
+--
+-- 1) Extracting sub-components from compound operands in instructions (like a
+--    literal bundled with a shift amount)
+-- 2) Testing the number of a register (e.g., testing if a register is r0)
+--
+-- While the type isn't much of an abstraction barrier, it is convenient to hide
+-- the forall under a data constructor rather than a type alias.
+--
+-- * The 'Sym' is a symbolic expression builder from the what4 library
+-- * The 'ParameterizedFormula' is the formula whose semantics we are currently evaluating
+-- * The 'SL.List' contains the concrete operands to the instruction whose semantics we are evaluating
+-- * The 'Ctx.Assignment' is the list of operands of the uninterpreted function being interpreted
+-- * The 'BaseTypeRepr' is the expected return type of the uninterpreted function
+--
+-- Note that the type parameters for the *instruction* operand list and the
+-- *uninterpreted function* operand list (@sh@ and @u@, respectively) explicitly
+-- do /not/ match up, as the UF and instructions take different operands.
+--
+-- We need to pass the return type 'BaseTypeRepr' in so that we can know at the
+-- call site that the expression produced by the evaluator is correctly-typed.
+data Evaluator arch t st =
+  Evaluator (forall tp u sh
+               . Sym t st
+              -> ParameterizedFormula (Sym t st) arch sh
+              -> SL.List (AllocatedOperand arch (Sym t st)) sh
+              -> Ctx.Assignment (S.Expr t) u
+              -> (forall ltp . Location arch ltp -> IO (S.Expr t ltp))
+              -> BaseTypeRepr tp
+              -> IO (S.Expr t tp))
 
-data FunctionInterpretation t arch =
+data FunctionInterpretation t st arch =
   FunctionInterpretation { locationInterp :: LocationFuncInterp arch
                          -- ^ The function interpretation to apply to functions
                          -- appearing in location definition contexts (i.e., the
@@ -177,7 +229,7 @@ data FunctionInterpretation t arch =
                          -- to apply statically during formula translation (at
                          -- the value level) to eliminate an uninterpreted
                          -- function appearing in a semantics expression.
-                         , exprInterp :: Evaluator arch t
+                         , exprInterp :: Evaluator arch t st
                          -- ^ The evaluator to apply to uninterpreted functions
                          -- during formula instantiation (in Formula.Instantiate)
                          }
