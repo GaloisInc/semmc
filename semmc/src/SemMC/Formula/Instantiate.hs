@@ -19,9 +19,8 @@ module SemMC.Formula.Instantiate
   , paramToLocation
   ) where
 
-import           Control.Monad.State
 import           Data.Foldable                      ( foldlM, foldrM )
-import           Data.Maybe                         ( fromJust, isNothing )
+import           Data.Maybe                         ( isNothing )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context         as Ctx
 import           Data.Parameterized.Ctx
@@ -156,8 +155,6 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
       case A.locationInterp interp of
         LocationFuncInterp fn -> fn opVals wo rep
 
-type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
-
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each
 -- operand that are used within the returned formula.
@@ -188,7 +185,7 @@ instantiateFormula
                       , opAssnVars = Pair opVarsAssn opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
     let allocOpers = FC.fmapFC A.taggedOperand opTaggedExprs
-    let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp, Literals arch (SB t st))
+    let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp)
         rewrite = FE.evaluateFunctions sym pf allocOpers newLitExprLookup (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
     -- Here, the formula rewriter walks over the formula AST and replaces calls
     -- to functions that we know something about with concrete values.  Most
@@ -234,8 +231,7 @@ instantiateFormula
     -- will probably require an arch-specific data type to key the map (to
     -- represent "lenses" into the compound operands).  This system should
     -- probably subsume operandValues (and extend buildOpAssignment)
-    (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
-      fmap (`MapF.union` m) <$> rewrite e
+    defs' <- traverseF rewrite defs
 
     -- After rewriting, it should be the case that all references to the bound
     -- variables corresponding to compound operands (for which we don't have
@@ -253,7 +249,7 @@ instantiateFormula
             Nothing -> fail $ printf "parameter %s is not a valid location" (show definingParam)
           opVarsReplaced <- S.evalBoundVars sym definition opVarsAssn opExprsAssn
           litVarsReplaced <-
-            replaceLitVars sym newLitExprLookup litVars' opVarsReplaced
+            replaceLitVars sym newLitExprLookup litVars opVarsReplaced
           return (definingLoc, litVarsReplaced)
 
     newDefs <- U.mapFMapBothM instantiateDefn defs'
@@ -334,14 +330,3 @@ condenseFormulas :: forall t f st arch.
                  -> f (Formula (SB t st) arch)
                  -> IO (Formula (SB t st) arch)
 condenseFormulas sym = foldrM (sequenceFormulas sym) emptyFormula
-
-mapAccumLMF :: forall acc m t a .
-  (Monad m, TraversableF t) =>
-  acc ->
-  t a ->
-  (forall z. acc -> a z -> m (a z, acc)) ->
-  m (t a, acc)
-mapAccumLMF acc0 tea f = runStateT (traverseF go tea) acc0
-  where
-    go :: forall z . a z -> StateT acc m (a z)
-    go x = StateT $ \acc -> f acc x

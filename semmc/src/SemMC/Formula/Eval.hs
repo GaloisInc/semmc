@@ -27,7 +27,6 @@ module SemMC.Formula.Eval (
   ) where
 
 import           Control.Arrow                      ( first )
-import           Control.Monad.State
 import           Data.Functor.Product  ( Product(Pair) )
 import qualified Data.Parameterized.Context         as Ctx
 import qualified Data.Parameterized.List            as SL
@@ -278,10 +277,9 @@ evaluateFunctions
   -> (forall ltp . A.Location arch ltp -> IO (S.Expr t ltp))
   -> [(String, A.Evaluator arch t st)]
   -> S.Expr t tp
-  -> IO (S.Expr t tp, MapF.MapF (Location arch) (S.ExprBoundVar t))
+  -> IO (S.Expr t tp)
 evaluateFunctions sym pf operands locExpr rewriters elt =
-  flip runStateT MapF.empty
-    (evaluateFunctions' sym pf operands locExpr rewriters elt)
+  evaluateFunctions' sym pf operands locExpr rewriters elt
 
 -- | Recursively applies rewrite rules to all uninterpreted functions present in a formula.
 evaluateFunctions'
@@ -292,7 +290,7 @@ evaluateFunctions'
   -> (forall ltp . A.Location arch ltp -> IO (S.Expr t ltp))
   -> [(String, A.Evaluator arch t st)]
   -> S.Expr t tp
-  -> StateT (MapF.MapF (Location arch) (S.BoundVar (Sym t st))) IO (S.Expr t tp)
+  -> IO (S.Expr t tp)
 evaluateFunctions' sym pf operands locExpr rewriters e =
   case e of
     S.SemiRingLiteral {} -> return e
@@ -301,7 +299,7 @@ evaluateFunctions' sym pf operands locExpr rewriters e =
     S.StringExpr {} -> return e
     S.AppExpr a -> do
       app <- S.traverseApp (evaluateFunctions' sym pf operands locExpr rewriters) (S.appExprApp a)
-      liftIO $ S.sbMakeExpr sym app
+      S.sbMakeExpr sym app
     S.NonceAppExpr nonceApp -> do
       case S.nonceExprApp nonceApp of
         S.Forall{} -> error "evaluateFunctions: Forall Not implemented"
@@ -318,11 +316,9 @@ evaluateFunctions' sym pf operands locExpr rewriters e =
           assignment' <- traverseFC (evaluateFunctions' sym pf operands locExpr rs) assignment
           case lookup key rewriters of
             Just (A.Evaluator evaluator) -> do
-              e' <- liftIO $ evaluator sym pf operands assignment' locExpr (S.exprType e)
-              -- modify' (m' `MapF.union`)
-              pure e'
+              evaluator sym pf operands assignment' locExpr (S.exprType e)
             Nothing ->
-              liftIO $ applySymFn sym symFun assignment
+              applySymFn sym symFun assignment
 
 -- | Normalize the name of an uninterpreted function to the SimpleBuilder-friendly form
 --
