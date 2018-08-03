@@ -46,7 +46,7 @@ import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import qualified What4.Interface as S
-import qualified What4.Expr.Builder as S
+import qualified What4.Expr as S
 import           What4.BaseTypes
 
 import           Data.Type.List ( ToContextFwd )
@@ -94,9 +94,9 @@ data WrappedOperand arch sh s where
 -- | A wrapper around a function that can be called to simplify a 'FunctionParameter'
 -- parameter into a 'L.Location'.  These are defined per-architecture and are
 -- invoked by 'paramToLocation' during formula instantiation.
-data LocationFuncInterp arch where
-  LocationFuncInterp :: ( forall sh s tp sym . SL.List (AO.AllocatedOperand arch sym) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Maybe (L.Location arch tp))
-                     -> LocationFuncInterp arch
+data LocationFuncInterp t st arch where
+  LocationFuncInterp :: ( forall sh s tp . SL.List (AO.AllocatedOperand arch (S.ExprBuilder t st)) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Maybe (L.Location arch tp))
+                     -> LocationFuncInterp t st arch
 
 instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where
   show (OperandParameter repr idx) = printf "OperandParameter (%s) (%s)" (show repr) (show idx)

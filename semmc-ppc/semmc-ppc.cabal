@@ -20,6 +20,7 @@ library
                        SemMC.Architecture.PPC.Base
                        SemMC.Architecture.PPC.Eval
                        SemMC.Architecture.PPC.Location
+                       SemMC.Architecture.PPC.OperandComponents
   other-modules:       SemMC.Architecture.PPC32.ConcreteState
                        SemMC.Architecture.PPC64.ConcreteState
                        SemMC.Architecture.PPC32.Opcodes.Internal

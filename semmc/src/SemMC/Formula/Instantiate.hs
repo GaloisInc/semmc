@@ -140,9 +140,9 @@ replaceLitVars sym newExprs oldVars expr = do
 
 -- | Get the corresponding location of a parameter, if it actually corresponds
 -- to one.
-paramToLocation :: forall arch sh tp sym
+paramToLocation :: forall arch sh tp t st
                  . (A.Architecture arch)
-                => SL.List (A.AllocatedOperand arch sym) sh
+                => SL.List (A.AllocatedOperand arch (S.ExprBuilder t st)) sh
                 -> Parameter arch sh tp
                 -> Maybe (A.Location arch tp)
 paramToLocation opVals op@(OperandParameter _ idx) =

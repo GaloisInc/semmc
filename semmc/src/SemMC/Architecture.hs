@@ -172,7 +172,7 @@ data Evaluator arch t st =
               -> IO (S.Expr t tp))
 
 data FunctionInterpretation t st arch =
-  FunctionInterpretation { locationInterp :: LocationFuncInterp arch
+  FunctionInterpretation { locationInterp :: LocationFuncInterp t st arch
                          -- ^ The function interpretation to apply to functions
                          -- appearing in location definition contexts (i.e., the
                          -- 'F.Parameter' function type).

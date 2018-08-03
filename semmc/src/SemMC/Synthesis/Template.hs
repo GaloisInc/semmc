@@ -175,8 +175,8 @@ templatizeInterp fi =
                          , exprInterp = Evaluator (templatedEvaluator (exprInterp fi))
                          }
 
-templatedLocationInterp :: LocationFuncInterp arch
-                        -> SL.List (AllocatedOperand (TemplatedArch arch) sym) sh
+templatedLocationInterp :: LocationFuncInterp t st arch
+                        -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st)) sh
                         -> WrappedOperand (TemplatedArch arch) sh s
                         -> WT.BaseTypeRepr tp
                         -> Maybe (Location (TemplatedArch arch) tp)
