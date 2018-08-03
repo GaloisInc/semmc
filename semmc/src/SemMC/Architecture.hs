@@ -84,6 +84,10 @@ class (IsOperand (Operand arch),
   data TaggedExpr arch sym :: Symbol -> *
 
   -- | Untag a tagged expression.
+  --
+  -- Convert a 'TaggedExpr' into a 'S.SymExpr', if possible.  Simple operands
+  -- (standing in for single values or locations) can be converted into symbolic
+  -- expressions.  Compound operations cannot (and are not expected to be).
   unTagged :: TaggedExpr arch sym s -> Maybe (S.SymExpr sym (OperandType arch s))
 
   -- | Extract the 'AllocatedOperand' from a 'TaggedExpr'
@@ -97,16 +101,6 @@ class (IsOperand (Operand arch),
   --
   -- This is used during formula instantiation to find a symbolic expression for
   -- each operand.
-  operandValue :: forall proxy sym s.
-                  (S.IsSymExprBuilder sym,
-                   S.IsExprBuilder sym)
-               => proxy arch
-               -> sym
-               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
-               -> Operand arch s
-               -> IO (TaggedExpr arch sym s)
-
-  -- |
   --
   -- FIXME: Add a way to allocate (sharable) exprs for non-locations
   allocateSymExprsForOperand :: forall proxy sym s

@@ -153,22 +153,23 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
     LocationOperand _ se -> Just se
     CompoundOperand {} -> Nothing
 
+  taggedOperand = toTemplatedOperand . taggedExpr
+
   uninterpretedFunctions _ = uninterpretedFunctions (Proxy @arch)
 
-  operandValue _ sym locLookup (TemplatedOperand _ _ f) =
+  allocateSymExprsForOperand _ sym locLookup (TemplatedOperand _ _ f) =
     uncurry TaggedExpr <$> f sym locLookup
 
   operandToLocation _ (TemplatedOperand loc _ _) = loc
   shapeReprToTypeRepr _ = shapeReprToTypeRepr (Proxy @arch)
-  locationFuncInterpretation _ = [ (funcName, templatizeInterp funcName fi)
+  locationFuncInterpretation _ = [ (funcName, templatizeInterp fi)
                                  | (funcName, fi) <- locationFuncInterpretation (Proxy @arch)
                                  ]
 
 templatizeInterp :: (HasCallStack, OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
-                 => String
-                 -> FunctionInterpretation t st arch
+                 => FunctionInterpretation t st arch
                  -> FunctionInterpretation t st (TemplatedArch arch)
-templatizeInterp funcName fi =
+templatizeInterp fi =
   FunctionInterpretation { locationInterp = LocationFuncInterp (templatedLocationInterp (locationInterp fi))
                          , exprInterpName = exprInterpName fi
                          , exprInterp = Evaluator (templatedEvaluator (exprInterp fi))
@@ -180,52 +181,8 @@ templatedLocationInterp :: LocationFuncInterp arch
                         -> WT.BaseTypeRepr tp
                         -> Maybe (Location (TemplatedArch arch) tp)
 templatedLocationInterp (LocationFuncInterp fi) operands (WrappedOperand orep ix) rep = do
-  let ops' = fmapFC toTemplatedOperand operands
+  let ops' = fmapFC fromTemplatedOperand operands
   fi ops' (WrappedOperand orep ix) rep
-
-{- Note [Evaluating Functions on Templated Operands]
-
-The problem here is that we need to be able to call the evaluator on
-TemplatedFormulas.  In this case, the *operands* list is a list of
-TemplatedOperand, which is not very closely related to a normal operand, and in
-fact might be missing entirely for symbolic operands.
-
-That said, we might be able to evaluate the necessary cases.
-
-UFs should *only* appear in cases where the TemplatedOperand actually has a
-concrete location.  SO.  Can we provide some extra argument or infrastructure to
-unwrap the TemplatedOperand (assert that it has a Just Location of some kind)
-and then apply the non-templated evaluator?
-
-It doesn't seem like it will be possible to write the "location to operand"
-translator for types like Memri, which are logically a Gpr + offset bundle.  The
-templated operand doesn't have a simple Location that we can translate (it
-actually has a Nothing).  Is there more information we can include in the
-templated operand to make this possible?  It seems like we could include the
-actual Operand type that we could just grab from the TemplatedOperand and use
-in-place.  If there is none, we could have a more structured representation with
-a good error message (that should never be seen if all else goes according to
-plan).  There is enough information at the template definition sites to actually
-construct this value.
-
-Note: templOpLocation doesn't seem to be used, so replacing that with something
-more useful here would probably be great.  Actually, it is used in a few places,
-but they could easily be replaced with a call to operandToLocation (of the
-underlying architecture) to achieve the same effect.
-
-It looks like there is a more fundamental problem: the evaluation of functions
-inside of the formula instantiator happens *before* the IO action to allocate
-symbolic variables in templates (operandValue) is ever executed.  Fundamentally,
-this means that we can't implement the interpreters for templated instructions.
-However, it looks like we can re-arrange instantiateFormula to call
-buildOpAsignment earlier - this would let us fully instantiate the symbolic
-variables that make up a templated instruction *before* we do our function
-evaluation.  We still need a place to store the generated variables, but we
-should be able to modify the definition of OperandValue to support saving a
-parallel structure to each operand that will let us store symbolic variables
-that represent e.g. offsets in compound operands.
-
--}
 
 templatedEvaluator :: forall arch t st sh u tp
                     . (OrdF (Location arch))
@@ -238,12 +195,20 @@ templatedEvaluator :: forall arch t st sh u tp
                    -> WT.BaseTypeRepr tp
                    -> IO (S.Expr t tp)
 templatedEvaluator (Evaluator e0) = \sym pf ops actuals locExpr tp -> do
-  let ops' = fmapFC toTemplatedOperand ops
+  let ops' = fmapFC fromTemplatedOperand ops
   e0 sym (unTemplate pf) ops' actuals locExpr tp
 
-toTemplatedOperand :: AllocatedOperand (TemplatedArch arch) sym s
-                   -> AllocatedOperand arch sym s
+toTemplatedOperand :: AllocatedOperand arch sym s
+                   -> AllocatedOperand (TemplatedArch arch) sym s
 toTemplatedOperand top =
+  case top of
+    ValueOperand s -> ValueOperand s
+    LocationOperand l s -> LocationOperand l s
+    CompoundOperand oc -> CompoundOperand oc
+
+fromTemplatedOperand :: AllocatedOperand (TemplatedArch arch) sym s
+                     -> AllocatedOperand arch sym s
+fromTemplatedOperand top =
   case top of
     ValueOperand s -> ValueOperand s
     LocationOperand l s -> LocationOperand l s
@@ -466,3 +431,47 @@ genTemplatedFormula :: (TemplateConstraints arch
                     -> IO (TemplatedInstructionFormula (S.ExprBuilder t st) arch)
 genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
   TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist
+
+{- Note [Evaluating Functions on Templated Operands]
+
+The problem here is that we need to be able to call the evaluator on
+TemplatedFormulas.  In this case, the *operands* list is a list of
+TemplatedOperand, which is not very closely related to a normal operand, and in
+fact might be missing entirely for symbolic operands.
+
+That said, we might be able to evaluate the necessary cases.
+
+UFs should *only* appear in cases where the TemplatedOperand actually has a
+concrete location.  SO.  Can we provide some extra argument or infrastructure to
+unwrap the TemplatedOperand (assert that it has a Just Location of some kind)
+and then apply the non-templated evaluator?
+
+It doesn't seem like it will be possible to write the "location to operand"
+translator for types like Memri, which are logically a Gpr + offset bundle.  The
+templated operand doesn't have a simple Location that we can translate (it
+actually has a Nothing).  Is there more information we can include in the
+templated operand to make this possible?  It seems like we could include the
+actual Operand type that we could just grab from the TemplatedOperand and use
+in-place.  If there is none, we could have a more structured representation with
+a good error message (that should never be seen if all else goes according to
+plan).  There is enough information at the template definition sites to actually
+construct this value.
+
+Note: templOpLocation doesn't seem to be used, so replacing that with something
+more useful here would probably be great.  Actually, it is used in a few places,
+but they could easily be replaced with a call to operandToLocation (of the
+underlying architecture) to achieve the same effect.
+
+It looks like there is a more fundamental problem: the evaluation of functions
+inside of the formula instantiator happens *before* the IO action to allocate
+symbolic variables in templates (operandValue) is ever executed.  Fundamentally,
+this means that we can't implement the interpreters for templated instructions.
+However, it looks like we can re-arrange instantiateFormula to call
+buildOpAsignment earlier - this would let us fully instantiate the symbolic
+variables that make up a templated instruction *before* we do our function
+evaluation.  We still need a place to store the generated variables, but we
+should be able to modify the definition of OperandValue to support saving a
+parallel structure to each operand that will let us store symbolic variables
+that represent e.g. offsets in compound operands.
+
+-}

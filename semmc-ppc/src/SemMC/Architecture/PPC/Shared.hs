@@ -172,15 +172,13 @@ concreteTemplatedOperand op loc x =
                      }
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
-          expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
-          return (expr, T.WrappedRecoverOperandFn $ const (return (op x)))
+          ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
+          return (ao, T.WrappedRecoverOperandFn $ const (return (op x)))
 
-symbolicTemplatedOperand :: forall arch s (bits :: Nat) extended
-                          . (A.OperandType arch s ~ BaseBVType extended,
+symbolicTemplatedOperand :: forall arch s (bits :: Nat)
+                          . (A.OperandType arch s ~ BaseBVType bits,
                              KnownNat bits,
-                             KnownNat extended,
-                             1 <= bits,
-                             bits <= extended)
+                             1 <= bits)
                          => Proxy bits
                          -> Bool
                          -> String
@@ -194,17 +192,8 @@ symbolicTemplatedOperand Proxy signed name constr =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
-          let bitsRepr = knownNat @bits
-              extendedRepr = knownNat @extended
-          extended <- case S.testNatCases bitsRepr extendedRepr of
-            S.NatCaseLT S.LeqProof ->
-              if signed
-              then S.bvSext sym knownNat v
-              else S.bvZext sym knownNat v
-            S.NatCaseEQ -> return v
-            S.NatCaseGT S.LeqProof -> error "impossible"
           let recover evalFn = constr <$> evalFn v
-          return (extended, T.WrappedRecoverOperandFn recover)
+          return (A.ValueOperand v, T.WrappedRecoverOperandFn recover)
 
 data MemoryAccess
   = Base
@@ -216,8 +205,8 @@ evalMemReg :: ( A.Operand arch ~ PPC.Operand
               , A.IsLocation (Location arch)
               )
            => MemoryAccess
-           -> E.Evaluator arch t
-evalMemReg access = E.Evaluator (rewrite access)
+           -> A.Evaluator arch t st
+evalMemReg access = A.Evaluator (rewrite access)
 
 isR0
   :: forall t st sh u tp arch . (A.Location arch ~ Location arch, A.Operand arch ~ PPC.Operand) =>
@@ -383,7 +372,7 @@ boundVarElemIndex x xs = do
 
 locationFuncInterpretation
   :: (A.IsLocation (Location ppc), A.Location ppc ~ Location ppc, A.Operand ppc ~ PPC.Operand)
-  => [(String, A.FunctionInterpretation t ppc)]
+  => [(String, A.FunctionInterpretation t st ppc)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemriReg
                                                , A.exprInterpName = 'E.interpMemriRegExtractor
@@ -410,7 +399,7 @@ locationFuncInterpretation =
                                                   , A.exprInterp = evalMemReg Offset
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'E.interpIsR0
-                                           , A.exprInterp = E.Evaluator isR0
+                                           , A.exprInterp = A.Evaluator isR0
                                            , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
                                            })
   ]
