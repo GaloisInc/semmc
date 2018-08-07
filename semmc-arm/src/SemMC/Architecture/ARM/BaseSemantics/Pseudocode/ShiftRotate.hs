@@ -40,7 +40,7 @@ import SemMC.DSL
 -- * 0b001 : SRType_LSR
 -- * 0b010 : SRType_ASR
 -- * 0b011 : SRType_ROR
--- * 0b100 : SRType_RRX
+-- * 0b111 : SRType_RRX
 --
 -- Note that there is an unused bit pattern, which is unfortunate but unavoidable
 newtype SRType = SRType { unSRType :: Expr 'TBV }
@@ -50,7 +50,7 @@ srtLSL = SRType (LitBV 3 0b000)
 srtLSR = SRType (LitBV 3 0b001)
 srtASR = SRType (LitBV 3 0b010)
 srtROR = SRType (LitBV 3 0b011)
-srtRRX = SRType (LitBV 3 0b100)
+srtRRX = SRType (LitBV 3 0b111)
 
 -- | Represents the result of 'decodeImmShift', and is actually a pair of the
 -- SRType (3 bits) followed by the shift amount (32 bits).
@@ -109,11 +109,12 @@ decodeImmShift :: (HasCallStack) =>
                -> Expr 'TBV  -- ^ 5-bit immediate value to be decoded
                -> ImmShift
 decodeImmShift ty imm5 = ImmShift $ "immShift" =:
-  cases [ (bveq ty (LitBV 2 0b00), concat (LitBV 3 0b000) (zext imm5))
-        , (bveq ty (LitBV 2 0b01), concat (LitBV 3 0b001) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))
-        , (bveq ty (LitBV 2 0b10), concat (LitBV 3 0b010) (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)))
-        , (bveq imm5 (LitBV 5 0b00000), concat (LitBV 3 0b100) (naturalLitBV 1))
-        ] (concat (LitBV 3 0b011) (zext imm5))
+  let imm1_32 = (ite (bveq (LitBV 5 0b00000) imm5) (naturalLitBV 32) (zext imm5)) in
+  cases [ (bveq ty (LitBV 2 0b00), concat (unSRType srtLSL) (zext imm5))
+        , (bveq ty (LitBV 2 0b01), concat (unSRType srtLSR) imm1_32)
+        , (bveq ty (LitBV 2 0b10), concat (unSRType srtASR) imm1_32)
+        , (bveq imm5 (LitBV 5 0b00000), concat (unSRType srtRRX) (naturalLitBV 1))
+        ] (concat (unSRType srtROR) (zext imm5))
 
 -- | The Shift function from the ARM manual (v8).
 shift :: (HasCallStack) => Expr 'TBV -> SRType -> Expr 'TBV -> Expr 'TBV
@@ -131,10 +132,10 @@ shift value srtype shift_n carry_in =
 shiftCImpl :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 shiftCImpl value shift_t shift_n c =
   cases [ (bveq shift_n (naturalLitBV 0x0), concat c value)
-        , (bveq shift_t (LitBV 3 0b000), lslC value shift_n)
-        , (bveq shift_t (LitBV 3 0b001), lsrC value shift_n)
-        , (bveq shift_t (LitBV 3 0b010), asrC value shift_n)
-        , (bveq shift_t (LitBV 3 0b011), rorC value shift_n)
+        , (bveq shift_t (unSRType srtLSL), lslC value shift_n)
+        , (bveq shift_t (unSRType srtLSR), lsrC value shift_n)
+        , (bveq shift_t (unSRType srtASR), asrC value shift_n)
+        , (bveq shift_t (unSRType srtROR), rorC value shift_n)
         ] (rrxC value c)
 
 shiftCLF :: LibraryFunctionDef '(['TBV, 'TBV, 'TBV, 'TBV], 'TBV)
