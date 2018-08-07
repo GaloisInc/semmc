@@ -448,7 +448,7 @@ boBit bo n = Data.Bits.testBit bo (4-n)
 
 -- | See 'boBit'.
 boBitDynamic :: Expr 'TBV -> Integer -> Expr 'TBool
-boBitDynamic bo n = testBitDynamic32 (zext' 32 bo) (LitBV 32 (4-n))
+boBitDynamic bo n = testBitDynamic bo (LitBV 5 (4-n))
 
 generic_ctr_ok :: (?bitSize :: BitSize) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
 generic_ctr_ok =
