@@ -325,8 +325,10 @@ genericBranchConditionalLNK lk bo bi = do
 
   let nextInsn = bvadd (Loc ip) (naturalLitBV 0x4)
   let target = concat (highBits (bitSizeValue ?bitSize - 2) (Loc lnk)) (LitBV 2 0x0)
+  let newCtr = ite (boBitDynamic bo 2) (Loc ctr) (bvsub (Loc ctr) (naturalLitBV 1))
 
-  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo (Loc ctr))) target nextInsn)
+  defLoc ctr newCtr
+  defLoc ip (ite (andp (generic_cond_ok bo bi) (generic_ctr_ok bo newCtr)) target nextInsn)
 
   when (lk == Link) $ do
     defLoc lnk nextInsn
