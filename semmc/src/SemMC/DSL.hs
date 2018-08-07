@@ -647,7 +647,7 @@ binTestBuiltin s e1 e2
 
 -- | Test if a specific bit is set
 testBit :: Int -> Expr 'TBV -> Expr 'TBool
-testBit n = bveq (LitBV 1 0) . extract n n
+testBit n = bveq (LitBV 1 1) . extract n n
 
 -- | Test a dynamically-chosen bit number (i.e., the bit number to test is an
 -- expr and not an 'Int').
