@@ -26,8 +26,9 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some (..) )
 import qualified Lang.Crucible.Backend as CRUB
-import qualified Lang.Crucible.Backend.Simple as SB
-import qualified What4.Expr.Builder as SB
+import qualified Lang.Crucible.Backend.Online as SB
+import qualified What4.Expr as SB
+import qualified What4.Protocol.Online as WPO
 
 import qualified Dismantle.PPC as DPPC
 
@@ -41,10 +42,11 @@ import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
 import qualified SemMC.Formula as F
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, unTemplate )
 import qualified SemMC.Synthesis as SemMC
-import qualified SemMC.Synthesis.Core as SemMC
 import qualified SemMC.Util as U
 
 import qualified SemMC.Architecture.PPC32 as PPC32
+
+import           Prelude
 
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
@@ -115,11 +117,11 @@ loadProgramBytes fp = do
                    [] -> fail "Couldn't find .text section in the binary"
   return (elf, textSection)
 
-loadBaseSet :: U.HasLogCfg
+loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver t solver)
             => [(Some (DPPC.Opcode DPPC.Operand), BS8.ByteString)]
-            -> SB.ExprBuilder t SB.SimpleBackendState
-            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.ExprBuilder t SB.SimpleBackendState) PPC32.PPC),
-                   SemMC.SynthesisEnvironment (SB.SimpleBackend t) PPC32.PPC)
+            -> SB.OnlineBackend t solver -- SB.ExprBuilder t st -- SB.SimpleBackendState
+            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.OnlineBackend t solver) PPC32.PPC),
+                   SemMC.SynthesisEnvironment (SB.OnlineBackend t solver) PPC32.PPC)
 loadBaseSet ops sym = do
   baseSet <- F.loadFormulas sym F.emptyLibrary ops
   let plainBaseSet = makePlain baseSet
@@ -184,35 +186,35 @@ mainWith r opts = do
   -- Set up the synthesis side of things
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
-  sym <- SB.newSimpleBackend r
-  (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
+  SB.withYicesOnlineBackend r $ \sym -> do
+    (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
 
-  -- Turn it into a formula
-  formula <- symbolicallyExecute sym plainBaseSet insns
-  putStrLn ""
-  putStrLn "Here's the formula for the whole program:"
-  print formula
+    -- Turn it into a formula
+    formula <- symbolicallyExecute sym plainBaseSet insns
+    putStrLn ""
+    putStrLn "Here's the formula for the whole program:"
+    print formula
 
-  -- Look for an equivalent program!
-  putStrLn ""
-  putStrLn "Starting synthesis..."
-  newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth synthEnv formula
-  putStrLn ""
-  putStrLn "Here's the equivalent program:"
-  putStrLn (printProgram newInsns)
+    -- Look for an equivalent program!
+    putStrLn ""
+    putStrLn "Starting synthesis..."
+    newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth synthEnv formula
+    putStrLn ""
+    putStrLn "Here's the equivalent program:"
+    putStrLn (printProgram newInsns)
 
-  -- Optionally append a return instruction so that we can call into this
-  -- function.
-  let retInsn = DPPC.Instruction DPPC.BLR DPPC.Nil
-  newInsns' <- case oAppendReturn opts of
-    False -> return newInsns
-    True -> return (newInsns ++ [retInsn])
-  let newObjBytes = rewriteElfText textSection elf newInsns'
-  BSL.writeFile (oOutputFile opts) newObjBytes
+    -- Optionally append a return instruction so that we can call into this
+    -- function.
+    let retInsn = DPPC.Instruction DPPC.BLR DPPC.Nil
+    newInsns' <- case oAppendReturn opts of
+      False -> return newInsns
+      True -> return (newInsns ++ [retInsn])
+    let newObjBytes = rewriteElfText textSection elf newInsns'
+    BSL.writeFile (oOutputFile opts) newObjBytes
 
-  case oOriginalWithReturn opts of
-    Nothing -> return ()
-    Just owr -> do
-      let origWithReturn = insns ++ [retInsn]
-          origObjBytes = rewriteElfText textSection elf origWithReturn
-      BSL.writeFile owr origObjBytes
+    case oOriginalWithReturn opts of
+      Nothing -> return ()
+      Just owr -> do
+        let origWithReturn = insns ++ [retInsn]
+            origObjBytes = rewriteElfText textSection elf origWithReturn
+        BSL.writeFile owr origObjBytes
