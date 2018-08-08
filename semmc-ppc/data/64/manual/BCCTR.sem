@@ -7,10 +7,13 @@
  (defs
   (('IP
    (ite
-    ((_ call "uf.test_bit_dynamic.32")
-     'CR
-     ((_ zero_extend 27)
-      (bvsub #b11111 bi)))
+    (bveq
+     #b1
+     ((_ extract 0 0)
+      (bvlshr
+       'CR
+       ((_ zero_extend 27)
+        (bvsub #b11111 bi)))))
     (concat
      ((_ extract 63 2)
       'CTR)
