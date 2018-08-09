@@ -192,10 +192,10 @@ symbolicTemplatedOperand Proxy _signed name constr =
           let recover evalFn = constr <$> evalFn v
           return (A.ValueOperand v, T.RecoverOperandFn recover)
 
-isR0 :: forall t st sh u tp arch sym
+isR0 :: forall t st fs sh u tp arch sym
       . ( A.Location arch ~ Location arch
         , A.Operand arch ~ PPC.Operand
-        , sym ~ S.ExprBuilder t st
+        , sym ~ S.ExprBuilder t st fs
         )
      => sym
      -> F.ParameterizedFormula sym arch sh
@@ -234,10 +234,10 @@ locationFuncInterpretation
   :: ( A.IsLocation (Location ppc)
      , A.Location ppc ~ Location ppc
      , A.Operand ppc ~ PPC.Operand
-     , sym ~ S.ExprBuilder t st
+     , sym ~ S.ExprBuilder t st fs
      , A.OperandComponents ppc sym ~ OperandComponents ppc sym
      )
-  => [(String, A.FunctionInterpretation t st ppc)]
+  => [(String, A.FunctionInterpretation t st fs ppc)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemriReg
                                                , A.exprInterpName = 'E.interpMemriRegExtractor

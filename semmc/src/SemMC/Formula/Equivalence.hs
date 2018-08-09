@@ -57,11 +57,11 @@ data EquivalenceResult arch ex
 deriving instance (ShowF (A.Location arch), ShowF ex) => Show (EquivalenceResult arch ex)
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Elt's.
-formulasEquivSym :: forall arch t solver .
+formulasEquivSym :: forall arch t solver fs .
                     (A.Architecture arch, WPO.OnlineSolver t solver)
-                 => CBO.OnlineBackend t solver
-                 -> F.Formula (CBO.OnlineBackend t solver) arch
-                 -> F.Formula (CBO.OnlineBackend t solver) arch
+                 => CBO.OnlineBackend t solver fs
+                 -> F.Formula (CBO.OnlineBackend t solver fs) arch
+                 -> F.Formula (CBO.OnlineBackend t solver fs) arch
                  -> IO (EquivalenceResult arch (Expr t))
 formulasEquivSym sym =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (Expr t tp)
@@ -69,11 +69,11 @@ formulasEquivSym sym =
   in formulasEquiv eval sym
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Value's.
-formulasEquivConcrete :: forall arch t solver .
+formulasEquivConcrete :: forall arch t solver fs .
                          (A.Architecture arch, WPO.OnlineSolver t solver)
-                      => CBO.OnlineBackend t solver
-                      -> F.Formula (CBO.OnlineBackend t solver) arch
-                      -> F.Formula (CBO.OnlineBackend t solver) arch
+                      => CBO.OnlineBackend t solver fs
+                      -> F.Formula (CBO.OnlineBackend t solver fs) arch
+                      -> F.Formula (CBO.OnlineBackend t solver fs) arch
                       -> IO (EquivalenceResult arch V.Value)
 formulasEquivConcrete =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (V.Value tp)
@@ -92,12 +92,12 @@ allPairwiseEquality sym = foldrM andPairEquality (S.truePred sym)
 
 -- | Check the equivalence of two formulas, using the first parameter to extract
 -- expression values for the counterexample.
-formulasEquiv :: forall t solver arch ex.
+formulasEquiv :: forall t solver fs arch ex.
                  (A.Architecture arch, WPO.OnlineSolver t solver)
               => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
-              -> CBO.OnlineBackend t solver
-              -> F.Formula (CBO.OnlineBackend t solver) arch
-              -> F.Formula (CBO.OnlineBackend t solver) arch
+              -> CBO.OnlineBackend t solver fs
+              -> F.Formula (CBO.OnlineBackend t solver fs) arch
+              -> F.Formula (CBO.OnlineBackend t solver fs) arch
               -> IO (EquivalenceResult arch ex)
 formulasEquiv
   eval
@@ -166,7 +166,7 @@ formulasEquiv
 -- We are requiring the online solver here, as most of this library requires
 -- lots of small queries.
 checkSat :: (WPO.OnlineSolver t solver)
-         => CBO.OnlineBackend t solver
+         => CBO.OnlineBackend t solver fs
          -> WE.BoolExpr t
          -> (SatResult (GroundEvalFn t) -> IO a)
          -> IO a

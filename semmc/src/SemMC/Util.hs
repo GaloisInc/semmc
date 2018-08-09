@@ -122,6 +122,11 @@ groundValToExpr sym (BaseBVRepr w) val = S.bvLit sym w val
 groundValToExpr sym BaseNatRepr val = S.natLit sym val
 groundValToExpr sym BaseIntegerRepr val = S.intLit sym val
 groundValToExpr sym BaseRealRepr val = S.realLit sym val
+groundValToExpr sym (BaseFloatRepr fpp@(FloatingPointPrecisionRepr eb sb)) val
+  | LeqProof <- leqTrans (LeqProof @1 @2) (leqProof (knownNat @2) eb)
+  , LeqProof <- leqTrans (LeqProof @1 @2) (leqProof (knownNat @2) sb)
+  , LeqProof <- leqAddPos eb sb
+  = S.floatFromBinary sym fpp =<< S.bvLit sym (addNat eb sb) val
 groundValToExpr sym BaseComplexRepr val = S.mkComplexLit sym val
 groundValToExpr sym (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
   base' <- groundValToExpr sym elemTp base
