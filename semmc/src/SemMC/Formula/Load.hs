@@ -42,7 +42,7 @@ import qualified SemMC.Log as L
 import qualified SemMC.Util as U
 
 formulaEnv :: forall sym arch
-            . (A.Architecture arch, CRU.IsExprBuilder sym, CRUB.IsSymInterface sym)
+            . (A.Architecture arch, CRU.IsSymExprBuilder sym)
            => Proxy arch
            -> sym
            -> IO (FE.FormulaEnv sym arch)
@@ -68,8 +68,7 @@ instance E.Exception FormulaParseError
 --
 -- This will throw an exception if any of the formula strings is malformed
 loadFormulas :: forall sym arch a
-                . ( CRU.IsExprBuilder sym
-                  , CRUB.IsSymInterface sym
+                . ( CRU.IsSymExprBuilder sym
                   , A.Architecture arch
                   , HR.HasRepr a (A.ShapeRepr arch)
                   , ShowF a
@@ -115,8 +114,7 @@ loadFormulas sym lib contents = do
 -- The funDir argument gives a directory whose defined functions will be
 -- loaded. All files with extension `.fun` in this directory will be loaded.
 loadFormulasFromFiles :: forall sym arch a
-                       . ( CRU.IsExprBuilder sym
-                         , CRUB.IsSymInterface sym
+                       . ( CRU.IsSymExprBuilder sym
                          , A.Architecture arch
                          , HR.HasRepr a (A.ShapeRepr arch)
                          , MapF.OrdF a

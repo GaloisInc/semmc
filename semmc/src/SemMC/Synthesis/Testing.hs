@@ -29,7 +29,7 @@ data SynthResult = Equivalent
                  | Timeout
                  deriving (Show, Eq)
 
-synthesizeAndCheck :: forall proxy arch t solver
+synthesizeAndCheck :: forall proxy arch t solver fs
                     . ( A.Architecture arch
                       , A.Architecture (SS.TemplatedArch arch)
                       , A.ArchRepr arch
@@ -38,8 +38,8 @@ synthesizeAndCheck :: forall proxy arch t solver
                       , SS.TemplatableOperand arch
                       )
                    => proxy arch
-                   -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver) arch
-                   -> MapF.MapF (A.Opcode arch (A.Operand arch)) (SF.ParameterizedFormula (CBO.OnlineBackend t solver) arch)
+                   -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
+                   -> MapF.MapF (A.Opcode arch (A.Operand arch)) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) arch)
                    -> (forall a . A.Instruction arch -> (forall sh . A.Opcode arch (A.Operand arch) sh -> PL.List (A.Operand arch) sh -> a) -> a)
                    -> [A.Instruction arch]
                    -> IO SynthResult
@@ -62,23 +62,23 @@ synthesizeAndCheck proxy env sem matchInsn p = do
                 SF.Timeout -> return Timeout
     Nothing -> return MissingSemantics
 
-symbolicallySimulateProgram :: forall proxy t solver arch
+symbolicallySimulateProgram :: forall proxy t solver fs arch
                              . ( A.Architecture arch
                                , WPO.OnlineSolver t solver
                                )
                             => proxy arch
-                            -> CBO.OnlineBackend t solver
-                            -> MapF.MapF (A.Opcode arch (A.Operand arch)) (SF.ParameterizedFormula (CBO.OnlineBackend t solver) arch)
+                            -> CBO.OnlineBackend t solver fs
+                            -> MapF.MapF (A.Opcode arch (A.Operand arch)) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) arch)
                             -> (forall a . A.Instruction arch -> (forall sh . A.Opcode arch (A.Operand arch) sh -> PL.List (A.Operand arch) sh -> a) -> a)
                             -> [A.Instruction arch]
-                            -> IO (Maybe (SF.Formula (CBO.OnlineBackend t solver) arch))
+                            -> IO (Maybe (SF.Formula (CBO.OnlineBackend t solver fs) arch))
 symbolicallySimulateProgram _ sym sem matchInsn p = do
   mfs <- mapM toSemantics p
   case sequence mfs of
     Nothing -> return Nothing
     Just fs -> Just <$> F.foldrM (SF.sequenceFormulas sym) SF.emptyFormula fs
   where
-    toSemantics :: A.Instruction arch -> IO (Maybe (SF.Formula (CBO.OnlineBackend t solver) arch))
+    toSemantics :: A.Instruction arch -> IO (Maybe (SF.Formula (CBO.OnlineBackend t solver fs) arch))
     toSemantics i = matchInsn i $ \opc operands -> do
       case MapF.lookup opc sem of
         Nothing -> return Nothing

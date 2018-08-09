@@ -5,4 +5,4 @@ module SemMC.Symbolic (
 import qualified Lang.Crucible.Backend.Online as CRU
 
 -- | Symbolic something?
-type Sym t solver = CRU.OnlineBackend t solver
+type Sym t solver fs = CRU.OnlineBackend t solver fs

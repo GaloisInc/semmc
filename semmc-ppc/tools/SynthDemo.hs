@@ -96,11 +96,11 @@ makePlain = MapF.foldrWithKey f MapF.empty
           -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula sym arch)
         f op pf = MapF.insert op (unTemplate pf)
 
-instantiateFormula' :: (Architecture arch, CRUB.IsBoolSolver (SB.ExprBuilder t st))
-                    => SB.ExprBuilder t st
-                    -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.ExprBuilder t st) arch)
+instantiateFormula' :: (Architecture arch, CRUB.IsBoolSolver (SB.ExprBuilder t st fs))
+                    => SB.ExprBuilder t st fs
+                    -> MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (SB.ExprBuilder t st fs) arch)
                     -> Instruction arch
-                    -> IO (F.Formula (SB.ExprBuilder t st) arch)
+                    -> IO (F.Formula (SB.ExprBuilder t st fs) arch)
 instantiateFormula' sym m (DPPC.Instruction op params) = do
   case MapF.lookup op m of
     Just pf -> snd <$> F.instantiateFormula sym pf params
@@ -119,9 +119,9 @@ loadProgramBytes fp = do
 
 loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver t solver)
             => [(Some (DPPC.Opcode DPPC.Operand), BS8.ByteString)]
-            -> SB.OnlineBackend t solver -- SB.ExprBuilder t st -- SB.SimpleBackendState
-            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.OnlineBackend t solver) PPC32.PPC),
-                   SemMC.SynthesisEnvironment (SB.OnlineBackend t solver) PPC32.PPC)
+            -> SB.OnlineBackend t solver fs -- SB.ExprBuilder t st fs -- SB.SimpleBackendState
+            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.OnlineBackend t solver fs) PPC32.PPC),
+                   SemMC.SynthesisEnvironment (SB.OnlineBackend t solver fs) PPC32.PPC)
 loadBaseSet ops sym = do
   baseSet <- F.loadFormulas sym F.emptyLibrary ops
   let plainBaseSet = makePlain baseSet
@@ -129,14 +129,14 @@ loadBaseSet ops sym = do
   return (plainBaseSet, synthEnv)
 
 symbolicallyExecute
-  :: (Architecture arch, Traversable t1, CRUB.IsBoolSolver (SB.ExprBuilder t2 st))
-  => SB.ExprBuilder t2 st
+  :: (Architecture arch, Traversable t1, CRUB.IsBoolSolver (SB.ExprBuilder t2 st fs))
+  => SB.ExprBuilder t2 st fs
   -> MapF.MapF
        (SemMC.Architecture.Opcode arch (SemMC.Architecture.Operand arch))
-       (F.ParameterizedFormula (SB.ExprBuilder t2 st) arch)
+       (F.ParameterizedFormula (SB.ExprBuilder t2 st fs) arch)
   -> t1 (DPPC.GenericInstruction
            (SemMC.Architecture.Opcode arch) (SemMC.Architecture.Operand arch))
-  -> IO (F.Formula (SB.ExprBuilder t2 st) arch)
+  -> IO (F.Formula (SB.ExprBuilder t2 st fs) arch)
 symbolicallyExecute sym plainBaseSet insns = do
   formulas <- traverse (instantiateFormula' sym plainBaseSet) insns
   F.foldrM (F.sequenceFormulas sym) F.emptyFormula formulas

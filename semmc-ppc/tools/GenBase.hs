@@ -76,7 +76,7 @@ main = O.execParser optParser >>= mainWithOptions
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
-  sym <- S.newSimpleBackend ng
+  sym <- S.newSimpleBackend @_ @(S.Flags S.FloatIEEE) ng
   D.createDirectoryIfMissing True (oManualDir opts)
   D.createDirectoryIfMissing True (oBaseDir opts)
   D.createDirectoryIfMissing True (oPseudoDir opts)

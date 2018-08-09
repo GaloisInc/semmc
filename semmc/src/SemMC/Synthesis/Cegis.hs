@@ -91,9 +91,9 @@ askTarget = reader cpTarget
 -- machine state.
 evalExpression :: (IsLocation loc)
                => MapF.MapF loc (WE.ExprBoundVar t)
-               -> LocExprs (WE.ExprBuilder t st) loc
+               -> LocExprs (WE.ExprBuilder t st fs) loc
                -> WE.Expr t tp
-               -> Cegis (WE.ExprBuilder t st) arch (WE.Expr t tp)
+               -> Cegis (WE.ExprBuilder t st fs) arch (WE.Expr t tp)
 evalExpression vars state expr = do
   sym <- askSym
   liftIO $ replaceLitVars sym (lookupInState sym state) vars expr
@@ -101,9 +101,9 @@ evalExpression vars state expr = do
 -- | Evaluate a whole formula, substituting in the location values given in the
 -- machine state, returning the transformed machine state.
 evalFormula :: (Architecture arch)
-            => Formula (WE.ExprBuilder t st) arch
+            => Formula (WE.ExprBuilder t st fs) arch
             -> L.ArchState arch (WE.Expr t)
-            -> Cegis (WE.ExprBuilder t st) arch (L.ArchState arch (WE.Expr t))
+            -> Cegis (WE.ExprBuilder t st fs) arch (L.ArchState arch (WE.Expr t))
 evalFormula (Formula vars defs) input =
   traverseF (evalExpression vars input) defs
 
@@ -131,7 +131,7 @@ type ConcreteTest sym arch = ConcreteTest' sym (Location arch)
 -- function will generate the expression @3*5 + imm5 = 10@. If the expression
 -- were instead @Nothing@, this would generate @7 = 10@.
 buildEqualityLocation :: (IsLocation loc)
-                      => ConcreteTest' (WE.ExprBuilder t st) loc
+                      => ConcreteTest' (WE.ExprBuilder t st fs) loc
                       -> MapF.MapF loc (WE.ExprBoundVar t)
                       -- ^ The bound variables representing the input values for
                       -- each location.
@@ -141,7 +141,7 @@ buildEqualityLocation :: (IsLocation loc)
                       -- ^ If 'Just', the symbolic representation of the new
                       -- definition of this location. If 'Nothing', then assume
                       -- the identity transformation.
-                      -> Cegis (WE.ExprBuilder t st) arch (WE.BoolExpr t)
+                      -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityLocation test vars outputLoc expr = do
   sym <- askSym
   actuallyIs <- case expr of
@@ -154,16 +154,16 @@ buildEqualityLocation test vars outputLoc expr = do
 
 -- | Build a conjuction of the equality expressions for /all/ locations in
 -- either the outputs of the 'ConcreteTest' or the definitions of the 'Formula'.
-buildEqualityMachine :: forall arch t st
+buildEqualityMachine :: forall arch t st fs
                       . (Architecture arch)
-                     => Formula (WE.ExprBuilder t st) arch
-                     -> ConcreteTest (WE.ExprBuilder t st) arch
-                     -> Cegis (WE.ExprBuilder t st) arch (WE.BoolExpr t)
+                     => Formula (WE.ExprBuilder t st fs) arch
+                     -> ConcreteTest (WE.ExprBuilder t st fs) arch
+                     -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityMachine (Formula vars defs) test = do
   sym <- askSym
   let allOutputLocs = Set.fromList (MapF.keys (testOutput test)) `Set.union`
                       Set.fromList (MapF.keys defs)
-      addEquality :: WE.BoolExpr t -> Some (Location arch) -> Cegis (WE.ExprBuilder t st) arch (WE.BoolExpr t)
+      addEquality :: WE.BoolExpr t -> Some (Location arch) -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
       addEquality soFar (Some loc) = do
         let locDef = MapF.lookup loc defs
         locEquality <- buildEqualityLocation test vars loc locDef
@@ -172,11 +172,11 @@ buildEqualityMachine (Formula vars defs) test = do
 
 -- | Build an equality of the form
 -- > f(test1_in) = test1_out /\ f(test2_in) = test2_out /\ ... /\ f(testn_in) = testn_out
-buildEqualityTests :: forall arch t st
+buildEqualityTests :: forall arch t st fs
                     . (Architecture arch)
-                   => Formula (WE.ExprBuilder t st) arch
-                   -> [ConcreteTest (WE.ExprBuilder t st) arch]
-                   -> Cegis (WE.ExprBuilder t st) arch (WE.BoolExpr t)
+                   => Formula (WE.ExprBuilder t st fs) arch
+                   -> [ConcreteTest (WE.ExprBuilder t st fs) arch]
+                   -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityTests form tests = do
   sym <- askSym
   let andTest test soFar = (liftIO . S.andPred sym soFar) =<< buildEqualityMachine form test
@@ -187,7 +187,7 @@ buildEqualityTests form tests = do
 -- operands are filled in concretely.
 extractConcreteInstructions :: (ArchRepr arch)
                             => GroundEvalFn t
-                            -> [TemplatedInstructionFormula (WE.ExprBuilder t st) arch]
+                            -> [TemplatedInstructionFormula (WE.ExprBuilder t st fs) arch]
                             -> IO [TemplatableInstruction arch]
 extractConcreteInstructions (GroundEvalFn evalFn) = mapM f
   where f (TemplatedInstructionFormula (TemplatedInstruction op _ _) tf) =
@@ -197,7 +197,7 @@ extractConcreteInstructions (GroundEvalFn evalFn) = mapM f
 -- Sat, it pulls out concrete instructions corresponding to the SAT model.
 -- Otherwise, it returns Nothing.
 tryExtractingConcrete :: (ArchRepr arch)
-                      => [TemplatedInstructionFormula (WE.ExprBuilder t st) arch]
+                      => [TemplatedInstructionFormula (WE.ExprBuilder t st fs) arch]
                       -> SatResult (GroundEvalFn t)
                       -> IO (Maybe [TemplatableInstruction arch])
 tryExtractingConcrete insns (Sat evalFn) = Just <$> extractConcreteInstructions evalFn insns
@@ -209,7 +209,7 @@ instantiateFormula' :: (Architecture arch
                        -- , WE.IsBoolSolver (WE.ExprBuilder t st)
                        )
                     => TemplatableInstruction arch
-                    -> Cegis (WE.ExprBuilder t st) arch (Formula (WE.ExprBuilder t st) arch)
+                    -> Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
 instantiateFormula' (TemplatableInstruction op oplist) = do
   sym <- askSym
   baseSet <- askBaseSet
@@ -221,7 +221,7 @@ condenseInstructions :: (Architecture arch
                        -- , WE.IsBoolSolver (WE.ExprBuilder t st)
                        )
                      => [TemplatableInstruction arch]
-                     -> Cegis (WE.ExprBuilder t st) arch (Formula (WE.ExprBuilder t st) arch)
+                     -> Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
 condenseInstructions insns = do
   sym <- askSym
   insnFormulas <- traverse instantiateFormula' insns
@@ -237,13 +237,13 @@ data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- behavior as the target formula.
 
 cegis' :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
-       => [TemplatedInstructionFormula (CBO.OnlineBackend t solver) arch]
+       => [TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
        -- ^ The trial instructions.
-       -> Formula (CBO.OnlineBackend t solver) arch
+       -> Formula (CBO.OnlineBackend t solver fs) arch
        -- ^ A formula representing the sequence of trial instructions.
-       -> [ConcreteTest (CBO.OnlineBackend t solver) arch]
+       -> [ConcreteTest (CBO.OnlineBackend t solver fs) arch]
        -- ^ All the tests we have so far.
-       -> Cegis (CBO.OnlineBackend t solver) arch (CegisResult (CBO.OnlineBackend t solver) arch)
+       -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis' trial trialFormula tests = do
   sym <- askSym
   -- Is this candidate satisfiable for the concrete tests we have so far? At
@@ -274,14 +274,14 @@ cegis' trial trialFormula tests = do
     Nothing -> return (CegisUnmatchable tests)
 
 cegis :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
-      => CegisParams (CBO.OnlineBackend t solver) arch
+      => CegisParams (CBO.OnlineBackend t solver fs) arch
       -- ^ Parameters not specific to the candidate. See 'CegisParams' for
       -- details.
-      -> [ConcreteTest (CBO.OnlineBackend t solver) arch]
+      -> [ConcreteTest (CBO.OnlineBackend t solver fs) arch]
       -- ^ The tests we know so far for the target formula.
-      -> [TemplatedInstructionFormula (CBO.OnlineBackend t solver) arch]
+      -> [TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
       -- ^ The candidate program.
-      -> IO (CegisResult (CBO.OnlineBackend t solver) arch)
+      -> IO (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis params tests trial = do
   trialFormula <- condenseFormulas (cpSym params) (map tifFormula trial)
   runReaderT (cegis' trial trialFormula tests) params

@@ -36,10 +36,10 @@ import qualified SemMC.Formula as F
 import           SemMC.Architecture.PPC.OperandComponents ( OperandComponents(..) )
 import           SemMC.Architecture.PPC.Location
 
-interpMemriReg :: forall sh s ppc tp sym t st
+interpMemriReg :: forall sh s ppc tp sym t st fs
                 . ( L.IsLocation (Location ppc)
                   , L.Location ppc ~ Location ppc
-                  , sym ~ S.ExprBuilder t st
+                  , sym ~ S.ExprBuilder t st fs
                   , A.OperandComponents ppc sym ~ OperandComponents ppc sym
                   )
                => SL.List (A.AllocatedOperand ppc sym) sh
@@ -61,10 +61,10 @@ interpMemriRegExtractor (PPC.MemRI mgpr _) = mgpr
 interpMemriOffsetExtractor :: PPC.MemRI -> Int16
 interpMemriOffsetExtractor (PPC.MemRI _ off) = off
 
-interpMemrixReg :: forall sh s ppc tp sym t st
+interpMemrixReg :: forall sh s ppc tp sym t st fs
                  . ( L.IsLocation (Location ppc)
                    , L.Location ppc ~ Location ppc
-                   , sym ~ S.ExprBuilder t st
+                   , sym ~ S.ExprBuilder t st fs
                    , A.OperandComponents ppc sym ~ OperandComponents ppc sym
                    )
                 => SL.List (A.AllocatedOperand ppc sym) sh
@@ -102,10 +102,10 @@ interpMemrixRegExtractor (PPC.MemRIX mgpr _) = mgpr
 interpMemrixOffsetExtractor :: PPC.MemRIX -> I.I 14
 interpMemrixOffsetExtractor (PPC.MemRIX _ off) = off
 
-interpMemrrBase :: forall sh s ppc tp t st sym
+interpMemrrBase :: forall sh s ppc tp t st fs sym
                 . ( L.IsLocation (Location ppc)
                   , L.Location ppc ~ Location ppc
-                  , sym ~ S.ExprBuilder t st
+                  , sym ~ S.ExprBuilder t st fs
                   , A.OperandComponents ppc sym ~ OperandComponents ppc sym
                   )
                => SL.List (A.AllocatedOperand ppc sym) sh
@@ -121,10 +121,10 @@ interpMemrrBase operands (F.WrappedOperand _orep ix) rep =
       error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
 
-interpMemrrOffset :: forall sh s ppc tp t st sym
+interpMemrrOffset :: forall sh s ppc tp t st fs sym
                    . ( L.IsLocation (Location ppc)
                      , L.Location ppc ~ Location ppc
-                     , sym ~ S.ExprBuilder t st
+                     , sym ~ S.ExprBuilder t st fs
                      , A.OperandComponents ppc sym ~ OperandComponents ppc sym
                      )
                   => SL.List (A.AllocatedOperand ppc sym) sh

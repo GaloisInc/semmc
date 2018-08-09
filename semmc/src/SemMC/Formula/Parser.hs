@@ -348,7 +348,7 @@ getBoolProof  expr =
 -- GHC cannot do let-destructuring when existentials are involved.
 --
 -- ...yes, it's a lot of type parameters.
-type ExprParser sym arch sh m = (S.IsSymInterface sym,
+type ExprParser sym arch sh m = (S.IsSymExprBuilder sym,
                                  E.MonadError String m,
                                  MR.MonadReader (DefsInfo sym arch sh) m,
                                  MonadIO m)
@@ -739,8 +739,7 @@ readCall _ _ = return Nothing
 
 -- | Parse an arbitrary expression.
 readExpr :: forall sym m arch sh
-          . (S.IsExprBuilder sym,
-             S.IsSymInterface sym,
+          . (S.IsSymExprBuilder sym,
              Monad m,
              E.MonadError String m,
              A.Architecture arch,
@@ -802,8 +801,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
     Nothing -> E.throwError $ printf "couldn't parse expression %s" (show opRaw)
 
 -- | Parse multiple expressions in a list.
-readExprs :: (S.IsExprBuilder sym,
-              S.IsSymInterface sym,
+readExprs :: (S.IsSymExprBuilder sym,
               Monad m,
               E.MonadError String m,
               A.Architecture arch,
@@ -824,8 +822,7 @@ readExprs (SC.SCons e rest) = do
 -- >  ('ca . #b1))
 --
 readDefs :: forall sym m arch sh
-          . (S.IsExprBuilder sym,
-             S.IsSymInterface sym,
+          . (S.IsSymExprBuilder sym,
              Monad m,
              E.MonadError String m,
              A.Architecture arch,
@@ -875,8 +872,7 @@ matchUF se =
 -- | Parse the whole definition of a templated formula, inside an appropriate
 -- monad.
 readFormula' :: forall sym arch (sh :: [Symbol]) m.
-                (S.IsExprBuilder sym,
-                 S.IsSymInterface sym,
+                (S.IsSymExprBuilder sym,
                  E.MonadError String m,
                  MonadIO m,
                  A.Architecture arch,
@@ -968,8 +964,7 @@ readFormula' sym env repr text = do
                          }
 
 -- | Parse the definition of a templated formula.
-readFormula :: (S.IsExprBuilder sym,
-                S.IsSymInterface sym,
+readFormula :: (S.IsSymExprBuilder sym,
                 A.Architecture arch,
                 ShowF (S.SymExpr sym),
                 U.HasLogCfg)
@@ -981,8 +976,7 @@ readFormula :: (S.IsExprBuilder sym,
 readFormula sym env repr text = E.runExceptT $ readFormula' sym env repr text
 
 -- | Read a templated formula definition from file, then parse it.
-readFormulaFromFile :: (S.IsExprBuilder sym,
-                        S.IsSymInterface sym,
+readFormulaFromFile :: (S.IsSymExprBuilder sym,
                         A.Architecture arch,
                         ShowF (S.SymExpr sym),
                         U.HasLogCfg)
