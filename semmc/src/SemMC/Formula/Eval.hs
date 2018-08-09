@@ -45,7 +45,7 @@ import           SemMC.Architecture.Location        as A
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Formula as F
 
-type Sym t st = S.ExprBuilder t st
+type Sym t st fs = S.ExprBuilder t st fs
 
 {-
 
@@ -178,10 +178,10 @@ elemIndexSL target = go . SL.imap Pair
 -- FIXME: Have the evaluator just take the function that returns the expr for
 -- each location.  That means the evaluator will never need to allocate one.
 
-evalRegExtractor :: (MapF.ShowF (A.Operand arch), A.IsLocation (A.Location arch), MapF.ShowF (A.OperandComponents arch (S.ExprBuilder t st)))
+evalRegExtractor :: (MapF.ShowF (A.Operand arch), A.IsLocation (A.Location arch), MapF.ShowF (A.OperandComponents arch (S.ExprBuilder t st fs)))
                  => String
-                 -> (forall s . A.AllocatedOperand arch (Sym t st) s -> Maybe (Some (A.Location arch)))
-                 -> A.Evaluator arch t st
+                 -> (forall s . A.AllocatedOperand arch (Sym t st fs) s -> Maybe (Some (A.Location arch)))
+                 -> A.Evaluator arch t st fs
 evalRegExtractor operationName match =
   A.Evaluator $ \_sym pf operands ufArguments locExpr resultRepr ->
     case ufArguments of
@@ -204,12 +204,12 @@ evalRegExtractor operationName match =
 -- This isn't suitable for the versions that extract registers
 evalBitvectorExtractor :: ( 1 <= n, HasCallStack
                           , MapF.ShowF (A.Operand arch)
-                          , MapF.ShowF (A.OperandComponents arch (Sym t st))
+                          , MapF.ShowF (A.OperandComponents arch (Sym t st fs))
                           )
                        => String
                        -> NatRepr n
-                       -> (forall x . A.OperandComponents arch (Sym t st) x -> NatRepr n -> Maybe (S.SymExpr (Sym t st) (BaseBVType n)))
-                       -> A.Evaluator arch t st
+                       -> (forall x . A.OperandComponents arch (Sym t st fs) x -> NatRepr n -> Maybe (S.SymExpr (Sym t st fs) (BaseBVType n)))
+                       -> A.Evaluator arch t st fs
 evalBitvectorExtractor =
   evalBitvectorExtractorWith identityTransform
 
@@ -218,13 +218,13 @@ identityTransform _ e = return e
 
 evalBitvectorExtractorWith :: ( HasCallStack, 1 <= n
                               , MapF.ShowF (A.Operand arch)
-                              , MapF.ShowF (A.OperandComponents arch (Sym t st))
+                              , MapF.ShowF (A.OperandComponents arch (Sym t st fs))
                               )
-                           => (Sym t st -> S.SymExpr (Sym t st) (BaseBVType n) -> IO (S.SymExpr (Sym t st) tp))
+                           => (Sym t st fs -> S.SymExpr (Sym t st fs) (BaseBVType n) -> IO (S.SymExpr (Sym t st fs) tp))
                            -> String
                            -> NatRepr n
-                           -> (forall s . A.OperandComponents arch (Sym t st) s -> NatRepr n -> Maybe (S.SymExpr (Sym t st) (BaseBVType n)))
-                           -> A.Evaluator arch t st
+                           -> (forall s . A.OperandComponents arch (Sym t st fs) s -> NatRepr n -> Maybe (S.SymExpr (Sym t st fs) (BaseBVType n)))
+                           -> A.Evaluator arch t st fs
 evalBitvectorExtractorWith wrapResultWith operationName litRep match =
   A.Evaluator $ \sym pf operands ufArguments _locExpr resultRepr ->
     case ufArguments of
@@ -271,11 +271,11 @@ evalBitvectorExtractorWith wrapResultWith operationName litRep match =
 -- | See `evaluateFunctions'`
 evaluateFunctions
   :: MapF.OrdF (Location arch)
-  => Sym t st
-  -> ParameterizedFormula (Sym t st) arch sh
-  -> SL.List (A.AllocatedOperand arch (Sym t st)) sh
+  => Sym t st fs
+  -> ParameterizedFormula (Sym t st fs) arch sh
+  -> SL.List (A.AllocatedOperand arch (Sym t st fs)) sh
   -> (forall ltp . A.Location arch ltp -> IO (S.Expr t ltp))
-  -> [(String, A.Evaluator arch t st)]
+  -> [(String, A.Evaluator arch t st fs)]
   -> S.Expr t tp
   -> IO (S.Expr t tp)
 evaluateFunctions sym pf operands locExpr rewriters elt =
@@ -284,11 +284,11 @@ evaluateFunctions sym pf operands locExpr rewriters elt =
 -- | Recursively applies rewrite rules to all uninterpreted functions present in a formula.
 evaluateFunctions'
   :: MapF.OrdF (Location arch)
-  => Sym t st
-  -> ParameterizedFormula (Sym t st) arch sh
-  -> SL.List (A.AllocatedOperand arch (Sym t st)) sh
+  => Sym t st fs
+  -> ParameterizedFormula (Sym t st fs) arch sh
+  -> SL.List (A.AllocatedOperand arch (Sym t st fs)) sh
   -> (forall ltp . A.Location arch ltp -> IO (S.Expr t ltp))
-  -> [(String, A.Evaluator arch t st)]
+  -> [(String, A.Evaluator arch t st fs)]
   -> S.Expr t tp
   -> IO (S.Expr t tp)
 evaluateFunctions' sym pf operands locExpr rewriters e =

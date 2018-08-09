@@ -34,10 +34,10 @@ import qualified SemMC.Formula as F
 -- final state.
 evaluateInstruction :: (A.Architecture arch
                        , MapF.OrdF (A.Opcode arch (A.Operand arch))
-                       , SB.IsBoolSolver (S.ExprBuilder t st))
-                    => S.ExprBuilder t st
+                       , SB.IsBoolSolver (S.ExprBuilder t st fs))
+                    => S.ExprBuilder t st fs
                     -- ^ The symbolic backend
-                    -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (S.ExprBuilder t st) arch)
+                    -> MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (S.ExprBuilder t st fs) arch)
                     -- ^ A collection of all of our semantics
                     -> A.Instruction arch
                     -- ^ The instruction being tested
@@ -61,10 +61,10 @@ pairToPairF (MapF.Pair a b) = Some (PairF a b)
 sndPairF :: PairF a b tp -> b tp
 sndPairF (PairF _ b) = b
 
-evaluateFormula :: forall t st arch .
+evaluateFormula :: forall t st fs arch .
                    (MapF.OrdF (A.Location arch), ShowF (A.Location arch), A.IsLocation (A.Location arch))
-                => S.ExprBuilder t st
-                -> F.Formula (S.ExprBuilder t st) arch
+                => S.ExprBuilder t st fs
+                -> F.Formula (S.ExprBuilder t st fs) arch
                 -> V.ConcreteState arch
                 -> IO (V.ConcreteState arch)
 evaluateFormula sb formula initialState =

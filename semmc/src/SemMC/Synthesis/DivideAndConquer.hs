@@ -28,11 +28,11 @@ import           SemMC.Synthesis.Core
 import           SemMC.Synthesis.Template
 import           SemMC.Util
 
-truncateFormula :: forall t solver arch.
+truncateFormula :: forall t solver fs arch.
                    (OrdF (Location arch))
-                => Formula (CBO.OnlineBackend t solver) arch
+                => Formula (CBO.OnlineBackend t solver fs) arch
                 -> Set.Set (Some (Location arch))
-                -> Formula (CBO.OnlineBackend t solver) arch
+                -> Formula (CBO.OnlineBackend t solver fs) arch
 truncateFormula form keepLocs =
   let filterDef :: Location arch tp
                 -> WE.Expr t tp
@@ -48,9 +48,9 @@ truncateFormula form keepLocs =
              }
 
 makeSplit :: (OrdF (Location arch))
-          => Formula (CBO.OnlineBackend t solver) arch
+          => Formula (CBO.OnlineBackend t solver fs) arch
           -> (Set.Set (Some (Location arch)), Set.Set (Some (Location arch)))
-          -> Maybe (Formula (CBO.OnlineBackend t solver) arch, Formula (CBO.OnlineBackend t solver) arch)
+          -> Maybe (Formula (CBO.OnlineBackend t solver fs) arch, Formula (CBO.OnlineBackend t solver fs) arch)
 makeSplit form (locs1, locs2)
   | Set.null locs1 || Set.null locs2 = Nothing
   | otherwise = let form1 = truncateFormula form locs1
@@ -65,8 +65,8 @@ splits (x:xs) = [ s' | (left, right) <- splits xs
                      , s' <- [(Set.insert x left, right), (left, Set.insert x right)]]
 
 enumerateSplits :: (OrdF (Location arch), WPO.OnlineSolver t solver)
-                => Formula (CBO.OnlineBackend t solver) arch
-                -> [(Formula (CBO.OnlineBackend t solver) arch, Formula (CBO.OnlineBackend t solver) arch)]
+                => Formula (CBO.OnlineBackend t solver fs) arch
+                -> [(Formula (CBO.OnlineBackend t solver fs) arch, Formula (CBO.OnlineBackend t solver fs) arch)]
 enumerateSplits form = mapMaybe (makeSplit form)
                      $ splits (MapF.keys (formDefs form))
 
@@ -77,8 +77,8 @@ divideAndConquer :: (Architecture arch,
                      Typeable arch,
                      WPO.OnlineSolver t solver
                      )
-                 => SynthesisParams (CBO.OnlineBackend t solver) arch
-                 -> Formula (CBO.OnlineBackend t solver) arch
+                 => SynthesisParams (CBO.OnlineBackend t solver fs) arch
+                 -> Formula (CBO.OnlineBackend t solver fs) arch
                  -- ^ Formula to synthesize.
                  -> IO (Maybe [Instruction arch])
 divideAndConquer params form =

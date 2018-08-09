@@ -17,5 +17,5 @@ import SemMC.Stochastic.Monad
 --
 -- For now, this function is a no-op and just returns all of the learned
 -- formulas.
-generalize :: Syn t solver arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t solver) arch))
+generalize :: Syn t solver fs arch (MapF.MapF (Opcode arch (Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
 generalize = askFormulas
