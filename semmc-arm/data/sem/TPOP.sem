@@ -548,7 +548,7 @@
     (isActive_R15)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 31 31)
        (pcStkVal)))
      (bvand
@@ -556,7 +556,7 @@
       (pcStkVal))
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 30 30)
         (pcStkVal)))
       (bvand
@@ -581,7 +581,7 @@
        (isActive_R15)
        (ite
         (bveq
-         #b0
+         #b1
          ((_ extract 31 31)
           (pcStkVal)))
         'CPSR

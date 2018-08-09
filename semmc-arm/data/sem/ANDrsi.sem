@@ -50,7 +50,7 @@
        ((_ call "uf.a32.soregimm_imm")
         sori)
        #b00000)
-      (concat #b100 #x00000001)
+      (concat #b111 #x00000001)
       (concat
        #b011
        ((_ zero_extend 27)
@@ -62,7 +62,7 @@
     (bvor #x00000020 'CPSR)))
   (var2
    (bveq
-    #b0
+    #b1
     ((_ extract 31 31)
      (bvand
       rN
@@ -145,7 +145,7 @@
          'CPSR)))))
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 30 30)
        (bvand
         rN

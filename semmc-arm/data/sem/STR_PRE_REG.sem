@@ -125,7 +125,7 @@
         ((_ call "uf.a32.ldst_so_reg_immediate")
          ldst_so_reg)
         #b00000)
-       (concat #b100 #x00000001)
+       (concat #b111 #x00000001)
        (concat
         #b011
         ((_ zero_extend 27)

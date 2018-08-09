@@ -12,9 +12,12 @@
     (ite
      (bvult shift_n #x00000020)
      (ite
-      ((_ call "uf.test_bit_dynamic.32")
-       (bvsub shift_n #x00000001)
-       value)
+      (bveq
+       #b1
+       ((_ extract 0 0)
+        (bvlshr
+         (bvsub shift_n #x00000001)
+         value)))
       #b1
       #b0)
      #b0)
@@ -32,9 +35,12 @@
     (ite
      (bvult shift_n #x00000020)
      (ite
-      ((_ call "uf.test_bit_dynamic.32")
-       (bvsub shift_n #x00000001)
-       value)
+      (bveq
+       #b1
+       ((_ extract 0 0)
+        (bvlshr
+         (bvsub shift_n #x00000001)
+         value)))
       #b1
       #b0)
      #b0)
@@ -46,9 +52,12 @@
     (ite
      (bvult shift_n #x00000020)
      (ite
-      ((_ call "uf.test_bit_dynamic.32")
-       (bvsub shift_n #x00000001)
-       value)
+      (bveq
+       #b1
+       ((_ extract 0 0)
+        (bvlshr
+         (bvsub shift_n #x00000001)
+         value)))
       #b1
       #b0)
      #b0)

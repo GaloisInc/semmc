@@ -10,13 +10,13 @@
      rD)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 31 31)
        rM))
      (bvand #xfffffffe rM)
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 30 30)
         rM))
       (bvand #xfffffffd rM)
@@ -61,7 +61,7 @@
            rD)
           (ite
            (bveq
-            #b0
+            #b1
             ((_ extract 31 31)
              rM))
            (SetT32Mode)
@@ -72,7 +72,7 @@
          rD)
         (ite
          (bveq
-          #b0
+          #b1
           ((_ extract 31 31)
            rM))
          (SetT32Mode)

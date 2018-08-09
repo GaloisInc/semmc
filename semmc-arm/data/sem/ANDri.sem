@@ -10,7 +10,7 @@
      rD)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 31 31)
        (bvand
         rN
@@ -46,7 +46,7 @@
           'CPSR)))))
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 30 30)
         (bvand
          rN
@@ -175,7 +175,7 @@
            rD)
           (ite
            (bveq
-            #b0
+            #b1
             ((_ extract 31 31)
              (bvand
               rN
@@ -200,7 +200,7 @@
          rD)
         (ite
          (bveq
-          #b0
+          #b1
           ((_ extract 31 31)
            (bvand
             rN

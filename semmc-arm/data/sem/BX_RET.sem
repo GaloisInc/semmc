@@ -8,13 +8,13 @@
   (bxWritePC
    (ite
     (bveq
-     #b0
+     #b1
      ((_ extract 31 31)
       'R14))
     (bvand #xfffffffe 'R14)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 30 30)
        'R14))
      (bvand #xfffffffd 'R14)
@@ -33,7 +33,7 @@
        'CPSR)
       (ite
        (bveq
-        #b0
+        #b1
         ((_ extract 31 31)
          'R14))
        (SetT32Mode)
