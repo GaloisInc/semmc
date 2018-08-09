@@ -8,7 +8,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Branch
     )
     where
 
-import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Context
 import           Data.Semigroup
 import qualified Dismantle.ARM as A

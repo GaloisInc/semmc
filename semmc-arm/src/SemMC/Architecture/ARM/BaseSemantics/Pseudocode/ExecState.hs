@@ -10,7 +10,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExecState
     )
     where
 
-import Data.Maybe
 import Prelude hiding ( concat, pred )
 import SemMC.Architecture.ARM.BaseSemantics.Base
 import SemMC.Architecture.ARM.BaseSemantics.Helpers
