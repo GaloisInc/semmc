@@ -46,6 +46,9 @@ import qualified Data.Int.Indexed as I
 import qualified Data.List.NonEmpty as NEL
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.List as PL
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy
 import qualified Data.Serialize.Get as G
@@ -204,6 +207,44 @@ symbolicTemplatedOperand Proxy signed name constr =
 --            => MemoryAccess
 --            -> A.Evaluator arch t st
 -- evalMemReg access = A.Evaluator (rewrite access)
+
+isR0 :: forall t st sh u tp arch sym
+      . ( A.Location arch ~ Location arch
+        , A.Operand arch ~ PPC.Operand
+        , sym ~ S.ExprBuilder t st
+        )
+     => sym
+     -> F.ParameterizedFormula sym arch sh
+     -> PL.List (A.AllocatedOperand arch sym) sh
+     -> Ctx.Assignment (S.Expr t) u
+     -> (forall tp' . Location arch tp' -> IO (S.SymExpr sym tp'))
+     -> BaseTypeRepr tp
+     -> IO (S.Expr t tp)
+isR0 sym pf ops actuals _locToExpr repr = do
+  let typedReturn :: forall tp' . S.Expr t tp' -> IO (S.Expr t tp)
+      typedReturn e =
+        case testEquality (S.exprType e) repr of
+          Nothing -> error ("The caller of isR0 expected type " ++ show repr ++ " but it returned a value of type " ++ show (S.exprType e))
+          Just Refl -> return e
+  case actuals of
+    Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
+      case ufArg `E.lookupVarInFormulaOperandList` pf of
+        Nothing ->
+          case MapF.lookup r0 (F.pfLiteralVars pf) of
+            Nothing -> typedReturn (S.falsePred sym)
+            Just r0Var ->
+              case testEquality r0Var ufArg of
+                Nothing -> typedReturn (S.falsePred sym)
+                Just Refl -> typedReturn (S.truePred sym)
+        Just (Some idx) ->
+          case ops PL.!! idx of
+            A.LocationOperand loc _
+              | Just Refl <- testEquality loc r0 -> typedReturn (S.truePred sym)
+            _ -> typedReturn (S.falsePred sym)
+    _ -> error "Unexpected argument list to isR0"
+  where
+    r0 :: Location arch (BaseBVType (ArchRegWidth arch))
+    r0 = LocGPR (PPC.GPR 0x0)
 
 -- isR0
 --   :: forall t st sh u tp arch . (A.Location arch ~ Location arch, A.Operand arch ~ PPC.Operand) =>
@@ -420,8 +461,8 @@ locationFuncInterpretation =
                                                            | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
                                                          _ -> Nothing
                                                   })
-  -- , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'E.interpIsR0
-  --                                          , A.exprInterp = A.Evaluator isR0
-  --                                          , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
-  --                                          })
+  , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'E.interpIsR0
+                                           , A.exprInterp = A.Evaluator isR0
+                                           , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
+                                           })
   ]
