@@ -32,11 +32,6 @@ uninterpretedFunctions _ =
                                                          ::> BaseBVType 4)),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))
 
-  , ("test_bit_dynamic.32",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32
-                                                         ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
-
     -- A32 Operands
 
   , ("a32.imm12_reg", -- reference to register by register number from an addrmode_imm12_pre operand

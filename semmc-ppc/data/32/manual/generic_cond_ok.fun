@@ -12,22 +12,28 @@
   (return 'bool)
   (body
    (ite
-    ((_ call "uf.test_bit_dynamic.32")
-     ((_ zero_extend 27)
-      bo)
-     #x00000004)
+    (bveq
+     #b1
+     ((_ extract 0 0)
+      (bvlshr bo #b00100)))
     (true)
     (ite
-     ((_ call "uf.test_bit_dynamic.32")
-      ((_ zero_extend 27)
-       bo)
-      #x00000003)
-     ((_ call "uf.test_bit_dynamic.32")
-      cr
-      ((_ zero_extend 27)
-       (bvsub #b11111 bi)))
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (bvlshr bo #b00011)))
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (bvlshr
+        cr
+        ((_ zero_extend 27)
+         (bvsub #b11111 bi)))))
      (notp
-      ((_ call "uf.test_bit_dynamic.32")
-       cr
-       ((_ zero_extend 27)
-        (bvsub #b11111 bi)))))))))
+      (bveq
+       #b1
+       ((_ extract 0 0)
+        (bvlshr
+         cr
+         ((_ zero_extend 27)
+          (bvsub #b11111 bi)))))))))))

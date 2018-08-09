@@ -18,10 +18,10 @@
       bo
       (ite
        (notp
-        ((_ call "uf.test_bit_dynamic.32")
-         ((_ zero_extend 27)
-          bo)
-         #x00000002))
+        (bveq
+         #b1
+         ((_ extract 0 0)
+          (bvlshr bo #b00010))))
        (bvsub 'CTR #x0000000000000001)
        'CTR)))
     (bvadd
@@ -32,9 +32,9 @@
    ('CTR
     (ite
      (notp
-      ((_ call "uf.test_bit_dynamic.32")
-       ((_ zero_extend 27)
-        bo)
-       #x00000002))
+      (bveq
+       #b1
+       ((_ extract 0 0)
+        (bvlshr bo #b00010))))
      (bvsub 'CTR #x0000000000000001)
      'CTR)))))

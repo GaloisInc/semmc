@@ -47,7 +47,7 @@ import           Data.Parameterized.Classes
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..), mapSome, viewSome )
 import qualified Data.Parameterized.List as SL
-import           Data.Parameterized.TraversableFC ( traverseFC )
+import           Data.Parameterized.TraversableFC ( traverseFC, allFC )
 import qualified Data.Parameterized.Map as MapF
 import           What4.BaseTypes
 import qualified Lang.Crucible.Backend as S
@@ -1067,7 +1067,7 @@ readDefinedFunction' sym env text = do
 
   let symbol = U.makeSymbol name
       argVarAssignment = TL.toAssignmentFwd argVarList
-      expand _args = False
+      expand args = allFC S.baseIsConcrete args
 
   symFn <- liftIO $ S.definedFn sym symbol argVarAssignment body expand
   return $ Some (FunctionFormula { ffName = name

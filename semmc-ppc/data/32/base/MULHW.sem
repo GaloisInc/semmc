@@ -3,8 +3,8 @@
 ;; Save the high 32 bits of the result into the output register
 ((operands
  ((rT . 'Gprc)
-  (rA . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rA . 'Gprc)))
  (in
   (rB rA 'IP))
  (defs
