@@ -15,8 +15,11 @@ naturalBitSize = 32
 -- | Type-level 'naturalBitSize'
 type NaturalBitSize = 32
 
+-- | Type for holding natural value words
+type NaturalWord = Word32
+
 -- | A zero value of the full register width
-naturalZero :: Word32
+naturalZero :: NaturalWord
 naturalZero = zeroBits
 
 -- | A literal value bitvector of the full register width

@@ -58,7 +58,6 @@ module SemMC.Architecture.ARM.Eval
     where
 
 import           Data.Int ( Int16, Int8 )
-import           Data.Word ( Word8 )
 import qualified Data.Parameterized.List as PL
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.ARM as ARMDis
@@ -67,6 +66,7 @@ import qualified Dismantle.Thumb as ThumbDis
 import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           SemMC.Architecture.ARM.Combined
 import           SemMC.Architecture.ARM.Location
+import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula as F
 import           What4.BaseTypes
@@ -90,7 +90,7 @@ interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
 interpImm12Reg :: forall sh s arm tp opty
                    . (L.IsLocation (L.Location arm)) =>
                     (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
-                 -> (Word8 -> L.Location arm (BaseBVType 32))
+                 -> (GPRIdent -> L.Location arm (BaseBVType 32))
                  -> PL.List opty sh
                  -> F.WrappedOperand arm sh s
                  -> BaseTypeRepr tp
@@ -166,7 +166,7 @@ interpLdstsoregOffRegExtractor = Just . ARMOperands.ldstSoRegOffsetRegister
 interpLdstsoregBaseReg :: forall sh s arm tp opty
                           . (L.IsLocation (L.Location arm)) =>
                           (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
-                       -> (Word8 -> L.Location arm (BaseBVType 32))
+                       -> (GPRIdent -> L.Location arm (BaseBVType 32))
                        -> PL.List opty sh
                        -> F.WrappedOperand arm sh s
                        -> BaseTypeRepr tp
@@ -184,7 +184,7 @@ interpLdstsoregBaseReg getArmOperand mkLoc operands (F.WrappedOperand _orep ix) 
 interpLdstsoregOffReg :: forall sh s arm tp opty
                          . (L.IsLocation (L.Location arm)) =>
                          (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
-                      -> (Word8 -> L.Location arm (BaseBVType 32))
+                      -> (GPRIdent -> L.Location arm (BaseBVType 32))
                       -> PL.List opty sh
                       -> F.WrappedOperand arm sh s
                       -> BaseTypeRepr tp
@@ -247,7 +247,7 @@ interpSoregimmRegExtractor = Just . ARMOperands.soRegImmReg
 interpSoregimmReg :: forall sh s arm tp opty
                      . (L.IsLocation (L.Location arm)) =>
                      (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
-                  -> (Word8 -> L.Location arm (BaseBVType 32))
+                  -> (GPRIdent -> L.Location arm (BaseBVType 32))
                   -> PL.List opty sh
                   -> F.WrappedOperand arm sh s
                   -> BaseTypeRepr tp
@@ -282,7 +282,7 @@ interpSoregregTypeExtractor = ARMOperands.soRegRegShiftType
 interpSoregregReg1 :: forall sh s arm tp opty
                       . (L.IsLocation (L.Location arm)) =>
                       (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
-                   -> (Word8 -> L.Location arm (BaseBVType 32))
+                   -> (GPRIdent -> L.Location arm (BaseBVType 32))
                    -> PL.List opty sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
@@ -303,7 +303,7 @@ interpSoregregReg1 getArmOperand mkLoc operands (F.WrappedOperand _orep ix) rep 
 interpSoregregReg2 :: forall sh s arm tp opty
                       . (L.IsLocation (L.Location arm)) =>
                       (forall tp2 . opty tp2 -> Maybe (ARMDis.Operand tp2))
-                   -> (Word8 -> L.Location arm (BaseBVType 32))
+                   -> (GPRIdent -> L.Location arm (BaseBVType 32))
                    -> PL.List opty sh
                    -> F.WrappedOperand arm sh s
                    -> BaseTypeRepr tp
@@ -339,7 +339,7 @@ interpTaddrmodeis2Reg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     T32Operand (ThumbDis.T_addrmode_is2 oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ThumbOperands.unLowGPR $ ThumbOperands.addrModeIs2Reg oprnd
+          loc = LocGPR $ fromIntegral $ ThumbOperands.unLowGPR $ ThumbOperands.addrModeIs2Reg oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'addrmode_is2_reg' at index " ++ show ix)
@@ -366,7 +366,7 @@ interpTaddrmodeis4Reg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     T32Operand (ThumbDis.T_addrmode_is4 oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ThumbOperands.unLowGPR $ ThumbOperands.addrModeIs4Reg oprnd
+          loc = LocGPR $ fromIntegral $ ThumbOperands.unLowGPR $ ThumbOperands.addrModeIs4Reg oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 'addrmode_is4_reg' at index " ++ show ix)
@@ -401,7 +401,7 @@ interpT2soregReg operands (F.WrappedOperand _orep ix) rep =
   case operands PL.!! ix of
     T32Operand (ThumbDis.T2_so_reg oprnd) ->
       let loc :: Location arm (BaseBVType (ArchRegWidth arm))
-          loc = LocGPR $ ThumbOperands.unGPR $ ThumbOperands.t2SoRegRm oprnd
+          loc = LocGPR $ fromIntegral $ ThumbOperands.unGPR $ ThumbOperands.t2SoRegRm oprnd
       in case () of
         _ | Just Refl <- testEquality (L.locationType loc) rep -> Just loc
           | otherwise -> error ("Invalid return type for location function 't2_so_reg_reg' at index " ++ show ix)

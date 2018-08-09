@@ -59,7 +59,6 @@ import qualified Dismantle.ARM.Operands as ARMOperands
 import qualified Dismantle.Thumb as ThumbDis
 import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
-import qualified Lang.Crucible.Backend as SB
 import           Language.Haskell.TH hiding ( recover )
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, regWidth )
@@ -236,8 +235,8 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
 
         opVt :: ThumbDis.Operand s -> IO (S.SymExpr sym (A.OperandType AArch32 s))
         opVt (ThumbDis.Cc_out v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
-        opVt (ThumbDis.GPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
-        opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.GPR gpr) = locLookup (LocGPR $ fromIntegral $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.GPRnopc gpr) = locLookup (LocGPR $ fromIntegral $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.Imm0_7 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.opcodeToBits v -- KWQ: (.&. 7)?
         opVt (ThumbDis.Imm0_15 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.opcodeToBits v -- KWQ: (.&. 15)?
         opVt (ThumbDis.Imm0_31 v) = S.bvLit sym knownNat $ toInteger $ ARMOperands.imm5ToBits v
@@ -245,7 +244,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt (ThumbDis.Imm0_4095 v) = S.bvLit sym knownNat $ toInteger v -- v :: Word16
         opVt (ThumbDis.Pred bits4) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.predToBits bits4
         opVt (ThumbDis.Reglist v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.regListToBits v
-        opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ ThumbOperands.unGPR gpr)
+        opVt (ThumbDis.RGPR gpr) = locLookup (LocGPR $ fromIntegral $ ThumbOperands.unGPR gpr)
         opVt (ThumbDis.T_addrmode_is2 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.addrModeIs2ToBits v
         opVt (ThumbDis.T_addrmode_is4 v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.addrModeIs4ToBits v
         opVt (ThumbDis.T_addrmode_pc v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.addrModePcToBits v
@@ -253,16 +252,16 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVt (ThumbDis.T2_so_imm v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
         opVt (ThumbDis.Thumb_bcc_target v) = S.bvLit sym knownNat $ toInteger v  -- v :: Word8
         opVt (ThumbDis.Thumb_blx_target v) = S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
-        opVt (ThumbDis.TGPR gpr) = locLookup (LocGPR $ ThumbOperands.unLowGPR gpr)
+        opVt (ThumbDis.TGPR gpr) = locLookup (LocGPR $ fromIntegral $ ThumbOperands.unLowGPR gpr)
         opVt x = error $ "operandValue T32 not implemented for " <> show x
 
 
 operandToLocation :: ARMOperand s -> Maybe (Location AArch32 (A.OperandType AArch32 s))
 operandToLocation (A32Operand (ARMDis.GPR gpr)) = Just $ LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
-operandToLocation (T32Operand (ThumbDis.GPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
-operandToLocation (T32Operand (ThumbDis.GPRnopc gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
-operandToLocation (T32Operand (ThumbDis.RGPR gpr)) = Just $ LocGPR $ ThumbOperands.unGPR gpr
-operandToLocation (T32Operand (ThumbDis.TGPR gpr)) = Just $ LocGPR $ ThumbOperands.unLowGPR gpr
+operandToLocation (T32Operand (ThumbDis.GPR gpr)) = Just $ LocGPR $ fromIntegral $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.GPRnopc gpr)) = Just $ LocGPR $ fromIntegral $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.RGPR gpr)) = Just $ LocGPR $ fromIntegral $ ThumbOperands.unGPR gpr
+operandToLocation (T32Operand (ThumbDis.TGPR gpr)) = Just $ LocGPR $ fromIntegral $ ThumbOperands.unLowGPR gpr
 operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
@@ -308,7 +307,7 @@ parseLocation = do
     _ -> do
       P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
-parsePrefixedRegister :: (Word8 -> b) -> Char -> ARMComp.Parser b
+parsePrefixedRegister :: (Word32 -> b) -> Char -> ARMComp.Parser b
 parsePrefixedRegister f c = do
   _ <- P.char c
   n <- P.decimal

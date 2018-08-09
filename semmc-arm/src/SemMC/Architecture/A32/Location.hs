@@ -14,8 +14,8 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.Ctx
 import           Data.Parameterized.TH.GADT
 import           Data.Semigroup
-import           Data.Word ( Word8 )
 import qualified Dismantle.ARM.Operands as ARMOprnds
+import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import           What4.BaseTypes
 
 
@@ -28,9 +28,9 @@ import           What4.BaseTypes
 -- R15 is sometimes not the PC value, it is separately managed.
 
 data Location arm :: BaseType -> * where
-  LocGPR :: Word8 -> Location arm (BaseBVType 32)
-  LocGPRMask :: Word8 -> Location arm (BaseBVType 32)
-  LocFPR :: Word8 -> Location arm (BaseBVType 32)
+  LocGPR :: GPRIdent -> Location arm (BaseBVType 32)
+  LocGPRMask :: GPRIdent -> Location arm (BaseBVType 32)
+  LocFPR :: GPRIdent -> Location arm (BaseBVType 32)
   LocPC :: Location arm (BaseBVType 32)
   LocCPSR :: Location arm (BaseBVType 32)
   LocMem1 :: Location arm (BaseArrayType (SingleCtx (BaseBVType 32)) (BaseBVType 8))
