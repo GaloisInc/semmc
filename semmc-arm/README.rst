@@ -6,7 +6,7 @@ instructions using a 16-bit Thumb encoding, but which execute in a
 
 The details on adding new semantics to this package, including
 information about the version of the ARM manual referenced in many
-modules and comments, can be found in `README.semantics.org`.
+modules and comments, can be found in `README.semantics.org`_.
 
 The semantics are defined in terms of effects on Memory and local
 processor registers; any unusual effects on processor state
@@ -15,7 +15,7 @@ handling.
 
 To generate static semantics definitions, create the static definition
 and then run the ``semmc-arm-genbase`` executable (see the
-`BaseSemantics README, `README.semantics.org`.
+`BaseSemantics README, `README.semantics.org`_.
 
 To dynamically learn semantics:
 
