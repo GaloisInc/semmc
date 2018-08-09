@@ -39,14 +39,14 @@ import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 
 -- | Given a formula derived from a learned program (@progForm@), extract a
 -- 'F.ParameterizedFormula' that has holes for the given 'Opcode'.
-extractFormula :: forall arch t solver sh
+extractFormula :: forall arch t solver fs sh
                 . (SynC arch)
                => AC.RegisterizedInstruction arch
                -> A.Opcode arch (A.Operand arch) sh
                -> SL.List (A.Operand arch) sh
-               -> F.Formula (Sym t solver) arch
+               -> F.Formula (Sym t solver fs) arch
                -> IORelation arch sh
-               -> Syn t solver arch (F.ParameterizedFormula (Sym t solver) arch sh)
+               -> Syn t solver fs arch (F.ParameterizedFormula (Sym t solver fs) arch sh)
 extractFormula ri opc ops progForm iorel = do
   L.logM L.Info ("Extracting formula from " ++ show progForm)
   go (MapF.empty, MapF.empty) (F.toList (outputs iorel))
@@ -77,11 +77,11 @@ extractFormula ri opc ops progForm iorel = do
 --
 -- We only need to replace the bound vars in 'pfOperandVars' and then use the
 -- replaced list with 'S.replaceVars' to update 'pfDefs'.
-renameVariables :: forall arch sh t solver
+renameVariables :: forall arch sh t solver fs
                  . (SynC arch)
                 => SL.List (A.Operand arch) sh
-                -> F.ParameterizedFormula (Sym t solver) arch sh
-                -> Syn t solver arch (F.ParameterizedFormula (Sym t solver) arch sh)
+                -> F.ParameterizedFormula (Sym t solver fs) arch sh
+                -> Syn t solver fs arch (F.ParameterizedFormula (Sym t solver fs) arch sh)
 renameVariables oplist pf0 = do
   withSymBackend $ \sym -> do
     (sva, opVars') <- liftIO (buildRenameList sym (F.pfOperandVars pf0))
@@ -92,9 +92,9 @@ renameVariables oplist pf0 = do
   where
     doReplace sym sva _k v = F.replaceVars sym sva v
 
-    buildRenameList :: Sym t solver
-                    -> SL.List (BV.BoundVar (Sym t solver) arch) sh
-                    -> IO (Pair (Ctx.Assignment (C.BoundVar (Sym t solver))) (Ctx.Assignment (C.SymExpr (Sym t solver))), SL.List (BV.BoundVar (Sym t solver) arch) sh)
+    buildRenameList :: Sym t solver fs
+                    -> SL.List (BV.BoundVar (Sym t solver fs) arch) sh
+                    -> IO (Pair (Ctx.Assignment (C.BoundVar (Sym t solver fs))) (Ctx.Assignment (C.SymExpr (Sym t solver fs))), SL.List (BV.BoundVar (Sym t solver fs) arch) sh)
     buildRenameList sym opVarList = do
       -- A shaped list with the same shape, but with pairs where the first is
       -- the original name and the second is the newly-allocated variable (with
@@ -105,10 +105,10 @@ renameVariables oplist pf0 = do
       return (sva, fmapFC secondVar opVarListRenames)
 
     allocateSensibleVariableName :: forall tp
-                                  . Sym t solver
+                                  . Sym t solver fs
                                  -> SL.Index sh tp
-                                 -> BV.BoundVar (Sym t solver) arch tp
-                                 -> IO (VarPair (BV.BoundVar (Sym t solver) arch) (BV.BoundVar (Sym t solver) arch) tp)
+                                 -> BV.BoundVar (Sym t solver fs) arch tp
+                                 -> IO (VarPair (BV.BoundVar (Sym t solver fs) arch) (BV.BoundVar (Sym t solver fs) arch) tp)
     allocateSensibleVariableName sym ix bv = do
       let operand = oplist SL.!! ix
       fresh <- C.freshBoundVar sym (U.makeSymbol ("operand" ++ show (SL.indexValue ix))) (AC.operandType (Proxy @arch) operand)
@@ -118,8 +118,8 @@ renameVariables oplist pf0 = do
     -- mapping the old pair to a new expr (which is just the new var wrapped
     -- into a SymExpr)
     convertToVarExprPair :: forall tp
-                          . VarPair (BV.BoundVar (Sym t solver) arch) (BV.BoundVar (Sym t solver) arch) tp
-                         -> IO (VarPair (BV.BoundVar (Sym t solver) arch) (EltWrapper t arch) tp)
+                          . VarPair (BV.BoundVar (Sym t solver fs) arch) (BV.BoundVar (Sym t solver fs) arch) tp
+                         -> IO (VarPair (BV.BoundVar (Sym t solver fs) arch) (EltWrapper t arch) tp)
     convertToVarExprPair (VarPair oldVar (BV.BoundVar newVar)) =
       return $ VarPair oldVar (EltWrapper (SB.BoundVarExpr newVar))
 
@@ -138,9 +138,9 @@ secondVar (VarPair _ v) = v
 -- The intermediate f0 is invalid, but we use 'F.copyFormula' to create a fresh
 -- set of bound variables that are unique.
 makeFreshFormula :: (AC.ConcreteArchitecture arch)
-                 => MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver))
-                 -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver))
-                 -> Syn t solver arch (F.Formula (Sym t solver) arch)
+                 => MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver fs))
+                 -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver fs))
+                 -> Syn t solver fs arch (F.Formula (Sym t solver fs) arch)
 makeFreshFormula exprs vars = withSymBackend $ \sym -> do
   liftIO $ F.copyFormula sym F.Formula { F.formParamVars = vars
                                        , F.formDefs = exprs
@@ -149,22 +149,22 @@ makeFreshFormula exprs vars = withSymBackend $ \sym -> do
 -- | Collect the locations that we need to define this formula; we collect into
 -- a 'MapF.MapF' instead of a 'F.Formula' so that we don't have a very invalid
 -- formula lying around.
-defineLocation :: forall t solver arch tp
+defineLocation :: forall t solver fs arch tp
                 . (AC.ConcreteArchitecture arch)
-               => F.Formula (Sym t solver) arch
+               => F.Formula (Sym t solver fs) arch
                -> A.Location arch tp
                -> SB.Expr t tp
-               -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver)), MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver)))
-               -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver)), MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver)))
+               -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver fs)), MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver fs)))
+               -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver fs)), MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver fs)))
 defineLocation frm loc expr (defs, vars) =
   (MapF.insert loc expr defs, collectVars frm expr vars)
 
-collectVars :: forall t solver tp arch
-             . (C.TestEquality (C.BoundVar (Sym t solver)), P.OrdF (A.Location arch))
-            => F.Formula (Sym t solver) arch
+collectVars :: forall t solver fs tp arch
+             . (C.TestEquality (C.BoundVar (Sym t solver fs)), P.OrdF (A.Location arch))
+            => F.Formula (Sym t solver fs) arch
             -> SB.Expr t tp
-            -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver))
-            -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver))
+            -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver fs))
+            -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver fs))
 collectVars frm expr m = MapF.union m neededVars
   where neededVars = U.extractUsedLocs (F.formParamVars frm) expr
 
@@ -176,13 +176,13 @@ collectVars frm expr m = MapF.union m neededVars
 -- 'AC.RegisterizedInstruction', which will tell us the mapping to another
 -- location that represents the immediate.  We can use the variable representing
 -- that location as the hole for the immediate.
-parameterizeFormula :: forall arch sh t solver
+parameterizeFormula :: forall arch sh t solver fs
                      . (AC.ConcreteArchitecture arch)
                     => AC.RegisterizedInstruction arch
                     -> A.Opcode arch (A.Operand arch) sh
                     -> SL.List (A.Operand arch) sh
-                    -> F.Formula (Sym t solver) arch
-                    -> Syn t solver arch (F.ParameterizedFormula (Sym t solver) arch sh)
+                    -> F.Formula (Sym t solver fs) arch
+                    -> Syn t solver fs arch (F.ParameterizedFormula (Sym t solver fs) arch sh)
 parameterizeFormula ri@AC.RI { AC.riLiteralLocs = regLitLocs } opcode oplist f = do
   -- The pfLiteralVars are the parameters from the original formula not
   -- corresponding to any parameters
@@ -249,14 +249,14 @@ collectUses opVars litVars defs =
 -- given 'MapF.MapF'.  For operands without 'A.Location's (i.e., immediates), we
 -- have to look up the corresponding mapping in the 'AC.RegisterizedInstruction'
 -- that records which 'A.Location' is standing in for the immediate.
-findVarForOperand :: forall arch sh tp t solver
+findVarForOperand :: forall arch sh tp t solver fs
                    . (AC.ConcreteArchitecture arch)
                   => A.Opcode arch (A.Operand arch) sh
                   -> AC.RegisterizedInstruction arch
-                  -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver))
+                  -> MapF.MapF (A.Location arch) (C.BoundVar (Sym t solver fs))
                   -> SL.Index sh tp
                   -> A.Operand arch tp
-                  -> Syn t solver arch (BV.BoundVar (Sym t solver) arch tp)
+                  -> Syn t solver fs arch (BV.BoundVar (Sym t solver fs) arch tp)
 findVarForOperand opc (AC.RI { AC.riLiteralLocs = lls, AC.riOpcode = rop }) formulaBindings ix op
   | Just P.Refl <- P.testEquality rop opc =
     case A.operandToLocation (Proxy @arch) op of
@@ -284,9 +284,9 @@ findVarForOperand opc (AC.RI { AC.riLiteralLocs = lls, AC.riOpcode = rop }) form
 
 liftImplicitLocations :: (P.OrdF (A.Location arch))
                       => A.Location arch tp
-                      -> C.SymExpr (Sym t solver) tp
-                      -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver))
-                      -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver))
+                      -> C.SymExpr (Sym t solver fs) tp
+                      -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver fs))
+                      -> MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver fs))
 liftImplicitLocations loc expr = MapF.insert (F.LiteralParameter loc) expr
 
 keepNonParams :: (P.OrdF f) => S.Set (Some f) -> f tp -> g tp -> Bool
@@ -320,8 +320,8 @@ replaceParameters :: (AC.ConcreteArchitecture arch)
                   => proxy arch
                   -> SL.Index sh tp
                   -> A.Operand arch tp
-                  -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver)), MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver)))
-                  -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver)), MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver)))
+                  -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver fs)), MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver fs)))
+                  -> (MapF.MapF (A.Location arch) (C.SymExpr (Sym t solver fs)), MapF.MapF (F.Parameter arch sh) (C.SymExpr (Sym t solver fs)))
 replaceParameters proxy ix op (defs, m) =
   case A.operandToLocation proxy op of
     Nothing -> (defs, m)

@@ -80,10 +80,10 @@ data Config arch =
          }
 
 -- | Synthesis environment.
-data SynEnv t solver arch =
-  SynEnv { seFormulas :: STM.TVar (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver) arch))
+data SynEnv t solver fs arch =
+  SynEnv { seFormulas :: STM.TVar (MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch))
          -- ^ All of the known formulas (base set + learned set) for real opcodes
-         , sePseudoFormulas :: MapF.MapF ((P.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver) arch)
+         , sePseudoFormulas :: MapF.MapF ((P.Pseudo arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch)
          -- ^ Formulas for all pseudo opcodes
          , seKnownCongruentOps :: STM.TVar (MapF.MapF (A.ShapeRepr arch) (SeqF.SeqF (P.SynthOpcode arch)))
          -- ^ All opcodes with known formulas with operands of a given shape
@@ -96,7 +96,7 @@ data SynEnv t solver arch =
          -- classification.
          , seIORelations :: MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
          -- ^ Descriptions of implicit and explicit operands for each opcode
-         , seSymBackend :: STM.TMVar (Sym t solver)
+         , seSymBackend :: STM.TMVar (Sym t solver fs)
          -- ^ The solver backend from Crucible.  This is behind a TMVar because
          -- it isn't thread safe - we have to serialize access.  We can't
          -- allocate one per thread, otherwise we won't be able to compare
@@ -109,7 +109,7 @@ data SynEnv t solver arch =
 -- continuation.
 --
 -- This is a "with" function, vs just returning the the constructed
--- 'SynEnv', because of the existential @t@ param in @Sym t solver@.
+-- 'SynEnv', because of the existential @t@ param in @Sym t solver fs@.
 withInitialState :: forall arch a
                   . (SynC arch, L.HasLogCfg, L.HasCallStack,
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
@@ -126,7 +126,7 @@ withInitialState :: forall arch a
                  -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
-                 -> (forall t solver . (WPO.OnlineSolver t solver) => SynEnv t solver arch -> IO a)
+                 -> (forall t solver fs . (WPO.OnlineSolver t solver) => SynEnv t solver fs arch -> IO a)
                  -- ^ Computation to pass run with access to the 'SynEnv'
                  -> IO a
 withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
@@ -152,13 +152,13 @@ withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
 -- overridden. Also, in 'withInitialState' the symbolic backend
 -- ('Sym') is constructed locally, which introduces an existentially
 -- bound param which is explicit here.
-loadInitialStateExplicit :: forall arch t solver
+loadInitialStateExplicit :: forall arch t solver fs
                   . (SynC arch, L.HasLogCfg, L.HasCallStack,
                      WPO.OnlineSolver t solver,
                     HR.HasRepr (A.Opcode arch (A.Operand arch)) (A.ShapeRepr arch),
                     HR.HasRepr (P.Pseudo arch (A.Operand arch)) (A.ShapeRepr arch))
                  => Config arch
-                 -> Sym t solver
+                 -> Sym t solver fs
                  -> IO (V.ConcreteState arch)
                  -- ^ A generator of random test cases
                  -> [V.ConcreteState arch]
@@ -174,7 +174,7 @@ loadInitialStateExplicit :: forall arch t solver
                  -- be all, but could omit instructions e.g., jumps)
                  -> MapF.MapF (A.Opcode arch (A.Operand arch)) (IORelation arch)
                  -- ^ IORelations
-                 -> IO (SynEnv t solver arch)
+                 -> IO (SynEnv t solver fs arch)
 loadInitialStateExplicit cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
   let load dir = F.loadFormulasFromFiles sym F.emptyLibrary (mkFormulaFilename dir) allOpcodes
   baseSet <- load (baseSetDir cfg)
@@ -226,7 +226,7 @@ mkFormulaFilename dir oc =
 -- have a formula (and that we actually want to learn)
 makeWorklist :: (MapF.OrdF (A.Opcode arch (A.Operand arch)))
              => [Some ((A.Opcode arch) (A.Operand arch))]
-             -> MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver) arch)
+             -> MapF.MapF ((A.Opcode arch) (A.Operand arch)) (F.ParameterizedFormula (Sym t solver fs) arch)
              -> WL.Worklist (Some (A.Opcode arch (A.Operand arch)))
 makeWorklist allOps knownFormulas = WL.fromList (S.toList opSet')
   where

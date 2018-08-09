@@ -47,19 +47,19 @@ import           SemMC.Formula.SETokens ( FAtom(..), printTokens
 -- | Serialize a 'ParameterizedFormula' into its textual s-expression form.
 printParameterizedFormula :: (A.Architecture arch)
                           => A.ShapeRepr arch sh
-                          -> ParameterizedFormula (S.ExprBuilder t st) arch sh
+                          -> ParameterizedFormula (S.ExprBuilder t st fs) arch sh
                           -> T.Text
 printParameterizedFormula rep =
   printTokens mempty . sexprConvertParameterized rep
 
 printFormula :: (ShowF (A.Location arch))
-             => Formula (S.ExprBuilder t st) arch
+             => Formula (S.ExprBuilder t st fs) arch
              -> T.Text
 printFormula = printTokens mempty . sexprConvert
 
-sexprConvert :: forall t st arch
+sexprConvert :: forall t st fs arch
               . (ShowF (A.Location arch))
-             => Formula (S.ExprBuilder t st) arch
+             => Formula (S.ExprBuilder t st fs) arch
              -> SC.SExpr FAtom
 sexprConvert f =
   fromFoldable' (ident "defs" : map (convertSimpleDef (Proxy @arch) (formParamVars f)) (MapF.toList (formDefs f)))
@@ -80,7 +80,7 @@ convertSimpleDef _ paramVars (MapF.Pair loc elt) =
 -- | Intermediate serialization.
 sexprConvertParameterized :: (A.Architecture arch)
                           => A.ShapeRepr arch sh
-                          -> ParameterizedFormula (S.ExprBuilder t st) arch sh
+                          -> ParameterizedFormula (S.ExprBuilder t st fs) arch sh
                           -> SC.SExpr FAtom
 sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
                                        , pfOperandVars = opVars
@@ -93,13 +93,13 @@ sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
                 ]
 
 convertUses :: (ShowF (A.Location arch))
-            => SL.List (BV.BoundVar (S.ExprBuilder t st) arch) sh
+            => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
             -> Set.Set (Some (Parameter arch sh))
             -> SC.SExpr FAtom
 convertUses oplist = fromFoldable (viewSome (convertParameter oplist))
 
 convertParameter :: (ShowF (A.Location arch))
-                 => SL.List (BV.BoundVar (S.ExprBuilder t st) arch) sh
+                 => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
                  -> Parameter arch sh tp
                  -> SC.SExpr FAtom
 convertParameter opVars (OperandParameter _ idx) = ident name
@@ -118,9 +118,9 @@ convertParameter opVars (FunctionParameter fnName (WrappedOperand orep oix) _) =
 -- encountered in a definition.
 type ParamLookup t = forall tp. S.ExprBoundVar t tp -> Maybe (SC.SExpr FAtom)
 
-convertDefs :: forall t st arch sh.
+convertDefs :: forall t st fs arch sh.
                (ShowF (A.Location arch))
-            => SL.List (BV.BoundVar (S.ExprBuilder t st) arch) sh
+            => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
             -> MapF.MapF (A.Location arch) (S.ExprBoundVar t)
             -> MapF.MapF (Parameter arch sh) (S.Expr t)
             -> SC.SExpr FAtom
@@ -135,7 +135,7 @@ convertLocation :: (ShowF loc) => loc tp -> SC.SExpr FAtom
 convertLocation = SC.SAtom . AQuoted . showF
 
 -- | For use in the parameter lookup function.
-buildOpMapping :: SL.List (BV.BoundVar (S.ExprBuilder t st) arch) sh
+buildOpMapping :: SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
                -> Map.Map (Some (S.ExprBoundVar t)) (SC.SExpr FAtom)
 buildOpMapping SL.Nil = Map.empty
 buildOpMapping (var SL.:< rest) =
@@ -143,7 +143,7 @@ buildOpMapping (var SL.:< rest) =
   where name = varName var
 
 convertDef :: (ShowF (A.Location arch))
-           => SL.List (BV.BoundVar (S.ExprBuilder t st) arch) sh
+           => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
            -> ParamLookup t
            -> Pair (Parameter arch sh) (S.Expr t)
            -> SC.SExpr FAtom
@@ -243,14 +243,14 @@ convertApp paramLookup = fromFoldable' . convertApp'
                 w = case S.exprType bv of BaseBVRepr len -> natValue len
 
 -- | Extract the name, as a String, of a wrapped bound variable.
-varName :: BV.BoundVar (S.ExprBuilder t st) arch op -> String
+varName :: BV.BoundVar (S.ExprBuilder t st fs) arch op -> String
 varName (BV.BoundVar var) = show (S.bvarName var)
 
 
-convertOperandVars :: forall arch sh t st
+convertOperandVars :: forall arch sh t st fs
                     . (A.Architecture arch)
                    => A.ShapeRepr arch sh
-                   -> SL.List (BV.BoundVar (S.ExprBuilder t st) arch) sh
+                   -> SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
                    -> SC.SExpr FAtom
 convertOperandVars rep l =
   case (rep, l) of

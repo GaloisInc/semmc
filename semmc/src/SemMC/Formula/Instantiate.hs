@@ -45,7 +45,7 @@ import           SemMC.Formula.Formula
 import qualified SemMC.Util                         as U
 
 -- I got tired of typing this.
-type SB t st = S.ExprBuilder t st
+type SB t st fs = S.ExprBuilder t st fs
 
 -- | Convert a type-level list of operands to a Crucible-style context of
 -- operand types. This reverses it, but we don't care about that for our use
@@ -116,9 +116,9 @@ buildLitAssignment _ exprLookup = foldlM f (MapF.Pair Ctx.empty Ctx.empty) . Map
 
 -- | Replace all the variables in the given 'SomeVarAssignment' with their
 -- corresponding expressions, in the given expression.
-replaceVars :: forall t st tp
-             . SB t st
-            -> SomeVarAssignment (SB t st)
+replaceVars :: forall t st fs tp
+             . SB t st fs
+            -> SomeVarAssignment (SB t st fs)
             -> S.Expr t tp
             -> IO (S.Expr t tp)
 replaceVars sym (Pair varAssn exprAssn) expr =
@@ -127,22 +127,22 @@ replaceVars sym (Pair varAssn exprAssn) expr =
 -- | Given a generator for expressions given machine locations and all used
 -- machine locations, this replaces bound variables with their corresponding
 -- expressions in the given top-level expression.
-replaceLitVars :: forall loc t st tp.
+replaceLitVars :: forall loc t st fs tp.
                   (OrdF loc)
-               => SB t st
+               => SB t st fs
                -> (forall tp'. loc tp' -> IO (S.Expr t tp'))
                -> MapF.MapF loc (S.ExprBoundVar t)
                -> S.Expr t tp
                -> IO (S.Expr t tp)
 replaceLitVars sym newExprs oldVars expr = do
-  assn <- buildLitAssignment (Proxy @(SB t st)) newExprs oldVars
+  assn <- buildLitAssignment (Proxy @(SB t st fs)) newExprs oldVars
   replaceVars sym assn expr
 
 -- | Get the corresponding location of a parameter, if it actually corresponds
 -- to one.
-paramToLocation :: forall arch sh tp t st
+paramToLocation :: forall arch sh tp t st fs
                  . (A.Architecture arch)
-                => SL.List (A.AllocatedOperand arch (S.ExprBuilder t st)) sh
+                => SL.List (A.AllocatedOperand arch (S.ExprBuilder t st fs)) sh
                 -> Parameter arch sh tp
                 -> Maybe (A.Location arch tp)
 paramToLocation opVals op@(OperandParameter _ idx) =
@@ -161,13 +161,13 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each
 -- operand that are used within the returned formula.
-instantiateFormula :: forall arch t st sh.
+instantiateFormula :: forall arch t st fs sh.
                       ( A.Architecture arch
-                      , S.IsSymExprBuilder (SB t st))
-                   => SB t st
-                   -> ParameterizedFormula (SB t st) arch sh
+                      , S.IsSymExprBuilder (SB t st fs))
+                   => SB t st fs
+                   -> ParameterizedFormula (SB t st fs) arch sh
                    -> SL.List (A.Operand arch) sh
-                   -> IO (SL.List (A.TaggedExpr arch (SB t st)) sh, Formula (SB t st) arch)
+                   -> IO (SL.List (A.TaggedExpr arch (SB t st fs)) sh, Formula (SB t st fs) arch)
 instantiateFormula
   sym
   pf@(ParameterizedFormula { pfOperandVars = opVars
@@ -187,7 +187,7 @@ instantiateFormula
     OperandAssignment { opAssnTaggedExprs = opTaggedExprs
                       , opAssnVars = Pair opVarsAssn opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
-    let allocOpers :: SL.List (A.AllocatedOperand arch (SB t st)) sh
+    let allocOpers :: SL.List (A.AllocatedOperand arch (SB t st fs)) sh
         allocOpers = FC.fmapFC A.taggedOperand opTaggedExprs
     let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp)
         rewrite = FE.evaluateFunctions sym pf allocOpers newLitExprLookup (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
@@ -269,30 +269,30 @@ instantiateFormula
                                      })
 
 -- | Create a new formula with the same semantics, but with fresh bound vars.
-copyFormula :: forall t st arch.
+copyFormula :: forall t st fs arch.
                (A.IsLocation (A.Location arch), U.HasCallStack)
-            => SB t st
-            -> Formula (SB t st) arch
-            -> IO (Formula (SB t st) arch)
+            => SB t st fs
+            -> Formula (SB t st fs) arch
+            -> IO (Formula (SB t st fs) arch)
 copyFormula sym (Formula { formParamVars = vars, formDefs = defs}) = do
   let mkVar :: forall tp. A.Location arch tp -> IO (S.ExprBoundVar t tp)
       mkVar loc = S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
   newVars <- MapF.traverseWithKey (const . mkVar) vars
   let lookupNewVar :: forall tp. A.Location arch tp -> S.Expr t tp
       lookupNewVar = S.varExpr sym . U.fromJust' "copyFormula" . flip MapF.lookup newVars
-  assn <- buildLitAssignment (Proxy @(SB t st)) (return . lookupNewVar) vars
+  assn <- buildLitAssignment (Proxy @(SB t st fs)) (return . lookupNewVar) vars
   newDefs <- traverseF (replaceVars sym assn) defs
   return $ Formula { formParamVars = newVars
                    , formDefs = newDefs
                    }
 
 -- | Combine two formulas in sequential execution
-sequenceFormulas :: forall t st arch.
+sequenceFormulas :: forall t st fs arch.
                     (A.Architecture arch)
-                 => SB t st
-                 -> Formula (SB t st) arch
-                 -> Formula (SB t st) arch
-                 -> IO (Formula (SB t st) arch)
+                 => SB t st fs
+                 -> Formula (SB t st fs) arch
+                 -> Formula (SB t st fs) arch
+                 -> IO (Formula (SB t st fs) arch)
 sequenceFormulas sym form1 form2 = do
   -- First, copy them, just to be safe. This might not be necessary for one of
   -- them, but I'll keep it like this for now.
@@ -313,7 +313,7 @@ sequenceFormulas sym form1 form2 = do
         | Just newVar <- MapF.lookup loc vars1 = S.varExpr sym newVar
         -- Otherwise, use the original variable.
         | otherwise = S.varExpr sym $ U.fromJust' "sequenceFormulas" $ MapF.lookup loc vars2
-  assn <- buildLitAssignment (Proxy @(SB t st)) (return . varReplace) vars2
+  assn <- buildLitAssignment (Proxy @(SB t st fs)) (return . varReplace) vars2
   newDefs2 <- traverseF (replaceVars sym assn) defs2
 
   let newDefs = MapF.union newDefs2 defs1
@@ -326,11 +326,11 @@ sequenceFormulas sym form1 form2 = do
                    , formDefs = newDefs
                    }
 
-condenseFormulas :: forall t f st arch.
+condenseFormulas :: forall f t st fs arch.
                     ( A.Architecture arch
                     , Foldable f
                     )
-                 => SB t st
-                 -> f (Formula (SB t st) arch)
-                 -> IO (Formula (SB t st) arch)
+                 => SB t st fs
+                 -> f (Formula (SB t st fs) arch)
+                 -> IO (Formula (SB t st fs) arch)
 condenseFormulas sym = foldrM (sequenceFormulas sym) emptyFormula

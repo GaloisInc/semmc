@@ -57,7 +57,7 @@ import           SemMC.Architecture.Internal
 import           SemMC.Architecture.Location
 import           SemMC.Formula.Formula ( LocationFuncInterp, ParameterizedFormula )
 
-type Sym t st = S.ExprBuilder t st
+type Sym t st fs = S.ExprBuilder t st fs
 
 type ShapeRepr arch = SL.List (OperandTypeRepr arch)
 
@@ -124,7 +124,7 @@ class (IsOperand (Operand arch),
   -- | Functions used to simplify defined locations in parameterized formulas
   -- that are defined as functions of an input parameter into a concrete
   -- location
-  locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t st arch)]
+  locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t st fs arch)]
 
   shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
 
@@ -161,18 +161,18 @@ showShapeRepr _ rep =
 --
 -- We need to pass the return type 'BaseTypeRepr' in so that we can know at the
 -- call site that the expression produced by the evaluator is correctly-typed.
-data Evaluator arch t st =
+data Evaluator arch t st fs =
   Evaluator (forall tp u sh
-               . Sym t st
-              -> ParameterizedFormula (Sym t st) arch sh
-              -> SL.List (AllocatedOperand arch (Sym t st)) sh
+               . Sym t st fs
+              -> ParameterizedFormula (Sym t st fs) arch sh
+              -> SL.List (AllocatedOperand arch (Sym t st fs)) sh
               -> Ctx.Assignment (S.Expr t) u
               -> (forall ltp . Location arch ltp -> IO (S.Expr t ltp))
               -> BaseTypeRepr tp
               -> IO (S.Expr t tp))
 
-data FunctionInterpretation t st arch =
-  FunctionInterpretation { locationInterp :: LocationFuncInterp t st arch
+data FunctionInterpretation t st fs arch =
+  FunctionInterpretation { locationInterp :: LocationFuncInterp t st fs arch
                          -- ^ The function interpretation to apply to functions
                          -- appearing in location definition contexts (i.e., the
                          -- 'F.Parameter' function type).
@@ -181,7 +181,7 @@ data FunctionInterpretation t st arch =
                          -- to apply statically during formula translation (at
                          -- the value level) to eliminate an uninterpreted
                          -- function appearing in a semantics expression.
-                         , exprInterp :: Evaluator arch t st
+                         , exprInterp :: Evaluator arch t st fs
                          -- ^ The evaluator to apply to uninterpreted functions
                          -- during formula instantiation (in Formula.Instantiate)
                          }

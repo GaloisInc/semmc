@@ -371,10 +371,10 @@ locationFuncInterpretation
   :: ( A.IsLocation (Location ppc)
      , A.Location ppc ~ Location ppc
      , A.Operand ppc ~ PPC.Operand
-     , sym ~ S.ExprBuilder t st
+     , sym ~ S.ExprBuilder t st fs
      , A.OperandComponents ppc sym ~ OperandComponents ppc sym
      )
-  => [(String, A.FunctionInterpretation t st ppc)]
+  => [(String, A.FunctionInterpretation t st fs ppc)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemriReg
                                                , A.exprInterpName = 'E.interpMemriRegExtractor
