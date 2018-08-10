@@ -443,7 +443,7 @@ instance InterpIsR15 (Maybe ThumbOperands.GPR) where
 
 
 instance InterpIsR15 ThumbOperands.LowGPR where
-    interpIsR15 gprReg = ThumbOperands.unLowGPR gprReg == 15
+    interpIsR15 _ = False  -- only 3 bits, can never be 15
 
 instance InterpIsR15 (Maybe ThumbOperands.LowGPR) where
   interpIsR15 mr =
