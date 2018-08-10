@@ -328,9 +328,13 @@ type instance ArchRegWidth AArch32 = $(litT $ numTyLit regWidth)
 
 
 instance A.Architecture AArch32 where
-    data TaggedExpr AArch32 sym s = TaggedExpr (S.SymExpr sym (A.OperandType AArch32 s))
-    unTagged (TaggedExpr e) = e
-    operandValue _ = operandValue
+    data TaggedExpr AArch32 sym s = TaggedExpr (A.AllocatedOperand AArch32 sym s)
+    unTagged (TaggedExpr te) =
+      case te of
+        A.ValueOperand se -> Just se
+        A.LocationOperand _ se -> Just se
+        A.CompoundOperand {} -> Nothing
+    allocateSymExprsForOperand _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation

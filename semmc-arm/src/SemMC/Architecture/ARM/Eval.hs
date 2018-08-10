@@ -75,8 +75,8 @@ import           What4.BaseTypes
 ------------------------------------------------------------------------
 -- | Extract values from the ARM Am2offset_imm operand
 
-interpAm2offsetimmImmExtractor :: ARMOperands.Am2OffsetImm -> Int16
-interpAm2offsetimmImmExtractor = fromIntegral . W.unW . ARMOperands.am2OffsetImmImmediate
+interpAm2offsetimmImmExtractor :: ARMOperands.Am2OffsetImm -> W.W 12 -- Int16
+interpAm2offsetimmImmExtractor = {- fromIntegral . W.unW . -} ARMOperands.am2OffsetImmImmediate
 
 interpAm2offsetimmAddExtractor :: ARMOperands.Am2OffsetImm -> Bool
 interpAm2offsetimmAddExtractor = (== 1) . ARMOperands.am2OffsetImmAdd
