@@ -76,6 +76,7 @@ import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 import qualified Text.Megaparsec.Char.Lexer as P
 import           What4.BaseTypes
+import qualified What4.Expr as WE
 import qualified What4.Interface as S
 
 -- | Define the arch type for this processor.  There are no
@@ -591,17 +592,23 @@ a32template a32sr =
               where mkTemplate gprNum = T.TemplatedOperand Nothing
                                         (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
                                             :: T.TemplatedOperand AArch32 "Addrmode_imm12"
-                        where mkTemplate' :: T.TemplatedOperandFn AArch32 "Addrmode_imm12"
+                        where mkTemplate' :: forall sym
+                                           . (S.IsSymExprBuilder sym)
+                                          => sym
+                                          -> (forall tp . Location AArch32 tp -> IO (S.SymExpr sym tp))
+                                          -> IO (A.AllocatedOperand AArch32 sym "Addrmode_imm12",
+                                                 T.WrappedRecoverOperandFn sym (A.Operand AArch32 "Addrmode_imm12"))
                               mkTemplate' sym locLookup = do
                                 let gprN = ARMOperands.gpr $ fromIntegral gprNum
-                                let loc = LocGPR gprN
+                                let loc = LocGPR gprNum
                                 base <- locLookup loc
                                 -- base <- A.unTagged <$> A.operandValue (Proxy @AArch32) sym locLookup
                                 --                           (A32Operand $ ARMDis.GPR gprN)
                                 offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
                                 addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
                                 -- expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
-                                let recover evalFn = do
+                                let recover :: (forall tp . S.SymExpr sym tp -> IO (WE.GroundValue tp)) -> IO (A.Operand AArch32 "Addrmode_imm12")
+                                    recover evalFn = do
                                       offsetVal <- fromInteger <$> evalFn offset
                                       addflagVal <- fromInteger <$> evalFn addflag
                                       return $ A32Operand $ ARMDis.Addrmode_imm12 $
@@ -614,16 +621,23 @@ a32template a32sr =
             where mkTemplate gprNum = T.TemplatedOperand Nothing
                                       (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
                                           :: T.TemplatedOperand AArch32 "Addrmode_imm12_pre"
-                    where mkTemplate' :: T.TemplatedOperandFn AArch32 "Addrmode_imm12_pre"
+                    where mkTemplate' :: forall sym
+                                       . (S.IsSymExprBuilder sym)
+                                      => sym
+                                      -> (forall tp . Location AArch32 tp -> IO (S.SymExpr sym tp))
+                                      -> IO (A.AllocatedOperand AArch32 sym "Addrmode_imm12_pre",
+                                             T.WrappedRecoverOperandFn sym (A.Operand AArch32 "Addrmode_imm12_pre"))
                           mkTemplate' sym locLookup = do
                             let gprN = ARMOperands.gpr $ fromIntegral gprNum
-                            let loc = LocGPR gprN
+                            let loc = LocGPR gprNum
                             -- base <- A.unTagged <$> A.operandValue (Proxy @AArch32) sym locLookup (A32Operand $ ARMDis.GPR gprN)
                             base <- locLookup loc
                             offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
-                            addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
+                            addflag :: S.SymExpr sym (BaseBVType 1)
+                                    <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
                             -- expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
-                            let recover evalFn = do
+                            let recover :: (forall tp . S.SymExpr sym tp -> IO (WE.GroundValue tp)) -> IO (A.Operand AArch32 "Addrmode_imm12_pre")
+                                recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
                                   addflagVal <- fromInteger <$> evalFn addflag
                                   return $ A32Operand $ ARMDis.Addrmode_imm12_pre $
