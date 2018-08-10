@@ -426,7 +426,7 @@ eval_isR15 sym pf operands ufArguments resultRepr =
 -- immediate types only appear as function operands.  This means that we only
 -- need to look found the bound variable in the 'Ctx.Assignment' in the argument
 -- list and can disregard the literals.
-eval_am2offset_imm_imm :: FE.Evaluator A32 t
+eval_am2offset_imm_imm :: A.Evaluator A32 t
 eval_am2offset_imm_imm =
   FE.evalBitvectorExtractor "am2offset_imm_imm" (knownNat @12) $ \case
     ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmImmediate oimm)
@@ -434,106 +434,106 @@ eval_am2offset_imm_imm =
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
 -- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
-eval_am2offset_imm_add :: HasCallStack => FE.Evaluator A32 t
+eval_am2offset_imm_add :: HasCallStack => A.Evaluator A32 t
 eval_am2offset_imm_add =
   FE.evalBitvectorExtractorWith bitToBool "am2offset_imm_add" (knownNat @1) $ \case
     ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmAdd oimm)
     _ -> Nothing
 
-eval_imm12_reg :: FE.Evaluator A32 t
+eval_imm12_reg :: A.Evaluator A32 t
 eval_imm12_reg =
   FE.evalRegExtractor "imm12_reg" testRegisterEquality $ \case
     ARMDis.Addrmode_imm12_pre ami12 -> Just (rewrapRegister (ARMOperands.addrModeImm12Register ami12))
     ARMDis.Addrmode_imm12 ami12 -> Just (rewrapRegister (ARMOperands.addrModeImm12Register ami12))
     _ -> Nothing
 
-eval_imm12_off :: FE.Evaluator A32 t
+eval_imm12_off :: A.Evaluator A32 t
 eval_imm12_off =
   FE.evalBitvectorExtractor "imm12_off" (knownNat @12) $ \case
     ARMDis.Addrmode_imm12_pre ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     _ -> Nothing
 
-eval_imm12_add :: HasCallStack => FE.Evaluator A32 t
+eval_imm12_add :: HasCallStack => A.Evaluator A32 t
 eval_imm12_add =
   FE.evalBitvectorExtractorWith bitToBool "imm12_add" (knownNat @1) $ \case
     ARMDis.Addrmode_imm12_pre ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     _ -> Nothing
 
-eval_ldst_so_reg_base_register :: FE.Evaluator A32 t
+eval_ldst_so_reg_base_register :: A.Evaluator A32 t
 eval_ldst_so_reg_base_register =
   FE.evalRegExtractor "ldst_so_reg_base_register" testRegisterEquality $ \case
     ARMDis.Ldst_so_reg lsr -> Just (rewrapRegister (ARMOperands.ldstSoRegBaseRegister lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_offset_register :: FE.Evaluator A32 t
+eval_ldst_so_reg_offset_register :: A.Evaluator A32 t
 eval_ldst_so_reg_offset_register =
   FE.evalRegExtractor "ldst_so_reg_offset_register" testRegisterEquality $ \case
     ARMDis.Ldst_so_reg lsr -> Just (rewrapRegister (ARMOperands.ldstSoRegOffsetRegister lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_add :: HasCallStack => FE.Evaluator A32 t
+eval_ldst_so_reg_add :: HasCallStack => A.Evaluator A32 t
 eval_ldst_so_reg_add =
   FE.evalBitvectorExtractorWith bitToBool "ldst_so_reg_add" (knownNat @1) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegAdd lsr)
     _ -> Nothing
 
-eval_ldst_so_reg_imm :: FE.Evaluator A32 t
+eval_ldst_so_reg_imm :: A.Evaluator A32 t
 eval_ldst_so_reg_imm =
   FE.evalBitvectorExtractor "ldst_so_reg_imm" (knownNat @5) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegImmediate lsr)
     _ -> Nothing
 
-eval_ldst_so_reg_st :: FE.Evaluator A32 t
+eval_ldst_so_reg_st :: A.Evaluator A32 t
 eval_ldst_so_reg_st =
   FE.evalBitvectorExtractor "ldst_so_reg_shift_type" (knownNat @2) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegShiftType lsr)
     _ -> Nothing
 
-eval_modimm_imm :: FE.Evaluator A32 t
+eval_modimm_imm :: A.Evaluator A32 t
 eval_modimm_imm =
   FE.evalBitvectorExtractor "modimm_imm" (knownNat @8) $ \case
     ARMDis.Mod_imm mi -> Just (fromIntegral $ W.unW $ ARMOperands.modImmOrigImmediate mi)
     _ -> Nothing
 
-eval_modimm_rot :: FE.Evaluator A32 t
+eval_modimm_rot :: A.Evaluator A32 t
 eval_modimm_rot =
   FE.evalBitvectorExtractor "modimm_rot" (knownNat @4) $ \case
     ARMDis.Mod_imm mi -> Just (fromIntegral $ W.unW $ ARMOperands.modImmOrigRotate mi)
     _ -> Nothing
 
-eval_soregimm_type :: FE.Evaluator A32 t
+eval_soregimm_type :: A.Evaluator A32 t
 eval_soregimm_type =
   FE.evalBitvectorExtractor "soregimm_type" (knownNat @2) $ \case
     ARMDis.So_reg_imm sri -> Just (fromIntegral $ W.unW $ ARMOperands.soRegImmShiftType sri)
     _ -> Nothing
 
-eval_soregimm_imm :: FE.Evaluator A32 t
+eval_soregimm_imm :: A.Evaluator A32 t
 eval_soregimm_imm =
   FE.evalBitvectorExtractor "soregimm_imm" (knownNat @5) $ \case
     ARMDis.So_reg_imm sri -> Just (fromIntegral $ W.unW $ ARMOperands.soRegImmImmediate sri)
     _ -> Nothing
 
-eval_soregimm_reg :: FE.Evaluator A32 t
+eval_soregimm_reg :: A.Evaluator A32 t
 eval_soregimm_reg =
   FE.evalRegExtractor "soregimm_reg" testRegisterEquality $ \case
     ARMDis.So_reg_imm sri -> Just (rewrapRegister (ARMOperands.soRegImmReg sri))
     _ -> Nothing
 
-eval_soregreg_type :: FE.Evaluator A32 t
+eval_soregreg_type :: A.Evaluator A32 t
 eval_soregreg_type =
   FE.evalBitvectorExtractor "soregreg_type" (knownNat @2) $ \case
     ARMDis.So_reg_reg srr -> Just (fromIntegral $ W.unW $ ARMOperands.soRegRegShiftType srr)
     _ -> Nothing
 
-eval_soregreg_reg1 :: FE.Evaluator A32 t
+eval_soregreg_reg1 :: A.Evaluator A32 t
 eval_soregreg_reg1 =
   FE.evalRegExtractor "soregreg_reg1" testRegisterEquality $ \case
     ARMDis.So_reg_reg srr -> Just (rewrapRegister (ARMOperands.soRegRegReg1 srr))
     _ -> Nothing
 
-eval_soregreg_reg2 :: FE.Evaluator A32 t
+eval_soregreg_reg2 :: A.Evaluator A32 t
 eval_soregreg_reg2 =
   FE.evalRegExtractor "soregreg_reg2" testRegisterEquality $ \case
     ARMDis.So_reg_reg srr -> Just (rewrapRegister (ARMOperands.soRegRegReg2 srr))
@@ -566,7 +566,7 @@ locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation
                        , A.exprInterpName = 'interpIsR15
-                       , A.exprInterp = FE.Evaluator eval_isR15
+                       , A.exprInterp = A.Evaluator eval_isR15
                        })
 
     , ("a32.am2offset_imm_imm", A.FunctionInterpretation
