@@ -9,8 +9,6 @@ module SemMC.Architecture.ARM.Location
     ( Location(..)
     , ArchRegWidth
     , ArchRepr(..)
-    , NaturalWord
-    , naturalBitSize
     )
     where
 
