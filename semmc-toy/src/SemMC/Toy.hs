@@ -65,7 +65,7 @@ import qualified SemMC.Architecture.View as V
 import qualified SemMC.Stochastic.IORelation as I
 import qualified SemMC.Stochastic.Pseudo as P
 import qualified SemMC.Stochastic.RvwpOptimization as R
-import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), WrappedRecoverOperandFn(..) )
+import           SemMC.Synthesis.Template ( TemplatedOperandFn, TemplatableOperand(..), TemplatedOperand(..), RecoverOperandFn(..) )
 import           SemMC.Util ( makeSymbol )
 
 -- import Debug.Trace
@@ -294,8 +294,9 @@ instance TemplatableOperand Toy where
             where mkTemplate reg = TemplatedOperand (Just (RegLoc reg)) (Set.singleton (Some (RegLoc reg))) mkTemplate' :: TemplatedOperand Toy "R32"
                     where mkTemplate' :: TemplatedOperandFn Toy "R32"
                           mkTemplate' _ locLookup = do
-                            expr <- locLookup (RegLoc reg)
-                            return (expr, WrappedRecoverOperandFn $ const (return (R32 reg)))
+                            let loc = RegLoc reg
+                            expr <- locLookup loc
+                            return (A.LocationOperand loc expr, RecoverOperandFn $ const (return (R32 reg)))
       "I32"
         | Just Refl <- testEquality sr (SR.knownSymbol @"I32") ->
             [TemplatedOperand Nothing Set.empty mkConst]
@@ -303,7 +304,7 @@ instance TemplatableOperand Toy where
                     mkConst sym _ = do
                       v <- S.freshConstant sym (makeSymbol "I32") knownRepr
                       let recover evalFn = I32 . fromInteger <$> evalFn v
-                      return (v, WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand v, RecoverOperandFn recover)
       r -> error $ "opTemplates: unexpected symbolRepr: "++show r
 
 type instance A.Operand Toy = Operand
@@ -332,15 +333,25 @@ shapeReprType sr =
         knownRepr :: BaseTypeRepr (A.OperandType Toy "I32")
     _ -> error ("Unhandled shape repr: " ++ show sr)
 
-instance A.Architecture Toy where
-  data TaggedExpr Toy sym s = TaggedExpr { unTaggedExpr :: S.SymExpr sym (A.OperandType Toy s) }
+data OperandComponents sym s = NoComponents
+type instance A.OperandComponents Toy sym = OperandComponents sym
 
-  unTagged = unTaggedExpr
+instance A.Architecture Toy where
+  data TaggedExpr Toy sym s = TaggedExpr { unTaggedExpr :: A.AllocatedOperand Toy sym s }
+
+  unTagged te =
+    case unTaggedExpr te of
+      A.ValueOperand se -> Just se
+      A.LocationOperand _ se -> Just se
+      A.CompoundOperand {} -> Nothing
+  taggedOperand = unTaggedExpr
 
   uninterpretedFunctions _ = []
 
-  operandValue _ _ newVars (R32 reg) = TaggedExpr <$> newVars (RegLoc reg)
-  operandValue _ sym _     (I32 imm) = TaggedExpr <$> S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
+  allocateSymExprsForOperand _ _ newVars (R32 reg) =
+    let loc = RegLoc reg
+    in TaggedExpr <$> A.LocationOperand loc <$> newVars loc
+  allocateSymExprsForOperand _ sym _     (I32 imm) = TaggedExpr <$> A.ValueOperand <$> S.bvLit sym (knownNat :: NatRepr 32) (toInteger imm)
 
   operandToLocation _ (R32 reg) = Just (RegLoc reg)
   operandToLocation _ (I32 _) = Nothing
