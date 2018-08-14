@@ -44,10 +44,11 @@ import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
 import qualified SemMC.Formula as F
 import           SemMC.Synthesis.Template ( BaseSet, TemplatedArch, unTemplate )
 import qualified SemMC.Synthesis as SemMC
-import qualified SemMC.Synthesis.Core as SemMC
 import qualified SemMC.Util as U
 
 import qualified SemMC.Architecture.PPC32 as PPC32
+
+import           Prelude
 
 data Options = Options { oInputFile :: FilePath
                        , oOutputFile :: FilePath
@@ -187,35 +188,36 @@ mainWith r opts = do
   -- Set up the synthesis side of things
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
+
   CBO.withYicesOnlineBackend r $ \sym -> do
-  (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
+    (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
 
-  -- Turn it into a formula
-  formula <- symbolicallyExecute sym plainBaseSet insns
-  putStrLn ""
-  putStrLn "Here's the formula for the whole program:"
-  print formula
+    -- Turn it into a formula
+    formula <- symbolicallyExecute sym plainBaseSet insns
+    putStrLn ""
+    putStrLn "Here's the formula for the whole program:"
+    print formula
 
-  -- Look for an equivalent program!
-  putStrLn ""
-  putStrLn "Starting synthesis..."
-  newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth synthEnv formula
-  putStrLn ""
-  putStrLn "Here's the equivalent program:"
-  putStrLn (printProgram newInsns)
+    -- Look for an equivalent program!
+    putStrLn ""
+    putStrLn "Starting synthesis..."
+    newInsns <- maybe (fail "Sorry, synthesis failed") return =<< SemMC.mcSynth synthEnv formula
+    putStrLn ""
+    putStrLn "Here's the equivalent program:"
+    putStrLn (printProgram newInsns)
 
-  -- Optionally append a return instruction so that we can call into this
-  -- function.
-  let retInsn = DPPC.Instruction DPPC.BLR DPPC.Nil
-  newInsns' <- case oAppendReturn opts of
-    False -> return newInsns
-    True -> return (newInsns ++ [retInsn])
-  let newObjBytes = rewriteElfText textSection elf newInsns'
-  BSL.writeFile (oOutputFile opts) newObjBytes
+    -- Optionally append a return instruction so that we can call into this
+    -- function.
+    let retInsn = DPPC.Instruction DPPC.BLR DPPC.Nil
+    newInsns' <- case oAppendReturn opts of
+      False -> return newInsns
+      True -> return (newInsns ++ [retInsn])
+    let newObjBytes = rewriteElfText textSection elf newInsns'
+    BSL.writeFile (oOutputFile opts) newObjBytes
 
-  case oOriginalWithReturn opts of
-    Nothing -> return ()
-    Just owr -> do
-      let origWithReturn = insns ++ [retInsn]
-          origObjBytes = rewriteElfText textSection elf origWithReturn
-      BSL.writeFile owr origObjBytes
+    case oOriginalWithReturn opts of
+      Nothing -> return ()
+      Just owr -> do
+        let origWithReturn = insns ++ [retInsn]
+            origObjBytes = rewriteElfText textSection elf origWithReturn
+        BSL.writeFile owr origObjBytes

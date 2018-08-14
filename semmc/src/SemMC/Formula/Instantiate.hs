@@ -19,9 +19,8 @@ module SemMC.Formula.Instantiate
   , paramToLocation
   ) where
 
-import           Control.Monad.State
 import           Data.Foldable                      ( foldlM, foldrM )
-import           Data.Maybe                         ( fromJust, isNothing )
+import           Data.Maybe                         ( isNothing )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context         as Ctx
 import           Data.Parameterized.Ctx
@@ -30,6 +29,7 @@ import qualified Data.Parameterized.Map             as MapF
 import           Data.Parameterized.Pair            ( Pair(..) )
 import           Data.Parameterized.Some            ( Some(..) )
 import           Data.Parameterized.TraversableF
+import qualified Data.Parameterized.TraversableFC   as FC
 import           Data.Proxy                         ( Proxy(..) )
 import           GHC.TypeLits                       ( Symbol )
 import           Text.Printf                        ( printf )
@@ -58,25 +58,9 @@ data OperandAssignment sym arch sh =
   OperandAssignment { opAssnTaggedExprs :: SL.List (A.TaggedExpr arch sym) sh
                     -- ^ The raw values obtained by calling 'operandValue' on
                     -- each of the operands.
-                    , opAssnVars :: Ctx.Assignment (S.BoundVar sym) (ShapeCtx arch sh)
-                    -- ^ The original bound variables associated with each
-                    -- operand, but turned into 'Ctx.Assignment' form instead of
-                    -- a 'SL.List'.
-                    , opAssnBareExprs :: Ctx.Assignment (S.SymExpr sym) (ShapeCtx arch sh)
-                    -- ^ The bare 'S.SymExpr's corresponding to each
-                    -- 'TaggedExpr', but in 'Ctx.Assignment' form.
+                    , opAssnVars :: SomeVarAssignment sym
                     }
 
-extendAssn :: (A.Architecture arch)
-           => A.TaggedExpr arch sym s
-           -> S.BoundVar sym (A.OperandType arch s)
-           -> OperandAssignment sym arch sh
-           -> OperandAssignment sym arch (s ': sh)
-extendAssn newExpr newVar oldAssn =
-  OperandAssignment { opAssnTaggedExprs = newExpr SL.:< opAssnTaggedExprs oldAssn
-                    , opAssnVars = opAssnVars oldAssn Ctx.:> newVar
-                    , opAssnBareExprs = opAssnBareExprs oldAssn Ctx.:> A.unTagged newExpr
-                    }
 
 -- | For a given pair of bound variables and operands, build up:
 -- 1. 'TaggedExpr's corresponding to each operand.
@@ -95,11 +79,22 @@ buildOpAssignment :: forall sym arch sh.
                 -> SL.List (A.Operand arch) sh
                 -- ^ List of operand values corresponding to each operand
                 -> IO (OperandAssignment sym arch sh)
-buildOpAssignment _ _ SL.Nil SL.Nil = return (OperandAssignment SL.Nil Ctx.empty Ctx.empty)
-buildOpAssignment sym newVars ((BV.BoundVar var) SL.:< varsRest) (val SL.:< valsRest) =
-  extendAssn <$> A.operandValue (Proxy @arch) sym newVars val
-             <*> pure var
-             <*> buildOpAssignment sym newVars varsRest valsRest
+buildOpAssignment _ _ SL.Nil SL.Nil = return (OperandAssignment SL.Nil (Pair Ctx.empty Ctx.empty))
+buildOpAssignment sym newVars ((BV.BoundVar var) SL.:< varsRest) (val SL.:< valsRest) = do
+  taggedExpr <- A.allocateSymExprsForOperand (Proxy @arch) sym newVars val
+  rest <- buildOpAssignment sym newVars varsRest valsRest
+  let oa' = case A.unTagged taggedExpr of
+        Nothing ->
+          OperandAssignment { opAssnTaggedExprs = taggedExpr SL.:< opAssnTaggedExprs rest
+                            , opAssnVars = opAssnVars rest
+                            }
+        Just symExpr ->
+          case opAssnVars rest of
+            Pair varAssn exprAssn ->
+              OperandAssignment { opAssnTaggedExprs = taggedExpr SL.:< opAssnTaggedExprs rest
+                                , opAssnVars = Pair (varAssn Ctx.:> var) (exprAssn Ctx.:> symExpr)
+                                }
+  return oa'
 
 type SomeVarAssignment sym = Pair (Ctx.Assignment (S.BoundVar sym)) (Ctx.Assignment (S.SymExpr sym))
 
@@ -145,13 +140,16 @@ replaceLitVars sym newExprs oldVars expr = do
 
 -- | Get the corresponding location of a parameter, if it actually corresponds
 -- to one.
-paramToLocation :: forall arch sh tp.
-                   (A.Architecture arch)
-                => SL.List (A.Operand arch) sh
+paramToLocation :: forall arch sh tp t st
+                 . (A.Architecture arch)
+                => SL.List (A.AllocatedOperand arch (S.ExprBuilder t st)) sh
                 -> Parameter arch sh tp
                 -> Maybe (A.Location arch tp)
-paramToLocation opVals (OperandParameter _ idx) =
- A.operandToLocation (Proxy @arch) (opVals SL.!! idx)
+paramToLocation opVals op@(OperandParameter _ idx) =
+  case opVals SL.!! idx of
+    A.LocationOperand l _ -> Just l
+    A.ValueOperand {} -> error ("Unexpected ValueOperand while extracting location for " ++ show op)
+    A.CompoundOperand {} -> error ("Unexpected CompoundOperand while extracting location for " ++ show op)
 paramToLocation _ (LiteralParameter loc) = Just loc
 paramToLocation opVals (FunctionParameter fnName wo rep) =
   case fnName `lookup` A.locationFuncInterpretation (Proxy @arch) of
@@ -159,8 +157,6 @@ paramToLocation opVals (FunctionParameter fnName wo rep) =
     Just interp ->
       case A.locationInterp interp of
         LocationFuncInterp fn -> fn opVals wo rep
-
-type Literals arch sym = MapF.MapF (A.Location arch) (S.BoundVar sym)
 
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each
@@ -179,10 +175,6 @@ instantiateFormula
                            , pfDefs = defs
                            })
   opVals = do
-    let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp, Literals arch (SB t st))
-        rewrite = FE.evaluateFunctions sym pf opVals (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
-    (defs', litVars') <- mapAccumLMF litVars defs $ \m e ->
-      fmap (`MapF.union` m) <$> rewrite e
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
@@ -193,17 +185,75 @@ instantiateFormula
             (return . S.varExpr sym . U.fromJust' ("newLitExprLookup: " ++ showF loc) . flip MapF.lookup newLitVars) loc
 
     OperandAssignment { opAssnTaggedExprs = opTaggedExprs
-                      , opAssnVars = opVarsAssn
-                      , opAssnBareExprs = opExprsAssn
+                      , opAssnVars = Pair opVarsAssn opExprsAssn
                       } <- buildOpAssignment sym newLitExprLookup opVars opVals
+    let allocOpers :: SL.List (A.AllocatedOperand arch (SB t st)) sh
+        allocOpers = FC.fmapFC A.taggedOperand opTaggedExprs
+    let rewrite :: forall tp . S.Expr t tp -> IO (S.Expr t tp)
+        rewrite = FE.evaluateFunctions sym pf allocOpers newLitExprLookup (fmap A.exprInterp <$> A.locationFuncInterpretation (Proxy @ arch))
+    -- Here, the formula rewriter walks over the formula AST and replaces calls
+    -- to functions that we know something about with concrete values.  Most
+    -- often, these functions are predicates testing something about operands
+    -- (e.g., is the operand a specific register) or splitting apart a compound
+    -- operand (e.g., some memory references are a combination of a register and
+    -- an offset).
+    --
+    -- For normal instructions, this is simple: look at the operand(s) of the
+    -- function and evaluate them statically.
+    --
+    -- For templated instructions, this is more complicated.  For templated
+    -- instructions, the register portions of compound operands are all static
+    -- (as part of the template), but the literals are *symbolic* variables
+    -- (which cannot be stored in the original operand type).  Moreover, the
+    -- variables standing in for the constant portions have not been allocated
+    -- yet, as that happens in `buildOpAssignment`.
+    --
+    -- Additionally, the representation in `buildOpAssignment` doesn't seem to
+    -- be very useful: it generates symbolic expressions that combine the
+    -- register and offset automatically (using addition or other bitvector
+    -- operations).  I think it hasn't ended up mattering, as the variables
+    -- allocated for the compound operands are actually never used (since the
+    -- rewriting pass eliminates direct references to them).  Noting especially
+    -- that the extractors for the current set of architectures allocate fresh
+    -- solver expressions (as bvLits) for extracted constants held in compound
+    -- operands.
+    --
+    -- It seems like (solver) values must be allocated *before* rewriting, and
+    -- there should not be any solver values for composite operands.  Instead,
+    -- there should be solver values allocated for each *component* of each
+    -- operand.  We need to make sure that e.g., an offset contained in a
+    -- compound operand has only a single variable allocated for it while
+    -- instantiating a templated instruction (so that all references are to the
+    -- same value).
+    --
+    -- Maybe this pre-processing pass to allocate all of the necessary
+    -- variables/values could eliminate the need to return the partial map from
+    -- the evaluator - we can just make sure that everything is pre-allocated.
+    -- This extra structure would have to be passed in to the evaluators.  It
+    -- should be able to have the same type for both the templated case and the
+    -- non-templated case, as the values in the map would just be SymExprs.  It
+    -- will probably require an arch-specific data type to key the map (to
+    -- represent "lenses" into the compound operands).  This system should
+    -- probably subsume operandValues (and extend buildOpAssignment)
+    defs' <- traverseF rewrite defs
+
+    -- After rewriting, it should be the case that all references to the bound
+    -- variables corresponding to compound operands (for which we don't have
+    -- valid expressions) should be gone.
+    --
+    -- We could change 'opAssnBareExprs' so that simple operands for which
+    -- substitution makes sense are present in the assignment (with some kind of
+    -- MaybeF wrapper), while operands with no simple SymExpr (i.e., compound
+    -- operands) are not present, and we can raise an error if we try to do a
+    -- substitution for one.
     let instantiateDefn :: forall tp. Parameter arch sh tp -> S.Expr t tp -> IO (A.Location arch tp, S.Expr t tp)
         instantiateDefn definingParam definition = do
-          definingLoc <- case paramToLocation opVals definingParam of
+          definingLoc <- case paramToLocation allocOpers definingParam of
             Just loc -> return loc
             Nothing -> fail $ printf "parameter %s is not a valid location" (show definingParam)
           opVarsReplaced <- S.evalBoundVars sym definition opVarsAssn opExprsAssn
           litVarsReplaced <-
-            replaceLitVars sym newLitExprLookup litVars' opVarsReplaced
+            replaceLitVars sym newLitExprLookup litVars opVarsReplaced
           return (definingLoc, litVarsReplaced)
 
     newDefs <- U.mapFMapBothM instantiateDefn defs'
@@ -284,14 +334,3 @@ condenseFormulas :: forall t f st arch.
                  -> f (Formula (SB t st) arch)
                  -> IO (Formula (SB t st) arch)
 condenseFormulas sym = foldrM (sequenceFormulas sym) emptyFormula
-
-mapAccumLMF :: forall acc m t a .
-  (Monad m, TraversableF t) =>
-  acc ->
-  t a ->
-  (forall z. acc -> a z -> m (a z, acc)) ->
-  m (t a, acc)
-mapAccumLMF acc0 tea f = runStateT (traverseF go tea) acc0
-  where
-    go :: forall z . a z -> StateT acc m (a z)
-    go x = StateT $ \acc -> f acc x

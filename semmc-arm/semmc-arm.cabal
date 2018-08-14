@@ -24,6 +24,7 @@ library
                      , SemMC.Architecture.ARM.Eval
                      , SemMC.Architecture.ARM.Location
                      , SemMC.Architecture.ARM.Opcodes
+                     , SemMC.Architecture.ARM.OperandComponents
   other-modules:       SemMC.Architecture.ARM.BaseSemantics.Arithmetic
                      , SemMC.Architecture.ARM.BaseSemantics.Base
                      , SemMC.Architecture.ARM.BaseSemantics.Branch

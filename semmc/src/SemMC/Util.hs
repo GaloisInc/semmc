@@ -129,6 +129,7 @@ groundValToExpr sym (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
   S.arrayFromMap sym idxTp entries base'
 groundValToExpr _ (BaseArrayRepr _ _) (GE.ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
 groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
+groundValToExpr _ BaseStringRepr _ = error "groundValToExpr: string base types are not supported yet"
 
 -- | Reverse a MapF, so that the old keys are the new values and the old values
 -- are the new keys.

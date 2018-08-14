@@ -36,6 +36,9 @@ import           SemMC.Stochastic.IORelation.Shared
 import           SemMC.Stochastic.IORelation.Types
 
 import           Debug.Trace
+
+import           Prelude
+
 -- | Sweep through the parameter space to find locations not mentioned in
 -- parameter lists that are modified by the instruction.
 --

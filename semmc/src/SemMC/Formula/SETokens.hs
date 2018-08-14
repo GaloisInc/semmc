@@ -30,6 +30,8 @@ import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
 
+import           Prelude
+
 data FAtom = AIdent String
            | AQuoted String
            | AString String

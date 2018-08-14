@@ -43,6 +43,7 @@ import qualified SemMC.Architecture.Concrete as AC
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
+import qualified SemMC.Architecture.PPC.OperandComponents as POC
 import qualified SemMC.Architecture.PPC.UF as UF
 import qualified SemMC.Architecture.PPC32.ConcreteState as PPCS
 import qualified SemMC.Architecture.Value as V
@@ -147,6 +148,7 @@ shapeReprType sr =
     PPC.U8immRepr -> knownRepr
 
 type instance ArchRegWidth PPC = 32
+type instance A.OperandComponents PPC sym = POC.OperandComponents PPC sym
 
 instance ArchRepr PPC where
   regWidthRepr _ = PPCS.repr32
@@ -160,45 +162,61 @@ instance T.TemplatableOperand PPC where
             where mkTemplate gprNum gprOffset =
                       T.TemplatedOperand Nothing (Set.fromList [Some (LocGPR (PPC.GPR gprNum)),Some (LocGPR (PPC.GPR gprOffset))]) mkTemplate' :: T.TemplatedOperand PPC "Memrr"
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memrr"
-                          mkTemplate' sym locLookup = do
-                            base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
-                            offset <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprOffset))
-                            expr <- S.bvAdd sym base offset
-                            let recover = const $ do
+                          mkTemplate' _sym locLookup = do
+                            let offLoc = LocGPR (PPC.GPR gprOffset)
+                            let baseLoc = LocGPR (PPC.GPR gprNum)
+                            let mbaseLoc
+                                  | gprNum == 0 = Nothing
+                                  | otherwise = Just baseLoc
+                            base <- locLookup baseLoc
+                            offset <- locLookup offLoc
+                            let recover _ = do
                                        let gpr | gprNum /= 0 = Just (PPC.GPR gprNum)
                                                | otherwise = Nothing
                                        return $ PPC.Memrr $ PPC.MemRR gpr (PPC.GPR gprOffset)
-                            return (expr, T.WrappedRecoverOperandFn recover)
+                            return ( A.CompoundOperand (POC.OCMemrr mbaseLoc base offLoc offset)
+                                   , T.RecoverOperandFn recover
+                                   )
       PPC.MemrixRepr ->
          mkTemplate <$> [0..31]
             where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: T.TemplatedOperand PPC "Memrix"
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memrix"
                           mkTemplate' sym locLookup = do
-                            base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
+                            let baseReg = LocGPR (PPC.GPR gprNum)
+                            let mbaseReg
+                                  | gprNum == 0 = Nothing
+                                  | otherwise = Just baseReg
+                            base <- locLookup baseReg
                             offset <- S.freshConstant sym (U.makeSymbol "Memrix_off") knownRepr
-                            expr <- S.bvAdd sym base offset
                             let recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
                                   let gpr
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
                                   return $ PPC.Memrix $ PPC.MemRIX gpr offsetVal
-                            return (expr, T.WrappedRecoverOperandFn recover)
+                            return ( A.CompoundOperand (POC.OCMemrix mbaseReg base offset)
+                                   , T.RecoverOperandFn recover
+                                   )
       PPC.Memrix16Repr ->
          mkTemplate <$> [0..31]
             where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: T.TemplatedOperand PPC "Memrix16"
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memrix16"
                           mkTemplate' sym locLookup = do
-                            base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
+                            let baseReg = LocGPR (PPC.GPR gprNum)
+                            let mbaseReg
+                                  | gprNum == 0 = Nothing
+                                  | otherwise = Just baseReg
+                            base <- locLookup baseReg
                             offset <- S.freshConstant sym (U.makeSymbol "Memrix16_off") knownRepr
-                            expr <- S.bvAdd sym base offset
                             let recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
                                   let gpr
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
                                   return $ PPC.Memrix16 $ PPC.MemRIX gpr offsetVal
-                            return (expr, T.WrappedRecoverOperandFn recover)
+                            return ( A.CompoundOperand (POC.OCMemrix mbaseReg base offset)
+                                   , T.RecoverOperandFn recover
+                                   )
       PPC.VrrcRepr -> PPCS.concreteTemplatedOperand (PPC.Vrrc . PPC.VR) (LocVSR . PPC.VSReg) <$> [0..31]
       PPC.U4immRepr -> [PPCS.symbolicTemplatedOperand (Proxy @4) True "U4imm" (PPC.U4imm . fromInteger)]
       PPC.U7immRepr -> [PPCS.symbolicTemplatedOperand (Proxy @7) True "U7imm" (PPC.U7imm . fromInteger)]
@@ -214,7 +232,7 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscondbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
                       let recover evalFn =
                             PPC.Abscondbrtarget . PPC.mkAbsCondBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (offsetRaw, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.CondbrtargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Condbrtarget"
@@ -222,7 +240,7 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Condbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
                       let recover evalFn =
                             PPC.Condbrtarget . PPC.mkCondBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (offsetRaw, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
 
       PPC.CrbitmRepr ->
         [T.TemplatedOperand Nothing Set.empty mkDirect]
@@ -231,7 +249,7 @@ instance T.TemplatableOperand PPC where
                        crrc <- S.freshConstant sym (U.makeSymbol "Crbitm") (knownRepr :: BaseTypeRepr (BaseBVType 8))
                        let recover evalFn =
                              PPC.Crbitm . PPC.CRBitM . fromInteger <$> evalFn crrc
-                       return (crrc, T.WrappedRecoverOperandFn recover)
+                       return (A.ValueOperand crrc, T.RecoverOperandFn recover)
       PPC.I1immRepr ->
         [PPCS.symbolicTemplatedOperand (Proxy @1) True "I1imm" (PPC.I1imm . fromInteger)]
       PPC.FprcRepr -> PPCS.concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
@@ -246,16 +264,21 @@ instance T.TemplatableOperand PPC where
             where mkTemplate gprNum = T.TemplatedOperand Nothing (Set.singleton (Some (LocGPR (PPC.GPR gprNum)))) mkTemplate' :: T.TemplatedOperand PPC "Memri"
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memri"
                           mkTemplate' sym locLookup = do
-                            base <- A.unTagged <$> A.operandValue (Proxy @PPC) sym locLookup (PPC.Gprc_nor0 (PPC.GPR gprNum))
+                            let baseReg = LocGPR (PPC.GPR gprNum)
+                            let mbaseReg
+                                  | gprNum == 0 = Nothing
+                                  | otherwise = Just baseReg
+                            base <- locLookup baseReg
                             offset <- S.freshConstant sym (U.makeSymbol "Memri_off") knownRepr
-                            expr <- S.bvAdd sym base offset
                             let recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
                                   let gpr
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
                                   return $ PPC.Memri $ PPC.MemRI gpr offsetVal
-                            return (expr, T.WrappedRecoverOperandFn recover)
+                            return ( A.CompoundOperand (POC.OCMemri mbaseReg base offset)
+                                   , T.RecoverOperandFn recover
+                                   )
       PPC.DirectbrtargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Directbrtarget"
@@ -263,7 +286,7 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Directbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                       let recover evalFn =
                             PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (offsetRaw, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.U5immRepr -> [PPCS.symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
       PPC.U6immRepr -> [PPCS.symbolicTemplatedOperand (Proxy @6) False "U6imm" (PPC.U6imm . fromInteger)]
       PPC.S17immRepr ->
@@ -272,7 +295,7 @@ instance T.TemplatableOperand PPC where
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
                       let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
-                      return (v, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand v, T.RecoverOperandFn recover)
       PPC.AbsdirectbrtargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Absdirectbrtarget"
@@ -280,7 +303,7 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Absdirectbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                       let recover evalFn =
                             PPC.Absdirectbrtarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (offsetRaw, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.CalltargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Calltarget"
@@ -288,7 +311,7 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Calltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                       let recover evalFn =
                             PPC.Calltarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (offsetRaw, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.AbscalltargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
                where mkDirect :: T.TemplatedOperandFn PPC "Abscalltarget"
@@ -296,7 +319,7 @@ instance T.TemplatableOperand PPC where
                        offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscalltarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                        let recover evalFn =
                              PPC.Abscalltarget . PPC.mkAbsBranchTarget . fromInteger <$> evalFn offsetRaw
-                       return (offsetRaw, T.WrappedRecoverOperandFn recover)
+                       return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
       PPC.CrrcRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Crrc"
@@ -304,7 +327,7 @@ instance T.TemplatableOperand PPC where
                       crrc <- S.freshConstant sym (U.makeSymbol "Crrc") (knownRepr :: BaseTypeRepr (BaseBVType 3))
                       let recover evalFn =
                             PPC.Crrc . PPC.CRRC . fromInteger <$> evalFn crrc
-                      return (crrc, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand crrc, T.RecoverOperandFn recover)
       PPC.CrbitrcRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
                where mkDirect :: T.TemplatedOperandFn PPC "Crbitrc"
@@ -312,14 +335,14 @@ instance T.TemplatableOperand PPC where
                        crrc <- S.freshConstant sym (U.makeSymbol "Crbitrc") (knownRepr :: BaseTypeRepr (BaseBVType 5))
                        let recover evalFn =
                              PPC.Crbitrc . PPC.CRBitRC . fromInteger <$> evalFn crrc
-                       return (crrc, T.WrappedRecoverOperandFn recover)
+                       return (A.ValueOperand crrc, T.RecoverOperandFn recover)
       PPC.I32immRepr ->
             [T.TemplatedOperand Nothing Set.empty mkImm]
               where mkImm :: T.TemplatedOperandFn PPC "I32imm"
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "I32imm") knownRepr
                       let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
-                      return (v, T.WrappedRecoverOperandFn recover)
+                      return (A.ValueOperand v, T.RecoverOperandFn recover)
 
 type instance A.Location PPC = Location PPC
 
@@ -335,91 +358,99 @@ operandValue :: forall sym s.
              -> PPC.Operand s
              -> IO (A.TaggedExpr PPC sym s)
 operandValue sym locLookup op = TaggedExpr <$> operandValue' op
-  where operandValue' :: PPC.Operand s -> IO (S.SymExpr sym (A.OperandType PPC s))
+  where operandValue' :: PPC.Operand s -> IO (A.AllocatedOperand PPC sym s)
         operandValue' (PPC.Abscalltarget (PPC.ABT absTarget)) =
-          S.bvLit sym knownNat (toInteger absTarget)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger absTarget)
         operandValue' (PPC.Abscondbrtarget (PPC.ACBT absTarget)) =
-          S.bvLit sym knownNat (toInteger absTarget)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger absTarget)
         operandValue' (PPC.Absdirectbrtarget (PPC.ABT absTarget)) =
-          S.bvLit sym knownNat (toInteger absTarget)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger absTarget)
         operandValue' (PPC.Calltarget (PPC.BT off)) =
-          S.bvLit sym knownNat (toInteger off)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger off)
         operandValue' (PPC.Condbrtarget (PPC.CBT off)) =
-          S.bvLit sym knownNat (toInteger off)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger off)
         operandValue' (PPC.Crbitm (PPC.CRBitM n)) =
-          S.bvLit sym knownNat (toInteger n)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Crbitrc (PPC.CRBitRC n)) =
-          S.bvLit sym knownNat (toInteger n)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Crrc (PPC.CRRC n)) =
-          S.bvLit sym knownNat (toInteger n)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger n)
         operandValue' (PPC.Directbrtarget (PPC.BT off)) =
-          S.bvLit sym knownNat (toInteger off)
-        operandValue' (PPC.Fprc (PPC.FR fr)) = locLookup (LocVSR (PPC.VSReg fr))
-        operandValue' (PPC.Gprc gpr) = locLookup (LocGPR gpr)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger off)
+        operandValue' (PPC.Fprc (PPC.FR fr)) =
+          let loc = LocVSR (PPC.VSReg fr)
+          in A.LocationOperand loc <$> locLookup loc
+        operandValue' (PPC.Gprc gpr) =
+          let loc = LocGPR gpr
+          in A.LocationOperand loc <$> locLookup loc
         operandValue' (PPC.Gprc_nor0 (PPC.GPR gpr)) =
-          if gpr /= 0
-          then locLookup (LocGPR (PPC.GPR gpr))
-          else S.bvLit sym knownNat 0
-        operandValue' (PPC.I1imm (I.I x)) = S.bvLit sym knownNat (toInteger x)
-        operandValue' (PPC.I32imm (I.I x)) = S.bvLit sym knownNat (toInteger x)
+          let loc = LocGPR (PPC.GPR gpr)
+          in if gpr /= 0
+             then A.LocationOperand loc <$> locLookup loc
+             else A.ValueOperand <$> S.bvLit sym knownNat 0
+        operandValue' (PPC.I1imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger x)
+        operandValue' (PPC.I32imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger x)
         operandValue' (PPC.Memri (PPC.MemRI gpr offset)) = do
           base <- case gpr of
                     Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger offset)
-          S.bvAdd sym base offset'
+          return (A.CompoundOperand (POC.OCMemri (LocGPR <$> gpr) base offset'))
         operandValue' (PPC.Memrix (PPC.MemRIX gpr offset)) = do
           base <- case gpr of
                     Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
-          S.bvAdd sym base offset'
+          return (A.CompoundOperand (POC.OCMemrix (LocGPR <$> gpr) base offset'))
         operandValue' (PPC.Memrix16 (PPC.MemRIX gpr offset)) = do
-          -- ?
           base <- case gpr of
                     Just gpr' -> locLookup (LocGPR gpr')
                     Nothing -> S.bvLit sym knownNat 0
           offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
-          S.bvAdd sym base offset'
+          return (A.CompoundOperand (POC.OCMemrix (LocGPR <$> gpr) base offset'))
         operandValue' (PPC.Memrr (PPC.MemRR gpr1 gpr2)) = do
           gpr1Val <- case gpr1 of
                        Just gpr -> locLookup (LocGPR gpr)
                        Nothing -> S.bvLit sym knownNat 0
           gpr2Val <- locLookup (LocGPR gpr2)
-          S.bvAdd sym gpr1Val gpr2Val
-        operandValue' (PPC.S16imm i16) = S.bvLit sym knownNat (toInteger i16)
-        operandValue' (PPC.S16imm64 i16) = S.bvLit sym knownNat (toInteger i16)
+          return (A.CompoundOperand (POC.OCMemrr (LocGPR <$> gpr1) gpr1Val (LocGPR gpr2) gpr2Val))
+        operandValue' (PPC.S16imm i16) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
+        operandValue' (PPC.S16imm64 i16) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S17imm i16) =
           -- The s17 imm type is a bit strange.  It is actually represented as
           -- 16 bits in the instruction, but is interpreted as shifted left by
           -- 16 bits.  We handle that correction in the semantics, so we just
           -- treat s17imm as a plain 16 bit value.
-          S.bvLit sym knownNat (toInteger i16)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S17imm64 i16) =
-          S.bvLit sym knownNat (toInteger i16)
-        operandValue' (PPC.S5imm (I.I i5)) = S.bvLit sym knownNat (toInteger i5)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
+        operandValue' (PPC.S5imm (I.I i5)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i5)
         operandValue' (PPC.U10imm (W.unW ->  w10)) =
-          S.bvLit sym knownNat (toInteger w10)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w10)
         operandValue' (PPC.U16imm (W.unW ->  w16)) =
-          S.bvLit sym knownNat (toInteger w16)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w16)
         operandValue' (PPC.U16imm64 (W.unW ->  w16)) =
-          S.bvLit sym knownNat (toInteger w16)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w16)
         operandValue' (PPC.U1imm (W.unW ->  w1)) =
-          S.bvLit sym knownNat (toInteger w1)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w1)
         operandValue' (PPC.U2imm (W.unW ->  w2)) =
-          S.bvLit sym knownNat (toInteger w2)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w2)
         operandValue' (PPC.U4imm (W.unW ->  w4)) =
-          S.bvLit sym knownNat (toInteger w4)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w4)
         operandValue' (PPC.U5imm (W.unW ->  w5)) =
-          S.bvLit sym knownNat (toInteger w5)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w5)
         operandValue' (PPC.U6imm (W.unW ->  w6)) =
-          S.bvLit sym knownNat (toInteger w6)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w6)
         operandValue' (PPC.U7imm (W.unW ->  w7)) =
-          S.bvLit sym knownNat (toInteger w7)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w7)
         operandValue' (PPC.U8imm (W.unW ->  w8)) =
-          S.bvLit sym knownNat (toInteger w8)
-        operandValue' (PPC.Vrrc (PPC.VR vr)) = locLookup (LocVSR (PPC.VSReg (vr + 32)))
-        operandValue' (PPC.Vsrc vsr) = locLookup (LocVSR vsr)
+          A.ValueOperand <$> S.bvLit sym knownNat (toInteger w8)
+        operandValue' (PPC.Vrrc (PPC.VR vr)) =
+          let loc = LocVSR (PPC.VSReg (vr + 32))
+          in A.LocationOperand loc <$> locLookup loc
+        operandValue' (PPC.Vsrc vsr) =
+          let loc = LocVSR vsr
+          in A.LocationOperand loc <$> locLookup loc
 
 
 operandToLocation :: PPC.Operand s -> Maybe (Location PPC (A.OperandType PPC s))
@@ -431,9 +462,14 @@ operandToLocation (PPC.Vsrc vr) = Just $ LocVSR vr
 operandToLocation _ = Nothing
 
 instance A.Architecture PPC where
-  data TaggedExpr PPC sym s = TaggedExpr (S.SymExpr sym (A.OperandType PPC s))
-  unTagged (TaggedExpr e) = e
-  operandValue _ = operandValue
+  data TaggedExpr PPC sym s = TaggedExpr (A.AllocatedOperand PPC sym s)
+  unTagged (TaggedExpr te) =
+    case te of
+      A.ValueOperand se -> Just se
+      A.LocationOperand _ se -> Just se
+      A.CompoundOperand {} -> Nothing
+  taggedOperand (TaggedExpr e) = e
+  allocateSymExprsForOperand _ = operandValue
   operandToLocation _ = operandToLocation
   uninterpretedFunctions = UF.uninterpretedFunctions
   locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation

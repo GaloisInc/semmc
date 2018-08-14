@@ -6,6 +6,8 @@ module SemMC.Synthesis
   , mcSynth
   , TemplatedArch
   , TemplatedOperand
+  , BaseSet
+  , unTemplate
   -- * Constraints
   , TemplatableOperand
   ) where

@@ -1,3 +1,5 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE TemplateHaskell     #-}
@@ -30,40 +32,35 @@ module SemMC.Architecture.PPC.Shared (
   -- * Arch. agnostic
   parsePrefixedRegister,
   locationFuncInterpretation,
-  boundVarElemIndex,
   concreteTemplatedOperand,
-  symbolicTemplatedOperand,
-  evalMemReg,
-  isR0
+  symbolicTemplatedOperand
   ) where
 
 import           Data.Bits ( shiftR, shiftL, (.|.), (.&.) )
 import qualified Data.ByteString.Builder as B
 import           Data.Int ( Int16 )
 import qualified Data.Int.Indexed as I
-import           Data.List
 import qualified Data.List.NonEmpty as NEL
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
-import           Data.Parameterized.Context
-import qualified Data.Parameterized.Map as M
+import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.TraversableFC
 import           Data.Proxy
 import qualified Data.Serialize.Get as G
 import qualified Data.Set as S
-import           Data.Type.Equality ((:~:)(Refl), testEquality)
 import           Data.Word ( Word16 )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.PPC as PPC
 import           GHC.TypeLits
 import           Numeric.Natural ( Natural )
+
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.PPC.Eval as E
 import           SemMC.Architecture.PPC.Location
+import           SemMC.Architecture.PPC.OperandComponents ( OperandComponents(..) )
 import qualified SemMC.Architecture.Value as V
-import qualified SemMC.BoundVar as BoundVar
 import qualified SemMC.Formula as F
 import qualified SemMC.Formula.Eval as E
 import qualified SemMC.Synthesis.Template as T
@@ -71,8 +68,8 @@ import qualified SemMC.Util as U
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 import qualified Text.Megaparsec.Char.Lexer as P
-import           What4.BaseTypes ( BaseBVType, NatRepr, knownNat, BaseTypeRepr )
-import qualified What4.Expr.Builder as S
+import           What4.BaseTypes ( BaseBVType, NatRepr, knownNat, BaseTypeRepr(..) )
+import qualified What4.Expr as S
 import qualified What4.Interface as S
 
 repr32 :: NatRepr 32
@@ -172,21 +169,19 @@ concreteTemplatedOperand op loc x =
                      }
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
-          expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
-          return (expr, T.WrappedRecoverOperandFn $ const (return (op x)))
+          ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
+          return (ao, T.RecoverOperandFn $ const (return (op x)))
 
-symbolicTemplatedOperand :: forall arch s (bits :: Nat) extended
-                          . (A.OperandType arch s ~ BaseBVType extended,
+symbolicTemplatedOperand :: forall arch s (bits :: Nat)
+                          . (A.OperandType arch s ~ BaseBVType bits,
                              KnownNat bits,
-                             KnownNat extended,
-                             1 <= bits,
-                             bits <= extended)
+                             1 <= bits)
                          => Proxy bits
                          -> Bool
                          -> String
                          -> (Integer -> A.Operand arch s)
                          -> T.TemplatedOperand arch s
-symbolicTemplatedOperand Proxy signed name constr =
+symbolicTemplatedOperand Proxy _signed name constr =
   T.TemplatedOperand { T.templOpLocation = Nothing
                      , T.templUsedLocations = S.empty
                      , T.templOpFn = mkTemplate'
@@ -194,223 +189,102 @@ symbolicTemplatedOperand Proxy signed name constr =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
-          let bitsRepr = knownNat @bits
-              extendedRepr = knownNat @extended
-          extended <- case S.testNatCases bitsRepr extendedRepr of
-            S.NatCaseLT S.LeqProof ->
-              if signed
-              then S.bvSext sym knownNat v
-              else S.bvZext sym knownNat v
-            S.NatCaseEQ -> return v
-            S.NatCaseGT S.LeqProof -> error "impossible"
           let recover evalFn = constr <$> evalFn v
-          return (extended, T.WrappedRecoverOperandFn recover)
+          return (A.ValueOperand v, T.RecoverOperandFn recover)
 
-data MemoryAccess
-  = Base
-  | Offset
-  deriving (Show, Eq)
-
-evalMemReg :: ( A.Operand arch ~ PPC.Operand
-              , A.Location arch ~ Location arch
-              , A.IsLocation (Location arch)
-              )
-           => MemoryAccess
-           -> E.Evaluator arch t
-evalMemReg access = E.Evaluator (rewrite access)
-
-isR0
-  :: forall t st sh u tp arch . (A.Location arch ~ Location arch, A.Operand arch ~ PPC.Operand) =>
-  S.ExprBuilder t st
-  -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
-  -> PPC.List (A.Operand arch) sh
-  -> Assignment (S.Expr t) u
-  -> BaseTypeRepr tp
-  -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
-isR0 sym pf operands assignment typeRepr =
-  case assignment of
-    Empty :> S.BoundVarExpr b ->
-      case Some b `boundVarElemIndex` (toListFC Some (F.pfOperandVars pf)) of
+isR0 :: forall t st sh u tp arch sym
+      . ( A.Location arch ~ Location arch
+        , A.Operand arch ~ PPC.Operand
+        , sym ~ S.ExprBuilder t st
+        )
+     => sym
+     -> F.ParameterizedFormula sym arch sh
+     -> PL.List (A.AllocatedOperand arch sym) sh
+     -> Ctx.Assignment (S.Expr t) u
+     -> (forall tp' . Location arch tp' -> IO (S.SymExpr sym tp'))
+     -> BaseTypeRepr tp
+     -> IO (S.Expr t tp)
+isR0 sym pf ops actuals _locToExpr repr = do
+  let typedReturn :: forall tp' . S.Expr t tp' -> IO (S.Expr t tp)
+      typedReturn e =
+        case testEquality (S.exprType e) repr of
+          Nothing -> error ("The caller of isR0 expected type " ++ show repr ++ " but it returned a value of type " ++ show (S.exprType e))
+          Just Refl -> return e
+  case actuals of
+    Ctx.Empty Ctx.:> S.BoundVarExpr ufArg ->
+      case ufArg `E.lookupVarInFormulaOperandList` pf of
         Nothing ->
-         returnElt $
-          case MapF.lookup (LocGPR (PPC.GPR 0x0)) (F.pfLiteralVars pf) of
-            Nothing -> S.falsePred sym
-            Just b' ->
-              case testEquality b b' of
-                Just Refl -> S.truePred sym
-                Nothing -> S.falsePred sym
-        Just index ->
-          case findOperandByIndex index operands of
-            Just (Some g@(PPC.Gprc _)) -> returnElt $
-              case testEquality g (PPC.Gprc (PPC.GPR 0x0)) of
-                Just Refl -> S.truePred sym
-                Nothing -> S.falsePred sym
-            Just (Some g@(PPC.Gprc_nor0 _)) -> returnElt $
-              case testEquality g (PPC.Gprc_nor0 (PPC.GPR 0x0)) of
-                Just Refl -> S.truePred sym
-                Nothing -> S.falsePred sym
-            Just x -> error $ "Expected a GPRC but got: " ++ show x
-            Nothing -> error "Index out of range in operandVars"
-   where
-     returnElt
-       :: S.Pred (S.ExprBuilder t st)
-       -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
-     returnElt b' =
-       case testEquality (S.exprType b') typeRepr of
-         Just Refl -> do
-           pure (b', M.empty)
-         Nothing -> error "Failed type equality in isR0"
-
-type Literals arch sym = M.MapF (A.Location arch) (S.BoundVar sym)
-
-rewrite
-  :: forall t st sh u tp arch . ( A.Location arch ~ Location arch
-                                , A.Operand arch ~ PPC.Operand
-                                , A.IsLocation (Location arch)
-                                ) =>
-     MemoryAccess
-  -> S.ExprBuilder t st
-  -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
-  -> PPC.List (A.Operand arch) sh
-  -> Assignment (S.Expr t) u
-  -> BaseTypeRepr tp
-  -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
-rewrite access sym pf operands assignment baseTypeRepr =
-  case assignment of
-    Empty :> S.BoundVarExpr b ->
-      case Some b `boundVarElemIndex` (toListFC Some (F.pfOperandVars pf)) of
-        Nothing -> error "BoundVar not present in ParameterizedFormula"
-        Just index ->
-          case findOperandByIndex index operands of
-            Just (Some op) ->
-              case op of
-                PPC.Memri (PPC.MemRI maybeBase offset) ->
-                  case access of
-                    Offset -> handleOffset (fromIntegral offset) (knownNat :: NatRepr 16)
-                    Base -> handleBase maybeBase
-                PPC.Memrix (PPC.MemRIX maybeBase (I.I offset)) ->
-                  case access of
-                    Offset -> handleOffset (fromIntegral offset) (knownNat :: NatRepr 14)
-                    Base -> handleBase maybeBase
-                PPC.Memrr (PPC.MemRR maybeBase offset) ->
-                  case access of
-                    Offset -> handleBase (Just offset)
-                    Base -> handleBase maybeBase
-                _ -> error $ "Unexpected operand type: " ++ show op
-            Nothing ->
-              error "Index not present in operands list"
-
-         where
-           handleOffset
-             :: ( KnownNat n
-                , 1 <= n
-                ) => Integer
-                  -> NatRepr n
-                  -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
-           handleOffset offset natRepr = do
-             s <- S.bvLit sym natRepr offset
-             case S.exprType s `testEquality` baseTypeRepr of
-               Just Refl -> pure (s, M.empty)
-               Nothing -> error "Couldn't unify offset types"
-           handleBase maybeBase =
-             case maybeBase of
-               Nothing ->
-                 findAtRegister (PPC.GPR 0x0) (U.makeSymbol "r0")
-               Just (PPC.GPR base) ->
-                 findAtRegister (PPC.GPR base) $ U.makeSymbol $ "r" ++ show base
-           findAtRegister
-             :: A.IsLocation (Location arch)
-             => PPC.GPR
-             -> S.SolverSymbol
-             -> IO (S.Expr t tp, Literals arch (S.ExprBuilder t st))
-           findAtRegister reg symbol =
-             case MapF.lookup (LocGPR reg) (F.pfLiteralVars pf) of
-               Nothing ->
-                 case findVariableForReg reg operands pf of
-                   Just (Some (BoundVar.BoundVar k)) ->
-                     case testEquality baseTypeRepr (S.bvarType k) of
-                       Just Refl ->
-                         pure (S.varExpr sym k, M.empty)
-                       _ -> error "Type equality failure"
-                   Nothing -> do
-                     let loc :: Location arch (BaseBVType (ArchRegWidth arch)) = LocGPR reg
-                     s <- S.freshBoundVar sym symbol baseTypeRepr
-                     case testEquality (A.locationType loc) (S.bvarType s) of
-                       Just Refl -> do
-                         let map' = M.singleton loc s
-                         pure (S.BoundVarExpr s, map')
-                       Nothing -> error "Type equality failure"
-               Just k ->
-                 pure $ case testEquality baseTypeRepr (S.bvarType k) of
-                   Just Refl -> (S.varExpr sym k, M.empty)
-                   _ -> error "Type equality failure"
-
-findOperandByIndex
-  :: Int
-  -> PPC.List PPC.Operand sh
-  -> Maybe (Some PPC.Operand)
-findOperandByIndex index list =
-  lookup index $ zip [0..] (toListFC Some list)
-
-findVariableForReg
-  :: (FoldableFC t, S.TestEquality (S.BoundVar sym), A.Operand arch ~ PPC.Operand)
-  => PPC.GPR
-  -> t PPC.Operand c2
-  -> F.ParameterizedFormula sym arch c2
-  -> Maybe (Some (BoundVar.BoundVar sym arch))
-findVariableForReg b list pf = do
-  index <- getIndex
-  lookup index $ zip [0..] $
-    toListFC Some (F.pfOperandVars pf)
-      where
-        getIndex = go (toListFC Some list) 0
-          where
-            go :: [Some PPC.Operand] -> Int -> Maybe Int
-            go [] _ = Nothing
-            go (Some x : xs) n =
-              case x of
-                PPC.Gprc base | base == b -> Just n
-                _ -> go xs (n+1)
-
-boundVarElemIndex
-  :: S.TestEquality (S.BoundVar sym)
-  => Some (S.BoundVar sym)
-  -> [Some (BoundVar.BoundVar sym arch)]
-  -> Maybe Int
-boundVarElemIndex x xs = do
-  let xs' = [ Some y | Some (BoundVar.BoundVar y) <- xs ]
-  x `elemIndex` xs'
+          case MapF.lookup r0 (F.pfLiteralVars pf) of
+            Nothing -> typedReturn (S.falsePred sym)
+            Just r0Var ->
+              case testEquality r0Var ufArg of
+                Nothing -> typedReturn (S.falsePred sym)
+                Just Refl -> typedReturn (S.truePred sym)
+        Just (Some idx) ->
+          case ops PL.!! idx of
+            A.LocationOperand loc _
+              | Just Refl <- testEquality loc r0 -> typedReturn (S.truePred sym)
+            _ -> typedReturn (S.falsePred sym)
+    _ -> error "Unexpected argument list to isR0"
+  where
+    r0 :: Location arch (BaseBVType (ArchRegWidth arch))
+    r0 = LocGPR (PPC.GPR 0x0)
 
 locationFuncInterpretation
-  :: (A.IsLocation (Location ppc), A.Location ppc ~ Location ppc, A.Operand ppc ~ PPC.Operand)
-  => [(String, A.FunctionInterpretation t ppc)]
+  :: ( A.IsLocation (Location ppc)
+     , A.Location ppc ~ Location ppc
+     , A.Operand ppc ~ PPC.Operand
+     , sym ~ S.ExprBuilder t st
+     , A.OperandComponents ppc sym ~ OperandComponents ppc sym
+     )
+  => [(String, A.FunctionInterpretation t st ppc)]
 locationFuncInterpretation =
   [ ("ppc.memri_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemriReg
                                                , A.exprInterpName = 'E.interpMemriRegExtractor
-                                               , A.exprInterp = evalMemReg Base
+                                               , A.exprInterp = E.evalRegExtractor "memri_reg" $ \ao ->
+                                                   case ao of
+                                                     A.CompoundOperand (OCMemri ml _ _) -> fmap Some ml
+                                                     _ -> Nothing
                                                })
   , ("ppc.memrix_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrixReg
                                                 , A.exprInterpName = 'E.interpMemrixRegExtractor
-                                                , A.exprInterp = evalMemReg Base
+                                                , A.exprInterp = E.evalRegExtractor "memrix_reg" $ \ao ->
+                                                    case ao of
+                                                      A.CompoundOperand (OCMemrix ml _ _) -> fmap Some ml
+                                                      _ -> Nothing
                                                 })
   , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrrBase
                                                 , A.exprInterpName = 'E.interpMemrrBaseExtractor
-                                                , A.exprInterp = evalMemReg Base
+                                                , A.exprInterp = E.evalRegExtractor "memrr_base" $ \ao ->
+                                                    case ao of
+                                                      A.CompoundOperand (OCMemrr mb _ _ _) -> fmap Some mb
+                                                      _ -> Nothing
                                                 })
   , ("ppc.memrr_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrrOffset
                                                   , A.exprInterpName = 'E.interpMemrrOffsetExtractor
-                                                  , A.exprInterp = evalMemReg Offset
+                                                  , A.exprInterp = E.evalRegExtractor "memrr_offset" $ \ao ->
+                                                      case ao of
+                                                        A.CompoundOperand (OCMemrr _ _ offset _) -> Just (Some offset)
+                                                        _ -> Nothing
                                                   })
   , ("ppc.memrix_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrixOffset
                                                    , A.exprInterpName = 'E.interpMemrixOffsetExtractor
-                                                   , A.exprInterp = evalMemReg Offset
+                                                   , A.exprInterp = E.evalBitvectorExtractor "memrix_offset" (knownNat @14) $ \ao nr' ->
+                                                       case ao of
+                                                         OCMemrix _ _ e
+                                                           | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
+                                                         _ -> Nothing
                                                    })
   , ("ppc.memri_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemriOffset
                                                   , A.exprInterpName = 'E.interpMemriOffsetExtractor
-                                                  , A.exprInterp = evalMemReg Offset
+                                                  , A.exprInterp = E.evalBitvectorExtractor "memri_offset" (knownNat @16) $ \ao nr' ->
+                                                       case ao of
+                                                         OCMemri _ _ e
+                                                           | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
+                                                         _ -> Nothing
                                                   })
   , ("ppc.is_r0", A.FunctionInterpretation { A.exprInterpName = 'E.interpIsR0
-                                           , A.exprInterp = E.Evaluator isR0
+                                           , A.exprInterp = A.Evaluator isR0
                                            , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
                                            })
   ]

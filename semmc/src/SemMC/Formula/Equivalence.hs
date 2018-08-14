@@ -17,7 +17,6 @@ module SemMC.Formula.Equivalence
   ) where
 
 import           Data.Foldable ( foldrM )
-import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )

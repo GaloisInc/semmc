@@ -30,7 +30,7 @@ import           GHC.TypeLits
 import           Control.Applicative ( (<|>) )
 import           Control.Monad ( guard )
 import           Data.Bits
-import           Data.Maybe ( fromJust, fromMaybe )
+import           Data.Maybe ( fromMaybe )
 import           Data.Monoid ((<>))
 import           Data.Proxy ( Proxy(..) )
 import           Numeric.Natural ( Natural )

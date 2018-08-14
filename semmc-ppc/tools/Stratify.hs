@@ -28,6 +28,8 @@ import qualified SemMC.Util as U
 import qualified OpcodeLists as OL
 import qualified Util as Util
 
+import           Prelude
+
 data Options = Options { oRelDir :: FilePath
                        , oBaseDir :: FilePath
                        , oPseudoDir :: FilePath
@@ -42,6 +44,7 @@ data Options = Options { oRelDir :: FilePath
                        , oRemoteTimeoutSeconds :: Int
                        , oRemoteRunner :: FilePath
                        , oRemoteHost :: String
+                       , oRemoteUser :: Maybe String
                        }
 
 optionsParser :: O.Parser Options
@@ -108,6 +111,10 @@ optionsParser = Options <$> O.strOption ( O.long "relation-directory"
                                         <> O.short 'H'
                                         <> O.metavar "HOST"
                                         <> O.help "The host to run the remote work on" )
+                        <*> O.optional (O.strOption ( O.long "remote-user"
+                                        <> O.short 'U'
+                                        <> O.metavar "USER"
+                                        <> O.help "An optional username to use to log into the remote host"))
 
 main :: IO ()
 main = O.execParser optParser >>= mainWithOptions
@@ -148,7 +155,7 @@ mainWithOptions opts = do
                        , SST.opcodeTimeoutSeconds = oOpcodeTimeoutSeconds opts
                        , SST.parallelOpcodes = oParallelOpcodes opts
                        , SST.parallelSynth = oParallelSynth opts
-                       , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) Nothing serializer
+                       , SST.testRunner = CE.runRemote (Just (oRemoteRunner opts)) (oRemoteHost opts) (oRemoteUser opts) serializer
                        , SST.logConfig = lcfg
                        , SST.statsThread = stThread
                        }

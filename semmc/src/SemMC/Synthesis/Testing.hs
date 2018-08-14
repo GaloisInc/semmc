@@ -27,7 +27,7 @@ data SynthResult = Equivalent
                  | MissingSemantics
                  -- ^ Semantics for an instruction were not found
                  | Timeout
-                 deriving (Show)
+                 deriving (Show, Eq)
 
 synthesizeAndCheck :: forall proxy arch t solver
                     . ( A.Architecture arch

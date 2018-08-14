@@ -27,7 +27,7 @@ module SemMC.Synthesis.Template
   , TemplateConstraints
   , TemplatedOperandFn
   , TemplatedOperand(..)
-  , WrappedRecoverOperandFn(..)
+  , RecoverOperandFn(..)
   , TemplatedArch
   , TemplatedFormula(..)
   , TemplatableOperand(..)
@@ -47,6 +47,7 @@ module SemMC.Synthesis.Template
 
 import           Data.EnumF
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
@@ -56,9 +57,11 @@ import           Data.Parameterized.TraversableFC ( FunctorFC(..) )
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as Set
 import           Data.Typeable
+import           GHC.Stack ( HasCallStack )
 import           GHC.TypeLits ( Symbol )
 import           Unsafe.Coerce ( unsafeCoerce )
 
+import qualified What4.BaseTypes as WT
 import qualified What4.Interface as S
 import           What4.Expr.GroundEval
 import qualified What4.Expr.Builder as S
@@ -75,11 +78,8 @@ import           SemMC.Formula
 -- | A function that allows you to recover the concrete value of a templated
 -- operand given a concrete evaluation function, typically provided as the model
 -- from an SMT solver.
-type RecoverOperandFn sym op = (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op
-
--- | Just what it sounds like. Haskell doesn't deal that well with RankNTypes.
-newtype WrappedRecoverOperandFn sym op =
-  WrappedRecoverOperandFn { unWrappedRecOpFn :: RecoverOperandFn sym op }
+newtype RecoverOperandFn sym op =
+  RecoverOperandFn { unRecOpFn :: (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op }
 
 -- | The bulk of what a 'TemplatedOperand' is. Reading off the type in English:
 -- given a symbolic expression builder and a mapping from machine location to
@@ -96,8 +96,8 @@ type TemplatedOperandFn arch s = forall sym.
                                   S.IsSymExprBuilder sym)
                               => sym
                               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
-                              -> IO (S.SymExpr sym (OperandType arch s),
-                                     WrappedRecoverOperandFn sym (Operand arch s))
+                              -> IO (AllocatedOperand arch sym s,
+                                     RecoverOperandFn sym (Operand arch s))
 
 -- | An operand for 'TemplatedArch'.
 data TemplatedOperand (arch :: *) (s :: Symbol) =
@@ -121,6 +121,7 @@ instance IsOperand (TemplatedOperand arch)
 -- instantiating a formula, rather than all concrete operands.
 data TemplatedArch (arch :: *)
 
+type instance OperandComponents (TemplatedArch arch) sym = OperandComponents arch sym
 type instance Operand (TemplatedArch arch) = TemplatedOperand arch
 type instance Opcode (TemplatedArch arch) = Opcode arch
 type instance OperandType (TemplatedArch arch) s = OperandType arch s
@@ -140,25 +141,85 @@ type TemplateConstraints arch = (Architecture arch,
 
 instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
   data TaggedExpr (TemplatedArch arch) sym s =
-    TaggedExpr { taggedExpr :: S.SymExpr sym (OperandType arch s)
-               , taggedRecover :: WrappedRecoverOperandFn sym (Operand arch s)
+    TaggedExpr { taggedExpr :: AllocatedOperand arch sym s
+               , taggedRecover :: RecoverOperandFn sym (Operand arch s)
                }
 
-  unTagged = taggedExpr
+  unTagged te = case taggedExpr te of
+    ValueOperand se -> Just se
+    LocationOperand _ se -> Just se
+    CompoundOperand {} -> Nothing
+
+  taggedOperand = toTemplatedOperand . taggedExpr
 
   uninterpretedFunctions _ = uninterpretedFunctions (Proxy @arch)
 
-  operandValue _ sym locLookup (TemplatedOperand _ _ f) =
-    uncurry TaggedExpr <$> f sym locLookup
+  allocateSymExprsForOperand _ sym locLookup (TemplatedOperand _ _ f) = do
+    (e, r) <- f sym locLookup
+    return TaggedExpr { taggedExpr = e, taggedRecover = r }
 
   operandToLocation _ (TemplatedOperand loc _ _) = loc
   shapeReprToTypeRepr _ = shapeReprToTypeRepr (Proxy @arch)
-  locationFuncInterpretation _ = error "locationFuncInterpretation shouldn't need to be used from a TemplatedArch"
+  locationFuncInterpretation _ = [ (funcName, templatizeInterp fi)
+                                 | (funcName, fi) <- locationFuncInterpretation (Proxy @arch)
+                                 ]
 
-instance Show (S.SymExpr sym (OperandType arch s)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
+-- | This function unwraps 'FunctionInterpretation's and then rewraps them to
+-- change the @arch@ of the interpretation.  This lets us re-use the
+-- interpretation in the templated architecture without actually having to
+-- rewrite them by hand twice (once normally and once templated).
+templatizeInterp :: (HasCallStack, OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
+                 => FunctionInterpretation t st arch
+                 -> FunctionInterpretation t st (TemplatedArch arch)
+templatizeInterp fi =
+  FunctionInterpretation { locationInterp = LocationFuncInterp (templatedLocationInterp (locationInterp fi))
+                         , exprInterpName = exprInterpName fi
+                         , exprInterp = Evaluator (templatedEvaluator (exprInterp fi))
+                         }
+
+templatedLocationInterp :: LocationFuncInterp t st arch
+                        -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st)) sh
+                        -> WrappedOperand (TemplatedArch arch) sh s
+                        -> WT.BaseTypeRepr tp
+                        -> Maybe (Location (TemplatedArch arch) tp)
+templatedLocationInterp (LocationFuncInterp fi) operands (WrappedOperand orep ix) rep = do
+  let ops' = fmapFC fromTemplatedOperand operands
+  fi ops' (WrappedOperand orep ix) rep
+
+templatedEvaluator :: forall arch t st sh u tp
+                    . (OrdF (Location arch))
+                   => Evaluator arch t st
+                   -> S.ExprBuilder t st
+                   -> ParameterizedFormula (S.ExprBuilder t st) (TemplatedArch arch) sh
+                   -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st)) sh
+                   -> Ctx.Assignment (S.Expr t) u
+                   -> (forall ltp . Location (TemplatedArch arch) ltp -> IO (S.Expr t ltp))
+                   -> WT.BaseTypeRepr tp
+                   -> IO (S.Expr t tp)
+templatedEvaluator (Evaluator e0) = \sym pf ops actuals locExpr tp -> do
+  let ops' = fmapFC fromTemplatedOperand ops
+  e0 sym (unTemplate pf) ops' actuals locExpr tp
+
+toTemplatedOperand :: AllocatedOperand arch sym s
+                   -> AllocatedOperand (TemplatedArch arch) sym s
+toTemplatedOperand top =
+  case top of
+    ValueOperand s -> ValueOperand s
+    LocationOperand l s -> LocationOperand l s
+    CompoundOperand oc -> CompoundOperand oc
+
+fromTemplatedOperand :: AllocatedOperand (TemplatedArch arch) sym s
+                     -> AllocatedOperand arch sym s
+fromTemplatedOperand top =
+  case top of
+    ValueOperand s -> ValueOperand s
+    LocationOperand l s -> LocationOperand l s
+    CompoundOperand oc -> CompoundOperand oc
+
+instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (OperandComponents arch sym)) => Show (TaggedExpr (TemplatedArch arch) sym s) where
   show (TaggedExpr expr _) = "TaggedExpr (" ++ show expr ++ ")"
 
-instance ShowF (S.SymExpr sym) => ShowF (TaggedExpr (TemplatedArch arch) sym) where
+instance (S.IsExprBuilder sym, IsLocation (Location arch), ShowF (S.SymExpr sym), ShowF (OperandComponents arch sym)) => ShowF (TaggedExpr (TemplatedArch arch) sym) where
   withShow (_ :: p (TaggedExpr (TemplatedArch arch) sym)) (_ :: q s) x =
     withShow (Proxy @(S.SymExpr sym)) (Proxy @(OperandType arch s)) x
 
@@ -242,9 +303,25 @@ data TemplatedFormula sym arch sh =
   TemplatedFormula { tfOperandExprs :: SL.List (TaggedExpr (TemplatedArch arch) sym) sh
                    , tfFormula :: Formula sym (TemplatedArch arch)
                    }
-deriving instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => Show (TemplatedFormula sym arch sh)
+deriving instance ( IsLocation (Location arch)
+                  , S.IsExprBuilder sym
+                  , ShowF (OperandComponents arch sym)
+                  , ShowF (Operand arch)
+                  , ShowF (TemplatedOperand arch)
+                  , ShowF (S.SymExpr sym)
+                  , ShowF (S.BoundVar sym)
+                  , ShowF (Location arch))
+                 => Show (TemplatedFormula sym arch sh)
 
-instance (ShowF (Operand arch), ShowF (TemplatedOperand arch), ShowF (S.SymExpr sym), ShowF (S.BoundVar sym), ShowF (Location arch)) => ShowF (TemplatedFormula sym arch) where
+instance ( IsLocation (Location arch)
+         , S.IsExprBuilder sym
+         , ShowF (OperandComponents arch sym)
+         , ShowF (Operand arch)
+         , ShowF (TemplatedOperand arch)
+         , ShowF (S.SymExpr sym)
+         , ShowF (S.BoundVar sym)
+         , ShowF (Location arch))
+        => ShowF (TemplatedFormula sym arch) where
   showF = show
 
 -- | A specific type of operand of which you can generate templates.
@@ -270,7 +347,7 @@ recoverOperands rep0 evalFn taggedExprs =
     SL.Nil -> return SL.Nil
     _rep SL.:< reps ->
       case taggedExprs of
-        TaggedExpr _ (WrappedRecoverOperandFn recover) SL.:< restExprs ->
+        TaggedExpr _ (RecoverOperandFn recover) SL.:< restExprs ->
           (SL.:<) <$> recover evalFn <*> recoverOperands reps evalFn restExprs
 
 type BaseSet sym arch = MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym (TemplatedArch arch))
@@ -356,3 +433,47 @@ genTemplatedFormula :: (TemplateConstraints arch
                     -> IO (TemplatedInstructionFormula (S.ExprBuilder t st) arch)
 genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
   TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist
+
+{- Note [Evaluating Functions on Templated Operands]
+
+The problem here is that we need to be able to call the evaluator on
+TemplatedFormulas.  In this case, the *operands* list is a list of
+TemplatedOperand, which is not very closely related to a normal operand, and in
+fact might be missing entirely for symbolic operands.
+
+That said, we might be able to evaluate the necessary cases.
+
+UFs should *only* appear in cases where the TemplatedOperand actually has a
+concrete location.  SO.  Can we provide some extra argument or infrastructure to
+unwrap the TemplatedOperand (assert that it has a Just Location of some kind)
+and then apply the non-templated evaluator?
+
+It doesn't seem like it will be possible to write the "location to operand"
+translator for types like Memri, which are logically a Gpr + offset bundle.  The
+templated operand doesn't have a simple Location that we can translate (it
+actually has a Nothing).  Is there more information we can include in the
+templated operand to make this possible?  It seems like we could include the
+actual Operand type that we could just grab from the TemplatedOperand and use
+in-place.  If there is none, we could have a more structured representation with
+a good error message (that should never be seen if all else goes according to
+plan).  There is enough information at the template definition sites to actually
+construct this value.
+
+Note: templOpLocation doesn't seem to be used, so replacing that with something
+more useful here would probably be great.  Actually, it is used in a few places,
+but they could easily be replaced with a call to operandToLocation (of the
+underlying architecture) to achieve the same effect.
+
+It looks like there is a more fundamental problem: the evaluation of functions
+inside of the formula instantiator happens *before* the IO action to allocate
+symbolic variables in templates (operandValue) is ever executed.  Fundamentally,
+this means that we can't implement the interpreters for templated instructions.
+However, it looks like we can re-arrange instantiateFormula to call
+buildOpAsignment earlier - this would let us fully instantiate the symbolic
+variables that make up a templated instruction *before* we do our function
+evaluation.  We still need a place to store the generated variables, but we
+should be able to modify the definition of OperandValue to support saving a
+parallel structure to each operand that will let us store symbolic variables
+that represent e.g. offsets in compound operands.
+
+-}
