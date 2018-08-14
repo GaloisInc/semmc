@@ -7,6 +7,7 @@ module Main ( main ) where
 
 import qualified Data.ByteString.Char8 as BS8
 import           Data.Proxy ( Proxy(..) )
+import qualified Data.Set as S
 import qualified Test.Tasty as T
 import qualified Test.Tasty.HUnit as T
 
@@ -32,7 +33,8 @@ main :: IO ()
 main = do
   PN.withIONonceGenerator $ \ng ->
     CBO.withYicesOnlineBackend ng $ \sym -> do
-      (baseSet, synthEnv) <- loadBaseSet PPC32.allDefinedFunctions PPC32.allSemantics sym
+      let sems = [ (sop, bs) | (sop, bs) <- PPC32.allSemantics, S.member sop insns ]
+      (baseSet, synthEnv) <- loadBaseSet PPC32.allDefinedFunctions sems sym
       T.defaultMain (allTests baseSet synthEnv)
 
 allTests :: (WPO.OnlineSolver t solver)
@@ -41,6 +43,34 @@ allTests :: (WPO.OnlineSolver t solver)
          -> T.TestTree
 allTests baseSet synthEnv =
   T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progs)
+
+insns :: S.Set (Some (D.Opcode o))
+insns = S.fromList
+        [ Some D.ADD4
+        , Some D.ADDC
+        , Some D.ADDI
+        , Some D.ADDIS
+        , Some D.AND
+        , Some D.ANDC
+        , Some D.EQV
+        , Some D.LI
+        , Some D.MULLW
+        , Some D.MULLD
+        , Some D.NAND
+        , Some D.NEG
+        , Some D.NOR
+        , Some D.OR
+        , Some D.ORI
+        , Some D.ORC
+        , Some D.ORIS
+        , Some D.SLD
+        , Some D.SLW
+        , Some D.SRAW
+        , Some D.SRAD
+        , Some D.SRD
+        , Some D.SRW
+        , Some D.SUBF
+        ]
 
 progs :: [(String, [D.Instruction])]
 progs = [ ("addNegated", [ D.Instruction D.NEG (reg 5 PL.:< reg 2 PL.:< PL.Nil)

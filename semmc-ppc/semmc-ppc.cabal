@@ -177,6 +177,7 @@ test-suite semmc-ppc-tests
                  semmc,
                  dismantle-ppc,
                  base,
+                 containers,
                  bytestring,
                  tasty,
                  tasty-hunit,
