@@ -58,6 +58,14 @@ data OperandComponents arch sym (s :: Symbol) where
                  , ldstSoRegTypeExpr :: WI.SymExpr sym (BaseBVType 2)
                  }
               -> OperandComponents arch sym s
+  OCModImm :: { modImmImmExpr :: WI.SymExpr sym (BaseBVType 8)
+              , modImmRotExpr :: WI.SymExpr sym (BaseBVType 4)
+              }
+           -> OperandComponents arch sym s
+  OCAm2OffsetImm :: { am2OffsetImmImmExpr :: WI.SymExpr sym (BaseBVType 12)
+                    , am2OffsetImmAddExpr :: WI.SymExpr sym (BaseBVType 1)
+                    }
+                 -> OperandComponents arch sym s
 
 instance (WI.IsExpr (WI.SymExpr sym), ShowF (A.Location arch)) => Show (OperandComponents arch sym s) where
   show oc =
