@@ -47,6 +47,7 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.List.NonEmpty ( NonEmpty(..), fromList )
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Proxy ( Proxy(..) )
 import           Data.Semigroup ((<>))
@@ -350,13 +351,17 @@ instance A.Architecture AArch32 where
         A.ValueOperand se -> Just se
         A.LocationOperand _ se -> Just se
         A.CompoundOperand {} -> Nothing
+    taggedOperand (TaggedExpr e) = e
     allocateSymExprsForOperand _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
 
-
+noLocation :: PL.List (A.AllocatedOperand arch sym) sh
+           -> F.WrappedOperand arch sh s
+           -> BaseTypeRepr tp
+           -> Maybe (Location arch tp)
 noLocation _ _ _ = Nothing
 
 locationFuncInterpretation :: [(String, A.FunctionInterpretation t st AArch32)]
@@ -512,10 +517,6 @@ locationFuncInterpretation =
                             })
     ]
 
-getArmDisOperand :: ARMOperand s -> Maybe (ARMDis.Operand s)
-getArmDisOperand (A32Operand a) = Just a
-getArmDisOperand _ = Nothing
-
 shapeReprType :: forall tp . ARMOperandRepr tp -> BaseTypeRepr (A.OperandType AArch32 tp)
 shapeReprType orep =
     case orep of
@@ -597,11 +598,8 @@ a32template a32sr =
                                 let gprN = ARMOperands.gpr $ fromIntegral gprNum
                                 let loc = LocGPR gprNum
                                 base <- locLookup loc
-                                -- base <- A.unTagged <$> A.operandValue (Proxy @AArch32) sym locLookup
-                                --                           (A32Operand $ ARMDis.GPR gprN)
                                 offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
                                 addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
-                                -- expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
                                 let recover :: (forall tp . S.SymExpr sym tp -> IO (WE.GroundValue tp)) -> IO (A.Operand AArch32 "Addrmode_imm12")
                                     recover evalFn = do
                                       offsetVal <- fromInteger <$> evalFn offset
@@ -625,12 +623,10 @@ a32template a32sr =
                           mkTemplate' sym locLookup = do
                             let gprN = ARMOperands.gpr $ fromIntegral gprNum
                             let loc = LocGPR gprNum
-                            -- base <- A.unTagged <$> A.operandValue (Proxy @AArch32) sym locLookup (A32Operand $ ARMDis.GPR gprN)
                             base <- locLookup loc
                             offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
                             addflag :: S.SymExpr sym (BaseBVType 1)
                                     <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
-                            -- expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
                             let recover :: (forall tp . S.SymExpr sym tp -> IO (WE.GroundValue tp)) -> IO (A.Operand AArch32 "Addrmode_imm12_pre")
                                 recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
@@ -688,21 +684,19 @@ concreteTemplatedOperand op loc x =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
           ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
-          -- expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
           return (ao, T.WrappedRecoverOperandFn $ const (return (op x)))
 
 
 symbolicTemplatedOperand :: forall arch s (bits :: Nat)
                           . (A.OperandType arch s ~ BaseBVType bits,
                              KnownNat bits,
-                             -- KnownNat extended,
                              1 <= bits)
                          => Proxy bits
                          -> Signed
                          -> String
                          -> (Integer -> A.Operand arch s)
                          -> T.TemplatedOperand arch s
-symbolicTemplatedOperand Proxy signed name constr =
+symbolicTemplatedOperand Proxy _signed name constr =
   T.TemplatedOperand { T.templOpLocation = Nothing
                      , T.templUsedLocations = Set.empty
                      , T.templOpFn = mkTemplate'
@@ -710,14 +704,5 @@ symbolicTemplatedOperand Proxy signed name constr =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
-          -- let bitsRepr = knownNat @bits
-          --     extendedRepr = knownNat @extended
-          -- extended <- case testNatCases bitsRepr extendedRepr of
-          --   NatCaseLT LeqProof ->
-          --     case signed of
-          --       Signed   -> S.bvSext sym knownNat v
-          --       Unsigned -> S.bvZext sym knownNat v
-          --   NatCaseEQ -> return v
-          --   NatCaseGT LeqProof -> error "impossible"
           let recover evalFn = constr <$> evalFn v
           return (A.ValueOperand v, T.WrappedRecoverOperandFn recover)
