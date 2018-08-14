@@ -78,16 +78,22 @@ class (IsOperand (Operand arch),
        ShowF (Opcode arch (Operand arch)),
        EnumF (Opcode arch (Operand arch)))
       => Architecture arch where
+
   -- | Tagged expression type for this architecture.
   --
-  -- This is a bit of a hack to add extra metadata needed for the templating stuff.
+  -- This wrapper allows the templated architecture to store some extra metadata
+  -- needed for re-constructing concrete instructions from templates (based on
+  -- models returned from the SMT solver).
+  --
+  -- For all non-templated architectures, this should probably just be @'AllocatedOperand' arch sym@
   data TaggedExpr arch sym :: Symbol -> *
 
-  -- | Untag a tagged expression.
+  -- | Project a 'S.SymExpr' from the 'TaggedExpr' (which is basically an 'AllocatedOperand') if possible
   --
-  -- Convert a 'TaggedExpr' into a 'S.SymExpr', if possible.  Simple operands
-  -- (standing in for single values or locations) can be converted into symbolic
-  -- expressions.  Compound operations cannot (and are not expected to be).
+  -- This is possible for simple cases where the 'AllocatedOperand' is a simple
+  -- value or location (but not possible if the operand is "compound" (i.e., it
+  -- has more than one logical component, like a memory reference that is a base
+  -- register plus an offset).
   unTagged :: TaggedExpr arch sym s -> Maybe (S.SymExpr sym (OperandType arch s))
 
   -- | Extract the 'AllocatedOperand' from a 'TaggedExpr'
@@ -101,8 +107,6 @@ class (IsOperand (Operand arch),
   --
   -- This is used during formula instantiation to find a symbolic expression for
   -- each operand.
-  --
-  -- FIXME: Add a way to allocate (sharable) exprs for non-locations
   allocateSymExprsForOperand :: forall proxy sym s
                               . (S.IsSymExprBuilder sym, S.IsExprBuilder sym)
                              => proxy arch

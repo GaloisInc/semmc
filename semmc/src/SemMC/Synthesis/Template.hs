@@ -167,6 +167,10 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
                                  | (funcName, fi) <- locationFuncInterpretation (Proxy @arch)
                                  ]
 
+-- | This function unwraps 'FunctionInterpretation's and then rewraps them to
+-- change the @arch@ of the interpretation.  This lets us re-use the
+-- interpretation in the templated architecture without actually having to
+-- rewrite them by hand twice (once normally and once templated).
 templatizeInterp :: (HasCallStack, OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
                  => FunctionInterpretation t st arch
                  -> FunctionInterpretation t st (TemplatedArch arch)

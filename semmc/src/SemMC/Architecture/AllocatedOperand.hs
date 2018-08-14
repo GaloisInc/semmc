@@ -26,8 +26,6 @@ data AllocatedOperand arch sym (s :: Symbol) where
                => WI.SymExpr sym (OperandType arch s)
                -> AllocatedOperand arch sym s
   -- | A value representing an operand backed by a Location
-  --
-  -- FIXME: Can we add a constraint indicating that this really is a bitvector type?
   LocationOperand :: (OperandType arch s ~ WT.BaseBVType n)
                   => Location arch (OperandType arch s)
                   -> WI.SymExpr sym (OperandType arch s)

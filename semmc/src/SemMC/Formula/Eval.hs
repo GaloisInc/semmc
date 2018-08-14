@@ -17,9 +17,7 @@
 -- values are known at formula instantiation time (which can be considered
 -- "static").
 module SemMC.Formula.Eval (
-  -- Evaluator(..),
   lookupVarInFormulaOperandList,
-  -- exprForRegister,
   evalBitvectorExtractor,
   evalBitvectorExtractorWith,
   evalRegExtractor,
@@ -47,34 +45,6 @@ import           SemMC.Formula.Formula as F
 
 type Sym t st = S.ExprBuilder t st
 
-{-
-
-In addition to the `List (Operand arch) sh` (which has bound variables
-corresponding to references to our compound operands), we will also need:
-
-> List (OperandComponents arch sym) sh
-
-where `OperandComponents` is an arch-keyed type family.  A PowerPC example might
-look like:
-
-data OperandComponents sym s where
-  GprcComponents :: SymExpr sym (BVType w) -> OperandComponents sym "gprc"
-  MemriComponents :: SymExpr sym (BVType w1) -> SymExpr sym (BVType w2) -> OperandComponents sym "memri"
-
-Each constructor will have the symbolic values allocated for the sub-components
-of the operand.  What that will be depends on whether we are instantiating a
-concrete instruction or an instruction template.
-
-Instead of the `List (Operand arch) sh`, we could now have `List (TaggedExpr
-arch) sh`, which could contain all of the expressions we need.  This would also
-simplify the extractors, as they won't have to actually look at operands at all
-(or know about registers).
-
-* The register extractor doesn't actually require the operand list (if we had the list of OperandComponents at least)
-* The bitvector extractor doesn't either (assuming OperandComponents)
-
--}
-
 -- | Given a 'S.BoundVar', attempt to find its index in the operand list for the
 -- 'F.ParameterizedFormula'
 --
@@ -97,86 +67,6 @@ elemIndexSL target = go . SL.imap Pair
         Pair idx (BV.BoundVar elt) SL.:< rest
           | Just Refl <- testEquality elt target -> Just (Some idx)
           | otherwise -> go rest
-
--- | Find a symbolic expression that represents the register passed in (as an 'A.Location')
---
--- This function checks to see if the register has already been referenced in
--- the formula literals map or the operand list.  If it has, the corresponding
--- expression is re-used.
---
--- If the register hasn't yet been assigned an expression, this function
--- allocates a new symbolic expression for it and maps the register to the new
--- expression in the returned map of locations to bound variables.  The returned
--- map is merged into the literals map in the outer evaluation logic.
--- exprForRegister :: forall arch t st sh tp tp0
---                  . (A.IsLocation (A.Location arch))
---                 => S.ExprBuilder t st
---                 -- ^ The symbolic backend
---                 -> F.ParameterizedFormula (S.ExprBuilder t st) arch sh
---                 -- ^ The semantics formula for the instruction being interpreted
---                 -> SL.List (A.AllocatedOperand arch (S.ExprBuilder t st)) sh
---                 -- ^ The actual arguments we are instantiating the parameterized formula with
---                 -> (forall tp1 . A.Operand arch tp1 -> Bool)
---                 -- ^ A predicate to test whether the 'A.Location' (below)
---                 -- matches an 'A.Operand' in the operands list; this is an
---                 -- opaque predicate because translating a 'A.Location' into an
---                 -- 'A.Operand' is inherently architecture-specific, and must be
---                 -- done by an architecture-specific backend.
---                 -> A.Location arch tp0
---                 -- ^ The register whose value (expression) should be looked up
---                 -> BaseTypeRepr tp
---                 -- ^ The return type of the 'S.Expr' that the caller is expecting.
---                 -> IO (S.Expr t tp, MapF.MapF (A.Location arch) (S.BoundVar (S.ExprBuilder t st)))
--- exprForRegister sym pf operands test reg resultRepr =
---   case MapF.lookup reg (F.pfLiteralVars pf) of
---     -- If the variable has already been allocated a LiteralVar (in
---     -- pfLiteralVars), we use that variable as our expression.
---     Just bvar ->
---       case testEquality resultRepr (S.bvarType bvar) of
---         Just Refl -> return (S.varExpr sym bvar, MapF.empty)
---         Nothing -> error ("The expression for " ++ MapF.showF reg ++ " has the wrong type; the caller expected " ++ show resultRepr)
---     -- Otherwise, We check the operands list to see if there was a variable
---     -- allocated in there for the same register.  If not, we allocate a fresh
---     -- variable and return it in the extra mapping that will be merged with the
---     -- literal vars.  Note that this is the only case where we actually return a
---     -- non-empty map.
---     Nothing
---       | Just (Some (BV.BoundVar bvar)) <- findOperandVarForRegister pf operands test ->
---         case testEquality (S.bvarType bvar) resultRepr of
---           Just Refl -> return (S.varExpr sym bvar, MapF.empty)
---           Nothing -> error ("Register operand has type " ++ show (S.bvarType bvar) ++ " but the caller expected " ++ show resultRepr)
---       | otherwise -> do
---           let usym = makeSymbol ("reg_" ++ MapF.showF reg)
---           s <- S.freshBoundVar sym usym (A.locationType reg)
---           case testEquality (S.bvarType s) resultRepr of
---             Just Refl -> return (S.varExpr sym s, MapF.singleton reg s)
---             Nothing -> error ("Created a fresh variable of type " ++ show (S.bvarType s) ++ " but the caller expected " ++ show resultRepr)
-
--- -- | Look a 'A.Location' in the operand list (@'SL.List' ('A.Operand' arch) sh@)
--- -- and, if it is found, return the corresponding 'BV.BoundVar' from the
--- -- 'F.ParameterizedFormula'
--- --
--- -- Because we cannot generically convert a 'A.Location' to an 'A.Operand', we
--- -- pass in a predicate to test if an 'A.Operand' matches the target
--- -- 'A.Location'.  This predicate must be provided by an architecture-specific
--- -- backend.
--- findOperandVarForRegister :: forall t st arch sh
---                            . F.ParameterizedFormula (S.ExprBuilder t st) arch sh
---                           -> SL.List (A.Operand arch) sh
---                           -> (forall tp1 . A.Operand arch tp1 -> Bool)
---                           -> Maybe (Some (BV.BoundVar (S.ExprBuilder t st) arch))
--- findOperandVarForRegister pf operands0 test = go (SL.imap Pair operands0)
---   where
---     go :: forall sh' . SL.List (Product (SL.Index sh) (A.Operand arch)) sh' -> Maybe (Some (BV.BoundVar (S.ExprBuilder t st) arch))
---     go operands =
---       case operands of
---         SL.Nil -> Nothing
---         Pair idx op SL.:< rest
---           | test op -> Just (Some (F.pfOperandVars pf SL.!! idx))
---           | otherwise -> go rest
-
--- FIXME: Have the evaluator just take the function that returns the expr for
--- each location.  That means the evaluator will never need to allocate one.
 
 evalRegExtractor :: (MapF.ShowF (A.Operand arch), A.IsLocation (A.Location arch), MapF.ShowF (A.OperandComponents arch (S.ExprBuilder t st)))
                  => String
@@ -256,15 +146,6 @@ evalBitvectorExtractorWith wrapResultWith operationName litRep match =
                       Just Refl -> return res
                       Nothing -> error (operationName ++ " returns a " ++ show (S.exprType res) ++ " but the caller expected " ++ show resultRepr)
                   Nothing -> error (operationName ++ " has an unexpected operand type: " ++ MapF.showF oc)
-
-          -- case match op of
-          --   Nothing -> error ("Unexpected operand type in " ++ operationName ++ ": " ++ MapF.showF op)
-          --   Just val -> do
-          --     bv <- S.bvLit sym litRep val
-          --     res <- wrapResultWith sym bv
-          --     case testEquality (S.exprType res) resultRepr of
-          --       Just Refl -> return (res, MapF.empty)
-          --       Nothing -> error (operationName ++ " returns a " ++ show (S.exprType res) ++ " but the caller expected " ++ show resultRepr)
       _ -> error ("Unexpected argument list to " ++ operationName)
 
 

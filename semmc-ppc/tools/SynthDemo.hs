@@ -119,7 +119,7 @@ loadProgramBytes fp = do
 
 loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver t solver)
             => [(Some (DPPC.Opcode DPPC.Operand), BS8.ByteString)]
-            -> SB.OnlineBackend t solver -- SB.ExprBuilder t st -- SB.SimpleBackendState
+            -> SB.OnlineBackend t solver
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.OnlineBackend t solver) PPC32.PPC),
                    SemMC.SynthesisEnvironment (SB.OnlineBackend t solver) PPC32.PPC)
 loadBaseSet ops sym = do
