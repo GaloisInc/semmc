@@ -34,6 +34,7 @@ import qualified SemMC.Architecture.View as V
 import           SemMC.Stochastic.IORelation ( IORelation(..), OperandRef(..) )
 import           SemMC.Stochastic.Monad
 
+import           Prelude
 
 -- | Generate an arbitrary instruction for the given opcode.
 --

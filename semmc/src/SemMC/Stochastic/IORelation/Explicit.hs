@@ -34,6 +34,8 @@ import qualified SemMC.Concrete.Execution as CE
 import           SemMC.Stochastic.IORelation.Shared
 import           SemMC.Stochastic.IORelation.Types
 
+import           Prelude
+
 -- | Make a random instruction that does not reference any implicit operands.
 --
 -- This could be made more efficient - right now, it just tries to generate

@@ -157,8 +157,9 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 
   uninterpretedFunctions _ = uninterpretedFunctions (Proxy @arch)
 
-  allocateSymExprsForOperand _ sym locLookup (TemplatedOperand _ _ f) =
-    uncurry TaggedExpr <$> f sym locLookup
+  allocateSymExprsForOperand _ sym locLookup (TemplatedOperand _ _ f) = do
+    (e, r) <- f sym locLookup
+    return TaggedExpr { taggedExpr = e, taggedRecover = r }
 
   operandToLocation _ (TemplatedOperand loc _ _) = loc
   shapeReprToTypeRepr _ = shapeReprToTypeRepr (Proxy @arch)

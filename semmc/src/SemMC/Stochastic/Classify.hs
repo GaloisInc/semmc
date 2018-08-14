@@ -455,6 +455,7 @@ summarizeExpr acc@(uf, nl, sz) (Some se) =
         S.FnApp {} -> (uf + 1, nl, sz + 1)
         _ -> (uf, nl, sz + 1)
     S.AppExpr ae -> FC.foldlFC' summarizeElt acc (S.appExprApp ae)
+    S.StringExpr {} -> acc
 
 summarizeElt :: (Int, Int, Int) -> S.Expr t tp -> (Int, Int, Int)
 summarizeElt acc@(uf, nl, sz) elt =
@@ -476,6 +477,7 @@ summarizeElt acc@(uf, nl, sz) elt =
         S.BVSdiv _ lhs rhs -> addIfNonlinear lhs rhs acc
         S.BVSrem _ lhs rhs -> addIfNonlinear lhs rhs acc
         _ -> (uf, nl, sz + 1)
+    S.StringExpr {} -> acc
 
 -- | If the operation is nonlinear (based on operands), increment the nonlinear
 -- op count.

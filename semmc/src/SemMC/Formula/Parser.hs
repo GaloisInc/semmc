@@ -63,6 +63,8 @@ import           SemMC.Formula.Formula
 import           SemMC.Formula.SETokens
 import qualified SemMC.Util as U
 
+import           Prelude
+
 data OperandTypeWrapper (arch :: *) :: TL.TyFun Symbol BaseType -> *
 type instance TL.Apply (OperandTypeWrapper arch) s = A.OperandType arch s
 type OperandTypes arch sh = TL.Map (OperandTypeWrapper arch) sh

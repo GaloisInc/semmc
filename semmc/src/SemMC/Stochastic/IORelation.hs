@@ -59,6 +59,8 @@ import           SemMC.Stochastic.IORelation.Types
 
 import qualified SemMC.Util as U
 
+import           Prelude
+
 data LearningConfig arch =
   LearningConfig { lcIORelationDirectory :: FilePath
                  , lcNumThreads :: Int
