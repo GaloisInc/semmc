@@ -804,7 +804,7 @@ a32template a32sr =
                                           => sym
                                           -> (forall tp . Location A32 tp -> IO (S.SymExpr sym tp))
                                           -> IO ( A.AllocatedOperand A32 sym "Addrmode_imm12",
-                                                  T.WrappedRecoverOperandFn sym (A.Operand A32 "Addrmode_imm12")
+                                                  T.RecoverOperandFn sym (A.Operand A32 "Addrmode_imm12")
                                                 )
                               mkTemplate' sym locLookup = do
                                 let gprN = ARMOperands.gpr $ fromIntegral gprNum
@@ -819,7 +819,7 @@ a32template a32sr =
                                       return $ ARMDis.Addrmode_imm12 $
                                              ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                                 return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
-                                       , T.WrappedRecoverOperandFn recover
+                                       , T.RecoverOperandFn recover
                                        )
       ARMDis.Addrmode_imm12_preRepr ->
           mkTemplate <$> [0..numGPR-1]
@@ -831,7 +831,7 @@ a32template a32sr =
                                       => sym
                                       -> (forall tp . Location A32 tp -> IO (S.SymExpr sym tp))
                                       -> IO ( A.AllocatedOperand A32 sym "Addrmode_imm12_pre",
-                                              T.WrappedRecoverOperandFn sym (A.Operand A32 "Addrmode_imm12_pre")
+                                              T.RecoverOperandFn sym (A.Operand A32 "Addrmode_imm12_pre")
                                             )
                           mkTemplate' sym locLookup = do
                             let gprN = ARMOperands.gpr $ fromIntegral gprNum
@@ -846,7 +846,7 @@ a32template a32sr =
                                   return $ ARMDis.Addrmode_imm12_pre $
                                          ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
                             return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
-                                   , T.WrappedRecoverOperandFn recover
+                                   , T.RecoverOperandFn recover
                                    )
       ARMDis.Arm_bl_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
       ARMDis.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
@@ -872,7 +872,7 @@ a32template a32sr =
       --                       let recover evalFn = do
       --                             offsetVal <- fromInteger <$> evalFn offset
       --                             return $ ARMDis.So_reg_reg $ ARMOperands.SoRegReg gprN gprN offsetVal
-      --                       return (expr, T.WrappedRecoverOperandFn recover)
+      --                       return (expr, T.RecoverOperandFn recover)
       ARMDis.UnpredictableRepr -> error "opTemplate ARM_UnpredictableRepr TBD... and are you sure?"
 
 concreteTemplatedOperand :: forall arch s a.
@@ -889,7 +889,7 @@ concreteTemplatedOperand op loc x =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
           ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
-          return (ao, T.WrappedRecoverOperandFn $ const (return (op x)))
+          return (ao, T.RecoverOperandFn $ const (return (op x)))
 
 symbolicTemplatedOperand :: forall arch s (bits :: Nat)
                           . (A.OperandType arch s ~ BaseBVType bits,
@@ -909,7 +909,7 @@ symbolicTemplatedOperand Proxy _signed name constr =
         mkTemplate' sym _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
           let recover evalFn = constr <$> evalFn v
-          return (A.ValueOperand v, T.WrappedRecoverOperandFn recover)
+          return (A.ValueOperand v, T.RecoverOperandFn recover)
 
 ----------------------------------------------------------------------
 -- Concrete state functionality

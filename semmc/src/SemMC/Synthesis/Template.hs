@@ -27,7 +27,7 @@ module SemMC.Synthesis.Template
   , TemplateConstraints
   , TemplatedOperandFn
   , TemplatedOperand(..)
-  , WrappedRecoverOperandFn(..)
+  , RecoverOperandFn(..)
   , TemplatedArch
   , TemplatedFormula(..)
   , TemplatableOperand(..)
@@ -78,11 +78,8 @@ import           SemMC.Formula
 -- | A function that allows you to recover the concrete value of a templated
 -- operand given a concrete evaluation function, typically provided as the model
 -- from an SMT solver.
-type RecoverOperandFn sym op = (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op
-
--- | Just what it sounds like. Haskell doesn't deal that well with RankNTypes.
-newtype WrappedRecoverOperandFn sym op =
-  WrappedRecoverOperandFn { unWrappedRecOpFn :: RecoverOperandFn sym op }
+newtype RecoverOperandFn sym op =
+  RecoverOperandFn { unRecOpFn :: (forall tp. S.SymExpr sym tp -> IO (GroundValue tp)) -> IO op }
 
 -- | The bulk of what a 'TemplatedOperand' is. Reading off the type in English:
 -- given a symbolic expression builder and a mapping from machine location to
@@ -100,7 +97,7 @@ type TemplatedOperandFn arch s = forall sym.
                               => sym
                               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
                               -> IO (AllocatedOperand arch sym s,
-                                     WrappedRecoverOperandFn sym (Operand arch s))
+                                     RecoverOperandFn sym (Operand arch s))
 
 -- | An operand for 'TemplatedArch'.
 data TemplatedOperand (arch :: *) (s :: Symbol) =
@@ -145,7 +142,7 @@ type TemplateConstraints arch = (Architecture arch,
 instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
   data TaggedExpr (TemplatedArch arch) sym s =
     TaggedExpr { taggedExpr :: AllocatedOperand arch sym s
-               , taggedRecover :: WrappedRecoverOperandFn sym (Operand arch s)
+               , taggedRecover :: RecoverOperandFn sym (Operand arch s)
                }
 
   unTagged te = case taggedExpr te of
@@ -350,7 +347,7 @@ recoverOperands rep0 evalFn taggedExprs =
     SL.Nil -> return SL.Nil
     _rep SL.:< reps ->
       case taggedExprs of
-        TaggedExpr _ (WrappedRecoverOperandFn recover) SL.:< restExprs ->
+        TaggedExpr _ (RecoverOperandFn recover) SL.:< restExprs ->
           (SL.:<) <$> recover evalFn <*> recoverOperands reps evalFn restExprs
 
 type BaseSet sym arch = MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym (TemplatedArch arch))
