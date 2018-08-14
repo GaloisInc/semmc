@@ -177,12 +177,6 @@ uninterpretedFunctions _ =
   , ("write_mem.128",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth ppc))) (BaseBVType 8) ::> BaseBVType (ArchRegWidth ppc) ::> BaseBVType 128)),
      Some (knownRepr :: BaseTypeRepr (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth ppc))) (BaseBVType 8))))
-  , ("test_bit_dynamic.32",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32 ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
-  , ("test_bit_dynamic.64",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 64 ::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
   , ("clz.32",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))

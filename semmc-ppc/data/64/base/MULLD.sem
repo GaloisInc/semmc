@@ -1,8 +1,8 @@
 ;; Multiply Low Doubleword (XO-form, RC=0)
 ((operands
  ((rT . 'Gprc)
-  (rA . 'Gprc)
-  (rB . 'Gprc)))
+  (rB . 'Gprc)
+  (rA . 'Gprc)))
  (in
   (rB rA 'IP))
  (defs

@@ -1,11 +1,13 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+
 module Main ( main ) where
 
 import qualified Control.Concurrent.Async as A
@@ -26,8 +28,8 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as N
 import           Data.Parameterized.Some ( Some (..) )
 import qualified Lang.Crucible.Backend as CRUB
-import qualified Lang.Crucible.Backend.Online as SB
-import qualified What4.Expr as SB
+import qualified Lang.Crucible.Backend.Online as CBO
+import qualified What4.Expr.Builder as SB
 import qualified What4.Protocol.Online as WPO
 
 import qualified Dismantle.PPC as DPPC
@@ -119,9 +121,9 @@ loadProgramBytes fp = do
 
 loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver t solver)
             => [(Some (DPPC.Opcode DPPC.Operand), BS8.ByteString)]
-            -> SB.OnlineBackend t solver
-            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (SB.OnlineBackend t solver) PPC32.PPC),
-                   SemMC.SynthesisEnvironment (SB.OnlineBackend t solver) PPC32.PPC)
+            -> CBO.OnlineBackend t solver
+            -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (CBO.OnlineBackend t solver) PPC32.PPC),
+                   SemMC.SynthesisEnvironment (CBO.OnlineBackend t solver) PPC32.PPC)
 loadBaseSet ops sym = do
   baseSet <- F.loadFormulas sym F.emptyLibrary ops
   let plainBaseSet = makePlain baseSet
@@ -186,7 +188,8 @@ mainWith r opts = do
   -- Set up the synthesis side of things
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
-  SB.withYicesOnlineBackend r $ \sym -> do
+
+  CBO.withYicesOnlineBackend r $ \sym -> do
     (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
 
     -- Turn it into a formula

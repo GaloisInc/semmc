@@ -18,8 +18,6 @@ class BatchData(object):
 
 class BatchEntry(object):
     def __init__(self):
-        self.type = None
-        self.count = None
         self.opcode = None
         self.pretty = None
         self.bytes = None
@@ -27,6 +25,7 @@ class BatchEntry(object):
         self.state_values = []
         self.signal_num = None
         self.inputs = []
+        self.passed = False
 
 class StateValue(object):
     def __init__(self, loc, exp, act):
@@ -51,31 +50,26 @@ def parse_batch_json(body):
     b.entries = []
     for entry in raw['entries']:
         be = BatchEntry()
-        be.type = entry['type']
         be.opcode = entry['opcode']
+        be.operands = entry['raw-operands']
+        be.pretty = entry['pretty']
+        be.bytes = entry['bytes']
 
-        if be.type == 'success':
-            be.count = int(entry['count'])
-        elif be.type == 'failure':
-            be.operands = entry['raw-operands']
-            be.pretty = entry['pretty']
-            be.bytes = entry['bytes']
+        for sval in entry['state']:
+            be.state_values.append(StateValue(sval['location'], sval['expected'], sval['actual']))
 
-            for sval in entry['state']:
-                be.state_values.append(StateValue(sval['location'], sval['expected'], sval['actual']))
+        for ival in entry['inputs']:
+            be.inputs.append(Input(ival['location'], ival['value']))
 
-            for ival in entry['inputs']:
-                be.inputs.append(Input(ival['location'], ival['value']))
-
-        elif be.type == 'unexpectedSignal':
-            be.pretty = entry['pretty']
-            be.bytes = entry['bytes']
-            be.signal_num = entry['signal']
-
-            for ival in entry['inputs']:
-                be.inputs.append(Input(ival['location'], ival['value']))
+        if entry['type'] == 'success':
+            be.passed = True
+        elif entry['type'] == 'failure':
+            be.passed = False
+        elif entry['type'] == 'unexpectedSignal':
+            be.passed = False
+            be.signal_num = int(entry['signal'])
         else:
-            raise ValueError("Invalid batch entry type: %s" % (be.type,))
+            raise ValueError("Invalid entry type: %s" % (entry['type'],))
 
         b.entries.append(be)
 
@@ -127,42 +121,24 @@ def upload_batch(request):
                 opcode.arch = arch
                 opcode.save()
 
-            if entry.type == 'success':
-                e = TestSuccess()
-                e.count = entry.count
-                e.opcode = opcode
-                e.batch = b
-                e.save()
-            elif entry.type == 'unexpectedSignal':
-                e = TestSignalError()
-                e.opcode = opcode
-                e.pretty = entry.pretty
-                e.bytes = entry.bytes
-                e.signal = entry.signal_num
-                e.batch = b
-                e.save()
+            e = Test()
+            e.pretty = entry.pretty
+            e.opcode = opcode
+            e.batch = b
+            e.bytes = entry.bytes
+            e.arguments = entry.operands
+            e.passed = entry.passed
+            e.signal = entry.signal_num
 
-                TestSignalErrorInput.objects.bulk_create([
-                    TestSignalErrorInput(test_signal_error=e, location=i.location, value=i.value)
-                    for i in entry.inputs ])
-            elif entry.type == 'failure':
-                e = TestFailure()
-                e.opcode = opcode
-                e.pretty = entry.pretty
-                e.bytes = entry.bytes
-                e.arguments = entry.operands
-                e.batch = b
-                e.save()
+            e.save()
 
-                TestFailureState.objects.bulk_create([
-                    TestFailureState(test_failure=e, location=sve.location, expected_value=sve.expected, actual_value=sve.actual)
-                    for sve in entry.state_values ])
+            TestMachineState.objects.bulk_create([
+                TestMachineState(test=e, location=sve.location, expected_value=sve.expected, actual_value=sve.actual)
+                for sve in entry.state_values ])
 
-                TestFailureInput.objects.bulk_create([
-                    TestFailureInput(test_failure=e, location=i.location, value=i.value)
-                    for i in entry.inputs ])
-            else:
-                raise Exception("BUG: Invalid entry type %s" % (entry.type,))
+            TestInput.objects.bulk_create([
+                TestInput(test=e, location=i.location, value=i.value)
+                for i in entry.inputs ])
 
     except TypeError as e:
         msg = "Type error: %s" % (e,)
@@ -202,9 +178,8 @@ def arch_list(request):
             host_data.append({
                 'host': h,
                 'last_batch_time': last_batch_time,
-                'num_failures': TestFailure.objects.filter(batch__testing_host__id=h.id).count() +
-                                TestSignalError.objects.filter(batch__testing_host__id=h.id).count(),
-                'num_successes': TestSuccess.objects.filter(batch__testing_host__id=h.id).count(),
+                'num_failures': Test.objects.filter(batch__testing_host__id=h.id, passed=False).count(),
+                'num_successes': Test.objects.filter(batch__testing_host__id=h.id, passed=True).count(),
                 })
 
         results.append({
@@ -222,7 +197,6 @@ def view_arch(request, arch_id):
             'opcode': lambda r: r['opcode'].name,
             'opcode': lambda r: r['opcode'].name,
             'num_failures': lambda r: r['num_failures'],
-            'num_signal_errors': lambda r: r['num_signal_errors'],
             'num_successes': lambda r: r['num_successes'],
             'percent_failing': lambda r: r['percent_failing'],
             }
@@ -240,21 +214,19 @@ def view_arch(request, arch_id):
     opcode_results = []
 
     for opcode in opcodes:
-        num_failures = TestFailure.objects.filter(opcode__id=opcode.id).count()
-        num_successes = TestSuccess.objects.filter(opcode__id=opcode.id).count()
-        num_signal_errors = TestSignalError.objects.filter(opcode__id=opcode.id).count()
+        num_failures = Test.objects.filter(opcode__id=opcode.id, passed=False).count()
+        num_successes = Test.objects.filter(opcode__id=opcode.id, passed=True).count()
 
-        denom = num_failures + num_successes + num_signal_errors
+        denom = num_failures + num_successes
         if denom == 0:
             percent = 100
         else:
-            percent = round(100.0 * ((num_failures + num_signal_errors) / denom), 2)
+            percent = round(100.0 * (num_failures / denom), 2)
 
         results = {
                 'opcode': opcode,
                 'num_failures': num_failures,
                 'num_successes': num_successes,
-                'num_signal_errors': num_signal_errors,
                 'percent_failing': percent,
                 }
         opcode_results.append(results)
@@ -269,7 +241,6 @@ def view_arch(request, arch_id):
     columns = [
             { 'name': 'opcode', 'display_name': 'Opcode', },
             { 'name': 'num_failures', 'display_name': '# Failures', },
-            { 'name': 'num_signal_errors', 'display_name': '# Signal Errors', },
             { 'name': 'num_successes', 'display_name': '# Successes', },
             { 'name': 'percent_failing', 'display_name': '% Failing', },
             ]
@@ -284,45 +255,64 @@ def view_arch(request, arch_id):
 
     return render(request, 'main/view_arch.html', context)
 
-def view_opcode(request, opcode_id):
+def view_opcode(request, opcode_id, result_type='success'):
+    # User clicked the 'delete all opcodes' button:
+    if request.POST.get('delete-all'):
+        Test.objects.filter(opcode__id=opcode_id).delete()
+
     set_display_mode(request)
     o = Opcode.objects.get(pk=opcode_id)
 
-    failures = TestFailure.objects.filter(opcode__id=o.id)
-    signal_errors = TestSignalError.objects.filter(opcode__id=o.id)
+    try:
+        limit_str = request.GET.get('limit')
+        if limit_str == 'none':
+            limit = None
+        else:
+            limit = int(request.GET.get('limit'))
+    except:
+        limit = 50
+
+    cases = Test.objects.filter(opcode__id=o.id)
+
+    successes = cases.filter(passed=True)
+    failures = cases.filter(signal__isnull=True, passed=False)
+    signals = cases.filter(signal__isnull=False)
+
+    if result_type == 'success':
+        cases = successes
+    elif result_type == 'signal':
+        cases = signals
+    elif result_type == 'failure':
+        cases = failures
+
+    cases = cases.order_by('-batch__submitted_at')
+    if limit:
+        cases = cases[:limit]
 
     context = {
             'opcode': o,
-            'failures': failures,
-            'signal_errors': signal_errors,
+            'cases': cases,
             'numty': request.session['numeric_display'],
+            'limit': limit,
+            'result_type': result_type,
+            'num_successes': successes.count(),
+            'num_signals': signals.count(),
+            'num_failures': failures.count(),
             }
 
     return render(request, 'main/view_opcode.html', context)
 
-def view_test_failure(request, test_failure_id):
+def view_test(request, test_id):
     set_display_mode(request)
-    tf = TestFailure.objects.get(pk=test_failure_id)
+    tf = Test.objects.get(pk=test_id)
 
     context = {
             'failure': tf,
             'numty': request.session['numeric_display'],
-            'inputs': tf.testfailureinput_set.all(),
+            'inputs': tf.testinput_set.all(),
             }
 
-    return render(request, 'main/view_test_failure.html', context)
-
-def view_test_signal_error(request, test_signal_error_id):
-    set_display_mode(request)
-    ts = TestSignalError.objects.get(pk=test_signal_error_id)
-
-    context = {
-            'signal_error': ts,
-            'numty': request.session['numeric_display'],
-            'inputs': ts.testsignalerrorinput_set.all(),
-            }
-
-    return render(request, 'main/view_test_signal_error.html', context)
+    return render(request, 'main/view_test.html', context)
 
 def set_display_mode(request):
     display_mode = request.GET.get('numeric_display') or request.session.get('numeric_display')

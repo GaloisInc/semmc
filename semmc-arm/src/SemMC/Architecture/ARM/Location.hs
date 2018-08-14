@@ -17,10 +17,10 @@ import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TH.GADT
 import           Data.Semigroup
-import           Data.Word ( Word8 )
 import qualified Dismantle.ARM.Operands as ARMOprnds
 import qualified Dismantle.Thumb.Operands as ThumbOprnds
 import           GHC.TypeLits
+import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import           What4.BaseTypes
 
 
@@ -38,7 +38,7 @@ class ArchRepr arch where
 -- R15 is sometimes not the PC value, it is separately managed.
 
 data Location arm :: BaseType -> * where
-  LocGPR :: Word8 -> Location arm (BaseBVType (ArchRegWidth arm))
+  LocGPR :: GPRIdent -> Location arm (BaseBVType (ArchRegWidth arm))
   LocPC :: Location arm (BaseBVType (ArchRegWidth arm))
   LocCPSR :: Location arm (BaseBVType (ArchRegWidth arm))
   LocMem :: Location arm (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))

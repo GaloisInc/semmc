@@ -19,6 +19,41 @@ body {
     color: black;
 }
 
+#opcodeTabs {
+    list-style-type: none;
+    border-bottom: 1px solid #888;
+    padding-bottom: 0.3em;
+}
+
+#opcodeTabs li:hover {
+    background: #ddd;
+}
+
+#opcodeTabs li {
+    display: inline;
+    padding-left: 1em;
+    padding-right: 1em;
+    padding-top: 0.2em;
+    padding-bottom: 0.3em;
+    border-left: 1px solid #fff;
+    border-right: 1px solid #fff;
+}
+
+#opcodeTabs li.activeTab {
+    border-bottom: 1px solid #fff;
+    border-left: 1px solid #888;
+    border-right: 1px solid #888;
+    border-top: 1px solid #888;
+}
+
+a.archLink {
+    font-size: 24px;
+}
+
+#deleteAllForm {
+    float: right;
+}
+
 .mono {
     font-family: monospace;
 }

@@ -30,7 +30,7 @@
      rD)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 31 31)
        ((_ extract 35 4)
         (res_nzcv))))
@@ -40,7 +40,7 @@
        (res_nzcv)))
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 30 30)
         ((_ extract 35 4)
          (res_nzcv))))
@@ -82,7 +82,7 @@
            rD)
           (ite
            (bveq
-            #b0
+            #b1
             ((_ extract 31 31)
              ((_ extract 35 4)
               (res_nzcv))))
@@ -94,7 +94,7 @@
          rD)
         (ite
          (bveq
-          #b0
+          #b1
           ((_ extract 31 31)
            ((_ extract 35 4)
             (res_nzcv))))

@@ -6,8 +6,6 @@
 {% endblock %}
 
 {% block body %}
-<h1>Architecture Listing</h1>
-
 <table id="archList">
     <tr>
         <th id="archCol">Architecture</th>
@@ -16,7 +14,7 @@
     {% for arch in archs %}
     <tr>
         <td valign="top">
-            <a href="/arch/{{ arch.arch.id }}/">{{ arch.arch.name|mono }}</a>
+            <a class="archLink" href="/arch/{{ arch.arch.id }}/">{{ arch.arch.name|mono }}</a>
         </td>
         <td>
             <ul>

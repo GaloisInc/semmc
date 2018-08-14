@@ -8,7 +8,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Memory
     )
     where
 
-import           Data.Maybe
 import           Data.Parameterized.Context
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Semigroup

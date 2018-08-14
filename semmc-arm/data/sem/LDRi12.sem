@@ -27,7 +27,7 @@
      gpr)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 31 31)
        ((_ call "uf.read_mem.32")
         'Mem
@@ -39,7 +39,7 @@
        (updAddr)))
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 30 30)
         ((_ call "uf.read_mem.32")
          'Mem
@@ -72,7 +72,7 @@
         gpr)
        (ite
         (bveq
-         #b0
+         #b1
          ((_ extract 31 31)
           ((_ call "uf.read_mem.32")
            'Mem

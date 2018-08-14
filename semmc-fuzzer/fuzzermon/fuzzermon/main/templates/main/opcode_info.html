@@ -1,0 +1,11 @@
+{% load main_helpers %}
+
+<div>
+    <a href="/test/{{ case.id }}/">{{ case.pretty|mono }}</a>
+</div>
+<div class="bytes">
+    {{ case.bytes|num:numty }}
+</div>
+<div>
+    <span class="lighthost">{{ case.batch.testing_host.hostname|mono }}</span>
+</div>

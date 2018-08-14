@@ -1,0 +1,16 @@
+{% load main_helpers %}
+
+<table>
+    <tr>
+        <th>Instruction</th>
+        <th>Signal</th>
+    </tr>
+    {% for case in cases %}
+    <tr>
+        <td>
+            {% include "main/opcode_info.html" %}
+        </td>
+        <td>{{ case.signal }}</td>
+    </tr>
+    {% endfor %}
+</table>

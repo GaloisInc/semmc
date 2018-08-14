@@ -75,7 +75,7 @@
         ((_ call "uf.a32.soregimm_imm")
          sori)
         #b00000)
-       (concat #b100 #x00000001)
+       (concat #b111 #x00000001)
        (concat
         #b011
         ((_ zero_extend 27)
@@ -96,7 +96,7 @@
         rD)
        (ite
         (bveq
-         #b0
+         #b1
          ((_ extract 31 31)
           ((_ extract 35 4)
            (res_nzcv))))
@@ -108,7 +108,7 @@
       rD)
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 31 31)
         ((_ extract 35 4)
          (res_nzcv))))
@@ -128,7 +128,7 @@
      rD)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 31 31)
        ((_ extract 35 4)
         (res_nzcv))))
@@ -138,7 +138,7 @@
        (res_nzcv)))
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 30 30)
         ((_ extract 35 4)
          (res_nzcv))))

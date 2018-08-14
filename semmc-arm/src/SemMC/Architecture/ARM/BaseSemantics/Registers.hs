@@ -3,13 +3,14 @@
 module SemMC.Architecture.ARM.BaseSemantics.Registers
     where
 
-import Data.Word ( Word8 )
+import Data.Word ( Word32 )
 import Prelude hiding ( concat )
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.DSL
 
+type GPRIdent = Word32
 
-numGPR :: Word8
+numGPR :: GPRIdent
 numGPR = 16
 
 

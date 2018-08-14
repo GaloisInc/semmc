@@ -7,8 +7,6 @@
 {% endblock %}
 
 {% block body %}
-<h1>Opcode Listing for {{ arch.name|mono }}</h1>
-
 <table>
     <tr>
         {% for col in cols %}
@@ -25,9 +23,6 @@
         </td>
         <td>
             {{ status.num_failures|mono }}
-        </td>
-        <td>
-            {{ status.num_signal_errors|mono }}
         </td>
         <td>
             {{ status.num_successes|mono }}

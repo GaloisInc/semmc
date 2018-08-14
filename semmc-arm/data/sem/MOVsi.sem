@@ -10,7 +10,7 @@
      rD)
     (ite
      (bveq
-      #b0
+      #b1
       ((_ extract 31 31)
        ((_ extract 32 1)
         ((_ call "df.shiftC")
@@ -46,7 +46,7 @@
          'CPSR))))
      (ite
       (bveq
-       #b0
+       #b1
        ((_ extract 30 30)
         ((_ extract 32 1)
          ((_ call "df.shiftC")
@@ -176,7 +176,7 @@
            rD)
           (ite
            (bveq
-            #b0
+            #b1
             ((_ extract 31 31)
              ((_ extract 32 1)
               ((_ call "df.shiftC")
@@ -201,7 +201,7 @@
          rD)
         (ite
          (bveq
-          #b0
+          #b1
           ((_ extract 31 31)
            ((_ extract 32 1)
             ((_ call "df.shiftC")

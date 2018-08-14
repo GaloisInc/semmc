@@ -8,20 +8,12 @@ module SemMC.Architecture.ARM.BaseSemantics.Misc
     )
     where
 
-import           Data.Maybe ( fromJust )
 import           Data.Parameterized.Context
-import           Data.Semigroup
-import qualified Dismantle.ARM as A
 import qualified Dismantle.Thumb as T
 import           Prelude hiding ( concat, pred )
 import           SemMC.Architecture.ARM.BaseSemantics.Base
 import           SemMC.Architecture.ARM.BaseSemantics.Helpers
-import           SemMC.Architecture.ARM.BaseSemantics.Natural
 import           SemMC.Architecture.ARM.BaseSemantics.OperandClasses
-import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Arithmetic
-import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.ExecState
-import           SemMC.Architecture.ARM.BaseSemantics.Pseudocode.Registers
-import           SemMC.Architecture.ARM.BaseSemantics.Registers
 import           SemMC.DSL
 
 

@@ -16,9 +16,23 @@
       bi)
      ((_ call "df.generic_ctr_ok")
       bo
-      'CTR))
+      (ite
+       (bveq
+        #b1
+        ((_ extract 0 0)
+         (bvlshr bo #b00010)))
+       'CTR
+       (bvsub 'CTR #x0000000000000001))))
     (concat
      ((_ extract 63 2)
       'LNK)
      #b00)
-    (bvadd 'IP #x0000000000000004))))))
+    (bvadd 'IP #x0000000000000004)))
+   ('CTR
+    (ite
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (bvlshr bo #b00010)))
+     'CTR
+     (bvsub 'CTR #x0000000000000001))))))

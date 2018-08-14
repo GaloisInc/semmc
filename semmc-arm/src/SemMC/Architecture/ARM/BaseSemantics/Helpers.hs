@@ -145,10 +145,10 @@ itStateLF = defineLibraryFunction "ITState" (Arg "cpsr" naturalBV :< Nil) $
         itstate_3_0 = concat itstate_3_2 itstate_1_0
         -- CurrentCond() for T32 except T1 and T3 encodings of the Branch instruction (F2.3.1, F2-2417)
     in ite (bveq itstate_3_0 (LitBV 4 0b0000))
-       (ite (bveq itstate_7_4 (LitBV 4 0b0000))
-        (LitBV 4 0b1110)
-        (unpredictable (LitBV 4 0b1110))) -- ARM doc doesn't cover this case...
-       itstate_7_4
+           (ite (bveq itstate_7_4 (LitBV 4 0b0000))
+                (LitBV 4 0b1110)
+                (unpredictable (LitBV 4 0b1110))) -- ARM doc doesn't cover this case...
+           itstate_7_4
 
 a32OpcodeNameLooksValid :: String -> Bool
 a32OpcodeNameLooksValid name =

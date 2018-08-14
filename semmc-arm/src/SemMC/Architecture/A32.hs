@@ -40,7 +40,6 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Proxy ( Proxy(..) )
 import           Data.Semigroup ((<>))
 import qualified Data.Set as Set
-import           Data.Word ( Word8 )
 import qualified Data.Word.Indexed as W
 import qualified Dismantle.Arbitrary as DA
 import qualified Dismantle.ARM as ARMDis
@@ -50,7 +49,7 @@ import           GHC.Stack ( HasCallStack )
 import           GHC.TypeLits
 import qualified GHC.Err.Located as L
 import qualified SemMC.Architecture as A
-import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR )
+import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, GPRIdent )
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
 import qualified SemMC.Architecture.ARM.UF as UF
@@ -433,7 +432,7 @@ parseLocation = do
     _ -> do
       P.failure (Just $ P.Tokens $ (c:|[])) (Set.fromList $ [ P.Label $ fromList "Location" ])
 
-parsePrefixedRegister :: (Word8 -> b) -> String -> ARMComp.Parser b
+parsePrefixedRegister :: (GPRIdent -> b) -> String -> ARMComp.Parser b
 parsePrefixedRegister f prefix = do
   _ <- P.string prefix
   n <- P.decimal

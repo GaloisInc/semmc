@@ -98,8 +98,8 @@ mdsform4 = do
 xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xoform3 = do
   rT <- param "rT" gprc naturalBV
-  rA <- param "rA" gprc naturalBV
   rB <- param "rB" gprc naturalBV
+  rA <- param "rA" gprc naturalBV
   input rA
   input rB
   return (rT, rA, rB)

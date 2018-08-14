@@ -12,7 +12,6 @@ module SemMC.Architecture.ARM.BaseSemantics.Pseudocode.AddSub
     where
 
 import Prelude hiding ( concat, pred )
-import SemMC.Architecture.ARM.BaseSemantics.Helpers
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.DSL
 

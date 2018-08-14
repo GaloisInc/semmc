@@ -33,6 +33,7 @@ module SemMC.DSL (
   -- * Operations
   (=:),
   testBit,
+  testBitDynamic,
   testBitDynamic32,
   testBitDynamic64,
   extract,
@@ -646,31 +647,37 @@ binTestBuiltin s e1 e2
 
 -- | Test if a specific bit is set
 testBit :: Int -> Expr 'TBV -> Expr 'TBool
-testBit n = bveq (LitBV 1 0) . extract n n
+testBit n = bveq (LitBV 1 1) . extract n n
 
 -- | Test a dynamically-chosen bit number (i.e., the bit number to test is an
--- expr and not an 'Int')
-testBitDynamic32 :: (HasCallStack)
-                 => Expr 'TBV -- ^ Bit number to test
-                 -> Expr 'TBV
-                 -> Expr 'TBool
-testBitDynamic32 bitNum e
-  | t1 == t2 = uf EBool "test_bit_dynamic.32" [Some bitNum, Some e]
-  | otherwise = error (printf "Type mismatch for test_bit_dynamic.32 lhs type is %s while rhs type is %s" (show t1) (show t2))
+-- expr and not an 'Int').
+testBitDynamic ::
+  HasCallStack =>
+  Expr 'TBV {-^ bitvector to test -} ->
+  Expr 'TBV {-^ index, with 0 being least significant bit -} ->
+  Expr 'TBool
+testBitDynamic expr index
+  | wExpr == wIndex = testBit (wExpr-1) (bvlshr expr index)
+  | otherwise = error (printf "Type mismatch in testBitDynamic: arguments must have same bit width, but saw widths %d and %d" wExpr wIndex)
   where
-    t1 = exprType bitNum
-    t2 = exprType e
+  EBV wExpr  = exprType expr
+  EBV wIndex = exprType index
 
-testBitDynamic64 :: (HasCallStack)
-                 => Expr 'TBV -- ^ Bit number to test
-                 -> Expr 'TBV
-                 -> Expr 'TBool
-testBitDynamic64 bitNum e
-  | t1 == t2 = uf EBool "test_bit_dynamic.64" [Some bitNum, Some e]
-  | otherwise = error (printf "Type mismatch for test_bit_dynamic.64 lhs type is %s while rhs type is %s" (show t1) (show t2))
+testBitDynamic32 :: HasCallStack => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+testBitDynamic32 expr index
+  | wExpr == 32 && wIndex == 32 = testBitDynamic expr index
+  | otherwise = error (printf "Type mismatch in testBitDynamic32: expected two 32-bit arguments, but saw widths %d and %d" wExpr wIndex)
   where
-    t1 = exprType bitNum
-    t2 = exprType e
+  EBV wExpr  = exprType expr
+  EBV wIndex = exprType index
+
+testBitDynamic64 :: HasCallStack => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
+testBitDynamic64 expr index
+  | wExpr == 64 && wIndex == 64 = testBitDynamic expr index
+  | otherwise = error (printf "Type mismatch in testBitDynamic64: expected two 64-bit arguments, but saw widths %d and %d" wExpr wIndex)
+  where
+  EBV wExpr  = exprType expr
+  EBV wIndex = exprType index
 
 
 -- | The extract operation defined on bitvectors in SMTLib

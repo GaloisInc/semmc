@@ -22,4 +22,4 @@ mkTest name test = T.testCase name $ do
   result <- test
   -- If the test fails it returns @Just <failure description>@, so no
   -- reason for a more descriptive string here.
-  T.assertEqual "" result Nothing
+  T.assertEqual "" Nothing result

@@ -66,7 +66,7 @@
         ((_ call "uf.t32.t2soreg_imm")
          rN)
         #b00000)
-       (concat #b100 #x00000001)
+       (concat #b111 #x00000001)
        (concat
         #b011
         ((_ zero_extend 27)

@@ -8,82 +8,47 @@
 {% endblock %}
 
 {% block body %}
-<h1>Test Failures for {{ opcode.name|mono }}</h1>
 
-{% include "main/display_mode.html" %}
+<div>
+    <form id="deleteAllForm" action="" method="post">
+        <input type="hidden" name="delete-all" value="yes"/>
+        <input type="button" value="Delete all {{ opcode.name }} results"
+                             onClick="if (confirm('Are you sure you want to delete all results for this opcode?')) { document.getElementById('deleteAllForm').submit(); }"/>
+    </form>
+    {% include "main/display_mode.html" %}
+</div>
 
-<table>
-    <tr>
-        <th rowspan="2">Instruction</th>
-        <th colspan="2">State Mismatches</th>
-    </tr>
-    <tr>
-        <th>Location</th>
-        <th>(S)emantics vs. (H)ardware</th>
-    </tr>
-    {% if failures|length == 0 %}
-    <tr>
-        <td colspan="3">No test failures.</td>
-    </tr>
-    {% endif %}
-    {% for failure in failures %}
-    <tr>
-        <td valign="top" rowspan="{{ failure.testfailurestate_set.all|length }}">
-            <div>
-                <a href="/test_failure/{{ failure.id }}/">{{ failure.pretty|mono }}</a>
-            </div>
-            <div class="bytes">
-                {{ failure.bytes|num:numty }}
-            </div>
-            <div>
-                <span class="lighthost">{{ failure.batch.testing_host.hostname|mono }}</span>
-            </div>
-        </td>
-        {% for state in failure.testfailurestate_set.all %}
-        {% if forloop.counter0 > 0 %}<tr>{% endif %}
-            <td>{{ state.location|mono }}</td>
-            <td>
-                <div class="testValue">
-                    <span class="typeTag">S:</span>{{ state.expected_value|num:numty }}
-                </div>
-                <div class="testValue">
-                    <span class="typeTag">H:</span>{{ state.actual_value|num:numty }}
-                </div>
-            </td>
-        </tr>
-        {% endfor %}
-    {% endfor %}
-</table>
+<ul id="opcodeTabs">
+    <li {% if result_type == 'success' %}class="activeTab"{% endif %}>
+        <a href="/opcode/{{ opcode.id }}/success/">Successes</a> ({{ num_successes }})</li>
+    <li {% if result_type == 'failure' %}class="activeTab"{% endif %}>
+        <a href="/opcode/{{ opcode.id }}/failure/">Failures</a> ({{ num_failures }})</li>
+    <li {% if result_type == 'signal' %}class="activeTab"{% endif %}>
+        <a href="/opcode/{{ opcode.id }}/signal/">Signals</a> ({{ num_signals }})</li>
+</ul>
 
-<h1>Test Signal Errors for {{ opcode.name|mono }}</h1>
+<p>
+{% if limit %}
+  {% if cases|length < limit %}
+  Showing all {{ cases|length }} results
+  {% else %}
+  Showing first {{ cases|length }} results (<a href="?limit=none">show all results</a>)
+  {% endif %}
+{% else %}
+  {% if cases|length < limit %}
+  Showing all {{ cases|length }} results
+  {% else %}
+  Showing all {{ cases|length }} results (<a href="?limit=50">show first 50 results</a>)
+  {% endif %}
+{% endif %}
+</p>
 
-<table>
-    <tr>
-        <th>Instruction</th>
-        <th>Signal</th>
-    </tr>
-    {% if signal_errors|length == 0 %}
-    <tr>
-        <td colspan="2">No test failures due to unexpected signals.</td>
-    </tr>
-    {% endif %}
-    {% for error in signal_errors %}
-    <tr>
-        <td>
-            <div>
-                <a href="/test_signal_error/{{ error.id }}/">{{ error.pretty|mono }}</a>
-            </div>
-            <div class="bytes">
-                {{ error.bytes|num:numty }}
-            </div>
-            <div>
-                <span class="lighthost">{{ error.batch.testing_host.hostname|mono }}</span>
-            </div>
-        </td>
-        <td>
-            {{ error.signal|mono }} ({{ error.signame|mono }})
-        </td>
-    </tr>
-    {% endfor %}
-</table>
+{% if result_type == "failure" %}
+{% include "main/view_opcode_failure.html" %}
+{% elif result_type == "success" %}
+{% include "main/view_opcode_success.html" %}
+{% elif result_type == "signal" %}
+{% include "main/view_opcode_signal.html" %}
+{% endif %}
+
 {% endblock %}

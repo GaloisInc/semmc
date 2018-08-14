@@ -9,10 +9,13 @@
   (('IP
    (ite
     (notp
-     ((_ call "uf.test_bit_dynamic.32")
-      'CR
-      ((_ zero_extend 27)
-       (bvsub #b11111 bi))))
+     (bveq
+      #b1
+      ((_ extract 0 0)
+       (bvlshr
+        'CR
+        ((_ zero_extend 27)
+         (bvsub #b11111 bi))))))
     (bvadd
      ((_ sign_extend 48)
       (concat target #b00))
