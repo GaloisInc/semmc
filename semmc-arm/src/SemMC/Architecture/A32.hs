@@ -57,6 +57,7 @@ import           SemMC.Architecture.ARM.Eval
 import qualified SemMC.Architecture.ARM.UF as UF
 import           SemMC.Architecture.ARM.Location ( ArchRegWidth )
 import           SemMC.Architecture.A32.Location
+import qualified SemMC.Architecture.ARM.OperandComponents as AOC
 import qualified SemMC.Architecture.Concrete as AC
 import qualified SemMC.Architecture.Value as V
 import qualified SemMC.Architecture.View as V
@@ -69,7 +70,7 @@ import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 import qualified Text.Megaparsec.Char.Lexer as P
 import           What4.BaseTypes
-import qualified What4.Expr.Builder as WEB
+import qualified What4.Expr as WEB
 import qualified What4.Interface as S
 
 
@@ -373,7 +374,7 @@ type instance ArchRegWidth A32 = 32
 instance A.Architecture A32 where
     data TaggedExpr A32 sym s = TaggedExpr (S.SymExpr sym (A.OperandType A32 s))
     unTagged (TaggedExpr e) = e
-    operandValue _ = operandValue
+    allocateSymExprsForOperand _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
@@ -388,35 +389,46 @@ instance A.Architecture A32 where
 --
 -- Note that this doesn't need to be polymorphic across architectures, as Thumb
 -- mode can't access r15 this way.
-eval_isR15 :: forall t st sh u tp
-            . WEB.ExprBuilder t st
+eval_isR15 :: forall t st sh u tp sym
+            . (sym ~ WEB.ExprBuilder t st)
+           => sym
            -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
-           -> SL.List (A.Operand A32) sh
+           -> SL.List (A.AllocatedOperand A32 sym) sh
            -> Ctx.Assignment (WEB.Expr t) u
+           -> (forall tp' . Location A32 tp' -> IO (S.SymExpr (WEB.ExprBuilder t st) tp'))
            -> BaseTypeRepr tp
-           -> IO (WEB.Expr t tp, MapF.MapF (A.Location A32) (S.BoundVar (WEB.ExprBuilder t st)))
-eval_isR15 sym pf operands ufArguments resultRepr =
+           -> IO (WEB.Expr t tp)
+eval_isR15 sym pf operands ufArguments _locToExpr resultRepr = do
+  let typedReturn :: forall tp' . WEB.Expr t tp' -> IO (WEB.Expr t tp)
+      typedReturn e =
+        case testEquality (S.exprType e) resultRepr of
+          Just Refl -> return e
+          Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
   case ufArguments of
     Ctx.Empty Ctx.:> WEB.BoundVarExpr gprArg ->
       case gprArg `FE.lookupVarInFormulaOperandList` pf of
         Nothing -> do
-          p <- case MapF.lookup (LocGPR 15) (F.pfLiteralVars pf) of
-            Nothing -> return (S.falsePred sym)
+          case MapF.lookup (LocGPR 15) (F.pfLiteralVars pf) of
+            Nothing -> typedReturn (S.falsePred sym)
             Just r15Var
-              | Just Refl <- testEquality r15Var gprArg -> return (S.truePred sym)
-              | otherwise -> return (S.falsePred sym)
-          case testEquality (S.exprType p) resultRepr of
-            Just Refl -> return (p, MapF.empty)
-            Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
+              | Just Refl <- testEquality r15Var gprArg -> typedReturn (S.truePred sym)
+              | otherwise -> typedReturn (S.falsePred sym)
+          -- case testEquality (S.exprType p) resultRepr of
+          --   Just Refl -> return p
+          --   Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
         Just (Some idx) -> do
-          let rnum = case operands SL.!! idx of
-                ARMDis.GPR n -> n
-                ARMDis.GPRnopc n -> n
-                other -> error $ "eval_isR15: got unexpected value in rnum extraction: " ++ show other
-          let p = if ARMOperands.unGPR rnum == 15 then S.truePred sym else S.falsePred sym
-          case testEquality (S.exprType p) resultRepr of
-            Just Refl -> return (p, MapF.empty)
-            Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
+          case operands SL.!! idx of
+            A.LocationOperand loc _
+              | Just Refl <- testEquality loc (LocGPR 15) -> typedReturn (S.truePred sym)
+              | Nothing -> typedReturn (S.falsePred sym)
+          -- let rnum = case operands SL.!! idx of
+          --       ARMDis.GPR n -> n
+          --       ARMDis.GPRnopc n -> n
+          --       other -> error $ "eval_isR15: got unexpected value in rnum extraction: " ++ show other
+          -- let p = if ARMOperands.unGPR rnum == 15 then S.truePred sym else S.falsePred sym
+          -- case testEquality (S.exprType p) resultRepr of
+          --   Just Refl -> return (p, MapF.empty)
+          --   Nothing -> error ("isR15 returns expressions of BaseBoolType, but the caller expected " ++ show resultRepr)
     _ -> error "Unexpected argument list to isR15"
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value
@@ -426,7 +438,7 @@ eval_isR15 sym pf operands ufArguments resultRepr =
 -- immediate types only appear as function operands.  This means that we only
 -- need to look found the bound variable in the 'Ctx.Assignment' in the argument
 -- list and can disregard the literals.
-eval_am2offset_imm_imm :: A.Evaluator A32 t
+eval_am2offset_imm_imm :: A.Evaluator A32 t st
 eval_am2offset_imm_imm =
   FE.evalBitvectorExtractor "am2offset_imm_imm" (knownNat @12) $ \case
     ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmImmediate oimm)
@@ -434,109 +446,115 @@ eval_am2offset_imm_imm =
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
 -- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
-eval_am2offset_imm_add :: HasCallStack => A.Evaluator A32 t
+eval_am2offset_imm_add :: HasCallStack => A.Evaluator A32 t st
 eval_am2offset_imm_add =
   FE.evalBitvectorExtractorWith bitToBool "am2offset_imm_add" (knownNat @1) $ \case
     ARMDis.Am2offset_imm oimm -> Just (fromIntegral $ W.unW $ ARMOperands.am2OffsetImmAdd oimm)
     _ -> Nothing
 
-eval_imm12_reg :: A.Evaluator A32 t
+eval_imm12_reg :: A.Evaluator A32 t st
 eval_imm12_reg =
   FE.evalRegExtractor "imm12_reg" testRegisterEquality $ \case
     ARMDis.Addrmode_imm12_pre ami12 -> Just (rewrapRegister (ARMOperands.addrModeImm12Register ami12))
     ARMDis.Addrmode_imm12 ami12 -> Just (rewrapRegister (ARMOperands.addrModeImm12Register ami12))
     _ -> Nothing
 
-eval_imm12_off :: A.Evaluator A32 t
+eval_imm12_off :: A.Evaluator A32 t st
 eval_imm12_off =
   FE.evalBitvectorExtractor "imm12_off" (knownNat @12) $ \case
     ARMDis.Addrmode_imm12_pre ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Immediate ami12)
     _ -> Nothing
 
-eval_imm12_add :: HasCallStack => A.Evaluator A32 t
+eval_imm12_add :: HasCallStack => A.Evaluator A32 t st
 eval_imm12_add =
   FE.evalBitvectorExtractorWith bitToBool "imm12_add" (knownNat @1) $ \case
     ARMDis.Addrmode_imm12_pre ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     ARMDis.Addrmode_imm12 ami12 -> Just (fromIntegral $ W.unW $ ARMOperands.addrModeImm12Add ami12)
     _ -> Nothing
 
-eval_ldst_so_reg_base_register :: A.Evaluator A32 t
+eval_ldst_so_reg_base_register :: A.Evaluator A32 t st
 eval_ldst_so_reg_base_register =
   FE.evalRegExtractor "ldst_so_reg_base_register" testRegisterEquality $ \case
     ARMDis.Ldst_so_reg lsr -> Just (rewrapRegister (ARMOperands.ldstSoRegBaseRegister lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_offset_register :: A.Evaluator A32 t
+eval_ldst_so_reg_offset_register :: A.Evaluator A32 t st
 eval_ldst_so_reg_offset_register =
   FE.evalRegExtractor "ldst_so_reg_offset_register" testRegisterEquality $ \case
     ARMDis.Ldst_so_reg lsr -> Just (rewrapRegister (ARMOperands.ldstSoRegOffsetRegister lsr))
     _ -> Nothing
 
-eval_ldst_so_reg_add :: HasCallStack => A.Evaluator A32 t
+eval_ldst_so_reg_add :: HasCallStack => A.Evaluator A32 t st
 eval_ldst_so_reg_add =
   FE.evalBitvectorExtractorWith bitToBool "ldst_so_reg_add" (knownNat @1) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegAdd lsr)
     _ -> Nothing
 
-eval_ldst_so_reg_imm :: A.Evaluator A32 t
+eval_ldst_so_reg_imm :: A.Evaluator A32 t st
 eval_ldst_so_reg_imm =
   FE.evalBitvectorExtractor "ldst_so_reg_imm" (knownNat @5) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegImmediate lsr)
     _ -> Nothing
 
-eval_ldst_so_reg_st :: A.Evaluator A32 t
+eval_ldst_so_reg_st :: A.Evaluator A32 t st
 eval_ldst_so_reg_st =
   FE.evalBitvectorExtractor "ldst_so_reg_shift_type" (knownNat @2) $ \case
     ARMDis.Ldst_so_reg lsr -> Just (fromIntegral $ W.unW $ ARMOperands.ldstSoRegShiftType lsr)
     _ -> Nothing
 
-eval_modimm_imm :: A.Evaluator A32 t
+eval_modimm_imm :: A.Evaluator A32 t st
 eval_modimm_imm =
   FE.evalBitvectorExtractor "modimm_imm" (knownNat @8) $ \case
     ARMDis.Mod_imm mi -> Just (fromIntegral $ W.unW $ ARMOperands.modImmOrigImmediate mi)
     _ -> Nothing
 
-eval_modimm_rot :: A.Evaluator A32 t
+eval_modimm_rot :: A.Evaluator A32 t st
 eval_modimm_rot =
   FE.evalBitvectorExtractor "modimm_rot" (knownNat @4) $ \case
     ARMDis.Mod_imm mi -> Just (fromIntegral $ W.unW $ ARMOperands.modImmOrigRotate mi)
     _ -> Nothing
 
-eval_soregimm_type :: A.Evaluator A32 t
+eval_soregimm_type :: A.Evaluator A32 t st
 eval_soregimm_type =
-  FE.evalBitvectorExtractor "soregimm_type" (knownNat @2) $ \case
-    ARMDis.So_reg_imm sri -> Just (fromIntegral $ W.unW $ ARMOperands.soRegImmShiftType sri)
-    _ -> Nothing
+  FE.evalBitvectorExtractor "soregimm_type" (knownNat @2) $ \ao nr' ->
+    case ao of
+      AOC.OCSoRegImm { AOC.soRegImmShiftTypeExpr = e }
+        | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
+      _ -> Nothing
 
-eval_soregimm_imm :: A.Evaluator A32 t
+eval_soregimm_imm :: A.Evaluator A32 t st
 eval_soregimm_imm =
-  FE.evalBitvectorExtractor "soregimm_imm" (knownNat @5) $ \case
-    ARMDis.So_reg_imm sri -> Just (fromIntegral $ W.unW $ ARMOperands.soRegImmImmediate sri)
-    _ -> Nothing
+  FE.evalBitvectorExtractor "soregimm_imm" (knownNat @5) $ \ao nr' ->
+    case ao of
+      AOC.OCSoRegImm { AOC.soRegImmImmExpr = e }
+        | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
+      _ -> Nothing
 
-eval_soregimm_reg :: A.Evaluator A32 t
+eval_soregimm_reg :: A.Evaluator A32 t st
 eval_soregimm_reg =
-  FE.evalRegExtractor "soregimm_reg" testRegisterEquality $ \case
-    ARMDis.So_reg_imm sri -> Just (rewrapRegister (ARMOperands.soRegImmReg sri))
+  FE.evalRegExtractor "soregimm_reg" $ \case
+    A.CompoundOperand (AOC.OCSoRegImm { AOC.soRegImmReg = loc }) -> Just (Some loc)
     _ -> Nothing
 
-eval_soregreg_type :: A.Evaluator A32 t
+eval_soregreg_type :: A.Evaluator A32 t st
 eval_soregreg_type =
-  FE.evalBitvectorExtractor "soregreg_type" (knownNat @2) $ \case
-    ARMDis.So_reg_reg srr -> Just (fromIntegral $ W.unW $ ARMOperands.soRegRegShiftType srr)
-    _ -> Nothing
+  FE.evalBitvectorExtractor "soregreg_type" (knownNat @2) $ \ao nr' ->
+    case ao of
+      AOC.OCSoRegReg { AOC.soRegRegTypeExpr = e }
+        | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
+      _ -> Nothing
 
-eval_soregreg_reg1 :: A.Evaluator A32 t
+eval_soregreg_reg1 :: A.Evaluator A32 t st
 eval_soregreg_reg1 =
-  FE.evalRegExtractor "soregreg_reg1" testRegisterEquality $ \case
-    ARMDis.So_reg_reg srr -> Just (rewrapRegister (ARMOperands.soRegRegReg1 srr))
+  FE.evalRegExtractor "soregreg_reg1" $ \case
+    A.CompoundOperand (AOC.OCSoRegReg { AOC.soRegRegReg1 = loc }) -> Just (Some loc)
     _ -> Nothing
 
-eval_soregreg_reg2 :: A.Evaluator A32 t
+eval_soregreg_reg2 :: A.Evaluator A32 t st
 eval_soregreg_reg2 =
-  FE.evalRegExtractor "soregreg_reg2" testRegisterEquality $ \case
-    ARMDis.So_reg_reg srr -> Just (rewrapRegister (ARMOperands.soRegRegReg2 srr))
+  FE.evalRegExtractor "soregreg_reg2" $ \case
+    A.CompoundOperand (AOC.OCSoRegReg { AOC.soRegRegReg2 = loc }) -> Just (Some loc)
     _ -> Nothing
 
 testRegisterEquality :: A.Location A32 tp1 -> ARMDis.Operand tp2 -> Bool
@@ -555,13 +573,13 @@ bitToBool sym = S.testBitBV sym 0
 rewrapRegister :: ARMOperands.GPR -> Some (Location arm)
 rewrapRegister = Some . LocGPR . fromIntegral . W.unW . ARMOperands.unGPR
 
-noLocation :: SL.List (A.Operand arch) sh
+noLocation :: SL.List (A.AllocatedOperand arch sym) sh
            -> F.WrappedOperand arch sh s
            -> BaseTypeRepr tp
            -> Maybe (Location arch tp)
 noLocation _ _ _ = Nothing
 
-locationFuncInterpretation :: [(String, A.FunctionInterpretation t A32)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t st A32)]
 locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation
@@ -581,7 +599,7 @@ locationFuncInterpretation =
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
-                          { A.locationInterp = F.LocationFuncInterp (interpImm12Reg Just LocGPR)
+                          { A.locationInterp = F.LocationFuncInterp interpImm12Reg
                           , A.exprInterpName = 'interpImm12RegExtractor
                           , A.exprInterp = eval_imm12_reg
                           })
@@ -597,12 +615,12 @@ locationFuncInterpretation =
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
-                                          { A.locationInterp = F.LocationFuncInterp (interpLdstsoregBaseReg Just LocGPR)
+                                          { A.locationInterp = F.LocationFuncInterp interpLdstsoregBaseReg
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor
                                           , A.exprInterp = eval_ldst_so_reg_base_register
                                           })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
-                                            { A.locationInterp = F.LocationFuncInterp (interpLdstsoregOffReg Just LocGPR)
+                                            { A.locationInterp = F.LocationFuncInterp interpLdstsoregOffReg
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor
                                             , A.exprInterp = eval_ldst_so_reg_offset_register
                                             })
@@ -644,7 +662,7 @@ locationFuncInterpretation =
                              , A.exprInterp = eval_soregimm_imm
                              })
     , ("a32.soregimm_reg", A.FunctionInterpretation
-                             { A.locationInterp = F.LocationFuncInterp (interpSoregimmReg Just LocGPR)
+                             { A.locationInterp = F.LocationFuncInterp interpSoregimmReg
                              , A.exprInterpName = 'interpSoregimmRegExtractor
                              , A.exprInterp = eval_soregimm_reg
                              })
@@ -655,12 +673,12 @@ locationFuncInterpretation =
                               , A.exprInterp = eval_soregreg_type
                               })
     , ("a32.soregreg_reg1", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg1 Just LocGPR)
+                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg1
                               , A.exprInterpName = 'interpSoregregReg1Extractor
                               , A.exprInterp = eval_soregreg_reg1
                               })
     , ("a32.soregreg_reg2", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg2 Just LocGPR)
+                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
                               , A.exprInterpName = 'interpSoregregReg2Extractor
                               , A.exprInterp = eval_soregreg_reg2
                               })
@@ -693,6 +711,8 @@ shapeReprType orep =
 
 data Signed = Signed | Unsigned deriving (Eq, Show)
 
+type instance A.OperandComponents A32 sym = AOC.OperandComponents A32 sym
+
 instance T.TemplatableOperand A32 where
   opTemplates = a32template
 
@@ -704,38 +724,62 @@ a32template a32sr =
               where mkTemplate gprNum = T.TemplatedOperand Nothing
                                         (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
                                             :: T.TemplatedOperand A32 "Addrmode_imm12"
-                        where mkTemplate' :: T.TemplatedOperandFn A32 "Addrmode_imm12"
+                        where mkTemplate' :: forall sym
+                                           . (S.IsSymExprBuilder sym)
+                                          => sym
+                                          -> (forall tp . Location A32 tp -> IO (S.SymExpr sym tp))
+                                          -> IO ( A.AllocatedOperand A32 sym "Addrmode_imm12",
+                                                  T.WrappedRecoverOperandFn sym (A.Operand A32 "Addrmode_imm12")
+                                                )
+                                      -- T.TemplatedOperandFn A32 "Addrmode_imm12"
                               mkTemplate' sym locLookup = do
                                 let gprN = ARMOperands.gpr $ fromIntegral gprNum
-                                base <- A.unTagged <$> A.operandValue (Proxy @A32) sym locLookup
-                                                          (ARMDis.GPR gprN)
+                                let loc = LocGPR gprNum
+                                base <- locLookup loc
+                                -- base <- A.unTagged <$> A.operandValue (Proxy @A32) sym locLookup
+                                --                           (ARMDis.GPR gprN)
                                 offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_off") knownRepr
                                 addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_add") knownRepr
-                                expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
-                                let recover evalFn = do
+                                -- expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
+                                let recover :: (forall tp . S.SymExpr sym tp -> IO (WEB.GroundValue tp)) -> IO (A.Operand A32 "Addrmode_imm12")
+                                    recover evalFn = do
                                       offsetVal <- fromInteger <$> evalFn offset
                                       addflagVal <- fromInteger <$> evalFn addflag
                                       return $ ARMDis.Addrmode_imm12 $
                                              ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
-                                return (expr, T.WrappedRecoverOperandFn recover)
+                                return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
+                                       , T.WrappedRecoverOperandFn recover
+                                       )
       ARMDis.Addrmode_imm12_preRepr ->
           mkTemplate <$> [0..numGPR-1]
             where mkTemplate gprNum = T.TemplatedOperand Nothing
                                       (Set.singleton (Some (LocGPR gprNum))) mkTemplate'
                                           :: T.TemplatedOperand A32 "Addrmode_imm12_pre"
-                    where mkTemplate' :: T.TemplatedOperandFn A32 "Addrmode_imm12_pre"
+                    where mkTemplate' :: forall sym
+                                       . (S.IsSymExprBuilder sym)
+                                      => sym
+                                      -> (forall tp . Location A32 tp -> IO (S.SymExpr sym tp))
+                                      -> IO ( A.AllocatedOperand A32 sym "Addrmode_imm12_pre",
+                                              T.WrappedRecoverOperandFn sym (A.Operand A32 "Addrmode_imm12_pre")
+                                            )
+                                      -- T.TemplatedOperandFn A32 "Addrmode_imm12_pre"
                           mkTemplate' sym locLookup = do
                             let gprN = ARMOperands.gpr $ fromIntegral gprNum
-                            base <- A.unTagged <$> A.operandValue (Proxy @A32) sym locLookup (ARMDis.GPR gprN)
+                            let loc = LocGPR gprNum
+                            base <- locLookup loc
+                            -- base <- A.unTagged <$> A.operandValue (Proxy @A32) sym locLookup (ARMDis.GPR gprN)
                             offset <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_off") knownRepr
                             addflag <- S.freshConstant sym (U.makeSymbol "Addrmode_imm12_pre_add") knownRepr
-                            expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
-                            let recover evalFn = do
+                            -- expr <- S.bvAdd sym base offset -- KWQ: need to reproduce offset manipulation
+                            let recover :: (forall tp . S.SymExpr sym tp -> IO (WEB.GroundValue tp)) -> IO (A.Operand A32 "Addrmode_imm12_pre")
+                                recover evalFn = do
                                   offsetVal <- fromInteger <$> evalFn offset
                                   addflagVal <- fromInteger <$> evalFn addflag
                                   return $ ARMDis.Addrmode_imm12_pre $
                                          ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
-                            return (expr, T.WrappedRecoverOperandFn recover)
+                            return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
+                                   , T.WrappedRecoverOperandFn recover
+                                   )
       ARMDis.Arm_bl_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
       ARMDis.Arm_blx_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
       ARMDis.Arm_br_targetRepr -> error "opTemplate ARM_br_targetRepr TBD"
@@ -776,15 +820,14 @@ concreteTemplatedOperand op loc x =
                      }
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym locLookup = do
-          expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
-          return (expr, T.WrappedRecoverOperandFn $ const (return (op x)))
+          ao <- A.taggedOperand <$> A.allocateSymExprsForOperand (Proxy @arch) sym locLookup (op x)
+          -- expr <- A.unTagged <$> A.operandValue (Proxy @arch) sym locLookup (op x)
+          return (ao, T.WrappedRecoverOperandFn $ const (return (op x)))
 
-symbolicTemplatedOperand :: forall arch s (bits :: Nat) extended
-                          . (A.OperandType arch s ~ BaseBVType extended,
+symbolicTemplatedOperand :: forall arch s (bits :: Nat)
+                          . (A.OperandType arch s ~ BaseBVType bits,
                              KnownNat bits,
-                             KnownNat extended,
-                             1 <= bits,
-                             bits <= extended)
+                             1 <= bits)
                          => Proxy bits
                          -> Signed
                          -> String
@@ -798,17 +841,17 @@ symbolicTemplatedOperand Proxy signed name constr =
   where mkTemplate' :: T.TemplatedOperandFn arch s
         mkTemplate' sym _ = do
           v <- S.freshConstant sym (U.makeSymbol name) (knownRepr :: BaseTypeRepr (BaseBVType bits))
-          let bitsRepr = knownNat @bits
-              extendedRepr = knownNat @extended
-          extended <- case testNatCases bitsRepr extendedRepr of
-            NatCaseLT LeqProof ->
-              case signed of
-                Signed   -> S.bvSext sym knownNat v
-                Unsigned -> S.bvZext sym knownNat v
-            NatCaseEQ -> return v
-            NatCaseGT LeqProof -> error "impossible"
+          -- let bitsRepr = knownNat @bits
+          --     extendedRepr = knownNat @extended
+          -- extended <- case testNatCases bitsRepr extendedRepr of
+          --   NatCaseLT LeqProof ->
+          --     case signed of
+          --       Signed   -> S.bvSext sym knownNat v
+          --       Unsigned -> S.bvZext sym knownNat v
+          --   NatCaseEQ -> return v
+          --   NatCaseGT LeqProof -> error "impossible"
           let recover evalFn = constr <$> evalFn v
-          return (extended, T.WrappedRecoverOperandFn recover)
+          return (A.ValueOperand v, T.WrappedRecoverOperandFn recover)
 
 ----------------------------------------------------------------------
 -- Concrete state functionality

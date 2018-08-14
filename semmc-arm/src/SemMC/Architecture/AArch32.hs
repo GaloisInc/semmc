@@ -67,6 +67,7 @@ import           SemMC.Architecture.ARM.Combined
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
 import           SemMC.Architecture.ARM.Location
+import qualified SemMC.Architecture.ARM.OperandComponents as AOC
 import qualified SemMC.Architecture.ARM.UF as UF
 import qualified SemMC.Concrete.Execution as CE
 import qualified SemMC.Formula as F
@@ -219,53 +220,53 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVa (ARMDis.Addr_offset_none gpr) =
           let loc = LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
           in A.LocationOperand loc <$> locLookup loc
-        opVa (ARMDis.Addrmode_imm12 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
-        opVa (ARMDis.Addrmode_imm12_pre v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.addrModeImm12ToBits v
-        opVa (ARMDis.Am2offset_imm v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.am2OffsetImmToBits v
-        opVa (ARMDis.Arm_bl_target v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
-        opVa (ARMDis.Arm_blx_target v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.branchExecuteTargetToBits v
-        opVa (ARMDis.Arm_br_target v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.branchTargetToBits v
-        opVa (ARMDis.Cc_out v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v -- KWQ: Bool? size?
+        opVa (ARMDis.Addrmode_imm12 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.addrModeImm12ToBits v))
+        opVa (ARMDis.Addrmode_imm12_pre v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.addrModeImm12ToBits v))
+        opVa (ARMDis.Am2offset_imm v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.am2OffsetImmToBits v))
+        opVa (ARMDis.Arm_bl_target v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.branchTargetToBits v))
+        opVa (ARMDis.Arm_blx_target v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.branchExecuteTargetToBits v))
+        opVa (ARMDis.Arm_br_target v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.branchTargetToBits v))
+        opVa (ARMDis.Cc_out v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.sBitToBits v)) -- KWQ: Bool? size?
         opVa (ARMDis.GPR gpr) =
           let loc = LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
           in A.LocationOperand loc <$> locLookup loc
         opVa (ARMDis.GPRnopc gpr) =
           let loc = LocGPR $ fromIntegral $ W.unW $ ARMOperands.unGPR gpr
           in A.LocationOperand loc <$> locLookup loc
-        opVa (ARMDis.Ldst_so_reg v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.ldstSoRegToBits v
-        opVa (ARMDis.Mod_imm v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.modImmToBits v
-        opVa (ARMDis.Pred bits4) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.predToBits bits4
-        opVa (ARMDis.Shift_so_reg_imm v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger v
-        opVa (ARMDis.So_reg_imm v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegImmToBits v
-        opVa (ARMDis.So_reg_reg v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.soRegRegToBits v
-        opVa (ARMDis.Unpredictable v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger v
+        opVa (ARMDis.Ldst_so_reg v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.ldstSoRegToBits v))
+        opVa (ARMDis.Mod_imm v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.modImmToBits v))
+        opVa (ARMDis.Pred bits4) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.predToBits bits4))
+        opVa (ARMDis.Shift_so_reg_imm v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger v)
+        opVa (ARMDis.So_reg_imm v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.soRegImmToBits v))
+        opVa (ARMDis.So_reg_reg v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.soRegRegToBits v))
+        opVa (ARMDis.Unpredictable v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger v)
         -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
 
         opVt :: ThumbDis.Operand s -> IO (A.AllocatedOperand AArch32 sym s)
-        opVt (ThumbDis.Cc_out v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.sBitToBits v
+        opVt (ThumbDis.Cc_out v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.sBitToBits v))
         opVt (ThumbDis.GPR gpr) =
           let loc = LocGPR $ ThumbOperands.unGPR gpr
           in A.LocationOperand loc <$> locLookup loc
         opVt (ThumbDis.GPRnopc gpr) =
           let loc = LocGPR $ ThumbOperands.unGPR gpr
           in A.LocationOperand loc <$> locLookup loc
-        opVt (ThumbDis.Imm0_7 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.opcodeToBits v -- KWQ: (.&. 7)?
-        opVt (ThumbDis.Imm0_15 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.opcodeToBits v -- KWQ: (.&. 15)?
-        opVt (ThumbDis.Imm0_31 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ARMOperands.imm5ToBits v
-        opVt (ThumbDis.Imm0_255 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger v  -- v :: Word8
-        opVt (ThumbDis.Imm0_4095 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger v -- v :: Word16
-        opVt (ThumbDis.Pred bits4) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.predToBits bits4
-        opVt (ThumbDis.Reglist v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.regListToBits v
+        opVt (ThumbDis.Imm0_7 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.opcodeToBits v)) -- KWQ: (.&. 7)?
+        opVt (ThumbDis.Imm0_15 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.opcodeToBits v)) -- KWQ: (.&. 15)?
+        opVt (ThumbDis.Imm0_31 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.imm5ToBits v))
+        opVt (ThumbDis.Imm0_255 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger v)  -- v :: Word8
+        opVt (ThumbDis.Imm0_4095 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger v) -- v :: Word16
+        opVt (ThumbDis.Pred bits4) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.predToBits bits4))
+        opVt (ThumbDis.Reglist v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.regListToBits v))
         opVt (ThumbDis.RGPR gpr) =
           let loc = LocGPR $ ThumbOperands.unGPR gpr
           in A.LocationOperand loc <$> locLookup loc
-        opVt (ThumbDis.T_addrmode_is2 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.addrModeIs2ToBits v
-        opVt (ThumbDis.T_addrmode_is4 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.addrModeIs4ToBits v
-        opVt (ThumbDis.T_addrmode_pc v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.addrModePcToBits v
-        opVt (ThumbDis.T_imm0_1020s4 v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.tImm01020S4ToBits v
-        opVt (ThumbDis.T2_so_imm v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.t2SoImmToBits v
-        opVt (ThumbDis.Thumb_bcc_target v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger v  -- v :: Word8
-        opVt (ThumbDis.Thumb_blx_target v) = A.ValueOperand <$> S.bvLit sym knownNat $ toInteger $ ThumbOperands.thumbBlxTargetToBits v
+        opVt (ThumbDis.T_addrmode_is2 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.addrModeIs2ToBits v))
+        opVt (ThumbDis.T_addrmode_is4 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.addrModeIs4ToBits v))
+        opVt (ThumbDis.T_addrmode_pc v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.addrModePcToBits v))
+        opVt (ThumbDis.T_imm0_1020s4 v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.tImm01020S4ToBits v))
+        opVt (ThumbDis.T2_so_imm v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.t2SoImmToBits v))
+        opVt (ThumbDis.Thumb_bcc_target v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger v)  -- v :: Word8
+        opVt (ThumbDis.Thumb_blx_target v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ThumbOperands.thumbBlxTargetToBits v))
         opVt (ThumbDis.TGPR gpr) =
           let loc = LocGPR $ ThumbOperands.unLowGPR gpr
           in A.LocationOperand loc <$> locLookup loc
@@ -375,7 +376,7 @@ locationFuncInterpretation =
                                   })
 
     , ("a32.imm12_reg", A.FunctionInterpretation
-                          { A.locationInterp = F.LocationFuncInterp (interpImm12Reg getArmDisOperand LocGPR)
+                          { A.locationInterp = F.LocationFuncInterp interpImm12Reg
                           , A.exprInterpName = 'interpImm12RegExtractor
                           })
     , ("a32.imm12_off", A.FunctionInterpretation
@@ -388,11 +389,11 @@ locationFuncInterpretation =
                           })
 
     , ("a32.ldst_so_reg_base_register", A.FunctionInterpretation
-                                          { A.locationInterp = F.LocationFuncInterp (interpLdstsoregBaseReg getArmDisOperand LocGPR)
+                                          { A.locationInterp = F.LocationFuncInterp interpLdstsoregBaseReg
                                           , A.exprInterpName = 'interpLdstsoregBaseRegExtractor
                                           })
     , ("a32.ldst_so_reg_offset_register", A.FunctionInterpretation
-                                            { A.locationInterp = F.LocationFuncInterp (interpLdstsoregOffReg getArmDisOperand LocGPR)
+                                            { A.locationInterp = F.LocationFuncInterp interpLdstsoregOffReg
                                             , A.exprInterpName = 'interpLdstsoregOffRegExtractor
                                             })
     , ("a32.ldst_so_reg_add", A.FunctionInterpretation
@@ -426,7 +427,7 @@ locationFuncInterpretation =
                              , A.exprInterpName = 'interpSoregimmImmExtractor
                              })
     , ("a32.soregimm_reg", A.FunctionInterpretation
-                             { A.locationInterp = F.LocationFuncInterp (interpSoregimmReg getArmDisOperand LocGPR)
+                             { A.locationInterp = F.LocationFuncInterp interpSoregimmReg
                              , A.exprInterpName = 'interpSoregimmRegExtractor })
 
     , ("a32.soregreg_type", A.FunctionInterpretation
@@ -434,10 +435,10 @@ locationFuncInterpretation =
                               , A.exprInterpName = 'interpSoregregTypeExtractor
                               })
     , ("a32.soregreg_reg1", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg1 getArmDisOperand LocGPR)
+                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg1
                               , A.exprInterpName = 'interpSoregregReg1Extractor })
     , ("a32.soregreg_reg2", A.FunctionInterpretation
-                              { A.locationInterp = F.LocationFuncInterp (interpSoregregReg2 getArmDisOperand LocGPR)
+                              { A.locationInterp = F.LocationFuncInterp interpSoregregReg2
                               , A.exprInterpName = 'interpSoregregReg2Extractor })
 
     , ("t32.blxtarget_S", A.FunctionInterpretation
@@ -569,14 +570,8 @@ shapeReprType orep =
 
 data Signed = Signed | Unsigned deriving (Eq, Show)
 
-data OperandComponents sym (s :: Symbol) where
-  OCAddrmodeImm12 :: Location AArch32 (BaseBVType 32)
-                  -> S.SymExpr sym (BaseBVType 32)
-                  -> S.SymExpr sym (BaseBVType 12)
-                  -> S.SymExpr sym (BaseBVType 1)
-                  -> OperandComponents sym s
 
-type instance A.OperandComponents AArch32 sym = OperandComponents sym
+type instance A.OperandComponents AArch32 sym = AOC.OperandComponents AArch32 sym
 
 instance T.TemplatableOperand AArch32 where
   opTemplates sr =
@@ -613,7 +608,7 @@ a32template a32sr =
                                       addflagVal <- fromInteger <$> evalFn addflag
                                       return $ A32Operand $ ARMDis.Addrmode_imm12 $
                                              ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
-                                return ( A.CompoundOperand (OCAddrmodeImm12 loc base offset addflag)
+                                return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
                                        , T.WrappedRecoverOperandFn recover
                                        )
       ARMDis.Addrmode_imm12_preRepr ->
@@ -642,7 +637,7 @@ a32template a32sr =
                                   addflagVal <- fromInteger <$> evalFn addflag
                                   return $ A32Operand $ ARMDis.Addrmode_imm12_pre $
                                          ARMOperands.AddrModeImm12 gprN offsetVal addflagVal
-                            return ( A.CompoundOperand (OCAddrmodeImm12 loc base offset addflag)
+                            return ( A.CompoundOperand (AOC.OCAddrmodeImm12 loc base offset addflag)
                                    , T.WrappedRecoverOperandFn recover
                                    )
       ARMDis.Arm_bl_targetRepr -> error "opTemplate ARM_blx_targetRepr TBD"
