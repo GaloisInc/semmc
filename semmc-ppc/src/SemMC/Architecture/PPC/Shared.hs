@@ -181,7 +181,7 @@ symbolicTemplatedOperand :: forall arch s (bits :: Nat)
                          -> String
                          -> (Integer -> A.Operand arch s)
                          -> T.TemplatedOperand arch s
-symbolicTemplatedOperand Proxy signed name constr =
+symbolicTemplatedOperand Proxy _signed name constr =
   T.TemplatedOperand { T.templOpLocation = Nothing
                      , T.templUsedLocations = S.empty
                      , T.templOpFn = mkTemplate'
