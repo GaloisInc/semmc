@@ -468,13 +468,13 @@ instance A.Architecture A32 where
 --
 -- Note that this doesn't need to be polymorphic across architectures, as Thumb
 -- mode can't access r15 this way.
-eval_isR15 :: forall t st sh u tp sym
-            . (sym ~ WEB.ExprBuilder t st)
+eval_isR15 :: forall t st fs sh u tp sym
+            . (sym ~ WEB.ExprBuilder t st fs)
            => sym
-           -> F.ParameterizedFormula (WEB.ExprBuilder t st) A32 sh
+           -> F.ParameterizedFormula (WEB.ExprBuilder t st fs) A32 sh
            -> SL.List (A.AllocatedOperand A32 sym) sh
            -> Ctx.Assignment (WEB.Expr t) u
-           -> (forall tp' . Location A32 tp' -> IO (S.SymExpr (WEB.ExprBuilder t st) tp'))
+           -> (forall tp' . Location A32 tp' -> IO (S.SymExpr (WEB.ExprBuilder t st fs) tp'))
            -> BaseTypeRepr tp
            -> IO (WEB.Expr t tp)
 eval_isR15 sym pf operands ufArguments _locToExpr resultRepr = do
@@ -507,7 +507,7 @@ eval_isR15 sym pf operands ufArguments _locToExpr resultRepr = do
 -- immediate types only appear as function operands.  This means that we only
 -- need to look found the bound variable in the 'Ctx.Assignment' in the argument
 -- list and can disregard the literals.
-eval_am2offset_imm_imm :: A.Evaluator A32 t st
+eval_am2offset_imm_imm :: A.Evaluator A32 t st fs
 eval_am2offset_imm_imm =
   FE.evalBitvectorExtractor "am2offset_imm_imm" (knownNat @12) $ \ao nr' ->
     case ao of
@@ -517,7 +517,7 @@ eval_am2offset_imm_imm =
 
 -- | An evaluator that cracks open a 'ARMOperands.Am2OffsetImm' operand value and extracts
 -- the "Add" field as a @BaseBVType 1@ (i.e., a 1 bit bitvector)
-eval_am2offset_imm_add :: HasCallStack => A.Evaluator A32 t st
+eval_am2offset_imm_add :: HasCallStack => A.Evaluator A32 t st fs
 eval_am2offset_imm_add =
   FE.evalBitvectorExtractorWith bitToBool "am2offset_imm_add" (knownNat @1) $ \ao nr' ->
     case ao of
@@ -525,13 +525,13 @@ eval_am2offset_imm_add =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_imm12_reg :: A.Evaluator A32 t st
+eval_imm12_reg :: A.Evaluator A32 t st fs
 eval_imm12_reg =
   FE.evalRegExtractor "imm12_reg" $ \case
     A.CompoundOperand (AOC.OCAddrmodeImm12 { AOC.addrmodeImm12Reg = loc }) -> Just (Some loc)
     _ -> Nothing
 
-eval_imm12_off :: A.Evaluator A32 t st
+eval_imm12_off :: A.Evaluator A32 t st fs
 eval_imm12_off =
   FE.evalBitvectorExtractor "imm12_off" (knownNat @12) $ \ao nr' ->
     case ao of
@@ -539,7 +539,7 @@ eval_imm12_off =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_imm12_add :: HasCallStack => A.Evaluator A32 t st
+eval_imm12_add :: HasCallStack => A.Evaluator A32 t st fs
 eval_imm12_add =
   FE.evalBitvectorExtractorWith bitToBool "imm12_add" (knownNat @1) $ \ao nr' ->
     case ao of
@@ -547,19 +547,19 @@ eval_imm12_add =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_ldst_so_reg_base_register :: A.Evaluator A32 t st
+eval_ldst_so_reg_base_register :: A.Evaluator A32 t st fs
 eval_ldst_so_reg_base_register =
   FE.evalRegExtractor "ldst_so_reg_base_register" $ \case
     A.CompoundOperand (AOC.OCLdstSoReg { AOC.ldstSoRegBaseLoc = loc }) -> Just (Some loc)
     _ -> Nothing
 
-eval_ldst_so_reg_offset_register :: A.Evaluator A32 t st
+eval_ldst_so_reg_offset_register :: A.Evaluator A32 t st fs
 eval_ldst_so_reg_offset_register =
   FE.evalRegExtractor "ldst_so_reg_offset_register" $ \case
     A.CompoundOperand (AOC.OCLdstSoReg { AOC.ldstSoRegOffsetLoc = loc }) -> Just (Some loc)
     _ -> Nothing
 
-eval_ldst_so_reg_add :: HasCallStack => A.Evaluator A32 t st
+eval_ldst_so_reg_add :: HasCallStack => A.Evaluator A32 t st fs
 eval_ldst_so_reg_add =
   FE.evalBitvectorExtractorWith bitToBool "ldst_so_reg_add" (knownNat @1) $ \ao nr' ->
     case ao of
@@ -567,7 +567,7 @@ eval_ldst_so_reg_add =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_ldst_so_reg_imm :: A.Evaluator A32 t st
+eval_ldst_so_reg_imm :: A.Evaluator A32 t st fs
 eval_ldst_so_reg_imm =
   FE.evalBitvectorExtractor "ldst_so_reg_imm" (knownNat @5) $ \ao nr' ->
     case ao of
@@ -575,7 +575,7 @@ eval_ldst_so_reg_imm =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_ldst_so_reg_st :: A.Evaluator A32 t st
+eval_ldst_so_reg_st :: A.Evaluator A32 t st fs
 eval_ldst_so_reg_st =
   FE.evalBitvectorExtractor "ldst_so_reg_shift_type" (knownNat @2) $ \ao nr' ->
     case ao of
@@ -583,7 +583,7 @@ eval_ldst_so_reg_st =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_modimm_imm :: A.Evaluator A32 t st
+eval_modimm_imm :: A.Evaluator A32 t st fs
 eval_modimm_imm =
   FE.evalBitvectorExtractor "modimm_imm" (knownNat @8) $ \ao nr' ->
     case ao of
@@ -591,7 +591,7 @@ eval_modimm_imm =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_modimm_rot :: A.Evaluator A32 t st
+eval_modimm_rot :: A.Evaluator A32 t st fs
 eval_modimm_rot =
   FE.evalBitvectorExtractor "modimm_rot" (knownNat @4) $ \ao nr' ->
     case ao of
@@ -599,7 +599,7 @@ eval_modimm_rot =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_soregimm_type :: A.Evaluator A32 t st
+eval_soregimm_type :: A.Evaluator A32 t st fs
 eval_soregimm_type =
   FE.evalBitvectorExtractor "soregimm_type" (knownNat @2) $ \ao nr' ->
     case ao of
@@ -607,7 +607,7 @@ eval_soregimm_type =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_soregimm_imm :: A.Evaluator A32 t st
+eval_soregimm_imm :: A.Evaluator A32 t st fs
 eval_soregimm_imm =
   FE.evalBitvectorExtractor "soregimm_imm" (knownNat @5) $ \ao nr' ->
     case ao of
@@ -615,13 +615,13 @@ eval_soregimm_imm =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_soregimm_reg :: A.Evaluator A32 t st
+eval_soregimm_reg :: A.Evaluator A32 t st fs
 eval_soregimm_reg =
   FE.evalRegExtractor "soregimm_reg" $ \case
     A.CompoundOperand (AOC.OCSoRegImm { AOC.soRegImmReg = loc }) -> Just (Some loc)
     _ -> Nothing
 
-eval_soregreg_type :: A.Evaluator A32 t st
+eval_soregreg_type :: A.Evaluator A32 t st fs
 eval_soregreg_type =
   FE.evalBitvectorExtractor "soregreg_type" (knownNat @2) $ \ao nr' ->
     case ao of
@@ -629,13 +629,13 @@ eval_soregreg_type =
         | Just Refl <- testEquality (S.exprType e) (BaseBVRepr nr') -> Just e
       _ -> Nothing
 
-eval_soregreg_reg1 :: A.Evaluator A32 t st
+eval_soregreg_reg1 :: A.Evaluator A32 t st fs
 eval_soregreg_reg1 =
   FE.evalRegExtractor "soregreg_reg1" $ \case
     A.CompoundOperand (AOC.OCSoRegReg { AOC.soRegRegReg1 = loc }) -> Just (Some loc)
     _ -> Nothing
 
-eval_soregreg_reg2 :: A.Evaluator A32 t st
+eval_soregreg_reg2 :: A.Evaluator A32 t st fs
 eval_soregreg_reg2 =
   FE.evalRegExtractor "soregreg_reg2" $ \case
     A.CompoundOperand (AOC.OCSoRegReg { AOC.soRegRegReg2 = loc }) -> Just (Some loc)
@@ -653,7 +653,7 @@ noLocation :: SL.List (A.AllocatedOperand arch sym) sh
            -> Maybe (Location arch tp)
 noLocation _ _ _ = Nothing
 
-locationFuncInterpretation :: [(String, A.FunctionInterpretation t st A32)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t st fs A32)]
 locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation
