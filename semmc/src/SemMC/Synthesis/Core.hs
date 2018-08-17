@@ -84,9 +84,9 @@ footprintFilter target candidate =
      candOutputs `Set.isSubsetOf` targetOutputs
 
 instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solver)
-            => Formula (CBO.OnlineBackend t solver) arch
-            -> [Some (TemplatedInstruction (CBO.OnlineBackend t solver) arch)]
-            -> Synth (CBO.OnlineBackend t solver) arch (Maybe [Instruction arch])
+            => Formula (CBO.OnlineBackend t solver fs) arch
+            -> [Some (TemplatedInstruction (CBO.OnlineBackend t solver fs) arch)]
+            -> Synth (CBO.OnlineBackend t solver fs) arch (Maybe [Instruction arch])
 instantiate target trial
   | footprintFilter target trial = do
       sym <- askSym
@@ -123,8 +123,8 @@ synthesizeFormula' :: (Architecture arch,
                        Architecture (TemplatedArch arch),
                        WPO.OnlineSolver t solver
                        )
-                   => Formula (CBO.OnlineBackend t solver) arch
-                   -> Synth (CBO.OnlineBackend t solver) arch (Maybe [Instruction arch])
+                   => Formula (CBO.OnlineBackend t solver fs) arch
+                   -> Synth (CBO.OnlineBackend t solver fs) arch (Maybe [Instruction arch])
 synthesizeFormula' target = do
   st <- get
   case Seq.viewl (synthPrefixes st) of
@@ -144,7 +144,7 @@ synthesizeFormula' target = do
     -- If there are no more possible prefixes, we can't synthesize this formula.
     Seq.EmptyL -> return Nothing
 
-synthesizeFormula :: forall t solver arch .
+synthesizeFormula :: forall t solver fs arch .
                      (Architecture arch,
                       TemplatableOperand arch,
                       ArchRepr arch,
@@ -152,8 +152,8 @@ synthesizeFormula :: forall t solver arch .
                       Typeable arch,
                       WPO.OnlineSolver t solver
                      )
-                  => SynthesisParams (CBO.OnlineBackend t solver) arch
-                  -> Formula (CBO.OnlineBackend t solver) arch
+                  => SynthesisParams (CBO.OnlineBackend t solver fs) arch
+                  -> Formula (CBO.OnlineBackend t solver fs) arch
                   -> IO (Maybe [Instruction arch])
 synthesizeFormula params target = do
   evalStateT (runReaderT (synthesizeFormula' target) params) $

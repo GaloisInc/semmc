@@ -94,9 +94,9 @@ data WrappedOperand arch sh s where
 -- | A wrapper around a function that can be called to simplify a 'FunctionParameter'
 -- parameter into a 'L.Location'.  These are defined per-architecture and are
 -- invoked by 'paramToLocation' during formula instantiation.
-data LocationFuncInterp t st arch where
-  LocationFuncInterp :: ( forall sh s tp . SL.List (AO.AllocatedOperand arch (S.ExprBuilder t st)) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Maybe (L.Location arch tp))
-                     -> LocationFuncInterp t st arch
+data LocationFuncInterp t st fs arch where
+  LocationFuncInterp :: ( forall sh s tp . SL.List (AO.AllocatedOperand arch (S.ExprBuilder t st fs)) sh -> WrappedOperand arch sh s -> BaseTypeRepr tp -> Maybe (L.Location arch tp))
+                     -> LocationFuncInterp t st fs arch
 
 instance ShowF (L.Location arch) => Show (Parameter arch sh tp) where
   show (OperandParameter repr idx) = printf "OperandParameter (%s) (%s)" (show repr) (show idx)
@@ -250,7 +250,7 @@ formOutputs :: (OrdF (L.Location arch)) => Formula sym arch -> Set.Set (Some (L.
 formOutputs = Set.fromList . MapF.keys . formDefs
 
 -- | Check if a given 'Formula' obeys the stated invariant.
-validFormula :: Formula (S.ExprBuilder t st) arch -> Bool
+validFormula :: Formula (S.ExprBuilder t st fs) arch -> Bool
 validFormula (Formula { formParamVars = paramVars, formDefs = defs }) =
   mconcat (map (viewSome U.allBoundVars) (MapF.elems defs))
   == Set.fromAscList (MapF.elems paramVars)

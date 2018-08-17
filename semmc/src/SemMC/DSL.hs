@@ -921,6 +921,11 @@ convertBaseType repr =
     CRU.BaseNatRepr -> quoted "nat"
     CRU.BaseIntegerRepr -> quoted "int"
     CRU.BaseRealRepr -> quoted "real"
+    CRU.BaseFloatRepr (CRU.FloatingPointPrecisionRepr eb sb) -> fromFoldable'
+      [ quoted "fp"
+      , int (fromIntegral (CRU.natValue eb))
+      , int (fromIntegral (CRU.natValue sb))
+      ]
     CRU.BaseStringRepr -> quoted "string"
     CRU.BaseComplexRepr -> quoted "complex"
     CRU.BaseStructRepr reprs ->

@@ -44,9 +44,9 @@ setupEnvironment :: (Architecture arch,
                      ArchRepr arch,
                      TemplatableOperand arch,
                      Typeable arch)
-                 => CBO.OnlineBackend t solver
-                 -> BaseSet (CBO.OnlineBackend t solver) arch
-                 -> SynthesisEnvironment (CBO.OnlineBackend t solver) arch
+                 => CBO.OnlineBackend t solver fs
+                 -> BaseSet (CBO.OnlineBackend t solver fs) arch
+                 -> SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
 setupEnvironment sym baseSet =
   let insns = templatedInstructions baseSet
   in SynthesisEnvironment { synthSym = sym
@@ -61,8 +61,8 @@ mcSynth :: (Architecture arch,
             Typeable arch,
             WPO.OnlineSolver t solver
             )
-        => SynthesisEnvironment (CBO.OnlineBackend t solver) arch
-        -> Formula (CBO.OnlineBackend t solver) arch
+        => SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
+        -> Formula (CBO.OnlineBackend t solver fs) arch
         -> IO (Maybe [Instruction arch])
 mcSynth env target = do
   let params = SynthesisParams { synthEnv = env

@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main ( main ) where
@@ -17,6 +18,7 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Dismantle.PPC as D
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Protocol.Online as WPO
 
@@ -32,14 +34,14 @@ import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
 main :: IO ()
 main = do
   PN.withIONonceGenerator $ \ng ->
-    CBO.withYicesOnlineBackend ng $ \sym -> do
+    CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
       let sems = [ (sop, bs) | (sop, bs) <- PPC32.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC32.allDefinedFunctions sems sym
       T.defaultMain (allTests baseSet synthEnv)
 
 allTests :: (WPO.OnlineSolver t solver)
-         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver) PPC32.PPC)
-         -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver) PPC32.PPC
+         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC32.PPC)
+         -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC32.PPC
          -> T.TestTree
 allTests baseSet synthEnv =
   T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progs)
@@ -81,8 +83,8 @@ progs = [ ("addNegated", [ D.Instruction D.NEG (reg 5 PL.:< reg 2 PL.:< PL.Nil)
     reg n = D.Gprc (D.GPR n)
 
 toSynthesisTest :: (WPO.OnlineSolver t solver)
-                => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver) PPC32.PPC)
-                -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver) PPC32.PPC
+                => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC32.PPC)
+                -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC32.PPC
                 -> (String, [D.Instruction])
                 -> T.TestTree
 toSynthesisTest baseSet synthEnv (name, p) = T.testCase name $ do
@@ -94,12 +96,12 @@ matchInsn i k =
   case i of
     D.Instruction opc operands -> k opc operands
 
-loadBaseSet :: (WPO.OnlineSolver t solver)
+loadBaseSet :: (WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs, CB.IsSymInterface sym)
             => [(String, BS8.ByteString)]
             -> [(Some (D.Opcode D.Operand), BS8.ByteString)]
-            -> CBO.OnlineBackend t solver
-            -> IO (MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver) PPC32.PPC),
-                   SS.SynthesisEnvironment (CBO.OnlineBackend t solver) PPC32.PPC)
+            -> sym
+            -> IO (MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC32.PPC),
+                   SS.SynthesisEnvironment sym PPC32.PPC)
 loadBaseSet funcs ops sym = do
   lcfg <- SL.mkNonLogCfg
   let ?logCfg = lcfg

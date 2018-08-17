@@ -363,7 +363,7 @@ noLocation :: PL.List (A.AllocatedOperand arch sym) sh
            -> Maybe (Location arch tp)
 noLocation _ _ _ = Nothing
 
-locationFuncInterpretation :: [(String, A.FunctionInterpretation t st AArch32)]
+locationFuncInterpretation :: [(String, A.FunctionInterpretation t st fs AArch32)]
 locationFuncInterpretation =
     [ ("arm.is_r15", A.FunctionInterpretation
                        { A.locationInterp = F.LocationFuncInterp noLocation

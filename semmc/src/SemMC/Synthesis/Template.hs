@@ -169,16 +169,16 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 -- interpretation in the templated architecture without actually having to
 -- rewrite them by hand twice (once normally and once templated).
 templatizeInterp :: (HasCallStack, OrdF (Location arch), Location arch ~ Location (TemplatedArch arch))
-                 => FunctionInterpretation t st arch
-                 -> FunctionInterpretation t st (TemplatedArch arch)
+                 => FunctionInterpretation t st fs arch
+                 -> FunctionInterpretation t st fs (TemplatedArch arch)
 templatizeInterp fi =
   FunctionInterpretation { locationInterp = LocationFuncInterp (templatedLocationInterp (locationInterp fi))
                          , exprInterpName = exprInterpName fi
                          , exprInterp = Evaluator (templatedEvaluator (exprInterp fi))
                          }
 
-templatedLocationInterp :: LocationFuncInterp t st arch
-                        -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st)) sh
+templatedLocationInterp :: LocationFuncInterp t st fs arch
+                        -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st fs)) sh
                         -> WrappedOperand (TemplatedArch arch) sh s
                         -> WT.BaseTypeRepr tp
                         -> Maybe (Location (TemplatedArch arch) tp)
@@ -186,12 +186,12 @@ templatedLocationInterp (LocationFuncInterp fi) operands (WrappedOperand orep ix
   let ops' = fmapFC fromTemplatedOperand operands
   fi ops' (WrappedOperand orep ix) rep
 
-templatedEvaluator :: forall arch t st sh u tp
+templatedEvaluator :: forall arch t st fs sh u tp
                     . (OrdF (Location arch))
-                   => Evaluator arch t st
-                   -> S.ExprBuilder t st
-                   -> ParameterizedFormula (S.ExprBuilder t st) (TemplatedArch arch) sh
-                   -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st)) sh
+                   => Evaluator arch t st fs
+                   -> S.ExprBuilder t st fs
+                   -> ParameterizedFormula (S.ExprBuilder t st fs) (TemplatedArch arch) sh
+                   -> SL.List (AllocatedOperand (TemplatedArch arch) (S.ExprBuilder t st fs)) sh
                    -> Ctx.Assignment (S.Expr t) u
                    -> (forall ltp . Location (TemplatedArch arch) ltp -> IO (S.Expr t ltp))
                    -> WT.BaseTypeRepr tp
@@ -427,10 +427,10 @@ tifFormula :: TemplatedInstructionFormula sym arch -> Formula sym arch
 tifFormula (TemplatedInstructionFormula _ tf) = coerceFormula (tfFormula tf)
 
 genTemplatedFormula :: (TemplateConstraints arch
-                       , S.IsSymExprBuilder (S.ExprBuilder t st))
-                    => S.ExprBuilder t st
-                    -> TemplatedInstruction (S.ExprBuilder t st) arch sh
-                    -> IO (TemplatedInstructionFormula (S.ExprBuilder t st) arch)
+                       , S.IsSymExprBuilder (S.ExprBuilder t st fs))
+                    => S.ExprBuilder t st fs
+                    -> TemplatedInstruction (S.ExprBuilder t st fs) arch sh
+                    -> IO (TemplatedInstructionFormula (S.ExprBuilder t st fs) arch)
 genTemplatedFormula sym ti@(TemplatedInstruction _ pf oplist) =
   TemplatedInstructionFormula ti . uncurry TemplatedFormula <$> instantiateFormula sym pf oplist
 
