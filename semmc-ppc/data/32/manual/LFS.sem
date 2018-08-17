@@ -8,19 +8,21 @@
   ((frT
    (concat
     #x0000000000000000
-    ((_ call "uf.fp.single_to_double")
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (bvadd
-       (ite
-        ((_ call "uf.ppc.is_r0")
-         ((_ call "uf.ppc.memri_reg")
-          memref))
-        #x00000000
-        ((_ call "uf.ppc.memri_reg")
-         memref))
-       ((_ sign_extend 16)
-        ((_ call "uf.ppc.memri_offset")
-         memref)))))))
+    ((_ call "uf.fp.double_to_binary")
+     (fp_single_to_double
+      (fp_binary_to_single
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (bvadd
+         (ite
+          ((_ call "uf.ppc.is_r0")
+           ((_ call "uf.ppc.memri_reg")
+            memref))
+          #x00000000
+          ((_ call "uf.ppc.memri_reg")
+           memref))
+         ((_ sign_extend 16)
+          ((_ call "uf.ppc.memri_offset")
+           memref)))))))))
    ('IP
     (bvadd 'IP #x00000004)))))

@@ -8,18 +8,20 @@
   ((rT
    (concat
     #x0000000000000000
-    ((_ call "uf.fp.single_to_double")
-     ((_ call "uf.read_mem.32")
-      'Mem
-      (bvadd
-       (ite
-        ((_ call "uf.ppc.is_r0")
-         ((_ call "uf.ppc.memrr_base")
-          memref))
-        #x0000000000000000
-        ((_ call "uf.ppc.memrr_base")
-         memref))
-       ((_ call "uf.ppc.memrr_offset")
-        memref))))))
+    ((_ call "uf.fp.double_to_binary")
+     (fp_single_to_double
+      (fp_binary_to_single
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (bvadd
+         (ite
+          ((_ call "uf.ppc.is_r0")
+           ((_ call "uf.ppc.memrr_base")
+            memref))
+          #x0000000000000000
+          ((_ call "uf.ppc.memrr_base")
+           memref))
+         ((_ call "uf.ppc.memrr_offset")
+          memref))))))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

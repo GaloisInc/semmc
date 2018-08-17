@@ -5,23 +5,32 @@
   (frB . 'Fprc)
   (frC . 'Fprc)))
  (in
-  ('FPSCR frC frB frA 'IP))
+  ('FPSCR frB frA 'IP))
  (defs
   (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec3")
-     "FMADDS"
-     frA
-     frB
-     frC
-     'FPSCR)))
+   ((_ call "uf.fp.tern_op_fpscr")
+    "FMADDS"
+    frA
+    frB
+    frC
+    'FPSCR))
    (frT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec3")
-      "FMADDS"
-      frA
-      frB
-      frC
-      'FPSCR)))
+    (concat
+     #x0000000000000000
+     ((_ call "uf.fp.double_to_binary")
+      (fp_single_to_double
+       (ffmas
+        ((_ call "uf.fp.double_to_single")
+         (fp_binary_to_double
+          ((_ extract 127 64)
+           frA)))
+        ((_ call "uf.fp.double_to_single")
+         (fp_binary_to_double
+          ((_ extract 127 64)
+           frC)))
+        ((_ call "uf.fp.double_to_single")
+         (fp_binary_to_double
+          ((_ extract 127 64)
+           frB))))))))
    ('IP
     (bvadd 'IP #x00000004)))))

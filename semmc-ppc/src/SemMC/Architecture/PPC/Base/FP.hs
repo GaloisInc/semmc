@@ -2,13 +2,13 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE RankNTypes #-}
 module SemMC.Architecture.PPC.Base.FP (
-  floatingPoint,
-  floatingPointLoads,
-  floatingPointStores,
-  floatingPointCompare,
+    floatingPoint
+  , floatingPointLoads
+  , floatingPointStores
+  , floatingPointCompare
   -- * Primitives
-  froundsingle,
-  fsingletodouble
+  , fpBinaryDoubleToSingle
+  , fpBinarySingleToDouble
   ) where
 
 import GHC.Stack ( HasCallStack )
@@ -17,6 +17,175 @@ import Data.Parameterized.Some ( Some(..) )
 
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
+
+
+withUnRegs
+  :: (Location 'TBV -> Location 'TBV -> SemM 'Def ()) -> SemM 'Def ()
+withUnRegs action = do
+  frT <- param "frT" fprc (EBV 128)
+  frB <- param "frB" fprc (EBV 128)
+  input frB
+  action frT frB
+
+withUnRegsFPSCR
+  :: String
+  -> (Location 'TBV -> Location 'TBV -> SemM 'Def ())
+  -> SemM 'Def ()
+withUnRegsFPSCR name action = withUnRegs $ \frT frB -> do
+  input fpscr
+  action frT frB
+  defLoc fpscr $ uf
+    (EBV 32)
+    "fp.un_op_fpscr"
+    [ Some (LitString name)
+    , Some (Loc frB)
+    , Some (Loc fpscr)
+    ]
+
+withBinRegs
+  :: (Location 'TBV -> Location 'TBV -> Location 'TBV -> SemM 'Def ())
+  -> SemM 'Def ()
+withBinRegs action = do
+  frT <- param "frT" fprc (EBV 128)
+  frA <- param "frA" fprc (EBV 128)
+  frB <- param "frB" fprc (EBV 128)
+  input frA
+  input frB
+  action frT frA frB
+
+withBinRegsFPSCR
+  :: String
+  -> (Location 'TBV -> Location 'TBV -> Location 'TBV -> SemM 'Def ())
+  -> SemM 'Def ()
+withBinRegsFPSCR name action = withBinRegs $ \frT frA frB -> do
+  input fpscr
+  action frT frA frB
+  defLoc fpscr $ uf
+    (EBV 32)
+    "fp.bin_op_fpscr"
+    [ Some (LitString name)
+    , Some (Loc frA)
+    , Some (Loc frB)
+    , Some (Loc fpscr)
+    ]
+
+withTernRegs
+  :: (  Location 'TBV
+     -> Location 'TBV
+     -> Location 'TBV
+     -> Location 'TBV
+     -> SemM 'Def ()
+     )
+  -> SemM 'Def ()
+withTernRegs action = do
+  frT <- param "frT" fprc (EBV 128)
+  frA <- param "frA" fprc (EBV 128)
+  frB <- param "frB" fprc (EBV 128)
+  frC <- param "frC" fprc (EBV 128)
+  input frA
+  input frB
+  action frT frA frB frC
+
+withTernRegsFPSCR
+  :: String
+  -> (  Location 'TBV
+     -> Location 'TBV
+     -> Location 'TBV
+     -> Location 'TBV
+     -> SemM 'Def ()
+     )
+  -> SemM 'Def ()
+withTernRegsFPSCR name action = withTernRegs $ \frT frA frB frC -> do
+  input fpscr
+  action frT frA frB frC
+  defLoc fpscr $ uf
+    (EBV 32)
+    "fp.tern_op_fpscr"
+    [ Some (LitString name)
+    , Some (Loc frA)
+    , Some (Loc frB)
+    , Some (Loc frC)
+    , Some (Loc fpscr)
+    ]
+
+fpArithWoFPSCRUnOp :: (Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
+fpArithWoFPSCRUnOp op = withUnRegs $ \frT frB -> do
+  let res = op (decodeDouble $ Loc frB)
+  defLoc frT $ encodeDouble res
+
+fpArithWoFPSCRUnOpS :: (Expr 'TFloat -> Expr 'TFloat) -> SemM 'Def ()
+fpArithWoFPSCRUnOpS op = withUnRegs $ \frT frB -> do
+  let res = op (decodeSingle $ Loc frB)
+  defLoc frT $ encodeSingle res
+
+fpArithUnOp :: String -> (Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
+fpArithUnOp name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (decodeDouble $ Loc frB)
+  defLoc frT $ encodeDouble res
+
+fpArithUnOpS :: String -> (Expr 'TFloat -> Expr 'TFloat) -> SemM 'Def ()
+fpArithUnOpS name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (decodeSingle $ Loc frB)
+  defLoc frT $ encodeSingle res
+
+fpArithBinOp
+  :: String
+  -> (Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
+  -> SemM 'Def ()
+fpArithBinOp name op = withBinRegsFPSCR name $ \frT frA frB -> do
+  let res = op (decodeDouble $ Loc frA) (decodeDouble $ Loc frB)
+  defLoc frT $ encodeDouble res
+
+fpArithBinOpS
+  :: String
+  -> (Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
+  -> SemM 'Def ()
+fpArithBinOpS name op = withBinRegsFPSCR name $ \frT frA frB -> do
+  let res = op (decodeSingle $ Loc frA) (decodeSingle $ Loc frB)
+  defLoc frT $ encodeSingle res
+
+fpArithTernOp
+  :: String
+  -> (Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
+  -> SemM 'Def ()
+fpArithTernOp name op = withTernRegsFPSCR name $ \frT frA frB frC -> do
+  let res = op (decodeDouble $ Loc frA)
+               (decodeDouble $ Loc frC)
+               (decodeDouble $ Loc frB)
+  defLoc frT $ encodeDouble res
+
+fpArithTernOpS
+  :: String
+  -> (Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
+  -> SemM 'Def ()
+fpArithTernOpS name op = withTernRegsFPSCR name $ \frT frA frB frC -> do
+  let res = op (decodeSingle $ Loc frA)
+               (decodeSingle $ Loc frC)
+               (decodeSingle $ Loc frB)
+  defLoc frT $ encodeSingle res
+
+fpConvDoubleToBV64Op
+  :: String -> (Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+fpConvDoubleToBV64Op name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (decodeDouble $ Loc frB)
+  defLoc frT $ extendDouble res
+
+fpConvDoubleToBV32Op
+  :: String -> (Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+fpConvDoubleToBV32Op name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (decodeDouble $ Loc frB)
+  defLoc frT $ extendDouble $ concat (undefinedBV 32) res
+
+fpConvBV64ToDoubleOp
+  :: String -> (Expr 'TBV -> Expr 'TDouble) -> SemM 'Def ()
+fpConvBV64ToDoubleOp name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (extractDouble $ Loc frB)
+  defLoc frT $ encodeDouble res
+
+fpConvBV64ToSingleOp :: String -> (Expr 'TBV -> Expr 'TFloat) -> SemM 'Def ()
+fpConvBV64ToSingleOp name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (extractDouble $ Loc frB)
+  defLoc frT $ encodeSingle res
 
 fp1op :: String -> SemM 'Def ()
 fp1op name = do
@@ -42,24 +211,6 @@ fp3op name = do
   defLoc frT (highBits' 128 res)
   defLoc fpscr (lowBits' 32 res)
 
-froundsingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-froundsingle = uf (EBV 32) "fp.round_single" . ((:[]) . Some)
-
-fsingletodouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-fsingletodouble = uf (EBV 64) "fp.single_to_double" . ((:[]) . Some)
-
-flt :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBool
-flt e1 e2 = uf EBool "fp.lt" [ Some e1, Some e2 ]
-
-fisqnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
-fisqnan64 = uf EBool "fp.is_qnan64" . ((:[]) . Some)
-
-fissnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
-fissnan64 = uf EBool "fp.is_snan64" . ((:[]) . Some)
-
-fisnan64 :: (HasCallStack) => Expr 'TBV -> Expr 'TBool
-fisnan64 e = orp (fisqnan64 e) (fissnan64 e)
-
 -- | Extract the double-precision part of a vector register
 extractDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 extractDouble = highBits128 64
@@ -68,35 +219,44 @@ extractDouble = highBits128 64
 extendDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
 extendDouble = concat (LitBV 64 0x0)
 
--- | Floating point comparison definitions
---
-fcbits :: (HasCallStack, ?bitSize :: BitSize)
-       => Expr 'TBV
-       -- ^ The first operand
-       -> Expr 'TBV
-       -- ^ the second operand
-       -> Expr 'TBV
-fcbits opa opb = LitBV 4 0x0000 -- c
-                 -- FIXME
-  where
-    c = ite (orp (fisnan64 opa) (fisnan64 opb)) (LitBV 4 0x0001)
-        (ite (flt opa opb) (LitBV 4 0x1000)
-         (ite (flt opb opa) (LitBV 4 0x0100) (LitBV 4 0x0010)))
+decodeDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble
+decodeDouble = fpBinaryToDouble . extractDouble
 
-fcmp :: (HasCallStack, ?bitSize :: BitSize)
-     => Expr 'TBV
-     -- ^ The crrc field
-     -> Expr 'TBV
-     -- ^ The first operand
-     -> Expr 'TBV
-     -- ^ The second operand
-     -> Expr 'TBV
-fcmp fld opa opb =
-  bvor crFld0 shiftedNibble
-  where
-    c = fcbits opa opb
-    shiftedNibble = bvshl (zext' 32 c) (bvmul (zext' 32 fld) (LitBV 32 0x4))
-    crFld0 = bvand (Loc cr) (bvnot (bvshl (LitBV 32 0xf) (bvmul (zext' 32 fld) (LitBV 32 0x4))))
+decodeSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TFloat
+decodeSingle = fpDoubleToSingle . decodeDouble
+
+encodeDouble :: (HasCallStack) => Expr 'TDouble -> Expr 'TBV
+encodeDouble = extendDouble . fpDoubleToBinary
+
+encodeSingle :: (HasCallStack) => Expr 'TFloat -> Expr 'TBV
+encodeSingle = encodeDouble . fpSingleToDouble
+
+fpBinaryDoubleToSingle :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+fpBinaryDoubleToSingle = fpSingleToBinary . fpDoubleToSingle . fpBinaryToDouble
+
+fpBinarySingleToDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
+fpBinarySingleToDouble = fpDoubleToBinary . fpSingleToDouble . fpBinaryToSingle
+
+
+-- | Floating point comparison definitions
+fcbits
+  :: (HasCallStack, ?bitSize::BitSize)
+  => (Expr tp -> Expr tp -> Expr 'TBool)
+  -- ^ @<@ check function
+  -> (Expr tp -> Expr tp -> Expr 'TBool)
+  -- ^ @=@ check function
+  -> (Expr tp -> Expr 'TBool)
+  -- ^ @nan@ check comparison
+  -> Expr tp
+  -- ^ The first operand
+  -> Expr tp
+  -- ^ The second operand
+  -> Expr 'TBV
+fcbits flt feq fnan opa opb =
+  concat (bvPredToBit $ flt opa opb) $
+    concat (bvPredToBit $ flt opb opa) $
+      concat (bvPredToBit $ feq opa opb) $
+      bvPredToBit $ orp (fnan opa) (fnan opb)
 
 floatingPointCompare :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPointCompare = do
@@ -108,6 +268,26 @@ floatingPointCompare = do
   -- 1), but we are not unsetting the FX field if VXSNAN gets set to 0. I'm not sure
   -- if this is the correct behavior; something to look into.
 
+  defineOpcodeWithIP "FCMPUD" $ do
+    comment "Floating Compare Unordered (X-form)"
+    bf  <- param "bf" crrc (EBV 3)
+    frA <- param "frA" fprc (EBV 128)
+    frB <- param "frB" fprc (EBV 128)
+    input bf
+    input frA
+    input frB
+    input cr
+    input fpscr
+    let c = fcbits
+              fltd
+              feqd
+              fnand
+              (decodeDouble $ Loc frA)
+              (decodeDouble $ Loc frB)
+    defLoc cr $
+      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    defLoc fpscr $ bvUpdate (Loc fpscr) 16 c
+
   defineOpcodeWithIP "FCMPUS" $ do
     comment "Floating Compare Unordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
@@ -117,28 +297,41 @@ floatingPointCompare = do
     input frB
     input cr
     input fpscr
+    let c = fcbits
+              flts
+              feqs
+              fnans
+              (decodeSingle $ Loc frA)
+              (decodeSingle $ Loc frB)
+    defLoc cr $
+      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    defLoc fpscr $ bvUpdate (Loc fpscr) 16 c
 
-    let lowA = extractDouble (Loc frA)
-    let lowB = extractDouble (Loc frB)
+  defineOpcodeWithIP "FCMPOD" $ do
+    comment "Floating Compare Ordered (X-form)"
+    bf  <- param "bf" crrc (EBV 3)
+    frA <- param "frA" fprc (EBV 128)
+    frB <- param "frB" fprc (EBV 128)
+    input bf
+    input frA
+    input frB
+    input cr
+    input fpscr
+    let c = fcbits
+              fltd
+              feqd
+              fnand
+              (decodeDouble $ Loc frA)
+              (decodeDouble $ Loc frB)
+    defLoc cr $
+      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    let vxvc = bvPredToBit $ orp
+                (fnand $ decodeDouble $ Loc frA)
+                (fnand $ decodeDouble $ Loc frB)
+    defLoc fpscr $ bvUpdate (bvUpdate (Loc fpscr) 16 c) 12 vxvc
 
-    let c     = fcbits lowA lowB
-    let newCR = fcmp (Loc bf) lowA lowB
-
-    let snan = orp (fissnan64 lowA) (fissnan64 lowB)
-
-    -- zero out the FPCC and VXSNAN bits
-    let fpscrFld0 = bvand (Loc fpscr) (LitBV 32 0xfff0ff7f)
-
-    let snanMask = ite snan (LitBV 32 0x00000080) (LitBV 32 0x00000000)
-    let fpccMask = bvshl (zext' 32 c) (LitBV 32 0x00000010)
-    let fxMask   = ite snan (LitBV 32 0x00000001) (LitBV 32 0x00000000)
-
-    defLoc cr newCR
-    defLoc fpscr (bvor snanMask
-                  (bvor fpccMask
-                   (bvor fxMask fpscrFld0)))
-  defineOpcodeWithIP "FCMPUD" $ do
-    comment "Floating Compare Unordered (X-form)"
+  defineOpcodeWithIP "FCMPOS" $ do
+    comment "Floating Compare Ordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
     frA <- param "frA" fprc (EBV 128)
     frB <- param "frB" fprc (EBV 128)
@@ -146,26 +339,18 @@ floatingPointCompare = do
     input frB
     input cr
     input fpscr
-
-    let lowA = extractDouble (Loc frA)
-    let lowB = extractDouble (Loc frB)
-
-    let c     = fcbits lowA lowB
-    let newCR = fcmp (Loc bf) lowA lowB
-
-    let snan = orp (fissnan64 lowA) (fissnan64 lowB)
-
-    -- zero out the FPCC and VXSNAN bits
-    let fpscrFld0 = bvand (Loc fpscr) (LitBV 32 0xfff0ff7f)
-
-    let snanMask = ite snan (LitBV 32 0x00000080) (LitBV 32 0x00000000)
-    let fpccMask = bvshl (zext' 32 c) (LitBV 32 0x00000010)
-    let fxMask   = ite snan (LitBV 32 0x00000001) (LitBV 32 0x00000000)
-
-    defLoc cr newCR
-    defLoc fpscr (bvor snanMask
-                  (bvor fpccMask
-                   (bvor fxMask fpscrFld0)))
+    let c = fcbits
+              flts
+              feqs
+              fnans
+              (decodeSingle $ Loc frA)
+              (decodeSingle $ Loc frB)
+    defLoc cr $
+      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    let vxvc = bvPredToBit $ orp
+                (fnans $ decodeSingle $ Loc frA)
+                (fnans $ decodeSingle $ Loc frB)
+    defLoc fpscr $ bvUpdate (bvUpdate (Loc fpscr) 16 c) 12 vxvc
 
   -- FIXME: CR is left undefined here
   defineOpcodeWithIP "MFFS" $ do
@@ -221,6 +406,7 @@ floatingPointCompare = do
       comment "Move to FPSCR Bit 1 (X-form, RC=1)"
       defLoc cr (undefinedBV 32)
 
+
 -- | Floating point operation definitions
 --
 -- FIXME: None of these are defining the status or control registers yet
@@ -228,43 +414,75 @@ floatingPoint :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPoint = do
   defineOpcodeWithIP "FADD" $ do
     comment "Floating Add (A-form)"
-    fp2op "FADD"
+    fpArithBinOp "FADD" fadd
 
   defineOpcodeWithIP "FADDS" $ do
     comment "Floating Add Single (A-form)"
-    fp2op "FADDS"
+    fpArithBinOpS "FADDS" fadds
 
   defineOpcodeWithIP "FSUB" $ do
     comment "Floating Subtract (A-form)"
-    fp2op "FSUB"
+    fpArithBinOp "FSUB" fsub
 
   defineOpcodeWithIP "FSUBS" $ do
     comment "Floating Subtract Single (A-form)"
-    fp2op "FSUBS"
+    fpArithBinOpS "FSUBS" fsubs
 
   defineOpcodeWithIP "FMUL" $ do
     comment "Floating Multiply (A-form)"
-    fp2op "FMUL"
+    fpArithBinOp "FMUL" fmul
 
   defineOpcodeWithIP "FMULS" $ do
     comment "Floating Multiply Single (A-form)"
-    fp2op "FMULS"
+    fpArithBinOpS "FMULS" fmuls
 
   defineOpcodeWithIP "FDIV" $ do
     comment "Floating Divide (A-form)"
-    fp2op "FDIV"
+    fpArithBinOp "FDIV" fdiv
 
   defineOpcodeWithIP "FDIVS" $ do
     comment "Floating Divide Single (A-form)"
-    fp2op "FDIVS"
+    fpArithBinOpS "FDIVS" fdivs
+
+  defineOpcodeWithIP "FSQRT" $ do
+    comment "Floating Square Root (A-form)"
+    fpArithUnOp "FSQRT" fsqrt
+
+  defineOpcodeWithIP "FSQRTS" $ do
+    comment "Floating Square Root Single (A-form)"
+    fpArithUnOpS "FSQRTS" fsqrts
+
+  defineOpcodeWithIP "FRE" $ do
+    comment "Floating Reciprocal Estimate (A-form)"
+    fp1op "FRE"
+
+  defineOpcodeWithIP "FRES" $ do
+    comment "Floating Reciprocal Estimate Single (A-form)"
+    fp1op "FRES"
+
+  defineOpcodeWithIP "FRSQRTE" $ do
+    comment "Floating Reciprocal Square Root Estimate (A-form)"
+    fp1op "FRSQRTE"
+
+  defineOpcodeWithIP "FRSQRTES" $ do
+    comment "Floating Reciprocal Square Root Estimate Single (A-form)"
+    fp1op "FRSQRTES"
+
+  defineOpcodeWithIP "FSELD" $ do
+    comment "Floating-Point Select (A-form)"
+    fp3op "FSELD"
+
+  defineOpcodeWithIP "FSELS" $ do
+    comment "Floating-Point Select Single (A-form)"
+    fp3op "FSELS"
 
   defineOpcodeWithIP "FMADD" $ do
     comment "Floating Multiply-Add (A-form)"
-    fp3op "FMADD"
+    fpArithTernOp "FMADD" ffma
 
   defineOpcodeWithIP "FMADDS" $ do
     comment "Floating Multiply-Add Single (A-form)"
-    fp3op "FMADDS"
+    fpArithTernOpS "FMADDS" ffmas
 
   -- NOTE: This functions were previously defined in terms of lower-level operations
   -- like negation and multiply-add, but our new encoding just pushes the opcode
@@ -295,11 +513,12 @@ floatingPoint = do
 
   defineOpcodeWithIP "FRSP" $ do
     comment "Floating Round to Single-Precision (X-form)"
-    fp1op "FRSP"
+    withUnRegsFPSCR "FRSP" $ \frT frB ->
+      defLoc frT $ encodeSingle $ frsp $ decodeDouble $ Loc frB
 
   defineOpcodeWithIP "FCTID" $ do
     comment "Floating Point Convert to Integer Doubleword (X-form)"
-    fp1op "FCTID"
+    fpConvDoubleToBV64Op "FCTID" fctid
 
   defineOpcodeWithIP "FCTIDZ" $ do
     comment "Floating Point Convert to Integer Doubleword with Round Towards Zero (X-form)"
@@ -307,7 +526,7 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCTIDU" $ do
     comment "Floating Point Convert to Integer Doubleword Unsigned (X-form)"
-    fp1op "FCTIDU"
+    fpConvDoubleToBV64Op "FCTIDU" fctidu
 
   defineOpcodeWithIP "FCTIDUZ" $ do
     comment "Floating Point Convert to Integer Doubleword Unsigned with Round Towards Zero (X-form)"
@@ -315,7 +534,7 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCTIW" $ do
     comment "Floating Point Convert to Integer Word (X-form)"
-    fp1op "FCTIW"
+    fpConvDoubleToBV32Op "FCTIW" fctiw
 
   defineOpcodeWithIP "FCTIWZ" $ do
     comment "Floating Point Convert to Integer Word with Round Towards Zero (X-form)"
@@ -323,7 +542,7 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCTIWU" $ do
     comment "Floating Point Convert to Integer Word Unsigned (X-form)"
-    fp1op "FCTIWU"
+    fpConvDoubleToBV32Op "FCTIWU" fctiwu
 
   defineOpcodeWithIP "FCTIWUZ" $ do
     comment "Floating Point Convert to Integer Word Unsigned with Round Towards Zero (X-form)"
@@ -331,19 +550,19 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCFID" $ do
     comment "Floating Point Convert from Integer Doubleword (X-form)"
-    fp1op "FCFID"
+    fpConvBV64ToDoubleOp "FCFID" fcfid
 
   defineOpcodeWithIP "FCFIDU" $ do
     comment "Floating Point Convert from Integer Doubleword Unsigned (X-form)"
-    fp1op "FCFIDU"
+    fpConvBV64ToDoubleOp "FCFIDU" fcfidu
 
   defineOpcodeWithIP "FCFIDS" $ do
     comment "Floating Point Convert from Integer Doubleword Single (X-form)"
-    fp1op "FCFIDS"
+    fpConvBV64ToSingleOp "FCFIDS" fcfids
 
   defineOpcodeWithIP "FCFIDUS" $ do
     comment "Floating Point Convert from Integer Doubleword Unsigned Single (X-form)"
-    fp1op "FCFIDUS"
+    fpConvBV64ToSingleOp "FCFIDUS" fcfidus
 
   defineOpcodeWithIP "FRIND" $ do
     comment "Floating Round to Integer Nearest (X-form)"
@@ -377,34 +596,35 @@ floatingPoint = do
     comment "Floating Round to Integer Minus Single (X-form)"
     fp1op "FRIMS"
 
+  defineOpcodeWithIP "FMR" $ do
+    comment "Floating Move Register (X-form)"
+    withUnRegs $ \frT frB ->
+      defLoc frT $ Loc frB
+
   defineOpcodeWithIP "FNEGD" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
     comment "the sign bit is always in the same place (MSB)"
-    fp1op "FNEGD"
+    fpArithWoFPSCRUnOp fnegd
 
   defineOpcodeWithIP "FNEGS" $ do
     comment "Floating Negate (X-form)"
     comment "There is no single-precision form of this because"
     comment "the sign bit is always in the same place (MSB)"
-    fp1op "FNEGS"
-
-  defineOpcodeWithIP "FMR" $ do
-    comment "Floating Move Register (X-form)"
-    fp1op "FMR"
+    fpArithWoFPSCRUnOpS fnegs
 
   -- See Note [FABS]
   defineOpcodeWithIP "FABSD" $ do
     comment "Floating Absolute Value (X-form)"
-    fp1op "FABSD"
+    fpArithWoFPSCRUnOp fabsd
+
+  defineOpcodeWithIP "FABSS" $ do
+    comment "Floating Absolute Value (X-form)"
+    fpArithWoFPSCRUnOpS fabss
 
   defineOpcodeWithIP "FNABSD" $ do
     comment "Floating Negative Absolute Value (X-form)"
     fp1op "FNABSD"
-
-  defineOpcodeWithIP "FABSS" $ do
-    comment "Floating Absolute Value (X-form)"
-    fp1op "FABSS"
 
   defineOpcodeWithIP "FNABSS" $ do
     comment "Floating Negative Absolute Value (X-form)"
@@ -418,37 +638,6 @@ floatingPoint = do
     comment "Floating Copy Sign Single (X-form)"
     fp2op "FCPSGNS"
 
-  defineOpcodeWithIP "FSQRT" $ do
-    comment "Floating Square Root (A-form)"
-    fp1op "FSQRT"
-
-  defineOpcodeWithIP "FSQRTS" $ do
-    comment "Floating Square Root Single (A-form)"
-    fp1op "FSQRT"
-
-  defineOpcodeWithIP "FRE" $ do
-    comment "Floating Reciprocal Estimate (A-form)"
-    fp1op "FRE"
-
-  defineOpcodeWithIP "FRES" $ do
-    comment "Floating Reciprocal Estimate Single (A-form)"
-    fp1op "FRES"
-
-  defineOpcodeWithIP "FRSQRTE" $ do
-    comment "Floating Reciprocal Square Root Estimate (A-form)"
-    fp1op "FRSQRTE"
-
-  defineOpcodeWithIP "FRSQRTES" $ do
-    comment "Floating Reciprocal Square Root Estimate Single (A-form)"
-    fp1op "FRSQRTES"
-
-  defineOpcodeWithIP "FSELD" $ do
-    comment "Floating-Point Select (A-form)"
-    fp3op "FSELD"
-
-  defineOpcodeWithIP "FSELS" $ do
-    comment "Floating-Point Select Single (A-form)"
-    fp3op "FSELS"
 
 -- | Define a load and double conversion of a single floating-point (D-form)
 loadFloat :: (?bitSize :: BitSize)
@@ -515,16 +704,16 @@ floatingPointLoads :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPointLoads = do
   defineOpcodeWithIP "LFS" $ do
     comment "Load Floating-Point Single (D-form)"
-    loadFloat 4 fsingletodouble
+    loadFloat 4 fpBinarySingleToDouble
   defineOpcodeWithIP "LFSX" $ do
     comment "Load Floating-Point Single Indexed (X-form)"
-    loadFloatIndexed 4 fsingletodouble
+    loadFloatIndexed 4 fpBinarySingleToDouble
   defineOpcodeWithIP "LFSU" $ do
     comment "Load Floating-Point Single with Update (D-form)"
-    loadFloatWithUpdate 4 fsingletodouble
+    loadFloatWithUpdate 4 fpBinarySingleToDouble
   defineOpcodeWithIP "LFSUX" $ do
     comment "Load Floating-Point Single with Update Indexed (X-form)"
-    loadFloatWithUpdateIndexed 4 fsingletodouble
+    loadFloatWithUpdateIndexed 4 fpBinarySingleToDouble
   defineOpcodeWithIP "LFD" $ do
     comment "Load Floating-Point Double (D-form)"
     loadFloat 8 id
@@ -546,7 +735,6 @@ floatingPointLoads = do
     comment "Load Floating-Point as Integer Word Zero Indexed (X-form)"
     loadFloatIndexed 4 (zext' 64)
   return ()
-
 
 
 storeFloat :: (?bitSize :: BitSize)
@@ -617,16 +805,16 @@ floatingPointStores :: (?bitSize :: BitSize) => SemM 'Top ()
 floatingPointStores = do
   defineOpcodeWithIP "STFS" $ do
     comment "Store Floating-Point Single (D-form)"
-    storeFloat 4 froundsingle
+    storeFloat 4 fpBinaryDoubleToSingle
   defineOpcodeWithIP "STFSU" $ do
     comment "Store Floating-Point Single with Update (D-form)"
-    storeFloatWithUpdate 4 froundsingle
+    storeFloatWithUpdate 4 fpBinaryDoubleToSingle
   defineOpcodeWithIP "STFSX" $ do
     comment "Store Floating-Point Single Indexed (X-form)"
-    storeFloatIndexed 4 froundsingle
+    storeFloatIndexed 4 fpBinaryDoubleToSingle
   defineOpcodeWithIP "STFSUX" $ do
     comment "Store Floating-Point Single with Update Indexed (X-form)"
-    storeFloatWithUpdateIndexed 4 froundsingle
+    storeFloatWithUpdateIndexed 4 fpBinaryDoubleToSingle
   defineOpcodeWithIP "STFD" $ do
     comment "Store Floating-Point Double (D-form)"
     storeFloat 8 id

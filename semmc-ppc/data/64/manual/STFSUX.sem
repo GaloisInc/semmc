@@ -20,8 +20,10 @@
        memref)
       ((_ call "uf.ppc.memrr_offset")
        memref))
-     ((_ call "uf.fp.round_single")
-      ((_ extract 127 64)
-       frS))))
+     ((_ call "uf.fp.single_to_binary")
+      ((_ call "uf.fp.double_to_single")
+       (fp_binary_to_double
+        ((_ extract 127 64)
+         frS))))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))
