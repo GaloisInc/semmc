@@ -605,12 +605,6 @@ data FPUnOp sym where
 
 -- | Look up a unary float operation by name.
 fpUnOp :: (S.IsExprBuilder sym) => String -> Maybe (FPUnOp sym)
-fpUnOp "fp_single_to_double" = Just $ FPUnOp knownRepr $ \sym ->
-  S.floatCast @_ @Prec64 @Prec32 sym knownRepr S.RNE
-fpUnOp "fp_binary_to_double" = Just $ FPBVUnOp knownNat $ \sym ->
-  S.floatFromBinary @_ @11 @53 sym knownRepr
-fpUnOp "fp_binary_to_single" =
-  Just $ FPBVUnOp knownNat $ \sym -> S.floatFromBinary @_ @8 @24 sym knownRepr
 fpUnOp "fnegd" = Just $ FPUnOp knownRepr $ S.floatNeg @_ @Prec64
 fpUnOp "fnegs" = Just $ FPUnOp knownRepr $ S.floatNeg @_ @Prec32
 fpUnOp "fabsd" = Just $ FPUnOp knownRepr $ S.floatAbs @_ @Prec64
@@ -623,6 +617,16 @@ fpUnOp "fnand" = Just $ FPUnOp knownRepr $ S.floatIsNaN @_ @Prec64
 fpUnOp "fnans" = Just $ FPUnOp knownRepr $ S.floatIsNaN @_ @Prec32
 fpUnOp "frsp" = Just $ FPUnOp knownRepr $ \sym ->
   S.floatCast @_ @Prec32 @Prec64 sym knownRepr S.RNE
+fpUnOp "fp_single_to_double" = Just $ FPUnOp knownRepr $ \sym ->
+  S.floatCast @_ @Prec64 @Prec32 sym knownRepr S.RNE
+fpUnOp "fp_binary_to_double" =
+  Just $ FPBVUnOp knownNat $ \sym -> S.floatFromBinary @_ @11 @53 sym knownRepr
+fpUnOp "fp_binary_to_single" =
+  Just $ FPBVUnOp knownNat $ \sym -> S.floatFromBinary @_ @8 @24 sym knownRepr
+fpUnOp "fp_double_to_binary" =
+  Just $ FPUnOp knownRepr $ S.floatToBinary @_ @11 @53
+fpUnOp "fp_single_to_binary" =
+  Just $ FPUnOp knownRepr $ S.floatToBinary @_ @8 @24
 fpUnOp "fctid" = Just $ FPUnOp knownRepr $ \sym ->
   S.floatToSBV @_ @64 @Prec64 sym knownRepr S.RNE
 fpUnOp "fctidu" = Just $ FPUnOp knownRepr $ \sym ->

@@ -8,7 +8,7 @@
   ((rT
    (concat
     #x0000000000000000
-    ((_ call "uf.fp.double_to_binary")
+    (fp_double_to_binary
      (fp_single_to_double
       (fp_binary_to_single
        ((_ call "uf.read_mem.32")

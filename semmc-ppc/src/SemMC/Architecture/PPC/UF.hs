@@ -22,13 +22,7 @@ uninterpretedFunctions :: forall proxy ppc
                        => proxy ppc
                        -> [(String, Some (Assignment BaseTypeRepr), Some BaseTypeRepr)]
 uninterpretedFunctions _ =
-  [ ("fp.double_to_binary",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseFloatType Prec64)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-  , ("fp.single_to_binary",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseFloatType Prec32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  , ("fp.double_to_single",
+  [ ("fp.double_to_single",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseFloatType Prec64)),
      Some (knownRepr :: BaseTypeRepr (BaseFloatType Prec32)))
   , ("fp.tern_op_fpscr",
@@ -40,25 +34,6 @@ uninterpretedFunctions _ =
   , ("fp.un_op_fpscr",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseStructType EmptyCtx ::> BaseBVType 128 ::> BaseBVType 32)),
      Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
-  -- Convert a single precision floating point value to double precision
-  , ("fp.single_to_double",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 64)))
-  , ("fp.is_qnan32",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
-  , ("fp.is_qnan64",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
-  , ("fp.is_snan32",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
-  , ("fp.is_snan64",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
-  , ("fp.lt",
-     Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType 64 ::> BaseBVType 64)),
-     Some (knownRepr :: BaseTypeRepr BaseBoolType))
   , ("ppc.is_r0",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth ppc))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))

@@ -909,10 +909,10 @@ fpBinaryToSingle e
   actualType   = exprType e
 
 fpDoubleToBinary :: (HasCallStack) => Expr 'TDouble -> Expr 'TBV
-fpDoubleToBinary e = uf (EBV 64) "fp.double_to_binary" [ Some e ]
+fpDoubleToBinary e = Builtin (EBV 64) "fp_double_to_binary" [ Some e ]
 
 fpSingleToBinary :: (HasCallStack) => Expr 'TFloat -> Expr 'TBV
-fpSingleToBinary e = uf (EBV 32) "fp.single_to_binary" [ Some e ]
+fpSingleToBinary e = Builtin (EBV 32) "fp_single_to_binary" [ Some e ]
 
 fnegd :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble
 fnegd = floatArithUnBuiltin "fnegd"
