@@ -480,13 +480,13 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
 
     N.withIONonceGenerator $ \nonceGen -> do
       gen <- DA.createGen
-      sym :: SB.SimpleBackend s
+      sym :: SB.SimpleBackend s (SB.Flags SB.FloatIEEE)
           <- SB.newSimpleBackend nonceGen
       SB.stopCaching sym
 
       lib <- F.loadLibrary proxy sym funcs
       baseSet <- F.loadFormulas sym lib semantics
-      let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s) arch)
+      let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s (SB.Flags SB.FloatIEEE)) arch)
           plainBaseSet = makePlain baseSet
 
           generateTestCase fromOpcodes = go maxRetries
