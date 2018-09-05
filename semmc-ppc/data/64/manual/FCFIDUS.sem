@@ -12,11 +12,11 @@
     'FPSCR))
    (frT
     (concat
-     #x0000000000000000
      (fp_double_to_binary
       (fp_single_to_double
        (fcfidus
         ((_ extract 127 64)
-         frB))))))
+         frB))))
+     #x0000000000000000))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

@@ -217,7 +217,7 @@ extractDouble = highBits128 64
 
 -- | Extend a double-precision value out to 128 bits
 extendDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
-extendDouble = concat (LitBV 64 0x0)
+extendDouble x = concat x (LitBV 64 0x0)
 
 decodeDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble
 decodeDouble = fpBinaryToDouble . extractDouble

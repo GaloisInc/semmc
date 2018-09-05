@@ -15,7 +15,6 @@
       memref))))
    (frT
     (concat
-     #x0000000000000000
      (fp_double_to_binary
       (fp_single_to_double
        (fp_binary_to_single
@@ -26,6 +25,7 @@
            memref)
           ((_ sign_extend 16)
            ((_ call "uf.ppc.memri_offset")
-            memref)))))))))
+            memref)))))))
+     #x0000000000000000))
    ('IP
     (bvadd 'IP #x00000004)))))

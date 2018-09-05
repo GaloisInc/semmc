@@ -7,11 +7,11 @@
  (defs
   ((frT
    (concat
-    #x0000000000000000
     (fp_double_to_binary
      (fabsd
       (fp_binary_to_double
        ((_ extract 127 64)
-        frB))))))
+        frB))))
+    #x0000000000000000))
    ('IP
     (bvadd 'IP #x00000004)))))

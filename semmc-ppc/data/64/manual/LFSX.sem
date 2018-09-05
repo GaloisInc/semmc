@@ -7,7 +7,6 @@
  (defs
   ((rT
    (concat
-    #x0000000000000000
     (fp_double_to_binary
      (fp_single_to_double
       (fp_binary_to_single
@@ -22,6 +21,7 @@
           ((_ call "uf.ppc.memrr_base")
            memref))
          ((_ call "uf.ppc.memrr_offset")
-          memref))))))))
+          memref))))))
+    #x0000000000000000))
    ('IP
     (bvadd 'IP #x0000000000000004)))))
