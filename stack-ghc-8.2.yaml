@@ -31,8 +31,10 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
+- async-2.2.1
 - config-ini-0.2.2.0
 - located-base-0.1.1.1
+- panic-0.4.0.1
 - regex-1.0.0.0
 - s-cargot-letbind-0.2.2.0
 - tasty-quickcheck-0.8.4
