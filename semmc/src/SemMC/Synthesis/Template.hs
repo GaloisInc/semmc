@@ -23,7 +23,9 @@ given constraints.
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 module SemMC.Synthesis.Template
-  ( BaseSet
+  ( Semantics
+  , TemplatedSemantics
+  , BaseSet
   , TemplateConstraints
   , TemplatedOperandFn
   , TemplatedOperand(..)
@@ -42,7 +44,9 @@ module SemMC.Synthesis.Template
   , unTemplateUnsafe
   , unTemplateSafe
   , unTemplate
-  , toBaseSet
+  , fromTemplatedSemantics
+  , toTemplatedSemantics
+--  , toBaseSet
   ) where
 
 import           Data.EnumF
@@ -350,14 +354,57 @@ recoverOperands rep0 evalFn taggedExprs =
         TaggedExpr _ (RecoverOperandFn recover) SL.:< restExprs ->
           (SL.:<) <$> recover evalFn <*> recoverOperands reps evalFn restExprs
 
-type BaseSet sym arch = MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym (TemplatedArch arch))
 
-toBaseSet :: (OrdF (Opcode arch (Operand arch)), OrdF (Location arch))
-          => MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym arch)
-          -> MapF.MapF (Opcode arch (Operand arch)) (ParameterizedFormula sym (TemplatedArch arch))
-toBaseSet m = MapF.fromList [ MapF.Pair o (templateSafe pf)
+-- | The type of opcodes associated with an architecture, of kind *
+type Opcodes arch = (Opcode arch (Operand arch))
+
+-- | The type of semantics; maps from opcodes to (parameterized) formulas for
+-- that architecture
+type Semantics sym arch = MapF.MapF
+                            (Opcodes arch)
+                            (ParameterizedFormula sym arch)
+
+-- | The type of templated semantics; maps from opcodes to (parameterized,
+-- phantom) formulas for that architecture. 'TemplatedSemantics' differs from
+-- 'Semantics' in that the resulting formulas are associated with the phantom
+-- 'TemplatedArch'. Replaces 'BaseSet'.
+type TemplatedSemantics sym arch = MapF.MapF
+                            (Opcodes arch)
+                            (ParameterizedFormula sym (TemplatedArch arch))
+
+-- | Renamed to 'TemplatedSemantics'.
+type BaseSet sym arch = TemplatedSemantics sym arch
+
+-- | Convert a plain semantics into a templated semantics
+toTemplatedSemantics :: (OrdF (Opcodes arch), OrdF (Location arch))
+                     => Semantics sym arch
+                     -> TemplatedSemantics sym arch
+toTemplatedSemantics m = MapF.fromList [ MapF.Pair o (templateSafe pf)
                             | MapF.Pair o pf <- MapF.toList m
                             ]
+
+
+-- | Convert a plain semantics into a 'BaseSet'. Depricated in favor of
+-- 'toTemplatedSemantics'.
+toBaseSet :: (OrdF (Opcodes arch), OrdF (Location arch))
+          => Semantics sym arch
+          -> BaseSet sym arch
+toBaseSet = toTemplatedSemantics
+
+
+-- | Convert a templated semantics into a plain semantics
+fromTemplatedSemantics :: forall arch sym. 
+                          (OrdF (Location arch), OrdF (Opcodes arch))
+                       => TemplatedSemantics sym arch
+                       -> Semantics sym arch
+fromTemplatedSemantics = MapF.foldrWithKey f MapF.empty
+  where f :: (OrdF (Location arch))
+          => Opcode arch (Operand arch) sh
+          -> ParameterizedFormula sym (TemplatedArch arch) sh
+          -> Semantics sym arch
+          -> Semantics sym arch
+        f op pf = MapF.insert op (unTemplate pf)
+
 
 data TemplatedInstruction sym arch sh where
   TemplatedInstruction :: (Opcode arch) (Operand arch) sh
@@ -409,7 +456,7 @@ templatedOutputs (TemplatedInstruction _ pf oplist) =
             LiteralParameter loc -> Set.singleton (Some loc)
 
 templatedInstructions :: (TemplateConstraints arch, ArchRepr arch)
-                      => BaseSet sym arch
+                      => TemplatedSemantics sym arch
                       -> [Some (TemplatedInstruction sym arch)]
 templatedInstructions baseSet = do
   Pair opcode pf <- MapF.toList baseSet
