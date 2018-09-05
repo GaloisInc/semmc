@@ -4,6 +4,7 @@ module SemMC.Synthesis
   , SynthesisEnvironment
   , synthSym
   , mcSynth
+  , mcSynthTimeout
   , TemplatedArch
   , TemplatedOperand
   , BaseSet
@@ -13,6 +14,8 @@ module SemMC.Synthesis
   ) where
 
 import           Data.Typeable
+import           Control.Monad (join)
+import           System.Timeout (timeout)
 
 import qualified What4.Protocol.Online as WPO
 import qualified Lang.Crucible.Backend.Online as CBO
@@ -54,13 +57,11 @@ setupEnvironment sym baseSet =
                           , synthInsns = insns
                           }
 
-mcSynth :: (Architecture arch,
-            Architecture (TemplatedArch arch),
+-- | Synthesizes a list of instructions from a formula.
+mcSynth :: (TemplateConstraints arch,
             ArchRepr arch,
-            TemplatableOperand arch,
-            Typeable arch,
             WPO.OnlineSolver t solver
-            )
+           )
         => SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
         -> Formula (CBO.OnlineBackend t solver fs) arch
         -> IO (Maybe [Instruction arch])
@@ -76,3 +77,15 @@ mcSynth env target = do
       case ret2 of
         Just _ -> return ret2
         Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target
+
+-- | Synthesizes a list of instructions from a formula, within a particular
+-- timeout limit.
+mcSynthTimeout :: (TemplateConstraints arch,
+                   ArchRepr arch,
+                   WPO.OnlineSolver t solver
+                  )
+               => Int 
+               -> SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
+               -> Formula (CBO.OnlineBackend t solver fs) arch
+               -> IO (Maybe [Instruction arch])
+mcSynthTimeout t env f = join <$> (timeout t $ mcSynth env f)

@@ -134,7 +134,7 @@ instance (IsOperandTypeRepr arch) => IsOperandTypeRepr (TemplatedArch arch) wher
 type TemplateConstraints arch = (Architecture arch,
                                  Typeable arch,
                                  TemplatableOperand arch,
-                                 IsOperandTypeRepr (TemplatedArch arch),
+                                 IsOperandTypeRepr arch,
                                  OrdF ((Opcode arch) (TemplatedOperand arch)),
                                  ShowF ((Opcode arch) (TemplatedOperand arch)),
                                  EnumF ((Opcode arch) (TemplatedOperand arch)))
