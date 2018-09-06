@@ -6,16 +6,16 @@
   ('FPSCR frB 'IP))
  (defs
   (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec1")
-     "FCFID"
-     frB
-     'FPSCR)))
+   ((_ call "uf.fp.un_op_fpscr")
+    "FCFID"
+    frB
+    'FPSCR))
    (frT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec1")
-      "FCFID"
-      frB
-      'FPSCR)))
+    (concat
+     (fp_double_to_binary
+      (fcfid
+       ((_ extract 127 64)
+        frB)))
+     #x0000000000000000))
    ('IP
     (bvadd 'IP #x00000004)))))
