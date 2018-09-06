@@ -14,7 +14,6 @@ import qualified Test.Tasty as T
 import qualified Test.Tasty.HUnit as T
 
 import           Data.Parameterized.Classes ( OrdF )
-import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.List ( List(..) )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as PN
@@ -85,14 +84,6 @@ progs :: [(String, [D.Instruction])]
 progs = [ ("addNegated", [ D.Instruction D.NEG (reg 5 :< reg 2 :< Nil)
                          , D.Instruction D.ADD4 (reg 11 :< reg 5 :< reg 3 :< Nil)
                          ])
-         ("synthesisFail"
-          , [ D.Instruction D.STD  $ memrix 1 (-2)          :< reg 31     :< Nil           -- store the data in reg 31 in memory
-            , D.Instruction D.STDU $ memrix 1 (-16)         :< reg 1      :< Nil           -- store the data in reg 1 in memory
-            , D.Instruction D.OR   $ reg 31                 :< reg 1      :< reg 1 :< Nil  -- let reg 1 = reg 31 || reg 1
-            , D.Instruction D.LI   $ reg 0                  :< D.S16imm 1 :< Nil
---            , D.Instruction D.SC   $ D.I32imm (0 :: I.I 32) :< Nil
-            ]
-          )
         , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ]) 
         , ("STDU", [ D.Instruction D.STDU $ memrix 1 (-16) :< reg 1      :< Nil ])
         , ("LI",   [ D.Instruction D.LI   $ reg 0          :< D.S16imm 1 :< Nil ])
