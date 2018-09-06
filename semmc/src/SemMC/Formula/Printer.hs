@@ -211,7 +211,7 @@ convertApp paramLookup = fromFoldable' . convertApp'
         convertApp' (S.BVSelect idx n bv) = extract i j bv
           -- See SemMC.Formula.Parser.readExtract for the explanation behind
           -- these values.
-          where i = natValue n + j + 1
+          where i = natValue n + j - 1
                 j = natValue idx
         convertApp' (S.BVNeg _ bv) = [ident "bvneg", convert bv]
         convertApp' (S.BVAdd _ bv1 bv2) = [ident "bvadd", convert bv1, convert bv2]
@@ -225,7 +225,6 @@ convertApp paramLookup = fromFoldable' . convertApp'
         convertApp' (S.BVAshr _ bv1 bv2) = [ident "bvashr", convert bv1, convert bv2]
         convertApp' (S.BVZext r bv) = extend "zero" (natValue r) bv
         convertApp' (S.BVSext r bv) = extend "sign" (natValue r) bv
-        convertApp' (S.BVTrunc r bv) = extract (natValue r - 1) 0 bv
         convertApp' (S.BVBitNot _ bv) = [ident "bvnot", convert bv]
         convertApp' (S.BVBitAnd _ bv1 bv2) = [ident "bvand", convert bv1, convert bv2]
         convertApp' (S.BVBitOr _ bv1 bv2) = [ident "bvor", convert bv1, convert bv2]
