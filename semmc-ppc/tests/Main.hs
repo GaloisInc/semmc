@@ -58,6 +58,7 @@ insns = S.fromList
         , Some D.AND
         , Some D.ANDC
         , Some D.EQV
+        , Some D.LHA
         , Some D.LI
         , Some D.MULLW
         , Some D.MULLD
@@ -84,13 +85,15 @@ progs :: [(String, [D.Instruction])]
 progs = [ ("addNegated", [ D.Instruction D.NEG (reg 5 :< reg 2 :< Nil)
                          , D.Instruction D.ADD4 (reg 11 :< reg 5 :< reg 3 :< Nil)
                          ])
-        , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ]) 
+        , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ])
         , ("STDU", [ D.Instruction D.STDU $ memrix 1 (-16) :< reg 1      :< Nil ])
+        , ("LHA",  [ D.Instruction D.LHA  $ reg 31         :< memri 1 (-2) :< Nil ])
         , ("LI",   [ D.Instruction D.LI   $ reg 0          :< D.S16imm 1 :< Nil ])
         ]
   where
     reg n = D.Gprc (D.GPR n)
     memrix n i = D.Memrix (D.MemRIX (Just (D.GPR n)) (i :: I.I 14))
+    memri n i = D.Memri (D.MemRI (Just (D.GPR n)) i)
 
 toSynthesisTest :: (WPO.OnlineSolver t solver)
                 => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)

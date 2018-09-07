@@ -195,11 +195,11 @@ evaluateFunctions' sym pf operands locExpr rewriters e =
           let key = T.unpack $ S.solverSymbolAsText (S.symFnName symFun)
               rs = first normalizeUFName <$> rewriters
           assignment' <- traverseFC (evaluateFunctions' sym pf operands locExpr rs) assignment
-          case lookup key rewriters of
-            Just (A.Evaluator evaluator) -> do
+          case lookup key  rewriters of
+            Just (A.Evaluator evaluator) ->
               evaluator sym pf operands assignment' locExpr (S.exprType e)
             Nothing ->
-              applySymFn sym symFun assignment
+              applySymFn sym symFun assignment'
 
 -- | Normalize the name of an uninterpreted function to the SimpleBuilder-friendly form
 --
