@@ -1,11 +1,11 @@
 ;; Floating Multiply-Add Single (A-form)
 ((operands
  ((frT . 'Fprc)
-  (frA . 'Fprc)
   (frB . 'Fprc)
-  (frC . 'Fprc)))
+  (frC . 'Fprc)
+  (frA . 'Fprc)))
  (in
-  ('FPSCR frB frA 'IP))
+  ('FPSCR frC frB frA 'IP))
  (defs
   (('FPSCR
    ((_ call "uf.fp.tern_op_fpscr")

@@ -1,8 +1,8 @@
 ;; Floating Multiply (A-form)
 ((operands
  ((frT . 'Fprc)
-  (frA . 'Fprc)
-  (frB . 'Fprc)))
+  (frB . 'Fprc)
+  (frA . 'Fprc)))
  (in
   ('FPSCR frB frA 'IP))
  (defs

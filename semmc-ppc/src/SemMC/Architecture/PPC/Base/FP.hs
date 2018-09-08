@@ -46,9 +46,11 @@ withBinRegs
   :: (Location 'TBV -> Location 'TBV -> Location 'TBV -> SemM 'Def ())
   -> SemM 'Def ()
 withBinRegs action = do
+  -- NOTE!!!
+  -- Dismantle argument order for binary operations is: frT, frB, frA
   frT <- param "frT" fprc (EBV 128)
-  frA <- param "frA" fprc (EBV 128)
   frB <- param "frB" fprc (EBV 128)
+  frA <- param "frA" fprc (EBV 128)
   input frA
   input frB
   action frT frA frB
@@ -78,12 +80,15 @@ withTernRegs
      )
   -> SemM 'Def ()
 withTernRegs action = do
+  -- NOTE!!!
+  -- Dismantle argument order for ternary operations is: frT, frB, frC, frA
   frT <- param "frT" fprc (EBV 128)
-  frA <- param "frA" fprc (EBV 128)
   frB <- param "frB" fprc (EBV 128)
   frC <- param "frC" fprc (EBV 128)
+  frA <- param "frA" fprc (EBV 128)
   input frA
   input frB
+  input frC
   action frT frA frB frC
 
 withTernRegsFPSCR
