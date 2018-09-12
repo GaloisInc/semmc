@@ -6,13 +6,18 @@
   ('FPSCR frB 'IP))
  (defs
   (('FPSCR
-   ((_ call "uf.fp.un_op_fpscr")
-    "FCTID"
-    frB
-    'FPSCR))
+   (concat
+    ((_ call "uf.fp.un_op_fpscr")
+     "FCTID"
+     frB
+     'FPSCR)
+    ((_ extract 7 0)
+     'FPSCR)))
    (frT
     (concat
      (fctid
+      ((_ extract 1 0)
+       'FPSCR)
       (fp_binary_to_double
        ((_ extract 127 64)
         frB)))

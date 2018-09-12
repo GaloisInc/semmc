@@ -27,13 +27,13 @@ uninterpretedFunctions _ =
      Some (knownRepr :: BaseTypeRepr (BaseFloatType Prec32)))
   , ("fp.tern_op_fpscr",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseStructType EmptyCtx ::> BaseBVType 128 ::> BaseBVType 128 ::> BaseBVType 128 ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 24)))
   , ("fp.bin_op_fpscr",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseStructType EmptyCtx ::> BaseBVType 128 ::> BaseBVType 128 ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 24)))
   , ("fp.un_op_fpscr",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseStructType EmptyCtx ::> BaseBVType 128 ::> BaseBVType 32)),
-     Some (knownRepr :: BaseTypeRepr (BaseBVType 32)))
+     Some (knownRepr :: BaseTypeRepr (BaseBVType 24)))
   , ("ppc.is_r0",
      Some (knownRepr :: Assignment BaseTypeRepr (EmptyCtx ::> BaseBVType (ArchRegWidth ppc))),
      Some (knownRepr :: BaseTypeRepr BaseBoolType))

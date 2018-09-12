@@ -34,8 +34,8 @@ withUnRegsFPSCR
 withUnRegsFPSCR name action = withUnRegs $ \frT frB -> do
   input fpscr
   action frT frB
-  defLoc fpscr $ uf
-    (EBV 32)
+  setFPSCR $ uf
+    (EBV 24)
     "fp.un_op_fpscr"
     [ Some (LitString name)
     , Some (Loc frB)
@@ -62,8 +62,8 @@ withBinRegsFPSCR
 withBinRegsFPSCR name action = withBinRegs $ \frT frA frB -> do
   input fpscr
   action frT frA frB
-  defLoc fpscr $ uf
-    (EBV 32)
+  setFPSCR $ uf
+    (EBV 24)
     "fp.bin_op_fpscr"
     [ Some (LitString name)
     , Some (Loc frA)
@@ -103,8 +103,8 @@ withTernRegsFPSCR
 withTernRegsFPSCR name action = withTernRegs $ \frT frA frB frC -> do
   input fpscr
   action frT frA frB frC
-  defLoc fpscr $ uf
-    (EBV 32)
+  setFPSCR $ uf
+    (EBV 24)
     "fp.tern_op_fpscr"
     [ Some (LitString name)
     , Some (Loc frA)
@@ -112,6 +112,12 @@ withTernRegsFPSCR name action = withTernRegs $ \frT frA frB frC -> do
     , Some (Loc frC)
     , Some (Loc fpscr)
     ]
+
+setFPSCR :: Expr 'TBV -> SemM 'Def ()
+setFPSCR state = defLoc fpscr $ concat state $ extract 31 24 $ Loc fpscr
+
+roundingMode :: Expr 'TBV
+roundingMode = extract 31 30 $ Loc fpscr
 
 fpArithWoFPSCRUnOp :: (Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
 fpArithWoFPSCRUnOp op = withUnRegs $ \frT frB -> do
@@ -123,73 +129,92 @@ fpArithWoFPSCRUnOpS op = withUnRegs $ \frT frB -> do
   let res = op (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
-fpArithUnOp :: String -> (Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
+fpArithUnOp
+  :: String -> (Expr 'TBV ->Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
 fpArithUnOp name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeDouble $ Loc frB)
+  let res = op roundingMode (decodeDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
-fpArithUnOpS :: String -> (Expr 'TFloat -> Expr 'TFloat) -> SemM 'Def ()
+fpArithUnOpS
+  :: String -> (Expr 'TBV ->Expr 'TFloat -> Expr 'TFloat) -> SemM 'Def ()
 fpArithUnOpS name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeSingle $ Loc frB)
+  let res = op roundingMode (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
 fpArithBinOp
   :: String
-  -> (Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
+  -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
   -> SemM 'Def ()
 fpArithBinOp name op = withBinRegsFPSCR name $ \frT frA frB -> do
-  let res = op (decodeDouble $ Loc frA) (decodeDouble $ Loc frB)
+  let res = op roundingMode
+               (decodeDouble $ Loc frA)
+               (decodeDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
 fpArithBinOpS
   :: String
-  -> (Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
+  -> (Expr 'TBV -> Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
   -> SemM 'Def ()
 fpArithBinOpS name op = withBinRegsFPSCR name $ \frT frA frB -> do
-  let res = op (decodeSingle $ Loc frA) (decodeSingle $ Loc frB)
+  let res = op roundingMode
+               (decodeSingle $ Loc frA)
+               (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
 fpArithTernOp
   :: String
-  -> (Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
+  -> (  Expr 'TBV
+     -> Expr 'TDouble
+     -> Expr 'TDouble
+     -> Expr 'TDouble
+     -> Expr 'TDouble
+     )
   -> SemM 'Def ()
 fpArithTernOp name op = withTernRegsFPSCR name $ \frT frA frB frC -> do
-  let res = op (decodeDouble $ Loc frA)
+  let res = op roundingMode
+               (decodeDouble $ Loc frA)
                (decodeDouble $ Loc frC)
                (decodeDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
 fpArithTernOpS
   :: String
-  -> (Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
+  -> (  Expr 'TBV
+     -> Expr 'TFloat
+     -> Expr 'TFloat
+     -> Expr 'TFloat
+     -> Expr 'TFloat
+     )
   -> SemM 'Def ()
 fpArithTernOpS name op = withTernRegsFPSCR name $ \frT frA frB frC -> do
-  let res = op (decodeSingle $ Loc frA)
+  let res = op roundingMode
+               (decodeSingle $ Loc frA)
                (decodeSingle $ Loc frC)
                (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
 fpConvDoubleToBV64Op
-  :: String -> (Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+  :: String -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
 fpConvDoubleToBV64Op name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeDouble $ Loc frB)
+  let res = op roundingMode (decodeDouble $ Loc frB)
   defLoc frT $ extendDouble res
 
 fpConvDoubleToBV32Op
-  :: String -> (Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+  :: String -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
 fpConvDoubleToBV32Op name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeDouble $ Loc frB)
+  let res = op roundingMode (decodeDouble $ Loc frB)
   defLoc frT $ extendDouble $ concat (undefinedBV 32) res
 
 fpConvBV64ToDoubleOp
-  :: String -> (Expr 'TBV -> Expr 'TDouble) -> SemM 'Def ()
+  :: String -> (Expr 'TBV -> Expr 'TBV -> Expr 'TDouble) -> SemM 'Def ()
 fpConvBV64ToDoubleOp name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (extractDouble $ Loc frB)
+  let res = op roundingMode (extractDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
-fpConvBV64ToSingleOp :: String -> (Expr 'TBV -> Expr 'TFloat) -> SemM 'Def ()
+fpConvBV64ToSingleOp
+  :: String -> (Expr 'TBV -> Expr 'TBV -> Expr 'TFloat) -> SemM 'Def ()
 fpConvBV64ToSingleOp name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (extractDouble $ Loc frB)
+  let res = op roundingMode (extractDouble $ Loc frB)
   defLoc frT $ encodeSingle res
 
 fp1op :: String -> SemM 'Def ()
@@ -519,7 +544,8 @@ floatingPoint = do
   defineOpcodeWithIP "FRSP" $ do
     comment "Floating Round to Single-Precision (X-form)"
     withUnRegsFPSCR "FRSP" $ \frT frB ->
-      defLoc frT $ encodeSingle $ frsp $ decodeDouble $ Loc frB
+      defLoc frT $
+        encodeSingle $ frsp roundingMode $ decodeDouble $ Loc frB
 
   defineOpcodeWithIP "FCTID" $ do
     comment "Floating Point Convert to Integer Doubleword (X-form)"
