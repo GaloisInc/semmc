@@ -108,6 +108,8 @@ module SemMC.DSL (
   flts,
   feqd,
   feqs,
+  fled,
+  fles,
   fnand,
   fnans,
   frsp,
@@ -119,6 +121,8 @@ module SemMC.DSL (
   fcfids,
   fcfidu,
   fcfidus,
+  frti,
+  frtis,
   fpDoubleToSingle,
   fpSingleToDouble,
   fpBinaryToDouble,
@@ -1026,6 +1030,12 @@ feqd = floatLogicBinBuiltin "feqd"
 feqs :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TBool
 feqs = floatLogicBinBuiltin "feqs"
 
+fled :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble -> Expr 'TBool
+fled = floatLogicBinBuiltin "fled"
+
+fles :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TBool
+fles = floatLogicBinBuiltin "fles"
+
 fnand :: (HasCallStack) => Expr 'TDouble -> Expr 'TBool
 fnand = floatLogicUnBuiltin "fnand"
 
@@ -1058,6 +1068,12 @@ fcfidu = floatConvBuiltin "fcfidu" (EBV 64) EDouble
 
 fcfidus :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TFloat
 fcfidus = floatConvBuiltin "fcfidus" (EBV 64) EFloat
+
+frti :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TDouble
+frti = floatConvBuiltin "frti" EDouble EDouble
+
+frtis :: (HasCallStack) => Expr 'TBV -> Expr 'TFloat -> Expr 'TFloat
+frtis = floatConvBuiltin "frtis" EFloat EFloat
 
 floatArithTernBuiltin
   :: (HasCallStack)

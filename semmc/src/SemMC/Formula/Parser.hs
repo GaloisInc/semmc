@@ -647,6 +647,10 @@ fpOp = \case
     S.bvToFloat @_ @64 @Prec64 sym knownRepr rm x
   "fcfidus" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
     S.bvToFloat @_ @64 @Prec32 sym knownRepr rm x
+  "frti" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatRound @_ @Prec64 sym rm x
+  "frtis" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatRound @_ @Prec32 sym rm x
 
   "fadd" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
     S.floatAdd @_ @Prec64 sym rm x y
@@ -669,6 +673,8 @@ fpOp = \case
   "flts" -> Just $ Op2 knownRepr $ S.floatLt @_ @Prec32
   "feqd" -> Just $ Op2 knownRepr $ S.floatFpEq @_ @Prec64
   "feqs" -> Just $ Op2 knownRepr $ S.floatFpEq @_ @Prec32
+  "fled" -> Just $ Op2 knownRepr $ S.floatLe @_ @Prec64
+  "fles" -> Just $ Op2 knownRepr $ S.floatLe @_ @Prec32
 
   "ffma" -> Just $ Op4 knownRepr $ \sym r x y z -> U.withRounding sym r $ \rm ->
     S.floatFMA @_ @Prec64 sym rm x y z
