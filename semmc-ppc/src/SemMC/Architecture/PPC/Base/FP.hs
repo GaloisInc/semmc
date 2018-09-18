@@ -15,7 +15,10 @@ import GHC.Stack ( HasCallStack )
 import Prelude hiding ( concat )
 import Data.Parameterized.Some ( Some(..) )
 
+import qualified What4.Interface as S
+
 import SemMC.DSL
+import SemMC.Util
 import SemMC.Architecture.PPC.Base.Core
 
 
@@ -34,8 +37,8 @@ withUnRegsFPSCR
 withUnRegsFPSCR name action = withUnRegs $ \frT frB -> do
   input fpscr
   action frT frB
-  defLoc fpscr $ uf
-    (EBV 32)
+  setFPSCR $ uf
+    (EBV 24)
     "fp.un_op_fpscr"
     [ Some (LitString name)
     , Some (Loc frB)
@@ -62,8 +65,8 @@ withBinRegsFPSCR
 withBinRegsFPSCR name action = withBinRegs $ \frT frA frB -> do
   input fpscr
   action frT frA frB
-  defLoc fpscr $ uf
-    (EBV 32)
+  setFPSCR $ uf
+    (EBV 24)
     "fp.bin_op_fpscr"
     [ Some (LitString name)
     , Some (Loc frA)
@@ -81,15 +84,15 @@ withTernRegs
   -> SemM 'Def ()
 withTernRegs action = do
   -- NOTE!!!
-  -- Dismantle argument order for ternary operations is: frT, frB, frC, frA
+  -- Dismantle argument order for ternary operations is: frT, frC, frB, frA
   frT <- param "frT" fprc (EBV 128)
   frB <- param "frB" fprc (EBV 128)
   frC <- param "frC" fprc (EBV 128)
   frA <- param "frA" fprc (EBV 128)
   input frA
-  input frB
   input frC
-  action frT frA frB frC
+  input frB
+  action frT frA frC frB
 
 withTernRegsFPSCR
   :: String
@@ -100,11 +103,11 @@ withTernRegsFPSCR
      -> SemM 'Def ()
      )
   -> SemM 'Def ()
-withTernRegsFPSCR name action = withTernRegs $ \frT frA frB frC -> do
+withTernRegsFPSCR name action = withTernRegs $ \frT frA frC frB -> do
   input fpscr
-  action frT frA frB frC
-  defLoc fpscr $ uf
-    (EBV 32)
+  action frT frA frC frB
+  setFPSCR $ uf
+    (EBV 24)
     "fp.tern_op_fpscr"
     [ Some (LitString name)
     , Some (Loc frA)
@@ -112,6 +115,12 @@ withTernRegsFPSCR name action = withTernRegs $ \frT frA frB frC -> do
     , Some (Loc frC)
     , Some (Loc fpscr)
     ]
+
+setFPSCR :: Expr 'TBV -> SemM 'Def ()
+setFPSCR state = defLoc fpscr $ concat state $ extract 31 24 $ Loc fpscr
+
+roundingMode :: Expr 'TBV
+roundingMode = extract 31 30 $ Loc fpscr
 
 fpArithWoFPSCRUnOp :: (Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
 fpArithWoFPSCRUnOp op = withUnRegs $ \frT frB -> do
@@ -123,73 +132,114 @@ fpArithWoFPSCRUnOpS op = withUnRegs $ \frT frB -> do
   let res = op (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
-fpArithUnOp :: String -> (Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
+fpArithUnOp
+  :: String -> (Expr 'TBV ->Expr 'TDouble -> Expr 'TDouble) -> SemM 'Def ()
 fpArithUnOp name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeDouble $ Loc frB)
+  let res = op roundingMode (decodeDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
-fpArithUnOpS :: String -> (Expr 'TFloat -> Expr 'TFloat) -> SemM 'Def ()
+fpArithUnOpS
+  :: String -> (Expr 'TBV ->Expr 'TFloat -> Expr 'TFloat) -> SemM 'Def ()
 fpArithUnOpS name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeSingle $ Loc frB)
+  let res = op roundingMode (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
 fpArithBinOp
   :: String
-  -> (Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
+  -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
   -> SemM 'Def ()
 fpArithBinOp name op = withBinRegsFPSCR name $ \frT frA frB -> do
-  let res = op (decodeDouble $ Loc frA) (decodeDouble $ Loc frB)
+  let res = op roundingMode
+               (decodeDouble $ Loc frA)
+               (decodeDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
 fpArithBinOpS
   :: String
-  -> (Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
+  -> (Expr 'TBV -> Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
   -> SemM 'Def ()
 fpArithBinOpS name op = withBinRegsFPSCR name $ \frT frA frB -> do
-  let res = op (decodeSingle $ Loc frA) (decodeSingle $ Loc frB)
+  let res = op roundingMode
+               (decodeSingle $ Loc frA)
+               (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
 fpArithTernOp
   :: String
-  -> (Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble)
+  -> (  Expr 'TBV
+     -> Expr 'TDouble
+     -> Expr 'TDouble
+     -> Expr 'TDouble
+     -> Expr 'TDouble
+     )
   -> SemM 'Def ()
-fpArithTernOp name op = withTernRegsFPSCR name $ \frT frA frB frC -> do
-  let res = op (decodeDouble $ Loc frA)
+fpArithTernOp name op = withTernRegsFPSCR name $ \frT frA frC frB -> do
+  let res = op roundingMode
+               (decodeDouble $ Loc frA)
                (decodeDouble $ Loc frC)
                (decodeDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
 fpArithTernOpS
   :: String
-  -> (Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat)
+  -> (  Expr 'TBV
+     -> Expr 'TFloat
+     -> Expr 'TFloat
+     -> Expr 'TFloat
+     -> Expr 'TFloat
+     )
   -> SemM 'Def ()
 fpArithTernOpS name op = withTernRegsFPSCR name $ \frT frA frB frC -> do
-  let res = op (decodeSingle $ Loc frA)
+  let res = op roundingMode
+               (decodeSingle $ Loc frA)
                (decodeSingle $ Loc frC)
                (decodeSingle $ Loc frB)
   defLoc frT $ encodeSingle res
 
 fpConvDoubleToBV64Op
-  :: String -> (Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+  :: String -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
 fpConvDoubleToBV64Op name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeDouble $ Loc frB)
+  let res = op roundingMode (decodeDouble $ Loc frB)
+  defLoc frT $ extendDouble res
+
+fpConvDoubleToBV64RTZOp
+  :: String -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+fpConvDoubleToBV64RTZOp name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (LitBV 2 $ roundingModeToBits S.RTZ) (decodeDouble $ Loc frB)
   defLoc frT $ extendDouble res
 
 fpConvDoubleToBV32Op
-  :: String -> (Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+  :: String -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
 fpConvDoubleToBV32Op name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (decodeDouble $ Loc frB)
+  let res = op roundingMode (decodeDouble $ Loc frB)
+  defLoc frT $ extendDouble $ concat (undefinedBV 32) res
+
+fpConvDoubleToBV32RTZOp
+  :: String -> (Expr 'TBV -> Expr 'TDouble -> Expr 'TBV) -> SemM 'Def ()
+fpConvDoubleToBV32RTZOp name op = withUnRegsFPSCR name $ \frT frB -> do
+  let res = op (LitBV 2 $ roundingModeToBits S.RTZ) (decodeDouble $ Loc frB)
   defLoc frT $ extendDouble $ concat (undefinedBV 32) res
 
 fpConvBV64ToDoubleOp
-  :: String -> (Expr 'TBV -> Expr 'TDouble) -> SemM 'Def ()
+  :: String -> (Expr 'TBV -> Expr 'TBV -> Expr 'TDouble) -> SemM 'Def ()
 fpConvBV64ToDoubleOp name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (extractDouble $ Loc frB)
+  let res = op roundingMode (extractDouble $ Loc frB)
   defLoc frT $ encodeDouble res
 
-fpConvBV64ToSingleOp :: String -> (Expr 'TBV -> Expr 'TFloat) -> SemM 'Def ()
+fpConvBV64ToSingleOp
+  :: String -> (Expr 'TBV -> Expr 'TBV -> Expr 'TFloat) -> SemM 'Def ()
 fpConvBV64ToSingleOp name op = withUnRegsFPSCR name $ \frT frB -> do
-  let res = op (extractDouble $ Loc frB)
+  let res = op roundingMode (extractDouble $ Loc frB)
+  defLoc frT $ encodeSingle res
+
+fpRoundToIntegerOp :: String -> S.RoundingMode -> SemM 'Def ()
+fpRoundToIntegerOp name rm = withUnRegsFPSCR name $ \frT frB -> do
+  let res = frti (LitBV 2 $ roundingModeToBits rm) $ decodeDouble $ Loc frB
+  defLoc frT $ encodeDouble res
+
+fpRoundToIntegerOpS :: String -> S.RoundingMode -> SemM 'Def ()
+fpRoundToIntegerOpS name rm = withUnRegsFPSCR name $ \frT frB -> do
+  let res = frtis (LitBV 2 $ roundingModeToBits rm) $ decodeSingle $ Loc frB
   defLoc frT $ encodeSingle res
 
 fp1op :: String -> SemM 'Def ()
@@ -475,11 +525,19 @@ floatingPoint = do
 
   defineOpcodeWithIP "FSELD" $ do
     comment "Floating-Point Select (A-form)"
-    fp3op "FSELD"
+    withTernRegs $ \frT frA frC frB ->
+      defLoc frT $
+        ite (fled (fpBinaryToDouble $ LitBV 64 0) (decodeDouble $ Loc frA))
+            (Loc frC)
+            (Loc frB)
 
   defineOpcodeWithIP "FSELS" $ do
     comment "Floating-Point Select Single (A-form)"
-    fp3op "FSELS"
+    withTernRegs $ \frT frA frC frB ->
+      defLoc frT $
+        ite (fles (fpBinaryToSingle $ LitBV 32 0) (decodeSingle $ Loc frA))
+            (Loc frC)
+            (Loc frB)
 
   defineOpcodeWithIP "FMADD" $ do
     comment "Floating Multiply-Add (A-form)"
@@ -494,32 +552,33 @@ floatingPoint = do
   -- through for consistency.
   defineOpcodeWithIP "FMSUB" $ do
     comment "Floating Multiply-Subtract (A-form)"
-    fp3op "FMSUB"
+    fpArithTernOp "FMSUB" $ \r x y z -> ffma r x y $ fnegd z
 
   defineOpcodeWithIP "FMSUBS" $ do
     comment "Floating Multiply-Subtract Single (A-form)"
-    fp3op "FMSUBS"
+    fpArithTernOpS "FMSUBS" $ \r x y z -> ffmas r x y $ fnegs z
 
   defineOpcodeWithIP "FNMADD" $ do
     comment "Floating Negative Multiply-Add (A-form)"
-    fp3op "FNMADD"
+    fpArithTernOp "FNMADD" $ \r x y z -> fnegd $ ffma r x y  z
 
   defineOpcodeWithIP "FNMADDS" $ do
     comment "Floating Negative Multiply-Add Single (A-form)"
-    fp3op "FNMADDS"
+    fpArithTernOpS "FNMADDS" $ \r x y z -> fnegs $ ffmas r x y z
 
   defineOpcodeWithIP "FNMSUB" $ do
     comment "Floating Negative Multiply-Subtract (A-form)"
-    fp3op "FNMSUB"
+    fpArithTernOp "FNMSUB" $ \r x y z -> fnegd $ ffma r x y $ fnegd z
 
   defineOpcodeWithIP "FNMSUBS" $ do
     comment "Floating Negative Multiply-Subtract Single (A-form)"
-    fp3op "FNMSUBS"
+    fpArithTernOpS "FNMSUBS" $ \r x y z -> fnegs $ ffmas r x y $ fnegs z
 
   defineOpcodeWithIP "FRSP" $ do
     comment "Floating Round to Single-Precision (X-form)"
     withUnRegsFPSCR "FRSP" $ \frT frB ->
-      defLoc frT $ encodeSingle $ frsp $ decodeDouble $ Loc frB
+      defLoc frT $
+        encodeSingle $ frsp roundingMode $ decodeDouble $ Loc frB
 
   defineOpcodeWithIP "FCTID" $ do
     comment "Floating Point Convert to Integer Doubleword (X-form)"
@@ -527,7 +586,7 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCTIDZ" $ do
     comment "Floating Point Convert to Integer Doubleword with Round Towards Zero (X-form)"
-    fp1op "FCTIDZ"
+    fpConvDoubleToBV64RTZOp "FCTIDZ" fctid
 
   defineOpcodeWithIP "FCTIDU" $ do
     comment "Floating Point Convert to Integer Doubleword Unsigned (X-form)"
@@ -535,7 +594,7 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCTIDUZ" $ do
     comment "Floating Point Convert to Integer Doubleword Unsigned with Round Towards Zero (X-form)"
-    fp1op "FCTIDUZ"
+    fpConvDoubleToBV64RTZOp "FCTIDUZ" fctidu
 
   defineOpcodeWithIP "FCTIW" $ do
     comment "Floating Point Convert to Integer Word (X-form)"
@@ -543,7 +602,7 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCTIWZ" $ do
     comment "Floating Point Convert to Integer Word with Round Towards Zero (X-form)"
-    fp1op "FCTIWZ"
+    fpConvDoubleToBV32RTZOp "FCTIWZ" fctiw
 
   defineOpcodeWithIP "FCTIWU" $ do
     comment "Floating Point Convert to Integer Word Unsigned (X-form)"
@@ -551,7 +610,7 @@ floatingPoint = do
 
   defineOpcodeWithIP "FCTIWUZ" $ do
     comment "Floating Point Convert to Integer Word Unsigned with Round Towards Zero (X-form)"
-    fp1op "FCTIWUZ"
+    fpConvDoubleToBV32RTZOp "FCTIWUZ" fctiwu
 
   defineOpcodeWithIP "FCFID" $ do
     comment "Floating Point Convert from Integer Doubleword (X-form)"
@@ -571,35 +630,35 @@ floatingPoint = do
 
   defineOpcodeWithIP "FRIND" $ do
     comment "Floating Round to Integer Nearest (X-form)"
-    fp1op "FRIND"
+    fpRoundToIntegerOp "FRIND" S.RNE
 
   defineOpcodeWithIP "FRINS" $ do
     comment "Floating Round to Integer Nearest Single (X-form)"
-    fp1op "FRINS"
+    fpRoundToIntegerOpS "FRINS" S.RNE
 
   defineOpcodeWithIP "FRIPD" $ do
     comment "Floating Round to Integer Plus (X-form)"
-    fp1op "FRIPD"
+    fpRoundToIntegerOp "FRIPD" S.RTP
 
   defineOpcodeWithIP "FRIPS" $ do
     comment "Floating Round to Integer Plus Single (X-form)"
-    fp1op "FRIPS"
+    fpRoundToIntegerOpS "FRIPS" S.RTP
 
   defineOpcodeWithIP "FRIZD" $ do
     comment "Floating Round to Integer Toward Zero (X-form)"
-    fp1op "FRIZD"
+    fpRoundToIntegerOp "FRIZD" S.RTZ
 
   defineOpcodeWithIP "FRIZS" $ do
     comment "Floating Round to Integer Toward Zero Single (X-form)"
-    fp1op "FRIZS"
+    fpRoundToIntegerOpS "FRIZS" S.RTZ
 
   defineOpcodeWithIP "FRIMD" $ do
     comment "Floating Round to Integer Minus (X-form)"
-    fp1op "FRIMD"
+    fpRoundToIntegerOp "FRIMD" S.RTN
 
   defineOpcodeWithIP "FRIMS" $ do
     comment "Floating Round to Integer Minus Single (X-form)"
-    fp1op "FRIMS"
+    fpRoundToIntegerOpS "FRIMS" S.RTN
 
   defineOpcodeWithIP "FMR" $ do
     comment "Floating Move Register (X-form)"
@@ -629,11 +688,11 @@ floatingPoint = do
 
   defineOpcodeWithIP "FNABSD" $ do
     comment "Floating Negative Absolute Value (X-form)"
-    fp1op "FNABSD"
+    fpArithWoFPSCRUnOp $ fnegd . fabsd
 
   defineOpcodeWithIP "FNABSS" $ do
     comment "Floating Negative Absolute Value (X-form)"
-    fp1op "FNABSS"
+    fpArithWoFPSCRUnOpS $ fnegs . fabss
 
   defineOpcodeWithIP "FCPSGND" $ do
     comment "Floating Copy Sign (X-form)"

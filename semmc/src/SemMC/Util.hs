@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -20,6 +21,8 @@ module SemMC.Util
   , mapFMapBothM
   , filterMapF
   , fromJust'
+  , withRounding
+  , roundingModeToBits
     -- * Async
   , asyncLinked
   , withAsyncLinked
@@ -32,6 +35,7 @@ import qualified Data.HashTable.Class as H
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.NatRepr (knownNat)
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Set as Set
 import           Text.Printf ( printf )
@@ -194,3 +198,32 @@ fromJust' :: (HasCallStack) => String -> Maybe a -> a
 fromJust' label x =
     let msg = "fromJust': got Nothing (" ++ label ++ ")"
     in fromMaybe (error msg) x
+
+withRounding
+  :: forall sym tp
+   . S.IsExprBuilder sym
+  => sym
+  -> S.SymBV sym 2
+  -> (S.RoundingMode -> IO (S.SymExpr sym tp))
+  -> IO (S.SymExpr sym tp)
+withRounding sym r action = do
+  cRNE <- roundingCond S.RNE
+  cRTZ <- roundingCond S.RTZ
+  cRTP <- roundingCond S.RTP
+  S.iteM S.baseTypeIte sym cRNE
+    (action S.RNE) $
+    S.iteM S.baseTypeIte sym cRTZ
+      (action S.RTZ) $
+      S.iteM S.baseTypeIte sym cRTP (action S.RTP) (action S.RTN)
+ where
+  roundingCond :: S.RoundingMode -> IO (S.Pred sym)
+  roundingCond rm =
+    S.bvEq sym r =<< S.bvLit sym knownNat (roundingModeToBits rm)
+
+roundingModeToBits :: S.RoundingMode -> Integer
+roundingModeToBits = \case
+  S.RNE -> 0
+  S.RTZ -> 1
+  S.RTP -> 2
+  S.RTN -> 3
+  S.RNA -> error $ "unsupported rounding mode: " ++ show S.RNA

@@ -108,6 +108,8 @@ module SemMC.DSL (
   flts,
   feqd,
   feqs,
+  fled,
+  fles,
   fnand,
   fnans,
   frsp,
@@ -119,6 +121,8 @@ module SemMC.DSL (
   fcfids,
   fcfidu,
   fcfidus,
+  frti,
+  frtis,
   fpDoubleToSingle,
   fpSingleToDouble,
   fpBinaryToDouble,
@@ -915,50 +919,91 @@ fpSingleToBinary :: (HasCallStack) => Expr 'TFloat -> Expr 'TBV
 fpSingleToBinary e = Builtin (EBV 32) "fp_single_to_binary" [ Some e ]
 
 fnegd :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble
-fnegd = floatArithUnBuiltin "fnegd"
+fnegd = floatArithUnBuiltinWoRounding "fnegd"
 
 fnegs :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat
-fnegs = floatArithUnBuiltin "fnegs"
+fnegs = floatArithUnBuiltinWoRounding "fnegs"
 
 fabsd :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble
-fabsd = floatArithUnBuiltin "fabsd"
+fabsd = floatArithUnBuiltinWoRounding "fabsd"
 
 fabss :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat
-fabss = floatArithUnBuiltin "fabss"
+fabss = floatArithUnBuiltinWoRounding "fabss"
 
-fsqrt :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble
+fsqrt :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TDouble
 fsqrt = floatArithUnBuiltin "fsqrt"
 
-fsqrts :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat
+fsqrts :: (HasCallStack) => Expr 'TBV -> Expr 'TFloat -> Expr 'TFloat
 fsqrts = floatArithUnBuiltin "fsqrts"
 
-fadd :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble
+fadd
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TDouble
+  -> Expr 'TDouble
+  -> Expr 'TDouble
 fadd = floatArithBinBuiltin "fadd"
 
-fadds :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat
+fadds
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TFloat
+  -> Expr 'TFloat
+  -> Expr 'TFloat
 fadds = floatArithBinBuiltin "fadds"
 
-fsub :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble
+fsub
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TDouble
+  -> Expr 'TDouble
+  -> Expr 'TDouble
 fsub = floatArithBinBuiltin "fsub"
 
-fsubs :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat
+fsubs
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TFloat
+  -> Expr 'TFloat
+  -> Expr 'TFloat
 fsubs = floatArithBinBuiltin "fsubs"
 
-fmul :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble
+fmul
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TDouble
+  -> Expr 'TDouble
+  -> Expr 'TDouble
 fmul = floatArithBinBuiltin "fmul"
 
-fmuls :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat
+fmuls
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TFloat
+  -> Expr 'TFloat
+  -> Expr 'TFloat
 fmuls = floatArithBinBuiltin "fmuls"
 
-fdiv :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble -> Expr 'TDouble
+fdiv
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TDouble
+  -> Expr 'TDouble
+  -> Expr 'TDouble
 fdiv = floatArithBinBuiltin "fdiv"
 
-fdivs :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TFloat
+fdivs
+  :: (HasCallStack)
+  => Expr 'TBV
+  -> Expr 'TFloat
+  -> Expr 'TFloat
+  -> Expr 'TFloat
 fdivs = floatArithBinBuiltin "fdivs"
 
 ffma
   :: (HasCallStack)
-  => Expr 'TDouble
+  => Expr 'TBV
+  -> Expr 'TDouble
   -> Expr 'TDouble
   -> Expr 'TDouble
   -> Expr 'TDouble
@@ -966,7 +1011,8 @@ ffma = floatArithTernBuiltin "ffma"
 
 ffmas
   :: (HasCallStack)
-  => Expr 'TFloat
+  => Expr 'TBV
+  -> Expr 'TFloat
   -> Expr 'TFloat
   -> Expr 'TFloat
   -> Expr 'TFloat
@@ -984,52 +1030,67 @@ feqd = floatLogicBinBuiltin "feqd"
 feqs :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TBool
 feqs = floatLogicBinBuiltin "feqs"
 
+fled :: (HasCallStack) => Expr 'TDouble -> Expr 'TDouble -> Expr 'TBool
+fled = floatLogicBinBuiltin "fled"
+
+fles :: (HasCallStack) => Expr 'TFloat -> Expr 'TFloat -> Expr 'TBool
+fles = floatLogicBinBuiltin "fles"
+
 fnand :: (HasCallStack) => Expr 'TDouble -> Expr 'TBool
 fnand = floatLogicUnBuiltin "fnand"
 
 fnans :: (HasCallStack) => Expr 'TFloat -> Expr 'TBool
 fnans = floatLogicUnBuiltin "fnans"
 
-frsp :: (HasCallStack) => Expr 'TDouble -> Expr 'TFloat
+frsp :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TFloat
 frsp = floatConvBuiltin "frsp" EDouble EFloat
 
-fctid :: (HasCallStack) => Expr 'TDouble -> Expr 'TBV
+fctid :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TBV
 fctid = floatConvBuiltin "fctid" EDouble (EBV 64)
 
-fctidu :: (HasCallStack) => Expr 'TDouble -> Expr 'TBV
+fctidu :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TBV
 fctidu = floatConvBuiltin "fctidu" EDouble (EBV 64)
 
-fctiw :: (HasCallStack) => Expr 'TDouble -> Expr 'TBV
+fctiw :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TBV
 fctiw = floatConvBuiltin "fctiw" EDouble (EBV 32)
 
-fctiwu :: (HasCallStack) => Expr 'TDouble -> Expr 'TBV
+fctiwu :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TBV
 fctiwu = floatConvBuiltin "fctiwu" EDouble (EBV 32)
 
-fcfid :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble
+fcfid :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TDouble
 fcfid = floatConvBuiltin "fcfid" (EBV 64) EDouble
 
-fcfids :: (HasCallStack) => Expr 'TBV -> Expr 'TFloat
+fcfids :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TFloat
 fcfids = floatConvBuiltin "fcfids" (EBV 64) EFloat
 
-fcfidu :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble
+fcfidu :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TDouble
 fcfidu = floatConvBuiltin "fcfidu" (EBV 64) EDouble
 
-fcfidus :: (HasCallStack) => Expr 'TBV -> Expr 'TFloat
+fcfidus :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TFloat
 fcfidus = floatConvBuiltin "fcfidus" (EBV 64) EFloat
+
+frti :: (HasCallStack) => Expr 'TBV -> Expr 'TDouble -> Expr 'TDouble
+frti = floatConvBuiltin "frti" EDouble EDouble
+
+frtis :: (HasCallStack) => Expr 'TBV -> Expr 'TFloat -> Expr 'TFloat
+frtis = floatConvBuiltin "frtis" EFloat EFloat
 
 floatArithTernBuiltin
   :: (HasCallStack)
   => String
+  -> Expr 'TBV
   -> Expr tp
   -> Expr tp
   -> Expr tp
   -> Expr tp
-floatArithTernBuiltin s e1 e2 e3
-  | t1 == t2, t1 == t3 = Builtin t1 s [Some e1, Some e2, Some e3]
+floatArithTernBuiltin s r e1 e2 e3
+  | t1 == t2, t1 == t3, EBV 2 == exprType r =
+    Builtin t1 s [Some r, Some e1, Some e2, Some e3]
   | otherwise = error
     (printf
-      "Type mismatch for ternary float builtin %s; arg1 type is %s, arg2 type is %s, arg3 type is %s"
+      "Type mismatch for ternary float builtin %s: rounding mode type is %s, arg1 type is %s, arg2 type is %s, arg3 type is %s"
       s
+      (show $ exprType r)
       (show t1)
       (show t2)
       (show t3)
@@ -1040,13 +1101,14 @@ floatArithTernBuiltin s e1 e2 e3
   t3 = exprType e3
 
 floatArithBinBuiltin
-  :: (HasCallStack) => String -> Expr tp -> Expr tp -> Expr tp
-floatArithBinBuiltin s e1 e2
-  | t1 == t2 = Builtin t1 s [Some e1, Some e2]
+  :: (HasCallStack) => String -> Expr 'TBV -> Expr tp -> Expr tp -> Expr tp
+floatArithBinBuiltin s r e1 e2
+  | t1 == t2, EBV 2 == exprType r = Builtin t1 s [Some r, Some e1, Some e2]
   | otherwise = error
     (printf
-      "Type mismatch for binary float builtin %s; lhs type is %s while rhs type is %s"
+      "Type mismatch for binary float builtin %s: rounding mode type is %s, lhs type is %s while rhs type is %s"
       s
+      (show $ exprType r)
       (show t1)
       (show t2)
     )
@@ -1054,8 +1116,19 @@ floatArithBinBuiltin s e1 e2
   t1 = exprType e1
   t2 = exprType e2
 
-floatArithUnBuiltin :: (HasCallStack) => String -> Expr tp -> Expr tp
-floatArithUnBuiltin s e = Builtin (exprType e) s [Some e]
+floatArithUnBuiltin
+  :: (HasCallStack) => String -> Expr 'TBV -> Expr tp -> Expr tp
+floatArithUnBuiltin s r e
+  | EBV 2 == exprType r = Builtin (exprType e) s [Some r, Some e]
+  | otherwise = error
+    (printf
+      "Type mismatch for unary float builtin %s: rounding mode type is %s"
+      s
+      (show $ exprType r)
+    )
+
+floatArithUnBuiltinWoRounding :: (HasCallStack) => String -> Expr tp -> Expr tp
+floatArithUnBuiltinWoRounding s e = Builtin (exprType e) s [Some e]
 
 floatLogicBinBuiltin
   :: (HasCallStack) => String -> Expr tp -> Expr tp -> Expr 'TBool
@@ -1080,10 +1153,12 @@ floatConvBuiltin
   => String
   -> ExprTypeRepr tp'
   -> ExprTypeRepr tp
+  -> Expr 'TBV
   -> Expr tp'
   -> Expr tp
-floatConvBuiltin s from_type to_type expr
-  | from_type == expr_type = Builtin to_type s [Some expr]
+floatConvBuiltin s from_type to_type r expr
+  | from_type == expr_type, EBV 2 == exprType r =
+    Builtin to_type s [Some r, Some expr]
   | otherwise = error
     (printf
       "Unexpected argument type for float conversion builtin %s; expected %s, found %s"

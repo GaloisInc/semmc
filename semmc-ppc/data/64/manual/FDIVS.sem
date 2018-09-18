@@ -7,16 +7,21 @@
   ('FPSCR frB frA 'IP))
  (defs
   (('FPSCR
-   ((_ call "uf.fp.bin_op_fpscr")
-    "FDIVS"
-    frA
-    frB
-    'FPSCR))
+   (concat
+    ((_ call "uf.fp.bin_op_fpscr")
+     "FDIVS"
+     frA
+     frB
+     'FPSCR)
+    ((_ extract 7 0)
+     'FPSCR)))
    (frT
     (concat
      (fp_double_to_binary
       (fp_single_to_double
        (fdivs
+        ((_ extract 1 0)
+         'FPSCR)
         ((_ call "uf.fp.double_to_single")
          (fp_binary_to_double
           ((_ extract 127 64)
