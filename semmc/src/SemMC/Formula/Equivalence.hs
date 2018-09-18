@@ -176,5 +176,5 @@ checkSat sym testExpr handler = do
   WPO.inNewFrame conn $ do
     f <- WPS.mkFormula conn testExpr
     WPS.assumeFormula conn f
-    res <- WPO.checkAndGetModel "semmc equivalence formula" sp
+    res <- WPO.checkAndGetModel sp "semmc equivalence formula"
     handler res
