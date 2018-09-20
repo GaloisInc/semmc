@@ -67,21 +67,38 @@
            #b0)))))
       #x000)))
     ('CR
-     (bvor
-      (bvand
-       'CR
-       (bvnot
-        (bvlshr
-         (concat #xf #x0000000)
-         (bvmul
-          ((_ zero_extend 29)
-           bf)
-          #x00000004))))
-      (bvlshr
+     ((_ call "df.updateCRField")
+      'CR
+      bf
+      (concat
+       (ite
+        (flts
+         ((_ call "uf.fp.double_to_single")
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            frA)))
+         ((_ call "uf.fp.double_to_single")
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            frB))))
+        #b1
+        #b0)
        (concat
+        (ite
+         (flts
+          ((_ call "uf.fp.double_to_single")
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             frB)))
+          ((_ call "uf.fp.double_to_single")
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             frA))))
+         #b1
+         #b0)
         (concat
          (ite
-          (flts
+          (feqs
            ((_ call "uf.fp.double_to_single")
             (fp_binary_to_double
              ((_ extract 127 64)
@@ -92,51 +109,20 @@
               frB))))
           #b1
           #b0)
-         (concat
-          (ite
-           (flts
-            ((_ call "uf.fp.double_to_single")
-             (fp_binary_to_double
-              ((_ extract 127 64)
-               frB)))
+         (ite
+          (orp
+           (fnans
             ((_ call "uf.fp.double_to_single")
              (fp_binary_to_double
               ((_ extract 127 64)
                frA))))
-           #b1
-           #b0)
-          (concat
-           (ite
-            (feqs
-             ((_ call "uf.fp.double_to_single")
-              (fp_binary_to_double
-               ((_ extract 127 64)
-                frA)))
-             ((_ call "uf.fp.double_to_single")
-              (fp_binary_to_double
-               ((_ extract 127 64)
-                frB))))
-            #b1
-            #b0)
-           (ite
-            (orp
-             (fnans
-              ((_ call "uf.fp.double_to_single")
-               (fp_binary_to_double
-                ((_ extract 127 64)
-                 frA))))
-             (fnans
-              ((_ call "uf.fp.double_to_single")
-               (fp_binary_to_double
-                ((_ extract 127 64)
-                 frB)))))
-            #b1
-            #b0))))
-        #x0000000)
-       (bvmul
-        ((_ zero_extend 29)
-         bf)
-        #x00000004))))
+           (fnans
+            ((_ call "uf.fp.double_to_single")
+             (fp_binary_to_double
+              ((_ extract 127 64)
+               frB)))))
+          #b1
+          #b0))))))
     ('IP
      (bvadd 'IP #x00000004))))))
  ((operands

@@ -339,8 +339,7 @@ floatingPointCompare = do
               fnand
               (decodeDouble $ Loc frA)
               (decodeDouble $ Loc frB)
-    defLoc cr $
-      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    defLoc cr $ updateCRField (Loc bf) c
     defLoc fpscr $ bvUpdate (Loc fpscr) 16 c
 
   defineOpcodeWithIP "FCMPUS" $ do
@@ -358,8 +357,7 @@ floatingPointCompare = do
               fnans
               (decodeSingle $ Loc frA)
               (decodeSingle $ Loc frB)
-    defLoc cr $
-      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    defLoc cr $ updateCRField (Loc bf) c
     defLoc fpscr $ bvUpdate (Loc fpscr) 16 c
 
   defineOpcodeWithIP "FCMPOD" $ do
@@ -378,8 +376,7 @@ floatingPointCompare = do
               fnand
               (decodeDouble $ Loc frA)
               (decodeDouble $ Loc frB)
-    defLoc cr $
-      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    defLoc cr $ updateCRField (Loc bf) c
     let vxvc = bvPredToBit $ orp
                 (fnand $ decodeDouble $ Loc frA)
                 (fnand $ decodeDouble $ Loc frB)
@@ -400,8 +397,7 @@ floatingPointCompare = do
               fnans
               (decodeSingle $ Loc frA)
               (decodeSingle $ Loc frB)
-    defLoc cr $
-      bvUpdate' (Loc cr) (bvmul (zeroExtendTo 32 $ Loc bf) (LitBV 32 4)) c
+    defLoc cr $ updateCRField (Loc bf) c
     let vxvc = bvPredToBit $ orp
                 (fnans $ decodeSingle $ Loc frA)
                 (fnans $ decodeSingle $ Loc frB)
