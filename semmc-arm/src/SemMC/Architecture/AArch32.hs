@@ -314,7 +314,7 @@ instance (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
 
 parseLocation :: ARMComp.Parser (Some (Location arm))
 parseLocation = do
-  c <- P.lookAhead (P.anyChar)
+  c <- P.lookAhead (P.anySingle)
   case c of
     'C' -> Some LocCPSR <$ P.string "CPSR"
     'M' -> Some LocMem <$ P.string "Mem"

@@ -418,7 +418,7 @@ instance A.IsLocation (Location A32) where
 
 parseLocation :: ARMComp.Parser (Some (Location A32))
 parseLocation = do
-  c <- P.lookAhead (P.anyChar)
+  c <- P.lookAhead (P.anySingle)
   case c of
     'C' -> Some LocCPSR <$ P.string "CPSR"
     'M' -> (Some LocMem1 <$ P.string "Mem")
