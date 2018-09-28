@@ -24,6 +24,12 @@ import qualified Dismantle.PPC as D
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Protocol.Online as WPO
+import           What4.Config
+import           What4.Interface
+import           What4.Solver
+import           Control.Monad
+import qualified Data.Text as Text
+
 
 import qualified SemMC.Architecture as SA
 import qualified SemMC.Formula as SF
@@ -38,8 +44,20 @@ main :: IO ()
 main = do
   PN.withIONonceGenerator $ \ng ->
     CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
+
+
+      -- set the verbosity level
+      void $ join (setOpt <$> getOptionSetting verbosity (getConfiguration sym)
+                          <*> pure (toInteger 3))
+
+      -- set the path to yices
+      void $ join (setOpt <$> getOptionSetting yicesPath (getConfiguration sym)
+                          <*> pure (Text.pack "/home/jpaykin/scripts/yices"))
+
+
       let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
+
       T.defaultMain (allTests baseSet synthEnv)
 
 allTests :: (WPO.OnlineSolver t solver)
@@ -82,13 +100,14 @@ insns = S.fromList
         ]
 
 progs :: [(String, [D.Instruction])]
-progs = [ ("addNegated", [ D.Instruction D.NEG (reg 5 :< reg 2 :< Nil)
-                         , D.Instruction D.ADD4 (reg 11 :< reg 5 :< reg 3 :< Nil)
-                         ])
-        , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ])
-        , ("STDU", [ D.Instruction D.STDU $ memrix 1 (-16) :< reg 1      :< Nil ])
-        , ("LHA",  [ D.Instruction D.LHA  $ reg 31         :< memri 1 (-2) :< Nil ])
-        , ("LI",   [ D.Instruction D.LI   $ reg 0          :< D.S16imm 1 :< Nil ])
+progs = [-- ("addNegated", [ D.Instruction D.NEG (reg 5 :< reg 2 :< Nil)
+         --                , D.Instruction D.ADD4 (reg 11 :< reg 5 :< reg 3 :< Nil)
+         --                ])
+          ("STD",  [ D.Instruction D.STD  $ memrix 1 (2)   :< reg 31     :< Nil ])
+--        , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ])
+--      ,   ("LHA",  [ D.Instruction D.LHA  $ reg 31         :< memri 1 (-2) :< Nil ])
+--        , ("LI",   [ D.Instruction D.LI   $ reg 0          :< D.S16imm 1 :< Nil ])
+--        , ("STDU", [ D.Instruction D.STDU $ memrix 1 (-16) :< reg 1      :< Nil ])
         ]
   where
     reg n = D.Gprc (D.GPR n)
