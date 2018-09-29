@@ -326,8 +326,8 @@ floatingPointCompare = do
   defineOpcodeWithIP "FCMPUD" $ do
     comment "Floating Compare Unordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
-    frA <- param "frA" fprc (EBV 128)
     frB <- param "frB" fprc (EBV 128)
+    frA <- param "frA" fprc (EBV 128)
     input bf
     input frA
     input frB
@@ -345,8 +345,8 @@ floatingPointCompare = do
   defineOpcodeWithIP "FCMPUS" $ do
     comment "Floating Compare Unordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
-    frA <- param "frA" fprc (EBV 128)
     frB <- param "frB" fprc (EBV 128)
+    frA <- param "frA" fprc (EBV 128)
     input frA
     input frB
     input cr

@@ -127,8 +127,8 @@
      (bvadd 'IP #x0000000000000004))))))
  ((operands
   ((bf . 'Crrc)
-   (frA . 'Fprc)
-   (frB . 'Fprc)))
+   (frB . 'Fprc)
+   (frA . 'Fprc)))
   (in
    ('FPSCR 'CR frB frA 'IP))
   (var1)))
