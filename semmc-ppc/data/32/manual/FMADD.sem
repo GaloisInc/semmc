@@ -1,27 +1,37 @@
 ;; Floating Multiply-Add (A-form)
 ((operands
  ((frT . 'Fprc)
-  (frA . 'Fprc)
   (frB . 'Fprc)
-  (frC . 'Fprc)))
+  (frC . 'Fprc)
+  (frA . 'Fprc)))
  (in
-  ('FPSCR frC frB frA 'IP))
+  ('FPSCR frB frC frA 'IP))
  (defs
   (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec3")
+   (concat
+    ((_ call "uf.fp.tern_op_fpscr")
      "FMADD"
      frA
      frB
      frC
+     'FPSCR)
+    ((_ extract 7 0)
      'FPSCR)))
    (frT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec3")
-      "FMADD"
-      frA
-      frB
-      frC
-      'FPSCR)))
+    (concat
+     (fp_double_to_binary
+      (ffma
+       ((_ extract 1 0)
+        'FPSCR)
+       (fp_binary_to_double
+        ((_ extract 127 64)
+         frA))
+       (fp_binary_to_double
+        ((_ extract 127 64)
+         frC))
+       (fp_binary_to_double
+        ((_ extract 127 64)
+         frB))))
+     #x0000000000000000))
    ('IP
     (bvadd 'IP #x00000004)))))

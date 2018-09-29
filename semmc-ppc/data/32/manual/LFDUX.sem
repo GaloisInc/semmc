@@ -14,13 +14,13 @@
      memref)))
    (frT
     (concat
-     #x0000000000000000
      ((_ call "uf.read_mem.64")
       'Mem
       (bvadd
        ((_ call "uf.ppc.memrr_base")
         memref)
        ((_ call "uf.ppc.memrr_offset")
-        memref)))))
+        memref)))
+     #x0000000000000000))
    ('IP
     (bvadd 'IP #x00000004)))))

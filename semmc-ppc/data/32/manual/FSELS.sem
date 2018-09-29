@@ -1,27 +1,21 @@
 ;; Floating-Point Select Single (A-form)
 ((operands
  ((frT . 'Fprc)
-  (frA . 'Fprc)
   (frB . 'Fprc)
-  (frC . 'Fprc)))
+  (frC . 'Fprc)
+  (frA . 'Fprc)))
  (in
-  ('FPSCR frC frB frA 'IP))
+  (frB frC frA 'IP))
  (defs
-  (('FPSCR
-   ((_ extract 31 0)
-    ((_ call "uf.ppc.vec3")
-     "FSELS"
-     frA
-     frB
-     frC
-     'FPSCR)))
-   (frT
-    ((_ extract 159 32)
-     ((_ call "uf.ppc.vec3")
-      "FSELS"
-      frA
-      frB
-      frC
-      'FPSCR)))
+  ((frT
+   (ite
+    (fles
+     (fp_binary_to_single #x00000000)
+     ((_ call "uf.fp.double_to_single")
+      (fp_binary_to_double
+       ((_ extract 127 64)
+        frA))))
+    frC
+    frB))
    ('IP
     (bvadd 'IP #x00000004)))))

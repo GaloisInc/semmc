@@ -575,6 +575,135 @@ readBoolUnop (SC.SAtom (AIdent idnt)) args
           BoolUnop op' -> liftIO (Just <$> Some <$> op' sym arg1)
 readBoolUnop _ _ = return Nothing
 
+data Op sym where
+  Op1
+    :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> arg1)
+    -> (sym -> S.SymExpr sym arg1 -> IO (S.SymExpr sym ret))
+    -> Op sym
+  Op2
+    :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> arg1 Ctx.::> arg2)
+    -> (  sym
+       -> S.SymExpr sym arg1
+       -> S.SymExpr sym arg2
+       -> IO (S.SymExpr sym ret)
+       )
+    -> Op sym
+  Op3
+    :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> arg1 Ctx.::> arg2 Ctx.::> arg3)
+    -> (  sym
+       -> S.SymExpr sym arg1
+       -> S.SymExpr sym arg2
+       -> S.SymExpr sym arg3
+       -> IO (S.SymExpr sym ret)
+       )
+    -> Op sym
+  Op4
+    :: Ctx.Assignment BaseTypeRepr (Ctx.EmptyCtx Ctx.::> arg1 Ctx.::> arg2 Ctx.::> arg3 Ctx.::> arg4)
+    -> (  sym
+       -> S.SymExpr sym arg1
+       -> S.SymExpr sym arg2
+       -> S.SymExpr sym arg3
+       -> S.SymExpr sym arg4
+       -> IO (S.SymExpr sym ret)
+       )
+    -> Op sym
+
+-- | Look up a unary float operation by name.
+fpOp :: S.IsExprBuilder sym => String -> Maybe (Op sym)
+fpOp = \case
+  "fnegd" -> Just $ Op1 knownRepr $ S.floatNeg @_ @Prec64
+  "fnegs" -> Just $ Op1 knownRepr $ S.floatNeg @_ @Prec32
+  "fabsd" -> Just $ Op1 knownRepr $ S.floatAbs @_ @Prec64
+  "fabss" -> Just $ Op1 knownRepr $ S.floatAbs @_ @Prec32
+  "fsqrt" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatSqrt @_ @Prec64 sym rm x
+  "fsqrts" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatSqrt @_ @Prec32 sym rm x
+  "fnand" -> Just $ Op1 knownRepr $ S.floatIsNaN @_ @Prec64
+  "fnans" -> Just $ Op1 knownRepr $ S.floatIsNaN @_ @Prec32
+  "frsp" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatCast @_ @Prec32 @Prec64 sym knownRepr rm x
+  "fp_single_to_double" -> Just $ Op1 knownRepr $ \sym ->
+    S.floatCast @_ @Prec64 @Prec32 sym knownRepr S.RNE
+  "fp_binary_to_double" ->
+    Just $ Op1 knownRepr $ \sym -> S.floatFromBinary @_ @11 @53 sym knownRepr
+  "fp_binary_to_single" ->
+    Just $ Op1 knownRepr $ \sym -> S.floatFromBinary @_ @8 @24 sym knownRepr
+  "fp_double_to_binary" -> Just $ Op1 knownRepr $ S.floatToBinary @_ @11 @53
+  "fp_single_to_binary" -> Just $ Op1 knownRepr $ S.floatToBinary @_ @8 @24
+  "fctid" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatToSBV @_ @64 @Prec64 sym knownRepr rm x
+  "fctidu" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatToBV @_ @64 @Prec64 sym knownRepr rm x
+  "fctiw" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatToSBV @_ @32 @Prec64 sym knownRepr rm x
+  "fctiwu" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatToBV @_ @32 @Prec64 sym knownRepr rm x
+  "fcfid" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.sbvToFloat @_ @64 @Prec64 sym knownRepr rm x
+  "fcfids" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.sbvToFloat @_ @64 @Prec32 sym knownRepr rm x
+  "fcfidu" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.bvToFloat @_ @64 @Prec64 sym knownRepr rm x
+  "fcfidus" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.bvToFloat @_ @64 @Prec32 sym knownRepr rm x
+  "frti" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatRound @_ @Prec64 sym rm x
+  "frtis" -> Just $ Op2 knownRepr $ \sym r x -> U.withRounding sym r $ \rm ->
+    S.floatRound @_ @Prec32 sym rm x
+
+  "fadd" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatAdd @_ @Prec64 sym rm x y
+  "fadds" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatAdd @_ @Prec32 sym rm x y
+  "fsub" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatSub @_ @Prec64 sym rm x y
+  "fsubs" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatSub @_ @Prec32 sym rm x y
+  "fmul" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatMul @_ @Prec64 sym rm x y
+  "fmuls" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatMul @_ @Prec32 sym rm x y
+  "fdiv" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatDiv @_ @Prec64 sym rm x y
+  "fdivs" -> Just $ Op3 knownRepr $ \sym r x y -> U.withRounding sym r $ \rm ->
+    S.floatDiv @_ @Prec32 sym rm x y
+
+  "fltd" -> Just $ Op2 knownRepr $ S.floatLt @_ @Prec64
+  "flts" -> Just $ Op2 knownRepr $ S.floatLt @_ @Prec32
+  "feqd" -> Just $ Op2 knownRepr $ S.floatFpEq @_ @Prec64
+  "feqs" -> Just $ Op2 knownRepr $ S.floatFpEq @_ @Prec32
+  "fled" -> Just $ Op2 knownRepr $ S.floatLe @_ @Prec64
+  "fles" -> Just $ Op2 knownRepr $ S.floatLe @_ @Prec32
+
+  "ffma" -> Just $ Op4 knownRepr $ \sym r x y z -> U.withRounding sym r $ \rm ->
+    S.floatFMA @_ @Prec64 sym rm x y z
+  "ffmas" -> Just $ Op4 knownRepr $ \sym r x y z ->
+    U.withRounding sym r $ \rm -> S.floatFMA @_ @Prec32 sym rm x y z
+
+  _ -> Nothing
+
+-- | Parse an expression of the form @(f x)@, where @f@ operates on floats.
+readFpOp :: forall sym arch sh m . ExprParser sym arch sh m
+readFpOp (SC.SAtom (AIdent idnt)) args
+  | Just (op :: Op sym) <- fpOp idnt
+  = prefixError (printf "in reading %s expression: " idnt) $ do
+    sym <- MR.reader getSym
+    case op of
+      Op1 arg_types fn -> do
+        Ctx.Empty Ctx.:> arg1 <- exprAssignment arg_types args
+        liftIO (Just . Some <$> fn sym arg1)
+      Op2 arg_types fn -> do
+        Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 <- exprAssignment arg_types args
+        liftIO (Just . Some <$> fn sym arg1 arg2)
+      Op3 arg_types fn -> do
+        Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 <- exprAssignment arg_types args
+        liftIO (Just . Some <$> fn sym arg1 arg2 arg3)
+      Op4 arg_types fn -> do
+        Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 Ctx.:> arg4 <- exprAssignment arg_types args
+        liftIO (Just . Some <$> fn sym arg1 arg2 arg3 arg4)
+readFpOp _ _ = return Nothing
+
 -- | Parse an expression of the form @(= x y)@.
 readEq :: ExprParser sym arch sh m
 readEq (SC.SAtom (AIdent "=")) args =
@@ -791,6 +920,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
     , readBVBinop
     , readBoolUnop
     , readBoolBinop
+    , readFpOp
     , readEq
     , readIte
     , readSelect

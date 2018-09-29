@@ -184,6 +184,6 @@ checkSat sym testExpr handler = do
     putStrLn $ "Made formula "
     WPS.assumeFormula conn f
     putStrLn $ "Assumed formula"
-    res <- WPO.checkAndGetModel sp "check for equivalence"
+    res <- WPO.checkAndGetModel sp "semmc equivalence formula"
     putStrLn $ "Got model "
     handler res

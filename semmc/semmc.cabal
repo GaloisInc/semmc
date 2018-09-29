@@ -103,7 +103,7 @@ library
                        async >= 2.2 && < 2.3,
                        time,
                        parsec >= 3.1 && < 3.2,
-                       megaparsec >= 6 && < 8,
+                       megaparsec >= 7 && < 8,
                        mtl >= 2.2 && < 2.3,
                        hashtables >= 1.2 && < 1.3,
                        transformers >= 0.5.2 && < 0.6,
