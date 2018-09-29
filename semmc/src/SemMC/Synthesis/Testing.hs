@@ -44,17 +44,24 @@ synthesizeAndCheck :: forall proxy arch t solver fs
                    -> [A.Instruction arch]
                    -> IO SynthResult
 synthesizeAndCheck proxy env sem matchInsn p = do
+  print $ "Synthesizing program from "
+  putStrLn $ show p
   mfrm <- symbolicallySimulateProgram proxy (SS.synthSym env) sem matchInsn p
   case mfrm of
     Just frm -> do
+      print $ "Obtained formula from program"
+      putStrLn $ show frm
       mp <- SS.mcSynth env frm
       case mp of
         Nothing -> return FailedSynthesis
         Just p' -> do
+          print $ "Obtained synthesized program "
+          putStrLn $ show p'
           mfrm' <- symbolicallySimulateProgram proxy (SS.synthSym env) sem matchInsn p'
           case mfrm' of
             Nothing -> return MissingSemantics
             Just frm' -> do
+              print $ "Obtained formula from new program"
               er <- SF.formulasEquivConcrete (SS.synthSym env) frm frm'
               case er of
                 SF.Equivalent -> return Equivalent
@@ -82,4 +89,7 @@ symbolicallySimulateProgram _ sym sem matchInsn p = do
     toSemantics i = matchInsn i $ \opc operands -> do
       case MapF.lookup opc sem of
         Nothing -> return Nothing
-        Just pf -> (Just . snd) <$> SF.instantiateFormula sym pf operands
+        Just pf -> do res <- (Just . snd) <$> SF.instantiateFormula sym pf operands
+--                      putStrLn "Instantiated formula: "
+--                      putStrLn $ show res
+                      return res

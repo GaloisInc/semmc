@@ -245,6 +245,7 @@ cegis' :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
        -- ^ All the tests we have so far.
        -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis' trial trialFormula tests = do
+  liftIO . putStrLn $ "INPUT FORMULA:\n" ++ show trialFormula
   sym <- askSym
   -- Is this candidate satisfiable for the concrete tests we have so far? At
   -- this point, the machine state is concrete, but the immediate values of the
@@ -252,7 +253,9 @@ cegis' trial trialFormula tests = do
   -- the SAT solver will give us values for the templated immediates in order to
   -- make the tests pass.
   check <- buildEqualityTests trialFormula tests
+  liftIO . putStrLn $ "Before checkSat"
   insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
+  liftIO . putStrLn $ "After checkSat"
 
   case insns of
     Just insns' -> do
@@ -260,6 +263,7 @@ cegis' trial trialFormula tests = do
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
       filledInFormula <- condenseInstructions insns'
+      liftIO . putStrLn $ "CANDIDATE FORMULA:\n" ++ show filledInFormula
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym targetFormula filledInFormula
       case equiv of
@@ -270,6 +274,7 @@ cegis' trial trialFormula tests = do
         DifferentBehavior ctrExample -> do
           ctrExampleOut <- evalFormula targetFormula ctrExample
           let newTest = ConcreteTest' ctrExample ctrExampleOut
+          liftIO $ putStrLn "RECURSING with cegis"
           cegis' trial trialFormula (newTest : tests)
     Nothing -> return (CegisUnmatchable tests)
 

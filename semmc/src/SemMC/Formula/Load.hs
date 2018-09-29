@@ -94,7 +94,7 @@ loadFormulas sym lib contents = do
       ef <- FP.readFormula sym env (HR.typeRepr op) (T.decodeUtf8 bs)
       case ef of
         Right f -> return (MapF.insert op f m)
-        Left e -> E.throwIO (FormulaParseError (showF op) e)
+        Left e -> putStrLn "Trying to load formulas" >> E.throwIO (FormulaParseError (showF op) e)
 
 -- | Load formulas from disk
 --
@@ -190,7 +190,7 @@ loadLibrary proxy sym contents = do
       case ef of
         Right (Some ff) ->
           return $ Pair.Pair (F.functionRef ff) ff
-        Left e -> E.throwIO (FormulaParseError name e)
+        Left e -> putStrLn "Trying to load library" >> E.throwIO (FormulaParseError name e)
 
 loadLibraryFromFiles :: forall sym arch
                       . ( CRU.IsExprBuilder sym

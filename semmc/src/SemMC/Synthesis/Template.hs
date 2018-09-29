@@ -46,7 +46,7 @@ module SemMC.Synthesis.Template
   , unTemplate
   , fromTemplatedSemantics
   , toTemplatedSemantics
---  , toBaseSet
+  , toBaseSet
   ) where
 
 import           Data.EnumF

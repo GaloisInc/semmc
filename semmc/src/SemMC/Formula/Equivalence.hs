@@ -105,6 +105,11 @@ formulasEquiv
   f1@(F.Formula { F.formParamVars = bvars1, F.formDefs = defs1 } )
   f2@(F.Formula { F.formParamVars = bvars2, F.formDefs = defs2 } ) =
   do
+    putStrLn "Checking equivalence of formulas"
+--    putStrLn $ "Formula 1: "
+--    print f1
+--    putStrLn $ "Formula 2: "
+--    print f2
     -- Create constants for each of the bound variables, then replace them in
     -- each of the definitions. This way, the equations in the different
     -- formulas refer to the same input variables.
@@ -174,7 +179,11 @@ checkSat sym testExpr handler = do
   sp <- CBO.getSolverProcess sym
   let conn = WPO.solverConn sp
   WPO.inNewFrame conn $ do
+    putStrLn $ "Ready to make formula for expression " ++ show testExpr
     f <- WPS.mkFormula conn testExpr
+    putStrLn $ "Made formula "
     WPS.assumeFormula conn f
-    res <- WPO.checkAndGetModel sp
+    putStrLn $ "Assumed formula"
+    res <- WPO.checkAndGetModel sp "check for equivalence"
+    putStrLn $ "Got model "
     handler res
