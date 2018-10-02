@@ -323,11 +323,11 @@ floatingPointCompare = do
   -- 1), but we are not unsetting the FX field if VXSNAN gets set to 0. I'm not sure
   -- if this is the correct behavior; something to look into.
 
-  defineOpcodeWithIP "FCMPUD" $ do
+  defineOpcodeWithIP "FCMPUS" $ do
     comment "Floating Compare Unordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
-    frA <- param "frA" fprc (EBV 128)
     frB <- param "frB" fprc (EBV 128)
+    frA <- param "frA" fprc (EBV 128)
     input bf
     input frA
     input frB
@@ -342,11 +342,11 @@ floatingPointCompare = do
     defLoc cr $ updateCRField (Loc bf) c
     defLoc fpscr $ bvUpdate (Loc fpscr) 16 c
 
-  defineOpcodeWithIP "FCMPUS" $ do
+  defineOpcodeWithIP "FCMPUD" $ do
     comment "Floating Compare Unordered (X-form)"
     bf  <- param "bf" crrc (EBV 3)
-    frA <- param "frA" fprc (EBV 128)
     frB <- param "frB" fprc (EBV 128)
+    frA <- param "frA" fprc (EBV 128)
     input frA
     input frB
     input cr
