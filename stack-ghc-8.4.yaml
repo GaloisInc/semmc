@@ -14,7 +14,7 @@ packages:
 - location: submodules/dismantle/dismantle-tablegen
 - location: submodules/dismantle/dismantle-thumb
 
-- location: ../crucible
+- location: submodules/crucible
   subdirs:
   - crucible
   - what4

@@ -43,16 +43,22 @@ import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
 main :: IO ()
 main = do
   PN.withIONonceGenerator $ \ng ->
-    CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
+
+
+--    CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
+      -- set the path to yices
+--      void $ join (setOpt <$> getOptionSetting yicesPath (getConfiguration sym)
+--                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/yices-tee"))
+
+    CBO.withZ3OnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
+      -- set the path to z3
+      void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
+                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/z3-tee"))
 
 
       -- set the verbosity level
-      void $ join (setOpt <$> getOptionSetting verbosity (getConfiguration sym)
-                          <*> pure (toInteger 3))
-
-      -- set the path to yices
-      void $ join (setOpt <$> getOptionSetting yicesPath (getConfiguration sym)
-                          <*> pure (Text.pack "/home/jpaykin/scripts/yices"))
+--      void $ join (setOpt <$> getOptionSetting verbosity (getConfiguration sym)
+--                          <*> pure (toInteger 3))
 
 
       let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
@@ -65,7 +71,8 @@ allTests :: (WPO.OnlineSolver t solver)
          -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
          -> T.TestTree
 allTests baseSet synthEnv =
-  T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progs)
+  T.adjustOption @T.Timeout (\_ -> T.mkTimeout 1000000000) $
+    T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progs)
 
 insns :: S.Set (Some (D.Opcode o))
 insns = S.fromList
@@ -101,13 +108,13 @@ insns = S.fromList
 
 progs :: [(String, [D.Instruction])]
 progs = [-- ("addNegated", [ D.Instruction D.NEG (reg 5 :< reg 2 :< Nil)
-         --                , D.Instruction D.ADD4 (reg 11 :< reg 5 :< reg 3 :< Nil)
-         --                ])
-          ("STD",  [ D.Instruction D.STD  $ memrix 1 (2)   :< reg 31     :< Nil ])
---        , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ])
---      ,   ("LHA",  [ D.Instruction D.LHA  $ reg 31         :< memri 1 (-2) :< Nil ])
---        , ("LI",   [ D.Instruction D.LI   $ reg 0          :< D.S16imm 1 :< Nil ])
---        , ("STDU", [ D.Instruction D.STDU $ memrix 1 (-16) :< reg 1      :< Nil ])
+--                        , D.Instruction D.ADD4 (reg 11 :< reg 5 :< reg 3 :< Nil)
+--                        ])
+         ("STD",  [ D.Instruction D.STD  $ memrix 1 (2)   :< reg 31     :< Nil ])
+--       , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ])
+--       , ("LHA",  [ D.Instruction D.LHA  $ reg 31         :< memri 1 (-2) :< Nil ])
+--       , ("LI",   [ D.Instruction D.LI   $ reg 0          :< D.S16imm 1 :< Nil ])
+--       , ("STDU", [ D.Instruction D.STDU $ memrix 1 (-16) :< reg 1      :< Nil ])
         ]
   where
     reg n = D.Gprc (D.GPR n)
