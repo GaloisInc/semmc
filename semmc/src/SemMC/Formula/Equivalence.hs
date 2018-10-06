@@ -60,13 +60,19 @@ deriving instance (ShowF (A.Location arch), ShowF ex) => Show (EquivalenceResult
 formulasEquivSym :: forall arch t solver fs .
                     (A.Architecture arch, WPO.OnlineSolver t solver)
                  => CBO.OnlineBackend t solver fs
+                 -> [Integer]
+                 -- ^ Only check equivalence of memory at these addresses.
                  -> F.Formula (CBO.OnlineBackend t solver fs) arch
                  -> F.Formula (CBO.OnlineBackend t solver fs) arch
                  -> IO (EquivalenceResult arch (Expr t))
-formulasEquivSym sym =
+formulasEquivSym sym indices =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (Expr t tp)
-      eval (GroundEvalFn evalFn) e = U.groundValToExpr sym (S.exprType e) =<< evalFn e
+      eval (GroundEvalFn evalFn) e = do 
+        e' <- evalFn e
+        U.groundValToExpr sym indices (S.exprType e) e'
   in formulasEquiv eval sym
+
+
 
 -- | Check the equivalence of two formulas. The counterexample values are 'Value's.
 formulasEquivConcrete :: forall arch t solver fs .
@@ -105,11 +111,6 @@ formulasEquiv
   f1@(F.Formula { F.formParamVars = bvars1, F.formDefs = defs1 } )
   f2@(F.Formula { F.formParamVars = bvars2, F.formDefs = defs2 } ) =
   do
-    putStrLn "Checking equivalence of formulas"
---    putStrLn $ "Formula 1: "
---    print f1
---    putStrLn $ "Formula 2: "
---    print f2
     -- Create constants for each of the bound variables, then replace them in
     -- each of the definitions. This way, the equations in the different
     -- formulas refer to the same input variables.
@@ -179,11 +180,7 @@ checkSat sym testExpr handler = do
   sp <- CBO.getSolverProcess sym
   let conn = WPO.solverConn sp
   WPO.inNewFrame conn $ do
-    putStrLn $ "Ready to make formula for expression " ++ show testExpr
     f <- WPS.mkFormula conn testExpr
-    putStrLn $ "Made formula "
     WPS.assumeFormula conn f
-    putStrLn $ "Assumed formula"
     res <- WPO.checkAndGetModel sp "semmc equivalence formula"
-    putStrLn $ "Got model "
     handler res

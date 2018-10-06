@@ -8,9 +8,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.Synthesis.Cegis
   ( evalFormula
   , ConcreteTest
+  , initTest
   , CegisParams(..)
   , CegisResult(..)
   , cegis
@@ -48,10 +52,16 @@ data TemplatableInstruction (arch :: *) where
                          -> SL.List (Operand arch) sh
                          -> TemplatableInstruction arch
 
+instance (MapF.ShowF (Operand arch), MapF.ShowF (Opcode arch (Operand arch)))
+      => Show (TemplatableInstruction arch) where
+  show (TemplatableInstruction opcode operand) = MapF.showF opcode ++ " " ++ show operand
+
+
 -- | Disregard the constraints.
 templInsnToDism :: TemplatableInstruction arch -> Instruction arch
 templInsnToDism (TemplatableInstruction op oplist) = Instruction op oplist
 
+-- | Note that ArchState arch (S.SymExpr sym) = LocExprs sym (Location arch)
 type LocExprs sym loc = MapF.MapF loc (S.SymExpr sym)
 
 -- | Look up the given location in the given machine state. If the location is
@@ -89,6 +99,14 @@ askTarget = reader cpTarget
 
 -- | Evaluate an expression, substituting in the location values given in the
 -- machine state.
+evalExpression' :: (IsLocation loc)
+               => WE.ExprBuilder t st fs
+               -> MapF.MapF loc (WE.ExprBoundVar t)
+               -> LocExprs (WE.ExprBuilder t st fs) loc
+               -> WE.Expr t tp
+               -> IO (WE.Expr t tp)
+evalExpression' sym vars state expr = replaceLitVars sym (lookupInState sym state) vars expr
+
 evalExpression :: (IsLocation loc)
                => MapF.MapF loc (WE.ExprBoundVar t)
                -> LocExprs (WE.ExprBuilder t st fs) loc
@@ -96,7 +114,8 @@ evalExpression :: (IsLocation loc)
                -> Cegis (WE.ExprBuilder t st fs) arch (WE.Expr t tp)
 evalExpression vars state expr = do
   sym <- askSym
-  liftIO $ replaceLitVars sym (lookupInState sym state) vars expr
+  liftIO $ evalExpression' sym vars state expr
+
 
 -- | Evaluate a whole formula, substituting in the location values given in the
 -- machine state, returning the transformed machine state.
@@ -104,8 +123,16 @@ evalFormula :: (Architecture arch)
             => Formula (WE.ExprBuilder t st fs) arch
             -> L.ArchState arch (WE.Expr t)
             -> Cegis (WE.ExprBuilder t st fs) arch (L.ArchState arch (WE.Expr t))
-evalFormula (Formula vars defs) input =
+evalFormula (Formula vars defs) input = do
   traverseF (evalExpression vars input) defs
+
+evalFormula' :: (Architecture arch)
+             => WE.ExprBuilder t st fs
+             -> Formula (WE.ExprBuilder t st fs) arch
+             -> L.ArchState arch (WE.Expr t)
+             -> IO (L.ArchState arch (WE.Expr t))
+evalFormula' sym (Formula vars defs) input = traverseF (evalExpression' sym vars input) defs
+
 
 -- | Concrete input and output states of a formula. There's nothing in the types
 -- that prevents the values from being symbolic, but please don't let them be!
@@ -115,6 +142,34 @@ data ConcreteTest' sym loc =
                 }
 
 type ConcreteTest sym arch = ConcreteTest' sym (Location arch)
+instance (MapF.ShowF loc, MapF.ShowF (S.SymExpr sym)) 
+      => Show (ConcreteTest' sym loc) 
+  where
+    show test = "⟨ " ++ show (testInput test) ++ " \t|||\t " ++ show (testOutput test) ++ " ⟩"
+
+-- Returns a 'LocExprs' data structure that maps all locations to the constant 0.
+defaultLocExprs :: forall loc sym. 
+                ( L.IsLocation loc 
+                , MapF.OrdF loc 
+                , S.IsExprBuilder sym
+                )
+               => sym
+               -> IO (LocExprs sym loc) -- MapF.MapF loc (S.SymExpr sym)
+defaultLocExprs sym = do locExprList <- mapM pairDefault (L.allLocations @loc)
+                         return $ MapF.fromList locExprList
+  where
+    pairDefault :: Some loc -> IO (MapF.Pair loc (S.SymExpr sym))
+    pairDefault (Some l) = MapF.Pair l <$> L.defaultLocationExpr sym l
+
+
+initTest :: (L.IsLocation (Location arch), Architecture arch)
+         => WE.ExprBuilder t st fs
+         -> Formula (WE.ExprBuilder t st fs) arch
+         -> IO (ConcreteTest (WE.ExprBuilder t st fs) arch)
+initTest sym f = do locExprs <- defaultLocExprs sym
+                    res <- evalFormula' sym f locExprs 
+                    return $ ConcreteTest' locExprs res
+
 
 -- | Build an equality expression for the given location, under the given
 -- concrete test. What this means is all of the machine state variables have
@@ -151,6 +206,7 @@ buildEqualityLocation test vars outputLoc expr = do
                   Nothing -> liftIO $ lookupInState sym (testInput test) outputLoc
   shouldBe <- liftIO $ lookupInState sym (testOutput test) outputLoc
   liftIO $ S.isEq sym actuallyIs shouldBe
+
 
 -- | Build a conjuction of the equality expressions for /all/ locations in
 -- either the outputs of the 'ConcreteTest' or the definitions of the 'Formula'.
@@ -245,7 +301,8 @@ cegis' :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
        -- ^ All the tests we have so far.
        -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis' trial trialFormula tests = do
-  liftIO . putStrLn $ "INPUT FORMULA:\n" ++ show trialFormula
+  -- liftIO . putStrLn $ "Number of tests: " ++ show (length tests)
+  liftIO . putStrLn $ "\n\nTESTS:\n\t" ++ show tests
   sym <- askSym
   -- Is this candidate satisfiable for the concrete tests we have so far? At
   -- this point, the machine state is concrete, but the immediate values of the
@@ -253,19 +310,20 @@ cegis' trial trialFormula tests = do
   -- the SAT solver will give us values for the templated immediates in order to
   -- make the tests pass.
   check <- buildEqualityTests trialFormula tests
-  liftIO . putStrLn $ "Before checkSat"
   insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
-  liftIO . putStrLn $ "After checkSat"
 
   case insns of
     Just insns' -> do
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
+      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
       filledInFormula <- condenseInstructions insns'
-      liftIO . putStrLn $ "CANDIDATE FORMULA:\n" ++ show filledInFormula
       targetFormula <- askTarget
-      equiv <- liftIO $ formulasEquivSym sym targetFormula filledInFormula
+      equiv <- liftIO $ formulasEquivSym sym 
+                                         (getMemAccesses filledInFormula) 
+                                         targetFormula 
+                                         filledInFormula
       case equiv of
         -- FIXME: Is the correct behavior in a timeout to give up on this
         -- branch?
@@ -274,9 +332,17 @@ cegis' trial trialFormula tests = do
         DifferentBehavior ctrExample -> do
           ctrExampleOut <- evalFormula targetFormula ctrExample
           let newTest = ConcreteTest' ctrExample ctrExampleOut
-          liftIO $ putStrLn "RECURSING with cegis"
           cegis' trial trialFormula (newTest : tests)
     Nothing -> return (CegisUnmatchable tests)
+
+-- | Returns a list of memory locations (as bit vectors) that are accessed or
+-- written to in a formula.
+-- 
+-- TODO: what should the dimensions of the bit-vector be?
+getMemAccesses :: Formula sym arch
+               -> [Integer]
+getMemAccesses = undefined
+
 
 cegis :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
       => CegisParams (CBO.OnlineBackend t solver fs) arch

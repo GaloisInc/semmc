@@ -3,6 +3,8 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module SemMC.Synthesis.Core
   ( synthesizeFormula
   , SynthesisEnvironment(..)
@@ -26,7 +28,8 @@ import           SemMC.Formula
 import           SemMC.Synthesis.Template
 import           SemMC.Synthesis.Cegis
 import           SemMC.Util
-
+import Debug.Trace (trace)
+    
 -- NOTE: This initial implementation is not meant to be at all fast; it is just
 -- a proof of concept.
 
@@ -80,7 +83,11 @@ footprintFilter target candidate =
   let (candInputs, candOutputs) = calcFootprint candidate
       targetInputs = formInputs target
       targetOutputs = formOutputs target
-  in candInputs `Set.isSubsetOf` targetInputs &&
+  in trace ("Target Inputs: " ++ show targetInputs) $
+     trace ("Target Outputs: " ++ show targetOutputs) $
+     trace ("Candidate Inputs: " ++ show candInputs) $
+     trace ("Candidate Outputs: " ++ show candOutputs) $
+     candInputs `Set.isSubsetOf` targetInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
 
 instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solver)
@@ -97,6 +104,7 @@ instantiate target trial
       -- of 'TemplatedOperand', which has a function inside it, and it's
       -- non-trivial to either make it not use a function or come up with a
       -- surrogate key.)
+      liftIO $ putStrLn $ "Trial: " ++ show trial
       tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
       st <- get
       let params = CegisParams { cpSym = sym
@@ -106,10 +114,13 @@ instantiate target trial
       cegisResult <- liftIO $ cegis params (synthTests st) tifs
       case cegisResult of
         -- If we find an equivalent instantiation, we're done!
-        CegisEquivalent insns -> return (Just insns)
+        CegisEquivalent insns -> do
+                         liftIO $ putStrLn "CegisEquivalent"
+                         return (Just insns)
         -- Otherwise, add this template as a possible prefix, and adopt the new
         -- test set.
         CegisUnmatchable newTests -> do
+          liftIO $ putStrLn "CegisUnmatchable"
           let oldPrefixes = synthPrefixes st
           put (st { synthTests = newTests
                   , synthPrefixes = oldPrefixes Seq.|> trial
@@ -156,7 +167,12 @@ synthesizeFormula :: forall t solver fs arch .
                   -> Formula (CBO.OnlineBackend t solver fs) arch
                   -> IO (Maybe [Instruction arch])
 synthesizeFormula params target = do
+  let sym = synthSym $ synthEnv params
+  seed <- initTest sym target
   evalStateT (runReaderT (synthesizeFormula' target) params) $
-    SynthesisState { synthTests = []
+    SynthesisState { synthTests = [seed]
                    , synthPrefixes = Seq.singleton []
                    }
+
+
+    

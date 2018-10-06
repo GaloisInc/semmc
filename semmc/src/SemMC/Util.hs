@@ -15,6 +15,7 @@
 module SemMC.Util
   ( -- * Misc
     groundValToExpr
+  , exprToGroundVal
   , makeSymbol
   , mapFReverse
   , sequenceMaybes
@@ -39,6 +40,7 @@ import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Context
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
+import           GHC.TypeNats (KnownNat)
 import           Data.Parameterized.NatRepr (knownNat)
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Set as Set
@@ -135,57 +137,47 @@ makeSymbol name = case userSymbol sanitizedName of
 
 -- | Convert a 'GroundValue' (a primitive type that represents the given
 -- Crucible type) back into a symbolic expression, just as a literal.
-groundValToExpr :: forall sym tp.
+groundValToExpr :: forall sym tp n.
                    (S.IsSymExprBuilder sym)
                 => sym
+                -> [Integer]
+                -- ^ A list of relevant indices into memory
                 -> BaseTypeRepr tp
                 -> GE.GroundValue tp
                 -> IO (S.SymExpr sym tp)
-groundValToExpr sym BaseBoolRepr True = return (S.truePred sym)
-groundValToExpr sym BaseBoolRepr False = return (S.falsePred sym)
-groundValToExpr sym (BaseBVRepr w) val = S.bvLit sym w val
-groundValToExpr sym BaseNatRepr val = S.natLit sym val
-groundValToExpr sym BaseIntegerRepr val = S.intLit sym val
-groundValToExpr sym BaseRealRepr val = S.realLit sym val
-groundValToExpr sym (BaseFloatRepr fpp@(FloatingPointPrecisionRepr eb sb)) val
+groundValToExpr sym _ BaseBoolRepr True = return (S.truePred sym)
+groundValToExpr sym _ BaseBoolRepr False = return (S.falsePred sym)
+groundValToExpr sym _ (BaseBVRepr w) val = S.bvLit sym w val
+groundValToExpr sym _ BaseNatRepr val = S.natLit sym val
+groundValToExpr sym _ BaseIntegerRepr val = S.intLit sym val
+groundValToExpr sym _ BaseRealRepr val = S.realLit sym val
+groundValToExpr sym _ (BaseFloatRepr fpp@(FloatingPointPrecisionRepr eb sb)) val
   | LeqProof <- leqTrans (LeqProof @1 @2) (leqProof (knownNat @2) eb)
   , LeqProof <- leqTrans (LeqProof @1 @2) (leqProof (knownNat @2) sb)
   , LeqProof <- leqAddPos eb sb
   = S.floatFromBinary sym fpp =<< S.bvLit sym (addNat eb sb) val
-groundValToExpr sym BaseComplexRepr val = S.mkComplexLit sym val
-groundValToExpr sym (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
-  base' <- groundValToExpr sym elemTp base
-  entries <- Hash.mkMap <$> traverse (groundValToExpr sym elemTp) m
+groundValToExpr sym _        BaseComplexRepr val = S.mkComplexLit sym val
+groundValToExpr sym indices (BaseArrayRepr idxTp elemTp) (GE.ArrayConcrete base m) = do
+  base' <- groundValToExpr sym indices elemTp base
+  entries <- Hash.mkMap <$> traverse (groundValToExpr sym indices elemTp) m
   S.arrayFromMap sym idxTp entries base'
 
--- Groundvaltoexpr _ (BaseArrayRepr _ _) (GE.ArrayMapping _) = error "groundValToExpr: ArrayMapping not handled"
-groundValToExpr sym (BaseArrayRepr idxs r) (GE.ArrayMapping f) = do
+groundValToExpr sym indices (BaseArrayRepr idxs r) (GE.ArrayMapping f) = do
     -- Construct a default value to populate the array
     defaultValue <- f $ defaultInput idxs
-    defaultExpr  <- groundValToExpr sym r defaultValue
-    let defaultConcrete = groundToConcrete r defaultValue
+    defaultExpr  <- groundValToExpr sym indices r defaultValue
 
-    let indexVals = allGroundAssign idxs
+    let indexVals = allGroundAssign idxs indices
         indexLits = fmap (mkIndex idxs) indexVals
-        indexConcrete = fmap (fmapFC indexToConcrete) indexLits
 
     resultVals <- mapM f indexVals
-    let resultConcrete = groundToConcrete r <$> resultVals
+    resultExprs <- mapM (groundValToExpr sym indices r) resultVals
 
-    let arrayMap' = Map.fromList $ zip indexLits resultConcrete
-        concreteMap = W.ConcreteArray idxs defaultConcrete (Map.mapKeys (fmapFC indexToConcrete) arrayMap')
+--      :: Map.Map (Assignment S.IndexLit idx) (S.SymExpr sym xs)
+    let arrayMap' = Map.fromList $ zip indexLits resultExprs
 
-    arr <- S.concreteToSym sym concreteMap
+    S.arrayFromMap sym idxs (Hash.mkMap arrayMap') defaultExpr
 
-    case S.asConcrete arr of
-      Just (W.ConcreteArray _ _ _) -> putStrLn "Created a concrete array"
-      Nothing                      -> putStrLn "Created a symbolic array"
-    return arr
-
-
-
---    sFun <- inlineDefineFun' sym (makeSymbol "arr") idxs (arrayMappingToExpr sym idxs r f)
---    S.arrayFromFn sym sFun
 
   where
     defaultInput :: forall idx. Assignment BaseTypeRepr idx -> Assignment GE.GroundValueWrapper idx
@@ -202,18 +194,9 @@ groundValToExpr sym (BaseArrayRepr idxs r) (GE.ArrayMapping f) = do
     mkIndex _                      _                  = error "Error creating index literal into an array: unsupported types"
 
 
-{-
-    listToArray :: Assignment BaseTypeRepr idx'
-                -> [(Assignment S.IndexLit idx',S.SymExpr sym xs)]
-                -> IO (S.SymArray sym idx' xs)
-    listToArray _ [] = error "Cannot construct an empty array"
-    listToArray Empty _ = error "Cannot construct an empty array"
-    listToArray idx@(_ :> _) [(i,e)] = S.constantArray sym idx e
--}
 
-
-groundValToExpr _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
-groundValToExpr _ BaseStringRepr     _ = error "groundValToExpr: string base types are not supported yet"
+groundValToExpr _ _ (BaseStructRepr _) _ = error "groundValToExpr: struct type isn't handled yet"
+groundValToExpr _ _ BaseStringRepr     _ = error "groundValToExpr: string base types are not supported yet"
 
 
 showGroundValue :: BaseTypeRepr b -> GE.GroundValue b -> String
@@ -233,97 +216,25 @@ showGroundValues Empty Empty = "Empty"
 showGroundValues (rs :> r) (bs :> GE.GVW b) = showGroundValues rs bs ++ " :> " ++ showGroundValue r b
 
 
-arrayMappingToExpr :: forall sym idx b.
-                      S.IsSymExprBuilder sym
-                   => sym
-                   -> Assignment BaseTypeRepr idx
-                   -> BaseTypeRepr b
-                   -> (Assignment GE.GroundValueWrapper idx -> IO (GE.GroundValue b))
-                   -> Assignment (S.SymExpr sym) idx -> IO (S.SymExpr sym b)
-arrayMappingToExpr sym idxRepr bRepr f idx = arrayMappingToExpr' (allGroundAssign idxRepr)
-  where
-    arrayMappingToExpr' :: [Assignment GE.GroundValueWrapper idx] -> IO (S.SymExpr sym b)
-    arrayMappingToExpr' []  = error "No candidate ground values found when converting ArrayMapping"
-    arrayMappingToExpr' [g] = arrayAsExp g
-    arrayMappingToExpr' (g : gs) = do eq <- isEqAssignment idxRepr idx g
-                                      ifthenelse eq (arrayAsExp g)
-                                                    (arrayMappingToExpr' gs)
-
-    arrayAsExp :: Assignment GE.GroundValueWrapper idx -> IO (S.SymExpr sym b)
-    arrayAsExp g = do -- putStrLn $ "Looking up " ++ showGroundValues idxRepr g
-                      v <- f g
-                      -- putStrLn $ "Got base value " ++ showGroundValue bRepr v
-                      e <- groundValToExpr sym bRepr v
-                      -- putStrLn $ "Got expression "
-                      return e
-
-    isEqAssignment :: forall idx'. 
-                      Assignment BaseTypeRepr idx'
-                   -> Assignment (S.SymExpr sym) idx'
-                   -> Assignment GE.GroundValueWrapper idx'
-                   -> IO (S.Pred sym)
-    isEqAssignment Empty Empty Empty = return $ S.truePred sym
-    isEqAssignment (rs :> r) (es :> e) (gs :> GE.GVW g) = do 
-      bs <- isEqAssignment rs es gs
-      e' <- groundValToExpr sym r g
-      b  <- S.isEq sym e e'
-      S.andPred sym bs b
-
-    -- The What4 interface does not allow lazy evaluation of monadic results in
-    -- an if/then/else statement unless the condition (in this case eq) is a
-    -- constant.
-    ifthenelse :: S.Pred sym -> IO (S.SymExpr sym b) -> IO (S.SymExpr sym b)
-               -> IO (S.SymExpr sym b)
-    ifthenelse b tIO fIO = case S.asConstantPred b of
-      Just True  -> tIO
-      Just False -> fIO
-      Nothing    -> do t' <- tIO
-                       f' <- fIO
-                       S.baseTypeIte sym b t' f'
 
 
-
-
-allGroundAssign :: Assignment BaseTypeRepr idx -> [Assignment GE.GroundValueWrapper idx]
-allGroundAssign Empty       = [Empty]
-allGroundAssign (idx :> r) = do vs <- allGroundAssign idx
-                                v  <- GE.GVW <$> allGroundVals r
-                                return $ vs :> v
-
-allConcreteFC :: Assignment BaseTypeRepr idx -> [Assignment W.ConcreteVal idx]
-allConcreteFC Empty       = [Empty]
-allConcreteFC (idx :> r) = do vs <- allConcreteFC idx
-                              v  <- groundToConcrete r <$> allGroundVals r
-                              return $ vs :> v
-
-groundToConcrete :: BaseTypeRepr b -> GE.GroundValue b -> W.ConcreteVal b
-groundToConcrete BaseBoolRepr b = W.ConcreteBool b
-groundToConcrete (BaseBVRepr n) b = W.ConcreteBV n b
-groundToConcrete BaseNatRepr n = W.ConcreteNat n
-groundToConcrete BaseIntegerRepr n = W.ConcreteInteger n
-groundToConcrete BaseRealRepr r = W.ConcreteReal r
-groundToConcrete (BaseFloatRepr f) x = error "Error converting a float to a concrete value"
-groundToConcrete BaseStringRepr s = W.ConcreteString s
-groundToConcrete BaseComplexRepr c = W.ConcreteComplex c
-groundToConcrete (BaseStructRepr ctx) vs = W.ConcreteStruct $ groundToConcreteFC ctx vs
-groundToConcrete (BaseArrayRepr ctx b) (GE.ArrayConcrete v map) =
-    W.ConcreteArray ctx (groundToConcrete b v) $ Map.mapKeys (fmapFC indexToConcrete) $ 
-                                                 Map.map (groundToConcrete b) map
-
-indexToConcrete :: S.IndexLit b -> W.ConcreteVal b
-indexToConcrete (S.NatIndexLit n) = W.ConcreteNat n
-indexToConcrete (S.BVIndexLit n i) = W.ConcreteBV n i
-
-groundToConcreteFC :: Assignment BaseTypeRepr ctx 
-                   -> Assignment GE.GroundValueWrapper ctx 
-                   -> Assignment W.ConcreteVal ctx
-groundToConcreteFC = undefined
-
-
-allGroundVals :: BaseTypeRepr b -> [GE.GroundValue b]
-allGroundVals BaseBoolRepr = [True,False]
-allGroundVals (BaseBVRepr w) = [0..(natValue w-1)]
-allGroundVals r              = error $ "Cannot produce ground values for the infinite type" ++ show r
+-- | Given a list of integers representing memory accesses, produce a list of all
+-- tuples of such integersin the shape of idx.
+--
+-- For example, if idx = [BVRepr 32, BVRepr 32], then allGroundAssign idx ls is
+-- equivalent to [(i,j) | i <- ls, j <- ls].
+--
+-- If idx represents data that are not bit vectors, allGroundAssign will throw
+-- an error. 
+allGroundAssign :: Assignment BaseTypeRepr idx 
+                -> [Integer]
+                -> [Assignment GE.GroundValueWrapper idx]
+allGroundAssign Empty                 _ = [Empty]
+allGroundAssign (idx :> BaseBVRepr _) indices = do
+  vs <- allGroundAssign idx indices
+  i <- indices
+  return $ vs :> GE.GVW i
+allGroundAssign _ _ = error "allGroundAssign is only defined for bit vectors"
 
 
 
@@ -345,24 +256,6 @@ exprToGroundVal (BaseStructRepr r)           e = do
     v <- S.asStruct e
     traverseFC (\e' -> GE.GVW <$> exprToGroundVal @sym (S.exprType e') e') v
 exprToGroundVal BaseStringRepr               e = S.asString e
-
--- | Given a list of symbolic expressions, map 'exprToGroundVal' over them.
-mapAssignment :: forall sym ctx.
-                 (S.IsSymExprBuilder sym)
-              => sym
-              -> Assignment BaseTypeRepr ctx
-              -> Assignment (S.SymExpr sym) ctx
-              -> IO (Assignment GE.GroundValueWrapper ctx)
-mapAssignment _ _ Empty = return Empty
-mapAssignment sym (reps :> r) (assn :> e) = do 
-    assn' <- mapAssignment sym reps assn
-    v <- maybe (myError)
-               return 
-               (GE.GVW <$> exprToGroundVal @sym r e)
-    return $ assn' :> v
-  where
-    myError = error $ "Could not extract ground value from symbolic expression of type" 
-                      ++ show r
 
 inlineDefineFun' :: S.IsSymExprBuilder sym
                  => sym

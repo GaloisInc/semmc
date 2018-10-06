@@ -114,10 +114,11 @@ data TemplatedOperand (arch :: *) (s :: Symbol) =
                    -- operand.
                    }
 
-instance Show (TemplatedOperand arch s) where
-  show _ = "some weird templated operand"
+instance ShowF (Location arch) => Show (TemplatedOperand arch s) where
+  show op = show (templUsedLocations op)
 
-instance (ShowF (Operand arch)) => ShowF (TemplatedOperand arch)
+
+instance (ShowF (Operand arch), ShowF (Location arch)) => ShowF (TemplatedOperand arch)
 
 instance IsOperand (TemplatedOperand arch)
 
