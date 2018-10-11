@@ -76,34 +76,34 @@ allTests baseSet synthEnv =
 
 insns :: S.Set (Some (D.Opcode o))
 insns = S.fromList
-        [ Some D.ADD4
-        , Some D.ADDC
-        , Some D.ADDI
-        , Some D.ADDIS
-        , Some D.AND
-        , Some D.ANDC
-        , Some D.EQV
-        , Some D.LHA
-        , Some D.LI
-        , Some D.MULLW
-        , Some D.MULLD
-        , Some D.NAND
-        , Some D.NEG
-        , Some D.NOR
-        , Some D.OR
-        , Some D.ORI
-        , Some D.ORC
-        , Some D.ORIS
-        , Some D.SLD
-        , Some D.SLW
-        , Some D.SRAW
-        , Some D.SRAD
-        , Some D.SRD
-        , Some D.SRW
-        , Some D.SUBF
-        , Some D.STD
-        , Some D.STDU
-        , Some D.SC
+        [ -- Some D.ADD4
+        -- , Some D.ADDC
+        -- , Some D.ADDI
+        -- , Some D.ADDIS
+        -- , Some D.AND
+        -- , Some D.ANDC
+        -- , Some D.EQV
+        -- , Some D.LHA
+        -- , Some D.LI
+        -- , Some D.MULLW
+        -- , Some D.MULLD
+        -- , Some D.NAND
+--        , Some D.NEG
+--        , Some D.NOR
+--        , Some D.OR
+--        , Some D.ORI
+--        , Some D.ORC
+--        , Some D.ORIS
+--        , Some D.SLD
+--        , Some D.SLW
+--        , Some D.SRAW
+--        , Some D.SRAD
+--        , Some D.SRD
+--        , Some D.SRW
+--        , Some D.SUBF
+         Some D.STD
+--        , Some D.STDU
+--        , Some D.SC
         ]
 
 progs :: [(String, [D.Instruction])]
