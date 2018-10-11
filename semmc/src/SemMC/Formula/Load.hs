@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE GADTs #-}
 -- | Utilities for loading formulas from disk
 module SemMC.Formula.Load (
   loadFormulas,
@@ -53,11 +54,11 @@ formulaEnv proxy sym = do
                        , FE.envUndefinedBit = undefinedBit
                        }
   where
-    toUF :: (String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)
+    toUF :: Some (A.UninterpFn arch)
          -> IO (String, (FE.SomeSome (CRU.SymFn sym), Some BaseTypeRepr))
-    toUF (name, Some args, retRep@(Some ret)) = do
+    toUF (Some (A.MkUninterpFn name args ret _)) = do
       uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol ("uf." ++ name)) args ret
-      return (("uf." ++ name), (uf, retRep))
+      return (("uf." ++ name), (uf, Some ret))
 
 data FormulaParseError = FormulaParseError String String
   deriving (Show)

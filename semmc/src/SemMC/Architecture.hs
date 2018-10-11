@@ -15,6 +15,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module SemMC.Architecture (
   Architecture(..),
@@ -33,16 +34,22 @@ module SemMC.Architecture (
   IsOperandTypeRepr(..),
   ArchRepr,
   ShapeRepr,
+  UninterpFn(..),
+  mkUninterpFn,
+  getUninterpFn,
   showShapeRepr,
   createSymbolicEntries
   ) where
 
+import           Data.List (find)
 import           Data.EnumF
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Pair ( Pair(..) )
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
+import           Data.Parameterized.TraversableFC (testEqualityFC)
 import           Data.Proxy ( Proxy(..) )
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
@@ -100,7 +107,7 @@ class (IsOperand (Operand arch),
   taggedOperand :: TaggedExpr arch sym s -> AllocatedOperand arch sym s
 
   -- | The uninterpreted functions referred to by this architecture
-  uninterpretedFunctions :: proxy arch -> [(String, Some (Ctx.Assignment BaseTypeRepr), Some BaseTypeRepr)]
+  uninterpretedFunctions :: proxy arch -> [Some (UninterpFn arch)]
 
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
@@ -139,6 +146,42 @@ showShapeRepr _ rep =
       SL.Nil -> ""
       (r SL.:< rep') -> let showr = operandTypeReprSymbol (Proxy @arch) r
                        in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
+  
+
+data UninterpFn arch argResult where
+  MkUninterpFn :: { uninterpFnName :: String
+                  , uninterpFnArgs :: Ctx.Assignment BaseTypeRepr args
+                  , uninterpFnRes  :: BaseTypeRepr ty
+                  , uninterpFnLive :: forall sym.
+                                      Ctx.Assignment (S.Expr sym) args 
+                                   -> [Some (S.Expr sym)]
+                  -- ^ Given some arguments, identify the arguments that might touch memory.
+                  } -> UninterpFn arch '(args,ty)
+
+
+
+mkUninterpFn :: forall (args :: Ctx.Ctx BaseType) (ty :: BaseType) arch.
+              ( KnownRepr (Ctx.Assignment BaseTypeRepr) args
+              , KnownRepr BaseTypeRepr ty )
+             => String 
+             -> (forall sym. Ctx.Assignment (S.Expr sym) args -> [Some (S.Expr sym)])
+             -> Some (UninterpFn arch)
+mkUninterpFn name liveness = Some $ MkUninterpFn name (knownRepr :: Ctx.Assignment BaseTypeRepr args) 
+                                                      (knownRepr :: BaseTypeRepr ty)
+                                                      liveness
+
+-- | Get the representation of the uninterpreted function with the name corresponding to the given string out of the list `uninterpretedfunctions'
+getUninterpFn :: forall arch.
+                 Architecture arch
+              => String
+              -> Maybe (Some (UninterpFn arch))
+getUninterpFn s = go $ uninterpretedFunctions (Proxy @arch)
+  where
+    go :: [Some (UninterpFn arch)] -> Maybe (Some (UninterpFn arch))
+    go [] = Nothing
+    go (Some f@(MkUninterpFn _ _ _ _) : fs) = if s == uninterpFnName f
+                                              then Just (Some f)
+                                              else go fs
 
 -- | This type encapsulates an evaluator for operations represented as
 -- uninterpreted functions in semantics.  It may seem strange to interpret

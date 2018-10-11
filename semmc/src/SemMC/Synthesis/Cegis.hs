@@ -27,9 +27,14 @@ import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
-import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some ( Some(..), viewSome )
 import           Data.Parameterized.TraversableF
+import           Data.Parameterized.TraversableFC
+import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Classes as P
 import qualified Data.Set as Set
+import qualified Data.Text as Text
+import           Data.Proxy (Proxy(..))
 
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Interface as S
@@ -37,6 +42,7 @@ import           What4.SatResult
 import           What4.Expr.GroundEval
 import qualified What4.Expr as WE
 import qualified What4.Protocol.Online as WPO
+import qualified What4.Symbol as WS
 
 import           Dismantle.Instruction
 
@@ -321,7 +327,7 @@ cegis' trial trialFormula tests = do
       filledInFormula <- condenseInstructions insns'
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym 
-                                         (getMemAccesses filledInFormula) 
+                                         (liveMem filledInFormula) 
                                          targetFormula 
                                          filledInFormula
       case equiv of
@@ -335,13 +341,77 @@ cegis' trial trialFormula tests = do
           cegis' trial trialFormula (newTest : tests)
     Nothing -> return (CegisUnmatchable tests)
 
+
+
+
 -- | Returns a list of memory locations (as bit vectors) that are accessed or
 -- written to in a formula.
--- 
--- TODO: what should the dimensions of the bit-vector be?
-getMemAccesses :: Formula sym arch
-               -> [Integer]
-getMemAccesses = undefined
+liveMem :: Architecture arch
+        => Formula (WE.ExprBuilder t st fs) arch
+        -> [Integer]
+-- liveMem _ = [0..63]
+liveMem form = case readLocation "Mem" of
+                 Just (Some mem) -> maybe [] (Set.toList . (liveMemInExpr form)) 
+                                             (MapF.lookup mem (formDefs form))
+                 Nothing         -> error "Cannot construct the location 'Mem'"
+
+-- | Just (Some memExpr) <- readLocation "Mem" = liveMemInExpr form 
+
+liveMemInExpr :: Architecture arch
+              => Formula (WE.ExprBuilder t st fs) arch
+              -> WE.Expr t a
+              -> Set.Set Integer
+liveMemInExpr _ (WE.BVExpr _ i _)   = Set.singleton i
+liveMemInExpr f (WE.SemiRingLiteral _ _ _) = undefined -- either a Nat, Int, or Real
+liveMemInExpr f (WE.StringExpr s _) = undefined
+liveMemInExpr f (WE.AppExpr a)      = liveMemInApp f $ WE.appExprApp a 
+liveMemInExpr f (WE.NonceAppExpr a) = liveMemInNonceApp f $ WE.nonceExprApp a
+liveMemInExpr _ (WE.BoundVarExpr _) = undefined -- we may have some bound variables which are uninterpreted functions?
+
+liveMemInApp :: Architecture arch
+              => Formula (WE.ExprBuilder t st fs) arch
+              -> WE.App (WE.Expr t) a
+              -> Set.Set Integer
+liveMemInApp _ WE.TrueBool = Set.empty
+liveMemInApp _ WE.FalseBool = Set.empty
+liveMemInApp f (WE.NotBool e) = liveMemInExpr f e
+liveMemInApp f (WE.AndBool e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
+liveMemInApp f (WE.XorBool e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
+liveMemInApp f (WE.IteBool e e1 e2) = liveMemInExpr f e 
+                          `Set.union` liveMemInExpr f e1 
+                          `Set.union` liveMemInExpr f e2
+liveMemInApp f (WE.SemiRingSum r x) = undefined -- either a Nat, Int, or Real
+
+
+exprSymFnToUninterpFn :: forall arch t args ret.
+                         Architecture arch 
+                      => WE.ExprSymFn t args ret -> Maybe (UninterpFn arch '(args,ret))
+exprSymFnToUninterpFn f = 
+  case WE.symFnInfo f of
+    WE.UninterpFnInfo args ret -> do
+      let name = Text.unpack . WS.solverSymbolAsText $ WE.symFnName f 
+      Some f'@(MkUninterpFn _ args' ret' _) <- getUninterpFn @arch name
+      case (P.testEquality args args', P.testEquality ret ret') of 
+        (Just P.Refl, Just P.Refl) -> return f'
+        (_, _)                     -> Nothing
+    _ -> Nothing
+
+
+
+liveMemInNonceApp :: forall arch t st fs a. 
+                 Architecture arch
+              => Formula (WE.ExprBuilder t st fs) arch
+              -> WE.NonceApp t (WE.Expr t) a
+              -> Set.Set Integer
+liveMemInNonceApp form (WE.FnApp f args) =
+    case exprSymFnToUninterpFn @arch f of
+      Just (MkUninterpFn _ _ _ liveness) -> 
+        let exprs = liveness args
+            ints  = (\(Some e) -> liveMemInExpr form e) <$> exprs
+        in foldl Set.union Set.empty ints
+      Nothing -> Set.empty
+liveMemInNonceApp _ _ = undefined
+
 
 
 cegis :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
@@ -356,3 +426,5 @@ cegis :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
 cegis params tests trial = do
   trialFormula <- condenseFormulas (cpSym params) (map tifFormula trial)
   runReaderT (cegis' trial trialFormula tests) params
+
+

@@ -157,7 +157,9 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
 
   taggedOperand = toTemplatedOperand . taggedExpr
 
-  uninterpretedFunctions _ = uninterpretedFunctions (Proxy @arch)
+  uninterpretedFunctions _ = do 
+    Some (MkUninterpFn name args res live) <- uninterpretedFunctions (Proxy @arch)
+    return $ Some (MkUninterpFn name args res live)
 
   allocateSymExprsForOperand _ sym locLookup (TemplatedOperand _ _ f) = do
     (e, r) <- f sym locLookup
