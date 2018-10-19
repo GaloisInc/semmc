@@ -27,14 +27,16 @@ import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
-import           Data.Parameterized.Some ( Some(..), viewSome )
+import           Data.Parameterized.Some ( Some(..), viewSome, mapSome, traverseSome )
 import           Data.Parameterized.TraversableF
 import           Data.Parameterized.TraversableFC
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Classes as P
+import           GHC.TypeNats (KnownNat)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import           Data.Proxy (Proxy(..))
+import           Debug.Trace (trace)
 
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Interface as S
@@ -153,7 +155,7 @@ instance (MapF.ShowF loc, MapF.ShowF (S.SymExpr sym))
   where
     show test = "⟨ " ++ show (testInput test) ++ " \t|||\t " ++ show (testOutput test) ++ " ⟩"
 
--- Returns a 'LocExprs' data structure that maps all locations to the constant 0.
+-- Returns a 'LocExprs' data structure that maps all locations to a default value.
 defaultLocExprs :: forall loc sym. 
                 ( L.IsLocation loc 
                 , MapF.OrdF loc 
@@ -178,7 +180,9 @@ initTest sym f = do locExprs <- defaultLocExprs sym
 
 
 -- | Build an equality expression for the given location, under the given
--- concrete test. What this means is all of the machine state variables have
+-- concrete test, of the form 
+-- > e[i ↦ testInput(i)] = testOutput(l)]
+-- What this means is all of the machine state variables have
 -- been filled in, and the resulting expression is set equal to the known "real"
 -- output value.
 --
@@ -191,7 +195,7 @@ initTest sym f = do locExprs <- defaultLocExprs sym
 -- , the location is @r3@, and the expression is @Just (3*r2 + imm5)@, this
 -- function will generate the expression @3*5 + imm5 = 10@. If the expression
 -- were instead @Nothing@, this would generate @7 = 10@.
-buildEqualityLocation :: (IsLocation loc)
+buildEqualityLocation :: (IsLocation loc, P.ShowF loc)
                       => ConcreteTest' (WE.ExprBuilder t st fs) loc
                       -> MapF.MapF loc (WE.ExprBoundVar t)
                       -- ^ The bound variables representing the input values for
@@ -202,7 +206,7 @@ buildEqualityLocation :: (IsLocation loc)
                       -- ^ If 'Just', the symbolic representation of the new
                       -- definition of this location. If 'Nothing', then assume
                       -- the identity transformation.
-                      -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
+                      -> Cegis (WE.ExprBuilder t st fs) arch (WE.Expr t tp, WE.Expr t tp)
 buildEqualityLocation test vars outputLoc expr = do
   sym <- askSym
   actuallyIs <- case expr of
@@ -211,29 +215,118 @@ buildEqualityLocation test vars outputLoc expr = do
                   -- candidate formula, then its original value is preserved.
                   Nothing -> liftIO $ lookupInState sym (testInput test) outputLoc
   shouldBe <- liftIO $ lookupInState sym (testOutput test) outputLoc
-  liftIO $ S.isEq sym actuallyIs shouldBe
+--  liftIO . putStrLn $ "Built equation for location " ++ P.showF outputLoc 
+--  liftIO . putStrLn $ "FOR test " ++ show test
+--  liftIO . putStrLn $ "WITH expression " ++ show expr
+--  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
+--  liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
+  return (actuallyIs, shouldBe)
 
+
+-- | Build a conjuction of the equality expressions for all registers given by
+-- the input list of locations.
+buildEqualityLocations :: forall arch t st fs
+                       . (Architecture arch)
+                       => Formula (WE.ExprBuilder t st fs) arch
+                       -> ConcreteTest (WE.ExprBuilder t st fs) arch
+                       -> Set.Set (Some (Location arch))
+                       -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
+buildEqualityLocations (Formula vars defs) test locs = do
+  sym <- askSym
+  let addEquality :: WE.BoolExpr t -> Some (Location arch) -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
+      addEquality soFar (Some loc) = do
+        let locDef = MapF.lookup loc defs
+        (actuallyIs,shouldBe) <- buildEqualityLocation test vars loc locDef
+        locEquality <- liftIO $ S.isEq sym actuallyIs shouldBe
+        liftIO $ S.andPred sym soFar locEquality
+  foldlM addEquality (S.truePred sym) locs
+
+-- | Build a conjuction of the equality expressions for all the
+-- indices/locations in memory touched by the input formula
+buildEqualityMem :: forall arch t st fs
+                 . (Architecture arch)
+                 => Formula (WE.ExprBuilder t st fs) arch
+                 -> ConcreteTest (WE.ExprBuilder t st fs) arch
+                 -> Maybe (Some (MemLoc arch))
+                 -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
+buildEqualityMem _ _ Nothing = do sym <- askSym
+                                  return $ S.truePred sym
+buildEqualityMem f@(Formula vars defs) test (Just (Some (MemLoc w mem))) = do
+  sym <- askSym
+  let locDef = MapF.lookup mem defs
+  (actualMem,targetMem) <- buildEqualityLocation test vars mem locDef
+  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actualMem
+  liftIO . putStrLn $ "SHOULD BE:\t" ++ show targetMem
+  let indices = liveMemInExpr f actualMem `Set.union` liveMemInExpr f targetMem
+  liftIO . putStrLn $ "INDICES: " ++ show indices
+  let addEquality :: WE.BoolExpr t -> Integer -> IO (WE.BoolExpr t)
+      addEquality soFar i = do
+        iExp        <- S.bvLit sym w i
+        actualMem_i <- S.arrayLookup sym actualMem (Ctx.Empty Ctx.:> iExp)
+        targetMem_i <- S.arrayLookup sym targetMem (Ctx.Empty Ctx.:> iExp)
+        liftIO . putStrLn $ "ACTUALLY IS[" ++ show i ++ "]:\t" ++ show actualMem_i
+        liftIO . putStrLn $ "SHOULD BE[" ++ show i ++ "]:\t" ++ show targetMem_i
+        locEquality <- S.isEq sym actualMem_i targetMem_i
+--        liftIO . putStrLn $ "actually=should:\t" ++ show locEquality
+        S.andPred sym soFar locEquality
+  liftIO $ foldlM addEquality (S.truePred sym) indices
+
+-- | Given a formula and a concrete test, return (1) the set of non-memory
+-- locations touched by the formula and test; (2) the location referring to
+-- memory
+--
+-- Unfortunately, the xs type is escaping its scope.
+partitionLocs :: forall arch t st fs
+               . Architecture arch
+              => Formula (WE.ExprBuilder t st fs) arch
+              -> ConcreteTest (WE.ExprBuilder t st fs) arch
+              -> ( Set.Set (Some (Location arch))
+                 , Maybe (Some (MemLoc arch)))
+partitionLocs (Formula _ defs) test =
+    let allOutputLocs = Set.fromList (MapF.keys (testOutput test)) `Set.union`
+                        Set.fromList (MapF.keys defs)
+        (memLocs, nonMemLocs) = Set.partition (\(Some loc) -> isMemoryLocation loc) allOutputLocs
+        mem = Set.lookupMin memLocs -- memLocs should either be empty or a singleton set, so this should be deterministic
+    in (nonMemLocs, mapSome toMemLoc <$> mem)
+  where 
+    toMemLoc :: Location arch tp -> MemLoc arch tp
+    toMemLoc loc 
+      | S.BaseArrayRepr (Ctx.Empty Ctx.:> S.BaseBVRepr w) _ <- locationType loc
+        = MemLoc w loc
+      | otherwise = error "The type of the memory Location in this architecture is unsupported"
+
+data MemLoc arch ty where
+  MemLoc :: 1 S.<= w
+         => S.NatRepr w
+         -> Location arch (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType w)) xs)
+         -> MemLoc arch (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType w)) xs)
+instance P.ShowF (Location arch) => Show (MemLoc arch ty) where 
+  show (MemLoc _ l) = P.showF l
 
 -- | Build a conjuction of the equality expressions for /all/ locations in
 -- either the outputs of the 'ConcreteTest' or the definitions of the 'Formula'.
+-- That is, builds an equality expression of the form
+-- > f.l1 (test_in.l1) = test_out.l1 /\ ... /\ (f.lm (test_in.lm) = test_out.lm)
+-- for all locations li possibly touched by f or the test.
 buildEqualityMachine :: forall arch t st fs
                       . (Architecture arch)
                      => Formula (WE.ExprBuilder t st fs) arch
                      -> ConcreteTest (WE.ExprBuilder t st fs) arch
                      -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
-buildEqualityMachine (Formula vars defs) test = do
+buildEqualityMachine f test = do
   sym <- askSym
-  let allOutputLocs = Set.fromList (MapF.keys (testOutput test)) `Set.union`
-                      Set.fromList (MapF.keys defs)
-      addEquality :: WE.BoolExpr t -> Some (Location arch) -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
-      addEquality soFar (Some loc) = do
-        let locDef = MapF.lookup loc defs
-        locEquality <- buildEqualityLocation test vars loc locDef
-        liftIO $ S.andPred sym soFar locEquality
-  foldlM addEquality (S.truePred sym) allOutputLocs
+  let (nonMemLocs, mem) = partitionLocs f test
+  nonMemPred <- buildEqualityLocations f test nonMemLocs
+--  liftIO . putStrLn $ "Non-mem: " ++ show nonMemPred
+  memPred <- buildEqualityMem f test mem
+--  liftIO . putStrLn $ "Mem: " ++ show nonMemPred
+  liftIO $ S.andPred sym nonMemPred memPred
+
+
 
 -- | Build an equality of the form
 -- > f(test1_in) = test1_out /\ f(test2_in) = test2_out /\ ... /\ f(testn_in) = testn_out
+-- where f(test_in) = test_out is an "equality machine" as in 'buildEqualityMachine'.
 buildEqualityTests :: forall arch t st fs
                     . (Architecture arch)
                    => Formula (WE.ExprBuilder t st fs) arch
@@ -241,8 +334,10 @@ buildEqualityTests :: forall arch t st fs
                    -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityTests form tests = do
   sym <- askSym
-  let andTest test soFar = (liftIO . S.andPred sym soFar) =<< buildEqualityMachine form test
+  let andTest test soFar = do test1 <- buildEqualityMachine form test
+                              liftIO $ S.andPred sym soFar test1
   foldrM andTest (S.truePred sym) tests
+
 
 -- | Given a concrete model from the SMT solver, extract concrete instructions
 -- from the templated instructions, so that all of the initially templated
@@ -307,8 +402,9 @@ cegis' :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
        -- ^ All the tests we have so far.
        -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis' trial trialFormula tests = do
-  -- liftIO . putStrLn $ "Number of tests: " ++ show (length tests)
-  liftIO . putStrLn $ "\n\nTESTS:\n\t" ++ show tests
+--   liftIO . putStrLn $ "Number of tests: " ++ show (length tests)
+--   liftIO . putStrLn $ "\n\nTESTS:\n\t" ++ show tests
+--  liftIO . putStrLn $ "\n\nTRIAL FORMULA:\n" ++ show trialFormula
   sym <- askSym
   -- Is this candidate satisfiable for the concrete tests we have so far? At
   -- this point, the machine state is concrete, but the immediate values of the
@@ -323,7 +419,7 @@ cegis' trial trialFormula tests = do
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
-      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
+--      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
       filledInFormula <- condenseInstructions insns'
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym 
@@ -333,11 +429,16 @@ cegis' trial trialFormula tests = do
       case equiv of
         -- FIXME: Is the correct behavior in a timeout to give up on this
         -- branch?
-        Timeout -> return (CegisUnmatchable tests)
-        Equivalent -> return . CegisEquivalent $ map templInsnToDism insns'
+        Timeout -> do
+          liftIO . putStrLn $ "Timeout"
+          return (CegisUnmatchable tests)
+        Equivalent -> do
+          liftIO . putStrLn $ "Equivalent"
+          return . CegisEquivalent $ map templInsnToDism insns'
         DifferentBehavior ctrExample -> do
           ctrExampleOut <- evalFormula targetFormula ctrExample
           let newTest = ConcreteTest' ctrExample ctrExampleOut
+          liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
           cegis' trial trialFormula (newTest : tests)
     Nothing -> return (CegisUnmatchable tests)
 
@@ -349,13 +450,16 @@ cegis' trial trialFormula tests = do
 liveMem :: Architecture arch
         => Formula (WE.ExprBuilder t st fs) arch
         -> [Integer]
--- liveMem _ = [0..63]
 liveMem form = case readLocation "Mem" of
-                 Just (Some mem) -> maybe [] (Set.toList . (liveMemInExpr form)) 
-                                             (MapF.lookup mem (formDefs form))
+                 Just (Some mem) -> -- maybe [] (Set.toList . (liveMemInExpr form)) 
+                                    --          (MapF.lookup mem (formDefs form))
+                                    case MapF.lookup mem (formDefs form) of
+                                      Nothing -> []
+                                      Just e  -> Set.toList $ liveMemInExpr form e
                  Nothing         -> error "Cannot construct the location 'Mem'"
 
 -- | Just (Some memExpr) <- readLocation "Mem" = liveMemInExpr form 
+
 
 liveMemInExpr :: Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
@@ -363,10 +467,10 @@ liveMemInExpr :: Architecture arch
               -> Set.Set Integer
 liveMemInExpr _ (WE.BVExpr _ i _)   = Set.singleton i
 liveMemInExpr f (WE.SemiRingLiteral _ _ _) = undefined -- either a Nat, Int, or Real
-liveMemInExpr f (WE.StringExpr s _) = undefined
+liveMemInExpr f (WE.StringExpr s _) = Set.empty
 liveMemInExpr f (WE.AppExpr a)      = liveMemInApp f $ WE.appExprApp a 
 liveMemInExpr f (WE.NonceAppExpr a) = liveMemInNonceApp f $ WE.nonceExprApp a
-liveMemInExpr _ (WE.BoundVarExpr _) = undefined -- we may have some bound variables which are uninterpreted functions?
+liveMemInExpr _ e@(WE.BoundVarExpr x) = Set.empty -- error $ "Could not find live mem addresses for bound var " ++ show e
 
 liveMemInApp :: Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
@@ -380,7 +484,10 @@ liveMemInApp f (WE.XorBool e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr
 liveMemInApp f (WE.IteBool e e1 e2) = liveMemInExpr f e 
                           `Set.union` liveMemInExpr f e1 
                           `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.SemiRingSum r x) = undefined -- either a Nat, Int, or Real
+liveMemInApp f (WE.BVAdd _ e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
+liveMemInApp f (WE.BVConcat _ e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
+liveMemInApp f (WE.BVSext _ e) = liveMemInExpr f e
+liveMemInApp _ e = error $ "Case " ++ show e ++ " not covered in liveMemInApp"
 
 
 exprSymFnToUninterpFn :: forall arch t args ret.
@@ -403,12 +510,25 @@ liveMemInNonceApp :: forall arch t st fs a.
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.NonceApp t (WE.Expr t) a
               -> Set.Set Integer
+-- when we get to an uninterpreted function, we should check whether the live
+-- registers they ask for are constants; if they are, add that constant to the
+-- result set. If not, construct an abstract formula from the result;
+-- > Old_Mem => New_Mem
+-- where 
+-- > Old_Mem = WhatWeKnow /\ i≠anyKnownLoc => Mem[i]=0
+-- and
+-- > New_Mem = WhatWeKnow /\ i ≠ anyKnownLoc => updatedMem[i]=0
 liveMemInNonceApp form (WE.FnApp f args) =
     case exprSymFnToUninterpFn @arch f of
-      Just (MkUninterpFn _ _ _ liveness) -> 
+      Just (MkUninterpFn name _ _ liveness) ->
         let exprs = liveness args
-            ints  = (\(Some e) -> liveMemInExpr form e) <$> exprs
-        in foldl Set.union Set.empty ints
+            maybeConst = traverseSome S.asConcrete <$> exprs
+        in undefined
+
+--            ints  = (\(Some e) -> liveMemInExpr form e) <$> exprs
+--        in foldl Set.union Set.empty ints
+--        in do e <- exprs
+--              v <- evalExpression form e 
       Nothing -> Set.empty
 liveMemInNonceApp _ _ = undefined
 

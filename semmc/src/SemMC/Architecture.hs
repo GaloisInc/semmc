@@ -38,7 +38,8 @@ module SemMC.Architecture (
   mkUninterpFn,
   getUninterpFn,
   showShapeRepr,
-  createSymbolicEntries
+  createSymbolicEntries,
+  createSymbolicName
   ) where
 
 import           Data.List (find)
@@ -54,6 +55,7 @@ import           Data.Proxy ( Proxy(..) )
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol )
 import qualified Language.Haskell.TH as TH
+import           Debug.Trace (trace)
 
 import           What4.BaseTypes
 import qualified What4.Interface as S
@@ -179,7 +181,7 @@ getUninterpFn s = go $ uninterpretedFunctions (Proxy @arch)
   where
     go :: [Some (UninterpFn arch)] -> Maybe (Some (UninterpFn arch))
     go [] = Nothing
-    go (Some f@(MkUninterpFn _ _ _ _) : fs) = if s == uninterpFnName f
+    go (Some f@(MkUninterpFn _ _ _ _) : fs) = if s == createSymbolicName (uninterpFnName f)
                                               then Just (Some f)
                                               else go fs
 
@@ -255,3 +257,7 @@ createSymbolicEntries = foldr duplicateIfDotted []
           let newElt = ("uf_" ++ map (\c -> if c == '.' then '_' else c) s, e)
           in newElt : ("uf." ++ s, e) : acc
 
+createSymbolicName :: String -> String
+createSymbolicName s = case '.' `elem` s of
+                          False -> s
+                          True  -> "uf_" ++ map (\c -> if c == '.' then '_' else c) s

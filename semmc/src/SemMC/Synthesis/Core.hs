@@ -83,10 +83,10 @@ footprintFilter target candidate =
   let (candInputs, candOutputs) = calcFootprint candidate
       targetInputs = formInputs target
       targetOutputs = formOutputs target
-  in trace ("Target Inputs: " ++ show targetInputs) $
-     trace ("Target Outputs: " ++ show targetOutputs) $
-     trace ("Candidate Inputs: " ++ show candInputs) $
-     trace ("Candidate Outputs: " ++ show candOutputs) $
+  in -- trace ("Target Inputs: " ++ show targetInputs) $
+     -- trace ("Target Outputs: " ++ show targetOutputs) $
+     -- trace ("Candidate Inputs: " ++ show candInputs) $
+     -- trace ("Candidate Outputs: " ++ show candOutputs) $
      candInputs `Set.isSubsetOf` targetInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
 
@@ -104,7 +104,7 @@ instantiate target trial
       -- of 'TemplatedOperand', which has a function inside it, and it's
       -- non-trivial to either make it not use a function or come up with a
       -- surrogate key.)
-      liftIO $ putStrLn $ "Trial: " ++ show trial
+--      liftIO $ putStrLn $ "Trial: " ++ show trial
       tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
       st <- get
       let params = CegisParams { cpSym = sym

@@ -175,10 +175,6 @@ instantiateFormula
                            , pfDefs = defs
                            })
   opVals = do
---    putStrLn "============="
---    putStrLn $ "Implicit variables " ++ show litVars
---    putStrLn $ "Explicit variables " ++ show opVars
---    putStrLn $ "Operand values: " ++ show opVals
     let addLitVar (Some loc) m = do
           bVar <- S.freshBoundVar sym (U.makeSymbol (showF loc)) (A.locationType loc)
           return (MapF.insert loc bVar m)
@@ -241,8 +237,6 @@ instantiateFormula
     -- probably subsume operandValues (and extend buildOpAssignment)
     defs' <- traverseF rewrite defs
     -- ok, so rewrite is not working in Mem??
---    putStrLn $ "Old definitions: " ++ show defs
---    putStrLn $ "Intermediate definitions: " ++ show defs'
 
     -- After rewriting, it should be the case that all references to the bound
     -- variables corresponding to compound operands (for which we don't have
@@ -264,7 +258,6 @@ instantiateFormula
           return (definingLoc, litVarsReplaced)
 
     newDefs <- U.mapFMapBothM instantiateDefn defs'
---    putStrLn $ "New definitions: " ++ show newDefs
 
     -- 'newLitVars' has variables for /all/ of the machine locations. Here we
     -- extract only the ones that are actually used.
@@ -273,7 +266,6 @@ instantiateFormula
     -- TODO: Should we filter out definitions that are syntactically identity
     -- functions?
 
---    putStrLn "============="
     return $ (opTaggedExprs, Formula { formParamVars = newActualLitVars
                                      , formDefs = newDefs
                                      })
