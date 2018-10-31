@@ -1,4 +1,8 @@
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 module SemMC.Architecture.PPC.Base.Core.OperandClasses (
+  SymToExprTagWrapper,
     -- * PPC Types
   gprc,
   gprc_nor0,
@@ -27,6 +31,11 @@ module SemMC.Architecture.PPC.Base.Core.OperandClasses (
   calltarget,
   abscalltarget
   ) where
+
+import           GHC.TypeLits ( Symbol )
+import qualified Data.Type.List as TL
+
+import           SemMC.DSL
 
 -- PPC Types
 
@@ -107,3 +116,8 @@ memri = "Memri"
 
 memrr :: String
 memrr = "Memrr"
+
+data SymToExprTagWrapper :: TL.TyFun k1 k2 -> *
+type instance TL.Apply SymToExprTagWrapper x = SymToExprTag x
+type family SymToExprTag (sym :: Symbol) :: ExprTag where
+  SymToExprTag "Gprc" = 'TBV

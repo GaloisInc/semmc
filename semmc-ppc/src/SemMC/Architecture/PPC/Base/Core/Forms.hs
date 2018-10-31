@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ImplicitParams #-}
 module SemMC.Architecture.PPC.Base.Core.Forms (
   vectorBV,
@@ -23,13 +24,22 @@ module SemMC.Architecture.PPC.Base.Core.Forms (
   vxform2s,
   vxform2,
   vaform,
-  vaform4u
+  vaform4u,
+  OpcodeParamDef(..),
+  xoform3c
   ) where
+
+import Data.Parameterized.Context
 
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core.BitSize
 import SemMC.Architecture.PPC.Base.Core.OperandClasses
 import SemMC.Architecture.PPC.Base.Core.Registers
+
+data OpcodeParamDef t = InputParamDef String String (ExprTypeRepr t)
+                      -- ^ A parameter used as an input (automatically declared as input)
+                      | ParamDef String String (ExprTypeRepr t)
+                      -- ^ Any other parameter
 
 vectorBV :: ExprTypeRepr 'TBV
 vectorBV = EBV 128
@@ -94,6 +104,12 @@ mdsform4 = do
   input rS
   input rB
   return (rA, mb, rS, rB)
+
+xoform3c :: (?bitSize :: BitSize) => Assignment OpcodeParamDef (EmptyCtx ::> 'TBV ::> 'TBV ::> 'TBV)
+xoform3c =  Empty
+         :> ParamDef "rT" gprc naturalBV
+         :> InputParamDef "rB" gprc naturalBV
+         :> InputParamDef "rA" gprc naturalBV
 
 xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 xoform3 = do
