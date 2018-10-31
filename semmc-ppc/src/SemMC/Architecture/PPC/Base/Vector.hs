@@ -74,6 +74,7 @@ baseVector = do
   vecCompare
   vecMinMax
   vecSum
+  vecMultAdd
   vecAverage
 
   defineOpcodeWithIP "VPERM" $ do
@@ -430,6 +431,44 @@ vecBitwise = do
   defineOpcodeWithIP "VBPERMQ" $ do
     comment "Vector Bit Permute Quadword (VX-form)"
     vec2op "VBPERMQ"
+
+vecMultAdd :: (?bitSize :: BitSize) => SemM 'Top ()
+vecMultAdd = do
+  defineOpcodeWithIP "VMHADDSHS" $ do
+    comment "Vector Multiply-High-Add Signed Halfword Saturate (VA-form)"
+    vec3op "VMHADDSHS"
+
+  defineOpcodeWithIP "VMHRADDSHS" $ do
+    comment "Vector Multiply-High-Round-Add Signed Halfword Saturate (VA-form)"
+    vec3op "VMHRADDSHS"
+
+  defineOpcodeWithIP "VMLADDUHM" $ do
+    comment "Vector Multiply-Low-Add Unsigned Halfword Modulo (VA-form)"
+    vec3op "VMLADDUHM"
+
+  defineOpcodeWithIP "VMSUMUBM" $ do
+    comment "Vector Multiply-Sum Unsigned Byte Modulo (VA-form)"
+    vec3op "VMSUMUBM"
+
+  defineOpcodeWithIP "VMSUMMBM" $ do
+    comment "Vector Multiply-Sum Mixed Byte Modulo (VA-form)"
+    vec3op "VMSUMMBM"
+
+  defineOpcodeWithIP "VMSUMSHM" $ do
+    comment "Vector Multiply-Sum Signed Halfword Modulo (VA-form)"
+    vec3op "VMSUMSHM"
+
+  defineOpcodeWithIP "VMSUMSHS" $ do
+    comment "Vector Multiply-Sum Signed Halfword Saturate (VA-form)"
+    vec3op "VMSUMSHS"
+
+  defineOpcodeWithIP "VMSUMUHM" $ do
+    comment "Vector Multiply-Sum Unsigned Halfword Modulo (VA-form)"
+    vec3op "VMSUMUHM"
+
+  defineOpcodeWithIP "VMSUMUHS" $ do
+    comment "Vector Multiply-Sum Unsigned Halfword Saturate (VA-form)"
+    vec3op "VMSUMUHS"
 
 vecMerge :: (?bitSize :: BitSize) => SemM 'Top ()
 vecMerge = do
