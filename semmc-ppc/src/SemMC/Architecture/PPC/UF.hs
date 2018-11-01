@@ -19,19 +19,16 @@ import           Data.Parameterized.Context ( Ctx
                                             , SingleCtx
                                             , (::>)
                                             , type (<+>)
-                                            , Assignment(..)
                                             )
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some
 
 import           What4.BaseTypes
-import           What4.Concrete
 import qualified What4.Interface as W
 import qualified What4.Expr.Builder as Expr
 
 import           SemMC.Architecture (UninterpFn(..), mkUninterpFn)
 import           SemMC.Architecture.PPC.Location
-import qualified Dismantle.PPC as PPC
 
                              
 type family DuplicateCtx (n :: Nat) (x :: k) :: Ctx k where

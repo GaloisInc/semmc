@@ -52,6 +52,7 @@ import           SemMC.Architecture
 import qualified SemMC.Architecture.Location as L
 import           SemMC.Formula
 import           SemMC.Synthesis.Template
+import           SemMC.Formula.MemAccesses
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.
@@ -113,7 +114,8 @@ evalExpression' :: (IsLocation loc)
                -> LocExprs (WE.ExprBuilder t st fs) loc
                -> WE.Expr t tp
                -> IO (WE.Expr t tp)
-evalExpression' sym vars state expr = replaceLitVars sym (lookupInState sym state) vars expr
+evalExpression' sym vars state expr = 
+  replaceLitVars sym (lookupInState sym state) vars expr
 
 evalExpression :: (IsLocation loc)
                => MapF.MapF loc (WE.ExprBoundVar t)
@@ -196,7 +198,8 @@ initTest sym f = do locExprs <- defaultLocExprs sym
 -- function will generate the expression @3*5 + imm5 = 10@. If the expression
 -- were instead @Nothing@, this would generate @7 = 10@.
 buildEqualityLocation :: (IsLocation loc, P.ShowF loc)
-                      => ConcreteTest' (WE.ExprBuilder t st fs) loc
+                      => WE.ExprBuilder t st fs
+                      -> ConcreteTest' (WE.ExprBuilder t st fs) loc
                       -> MapF.MapF loc (WE.ExprBoundVar t)
                       -- ^ The bound variables representing the input values for
                       -- each location.
@@ -206,11 +209,10 @@ buildEqualityLocation :: (IsLocation loc, P.ShowF loc)
                       -- ^ If 'Just', the symbolic representation of the new
                       -- definition of this location. If 'Nothing', then assume
                       -- the identity transformation.
-                      -> Cegis (WE.ExprBuilder t st fs) arch (WE.Expr t tp, WE.Expr t tp)
-buildEqualityLocation test vars outputLoc expr = do
-  sym <- askSym
+                      -> IO (WE.Expr t tp, WE.Expr t tp)
+buildEqualityLocation sym test vars outputLoc expr = do
   actuallyIs <- case expr of
-                  Just expr' -> evalExpression vars (testInput test) expr'
+                  Just expr' -> evalExpression' sym vars (testInput test) expr'
                   -- If this location isn't present in the definitions of the
                   -- candidate formula, then its original value is preserved.
                   Nothing -> liftIO $ lookupInState sym (testInput test) outputLoc
@@ -227,19 +229,21 @@ buildEqualityLocation test vars outputLoc expr = do
 -- the input list of locations.
 buildEqualityLocations :: forall arch t st fs
                        . (Architecture arch)
-                       => Formula (WE.ExprBuilder t st fs) arch
+                       => WE.ExprBuilder t st fs
+                       ->Formula (WE.ExprBuilder t st fs) arch
                        -> ConcreteTest (WE.ExprBuilder t st fs) arch
                        -> Set.Set (Some (Location arch))
-                       -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
-buildEqualityLocations (Formula vars defs) test locs = do
-  sym <- askSym
-  let addEquality :: WE.BoolExpr t -> Some (Location arch) -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
+                       -> IO (WE.BoolExpr t)
+buildEqualityLocations sym (Formula vars defs) test locs = do
+  let addEquality :: WE.BoolExpr t -> Some (Location arch) -> IO (WE.BoolExpr t)
       addEquality soFar (Some loc) = do
         let locDef = MapF.lookup loc defs
-        (actuallyIs,shouldBe) <- buildEqualityLocation test vars loc locDef
+        (actuallyIs,shouldBe) <- buildEqualityLocation sym test vars loc locDef
         locEquality <- liftIO $ S.isEq sym actuallyIs shouldBe
         liftIO $ S.andPred sym soFar locEquality
   foldlM addEquality (S.truePred sym) locs
+
+{-
 
 -- | Build a conjuction of the equality expressions for all the
 -- indices/locations in memory touched by the input formula
@@ -247,11 +251,11 @@ buildEqualityMem :: forall arch t st fs
                  . (Architecture arch)
                  => Formula (WE.ExprBuilder t st fs) arch
                  -> ConcreteTest (WE.ExprBuilder t st fs) arch
-                 -> Maybe (Some (MemLoc arch))
+                 -> Maybe (L.MemLoc (L.Location arch))
                  -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityMem _ _ Nothing = do sym <- askSym
                                   return $ S.truePred sym
-buildEqualityMem f@(Formula vars defs) test (Just (Some (MemLoc w mem))) = do
+buildEqualityMem f@(Formula vars defs) test (Just (L.MemLoc w mem)) = do
   sym <- askSym
   let locDef = MapF.lookup mem defs
   (actualMem,targetMem) <- buildEqualityLocation test vars mem locDef
@@ -270,7 +274,57 @@ buildEqualityMem f@(Formula vars defs) test (Just (Some (MemLoc w mem))) = do
 --        liftIO . putStrLn $ "actually=should:\t" ++ show locEquality
         S.andPred sym soFar locEquality
   liftIO $ foldlM addEquality (S.truePred sym) indices
+-}
+buildEqualityMem :: forall arch t st fs sym
+                 . (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+                 => sym
+                 -> Formula sym arch
+                 -> ConcreteTest sym arch
+                 -> Maybe (L.MemLoc (L.Location arch))
+                 -> IO (WE.BoolExpr t)
+buildEqualityMem sym _ _ Nothing = return $ S.truePred sym
+buildEqualityMem sym f@(Formula vars defs) test (Just (L.MemLoc w mem)) = do
+  let locDef = MapF.lookup mem defs
+--  putStrLn $ "\n\nTEST: " ++ show test
+--  putStrLn $ "Formula: " ++ show f
+--  putStrLn $ "LocDef: " ++ show locDef
+  (actualMem,targetMem) <- buildEqualityLocation sym test vars mem locDef
+--  putStrLn $ "LocDef: " ++ show locDef
+  (actualMem,targetMem) <- buildEqualityLocation sym test vars mem locDef
+--  putStrLn $ "ACTUALLY IS:\t" ++ show actualMem
+--  putStrLn $ "SHOULD BE:\t" ++ show targetMem
 
+  res <- S.isEq sym actualMem targetMem
+--  putStrLn $ "ACTUALLY IS = SHOULD BE: " ++ show res
+  return res
+--  WB.sbMakeExpr sym $ WE.ArrayEq actualMem targetMem
+
+  where
+    toBVExpr :: S.NatRepr w 
+             -> Some (S.SymExpr sym) 
+             -> IO (S.SymExpr sym (S.BaseBVType w))
+    toBVExpr w0 (Some e) = case S.exprType e of
+      S.BaseBVRepr w' -> case S.compareNat w0 w' of 
+                           S.NatEQ -> return e
+                           _       -> error $ "Memory index " ++ show e ++ " is not a bit vector of size " ++ show w0
+      _ -> error $ "Memory index " ++ show e ++ " is not a bit vector of size " ++ show w0
+
+
+
+
+
+partitionLocs' :: forall arch t st fs
+                . Architecture arch
+               => Formula (WE.ExprBuilder t st fs) arch
+               -> ConcreteTest (WE.ExprBuilder t st fs) arch
+               -> ( Set.Set (Some (Location arch))
+                 , Maybe (L.MemLoc (L.Location arch)))
+partitionLocs' (Formula _ defs) test =
+    let allOutputLocs = Set.fromList (MapF.keys (testOutput test)) `Set.union`
+                         Set.fromList (MapF.keys defs)
+    in partitionLocs @arch allOutputLocs
+
+{-
 -- | Given a formula and a concrete test, return (1) the set of non-memory
 -- locations touched by the formula and test; (2) the location referring to
 -- memory
@@ -294,7 +348,9 @@ partitionLocs (Formula _ defs) test =
       | S.BaseArrayRepr (Ctx.Empty Ctx.:> S.BaseBVRepr w) _ <- locationType loc
         = MemLoc w loc
       | otherwise = error "The type of the memory Location in this architecture is unsupported"
+-}
 
+{-
 data MemLoc arch ty where
   MemLoc :: 1 S.<= w
          => S.NatRepr w
@@ -302,6 +358,7 @@ data MemLoc arch ty where
          -> MemLoc arch (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType w)) xs)
 instance P.ShowF (Location arch) => Show (MemLoc arch ty) where 
   show (MemLoc _ l) = P.showF l
+-}
 
 -- | Build a conjuction of the equality expressions for /all/ locations in
 -- either the outputs of the 'ConcreteTest' or the definitions of the 'Formula'.
@@ -310,18 +367,17 @@ instance P.ShowF (Location arch) => Show (MemLoc arch ty) where
 -- for all locations li possibly touched by f or the test.
 buildEqualityMachine :: forall arch t st fs
                       . (Architecture arch)
-                     => Formula (WE.ExprBuilder t st fs) arch
+                     => WE.ExprBuilder t st fs
+                     -> Formula (WE.ExprBuilder t st fs) arch
                      -> ConcreteTest (WE.ExprBuilder t st fs) arch
-                     -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
-buildEqualityMachine f test = do
-  sym <- askSym
-  let (nonMemLocs, mem) = partitionLocs f test
-  nonMemPred <- buildEqualityLocations f test nonMemLocs
+                     -> IO (WE.BoolExpr t)
+buildEqualityMachine sym f test = do
+  let (nonMemLocs, mem) = partitionLocs' f test
+  nonMemPred <- buildEqualityLocations sym f test nonMemLocs
 --  liftIO . putStrLn $ "Non-mem: " ++ show nonMemPred
-  memPred <- buildEqualityMem f test mem
+  memPred <- buildEqualityMem sym f test mem
 --  liftIO . putStrLn $ "Mem: " ++ show nonMemPred
   liftIO $ S.andPred sym nonMemPred memPred
-
 
 
 -- | Build an equality of the form
@@ -334,9 +390,9 @@ buildEqualityTests :: forall arch t st fs
                    -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityTests form tests = do
   sym <- askSym
-  let andTest test soFar = do test1 <- buildEqualityMachine form test
+  let andTest test soFar = do test1 <- buildEqualityMachine sym form test
                               liftIO $ S.andPred sym soFar test1
-  foldrM andTest (S.truePred sym) tests
+  liftIO $ foldrM andTest (S.truePred sym) tests
 
 
 -- | Given a concrete model from the SMT solver, extract concrete instructions
@@ -423,7 +479,7 @@ cegis' trial trialFormula tests = do
       filledInFormula <- condenseInstructions insns'
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym 
-                                         (liveMem filledInFormula) 
+                                         (liveMemConst filledInFormula) 
                                          targetFormula 
                                          filledInFormula
       case equiv of
@@ -444,93 +500,6 @@ cegis' trial trialFormula tests = do
 
 
 
-
--- | Returns a list of memory locations (as bit vectors) that are accessed or
--- written to in a formula.
-liveMem :: Architecture arch
-        => Formula (WE.ExprBuilder t st fs) arch
-        -> [Integer]
-liveMem form = case readLocation "Mem" of
-                 Just (Some mem) -> -- maybe [] (Set.toList . (liveMemInExpr form)) 
-                                    --          (MapF.lookup mem (formDefs form))
-                                    case MapF.lookup mem (formDefs form) of
-                                      Nothing -> []
-                                      Just e  -> Set.toList $ liveMemInExpr form e
-                 Nothing         -> error "Cannot construct the location 'Mem'"
-
--- | Just (Some memExpr) <- readLocation "Mem" = liveMemInExpr form 
-
-
-liveMemInExpr :: Architecture arch
-              => Formula (WE.ExprBuilder t st fs) arch
-              -> WE.Expr t a
-              -> Set.Set Integer
-liveMemInExpr _ (WE.BVExpr _ i _)   = Set.singleton i
-liveMemInExpr f (WE.SemiRingLiteral _ _ _) = undefined -- either a Nat, Int, or Real
-liveMemInExpr f (WE.StringExpr s _) = Set.empty
-liveMemInExpr f (WE.AppExpr a)      = liveMemInApp f $ WE.appExprApp a 
-liveMemInExpr f (WE.NonceAppExpr a) = liveMemInNonceApp f $ WE.nonceExprApp a
-liveMemInExpr _ e@(WE.BoundVarExpr x) = Set.empty -- error $ "Could not find live mem addresses for bound var " ++ show e
-
-liveMemInApp :: Architecture arch
-              => Formula (WE.ExprBuilder t st fs) arch
-              -> WE.App (WE.Expr t) a
-              -> Set.Set Integer
-liveMemInApp _ WE.TrueBool = Set.empty
-liveMemInApp _ WE.FalseBool = Set.empty
-liveMemInApp f (WE.NotBool e) = liveMemInExpr f e
-liveMemInApp f (WE.AndBool e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.XorBool e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.IteBool e e1 e2) = liveMemInExpr f e 
-                          `Set.union` liveMemInExpr f e1 
-                          `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.BVAdd _ e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.BVConcat _ e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.BVSext _ e) = liveMemInExpr f e
-liveMemInApp _ e = error $ "Case " ++ show e ++ " not covered in liveMemInApp"
-
-
-exprSymFnToUninterpFn :: forall arch t args ret.
-                         Architecture arch 
-                      => WE.ExprSymFn t args ret -> Maybe (UninterpFn arch '(args,ret))
-exprSymFnToUninterpFn f = 
-  case WE.symFnInfo f of
-    WE.UninterpFnInfo args ret -> do
-      let name = Text.unpack . WS.solverSymbolAsText $ WE.symFnName f 
-      Some f'@(MkUninterpFn _ args' ret' _) <- getUninterpFn @arch name
-      case (P.testEquality args args', P.testEquality ret ret') of 
-        (Just P.Refl, Just P.Refl) -> return f'
-        (_, _)                     -> Nothing
-    _ -> Nothing
-
-
-
-liveMemInNonceApp :: forall arch t st fs a. 
-                 Architecture arch
-              => Formula (WE.ExprBuilder t st fs) arch
-              -> WE.NonceApp t (WE.Expr t) a
-              -> Set.Set Integer
--- when we get to an uninterpreted function, we should check whether the live
--- registers they ask for are constants; if they are, add that constant to the
--- result set. If not, construct an abstract formula from the result;
--- > Old_Mem => New_Mem
--- where 
--- > Old_Mem = WhatWeKnow /\ i≠anyKnownLoc => Mem[i]=0
--- and
--- > New_Mem = WhatWeKnow /\ i ≠ anyKnownLoc => updatedMem[i]=0
-liveMemInNonceApp form (WE.FnApp f args) =
-    case exprSymFnToUninterpFn @arch f of
-      Just (MkUninterpFn name _ _ liveness) ->
-        let exprs = liveness args
-            maybeConst = traverseSome S.asConcrete <$> exprs
-        in undefined
-
---            ints  = (\(Some e) -> liveMemInExpr form e) <$> exprs
---        in foldl Set.union Set.empty ints
---        in do e <- exprs
---              v <- evalExpression form e 
-      Nothing -> Set.empty
-liveMemInNonceApp _ _ = undefined
 
 
 

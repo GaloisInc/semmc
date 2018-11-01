@@ -24,6 +24,7 @@ module SemMC.Formula
   , condenseFormulas
   , replaceLitVars
   , replaceVars
+  , partitionLocs
 
   -- * Equivalence Checking
   , EquivalenceResult(..)
@@ -87,9 +88,13 @@ import SemMC.Formula.Load ( loadFormulas, loadFormulasFromFiles
 import SemMC.Formula.Parser ( readFormula, readFormulaFromFile,
                               readDefinedFunction, readDefinedFunctionFromFile )
 import SemMC.Formula.Printer ( printParameterizedFormula, printFormula )
+import SemMC.Formula.MemAccesses
 import SemMC.Formula.Equivalence ( EquivalenceResult(..),
                                    formulasEquiv,
                                    formulasEquivConcrete,
                                    formulasEquivSym,
-                                   checkSat
+--                                   partitionLocs,
+                                   checkSat,
+--                                   LocExprs(..),
+--                                   mkLocExprs
                                  )

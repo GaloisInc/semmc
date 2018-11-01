@@ -76,7 +76,7 @@ allTests baseSet synthEnv =
 
 insns :: S.Set (Some (D.Opcode o))
 insns = S.fromList
-        [ -- Some D.ADD4
+        [ Some D.ADD4
         -- , Some D.ADDC
         -- , Some D.ADDI
         -- , Some D.ADDIS
@@ -88,7 +88,7 @@ insns = S.fromList
         -- , Some D.MULLW
         -- , Some D.MULLD
         -- , Some D.NAND
---        , Some D.NEG
+        , Some D.NEG
 --        , Some D.NOR
 --        , Some D.OR
 --        , Some D.ORI
@@ -101,7 +101,7 @@ insns = S.fromList
 --        , Some D.SRD
 --        , Some D.SRW
 --        , Some D.SUBF
-         Some D.STD
+        , Some D.STD
 --        , Some D.STDU
 --        , Some D.SC
         ]
@@ -110,7 +110,7 @@ progs :: [(String, [D.Instruction])]
 progs = [-- ("addNegated", [ D.Instruction D.NEG (reg 5 :< reg 2 :< Nil)
 --                        , D.Instruction D.ADD4 (reg 11 :< reg 5 :< reg 3 :< Nil)
 --                        ])
-         ("STD",  [ D.Instruction D.STD  $ memrix 1 (2)   :< reg 31     :< Nil ])
+        ("STD",  [ D.Instruction D.STD  $ memrix 1 (2)   :< reg 31     :< Nil ])
 --       , ("STD",  [ D.Instruction D.STD  $ memrix 1 (-2)  :< reg 31     :< Nil ])
 --       , ("LHA",  [ D.Instruction D.LHA  $ reg 31         :< memri 1 (-2) :< Nil ])
 --       , ("LI",   [ D.Instruction D.LI   $ reg 0          :< D.S16imm 1 :< Nil ])

@@ -30,6 +30,7 @@ library
                        SemMC.DSL
                        SemMC.Formula
                        SemMC.Formula.Env
+                       SemMC.Formula.MemAccesses
                        SemMC.Formula.Equivalence
                        SemMC.Formula.Eval
                        SemMC.Formula.Formula

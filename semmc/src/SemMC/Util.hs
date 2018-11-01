@@ -16,6 +16,7 @@ module SemMC.Util
   ( -- * Misc
     groundValToExpr
   , exprToGroundVal
+  , concreteToGVW
   , makeSymbol
   , mapFReverse
   , sequenceMaybes
@@ -256,6 +257,31 @@ exprToGroundVal (BaseStructRepr r)           e = do
     v <- S.asStruct e
     traverseFC (\e' -> GE.GVW <$> exprToGroundVal @sym (S.exprType e') e') v
 exprToGroundVal BaseStringRepr               e = S.asString e
+
+concreteToGVW :: W.ConcreteVal tp -> GE.GroundValueWrapper tp
+concreteToGVW = GE.GVW . concreteToGroundVal
+
+-- | Convert concrete values to ground values
+concreteToGroundVal :: W.ConcreteVal tp -> GE.GroundValue tp
+concreteToGroundVal (W.ConcreteBool b) = b
+concreteToGroundVal (W.ConcreteNat n) = n
+concreteToGroundVal (W.ConcreteInteger n) = n
+concreteToGroundVal (W.ConcreteReal r) = r
+concreteToGroundVal (W.ConcreteString s) = s
+concreteToGroundVal (W.ConcreteComplex c) = c
+concreteToGroundVal (W.ConcreteBV _ i) = i
+concreteToGroundVal (W.ConcreteStruct ctx) = fmapFC (GE.GVW . concreteToGroundVal) ctx
+concreteToGroundVal (W.ConcreteArray idx def m) = GE.ArrayConcrete (concreteToGroundVal def) $ 
+                                                     Map.fromList (concToGV' <$> Map.toList m)
+  where
+    concToGV' :: (Assignment W.ConcreteVal idx, W.ConcreteVal tp) 
+              -> (Assignment S.IndexLit idx, GE.GroundValue tp)
+    concToGV' (args,v) = (fmapFC concreteToIndexLit args, concreteToGroundVal v)
+
+concreteToIndexLit :: W.ConcreteVal tp -> S.IndexLit tp
+concreteToIndexLit (W.ConcreteNat n) = S.NatIndexLit n
+concreteToIndexLit (W.ConcreteBV r i) = S.BVIndexLit r i
+concreteToIndexLit v = error $ "Cannot turn conrete value of type " ++ show (W.concreteType v) ++ " into an IndexLit"
 
 inlineDefineFun' :: S.IsSymExprBuilder sym
                  => sym

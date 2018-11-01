@@ -38,6 +38,7 @@ import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()
 import qualified GHC.Err.Located as L
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Location as AL
 import qualified SemMC.Architecture.Concrete as AC
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC.OperandComponents as POC
@@ -650,7 +651,8 @@ instance ArchitectureWithPseudo PPC where
   assemblePseudo _ = PPCP.ppcAssemblePseudo (Proxy @PPC)
 
 instance A.IsLocation (Location PPC) where
-  isMemoryLocation l =
+
+  isMemLoc l =
     case l of
       LocMem -> True
       _ -> False
@@ -682,7 +684,7 @@ instance A.IsLocation (Location PPC) where
   defaultLocationExpr sym LocMem =
     S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
-  allLocations = concat
+  nonMemLocations = concat
     [ map (Some . LocGPR . PPC.GPR) [0..31]
     , map (Some . LocVSR . PPC.VSReg) [0..63]
     , [ Some LocIP
@@ -693,9 +695,10 @@ instance A.IsLocation (Location PPC) where
       , Some LocCR
       , Some LocFPSCR
       , Some LocVSCR
-      , Some LocMem
       ]
     ]
+
+  memLocation = AL.toMemLoc LocMem
 
   registerizationLocations = map (Some . LocGPR . PPC.GPR) (0 : [3..10])
 
