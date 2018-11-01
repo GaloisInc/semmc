@@ -35,9 +35,8 @@ baseArithmetic = do
     defLoc rT res
     defineRCVariant "NEGo" res $ do
       comment "Negate (XO-form, RC=1)"
-  defineOpcodeWithIP "MULLI" $ do
+  definePPCOpcode P.MULLI dformr0c $ \rT si rA -> do
     comment "Multiply Low Immediate (D-form)"
-    (rT, rA, si) <- dformr0
     let prod = bvmul (Loc rA) (sext (Loc si))
     defLoc rT prod
   definePPCOpcode P.MULLW xoform3c $ \rT rB rA -> do
@@ -122,20 +121,18 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
     definePPCOpcodeRC P.ADDCo res $ do
       comment "Add Carrying (XO-form, RC=1)"
-  defineOpcodeWithIP "ADDIC" $ do
+  definePPCOpcode P.ADDIC dformr0c $ \rT si rA -> do
     comment "Add Immediate Carrying (D-form)"
-    (rT, rA, si) <- dformr0
     input xer
     let len = bitSizeValue ?bitSize
     let eres = bvadd (zext' (len + 1) (Loc rA)) (concat (LitBV 1 0x0) (sext (Loc si)))
     let res = lowBits' len eres
     defLoc rT res
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres))
-    defineRCVariant "ADDICo" res $ do
+    definePPCOpcodeRC P.ADDICo res $ do
       comment "Add Immediate Carrying and Record (D-form)"
-  defineOpcodeWithIP "SUBFIC" $ do
+  definePPCOpcode P.SUBFIC dformr0c $ \rT si rA -> do
     comment "Subtract From Immediate Carrying (D-form)"
-    (rT, rA, si) <- dformr0
     input xer
     let len = bitSizeValue ?bitSize
     let eres = bvsub (zext' (len + 1) (Loc rA)) (concat (LitBV 1 0x0) (sext (Loc si)))
@@ -164,9 +161,8 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     definePPCOpcodeRC P.ADDEo res $ do
       comment "Add Extended (XO-form, RC=1)"
-  defineOpcodeWithIP "ADDME" $ do
+  definePPCOpcode P.ADDME xoform2c $ \rT rA -> do
     comment "Add to Minus One Extended (XO-form, RC=0)"
-    (rT, rA) <- xoform2
     input xer
     let len = bitSizeValue ?bitSize
     let eres0 = bvadd (zext' (len + 1) (Loc rA)) (zext' (len + 1) (xerBit CA (Loc xer)))
@@ -174,7 +170,7 @@ baseArithmetic = do
     let res = lowBits' len eres1
     defLoc rT res
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
-    defineRCVariant "ADDMEo" res $ do
+    definePPCOpcodeRC P.ADDMEo res $ do
       comment "Add to Minus One Extended (XO-form, RC=1)"
   definePPCOpcode P.SUBFE xoform3c $ \rT rB rA -> do
     comment "Subtract From Extended (XO-form, RC=0)"
@@ -187,17 +183,15 @@ baseArithmetic = do
     defLoc xer (updateXER CA (Loc xer) (highBits' 1 eres1))
     definePPCOpcodeRC P.SUBFEo res $ do
       comment "Subtract From Extended (XO-form, RC=1)"
-  defineOpcodeWithIP "ADDZE" $ do
+  definePPCOpcode P.ADDZE xoform2c $ \rT rA -> do
     comment "Add to Zero Extended (XO-form, RC=0)"
-    (rT, rA) <- xoform2
     input xer
     let res = bvadd (Loc rA) (zext (xerBit CA (Loc xer)))
     defLoc rT res
-    defineRCVariant "ADDZEo" res $ do
+    definePPCOpcodeRC P.ADDZEo res $ do
       comment "Add to Zero Extended (XO-form, RC=1)"
-  defineOpcodeWithIP "SUBFZE" $ do
+  definePPCOpcode P.SUBFZE xoform2c $ \rT rA -> do
     comment "Subtract From Zero Extended (XO-form, RC=0)"
-    (rT, rA) <- xoform2
     input xer
     let res = bvadd (bvnot (Loc rA)) (zext (xerBit CA (Loc xer)))
     defLoc rT res

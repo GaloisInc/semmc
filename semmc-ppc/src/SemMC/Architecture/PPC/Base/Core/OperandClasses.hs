@@ -121,3 +121,5 @@ data SymToExprTagWrapper :: TL.TyFun k1 k2 -> *
 type instance TL.Apply SymToExprTagWrapper x = SymToExprTag x
 type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Gprc" = 'TBV
+  SymToExprTag "S16imm" = 'TBV
+  SymToExprTag "U16imm" = 'TBV
