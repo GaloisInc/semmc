@@ -25,7 +25,8 @@ module SemMC.Architecture.PPC.Base.Core.Forms (
   dformr0c,
   xform3c,
   xoform2c,
-  xoform3c
+  xoform3c,
+  vxform3c
   ) where
 
 import Data.Parameterized.Context
@@ -117,6 +118,12 @@ vxform3u = do
   uim <- param "uim" u5imm (EBV 5)
   input vrB
   return (vrT, vrB, uim)
+
+vxform3c :: (?bitSize :: BitSize) => Assignment OpcodeParamDef (EmptyCtx ::> 'TBV ::> 'TBV ::> 'TBV)
+vxform3c =  Empty
+         :> ParamDef "vrT" vrrc vectorBV
+         :> InputParamDef "vrA" vrrc vectorBV
+         :> InputParamDef "vrB" vrrc vectorBV
 
 vxform3 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 vxform3 = do

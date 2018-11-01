@@ -6,6 +6,9 @@ module SemMC.Architecture.PPC.Base.Vector (
   ) where
 
 import Prelude hiding ( concat )
+
+import qualified Dismantle.PPC as P
+
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
@@ -284,44 +287,36 @@ vecArith = do
 
 vecBitwise :: (?bitSize :: BitSize) => SemM 'Top ()
 vecBitwise = do
-  defineOpcodeWithIP "VAND" $ do
+  definePPCOpcode P.VAND vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical AND (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvand (Loc vrA) (Loc vrB))
 
-  defineOpcodeWithIP "VANDC" $ do
+  definePPCOpcode P.VANDC vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical AND with Complement (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvand (Loc vrA) (bvnot (Loc vrB)))
 
-  defineOpcodeWithIP "VEQV" $ do
+  definePPCOpcode P.VEQV vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical Equivalent (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvnot (bvxor (Loc vrA) (Loc vrB)))
 
-  defineOpcodeWithIP "VNAND" $ do
+  definePPCOpcode P.VNAND vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical NAND (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvnot (bvand (Loc vrA) (Loc vrB)))
 
-  defineOpcodeWithIP "VORC" $ do
+  definePPCOpcode P.VORC vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical OR with Complement (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvor (Loc vrA) (bvnot (Loc vrB)))
 
-  defineOpcodeWithIP "VNOR" $ do
+  definePPCOpcode P.VNOR vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical NOR (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvnot (bvor (Loc vrA) (Loc vrB)))
 
-  defineOpcodeWithIP "VOR" $ do
+  definePPCOpcode P.VOR vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical OR (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvor (Loc vrA) (Loc vrB))
 
-  defineOpcodeWithIP "VXOR" $ do
+  definePPCOpcode P.VXOR vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical XOR (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvxor (Loc vrA) (Loc vrB))
 
   defineOpcodeWithIP "VSL" $ do

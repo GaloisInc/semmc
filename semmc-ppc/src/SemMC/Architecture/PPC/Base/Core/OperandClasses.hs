@@ -123,3 +123,4 @@ type family SymToExprTag (sym :: Symbol) :: ExprTag where
   SymToExprTag "Gprc" = 'TBV
   SymToExprTag "S16imm" = 'TBV
   SymToExprTag "U16imm" = 'TBV
+  SymToExprTag "Vrrc" = 'TBV
