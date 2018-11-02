@@ -198,10 +198,10 @@ extractConcreteInstructions (GroundEvalFn evalFn) = mapM f
 -- Otherwise, it returns Nothing.
 tryExtractingConcrete :: (ArchRepr arch)
                       => [TemplatedInstructionFormula (WE.ExprBuilder t st fs) arch]
-                      -> SatResult (GroundEvalFn t)
+                      -> SatResult (GroundEvalFn t) core
                       -> IO (Maybe [TemplatableInstruction arch])
 tryExtractingConcrete insns (Sat evalFn) = Just <$> extractConcreteInstructions evalFn insns
-tryExtractingConcrete _ Unsat = return Nothing
+tryExtractingConcrete _ Unsat{} = return Nothing
 tryExtractingConcrete _ Unknown = fail "got Unknown when checking sat-ness"
 
 -- | Build a formula for the given concrete instruction.
