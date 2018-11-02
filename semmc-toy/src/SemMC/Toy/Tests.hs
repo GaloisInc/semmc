@@ -76,7 +76,7 @@ readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semanti
 doThing :: (U.HasLogCfg) => IO ()
 doThing = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -144,7 +144,7 @@ dependentFormula sym = do
 doThing2 :: (U.HasLogCfg) => IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -162,14 +162,14 @@ doThing2 = do
 doThing3 :: (U.HasLogCfg) => IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
 doThing4 :: (U.HasLogCfg) => IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   print add
   Right sub <- readBinOpc sym SubRr
