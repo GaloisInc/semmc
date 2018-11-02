@@ -18,6 +18,7 @@ module SemMC.Formula.MemAccesses
   , liveMemInExpr
   , liveMemSymbolic
   , liveMemConst
+  , liveMemMap
   , partitionEithers
   , partitionLocs
   ) where
@@ -25,6 +26,7 @@ module SemMC.Formula.MemAccesses
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Either as Either
+import qualified Data.Map as Map
 import           Data.Foldable
 import           Data.Maybe (listToMaybe)
 
@@ -57,6 +59,13 @@ partitionLocs locs =
         memLocList = (\(Some l) -> L.toMemLoc l) <$> Set.toList memLocs
     in (locs `Set.difference` memLocs, listToMaybe memLocList)
 
+-- | Given a formula @F@, construct a map @i ↦ lookup (F(mem))@ for each @i@ in
+-- the live memory locations of @F@
+liveMemMap :: (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+           => sym 
+           -> Formula sym arch
+           -> IO (Map.Map (Some (WE.Expr t)) (Some (WE.Expr t)))
+liveMemMap = undefined
 
 -- | Returns a list of memory locations (as bit vectors) that are accessed or
 -- written to in a formula, along with a list of symbolic expressions

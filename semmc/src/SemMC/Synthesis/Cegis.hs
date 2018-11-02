@@ -24,6 +24,7 @@ import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
 import           Data.Maybe ( fromJust )
+import qualified Data.Map as Map
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
@@ -147,9 +148,15 @@ evalFormula' sym (Formula vars defs) input = traverseF (evalExpression' sym vars
 -- | Concrete input and output states of a formula. There's nothing in the types
 -- that prevents the values from being symbolic, but please don't let them be!
 data ConcreteTest' sym loc =
-  ConcreteTest' { testInput :: LocExprs sym loc
+  ConcreteTest' { testInput  :: LocExprs sym loc
                 , testOutput :: LocExprs sym loc
+                , memInput   :: Map.Map (Some (S.SymExpr sym)) (Some (S.SymExpr sym))
+                , memOutput  :: Map.Map (Some (S.SymExpr sym)) (Some (S.SymExpr sym))
                 }
+
+-- nonMemTestInput :: P.OrdF loc
+--                => L.MemLoc loc -> ConcreteTest' sym loc -> LocExprs sym loc
+--nonMemTestInput (L.MemLoc _ mem) test = MapF.delete mem $ testInput test
 
 type ConcreteTest sym arch = ConcreteTest' sym (Location arch)
 instance (MapF.ShowF loc, MapF.ShowF (S.SymExpr sym)) 
@@ -172,13 +179,66 @@ defaultLocExprs sym = do locExprList <- mapM pairDefault (L.allLocations @loc)
     pairDefault (Some l) = MapF.Pair l <$> L.defaultLocationExpr sym l
 
 
+-- | Given a formula and a counterexample provided from the solver, construct
+-- the concrete test illustrated by the counterexample.
+mkTest :: forall sym arch t st fs.
+          (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+       => sym
+       -> Formula sym arch
+       -> L.ArchState arch (S.SymExpr sym)
+       -> IO (ConcreteTest sym arch)
+mkTest sym targetFormula ctrExample 
+  | L.MemLoc _ mem <- memLocation @(L.Location arch) = do
+    -- the testInput is exactly the counter example for non-memory locations
+    let testInput = MapF.delete mem ctrExample
+
+    -- substitute the non-memory locations from the test into the target
+    -- formula. For non-memory locations, this gives us the testOutput.
+    ctrExampleOut <- evalFormula' sym targetFormula testInput
+    let testOutput = MapF.delete mem ctrExampleOut
+
+    -- to construct the memInput/memOutput, we need to find all memory locations that
+    -- occur in the input/output counterexamples respectively and record the values they map to.
+    addrMap <- liveMemMap sym targetFormula
+
+    -- finally, substitute the testInput and testOutput into the addrMap
+    inputAddrMap  <- Map.foldMapWithKey (evalExpr2 testInput) addrMap
+    outputAddrMap <- Map.foldMapWithKey (evalExpr2 testOutput) addrMap
+
+    return $ ConcreteTest' testInput testOutput inputAddrMap outputAddrMap
+
+  where
+    -- substitute the concrete values in the LocExprs into the two expressions
+    -- and produce a singleton map with the result.
+    evalExpr2 :: LocExprs sym (L.Location arch)
+              -> Some (S.SymExpr sym) 
+              -> Some (S.SymExpr sym) 
+              -> IO (Map.Map (Some (WE.Expr t)) (Some (WE.Expr t)))
+    evalExpr2 subst (Some key) (Some result) = do
+        key'    <- evalExpression' sym (formParamVars targetFormula) subst key
+        result' <- evalExpression' sym (formParamVars targetFormula) subst result
+        return $ Map.singleton (Some key') (Some result')
+
+-- | Construct an initial test from concrete values
 initTest :: (L.IsLocation (Location arch), Architecture arch)
          => WE.ExprBuilder t st fs
          -> Formula (WE.ExprBuilder t st fs) arch
          -> IO (ConcreteTest (WE.ExprBuilder t st fs) arch)
 initTest sym f = do locExprs <- defaultLocExprs sym
-                    res <- evalFormula' sym f locExprs 
-                    return $ ConcreteTest' locExprs res
+                    mkTest sym f locExprs
+
+-- | Given a formula and a concrete test, replace all non-memory locations in
+-- the formula with their bindings from the test
+substituteNonMem :: forall sym t st fs arch.
+                    (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+                 => sym
+                 -> Formula sym arch
+                 -> ConcreteTest' sym (L.Location arch)
+                 -> IO (Formula sym arch)
+substituteNonMem sym f test = Formula (formParamVars f) <$> traverseF go (formDefs f)
+  where
+    go :: S.SymExpr sym s -> IO (S.SymExpr sym s)
+    go e = evalExpression' sym (formParamVars f) (testInput test) e
 
 
 -- | Build an equality expression for the given location, under the given
@@ -492,15 +552,10 @@ cegis' trial trialFormula tests = do
           liftIO . putStrLn $ "Equivalent"
           return . CegisEquivalent $ map templInsnToDism insns'
         DifferentBehavior ctrExample -> do
-          ctrExampleOut <- evalFormula targetFormula ctrExample
-          let newTest = ConcreteTest' ctrExample ctrExampleOut
+          newTest <- liftIO $ mkTest sym targetFormula ctrExample
           liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
           cegis' trial trialFormula (newTest : tests)
     Nothing -> return (CegisUnmatchable tests)
-
-
-
-
 
 
 cegis :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
