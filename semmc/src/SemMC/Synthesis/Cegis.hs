@@ -190,22 +190,19 @@ mkTest :: forall sym arch t st fs.
 mkTest sym targetFormula ctrExample 
   | L.MemLoc _ mem <- memLocation @(L.Location arch) = do
     -- the testInput is exactly the counter example for non-memory locations
-    let testInput = MapF.delete mem ctrExample
+    let testInput' = MapF.delete mem ctrExample
 
     -- substitute the non-memory locations from the test into the target
     -- formula. For non-memory locations, this gives us the testOutput.
-    ctrExampleOut <- evalFormula' sym targetFormula testInput
-    let testOutput = MapF.delete mem ctrExampleOut
+    ctrExampleOut <- evalFormula' sym targetFormula testInput'
+    let testOutput' = MapF.delete mem ctrExampleOut
 
     -- to construct the memInput/memOutput, we need to find all memory locations that
     -- occur in the input/output counterexamples respectively and record the values they map to.
-    addrMap <- liveMemMap sym targetFormula
+    inputAddrMap  <- liveMemMap sym $ Formula @sym @arch (formParamVars targetFormula) ctrExample
+    outputAddrMap <- liveMemMap sym $ Formula @sym @arch (formParamVars targetFormula) ctrExampleOut
 
-    -- finally, substitute the testInput and testOutput into the addrMap
-    inputAddrMap  <- Map.foldMapWithKey (evalExpr2 testInput) addrMap
-    outputAddrMap <- Map.foldMapWithKey (evalExpr2 testOutput) addrMap
-
-    return $ ConcreteTest' testInput testOutput inputAddrMap outputAddrMap
+    return $ ConcreteTest' testInput' testOutput' inputAddrMap outputAddrMap
 
   where
     -- substitute the concrete values in the LocExprs into the two expressions
@@ -227,6 +224,7 @@ initTest :: (L.IsLocation (Location arch), Architecture arch)
 initTest sym f = do locExprs <- defaultLocExprs sym
                     mkTest sym f locExprs
 
+{-
 -- | Given a formula and a concrete test, replace all non-memory locations in
 -- the formula with their bindings from the test
 substituteNonMem :: forall sym t st fs arch.
@@ -239,6 +237,7 @@ substituteNonMem sym f test = Formula (formParamVars f) <$> traverseF go (formDe
   where
     go :: S.SymExpr sym s -> IO (S.SymExpr sym s)
     go e = evalExpression' sym (formParamVars f) (testInput test) e
+-}
 
 
 -- | Build an equality expression for the given location, under the given
@@ -290,7 +289,7 @@ buildEqualityLocation sym test vars outputLoc expr = do
 buildEqualityLocations :: forall arch t st fs
                        . (Architecture arch)
                        => WE.ExprBuilder t st fs
-                       ->Formula (WE.ExprBuilder t st fs) arch
+                       -> Formula (WE.ExprBuilder t st fs) arch
                        -> ConcreteTest (WE.ExprBuilder t st fs) arch
                        -> Set.Set (Some (Location arch))
                        -> IO (WE.BoolExpr t)
@@ -438,6 +437,92 @@ buildEqualityMachine sym f test = do
   memPred <- buildEqualityMem sym f test mem
 --  liftIO . putStrLn $ "Mem: " ++ show nonMemPred
   liftIO $ S.andPred sym nonMemPred memPred
+
+
+-- | Substitute test input (for non-memory locations) into the target formula,
+-- producing a new formula f' such that the only free variables in f' are Mem
+-- and any uninstantiated immediates to be generated. We then construct a
+-- predicate of the form 
+-- @\forall l <> Mem, f'(l) = testOutput(l)@
+simplifyWithTestNonMem :: forall arch t st fs sym.
+                         (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+                      => sym
+                      -> Formula sym arch
+                      -- ^ the target formula
+                      -> ConcreteTest sym arch
+                      -- ^ a single test case
+                      -> IO (S.Pred sym)
+simplifyWithTestNonMem sym trialFormula test = do
+  defs'  <- evalFormula' sym trialFormula (testInput test)
+  let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula `Set.union` formOutputs trialFormula
+  andPred sym nonMemLocs $ \(Some l) -> do
+    (actuallyIs,shouldBe) <- buildEqualityLocation sym test vars l (MapF.lookup l defs')
+    S.isEq sym actuallyIs shouldBe
+  where
+    vars = formParamVars trialFormula
+
+-- | Meant to be used as the recurser to a fold to accumulate several predicates
+andPred' :: S.IsExprBuilder sym
+        => sym -> (a -> IO (S.Pred sym)) -> a -> S.Pred sym -> IO (S.Pred sym)
+andPred' sym f a accum = f a >>= S.andPred sym accum
+
+-- | Take the conjunction of (f a) for each a in some foldable data structure
+andPred :: (Foldable m, S.IsExprBuilder sym)
+        => sym -> m a -> (a -> IO (S.Pred sym)) -> IO (S.Pred sym)
+andPred sym a f = foldrM (andPred' sym f) (S.truePred sym) a
+
+
+-- | For each memory address i touched by the formula, constrain the input and
+-- output state of memory with respect to that data
+simplifyWithTestMem :: forall arch t st fs sym.
+                         (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+                      => sym
+                      -> L.MemLoc (L.Location arch)
+                      -> Formula sym arch
+                      -- ^ the target formula
+                      -> ConcreteTest sym arch
+                      -- ^ a single test case
+                      -> IO (S.Pred sym)
+simplifyWithTestMem sym (L.MemLoc _ mem) trialFormula test = do
+  -- FIXME: we do this both here and in simplifyWithTestNonMem
+  defs' <- evalFormula' sym trialFormula (testInput test)
+  let addrs = liveMemSymbolic @arch (Formula (formParamVars trialFormula) defs')
+
+  andPred sym addrs $ \i -> do
+    let memExpr  = S.varExpr sym $ fromJust $ MapF.lookup mem (formParamVars trialFormula)
+    preState  <- constrainMem @arch sym (Some memExpr) i (memInput test)
+
+    let memExpr' = fromJust $ MapF.lookup mem defs'
+    postState <- constrainMem @arch sym (Some memExpr') i (memOutput test)
+
+    S.andPred sym preState postState
+
+-- | constrain a state with respect to a particular map from addresses in memory
+-- to values. In particular, 'constrainMem mem i addressMap' produces a predicate 
+--
+-- '(forall (j,v) in addressMap, mem(j)=v) 
+--   /\ ((forall j in dom(addressMap), i <> j) -> (forall v in rng(addressMap), mem(i) <> v))
+constrainMem :: forall arch t st fs sym.
+                (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+             => sym
+             -> Some (S.SymExpr sym) 
+             -- ^ An expression corresponding to memory
+             -> Some (S.SymExpr sym)
+             -- ^ A memory address touched by the formula
+             -> Map.Map (Some (S.SymExpr sym)) (Some (S.SymExpr sym))
+             -- ^ A mapping from concrete memory addresses to concrete values
+             -> IO (S.Pred sym)
+{- \(Some i) -> do
+    preState  <- andPred sym (Map.toList (memInput test)) $ \(Some j,Some v) -> do
+                   mem_i <- S.arrayLookup sym mem i
+                   mem_j <- S.arrayLookup sym mem j
+                   mem_eq <- S.isEq mem_j v
+                   mem_neq <- do i_neq_j <- S.notPred sym <$> S.isEq i j
+                                 mem_i_neq_v <- S.notPred sym <$> S.isEq mem_i v
+                                 S.impliesPred sym i_neq_j mem_i_neq_v
+                   S.andPred sym mem_eq mem_neq
+-}
+constrainMem = undefined
 
 
 -- | Build an equality of the form
