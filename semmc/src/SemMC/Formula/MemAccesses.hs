@@ -13,14 +13,16 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module SemMC.Formula.MemAccesses
-  ( liveMem
-  , liveMem'
-  , liveMemInExpr
-  , liveMemSymbolic
+  (-- liveMem
+--  , liveMem'
+   liveMemInExpr
+  , liveMem
   , liveMemConst
   , liveMemMap
-  , partitionEithers
+--  , partitionEithers
   , partitionLocs
+  , someArrayLookup
+  , someIsEq
   ) where
 
 import qualified Data.Set as Set
@@ -28,7 +30,7 @@ import qualified Data.Text as Text
 import qualified Data.Either as Either
 import qualified Data.Map as Map
 import           Data.Foldable
-import           Data.Maybe (listToMaybe)
+import           Data.Maybe (listToMaybe, catMaybes)
 
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
@@ -59,14 +61,56 @@ partitionLocs locs =
         memLocList = (\(Some l) -> L.toMemLoc l) <$> Set.toList memLocs
     in (locs `Set.difference` memLocs, listToMaybe memLocList)
 
--- | Given a formula @F@, construct a map @i ↦ lookup (F(mem))@ for each @i@ in
--- the live memory locations of @F@
-liveMemMap :: (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+-- | Given a formula @F@, construct a map @i ↦ lookup (F(mem)) i@ for each @i@ in
+-- the live memory addresses of @F@
+--
+-- FIXME: Note that this is less efficient than just collecting the values as
+-- you traverse the expression
+liveMemMap :: forall arch t st fs sym.
+              (Architecture arch, sym ~ WE.ExprBuilder t st fs)
            => sym 
            -> Formula sym arch
            -> IO (Map.Map (Some (WE.Expr t)) (Some (WE.Expr t)))
-liveMemMap = undefined
+liveMemMap sym f@(Formula _ defs) | L.MemLoc _ mem <- memLocation @(Location arch) = 
+  case MapF.lookup mem defs of
+      Nothing -> return $ Map.empty
+      Just memExpr -> foldMap (mkSingletonMap (Some memExpr)) $ liveMem f
+  where
+    mkSingletonMap :: Some (WE.Expr t) -> Some (WE.Expr t) -> IO (Map.Map (Some (WE.Expr t)) (Some (WE.Expr t)))
+    mkSingletonMap memExpr i = Map.singleton i <$> someArrayLookup sym memExpr i
 
+-- | @someArrayLookup sym (Some arr) (Some i)@ results in @Some <$>
+-- S.arrayLookup arr i@ as long as @arr@ and @i@ have the correct type;
+-- otherwise throws an error
+someArrayLookup :: S.IsExprBuilder sym
+                => sym 
+                -> Some (S.SymExpr sym)
+                -> Some (S.SymExpr sym)
+                -> IO (Some (S.SymExpr sym))
+someArrayLookup sym (Some arr) (Some i)
+  | S.BaseArrayRepr (Ctx.Empty Ctx.:> tp) b <- S.exprType arr -- does the array expression have the right shape?
+  , Just S.Refl <- S.testEquality tp (S.exprType i) -- does the argument type match the indices of the array?
+  = Some <$> S.arrayLookup sym arr (Ctx.Empty Ctx.:> i)
+  | otherwise = error "Could not construct an array lookup because arguments have the wrong type"
+
+someIsEq :: S.IsExprBuilder sym
+         => sym
+         -> Some (S.SymExpr sym)
+         -> Some (S.SymExpr sym)
+         -> IO (S.Pred sym)
+someIsEq sym (Some x) (Some y) 
+  | Just S.Refl <- S.testEquality (S.exprType x) (S.exprType y) = S.isEq sym x y
+  | otherwise = error "Could not construct an equality predicate because its arguments have the wrong type"
+
+
+-- | Returns the set of memory addresses that are accessed by the formula
+liveMem :: (Architecture arch)
+        => Formula (WE.ExprBuilder t st fs) arch
+        -> Set.Set (Some (WE.Expr t))
+liveMem f = foldMapF (liveMemInExpr f) (formDefs f)
+
+
+{-
 -- | Returns a list of memory locations (as bit vectors) that are accessed or
 -- written to in a formula, along with a list of symbolic expressions
 liveMem :: Architecture arch
@@ -97,7 +141,6 @@ liveMemConst :: Architecture arch
              -> [Integer]
 liveMemConst = Set.toList . fst . liveMem 
 
-
 -- | Coerce an integer into a memory address
 mkAddress :: S.IsExprBuilder sym
           => sym -> L.MemLoc loc -> Integer -> IO (Some (S.SymExpr sym))
@@ -107,35 +150,41 @@ mkAddresses :: S.IsExprBuilder sym
           => sym -> L.MemLoc loc -> Set.Set Integer -> IO (Set.Set (Some (S.SymExpr sym)))
 mkAddresses = undefined
 
-liveMemSymbolic :: (Architecture arch)
-                => Formula (WE.ExprBuilder t st fs) arch
-                -> Set.Set (Some (WE.Expr t))
-liveMemSymbolic = undefined
+
 
 liveMemInExprs :: Architecture arch
                => Formula (WE.ExprBuilder t st fs) arch
                -> Ctx.Assignment (WE.Expr t) idx
-               -> Set.Set (Either Integer (Some (WE.Expr t)))
+               -> Set.Set (Some (WE.Expr t))
 liveMemInExprs form idx = foldMapFC (liveMemInExpr form) idx
+-}
+
+liveMemConst :: forall arch t st fs.
+                Architecture arch
+             => Formula (WE.ExprBuilder t st fs) arch
+             -> [Integer]
+liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMem f)
+  where
+    exprToInt :: Some (WE.Expr t) -> Maybe Integer
+    exprToInt (Some e) | Just (WC.ConcreteBV _ i)    <- S.asConcrete e = Just i
+    exprToInt (Some e) | Just (WC.ConcreteInteger i) <- S.asConcrete e = Just i
+    exprToInt _        | otherwise = Nothing
 
 
 liveMemInExpr :: Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.Expr t a
-              -> Set.Set (Either Integer (Some (WE.Expr t)))
--- liveMemInExpr _ (WE.BVExpr _ i _)     = Set.singleton i
--- liveMemInExpr f (WE.SemiRingLiteral WE.SemiRingNat n _)  = Set.singleton $ toInteger n
--- liveMemInExpr f (WE.SemiRingLiteral WE.SemiRingInt i _)  = Set.singleton i
--- liveMemInExpr f (WE.SemiRingLiteral WE.SemiRingReal _ _) = Set.empty
--- liveMemInExpr f (WE.StringExpr s _)   = Set.empty
-liveMemInExpr f (WE.AppExpr a)        = liveMemInApp f $ WE.appExprApp a 
+              -> Set.Set (Some (WE.Expr t))
+liveMemInExpr f (WE.AppExpr a)        = foldMapFC (liveMemInExpr f) $ WE.appExprApp a 
 liveMemInExpr f (WE.NonceAppExpr a)   = liveMemInNonceApp f $ WE.nonceExprApp a
 liveMemInExpr _ _                     = Set.empty
 
+{-
 liveMemInApp :: Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.App (WE.Expr t) a
-              -> Set.Set (Either Integer (Some (WE.Expr t)))
+              -> Set.Set (Some (WE.Expr t))
+liveMemInApp f app = foldMapFC (liveMemInExpr f) app
 liveMemInApp _ WE.TrueBool = Set.empty
 liveMemInApp _ WE.FalseBool = Set.empty
 liveMemInApp f (WE.NotBool e) = liveMemInExpr f e
@@ -150,6 +199,7 @@ liveMemInApp f (WE.BVSext _ e) = liveMemInExpr f e
 liveMemInApp f (WE.ConstantArray _ _ e) = liveMemInExpr f e
 liveMemInApp _ e = error $ "Case " ++ show e ++ " not covered in liveMemInApp"
 -- TODO: expand liveMemInApp to more cases, possibly with lenses?
+-}
 
 
 exprSymFnToUninterpFn :: forall arch t args ret.
@@ -171,29 +221,14 @@ liveMemInNonceApp :: forall arch t st fs a.
                  Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.NonceApp t (WE.Expr t) a
-              -> Set.Set (Either Integer (Some (WE.Expr t)))
--- when we get to an uninterpreted function, we should check whether the live
--- registers they ask for are constants; if they are, add that constant to the
--- result set. If not, construct an abstract formula from the result;
--- > Old_Mem => New_Mem
--- where 
--- > Old_Mem = WhatWeKnow /\ i≠anyKnownLoc => Mem[i]=0
--- and
--- > New_Mem = WhatWeKnow /\ i ≠ anyKnownLoc => updatedMem[i]=0
+              -> Set.Set (Some (WE.Expr t))
 liveMemInNonceApp form (WE.FnApp f args) =
     case exprSymFnToUninterpFn @arch f of
-      Just (MkUninterpFn name _ _ liveness) ->
+      Just (MkUninterpFn _ _ _ liveness) ->
         let exprs = liveness args
-            maybeConsts = decideConst <$> exprs
-        in Set.fromList maybeConsts `Set.union` liveMemInExprs form args
-      Nothing -> Set.empty
-
-  where
-    decideConst :: Some (WE.Expr t) -> Either Integer (Some (WE.Expr t))
-    decideConst (Some e) = case S.asConcrete e of
-                              Just (WC.ConcreteBV _ i) -> Left i
-                              Just (WC.ConcreteInteger i) -> Left i
-                              Just (WC.ConcreteNat n) -> Left (toInteger n)
-                              _ -> Right (Some e)
-liveMemInNonceApp _ _ = undefined
+        -- Add the live expressions to the set
+        -- Also recurse along arguments
+        in Set.fromList exprs `Set.union` foldMapFC (liveMemInExpr form) args
+      Nothing -> foldMapFC (liveMemInExpr form) args
+liveMemInNonceApp form app = foldMapFC (liveMemInExpr form) app
 

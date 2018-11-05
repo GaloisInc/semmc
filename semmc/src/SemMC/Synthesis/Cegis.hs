@@ -438,6 +438,25 @@ buildEqualityMachine sym f test = do
 --  liftIO . putStrLn $ "Mem: " ++ show nonMemPred
   liftIO $ S.andPred sym nonMemPred memPred
 
+simplifyWithTest :: forall arch t st fs sym.
+                         (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+                      => sym
+                      -> Formula sym arch
+                      -- ^ the target formula
+                      -> ConcreteTest sym arch
+                      -- ^ a single test case
+                      -> IO (S.Pred sym)
+simplifyWithTest sym f test = do
+    nonMemPred <- simplifyWithTestNonMem sym f test
+    memPred <- simplifyWithTestMem sym (formMem f) f test
+    S.andPred sym nonMemPred memPred
+
+formMem :: Architecture arch
+        => Formula sym arch 
+        -> Maybe (L.MemLoc (L.Location arch))
+formMem f | any (\(Some l) -> L.isMemLoc l) (MapF.keys $ formParamVars f) = Just L.memLocation
+formMem _ | otherwise = Nothing
+
 
 -- | Substitute test input (for non-memory locations) into the target formula,
 -- producing a new formula f' such that the only free variables in f' are Mem
@@ -477,16 +496,17 @@ andPred sym a f = foldrM (andPred' sym f) (S.truePred sym) a
 simplifyWithTestMem :: forall arch t st fs sym.
                          (Architecture arch, sym ~ WE.ExprBuilder t st fs)
                       => sym
-                      -> L.MemLoc (L.Location arch)
+                      -> Maybe (L.MemLoc (L.Location arch))
                       -> Formula sym arch
                       -- ^ the target formula
                       -> ConcreteTest sym arch
                       -- ^ a single test case
                       -> IO (S.Pred sym)
-simplifyWithTestMem sym (L.MemLoc _ mem) trialFormula test = do
+simplifyWithTestMem sym Nothing trialFormula test = return $ S.truePred sym
+simplifyWithTestMem sym (Just (L.MemLoc _ mem)) trialFormula test = do
   -- FIXME: we do this both here and in simplifyWithTestNonMem
   defs' <- evalFormula' sym trialFormula (testInput test)
-  let addrs = liveMemSymbolic @arch (Formula (formParamVars trialFormula) defs')
+  let addrs = liveMem @arch (Formula (formParamVars trialFormula) defs')
 
   andPred sym addrs $ \i -> do
     let memExpr  = S.varExpr sym $ fromJust $ MapF.lookup mem (formParamVars trialFormula)
@@ -496,6 +516,7 @@ simplifyWithTestMem sym (L.MemLoc _ mem) trialFormula test = do
     postState <- constrainMem @arch sym (Some memExpr') i (memOutput test)
 
     S.andPred sym preState postState
+
 
 -- | constrain a state with respect to a particular map from addresses in memory
 -- to values. In particular, 'constrainMem mem i addressMap' produces a predicate 
@@ -522,7 +543,15 @@ constrainMem :: forall arch t st fs sym.
                                  S.impliesPred sym i_neq_j mem_i_neq_v
                    S.andPred sym mem_eq mem_neq
 -}
-constrainMem = undefined
+constrainMem sym mem i addrMap = do 
+  -- Produce a predicate @constrPos && (neq_i -> neq_v)@
+  mem_i <- someArrayLookup sym mem i
+  constrPos <- andPred sym (Map.toList addrMap) $ \(j,v) -> do
+                 mem_j <- someArrayLookup sym mem j
+                 someIsEq sym mem_j v
+  neq_i     <- andPred sym (Map.toList addrMap) $ \(j, _) -> S.notPred sym =<< someIsEq sym i j
+  neq_v     <- andPred sym (Map.toList addrMap) $ \(_, v) -> S.notPred sym =<< someIsEq sym mem_i v
+  S.andPred sym constrPos =<< S.impliesPred sym neq_i neq_v
 
 
 -- | Build an equality of the form
@@ -535,7 +564,7 @@ buildEqualityTests :: forall arch t st fs
                    -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityTests form tests = do
   sym <- askSym
-  let andTest test soFar = do test1 <- buildEqualityMachine sym form test
+  let andTest test soFar = do test1 <- simplifyWithTest sym form test
                               liftIO $ S.andPred sym soFar test1
   liftIO $ foldrM andTest (S.truePred sym) tests
 
