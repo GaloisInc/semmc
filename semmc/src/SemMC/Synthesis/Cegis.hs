@@ -162,7 +162,10 @@ type ConcreteTest sym arch = ConcreteTest' sym (Location arch)
 instance (MapF.ShowF loc, MapF.ShowF (S.SymExpr sym)) 
       => Show (ConcreteTest' sym loc) 
   where
-    show test = "⟨ " ++ show (testInput test) ++ " \t|||\t " ++ show (testOutput test) ++ " ⟩"
+    show test = "⟨\t" ++ show (testInput test)
+                ++ "\n|||\t" ++ show (testOutput test) 
+                ++ "\n|||\t" ++ show (memInput test) 
+                ++ "\n|||\t" ++ show (memOutput test) ++ "\n⟩"
 
 -- Returns a 'LocExprs' data structure that maps all locations to a default value.
 defaultLocExprs :: forall loc sym. 
@@ -189,6 +192,7 @@ mkTest :: forall sym arch t st fs.
        -> IO (ConcreteTest sym arch)
 mkTest sym targetFormula ctrExample 
   | L.MemLoc _ mem <- memLocation @(L.Location arch) = do
+    -- putStrLn $ "Constructing test from " ++ show ctrExample
     -- the testInput is exactly the counter example for non-memory locations
     let testInput' = MapF.delete mem ctrExample
 
@@ -199,9 +203,10 @@ mkTest sym targetFormula ctrExample
 
     -- to construct the memInput/memOutput, we need to find all memory locations that
     -- occur in the input/output counterexamples respectively and record the values they map to.
-    inputAddrMap  <- liveMemMap sym $ Formula @sym @arch (formParamVars targetFormula) ctrExample
-    outputAddrMap <- liveMemMap sym $ Formula @sym @arch (formParamVars targetFormula) ctrExampleOut
+    let inputAddrMap  = liveMemMap $ Formula @sym @arch (formParamVars targetFormula) ctrExample
+        outputAddrMap = liveMemMap $ Formula @sym @arch (formParamVars targetFormula) ctrExampleOut
 
+    -- putStrLn $ "Test: " ++ show (ConcreteTest' @sym testInput' testOutput' inputAddrMap outputAddrMap)
     return $ ConcreteTest' testInput' testOutput' inputAddrMap outputAddrMap
 
   where
@@ -502,19 +507,26 @@ simplifyWithTestMem :: forall arch t st fs sym.
                       -> ConcreteTest sym arch
                       -- ^ a single test case
                       -> IO (S.Pred sym)
-simplifyWithTestMem sym Nothing trialFormula test = return $ S.truePred sym
-simplifyWithTestMem sym (Just (L.MemLoc _ mem)) trialFormula test = do
+simplifyWithTestMem sym Nothing _ _ = return $ S.truePred sym
+simplifyWithTestMem sym (Just (L.MemLoc _ mem)) (Formula vars defs) test = do
   -- FIXME: we do this both here and in simplifyWithTestNonMem
-  defs' <- evalFormula' sym trialFormula (testInput test)
-  let addrs = liveMem @arch (Formula (formParamVars trialFormula) defs')
+--  putStrLn $ "Trial formula: " ++ show trialFormula
+--  putStrLn $ "In simplify with test for " ++ show test
+   
+  -- We only want to instantiate the non-mem variables in the formula
+  let vars' = MapF.delete mem vars
+  defs' <- evalFormula' sym (Formula @sym @arch vars' defs) (testInput test)
+--  putStrLn $ "Evaluating formula on input tests " ++ show defs'
+  let addrs = liveMemAddresses @arch $ Formula vars' defs'
+--  putStrLn $ "Live addresses: " ++ show addrs
+
+  let memExpr  = S.varExpr sym $ fromJust $ MapF.lookup mem vars
+  let memExpr' = fromJust $ MapF.lookup mem defs'
+  putStrLn $ "Mem type: " ++ show (S.exprType memExpr)
 
   andPred sym addrs $ \i -> do
-    let memExpr  = S.varExpr sym $ fromJust $ MapF.lookup mem (formParamVars trialFormula)
-    preState  <- constrainMem @arch sym (Some memExpr) i (memInput test)
-
-    let memExpr' = fromJust $ MapF.lookup mem defs'
+    preState  <- constrainMem @arch sym (Some memExpr)  i (memInput test)
     postState <- constrainMem @arch sym (Some memExpr') i (memOutput test)
-
     S.andPred sym preState postState
 
 
@@ -533,24 +545,20 @@ constrainMem :: forall arch t st fs sym.
              -> Map.Map (Some (S.SymExpr sym)) (Some (S.SymExpr sym))
              -- ^ A mapping from concrete memory addresses to concrete values
              -> IO (S.Pred sym)
-{- \(Some i) -> do
-    preState  <- andPred sym (Map.toList (memInput test)) $ \(Some j,Some v) -> do
-                   mem_i <- S.arrayLookup sym mem i
-                   mem_j <- S.arrayLookup sym mem j
-                   mem_eq <- S.isEq mem_j v
-                   mem_neq <- do i_neq_j <- S.notPred sym <$> S.isEq i j
-                                 mem_i_neq_v <- S.notPred sym <$> S.isEq mem_i v
-                                 S.impliesPred sym i_neq_j mem_i_neq_v
-                   S.andPred sym mem_eq mem_neq
--}
 constrainMem sym mem i addrMap = do 
   -- Produce a predicate @constrPos && (neq_i -> neq_v)@
   mem_i <- someArrayLookup sym mem i
+  putStrLn $ "ConstrainMem at index " ++ show i
+  putStrLn $ "with array mapping " ++ show addrMap
+  putStrLn $ "with memory " ++ show mem
   constrPos <- andPred sym (Map.toList addrMap) $ \(j,v) -> do
                  mem_j <- someArrayLookup sym mem j
                  someIsEq sym mem_j v
+  putStrLn "After constrPos"
   neq_i     <- andPred sym (Map.toList addrMap) $ \(j, _) -> S.notPred sym =<< someIsEq sym i j
+  putStrLn "After neq_i"
   neq_v     <- andPred sym (Map.toList addrMap) $ \(_, v) -> S.notPred sym =<< someIsEq sym mem_i v
+  putStrLn "After neq_v"
   S.andPred sym constrPos =<< S.impliesPred sym neq_i neq_v
 
 
@@ -649,7 +657,7 @@ cegis' trial trialFormula tests = do
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
---      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
+      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
       filledInFormula <- condenseInstructions insns'
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym 

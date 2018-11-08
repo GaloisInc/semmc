@@ -17,6 +17,7 @@ module SemMC.Formula.MemAccesses
 --  , liveMem'
    liveMemInExpr
   , liveMem
+  , liveMemAddresses
   , liveMemConst
   , liveMemMap
 --  , partitionEithers
@@ -31,11 +32,13 @@ import qualified Data.Either as Either
 import qualified Data.Map as Map
 import           Data.Foldable
 import           Data.Maybe (listToMaybe, catMaybes)
+import           GHC.TypeNats (KnownNat)
 
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Classes as P
+import qualified Data.Parameterized.NatRepr as P
 import           Data.Parameterized.TraversableF
 import           Data.Parameterized.TraversableFC
 
@@ -63,21 +66,17 @@ partitionLocs locs =
 
 -- | Given a formula @F@, construct a map @i ↦ lookup (F(mem)) i@ for each @i@ in
 -- the live memory addresses of @F@
---
--- FIXME: Note that this is less efficient than just collecting the values as
--- you traverse the expression
 liveMemMap :: forall arch t st fs sym.
               (Architecture arch, sym ~ WE.ExprBuilder t st fs)
-           => sym 
-           -> Formula sym arch
-           -> IO (Map.Map (Some (WE.Expr t)) (Some (WE.Expr t)))
-liveMemMap sym f@(Formula _ defs) | L.MemLoc _ mem <- memLocation @(Location arch) = 
-  case MapF.lookup mem defs of
-      Nothing -> return $ Map.empty
-      Just memExpr -> foldMap (mkSingletonMap (Some memExpr)) $ liveMem f
+           => Formula sym arch
+           -> Map.Map (Some (WE.Expr t)) (Some (WE.Expr t))
+liveMemMap f = foldMap accessMap $ liveMem f 
   where
-    mkSingletonMap :: Some (WE.Expr t) -> Some (WE.Expr t) -> IO (Map.Map (Some (WE.Expr t)) (Some (WE.Expr t)))
-    mkSingletonMap memExpr i = Map.singleton i <$> someArrayLookup sym memExpr i
+    accessMap :: AccessData sym -> Map.Map (Some (WE.Expr t)) (Some (WE.Expr t))
+    accessMap (ReadData _)    = Map.empty
+    accessMap (WriteData e i) = Map.singleton (Some e) (Some i)
+
+  
 
 -- | @someArrayLookup sym (Some arr) (Some i)@ results in @Some <$>
 -- S.arrayLookup arr i@ as long as @arr@ and @i@ have the correct type;
@@ -88,27 +87,34 @@ someArrayLookup :: S.IsExprBuilder sym
                 -> Some (S.SymExpr sym)
                 -> IO (Some (S.SymExpr sym))
 someArrayLookup sym (Some arr) (Some i)
-  | S.BaseArrayRepr (Ctx.Empty Ctx.:> tp) b <- S.exprType arr -- does the array expression have the right shape?
+  | S.BaseArrayRepr (Ctx.Empty Ctx.:> tp) _ <- S.exprType arr -- does the array expression have the right shape?
   , Just S.Refl <- S.testEquality tp (S.exprType i) -- does the argument type match the indices of the array?
   = Some <$> S.arrayLookup sym arr (Ctx.Empty Ctx.:> i)
   | otherwise = error "Could not construct an array lookup because arguments have the wrong type"
 
-someIsEq :: S.IsExprBuilder sym
+someIsEq :: (S.IsExprBuilder sym, P.ShowF (S.SymExpr sym))
          => sym
          -> Some (S.SymExpr sym)
          -> Some (S.SymExpr sym)
          -> IO (S.Pred sym)
 someIsEq sym (Some x) (Some y) 
   | Just S.Refl <- S.testEquality (S.exprType x) (S.exprType y) = S.isEq sym x y
-  | otherwise = error "Could not construct an equality predicate because its arguments have the wrong type"
+  | otherwise = error $ "Could not construct an equality predicate because its arguments have the wrong type\n" 
+                     ++ "Expression 1: " ++ P.showF x ++ "\nHas type " ++ show (S.exprType x)
+                     ++ "\nExpression 2: " ++ P.showF y ++ "\nHas type " ++ show (S.exprType y)
 
 
 -- | Returns the set of memory addresses that are accessed by the formula
 liveMem :: (Architecture arch)
         => Formula (WE.ExprBuilder t st fs) arch
-        -> Set.Set (Some (WE.Expr t))
+        -> Set.Set (AccessData (WE.ExprBuilder t st fs))
 liveMem f = foldMapF (liveMemInExpr f) (formDefs f)
 
+liveMemAddresses :: forall arch t st fs. 
+                    Architecture arch
+                 => Formula (WE.ExprBuilder t st fs) arch
+                 -> Set.Set (Some (WE.Expr t))
+liveMemAddresses = Set.map accessAddr . liveMem
 
 {-
 -- | Returns a list of memory locations (as bit vectors) that are accessed or
@@ -163,7 +169,7 @@ liveMemConst :: forall arch t st fs.
                 Architecture arch
              => Formula (WE.ExprBuilder t st fs) arch
              -> [Integer]
-liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMem f)
+liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMemAddresses f)
   where
     exprToInt :: Some (WE.Expr t) -> Maybe Integer
     exprToInt (Some e) | Just (WC.ConcreteBV _ i)    <- S.asConcrete e = Just i
@@ -174,7 +180,7 @@ liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMem f)
 liveMemInExpr :: Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.Expr t a
-              -> Set.Set (Some (WE.Expr t))
+              -> Set.Set (AccessData (WE.ExprBuilder t st fs))
 liveMemInExpr f (WE.AppExpr a)        = foldMapFC (liveMemInExpr f) $ WE.appExprApp a 
 liveMemInExpr f (WE.NonceAppExpr a)   = liveMemInNonceApp f $ WE.nonceExprApp a
 liveMemInExpr _ _                     = Set.empty
@@ -221,7 +227,7 @@ liveMemInNonceApp :: forall arch t st fs a.
                  Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.NonceApp t (WE.Expr t) a
-              -> Set.Set (Some (WE.Expr t))
+              -> Set.Set (AccessData (WE.ExprBuilder t st fs))
 liveMemInNonceApp form (WE.FnApp f args) =
     case exprSymFnToUninterpFn @arch f of
       Just (MkUninterpFn _ _ _ liveness) ->

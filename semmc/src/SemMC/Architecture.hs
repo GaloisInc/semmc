@@ -37,6 +37,8 @@ module SemMC.Architecture (
   UninterpFn(..),
   mkUninterpFn,
   getUninterpFn,
+  AccessData(..),
+  accessAddr,
   showShapeRepr,
   createSymbolicEntries,
   createSymbolicName
@@ -155,8 +157,8 @@ data UninterpFn arch argResult where
                   , uninterpFnArgs :: Ctx.Assignment BaseTypeRepr args
                   , uninterpFnRes  :: BaseTypeRepr ty
                   , uninterpFnLive :: forall sym.
-                                      Ctx.Assignment (S.Expr sym) args 
-                                   -> [Some (S.Expr sym)]
+                                      Ctx.Assignment (S.SymExpr sym) args 
+                                   -> [AccessData sym]
                   -- ^ Given some arguments, identify the arguments that might touch memory.
                   } -> UninterpFn arch '(args,ty)
 
@@ -166,7 +168,7 @@ mkUninterpFn :: forall (args :: Ctx.Ctx BaseType) (ty :: BaseType) arch.
               ( KnownRepr (Ctx.Assignment BaseTypeRepr) args
               , KnownRepr BaseTypeRepr ty )
              => String 
-             -> (forall sym. Ctx.Assignment (S.Expr sym) args -> [Some (S.Expr sym)])
+             -> (forall sym. Ctx.Assignment (S.SymExpr sym) args -> [AccessData sym])
              -> Some (UninterpFn arch)
 mkUninterpFn name liveness = Some $ MkUninterpFn name (knownRepr :: Ctx.Assignment BaseTypeRepr args) 
                                                       (knownRepr :: BaseTypeRepr ty)
@@ -184,6 +186,27 @@ getUninterpFn s = go $ uninterpretedFunctions (Proxy @arch)
     go (Some f@(MkUninterpFn _ _ _ _) : fs) = if s == createSymbolicName (uninterpFnName f)
                                               then Just (Some f)
                                               else go fs
+
+
+data AccessData sym where
+  ReadData  :: S.SymExpr sym (S.BaseBVType w) -> AccessData sym
+  WriteData :: S.SymExpr sym (S.BaseBVType w) -> S.SymExpr sym tp -> AccessData sym
+
+instance S.TestEquality (S.SymExpr sym) => Eq (AccessData sym) where
+  ReadData e == ReadData e'        | Just _ <- S.testEquality e e' = True
+  WriteData i v == WriteData i' v' | Just _ <- S.testEquality i i' 
+                                   , Just _ <- S.testEquality v v' = True
+  _ == _ = False
+
+instance OrdF (S.SymExpr sym) => Ord (AccessData sym) where
+  ReadData e    <= ReadData e'     = e `leqF` e'
+  WriteData e a <= WriteData e' a' = e `ltF` e' || (e `leqF` e' && a `leqF` a')
+  ReadData _    <= WriteData _ _   = True
+  WriteData _ _ <= ReadData _      = False
+
+accessAddr :: AccessData sym -> Some (S.SymExpr sym)
+accessAddr (ReadData i) = Some i
+accessAddr (WriteData i _) = Some i
 
 -- | This type encapsulates an evaluator for operations represented as
 -- uninterpreted functions in semantics.  It may seem strange to interpret

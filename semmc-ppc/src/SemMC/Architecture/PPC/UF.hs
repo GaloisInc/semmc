@@ -27,7 +27,7 @@ import           What4.BaseTypes
 import qualified What4.Interface as W
 import qualified What4.Expr.Builder as Expr
 
-import           SemMC.Architecture (UninterpFn(..), mkUninterpFn)
+import           SemMC.Architecture (UninterpFn(..), mkUninterpFn, AccessData(..))
 import           SemMC.Architecture.PPC.Location
 
                              
@@ -156,23 +156,23 @@ readMemUninterpFns = [
     mkUninterpFn @(EmptyCtx ::> BaseMemType ppc ::> BaseIdxType ppc)
                  @(BaseBVType 8)
                  "read_mem.8"
-                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [Some idx])
+                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [ReadData idx])
   , mkUninterpFn @(EmptyCtx ::> BaseMemType ppc ::> BaseIdxType ppc)
                  @(BaseBVType 16)
                  "read_mem.16"
-                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [Some idx])
+                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [ReadData idx])
   , mkUninterpFn @(EmptyCtx ::> BaseMemType ppc ::> BaseIdxType ppc)
                  @(BaseBVType 32)
                  "read_mem.32"
-                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [Some idx])
+                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [ReadData idx])
   , mkUninterpFn @(EmptyCtx ::> BaseMemType ppc ::> BaseIdxType ppc)
                  @(BaseBVType 64)
                  "read_mem.64"
-                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [Some idx])
+                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [ReadData idx])
   , mkUninterpFn @(EmptyCtx ::> BaseMemType ppc ::> BaseIdxType ppc)
                  @(BaseBVType 128)
                  "read_mem.128"
-                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [Some idx])
+                 (\ (_ Ctx.:> _ Ctx.:> idx) -> [ReadData idx])
   ]
 
 mkUninterpFnWriteMem :: forall ppc (n :: Nat).
@@ -182,7 +182,7 @@ mkUninterpFnWriteMem name =
     mkUninterpFn @(EmptyCtx ::> BaseMemType ppc ::> BaseIdxType ppc ::> BaseBVType n)
                  @(BaseMemType ppc)
                  name
-                 $ \(_ Ctx.:> _ Ctx.:> idx Ctx.:> _) -> [Some idx]
+                 $ \(_ Ctx.:> _ Ctx.:> idx Ctx.:> val) -> [WriteData idx val]
 
 writeMemUninterpFns :: forall ppc. (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
               => [Some (UninterpFn ppc)]
