@@ -62,6 +62,7 @@ import qualified Dismantle.Thumb.Operands as ThumbOperands
 import           GHC.TypeLits
 import           Language.Haskell.TH hiding ( recover )
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Location as AL
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, regWidth )
 import           SemMC.Architecture.ARM.Combined
 import qualified SemMC.Architecture.ARM.Components as ARMComp
@@ -286,8 +287,8 @@ operandToLocation _ = Nothing
 instance (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
          A.IsLocation (Location arm) where
 
-  isMemoryLocation LocMem = True
-  isMemoryLocation _ = False
+  isMemLoc LocMem = True
+  isMemLoc _ = False
 
   readLocation = P.parseMaybe parseLocation
 
@@ -302,13 +303,13 @@ instance (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
   defaultLocationExpr sym LocMem =
       S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
-  allLocations = concat
+  nonMemLocations = concat
     [ map (Some . LocGPR) [0..numGPR-1],
       [ Some LocPC
       , Some LocCPSR
-      , Some LocMem
       ]
     ]
+  memLocation = [AL.toMemLoc LocMem]
 
   registerizationLocations = [] -- map (Some . LocGPR . ARMDis.GPR) (0 : [3..4])
 
@@ -354,6 +355,8 @@ instance A.Architecture AArch32 where
     allocateSymExprsForOperand _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
+    readMemUF = UF.mkReadMemUF
+    writeMemUF = UF.mkWriteMemUF
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
 

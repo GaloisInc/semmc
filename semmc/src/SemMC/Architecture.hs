@@ -23,6 +23,7 @@ module SemMC.Architecture (
   OperandComponents,
   Location,
   IsLocation(..),
+  allLocations,
   Evaluator(..),
   FunctionInterpretation(..),
   Instruction,
@@ -110,8 +111,13 @@ class (IsOperand (Operand arch),
   -- | Extract the 'AllocatedOperand' from a 'TaggedExpr'
   taggedOperand :: TaggedExpr arch sym s -> AllocatedOperand arch sym s
 
-  -- | The uninterpreted functions referred to by this architecture
-  uninterpretedFunctions :: proxy arch -> [Some (UninterpFn arch)]
+  -- | The uninterpreted functions referred to by this architecture. These
+  -- should include readMemUF and writeMemUF
+  uninterpretedFunctions :: proxy arch -> [(UninterpFn arch)]
+  readMemUF :: Integer -- ^ Number of bits to read, undefined if not in 'uninterpretedFunctions'
+            -> (UninterpFn arch)
+  writeMemUF :: Integer -- ^ Number of bits to read, undefined if not in 'uninterpretedFunctions'
+             -> (UninterpFn arch)
 
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.
@@ -152,15 +158,16 @@ showShapeRepr _ rep =
                        in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
   
 
-data UninterpFn arch argResult where
-  MkUninterpFn :: { uninterpFnName :: String
+data UninterpFn arch where
+  MkUninterpFn :: forall arch args ty.
+                  { uninterpFnName :: String
                   , uninterpFnArgs :: Ctx.Assignment BaseTypeRepr args
                   , uninterpFnRes  :: BaseTypeRepr ty
                   , uninterpFnLive :: forall sym.
                                       Ctx.Assignment (S.SymExpr sym) args 
                                    -> [AccessData sym]
                   -- ^ Given some arguments, identify the arguments that might touch memory.
-                  } -> UninterpFn arch '(args,ty)
+                  } -> UninterpFn arch
 
 
 
@@ -169,8 +176,8 @@ mkUninterpFn :: forall (args :: Ctx.Ctx BaseType) (ty :: BaseType) arch.
               , KnownRepr BaseTypeRepr ty )
              => String 
              -> (forall sym. Ctx.Assignment (S.SymExpr sym) args -> [AccessData sym])
-             -> Some (UninterpFn arch)
-mkUninterpFn name liveness = Some $ MkUninterpFn name (knownRepr :: Ctx.Assignment BaseTypeRepr args) 
+             -> UninterpFn arch
+mkUninterpFn name liveness = MkUninterpFn name (knownRepr :: Ctx.Assignment BaseTypeRepr args) 
                                                       (knownRepr :: BaseTypeRepr ty)
                                                       liveness
 
@@ -178,13 +185,13 @@ mkUninterpFn name liveness = Some $ MkUninterpFn name (knownRepr :: Ctx.Assignme
 getUninterpFn :: forall arch.
                  Architecture arch
               => String
-              -> Maybe (Some (UninterpFn arch))
+              -> Maybe (UninterpFn arch)
 getUninterpFn s = go $ uninterpretedFunctions (Proxy @arch)
   where
-    go :: [Some (UninterpFn arch)] -> Maybe (Some (UninterpFn arch))
+    go :: [UninterpFn arch] -> Maybe (UninterpFn arch)
     go [] = Nothing
-    go (Some f@(MkUninterpFn _ _ _ _) : fs) = if s == createSymbolicName (uninterpFnName f)
-                                              then Just (Some f)
+    go (f@(MkUninterpFn _ _ _ _) : fs) = if s == createSymbolicName (uninterpFnName f)
+                                              then Just f
                                               else go fs
 
 

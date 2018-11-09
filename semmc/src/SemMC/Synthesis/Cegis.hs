@@ -23,7 +23,7 @@ module SemMC.Synthesis.Cegis
 import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
-import           Data.Maybe ( fromJust )
+import           Data.Maybe ( fromJust, listToMaybe )
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
@@ -184,6 +184,8 @@ defaultLocExprs sym = do locExprList <- mapM pairDefault (L.allLocations @loc)
 
 -- | Given a formula and a counterexample provided from the solver, construct
 -- the concrete test illustrated by the counterexample.
+--
+-- TODO: adapt this to deal with the case when the architecture has several memory locations (e.g. A32)
 mkTest :: forall sym arch t st fs.
           (Architecture arch, sym ~ WE.ExprBuilder t st fs)
        => sym
@@ -191,7 +193,7 @@ mkTest :: forall sym arch t st fs.
        -> L.ArchState arch (S.SymExpr sym)
        -> IO (ConcreteTest sym arch)
 mkTest sym targetFormula ctrExample 
-  | L.MemLoc _ mem <- memLocation @(L.Location arch) = do
+  | [L.MemLoc _ mem] <- memLocation @(L.Location arch) = do
     -- putStrLn $ "Constructing test from " ++ show ctrExample
     -- the testInput is exactly the counter example for non-memory locations
     let testInput' = MapF.delete mem ctrExample
@@ -208,18 +210,7 @@ mkTest sym targetFormula ctrExample
 
     -- putStrLn $ "Test: " ++ show (ConcreteTest' @sym testInput' testOutput' inputAddrMap outputAddrMap)
     return $ ConcreteTest' testInput' testOutput' inputAddrMap outputAddrMap
-
-  where
-    -- substitute the concrete values in the LocExprs into the two expressions
-    -- and produce a singleton map with the result.
-    evalExpr2 :: LocExprs sym (L.Location arch)
-              -> Some (S.SymExpr sym) 
-              -> Some (S.SymExpr sym) 
-              -> IO (Map.Map (Some (WE.Expr t)) (Some (WE.Expr t)))
-    evalExpr2 subst (Some key) (Some result) = do
-        key'    <- evalExpression' sym (formParamVars targetFormula) subst key
-        result' <- evalExpression' sym (formParamVars targetFormula) subst result
-        return $ Map.singleton (Some key') (Some result')
+mkTest _ _ _ | otherwise = error "Cannot make test for this architecture"
 
 -- | Construct an initial test from concrete values
 initTest :: (L.IsLocation (Location arch), Architecture arch)
@@ -459,7 +450,7 @@ simplifyWithTest sym f test = do
 formMem :: Architecture arch
         => Formula sym arch 
         -> Maybe (L.MemLoc (L.Location arch))
-formMem f | any (\(Some l) -> L.isMemLoc l) (MapF.keys $ formParamVars f) = Just L.memLocation
+formMem f | any (\(Some l) -> L.isMemLoc l) (MapF.keys $ formParamVars f) = listToMaybe L.memLocation
 formMem _ | otherwise = Nothing
 
 

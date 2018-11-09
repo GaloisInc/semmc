@@ -473,6 +473,8 @@ instance A.Architecture PPC where
   allocateSymExprsForOperand _ = operandValue
   operandToLocation _ = operandToLocation
   uninterpretedFunctions = UF.uninterpretedFunctions
+  readMemUF  = UF.mkUninterpFnReadMem
+  writeMemUF = UF.mkUninterpFnWriteMem
   locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation
   shapeReprToTypeRepr _proxy = shapeReprType
 
@@ -698,7 +700,7 @@ instance A.IsLocation (Location PPC) where
       ]
     ]
 
-  memLocation = AL.toMemLoc LocMem
+  memLocation = [AL.toMemLoc LocMem]
 
   registerizationLocations = map (Some . LocGPR . PPC.GPR) (0 : [3..10])
 

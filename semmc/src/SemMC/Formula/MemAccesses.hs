@@ -210,12 +210,12 @@ liveMemInApp _ e = error $ "Case " ++ show e ++ " not covered in liveMemInApp"
 
 exprSymFnToUninterpFn :: forall arch t args ret.
                          Architecture arch 
-                      => WE.ExprSymFn t args ret -> Maybe (UninterpFn arch '(args,ret))
+                      => WE.ExprSymFn t args ret -> Maybe (UninterpFn arch)
 exprSymFnToUninterpFn f = 
   case WE.symFnInfo f of
     WE.UninterpFnInfo args ret -> do
       let name = Text.unpack . WS.solverSymbolAsText $ WE.symFnName f 
-      Some f'@(MkUninterpFn _ args' ret' _) <- getUninterpFn @arch name
+      f'@(MkUninterpFn _ args' ret' _) <- getUninterpFn @arch name
       case (P.testEquality args args', P.testEquality ret ret') of 
         (Just P.Refl, Just P.Refl) -> return f'
         (_, _)                     -> Nothing
@@ -229,12 +229,12 @@ liveMemInNonceApp :: forall arch t st fs a.
               -> WE.NonceApp t (WE.Expr t) a
               -> Set.Set (AccessData (WE.ExprBuilder t st fs))
 liveMemInNonceApp form (WE.FnApp f args) =
+  foldMapFC (liveMemInExpr form) args `Set.union` 
     case exprSymFnToUninterpFn @arch f of
-      Just (MkUninterpFn _ _ _ liveness) ->
-        let exprs = liveness args
-        -- Add the live expressions to the set
-        -- Also recurse along arguments
-        in Set.fromList exprs `Set.union` foldMapFC (liveMemInExpr form) args
-      Nothing -> foldMapFC (liveMemInExpr form) args
+      Just (MkUninterpFn _ args' _ liveness) ->
+        case S.testEquality (fmapFC S.exprType args) args' of
+          Just S.Refl -> Set.fromList $ liveness args
+          Nothing     -> Set.empty
+      Nothing -> Set.empty
 liveMemInNonceApp form app = foldMapFC (liveMemInExpr form) app
 

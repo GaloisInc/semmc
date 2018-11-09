@@ -54,9 +54,9 @@ formulaEnv proxy sym = do
                        , FE.envUndefinedBit = undefinedBit
                        }
   where
-    toUF :: Some (A.UninterpFn arch)
+    toUF :: A.UninterpFn arch
          -> IO (String, (FE.SomeSome (CRU.SymFn sym), Some BaseTypeRepr))
-    toUF (Some (A.MkUninterpFn name args ret _)) = do
+    toUF (A.MkUninterpFn name args ret _) = do
       uf <- FE.SomeSome <$> CRU.freshTotalUninterpFn sym (U.makeSymbol ("uf." ++ name)) args ret
       return (("uf." ++ name), (uf, Some ret))
 

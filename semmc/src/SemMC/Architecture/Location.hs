@@ -9,7 +9,8 @@ module SemMC.Architecture.Location (
   MemLoc(..),
   fromMemLoc,
   toMemLoc,
-  ArchState
+  ArchState,
+  allLocations
   ) where
 
 import           Data.Parameterized.Classes
@@ -35,10 +36,7 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   -- | Non-memory locations
   nonMemLocations :: [Some a]
   -- | The location(s) representing memory
-  memLocation :: MemLoc a
-  -- | All the locations!
-  allLocations :: [Some a]
-  allLocations = nonMemLocations ++ [fromMemLoc memLocation]
+  memLocation :: [MemLoc a]
   -- | Locations that are acceptable to use for registerization.
   --
   -- This isn't just allLocations because vector registers and control registers
@@ -48,6 +46,9 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   -- | A predicate describing if a particular location is a memory location
   isMemLoc :: a tp -> Bool
 
+-- | All the locations!
+allLocations :: IsLocation a => [Some a]
+allLocations = nonMemLocations ++ (fromMemLoc <$> memLocation)
 
 -- | Represents the different registers, flags, and (eventually) memory a given
 -- architecture has.

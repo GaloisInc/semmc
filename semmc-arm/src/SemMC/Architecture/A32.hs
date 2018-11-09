@@ -49,6 +49,7 @@ import           GHC.Stack ( HasCallStack )
 import           GHC.TypeLits
 import qualified GHC.Err.Located as L
 import qualified SemMC.Architecture as A
+import qualified SemMC.Architecture.Location as AL
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, GPRIdent )
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
@@ -380,9 +381,9 @@ operandToLocation (ARMDis.GPRnopc gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ 
 operandToLocation _ = Nothing
 
 instance A.IsLocation (Location A32) where
-  isMemoryLocation LocMem1 = True
-  isMemoryLocation LocMem2 = True
-  isMemoryLocation _ = False
+  isMemLoc LocMem1 = True
+  isMemLoc LocMem2 = True
+  isMemLoc _ = False
 
   readLocation = P.parseMaybe parseLocation
 
@@ -404,15 +405,15 @@ instance A.IsLocation (Location A32) where
   defaultLocationExpr sym LocMem2 =
       S.constantArray sym knownRepr =<< S.bvLit sym knownNat 0
 
-  allLocations = concat
+  nonMemLocations = concat
     [ map (Some . LocGPR) [0..numGPR-1]
     , map (Some . LocGPRMask) [0..numGPR-1]
     , [ Some LocPC
       , Some LocCPSR
-      , Some LocMem1
-      , Some LocMem2
       ]
     ]
+
+  memLocation = [AL.toMemLoc  LocMem1, AL.toMemLoc LocMem2]
 
   registerizationLocations = []
 
@@ -456,6 +457,8 @@ instance A.Architecture A32 where
     allocateSymExprsForOperand _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
+    readMemUF = UF.mkReadMemUF
+    writeMemUF = UF.mkWriteMemUF
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
 
