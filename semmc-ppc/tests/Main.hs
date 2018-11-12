@@ -52,8 +52,8 @@ main = do
 
     CBO.withZ3OnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
       -- set the path to z3
-      void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
-                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/z3-tee"))
+--      void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
+--                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/z3-tee"))
 
 
       -- set the verbosity level
@@ -135,7 +135,8 @@ matchInsn i k =
   case i of
     D.Instruction opc operands -> k opc operands
 
-loadBaseSet :: (WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs, CB.IsSymInterface sym)
+loadBaseSet :: forall sym t solver fs.
+               (WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs, CB.IsSymInterface sym)
             => [(String, BS8.ByteString)]
             -> [(Some (D.Opcode D.Operand), BS8.ByteString)]
             -> sym
@@ -144,10 +145,14 @@ loadBaseSet :: (WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs, 
 loadBaseSet funcs ops sym = do
   lcfg <- SL.mkNonLogCfg
   let ?logCfg = lcfg
-  lib <- SF.loadLibrary (Proxy @PPC64.PPC) sym funcs
-  baseSet <- SF.loadFormulas sym lib ops
-  let synthEnv = SS.setupEnvironment sym baseSet
+  env <- SF.formulaEnv (Proxy @PPC64.PPC) sym
+  lib <- SF.loadLibrary (Proxy @PPC64.PPC) sym env funcs
+  baseSet <- SF.loadFormulas sym (templateEnv env) lib ops
+  let synthEnv = SS.setupEnvironment sym env baseSet
   return (removeTemplates baseSet, synthEnv)
+  where
+    templateEnv :: SF.FormulaEnv sym arch -> SF.FormulaEnv sym (SS.TemplatedArch arch)
+    templateEnv (SF.FormulaEnv fs b) = SF.FormulaEnv fs b
 
 removeTemplates :: forall arch sym
                  . (OrdF (SA.Opcode arch (SA.Operand arch)),

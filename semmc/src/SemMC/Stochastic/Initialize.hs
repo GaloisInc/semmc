@@ -176,13 +176,14 @@ loadInitialStateExplicit :: forall arch t solver fs
                  -- ^ IORelations
                  -> IO (SynEnv t solver fs arch)
 loadInitialStateExplicit cfg sym genTest interestingTests allOpcodes pseudoOpcodes targetOpcodes iorels = do
-  let load dir = F.loadFormulasFromFiles sym F.emptyLibrary (mkFormulaFilename dir) allOpcodes
+  env <- F.formulaEnv (Proxy @arch) sym
+  let load dir = F.loadFormulasFromFiles sym env F.emptyLibrary (mkFormulaFilename dir) allOpcodes
   baseSet <- load (baseSetDir cfg)
   L.logIO L.Info "Finished loading the base set"
   learnedSet <- load (learnedSetDir cfg)
   L.logIO L.Info "Finished loading learned set"
   let initialFormulas = MapF.union baseSet learnedSet
-  pseudoSet <- F.loadFormulasFromFiles sym F.emptyLibrary (mkFormulaFilename (pseudoSetDir cfg)) pseudoOpcodes
+  pseudoSet <- F.loadFormulasFromFiles sym env F.emptyLibrary (mkFormulaFilename (pseudoSetDir cfg)) pseudoOpcodes
   L.logIO L.Info "Finished loading pseudo ops"
   let congruentOps' = MapF.foldrWithKey (addCongruentOp (Proxy @arch). P.RealOpcode) MapF.empty initialFormulas
       congruentOps = MapF.foldrWithKey (addCongruentOp (Proxy @arch) . P.PseudoOpcode) congruentOps' pseudoSet

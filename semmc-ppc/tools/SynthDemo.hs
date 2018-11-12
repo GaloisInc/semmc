@@ -21,6 +21,7 @@ import           Data.Monoid
 import           Data.Word ( Word32 )
 import qualified Options.Applicative as O
 import           Text.Printf ( printf )
+import           Data.Proxy (Proxy(..))
 
 import qualified Data.ElfEdit as E
 import           Data.Parameterized.Classes ( OrdF, ShowF(..) )
@@ -125,10 +126,15 @@ loadBaseSet :: (U.HasLogCfg, WPO.OnlineSolver t solver)
             -> IO (MapF.MapF (DPPC.Opcode DPPC.Operand) (F.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC32.PPC),
                    SemMC.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC32.PPC)
 loadBaseSet ops sym = do
-  baseSet <- F.loadFormulas sym F.emptyLibrary ops
+  env <- F.formulaEnv (Proxy @PPC32.PPC) sym
+  baseSet <- F.loadFormulas sym (templateEnv env) F.emptyLibrary ops
   let plainBaseSet = makePlain baseSet
-      synthEnv = SemMC.setupEnvironment sym baseSet
+      synthEnv = SemMC.setupEnvironment sym env baseSet
   return (plainBaseSet, synthEnv)
+  where
+    templateEnv :: F.FormulaEnv sym arch -> F.FormulaEnv sym (SemMC.TemplatedArch arch)
+    templateEnv (F.FormulaEnv fs b) = F.FormulaEnv fs b
+
 
 symbolicallyExecute
   :: (Architecture arch, Traversable t1, CRUB.IsBoolSolver (SB.ExprBuilder t2 st fs))

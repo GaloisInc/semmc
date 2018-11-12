@@ -42,6 +42,7 @@ module SemMC.Formula
 
     -- * SemMC.Formula.Env
   , FormulaEnv(..)
+  , formulaEnv
 
     -- * SemMC.Formula.Parser
   , loadFormulas
@@ -83,7 +84,8 @@ import SemMC.Formula.Instantiate ( instantiateFormula,
                                    replaceVars,
                                    replaceLitVars
                                  )
-import SemMC.Formula.Load ( loadFormulas, loadFormulasFromFiles
+import SemMC.Formula.Load ( formulaEnv
+                          , loadFormulas, loadFormulasFromFiles
                           , loadLibrary, loadLibraryFromFiles )
 import SemMC.Formula.Parser ( readFormula, readFormulaFromFile,
                               readDefinedFunction, readDefinedFunctionFromFile )

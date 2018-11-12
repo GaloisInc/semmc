@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs #-}
 -- | Utilities for loading formulas from disk
 module SemMC.Formula.Load (
+  formulaEnv,
   loadFormulas,
   loadFormulasFromFiles,
   loadLibrary,
@@ -78,11 +79,12 @@ loadFormulas :: forall sym arch a
                   , U.HasCallStack
                   , L.HasLogCfg )
                 => sym
+             -> FE.FormulaEnv sym arch
              -> F.Library sym
              -> [(Some a, BS.ByteString)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulas sym lib contents = do
-  initEnv <- formulaEnv (Proxy @arch) sym
+loadFormulas sym initEnv lib contents = do
+--  initEnv <- formulaEnv (Proxy @arch) sym
   let env = FE.addLibrary initEnv lib
   F.foldlM (parseFormulaBS env) MapF.empty contents
   where
@@ -123,12 +125,13 @@ loadFormulasFromFiles :: forall sym arch a
                          , U.HasCallStack
                          , L.HasLogCfg )
                       => sym
+                      -> FE.FormulaEnv sym arch
                       -> F.Library sym
                       -> (forall sh' . a sh' -> FilePath)
                       -> [Some a]
                       -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
-loadFormulasFromFiles sym lib toFP shapes = do
-  initEnv <- formulaEnv (Proxy @arch) sym
+loadFormulasFromFiles sym initEnv lib toFP shapes = do
+--  initEnv <- formulaEnv (Proxy @arch) sym
   let env = FE.addLibrary initEnv lib
   F.foldlM (\m (Some (op :: a sh)) -> addIfJust (readFormulaForOpcode env) m op) MapF.empty shapes
   where
@@ -173,19 +176,19 @@ loadLibrary :: forall sym arch
                , L.HasLogCfg )
             => Proxy arch
             -> sym
+            -> FE.FormulaEnv sym arch
             -> [(String, BS.ByteString)]
             -> IO (F.Library sym)
-loadLibrary proxy sym contents = do
+loadLibrary _ sym env contents = do
   -- TODO Allow functions to call other functions by somehow loading in
   -- dependency order and adding to the environment as we go. For now, for
   -- predictability's sake, we load everything in the initial environment.
-  env <- formulaEnv proxy sym
-  MapF.fromList <$> mapM (parseFunctionBS env) contents
+--  env <- formulaEnv proxy sym
+  MapF.fromList <$> mapM parseFunctionBS contents
   where
-    parseFunctionBS :: FE.FormulaEnv sym arch
-                    -> (String, BS.ByteString)
+    parseFunctionBS :: (String, BS.ByteString)
                     -> IO (Pair.Pair F.FunctionRef (F.FunctionFormula sym))
-    parseFunctionBS env (name, bs) = do
+    parseFunctionBS (name, bs) = do
       U.logIO U.Info $ "reading formula for defined function " ++ show name
       ef <- FP.readDefinedFunction sym env (T.decodeUtf8 bs)
       case ef of
@@ -202,20 +205,20 @@ loadLibraryFromFiles :: forall sym arch
                         , L.HasLogCfg )
                      => Proxy arch
                      -> sym
+                     -> FE.FormulaEnv sym arch
                      -> FilePath
                      -> IO (F.Library sym)
-loadLibraryFromFiles proxy sym dir = do
+loadLibraryFromFiles _ sym env dir = do
   files <- listFunctionFiles dir
-  env <- formulaEnv proxy sym
+--  env <- formulaEnv proxy sym
   -- TODO Allow functions to call other functions by somehow loading in
   -- dependency order and adding to the environment as we go. For now, for
   -- predictability's sake, we load everything in the initial environment.
-  MapF.fromList <$> mapM (loadFile env) files
+  MapF.fromList <$> mapM loadFile files
   where
-    loadFile :: FE.FormulaEnv sym arch
-             -> FilePath
+    loadFile :: FilePath
              -> IO (Pair.Pair F.FunctionRef (F.FunctionFormula sym))
-    loadFile env origFile = do
+    loadFile origFile = do
       file <- S.canonicalizePath origFile
       U.logIO U.Info $ "loading function file: "++file
       ef <- FP.readDefinedFunctionFromFile sym env file

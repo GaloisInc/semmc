@@ -44,6 +44,7 @@ import qualified What4.Interface as S
 import           What4.SatResult
 import           What4.Expr.GroundEval
 import qualified What4.Expr as WE
+import qualified What4.Expr.Builder as WB
 import qualified What4.Protocol.Online as WPO
 import qualified What4.Symbol as WS
 
@@ -54,6 +55,7 @@ import qualified SemMC.Architecture.Location as L
 import           SemMC.Formula
 import           SemMC.Synthesis.Template
 import           SemMC.Formula.MemAccesses
+import           SemMC.Formula.Env
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.
@@ -90,10 +92,12 @@ lookupInState sym st loc =
 data CegisParams sym arch =
   CegisParams { cpSym :: sym
               -- ^ The symbolic expression builder.
-              , cpBaseSet :: BaseSet sym arch
+              , cpSemantics :: TemplatedSemantics sym arch
               -- ^ The base set of opcode semantics.
               , cpTarget :: Formula sym arch
               -- ^ The target formula we're trying to match.
+              , cpUFEnv :: FormulaEnv sym arch
+              -- ^ The uninterpreted functions in scope
               }
 
 type Cegis sym arch = ReaderT (CegisParams sym arch) IO
@@ -101,8 +105,11 @@ type Cegis sym arch = ReaderT (CegisParams sym arch) IO
 askSym :: Cegis sym arch sym
 askSym = reader cpSym
 
-askBaseSet :: Cegis sym arch (BaseSet sym arch)
-askBaseSet = reader cpBaseSet
+askUF :: Cegis sym arch (FormulaEnv sym arch)
+askUF = reader cpUFEnv
+
+askSemantics :: Cegis sym arch (TemplatedSemantics sym arch)
+askSemantics = reader cpSemantics
 
 askTarget :: Cegis sym arch (Formula sym arch)
 askTarget = reader cpTarget
@@ -436,16 +443,16 @@ buildEqualityMachine sym f test = do
 
 simplifyWithTest :: forall arch t st fs sym.
                          (Architecture arch, sym ~ WE.ExprBuilder t st fs)
-                      => sym
-                      -> Formula sym arch
+                      => Formula sym arch
                       -- ^ the target formula
                       -> ConcreteTest sym arch
                       -- ^ a single test case
-                      -> IO (S.Pred sym)
-simplifyWithTest sym f test = do
-    nonMemPred <- simplifyWithTestNonMem sym f test
-    memPred <- simplifyWithTestMem sym (formMem f) f test
-    S.andPred sym nonMemPred memPred
+                      -> Cegis sym arch (S.Pred sym)
+simplifyWithTest f test = do
+    nonMemPred <- simplifyWithTestNonMem f test
+    memPred <- simplifyWithTestMem (formMem f) f test
+    sym <- askSym
+    liftIO $ S.andPred sym nonMemPred memPred
 
 formMem :: Architecture arch
         => Formula sym arch 
@@ -461,16 +468,16 @@ formMem _ | otherwise = Nothing
 -- @\forall l <> Mem, f'(l) = testOutput(l)@
 simplifyWithTestNonMem :: forall arch t st fs sym.
                          (Architecture arch, sym ~ WE.ExprBuilder t st fs)
-                      => sym
-                      -> Formula sym arch
+                      => Formula sym arch
                       -- ^ the target formula
                       -> ConcreteTest sym arch
                       -- ^ a single test case
-                      -> IO (S.Pred sym)
-simplifyWithTestNonMem sym trialFormula test = do
-  defs'  <- evalFormula' sym trialFormula (testInput test)
+                      -> Cegis sym arch (S.Pred sym)
+simplifyWithTestNonMem trialFormula test = do
+  sym <- askSym
+  defs' <- liftIO $ evalFormula' sym trialFormula (testInput test)
   let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula `Set.union` formOutputs trialFormula
-  andPred sym nonMemLocs $ \(Some l) -> do
+  liftIO $ andPred sym nonMemLocs $ \(Some l) -> do
     (actuallyIs,shouldBe) <- buildEqualityLocation sym test vars l (MapF.lookup l defs')
     S.isEq sym actuallyIs shouldBe
   where
@@ -491,33 +498,35 @@ andPred sym a f = foldrM (andPred' sym f) (S.truePred sym) a
 -- output state of memory with respect to that data
 simplifyWithTestMem :: forall arch t st fs sym.
                          (Architecture arch, sym ~ WE.ExprBuilder t st fs)
-                      => sym
-                      -> Maybe (L.MemLoc (L.Location arch))
+                      => Maybe (L.MemLoc (L.Location arch))
                       -> Formula sym arch
                       -- ^ the target formula
                       -> ConcreteTest sym arch
                       -- ^ a single test case
-                      -> IO (S.Pred sym)
-simplifyWithTestMem sym Nothing _ _ = return $ S.truePred sym
-simplifyWithTestMem sym (Just (L.MemLoc _ mem)) (Formula vars defs) test = do
+                      -> Cegis sym arch (S.Pred sym)
+simplifyWithTestMem Nothing _ _ = askSym >>= liftIO . return . S.truePred
+simplifyWithTestMem (Just (L.MemLoc _ mem)) (Formula vars defs) test = do
   -- FIXME: we do this both here and in simplifyWithTestNonMem
 --  putStrLn $ "Trial formula: " ++ show trialFormula
 --  putStrLn $ "In simplify with test for " ++ show test
-   
+  
+  sym <- askSym
+  env <- askUF
+
   -- We only want to instantiate the non-mem variables in the formula
   let vars' = MapF.delete mem vars
-  defs' <- evalFormula' sym (Formula @sym @arch vars' defs) (testInput test)
+  defs' <- liftIO $ evalFormula' sym (Formula @sym @arch vars' defs) (testInput test)
 --  putStrLn $ "Evaluating formula on input tests " ++ show defs'
   let addrs = liveMemAddresses @arch $ Formula vars' defs'
 --  putStrLn $ "Live addresses: " ++ show addrs
 
   let memExpr  = S.varExpr sym $ fromJust $ MapF.lookup mem vars
   let memExpr' = fromJust $ MapF.lookup mem defs'
-  putStrLn $ "Mem type: " ++ show (S.exprType memExpr)
+  liftIO . putStrLn $ "Mem type: " ++ show (S.exprType memExpr)
 
-  andPred sym addrs $ \i -> do
-    preState  <- constrainMem @arch sym (Some memExpr)  i (memInput test)
-    postState <- constrainMem @arch sym (Some memExpr') i (memOutput test)
+  liftIO $ andPred sym addrs $ \i -> do
+    preState  <- constrainMem @arch sym env (Some memExpr)  i (memInput test)
+    postState <- constrainMem @arch sym env (Some memExpr') i (memOutput test)
     S.andPred sym preState postState
 
 
@@ -529,6 +538,7 @@ simplifyWithTestMem sym (Just (L.MemLoc _ mem)) (Formula vars defs) test = do
 constrainMem :: forall arch t st fs sym.
                 (Architecture arch, sym ~ WE.ExprBuilder t st fs)
              => sym
+             -> FormulaEnv sym arch
              -> Some (S.SymExpr sym) 
              -- ^ An expression corresponding to memory
              -> Some (S.SymExpr sym)
@@ -536,21 +546,96 @@ constrainMem :: forall arch t st fs sym.
              -> Map.Map (Some (S.SymExpr sym)) (Some (S.SymExpr sym))
              -- ^ A mapping from concrete memory addresses to concrete values
              -> IO (S.Pred sym)
-constrainMem sym mem i addrMap = do 
+constrainMem sym env mem i addrMap = do 
   -- Produce a predicate @constrPos && (neq_i -> neq_v)@
-  mem_i <- someArrayLookup sym mem i
   putStrLn $ "ConstrainMem at index " ++ show i
   putStrLn $ "with array mapping " ++ show addrMap
   putStrLn $ "with memory " ++ show mem
-  constrPos <- andPred sym (Map.toList addrMap) $ \(j,v) -> do
-                 mem_j <- someArrayLookup sym mem j
-                 someIsEq sym mem_j v
+  constrPos <- andPred sym (Map.toList addrMap) $ \(j,Some v) -> 
+    -- need to know the size of 'v' to know how many bits to read starting from i
+    case S.exprType v of
+      S.BaseBVRepr w -> do mem_j <- someReadMem sym env w mem j
+                           S.isEq sym mem_j v
+      _ -> error "Could not constrain memory because arguments have the wrong type"
   putStrLn "After constrPos"
   neq_i     <- andPred sym (Map.toList addrMap) $ \(j, _) -> S.notPred sym =<< someIsEq sym i j
   putStrLn "After neq_i"
-  neq_v     <- andPred sym (Map.toList addrMap) $ \(_, v) -> S.notPred sym =<< someIsEq sym mem_i v
+  neq_v     <- andPred sym (Map.toList addrMap) $ \(_, Some v) ->
+    -- need to know the size of 'v' to know how many bits to read starting from i
+    case S.exprType v of
+      S.BaseBVRepr w -> do mem_i <- someReadMem sym env w mem i
+                           S.notPred sym =<< S.isEq sym mem_i v
+      _ -> error "Could not constrain memory because arguments have the wrong type"
   putStrLn "After neq_v"
   S.andPred sym constrPos =<< S.impliesPred sym neq_i neq_v
+
+
+someReadMem :: forall arch sym w.
+               (Architecture arch, S.IsSymExprBuilder sym, 1 S.<= w)
+            => sym
+            -> FormulaEnv sym arch
+            -> S.NatRepr w
+            -- ^ the number of bits to read                
+            -> Some (S.SymExpr sym)
+            -- ^ an expression representing memory
+            -> Some (S.SymExpr sym)
+            -- ^ an expression representing the location in memory to read
+            -> IO (S.SymExpr sym (S.BaseBVType w))
+someReadMem sym env w arr i = 
+    someApplySymFn sym (lookupUF env (readMemUF @arch $ S.natValue w)) arr i (S.BaseBVRepr w)
+{-
+  | S.BaseArrayRepr (Ctx.Empty Ctx.:> arg) _ <- S.exprType arr
+  , Just S.Refl <- S.testEquality arg (S.exprType i)
+  , SomeSome f <- lookupUF env (readMemUF @arch $ S.natValue w)
+  , Ctx.Empty Ctx.:> mem Ctx.:> arg' <- S.fnArgTypes f
+  , S.BaseBVRepr w' <- S.fnReturnType f
+  , Just S.Refl <- S.testEquality arg' arg
+  , Just S.Refl <- S.testEquality mem (S.exprType arr)
+  , Just S.Refl <- S.testEquality w w'
+-}
+--  = S.applySymFn sym f (Ctx.empty Ctx.:> arr Ctx.:> i)
+{-
+someReadMem _ _ w (Some arr) (Some i) 
+  | otherwise = error $ "Could not construct a readMem because arguments have the wrong type"
+                      ++ "\nw: " ++ show w
+                      ++ "\nArray: " ++ show (S.exprType arr)
+                      ++ "\ni: " ++ show (S.exprType i)
+-}
+
+someApplySymFn :: S.IsSymExprBuilder sym
+               => sym
+               -> SomeSome (S.SymFn sym)
+               -- ^ the symbolic function to apply
+               -> Some (S.SymExpr sym)
+               -- ^ an expression representing memory
+               -> Some (S.SymExpr sym)
+               -- ^ an expression representing the location in memory to read
+               -> S.BaseTypeRepr res
+               -- ^ the target result type of the function
+               -> IO (S.SymExpr sym res)
+someApplySymFn sym (SomeSome f) (Some arr) (Some i) res 
+  | Ctx.Empty Ctx.:> arrType Ctx.:> iType <- S.fnArgTypes f
+  , Just S.Refl <- S.testEquality arrType (S.exprType arr)
+  , Just S.Refl <- S.testEquality iType (S.exprType i)
+  , Just S.Refl <- S.testEquality (S.fnReturnType f) res
+  = S.applySymFn sym f (Ctx.empty Ctx.:> arr Ctx.:> i)
+  | otherwise = error $ "Could not construct a readMem because arguments have the wrong type"
+
+
+lookupUF :: FormulaEnv sym arch 
+         -> UninterpFn arch 
+         -> SomeSome (S.SymFn sym)
+lookupUF env (MkUninterpFn name _ _ _)
+  = case Map.lookup ("uf." ++ name) (envFunctions env) of
+      Just (f0, _) -> f0
+      Nothing      -> error $ "Could not find uninterpreted function in FormulaEnv\n"
+                             ++ showUFEnv env
+
+
+showUFEnv :: FormulaEnv sym arch -> String
+showUFEnv env = Map.foldMapWithKey go (envFunctions env)
+  where
+    go name (SomeSome f, _) = name ++ "\n"
 
 
 -- | Build an equality of the form
@@ -563,9 +648,9 @@ buildEqualityTests :: forall arch t st fs
                    -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
 buildEqualityTests form tests = do
   sym <- askSym
-  let andTest test soFar = do test1 <- simplifyWithTest sym form test
+  let andTest test soFar = do test1 <- simplifyWithTest form test
                               liftIO $ S.andPred sym soFar test1
-  liftIO $ foldrM andTest (S.truePred sym) tests
+  foldrM andTest (S.truePred sym) tests
 
 
 -- | Given a concrete model from the SMT solver, extract concrete instructions
@@ -598,8 +683,8 @@ instantiateFormula' :: (Architecture arch
                     -> Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
 instantiateFormula' (TemplatableInstruction op oplist) = do
   sym <- askSym
-  baseSet <- askBaseSet
-  let pf = unTemplate . fromJust $ MapF.lookup op baseSet
+  semantics <- askSemantics
+  let pf = unTemplate . fromJust $ MapF.lookup op semantics
   liftIO (snd <$> instantiateFormula sym pf oplist)
 
 -- | Condense a series of instructions in sequential execution into one formula.

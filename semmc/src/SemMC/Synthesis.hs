@@ -48,13 +48,15 @@ setupEnvironment :: (Architecture arch,
                      TemplatableOperand arch,
                      Typeable arch)
                  => CBO.OnlineBackend t solver fs
+                 -> FormulaEnv (CBO.OnlineBackend t solver fs) arch
                  -> BaseSet (CBO.OnlineBackend t solver fs) arch
                  -> SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
-setupEnvironment sym baseSet =
+setupEnvironment sym env baseSet =
   let insns = templatedInstructions baseSet
   in SynthesisEnvironment { synthSym = sym
                           , synthBaseSet = baseSet
                           , synthInsns = insns
+                          , synthUFEnv = env
                           }
 
 -- | Synthesizes a list of instructions from a formula.

@@ -168,12 +168,13 @@ data UninterpFn arch where
                                    -> [AccessData sym]
                   -- ^ Given some arguments, identify the arguments that might touch memory.
                   } -> UninterpFn arch
-
+instance Show (UninterpFn arch) where
+  show (MkUninterpFn name args res _) = name ++ " [ " ++ show args ++ " => " ++ show res ++ " ]"
 
 
 mkUninterpFn :: forall (args :: Ctx.Ctx BaseType) (ty :: BaseType) arch.
               ( KnownRepr (Ctx.Assignment BaseTypeRepr) args
-              , KnownRepr BaseTypeRepr ty )
+              , KnownRepr BaseTypeRepr ty)
              => String 
              -> (forall sym. Ctx.Assignment (S.SymExpr sym) args -> [AccessData sym])
              -> UninterpFn arch

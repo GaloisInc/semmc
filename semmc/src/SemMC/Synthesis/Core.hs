@@ -40,6 +40,7 @@ data SynthesisEnvironment sym arch =
   SynthesisEnvironment { synthSym :: sym
                        , synthBaseSet :: BaseSet sym arch
                        , synthInsns :: [Some (TemplatedInstruction sym arch)]
+                       , synthUFEnv :: FormulaEnv sym arch
                        }
 
 data SynthesisParams sym arch =
@@ -62,6 +63,9 @@ askBaseSet = reader (synthBaseSet . synthEnv)
 
 askInsns :: Synth sym arch [Some (TemplatedInstruction sym arch)]
 askInsns = reader (synthInsns . synthEnv)
+
+askUFEnv :: Synth sym arch (FormulaEnv sym arch)
+askUFEnv = reader (synthUFEnv . synthEnv)
 
 askMaxLength :: Synth sym arch Int
 askMaxLength = reader synthMaxLength
@@ -98,6 +102,7 @@ instantiate target trial
   | footprintFilter target trial = do
       sym <- askSym
       baseSet <- askBaseSet
+      ufEnv <- askUFEnv
       -- Instantiate the templated formulas for the templated instructions we're
       -- trying. Ideally we'd like to cache these somewhere, but this is hard
       -- due to the implementation of 'TemplatedInstruction'. (It stores a list
@@ -108,8 +113,9 @@ instantiate target trial
       tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
       st <- get
       let params = CegisParams { cpSym = sym
-                               , cpBaseSet = baseSet
+                               , cpSemantics = baseSet
                                , cpTarget = target
+                               , cpUFEnv = ufEnv
                                }
       cegisResult <- liftIO $ cegis params (synthTests st) tifs
       case cegisResult of
