@@ -438,7 +438,7 @@ buildEqualityMachine sym f test = do
   nonMemPred <- buildEqualityLocations sym f test nonMemLocs
 --  liftIO . putStrLn $ "Non-mem: " ++ show nonMemPred
   memPred <- buildEqualityMem sym f test mem
---  liftIO . putStrLn $ "Mem: " ++ show nonMemPred
+--  liftIO . putStrLn $ "Mem: " ++ show memPred
   liftIO $ S.andPred sym nonMemPred memPred
 
 simplifyWithTest :: forall arch t st fs sym.
@@ -451,6 +451,8 @@ simplifyWithTest :: forall arch t st fs sym.
 simplifyWithTest f test = do
     nonMemPred <- simplifyWithTestNonMem f test
     memPred <- simplifyWithTestMem (formMem f) f test
+    liftIO . putStrLn $ "Non-mem: " ++ show nonMemPred
+    liftIO . putStrLn $ "Mem: " ++ show memPred
     sym <- askSym
     liftIO $ S.andPred sym nonMemPred memPred
 
@@ -557,16 +559,13 @@ constrainMem sym env mem i addrMap = do
       S.BaseBVRepr w -> do mem_j <- someReadMem sym env w mem j
                            S.isEq sym mem_j v
       _ -> error "Could not constrain memory because arguments have the wrong type"
-  putStrLn "After constrPos"
   neq_i     <- andPred sym (Map.toList addrMap) $ \(j, _) -> S.notPred sym =<< someIsEq sym i j
-  putStrLn "After neq_i"
   neq_v     <- andPred sym (Map.toList addrMap) $ \(_, Some v) ->
     -- need to know the size of 'v' to know how many bits to read starting from i
     case S.exprType v of
       S.BaseBVRepr w -> do mem_i <- someReadMem sym env w mem i
                            S.notPred sym =<< S.isEq sym mem_i v
       _ -> error "Could not constrain memory because arguments have the wrong type"
-  putStrLn "After neq_v"
   S.andPred sym constrPos =<< S.impliesPred sym neq_i neq_v
 
 
@@ -582,7 +581,9 @@ someReadMem :: forall arch sym w.
             -- ^ an expression representing the location in memory to read
             -> IO (S.SymExpr sym (S.BaseBVType w))
 someReadMem sym env w arr i = 
-    someApplySymFn sym (lookupUF env (readMemUF @arch $ S.natValue w)) arr i (S.BaseBVRepr w)
+  let readMemF = lookupUF env (readMemUF @arch $ S.natValue w)
+  in someApplySymFn sym readMemF arr i (S.BaseBVRepr w)
+
 {-
   | S.BaseArrayRepr (Ctx.Empty Ctx.:> arg) _ <- S.exprType arr
   , Just S.Refl <- S.testEquality arg (S.exprType i)
@@ -629,14 +630,91 @@ lookupUF env (MkUninterpFn name _ _ _)
   = case Map.lookup ("uf." ++ name) (envFunctions env) of
       Just (f0, _) -> f0
       Nothing      -> error $ "Could not find uninterpreted function in FormulaEnv\n"
-                             ++ showUFEnv env
-
-
-showUFEnv :: FormulaEnv sym arch -> String
-showUFEnv env = Map.foldMapWithKey go (envFunctions env)
+                             ++ Map.foldMapWithKey go (envFunctions env)
   where
-    go name (SomeSome f, _) = name ++ "\n"
+    go name (SomeSome _, _) = name ++ "\n"
 
+
+trivialParameterizedFormula :: Architecture arch
+                            => Formula sym arch -> ParameterizedFormula sym arch '[]
+trivialParameterizedFormula (Formula vars defs) = 
+    ParameterizedFormula Set.empty SL.Nil vars (mapFKeys LiteralParameter defs)
+
+mapFKeys :: P.OrdF keys'
+         => (forall tp. keys tp -> keys' tp) 
+         -> MapF.MapF keys res 
+         -> MapF.MapF keys' res
+mapFKeys f m = MapF.foldrWithKey (\k -> MapF.insert (f k)) MapF.empty m
+
+
+readMemBigEvaluator' :: forall sym byte w i.
+                        (S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i)
+                     => sym
+                     -> S.NatRepr byte
+                     -> S.NatRepr w
+                     -> S.SymExpr sym (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) (S.BaseBVType byte))
+                     -> S.SymExpr sym (S.BaseBVType i)
+                     -> IO (S.SymExpr sym (S.BaseBVType w))
+readMemBigEvaluator' sym byte w mem i = 
+  case S.compareNat w byte of
+    -- if the number of bits to read is equal to the number of bits stored in
+    -- one block of memory, then just lookup the result in memory
+    S.NatEQ -> S.arrayLookup sym mem (Ctx.Empty Ctx.:> i)
+
+    -- if the number of bits we need to read is greater than the number of
+    -- bits stored in a single block of memory, then look up a single block
+    -- and then recurse
+    S.NatGT w_minus_byte_minus1 
+      -- we need a proof that 1 <= (w-byte-1)+1
+      | S.LeqProof <- myLeqPf w_minus_byte_minus1 -> do
+        let w_minus_byte = S.addNat w_minus_byte_minus1 (S.knownNat @1)
+        let S.BaseBVRepr iRepr = S.exprType i
+
+        b <- S.arrayLookup sym mem (Ctx.Empty Ctx.:> i)
+        one <- S.bvLit sym iRepr 1
+        i' <- S.bvAdd sym i one
+        bs <- readMemBigEvaluator' sym byte w_minus_byte mem i'
+        S.bvConcat sym b bs
+
+        -- if the number of bits we need to read is less than the number of bits
+        -- stored in a single block of memory, then we have asked for some
+        -- number of bits that does not divide evenly and throw an error
+    S.NatLT _ -> error $ "read_mem cannot be evaluated: "
+                      ++ "the number of bits requested is not a mulitple of the dimension of the array"
+
+  where
+    myLeqPf :: S.NatRepr n -> S.LeqProof 1 (n S.+ 1)
+    myLeqPf n | S.Refl <- S.plusComm n (S.knownNat @1) = S.leqAdd (S.leqRefl (S.knownNat @1)) n
+
+-- | The evaluator for reading bits from memory (big endian representation)
+--
+-- read_mem does is not an operand, so we throw an error if 'sh' is not 'Nil'
+readMemBigEvaluator :: 
+                    WE.ExprBuilder t st fs
+                 -> ParameterizedFormula (WE.ExprBuilder t st fs) arch sh
+                 -> SL.List (AllocatedOperand arch (WE.ExprBuilder t st fs)) sh
+                 -- ^ We expect this list to be empty
+                 -> Ctx.Assignment (WB.Expr t) u
+                 -- ^ The input to read_mem, in this case an array corresponding
+                 -- to memory along with the index into the array at which to start reading
+                 -> (forall ltp . Location arch ltp -> IO (WB.Expr t ltp))
+                 -> S.BaseTypeRepr tp
+                 -- ^ The result type, a bit-vector of size w
+                 -> IO (WB.Expr t tp)
+readMemBigEvaluator sym _f SL.Nil (Ctx.Empty Ctx.:> mem Ctx.:> i) evalLoc (S.BaseBVRepr w) 
+    | Just (byte, iType, S.Refl, S.LeqProof, S.LeqProof, S.Refl) <- checkArgs (S.exprType mem) (S.exprType i) w
+    = readMemBigEvaluator' sym byte w mem i
+  where
+    checkArgs :: S.BaseTypeRepr mem
+              -> S.BaseTypeRepr i
+              -> S.NatRepr w
+              -> Maybe (S.NatRepr byte, S.NatRepr i'
+                       , i S.:~: S.BaseBVType i'
+                       , S.LeqProof 1 i'
+                       , S.LeqProof 1 byte
+                       , mem S.:~: S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i')) (S.BaseBVType byte))
+    checkArgs = undefined
+readMemBigEvaluator _ _ _ _ _ _ = error "read_mem called with incorrect arguments and cannot be evaluated"
 
 -- | Build an equality of the form
 -- > f(test1_in) = test1_out /\ f(test2_in) = test2_out /\ ... /\ f(testn_in) = testn_out
