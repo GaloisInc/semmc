@@ -30,14 +30,15 @@ library
                        SemMC.DSL
                        SemMC.Formula
                        SemMC.Formula.Env
-                       SemMC.Formula.MemAccesses
                        SemMC.Formula.Equivalence
                        SemMC.Formula.Eval
                        SemMC.Formula.Formula
                        SemMC.Formula.Instantiate
                        SemMC.Formula.Load
+                       SemMC.Formula.MemAccesses
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
+                       SemMC.Formula.ReadWriteEval
                        SemMC.Formula.SETokens
                        SemMC.Log
                        SemMC.Log.Tests
