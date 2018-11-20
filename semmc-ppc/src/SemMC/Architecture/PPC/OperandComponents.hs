@@ -1,7 +1,9 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module SemMC.Architecture.PPC.OperandComponents (
   OperandComponents(..)
   ) where
