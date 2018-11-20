@@ -174,5 +174,7 @@ mkOperandRef proxy op w0 = U.unfoldShape (HR.typeRepr op) nil elt w0
       case w of
         0 -> return (OperandRef (Some SL.IndexHere))
         _ -> do
-          OperandRef (Some ix) <- U.unfoldShape reps nil elt (w - 1)
-          return (OperandRef (Some (SL.IndexThere ix)))
+          shape <- U.unfoldShape reps nil elt (w - 1)
+          case shape of
+            OperandRef (Some ix) -> return (OperandRef (Some (SL.IndexThere ix)))
+            ImplicitOperand _ -> error "Invalid shape for mkOperandRef"

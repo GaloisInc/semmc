@@ -19,6 +19,7 @@ module SemMC.Synthesis.Cegis
 import           Control.Monad.IO.Class ( liftIO )
 import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
+import           Data.Kind
 import           Data.Maybe ( fromJust )
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
@@ -43,7 +44,7 @@ import           SemMC.Synthesis.Template
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.
-data TemplatableInstruction (arch :: *) where
+data TemplatableInstruction (arch :: Type) where
   TemplatableInstruction :: Opcode arch (Operand arch) sh
                          -> SL.List (Operand arch) sh
                          -> TemplatableInstruction arch

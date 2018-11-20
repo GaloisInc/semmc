@@ -46,6 +46,7 @@ module SemMC.Synthesis.Template
   ) where
 
 import           Data.EnumF
+import           Data.Kind
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
@@ -100,7 +101,7 @@ type TemplatedOperandFn arch s = forall sym.
                                      RecoverOperandFn sym (Operand arch s))
 
 -- | An operand for 'TemplatedArch'.
-data TemplatedOperand (arch :: *) (s :: Symbol) =
+data TemplatedOperand (arch :: Type) (s :: Symbol) =
   TemplatedOperand { templOpLocation :: Maybe (Location arch (OperandType arch s))
                    -- ^ If this operand represents a location, this is it.
                    , templUsedLocations :: Set.Set (Some (Location arch))
@@ -119,7 +120,7 @@ instance IsOperand (TemplatedOperand arch)
 
 -- | Phantom architecture used to signal we want to use template operands when
 -- instantiating a formula, rather than all concrete operands.
-data TemplatedArch (arch :: *)
+data TemplatedArch (arch :: Type)
 
 type instance OperandComponents (TemplatedArch arch) sym = OperandComponents arch sym
 type instance Operand (TemplatedArch arch) = TemplatedOperand arch
@@ -325,7 +326,7 @@ instance ( IsLocation (Location arch)
   showF = show
 
 -- | A specific type of operand of which you can generate templates.
-class TemplatableOperand (arch :: *) where
+class TemplatableOperand (arch :: Type) where
   -- | All possible templates of an operand. In a nutshell, fill in register
   -- parts, leave immediate parts symbolic.
   opTemplates :: OperandTypeRepr arch s -> [TemplatedOperand arch s]

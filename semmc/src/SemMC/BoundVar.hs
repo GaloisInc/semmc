@@ -8,6 +8,7 @@ module SemMC.BoundVar (
   BoundVar(..)
   ) where
 
+import           Data.Kind
 import           GHC.TypeLits ( Symbol )
 import           Data.Parameterized.Classes
 import qualified What4.Interface as S
@@ -15,7 +16,7 @@ import qualified Unsafe.Coerce as U
 
 import           SemMC.Architecture.Internal ( OperandType )
 
-newtype BoundVar (sym :: *) (arch :: *) (op :: Symbol) =
+newtype BoundVar (sym :: Type) (arch :: Type) (op :: Symbol) =
   BoundVar { unBoundVar :: S.BoundVar sym (OperandType arch op) }
 deriving instance (Eq (S.BoundVar sym (OperandType arch op))) => Eq (BoundVar sym arch op)
 deriving instance (Ord (S.BoundVar sym (OperandType arch op))) => Ord (BoundVar sym arch op)

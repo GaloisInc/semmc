@@ -12,6 +12,7 @@ module SemMC.Architecture.Internal (
   IsOperandTypeRepr(..)
   ) where
 
+import           Data.Kind
 import           GHC.TypeLits ( Symbol )
 
 import qualified Dismantle.Instruction as I
@@ -20,24 +21,24 @@ import           What4.BaseTypes
 type Instruction arch = I.GenericInstruction (Opcode arch) (Operand arch)
 
 -- | Type of operands for a given architecture.
-type family Operand (arch :: *) :: Symbol -> *
+type family Operand (arch :: Type) :: Symbol -> Type
 
 -- | Class containing methods we want on operands. (Nothing for now.)
-class IsOperand (o :: Symbol -> *) where
+class IsOperand (o :: Symbol -> Type) where
 
 -- | Type of opcodes for a given architecture.
-type family Opcode (arch :: *) = (r :: (Symbol -> *) -> [Symbol] -> *)
+type family Opcode (arch :: Type) = (r :: (Symbol -> Type) -> [Symbol] -> Type)
 
 -- | Class containing methods we want on opcodes. (Nothing for now.)
-class IsOpcode (op :: (Symbol -> *) -> [Symbol] -> *)
+class IsOpcode (op :: (Symbol -> Type) -> [Symbol] -> Type)
 
 -- | Mapping from a particular instance of operand (characterized by a symbol)
 -- to a Crucible type that is the type of expression an occurrence of said
 -- operand should generate.
-type family OperandType (arch :: *) (op :: Symbol) :: BaseType
+type family OperandType (arch :: Type) (op :: Symbol) :: BaseType
 
 -- | The shape representative for the given architecture
 class IsOperandTypeRepr arch where
-  type OperandTypeRepr (arch :: *) :: Symbol -> *
+  type OperandTypeRepr (arch :: Type) :: Symbol -> Type
   operandTypeReprSymbol :: proxy arch -> OperandTypeRepr arch s -> String
 

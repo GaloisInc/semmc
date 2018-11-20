@@ -12,6 +12,8 @@ import qualified Options.Applicative.Help as OH
 import           SemMC.Formula.SETokens
 import           System.Exit
 
+import           Prelude
+
 
 data Options = Options { fileA :: FilePath
                        , fileB :: FilePath

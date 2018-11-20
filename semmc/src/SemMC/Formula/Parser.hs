@@ -31,6 +31,7 @@ import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Control.Monad.Reader as MR
 import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
+import           Data.Kind
 import qualified Data.Map as Map
 import qualified Data.SCargot.Repr as SC
 import           Data.Semigroup
@@ -65,7 +66,7 @@ import qualified SemMC.Util as U
 
 import           Prelude
 
-data OperandTypeWrapper (arch :: *) :: TL.TyFun Symbol BaseType -> *
+data OperandTypeWrapper (arch :: Type) :: TL.TyFun Symbol BaseType -> Type
 type instance TL.Apply (OperandTypeWrapper arch) s = A.OperandType arch s
 type OperandTypes arch sh = TL.Map (OperandTypeWrapper arch) sh
 
@@ -281,7 +282,7 @@ readParameter _ oplist atom =
             (A.readLocation lit)
 
 -- | Parses the input list, e.g., @(ra rb 'ca)@
-readInputs :: forall m (arch :: *) (tps :: [BaseType])
+readInputs :: forall m (arch :: Type) (tps :: [BaseType])
             . (E.MonadError String m,
                A.Architecture arch)
            => SL.List OpData tps
@@ -691,17 +692,25 @@ readFpOp (SC.SAtom (AIdent idnt)) args
     sym <- MR.reader getSym
     case op of
       Op1 arg_types fn -> do
-        Ctx.Empty Ctx.:> arg1 <- exprAssignment arg_types args
-        liftIO (Just . Some <$> fn sym arg1)
+        exprAssignment arg_types args >>= \case
+          Ctx.Empty Ctx.:> arg1 ->
+              liftIO (Just . Some <$> fn sym arg1)
+          _ -> error "Unable to unpack Op1 arg in Formula.Parser readFpOp"
       Op2 arg_types fn -> do
-        Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 <- exprAssignment arg_types args
-        liftIO (Just . Some <$> fn sym arg1 arg2)
+        exprAssignment arg_types args >>= \case
+          Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 ->
+              liftIO (Just . Some <$> fn sym arg1 arg2)
+          _ -> error "Unable to unpack Op2 arg in Formula.Parser readFpOp"
       Op3 arg_types fn -> do
-        Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 <- exprAssignment arg_types args
-        liftIO (Just . Some <$> fn sym arg1 arg2 arg3)
+        exprAssignment arg_types args >>= \case
+          Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 ->
+              liftIO (Just . Some <$> fn sym arg1 arg2 arg3)
+          _ -> error "Unable to unpack Op3 arg in Formula.Parser readFpOp"
       Op4 arg_types fn -> do
-        Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 Ctx.:> arg4 <- exprAssignment arg_types args
-        liftIO (Just . Some <$> fn sym arg1 arg2 arg3 arg4)
+        exprAssignment arg_types args >>= \case
+          Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 Ctx.:> arg4 ->
+              liftIO (Just . Some <$> fn sym arg1 arg2 arg3 arg4)
+          _ -> error "Unable to unpack Op4 arg in Formula.Parser readFpOp"
 readFpOp _ _ = return Nothing
 
 -- | Parse an expression of the form @(= x y)@.
@@ -742,7 +751,7 @@ readIte (SC.SAtom (AIdent "ite")) args =
       tp -> E.throwError $ printf "test expression must be a boolean; got %s" (show tp)
 readIte _ _ = return Nothing
 
-data ArrayJudgment :: BaseType -> BaseType -> * where
+data ArrayJudgment :: BaseType -> BaseType -> Type where
   ArraySingleDim :: forall idx res.
                     BaseTypeRepr res
                  -> ArrayJudgment idx (BaseArrayType (Ctx.SingleCtx idx) res)
@@ -894,9 +903,15 @@ readExpr (SC.SAtom (ABV len val)) = do
   sym <- MR.reader getSym
   -- The following two patterns should never fail, given that during parsing we
   -- can only construct BVs with positive length.
-  Just (Some lenRepr) <- return $ someNat (toInteger len)
-  let Just pf = isPosNat lenRepr
-  liftIO $ withLeqProof pf (Some <$> S.bvLit sym lenRepr val)
+  case someNat (toInteger len) of
+    Just (Some lenRepr) ->
+        let Just pf = isPosNat lenRepr
+        in liftIO $ withLeqProof pf (Some <$> S.bvLit sym lenRepr val)
+    Nothing -> error "SemMC.Formula.Parser.readExpr someNat failure"
+
+  -- Just (Some lenRepr) <- return $ someNat (toInteger len)
+  -- let Just pf = isPosNat lenRepr
+  -- liftIO $ withLeqProof pf (Some <$> S.bvLit sym lenRepr val)
 readExpr (SC.SAtom paramRaw) = do
   -- This is a parameter (i.e., variable).
   DefsInfo { getOpNameList = opNames

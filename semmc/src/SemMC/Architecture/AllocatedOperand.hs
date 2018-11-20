@@ -2,11 +2,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module SemMC.Architecture.AllocatedOperand (
   AllocatedOperand(..),
   OperandComponents
   ) where
 
+import           Data.Kind
 import           GHC.TypeLits ( Symbol )
 import           Data.Parameterized.Classes ( ShowF, showF )
 
@@ -56,4 +59,4 @@ instance (WI.IsExprBuilder sym, IsLocation (Location arch), ShowF (OperandCompon
 -- operands, there are two cases. In the case of concrete instructions, these
 -- will just be literal SymExprs.  For instruction templates used in
 -- synthesis, they will be symbolic values (which are also SymExprs).
-type family OperandComponents arch sym :: Symbol -> *
+type family OperandComponents arch sym :: Symbol -> Type
