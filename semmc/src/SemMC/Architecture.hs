@@ -35,6 +35,7 @@ module SemMC.Architecture (
   IsOperandTypeRepr(..),
   ArchRepr,
   ShapeRepr,
+  Endianness(..),
   UninterpFn(..),
   mkUninterpFn,
   getUninterpFn,
@@ -147,7 +148,20 @@ class (IsOperand (Operand arch),
   -- location
   locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t st fs arch)]
 
+{-
+  -- | Interpretations for readMemUF and writeMemUF. We need these both as
+  -- uninterpreted functions (for crucible) and as function interpretations (for
+  -- synthesis). These should be instantiations of
+  -- 'SemMC.Formula.readMemEvaluator' and 'SemMC.Formula.writeMemEvaluator' with
+  -- the appropriate names and endianness arguments
+  memOpInterpretation :: proxy arch -> [(String, Evaluator arch t st fs)]
+-}
+
+  -- | Whether the architecture writes data in big-endian or little-endian form, by default
+  archEndianness :: proxy arch -> Endianness
+
   shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
+
 
 
 showShapeRepr :: forall arch sh. (IsOperandTypeRepr arch) => Proxy arch -> ShapeRepr arch sh -> String
@@ -156,7 +170,9 @@ showShapeRepr _ rep =
       SL.Nil -> ""
       (r SL.:< rep') -> let showr = operandTypeReprSymbol (Proxy @arch) r
                        in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
-  
+
+
+data Endianness = BigEndian | LittleEndian  
 
 data UninterpFn arch where
   MkUninterpFn :: forall arch args ty.

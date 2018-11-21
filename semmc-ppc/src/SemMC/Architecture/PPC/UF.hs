@@ -24,11 +24,8 @@ import           Data.Parameterized.Context ( Ctx
                                             , type (<+>)
                                             )
 import qualified Data.Parameterized.Context as Ctx
-import           Data.Parameterized.Some
 
 import           What4.BaseTypes
-import qualified What4.Interface as W
-import qualified What4.Expr.Builder as Expr
 
 import           SemMC.Architecture (UninterpFn(..), mkUninterpFn, AccessData(..))
 import           SemMC.Architecture.PPC.Location

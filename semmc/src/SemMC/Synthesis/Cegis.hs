@@ -635,16 +635,6 @@ lookupUF env (MkUninterpFn name _ _ _)
     go name (SomeSome _, _) = name ++ "\n"
 
 
-trivialParameterizedFormula :: Architecture arch
-                            => Formula sym arch -> ParameterizedFormula sym arch '[]
-trivialParameterizedFormula (Formula vars defs) = 
-    ParameterizedFormula Set.empty SL.Nil vars (mapFKeys LiteralParameter defs)
-
-mapFKeys :: P.OrdF keys'
-         => (forall tp. keys tp -> keys' tp) 
-         -> MapF.MapF keys res 
-         -> MapF.MapF keys' res
-mapFKeys f m = MapF.foldrWithKey (\k -> MapF.insert (f k)) MapF.empty m
 
 
 -- | Build an equality of the form
@@ -659,7 +649,13 @@ buildEqualityTests form tests = do
   sym <- askSym
   let andTest test soFar = do test1 <- simplifyWithTest form test
                               liftIO $ S.andPred sym soFar test1
-  foldrM andTest (S.truePred sym) tests
+  result <- foldrM andTest (S.truePred sym) tests
+  liftIO $ instantiateMemOps sym (lookupInState sym $ formBoundVars sym) form result
+  where
+    formBoundVars :: WE.ExprBuilder t st fs 
+                  -> MapF.MapF (L.Location arch) (S.SymExpr (WE.ExprBuilder t st fs))
+    formBoundVars sym = MapF.map (S.varExpr sym) (formParamVars form)
+
 
 
 -- | Given a concrete model from the SMT solver, extract concrete instructions

@@ -476,6 +476,7 @@ instance A.Architecture PPC where
   readMemUF  = UF.mkUninterpFnReadMem
   writeMemUF = UF.mkUninterpFnWriteMem
   locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation
+  archEndianness _proxy = A.BigEndian
   shapeReprToTypeRepr _proxy = shapeReprType
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)

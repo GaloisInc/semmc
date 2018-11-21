@@ -1,15 +1,19 @@
 {-# LANGUAGE RankNTypes, TypeOperators, TypeApplications, DataKinds, 
 TypeFamilies, ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-unticked-promoted-constructors #-}
 
 -- | Evaluators for readMem and writeMem uninterpreted functions
 module SemMC.Formula.ReadWriteEval
-  ( Endianness(..)
+  ( memOpInterpretation
   , readMemEvaluator
   , writeMemEvaluator
   ) where
 
+import Text.Printf ( printf )
+
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as L
+import           Data.Parameterized.Some (Some(..))
 
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
@@ -17,15 +21,55 @@ import qualified What4.Expr as WE
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula.Formula as F
 
-data Endianness = BigEndian | LittleEndian
+import qualified SemMC.DSL as DSL
+
+{-
+-- | Read from the pseudo-location "Memory"
+--
+-- should go in 'SemMC.DSL', which can then be used by architecture-specific
+-- core/semantics?
+readMemSemantics :: DSL.Expr DSL.TMemory
+                 -- ^ The memory
+                 -> DSL.Expr DSL.TBV
+                 -- ^ The effective address to load
+                 -> Int
+                 -- ^ The number of bytes
+                 -> DSL.Expr DSL.TBV
+readMemSemantics mem ea nBytes =
+  DSL.uf (DSL.EBV (8 * nBytes)) funcName [Some mem, Some ea]
+  where
+    funcName :: String
+    funcName = printf "read_mem.%d" (nBytes * 8)
+-}
+
+
+-- | Interpretation of readMemUF and writeMemUF
+memOpInterpretation :: A.Architecture arch => proxy arch -> [(String, A.Evaluator arch t st fs)]
+memOpInterpretation proxy = (readMemInterp end <$> sizes) ++ (writeMemInterp end <$> sizes)
+  where
+    end   = A.archEndianness proxy
+    sizes = [8,16,32,64,128]
+
+readMemInterp :: forall arch t st fs. 
+                 A.Architecture arch
+              => A.Endianness ->  Integer -> (String, A.Evaluator arch t st fs)
+readMemInterp end n = let f = A.readMemUF @arch n
+                      in (A.createSymbolicName (A.uninterpFnName f), readMemEvaluator end)
+
+writeMemInterp :: forall arch t st fs. 
+                  A.Architecture arch
+               => A.Endianness ->  Integer -> (String, A.Evaluator arch t st fs)
+writeMemInterp end n = let f = A.writeMemUF @arch n
+                       in (A.createSymbolicName (A.uninterpFnName f), writeMemEvaluator end)
+
 
 -- | The evaluator for reading bits from memory
-readMemEvaluator :: Endianness -> A.Evaluator arch t st fs
+readMemEvaluator :: A.Endianness -> A.Evaluator arch t st fs
 readMemEvaluator endianness = A.Evaluator (readMemEvaluator' endianness)
 
 -- read_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
 readMemEvaluator' :: 
-                    Endianness
+                    A.Endianness
                  -> WE.ExprBuilder t st fs
                  -> F.ParameterizedFormula (WE.ExprBuilder t st fs) arch sh
                  -> L.List (A.AllocatedOperand arch (WE.ExprBuilder t st fs)) sh
@@ -51,7 +95,7 @@ readMemEvaluatorTotal :: forall sym byte w i.
                         (S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i)
                      => sym
                      -- ^ The expression builder
-                     -> Endianness
+                     -> A.Endianness
                      -- ^ The endianness of the architecture
                      -> S.NatRepr byte
                      -- ^ The number of bits in a single register in the array; often a byte
@@ -97,19 +141,19 @@ readMemEvaluatorTotal sym endianness byte w mem i =
     -- with a big endian representation, we concatinate bit vectors in the same
     -- direction as they are alid out in memory; with little endian, the opposite
     bvConcatEndian :: (1 S.<= u, 1 S.<= v)
-                   => Endianness -> S.SymBV sym u -> S.SymBV sym v  -> IO (S.SymBV sym (u S.+ v))
-    bvConcatEndian BigEndian    u v = S.bvConcat sym u v
-    bvConcatEndian LittleEndian u v 
+                   => A.Endianness -> S.SymBV sym u -> S.SymBV sym v  -> IO (S.SymBV sym (u S.+ v))
+    bvConcatEndian A.BigEndian    u v = S.bvConcat sym u v
+    bvConcatEndian A.LittleEndian u v 
       | S.Refl <- S.plusComm (S.bvWidth u) (S.bvWidth v) = S.bvConcat sym v u
 
 
 -- | The evaluator for writing bits from memory
-writeMemEvaluator :: Endianness -> A.Evaluator arch t st fs
+writeMemEvaluator :: A.Endianness -> A.Evaluator arch t st fs
 writeMemEvaluator endianness = A.Evaluator (writeMemEvaluator' endianness)
 
 -- write_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
 writeMemEvaluator' :: 
-                    Endianness
+                    A.Endianness
                  -> WE.ExprBuilder t st fs
                  -> F.ParameterizedFormula (WE.ExprBuilder t st fs) arch sh
                  -> L.List (A.AllocatedOperand arch (WE.ExprBuilder t st fs)) sh
@@ -138,7 +182,7 @@ writeMemEvaluatorTotal :: forall sym byte w i.
                         (S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i)
                      => sym
                      -- ^ The expression builder
-                     -> Endianness
+                     -> A.Endianness
                      -- ^ The endianness of the architecture
                      -> S.NatRepr byte
                      -- ^ The number of bits in a single register in the array; often a byte
@@ -183,18 +227,18 @@ writeMemEvaluatorTotal sym endianness byte mem i v =
 
     -- with a big endian representation, we write the most significant bits first
     bvSelectEndian :: 1 S.<= rest
-                   => Endianness 
+                   => A.Endianness 
                    -> S.NatRepr rest
                    -> S.SymBV sym (byte S.+ rest)
                    -> IO (S.SymBV sym byte, S.SymBV sym rest)
-    bvSelectEndian LittleEndian rest result 
+    bvSelectEndian A.LittleEndian rest result 
       -- need a proof that @byte <= byte + rest@
       | S.LeqProof <- S.addIsLeq byte rest = do
         -- take 'byte' nuber of bits starting from index 0 (the least signficant bit)
         leastSig <- S.bvSelect sym (S.knownNat @0) byte result
         mostSig <- S.bvSelect sym byte rest result
         return (leastSig, mostSig)
-    bvSelectEndian BigEndian rest result
+    bvSelectEndian A.BigEndian rest result
       -- need a proof that @rest <= byte + rest@
       | S.LeqProof <- S.addPrefixIsLeq byte rest 
       -- and a proof that @byte+rest = rest+byte@
