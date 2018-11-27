@@ -38,6 +38,8 @@ module SemMC.Formula
   , functionRef
   , Library
   , emptyLibrary
+  , Opcodes
+  , Semantics
 
     -- * SemMC.Formula.Env
   , FormulaEnv(..)

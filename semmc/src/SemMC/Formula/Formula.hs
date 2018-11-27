@@ -33,6 +33,8 @@ module SemMC.Formula.Formula
   , functionRef
   , Library
   , emptyLibrary
+  , Opcodes
+  , Library
   ) where
 
 import           GHC.TypeLits ( Symbol )
@@ -314,7 +316,17 @@ functionRef (FunctionFormula { ffName = name
               , frArgTypes = argTypes
               , frRetType = retType }
 
+-- | A library maps functions to formulas
 type Library sym = MapF.MapF FunctionRef (FunctionFormula sym)
 
 emptyLibrary :: Library sym
 emptyLibrary = MapF.empty
+
+-- | The type of opcodes associated with an architecture, of kind *
+type Opcodes arch = (Opcode arch (Operand arch))
+
+-- | The type of semantics; maps from opcodes to (parameterized) formulas for
+-- that architecture
+type Semantics sym arch = MapF.MapF
+                            (Opcodes arch)
+                            (ParameterizedFormula sym arch)
