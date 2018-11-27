@@ -26,12 +26,13 @@ module Data.Type.List (
 
 import Prelude hiding (reverse)
 
+import           Data.Kind
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as SL
 import           Data.Proxy ( Proxy(..) )
 
-data TyFun :: k1 -> k2 -> *
-type family Apply (f :: TyFun k1 k2 -> *) (x :: k1) :: k2
+data TyFun :: k1 -> k2 -> Type
+type family Apply (f :: TyFun k1 k2 -> Type) (x :: k1) :: k2
 type family ReverseAcc xs acc where
   ReverseAcc '[] acc = acc
   ReverseAcc (x ': xs) acc = ReverseAcc xs (x ': acc)
@@ -46,7 +47,7 @@ reverseAcc (x SL.:< xs) ys = reverseAcc xs (x SL.:< ys)
 reverse :: SL.List f xs -> SL.List f (Reverse xs)
 reverse xs = reverseAcc xs SL.Nil
 
-type family Map (f :: TyFun k1 k2 -> *) (xs :: [k1]) :: [k2] where
+type family Map (f :: TyFun k1 k2 -> Type) (xs :: [k1]) :: [k2] where
   Map f '[] = '[]
   Map f (x ': xs) = Apply f x ': Map f xs
 
@@ -54,8 +55,8 @@ type family Map (f :: TyFun k1 k2 -> *) (xs :: [k1]) :: [k2] where
 -- application of 'Map'. Tricky because doing case analysis on such a list does
 -- not provide much, since GHC does not infer from, say, @Map f xs ~ '[]@ that
 -- @xs ~ '[]@.
-mapFromMapped :: forall (f :: TyFun k1 k2 -> *) (xs :: [k1])
-                        (g :: k2 -> *) (h :: k1 -> *) w
+mapFromMapped :: forall (f :: TyFun k1 k2 -> Type) (xs :: [k1])
+                        (g :: k2 -> Type) (h :: k1 -> Type) w
                . Proxy f -> (forall (x :: k1). g (Apply f x) -> h x)
               -> SL.List w xs -- ^ Needed to do case analysis on @xs@
               -> SL.List g (Map f xs) -> SL.List h xs

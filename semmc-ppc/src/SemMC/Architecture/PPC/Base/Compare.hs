@@ -6,6 +6,9 @@ module SemMC.Architecture.PPC.Base.Compare (
 
 import Prelude hiding ( concat )
 import Control.Monad ( when )
+
+import qualified Dismantle.PPC as P
+
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
@@ -68,9 +71,8 @@ baseCompare = do
     let newCR = cmpImm bvult bvugt (Loc fld) ximm (zext lowreg)
     defLoc cr newCR
 
-  defineOpcodeWithIP "CMPB" $ do
+  definePPCOpcode P.CMPB xform3c $ \rA rB rS -> do
     comment "Compare Bytes (X-form)"
-    (rA, rS, rB) <- xform3
     let extractByte n bv = extract (8 * n + 7) (8 * n) bv
     let compareByte n = ite (bveq (extractByte n (Loc rS)) (extractByte n (Loc rB))) (LitBV 8 0xff) (LitBV 8 0x0)
     let high = concat (compareByte 0) (concat (compareByte 1) (concat (compareByte 2) (compareByte 3)))

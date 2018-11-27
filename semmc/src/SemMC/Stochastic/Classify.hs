@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -152,20 +153,22 @@ classify target@AC.RI{ AC.riOperands = oplist, AC.riOpcode = opc } p eqclasses =
                          , mergableClasses = []
                          }
       act = classifyByClass target p 0
-  Just iorel <- opcodeIORelation opc
-  let e0 = ClassifyEnv { operandList = oplist
-                       , iorelation = iorel
-                       }
-  (mclasses, _) <- RWS.evalRWST (unClassify act) e0 s0
-  case mclasses of
-    Nothing -> return Nothing
-    Just classes
-      | Seq.null classes -> do
-          -- Add a new equivalence class for this program, since it isn't
-          -- equivalent to any existing class
-          return (Just (EquivalenceClasses (equivalenceClass p Seq.<| unClasses eqclasses)))
-      | otherwise -> do
-          return (Just (EquivalenceClasses (Seq.singleton (equivalenceClassFromList compareCandidate p (mergeClasses classes)))))
+  opcodeIORelation opc >>= \case
+    Just iorel -> do
+      let e0 = ClassifyEnv { operandList = oplist
+                           , iorelation = iorel
+                           }
+      (mclasses, _) <- RWS.evalRWST (unClassify act) e0 s0
+      case mclasses of
+        Nothing -> return Nothing
+        Just classes
+            | Seq.null classes -> do
+                      -- Add a new equivalence class for this program, since it isn't
+                      -- equivalent to any existing class
+                      return (Just (EquivalenceClasses (equivalenceClass p Seq.<| unClasses eqclasses)))
+            | otherwise -> do
+                      return (Just (EquivalenceClasses (Seq.singleton (equivalenceClassFromList compareCandidate p (mergeClasses classes)))))
+    Nothing -> error "Unable to get opcode IO relation in classify"
 
 numberItem :: Int -> a -> (Int, (Int, a))
 numberItem n itm = (n + 1, (n, itm))
@@ -271,8 +274,8 @@ removeInvalidPrograms :: forall t solver fs arch sh
                       -> ClassifyM t solver fs sh arch Int
 removeInvalidPrograms ix target cx = do
   targetTC <- liftC $ mkTestCase cx [target]
-  CE.TestSuccess (CE.TestResult { CE.resultContext = targetSt })
-    <- liftC $ runConcreteTest targetTC
+  testRes  <- liftC $ runConcreteTest targetTC
+  let CE.TestSuccess (CE.TestResult { CE.resultContext = targetSt }) = testRes
   klasses <- RWS.gets eqClassesSeq
   let allCandidates = foldr (\k a -> ecPrograms k Seq.>< a) Seq.empty (unClasses klasses)
   (testCases, testIndex) <- F.foldrM (makeAndIndexTest cx) ([], M.empty) allCandidates

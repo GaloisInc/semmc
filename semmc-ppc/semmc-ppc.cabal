@@ -58,7 +58,7 @@ library
                      , containers
                      , located-base
                      , filepath
-                     , megaparsec >= 6 && < 7
+                     , megaparsec >= 7 && < 8
                      , what4 >= 0.4
 
   hs-source-dirs:      src

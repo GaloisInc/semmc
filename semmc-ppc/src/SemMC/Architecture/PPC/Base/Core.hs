@@ -1,6 +1,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ImplicitParams #-}
 module SemMC.Architecture.PPC.Base.Core (
   BitSize(..),
@@ -11,6 +12,9 @@ module SemMC.Architecture.PPC.Base.Core (
   -- * Registers
   module SemMC.Architecture.PPC.Base.Core.Registers,
   -- * IP Wrapper
+  OpcodeParamDef(..),
+  definePPCOpcode,
+  definePPCOpcodeRC,
   defineOpcodeWithIP,
   defineRCVariant,
   defineVRCVariant,
@@ -59,7 +63,12 @@ import GHC.Stack ( HasCallStack )
 
 import Prelude hiding ( concat )
 import Text.Printf ( printf )
-import Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Classes ( ShowF(..) )
+import qualified Data.Parameterized.Context as Ctx
+import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.Type.List as TL
+
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core.BitSize
 import SemMC.Architecture.PPC.Base.Core.Forms
@@ -68,6 +77,50 @@ import SemMC.Architecture.PPC.Base.Core.Registers
 
 
 -- IP Helper Wrapper
+
+-- | Type-safe definition of the semantics for a PPC opcode, with an implicit
+-- update of the instruction pointer
+definePPCOpcode :: ( Ctx.CurryAssignmentClass args
+                   , TL.SameShape args (TL.Map SymToExprTagWrapper sh)
+                   , ?bitSize :: BitSize
+                   , ShowF oc
+                   )
+                => oc sh
+                -> Ctx.Assignment OpcodeParamDef args
+                -> Ctx.CurryAssignment args Location (SemM 'Def ())
+                -> SemM 'Top ()
+definePPCOpcode opc defArgs defBody =
+  defineOpcode name $ do
+    input ip
+    defLoc ip (bvadd (Loc ip) (naturalLitBV 0x4))
+    defArgs' <- FC.traverseFC param' defArgs
+    Ctx.uncurryAssignment defBody defArgs'
+  where
+    name = showF opc
+    param' :: OpcodeParamDef t -> SemM 'Def (Location t)
+    param' (ParamDef pname ty ety) = param pname ty ety
+    param' (InputParamDef pname ty ety) = do
+      p <- param pname ty ety
+      input p
+      return p
+
+-- | A variant of 'definePPCOpcode' that also sets the CR register (suitable for
+-- defining dotted variants of non-vector instructions)
+definePPCOpcodeRC :: ( ?bitSize :: BitSize
+                     , ShowF oc
+                     )
+                  => oc sh
+                  -> Expr 'TBV
+                  -> SemM 'Def ()
+                  -> SemM 'Def ()
+definePPCOpcodeRC opc modifiedReg def =
+  forkDefinition newName $ do
+  input cr
+  input xer
+  defLoc cr (cmpImm bvslt bvsgt (LitBV 3 0x0) (naturalLitBV 0x0) modifiedReg)
+  def
+  where
+    newName = showF opc
 
 -- | A wrapper around 'defineOpcode' that updates the IP after the instruction
 -- executes (simply by adding 4).

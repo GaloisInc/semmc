@@ -59,7 +59,7 @@ library
                      , located-base
                      , cereal
                      , filepath
-                     , megaparsec
+                     , megaparsec == 7.*
                      , parameterized-utils
                      , pretty
                      , semmc

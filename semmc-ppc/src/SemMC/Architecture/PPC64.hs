@@ -701,7 +701,7 @@ instance A.IsLocation (Location PPC) where
 
 parseLocation :: PPCS.Parser (Some (Location PPC))
 parseLocation = do
-  c <- P.lookAhead (P.anyChar)
+  c <- P.lookAhead (P.anySingle)
   case c of
     'I' -> Some LocIP <$ P.string "IP"
     'X' -> Some LocXER <$ P.string "XER"

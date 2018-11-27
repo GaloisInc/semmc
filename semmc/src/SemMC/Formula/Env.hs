@@ -11,6 +11,7 @@ module SemMC.Formula.Env
   , addLibrary
   ) where
 
+import           Data.Kind
 import qualified Data.Map.Strict as Map
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
@@ -21,7 +22,7 @@ import qualified What4.Interface as S
 import SemMC.Formula.Formula
 
 -- | Like 'Data.Parameterized.Some.Some', but for doubly-parameterized types.
-data SomeSome (f :: k1 -> k2 -> *) = forall x y. SomeSome (f x y)
+data SomeSome (f :: k1 -> k2 -> Type) = forall x y. SomeSome (f x y)
 
 type Functions sym arch = Map.Map String (SomeSome (S.SymFn sym), Some BaseTypeRepr)
 

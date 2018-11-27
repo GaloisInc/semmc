@@ -7,7 +7,6 @@
  (defs
   ((rT
    (concat
-    #x0000000000000000
     ((_ zero_extend 32)
      ((_ call "uf.read_mem.32")
       'Mem
@@ -20,6 +19,7 @@
         ((_ call "uf.ppc.memrr_base")
          memref))
        ((_ call "uf.ppc.memrr_offset")
-        memref))))))
+        memref))))
+    #x0000000000000000))
    ('IP
     (bvadd 'IP #x00000004)))))

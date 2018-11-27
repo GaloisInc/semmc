@@ -89,23 +89,23 @@ baseSpecial = do
     input rS
     input crbit
     input cr
-    -- Check the number of bits set in the field; if it is 1, then we set that
-    -- field.  Otherwise, we are undefined.
-    let check = bvpopcnt (zext' 32 (Loc crbit))
-    let fldIdx = bvclz (zext' 32 (Loc crbit))
-    let regContents = lowBits 32 (Loc rS)
-    -- Generate a 4 bit mask to select the field.
-    let fieldBitStart = bvmul fldIdx (LitBV 32 0x4)
+    -- -- Check the number of bits set in the field; if it is 1, then we set that
+    -- -- field.  Otherwise, we are undefined.
+    -- let check = bvpopcnt (zext' 32 (Loc crbit))
+    -- let fieldIndex = bvclz (zext' 32 (Loc crbit))
+    let fieldIndex = (zext' 32 (Loc crbit))
+    let fieldBitStart = bvmul fieldIndex (LitBV 32 0x4)
+    let fieldBitEnd = bvadd fieldBitStart (LitBV 32 0x3)
     -- This is the mask we use to extract a new value from the source register
-    let fieldMask = mask 32 fieldBitStart (bvadd fieldBitStart (LitBV 32 0x3))
+    let fieldMask = mask 32 fieldBitStart fieldBitEnd
     -- The mask we apply to CR to clear the space for the new value
-    let crmask = bvnot fieldMask
+    let crMask = bvnot fieldMask
 
-    -- Save the high bits in a word with the target and low bits cleared (via shifting)
-    -- Save the low bits in a word with the target and high bits cleared (via shifting)
-    -- Shift the new field into place and OR everything together
-    let newCR = bvor (bvand crmask (Loc cr)) (bvand fieldMask regContents)
-    let res = ite (bveq check (LitBV 32 0x1)) newCR (undefinedBV 32)
+    let newCR = bvor
+          (bvand crMask (Loc cr))
+          (bvand fieldMask (lowBits 32 (Loc rS)))
+    -- let res = ite (bveq check (LitBV 32 0x1)) newCR (undefinedBV 32)
+    let res = newCR
     defLoc cr res
 
   defineOpcodeWithIP "MFOCRF" $ do
@@ -113,16 +113,19 @@ baseSpecial = do
     rT <- param "rT" gprc naturalBV
     crbit <- param "FXM" crbitm (EBV 8)
     input crbit
-    -- FIXME: The other bits of rT are actually undefined - we need a way to
-    -- talk about undefined bits
     input rT
     input cr
 
-    let check = bvpopcnt (zext' 32 (Loc crbit))
-    let fldIdx = bvclz (zext' 32 (Loc crbit))
-    let fieldBitStart = bvmul fldIdx (LitBV 32 0x4)
-    let fieldMask = mask 32 fieldBitStart (bvadd fieldBitStart (LitBV 32 0x3))
-    let crmask = bvnot fieldMask
-    let newRT = bvand crmask (Loc cr)
-    let res = ite (bveq check (LitBV 32 0x1)) newRT (LitBV 32 0x0)
-    defLoc rT (zext res)
+    -- let check = bvpopcnt (zext' 32 (Loc crbit))
+    -- let fieldIndex = bvclz (zext' 32 (Loc crbit))
+    let fieldIndex = zext' 32 (Loc crbit)
+    let fieldBitStart = bvmul fieldIndex (LitBV 32 0x4)
+    let fieldBitEnd = bvadd fieldBitStart (LitBV 32 0x3)
+    let fieldMask = mask 32 fieldBitStart fieldBitEnd
+    let rTMask = bvnot $ mask 64 fieldBitStart fieldBitEnd
+    let newRT = bvor
+          (zext $ bvand fieldMask (Loc cr))
+          (bvand rTMask (undefinedBV 64))
+    -- let res = ite (bveq check (LitBV 32 0x1)) newRT (undefinedBV 64)
+    let res = newRT
+    defLoc rT res

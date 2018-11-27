@@ -518,7 +518,7 @@ vsxStore = do
     comment "Store VSX Scalar Single-Precision Indexed (XX1-form)"
     (xS, memref) <- storeForm
     let ea = effectiveAddress memref
-    defLoc memory (storeMem (Loc memory) ea 4 (froundsingle (highBits128 64 (Loc xS))))
+    defLoc memory (storeMem (Loc memory) ea 4 (fpBinaryDoubleToSingle (highBits128 64 (Loc xS))))
 
   defineOpcodeWithIP "STXVD2X" $ do
     comment "Store VSX Vector Doubleword*2 Indexed (XX1-form)"
@@ -593,7 +593,7 @@ vsxLoad = do
     comment "Load VSX Scalar Single-Precision Indexed (XX1-form)"
     (xT, memref) <- loadForm
     let ea = effectiveAddress memref
-    defLoc xT (concat (fsingletodouble (readMem (Loc memory) ea 4)) (undefinedBV 64))
+    defLoc xT (concat (fpBinarySingleToDouble (readMem (Loc memory) ea 4)) (undefinedBV 64))
 
   defineOpcodeWithIP "LXVD2X" $ do
     comment "Load VSX Vector Doubleword*2 Indexed (XX1-form)"

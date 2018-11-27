@@ -1,57 +1,115 @@
 ;; Floating Compare Unordered (X-form)
 ((operands
  ((bf . 'Crrc)
-  (frA . 'Fprc)
-  (frB . 'Fprc)))
+  (frB . 'Fprc)
+  (frA . 'Fprc)))
  (in
-  ('FPSCR 'CR frB frA 'IP))
+  ('FPSCR 'CR frB frA bf 'IP))
  (defs
   (('FPSCR
    (bvor
-    (ite
-     (orp
-      ((_ call "uf.fp.is_snan64")
-       ((_ extract 127 64)
-        frA))
-      ((_ call "uf.fp.is_snan64")
-       ((_ extract 127 64)
-        frB)))
-     #x00000080
-     #x00000000)
-    (bvor
-     (bvshl
-      ((_ zero_extend 28)
-       #x0)
-      #x00000010)
-     (bvor
+    (bvand
+     'FPSCR
+     (concat
+      (concat #xffff #x0)
+      #xfff))
+    (concat
+     (concat
+      #x0000
+      (concat
+       (ite
+        (fltd
+         (fp_binary_to_double
+          ((_ extract 127 64)
+           frA))
+         (fp_binary_to_double
+          ((_ extract 127 64)
+           frB)))
+        #b1
+        #b0)
+       (concat
+        (ite
+         (fltd
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            frB))
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            frA)))
+         #b1
+         #b0)
+        (concat
+         (ite
+          (feqd
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             frA))
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             frB)))
+          #b1
+          #b0)
+         (ite
+          (orp
+           (fnand
+            (fp_binary_to_double
+             ((_ extract 127 64)
+              frA)))
+           (fnand
+            (fp_binary_to_double
+             ((_ extract 127 64)
+              frB))))
+          #b1
+          #b0)))))
+     #x000)))
+   ('CR
+    ((_ call "df.updateCRField")
+     'CR
+     bf
+     (concat
       (ite
-       (orp
-        ((_ call "uf.fp.is_snan64")
+       (fltd
+        (fp_binary_to_double
          ((_ extract 127 64)
           frA))
-        ((_ call "uf.fp.is_snan64")
+        (fp_binary_to_double
          ((_ extract 127 64)
           frB)))
-       #x00000001
-       #x00000000)
-      (bvand 'FPSCR #xfff0ff7f)))))
-   ('CR
-    (bvor
-     (bvand
-      'CR
-      (bvnot
-       (bvshl
-        #x0000000f
-        (bvmul
-         ((_ zero_extend 29)
-          bf)
-         #x00000004))))
-     (bvshl
-      ((_ zero_extend 28)
-       #x0)
-      (bvmul
-       ((_ zero_extend 29)
-        bf)
-       #x00000004))))
+       #b1
+       #b0)
+      (concat
+       (ite
+        (fltd
+         (fp_binary_to_double
+          ((_ extract 127 64)
+           frB))
+         (fp_binary_to_double
+          ((_ extract 127 64)
+           frA)))
+        #b1
+        #b0)
+       (concat
+        (ite
+         (feqd
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            frA))
+          (fp_binary_to_double
+           ((_ extract 127 64)
+            frB)))
+         #b1
+         #b0)
+        (ite
+         (orp
+          (fnand
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             frA)))
+          (fnand
+           (fp_binary_to_double
+            ((_ extract 127 64)
+             frB))))
+         #b1
+         #b0))))))
    ('IP
     (bvadd 'IP #x0000000000000004)))))

@@ -6,6 +6,9 @@ module SemMC.Architecture.PPC.Base.Bitwise (
 
 import Prelude hiding ( concat )
 import Control.Monad ( when )
+
+import qualified Dismantle.PPC as P
+
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
@@ -27,61 +30,53 @@ baseBitwise = do
     input cr
     input xer
     defLoc cr (cmpImm bvslt bvsgt (LitBV 3 0x0) (naturalLitBV 0x0) res)
-  defineOpcodeWithIP "XOR" $ do
+  definePPCOpcode P.XOR xform3c $ \rA rB rS -> do
     comment "XOR (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvxor (Loc rS) (Loc rB)
     defLoc rA res
-    defineRCVariant "XORo" res $ do
+    definePPCOpcodeRC P.XORo res $ do
       comment "XOR (X-form, RC=1)"
-  defineOpcodeWithIP "OR" $ do
+  definePPCOpcode P.OR xform3c $ \rA rB rS -> do
     comment "OR (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvor (Loc rS) (Loc rB)
     defLoc rA res
-    defineRCVariant "ORo" res $ do
+    definePPCOpcodeRC P.ORo res $ do
       comment "OR (X-form, RC=1)"
-  defineOpcodeWithIP "AND" $ do
+  definePPCOpcode P.AND xform3c $ \rA rB rS -> do
     comment "AND (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvand (Loc rS) (Loc rB)
     defLoc rA res
-    defineRCVariant "ANDo" res $ do
+    definePPCOpcodeRC P.ANDo res $ do
       comment "AND (X-form, RC=1)"
-  defineOpcodeWithIP "NAND" $ do
+  definePPCOpcode P.NAND xform3c $ \rA rB rS -> do
     comment "NAND (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvnot (bvand (Loc rS) (Loc rB))
     defLoc rA res
-    defineRCVariant "NANDo" res $ do
+    definePPCOpcodeRC P.NANDo res $ do
       comment "NAND (X-form, RC=1)"
-  defineOpcodeWithIP "NOR" $ do
+  definePPCOpcode P.NOR xform3c $ \rA rB rS -> do
     comment "NOR (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvnot (bvor (Loc rS) (Loc rB))
     defLoc rA res
-    defineRCVariant "NORo" res $ do
+    definePPCOpcodeRC P.NORo res $ do
       comment "NOR (X-form, RC=1)"
-  defineOpcodeWithIP "EQV" $ do
+  definePPCOpcode P.EQV xform3c $ \rA rB rS -> do
     comment "EQV (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvnot (bvxor (Loc rS) (Loc rB))
     defLoc rA res
-    defineRCVariant "EQVo" res $ do
+    definePPCOpcodeRC P.EQVo res $ do
       comment "EQV (X-form, RC=1)"
-  defineOpcodeWithIP "ANDC" $ do
+  definePPCOpcode P.ANDC xform3c $ \rA rB rS -> do
     comment "AND with Complement (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvand (Loc rS) (bvnot (Loc rB))
     defLoc rA res
-    defineRCVariant "ANDCo" res $ do
+    definePPCOpcodeRC P.ANDCo res $ do
       comment "AND with Complement (X-form, RC=1)"
-  defineOpcodeWithIP "ORC" $ do
+  definePPCOpcode P.ORC xform3c $ \rA rB rS -> do
     comment "OR with Complement (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let res = bvor (Loc rS) (bvnot (Loc rB))
     defLoc rA res
-    defineRCVariant "ORCo" res $ do
+    definePPCOpcodeRC P.ORCo res $ do
       comment "OR with Complement (X-form, RC=1)"
   defineOpcodeWithIP "EXTSB" $ do
     comment "Extend Sign Byte (X-form, RC=0)"
@@ -97,23 +92,21 @@ baseBitwise = do
     defLoc rA res
     defineRCVariant "EXTSHo" res $ do
       comment "Extend Sign Halfword (X-form, RC=1)"
-  defineOpcodeWithIP "SLW" $ do
+  definePPCOpcode P.SLW xform3c $ \rA rB rS -> do
     comment "Shift Left Word (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let n = zext' 32 (lowBits 6 (Loc rB))
     let w = lowBits 32 (Loc rS)
     let res = zext (bvshl w n)
     defLoc rA res
-    defineRCVariant "SLWo" res $ do
+    definePPCOpcodeRC P.SLWo res $ do
       comment "Shift Left Word (X-form, RC=1)"
-  defineOpcodeWithIP "SRW" $ do
+  definePPCOpcode P.SRW xform3c $ \rA rB rS -> do
     comment "Shift Right Word (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     let n = zext' 32 (lowBits 6 (Loc rB))
     let w = lowBits 32 (Loc rS)
     let res = zext (bvlshr w n)
     defLoc rA res
-    defineRCVariant "SRWo" res $ do
+    definePPCOpcodeRC P.SRWo res $ do
       comment "Shift Right Word (X-form, RC=1)"
   defineOpcodeWithIP "SRAWI" $ do
     comment "Shift Right Algebraic Word Immediate (X-form, RC=0)"
@@ -133,9 +126,8 @@ baseBitwise = do
     defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
     defineRCVariant "SRAWIo" res $ do
       comment "Shift Right Algebraic Word Immediate (X-form, RC=1)"
-  defineOpcodeWithIP "SRAW" $ do
+  definePPCOpcode P.SRAW xform3c $ \rA rB rS -> do
     comment "Shift Right Algebraic Word (X-form, RC=0)"
-    (rA, rS, rB) <- xform3
     input xer
     let n = lowBits 6 (Loc rB)
     let w = lowBits 32 (Loc rS)
@@ -149,7 +141,7 @@ baseBitwise = do
     let hasShiftedOutOnes = bvne shiftedOutBits (LitBV 32 0x0)
     defLoc rA r
     defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
-    defineRCVariant "SRAWo" r $ do
+    definePPCOpcodeRC P.SRAWo r $ do
       comment "Shift Right Algebraic Word (X-form, RC=1)"
 
   rotates
@@ -158,21 +150,19 @@ baseBitwise = do
   temporary
 
   when (?bitSize == Size64) $ do
-    defineOpcodeWithIP "SLD" $ do
+    definePPCOpcode P.SLD xform3c $ \rA rB rS -> do
       comment "Shift Left Doubleword (X-form, RC=0)"
-      (rA, rS, rB) <- xform3
       let n = zext (lowBits 6 (Loc rB))
       let res = bvshl (Loc rS) n
       defLoc rA res
-      defineRCVariant "SLDo" res $ do
+      definePPCOpcodeRC P.SLDo res $ do
         comment "Shift Left Doubleword (x-form, RC=1)"
-    defineOpcodeWithIP "SRD" $ do
+    definePPCOpcode P.SRD xform3c $ \rA rB rS -> do
       comment "Shift Right Doubleword (X-form, RC=0)"
-      (rA, rS, rB) <- xform3
       let n = zext (lowBits64 6 (Loc rB))
       let res = bvlshr (Loc rS) n
       defLoc rA res
-      defineRCVariant "SRDo" res $ do
+      definePPCOpcodeRC P.SRDo res $ do
         comment "Shift Right Doubleword (X-form, RC=1)"
     defineOpcodeWithIP "SRADI" $ do
       comment "Shift Right Algebraic Doubleword Immediate (XS-form, RC=0)"
@@ -192,9 +182,8 @@ baseBitwise = do
       defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
       defineRCVariant "SRADIo" res $ do
         comment "Shift Right Algebraic Doubleword Immediate (XS-form, RC=1)"
-    defineOpcodeWithIP "SRAD" $ do
+    definePPCOpcode P.SRAD xform3c $ \rA rB rS -> do
       comment "Shift Right Algebraic Doubleword (X-form, RC=0)"
-      (rA, rS, rB) <- xform3
       input xer
       let n = lowBits 6 (Loc rB)
       let w = Loc rS
@@ -205,7 +194,7 @@ baseBitwise = do
       let hasShiftedOutOnes = bvne shiftedOutBits (naturalLitBV 0x0)
       defLoc rA r
       defLoc xer (updateXER CA (Loc xer) (ite hasShiftedOutOnes s (LitBV 1 0x0)))
-      defineRCVariant "SRADo" r $ do
+      definePPCOpcodeRC P.SRADo r $ do
         comment "Shift Right Algebraic Doubleword (X-form, RC=1)"
     defineOpcodeWithIP "EXTSW" $ do
       comment "Extend Sign Word (X-form, RC=0)"
@@ -293,9 +282,8 @@ special = do
       (rA, rS) <- xform2
       defLoc rA (bvpopcnt (Loc rS))
 
-    defineOpcodeWithIP "BPERMD" $ do
+    definePPCOpcode P.BPERMD xform3c $ \rA rB rS -> do
       comment "Bit Permute Doubleword (X-form)"
-      (rA, rS, rB) <- xform3
       let computePermBit i =
             let idx = extract (8 * i + 7) (8 * i) (Loc rS)
                 rbVal = ite (testBitDynamic64 (zext idx) (Loc rB)) (LitBV 1 1) (LitBV 1 0)

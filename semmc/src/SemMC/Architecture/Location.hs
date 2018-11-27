@@ -7,6 +7,7 @@ module SemMC.Architecture.Location (
   ArchState
   ) where
 
+import           Data.Kind
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
@@ -39,4 +40,4 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
 
 -- | Represents the different registers, flags, and (eventually) memory a given
 -- architecture has.
-type family Location (arch :: *) :: BaseType -> *
+type family Location (arch :: Type) :: BaseType -> Type

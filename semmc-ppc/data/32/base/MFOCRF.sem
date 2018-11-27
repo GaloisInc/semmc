@@ -6,28 +6,18 @@
   ('CR rT FXM 'IP))
  (defs
   ((rT
-   (ite
-    (bveq
-     ((_ call "uf.popcnt.32")
+   (bvand
+    ((_ call "df.mask_32")
+     (bvmul
       ((_ zero_extend 24)
-       FXM))
-     #x00000001)
-    (bvand
-     (bvnot
-      ((_ call "df.mask_32")
-       (bvmul
-        ((_ call "uf.clz.32")
-         ((_ zero_extend 24)
-          FXM))
-        #x00000004)
-       (bvadd
-        (bvmul
-         ((_ call "uf.clz.32")
-          ((_ zero_extend 24)
-           FXM))
-         #x00000004)
-        #x00000003)))
-     'CR)
-    #x00000000))
+       FXM)
+      #x00000004)
+     (bvadd
+      (bvmul
+       ((_ zero_extend 24)
+        FXM)
+       #x00000004)
+      #x00000003))
+    'CR))
    ('IP
     (bvadd 'IP #x00000004)))))
