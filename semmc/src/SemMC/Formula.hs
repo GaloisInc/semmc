@@ -38,7 +38,6 @@ module SemMC.Formula
   , functionRef
   , Library
   , emptyLibrary
-  , Opcodes
   , Semantics
 
     -- * SemMC.Formula.Env
@@ -75,6 +74,7 @@ import SemMC.Formula.Formula
   , functionRef
   , Library
   , emptyLibrary
+  , Semantics
   )
 import SemMC.Formula.Env ( FormulaEnv(..) )
 import SemMC.Formula.Instantiate ( instantiateFormula,

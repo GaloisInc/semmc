@@ -355,7 +355,7 @@ recoverOperands rep0 evalFn taggedExprs =
         TaggedExpr _ (RecoverOperandFn recover) SL.:< restExprs ->
           (SL.:<) <$> recover evalFn <*> recoverOperands reps evalFn restExprs
 
-
+type Opcodes arch = Opcode arch (Operand arch)
 
 -- | The type of templated semantics; maps from opcodes to (parameterized,
 -- phantom) formulas for that architecture. 'TemplatedSemantics' differs from
