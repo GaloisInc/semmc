@@ -23,6 +23,7 @@ import           GHC.TypeLits
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import           What4.BaseTypes
 
+import           Prelude
 
 type family ArchRegWidth arch :: Nat
 
