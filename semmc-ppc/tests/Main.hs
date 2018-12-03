@@ -50,7 +50,7 @@ main = do
 --      void $ join (setOpt <$> getOptionSetting yicesPath (getConfiguration sym)
 --                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/yices-tee"))
 
-    CBO.withZ3OnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
+   CBO.withZ3OnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
       -- set the path to z3
 --      void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
 --                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/z3-tee"))
@@ -76,7 +76,7 @@ allTests baseSet synthEnv =
 
 insns :: S.Set (Some (D.Opcode o))
 insns = S.fromList
-        [ Some D.ADD4
+        [ -- Some D.ADD4
         -- , Some D.ADDC
         -- , Some D.ADDI
         -- , Some D.ADDIS
@@ -88,7 +88,7 @@ insns = S.fromList
         -- , Some D.MULLW
         -- , Some D.MULLD
         -- , Some D.NAND
-        , Some D.NEG
+--        , Some D.NEG
 --        , Some D.NOR
 --        , Some D.OR
 --        , Some D.ORI
@@ -101,7 +101,7 @@ insns = S.fromList
 --        , Some D.SRD
 --        , Some D.SRW
 --        , Some D.SUBF
-        , Some D.STD
+         Some D.STD
 --        , Some D.STDU
 --        , Some D.SC
         ]

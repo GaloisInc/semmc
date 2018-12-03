@@ -24,6 +24,7 @@ module SemMC.Formula.MemAccesses
   , partitionLocs
   , someArrayLookup
   , someIsEq
+  , exprSymFnToUninterpFn
   ) where
 
 import qualified Data.Set as Set

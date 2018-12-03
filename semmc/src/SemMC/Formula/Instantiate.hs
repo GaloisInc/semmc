@@ -179,11 +179,15 @@ instantiateFormula sym pf opVals
 instantiateMemOps :: forall arch t st fs sym tp.
                      (A.Architecture arch, sym ~ S.ExprBuilder t st fs)
                    => sym
-                   -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
+--                   -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
                    -> Formula sym arch
                    -> S.SymExpr sym tp
                    -> IO (S.SymExpr sym tp)
-instantiateMemOps sym locExprs f e = 
+instantiateMemOps sym  f e = do
+    let vars = formParamVars f
+    let exprs = MapF.map (S.varExpr sym) vars
+    let locExprs :: A.Location arch a -> IO (S.SymExpr sym a)
+        locExprs loc = maybe (A.defaultLocationExpr sym loc) return $ MapF.lookup loc exprs
     FE.evaluateFunctions sym
                          (trivialParameterizedFormula f)
                          SL.Nil

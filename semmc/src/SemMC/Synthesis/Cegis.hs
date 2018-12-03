@@ -159,6 +159,7 @@ data ConcreteTest' sym loc =
                 , testOutput :: LocExprs sym loc
                 , memInput   :: Map.Map (Some (S.SymExpr sym)) (Some (S.SymExpr sym))
                 , memOutput  :: Map.Map (Some (S.SymExpr sym)) (Some (S.SymExpr sym))
+--                , defaultMem :: Some (S.SymExpr sym)
                 }
 
 -- nonMemTestInput :: P.OrdF loc
@@ -193,13 +194,15 @@ defaultLocExprs sym = do locExprList <- mapM pairDefault (L.allLocations @loc)
 -- the concrete test illustrated by the counterexample.
 --
 -- TODO: adapt this to deal with the case when the architecture has several memory locations (e.g. A32)
-mkTest :: forall sym arch t st fs.
+mkTest :: forall sym arch t st fs byte.
           (Architecture arch, sym ~ WE.ExprBuilder t st fs)
        => sym
        -> Formula sym arch
        -> L.ArchState arch (S.SymExpr sym)
+--       -> S.SymExpr sym byte
+       -- The default value of memory for the test
        -> IO (ConcreteTest sym arch)
-mkTest sym targetFormula ctrExample 
+mkTest sym targetFormula ctrExample
   | [L.MemLoc _ mem] <- memLocation @(L.Location arch) = do
     -- putStrLn $ "Constructing test from " ++ show ctrExample
     -- the testInput is exactly the counter example for non-memory locations
@@ -216,31 +219,20 @@ mkTest sym targetFormula ctrExample
         outputAddrMap = liveMemMap $ Formula @sym @arch (formParamVars targetFormula) ctrExampleOut
 
     -- putStrLn $ "Test: " ++ show (ConcreteTest' @sym testInput' testOutput' inputAddrMap outputAddrMap)
-    return $ ConcreteTest' testInput' testOutput' inputAddrMap outputAddrMap
+    return $ ConcreteTest' testInput' testOutput'
+                           inputAddrMap outputAddrMap
+--                           (Some defaultValue)
 mkTest _ _ _ | otherwise = error "Cannot make test for this architecture"
 
 -- | Construct an initial test from concrete values
 initTest :: (L.IsLocation (Location arch), Architecture arch)
          => WE.ExprBuilder t st fs
          -> Formula (WE.ExprBuilder t st fs) arch
+--         -> S.SymExpr (WE.ExprBuilder t st fs) byte
+--         -- ^ The default value of memory for the test
          -> IO (ConcreteTest (WE.ExprBuilder t st fs) arch)
 initTest sym f = do locExprs <- defaultLocExprs sym
                     mkTest sym f locExprs
-
-{-
--- | Given a formula and a concrete test, replace all non-memory locations in
--- the formula with their bindings from the test
-substituteNonMem :: forall sym t st fs arch.
-                    (Architecture arch, sym ~ WE.ExprBuilder t st fs)
-                 => sym
-                 -> Formula sym arch
-                 -> ConcreteTest' sym (L.Location arch)
-                 -> IO (Formula sym arch)
-substituteNonMem sym f test = Formula (formParamVars f) <$> traverseF go (formDefs f)
-  where
-    go :: S.SymExpr sym s -> IO (S.SymExpr sym s)
-    go e = evalExpression' sym (formParamVars f) (testInput test) e
--}
 
 
 -- | Build an equality expression for the given location, under the given
@@ -287,93 +279,9 @@ buildEqualityLocation sym test vars outputLoc expr = do
   return (actuallyIs, shouldBe)
 
 
--- | Build a conjuction of the equality expressions for all registers given by
--- the input list of locations.
-buildEqualityLocations :: forall arch t st fs
-                       . (Architecture arch)
-                       => WE.ExprBuilder t st fs
-                       -> Formula (WE.ExprBuilder t st fs) arch
-                       -> ConcreteTest (WE.ExprBuilder t st fs) arch
-                       -> Set.Set (Some (Location arch))
-                       -> IO (WE.BoolExpr t)
-buildEqualityLocations sym (Formula vars defs) test locs = do
-  let addEquality :: WE.BoolExpr t -> Some (Location arch) -> IO (WE.BoolExpr t)
-      addEquality soFar (Some loc) = do
-        let locDef = MapF.lookup loc defs
-        (actuallyIs,shouldBe) <- buildEqualityLocation sym test vars loc locDef
-        locEquality <- liftIO $ S.isEq sym actuallyIs shouldBe
-        liftIO $ S.andPred sym soFar locEquality
-  foldlM addEquality (S.truePred sym) locs
+
 
 {-
-
--- | Build a conjuction of the equality expressions for all the
--- indices/locations in memory touched by the input formula
-buildEqualityMem :: forall arch t st fs
-                 . (Architecture arch)
-                 => Formula (WE.ExprBuilder t st fs) arch
-                 -> ConcreteTest (WE.ExprBuilder t st fs) arch
-                 -> Maybe (L.MemLoc (L.Location arch))
-                 -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
-buildEqualityMem _ _ Nothing = do sym <- askSym
-                                  return $ S.truePred sym
-buildEqualityMem f@(Formula vars defs) test (Just (L.MemLoc w mem)) = do
-  sym <- askSym
-  let locDef = MapF.lookup mem defs
-  (actualMem,targetMem) <- buildEqualityLocation test vars mem locDef
-  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actualMem
-  liftIO . putStrLn $ "SHOULD BE:\t" ++ show targetMem
-  let indices = liveMemInExpr f actualMem `Set.union` liveMemInExpr f targetMem
-  liftIO . putStrLn $ "INDICES: " ++ show indices
-  let addEquality :: WE.BoolExpr t -> Integer -> IO (WE.BoolExpr t)
-      addEquality soFar i = do
-        iExp        <- S.bvLit sym w i
-        actualMem_i <- S.arrayLookup sym actualMem (Ctx.Empty Ctx.:> iExp)
-        targetMem_i <- S.arrayLookup sym targetMem (Ctx.Empty Ctx.:> iExp)
-        liftIO . putStrLn $ "ACTUALLY IS[" ++ show i ++ "]:\t" ++ show actualMem_i
-        liftIO . putStrLn $ "SHOULD BE[" ++ show i ++ "]:\t" ++ show targetMem_i
-        locEquality <- S.isEq sym actualMem_i targetMem_i
---        liftIO . putStrLn $ "actually=should:\t" ++ show locEquality
-        S.andPred sym soFar locEquality
-  liftIO $ foldlM addEquality (S.truePred sym) indices
--}
-buildEqualityMem :: forall arch t st fs sym
-                 . (Architecture arch, sym ~ WE.ExprBuilder t st fs)
-                 => sym
-                 -> Formula sym arch
-                 -> ConcreteTest sym arch
-                 -> Maybe (L.MemLoc (L.Location arch))
-                 -> IO (WE.BoolExpr t)
-buildEqualityMem sym _ _ Nothing = return $ S.truePred sym
-buildEqualityMem sym f@(Formula vars defs) test (Just (L.MemLoc w mem)) = do
-  let locDef = MapF.lookup mem defs
---  putStrLn $ "\n\nTEST: " ++ show test
---  putStrLn $ "Formula: " ++ show f
---  putStrLn $ "LocDef: " ++ show locDef
-  (actualMem,targetMem) <- buildEqualityLocation sym test vars mem locDef
---  putStrLn $ "LocDef: " ++ show locDef
-  (actualMem,targetMem) <- buildEqualityLocation sym test vars mem locDef
---  putStrLn $ "ACTUALLY IS:\t" ++ show actualMem
---  putStrLn $ "SHOULD BE:\t" ++ show targetMem
-
-  res <- S.isEq sym actualMem targetMem
---  putStrLn $ "ACTUALLY IS = SHOULD BE: " ++ show res
-  return res
---  WB.sbMakeExpr sym $ WE.ArrayEq actualMem targetMem
-
-  where
-    toBVExpr :: S.NatRepr w 
-             -> Some (S.SymExpr sym) 
-             -> IO (S.SymExpr sym (S.BaseBVType w))
-    toBVExpr w0 (Some e) = case S.exprType e of
-      S.BaseBVRepr w' -> case S.compareNat w0 w' of 
-                           S.NatEQ -> return e
-                           _       -> error $ "Memory index " ++ show e ++ " is not a bit vector of size " ++ show w0
-      _ -> error $ "Memory index " ++ show e ++ " is not a bit vector of size " ++ show w0
-
-
-
-
 
 partitionLocs' :: forall arch t st fs
                 . Architecture arch
@@ -386,7 +294,6 @@ partitionLocs' (Formula _ defs) test =
                          Set.fromList (MapF.keys defs)
     in partitionLocs @arch allOutputLocs
 
-{-
 -- | Given a formula and a concrete test, return (1) the set of non-memory
 -- locations touched by the formula and test; (2) the location referring to
 -- memory
@@ -422,36 +329,21 @@ instance P.ShowF (Location arch) => Show (MemLoc arch ty) where
   show (MemLoc _ l) = P.showF l
 -}
 
--- | Build a conjuction of the equality expressions for /all/ locations in
--- either the outputs of the 'ConcreteTest' or the definitions of the 'Formula'.
--- That is, builds an equality expression of the form
--- > f.l1 (test_in.l1) = test_out.l1 /\ ... /\ (f.lm (test_in.lm) = test_out.lm)
--- for all locations li possibly touched by f or the test.
-buildEqualityMachine :: forall arch t st fs
-                      . (Architecture arch)
-                     => WE.ExprBuilder t st fs
-                     -> Formula (WE.ExprBuilder t st fs) arch
-                     -> ConcreteTest (WE.ExprBuilder t st fs) arch
-                     -> IO (WE.BoolExpr t)
-buildEqualityMachine sym f test = do
-  let (nonMemLocs, mem) = partitionLocs' f test
-  nonMemPred <- buildEqualityLocations sym f test nonMemLocs
---  liftIO . putStrLn $ "Non-mem: " ++ show nonMemPred
-  memPred <- buildEqualityMem sym f test mem
---  liftIO . putStrLn $ "Mem: " ++ show memPred
-  liftIO $ S.andPred sym nonMemPred memPred
 
 simplifyWithTest :: forall arch t st fs sym.
                          (Architecture arch, sym ~ WE.ExprBuilder t st fs)
                       => Formula sym arch
                       -- ^ the target formula
+                      -> Some (S.SymExpr sym)
+                      -- ^ a symbolic constant representing memory
                       -> ConcreteTest sym arch
                       -- ^ a single test case
                       -> Cegis sym arch (S.Pred sym)
-simplifyWithTest f test = do
+simplifyWithTest f memExpr test = do
     nonMemPred <- simplifyWithTestNonMem f test
-    memPred <- simplifyWithTestMem (formMem f) f test
-    liftIO . putStrLn $ "Non-mem: " ++ show nonMemPred
+    memPred <- simplifyWithTestMem (formMem f) f memExpr test
+    liftIO . putStrLn $ "Test: " ++ show test
+--    liftIO . putStrLn $ "Non-mem: " ++ show nonMemPred
     liftIO . putStrLn $ "Mem: " ++ show memPred
     sym <- askSym
     liftIO $ S.andPred sym nonMemPred memPred
@@ -478,7 +370,8 @@ simplifyWithTestNonMem :: forall arch t st fs sym.
 simplifyWithTestNonMem trialFormula test = do
   sym <- askSym
   defs' <- liftIO $ evalFormula' sym trialFormula (testInput test)
-  let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula `Set.union` formOutputs trialFormula
+  let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula 
+                                   `Set.union` formOutputs trialFormula
   liftIO $ andPred sym nonMemLocs $ \(Some l) -> do
     (actuallyIs,shouldBe) <- buildEqualityLocation sym test vars l (MapF.lookup l defs')
     S.isEq sym actuallyIs shouldBe
@@ -503,11 +396,13 @@ simplifyWithTestMem :: forall arch t st fs sym.
                       => Maybe (L.MemLoc (L.Location arch))
                       -> Formula sym arch
                       -- ^ the target formula
+                      -> Some (S.SymExpr sym)
+                      -- ^ A symbolic constant representing memory
                       -> ConcreteTest sym arch
                       -- ^ a single test case
                       -> Cegis sym arch (S.Pred sym)
-simplifyWithTestMem Nothing _ _ = askSym >>= liftIO . return . S.truePred
-simplifyWithTestMem (Just (L.MemLoc _ mem)) (Formula vars defs) test = do
+simplifyWithTestMem Nothing _ _ _ = askSym >>= liftIO . return . S.truePred
+simplifyWithTestMem (Just (L.MemLoc _ mem)) (Formula vars defs) (Some memExpr) test = do
   -- FIXME: we do this both here and in simplifyWithTestNonMem
 --  putStrLn $ "Trial formula: " ++ show trialFormula
 --  putStrLn $ "In simplify with test for " ++ show test
@@ -522,9 +417,9 @@ simplifyWithTestMem (Just (L.MemLoc _ mem)) (Formula vars defs) test = do
   let addrs = liveMemAddresses @arch $ Formula vars' defs'
 --  putStrLn $ "Live addresses: " ++ show addrs
 
-  let memExpr  = S.varExpr sym $ fromJust $ MapF.lookup mem vars
+--  let memExpr  = S.varExpr sym $ fromJust $ MapF.lookup mem vars
   let memExpr' = fromJust $ MapF.lookup mem defs'
-  liftIO . putStrLn $ "Mem type: " ++ show (S.exprType memExpr)
+--  liftIO . putStrLn $ "Mem type: " ++ show (S.exprType memExpr)
 
   liftIO $ andPred sym addrs $ \i -> do
     preState  <- constrainMem @arch sym env (Some memExpr)  i (memInput test)
@@ -541,7 +436,7 @@ constrainMem :: forall arch t st fs sym.
                 (Architecture arch, sym ~ WE.ExprBuilder t st fs)
              => sym
              -> FormulaEnv sym arch
-             -> Some (S.SymExpr sym) 
+             -> Some (S.SymExpr sym)
              -- ^ An expression corresponding to memory
              -> Some (S.SymExpr sym)
              -- ^ A memory address touched by the formula
@@ -559,8 +454,8 @@ constrainMem sym env mem i addrMap = do
       S.BaseBVRepr w -> do mem_j <- someReadMem sym env w mem j
                            S.isEq sym mem_j v
       _ -> error "Could not constrain memory because arguments have the wrong type"
-  neq_i     <- andPred sym (Map.toList addrMap) $ \(j, _) -> S.notPred sym =<< someIsEq sym i j
-  neq_v     <- andPred sym (Map.toList addrMap) $ \(_, Some v) ->
+  neq_i <- andPred sym (Map.toList addrMap) $ \(j, _) -> S.notPred sym =<< someIsEq sym i j
+  neq_v <- andPred sym (Map.toList addrMap) $ \(_, Some v) ->
     -- need to know the size of 'v' to know how many bits to read starting from i
     case S.exprType v of
       S.BaseBVRepr w -> do mem_i <- someReadMem sym env w mem i
@@ -582,44 +477,48 @@ someReadMem :: forall arch sym w.
             -> IO (S.SymExpr sym (S.BaseBVType w))
 someReadMem sym env w arr i = 
   let readMemF = lookupUF env (readMemUF @arch $ S.natValue w)
-  in someApplySymFn sym readMemF arr i (S.BaseBVRepr w)
+  in someApplySymFn sym readMemF [arr,i] (S.BaseBVRepr w)
 
-{-
-  | S.BaseArrayRepr (Ctx.Empty Ctx.:> arg) _ <- S.exprType arr
-  , Just S.Refl <- S.testEquality arg (S.exprType i)
-  , SomeSome f <- lookupUF env (readMemUF @arch $ S.natValue w)
-  , Ctx.Empty Ctx.:> mem Ctx.:> arg' <- S.fnArgTypes f
-  , S.BaseBVRepr w' <- S.fnReturnType f
-  , Just S.Refl <- S.testEquality arg' arg
-  , Just S.Refl <- S.testEquality mem (S.exprType arr)
-  , Just S.Refl <- S.testEquality w w'
--}
---  = S.applySymFn sym f (Ctx.empty Ctx.:> arr Ctx.:> i)
-{-
-someReadMem _ _ w (Some arr) (Some i) 
-  | otherwise = error $ "Could not construct a readMem because arguments have the wrong type"
-                      ++ "\nw: " ++ show w
-                      ++ "\nArray: " ++ show (S.exprType arr)
-                      ++ "\ni: " ++ show (S.exprType i)
--}
+someWriteMem :: forall arch sym mem.
+                (Architecture arch, S.IsSymExprBuilder sym)
+             => sym
+             -> FormulaEnv sym arch
+             -> S.SymExpr sym mem
+             -- ^ an expression representing memory
+             -> Some (S.SymExpr sym)
+             -- ^ an expression representing the location in memory to write
+             -> Some (S.SymExpr sym)
+             -- ^ the value to write in memory
+             -> IO (S.SymExpr sym mem)
+someWriteMem sym env arr i (Some v)
+  | S.BaseBVRepr w <- S.exprType v = 
+  let writeMemF = lookupUF env (writeMemUF @arch $ S.natValue w)
+  in someApplySymFn sym writeMemF [Some arr,i,Some v] (S.exprType arr)
 
 someApplySymFn :: S.IsSymExprBuilder sym
                => sym
                -> SomeSome (S.SymFn sym)
                -- ^ the symbolic function to apply
-               -> Some (S.SymExpr sym)
-               -- ^ an expression representing memory
-               -> Some (S.SymExpr sym)
-               -- ^ an expression representing the location in memory to read
+               -> [Some (S.SymExpr sym)]
+               -- ^ the list of expressions to apply
+--               -> Some (S.SymExpr sym)
+--               -- ^ an expression representing the location in memory to read
                -> S.BaseTypeRepr res
                -- ^ the target result type of the function
                -> IO (S.SymExpr sym res)
-someApplySymFn sym (SomeSome f) (Some arr) (Some i) res 
-  | Ctx.Empty Ctx.:> arrType Ctx.:> iType <- S.fnArgTypes f
-  , Just S.Refl <- S.testEquality arrType (S.exprType arr)
-  , Just S.Refl <- S.testEquality iType (S.exprType i)
+someApplySymFn sym (SomeSome f) [Some arg1, Some arg2] res 
+  | Ctx.Empty Ctx.:> arg1Type Ctx.:> arg2Type <- S.fnArgTypes f
+  , Just S.Refl <- S.testEquality arg1Type (S.exprType arg1)
+  , Just S.Refl <- S.testEquality arg2Type (S.exprType arg2)
   , Just S.Refl <- S.testEquality (S.fnReturnType f) res
-  = S.applySymFn sym f (Ctx.empty Ctx.:> arr Ctx.:> i)
+  = S.applySymFn sym f (Ctx.empty Ctx.:> arg1 Ctx.:> arg2)
+someApplySymFn sym (SomeSome f) [Some arg1, Some arg2, Some arg3] res 
+  | Ctx.Empty Ctx.:> arg1Type Ctx.:> arg2Type Ctx.:> arg3Type <- S.fnArgTypes f
+  , Just S.Refl <- S.testEquality arg1Type (S.exprType arg1)
+  , Just S.Refl <- S.testEquality arg2Type (S.exprType arg2)
+  , Just S.Refl <- S.testEquality arg3Type (S.exprType arg3)
+  , Just S.Refl <- S.testEquality (S.fnReturnType f) res
+  = S.applySymFn sym f (Ctx.empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3)
   | otherwise = error $ "Could not construct a readMem because arguments have the wrong type"
 
 
@@ -636,6 +535,31 @@ lookupUF env (MkUninterpFn name _ _ _)
 
 
 
+mkMemExpr :: (IsLocation loc, S.IsSymExprBuilder sym)
+          => sym
+          -> loc (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) byte)
+          -> IO ( S.NatRepr i
+                , S.SymExpr sym byte
+                , S.SymExpr sym (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) byte))
+mkMemExpr sym loc 
+  | S.BaseArrayRepr idx@(Ctx.Empty Ctx.:> S.BaseBVRepr i) byte <- locationType loc
+  , Right dSymbol <- S.userSymbol "d"
+  = do
+  -- create a new symbolic constant 'd' for the default value of memory
+    d <- S.freshConstant sym dSymbol byte
+    memExpr <- S.constantArray sym idx d
+    return (i,d,memExpr)
+  | otherwise = error "Could not create memory expression"
+
+mkConstMemExpr  :: (IsLocation loc, S.IsSymExprBuilder sym)
+          => sym
+          -> loc (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) byte)
+          -> IO (S.SymExpr sym (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) byte))
+mkConstMemExpr sym loc 
+  | S.BaseArrayRepr (Ctx.Empty Ctx.:> S.BaseBVRepr i) (S.BaseBVRepr xs) <- L.locationType loc
+  = do bv23 <- liftIO $ S.bvLit sym xs 23
+       S.constantArray sym (Ctx.Empty Ctx.:> S.BaseBVRepr i) bv23
+
 
 -- | Build an equality of the form
 -- > f(test1_in) = test1_out /\ f(test2_in) = test2_out /\ ... /\ f(testn_in) = testn_out
@@ -645,18 +569,71 @@ buildEqualityTests :: forall arch t st fs
                    => Formula (WE.ExprBuilder t st fs) arch
                    -> [ConcreteTest (WE.ExprBuilder t st fs) arch]
                    -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
-buildEqualityTests form tests = do
+buildEqualityTests form tests 
+  -- 'idxSize' is the size of indices into memory, and 'byteSize' is the size of
+  -- a single block of data stored in memory
+  | [L.MemLoc _ memLoc] <- L.memLocation @(Location arch) = do
+--  , MapF.Pair idxSize byteSize <- memType memLoc
+--  , Just S.LeqProof <- S.testLeq (S.knownNat @1) byteSize = do
   sym <- askSym
-  let andTest test soFar = do test1 <- simplifyWithTest form test
+
+--  liftIO . putStrLn $ "TESTS: " ++ show tests
+
+--  (iSize, d, memExpr) <- liftIO $ mkMemExpr sym memLoc
+  let Right memSymbol = S.userSymbol "MyMem"
+  memExpr <- liftIO $ S.freshConstant sym memSymbol (L.locationType memLoc)
+
+  -- concatinate 'simplifyWithTest' for each test
+  let andTest test soFar = do test1 <- simplifyWithTest form (Some memExpr) test
                               liftIO $ S.andPred sym soFar test1
   result <- foldrM andTest (S.truePred sym) tests
-  liftIO $ instantiateMemOps sym (lookupInState sym $ formBoundVars sym) form result
-  where
-    formBoundVars :: WE.ExprBuilder t st fs 
-                  -> MapF.MapF (L.Location arch) (S.SymExpr (WE.ExprBuilder t st fs))
-    formBoundVars sym = MapF.map (S.varExpr sym) (formParamVars form)
 
+{-
+  env <- askUF
 
+  bv0 <- liftIO $ S.bvLit sym (S.knownNat @64) 0
+  bv1 <- liftIO $ S.bvLit sym (S.knownNat @64) 1
+--  bv <- liftIO $ S.bvLit sym (S.knownNat @64) 81985529216486895
+  let Right bvSymbol = S.userSymbol "BV"
+  bv <- liftIO $ S.freshConstant sym bvSymbol (S.BaseBVRepr (S.knownNat @64))
+--  read0 <- liftIO $ someReadMem sym env (S.knownNat @64) (Some memExpr) (Some bv0)
+--  result <- liftIO $ S.isEq sym read0 bv0
+--  write0 <- liftIO $ someWriteMem sym env memExpr (Some bv) (Some bv0)
+  read0 <- liftIO $ someReadMem sym env (S.knownNat @64) (Some memExpr) (Some bv0)
+  result <- liftIO $ S.isEq sym read0 bv0
+--  result <- liftIO $ S.isEq sym write0 memExpr
+-}
+
+--  liftIO $ putStrLn $ "Before: " ++ show result
+
+  -- replace the memory operations 'readMem' and 'writeMem' with their serialized variants
+  afterMemOps <- liftIO $ instantiateMemOps 
+                            sym
+--                            (lookupInState sym $ MapF.map (S.varExpr sym) 
+--                                                          (formParamVars form))
+--                            (lookupInState sym $ MapF.singleton memLoc memExpr)
+                            form
+                            result
+
+--  liftIO $ putStrLn $ "AfterMemOps: " ++ show afterMemOps
+
+  let locMap :: forall tp. Location arch tp -> IO (S.SymExpr (WE.ExprBuilder t st fs) tp)
+      locMap loc | Just S.Refl <- S.testEquality loc memLoc = return memExpr
+                 | Just e <- MapF.lookup loc (formParamVars form) = return $ S.varExpr sym e
+                 | otherwise     = L.defaultLocationExpr sym loc
+  afterMem <- liftIO $ replaceLitVars sym locMap (formParamVars form) afterMemOps
+
+--  liftIO $ putStrLn $ "Testing: " ++ show afterMem
+
+--  error "STOP"
+  return afterMem
+
+-- otherwise, no memory for this architecture
+buildEqualityTests form tests = do
+  sym <- askSym
+  let andTest test soFar = do test1 <- simplifyWithTestNonMem form test
+                              liftIO $ S.andPred sym soFar test1
+  foldrM andTest (S.truePred sym) tests
 
 -- | Given a concrete model from the SMT solver, extract concrete instructions
 -- from the templated instructions, so that all of the initially templated
@@ -721,9 +698,8 @@ cegis' :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
        -- ^ All the tests we have so far.
        -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis' trial trialFormula tests = do
---   liftIO . putStrLn $ "Number of tests: " ++ show (length tests)
+--  liftIO . putStrLn $ "Number of tests: " ++ show (length tests)
 --   liftIO . putStrLn $ "\n\nTESTS:\n\t" ++ show tests
---  liftIO . putStrLn $ "\n\nTRIAL FORMULA:\n" ++ show trialFormula
   sym <- askSym
   -- Is this candidate satisfiable for the concrete tests we have so far? At
   -- this point, the machine state is concrete, but the immediate values of the
@@ -731,6 +707,7 @@ cegis' trial trialFormula tests = do
   -- the SAT solver will give us values for the templated immediates in order to
   -- make the tests pass.
   check <- buildEqualityTests trialFormula tests
+--  liftIO . putStrLn $ "Equality tests: " ++ show check
   insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
 
   case insns of
@@ -772,6 +749,7 @@ cegis :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver)
       -> IO (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis params tests trial = do
   trialFormula <- condenseFormulas (cpSym params) (map tifFormula trial)
+  liftIO . putStrLn $ "\n\n=============\nTRIAL FORMULA:\n============\n" ++ show trialFormula
   runReaderT (cegis' trial trialFormula tests) params
 
 

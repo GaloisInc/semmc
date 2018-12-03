@@ -71,14 +71,17 @@ mcSynth env target = do
   let params = SynthesisParams { synthEnv = env
                                , synthMaxLength = 0
                                }
-  ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target
-  case ret1 of
-    Just _ -> return ret1
-    Nothing -> do
-      ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target
-      case ret2 of
-        Just _ -> return ret2
-        Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target
+  -- ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target
+  -- case ret1 of
+  --   Just _ -> return ret1
+  --   Nothing -> do
+  -- -- Instead of repeating each call, perhaps we can only recurse if the result
+  -- -- ran out of space, which could be tracked in 'synthesizeFormula'
+  --     ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target
+  --     case ret2 of
+  --       Just _ -> return ret2
+  --       Nothing -> 
+  synthesizeFormula (params { synthMaxLength = 1000 }) target
 
 -- | Synthesizes a list of instructions from a formula, within a particular
 -- timeout limit.

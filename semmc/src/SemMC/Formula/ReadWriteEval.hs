@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, TypeOperators, TypeApplications, DataKinds, 
-TypeFamilies, ScopedTypeVariables #-}
+TypeFamilies, ScopedTypeVariables, AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -fno-warn-unticked-promoted-constructors #-}
 
 -- | Evaluators for readMem and writeMem uninterpreted functions
@@ -19,9 +19,11 @@ import qualified What4.Interface as S
 import qualified What4.Expr as WE
 
 import qualified SemMC.Architecture as A
+-- import           SemMC.Architecture.PPC64 as PPC
 import qualified SemMC.Formula.Formula as F
 
 import qualified SemMC.DSL as DSL
+import           SemMC.Formula.MemAccesses (exprSymFnToUninterpFn)
 
 {-
 -- | Read from the pseudo-location "Memory"
@@ -64,12 +66,14 @@ writeMemInterp end n = let f = A.writeMemUF @arch n
 
 
 -- | The evaluator for reading bits from memory
-readMemEvaluator :: A.Endianness -> A.Evaluator arch t st fs
+readMemEvaluator :: A.Architecture arch
+                 => A.Endianness -> A.Evaluator arch t st fs
 readMemEvaluator endianness = A.Evaluator (readMemEvaluator' endianness)
 
 -- read_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
-readMemEvaluator' :: 
-                    A.Endianness
+readMemEvaluator' :: forall arch t st fs sh u tp.
+                    A.Architecture arch
+                 => A.Endianness
                  -> WE.ExprBuilder t st fs
                  -> F.ParameterizedFormula (WE.ExprBuilder t st fs) arch sh
                  -> L.List (A.AllocatedOperand arch (WE.ExprBuilder t st fs)) sh
@@ -88,11 +92,74 @@ readMemEvaluator' endianness sym _f L.Nil (Ctx.Empty Ctx.:> mem Ctx.:> i) _ (S.B
   , S.NonZeroNat <- S.isZeroNat iType
   , S.NonZeroNat <- S.isZeroNat byte
     = readMemEvaluatorTotal sym endianness byte w mem i
+--    = readMemEvaluatorFast @arch sym endianness byte w mem i
+--    let Right symb = S.userSymbol "MyRead"
+--    in S.freshConstant sym symb (S.BaseBVRepr w)
 readMemEvaluator' _ _ _ _ _ _ _ = error "read_mem called with incorrect arguments and cannot be evaluated"
 
+-- | Tries to circumvent an n-bit call to 'readMem' by examining the innermost
+-- argument; if the result is a 'writeMem' of the appropriate size, then
+-- circumvent the result.
+readMemEvaluatorFast :: forall arch sym byte w i t st fs.
+                        ( S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i
+                        , sym ~ WE.ExprBuilder t st fs 
+                        , A.Architecture arch)
+                     => sym
+                     -- ^ The expression builder
+                     -> A.Endianness
+                     -- ^ The endianness of the architecture
+                     -> S.NatRepr byte
+                     -- ^ The number of bits in a single register in the array; often a byte
+                     -> S.NatRepr w
+                     -- ^ The number of bits total to read. Will throw an error
+                     -- if 'byte' does not evenly divide 'w'
+                     -> S.SymExpr sym (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) (S.BaseBVType byte))
+                     -- ^ An expression representing memory
+                     -> S.SymExpr sym (S.BaseBVType i)
+                     -- ^ The index at which to start reading bits
+                     -> IO (S.SymExpr sym (S.BaseBVType w))
+readMemEvaluatorFast sym endianness byte w mem i
+  | S.BaseBVRepr iSize <- S.exprType i
+  , Just (mem',i',v) <- isWriteMem @arch w iSize mem = do
+      -- if i=i' then return v
+      i_eq_i' <- S.isEq sym i i'
+      -- FIXME: this is currently not actually safe.
+      -- if the difference between i and i' is a multiple of byte, 
+      -- then it is safe to recurse, otherwise we might have to take 
+      -- part of v as our result.
+      recurse <- readMemEvaluatorFast @arch sym endianness byte w mem' i
+      S.bvIte sym i_eq_i' v recurse
+  | otherwise = do
+      readMemEvaluatorTotal sym endianness byte w mem i
+
+-- | @isWriteMem w _ mem@ returns @Just (mem', i, v)@ if @mem = write_mem_w mem' i v@.
+isWriteMem :: forall arch sym t st fs w i byte memType.
+               ( sym ~ WE.ExprBuilder t st fs
+              , memType ~ S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) (S.BaseBVType byte)
+              , 1 S.<= i, 1 S.<= w
+              , A.Architecture arch
+              )
+           => S.NatRepr w
+           -> S.NatRepr i
+           -> S.SymExpr sym memType
+           -> Maybe ( S.SymExpr sym memType
+                    , S.SymExpr sym (S.BaseBVType i)
+                    , S.SymExpr sym (S.BaseBVType w) )
+isWriteMem w iSize memExpr@(WE.NonceAppExpr a)
+  | WE.FnApp _ (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:> v) <- WE.nonceExprApp a
+--  , Just uf <- exprSymFnToUninterpFn @arch f
+--  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.natValue w))
+  , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
+  , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
+  , Just S.Refl <- S.testEquality (S.exprType v) (S.BaseBVRepr w)
+  = error "HERE" -- Just (mem, i, v)
+isWriteMem _ _ _ = Nothing
+   
+
 -- | Interpretes a 'readMem' as a function over well-typed symbolic expressions
+-- as a sequence of reads of primitive memory
 readMemEvaluatorTotal :: forall sym byte w i.
-                        (S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i)
+                        ( S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i)
                      => sym
                      -- ^ The expression builder
                      -> A.Endianness
@@ -175,6 +242,9 @@ writeMemEvaluator' endianness sym _f L.Nil (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:>
   , Just S.Refl <- S.testEquality (S.exprType mem) memType
   , S.BaseBVRepr _ <- S.exprType v
     = writeMemEvaluatorTotal sym endianness byte mem i v
+--    let Right symb = S.userSymbol "MyWrite"
+--    in S.freshConstant sym symb memType
+
 writeMemEvaluator' _ _ _ _ _ _ _ = error "write_mem called with incorrect arguments and cannot be evaluated"
 
 -- | Interpretes a 'writeMem' as a function over well-typed symbolic expressions

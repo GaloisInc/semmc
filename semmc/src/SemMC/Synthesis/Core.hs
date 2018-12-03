@@ -129,7 +129,7 @@ instantiate target trial
           liftIO $ putStrLn "CegisUnmatchable"
           let oldPrefixes = synthPrefixes st
           put (st { synthTests = newTests
-                  , synthPrefixes = oldPrefixes Seq.|> trial
+                  , synthPrefixes = oldPrefixes -- Seq.|> trial
                   })
           return Nothing
   | otherwise = return Nothing
