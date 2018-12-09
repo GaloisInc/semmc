@@ -9,7 +9,19 @@ maintainer:          jgrosen@galois.com
 copyright:           (c) Galois Inc. 2017
 category:            Compiler
 build-type:          Simple
-extra-source-files:  ChangeLog.md
+extra-source-files:  ChangeLog.md,
+                     data/32/base/*.sem
+                     data/32/base/*.fun
+                     data/32/manual/*.sem
+                     data/32/manual/*.fun
+                     data/32/pseudo/*.sem
+                     data/32/pseudo/*.fun
+                     data/64/base/*.sem
+                     data/64/base/*.fun
+                     data/64/manual/*.sem
+                     data/64/manual/*.fun
+                     data/64/pseudo/*.sem
+                     data/64/pseudo/*.fun
 cabal-version:       >=1.10
 
 library
