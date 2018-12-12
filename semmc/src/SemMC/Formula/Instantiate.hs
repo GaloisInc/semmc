@@ -11,7 +11,6 @@
 {-# LANGUAGE TypeOperators #-}
 module SemMC.Formula.Instantiate
   ( instantiateFormula
-  , instantiateMemOps
   , copyFormula
   , sequenceFormulas
   , condenseFormulas
@@ -32,9 +31,9 @@ import           Data.Parameterized.Pair            ( Pair(..) )
 import           Data.Parameterized.Some            ( Some(..) )
 import           Data.Parameterized.TraversableF
 import qualified Data.Parameterized.TraversableFC   as FC
-import           Data.Proxy                         ( Proxy(..) )
 import           GHC.TypeLits                       ( Symbol )
 import           Text.Printf                        ( printf )
+import           Data.Proxy                         ( Proxy(..) )
 
 import           What4.BaseTypes
 import qualified What4.Interface     as S
@@ -174,39 +173,6 @@ instantiateFormula :: forall arch t st fs sh.
                    -> IO (SL.List (A.TaggedExpr arch (SB t st fs)) sh, Formula (SB t st fs) arch)
 instantiateFormula sym pf opVals 
     = instantiateFormula' sym pf opVals (A.locationFuncInterpretation (Proxy @ arch))
-
--- | Instantiate occurrences of 'read_mem' and 'write_mem' that occur in an expression
-instantiateMemOps :: forall arch t st fs sym tp.
-                     (A.Architecture arch, sym ~ S.ExprBuilder t st fs)
-                   => sym
---                   -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
-                   -> Formula sym arch
-                   -> S.SymExpr sym tp
-                   -> IO (S.SymExpr sym tp)
-instantiateMemOps sym  f e = do
-    let vars = formParamVars f
-    let exprs = MapF.map (S.varExpr sym) vars
-    let locExprs :: A.Location arch a -> IO (S.SymExpr sym a)
-        locExprs loc = maybe (A.defaultLocationExpr sym loc) return $ MapF.lookup loc exprs
-    FE.evaluateFunctions sym
-                         (trivialParameterizedFormula f)
-                         SL.Nil
-                         locExprs
-                         (RWE.memOpInterpretation (Proxy @arch))
-                         e
-
-trivialParameterizedFormula :: A.Architecture arch
-                            => Formula sym arch 
-                            -> ParameterizedFormula sym arch '[]
-trivialParameterizedFormula (Formula vars defs) = 
-    ParameterizedFormula Set.empty SL.Nil vars (mapFKeys LiteralParameter defs)
-
-mapFKeys :: OrdF keys'
-         => (forall tp. keys tp -> keys' tp) 
-         -> MapF.MapF keys res 
-         -> MapF.MapF keys' res
-mapFKeys f m = MapF.foldrWithKey (\k -> MapF.insert (f k)) MapF.empty m
-
 
 -- | Create a concrete 'Formula' from the given 'ParameterizedFormula' and
 -- operand list. The first result is the list of created 'TaggedExpr's for each

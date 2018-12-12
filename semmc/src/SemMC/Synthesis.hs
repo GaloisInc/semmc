@@ -60,6 +60,8 @@ setupEnvironment sym env baseSet =
                           }
 
 -- | Synthesizes a list of instructions from a formula.
+--
+-- TODO: Restore divide and conquer passes that are currently commented out
 mcSynth :: (TemplateConstraints arch,
             ArchRepr arch,
             WPO.OnlineSolver t solver

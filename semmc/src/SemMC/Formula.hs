@@ -19,7 +19,6 @@ module SemMC.Formula
 
   -- * Use and manipulation
   , instantiateFormula
-  , instantiateMemOps
   , sequenceFormulas
   , copyFormula
   , condenseFormulas
@@ -79,7 +78,6 @@ import SemMC.Formula.Formula
   )
 import SemMC.Formula.Env ( FormulaEnv(..) )
 import SemMC.Formula.Instantiate ( instantiateFormula,
-                                   instantiateMemOps,
                                    sequenceFormulas,
                                    copyFormula,
                                    condenseFormulas,

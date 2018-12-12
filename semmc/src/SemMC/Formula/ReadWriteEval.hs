@@ -7,13 +7,19 @@ module SemMC.Formula.ReadWriteEval
   ( memOpInterpretation
   , readMemEvaluator
   , writeMemEvaluator
+  , instantiateMemOps
   ) where
 
 import Text.Printf ( printf )
+import qualified Data.Set as Set
+import           Data.Proxy                         ( Proxy(..) )
 
+import           Data.Parameterized.Classes (OrdF(..))
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as L
 import           Data.Parameterized.Some (Some(..))
+import qualified Data.Parameterized.Vector as V
+import qualified Data.Parameterized.Map as MapF
 
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
@@ -21,6 +27,7 @@ import qualified What4.Expr as WE
 import qualified SemMC.Architecture as A
 -- import           SemMC.Architecture.PPC64 as PPC
 import qualified SemMC.Formula.Formula as F
+import qualified SemMC.Formula.Eval as E
 
 import qualified SemMC.DSL as DSL
 import           SemMC.Formula.MemAccesses (exprSymFnToUninterpFn)
@@ -43,6 +50,53 @@ readMemSemantics mem ea nBytes =
     funcName :: String
     funcName = printf "read_mem.%d" (nBytes * 8)
 -}
+
+-- | Instantiate occurrences of 'read_mem' and 'write_mem' that occur in an expression
+instantiateMemOps :: forall arch t st fs sym tp.
+                     (A.Architecture arch, sym ~ WE.ExprBuilder t st fs)
+                   => sym
+--                   -> (forall tp'. A.Location arch tp' -> IO (S.SymExpr sym tp'))
+                   -> F.Formula sym arch
+                   -> S.SymExpr sym tp
+                   -> IO (S.SymExpr sym tp)
+instantiateMemOps sym  f e = do
+    let vars = F.formParamVars f
+    let exprs = MapF.map (S.varExpr sym) vars
+    let locExprs :: A.Location arch a -> IO (S.SymExpr sym a)
+        locExprs loc = maybe (A.defaultLocationExpr sym loc) return $ MapF.lookup loc exprs
+    -- First evaluate readMem. This will eliminate some occurrences of writeMem as well
+    e' <- E.evaluateFunctions sym
+                         (trivialParameterizedFormula f)
+                         L.Nil
+                         locExprs
+--                         (memOpInterpretation (Proxy @arch))
+                         (readMemInterp end <$> sizes)
+                         e
+    -- Then if any occurrences of writeMem are left, evaluate these.
+    E.evaluateFunctions sym
+                         (trivialParameterizedFormula f)
+                         L.Nil
+                         locExprs
+--                         (memOpInterpretation (Proxy @arch))
+                         (writeMemInterp end <$> sizes)
+                         e'
+  where
+    end = A.archEndianness (Proxy @arch)
+    sizes = [8,16,32,64,128]
+
+trivialParameterizedFormula :: forall sym arch.
+                               A.Architecture arch
+                            => F.Formula sym arch 
+                            -> F.ParameterizedFormula sym arch '[]
+trivialParameterizedFormula (F.Formula vars defs) = 
+    F.ParameterizedFormula Set.empty L.Nil vars (mapFKeys F.LiteralParameter defs)
+
+mapFKeys :: forall keys keys' res.
+            OrdF keys'
+         => (forall (tp :: S.BaseType). keys tp -> keys' tp) 
+         -> MapF.MapF keys res 
+         -> MapF.MapF keys' res
+mapFKeys f m = MapF.foldrWithKey (\k -> MapF.insert (f k)) MapF.empty m
 
 
 -- | Interpretation of readMemUF and writeMemUF
@@ -127,10 +181,30 @@ readMemEvaluatorFast sym endianness byte w mem i
       -- if the difference between i and i' is a multiple of byte, 
       -- then it is safe to recurse, otherwise we might have to take 
       -- part of v as our result.
-      recurse <- readMemEvaluatorFast @arch sym endianness byte w mem' i
+      recurse <- readMemEvaluatorTotal sym endianness byte w mem' i
       S.bvIte sym i_eq_i' v recurse
   | otherwise = do
       readMemEvaluatorTotal sym endianness byte w mem i
+
+arrayLookupVector :: sym ~ WE.ExprBuilder t st fs
+                  => sym
+                  -> S.NatRepr n
+                  -- ^ The number of entries to read
+                  -> S.SymArray sym (idx Ctx.::> tp) b
+                  -> Ctx.Assignment (S.SymExpr sym) (idx Ctx.::> tp)
+                  -- ^ The index at which to start the lookup
+                  -> IO (V.Vector n (S.SymExpr sym b))
+arrayLookupVector sym n arr i = undefined
+
+arrayUpdateVector :: sym ~ WE.ExprBuilder t st fs
+                  => sym
+                  -> S.SymArray sym (idx Ctx.::> tp) b
+                  -> Ctx.Assignment (S.SymExpr sym) (idx Ctx.::> tp)
+                  -- ^ The index at which to start the update
+                  -> V.Vector n (S.SymExpr sym b)
+                  -> S.SymArray sym (idx Ctx.::> tp) b
+arrayUpdateVector = undefined
+            
 
 -- | @isWriteMem w _ mem@ returns @Just (mem', i, v)@ if @mem = write_mem_w mem' i v@.
 isWriteMem :: forall arch sym t st fs w i byte memType.
@@ -146,9 +220,9 @@ isWriteMem :: forall arch sym t st fs w i byte memType.
                     , S.SymExpr sym (S.BaseBVType i)
                     , S.SymExpr sym (S.BaseBVType w) )
 isWriteMem w iSize memExpr@(WE.NonceAppExpr a)
-  | WE.FnApp _ (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:> v) <- WE.nonceExprApp a
---  , Just uf <- exprSymFnToUninterpFn @arch f
---  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.natValue w))
+  | WE.FnApp f (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:> v) <- WE.nonceExprApp a
+  , Just uf <- exprSymFnToUninterpFn @arch f
+  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.natValue w))
   , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
   , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
   , Just S.Refl <- S.testEquality (S.exprType v) (S.BaseBVRepr w)

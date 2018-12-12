@@ -56,6 +56,7 @@ import           SemMC.Formula
 import           SemMC.Synthesis.Template
 import           SemMC.Formula.MemAccesses
 import           SemMC.Formula.Env
+import           SemMC.Formula.ReadWriteEval
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.
@@ -194,7 +195,7 @@ defaultLocExprs sym = do locExprList <- mapM pairDefault (L.allLocations @loc)
 -- the concrete test illustrated by the counterexample.
 --
 -- TODO: adapt this to deal with the case when the architecture has several memory locations (e.g. A32)
-mkTest :: forall sym arch t st fs byte.
+mkTest :: forall sym arch t st fs.
           (Architecture arch, sym ~ WE.ExprBuilder t st fs)
        => sym
        -> Formula sym arch
@@ -588,21 +589,20 @@ buildEqualityTests form tests
                               liftIO $ S.andPred sym soFar test1
   result <- foldrM andTest (S.truePred sym) tests
 
-{-
-  env <- askUF
+--   env <- askUF
 
-  bv0 <- liftIO $ S.bvLit sym (S.knownNat @64) 0
-  bv1 <- liftIO $ S.bvLit sym (S.knownNat @64) 1
---  bv <- liftIO $ S.bvLit sym (S.knownNat @64) 81985529216486895
-  let Right bvSymbol = S.userSymbol "BV"
-  bv <- liftIO $ S.freshConstant sym bvSymbol (S.BaseBVRepr (S.knownNat @64))
---  read0 <- liftIO $ someReadMem sym env (S.knownNat @64) (Some memExpr) (Some bv0)
---  result <- liftIO $ S.isEq sym read0 bv0
---  write0 <- liftIO $ someWriteMem sym env memExpr (Some bv) (Some bv0)
-  read0 <- liftIO $ someReadMem sym env (S.knownNat @64) (Some memExpr) (Some bv0)
-  result <- liftIO $ S.isEq sym read0 bv0
---  result <- liftIO $ S.isEq sym write0 memExpr
--}
+--   bv0 <- liftIO $ S.bvLit sym (S.knownNat @64) 0
+--   bv1 <- liftIO $ S.bvLit sym (S.knownNat @64) 1
+-- --  bv <- liftIO $ S.bvLit sym (S.knownNat @64) 81985529216486895
+--   let Right bvSymbol = S.userSymbol "BV"
+--   bv <- liftIO $ S.freshConstant sym bvSymbol (S.BaseBVRepr (S.knownNat @64))
+-- --  read0 <- liftIO $ someReadMem sym env (S.knownNat @64) (Some memExpr) (Some bv0)
+-- --  result <- liftIO $ S.isEq sym read0 bv0
+--   write0 <- liftIO $ someWriteMem sym env memExpr (Some bv) (Some bv0)
+-- --  read0 <- liftIO $ someReadMem sym env (S.knownNat @64) (Some memExpr) (Some bv0)
+-- --  result <- liftIO $ S.isEq sym read0 bv0
+--   result <- liftIO $ S.isEq sym write0 memExpr
+
 
 --  liftIO $ putStrLn $ "Before: " ++ show result
 
@@ -623,9 +623,8 @@ buildEqualityTests form tests
                  | otherwise     = L.defaultLocationExpr sym loc
   afterMem <- liftIO $ replaceLitVars sym locMap (formParamVars form) afterMemOps
 
---  liftIO $ putStrLn $ "Testing: " ++ show afterMem
+  liftIO $ putStrLn $ "Testing: " ++ show afterMem
 
---  error "STOP"
   return afterMem
 
 -- otherwise, no memory for this architecture
