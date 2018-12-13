@@ -18,6 +18,7 @@ packages:
   subdirs:
   - crucible
   - what4
+  - crucible-llvm
   # The 'exra-dep' here means don't actually build this package unless
   # needed as a dependency, and don't load it into GHCi.
   extra-dep: true
@@ -28,6 +29,8 @@ packages:
 - location: submodules/s-cargot
   extra-dep: true
 - location: submodules/s-cargot-letbind
+  extra-dep: true
+- location: submodules/llvm-pretty
   extra-dep: true
 
 
@@ -40,6 +43,7 @@ extra-deps:
 - tasty-quickcheck-0.10
 - panic-0.4.0.1
 - megaparsec-7.0.1
+- monadLib-3.7.3
  
 # Extra package databases containing global packages
 extra-package-dbs: []

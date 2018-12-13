@@ -40,6 +40,7 @@ library
                        SemMC.Formula.Printer
                        SemMC.Formula.ReadWriteEval
                        SemMC.Formula.SETokens
+                       SemMC.Formula.LLVMMem
                        SemMC.Log
                        SemMC.Log.Tests
                        SemMC.Stochastic.CandidateProgram
@@ -112,7 +113,8 @@ library
                        sqlite-simple >= 0.4 && < 0.5,
                        directory,
                        unliftio,
-                       what4 >= 0.4
+                       what4 >= 0.4,
+                       crucible-llvm
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall

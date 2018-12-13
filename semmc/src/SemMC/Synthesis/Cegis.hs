@@ -57,6 +57,7 @@ import           SemMC.Synthesis.Template
 import           SemMC.Formula.MemAccesses
 import           SemMC.Formula.Env
 import           SemMC.Formula.ReadWriteEval
+import qualified SemMC.Formula.LLVMMem as LLVM
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.

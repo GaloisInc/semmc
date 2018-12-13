@@ -16,3 +16,9 @@
 [submodule "submodules/s-cargot-letbind"]
 	path = submodules/s-cargot-letbind
 	url = https://github.com/GaloisInc/s-cargot-letbind.git
+[submodule "dependencies/llvm-pretty"]
+	path = submodules/llvm-pretty
+	url = https://github.com/elliottt/llvm-pretty.git
+[submodule "submodules/llvm-pretty"]
+	path = submodules/llvm-pretty
+	url = https://github.com/elliottt/llvm-pretty
