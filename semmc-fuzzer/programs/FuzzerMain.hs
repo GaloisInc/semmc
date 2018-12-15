@@ -24,7 +24,7 @@ import qualified Data.Word.Indexed as W
 import           Data.Word ( Word64 )
 import           Data.Proxy ( Proxy(..) )
 import           Data.List (intercalate)
-import           Data.Maybe (catMaybes, fromMaybe)
+import           Data.Maybe (catMaybes, fromMaybe, isNothing)
 import           Data.Monoid ((<>))
 import qualified Data.Map as M
 import           Data.EnumF (EnumF)
@@ -61,6 +61,7 @@ import           Dismantle.ARM.Random ()
 
 import           SemMC.Fuzzer.Types
 import           SemMC.Fuzzer.Util
+import           SemMC.Fuzzer.Filters
 
 import qualified SemMC.Log as L
 import qualified SemMC.Formula as F
@@ -154,6 +155,7 @@ data Config =
            , configNumThreads :: Int
            , configReportURL  :: Maybe String
            , configUsername   :: Maybe String
+           , configFilters    :: [String]
            }
 
 defaultConfig :: Config
@@ -170,6 +172,7 @@ defaultConfig =
            , configNumThreads = 1
            , configReportURL  = Nothing
            , configUsername   = Nothing
+           , configFilters    = []
            }
 
 loadConfig :: FilePath -> IO (Either String FuzzerConfig)
@@ -182,14 +185,15 @@ hostSectionPrefix = "host:"
 
 parser :: CI.IniParser FuzzerConfig
 parser = do
-    (arch, op, strat, ll, url) <- CI.section "fuzzer" $ do
+    (arch, op, strat, ll, url, fs) <- CI.section "fuzzer" $ do
         arch  <- T.unpack <$> CI.field "arch"
         op    <- CI.fieldDefOf "opcodes" CI.readable (configOpcodes defaultConfig)
         strat <- CI.fieldDefOf "strategy" CI.readable (configStrategy defaultConfig)
         url   <- (Just <$> CI.field "report-url") <|>
                  (return $ T.pack <$> configReportURL defaultConfig)
         ll    <- CI.fieldDefOf "log-level" CI.readable (configLogLevel defaultConfig)
-        return (arch, op, strat, ll, url)
+        fs    <- CI.fieldDefOf "instruction-state-filters" CI.readable (configFilters defaultConfig)
+        return (arch, op, strat, ll, url, fs)
 
     when (not $ arch `elem` allArchNames) $
         fail $ "Invalid architecture name: " <> arch
@@ -208,6 +212,7 @@ parser = do
                         , fuzzerTestStrategy = strat
                         , fuzzerMaximumLogLevel = ll
                         , fuzzerReportURL = T.unpack <$> url
+                        , fuzzerFilters = fs
                         }
 
 ppc32Arch :: ArchImpl
@@ -323,6 +328,7 @@ simpleFuzzerConfig cfg = do
                  <*> (pure $ configStrategy cfg)
                  <*> (pure $ configLogLevel cfg)
                  <*> (pure $ configReportURL cfg)
+                 <*> (pure $ configFilters cfg)
 
 mkFuzzerConfig :: Config -> IO FuzzerConfig
 mkFuzzerConfig cfg =
@@ -422,13 +428,26 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
               show (fuzzerArchName mainConfig)
           IO.exitFailure
 
+  let filterStrs = fuzzerFilters mainConfig
+      filters = readFilter proxy <$> filterStrs
+
+  when (any isNothing filters) $ do
+      let missing = fst <$> filter (isNothing . snd) (zip (fuzzerFilters mainConfig) filters)
+      IO.hPutStrLn IO.stderr $ "Error: could not parse some filters for arch " <>
+                               show (fuzzerArchName mainConfig) <> " " <>
+                               "(could not parse filters:" <> (show missing) <> ")"
+      IO.exitFailure
+
+  let instFilter st = foldl (>>=) (Just st) (catMaybes filters)
+
+  L.withLogCfg logCfg $ L.logIO L.Info $ printf "Filters enabled: %s" (show filterStrs)
   L.withLogCfg logCfg $ L.logIO L.Info $
       printf "Starting up for host %s" (fuzzerTestHostname hostConfig)
 
   runThread <- CA.async $ do
       L.withLogCfg logCfg $
           testRunner mainConfig hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
-                     allSemantics allFunctions ppInst assemble caseChan resChan
+                     allSemantics allFunctions ppInst assemble instFilter caseChan resChan
 
   CA.link runThread
 
@@ -439,6 +458,8 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   CA.wait runThread
 
   L.logEndWith logCfg
+
+
 
 testRunner :: forall arch .
               ( TemplatableOperand arch
@@ -462,10 +483,11 @@ testRunner :: forall arch .
            -> [(String, BS.ByteString)]
            -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> Doc)
            -> (GenericInstruction (A.Opcode arch) (A.Operand arch) -> BSC8.ByteString)
+           -> InstFilter arch
            -> C.Chan (Maybe [CE.TestCase (V.ConcreteState arch) (A.Instruction arch)])
            -> C.Chan (CE.ResultOrError (V.ConcreteState arch))
            -> IO ()
-testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst assemble caseChan resChan = do
+testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst assemble ifilt caseChan resChan = do
     self <- getLoginName
     hostname <- getHostName
 
@@ -496,9 +518,12 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                     L.logIO L.Error $ printf "Giving up after %d retries!" maxRetries
                     return Nothing
                   go retries = do
-                    inst <- D.randomInstruction gen fromOpcodes
+                    (inst, initialState) <- rejectionSampleMaybe gen ifilt $ \g -> do
+                        i <- D.randomInstruction g fromOpcodes
+                        s <- C.randomState proxy g
+                        return (i, s)
+
                     let instBytes = assemble inst
-                    initialState <- C.randomState proxy gen
                     nonce <- N.indexValue <$> N.freshNonce nonceGen
                     evalResult <- E.try $ evaluateInstruction sym plainBaseSet inst initialState
 

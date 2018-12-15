@@ -668,6 +668,33 @@ manualBitwise = do
     aluWritePC (isR15 rD) result
     cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
 
+  defineA32Opcode A.ORRrr (Empty
+                          :> ParamDef "rD" gpr naturalBV
+                          :> ParamDef "setcc" cc_out (EBV 1)
+                          :> ParamDef "predBits" pred (EBV 4)
+                          :> ParamDef "rM" gpr naturalBV
+                          :> ParamDef "rN" gpr naturalBV
+                          )
+                          $ \rD setcc _ rN rM -> do
+    comment "ORR register, Encoding A1 (A8.8.123, A8-518)"
+    input rM
+    input rN
+    input setcc
+    let setflags = bveq (Loc setcc) (LitBV 1 0b1)
+        (_, _, c, v) = getNZCV
+        n' = extract 31 31 result
+        z' = isZeroBit result
+        v' = v
+        (shift_t, shift_n) = splitImmShift $ decodeImmShift (LitBV 2 0b00) (LitBV 5 0b00000)
+        shiftedWithCarry = shiftC (Loc rM) shift_t shift_n c
+        shifted = extract 31 0 shiftedWithCarry
+        c' = extract 32 32 shiftedWithCarry
+        result = bvor (Loc rN) shifted
+        nzcv = concat n' $ concat z' $ concat c' v'
+    defReg rD (ite (isR15 rD) (Loc rD) result)
+    aluWritePC (isR15 rD) result
+    cpsrNZCV (andp setflags (notp (isR15 rD))) nzcv
+
 -- ----------------------------------------------------------------------
 adcrr :: (HasCallStack)
       => Location 'TBV

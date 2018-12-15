@@ -46,6 +46,7 @@ import qualified SemMC.Architecture.View as V
 import           SemMC.Synthesis.Template ( TemplatableOperand
                                           , TemplatedOperand
                                           )
+import           SemMC.Fuzzer.Filters(FilterParser(..))
 
 data OpcodeMatch =
     AllOpcodes
@@ -69,6 +70,7 @@ data FuzzerConfig =
                  , fuzzerTestStrategy :: TestStrategy
                  , fuzzerMaximumLogLevel :: L.LogLevel
                  , fuzzerReportURL :: Maybe String
+                 , fuzzerFilters :: [String]
                  }
                  deriving (Show)
 
@@ -92,6 +94,7 @@ data ArchImpl where
                 , Show (GenericInstruction (A.Opcode arch) (A.Operand arch))
                 , EnumF (A.Opcode arch (TemplatedOperand arch))
                 , HasRepr (A.Opcode arch (A.Operand arch)) (L.List (A.OperandTypeRepr arch))
+                , FilterParser arch
                 )
              => String
              -> Proxy arch
