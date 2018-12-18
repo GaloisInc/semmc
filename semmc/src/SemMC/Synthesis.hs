@@ -18,6 +18,7 @@ import           Control.Monad (join)
 import           System.Timeout (timeout)
 
 import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 
 import           SemMC.Architecture
@@ -64,7 +65,8 @@ setupEnvironment sym env baseSet =
 -- TODO: Restore divide and conquer passes that are currently commented out
 mcSynth :: (TemplateConstraints arch,
             ArchRepr arch,
-            WPO.OnlineSolver t solver
+            WPO.OnlineSolver t solver,
+            CB.IsSymInterface (CBO.OnlineBackend t solver fs)
            )
         => SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch
         -> Formula (CBO.OnlineBackend t solver fs) arch
@@ -89,7 +91,8 @@ mcSynth env target = do
 -- timeout limit.
 mcSynthTimeout :: (TemplateConstraints arch,
                    ArchRepr arch,
-                   WPO.OnlineSolver t solver
+                   WPO.OnlineSolver t solver,
+                   CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                   )
                => Int 
                -> SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch

@@ -148,7 +148,7 @@ shapeReprType sr =
     PPC.U7immRepr -> knownRepr
     PPC.U8immRepr -> knownRepr
 
-type instance ArchRegWidth PPC = 32
+type instance A.RegWidth PPC = 32
 type instance A.OperandComponents PPC sym = POC.OperandComponents PPC sym
 
 instance ArchRepr PPC where
@@ -476,7 +476,7 @@ instance A.Architecture PPC where
   readMemUF  = UF.mkUninterpFnReadMem
   writeMemUF = UF.mkUninterpFnWriteMem
   locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation
-  archEndianness _proxy = A.BigEndian
+  archEndianForm _proxy = A.BigEndian
   shapeReprToTypeRepr _proxy = shapeReprType
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)

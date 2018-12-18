@@ -81,7 +81,7 @@ instantiateMemOps sym  f e = do
                          (writeMemInterp end <$> sizes)
                          e'
   where
-    end = A.archEndianness (Proxy @arch)
+    end = A.archEndianForm (Proxy @arch)
     sizes = [8,16,32,64,128]
 
 trivialParameterizedFormula :: forall sym arch.
@@ -103,31 +103,31 @@ mapFKeys f m = MapF.foldrWithKey (\k -> MapF.insert (f k)) MapF.empty m
 memOpInterpretation :: A.Architecture arch => proxy arch -> [(String, A.Evaluator arch t st fs)]
 memOpInterpretation proxy = (readMemInterp end <$> sizes) ++ (writeMemInterp end <$> sizes)
   where
-    end   = A.archEndianness proxy
+    end   = A.archEndianForm proxy
     sizes = [8,16,32,64,128]
 
 readMemInterp :: forall arch t st fs. 
                  A.Architecture arch
-              => A.Endianness ->  Integer -> (String, A.Evaluator arch t st fs)
+              => A.EndianForm ->  Integer -> (String, A.Evaluator arch t st fs)
 readMemInterp end n = let f = A.readMemUF @arch n
                       in (A.createSymbolicName (A.uninterpFnName f), readMemEvaluator end)
 
 writeMemInterp :: forall arch t st fs. 
                   A.Architecture arch
-               => A.Endianness ->  Integer -> (String, A.Evaluator arch t st fs)
+               => A.EndianForm ->  Integer -> (String, A.Evaluator arch t st fs)
 writeMemInterp end n = let f = A.writeMemUF @arch n
                        in (A.createSymbolicName (A.uninterpFnName f), writeMemEvaluator end)
 
 
 -- | The evaluator for reading bits from memory
 readMemEvaluator :: A.Architecture arch
-                 => A.Endianness -> A.Evaluator arch t st fs
+                 => A.EndianForm -> A.Evaluator arch t st fs
 readMemEvaluator endianness = A.Evaluator (readMemEvaluator' endianness)
 
 -- read_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
 readMemEvaluator' :: forall arch t st fs sh u tp.
                     A.Architecture arch
-                 => A.Endianness
+                 => A.EndianForm
                  -> WE.ExprBuilder t st fs
                  -> F.ParameterizedFormula (WE.ExprBuilder t st fs) arch sh
                  -> L.List (A.AllocatedOperand arch (WE.ExprBuilder t st fs)) sh
@@ -160,7 +160,7 @@ readMemEvaluatorFast :: forall arch sym byte w i t st fs.
                         , A.Architecture arch)
                      => sym
                      -- ^ The expression builder
-                     -> A.Endianness
+                     -> A.EndianForm
                      -- ^ The endianness of the architecture
                      -> S.NatRepr byte
                      -- ^ The number of bits in a single register in the array; often a byte
@@ -236,7 +236,7 @@ readMemEvaluatorTotal :: forall sym byte w i.
                         ( S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i)
                      => sym
                      -- ^ The expression builder
-                     -> A.Endianness
+                     -> A.EndianForm
                      -- ^ The endianness of the architecture
                      -> S.NatRepr byte
                      -- ^ The number of bits in a single register in the array; often a byte
@@ -282,19 +282,19 @@ readMemEvaluatorTotal sym endianness byte w mem i =
     -- with a big endian representation, we concatinate bit vectors in the same
     -- direction as they are alid out in memory; with little endian, the opposite
     bvConcatEndian :: (1 S.<= u, 1 S.<= v)
-                   => A.Endianness -> S.SymBV sym u -> S.SymBV sym v  -> IO (S.SymBV sym (u S.+ v))
+                   => A.EndianForm -> S.SymBV sym u -> S.SymBV sym v  -> IO (S.SymBV sym (u S.+ v))
     bvConcatEndian A.BigEndian    u v = S.bvConcat sym u v
     bvConcatEndian A.LittleEndian u v 
       | S.Refl <- S.plusComm (S.bvWidth u) (S.bvWidth v) = S.bvConcat sym v u
 
 
 -- | The evaluator for writing bits from memory
-writeMemEvaluator :: A.Endianness -> A.Evaluator arch t st fs
+writeMemEvaluator :: A.EndianForm -> A.Evaluator arch t st fs
 writeMemEvaluator endianness = A.Evaluator (writeMemEvaluator' endianness)
 
 -- write_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
 writeMemEvaluator' :: 
-                    A.Endianness
+                    A.EndianForm
                  -> WE.ExprBuilder t st fs
                  -> F.ParameterizedFormula (WE.ExprBuilder t st fs) arch sh
                  -> L.List (A.AllocatedOperand arch (WE.ExprBuilder t st fs)) sh
@@ -326,7 +326,7 @@ writeMemEvaluatorTotal :: forall sym byte w i.
                         (S.IsExprBuilder sym, 1 S.<= byte, 1 S.<= w, 1 S.<= i)
                      => sym
                      -- ^ The expression builder
-                     -> A.Endianness
+                     -> A.EndianForm
                      -- ^ The endianness of the architecture
                      -> S.NatRepr byte
                      -- ^ The number of bits in a single register in the array; often a byte
@@ -371,7 +371,7 @@ writeMemEvaluatorTotal sym endianness byte mem i v =
 
     -- with a big endian representation, we write the most significant bits first
     bvSelectEndian :: 1 S.<= rest
-                   => A.Endianness 
+                   => A.EndianForm 
                    -> S.NatRepr rest
                    -> S.SymBV sym (byte S.+ rest)
                    -> IO (S.SymBV sym byte, S.SymBV sym rest)

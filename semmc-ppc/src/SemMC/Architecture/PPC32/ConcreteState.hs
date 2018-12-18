@@ -37,13 +37,14 @@ import qualified Dismantle.PPC as PPC
 
 import qualified SemMC.Architecture.Value as V
 
+import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.PPC.Shared as PPCS
 import           SemMC.Architecture.PPC.Location
 
 type ConcreteState ppc = MapF.MapF (Location ppc) V.Value
 
 -- | FIXME: Does not include memory
-randomState :: (KnownNat (ArchRegWidth ppc), ArchRegWidth ppc ~ 32) => DA.Gen -> IO (ConcreteState ppc)
+randomState :: (KnownNat (A.RegWidth ppc), A.RegWidth ppc ~ 32) => DA.Gen -> IO (ConcreteState ppc)
 randomState gen = St.execStateT randomize MapF.empty
   where
     randomize = do
@@ -78,7 +79,7 @@ randomState gen = St.execStateT randomize MapF.empty
 -- chosen.  The other registers all have zeros.
 --
 -- FIXME: Doesn't include FP registers yet.  We'll want NaN and INF values there
-interestingStates :: (KnownNat (ArchRegWidth ppc), ArchRegWidth ppc ~ 32) => [ConcreteState ppc]
+interestingStates :: (KnownNat (A.RegWidth ppc), A.RegWidth ppc ~ 32) => [ConcreteState ppc]
 interestingStates = gprStates -- ++ fprStates
   where
     i32Min :: Int32
@@ -101,7 +102,7 @@ interestingStates = gprStates -- ++ fprStates
       MapF.insert r1 v1 $ MapF.insert r2 v2 zeroState
 
 -- | FIXME: Does not include memory
-zeroState :: (KnownNat (ArchRegWidth ppc), ArchRegWidth ppc ~ 32) => ConcreteState ppc
+zeroState :: (KnownNat (A.RegWidth ppc), A.RegWidth ppc ~ 32) => ConcreteState ppc
 zeroState = St.execState addZeros MapF.empty
   where
     addZero :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.State (ConcreteState ppc) ()
@@ -117,7 +118,7 @@ zeroState = St.execState addZeros MapF.empty
 -- Note that we perform a byte swap to put data in big endian so that the
 -- machine on the receiving end doesn't need to do anything special besides map
 -- the data.
-serialize :: (KnownNat (ArchRegWidth ppc), ArchRegWidth ppc ~ 32)
+serialize :: (KnownNat (A.RegWidth ppc), A.RegWidth ppc ~ 32)
           => ConcreteState ppc
           -> B.ByteString
 serialize s = LB.toStrict (B.toLazyByteString b)
@@ -143,8 +144,8 @@ extractLocs s locs = map extractLoc locs
       in v
 
 deserialize :: ( ArchRepr ppc
-               , KnownNat (ArchRegWidth ppc)
-               , ArchRegWidth ppc ~ 32
+               , KnownNat (A.RegWidth ppc)
+               , A.RegWidth ppc ~ 32
                ) => B.ByteString -> Maybe (ConcreteState ppc)
 deserialize bs =
   case G.runGet getArchState bs of
@@ -152,8 +153,8 @@ deserialize bs =
     Right s -> Just s
 
 getArchState :: forall ppc . ( ArchRepr ppc
-                             , KnownNat (ArchRegWidth ppc)
-                             , ArchRegWidth ppc ~ 32
+                             , KnownNat (A.RegWidth ppc)
+                             , A.RegWidth ppc ~ 32
                              ) => G.Get (ConcreteState ppc)
 getArchState = do
   gprs' <- mapM (getWith (PPCS.getValue G.getWord32be (regWidthRepr (Proxy @ppc)))) gprs
@@ -181,7 +182,7 @@ getWith g loc = do
 getBS :: G.Get (V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
 getBS = V.ValueMem <$> G.getBytes 64
 
-gprs :: [Location ppc (BaseBVType (ArchRegWidth ppc))]
+gprs :: [Location ppc (BaseBVType (A.RegWidth ppc))]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]
 
 vsrs :: [Location ppc (BaseBVType 128)]
@@ -200,7 +201,7 @@ vrs = fmap (LocVSR . PPC.VSReg) [32..63]
 --
 -- We don't send an MSR because randomly generating that might do odd things
 -- (like switch endianness).
-specialRegs :: (ArchRegWidth ppc ~ 32) => [Location ppc (BaseBVType 32)]
+specialRegs :: (A.RegWidth ppc ~ 32) => [Location ppc (BaseBVType 32)]
 specialRegs = [ LocCTR
               , LocLNK
               , LocCR

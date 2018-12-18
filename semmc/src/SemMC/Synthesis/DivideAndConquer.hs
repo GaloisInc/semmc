@@ -20,6 +20,7 @@ import           Data.Typeable
 
 import qualified What4.Expr as WE
 import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 
 import           SemMC.Architecture
@@ -75,7 +76,8 @@ divideAndConquer :: (Architecture arch,
                      ArchRepr arch,
                      Architecture (TemplatedArch arch),
                      Typeable arch,
-                     WPO.OnlineSolver t solver
+                     WPO.OnlineSolver t solver,
+                     CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                      )
                  => SynthesisParams (CBO.OnlineBackend t solver fs) arch
                  -> Formula (CBO.OnlineBackend t solver fs) arch

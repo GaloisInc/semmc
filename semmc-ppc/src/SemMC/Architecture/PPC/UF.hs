@@ -28,7 +28,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           What4.BaseTypes
 
 import           SemMC.Architecture (UninterpFn(..), mkUninterpFn, AccessData(..))
-import           SemMC.Architecture.PPC.Location
+import qualified SemMC.Architecture as A
 
                              
 type family DuplicateCtx (n :: Nat) (x :: k) :: Ctx k where
@@ -36,10 +36,10 @@ type family DuplicateCtx (n :: Nat) (x :: k) :: Ctx k where
   DuplicateCtx n x = (DuplicateCtx (n-1) x) ::> x
 
 uninterpretedFunctions :: forall proxy ppc
-                        . (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+                        . (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
                        => proxy ppc
                        -> [UninterpFn ppc]
-uninterpretedFunctions _ = fpUninterpFns @ppc 
+uninterpretedFunctions _ = fpUninterpFns @ppc
                         ++ ppcUninterpFns @ppc
                         ++ (mkUninterpFnReadMem  @ppc <$> [8,16,32,64,128])
                         ++ (mkUninterpFnWriteMem @ppc <$> [8,16,32,64,128])
@@ -47,7 +47,7 @@ uninterpretedFunctions _ = fpUninterpFns @ppc
                         ++ popcntUninterpFns @ppc
 
 
-fpUninterpFns :: forall ppc. (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+fpUninterpFns :: forall ppc. (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
               => [UninterpFn ppc]
 fpUninterpFns =
   [ mkUninterpFn @(SingleCtx (BaseFloatType Prec64)) 
@@ -75,35 +75,35 @@ fpUninterpFns =
   ]
 
 
-ppcUninterpFns :: forall ppc. (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+ppcUninterpFns :: forall ppc. (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
               => [UninterpFn ppc]
 ppcUninterpFns = [
-    mkUninterpFn @(SingleCtx (BaseBVType (ArchRegWidth ppc)))
+    mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
                  @BaseBoolType
                  "ppc.is_r0"
                  (\_ -> [])
-  , mkUninterpFn @(SingleCtx (BaseBVType (ArchRegWidth ppc)))
-                 @(BaseBVType (ArchRegWidth ppc))
+  , mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
+                 @(BaseBVType (A.RegWidth ppc))
                  "ppc.memri_reg"
                  (\_ -> [])
-  , mkUninterpFn @(SingleCtx (BaseBVType (ArchRegWidth ppc)))
+  , mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
                  @(BaseBVType 16)
                  "ppc.memri_offset"
                  (\_ -> [])
-  , mkUninterpFn @(SingleCtx (BaseBVType (ArchRegWidth ppc)))
-                 @(BaseBVType (ArchRegWidth ppc))
+  , mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
+                 @(BaseBVType (A.RegWidth ppc))
                  "ppc.memrix_reg"
                  (\_ -> [])
-  , mkUninterpFn @(SingleCtx (BaseBVType (ArchRegWidth ppc)))
+  , mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
                  @(BaseBVType 14)
                  "ppc.memrix_offset"
                  (\_ -> [])
-  , mkUninterpFn @(SingleCtx (BaseBVType (ArchRegWidth ppc)))
-                 @(BaseBVType (ArchRegWidth ppc))
+  , mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
+                 @(BaseBVType (A.RegWidth ppc))
                  "ppc.memrr_base"
                  (\_ -> [])
-  , mkUninterpFn @(SingleCtx (BaseBVType (ArchRegWidth ppc)))
-                 @(BaseBVType (ArchRegWidth ppc))
+  , mkUninterpFn @(SingleCtx (BaseBVType (A.RegWidth ppc)))
+                 @(BaseBVType (A.RegWidth ppc))
                  "ppc.memrr_offset"
                  (\_ -> [])
   , mkUninterpFn @(    SingleCtx (BaseStructType EmptyCtx) 
@@ -146,12 +146,12 @@ ppcUninterpFns = [
 
 
 -- | The basic type of indices into the array
-type BaseIdxType ppc = BaseBVType (ArchRegWidth ppc)
+type BaseIdxType ppc = BaseBVType (A.RegWidth ppc)
 -- | The type of the memory array
 type BaseMemType ppc = BaseArrayType (SingleCtx (BaseIdxType ppc)) (BaseBVType 8) 
 
 {-
-readMemUninterpFns :: forall ppc. (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+readMemUninterpFns :: forall ppc. (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
                    => [Some (UninterpFn ppc)]
 readMemUninterpFns = [
     mkUninterpFn @(EmptyCtx ::> BaseMemType ppc ::> BaseIdxType ppc)
@@ -177,7 +177,7 @@ readMemUninterpFns = [
   ]
 -}
 
-mkUninterpFnReadMem :: forall ppc. (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+mkUninterpFnReadMem :: forall ppc. (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
                     => Integer -> UninterpFn ppc
 mkUninterpFnReadMem n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                       , NatGT _ <- compareNat (knownNat @n) (knownNat @0)
@@ -188,7 +188,7 @@ mkUninterpFnReadMem n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
 mkUninterpFnReadMem n | otherwise = error $ "Cannot construct read_mem." ++ show n
 
 mkUninterpFnWriteMem :: forall ppc.
-                   (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+                   (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
                 => Integer -> UninterpFn ppc
 mkUninterpFnWriteMem n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                        , NatGT _ <- compareNat (knownNat @n) (knownNat @0)
@@ -199,7 +199,7 @@ mkUninterpFnWriteMem n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
 mkUninterpFnWriteMem n | otherwise = error $ "Cannot construct write_mem." ++ show n
 
 
-clzUninterpFns :: forall ppc. (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+clzUninterpFns :: forall ppc. (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
                => [UninterpFn ppc]
 clzUninterpFns = [
     mkUninterpFn @(SingleCtx (BaseBVType 32)) 
@@ -213,7 +213,7 @@ clzUninterpFns = [
   ]
 
 
-popcntUninterpFns :: forall ppc. (KnownNat (ArchRegWidth ppc), 1 <= ArchRegWidth ppc)
+popcntUninterpFns :: forall ppc. (KnownNat (A.RegWidth ppc), 1 <= A.RegWidth ppc)
                      => [UninterpFn ppc]
 popcntUninterpFns = [
     mkUninterpFn @(SingleCtx (BaseBVType 32)) 

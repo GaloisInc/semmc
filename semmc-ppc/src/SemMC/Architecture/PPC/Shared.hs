@@ -227,7 +227,7 @@ isR0 sym pf ops actuals _locToExpr repr = do
             _ -> typedReturn (S.falsePred sym)
     _ -> error "Unexpected argument list to isR0"
   where
-    r0 :: Location arch (BaseBVType (ArchRegWidth arch))
+    r0 :: Location arch (BaseBVType (A.RegWidth arch))
     r0 = LocGPR (PPC.GPR 0x0)
 
 locationFuncInterpretation

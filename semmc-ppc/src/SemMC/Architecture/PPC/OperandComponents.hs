@@ -9,23 +9,24 @@ module SemMC.Architecture.PPC.OperandComponents (
 import           Data.Parameterized.Classes ( ShowF )
 import           GHC.TypeLits ( Symbol )
 
-import           SemMC.Architecture.PPC.Location ( Location, ArchRegWidth )
+import qualified SemMC.Architecture as A
+import           SemMC.Architecture.PPC.Location ( Location )
 import           What4.BaseTypes ( BaseBVType )
 import qualified What4.Interface as S
 
 data OperandComponents ppc sym (s :: Symbol) where
   OCMemri :: Maybe (Location ppc tp)
-          -> S.SymExpr sym (BaseBVType (ArchRegWidth ppc))
+          -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
           -> S.SymExpr sym (BaseBVType 16)
           -> OperandComponents ppc sym s
   OCMemrix :: Maybe (Location ppc tp)
-           -> S.SymExpr sym (BaseBVType (ArchRegWidth ppc))
+           -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
            -> S.SymExpr sym (BaseBVType 14)
            -> OperandComponents ppc sym s
   OCMemrr :: Maybe (Location ppc tp)
-           -> S.SymExpr sym (BaseBVType (ArchRegWidth ppc))
+           -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
            -> Location ppc tp
-           -> S.SymExpr sym (BaseBVType (ArchRegWidth ppc))
+           -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
            -> OperandComponents ppc sym s
 
 instance (S.IsExpr (S.SymExpr sym)) => Show (OperandComponents ppc sym s) where

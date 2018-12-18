@@ -12,6 +12,7 @@ import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
 import qualified What4.Protocol.Online as WPO
 import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.Backend as CB
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula as SF
@@ -34,8 +35,8 @@ synthesizeAndCheck :: forall proxy arch t solver fs
                       , A.Architecture (SS.TemplatedArch arch)
                       , A.ArchRepr arch
                       , WPO.OnlineSolver t solver
-                      , OrdF (A.Opcode arch (SS.TemplatedOperand arch))
                       , SS.TemplatableOperand arch
+                      , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                       )
                    => proxy arch
                    -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) arch

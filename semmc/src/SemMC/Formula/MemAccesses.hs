@@ -70,12 +70,12 @@ partitionLocs locs =
 liveMemMap :: forall arch t st fs sym.
               (Architecture arch, sym ~ WE.ExprBuilder t st fs)
            => Formula sym arch
-           -> Map.Map (Some (WE.Expr t)) (Some (WE.Expr t))
-liveMemMap f = foldMap accessMap $ liveMem f 
+           -> Set.Set (AccessData sym arch)
+liveMemMap f = Set.filter isWrite $ liveMem f
   where
-    accessMap :: AccessData sym -> Map.Map (Some (WE.Expr t)) (Some (WE.Expr t))
-    accessMap (ReadData _)    = Map.empty
-    accessMap (WriteData e i) = Map.singleton (Some e) (Some i)
+    isWrite :: AccessData sym arch -> Bool
+    isWrite (WriteData _ _) = True
+    isWrite _ = False
 
   
 
@@ -108,13 +108,13 @@ someIsEq sym (Some x) (Some y)
 -- | Returns the set of memory addresses that are accessed by the formula
 liveMem :: (Architecture arch)
         => Formula (WE.ExprBuilder t st fs) arch
-        -> Set.Set (AccessData (WE.ExprBuilder t st fs))
+        -> Set.Set (AccessData (WE.ExprBuilder t st fs) arch)
 liveMem f = foldMapF (liveMemInExpr f) (formDefs f)
 
 liveMemAddresses :: forall arch t st fs. 
                     Architecture arch
                  => Formula (WE.ExprBuilder t st fs) arch
-                 -> Set.Set (Some (WE.Expr t))
+                 -> Set.Set (WE.Expr t (S.BaseBVType (RegWidth arch)))
 liveMemAddresses = Set.map accessAddr . liveMem
 
 {-
@@ -172,16 +172,15 @@ liveMemConst :: forall arch t st fs.
              -> [Integer]
 liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMemAddresses f)
   where
-    exprToInt :: Some (WE.Expr t) -> Maybe Integer
-    exprToInt (Some e) | Just (WC.ConcreteBV _ i)    <- S.asConcrete e = Just i
-    exprToInt (Some e) | Just (WC.ConcreteInteger i) <- S.asConcrete e = Just i
-    exprToInt _        | otherwise = Nothing
+    exprToInt :: WE.Expr t (S.BaseBVType (RegWidth arch)) -> Maybe Integer
+    exprToInt e | Just (WC.ConcreteBV _ i)    <- S.asConcrete e = Just i
+    exprToInt _ | otherwise = Nothing
 
 
 liveMemInExpr :: Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.Expr t a
-              -> Set.Set (AccessData (WE.ExprBuilder t st fs))
+              -> Set.Set (AccessData (WE.ExprBuilder t st fs) arch)
 liveMemInExpr f (WE.AppExpr a)        = foldMapFC (liveMemInExpr f) $ WE.appExprApp a 
 liveMemInExpr f (WE.NonceAppExpr a)   = liveMemInNonceApp f $ WE.nonceExprApp a
 liveMemInExpr _ _                     = Set.empty
@@ -228,7 +227,7 @@ liveMemInNonceApp :: forall arch t st fs a.
                  Architecture arch
               => Formula (WE.ExprBuilder t st fs) arch
               -> WE.NonceApp t (WE.Expr t) a
-              -> Set.Set (AccessData (WE.ExprBuilder t st fs))
+              -> Set.Set (AccessData (WE.ExprBuilder t st fs) arch)
 liveMemInNonceApp form (WE.FnApp f args) =
   foldMapFC (liveMemInExpr form) args `Set.union` 
     case exprSymFnToUninterpFn @arch f of

@@ -16,6 +16,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module SemMC.Architecture (
   Architecture(..),
@@ -34,16 +35,18 @@ module SemMC.Architecture (
   OperandType,
   IsOperandTypeRepr(..),
   ArchRepr,
+  RegWidth,
   ShapeRepr,
-  Endianness(..),
   UninterpFn(..),
   mkUninterpFn,
   getUninterpFn,
   AccessData(..),
+  LLVM.EndianForm(..),
   accessAddr,
   showShapeRepr,
   createSymbolicEntries,
-  createSymbolicName
+  createSymbolicName,
+  regWidth
   ) where
 
 import           Data.List (find)
@@ -57,13 +60,16 @@ import qualified Data.Parameterized.HasRepr as HR
 import           Data.Parameterized.TraversableFC (testEqualityFC)
 import           Data.Proxy ( Proxy(..) )
 import           Data.Typeable ( Typeable )
-import           GHC.TypeLits ( Symbol )
+import           GHC.TypeLits ( Symbol, Nat, KnownNat )
 import qualified Language.Haskell.TH as TH
 import           Debug.Trace (trace)
 
 import           What4.BaseTypes
 import qualified What4.Interface as S
 import qualified What4.Expr as S
+
+import qualified Lang.Crucible.LLVM.DataLayout as LLVM
+import qualified Lang.Crucible.LLVM.MemModel as LLVM
 
 import           SemMC.Architecture.AllocatedOperand
 import           SemMC.Architecture.Internal
@@ -89,7 +95,8 @@ class (IsOperand (Operand arch),
        ShowF (Operand arch),
        OrdF (Opcode arch (Operand arch)),
        ShowF (Opcode arch (Operand arch)),
-       EnumF (Opcode arch (Operand arch)))
+       EnumF (Opcode arch (Operand arch)),
+       HasRegWidth arch)
       => Architecture arch where
 
   -- | Tagged expression type for this architecture.
@@ -114,7 +121,7 @@ class (IsOperand (Operand arch),
 
   -- | The uninterpreted functions referred to by this architecture. These
   -- should include readMemUF and writeMemUF
-  uninterpretedFunctions :: proxy arch -> [(UninterpFn arch)]
+  uninterpretedFunctions :: proxy arch -> [UninterpFn arch]
   readMemUF :: Integer -- ^ Number of bits to read, undefined if not in 'uninterpretedFunctions'
             -> (UninterpFn arch)
   writeMemUF :: Integer -- ^ Number of bits to read, undefined if not in 'uninterpretedFunctions'
@@ -158,11 +165,13 @@ class (IsOperand (Operand arch),
 -}
 
   -- | Whether the architecture writes data in big-endian or little-endian form, by default
-  archEndianness :: proxy arch -> Endianness
+  archEndianForm :: proxy arch -> LLVM.EndianForm
 
   shapeReprToTypeRepr :: proxy arch -> OperandTypeRepr arch s -> BaseTypeRepr (OperandType arch s)
 
 
+regWidth :: Architecture arch => NatRepr (RegWidth arch)
+regWidth = knownNat
 
 showShapeRepr :: forall arch sh. (IsOperandTypeRepr arch) => Proxy arch -> ShapeRepr arch sh -> String
 showShapeRepr _ rep =
@@ -172,7 +181,9 @@ showShapeRepr _ rep =
                        in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
 
 
-data Endianness = BigEndian | LittleEndian  
+type family RegWidth arch :: Nat
+
+type HasRegWidth arch = (1 <= RegWidth arch, 16 <= RegWidth arch, KnownNat (RegWidth arch))
 
 data UninterpFn arch where
   MkUninterpFn :: forall arch args ty.
@@ -181,7 +192,7 @@ data UninterpFn arch where
                   , uninterpFnRes  :: BaseTypeRepr ty
                   , uninterpFnLive :: forall sym.
                                       Ctx.Assignment (S.SymExpr sym) args 
-                                   -> [AccessData sym]
+                                   -> [AccessData sym arch]
                   -- ^ Given some arguments, identify the arguments that might touch memory.
                   } -> UninterpFn arch
 instance Show (UninterpFn arch) where
@@ -192,7 +203,8 @@ mkUninterpFn :: forall (args :: Ctx.Ctx BaseType) (ty :: BaseType) arch.
               ( KnownRepr (Ctx.Assignment BaseTypeRepr) args
               , KnownRepr BaseTypeRepr ty)
              => String 
-             -> (forall sym. Ctx.Assignment (S.SymExpr sym) args -> [AccessData sym])
+             -> (forall sym. Ctx.Assignment (S.SymExpr sym) args 
+                          -> [AccessData sym arch])
              -> UninterpFn arch
 mkUninterpFn name liveness = MkUninterpFn name (knownRepr :: Ctx.Assignment BaseTypeRepr args) 
                                                       (knownRepr :: BaseTypeRepr ty)
@@ -212,25 +224,32 @@ getUninterpFn s = go $ uninterpretedFunctions (Proxy @arch)
                                               else go fs
 
 
-data AccessData sym where
-  ReadData  :: S.SymExpr sym (S.BaseBVType w) -> AccessData sym
-  WriteData :: S.SymExpr sym (S.BaseBVType w) -> S.SymExpr sym tp -> AccessData sym
+data AccessData sym arch where
+  ReadData  :: S.SymExpr sym (S.BaseBVType (RegWidth arch)) -> AccessData sym arch
+  WriteData :: 1 <= v
+            => S.SymExpr sym (S.BaseBVType (RegWidth arch))
+            -> S.SymExpr sym (S.BaseBVType v)
+            -> AccessData sym arch
 
-instance S.TestEquality (S.SymExpr sym) => Eq (AccessData sym) where
+instance S.TestEquality (S.SymExpr sym) => Eq (AccessData sym arch) where
   ReadData e == ReadData e'        | Just _ <- S.testEquality e e' = True
   WriteData i v == WriteData i' v' | Just _ <- S.testEquality i i' 
                                    , Just _ <- S.testEquality v v' = True
   _ == _ = False
 
-instance OrdF (S.SymExpr sym) => Ord (AccessData sym) where
+instance OrdF (S.SymExpr sym) => Ord (AccessData sym arch) where
   ReadData e    <= ReadData e'     = e `leqF` e'
   WriteData e a <= WriteData e' a' = e `ltF` e' || (e `leqF` e' && a `leqF` a')
   ReadData _    <= WriteData _ _   = True
   WriteData _ _ <= ReadData _      = False
 
-accessAddr :: AccessData sym -> Some (S.SymExpr sym)
-accessAddr (ReadData i) = Some i
-accessAddr (WriteData i _) = Some i
+instance ShowF (S.SymExpr sym) => Show (AccessData sym arch) where
+  show (ReadData i)    = "Read " ++ showF i
+  show (WriteData i v) = "Wrote " ++ showF v ++ " to " ++ showF i
+
+accessAddr :: AccessData sym arch -> S.SymBV sym (RegWidth arch)
+accessAddr (ReadData i) = i
+accessAddr (WriteData i _) = i
 
 -- | This type encapsulates an evaluator for operations represented as
 -- uninterpreted functions in semantics.  It may seem strange to interpret

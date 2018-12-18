@@ -21,6 +21,7 @@ import qualified Data.Set as Set
 import           Data.Typeable
 
 import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 
 import           SemMC.Architecture
@@ -94,7 +95,7 @@ footprintFilter target candidate =
      candInputs `Set.isSubsetOf` targetInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
 
-instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solver)
+instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
             => Formula (CBO.OnlineBackend t solver fs) arch
             -> [Some (TemplatedInstruction (CBO.OnlineBackend t solver fs) arch)]
             -> Synth (CBO.OnlineBackend t solver fs) arch (Maybe [Instruction arch])
@@ -138,7 +139,8 @@ synthesizeFormula' :: (Architecture arch,
                        TemplatableOperand arch,
                        ArchRepr arch,
                        Architecture (TemplatedArch arch),
-                       WPO.OnlineSolver t solver
+                       WPO.OnlineSolver t solver,
+                       CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                        )
                    => Formula (CBO.OnlineBackend t solver fs) arch
                    -> Synth (CBO.OnlineBackend t solver fs) arch (Maybe [Instruction arch])
@@ -167,7 +169,8 @@ synthesizeFormula :: forall t solver fs arch .
                       ArchRepr arch,
                       Architecture (TemplatedArch arch),
                       Typeable arch,
-                      WPO.OnlineSolver t solver
+                      WPO.OnlineSolver t solver,
+                      CB.IsSymInterface (CBO.OnlineBackend t solver fs)
                      )
                   => SynthesisParams (CBO.OnlineBackend t solver fs) arch
                   -> Formula (CBO.OnlineBackend t solver fs) arch
