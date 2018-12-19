@@ -285,6 +285,8 @@ instance A.IsOperandTypeRepr Toy where
   type OperandTypeRepr Toy = SR.SymbolRepr
   operandTypeReprSymbol _ = T.unpack . SR.symbolRepr
 
+type instance A.RegWidth Toy = 16
+
 instance TemplatableOperand Toy where
   opTemplates sr =
     case SR.symbolRepr sr of

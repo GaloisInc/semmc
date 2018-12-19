@@ -162,7 +162,7 @@ formulasEquiv
     let handler (Sat evalFn) = do
           -- Extract the failing test case.
           DifferentBehavior <$> traverseF (eval evalFn) varConstants
-        handler Unsat = return Equivalent
+        handler (Unsat _) = return Equivalent
         handler Unknown = return Timeout
 
     checkSat sym testExpr handler
@@ -174,12 +174,12 @@ formulasEquiv
 checkSat :: (WPO.OnlineSolver t solver)
          => CBO.OnlineBackend t solver fs
          -> WE.BoolExpr t
-         -> (SatResult (GroundEvalFn t) -> IO a)
+         -> (SatResult (GroundEvalFn t) () -> IO a)
          -> IO a
 checkSat sym testExpr handler = do
   sp <- CBO.getSolverProcess sym
   let conn = WPO.solverConn sp
-  WPO.inNewFrame conn $ do
+  WPO.inNewFrame sp $ do
     f <- WPS.mkFormula conn testExpr
     WPS.assumeFormula conn f
     res <- WPO.checkAndGetModel sp "semmc equivalence formula"

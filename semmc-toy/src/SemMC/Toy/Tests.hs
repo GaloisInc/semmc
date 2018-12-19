@@ -76,7 +76,7 @@ readBinOpc sym opc = readFormulaFromFile sym env (HR.typeRepr opc) ("toy-semanti
 doThing :: (U.HasLogCfg) => IO ()
 doThing = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) @_ r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -144,7 +144,7 @@ dependentFormula sym = do
 doThing2 :: (U.HasLogCfg) => IO ()
 doThing2 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) @_ r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   Right sub <- readBinOpc sym SubRr
   Right movi <- readBinOpc sym MovRi
@@ -155,21 +155,23 @@ doThing2 = do
   -- target <- fooFormula sym
   target <- independentFormula sym
 
-  let env = setupEnvironment sym (toBaseSet baseset)
-  print =<< mcSynth env target
+  let formEnv = FormulaEnv Map.empty undefined
+  let synthEnv = setupEnvironment sym formEnv (toBaseSet baseset)
+  print =<< mcSynth synthEnv target
   print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
+
 
 doThing3 :: (U.HasLogCfg) => IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) @_ r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures$ \sym -> do
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 
 doThing4 :: (U.HasLogCfg) => IO ()
 doThing4 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) @_ r $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   print add
   Right sub <- readBinOpc sym SubRr
@@ -180,8 +182,9 @@ doThing4 = do
               $ MapF.empty
 
   ind <- independentFormula sym
-  let env = setupEnvironment sym (toBaseSet baseset)
-  print =<< mcSynth env ind
+  let formEnv = FormulaEnv Map.empty undefined
+  let synthEnv = setupEnvironment sym formEnv (toBaseSet baseset)
+  print =<< mcSynth synthEnv ind
 
 ----------------------------------------------------------------
 -- * Stratefied synthesis

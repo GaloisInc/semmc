@@ -7,7 +7,6 @@
 
 module SemMC.Architecture.ARM.Location
     ( Location(..)
-    , ArchRegWidth
     , ArchRepr(..)
     )
     where
@@ -20,14 +19,13 @@ import           Data.Semigroup
 import qualified Dismantle.ARM.Operands as ARMOprnds
 import qualified Dismantle.Thumb.Operands as ThumbOprnds
 import           GHC.TypeLits
+import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import           What4.BaseTypes
 
 
-type family ArchRegWidth arch :: Nat
-
 class ArchRepr arch where
-  regWidthRepr :: proxy arch -> NatRepr (ArchRegWidth arch)
+  regWidthRepr :: proxy arch -> NatRepr (A.RegWidth arch)
 
 -- ----------------------------------------------------------------------
 
@@ -38,10 +36,10 @@ class ArchRepr arch where
 -- R15 is sometimes not the PC value, it is separately managed.
 
 data Location arm :: BaseType -> * where
-  LocGPR :: GPRIdent -> Location arm (BaseBVType (ArchRegWidth arm))
-  LocPC :: Location arm (BaseBVType (ArchRegWidth arm))
-  LocCPSR :: Location arm (BaseBVType (ArchRegWidth arm))
-  LocMem :: Location arm (BaseArrayType (SingleCtx (BaseBVType (ArchRegWidth arm))) (BaseBVType 8))
+  LocGPR :: GPRIdent -> Location arm (BaseBVType (A.RegWidth arm))
+  LocPC :: Location arm (BaseBVType (A.RegWidth arm))
+  LocCPSR :: Location arm (BaseBVType (A.RegWidth arm))
+  LocMem :: Location arm (BaseArrayType (SingleCtx (BaseBVType (A.RegWidth arm))) (BaseBVType 8))
 
 instance Show (Location arm tp) where
   show (LocGPR gpr) = case gpr of

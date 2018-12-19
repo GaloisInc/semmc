@@ -54,7 +54,6 @@ import           SemMC.Architecture.ARM.BaseSemantics.Registers ( numGPR, GPRIde
 import qualified SemMC.Architecture.ARM.Components as ARMComp
 import           SemMC.Architecture.ARM.Eval
 import qualified SemMC.Architecture.ARM.UF as UF
-import           SemMC.Architecture.ARM.Location ( ArchRegWidth )
 import           SemMC.Architecture.A32.Location
 import qualified SemMC.Architecture.ARM.OperandComponents as AOC
 import qualified SemMC.Architecture.Concrete as AC
@@ -444,7 +443,7 @@ parsePrefixedRegister f prefix = do
 
 -- ----------------------------------------------------------------------
 
-type instance ArchRegWidth A32 = 32
+type instance A.RegWidth A32 = 32
 
 instance A.Architecture A32 where
     data TaggedExpr A32 sym s = TaggedExpr (A.AllocatedOperand A32 sym s)

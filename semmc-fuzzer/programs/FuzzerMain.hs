@@ -484,12 +484,10 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
           <- SB.newSimpleBackend nonceGen
       SB.stopCaching sym
 
-      lib <- F.loadLibrary proxy sym funcs
-      baseSet <- F.loadFormulas sym lib semantics
-      let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s (SB.Flags SB.FloatIEEE)) arch)
-          plainBaseSet = makePlain baseSet
-
-          generateTestCase fromOpcodes = go maxRetries
+      env <- F.formulaEnv proxy sym
+      lib <- F.loadLibrary proxy sym env funcs
+      sems <- F.loadFormulas sym env lib semantics
+      let generateTestCase fromOpcodes = go maxRetries
               where
                   maxRetries = 100 :: Int
                   go retries | retries < 1 = do
@@ -500,7 +498,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                     let instBytes = assemble inst
                     initialState <- C.randomState proxy gen
                     nonce <- N.indexValue <$> N.freshNonce nonceGen
-                    evalResult <- E.try $ evaluateInstruction sym plainBaseSet inst initialState
+                    evalResult <- E.try $ evaluateInstruction sym sems inst initialState
 
                     case evalResult of
                         Left (e::E.SomeException) -> do

@@ -284,7 +284,7 @@ operandToLocation _ = Nothing
 
 -- ----------------------------------------------------------------------
 
-instance (KnownNat (ArchRegWidth arm), 1 <= ArchRegWidth arm) =>
+instance (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
          A.IsLocation (Location arm) where
 
   isMemLoc LocMem = True
@@ -341,7 +341,7 @@ parsePrefixedRegister f c = do
 --             OrdF (A.Opcode ARM (A.Operand ARM))
 --                  (Data.EnumF.EnumF (A.Opcode ARM (A.Operand ARM)))
 
-type instance ArchRegWidth AArch32 = $(litT $ numTyLit regWidth)
+type instance A.RegWidth AArch32 = $(litT $ numTyLit regWidth)
 
 
 instance A.Architecture AArch32 where
