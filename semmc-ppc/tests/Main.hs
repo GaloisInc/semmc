@@ -50,7 +50,7 @@ main = do
 --      void $ join (setOpt <$> getOptionSetting yicesPath (getConfiguration sym)
 --                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/yices-tee"))
 
-   CBO.withZ3OnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
+   CBO.withZ3OnlineBackend @(CBO.Flags CBO.FloatReal) ng CBO.NoUnsatFeatures $ \sym -> do
       -- set the path to z3
 --      void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
 --                          <*> pure (Text.pack "/home/jennifer/work/crucible/scripts/z3-tee"))
@@ -66,7 +66,7 @@ main = do
 
       T.defaultMain (allTests baseSet synthEnv)
 
-allTests :: (WPO.OnlineSolver t solver)
+allTests :: (WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
          => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
          -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
          -> T.TestTree
@@ -121,7 +121,7 @@ progs = [-- ("addNegated", [ D.Instruction D.NEG (reg 5 :< reg 2 :< Nil)
     memrix n i = D.Memrix (D.MemRIX (Just (D.GPR n)) (i :: I.I 14))
     memri n i = D.Memri (D.MemRI (Just (D.GPR n)) i)
 
-toSynthesisTest :: (WPO.OnlineSolver t solver)
+toSynthesisTest :: (WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
                 => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
                 -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
                 -> (String, [D.Instruction])
