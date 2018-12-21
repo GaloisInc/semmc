@@ -40,6 +40,7 @@ import           Dismantle.PPC.Random ()
 import qualified GHC.Err.Located as L
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Concrete as AC
+import           SemMC.Architecture.PPC ( AnyPPC, V32 )
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
 import qualified SemMC.Architecture.PPC.Shared as PPCS
@@ -58,7 +59,7 @@ import qualified Text.Megaparsec.Char as P
 import           What4.BaseTypes
 import qualified What4.Interface as S
 
-data PPC
+type PPC = AnyPPC V32
 
 type instance A.Operand PPC = PPC.Operand
 

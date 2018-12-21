@@ -25,7 +25,8 @@ extra-source-files:  ChangeLog.md,
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     SemMC.Architecture.PPC32
+  exposed-modules:     SemMC.Architecture.PPC
+                       SemMC.Architecture.PPC32
                        SemMC.Architecture.PPC32.Opcodes
                        SemMC.Architecture.PPC64
                        SemMC.Architecture.PPC64.Opcodes
