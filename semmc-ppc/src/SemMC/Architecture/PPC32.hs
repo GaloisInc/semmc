@@ -61,14 +61,6 @@ import qualified What4.Interface as S
 
 type PPC = AnyPPC V32
 
-type instance A.Operand PPC = PPC.Operand
-
-instance A.IsOperand PPC.Operand
-
-type instance A.Opcode PPC = PPC.Opcode
-
-instance A.IsOpcode PPC.Opcode
-
 -- Assuming 32-bit PPC for now.
 type instance A.OperandType PPC "Abscalltarget" = BaseBVType 24
 type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 14
@@ -148,7 +140,6 @@ shapeReprType sr =
     PPC.U7immRepr -> knownRepr
     PPC.U8immRepr -> knownRepr
 
-type instance ArchRegWidth PPC = 32
 type instance A.OperandComponents PPC sym = POC.OperandComponents PPC sym
 
 instance ArchRepr PPC where
@@ -346,10 +337,6 @@ instance T.TemplatableOperand PPC where
                       return (A.ValueOperand v, T.RecoverOperandFn recover)
 
 type instance A.Location PPC = Location PPC
-
-instance A.IsOperandTypeRepr PPC where
-  type OperandTypeRepr PPC = PPC.OperandRepr
-  operandTypeReprSymbol _ = PPC.operandReprString
 
 operandValue :: forall sym s.
                 (S.IsSymExprBuilder sym,
