@@ -432,7 +432,7 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
     doMemAccesses (memInput test)
 
    -- 4) Perform the operations specified by the formula
-    instantiateMemOpsLLVM sym (MapF.lookup mem defs')
+    LLVM.instantiateMemOpsLLVM (MapF.lookup mem defs')
 
     -- 5) Compare the prepared state with the output part of the test
     andPred sym (memOutput test) $ \case
@@ -460,14 +460,6 @@ doMemAccesses (ReadData _ : ls) = doMemAccesses ls
 doMemAccesses (WriteData i v : ls) = do
   LLVM.writeMem i v
   doMemAccesses ls
-                        
-instantiateMemOpsLLVM :: sym ~ WE.ExprBuilder t st fs
-                      => sym
-                      -> Maybe (S.SymExpr sym (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType (RegWidth arch))) xs))
-                      -- ^ A symbolic expression representing memory
-                      -> LLVM.MemM sym arch ()
-instantiateMemOpsLLVM = undefined
-
 {-
 -- | For each memory address i touched by the formula, constrain the input and
 -- output state of memory with respect to that data

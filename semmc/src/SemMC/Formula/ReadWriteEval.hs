@@ -8,6 +8,8 @@ module SemMC.Formula.ReadWriteEval
   , readMemEvaluator
   , writeMemEvaluator
   , instantiateMemOps
+  , isWriteMem
+  , isSomeWriteMem
   ) where
 
 import Text.Printf ( printf )
@@ -186,25 +188,6 @@ readMemEvaluatorFast sym endianness byte w mem i
   | otherwise = do
       readMemEvaluatorTotal sym endianness byte w mem i
 
-arrayLookupVector :: sym ~ WE.ExprBuilder t st fs
-                  => sym
-                  -> S.NatRepr n
-                  -- ^ The number of entries to read
-                  -> S.SymArray sym (idx Ctx.::> tp) b
-                  -> Ctx.Assignment (S.SymExpr sym) (idx Ctx.::> tp)
-                  -- ^ The index at which to start the lookup
-                  -> IO (V.Vector n (S.SymExpr sym b))
-arrayLookupVector sym n arr i = undefined
-
-arrayUpdateVector :: sym ~ WE.ExprBuilder t st fs
-                  => sym
-                  -> S.SymArray sym (idx Ctx.::> tp) b
-                  -> Ctx.Assignment (S.SymExpr sym) (idx Ctx.::> tp)
-                  -- ^ The index at which to start the update
-                  -> V.Vector n (S.SymExpr sym b)
-                  -> S.SymArray sym (idx Ctx.::> tp) b
-arrayUpdateVector = undefined
-            
 
 -- | @isWriteMem w _ mem@ returns @Just (mem', i, v)@ if @mem = write_mem_w mem' i v@.
 isWriteMem :: forall arch sym t st fs w i byte memType.
@@ -226,9 +209,33 @@ isWriteMem w iSize memExpr@(WE.NonceAppExpr a)
   , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
   , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
   , Just S.Refl <- S.testEquality (S.exprType v) (S.BaseBVRepr w)
-  = error "HERE" -- Just (mem, i, v)
+  = Just (mem, i, v)
 isWriteMem _ _ _ = Nothing
-   
+
+
+-- | Given an expression representing memory, returns 'Just (mem, WriteData idx
+-- v)' if the original expression is equal to 'write_mem_x mem idx v' for some
+-- x-length bit vector 'v'.
+isSomeWriteMem :: forall arch sym t st fs i byte memType.
+               ( sym ~ WE.ExprBuilder t st fs
+              , memType ~ S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) (S.BaseBVType byte)
+              , A.Architecture arch
+              )
+           => S.SymExpr sym memType
+           -> Maybe ( S.SymExpr sym memType
+                    , A.AccessData sym arch)
+isSomeWriteMem memExpr@(WE.NonceAppExpr a)
+  | WE.FnApp f (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:> v) <- WE.nonceExprApp a
+  , Just uf <- exprSymFnToUninterpFn @arch f
+  , S.BaseBVRepr w <- S.exprType v
+  , S.BaseBVRepr iSize <- S.exprType i
+  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.natValue w))
+  , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
+  , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
+  , Just S.Refl <- S.testEquality (iSize) (S.knownNat @(A.RegWidth arch))
+  = Just (mem, A.WriteData i v)
+isSomeWriteMem _ = Nothing
+
 
 -- | Interpretes a 'readMem' as a function over well-typed symbolic expressions
 -- as a sequence of reads of primitive memory

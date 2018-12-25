@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 module SemMC.Architecture.Location (
   Location,
   IsLocation(..),
@@ -61,7 +62,7 @@ type family Location (arch :: *) :: BaseType -> *
 data MemLoc loc where
   MemLoc :: 1 S.<= w
          => S.NatRepr w
-         -> loc (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType w)) xs)
+         -> loc (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType w)) (S.BaseBVType 8))
          -> MemLoc loc -- (S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType w)) xs)
 instance ShowF loc => Show (MemLoc loc) where 
   show (MemLoc _ l) = showF l
@@ -72,7 +73,8 @@ fromMemLoc (MemLoc _ l) = Some l
 
 toMemLoc :: IsLocation loc => loc tp -> MemLoc loc
 toMemLoc loc 
-      | S.BaseArrayRepr (Ctx.Empty Ctx.:> S.BaseBVRepr w) _ <- locationType loc
+      | S.BaseArrayRepr (Ctx.Empty Ctx.:> S.BaseBVRepr w) (S.BaseBVRepr eight) <- locationType loc
+      , Just S.Refl <- S.testEquality eight (S.knownNat @8)
         = MemLoc w loc
       | otherwise = error "The type of the memory Location in this architecture is unsupported"
 

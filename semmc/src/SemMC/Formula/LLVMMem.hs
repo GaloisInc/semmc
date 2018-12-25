@@ -1,9 +1,10 @@
 {-# LANGUAGE TypeOperators, DataKinds, TypeFamilies, GeneralizedNewtypeDeriving,
   PatternSynonyms, TypeApplications, ScopedTypeVariables, RankNTypes,
-  AllowAmbiguousTypes #-}
+  AllowAmbiguousTypes, FlexibleContexts #-}
 
 module SemMC.Formula.LLVMMem
-  ( MemM(..)
+  ( MemData(..)
+  , MemM(..)
   , withMem
   , askSym
   , askImpl
@@ -13,22 +14,28 @@ module SemMC.Formula.LLVMMem
   , LLVM.MemImpl
   , LLVM.HasPtrWidth
   , saveImpl
+  , instantiateMemOpsLLVM
   ) where
 
 import           Data.Proxy (Proxy(..))
 import           Control.Monad.State
 import           Data.Maybe (fromJust)
+import           GHC.TypeLits (KnownNat)
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as N
-import qualified What4.Interface as S
 import qualified Lang.Crucible.Backend as B
+
+import qualified What4.Interface as S
+import qualified What4.Expr.Builder as WE
 
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified Lang.Crucible.LLVM.Bytes as LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as LLVM
 
 import qualified SemMC.Architecture as A
+import qualified SemMC.Formula.MemAccesses as MA
+import qualified SemMC.Formula.ReadWriteEval as RW
 
 data MemData sym arch = MemData { memSym :: sym
                                 , memImpl :: LLVM.MemImpl sym
@@ -38,8 +45,6 @@ data MemData sym arch = MemData { memSym :: sym
 newtype MemM sym arch a = MemM {runMemM :: StateT (MemData sym arch) IO a}
   deriving (Functor, Applicative, Monad, MonadIO)
 
--- | TODO: I want allocation to also allocate some 'default' values. But what is
--- the size of this default value?
 withMem :: forall arch sym a.
            (A.Architecture arch, B.IsSymInterface sym)
         => sym
@@ -55,6 +60,8 @@ withMem sym op = do
     let alignment = fromJust $ LLVM.toAlignment $ LLVM.toBytes 1
     (base,mem) <- LLVM.doMalloc sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
                                 initMem wExpr alignment
+    -- TODO: create a symbolic array to store in memory
+    
     evalStateT (runMemM op) (MemData sym mem base alignment)
 
 -- Do the first operation but then restore the memImpl from the initial state
@@ -107,7 +114,8 @@ readMem bytes offset = do
   sym <- askSym
   ptr <- mkPtr offset
   mem <- askImpl
-  v <- liftIO $ LLVM.loadRaw sym mem ptr (bvType bytes)
+  alignment <- askAlignment
+  v <- liftIO $ LLVM.loadRaw sym mem ptr (bvType bytes) alignment
   valToSymBV bytes v
 
 bvType :: S.NatRepr bytes -> LLVM.StorageType
@@ -151,3 +159,74 @@ symBVToVal v = do
   sym <- askSym
   vNat <- liftIO $ S.bvToNat sym v
   return $ LLVM.LLVMValInt vNat v
+
+
+---------------------------------------
+
+
+-- | Interpret a symbolic array as a sequence of operations on the memory.
+--
+-- We assume that the expression is an array built up from call to
+-- 'arrayUpdate' and 'write_mem'. If the memory is constructed in a different
+-- way, that array will just be written directly to the memory model, not taking
+-- recursive structure into account.
+--
+-- TODO: add support for 'arrayIte' and 'arrayFromMap'?
+instantiateMemOpsLLVM :: forall sym t st fs arch.
+                         ( sym ~ WE.ExprBuilder t st fs
+                         , A.Architecture arch
+                         , B.IsSymInterface sym)
+                      => Maybe (S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType 8))
+                      -- ^ A symbolic expression representing memory
+                      -> MemM sym arch ()
+instantiateMemOpsLLVM (Just e) = LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ 
+                                     instantiateLLVMExpr e
+instantiateMemOpsLLVM Nothing  = return () -- or error?
+
+
+isUpdateArray :: forall arch t st fs sym bytes.
+              ( sym ~ WE.ExprBuilder t st fs
+              , A.Architecture arch
+              )
+           => S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType bytes)
+           -> Maybe ( S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType bytes) 
+                    , A.AccessData sym arch)
+isUpdateArray (WE.AppExpr a)
+  | WE.UpdateArray (S.BaseBVRepr _) (Ctx.Empty Ctx.:> S.BaseBVRepr regWidth) 
+                   mem (Ctx.Empty Ctx.:> idx) val <- WE.appExprApp a 
+  , Just S.Refl <- S.testEquality regWidth (S.knownNat @(A.RegWidth arch)) = 
+    Just (mem, A.WriteData idx val)
+isUpdateArray _ | otherwise = Nothing
+
+
+isBoundVar :: S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType bytes)
+           -> Bool
+isBoundVar = undefined
+
+instantiateLLVMExpr :: forall arch sym t st fs.
+                       (sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
+                       , A.Architecture arch, LLVM.HasPtrWidth (A.RegWidth arch)
+                       )
+                    => S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType 8)
+                    -> MemM sym arch ()
+instantiateLLVMExpr mem
+  | Just (mem', A.WriteData idx val) <- isUpdateArray @arch mem = do
+  instantiateLLVMExpr mem'
+  writeMem idx val
+instantiateLLVMExpr mem 
+  | Just (mem', A.WriteData idx val) <- RW.isSomeWriteMem @arch mem = do
+  instantiateLLVMExpr mem'
+  writeMem idx val
+instantiateLLVMExpr _ | otherwise = return ()
+
+{-
+  -- Write the memory expression to the underlying memory model
+  sym <- askSym
+  impl <- askImpl
+  ptr <- askBase
+  alignment <- askAlignment
+  let width = S.knownNat @(A.RegWidth arch)
+  lenExpr <- liftIO $ S.bvLit sym width (2^(S.natValue width)-1)
+  impl' <- liftIO $ LLVM.doArrayStore sym impl ptr alignment mem lenExpr 
+  putImpl impl'
+-}
