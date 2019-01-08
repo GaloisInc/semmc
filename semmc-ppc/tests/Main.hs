@@ -5,13 +5,15 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
-module Main ( main ) where
+module Main ( main, memtest ) where
 
 import qualified Data.ByteString.Char8 as BS8
 import           Data.Proxy ( Proxy(..) )
 import qualified Data.Set as S
 import qualified Test.Tasty as T
 import qualified Test.Tasty.HUnit as T
+import           GHC.Word (Word8)
+import           GHC.Int (Int16)
 
 import           Data.Parameterized.Classes ( OrdF )
 import           Data.Parameterized.List ( List(..) )
@@ -45,7 +47,7 @@ main = executeTests progs
 
 -- just test tests for programs that deal with memory
 memtest :: IO ()
-memtest = exectueTests memProgs
+memtest = executeTests memProgs
 
 executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
@@ -66,19 +68,20 @@ executeTests progsToTest = do
 --      void $ join (setOpt <$> getOptionSetting verbosity (getConfiguration sym)
 --                          <*> pure (toInteger 3))
 
-      let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop progsToTest ]
+      let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
 
-      T.defaultMain (allTests baseSet synthEnv)
+      T.defaultMain (allTests baseSet synthEnv progsToTest)
 
 
 allTests :: (WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
          => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
          -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
+         -> [(String, [D.Instruction])]
          -> T.TestTree
-allTests baseSet synthEnv =
+allTests baseSet synthEnv progsToTest =
   T.adjustOption @T.Timeout (\_ -> T.mkTimeout 1000000000) $
-    T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progs)
+    T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progsToTest)
 
 insns :: S.Set (Some (D.Opcode o))
 insns = S.fromList
@@ -113,23 +116,27 @@ insns = S.fromList
         ]
 
 progs :: [(String, [D.Instruction])]
-progs = [("addNegated", [ D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)
-                        , D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
-                        ])]
+progs = [] -- [("addNegated", [ D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)
+--                        , D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
+--                        ])]
       ++ memProgs
          
 memProgs  :: [(String,[D.Instruction])] 
 memProgs = [
         ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])
-       , ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-2)  :< mkGPR 31     :< Nil ])
-       , ("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-2) :< Nil ])
-       , ("LI",   [ D.Instruction D.LI   $ mkGPR 0          :< D.S16imm 1 :< Nil ])
-       , ("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-16) :< mkGPR 1      :< Nil ])
+--       , ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-2)  :< mkGPR 31     :< Nil ])
+--       , ("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-2) :< Nil ])
+--       , ("LI",   [ D.Instruction D.LI   $ mkGPR 0          :< D.S16imm 1 :< Nil ])
+--       , ("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-16) :< mkGPR 1      :< Nil ])
         ]
 
-
+mkGPR :: Word8 -> D.Operand "Gprc"
 mkGPR n = D.Gprc (D.GPR n)
+
+mkMemRIX :: Word8 -> I.I 14 -> D.Operand "Memrix"
 mkMemRIX n i = D.Memrix (D.MemRIX (Just (D.GPR n)) (i :: I.I 14))
+
+mkMemRI :: Word8 -> Int16 -> D.Operand "Memri"
 mkMemRI n i = D.Memri (D.MemRI (Just (D.GPR n)) i)
 
 toSynthesisTest :: (WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
