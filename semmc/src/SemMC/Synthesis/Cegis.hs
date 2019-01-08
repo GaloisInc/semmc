@@ -34,7 +34,7 @@ import           Data.Parameterized.TraversableF
 import           Data.Parameterized.TraversableFC
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Classes as P
-import           GHC.TypeNats (KnownNat)
+import           GHC.TypeNats (KnownNat, Nat)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import           Data.Proxy (Proxy(..))
@@ -417,11 +417,15 @@ simplifyWithTestLLVMMem :: forall t st fs sym arch.
                         -> Formula sym arch
                         -> ConcreteTest sym arch
                         -> Cegis sym arch (S.Pred sym)
+-- if there is no memory, return True
+simplifyWithTestLLVMMem Nothing _ _ = do
+  sym <- askSym
+  return $ S.truePred sym
 simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test 
   | Just S.Refl <- S.testEquality w_mem (S.knownNat @(RegWidth arch)) = do
   sym <- askSym
   liftIO $ LLVM.withMem @arch sym $ do
-  -- 1) Instantiate the non-mem variables in the formula
+    -- 1) Instantiate the non-mem variables in the formula
     let vars' = MapF.delete mem vars
     defs' <- liftIO $ evalFormula' sym (Formula @sym @arch vars' defs) (testInput test)
 
@@ -434,15 +438,19 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
    -- 4) Perform the operations specified by the formula
     LLVM.instantiateMemOpsLLVM (MapF.lookup mem defs')
 
+    -- 5) Check that the default value does not occur anywhere in the test
+    defaultInTest <- checkDefaultInTest test
+
     -- 5) Compare the prepared state with the output part of the test
-    andPred sym (memOutput test) $ \case
+    actualIsDesired <- andPred sym (memOutput test) $ \case
       ReadData _    -> error "Ill-formed concrete test"
       WriteData i desired_v -> do
         let numBytes = S.bvWidth desired_v
         actual_v <- LLVM.readMem @arch numBytes i
         liftIO $ S.isEq sym actual_v desired_v
 
-  -- TODO: also incorporate default values
+    liftIO $ S.isEq sym defaultInTest actualIsDesired
+
 {-
   preState <- andPred sym addrs $ \i -> constrainMemLLVM i (memInput test)
 
@@ -451,6 +459,55 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
     andPred sym addrs $ \(Some i) -> constrainMemLLVM i (memOutput test)
   liftIO $ S.andPred sym preState postState
 -}
+simplifyWithTestLLVMMem _ _ _ = error "Memory location for this architecture does not match architecture"
+
+
+
+-- | Check that a bit-vector of dimension w=8^k is not equal to 'd++..++d' where
+-- 'd' is the 'defaultValue' stored in the 'MemM' monad
+checkDefault :: forall w sym arch.
+                (S.IsExprBuilder sym, 1 S.<= w)
+             => S.SymBV sym w -> LLVM.MemM sym arch (S.Pred sym)
+checkDefault v = do
+    sym <- LLVM.askSym
+    d   <- LLVM.askDefault
+    ds  <- liftIO $ appendN sym (S.bvWidth v) d
+    liftIO $ S.isEq sym v ds
+    
+
+
+-- | If w = 8^k, concatinate a byte k times with itself
+appendN :: forall w sym.
+           (S.IsExprBuilder sym, 1 S.<= w)
+        => sym -> S.NatRepr w -> S.SymBV sym 8 -> IO (S.SymBV sym w)
+appendN sym w b = case S.compareNat w (S.knownNat @8) of
+    S.NatEQ   -> return b
+    
+    -- if w < 8, then take the first 'w' elements from 'b'
+    S.NatLT _ -> case S.leqTrans (S.addIsLeq w (S.knownNat @1)) (S.LeqProof @(w S.+ 1) @8) of
+                   S.LeqProof -> S.bvSelect sym (S.knownNat @0) w b
+
+    -- y = 
+    S.NatGT y -> case S.addPrefixIsLeq y (S.knownNat @1) of
+      S.LeqProof -> do x <- appendN sym (S.incNat y) b
+                       S.bvConcat sym b x
+
+
+-- | Check that the 'defaultValue' in the 'MemM' monad does not occur in the
+-- domain of either the input or the output memory in the test
+checkDefaultInTest :: forall sym arch.
+                      S.IsExprBuilder sym
+                   => ConcreteTest sym arch -> LLVM.MemM sym arch (S.Pred sym)
+checkDefaultInTest test = do 
+  sym <- LLVM.askSym
+  inInput <- andPred sym (memInput test) $ go sym
+  inOutput <- andPred sym (memOutput test) $ go sym
+  liftIO $ S.andPred sym inInput inOutput
+  where
+    go :: sym -> AccessData sym arch -> LLVM.MemM sym arch (S.Pred sym)
+    go sym (WriteData _ v) = do b <- checkDefault v
+                                liftIO $ S.notPred sym b
+    go _ _ = error "Ill-formed concrete test"
 
 doMemAccesses :: (Architecture arch, LLVM.HasPtrWidth (RegWidth arch), CB.IsSymInterface sym)
               => [AccessData sym arch]
