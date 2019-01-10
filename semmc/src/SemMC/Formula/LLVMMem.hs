@@ -72,8 +72,8 @@ withMem sym op = do
     -- 2) Allocate a block of uninitialized memory
     wExpr   <- S.bvLit sym w (2^(S.natValue w)-1)
     print $ PP.text "Initializing memory of dimension " <+> S.printSymExpr wExpr
-    (base,mem) <- LLVM.doMalloc sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
-                                initMem wExpr alignment
+    (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
+                                initMem alignment
 
     print $ PP.text "Base value: " <+> LLVM.ppPtr base
 
@@ -86,7 +86,7 @@ withMem sym op = do
     let Right dSymbol = S.userSymbol "d"
     d <- S.freshConstant sym dSymbol (S.BaseBVRepr (S.knownNat @8))
     uninterpMem <- S.constantArray sym (Ctx.empty Ctx.:> S.BaseBVRepr w) d
-    mem' <- LLVM.doArrayStore sym mem base alignment uninterpMem wExpr
+    mem' <- LLVM.doArrayStoreUnbounded sym mem base alignment uninterpMem
 
     putStrLn $ "Creating uninterpreted memory: " ++ show (LLVM.ppMem mem')
 
