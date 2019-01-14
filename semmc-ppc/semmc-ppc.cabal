@@ -194,6 +194,7 @@ test-suite semmc-ppc-memtests
   ghc-options: -Wall
   main-is: MemTests.hs
   hs-source-dirs: tests
+  other-modules: Main
   build-depends: semmc-ppc,
                  semmc,
                  dismantle-tablegen,

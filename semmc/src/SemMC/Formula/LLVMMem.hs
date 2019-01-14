@@ -29,6 +29,7 @@ import           Text.PrettyPrint.ANSI.Leijen ( (<+>) )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as N
 import qualified Lang.Crucible.Backend as B
+import qualified Lang.Crucible.Types as T
 
 import qualified What4.Interface as S
 import qualified What4.Expr.Builder as WE
@@ -126,13 +127,18 @@ askDefault = MemM $ do
   return $ defaultValue memData
 
 -- Input: a bit vector representing the offset from the base ptr for memory
-mkPtr :: (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym)
+mkPtr :: forall arch sym.
+         (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym)
       => S.SymBV sym (A.RegWidth arch)
       -> MemM sym arch (LLVM.LLVMPtr sym (A.RegWidth arch))
 mkPtr offset = do
   sym <- askSym
-  LLVM.LLVMPointer _ base <- askBase
-  liftIO $ S.bvAdd sym base offset >>= LLVM.llvmPointer_bv sym
+  basePtr <- askBase
+  let w = LLVM.ptrWidth basePtr
+  liftIO $ LLVM.ptrAdd sym w basePtr offset
+
+--  LLVM.LLVMPointer _ base <- askBase
+--  liftIO $ S.bvAdd sym base offset >>= LLVM.llvmPointer_bv sym
 
 -- | Read 'bytes' number of bits starting from location i in memory
 readMem :: (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bytes)
@@ -148,10 +154,9 @@ readMem bytes offset = do
   liftIO . print $ PP.text "Attempting to read offset " <+> S.printSymExpr offset 
                <+> PP.text " from mem " <+> LLVM.ppMem mem
   alignment <- askAlignment
-  v <- liftIO $ LLVM.loadRaw sym mem ptr (bvType bytes) alignment
-  v' <- valToSymBV bytes v
-  liftIO . print $ PP.text "Successfully read value " <+> S.printSymExpr v'
-  return v'
+  v <- liftIO $ LLVM.doLoad sym mem ptr (bvType bytes) (T.BVRepr bytes) alignment
+  liftIO . print $ PP.text "Successfully read value " <+> S.printSymExpr v
+  return v
 
 bvType :: S.NatRepr bytes -> LLVM.StorageType
 bvType x = LLVM.bitvectorType . LLVM.toBytes $ S.natValue x
@@ -167,16 +172,17 @@ writeMem offset v = do
   ptr <- mkPtr offset
   mem <- askImpl
   liftIO . print $ PP.text "Attempting to write to pointer " <+> LLVM.ppPtr ptr
+  liftIO . print $ PP.text "withBase " <+> LLVM.ppPtr ptr
   liftIO . print $ PP.text "to MemImpl " <+> LLVM.ppMem mem
   let vType = bvType (S.bvWidth v)
-  v' <- symBVToVal v
+--  v' <- symBVToVal v
   align <- askAlignment
 
   -- instead of using 'storeRaw' here, we want to do the same operation but
   -- without checking that the index is in the bounds, since we don't care about
   -- that.
   -- mem' <- liftIO $ myStore sym mem ptr vType align v'
-  mem' <- liftIO $ LLVM.storeRaw sym mem ptr vType align v'
+  mem' <- liftIO $ LLVM.doStore sym mem ptr (T.BVRepr (S.bvWidth v)) vType align v
 
   liftIO . print $ PP.text "Successfully wrote value: " <+> LLVM.ppMem mem'
   putImpl mem'
@@ -203,27 +209,6 @@ myStore sym mem ptr valType alignment val = do
     return mem{ LLVM.memImplHeap = heap' }
 -}
 
-valToSymBV :: (S.IsExprBuilder sym, 1 S.<= bytes)
-           => S.NatRepr bytes
-           -> LLVM.LLVMVal sym
-           -> MemM sym arch (S.SymBV sym bytes)
-valToSymBV bytes (LLVM.LLVMValInt _ v) 
-  | Just S.Refl <- S.testEquality bytes (S.bvWidth v)
-  = return v
-valToSymBV bytes (LLVM.LLVMValZero tp)
-  | LLVM.Bitvector bytes' <- LLVM.storageTypeF tp
-  , S.natValue bytes == LLVM.bytesToInteger bytes' = do 
-    sym <- askSym
-    liftIO $ S.bvLit sym bytes 0
-valToSymBV _ _ = error "LLVM value is not a bit vector"
-
-symBVToVal :: (S.IsExprBuilder sym, 1 S.<= bytes)
-           => S.SymBV sym bytes
-           -> MemM sym w (LLVM.LLVMVal sym)
-symBVToVal v = do
-  sym <- askSym
-  vNat <- liftIO $ S.bvToNat sym v
-  return $ LLVM.LLVMValInt vNat v
 
 
 ---------------------------------------
