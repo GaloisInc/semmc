@@ -466,6 +466,8 @@ templatedOutputs (TemplatedInstruction _ pf oplist) =
                 TemplatedOperand (Just loc) _ _ -> Set.singleton (Some loc)
                 _ -> Set.empty
             LiteralParameter loc -> Set.singleton (Some loc)
+            FunctionParameter {} -> Set.empty -- error "Function parameters are not actually outputs"
+              -- TODO: is throwing an error the correct behavior here?
 
 templatedInstructions :: (TemplateConstraints arch, ArchRepr arch)
                       => TemplatedSemantics sym arch
