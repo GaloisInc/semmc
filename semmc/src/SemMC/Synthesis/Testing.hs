@@ -91,6 +91,4 @@ symbolicallySimulateProgram _ sym sem matchInsn p = do
       case MapF.lookup opc sem of
         Nothing -> return Nothing
         Just pf -> do res <- (Just . snd) <$> SF.instantiateFormula sym pf operands
---                      putStrLn "Instantiated formula: "
---                      putStrLn $ show res
                       return res

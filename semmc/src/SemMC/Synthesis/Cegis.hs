@@ -265,7 +265,29 @@ buildEqualityLocation :: Architecture arch
                       -- ^ If 'Just', the symbolic representation of the new
                       -- definition of this location. If 'Nothing', then assume
                       -- the identity transformation.
-                      -> IO (WE.Expr t tp, WE.Expr t tp)
+--                      -> IO (WE.Expr t tp, WE.Expr t tp)
+                      -> IO (WE.BoolExpr t)
+buildEqualityLocation sym test vars loc Nothing
+  -- If the location does not appear in the test output, then the location is preserved
+  | Nothing <- MapF.lookup loc (testOutput test) = return $ S.truePred sym
+
+{-
+  -- If the location does not appear in the test input or the test output, then
+  -- the location is preserved
+--  | Nothing <- MapF.lookup loc (testInput test) = return $ S.truePred sym
+--  | Just inputLoc  <- MapF.lookup loc (testInput test)
+--  , Just outputLoc <- MapF.lookup loc (testOutput test) = S.isEq sym inputLoc outputLoc
+--  | Nothing <- MapF.lookup loc (testInput test)
+--  , Just outputLoc <- MapF.lookup loc (testOutput test) = S.isEq sym 
+
+buildEqualityLocation sym test vars loc (Just outputLoc)
+  | Just inputLoc <- MapF.lookup loc (testInput test) = S.isEq sym inputLoc outputLoc
+
+  -- It should never be the case that the location appears in the test output
+  -- but not the test input
+buildEqualityLocation sym _ _ _ _ = return $ S.falsePred sym
+-}
+
 buildEqualityLocation sym test vars outputLoc expr = do
   actuallyIs <- case expr of
                   Just expr' -> evalExpression' sym vars (testInput test) expr'
@@ -273,12 +295,14 @@ buildEqualityLocation sym test vars outputLoc expr = do
                   -- candidate formula, then its original value is preserved.
                   Nothing -> liftIO $ lookupInState sym (testInput test) outputLoc
   shouldBe <- liftIO $ lookupInState sym (testOutput test) outputLoc
---  liftIO . putStrLn $ "Built equation for location " ++ P.showF outputLoc 
+  liftIO . putStrLn $ "Built equation for location " ++ P.showF outputLoc 
 --  liftIO . putStrLn $ "FOR test " ++ show test
---  liftIO . putStrLn $ "WITH expression " ++ show expr
---  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
---  liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
-  return (actuallyIs, shouldBe)
+  liftIO . putStrLn $ "WITH expression " ++ show expr
+  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
+  liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
+--  return (actuallyIs, shouldBe)
+  liftIO $ S.isEq sym actuallyIs shouldBe
+
 
 
 
@@ -360,10 +384,15 @@ simplifyWithTestLLVM :: ( Architecture arch
                      -> ConcreteTest sym arch
                      -> Cegis sym arch (WE.BoolExpr t)
 simplifyWithTestLLVM f test = do
+    liftIO . putStrLn $ "\nConstructing predicate for test " ++ show test ++ "\n"
     nonMemPred <- simplifyWithTestNonMem f test
+    liftIO . putStrLn $ "\nNON-MEM PRED: " ++ show nonMemPred ++ "\n"
     memPred <- simplifyWithTestLLVMMem (formMem f) f test
     sym <- askSym
-    liftIO $ S.andPred sym nonMemPred memPred
+    res <- liftIO $ S.andPred sym nonMemPred memPred
+--    liftIO . putStrLn $ "RESULT: " ++ show res ++ "\n"
+    return res
+
 
 
 formMem :: Architecture arch
@@ -378,7 +407,7 @@ formMem _ | otherwise = Nothing
 -- and any uninstantiated immediates to be generated. We then construct a
 -- predicate of the form 
 -- @\forall l <> Mem, f'(l) = testOutput(l)@
-simplifyWithTestNonMem :: forall arch t st fs sym w.
+simplifyWithTestNonMem :: forall arch t st fs sym.
                          (Architecture arch, sym ~ WE.ExprBuilder t st fs)
                       => Formula sym arch
                       -- ^ the target formula
@@ -391,9 +420,11 @@ simplifyWithTestNonMem trialFormula test = do
   defs' <- liftIO $ evalFormula' sym trialFormula (testInput test)
   let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula 
                                    `Set.union` formOutputs trialFormula
-  liftIO $ andPred sym nonMemLocs $ \(Some l) -> do
-    (actuallyIs,shouldBe) <- buildEqualityLocation sym test vars l (MapF.lookup l defs')
-    S.isEq sym actuallyIs shouldBe
+  liftIO . putStrLn $ "Non-mem locs: " ++ show nonMemLocs
+  liftIO . putStrLn $ "Formula: " ++ show trialFormula
+  liftIO . putStrLn $ "  evaluated on tests: " ++ show defs'
+  liftIO $ andPred sym nonMemLocs $ \(Some l) ->
+    buildEqualityLocation sym test vars l (MapF.lookup l defs')
   where
     vars = formParamVars trialFormula
 
@@ -440,6 +471,7 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
 
     -- 5) Check that the default value does not occur anywhere in the test
     defaultInTest <- checkDefaultInTest test
+--    liftIO . putStrLn $ "Default in test: " ++ show defaultInTest
 
     -- 5) Compare the prepared state with the output part of the test
     actualIsDesired <- andPred sym (memOutput test) $ \case
@@ -448,8 +480,9 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
         let numBytes = S.bvWidth desired_v
         actual_v <- LLVM.readMem @arch numBytes i
         liftIO $ S.isEq sym actual_v desired_v
+--    liftIO . putStrLn $ "ActualIsDesired: " ++ show actualIsDesired
 
-    liftIO $ S.isEq sym defaultInTest actualIsDesired
+    liftIO $ S.andPred sym defaultInTest actualIsDesired
 
 {-
   preState <- andPred sym addrs $ \i -> constrainMemLLVM i (memInput test)

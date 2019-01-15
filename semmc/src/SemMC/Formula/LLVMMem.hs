@@ -71,8 +71,7 @@ withMem sym op = do
     let alignment = LLVM.noAlignment
 
     -- 2) Allocate a block of uninitialized memory
-    wExpr   <- S.bvLit sym w (2^(S.natValue w)-1)
-    print $ PP.text "Initializing memory of dimension " <+> S.printSymExpr wExpr
+    print $ PP.text "Initializing memory of unbounded size"
     (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
                                 initMem alignment
 
@@ -151,7 +150,7 @@ readMem bytes offset = do
   sym <- askSym
   ptr <- mkPtr offset
   mem <- askImpl
-  liftIO . print $ PP.text "Attempting to read offset " <+> S.printSymExpr offset 
+  liftIO . print $ PP.text "Attempting to read pointer " <+> LLVM.ppPtr ptr
                <+> PP.text " from mem " <+> LLVM.ppMem mem
   alignment <- askAlignment
   v <- liftIO $ LLVM.doLoad sym mem ptr (bvType bytes) (T.BVRepr bytes) alignment
@@ -159,7 +158,7 @@ readMem bytes offset = do
   return v
 
 bvType :: S.NatRepr bytes -> LLVM.StorageType
-bvType x = LLVM.bitvectorType . LLVM.toBytes $ S.natValue x
+bvType x = LLVM.bitvectorType . LLVM.bitsToBytes $ S.natValue x
 
 writeMem :: (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bytes)
          => S.SymBV sym (A.RegWidth arch)
@@ -171,8 +170,8 @@ writeMem offset v = do
   sym <- askSym
   ptr <- mkPtr offset
   mem <- askImpl
-  liftIO . print $ PP.text "Attempting to write to pointer " <+> LLVM.ppPtr ptr
-  liftIO . print $ PP.text "withBase " <+> LLVM.ppPtr ptr
+  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
+  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
   liftIO . print $ PP.text "to MemImpl " <+> LLVM.ppMem mem
   let vType = bvType (S.bvWidth v)
 --  v' <- symBVToVal v
