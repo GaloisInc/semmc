@@ -72,9 +72,10 @@ mcSynth :: (TemplateConstraints arch,
         -> Formula (CBO.OnlineBackend t solver fs) arch
         -> IO (Maybe [Instruction arch])
 mcSynth env target = do
+  putStrLn $ "Calling mcSynth on target " ++ show target
   let params = SynthesisParams { synthEnv = env
                                , synthMaxLength = 0
-                               }
+                                }
   ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target
   case ret1 of
     Just _ -> return ret1
@@ -84,8 +85,7 @@ mcSynth env target = do
       ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target
       case ret2 of
         Just _ -> return ret2
-        Nothing -> 
-             synthesizeFormula (params { synthMaxLength = 1000 }) target
+        Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target
 
 -- | Synthesizes a list of instructions from a formula, within a particular
 -- timeout limit.

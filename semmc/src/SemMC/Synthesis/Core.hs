@@ -15,12 +15,14 @@ import           Control.Arrow ( (&&&) )
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Parameterized.Some ( Some, viewSome )
+import           Data.Parameterized.Classes (ShowF)
 import qualified Data.Sequence as Seq
 import           Data.Foldable
 import qualified Data.Set as Set
 import           Data.Typeable
 
 import qualified What4.Protocol.Online as WPO
+import qualified What4.Interface as S
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 
@@ -80,7 +82,7 @@ calcFootprint = foldl' addPrint (Set.empty, Set.empty)
           in (curInputs `Set.union` (newInputs Set.\\ curOutputs),
               curOutputs `Set.union` newOutputs)
 
-footprintFilter :: (Architecture arch)
+footprintFilter :: (Architecture arch, ShowF (S.BoundVar sym), ShowF (S.SymExpr sym))
                 => Formula sym arch
                 -> [Some (TemplatedInstruction sym arch)]
                 -> Bool
@@ -92,7 +94,10 @@ footprintFilter target candidate =
      -- trace ("Target Outputs: " ++ show targetOutputs) $
      -- trace ("Candidate Inputs: " ++ show candInputs) $
      -- trace ("Candidate Outputs: " ++ show candOutputs) $
-     candInputs `Set.isSubsetOf` targetInputs &&
+     -- trace ("For formula " ++ show target ++ "\n") $
+--   JP TODO: I swapped the order here, but I'm not sure which direction is sound
+--     candInputs `Set.isSubsetOf` targetInputs &&
+     targetInputs `Set.isSubsetOf` candInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
 
 instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
@@ -133,7 +138,7 @@ instantiate target trial
                   , synthPrefixes = oldPrefixes Seq.|> trial
                   })
           return Nothing
-  | otherwise = do liftIO . putStrLn $ "Could not instantiate target with trial " ++ show trial
+  | otherwise = do liftIO . putStrLn $ "Could not instantiate target with trial " ++ show trial ++ "\n"
                    return Nothing
 
 synthesizeFormula' :: (Architecture arch,
@@ -146,10 +151,10 @@ synthesizeFormula' :: (Architecture arch,
                    => Formula (CBO.OnlineBackend t solver fs) arch
                    -> Synth (CBO.OnlineBackend t solver fs) arch (Maybe [Instruction arch])
 synthesizeFormula' target = do
+  liftIO . putStrLn $ "Calling synthesizeFormula' on target " ++ show target
   st <- get
   case Seq.viewl (synthPrefixes st) of
     prefix Seq.:< prefixesTail -> do
-      liftIO . putStrLn $ "Calling synthesizeFormula' with prefix " ++ show prefix
       maxLen <- askMaxLength
       if 1 + length prefix > maxLen then return Nothing else do
         put $ st { synthPrefixes = prefixesTail }
@@ -178,6 +183,7 @@ synthesizeFormula :: forall t solver fs arch .
                   -> Formula (CBO.OnlineBackend t solver fs) arch
                   -> IO (Maybe [Instruction arch])
 synthesizeFormula params target = do
+  putStrLn $ "Calling synthesizeFormula on target " ++ show target
   let sym = synthSym $ synthEnv params
   seed <- initTest sym target
   evalStateT (runReaderT (synthesizeFormula' target) params) $
