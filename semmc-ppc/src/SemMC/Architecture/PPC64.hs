@@ -40,6 +40,7 @@ import qualified GHC.Err.Located as L
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as AL
 import qualified SemMC.Architecture.Concrete as AC
+import           SemMC.Architecture.PPC ( AnyPPC, V64 )
 import           SemMC.Architecture.PPC.Location
 import qualified SemMC.Architecture.PPC.OperandComponents as POC
 import qualified SemMC.Architecture.PPC.Pseudo as PPCP
@@ -58,19 +59,7 @@ import qualified Text.Megaparsec.Char as P
 import           What4.BaseTypes
 import qualified What4.Interface as S
 
-data PPC
-
-type instance A.Operand PPC = PPC.Operand
-
-instance A.IsOperand PPC.Operand
-
-type instance A.Opcode PPC = PPC.Opcode
-
-instance A.IsOpcode PPC.Opcode
-
-instance A.IsOperandTypeRepr PPC where
-  type OperandTypeRepr PPC = PPC.OperandRepr
-  operandTypeReprSymbol _ = PPC.operandReprString
+type PPC = AnyPPC V64
 
 type instance A.OperandType PPC "Abscalltarget" = BaseBVType 24
 type instance A.OperandType PPC "Abscondbrtarget" = BaseBVType 14
@@ -149,7 +138,6 @@ shapeReprType sr =
     PPC.U7immRepr -> knownRepr
     PPC.U8immRepr -> knownRepr
 
-type instance A.RegWidth PPC = 64
 type instance A.OperandComponents PPC sym = POC.OperandComponents PPC sym
 
 instance ArchRepr PPC where
@@ -349,8 +337,6 @@ instance T.TemplatableOperand PPC where
                       v <- S.freshConstant sym (U.makeSymbol "I32imm") knownRepr
                       let recover evalFn = PPC.I32imm . fromInteger <$> evalFn v
                       return (A.ValueOperand v, T.RecoverOperandFn recover)
-
-type instance A.Location PPC = Location PPC
 
 operandValue :: forall sym s.
                 (S.IsSymExprBuilder sym,

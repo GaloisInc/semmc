@@ -14,6 +14,7 @@ module SemMC.Architecture.Location (
   allLocations
   ) where
 
+import           Data.Kind
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
@@ -53,7 +54,7 @@ allLocations = nonMemLocations ++ (fromMemLoc <$> memLocation)
 
 -- | Represents the different registers, flags, and (eventually) memory a given
 -- architecture has.
-type family Location (arch :: *) :: BaseType -> *
+type family Location (arch :: Type) :: BaseType -> Type
 
 
 -- A MemLoc is a way to represent a memory location by abstracting away the size
@@ -77,4 +78,3 @@ toMemLoc loc
       , Just S.Refl <- S.testEquality eight (S.knownNat @8)
         = MemLoc w loc
       | otherwise = error "The type of the memory Location in this architecture is unsupported"
-

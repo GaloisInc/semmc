@@ -155,8 +155,6 @@ module SemMC.DSL (
 
 import           GHC.Stack ( HasCallStack )
 
-import           Prelude hiding ( concat )
-
 import qualified Control.Monad.RWS.Strict as RWS
 import qualified Data.Foldable as F
 import qualified Data.Bits as B
@@ -178,6 +176,8 @@ import           SemMC.DSL.Internal
 import           SemMC.Formula.SETokens ( FAtom(..), fromFoldable', printTokens
                                         , ident, int, quoted, string )
 import qualified What4.BaseTypes as CRU
+
+import           Prelude hiding ( concat )
 
 
 locationType :: Location tp -> ExprTypeRepr tp
@@ -357,16 +357,19 @@ defineOpcodeWithParams name params def =
 -- >     defLoc eflags ...
 forkDefinition :: String -> SemMD 'Def d () -> SemMD 'Def d ()
 forkDefinition name (SemM def) = do
-  DefState origFormula <- RWS.get
+  origForm <- RWS.get
+  let DefState origFormula = origForm
   let modFormula = origFormula { fName = name
                                , fComment = Seq.empty
                                }
   RWS.put (DefState modFormula)
   SemM def
-  DefState forkedFormula <- RWS.get
+  modForm <- RWS.get
+  let DefState forkedFormula = modForm
   RWS.tell (Seq.singleton forkedFormula)
-  -- Restore the original formula so that 'definOpcode' can finish it off
+  -- Restore the original formula so that 'defineOpcode' can finish it off
   RWS.put (DefState origFormula)
+
 
 -- | Add a descriptive comment to the output file
 --

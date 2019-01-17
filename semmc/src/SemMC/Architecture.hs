@@ -51,6 +51,7 @@ module SemMC.Architecture (
 
 import           Data.List (find)
 import           Data.EnumF
+import           Data.Kind
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
@@ -106,7 +107,7 @@ class (IsOperand (Operand arch),
   -- models returned from the SMT solver).
   --
   -- For all non-templated architectures, this should probably just be @'AllocatedOperand' arch sym@
-  data TaggedExpr arch sym :: Symbol -> *
+  data TaggedExpr arch sym :: Symbol -> Type
 
   -- | Project a 'S.SymExpr' from the 'TaggedExpr' (which is basically an 'AllocatedOperand') if possible
   --

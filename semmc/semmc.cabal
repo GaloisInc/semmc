@@ -95,7 +95,7 @@ library
                        BoundedChan,
                        located-base,
                        text >= 1 && < 2,
-                       mwc-random >= 0.13 && < 0.14,
+                       mwc-random >= 0.13 && < 0.15,
                        exceptions >= 0.8 && < 0.11,
                        s-cargot >= 0.1.4.0 && < 0.2,
                        s-cargot-letbind >= 0.2.2.0 && < 0.3,
@@ -121,6 +121,8 @@ library
   ghc-options:         -Wall
   if impl(ghc >= 8.1)
      ghc-options: -Wno-simplifiable-class-constraints
+  if impl(ghc >= 8.6)
+     default-extensions: NoStarIsType
 
 executable cmpsem
   default-language: Haskell2010

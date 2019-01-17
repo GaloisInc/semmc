@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ImplicitParams #-}
 module SemMC.Architecture.PPC.Base.Core.Forms (
   vectorBV,
@@ -7,13 +8,9 @@ module SemMC.Architecture.PPC.Base.Core.Forms (
   mdsform4,
   mform5i,
   mform5r,
-  xoform3,
-  xoform2,
-  xform3,
   xform2,
   xform2f,
   dform,
-  dformr0,
   dformu,
   iform,
   aform,
@@ -23,13 +20,26 @@ module SemMC.Architecture.PPC.Base.Core.Forms (
   vxform2s,
   vxform2,
   vaform,
-  vaform4u
+  vaform4u,
+  OpcodeParamDef(..),
+  dformr0c,
+  xform3c,
+  xoform2c,
+  xoform3c,
+  vxform3c
   ) where
+
+import Data.Parameterized.Context
 
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core.BitSize
 import SemMC.Architecture.PPC.Base.Core.OperandClasses
 import SemMC.Architecture.PPC.Base.Core.Registers
+
+data OpcodeParamDef t = InputParamDef String String (ExprTypeRepr t)
+                      -- ^ A parameter used as an input (automatically declared as input)
+                      | ParamDef String String (ExprTypeRepr t)
+                      -- ^ Any other parameter
 
 vectorBV :: ExprTypeRepr 'TBV
 vectorBV = EBV 128
@@ -95,15 +105,6 @@ mdsform4 = do
   input rB
   return (rA, mb, rS, rB)
 
-xoform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-xoform3 = do
-  rT <- param "rT" gprc naturalBV
-  rB <- param "rB" gprc naturalBV
-  rA <- param "rA" gprc naturalBV
-  input rA
-  input rB
-  return (rT, rA, rB)
-
 vxform2s :: SemM 'Def (Location 'TBV, Location 'TBV)
 vxform2s = do
   vrT <- param "vrT" vrrc vectorBV
@@ -117,6 +118,12 @@ vxform3u = do
   uim <- param "uim" u5imm (EBV 5)
   input vrB
   return (vrT, vrB, uim)
+
+vxform3c :: (?bitSize :: BitSize) => Assignment OpcodeParamDef (EmptyCtx ::> 'TBV ::> 'TBV ::> 'TBV)
+vxform3c =  Empty
+         :> ParamDef "vrT" vrrc vectorBV
+         :> InputParamDef "vrA" vrrc vectorBV
+         :> InputParamDef "vrB" vrrc vectorBV
 
 vxform3 :: SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
 vxform3 = do
@@ -155,21 +162,22 @@ vaform4u = do
   input vrB
   return (vrT, shb, vrA, vrB)
 
-xoform2 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
-xoform2 = do
-  rT <- param "rT" gprc naturalBV
-  rA <- param "rA" gprc naturalBV
-  input rA
-  return (rT, rA)
+xoform3c :: (?bitSize :: BitSize) => Assignment OpcodeParamDef (EmptyCtx ::> 'TBV ::> 'TBV ::> 'TBV)
+xoform3c =  Empty
+         :> ParamDef "rT" gprc naturalBV
+         :> InputParamDef "rB" gprc naturalBV
+         :> InputParamDef "rA" gprc naturalBV
 
-xform3 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-xform3 = do
-  rA <- param "rA" gprc naturalBV
-  rB <- param "rB" gprc naturalBV
-  rS <- param "rS" gprc naturalBV
-  input rS
-  input rB
-  return (rA, rS, rB)
+xoform2c :: (?bitSize :: BitSize) => Assignment OpcodeParamDef (EmptyCtx ::> 'TBV ::> 'TBV)
+xoform2c =  Empty
+         :> ParamDef "rT" gprc naturalBV
+         :> InputParamDef "rA" gprc naturalBV
+
+xform3c :: (?bitSize :: BitSize) => Assignment OpcodeParamDef (EmptyCtx ::> 'TBV ::> 'TBV ::> 'TBV)
+xform3c =  Empty
+        :> ParamDef "rA" gprc naturalBV
+        :> InputParamDef "rB" gprc naturalBV
+        :> InputParamDef "rS" gprc naturalBV
 
 xform2 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV)
 xform2 = do
@@ -195,14 +203,11 @@ dform = do
   return (rT, rA, si)
 
 -- | D-form instructions where the operand is allowed to contain r0
-dformr0 :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)
-dformr0 = do
-  rT <- param "rT" gprc naturalBV
-  si <- param "si" s16imm (EBV 16)
-  rA <- param "rA" gprc naturalBV
-  input rA
-  input si
-  return (rT, rA, si)
+dformr0c :: (?bitSize :: BitSize) => Assignment OpcodeParamDef (EmptyCtx ::> 'TBV ::> 'TBV ::> 'TBV)
+dformr0c =  Empty
+         :> ParamDef "rT" gprc naturalBV
+         :> InputParamDef "si" s16imm (EBV 16)
+         :> InputParamDef "rA" gprc naturalBV
 
 -- | The unsigned immediate version of the dform
 dformu :: (?bitSize :: BitSize) => SemM 'Def (Location 'TBV, Location 'TBV, Location 'TBV)

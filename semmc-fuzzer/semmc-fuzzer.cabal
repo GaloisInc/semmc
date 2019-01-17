@@ -16,10 +16,15 @@ library
   default-language:    Haskell2010
   exposed-modules:     SemMC.Fuzzer.Types
                        SemMC.Fuzzer.Util
+                       SemMC.Fuzzer.Filters
 
   build-depends:       base >=4.9 && <5,
                        bytestring,
                        semmc,
+                       semmc-arm,
+                       semmc-ppc,
+                       dismantle-ppc,
+                       dismantle-arm,
                        text,
                        parameterized-utils,
                        pretty,

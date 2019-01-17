@@ -164,7 +164,7 @@ doThing2 = do
 doThing3 :: (U.HasLogCfg) => IO ()
 doThing3 = do
   Some r <- newIONonceGenerator
-  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures$ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
   Right add <- readBinOpc sym AddRr
   putStrLn $ T.unpack $ printParameterizedFormula (HR.typeRepr AddRr) add
 

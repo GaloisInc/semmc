@@ -25,6 +25,7 @@ import           Control.Monad.IO.Class ( liftIO, MonadIO )
 import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Data.Foldable
 import           Data.Maybe ( fromJust, listToMaybe )
+import           Data.Kind
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
@@ -52,7 +53,7 @@ import qualified SemMC.Formula.LLVMMem as LLVM
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.
-data TemplatableInstruction (arch :: *) where
+data TemplatableInstruction (arch :: Type) where
   TemplatableInstruction :: Opcode arch (Operand arch) sh
                          -> SL.List (Operand arch) sh
                          -> TemplatableInstruction arch
@@ -463,7 +464,7 @@ tryExtractingConcrete :: (ArchRepr arch)
                       -> SatResult (GroundEvalFn t) a
                       -> IO (Maybe [TemplatableInstruction arch])
 tryExtractingConcrete insns (Sat evalFn) = Just <$> extractConcreteInstructions evalFn insns
-tryExtractingConcrete _ (Unsat _) = return Nothing
+tryExtractingConcrete _ Unsat{} = return Nothing
 tryExtractingConcrete _ Unknown = fail "got Unknown when checking sat-ness"
 
 -- | Build a formula for the given concrete instruction.

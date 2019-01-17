@@ -195,7 +195,7 @@ mainWith r opts = do
   putStrLn ""
   putStrLn "Parsing semantics for known PPC opcodes"
 
-  CBO.withYicesOnlineBackend @(SB.Flags SB.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
     (plainBaseSet, synthEnv) <- loadBaseSet PPC32.allSemantics sym
 
     -- Turn it into a formula

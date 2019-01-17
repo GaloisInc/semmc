@@ -69,11 +69,11 @@ int waitForSignal(pid_t);
 #if defined(LOGGING)
 
 FILE* logStream = NULL;
-#define LOG(...) fprintf(stderr, __VA_ARGS__)
+#define LOG(...) fprintf(logStream, __VA_ARGS__)
 void initializeLogger() {
-  /* logStream = fopen(LOG_FILE, "w"); */
-  /* assert(logStream); */
-  /* setlinebuf(logStream); */
+  logStream = fopen(LOG_FILE, "w");
+  assert(logStream);
+  setlinebuf(logStream);
   LOG("Log initialized\n");
 }
 
@@ -356,7 +356,7 @@ void setupRegisterState(pid_t childPid, uint8_t* programSpace, uint8_t* memSpace
   //LOG("cpsr_q = %s\n", ((regs[IDX_CPSR] >> 27) & 1) ? "Q" : "-");
 
   // Need to check that format of cpsr is valid
-  // regs[IDX_CPSR] = rs->cpsr;
+  regs[IDX_CPSR] = rs->cpsr;
 
   // Apply the reg mask; this modifies the test vector, but that is fine.  We
   // won't need the original values ever again.
@@ -386,16 +386,42 @@ void snapshotRegisterState(pid_t childPid, uint8_t* memSpace, RegisterState* rs)
 
   // Reset the CPSR and PC values after the test because we don't have a
   // sensible way of dealing with those register values.
-  rs->cpsr = 0;
+  rs->cpsr = regs[IDX_CPSR];
   rs->gprs[15] = 0;
 }
 
+// stack space used for icache flush on the child
+uint8_t flushStack[4096];
 
+// keep the CPSR used to first flush the icache around
+// since subsequent activity might mess with the CPSR
+uint32_t flushICacheCPSR = 0;
+
+void childFlushICache(uint8_t* programSpace) {
+  __clear_cache(programSpace, programSpace + pageSize);
+  RAISE_TRAP;
+  exit(19);
+}
 
 void flushICache(pid_t childPid, uint8_t* programSpace) {
+  elf_gregset_t regs;
+  struct iovec iov;
+  iov.iov_base = &regs;
+  iov.iov_len = sizeof(regs);
+  checkedPtrace(PTRACE_GETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
 
-  (void)childPid;
-  (void)programSpace;
+  regs[15] = CAST_PTR(childFlushICache);
+  regs[13] = CAST_PTR(flushStack + 2000);
+  regs[0]  = CAST_PTR(programSpace);
+
+  if(flushICacheCPSR == 0)
+    flushICacheCPSR = regs[16];
+  regs[16] = flushICacheCPSR;
+  checkedPtrace(PTRACE_SETREGSET, childPid, (void*)NT_PRSTATUS, &iov);
+
+  checkedPtrace(PTRACE_CONT, childPid, NULL, NULL);
+  int sig = waitForSignal(childPid);
+  assert(sig == SIGTRAP);
 }
 
 #elif defined(__aarch64__)

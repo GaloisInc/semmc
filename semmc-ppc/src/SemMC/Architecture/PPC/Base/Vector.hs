@@ -6,6 +6,9 @@ module SemMC.Architecture.PPC.Base.Vector (
   ) where
 
 import Prelude hiding ( concat )
+
+import qualified Dismantle.PPC as P
+
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
@@ -74,6 +77,7 @@ baseVector = do
   vecCompare
   vecMinMax
   vecSum
+  vecMultAdd
   vecAverage
 
   defineOpcodeWithIP "VPERM" $ do
@@ -283,44 +287,36 @@ vecArith = do
 
 vecBitwise :: (?bitSize :: BitSize) => SemM 'Top ()
 vecBitwise = do
-  defineOpcodeWithIP "VAND" $ do
+  definePPCOpcode P.VAND vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical AND (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvand (Loc vrA) (Loc vrB))
 
-  defineOpcodeWithIP "VANDC" $ do
+  definePPCOpcode P.VANDC vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical AND with Complement (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvand (Loc vrA) (bvnot (Loc vrB)))
 
-  defineOpcodeWithIP "VEQV" $ do
+  definePPCOpcode P.VEQV vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical Equivalent (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvnot (bvxor (Loc vrA) (Loc vrB)))
 
-  defineOpcodeWithIP "VNAND" $ do
+  definePPCOpcode P.VNAND vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical NAND (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvnot (bvand (Loc vrA) (Loc vrB)))
 
-  defineOpcodeWithIP "VORC" $ do
+  definePPCOpcode P.VORC vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical OR with Complement (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvor (Loc vrA) (bvnot (Loc vrB)))
 
-  defineOpcodeWithIP "VNOR" $ do
+  definePPCOpcode P.VNOR vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical NOR (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvnot (bvor (Loc vrA) (Loc vrB)))
 
-  defineOpcodeWithIP "VOR" $ do
+  definePPCOpcode P.VOR vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical OR (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvor (Loc vrA) (Loc vrB))
 
-  defineOpcodeWithIP "VXOR" $ do
+  definePPCOpcode P.VXOR vxform3c $ \vrT vrA vrB -> do
     comment "Vector Logical XOR (VX-form)"
-    (vrT, vrA, vrB) <- vxform3
     defLoc vrT (bvxor (Loc vrA) (Loc vrB))
 
   defineOpcodeWithIP "VSL" $ do
@@ -430,6 +426,44 @@ vecBitwise = do
   defineOpcodeWithIP "VBPERMQ" $ do
     comment "Vector Bit Permute Quadword (VX-form)"
     vec2op "VBPERMQ"
+
+vecMultAdd :: (?bitSize :: BitSize) => SemM 'Top ()
+vecMultAdd = do
+  defineOpcodeWithIP "VMHADDSHS" $ do
+    comment "Vector Multiply-High-Add Signed Halfword Saturate (VA-form)"
+    vec3op "VMHADDSHS"
+
+  defineOpcodeWithIP "VMHRADDSHS" $ do
+    comment "Vector Multiply-High-Round-Add Signed Halfword Saturate (VA-form)"
+    vec3op "VMHRADDSHS"
+
+  defineOpcodeWithIP "VMLADDUHM" $ do
+    comment "Vector Multiply-Low-Add Unsigned Halfword Modulo (VA-form)"
+    vec3op "VMLADDUHM"
+
+  defineOpcodeWithIP "VMSUMUBM" $ do
+    comment "Vector Multiply-Sum Unsigned Byte Modulo (VA-form)"
+    vec3op "VMSUMUBM"
+
+  defineOpcodeWithIP "VMSUMMBM" $ do
+    comment "Vector Multiply-Sum Mixed Byte Modulo (VA-form)"
+    vec3op "VMSUMMBM"
+
+  defineOpcodeWithIP "VMSUMSHM" $ do
+    comment "Vector Multiply-Sum Signed Halfword Modulo (VA-form)"
+    vec3op "VMSUMSHM"
+
+  defineOpcodeWithIP "VMSUMSHS" $ do
+    comment "Vector Multiply-Sum Signed Halfword Saturate (VA-form)"
+    vec3op "VMSUMSHS"
+
+  defineOpcodeWithIP "VMSUMUHM" $ do
+    comment "Vector Multiply-Sum Unsigned Halfword Modulo (VA-form)"
+    vec3op "VMSUMUHM"
+
+  defineOpcodeWithIP "VMSUMUHS" $ do
+    comment "Vector Multiply-Sum Unsigned Halfword Saturate (VA-form)"
+    vec3op "VMSUMUHS"
 
 vecMerge :: (?bitSize :: BitSize) => SemM 'Top ()
 vecMerge = do

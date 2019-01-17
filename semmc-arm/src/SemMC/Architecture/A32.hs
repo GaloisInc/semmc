@@ -1000,7 +1000,7 @@ serializeState s = LB.toStrict (B.toLazyByteString b)
                 , mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s gprMaskList))
                 , mconcat (map (serializeSymVal (B.word32LE . fromInteger)) (extractLocs s fprList))
                 -- CPSR, unused
-                , B.word32LE 0
+                , serializeSymVal (B.word32LE . fromInteger) (extractLoc s LocCPSR)
                 -- , serializeMem (extractLoc s LocMem1)
                 , serializeMem (V.ValueMem $ B.replicate 32 0)
                 -- , serializeMem (extractLoc s LocMem2)

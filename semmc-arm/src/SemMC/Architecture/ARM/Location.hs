@@ -23,6 +23,7 @@ import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import           What4.BaseTypes
 
+import           Prelude
 
 class ArchRepr arch where
   regWidthRepr :: proxy arch -> NatRepr (A.RegWidth arch)

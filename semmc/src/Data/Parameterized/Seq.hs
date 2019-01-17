@@ -6,9 +6,10 @@ module Data.Parameterized.Seq
   , (><)
   ) where
 
+import           Data.Kind
 import qualified Data.Sequence as Seq
 
-newtype SeqF (a :: k -> *) (tp :: k) = SeqF { unSeqF :: Seq.Seq (a tp) }
+newtype SeqF (a :: k -> Type) (tp :: k) = SeqF { unSeqF :: Seq.Seq (a tp) }
 
 singleton :: a tp -> SeqF a tp
 singleton = SeqF . Seq.singleton

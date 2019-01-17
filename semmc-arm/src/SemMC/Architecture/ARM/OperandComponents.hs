@@ -1,7 +1,9 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module SemMC.Architecture.ARM.OperandComponents (
   OperandComponents(..)
   ) where

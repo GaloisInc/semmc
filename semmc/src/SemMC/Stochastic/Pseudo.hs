@@ -25,6 +25,7 @@ module SemMC.Stochastic.Pseudo
   , actualInsnToSynth
   ) where
 
+import           Data.Kind
 import           Data.Monoid ( (<>) )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr ( HasRepr(..) )
@@ -46,7 +47,7 @@ import qualified SemMC.Architecture as A
 -- > type instance Pseudo <your arch> = EmptyPseudo
 -- > instance ArchitectureWithPseudo <your arch> where
 -- >   assemblePseudo _ = pseudoAbsurd
-type family Pseudo arch :: (Symbol -> *) -> [Symbol] -> *
+type family Pseudo arch :: (Symbol -> Type) -> [Symbol] -> Type
 
 -- | An architecture with pseuo-ops.
 class (A.Architecture arch,

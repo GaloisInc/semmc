@@ -110,7 +110,7 @@ instantiate target trial
       -- of 'TemplatedOperand', which has a function inside it, and it's
       -- non-trivial to either make it not use a function or come up with a
       -- surrogate key.)
---      liftIO $ putStrLn $ "Trial: " ++ show trial
+      liftIO $ putStrLn $ "Trial: " ++ show trial
       tifs <- liftIO $ traverse (viewSome (genTemplatedFormula sym)) trial
       st <- get
       let params = CegisParams { cpSym = sym
@@ -130,10 +130,11 @@ instantiate target trial
           liftIO $ putStrLn "CegisUnmatchable"
           let oldPrefixes = synthPrefixes st
           put (st { synthTests = newTests
-                  , synthPrefixes = oldPrefixes -- Seq.|> trial
+                  , synthPrefixes = oldPrefixes Seq.|> trial
                   })
           return Nothing
-  | otherwise = return Nothing
+  | otherwise = do liftIO . putStrLn $ "Could not instantiate target with trial " ++ show trial
+                   return Nothing
 
 synthesizeFormula' :: (Architecture arch,
                        TemplatableOperand arch,
@@ -148,6 +149,7 @@ synthesizeFormula' target = do
   st <- get
   case Seq.viewl (synthPrefixes st) of
     prefix Seq.:< prefixesTail -> do
+      liftIO . putStrLn $ "Calling synthesizeFormula' with prefix " ++ show prefix
       maxLen <- askMaxLength
       if 1 + length prefix > maxLen then return Nothing else do
         put $ st { synthPrefixes = prefixesTail }

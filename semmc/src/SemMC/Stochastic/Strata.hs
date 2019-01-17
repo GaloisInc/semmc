@@ -1,6 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -209,12 +210,14 @@ buildFormula :: (SynC arch)
              -> AC.RegisterizedInstruction arch
              -> F.Formula (Sym t solver fs) arch
              -> Syn t solver fs arch (F.ParameterizedFormula (Sym t solver fs) arch sh)
-buildFormula o i progFormula = do
-  Just iorel <- opcodeIORelation o
-  case AC.riInstruction i of
-    D.Instruction opcode operands
-      | Just MapF.Refl <- MapF.testEquality opcode o -> do
-          -- Now, for all of the outputs (implicit and explicit) in the target
-          -- instruction, look up the corresponding formula in `progFormula`
-          extractFormula i opcode operands progFormula iorel
-      | otherwise -> L.error ("Unexpected opcode mismatch: " ++ MapF.showF o)
+buildFormula o i progFormula =
+  opcodeIORelation o >>= \case
+    Just iorel ->
+        case AC.riInstruction i of
+          D.Instruction opcode operands
+              | Just MapF.Refl <- MapF.testEquality opcode o ->
+                -- Now, for all of the outputs (implicit and explicit) in the target
+                -- instruction, look up the corresponding formula in `progFormula`
+                                extractFormula i opcode operands progFormula iorel
+              | otherwise -> L.error ("Unexpected opcode mismatch: " ++ MapF.showF o)
+    Nothing -> L.error ("Unable to get opcode IORelation in SemMC Strata buildFormula")

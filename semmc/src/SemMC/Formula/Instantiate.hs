@@ -20,6 +20,7 @@ module SemMC.Formula.Instantiate
   ) where
 
 import           Data.Foldable                      ( foldlM, foldrM )
+import           Data.Kind
 import           Data.Maybe                         ( isNothing )
 import qualified Data.Set                           as Set
 import           Data.Parameterized.Classes
@@ -52,7 +53,7 @@ type SB t st fs = S.ExprBuilder t st fs
 -- | Convert a type-level list of operands to a Crucible-style context of
 -- operand types. This reverses it, but we don't care about that for our use
 -- case (and not doing so would be harder).
-type family ShapeCtx (arch :: *) (sh :: [Symbol]) :: Ctx BaseType where
+type family ShapeCtx (arch :: Type) (sh :: [Symbol]) :: Ctx BaseType where
   ShapeCtx _    '[] = EmptyCtx
   ShapeCtx arch (s ': sh) = ShapeCtx arch sh '::> A.OperandType arch s
 

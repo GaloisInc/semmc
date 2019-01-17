@@ -42,12 +42,16 @@ import qualified SemMC.Synthesis as SS
 import qualified SemMC.Architecture.PPC64 as PPC64
 import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
 
+
 main :: IO ()
-main = executeTests progs
+main = executeTests $ memProgs ++ nonMemProgs
 
 -- just test tests for programs that deal with memory
 memtest :: IO ()
 memtest = executeTests memProgs
+
+nonmemtest :: IO ()
+nonmemtest = executeTests nonMemProgs
 
 executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
@@ -116,21 +120,21 @@ insns = S.fromList
         -- , Some D.SC
         ]
 
-progs :: [(String, [D.Instruction])]
-progs = [("addNegated", [ D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)
-                         , D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
-                        ])] ++
-        [("add", [ D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
+nonMemProgs :: [(String, [D.Instruction])]
+nonMemProgs = [("add", [ D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
                         ])] ++
       [("negated", [D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)])] ++
-      memProgs
+      [("addNegated", [ D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)
+                      , D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
+                      ])]
+        
          
 memProgs  :: [(String,[D.Instruction])] 
 memProgs = [
-         ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])
-       , ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-2)  :< mkGPR 31     :< Nil ])
-       , ("LI",   [ D.Instruction D.LI   $ mkGPR 0          :< D.S16imm 1 :< Nil ])
-       , ("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-16) :< mkGPR 1      :< Nil ])
+--         ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])
+       ("LI",   [ D.Instruction D.LI   $ mkGPR 0          :< D.S16imm 1 :< Nil ])
+--       , ("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-16) :< mkGPR 2      :< Nil ])
+--       , ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-2)  :< mkGPR 31     :< Nil])
        -- , ("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (2) :< Nil ])
        -- , ("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-2) :< Nil ])
         ]

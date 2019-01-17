@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module SemMC.Formula.Equivalence
   ( EquivalenceResult(..)
@@ -162,7 +163,7 @@ formulasEquiv
     let handler (Sat evalFn) = do
           -- Extract the failing test case.
           DifferentBehavior <$> traverseF (eval evalFn) varConstants
-        handler (Unsat _) = return Equivalent
+        handler Unsat{} = return Equivalent
         handler Unknown = return Timeout
 
     checkSat sym testExpr handler

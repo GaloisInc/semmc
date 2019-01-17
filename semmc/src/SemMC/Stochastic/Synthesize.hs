@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -449,13 +450,15 @@ instance C.Exception ComparisonError
 -- the right value) wouldn't make sense anymore.
 getOutMasks :: forall arch t solver fs . SynC arch
             => Instruction arch -> Syn t solver fs arch [V.SemanticView arch]
-getOutMasks (D.Instruction opcode operands) = do
-  Just ioRel <- opcodeIORelation opcode
-  let outputs = Set.toList $ I.outputs ioRel
-  let outputToSemView (I.ImplicitOperand i) = implicitOperandToSemView i
-      outputToSemView (I.OperandRef o)      = operandRefToSemView operands o
-  let semViews = map outputToSemView outputs
-  return semViews
+getOutMasks (D.Instruction opcode operands) =
+  opcodeIORelation opcode >>= \case
+    Just ioRel -> do
+        let outputs = Set.toList $ I.outputs ioRel
+        let outputToSemView (I.ImplicitOperand i) = implicitOperandToSemView i
+            outputToSemView (I.OperandRef o)      = operandRefToSemView operands o
+        let semViews = map outputToSemView outputs
+        return semViews
+    Nothing -> error "Unable to get opcodeIORelation in getOutMasks"
   where
     operandRefToSemView :: SL.List (Operand arch) sh -> Some (SL.Index sh) -> V.SemanticView arch
     operandRefToSemView operands' (Some index) = desc
