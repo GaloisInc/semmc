@@ -200,24 +200,3 @@ test-suite semmc-ppc-tests
                  crucible,
                  what4,
                  text
-
-test-suite semmc-ppc-memtests
-  default-language: Haskell2010
-  type: exitcode-stdio-1.0
-  ghc-options: -Wall
-  main-is: MemTests.hs
-  hs-source-dirs: tests
-  other-modules: Main
-  build-depends: semmc-ppc,
-                 semmc,
-                 dismantle-tablegen,
-                 dismantle-ppc,
-                 base,
-                 containers,
-                 bytestring,
-                 tasty,
-                 tasty-hunit,
-                 parameterized-utils,
-                 crucible,
-                 what4,
-                 text
