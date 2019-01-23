@@ -17,19 +17,20 @@ import           What4.BaseTypes ( BaseBVType )
 import qualified What4.Interface as S
 
 data OperandComponents ppc sym (s :: Symbol) where
-  OCMemri :: Maybe (Location ppc tp)
+  OCMemri :: Location ppc tp
           -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
           -> S.SymExpr sym (BaseBVType 16)
           -> OperandComponents ppc sym s
-  OCMemrix :: Maybe (Location ppc tp)
+  OCMemrix :: Location ppc tp
            -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
            -> S.SymExpr sym (BaseBVType 14)
            -> OperandComponents ppc sym s
-  OCMemrr :: Maybe (Location ppc tp)
+  OCMemrr :: Location ppc tp
            -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
            -> Location ppc tp
            -> S.SymExpr sym (BaseBVType (A.RegWidth ppc))
            -> OperandComponents ppc sym s
+
 
 instance (S.IsExpr (S.SymExpr sym)) => Show (OperandComponents ppc sym s) where
   show oc =

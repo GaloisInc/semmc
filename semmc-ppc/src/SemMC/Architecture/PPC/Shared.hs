@@ -33,7 +33,10 @@ module SemMC.Architecture.PPC.Shared (
   parsePrefixedRegister,
   locationFuncInterpretation,
   concreteTemplatedOperand,
-  symbolicTemplatedOperand
+  symbolicTemplatedOperand,
+  -- * 'OperandComponent' helper functions
+  fromMaybeGPRLoc,
+  fromMaybeGPRBase
   ) where
 
 import           Data.Bits ( shiftR, shiftL, (.|.), (.&.) )
@@ -243,21 +246,21 @@ locationFuncInterpretation =
                                                , A.exprInterpName = 'E.interpMemriRegExtractor
                                                , A.exprInterp = E.evalRegExtractor "memri_reg" $ \ao ->
                                                    case ao of
-                                                     A.CompoundOperand (OCMemri ml _ _) -> fmap Some ml
+                                                     A.CompoundOperand (OCMemri l _ _) -> Just (Some l)
                                                      _ -> Nothing
                                                })
   , ("ppc.memrix_reg", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrixReg
                                                 , A.exprInterpName = 'E.interpMemrixRegExtractor
                                                 , A.exprInterp = E.evalRegExtractor "memrix_reg" $ \ao ->
                                                     case ao of
-                                                      A.CompoundOperand (OCMemrix ml _ _) -> fmap Some ml
+                                                      A.CompoundOperand (OCMemrix l _ _) -> Just (Some l)
                                                       _ -> Nothing
                                                 })
   , ("ppc.memrr_base", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrrBase
                                                 , A.exprInterpName = 'E.interpMemrrBaseExtractor
                                                 , A.exprInterp = E.evalRegExtractor "memrr_base" $ \ao ->
                                                     case ao of
-                                                      A.CompoundOperand (OCMemrr mb _ _ _) -> fmap Some mb
+                                                      A.CompoundOperand (OCMemrr b _ _ _) -> Just (Some b)
                                                       _ -> Nothing
                                                 })
   , ("ppc.memrr_offset", A.FunctionInterpretation { A.locationInterp = F.LocationFuncInterp E.interpMemrrOffset
@@ -288,3 +291,22 @@ locationFuncInterpretation =
                                            , A.locationInterp = F.LocationFuncInterp (\_ _ _ -> Nothing)
                                            })
   ]
+
+-- | Helper function to convert from Dismantle 'Maybe GPR' values to total
+-- locations, as needed by 'OperandComponents'
+fromMaybeGPRLoc :: forall arch.
+                   Maybe PPC.GPR -> Location arch (BaseBVType (A.RegWidth arch))
+fromMaybeGPRLoc (Just gpr) = LocGPR gpr
+fromMaybeGPRLoc Nothing    = LocGPR (PPC.GPR 0)
+
+-- | Helper function to conver Dismantle 'Maybe GPR' values to symbolic
+-- expressions representing their values, as needed by 'OperandComponents'
+fromMaybeGPRBase :: forall arch sym.
+                    ( A.Architecture arch
+                    , S.IsExprBuilder sym )
+                 => sym 
+                 -> Maybe PPC.GPR
+                 -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
+                 -> IO (S.SymBV sym (A.RegWidth arch))
+fromMaybeGPRBase _sym (Just gpr) locLookup  = locLookup (LocGPR gpr)
+fromMaybeGPRBase sym  Nothing    _locLookup = S.bvLit sym knownNat 0

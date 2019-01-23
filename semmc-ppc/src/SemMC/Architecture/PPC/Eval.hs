@@ -48,11 +48,9 @@ interpMemriReg :: forall sh s ppc tp sym t st fs
                -> Maybe (L.Location ppc tp)
 interpMemriReg operands (F.WrappedOperand _orep ix) rep =
   case operands SL.!! ix of
-    A.CompoundOperand (OCMemri (Just loc) _ _)
+    A.CompoundOperand (OCMemri loc _ _)
       | Just Refl <- testEquality rep (L.locationType loc) -> Just loc
       | otherwise -> error ("Invalid return type for location function 'memri_reg' at index " ++ show ix)
-    A.CompoundOperand (OCMemri Nothing _ _) ->
-      error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
 
 interpMemriRegExtractor :: PPC.MemRI -> Maybe PPC.GPR
@@ -73,11 +71,9 @@ interpMemrixReg :: forall sh s ppc tp sym t st fs
                 -> Maybe (L.Location ppc tp)
 interpMemrixReg operands (F.WrappedOperand _orep ix) rep =
   case operands SL.!! ix of
-    A.CompoundOperand (OCMemrix (Just loc) _ _)
+    A.CompoundOperand (OCMemrix loc _ _)
       | Just Refl <- testEquality rep (L.locationType loc) -> Just loc
       | otherwise -> error ("Invalid return type for location function 'memrix_reg' at index " ++ show ix)
-    A.CompoundOperand (OCMemrix Nothing _ _) ->
-      error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
 
 interpMemrixOffset :: forall sh s ppc tp sym
@@ -114,11 +110,9 @@ interpMemrrBase :: forall sh s ppc tp t st fs sym
                -> Maybe (L.Location ppc tp)
 interpMemrrBase operands (F.WrappedOperand _orep ix) rep =
   case operands SL.!! ix of
-    A.CompoundOperand (OCMemrr (Just base) _ _ _)
+    A.CompoundOperand (OCMemrr base _ _ _)
       | Just Refl <- testEquality rep (L.locationType base) -> Just base
       | otherwise -> error ("Invalid return type for location function 'memrr_base' at index " ++ show ix)
-    A.CompoundOperand (OCMemrr Nothing _ _ _) ->
-      error ("Invalid instruction form with operand " ++ show ix ++ " = r0")
     _ -> error ("Invalid operand type at index " ++ show ix)
 
 interpMemrrOffset :: forall sh s ppc tp t st fs sym

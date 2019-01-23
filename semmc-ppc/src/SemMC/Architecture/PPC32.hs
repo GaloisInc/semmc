@@ -158,16 +158,13 @@ instance T.TemplatableOperand PPC where
                           mkTemplate' _sym locLookup = do
                             let offLoc = LocGPR (PPC.GPR gprOffset)
                             let baseLoc = LocGPR (PPC.GPR gprNum)
-                            let mbaseLoc
-                                  | gprNum == 0 = Nothing
-                                  | otherwise = Just baseLoc
                             base <- locLookup baseLoc
                             offset <- locLookup offLoc
                             let recover _ = do
                                        let gpr | gprNum /= 0 = Just (PPC.GPR gprNum)
                                                | otherwise = Nothing
                                        return $ PPC.Memrr $ PPC.MemRR gpr (PPC.GPR gprOffset)
-                            return ( A.CompoundOperand (POC.OCMemrr mbaseLoc base offLoc offset)
+                            return ( A.CompoundOperand (POC.OCMemrr baseLoc base offLoc offset)
                                    , T.RecoverOperandFn recover
                                    )
       PPC.MemrixRepr ->
@@ -176,9 +173,6 @@ instance T.TemplatableOperand PPC where
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memrix"
                           mkTemplate' sym locLookup = do
                             let baseReg = LocGPR (PPC.GPR gprNum)
-                            let mbaseReg
-                                  | gprNum == 0 = Nothing
-                                  | otherwise = Just baseReg
                             base <- locLookup baseReg
                             offset <- S.freshConstant sym (U.makeSymbol "Memrix_off") knownRepr
                             let recover evalFn = do
@@ -187,7 +181,7 @@ instance T.TemplatableOperand PPC where
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
                                   return $ PPC.Memrix $ PPC.MemRIX gpr offsetVal
-                            return ( A.CompoundOperand (POC.OCMemrix mbaseReg base offset)
+                            return ( A.CompoundOperand (POC.OCMemrix baseReg base offset)
                                    , T.RecoverOperandFn recover
                                    )
       PPC.Memrix16Repr ->
@@ -196,9 +190,6 @@ instance T.TemplatableOperand PPC where
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memrix16"
                           mkTemplate' sym locLookup = do
                             let baseReg = LocGPR (PPC.GPR gprNum)
-                            let mbaseReg
-                                  | gprNum == 0 = Nothing
-                                  | otherwise = Just baseReg
                             base <- locLookup baseReg
                             offset <- S.freshConstant sym (U.makeSymbol "Memrix16_off") knownRepr
                             let recover evalFn = do
@@ -207,7 +198,7 @@ instance T.TemplatableOperand PPC where
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
                                   return $ PPC.Memrix16 $ PPC.MemRIX gpr offsetVal
-                            return ( A.CompoundOperand (POC.OCMemrix mbaseReg base offset)
+                            return ( A.CompoundOperand (POC.OCMemrix baseReg base offset)
                                    , T.RecoverOperandFn recover
                                    )
       PPC.VrrcRepr -> PPCS.concreteTemplatedOperand (PPC.Vrrc . PPC.VR) (LocVSR . PPC.VSReg) <$> [0..31]
@@ -258,9 +249,6 @@ instance T.TemplatableOperand PPC where
                     where mkTemplate' :: T.TemplatedOperandFn PPC "Memri"
                           mkTemplate' sym locLookup = do
                             let baseReg = LocGPR (PPC.GPR gprNum)
-                            let mbaseReg
-                                  | gprNum == 0 = Nothing
-                                  | otherwise = Just baseReg
                             base <- locLookup baseReg
                             offset <- S.freshConstant sym (U.makeSymbol "Memri_off") knownRepr
                             let recover evalFn = do
@@ -269,7 +257,7 @@ instance T.TemplatableOperand PPC where
                                         | gprNum /= 0 = Just (PPC.GPR gprNum)
                                         | otherwise = Nothing
                                   return $ PPC.Memri $ PPC.MemRI gpr offsetVal
-                            return ( A.CompoundOperand (POC.OCMemri mbaseReg base offset)
+                            return ( A.CompoundOperand (POC.OCMemri baseReg base offset)
                                    , T.RecoverOperandFn recover
                                    )
       PPC.DirectbrtargetRepr ->
@@ -380,29 +368,21 @@ operandValue sym locLookup op = TaggedExpr <$> operandValue' op
         operandValue' (PPC.I1imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger x)
         operandValue' (PPC.I32imm (I.I x)) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger x)
         operandValue' (PPC.Memri (PPC.MemRI gpr offset)) = do
-          base <- case gpr of
-                    Just gpr' -> locLookup (LocGPR gpr')
-                    Nothing -> S.bvLit sym knownNat 0
+          base <- PPCS.fromMaybeGPRBase sym gpr locLookup
           offset' <- S.bvLit sym knownNat (toInteger offset)
-          return (A.CompoundOperand (POC.OCMemri (LocGPR <$> gpr) base offset'))
+          return (A.CompoundOperand (POC.OCMemri (PPCS.fromMaybeGPRLoc gpr) base offset'))
         operandValue' (PPC.Memrix (PPC.MemRIX gpr offset)) = do
-          base <- case gpr of
-                    Just gpr' -> locLookup (LocGPR gpr')
-                    Nothing -> S.bvLit sym knownNat 0
+          base <- PPCS.fromMaybeGPRBase sym gpr locLookup
           offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
-          return (A.CompoundOperand (POC.OCMemrix (LocGPR <$> gpr) base offset'))
+          return (A.CompoundOperand (POC.OCMemrix (PPCS.fromMaybeGPRLoc gpr) base offset'))
         operandValue' (PPC.Memrix16 (PPC.MemRIX gpr offset)) = do
-          base <- case gpr of
-                    Just gpr' -> locLookup (LocGPR gpr')
-                    Nothing -> S.bvLit sym knownNat 0
+          base <- PPCS.fromMaybeGPRBase sym gpr locLookup
           offset' <- S.bvLit sym knownNat (toInteger (I.unI offset))
-          return (A.CompoundOperand (POC.OCMemrix (LocGPR <$> gpr) base offset'))
+          return (A.CompoundOperand (POC.OCMemrix (PPCS.fromMaybeGPRLoc gpr) base offset'))
         operandValue' (PPC.Memrr (PPC.MemRR gpr1 gpr2)) = do
-          gpr1Val <- case gpr1 of
-                       Just gpr -> locLookup (LocGPR gpr)
-                       Nothing -> S.bvLit sym knownNat 0
+          gpr1Val <- PPCS.fromMaybeGPRBase sym gpr1 locLookup
           gpr2Val <- locLookup (LocGPR gpr2)
-          return (A.CompoundOperand (POC.OCMemrr (LocGPR <$> gpr1) gpr1Val (LocGPR gpr2) gpr2Val))
+          return (A.CompoundOperand (POC.OCMemrr (PPCS.fromMaybeGPRLoc gpr1) gpr1Val (LocGPR gpr2) gpr2Val))
         operandValue' (PPC.S16imm i16) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S16imm64 i16) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger i16)
         operandValue' (PPC.S17imm i16) =
