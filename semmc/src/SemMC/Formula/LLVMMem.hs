@@ -18,32 +18,24 @@ module SemMC.Formula.LLVMMem
   , instantiateMemOpsLLVM
   ) where
 
-import           Data.String (fromString)
 import           Data.Proxy (Proxy(..))
 import           Control.Monad.State
-import           Data.Maybe (fromJust)
-import           GHC.TypeLits (KnownNat)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           Text.PrettyPrint.ANSI.Leijen ( (<+>) )
 
 import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.NatRepr as N
 import qualified Lang.Crucible.Backend as B
-import qualified Lang.Crucible.Types as T
 
 import qualified What4.Interface as S
 import qualified What4.Expr.Builder as WE
-import qualified What4.ProgramLoc as WPL
-import qualified What4.FunctionName as WFN
+import qualified What4.Concrete as WC
 
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
--- import qualified Lang.Crucible.LLVM.MemModel.Generic as LLVMG
-import qualified Lang.Crucible.LLVM.Bytes as LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as LLVM
+import qualified Lang.Crucible.LLVM.MemType as MemType
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Formula.MemAccesses as MA
-import qualified SemMC.Formula.ReadWriteEval as RW
 
 data MemData sym arch = MemData { memSym :: sym
                                 , memImpl :: LLVM.MemImpl sym
@@ -71,11 +63,11 @@ withMem sym op = do
     let alignment = LLVM.noAlignment
 
     -- 2) Allocate a block of uninitialized memory
-    print $ PP.text "Initializing memory of unbounded size"
+--    print $ PP.text "Initializing memory of unbounded size"
     (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
                                 initMem alignment
 
-    print $ PP.text "Base value: " <+> LLVM.ppPtr base
+--    print $ PP.text "Base value: " <+> LLVM.ppPtr base
 
     -- 3) Create a symbolic array to store in memory
 --    let Right memSymbol = S.userSymbol "Mem"
@@ -88,7 +80,7 @@ withMem sym op = do
     uninterpMem <- S.constantArray sym (Ctx.empty Ctx.:> S.BaseBVRepr w) d
     mem' <- LLVM.doArrayStoreUnbounded sym mem base alignment uninterpMem
 
-    putStrLn $ "Creating uninterpreted memory: " ++ show (LLVM.ppMem mem')
+--    print $ PP.text "Creating uninterpreted memory: " <+> LLVM.ppMem mem'
 
     
     -- 4) Execute the operation with these starting conditions
@@ -139,75 +131,75 @@ mkPtr offset = do
 --  LLVM.LLVMPointer _ base <- askBase
 --  liftIO $ S.bvAdd sym base offset >>= LLVM.llvmPointer_bv sym
 
--- | Read 'bytes' number of bits starting from location i in memory
-readMem :: (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bytes)
-        => S.NatRepr bytes
-        -- ^ The number of bytes to read
+-- | Read 'bits' number of bits starting from location i in memory
+readMem :: (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bits)
+        => S.NatRepr bits
+        -- ^ The number of bits to read
         -> S.SymBV sym (A.RegWidth arch)
         -- ^ The address in memory at which to read
-        -> MemM sym arch (S.SymBV sym bytes)
-readMem bytes offset = do
+        -> MemM sym arch (S.SymBV sym bits)
+readMem bits offset = do
   sym <- askSym
   ptr <- mkPtr offset
   mem <- askImpl
-  liftIO . print $ PP.text "Attempting to read pointer " <+> LLVM.ppPtr ptr
-               <+> PP.text " from mem " <+> LLVM.ppMem mem
+--  liftIO . print $ PP.text "Attempting to read pointer " <+> LLVM.ppPtr ptr
+--               <+> PP.text " from mem " <+> LLVM.ppMem mem
   alignment <- askAlignment
-  v <- liftIO $ LLVM.doLoad sym mem ptr (bvType bytes) (T.BVRepr bytes) alignment
-  liftIO . print $ PP.text "Successfully read value " <+> S.printSymExpr v
-  return v
+  sType <- bvType bits
 
-bvType :: S.NatRepr bytes -> LLVM.StorageType
-bvType x = LLVM.bitvectorType . LLVM.bitsToBytes $ S.natValue x
+  v <- liftIO $ LLVM.loadRaw sym mem ptr sType alignment
 
-writeMem :: (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bytes)
+--  liftIO . print $ PP.text "Successfully read value " <+> PP.text (show v)
+
+  return $ llvmValToSymBV bits v
+
+-- | An LLVMVal represents a plain bitvector if it is an 'LLVMValInt' with block
+-- number 0.
+llvmValToSymBV :: S.IsExprBuilder sym
+               => S.NatRepr bits
+               -> LLVM.LLVMVal sym
+               -> S.SymBV sym bits
+llvmValToSymBV bits (LLVM.LLVMValInt blk val)
+  | Just S.Refl <- S.testEquality bits (S.bvWidth val)
+  , Just (WC.ConcreteNat 0) <- S.asConcrete blk = val
+llvmValToSymBV _ _ = error "LLVMVal given is not a bitvector."
+
+
+symBVToLLVMVal :: (1 S.<= bits, S.IsExprBuilder sym)
+               => S.SymBV sym bits
+               -> MemM sym arch (LLVM.LLVMVal sym)
+symBVToLLVMVal b = do
+  sym <- askSym
+  zero <- liftIO $ S.natLit sym 0
+  return $ LLVM.LLVMValInt zero b
+
+bvType :: LLVM.HasPtrWidth (A.RegWidth arch)
+       => S.NatRepr bits
+       -> MemM sym arch LLVM.StorageType
+bvType x = LLVM.toStorableType $ MemType.IntType (fromIntegral (S.natValue x))
+
+writeMem :: forall arch sym bits.
+            (LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bits)
          => S.SymBV sym (A.RegWidth arch)
          -- ^ The address in memory at which to write
-         -> S.SymBV sym bytes
+         -> S.SymBV sym bits
          -- ^ The value to write
          -> MemM sym arch ()
 writeMem offset v = do
-  sym <- askSym
   ptr <- mkPtr offset
   mem <- askImpl
-  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
-  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
-  liftIO . print $ PP.text "to MemImpl " <+> LLVM.ppMem mem
-  let vType = bvType (S.bvWidth v)
---  v' <- symBVToVal v
+--  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
+--  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
   align <- askAlignment
 
-  -- instead of using 'storeRaw' here, we want to do the same operation but
-  -- without checking that the index is in the bounds, since we don't care about
-  -- that.
-  -- mem' <- liftIO $ myStore sym mem ptr vType align v'
-  mem' <- liftIO $ LLVM.doStore sym mem ptr (T.BVRepr (S.bvWidth v)) vType align v
+  sType <- bvType (S.bvWidth v)
 
-  liftIO . print $ PP.text "Successfully wrote value: " <+> LLVM.ppMem mem'
+  v' <- symBVToLLVMVal v
+
+  sym <- askSym
+  mem' <- liftIO $ LLVM.storeRaw sym mem ptr sType align v'
+
   putImpl mem'
-
-
-{-
--- | Store an LLVM value in memory. Does not assert that the pointer is valid
--- and points to a mutable memory region.
-myStore :: (B.IsSymInterface sym, LLVM.HasPtrWidth wptr)
-  => sym
-  -> LLVM.MemImpl sym
-  -> LLVM.LLVMPtr sym wptr {- ^ pointer to store into -}
-  -> LLVM.StorageType      {- ^ type of value to store -}
-  -> LLVM.Alignment
-  -> LLVM.LLVMVal sym      {- ^ value to store -}
-  -> IO (LLVM.MemImpl sym)
-myStore sym mem ptr valType alignment val = do
-    (p, heap') <- LLVMG.writeMem sym LLVM.PtrWidth ptr valType alignment val (LLVM.memImplHeap mem)
-    let reason = B.AssumptionReason (WPL.mkProgramLoc (WFN.functionNameFromText (fromString "NoFunction")) WPL.InternalPos) 
-                                    "Presume index is within the bounds"
-    B.addAssumption sym (B.LabeledPred p reason)
---    let errMsg = ptrMessage "Invalid memory store." ptr valType
---    assert sym p (AssertFailureSimError errMsg)
-    return mem{ LLVM.memImplHeap = heap' }
--}
-
 
 
 ---------------------------------------
@@ -233,12 +225,12 @@ instantiateMemOpsLLVM (Just e) = LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch
 instantiateMemOpsLLVM Nothing  = return () -- or error?
 
 
-isUpdateArray :: forall arch t st fs sym bytes.
+isUpdateArray :: forall arch t st fs sym bits.
               ( sym ~ WE.ExprBuilder t st fs
               , A.Architecture arch
               )
-           => S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType bytes)
-           -> Maybe ( S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType bytes) 
+           => S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType bits)
+           -> Maybe ( S.SymArray sym (Ctx.SingleCtx (S.BaseBVType (A.RegWidth arch))) (S.BaseBVType bits) 
                     , A.AccessData sym arch)
 isUpdateArray (WE.AppExpr a)
   | WE.UpdateArray (S.BaseBVRepr _) (Ctx.Empty Ctx.:> S.BaseBVRepr regWidth) 
@@ -264,15 +256,3 @@ instantiateLLVMExpr mem
   instantiateLLVMExpr mem'
   writeMem idx val
 instantiateLLVMExpr _ | otherwise = return ()
-
-{-
-  -- Write the memory expression to the underlying memory model
-  sym <- askSym
-  impl <- askImpl
-  ptr <- askBase
-  alignment <- askAlignment
-  let width = S.knownNat @(A.RegWidth arch)
-  lenExpr <- liftIO $ S.bvLit sym width (2^(S.natValue width)-1)
-  impl' <- liftIO $ LLVM.doArrayStore sym impl ptr alignment mem lenExpr 
-  putImpl impl'
--}
