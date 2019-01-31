@@ -12,17 +12,21 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module SemMC.Synthesis.Cegis
-  ( evalFormula
-  , ConcreteTest
+  ( ConcreteTest
   , initTest
-  , CegisParams(..)
+  , CegisParams
+  , cpMem
+  , mkCegisParams
   , CegisResult(..)
   , cegis
   ) where
 
 import           Control.Monad.IO.Class ( liftIO, MonadIO )
 import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
+import           Control.Monad.Trans.State  (StateT(..), evalStateT, get, put )
+import           Control.Monad.Trans.Class  (lift)
 import           Data.Foldable
 import           Data.Maybe ( fromJust, listToMaybe )
 import           Data.Kind
@@ -32,6 +36,7 @@ import qualified Data.Parameterized.HasRepr as HR
 import           Data.Parameterized.Some ( Some(..) )
 import           Data.Parameterized.TraversableF
 import qualified Data.Parameterized.Classes as P
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Set as Set
 
 import qualified Lang.Crucible.Backend.Online as CBO
@@ -41,6 +46,7 @@ import           What4.SatResult
 import           What4.Expr.GroundEval
 import qualified What4.Expr as WE
 import qualified What4.Protocol.Online as WPO
+import qualified What4.Symbol as WS
 
 import           Dismantle.Instruction
 
@@ -50,6 +56,7 @@ import           SemMC.Formula
 import           SemMC.Synthesis.Template
 import           SemMC.Formula.MemAccesses
 import qualified SemMC.Formula.LLVMMem as LLVM
+
 
 -- | This is exactly a Dismantle 'Instruction', just with the dictionary of
 -- constraints of a templatable opcode available.
@@ -79,8 +86,24 @@ lookupInState :: forall sym loc tp.
               -> LocExprs sym loc
               -> loc tp
               -> IO (S.SymExpr sym tp)
-lookupInState sym st loc =
-  maybe (defaultLocationExpr sym loc) return $ MapF.lookup loc st
+lookupInState sym st loc | Just e <- MapF.lookup loc st = return e
+                         | otherwise = defaultLocationExpr sym loc
+
+-- | Look up the given location in the given machine state. If the location is
+-- 'Mem', return the mem-expression. Otherwise, if the location is not found, return the
+-- default value for that location.
+lookupInStateMem :: forall arch sym tp.
+                    (S.IsExprBuilder sym, Architecture arch)
+                 => sym
+                 -> LocExprs sym (Location arch)
+                 -> S.SymExpr sym (MemType sym arch)
+                 -> Location arch tp
+                 -> IO (S.SymExpr sym tp)
+lookupInStateMem sym st memExpr loc
+  | isMemLoc loc
+  , Just S.Refl <- S.testEquality (memTypeRepr @sym @arch) (locationType loc) = 
+    return memExpr
+  | otherwise = lookupInState sym st loc
 
 -- | Parameters given to call cegis.
 data CegisParams sym arch =
@@ -92,21 +115,99 @@ data CegisParams sym arch =
               -- ^ The target formula we're trying to match.
               , cpUFEnv :: FormulaEnv sym arch
               -- ^ The uninterpreted functions in scope
+              , cpMem :: S.SymExpr sym (MemType sym arch)
+              -- ^ A symbolic expression representing the memory in all tests
               }
 
-type Cegis sym arch = ReaderT (CegisParams sym arch) IO
+-- | Construct parameters for Cegis
+mkCegisParams :: (S.IsSymExprBuilder sym, Architecture arch)
+              => sym 
+              -> TemplatedSemantics sym arch
+              -- ^ The base set of opcode semantics
+              -> Formula sym arch
+              -- ^ The target formula we're trying to match
+              -> FormulaEnv sym arch
+              -- ^ The uninterpreted functions in scope
+              -> IO (CegisParams sym arch)
+mkCegisParams sym sem target ufEnv = case S.userSymbol "Mem" of
+    Left  err       -> error (show $ WS.ppSolverSymbolError err)
+    Right memSymbol -> do
+      memExpr <- S.freshConstant sym memSymbol S.knownRepr
+      return $ CegisParams { cpSym = sym
+                           , cpSemantics = sem
+                           , cpTarget = target
+                           , cpUFEnv = ufEnv
+                           , cpMem   = memExpr
+                           }
+
+mkCegisState :: (S.IsSymExprBuilder sym, Architecture arch)
+             => sym
+             -> CegisState sym arch
+mkCegisState sym = CegisState { csTests = []
+                             , csCheck = S.truePred sym
+                             }
+
+
+
+data CegisState sym arch =
+  CegisState { csTests :: [ConcreteTest sym arch]
+             -- ^ The tests so far
+             , csCheck :: S.Pred sym
+             -- ^ A predicate represnting the validity of the current tests
+             }
+type MemType sym arch = S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType (RegWidth arch))) (S.BaseBVType 8)
+memTypeRepr :: forall sym arch.
+               Architecture arch
+            => S.BaseTypeRepr (MemType sym arch)
+memTypeRepr = S.knownRepr
+
+newtype Cegis sym arch a = Cegis (ReaderT (CegisParams sym arch) (StateT (CegisState sym arch) IO) a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+runCegis :: CegisParams sym arch -> CegisState sym arch -> Cegis sym arch a -> IO a
+runCegis params st (Cegis op) = evalStateT (runReaderT op params) st
 
 askSym :: Cegis sym arch sym
-askSym = reader cpSym
+askSym = Cegis $ reader cpSym
 
 askUF :: Cegis sym arch (FormulaEnv sym arch)
-askUF = reader cpUFEnv
+askUF = Cegis $ reader cpUFEnv
 
 askSemantics :: Cegis sym arch (TemplatedSemantics sym arch)
-askSemantics = reader cpSemantics
+askSemantics = Cegis $ reader cpSemantics
 
 askTarget :: Cegis sym arch (Formula sym arch)
-askTarget = reader cpTarget
+askTarget = Cegis $ reader cpTarget
+
+askTests :: Cegis sym arch [ConcreteTest sym arch]
+askTests = Cegis . lift $ csTests <$> get
+
+askCheck :: Cegis sym arch (S.Pred sym)
+askCheck = Cegis . lift $ csCheck <$> get
+
+askMemExpr :: Cegis sym arch (S.SymExpr sym (MemType sym arch))
+askMemExpr = Cegis $ reader cpMem
+
+addTest ::  ( Architecture arch
+            , sym ~ WE.ExprBuilder t st fs
+            , CB.IsSymInterface sym)
+        => Formula sym arch
+        -> ConcreteTest sym arch
+        -> Cegis sym arch ()
+addTest form test = do
+  sym <- askSym
+  st <- Cegis $ lift get
+  let newTests = test : csTests st
+
+  check <- simplifyWithTestLLVM form test
+  newCheck  <- liftIO $ S.andPred sym check (csCheck st)
+  Cegis . lift $ put (st{csTests = newTests, csCheck = newCheck})
+
+addTests :: ( Architecture arch
+            , sym ~ WE.ExprBuilder t st fs
+            , CB.IsSymInterface sym)
+        => Formula sym arch -> [ConcreteTest sym arch] -> Cegis sym arch ()
+addTests form tests = mapM_ (addTest form) tests
 
 -- | Evaluate an expression, substituting in the location values given in the
 -- machine state.
@@ -119,15 +220,17 @@ evalExpression' :: (IsLocation loc)
 evalExpression' sym vars state expr = 
   replaceLitVars sym (lookupInState sym state) vars expr
 
-evalExpression :: (IsLocation loc)
-               => MapF.MapF loc (WE.ExprBoundVar t)
-               -> LocExprs (WE.ExprBuilder t st fs) loc
+{-
+evalExpression :: forall arch t tp fs st.
+                  Architecture arch
+               => MapF.MapF (Location arch) (WE.ExprBoundVar t)
+               -> L.ArchState arch (WE.Expr t)
                -> WE.Expr t tp
                -> Cegis (WE.ExprBuilder t st fs) arch (WE.Expr t tp)
 evalExpression vars state expr = do
   sym <- askSym
-  liftIO $ evalExpression' sym vars state expr
-
+  memExpr <- askMemExpr
+  liftIO $ replaceLitVars sym (lookupInStateMem @arch sym state memExpr) vars expr
 
 -- | Evaluate a whole formula, substituting in the location values given in the
 -- machine state, returning the transformed machine state.
@@ -137,14 +240,28 @@ evalFormula :: (Architecture arch)
             -> Cegis (WE.ExprBuilder t st fs) arch (L.ArchState arch (WE.Expr t))
 evalFormula (Formula vars defs) input = do
   traverseF (evalExpression vars input) defs
+-}
 
-evalFormula' :: (Architecture arch)
+evalFormula' :: forall arch t st fs.
+                (Architecture arch)
+             => WE.ExprBuilder t st fs
+             -> Formula (WE.ExprBuilder t st fs) arch
+             -> L.ArchState arch (WE.Expr t)
+             -> (forall tp'. Location arch tp' -> IO (WE.Expr t tp'))
+             -> IO (L.ArchState arch (WE.Expr t))
+evalFormula' sym (Formula vars defs) input evalLoc = traverseF go defs
+  where
+    go :: WE.Expr t tp' -> IO (WE.Expr t tp')
+    go = replaceLitVars sym evalLoc vars
+
+
+evalFormula :: forall arch t st fs.
+                (Architecture arch)
              => WE.ExprBuilder t st fs
              -> Formula (WE.ExprBuilder t st fs) arch
              -> L.ArchState arch (WE.Expr t)
              -> IO (L.ArchState arch (WE.Expr t))
-evalFormula' sym (Formula vars defs) input = traverseF (evalExpression' sym vars input) defs
-
+evalFormula sym f st = evalFormula' sym f st (lookupInState sym st)
 
 -- | Concrete input and output states of a formula. There's nothing in the types
 -- that prevents the values from being symbolic, but please don't let them be!
@@ -159,6 +276,16 @@ data ConcreteTest' sym arch =
 -- nonMemTestInput :: P.OrdF loc
 --                => L.MemLoc loc -> ConcreteTest' sym loc -> LocExprs sym loc
 --nonMemTestInput (L.MemLoc _ mem) test = MapF.delete mem $ testInput test
+
+testDomain :: forall sym arch.
+              Architecture arch
+           => ConcreteTest sym arch
+           -> Set.Set (Some (Location arch))
+testDomain test = testDomain' (testInput test) `Set.union` testDomain' (testOutput test)
+  where
+    testDomain' :: LocExprs sym (Location arch)
+                -> Set.Set (Some (Location arch))
+    testDomain' = MapF.foldMapWithKey $ \l _ -> Set.singleton (Some l)
 
 type ConcreteTest sym arch = ConcreteTest' sym arch
 instance (Architecture arch, P.ShowF (S.SymExpr sym))
@@ -193,8 +320,9 @@ mkTest :: forall sym arch t st fs.
        => sym
        -> Formula sym arch
        -> L.ArchState arch (S.SymExpr sym)
+       -> S.SymExpr sym (MemType sym arch)
        -> IO (ConcreteTest sym arch)
-mkTest sym targetFormula ctrExample
+mkTest sym targetFormula ctrExample memExpr
   | [L.MemLoc _ mem] <- memLocation @(L.Location arch) = do
     -- putStrLn $ "Constructing test from " ++ show ctrExample
     -- the testInput is exactly the counter example for non-memory locations
@@ -202,7 +330,8 @@ mkTest sym targetFormula ctrExample
 
     -- substitute the non-memory locations from the test into the target
     -- formula. For non-memory locations, this gives us the testOutput.
-    ctrExampleOut <- evalFormula' sym targetFormula testInput'
+    ctrExampleOut <- evalFormula' sym targetFormula testInput' $
+                        lookupInStateMem @arch sym testInput' memExpr
     let testOutput' = MapF.delete mem ctrExampleOut
 
     -- to construct the memInput/memOutput, we need to find all memory locations that
@@ -212,15 +341,16 @@ mkTest sym targetFormula ctrExample
 
     return $ ConcreteTest' testInput' testOutput'
                            (Set.toList inputAddrMap) (Set.toList outputAddrMap)
-mkTest _ _ _ | otherwise = error "Cannot make test for this architecture"
+mkTest _ _ _ _ | otherwise = error "Cannot make test for this architecture"
 
 -- | Construct an initial test from concrete values
-initTest :: (L.IsLocation (Location arch), Architecture arch)
-         => WE.ExprBuilder t st fs
-         -> Formula (WE.ExprBuilder t st fs) arch
-         -> IO (ConcreteTest (WE.ExprBuilder t st fs) arch)
-initTest sym f = do locExprs <- defaultLocExprs sym
-                    mkTest sym f locExprs
+initTest :: (L.IsLocation (Location arch), Architecture arch, sym ~ WE.ExprBuilder t st fs)
+         => sym
+         -> Formula sym arch
+         -> S.SymExpr sym (MemType sym arch)
+         -> IO (ConcreteTest sym arch)
+initTest sym f memExpr = do locExprs <- defaultLocExprs sym
+                            mkTest sym f locExprs memExpr
 
 
 -- | Build an equality expression for the given non-memory location, under the given
@@ -263,11 +393,11 @@ buildEqualityLocation sym test vars outputLoc expr = do
                   -- candidate formula, then its original value is preserved.
                   Nothing -> liftIO $ lookupInState sym (testInput test) outputLoc
   shouldBe <- liftIO $ lookupInState sym (testOutput test) outputLoc
-  liftIO . putStrLn $ "Built equation for location " ++ P.showF outputLoc 
+--  liftIO . putStrLn $ "Built equation for location " ++ P.showF outputLoc 
 --  liftIO . putStrLn $ "FOR test " ++ show test
-  liftIO . putStrLn $ "WITH expression " ++ show expr
-  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
-  liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
+--  liftIO . putStrLn $ "WITH expression " ++ show expr
+--  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
+--  liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
   liftIO $ S.isEq sym actuallyIs shouldBe
 
 
@@ -278,10 +408,11 @@ simplifyWithTestLLVM :: ( Architecture arch
                      -> ConcreteTest sym arch
                      -> Cegis sym arch (WE.BoolExpr t)
 simplifyWithTestLLVM f test = do
-    liftIO . putStrLn $ "\nConstructing predicate for test " ++ show test ++ "\n"
+--    liftIO . putStrLn $ "\nConstructing predicate for test " ++ show test ++ "\n"
     nonMemPred <- simplifyWithTestNonMem f test
-    liftIO . putStrLn $ "\nNON-MEM PRED: " ++ show nonMemPred ++ "\n"
+--    liftIO . putStrLn $ "\nNON-MEM PRED: " ++ show nonMemPred ++ "\n"
     memPred <- simplifyWithTestLLVMMem (formMem f) f test
+--    liftIO . putStrLn $ "\nMEM PRED: " ++ show memPred ++ "\n"
     sym <- askSym
     res <- liftIO $ S.andPred sym nonMemPred memPred
 --    liftIO . putStrLn $ "RESULT: " ++ show res ++ "\n"
@@ -309,12 +440,15 @@ simplifyWithTestNonMem :: forall arch t st fs sym.
                       -> Cegis sym arch (S.Pred sym)
 simplifyWithTestNonMem trialFormula test = do
   sym <- askSym
-  defs' <- liftIO $ evalFormula' sym trialFormula (testInput test)
+  defs' <- liftIO $ evalFormula sym trialFormula (testInput test)
+  targetFormula <- askTarget -- Make sure to also include relevant locations in the target
   let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula 
                                    `Set.union` formOutputs trialFormula
-  liftIO . putStrLn $ "Non-mem locs: " ++ show nonMemLocs
-  liftIO . putStrLn $ "Formula: " ++ show trialFormula
-  liftIO . putStrLn $ "  evaluated with respect to the test: " ++ show defs'
+                                   `Set.union` formInputs  targetFormula
+                                   `Set.union` formOutputs targetFormula
+--  liftIO . putStrLn $ "Non-mem locs: " ++ show nonMemLocs
+--  liftIO . putStrLn $ "Formula: " ++ show trialFormula
+--  liftIO . putStrLn $ "  evaluated with respect to the test: " ++ show defs'
   liftIO $ andPred sym nonMemLocs $ \(Some l) ->
     buildEqualityLocation sym test vars l (MapF.lookup l defs')
   where
@@ -349,7 +483,7 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
   liftIO $ LLVM.withMem @arch sym $ do
     -- 1) Instantiate the non-mem variables in the formula
     let vars' = MapF.delete mem vars
-    defs' <- liftIO $ evalFormula' sym (Formula @sym @arch vars' defs) (testInput test)
+    defs' <- liftIO $ evalFormula sym (Formula @sym @arch vars' defs) (testInput test)
 
     -- 2) Prepare the memory to model the input part of the test
     doMemAccesses (memInput test)
@@ -371,6 +505,7 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
 --    liftIO . putStrLn $ "ActualIsDesired: " ++ show actualIsDesired
 
     liftIO $ S.andPred sym defaultInTest actualIsDesired
+--    return actualIsDesired
 
 simplifyWithTestLLVMMem _ _ _ = error "Memory location for this architecture does not match architecture"
 
@@ -435,14 +570,15 @@ doMemAccesses (WriteData i v : ls) = do
 buildEqualityTests :: forall arch t st fs
                     . (Architecture arch, CB.IsSymInterface (WE.ExprBuilder t st fs))
                    => Formula (WE.ExprBuilder t st fs) arch
-                   -> [ConcreteTest (WE.ExprBuilder t st fs) arch]
                    -> Cegis (WE.ExprBuilder t st fs) arch (WE.BoolExpr t)
-buildEqualityTests form tests 
+buildEqualityTests form
   | [L.MemLoc _ _] <- L.memLocation @(Location arch) = do
   sym <- askSym
+  tests <- askTests
   andPred sym tests $ simplifyWithTestLLVM form
-buildEqualityTests form tests = do
+buildEqualityTests form = do
   sym <- askSym
+  tests <- askTests
   andPred sym tests $ simplifyWithTestNonMem form
 
 -- | Given a concrete model from the SMT solver, extract concrete instructions
@@ -500,20 +636,16 @@ cegis' :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver, CB.IsSym
        -- ^ The trial instructions.
        -> Formula (CBO.OnlineBackend t solver fs) arch
        -- ^ A formula representing the sequence of trial instructions.
-       -> [ConcreteTest (CBO.OnlineBackend t solver fs) arch]
-       -- ^ All the tests we have so far.
+--       -> [ConcreteTest (CBO.OnlineBackend t solver fs) arch]
+--       -- ^ All the tests we have so far.
        -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
-cegis' trial trialFormula tests = do
+cegis' trial trialFormula = do
 --  liftIO . putStrLn $ "Number of tests: " ++ show (length tests)
 --   liftIO . putStrLn $ "\n\nTESTS:\n\t" ++ show tests
   sym <- askSym
-  -- Is this candidate satisfiable for the concrete tests we have so far? At
-  -- this point, the machine state is concrete, but the immediate values of the
-  -- instructions are symbolic. If the candidate is satisfiable for the tests,
-  -- the SAT solver will give us values for the templated immediates in order to
-  -- make the tests pass.
-  check <- buildEqualityTests trialFormula tests
---  liftIO . putStrLn $ "Equality tests: " ++ show check
+--  check <- buildEqualityTests trialFormula tests
+  -- liftIO . putStrLn $ "Equality tests: " ++ show check
+  check <- askCheck
   insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
 
   case insns of
@@ -521,11 +653,11 @@ cegis' trial trialFormula tests = do
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
-      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
+--      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
       filledInFormula <- condenseInstructions insns'
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym 
-                                         (liveMemConst filledInFormula) 
+                                         (liveMemConst filledInFormula)
                                          targetFormula 
                                          filledInFormula
       case equiv of
@@ -533,29 +665,52 @@ cegis' trial trialFormula tests = do
         -- branch?
         Timeout -> do
           liftIO . putStrLn $ "Timeout"
+          tests <- askTests
           return (CegisUnmatchable tests)
         Equivalent -> do
           liftIO . putStrLn $ "Equivalent"
           return . CegisEquivalent $ map templInsnToDism insns'
         DifferentBehavior ctrExample -> do
-          newTest <- liftIO $ mkTest sym targetFormula ctrExample
+          memExpr <- askMemExpr
+          newTest <- liftIO $ mkTest sym targetFormula ctrExample memExpr
           liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
-          cegis' trial trialFormula (newTest : tests)
-    Nothing -> return (CegisUnmatchable tests)
+          -- If the template has no degrees of freedom, then we have checked
+          -- that this template is not equivalent to this formula, and we should
+          -- move on.
+
+          -- Adds newTest to params 
+          addTest trialFormula newTest
+          cegis' trial trialFormula
+    Nothing -> do
+        tests <- askTests
+        return (CegisUnmatchable tests)
 
 
-cegis :: (Architecture arch, ArchRepr arch, WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
-      => CegisParams (CBO.OnlineBackend t solver fs) arch
+cegis :: forall arch sym t solver fs.
+        ( Architecture arch, ArchRepr arch
+        , WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs
+        , CB.IsSymInterface sym
+        )
+      => CegisParams sym arch
       -- ^ Parameters not specific to the candidate. See 'CegisParams' for
       -- details.
-      -> [ConcreteTest (CBO.OnlineBackend t solver fs) arch]
-      -- ^ The tests we know so far for the target formula.
-      -> [TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
+      -> [ConcreteTest sym arch]
+      -- ^ The concrete tests
+      -> [TemplatedInstructionFormula sym arch]
       -- ^ The candidate program.
-      -> IO (CegisResult (CBO.OnlineBackend t solver fs) arch)
+      -> IO (CegisResult sym arch)
 cegis params tests trial = do
-  trialFormula <- condenseFormulas (cpSym params) (map tifFormula trial)
-  liftIO . putStrLn $ "\n\n=============\nTRIAL FORMULA:\n============\n" ++ show trialFormula
-  runReaderT (cegis' trial trialFormula tests) params
+  let sym = cpSym params
+  trialFormula <- condenseFormulas sym (map tifFormula trial)
+  liftIO . putStrLn $ "=============\nTRIAL FORMULA:\n============\n" ++ show trialFormula
 
+  -- Is this candidate satisfiable for the concrete tests we have so far? At
+  -- this point, the machine state is concrete, but the immediate values of the
+  -- instructions are symbolic. If the candidate is satisfiable for the tests,
+  -- the SAT solver will give us values for the templated immediates in order to
+  -- make the tests pass.
 
+--  liftIO . putStrLn $ "Target formula: " ++ show (cpTarget params)
+  let cst = mkCegisState sym
+  runCegis params cst $ do addTests trialFormula tests
+                           cegis' trial trialFormula
