@@ -38,9 +38,7 @@ library
                        SemMC.Formula.MemAccesses
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
-                       SemMC.Formula.ReadWriteEval
                        SemMC.Formula.SETokens
-                       SemMC.Formula.LLVMMem
                        SemMC.Log
                        SemMC.Log.Tests
                        SemMC.Stochastic.CandidateProgram
@@ -66,7 +64,9 @@ library
                        SemMC.Synthesis.Cegis
                        SemMC.Synthesis.Core
                        SemMC.Synthesis.DivideAndConquer
+                       SemMC.Synthesis.LLVMMem
                        SemMC.Synthesis.Template
+                       SemMC.Synthesis.ReadWriteEval
                        SemMC.Synthesis.Testing
                        SemMC.Symbolic
                        SemMC.TH

@@ -42,6 +42,8 @@ module SemMC.Architecture (
   getUninterpFn,
   AccessData(..),
   LLVM.EndianForm(..),
+  MemType,
+  memTypeRepr,
   accessAddr,
   showShapeRepr,
   createSymbolicEntries,
@@ -156,14 +158,6 @@ class (IsOperand (Operand arch),
   -- location
   locationFuncInterpretation :: proxy arch -> [(String, FunctionInterpretation t st fs arch)]
 
-{-
-  -- | Interpretations for readMemUF and writeMemUF. We need these both as
-  -- uninterpreted functions (for crucible) and as function interpretations (for
-  -- synthesis). These should be instantiations of
-  -- 'SemMC.Formula.readMemEvaluator' and 'SemMC.Formula.writeMemEvaluator' with
-  -- the appropriate names and endianness arguments
-  memOpInterpretation :: proxy arch -> [(String, Evaluator arch t st fs)]
--}
 
   -- | Whether the architecture writes data in big-endian or little-endian form, by default
   archEndianForm :: proxy arch -> LLVM.EndianForm
@@ -251,6 +245,15 @@ instance ShowF (S.SymExpr sym) => Show (AccessData sym arch) where
 accessAddr :: AccessData sym arch -> S.SymBV sym (RegWidth arch)
 accessAddr (ReadData i) = i
 accessAddr (WriteData i _) = i
+
+-- | A type synonym for the type of memory
+type MemType arch = S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType (RegWidth arch))) (S.BaseBVType 8)
+
+memTypeRepr :: forall arch.
+               Architecture arch
+            => S.BaseTypeRepr (MemType arch)
+memTypeRepr = S.knownRepr
+
 
 -- | This type encapsulates an evaluator for operations represented as
 -- uninterpreted functions in semantics.  It may seem strange to interpret

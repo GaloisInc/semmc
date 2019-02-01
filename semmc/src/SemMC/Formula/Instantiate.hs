@@ -43,7 +43,6 @@ import qualified What4.Expr.Builder as S
 import qualified SemMC.Architecture                 as A
 import qualified SemMC.BoundVar                     as BV
 import qualified SemMC.Formula.Eval                 as FE
-import qualified SemMC.Formula.ReadWriteEval        as RWE
 import           SemMC.Formula.Formula
 import qualified SemMC.Util                         as U
 
