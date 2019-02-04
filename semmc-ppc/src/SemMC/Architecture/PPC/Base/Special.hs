@@ -108,7 +108,6 @@ baseSpecial = do
     let res = newCR
     defLoc cr res
 
-{- TODO: Generating errors when running scripts/genbase.sh, needs to be resolved
   defineOpcodeWithIP "MFOCRF" $ do
     comment "Move From One Condition Register Field (XFX-form)"
     rT <- param "rT" gprc naturalBV
@@ -119,15 +118,14 @@ baseSpecial = do
 
     -- let check = bvpopcnt (zext' 32 (Loc crbit))
     -- let fieldIndex = bvclz (zext' 32 (Loc crbit))
-    let fieldIndex = zext' 32 (Loc crbit)
-    let fieldBitStart = bvmul fieldIndex (LitBV 32 0x4)
-    let fieldBitEnd = bvadd fieldBitStart (LitBV 32 0x3)
-    let fieldMask = mask 32 fieldBitStart fieldBitEnd
-    let rTMask = bvnot $ mask 64 fieldBitStart fieldBitEnd
+    let fieldIndex = zext (Loc crbit)
+    let fieldBitStart = bvmul fieldIndex (naturalLitBV 0x4)
+    let fieldBitEnd = bvadd fieldBitStart (naturalLitBV 0x3)
+    let fieldMask = mask (bitSizeValue ?bitSize) fieldBitStart fieldBitEnd
+    let rTMask = bvnot $ mask (bitSizeValue ?bitSize) fieldBitStart fieldBitEnd
     let newRT = bvor
-          (zext $ bvand fieldMask (Loc cr))
-          (bvand rTMask (undefinedBV 64))
+          (bvand fieldMask (zext (Loc cr)))
+          (bvand rTMask (undefinedBV (bitSizeValue ?bitSize)))
     -- let res = ite (bveq check (LitBV 32 0x1)) newRT (undefinedBV 64)
     let res = newRT
     defLoc rT res
--}
