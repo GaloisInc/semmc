@@ -4,7 +4,7 @@
   (si . 'S16imm)
   (rA . 'Gprc)))
  (in
-  (si rA 'IP))
+  (rA si 'IP))
  (defs
   ((rT
    (bvmul

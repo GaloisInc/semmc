@@ -2,7 +2,7 @@
  ((rA . 'Gprc)
   (imm . 'S16imm)))
  (in
-  (imm rA 'IP))
+  (imm 'IP))
  (defs
   ((rA
    ((_ sign_extend 16)

@@ -107,7 +107,6 @@ manual bitSize = runSem $ do
   defineOpcodeWithIP "LI" $ do
     rA <- param "rA" gprc naturalBV
     imm <- param "imm" s16imm (EBV 16)
-    input rA
     input imm
     defLoc rA (sext (Loc imm))
   defineOpcodeWithIP "LIS" $ do
@@ -144,3 +143,4 @@ intrinsic with its constant fixed to zero.  That would let us learn most of the
 dotted variants.
 
 -}
+

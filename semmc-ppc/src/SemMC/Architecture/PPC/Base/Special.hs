@@ -108,6 +108,7 @@ baseSpecial = do
     let res = newCR
     defLoc cr res
 
+{- TODO: Generating errors when running scripts/genbase.sh, needs to be resolved
   defineOpcodeWithIP "MFOCRF" $ do
     comment "Move From One Condition Register Field (XFX-form)"
     rT <- param "rT" gprc naturalBV
@@ -129,3 +130,4 @@ baseSpecial = do
     -- let res = ite (bveq check (LitBV 32 0x1)) newRT (undefinedBV 64)
     let res = newRT
     defLoc rT res
+-}

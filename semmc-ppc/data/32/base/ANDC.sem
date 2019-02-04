@@ -4,7 +4,7 @@
   (rB . 'Gprc)
   (rS . 'Gprc)))
  (in
-  (rB rS 'IP))
+  (rS rB 'IP))
  (defs
   ((rA
    (bvand
