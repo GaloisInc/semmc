@@ -13,50 +13,42 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module SemMC.Formula.MemAccesses
-  (-- liveMem
---  , liveMem'
-   liveMemInExpr
+  ( liveMemInExpr
   , liveMem
   , liveMemAddresses
   , liveMemConst
   , liveMemMap
---  , partitionEithers
   , partitionLocs
   , someArrayLookup
   , someIsEq
   , exprSymFnToUninterpFn
+  , isReadMem
+  , isWriteMem
   ) where
 
 import qualified Data.Set as Set
 import qualified Data.Text as Text
-import qualified Data.Either as Either
-import qualified Data.Map as Map
-import           Data.Foldable
 import           Data.Maybe (listToMaybe, catMaybes)
-import           GHC.TypeNats (KnownNat)
 
 import           Data.Parameterized.Some
-import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Classes as P
-import qualified Data.Parameterized.NatRepr as P
 import           Data.Parameterized.TraversableF
 import           Data.Parameterized.TraversableFC
 
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 import qualified What4.Expr.Builder as WB
-import qualified What4.Protocol.Online as WPO
 import qualified What4.Symbol as WS
 import qualified What4.Concrete as WC
 
-import           SemMC.Architecture
+import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
 import           SemMC.Formula.Formula
 
 
 partitionLocs :: forall arch
-               . Architecture arch
+               . A.Architecture arch
               => Set.Set (Some (L.Location arch))
               -> ( Set.Set (Some (L.Location arch))
                  , Maybe (L.MemLoc (L.Location arch)))
@@ -68,13 +60,13 @@ partitionLocs locs =
 -- | Given a formula @F@, construct a map @i ↦ lookup (F(mem)) i@ for each @i@ in
 -- the live memory addresses of @F@
 liveMemMap :: forall arch t st fs sym.
-              (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+              (A.Architecture arch, sym ~ WE.ExprBuilder t st fs)
            => Formula sym arch
-           -> Set.Set (AccessData sym arch)
+           -> Set.Set (A.AccessData sym arch)
 liveMemMap f = Set.filter isWrite $ liveMem f
   where
-    isWrite :: AccessData sym arch -> Bool
-    isWrite (WriteData _ _) = True
+    isWrite :: A.AccessData sym arch -> Bool
+    isWrite (A.WriteData _ _) = True
     isWrite _ = False
 
   
@@ -106,135 +98,104 @@ someIsEq sym (Some x) (Some y)
 
 
 -- | Returns the set of memory addresses that are accessed by the formula
-liveMem :: (Architecture arch)
+liveMem :: (A.Architecture arch)
         => Formula (WE.ExprBuilder t st fs) arch
-        -> Set.Set (AccessData (WE.ExprBuilder t st fs) arch)
-liveMem f = foldMapF (liveMemInExpr f) (formDefs f)
+        -> Set.Set (A.AccessData (WE.ExprBuilder t st fs) arch)
+liveMem f = foldMapF liveMemInExpr (formDefs f)
 
 liveMemAddresses :: forall arch t st fs. 
-                    Architecture arch
+                    A.Architecture arch
                  => Formula (WE.ExprBuilder t st fs) arch
-                 -> Set.Set (WE.Expr t (S.BaseBVType (RegWidth arch)))
-liveMemAddresses = Set.map accessAddr . liveMem
-
-{-
--- | Returns a list of memory locations (as bit vectors) that are accessed or
--- written to in a formula, along with a list of symbolic expressions
-liveMem :: Architecture arch
-        => Formula (WE.ExprBuilder t st fs) arch
-        -> (Set.Set Integer, Set.Set (Some (WE.Expr t)))
-liveMem form = partitionEithers $ liveMem' form
-
-liveMem' :: Architecture arch
-         => Formula (WE.ExprBuilder t st fs) arch
-         -> Set.Set (Either Integer (Some (WE.Expr t)))
-liveMem' form = case readLocation "Mem" of
-                  Just (Some mem) -> -- maybe [] (Set.toList . (liveMemInExpr form)) 
-                                     --          (MapF.lookup mem (formDefs form))
-                                     case MapF.lookup mem (formDefs form) of
-                                       Nothing -> Set.empty
-                                       Just e  -> liveMemInExpr form e
-                  Nothing         -> error "Cannot construct the location 'Mem'"
-
-
-partitionEithers :: (Ord a,Ord b) => Set.Set (Either a b) -> (Set.Set a, Set.Set b)
-partitionEithers = foldr (Either.either (\a (sA,sB) -> (Set.insert a sA,sB)) 
-                                        (\b (sA,sB) -> (sA,Set.insert b sB))) 
-                         (Set.empty,Set.empty)
-                     
-
-liveMemConst :: Architecture arch
-             => Formula (WE.ExprBuilder t st fs) arch
-             -> [Integer]
-liveMemConst = Set.toList . fst . liveMem 
-
--- | Coerce an integer into a memory address
-mkAddress :: S.IsExprBuilder sym
-          => sym -> L.MemLoc loc -> Integer -> IO (Some (S.SymExpr sym))
-mkAddress sym (L.MemLoc w _) i = do e <- S.bvLit sym w i
-                                    return (Some e)
-mkAddresses :: S.IsExprBuilder sym
-          => sym -> L.MemLoc loc -> Set.Set Integer -> IO (Set.Set (Some (S.SymExpr sym)))
-mkAddresses = undefined
-
-
-
-liveMemInExprs :: Architecture arch
-               => Formula (WE.ExprBuilder t st fs) arch
-               -> Ctx.Assignment (WE.Expr t) idx
-               -> Set.Set (Some (WE.Expr t))
-liveMemInExprs form idx = foldMapFC (liveMemInExpr form) idx
--}
+                 -> Set.Set (WE.Expr t (S.BaseBVType (A.RegWidth arch)))
+liveMemAddresses = Set.map A.accessAddr . liveMem
 
 liveMemConst :: forall arch t st fs.
-                Architecture arch
+                A.Architecture arch
              => Formula (WE.ExprBuilder t st fs) arch
              -> [Integer]
 liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMemAddresses f)
   where
-    exprToInt :: WE.Expr t (S.BaseBVType (RegWidth arch)) -> Maybe Integer
+    exprToInt :: WE.Expr t (S.BaseBVType (A.RegWidth arch)) -> Maybe Integer
     exprToInt e | Just (WC.ConcreteBV _ i)    <- S.asConcrete e = Just i
     exprToInt _ | otherwise = Nothing
 
 
-liveMemInExpr :: Architecture arch
-              => Formula (WE.ExprBuilder t st fs) arch
-              -> WE.Expr t a
-              -> Set.Set (AccessData (WE.ExprBuilder t st fs) arch)
-liveMemInExpr f (WE.AppExpr a)        = foldMapFC (liveMemInExpr f) $ WE.appExprApp a 
-liveMemInExpr f (WE.NonceAppExpr a)   = liveMemInNonceApp f $ WE.nonceExprApp a
-liveMemInExpr _ _                     = Set.empty
+liveMemInExpr :: forall arch t st fs a.
+                 A.Architecture arch
+              => WE.Expr t a
+              -> Set.Set (A.AccessData (WE.ExprBuilder t st fs) arch)
+liveMemInExpr e
+  | Just S.Refl <- S.testEquality (S.exprType e) (A.memTypeRepr @arch)
+  , Just (mem', wd@(A.WriteData i v)) <- isWriteMem @arch @(WE.ExprBuilder t st fs) e
+  = Set.insert wd $ liveMemInExpr mem' `Set.union` liveMemInExpr i `Set.union` liveMemInExpr v
 
-{-
-liveMemInApp :: Architecture arch
-              => Formula (WE.ExprBuilder t st fs) arch
-              -> WE.App (WE.Expr t) a
-              -> Set.Set (Some (WE.Expr t))
-liveMemInApp f app = foldMapFC (liveMemInExpr f) app
-liveMemInApp _ WE.TrueBool = Set.empty
-liveMemInApp _ WE.FalseBool = Set.empty
-liveMemInApp f (WE.NotBool e) = liveMemInExpr f e
-liveMemInApp f (WE.AndBool e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.XorBool e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.IteBool e e1 e2) = liveMemInExpr f e 
-                          `Set.union` liveMemInExpr f e1 
-                          `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.BVAdd _ e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.BVConcat _ e1 e2) = liveMemInExpr f e1 `Set.union` liveMemInExpr f e2
-liveMemInApp f (WE.BVSext _ e) = liveMemInExpr f e
-liveMemInApp f (WE.ConstantArray _ _ e) = liveMemInExpr f e
-liveMemInApp _ e = error $ "Case " ++ show e ++ " not covered in liveMemInApp"
--- TODO: expand liveMemInApp to more cases, possibly with lenses?
--}
+liveMemInExpr e
+  | S.BaseBVRepr _ <- S.exprType e
+  , Just (mem', rd@(A.ReadData i)) <- isReadMem @arch e
+  = Set.insert rd $ liveMemInExpr mem' `Set.union` liveMemInExpr i
 
+liveMemInExpr (WE.AppExpr a)        = foldMapFC liveMemInExpr $ WE.appExprApp a
+liveMemInExpr (WE.NonceAppExpr a)   = foldMapFC liveMemInExpr $ WE.nonceExprApp a
+liveMemInExpr _                     = Set.empty
 
 exprSymFnToUninterpFn :: forall arch t args ret.
-                         Architecture arch 
-                      => WE.ExprSymFn t args ret -> Maybe (UninterpFn arch)
-exprSymFnToUninterpFn f = 
+                         A.Architecture arch 
+                      => WE.ExprSymFn t args ret -> Maybe (A.UninterpFn arch)
+exprSymFnToUninterpFn f =
   case WE.symFnInfo f of
     WE.UninterpFnInfo args ret -> do
       let name = Text.unpack . WS.solverSymbolAsText $ WE.symFnName f 
-      f'@(MkUninterpFn _ args' ret' _) <- getUninterpFn @arch name
+      f'@(A.MkUninterpFn _ args' ret' _) <- A.getUninterpFn @arch name
       case (P.testEquality args args', P.testEquality ret ret') of 
         (Just P.Refl, Just P.Refl) -> return f'
         (_, _)                     -> Nothing
     _ -> Nothing
 
 
+-- | Given an expression representing memory, returns 'Just (mem, WriteData idx
+-- v)' if the original expression is equal to 'write_mem_x mem idx v' for some
+-- x-length bit vector 'v'.
+isWriteMem :: forall arch sym t st fs.
+              ( sym ~ WE.ExprBuilder t st fs
+              , A.Architecture arch
+              )
+           => S.SymExpr sym (A.MemType arch)
+           -> Maybe ( S.SymExpr sym (A.MemType arch)
+                    , A.AccessData sym arch)
+isWriteMem memExpr@(WE.NonceAppExpr a)
+  | WE.FnApp f (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:> v) <- WE.nonceExprApp a
+  , Just uf <- exprSymFnToUninterpFn @arch f
+  , S.BaseBVRepr w <- S.exprType v
+  , S.BaseBVRepr iSize <- S.exprType i
+  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.natValue w))
+  , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
+  , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
+  , Just S.Refl <- S.testEquality (iSize) (S.knownNat @(A.RegWidth arch))
+  = Just (mem, A.WriteData i v)
+isWriteMem memExpr
+  | Just (WE.UpdateArray (S.BaseBVRepr w) _ mem (Ctx.Empty Ctx.:> i) v) <- WB.asApp memExpr
+  , Just S.Refl <- S.testEquality w (S.knownNat @8)
+  = Just (mem, A.WriteData i v)
+isWriteMem _ = Nothing
 
-liveMemInNonceApp :: forall arch t st fs a. 
-                 Architecture arch
-              => Formula (WE.ExprBuilder t st fs) arch
-              -> WE.NonceApp t (WE.Expr t) a
-              -> Set.Set (AccessData (WE.ExprBuilder t st fs) arch)
-liveMemInNonceApp form (WE.FnApp f args) =
-  foldMapFC (liveMemInExpr form) args `Set.union` 
-    case exprSymFnToUninterpFn @arch f of
-      Just (MkUninterpFn _ args' _ liveness) ->
-        case S.testEquality (fmapFC S.exprType args) args' of
-          Just S.Refl -> Set.fromList $ liveness args
-          Nothing     -> Set.empty
-      Nothing -> Set.empty
-liveMemInNonceApp form app = foldMapFC (liveMemInExpr form) app
-
+-- | Returns 'Just (mem, ReadData idx)' if the original expression is equal to 'read_mem_w'
+isReadMem :: forall arch sym t st fs w.
+           ( sym ~ WE.ExprBuilder t st fs
+           , A.Architecture arch
+           )
+         => S.SymBV sym w
+         -> Maybe (S.SymExpr sym (A.MemType arch)
+                  , A.AccessData sym arch)
+isReadMem e@(WE.NonceAppExpr a)
+  | WE.FnApp f (Ctx.Empty Ctx.:> mem Ctx.:> i) <- WE.nonceExprApp a
+  , Just uf <- exprSymFnToUninterpFn @arch f
+  , A.uninterpFnName uf == A.uninterpFnName (A.readMemUF @arch (S.natValue $ S.bvWidth e))
+  , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr (S.knownNat @(A.RegWidth arch)))
+  , Just S.Refl <- S.testEquality (S.exprType mem) (A.memTypeRepr @arch)
+  = Just (mem, A.ReadData i)
+isReadMem e
+  | Just (WE.SelectArray _ mem (Ctx.Empty Ctx.:> i)) <- WB.asApp e
+  , Just S.Refl <- S.testEquality (S.bvWidth e) (S.knownNat @8)
+  , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr (S.knownNat @(A.RegWidth arch)))
+  = Just (mem, A.ReadData i)
+isReadMem _ | otherwise = Nothing

@@ -13,6 +13,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ViewPatterns #-}
 module SemMC.Synthesis.Cegis
   ( ConcreteTest
   , initTest
@@ -28,7 +29,7 @@ import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Control.Monad.Trans.State  (StateT(..), evalStateT, get, put )
 import           Control.Monad.Trans.Class  (lift)
 import           Data.Foldable
-import           Data.Maybe ( fromJust, listToMaybe )
+import           Data.Maybe ( fromJust, listToMaybe, isJust )
 import           Data.Kind
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
@@ -188,11 +189,13 @@ addTest ::  ( Architecture arch
         -> ConcreteTest sym arch
         -> Cegis sym arch ()
 addTest form test = do
+  liftIO . putStrLn $ "Adding test " ++ show test
   sym <- askSym
   st <- Cegis $ lift get
   let newTests = test : csTests st
 
   check <- simplifyWithTestLLVM form test
+  -- liftIO . putStrLn $ "Resulting in: " ++ show check
   newCheck  <- liftIO $ S.andPred sym check (csCheck st)
   Cegis . lift $ put (st{csTests = newTests, csCheck = newCheck})
 
@@ -228,13 +231,40 @@ evalFormula' :: forall arch t st fs sym.
              => sym
              -> Formula sym arch
              -> (forall tp'. Location arch tp' -> IO (WE.Expr t tp'))
-             -> IO (L.ArchState arch (WE.Expr t))
+--             -> IO (L.ArchState arch (WE.Expr t))
+             -> IO (Formula sym arch)
 evalFormula' sym f@(Formula vars defs) evalLoc = do
   -- 1) replace all the locations in the formula with their interpretations by evalLoc
-  defs'   <- traverseF (evalExpression' sym vars evalLoc) defs
-  -- 2) instantiate all calls to read_mem in the formula
-  traverseF (RW.instantiateReadMem sym f evalLoc) defs'
+  defs' <- traverseF (evalExpression' sym vars evalLoc) defs
+  return (Formula vars defs')
 
+evalFormulaNoMem :: forall arch t st fs sym.
+                ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
+                , Architecture arch
+                )
+             => sym
+             -> Formula sym arch
+             -> L.ArchState arch (WE.Expr t)
+             -> Cegis sym arch (Formula sym arch)
+evalFormulaNoMem sym f state = do
+  memExpr <- askMemExpr
+  let evalLoc :: forall tp. Location arch tp -> IO (WE.Expr t tp)
+      evalLoc = lookupInStateMem @arch sym state memExpr
+  f' <- liftIO $ evalFormula' sym f evalLoc
+  liftIO $ evalFormulaReadMem sym f' evalLoc
+
+-- | instantiate all calls to read_mem in the formula
+evalFormulaReadMem :: forall arch t st fs sym.
+                ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
+                , Architecture arch
+                )
+             => sym
+             -> Formula sym arch
+             -> (forall tp'. Location arch tp' -> IO (WE.Expr t tp'))
+             -> IO (Formula sym arch)
+evalFormulaReadMem sym f@(Formula vars defs) evalLoc = do
+  defs' <- traverseF (RW.instantiateReadMem sym f evalLoc) defs
+  return (Formula vars defs')
 
 evalFormula :: forall arch t st fs sym.
              ( sym ~ WE.ExprBuilder t st fs, CB.IsSymInterface sym
@@ -243,26 +273,58 @@ evalFormula :: forall arch t st fs sym.
              => sym
              -> Formula sym arch
              -> L.ArchState arch (WE.Expr t)
-             -> IO (L.ArchState arch (WE.Expr t))
+             -> IO (Formula sym arch)
 evalFormula sym f st = evalFormula' sym f (lookupInState sym st)
 
 -- | Concrete input and output states of a formula. There's nothing in the types
 -- that prevents the values from being symbolic, but please don't let them be!
-data ConcreteTest' sym arch =
-  ConcreteTest' { testInput  :: LocExprs sym (Location arch)
+data ConcreteTest sym arch =
+  ConcreteTest { testInput  :: LocExprs sym (Location arch)
                 , testOutput :: LocExprs sym (Location arch)
                 , memInput   :: [AccessData sym arch]
                 , memOutput  :: [AccessData sym arch]
                 }
 
-type ConcreteTest sym arch = ConcreteTest' sym arch
 instance (Architecture arch, P.ShowF (S.SymExpr sym))
-      => Show (ConcreteTest' sym arch)
+      => Show (ConcreteTest sym arch)
   where
     show test = "⟨\t" ++ show (testInput test)
                 ++ "\n|||\t" ++ show (testOutput test)
                 ++ "\n|||\t" ++ show (memInput test) 
                 ++ "\n|||\t" ++ show (memOutput test) ++ "\n⟩"
+
+-- | The equality of concrete tests only relies on their input
+concreteTestEq :: forall sym arch.
+                  (S.IsExprBuilder sym, Architecture arch)
+               => ConcreteTest sym arch -> ConcreteTest sym arch -> Bool
+concreteTestEq test1 test2 =
+    concreteLocExprsEq (testInput test1) (testInput test2)
+    && and (zipWith concreteAccessDataEq (memInput test1) (memInput test2))
+  where
+    concreteLocExprsEq :: S.TestEquality loc => LocExprs sym loc -> LocExprs sym loc -> Bool
+    concreteLocExprsEq (MapF.toList -> l1) (MapF.toList -> l2) =
+        length l1 == length l2
+        && and (zipWith (\(MapF.Pair loc1 v1) (MapF.Pair loc2 v2) ->
+                            isJust (S.testEquality loc1 loc2) && concreteSymExprEq v1 v2)
+                l1 l2)
+
+    concreteAccessDataEq :: AccessData sym arch -> AccessData sym arch -> Bool
+    concreteAccessDataEq (ReadData idx1) (ReadData idx2) = concreteSymExprEq idx1 idx2
+    concreteAccessDataEq (WriteData idx1 v1) (WriteData idx2 v2) =
+        concreteSymExprEq idx1 idx2 && concreteSymExprEq v1 v2
+    concreteAccessDataEq _ _ = False
+
+    concreteSymExprEq :: S.SymExpr sym tp1 -> S.SymExpr sym tp2 -> Bool
+    concreteSymExprEq e1 e2 | Just c1 <- S.asConcrete e1, Just c2 <- S.asConcrete e2 =
+        isJust (S.testEquality c1 c2)
+                            | otherwise = False
+
+isExistingTest :: (Architecture arch, S.IsExprBuilder sym)
+               => ConcreteTest sym arch
+               -> Cegis sym arch Bool
+isExistingTest test = do
+  tests <- askTests
+  return . and $ not . concreteTestEq test <$> tests
 
 -- Returns a 'LocExprs' data structure that maps all locations to a default value.
 defaultLocExprs :: forall loc sym. 
@@ -300,8 +362,10 @@ mkTest sym targetFormula ctrExample memExpr
 
     -- substitute the non-memory locations from the test into the target
     -- formula. For non-memory locations, this gives us the testOutput.
-    ctrExampleOut <- evalFormula' sym targetFormula $
-                        lookupInStateMem @arch sym testInput' memExpr
+    let evalLoc :: forall tp. Location arch tp -> IO (WE.Expr t tp)
+        evalLoc = lookupInStateMem @arch sym testInput' memExpr
+    targetFormula' <- evalFormula' sym targetFormula evalLoc
+    Formula _ ctrExampleOut <- evalFormulaReadMem sym targetFormula' evalLoc
     let testOutput' = MapF.delete mem ctrExampleOut
 
     -- to construct the memInput/memOutput, we need to find all memory locations that
@@ -309,8 +373,8 @@ mkTest sym targetFormula ctrExample memExpr
     let inputAddrMap  = MA.liveMemMap $ Formula @sym @arch (formParamVars targetFormula) ctrExample
         outputAddrMap = MA.liveMemMap $ Formula @sym @arch (formParamVars targetFormula) ctrExampleOut
 
-    return $ ConcreteTest' testInput' testOutput'
-                           (Set.toList inputAddrMap) (Set.toList outputAddrMap)
+    return $ ConcreteTest testInput' testOutput'
+                          (Set.toList inputAddrMap) (Set.toList outputAddrMap)
 mkTest _ _ _ _ | otherwise = error "Cannot make test for this architecture"
 
 -- | Construct an initial test from concrete values
@@ -341,37 +405,79 @@ initTest sym f memExpr = do locExprs <- defaultLocExprs sym
 -- , the location is @r3@, and the expression is @Just (3*r2 + imm5)@, this
 -- function will generate the expression @3*5 + imm5 = 10@. If the expression
 -- were instead @Nothing@, this would generate @7 = 10@.
-buildEqualityLocation :: Architecture arch
-                      => WE.ExprBuilder t st fs
-                      -> ConcreteTest' (WE.ExprBuilder t st fs) arch
-                      -> MapF.MapF (Location arch) (WE.ExprBoundVar t)
+buildEqualityLocation :: forall arch t st fs tp sym.
+                         (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+                      => sym
+                      -> ConcreteTest sym arch
+                      -> MapF.MapF (Location arch) (S.BoundVar sym)
                       -- ^ The bound variables representing the input values for
                       -- each location.
                       -> Location arch tp
                       -- ^ The location for which we're building the equality.
-                      -> Maybe (WE.Expr t tp)
+                      -> Maybe (S.SymExpr sym tp)
                       -- ^ If 'Just', the symbolic representation of the new
                       -- definition of this location. If 'Nothing', then assume
                       -- the identity transformation.
-                      -> IO (WE.BoolExpr t)
+                      -> Cegis sym arch (WE.BoolExpr t)
 buildEqualityLocation sym test _vars loc Nothing
   -- If the location does not appear in the test output, then the location is preserved
   | Nothing <- MapF.lookup loc (testOutput test) = return $ S.truePred sym
 
 buildEqualityLocation sym test vars outputLoc expr = do
   actuallyIs <- case expr of
-                  Just expr' -> evalExpression sym vars (testInput test) expr'
+                  Just expr' -> liftIO $ evalExpression sym vars (testInput test) expr'
                   -- If this location isn't present in the definitions of the
                   -- candidate formula, then its original value is preserved.
                   Nothing -> liftIO $ lookupInState sym (testInput test) outputLoc
   shouldBe <- liftIO $ lookupInState sym (testOutput test) outputLoc
---  liftIO . putStrLn $ "Built equation for location " ++ P.showF outputLoc 
---  liftIO . putStrLn $ "FOR test " ++ show test
---  liftIO . putStrLn $ "WITH expression " ++ show expr
---  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
---  liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
-  liftIO $ S.isEq sym actuallyIs shouldBe
+  liftIO . putStrLn $ "Built equation for location " ++ P.showF outputLoc
+  -- liftIO . putStrLn $ "FOR test " ++ show test
+  liftIO . putStrLn $ "WITH expression " ++ show expr
+  liftIO . putStrLn $ "ACTUALLY IS:\t" ++ show actuallyIs
+  liftIO . putStrLn $ "SHOULD BE:\t" ++ show shouldBe
+  actuallyShould <- liftIO $ S.isEq sym actuallyIs shouldBe
+  
+  -- Check that these results don't overlap with memory
+  noOverlap <- checkNoOverlap @arch sym actuallyIs shouldBe
+  liftIO . putStrLn $ "NO OVERLAP CHECK:\t" ++ show noOverlap
 
+  liftIO $ S.andPred sym actuallyShould noOverlap
+
+-- | @checkNoOverlap sym e1 e2@ produces the predicate:
+-- for all i \in dom(e1), j \in dom(e2), i <> j -> Mem[i] <> Mem[j]
+checkNoOverlap :: forall arch t st fs sym tp.
+                  (Architecture arch, sym ~ WE.ExprBuilder t st fs)
+               => sym
+               -> S.SymExpr sym tp
+               -> S.SymExpr sym tp
+               -> Cegis sym arch (S.Pred sym)
+checkNoOverlap sym e1 e2 = do
+  let acc1 = MA.liveMemInExpr @arch e1
+  let acc2 = MA.liveMemInExpr @arch e2
+  andPred sym acc1 $ \i ->
+    andPred sym acc2 $ \j ->
+      inMemAccesses $ getIndices i j
+  where
+    getIndices (ReadData i) (ReadData j) = (i,j)
+    getIndices (ReadData i) (WriteData j _) = (i,j)
+    getIndices (WriteData i _) (ReadData j) = (i,j)
+    getIndices (WriteData i _) (WriteData j _) = (i,j)
+
+-- | @inMemAccesses (i,j)@ produces the predicate:
+-- forall j \in accesses, i <> j -> Mem[i] <> Mem[j]
+inMemAccesses :: forall arch sym.
+                 (S.IsExprBuilder sym)
+              => (S.SymBV sym (RegWidth arch), S.SymBV sym (RegWidth arch))
+              -> Cegis sym arch (S.Pred sym)
+inMemAccesses (i,j) = do
+  sym <- askSym
+  mem <- askMemExpr
+  liftIO $ do
+    i_neq_j <- S.notPred sym =<< S.isEq sym i j
+    mem_i <- S.arrayLookup sym mem (Ctx.empty Ctx.:> i)
+    mem_j <- S.arrayLookup sym mem (Ctx.empty Ctx.:> j)
+    mem_i_neq_mem_j <- S.notPred sym =<< S.isEq sym mem_i mem_j
+    S.impliesPred sym i_neq_j mem_i_neq_mem_j
 
 simplifyWithTestLLVM :: ( Architecture arch
                         , sym ~ WE.ExprBuilder t st fs
@@ -383,9 +489,9 @@ simplifyWithTestLLVM :: ( Architecture arch
 simplifyWithTestLLVM f test = do
 --    liftIO . putStrLn $ "\nConstructing predicate for test " ++ show test ++ "\n"
     nonMemPred <- simplifyWithTestNonMem f test
---    liftIO . putStrLn $ "\nNON-MEM PRED: " ++ show nonMemPred ++ "\n"
+    liftIO . putStrLn $ "\nNON-MEM PRED: " ++ show nonMemPred ++ "\n"
     memPred <- simplifyWithTestLLVMMem (formMem f) f test
---    liftIO . putStrLn $ "\nMEM PRED: " ++ show memPred ++ "\n"
+    liftIO . putStrLn $ "\nMEM PRED: " ++ show memPred ++ "\n"
     sym <- askSym
     res <- liftIO $ S.andPred sym nonMemPred memPred
 --    liftIO . putStrLn $ "RESULT: " ++ show res ++ "\n"
@@ -415,16 +521,16 @@ simplifyWithTestNonMem :: forall arch t st fs sym.
                       -> Cegis sym arch (S.Pred sym)
 simplifyWithTestNonMem trialFormula test = do
   sym <- askSym
-  defs' <- liftIO $ evalFormula sym trialFormula (testInput test)
+  Formula _ defs' <- evalFormulaNoMem sym trialFormula (testInput test)
   targetFormula <- askTarget -- Make sure to also include relevant locations in the target
   let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula 
                                    `Set.union` formOutputs trialFormula
                                    `Set.union` formInputs  targetFormula
                                    `Set.union` formOutputs targetFormula
 --  liftIO . putStrLn $ "Non-mem locs: " ++ show nonMemLocs
---  liftIO . putStrLn $ "Formula: " ++ show trialFormula
---  liftIO . putStrLn $ "  evaluated with respect to the test: " ++ show defs'
-  liftIO $ andPred sym nonMemLocs $ \(Some l) ->
+  liftIO . putStrLn $ "Trial Formula: " ++ show trialFormula
+  liftIO . putStrLn $ "  evaluated with respect to the test: " ++ show defs'
+  andPred sym nonMemLocs $ \(Some l) ->
     buildEqualityLocation sym test vars l (MapF.lookup l defs')
   where
     vars = formParamVars trialFormula
@@ -457,7 +563,7 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
   liftIO $ LLVM.withMem @arch sym $ \defaultValue -> do
     -- 1) Instantiate the non-mem variables in the formula
     let vars' = MapF.delete mem vars
-    defs' <- liftIO $ evalFormula sym (Formula @sym @arch vars' defs) (testInput test)
+    Formula _ defs' <- liftIO $ evalFormula sym (Formula @sym @arch vars' defs) (testInput test)
 
     -- 2) Prepare the memory to model the input part of the test
     LLVM.doMemAccesses (memInput test)
@@ -604,7 +710,7 @@ cegis' trial trialFormula = do
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
---      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
+      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
       filledInFormula <- condenseInstructions insns'
       targetFormula <- askTarget
       equiv <- liftIO $ formulasEquivSym sym 
@@ -624,14 +730,23 @@ cegis' trial trialFormula = do
         DifferentBehavior ctrExample -> do
           memExpr <- askMemExpr
           newTest <- liftIO $ mkTest sym targetFormula ctrExample memExpr
-          liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
-          -- If the template has no degrees of freedom, then we have checked
-          -- that this template is not equivalent to this formula, and we should
-          -- move on.
 
-          -- Adds newTest to params 
-          addTest trialFormula newTest
-          cegis' trial trialFormula
+          -- JP: it is probably better not to do this check since if the
+          -- algorithm works correctly it should never generate duplicate
+          -- checks. However, for debugging purposes this check is useful to
+          -- avoid infinite loops
+          testIsDuplicate <- isExistingTest newTest
+          if testIsDuplicate
+          then error "Generated a duplicate test in Cegis" -- askTests >>= return . CegisUnmatchable
+          else do
+            liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
+            -- If the template has no degrees of freedom, then we have checked
+            -- that this template is not equivalent to this formula, and we should
+            -- move on.
+
+            -- Adds newTest to params
+            addTest trialFormula newTest
+            cegis' trial trialFormula
     Nothing -> do
         tests <- askTests
         return (CegisUnmatchable tests)

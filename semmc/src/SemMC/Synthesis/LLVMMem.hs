@@ -148,14 +148,14 @@ readMem bits offset = do
   sym <- askSym
   ptr <- mkPtr offset
   mem <- askImpl
-  liftIO . print $ PP.text "Attempting to read pointer " <+> LLVM.ppPtr ptr
-               <+> PP.text " from mem " <+> LLVM.ppMem mem
+--  liftIO . print $ PP.text "Attempting to read pointer " <+> LLVM.ppPtr ptr
+--               <+> PP.text " from mem " <+> LLVM.ppMem mem
   alignment <- askAlignment
   sType <- bvType bits
 
   v <- liftIO $ LLVM.loadRaw sym mem ptr sType alignment
 
-  liftIO . print $ PP.text "Successfully read value " <+> PP.text (show v)
+--  liftIO . print $ PP.text "Successfully read value " <+> PP.text (show v)
 
   return $ llvmValToSymBV bits v
 
@@ -194,8 +194,8 @@ writeMem :: forall arch sym bits.
 writeMem offset v = do
   ptr <- mkPtr offset
   mem <- askImpl
-  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
-  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
+--  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
+--  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
   align <- askAlignment
 
   sType <- bvType (S.bvWidth v)
@@ -205,7 +205,7 @@ writeMem offset v = do
   sym <- askSym
   mem' <- liftIO $ LLVM.storeRaw sym mem ptr sType align v'
 
-  liftIO . print $ PP.text "Successfully wrote value"
+--  liftIO . print $ PP.text "Successfully wrote value"
 
   putImpl mem'
 
@@ -270,31 +270,8 @@ instantiateLLVMExpr mem
     instantiateLLVMExpr mem'
     writeMem idx val
 instantiateLLVMExpr mem
-  | Just (mem', A.WriteData idx val) <- isWriteMem @arch mem = do
+  | Just (mem', A.WriteData idx val) <- MA.isWriteMem @arch mem = do
   LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
     instantiateLLVMExpr mem'
     writeMem idx val
 instantiateLLVMExpr _ | otherwise = return ()
-
-
--- | Given an expression representing memory, returns 'Just (mem, WriteData idx
--- v)' if the original expression is equal to 'write_mem_x mem idx v' for some
--- x-length bit vector 'v'.
-isWriteMem :: forall arch sym t st fs.
-               ( sym ~ WE.ExprBuilder t st fs
-              , A.Architecture arch
-              )
-           => S.SymExpr sym (A.MemType arch)
-           -> Maybe ( S.SymExpr sym (A.MemType arch)
-                    , A.AccessData sym arch)
-isWriteMem memExpr@(WE.NonceAppExpr a)
-  | WE.FnApp f (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:> v) <- WE.nonceExprApp a
-  , Just uf <- MA.exprSymFnToUninterpFn @arch f
-  , S.BaseBVRepr w <- S.exprType v
-  , S.BaseBVRepr iSize <- S.exprType i
-  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.natValue w))
-  , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
-  , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
-  , Just S.Refl <- S.testEquality (iSize) (S.knownNat @(A.RegWidth arch))
-  = Just (mem, A.WriteData i v)
-isWriteMem _ = Nothing
