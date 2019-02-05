@@ -4,7 +4,7 @@
   (rB . 'Gprc)
   (rA . 'Gprc)))
  (in
-  ('XER rB rA 'IP))
+  ('XER rA rB 'IP))
  (defs
   (('XER
    (concat

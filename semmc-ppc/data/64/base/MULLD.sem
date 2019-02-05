@@ -4,7 +4,7 @@
   (rB . 'Gprc)
   (rA . 'Gprc)))
  (in
-  (rB rA 'IP))
+  (rA rB 'IP))
  (defs
   ((rT
    ((_ extract 63 0)

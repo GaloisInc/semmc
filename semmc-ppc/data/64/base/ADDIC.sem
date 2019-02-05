@@ -4,7 +4,7 @@
   (si . 'S16imm)
   (rA . 'Gprc)))
  (in
-  ('XER si rA 'IP))
+  ('XER rA si 'IP))
  (defs
   (('XER
    (concat

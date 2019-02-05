@@ -4,7 +4,7 @@
   (rB . 'Gprc)
   (rA . 'Gprc)))
  (in
-  ('XER 'CR rB rA 'IP))
+  ('XER 'CR rA rB 'IP))
  (defs
   (('CR
    ((_ call "df.cmpImm")
