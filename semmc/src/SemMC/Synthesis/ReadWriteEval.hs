@@ -4,7 +4,8 @@ TypeFamilies, ScopedTypeVariables, AllowAmbiguousTypes #-}
 
 -- | Evaluators for readMem and writeMem uninterpreted functions
 module SemMC.Synthesis.ReadWriteEval
-  (instantiateReadMem) where
+  ( instantiateReadMem
+  ) where
 
 import Text.Printf ( printf )
 import qualified Data.Set as Set
@@ -106,30 +107,6 @@ readMemEvaluator sym _f L.Nil (Ctx.Empty Ctx.:> mem Ctx.:> i) evalLoc (S.BaseBVR
 --    let Right symb = S.userSymbol "MyRead"
 --    in S.freshConstant sym symb (S.BaseBVRepr w)
 readMemEvaluator _ _ _ _ _ _ = error "read_mem called with incorrect arguments and cannot be evaluated"
-
-
--- | @isWriteMem w _ mem@ returns @Just (mem', i, v)@ if @mem = write_mem_w mem' i v@.
-isWriteMem :: forall arch sym t st fs w i byte memType.
-               ( sym ~ WE.ExprBuilder t st fs
-              , memType ~ S.BaseArrayType (Ctx.SingleCtx (S.BaseBVType i)) (S.BaseBVType byte)
-              , 1 S.<= i, 1 S.<= w
-              , A.Architecture arch
-              )
-           => S.NatRepr w
-           -> S.NatRepr i
-           -> S.SymExpr sym memType
-           -> Maybe ( S.SymExpr sym memType
-                    , S.SymExpr sym (S.BaseBVType i)
-                    , S.SymExpr sym (S.BaseBVType w) )
-isWriteMem w iSize memExpr@(WE.NonceAppExpr a)
-  | WE.FnApp f (Ctx.Empty Ctx.:> mem Ctx.:> i Ctx.:> v) <- WE.nonceExprApp a
-  , Just uf <- exprSymFnToUninterpFn @arch f
-  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.natValue w))
-  , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
-  , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
-  , Just S.Refl <- S.testEquality (S.exprType v) (S.BaseBVRepr w)
-  = Just (mem, i, v)
-isWriteMem _ _ _ = Nothing
 
 
 
