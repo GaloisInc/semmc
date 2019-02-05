@@ -5,7 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
-module Main ( main, memtest ) where
+module Main ( main, memtest, nonmemtest ) where
 
 import qualified Data.ByteString.Char8 as BS8
 import           Data.Proxy ( Proxy(..) )
@@ -88,7 +88,7 @@ allTests baseSet synthEnv progsToTest =
     T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progsToTest)
 
 insns :: S.Set (Some (D.Opcode o))
-insns = S.fromList [Some D.LI, Some D.ADD4] -- Some D.LHA]
+insns = S.fromList [Some D.STD, Some D.LHA, Some D.STDU, Some D.ADD4, Some D.NEG, Some D.LI]
 {-        [ Some D.ADD4
         -- , Some D.ADDC
         -- , Some D.ADDI
@@ -118,26 +118,41 @@ insns = S.fromList [Some D.LI, Some D.ADD4] -- Some D.LHA]
         , Some D.STD
         , Some D.STDU
         -- , Some D.SC
-        ] -}
+        ]
+-}
 
 nonMemProgs :: [(String, [D.Instruction])]
-nonMemProgs = [("add", [ D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
-                        ])] ++
-      [("negated", [D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)])] ++
+nonMemProgs =
+      [("add", [ D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil) ])]
+      ++
+      [("negated", [D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)])]
+      ++
+      [("independent", [ D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
+                       , D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)
+                       ])]
+      ++
       [("addNegated", [ D.Instruction D.NEG (mkGPR 5 :< mkGPR 2 :< Nil)
                       , D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
                       ])]
+      ++
+      [("LI", [ D.Instruction D.LI   $ mkGPR 0 :< D.S16imm 1 :< Nil ])]
+
         
          
+
 memProgs  :: [(String,[D.Instruction])] 
-memProgs = [
---         ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])
-       ("LI",   [ D.Instruction D.LI   $ mkGPR 0          :< D.S16imm 1 :< Nil ])
---       , ("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-16) :< mkGPR 2      :< Nil ])
---       , ("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-2)  :< mkGPR 31     :< Nil])
-     -- , ("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (2) :< Nil ])
-       -- , ("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-2) :< Nil ])
-        ]
+memProgs =
+    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-2)  :< mkGPR 31     :< Nil])]
+    ++
+    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])]
+    ++
+    [("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (16) :< mkGPR 2      :< Nil ])]
+    ++
+    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (2) :< Nil ])]
+    ++
+    [("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-16) :< mkGPR 2      :< Nil ])]
+    ++
+    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-2) :< Nil ])]
 
 mkGPR :: Word8 -> D.Operand "Gprc"
 mkGPR n = D.Gprc (D.GPR n)

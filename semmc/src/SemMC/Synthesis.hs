@@ -16,6 +16,7 @@ module SemMC.Synthesis
 import           Data.Typeable
 import           Control.Monad (join)
 import           System.Timeout (timeout)
+import           Control.Exception.Base (finally)
 
 import qualified What4.Protocol.Online as WPO
 import qualified Lang.Crucible.Backend as CB
@@ -75,17 +76,25 @@ mcSynth env target = do
   putStrLn $ "Calling mcSynth on target " ++ show target
   let params = SynthesisParams { synthEnv = env
                                , synthMaxLength = 0
-                                }
-  ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target
-  case ret1 of
-    Just _ -> return ret1
-    Nothing -> do
-  -- Instead of repeating each call, perhaps we can only recurse if the result
-  -- ran out of space, which could be tracked in 'synthesizeFormula'
-      ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target
-      case ret2 of
-        Just _ -> return ret2
-        Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target
+                               }
+  safeAssumptionFrame (synthSym env) $ do
+    -- synthesizeFormula (params {synthMaxLength = 1}) target
+    ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target
+    case ret1 of
+      Just _ -> return ret1
+      Nothing -> do
+      -- Instead of repeating each call, perhaps we can only recurse if the result
+      -- ran out of space, which could be tracked in 'synthesizeFormula'
+        ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target
+        case ret2 of
+          Just _ -> return ret2
+          Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target
+  where
+    -- Isolate the solver environment using pushFrame and popFrame
+    safeAssumptionFrame sym op = do
+      frame <- CB.pushAssumptionFrame sym
+      finally op (CB.popAssumptionFrame sym frame)
+
 
 -- | Synthesizes a list of instructions from a formula, within a particular
 -- timeout limit.

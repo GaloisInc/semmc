@@ -737,7 +737,8 @@ cegis' trial trialFormula = do
           -- avoid infinite loops
           testIsDuplicate <- isExistingTest newTest
           if testIsDuplicate
-          then error "Generated a duplicate test in Cegis" -- askTests >>= return . CegisUnmatchable
+          then -- error "Generated a duplicate test in Cegis"
+               askTests >>= return . CegisUnmatchable
           else do
             liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
             -- If the template has no degrees of freedom, then we have checked
