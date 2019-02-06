@@ -290,6 +290,9 @@ instance (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
   isMemLoc LocMem = True
   isMemLoc _ = False
 
+  isIP LocPC = True
+  isIP _     = False
+
   readLocation = P.parseMaybe parseLocation
 
   locationType (LocGPR _) = knownRepr

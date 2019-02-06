@@ -334,7 +334,7 @@ defaultLocExprs :: forall loc sym.
                 )
                => sym
                -> IO (LocExprs sym loc) -- MapF.MapF loc (S.SymExpr sym)
-defaultLocExprs sym = do locExprList <- mapM pairDefault (L.allLocations @loc)
+defaultLocExprs sym = do locExprList <- mapM pairDefault $ L.nonIPLocations @loc
                          return $ MapF.fromList locExprList
   where
     pairDefault :: Some loc -> IO (MapF.Pair loc (S.SymExpr sym))
@@ -357,8 +357,8 @@ mkTest :: forall sym arch t st fs.
 mkTest sym targetFormula ctrExample memExpr
   | [L.MemLoc _ mem] <- memLocation @(L.Location arch) = do
     -- putStrLn $ "Constructing test from " ++ show ctrExample
-    -- the testInput is exactly the counter example for non-memory locations
-    let testInput' = MapF.delete mem ctrExample
+    -- the testInput is exactly the counter example for non-memory, non-IP locations
+    let testInput' = MapF.filterWithKey (\l _ -> not (L.isIP l) && not (L.isMemLoc l)) ctrExample
 
     -- substitute the non-memory locations from the test into the target
     -- formula. For non-memory locations, this gives us the testOutput.
@@ -366,7 +366,7 @@ mkTest sym targetFormula ctrExample memExpr
         evalLoc = lookupInStateMem @arch sym testInput' memExpr
     targetFormula' <- evalFormula' sym targetFormula evalLoc
     Formula _ ctrExampleOut <- evalFormulaReadMem sym targetFormula' evalLoc
-    let testOutput' = MapF.delete mem ctrExampleOut
+    let testOutput' = MapF.filterWithKey (\l _ -> not (L.isIP l) && not (L.isMemLoc l)) ctrExampleOut
 
     -- to construct the memInput/memOutput, we need to find all memory locations that
     -- occur in the input/output counterexamples respectively and record the values they map to.
@@ -523,10 +523,11 @@ simplifyWithTestNonMem trialFormula test = do
   sym <- askSym
   Formula _ defs' <- evalFormulaNoMem sym trialFormula (testInput test)
   targetFormula <- askTarget -- Make sure to also include relevant locations in the target
-  let nonMemLocs = fst . partitionLocs @arch $ formInputs  trialFormula 
+  let nonMemLocs' = fst . partitionLocs @arch $ formInputs trialFormula
                                    `Set.union` formOutputs trialFormula
                                    `Set.union` formInputs  targetFormula
                                    `Set.union` formOutputs targetFormula
+      nonMemLocs = Set.filter (\(Some l) -> not (L.isIP l) && not (L.isMemLoc l)) nonMemLocs'
 --  liftIO . putStrLn $ "Non-mem locs: " ++ show nonMemLocs
   liftIO . putStrLn $ "Trial Formula: " ++ show trialFormula
   liftIO . putStrLn $ "  evaluated with respect to the test: " ++ show defs'
@@ -561,8 +562,8 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) (Formula vars defs) test
   | Just S.Refl <- S.testEquality w_mem (S.knownNat @(RegWidth arch)) = do
   sym <- askSym
   liftIO $ LLVM.withMem @arch sym $ \defaultValue -> do
-    -- 1) Instantiate the non-mem variables in the formula
-    let vars' = MapF.delete mem vars
+    -- 1) Instantiate the non-mem, non-IP variables in the formula
+    let vars' = MapF.filterWithKey (\l _ -> not (L.isIP l) && not (L.isMemLoc l)) vars
     Formula _ defs' <- liftIO $ evalFormula sym (Formula @sym @arch vars' defs) (testInput test)
 
     -- 2) Prepare the memory to model the input part of the test

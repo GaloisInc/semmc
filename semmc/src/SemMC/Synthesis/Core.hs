@@ -82,8 +82,11 @@ calcFootprint :: (Architecture arch)
 calcFootprint = foldl' addPrint (Set.empty, Set.empty)
   where addPrint (curInputs, curOutputs) insn =
           let (newInputs, newOutputs) = viewSome (templatedInputs &&& templatedOutputs) insn
-          in (curInputs `Set.union` (newInputs Set.\\ curOutputs),
-              curOutputs `Set.union` newOutputs)
+              upInputs  = curInputs `Set.union` (newInputs Set.\\ curOutputs)
+              upOutputs = curOutputs `Set.union` newOutputs
+          -- footprint should not include IP
+          in ( Set.filter (\(Some l) -> not (isIP l)) upInputs
+             , Set.filter (\(Some l) -> not (isIP l)) upOutputs )
 
 footprintFilter :: (Architecture arch, ShowF (S.BoundVar sym), ShowF (S.SymExpr sym))
                 => Formula sym arch
@@ -91,20 +94,10 @@ footprintFilter :: (Architecture arch, ShowF (S.BoundVar sym), ShowF (S.SymExpr 
                 -> Bool
 footprintFilter target candidate =
   let (candInputs, candOutputs) = calcFootprint candidate
-      targetInputs = formInputs target
+      targetInputs  = formInputs target
       targetOutputs = formOutputs target
-  in -- trace ("Target Inputs: " ++ show targetInputs) $
-     -- trace ("Target Outputs: " ++ show targetOutputs) $
-     -- trace ("Candidate Inputs: " ++ show candInputs) $
-     -- trace ("Candidate Outputs: " ++ show candOutputs) $
-     -- trace ("For formula " ++ show target ++ "\n") $
---   JP TODO: I swapped the order here, but I'm not sure which direction is sound
-     candInputs `Set.isSubsetOf` targetInputs &&
---     targetInputs `Set.isSubsetOf` candInputs &&
+  in candInputs `Set.isSubsetOf` targetInputs &&
      candOutputs `Set.isSubsetOf` targetOutputs
---     candOutputs `Set.isSubsetOf` targetOutputs && targetOutputs `Set.isSubsetOf` candOutputs
---     candOutputs == targetOutputs
--- --     targetOutputs `Set.isSubsetOf` candOutputs
 
 
 

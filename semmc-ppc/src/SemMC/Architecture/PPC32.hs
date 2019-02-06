@@ -674,6 +674,9 @@ instance A.IsLocation (Location PPC) where
 
   registerizationLocations = map (Some . LocGPR . PPC.GPR) (0 : [3..10])
 
+  isIP LocIP = True
+  isIP _     = False
+
 parseLocation :: PPCS.Parser (Some (Location PPC))
 parseLocation = do
   c <- P.lookAhead (P.anySingle)

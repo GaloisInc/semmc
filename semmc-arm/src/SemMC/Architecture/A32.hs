@@ -384,6 +384,9 @@ instance A.IsLocation (Location A32) where
   isMemLoc LocMem2 = True
   isMemLoc _ = False
 
+  isIP LocPC = True
+  isIP _     = False
+
   readLocation = P.parseMaybe parseLocation
 
   locationType (LocGPR _) = knownRepr

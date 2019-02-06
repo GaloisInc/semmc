@@ -11,7 +11,8 @@ module SemMC.Architecture.Location (
   fromMemLoc,
   toMemLoc,
   ArchState,
-  allLocations
+  allLocations,
+  nonIPLocations
   ) where
 
 import           Data.Kind
@@ -47,10 +48,17 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   registerizationLocations :: [Some a]
   -- | A predicate describing if a particular location is a memory location
   isMemLoc :: a tp -> Bool
+  -- | A predicate describing if a particular location holds the IP
+  isIP :: a tp -> Bool
 
 -- | All the locations!
 allLocations :: IsLocation a => [Some a]
 allLocations = nonMemLocations ++ (fromMemLoc <$> memLocation)
+
+nonIPLocations :: IsLocation a => [Some a]
+nonIPLocations = filter (not . isSomeIP) allLocations
+  where
+    isSomeIP (Some l) = isIP l
 
 -- | Represents the different registers, flags, and (eventually) memory a given
 -- architecture has.

@@ -625,6 +625,9 @@ instance A.IsLocation (Location PPC) where
       LocMem -> True
       _ -> False
 
+  isIP LocIP = True
+  isIP _     = False
+
   readLocation = P.parseMaybe parseLocation
 
   locationType (LocGPR _) = knownRepr
