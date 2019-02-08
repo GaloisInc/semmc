@@ -181,6 +181,8 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
                                  | (funcName, fi) <- locationFuncInterpretation (Proxy @arch)
                                  ]
 
+  archEndianForm _ = archEndianForm (Proxy @arch)
+
 -- | This function unwraps 'FunctionInterpretation's and then rewraps them to
 -- change the @arch@ of the interpretation.  This lets us re-use the
 -- interpretation in the templated architecture without actually having to

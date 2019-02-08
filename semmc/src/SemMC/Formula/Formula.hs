@@ -27,6 +27,7 @@ module SemMC.Formula.Formula
   , validFormula
   , emptyFormula
   , coerceFormula
+  , formStripIP
     -- * Functions and libraries
   , FunctionFormula(..)
   , FunctionRef(..)
@@ -266,6 +267,16 @@ coerceFormula f =
   Formula { formParamVars = formParamVars f
           , formDefs = formDefs f
           }
+
+-- | Remove the instruction pointer location from the definitions in a formula
+--
+-- Note that this could break the property that `formParamVars` contains exactly
+-- the bound variables in a formula
+formStripIP :: L.IsLocation (L.Location arch)
+            => Formula sym arch -> Formula sym arch
+formStripIP (Formula vars defs) = Formula (go vars) (go defs)
+  where
+    go = MapF.filterWithKey (\l _ -> not (L.isIP l))
 
 -- | A formula representing a defined function.
 data FunctionFormula sym (sig :: ([BaseType], BaseType)) where

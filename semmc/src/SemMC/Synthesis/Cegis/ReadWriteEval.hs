@@ -3,7 +3,7 @@ TypeFamilies, ScopedTypeVariables, AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -fno-warn-unticked-promoted-constructors #-}
 
 -- | Evaluators for readMem and writeMem uninterpreted functions
-module SemMC.Synthesis.ReadWriteEval
+module SemMC.Synthesis.Cegis.ReadWriteEval
   ( instantiateReadMem
   ) where
 
@@ -28,8 +28,8 @@ import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Eval as E
 
 import qualified SemMC.DSL as DSL
-import           SemMC.Formula.MemAccesses (exprSymFnToUninterpFn)
-import qualified SemMC.Synthesis.LLVMMem as LLVM
+import           SemMC.Synthesis.Cegis.MemAccesses (exprSymFnToUninterpFn)
+import qualified SemMC.Synthesis.Cegis.LLVMMem as LLVM
 
 
 -- | Instantiate occurrences of 'read_mem' that occur in an expression

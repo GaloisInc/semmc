@@ -63,7 +63,7 @@ synthesizeAndCheck proxy env sem matchInsn p = do
             Nothing -> return MissingSemantics
             Just frm' -> do
               print $ "Obtained formula from new program"
-              er <- SF.formulasEquivConcrete (SS.synthSym env) frm frm'
+              er <- SF.formulasEquivConcrete (SS.synthSym env) (SF.formStripIP frm) (SF.formStripIP frm')
               case er of
                 SF.Equivalent -> return Equivalent
                 SF.DifferentBehavior {} -> return BadSemantics

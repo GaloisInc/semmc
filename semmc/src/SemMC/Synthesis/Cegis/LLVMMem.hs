@@ -2,7 +2,7 @@
   PatternSynonyms, TypeApplications, ScopedTypeVariables, RankNTypes,
   AllowAmbiguousTypes, FlexibleContexts #-}
 
-module SemMC.Synthesis.LLVMMem
+module SemMC.Synthesis.Cegis.LLVMMem
   ( MemData(..)
   , MemM(..)
   , withMem
@@ -38,7 +38,7 @@ import qualified Lang.Crucible.LLVM.DataLayout as LLVM
 import qualified Lang.Crucible.LLVM.MemType as MemType
 
 import qualified SemMC.Architecture as A
-import qualified SemMC.Formula.MemAccesses as MA
+import qualified SemMC.Synthesis.Cegis.MemAccesses as MA
 
 data MemData sym arch = MemData { memSym :: sym
                                 , memImpl :: LLVM.MemImpl sym

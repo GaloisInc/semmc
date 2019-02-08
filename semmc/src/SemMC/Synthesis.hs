@@ -73,22 +73,25 @@ mcSynth :: (TemplateConstraints arch,
         -> Formula (CBO.OnlineBackend t solver fs) arch
         -> IO (Maybe [Instruction arch])
 mcSynth env target = do
-  putStrLn $ "Calling mcSynth on target " ++ show target
+
+  -- Synthesize the target without considering the behavior of the instruction pointer
+  let target' = formStripIP target
+
+  putStrLn $ "Calling mcSynth on target " ++ show target'
   let params = SynthesisParams { synthEnv = env
                                , synthMaxLength = 0
                                }
   safeAssumptionFrame (synthSym env) $ do
-    -- synthesizeFormula (params {synthMaxLength = 1}) target
-    ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target
+    ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target'
     case ret1 of
       Just _ -> return ret1
       Nothing -> do
       -- Instead of repeating each call, perhaps we can only recurse if the result
       -- ran out of space, which could be tracked in 'synthesizeFormula'
-        ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target
+        ret2 <- divideAndConquer (params { synthMaxLength = 2 }) target'
         case ret2 of
           Just _ -> return ret2
-          Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target
+          Nothing -> synthesizeFormula (params { synthMaxLength = 1000 }) target'
   where
     -- Isolate the solver environment using pushFrame and popFrame
     safeAssumptionFrame sym op = do

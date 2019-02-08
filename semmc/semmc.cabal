@@ -35,7 +35,6 @@ library
                        SemMC.Formula.Formula
                        SemMC.Formula.Instantiate
                        SemMC.Formula.Load
-                       SemMC.Formula.MemAccesses
                        SemMC.Formula.Parser
                        SemMC.Formula.Printer
                        SemMC.Formula.SETokens
@@ -62,11 +61,15 @@ library
                        SemMC.Stochastic.Synthesize
                        SemMC.Synthesis
                        SemMC.Synthesis.Cegis
+                       SemMC.Synthesis.Cegis.Types
+                       SemMC.Synthesis.Cegis.EvalFormula
+                       SemMC.Synthesis.Cegis.ReadWriteEval
+                       SemMC.Synthesis.Cegis.LLVMMem
+                       SemMC.Synthesis.Cegis.MemAccesses
+                       SemMC.Synthesis.Cegis.Tests
                        SemMC.Synthesis.Core
                        SemMC.Synthesis.DivideAndConquer
-                       SemMC.Synthesis.LLVMMem
                        SemMC.Synthesis.Template
-                       SemMC.Synthesis.ReadWriteEval
                        SemMC.Synthesis.Testing
                        SemMC.Symbolic
                        SemMC.TH

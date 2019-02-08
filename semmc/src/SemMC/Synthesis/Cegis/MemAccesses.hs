@@ -12,13 +12,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module SemMC.Formula.MemAccesses
+module SemMC.Synthesis.Cegis.MemAccesses
   ( liveMemInExpr
   , liveMem
   , liveMemAddresses
   , liveMemConst
   , liveMemMap
   , partitionLocs
+  , nonMemIPLocs
   , someArrayLookup
   , someIsEq
   , exprSymFnToUninterpFn
@@ -56,6 +57,12 @@ partitionLocs locs =
     let memLocs = Set.filter (\(Some l) -> L.isMemLoc l) locs
         memLocList = (\(Some l) -> L.toMemLoc l) <$> Set.toList memLocs
     in (locs `Set.difference` memLocs, listToMaybe memLocList)
+
+nonMemIPLocs :: forall arch.
+                A.Architecture arch
+             => Set.Set (Some (L.Location arch))
+             -> Set.Set (Some (L.Location arch))
+nonMemIPLocs locs = Set.filter (\(Some l) -> not (L.isIP l) && not (L.isMemLoc l)) locs
 
 -- | Given a formula @F@, construct a map @i ↦ lookup (F(mem)) i@ for each @i@ in
 -- the live memory addresses of @F@
