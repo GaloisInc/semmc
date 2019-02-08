@@ -2,80 +2,80 @@
  ((conditionMatch
   (ite
    (bveq
-    ((_ extract 2 0)
+    ((_ xtract 3 1)
      instrPred)
     #b000)
    (bveq
     #b1
-    ((_ extract 1 1)
+    ((_ xtract 30 30)
      cpsr))
    (ite
     (bveq
-     ((_ extract 2 0)
+     ((_ xtract 3 1)
       instrPred)
      #b001)
     (bveq
      #b1
-     ((_ extract 2 2)
+     ((_ xtract 29 29)
       cpsr))
     (ite
      (bveq
-      ((_ extract 2 0)
+      ((_ xtract 3 1)
        instrPred)
       #b010)
      (bveq
       #b1
-      ((_ extract 0 0)
+      ((_ xtract 31 31)
        cpsr))
      (ite
       (bveq
-       ((_ extract 2 0)
+       ((_ xtract 3 1)
         instrPred)
        #b011)
       (bveq
        #b1
-       ((_ extract 3 3)
+       ((_ xtract 28 28)
         cpsr))
       (ite
        (bveq
-        ((_ extract 2 0)
+        ((_ xtract 3 1)
          instrPred)
         #b100)
        (andp
         (bveq
          #b1
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           cpsr))
         (notp
          (bveq
           #b1
-          ((_ extract 1 1)
+          ((_ xtract 30 30)
            cpsr))))
        (ite
         (bveq
-         ((_ extract 2 0)
+         ((_ xtract 3 1)
           instrPred)
          #b101)
         (bveq
-         ((_ extract 0 0)
+         ((_ xtract 31 31)
           cpsr)
-         ((_ extract 3 3)
+         ((_ xtract 28 28)
           cpsr))
         (ite
          (bveq
-          ((_ extract 2 0)
+          ((_ xtract 3 1)
            instrPred)
           #b110)
          (andp
           (bveq
-           ((_ extract 0 0)
+           ((_ xtract 31 31)
             cpsr)
-           ((_ extract 3 3)
+           ((_ xtract 28 28)
             cpsr))
           (notp
            (bveq
             #b1
-            ((_ extract 1 1)
+            ((_ xtract 30 30)
              cpsr))))
          (true)))))))))
   (true
@@ -92,7 +92,7 @@
     (andp
      (bveq
       #b1
-      ((_ extract 3 3)
+      ((_ xtract 0 0)
        instrPred))
      (bvne instrPred #xf))
     (notp

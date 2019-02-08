@@ -76,3 +76,5 @@ allT32Opcodes = map (mapSome T32Opcode) t32Opcodes
 
 t32DefinedFunctions :: [(String, BS.ByteString)]
 t32DefinedFunctions = $(STH.attachDefinedFunctions [ "data/sem" ])
+
+

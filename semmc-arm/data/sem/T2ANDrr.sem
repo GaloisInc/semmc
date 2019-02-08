@@ -18,7 +18,7 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))))
     (concat
      ((_ call "df.isZeroBit")
@@ -31,7 +31,7 @@
           (immShift))
          ((_ extract 34 3)
           (immShift))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR)))))
      (concat
       ((_ extract 0 0)
@@ -41,9 +41,9 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))
-      ((_ extract 3 3)
+      ((_ xtract 28 28)
        'CPSR)))))
   (branchWritePC
    (ite
@@ -60,7 +60,7 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))))
     (bvadd 'PC #x00000002))))
  ((operands
@@ -110,6 +110,6 @@
            (immShift))
           ((_ extract 34 3)
            (immShift))
-          ((_ extract 2 2)
+          ((_ xtract 29 29)
            'CPSR)))))
       rD))))))

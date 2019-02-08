@@ -124,3 +124,21 @@ test-suite test_formulas
                   , what4
   -- dismantle-tablegen needed for Data.Parameterized.HasRepr
   ghc-options:      -Wall
+
+test-suite test_pseudo
+  default-language: Haskell2010
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          TestPseudo.hs
+  build-depends:    base      >=4.7 && <5
+                  , bytestring
+                  , parameterized-utils
+                  , semmc
+                  , semmc-arm
+                  , tasty-hunit
+                  , tasty
+                  , text
+                  , what4
+                  , dismantle-tablegen
+                  , crucible
+  ghc-options:      -Wall

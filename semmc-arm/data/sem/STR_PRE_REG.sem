@@ -22,7 +22,7 @@
           (immShift))
          ((_ extract 34 3)
           (immShift))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR))))
       (bvsub
        ((_ call "uf.a32.ldst_so_reg_base_register")
@@ -35,7 +35,7 @@
           (immShift))
          ((_ extract 34 3)
           (immShift))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR)))))
      (ite
       ((_ call "df.testCondition")
@@ -62,7 +62,7 @@
             (immShift))
            ((_ extract 34 3)
             (immShift))
-           ((_ extract 2 2)
+           ((_ xtract 29 29)
             'CPSR))))
         (bvsub
          ((_ call "uf.a32.ldst_so_reg_base_register")
@@ -75,7 +75,7 @@
             (immShift))
            ((_ extract 34 3)
             (immShift))
-           ((_ extract 2 2)
+           ((_ xtract 29 29)
             'CPSR)))))))))))
   (immShift
    (ite

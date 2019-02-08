@@ -17,7 +17,7 @@
         ((_ extract 31 24)
          ((_ call "uf.a32.soregreg_reg1")
           sorr)))
-       ((_ extract 2 2)
+       ((_ xtract 29 29)
         'CPSR)))))
    (concat
     ((_ call "df.isZeroBit")
@@ -35,7 +35,7 @@
          ((_ extract 31 24)
           ((_ call "uf.a32.soregreg_reg1")
            sorr)))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))))
     (concat
      ((_ extract 0 0)
@@ -50,9 +50,9 @@
         ((_ extract 31 24)
          ((_ call "uf.a32.soregreg_reg1")
           sorr)))
-       ((_ extract 2 2)
+       ((_ xtract 29 29)
         'CPSR)))
-     ((_ extract 3 3)
+     ((_ xtract 28 28)
       'CPSR))))))
  ((operands
   ((rD . 'GPR)
@@ -127,6 +127,6 @@
            ((_ extract 31 24)
             ((_ call "uf.a32.soregreg_reg1")
              sorr)))
-          ((_ extract 2 2)
+          ((_ xtract 29 29)
            'CPSR)))))
       rD))))))

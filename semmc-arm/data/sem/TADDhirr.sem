@@ -8,7 +8,7 @@
      rM
      #b000
      #x00000000
-     ((_ extract 2 2)
+     ((_ xtract 29 29)
       'CPSR)))
    #x00000000))
   (branchWritePC

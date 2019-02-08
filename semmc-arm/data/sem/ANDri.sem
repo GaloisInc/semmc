@@ -25,7 +25,7 @@
            ((_ zero_extend 28)
             ((_ call "uf.a32.modimm_rot")
              mimm)))
-          ((_ extract 2 2)
+          ((_ xtract 29 29)
            'CPSR))))))
      (bvand
       #xfffffffe
@@ -42,7 +42,7 @@
           ((_ zero_extend 28)
            ((_ call "uf.a32.modimm_rot")
             mimm)))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR)))))
      (ite
       (bveq
@@ -61,7 +61,7 @@
             ((_ zero_extend 28)
              ((_ call "uf.a32.modimm_rot")
               mimm)))
-           ((_ extract 2 2)
+           ((_ xtract 29 29)
             'CPSR))))))
       (bvand
        #xfffffffd
@@ -78,7 +78,7 @@
            ((_ zero_extend 28)
             ((_ call "uf.a32.modimm_rot")
              mimm)))
-          ((_ extract 2 2)
+          ((_ xtract 29 29)
            'CPSR)))))
       (bvand
        rN
@@ -93,7 +93,7 @@
           ((_ zero_extend 28)
            ((_ call "uf.a32.modimm_rot")
             mimm)))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR))))))
     (bvadd 'PC #x00000004))))
  ((operands
@@ -134,7 +134,7 @@
               ((_ zero_extend 28)
                ((_ call "uf.a32.modimm_rot")
                 mimm)))
-             ((_ extract 2 2)
+             ((_ xtract 29 29)
               'CPSR)))))
          (concat
           ((_ call "df.isZeroBit")
@@ -151,7 +151,7 @@
                ((_ zero_extend 28)
                 ((_ call "uf.a32.modimm_rot")
                  mimm)))
-              ((_ extract 2 2)
+              ((_ xtract 29 29)
                'CPSR)))))
           (concat
            ((_ extract 0 0)
@@ -165,9 +165,9 @@
               ((_ zero_extend 28)
                ((_ call "uf.a32.modimm_rot")
                 mimm)))
-             ((_ extract 2 2)
+             ((_ xtract 29 29)
               'CPSR)))
-           ((_ extract 3 3)
+           ((_ xtract 28 28)
             'CPSR))))
         ((_ extract 31 4)
          (ite
@@ -190,7 +190,7 @@
                  ((_ zero_extend 28)
                   ((_ call "uf.a32.modimm_rot")
                    mimm)))
-                ((_ extract 2 2)
+                ((_ xtract 29 29)
                  'CPSR))))))
            (SetT32Mode)
            'CPSR)
@@ -215,7 +215,7 @@
                ((_ zero_extend 28)
                 ((_ call "uf.a32.modimm_rot")
                  mimm)))
-              ((_ extract 2 2)
+              ((_ xtract 29 29)
                'CPSR))))))
          (SetT32Mode)
          'CPSR)
@@ -243,6 +243,6 @@
            ((_ zero_extend 28)
             ((_ call "uf.a32.modimm_rot")
              mimm)))
-          ((_ extract 2 2)
+          ((_ xtract 29 29)
            'CPSR)))))
       rD))))))

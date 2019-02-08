@@ -507,6 +507,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
       SB.stopCaching sym
 
       lib <- F.loadLibrary proxy sym funcs
+      -- testConditionTest sym lib
       baseSet <- F.loadFormulas sym lib semantics
       let plainBaseSet :: MapF.MapF (A.Opcode arch (A.Operand arch)) (F.ParameterizedFormula (SB.SimpleBackend s (SB.Flags SB.FloatIEEE)) arch)
           plainBaseSet = makePlain baseSet

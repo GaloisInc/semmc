@@ -74,7 +74,7 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))))))
   (nzcv
    (concat
@@ -89,7 +89,7 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))))
     (concat
      ((_ call "df.isZeroBit")
@@ -103,7 +103,7 @@
           (immShift))
          ((_ extract 34 3)
           (immShift))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR)))))
      (concat
       ((_ extract 0 0)
@@ -114,9 +114,9 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))
-      ((_ extract 3 3)
+      ((_ xtract 28 28)
        'CPSR)))))
   (bxWritePC
    (ite
@@ -141,7 +141,7 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))))
     (ite
      (bveq
@@ -157,7 +157,7 @@
            (immShift))
           ((_ extract 34 3)
            (immShift))
-          ((_ extract 2 2)
+          ((_ xtract 29 29)
            'CPSR))))))
      (bvand
       #xfffffffd
@@ -171,7 +171,7 @@
           (immShift))
          ((_ extract 34 3)
           (immShift))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR)))))
      (bvand
       rN
@@ -183,7 +183,7 @@
          (immShift))
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR))))))))
  ((operands
   ((rD . 'GPR)
@@ -246,6 +246,6 @@
            (immShift))
           ((_ extract 34 3)
            (immShift))
-          ((_ extract 2 2)
+          ((_ xtract 29 29)
            'CPSR)))))
       rD))))))

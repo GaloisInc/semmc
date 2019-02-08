@@ -24,7 +24,7 @@
        (immShift))
       ((_ extract 34 3)
        (immShift))
-      ((_ extract 2 2)
+      ((_ xtract 29 29)
        'CPSR)))
     #x00000000))
   (immShift

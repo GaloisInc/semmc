@@ -8,10 +8,10 @@
     imm)))
   (nzcv
    (concat
-    ((_ extract 0 0)
+    ((_ xtract 31 31)
      'CPSR)
     (concat
-     ((_ extract 1 1)
+     ((_ xtract 30 30)
       'CPSR)
      (concat
       ((_ extract 0 0)
@@ -20,9 +20,9 @@
         #b000
         ((_ extract 34 3)
          (immShift))
-        ((_ extract 2 2)
+        ((_ xtract 29 29)
          'CPSR)))
-      ((_ extract 3 3)
+      ((_ xtract 28 28)
        'CPSR)))))
   (branchWritePC
    (ite
@@ -36,7 +36,7 @@
        #b000
        ((_ extract 34 3)
         (immShift))
-       ((_ extract 2 2)
+       ((_ xtract 29 29)
         'CPSR))))
     (bvadd 'PC #x00000002))))
  ((operands
@@ -92,6 +92,6 @@
          #b000
          ((_ extract 34 3)
           (immShift))
-         ((_ extract 2 2)
+         ((_ xtract 29 29)
           'CPSR))))
       rD))))))

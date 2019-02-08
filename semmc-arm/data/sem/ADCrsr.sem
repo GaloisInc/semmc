@@ -15,10 +15,10 @@
       ((_ extract 31 24)
        ((_ call "uf.a32.soregreg_reg1")
         sorr)))
-     ((_ extract 2 2)
+     ((_ xtract 29 29)
       'CPSR)))
    ((_ zero_extend 31)
-    ((_ extract 2 2)
+    ((_ xtract 29 29)
      'CPSR))))
   (nzcv
    ((_ extract 3 0)

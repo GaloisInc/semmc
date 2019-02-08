@@ -420,6 +420,49 @@ readExtract (SC.SCons (SC.SAtom (AIdent "_"))
   liftIO (Just <$> Some <$> S.bvSelect sym idxNat nNat arg)
 readExtract _ _ = return Nothing
 
+-- | Parse an expression of the form @((_ extract i j) x)@.
+readXtract :: ExprParser sym arch sh m
+readXtract (SC.SCons (SC.SAtom (AIdent "_"))
+             (SC.SCons (SC.SAtom (AIdent "xtract"))
+              (SC.SCons (SC.SAtom (AInt iInt))
+               (SC.SCons (SC.SAtom (AInt jInt))
+                SC.SNil))))
+            args = prefixError "in reading xtract expression: " $ do
+  when (length args /= 1) (E.throwError $ printf "expecting 1 argument, got %d" (length args))
+  sym <- MR.reader getSym
+  -- The SMT-LIB spec represents extracts differently than Crucible does. Per
+  -- SMT: "extraction of bits i down to j from a bitvector of size m to yield a
+  -- new bitvector of size n, where n = i - j + 1". Per Crucible:
+  --
+  -- > -- | Select a subsequence from a bitvector.
+  -- > bvSelect :: (1 <= n, idx + n <= w)
+  -- >          => sym
+  -- >          -> NatRepr idx  -- ^ Starting index, from 0 as least significant bit
+  -- >          -> NatRepr n    -- ^ Number of bits to take
+  -- >          -> SymBV sym w  -- ^ Bitvector to select from
+  -- >          -> IO (SymBV sym n)
+  --
+  -- The "starting index" seems to be from the bottom, so that (in slightly
+  -- pseudocode)
+  --
+  -- > > bvSelect sym 0 8 (0x01020304:[32])
+  -- > 0x4:[8]
+  -- > > bvSelect sym 24 8 (0x01020304:[32])
+  -- > 0x1:[8]
+  --
+  -- Thus, n = i - j + 1, and idx = j.
+  let nInt = iInt - jInt + 1
+      idxInt = jInt
+  Some nNat <- prefixError "in calculating extract length: " $ intToNatM nInt
+  Some idxNat <- prefixError "in extract lower bound: " $ intToNatM idxInt
+  LeqProof <- fromMaybeError "extract length must be positive" $ isPosNat nNat
+  Some arg <- return $ args !! 0
+  BVProof lenNat <- getBVProof arg
+  LeqProof <- fromMaybeError "invalid extract for given bitvector" $
+    testLeq (addNat idxNat nNat) lenNat
+  liftIO (Just <$> Some <$> S.bvSelect sym idxNat nNat arg)
+readXtract _ _ = return Nothing
+
 -- | Parse an expression of the form @((_ zero_extend i) x)@ or @((_ sign_extend i) x)@.
 readExtend :: ExprParser sym arch sh m
 readExtend (SC.SCons (SC.SAtom (AIdent "_"))
@@ -930,6 +973,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
   parseAttempt <- U.sequenceMaybes $ map (\f -> f opRaw args)
     [ readConcat
     , readExtract
+    , readXtract
     , readExtend
     , readBVUnop
     , readBVBinop
@@ -1211,6 +1255,7 @@ readDefinedFunction' sym env text = do
       expand args = allFC S.baseIsConcrete args
 
   symFn <- liftIO $ S.definedFn sym symbol argVarAssignment body expand
+  liftIO $ putStrLn (name <> " : " <> showF body)
   return $ Some (FunctionFormula { ffName = name
                                  , ffArgTypes = argTypeReprs
                                  , ffArgVars = argVarList

@@ -214,10 +214,10 @@ getNZCV = splitNZCV (Loc cpsr)
 splitNZCV :: HasCallStack
           => Expr 'TBV
           -> (Expr 'TBV, Expr 'TBV, Expr 'TBV, Expr 'TBV)
-splitNZCV bv = let n = extract 31 31 bv
-                   z = extract 30 30 bv
-                   c = extract 29 29 bv
-                   v = extract 28 28 bv
+splitNZCV bv = let n = xtract 31 31 bv
+                   z = xtract 30 30 bv
+                   c = xtract 29 29 bv
+                   v = xtract 28 28 bv
                in (n, z, c, v)
 
 -- ----------------------------------------------------------------------
@@ -257,6 +257,23 @@ finalizePC = do
 
 -- ----------------------------------------------------------------------
 
+xtract :: (HasCallStack)
+        => Int
+        -> Int
+        -> Expr 'TBV
+        -> Expr 'TBV
+xtract i j e =
+  case exprType e of
+    EBV m ->
+      let n = i - j + 1
+          i' = (Some . LitInt . fromIntegral) i
+          j' = (Some . LitInt . fromIntegral) j
+          -- i' = Some . LitInt . fromIntegral $ m-1 - j
+          -- j' = Some . LitInt . fromIntegral $ m-1 - i
+      in case m > i && i >= j && j >= 0 of
+        True -> TheoryFunc (EBV n) "xtract" [i', j'] [Some e]
+        False -> undefined -- error (printf "Invalid slice (%d,%d) of a %d-bit vector" i j m)
+
 testConditionLF :: LibraryFunctionDef '(['TBV, 'TBV], 'TBool)
 testConditionLF =
   -- TODO Would be easier to use getNZCV inside the library function, but then
@@ -267,8 +284,8 @@ testConditionLF =
      Arg "cpsr" (EBV 32) :< Nil) $
   \instrPred cpsrValue ->
     let (n,z,c,v) = splitNZCV cpsrValue  -- (E1.2.4, E1-2297)
-        cond_3_1 = extract 3 1 instrPred
-        cond_0   = extract 0 0 instrPred
+        cond_3_1 = xtract 3 1 instrPred
+        cond_0   = xtract 0 0 instrPred
         isBitSet = bveq (LitBV 1 0b1)
         -- ConditionHolds (F2.3.1, F2-2417):
         result = "conditionMatch" =:

@@ -51,9 +51,9 @@
           ((_ call "df.isZeroBit")
            rM)
           (concat
-           ((_ extract 2 2)
+           ((_ xtract 29 29)
             'CPSR)
-           ((_ extract 3 3)
+           ((_ xtract 28 28)
             'CPSR))))
         ((_ extract 31 4)
          (ite

@@ -5,7 +5,7 @@
    rN
    rM
    ((_ zero_extend 31)
-    ((_ extract 2 2)
+    ((_ xtract 29 29)
      'CPSR))))
   (SetT32Mode
    (bvand

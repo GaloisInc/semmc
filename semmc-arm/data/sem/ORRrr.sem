@@ -1,5 +1,4 @@
-;; AND register, Encoding A1  (F7.1.14, F7-2558)
-;; Note that this encoding fixes the shift to 0
+;; ORR register, Encoding A1 (A8.8.123, A8-518)
 (let
  ((immShift
   (concat
@@ -10,45 +9,6 @@
    (bvand
     #xfeffffff
     (bvor #x00000020 'CPSR)))
-  (nzcv
-   (concat
-    ((_ extract 0 0)
-     (bvand
-      rN
-      ((_ extract 32 1)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 2 0)
-         (immShift))
-        ((_ extract 34 3)
-         (immShift))
-        ((_ xtract 29 29)
-         'CPSR)))))
-    (concat
-     ((_ call "df.isZeroBit")
-      (bvand
-       rN
-       ((_ extract 32 1)
-        ((_ call "df.shiftC")
-         rM
-         ((_ extract 2 0)
-          (immShift))
-         ((_ extract 34 3)
-          (immShift))
-         ((_ xtract 29 29)
-          'CPSR)))))
-     (concat
-      ((_ extract 0 0)
-       ((_ call "df.shiftC")
-        rM
-        ((_ extract 2 0)
-         (immShift))
-        ((_ extract 34 3)
-         (immShift))
-        ((_ xtract 29 29)
-         'CPSR)))
-      ((_ xtract 28 28)
-       'CPSR)))))
   (bxWritePC
    (ite
     ((_ call "uf.arm.is_r15")
@@ -57,11 +17,11 @@
      (bveq
       #b1
       ((_ extract 31 31)
-       (bvand
-        rN
+       (bvor
+        rM
         ((_ extract 32 1)
          ((_ call "df.shiftC")
-          rM
+          rN
           ((_ extract 2 0)
            (immShift))
           ((_ extract 34 3)
@@ -70,11 +30,11 @@
            'CPSR))))))
      (bvand
       #xfffffffe
-      (bvand
-       rN
+      (bvor
+       rM
        ((_ extract 32 1)
         ((_ call "df.shiftC")
-         rM
+         rN
          ((_ extract 2 0)
           (immShift))
          ((_ extract 34 3)
@@ -85,11 +45,11 @@
       (bveq
        #b1
        ((_ extract 30 30)
-        (bvand
-         rN
+        (bvor
+         rM
          ((_ extract 32 1)
           ((_ call "df.shiftC")
-           rM
+           rN
            ((_ extract 2 0)
             (immShift))
            ((_ extract 34 3)
@@ -98,22 +58,22 @@
             'CPSR))))))
       (bvand
        #xfffffffd
-       (bvand
-        rN
+       (bvor
+        rM
         ((_ extract 32 1)
          ((_ call "df.shiftC")
-          rM
+          rN
           ((_ extract 2 0)
            (immShift))
           ((_ extract 34 3)
            (immShift))
           ((_ xtract 29 29)
            'CPSR)))))
-      (bvand
-       rN
+      (bvor
+       rM
        ((_ extract 32 1)
         ((_ call "df.shiftC")
-         rM
+         rN
          ((_ extract 2 0)
           (immShift))
          ((_ extract 34 3)
@@ -128,7 +88,7 @@
    (rM . 'GPR)
    (rN . 'GPR)))
   (in
-   (setcc rN rM 'CPSR 'PC))
+   (setcc rM rN 'CPSR 'PC))
   (defs
    (('PC
     (bxWritePC))
@@ -144,7 +104,44 @@
          ((_ call "uf.arm.is_r15")
           rD)))
        (concat
-        (nzcv)
+        (concat
+         ((_ extract 0 0)
+          (bvor
+           rM
+           ((_ extract 32 1)
+            ((_ call "df.shiftC")
+             rN
+             ((_ extract 2 0)
+              (immShift))
+             ((_ extract 34 3)
+              (immShift))
+             ((_ xtract 29 29)
+              'CPSR)))))
+         (concat
+          ((_ call "df.isZeroBit")
+           (bvor
+            rM
+            ((_ extract 32 1)
+             ((_ call "df.shiftC")
+              rN
+              ((_ extract 2 0)
+               (immShift))
+              ((_ extract 34 3)
+               (immShift))
+              ((_ xtract 29 29)
+               'CPSR)))))
+          (concat
+           ((_ extract 0 0)
+            ((_ call "df.shiftC")
+             rN
+             ((_ extract 2 0)
+              (immShift))
+             ((_ extract 34 3)
+              (immShift))
+             ((_ xtract 29 29)
+              'CPSR)))
+           ((_ xtract 28 28)
+            'CPSR))))
         ((_ extract 31 4)
          (ite
           ((_ call "uf.arm.is_r15")
@@ -153,11 +150,11 @@
            (bveq
             #b1
             ((_ extract 31 31)
-             (bvand
-              rN
+             (bvor
+              rM
               ((_ extract 32 1)
                ((_ call "df.shiftC")
-                rM
+                rN
                 ((_ extract 2 0)
                  (immShift))
                 ((_ extract 34 3)
@@ -174,11 +171,11 @@
          (bveq
           #b1
           ((_ extract 31 31)
-           (bvand
-            rN
+           (bvor
+            rM
             ((_ extract 32 1)
              ((_ call "df.shiftC")
-              rM
+              rN
               ((_ extract 2 0)
                (immShift))
               ((_ extract 34 3)
@@ -198,11 +195,11 @@
        ((_ call "uf.arm.is_r15")
         rD)
        rD
-       (bvand
-        rN
+       (bvor
+        rM
         ((_ extract 32 1)
          ((_ call "df.shiftC")
-          rM
+          rN
           ((_ extract 2 0)
            (immShift))
           ((_ extract 34 3)
