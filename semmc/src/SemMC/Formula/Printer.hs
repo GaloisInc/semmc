@@ -177,7 +177,7 @@ convertFnApp paramLookup fn args
   | name == "undefined"
   , BaseBVRepr nr <- S.fnReturnType fn =
       let call = fromFoldable' [ ident "_", ident "call", quoted "uf.undefined" ]
-      in fromFoldable' [ call, int (NR.natValue nr) ]
+      in fromFoldable' [ call, int (NR.intValue nr) ]
   | otherwise =
     let call = fromFoldable' [ ident "_", ident "call", quoted (prefix ++ T.unpack name) ]
     in fromFoldable' (call : FC.toListFC (convertElt paramLookup) args)
@@ -211,8 +211,8 @@ convertApp paramLookup = fromFoldable' . convertApp'
         convertApp' (S.BVSelect idx n bv) = extract i j bv
           -- See SemMC.Formula.Parser.readExtract for the explanation behind
           -- these values.
-          where i = natValue n + j - 1
-                j = natValue idx
+          where i = intValue n + j - 1
+                j = intValue idx
         convertApp' (S.BVNeg _ bv) = [ident "bvneg", convert bv]
         convertApp' (S.BVAdd _ bv1 bv2) = [ident "bvadd", convert bv1, convert bv2]
         convertApp' (S.BVMul _ bv1 bv2) = [ident "bvmul", convert bv1, convert bv2]
@@ -223,8 +223,8 @@ convertApp paramLookup = fromFoldable' . convertApp'
         convertApp' (S.BVShl _ bv1 bv2) = [ident "bvshl", convert bv1, convert bv2]
         convertApp' (S.BVLshr _ bv1 bv2) = [ident "bvlshr", convert bv1, convert bv2]
         convertApp' (S.BVAshr _ bv1 bv2) = [ident "bvashr", convert bv1, convert bv2]
-        convertApp' (S.BVZext r bv) = extend "zero" (natValue r) bv
-        convertApp' (S.BVSext r bv) = extend "sign" (natValue r) bv
+        convertApp' (S.BVZext r bv) = extend "zero" (intValue r) bv
+        convertApp' (S.BVSext r bv) = extend "sign" (intValue r) bv
         convertApp' (S.BVBitNot _ bv) = [ident "bvnot", convert bv]
         convertApp' (S.BVBitAnd _ bv1 bv2) = [ident "bvand", convert bv1, convert bv2]
         convertApp' (S.BVBitOr _ bv1 bv2) = [ident "bvor", convert bv1, convert bv2]
@@ -239,7 +239,7 @@ convertApp paramLookup = fromFoldable' . convertApp'
         extend op r bv = [fromFoldable' [ident "_", ident (op ++ "_extend"), int extension],
                           convert bv]
           where extension = r - w
-                w = case S.exprType bv of BaseBVRepr len -> natValue len
+                w = case S.exprType bv of BaseBVRepr len -> intValue len
 
 -- | Extract the name, as a String, of a wrapped bound variable.
 varName :: BV.BoundVar (S.ExprBuilder t st fs) arch op -> String

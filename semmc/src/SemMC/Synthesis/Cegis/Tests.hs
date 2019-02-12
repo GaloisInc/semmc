@@ -93,7 +93,7 @@ simplifyWithTestNonMem :: forall arch t st fs sym.
                       -> T.Cegis sym arch (S.Pred sym)
 simplifyWithTestNonMem trialFormula test = do
   sym <- T.askSym
-  F.Formula _ defs' <- CE.evalFormula trialFormula $ stripMemLoc @arch @sym (T.testInput test)
+  F.Formula _ defs' <- CE.evalFormulaMem trialFormula $ stripMemLoc @arch @sym (T.testInput test)
   targetFormula <- T.askTarget -- Make sure to also include relevant locations in the target
   let locs = MA.nonMemIPLocs @arch $ F.formInputs trialFormula
                          `Set.union` F.formOutputs trialFormula
@@ -192,7 +192,7 @@ checkNoOverlap sym e1 e2 = do
     getIndices (A.WriteData i _) (A.WriteData j _) = (i,j)
 
 -- | @inMemAccesses (i,j)@ produces the predicate:
--- forall j \in accesses, i <> j -> Mem[i] <> Mem[j]
+-- i <> j -> Mem[i] <> Mem[j]
 inMemAccesses :: forall arch sym.
                  (S.IsExprBuilder sym)
               => (S.SymBV sym (A.RegWidth arch), S.SymBV sym (A.RegWidth arch))
