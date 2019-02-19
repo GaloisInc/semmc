@@ -17,6 +17,22 @@ Repository Layout
 * *tools* contains a C program called the *remote-runner*, which can be used to execute machine code on remote machines (used for running concrete test cases on remote hardware e.g., and ARM or PowerPC machine).
 
 
+Semantics Background
+--------------------
+
+   The *semmc* library is designed to learn semantics for machine code
+   instructions.  Its output, for each Instruction Set Architecture (ISA), is a
+   directory of files where each file contains a formula corresponding to the
+   semantics for an opcode in the ISA.  For example, the ``ADDI.sem`` file
+   contains the semantics for the add immediate instruction in PowerPC.
+
+   There are functions in *semmc* for dealing with this representation.
+   Formulas are loaded into a data type called ``ParameterizedFormula``, which
+   contains formula fragments based on the ``ExprBuilder`` representation of
+   *crucible*.  This can be thought of as a convenient representation of SMT
+   formulas.
+
+
 Building
 --------
 
