@@ -173,12 +173,13 @@ buildEqualityLocation sym test vars outputLoc expr = do
 
 -- | @checkNoOverlap sym e1 e2@ produces the predicate:
 -- for all i \in dom(e1), j \in dom(e2), i <> j -> Mem[i] <> Mem[j]
-checkNoOverlap :: forall arch t st fs sym tp.
-                  (A.Architecture arch, sym ~ WE.ExprBuilder t st fs)
+checkNoOverlap :: forall arch t st fs sym tp m.
+                  ( T.HasMemExpr m, T.HasSym m, MonadIO (m sym arch)
+                  , A.Architecture arch, sym ~ WE.ExprBuilder t st fs)
                => sym
                -> S.SymExpr sym tp
                -> S.SymExpr sym tp
-               -> T.Cegis sym arch (S.Pred sym)
+               -> m sym arch (S.Pred sym)
 checkNoOverlap sym e1 e2 = do
   let acc1 = MA.liveMemInExpr @arch e1
   let acc2 = MA.liveMemInExpr @arch e2
@@ -193,10 +194,11 @@ checkNoOverlap sym e1 e2 = do
 
 -- | @inMemAccesses (i,j)@ produces the predicate:
 -- i <> j -> Mem[i] <> Mem[j]
-inMemAccesses :: forall arch sym.
-                 (S.IsExprBuilder sym)
+inMemAccesses :: forall arch sym m.
+                 ( T.HasMemExpr m, T.HasSym m, MonadIO (m sym arch)
+                 , S.IsExprBuilder sym)
               => (S.SymBV sym (A.RegWidth arch), S.SymBV sym (A.RegWidth arch))
-              -> T.Cegis sym arch (S.Pred sym)
+              -> m sym arch (S.Pred sym)
 inMemAccesses (i,j) = do
   sym <- T.askSym
   mem <- T.askMemExpr
@@ -224,7 +226,8 @@ simplifyWithTestLLVMMem Nothing _ _ = do
 simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) f test 
   | Just S.Refl <- S.testEquality w_mem (S.knownNat @(A.RegWidth arch)) = do
   sym <- T.askSym
-  liftIO $ LLVM.withMem @arch sym $ \defaultValue -> do
+  memExpr <- T.askMemExpr
+  liftIO $ LLVM.withMem' @arch sym memExpr $ do
     -- 1) Instantiate the non-mem, non-IP variables in the formula
     F.Formula _ defs' <- liftIO $ CE.evalFormula' sym f $ CE.mkEvalLoc @arch sym (T.testInput test)
 
@@ -234,19 +237,19 @@ simplifyWithTestLLVMMem (Just (L.MemLoc w_mem mem)) f test
     -- 3) Perform the operations specified by the formula
     LLVM.instantiateMemOpsLLVM (MapF.lookup mem defs')
 
-    -- 4) Check that the default value does not occur anywhere in the test
-    defaultInTest <- checkDefaultInTest defaultValue test
-
-    -- 5) Compare the prepared state with the output part of the test
-    actualIsDesired <- andPred sym (T.memOutput test) $ \case
+    -- 4) Compare the prepared state with the output part of the test
+    andPred sym (T.memOutput test) $ \case
       A.ReadData _    -> error "Ill-formed concrete test"
-      A.WriteData i desired_v -> do
-        let numBytes = S.bvWidth desired_v
-        actual_v <- LLVM.readMem @arch numBytes i
-        liftIO $ S.isEq sym actual_v desired_v
-    -- liftIO . putStrLn $ "ActualIsDesired: " ++ show actualIsDesired
+      A.WriteData i shouldBe -> do
+        let numBytes = S.bvWidth shouldBe
+        actuallyIs <- LLVM.readMem @arch numBytes i
+        actuallyShould <- liftIO $ S.isEq sym actuallyIs shouldBe
 
-    liftIO $ S.andPred sym defaultInTest actualIsDesired
+        -- 5) Check that the default value does not occur anywhere in the test
+        noOverlap <- checkNoOverlap @arch sym actuallyIs shouldBe
+
+        liftIO $ S.andPred sym noOverlap actuallyShould
+
 simplifyWithTestLLVMMem _ _ _ = error "Memory location for this architecture does not match architecture"
 
 
@@ -257,7 +260,7 @@ checkDefault :: forall w sym arch.
                 (S.IsExprBuilder sym, 1 S.<= w)
              => S.SymBV sym 8 -> S.SymBV sym w -> LLVM.MemM sym arch (S.Pred sym)
 checkDefault defaultValue v = do
-    sym <- LLVM.askSym
+    sym <- T.askSym
     ds  <- liftIO $ appendN sym (S.bvWidth v) defaultValue
     liftIO $ S.isEq sym v ds
 
@@ -284,7 +287,7 @@ checkDefaultInTest :: forall sym arch.
                       S.IsExprBuilder sym
                    => S.SymBV sym 8 -> T.ConcreteTest sym arch -> LLVM.MemM sym arch (S.Pred sym)
 checkDefaultInTest defaultValue test = do
-  sym <- LLVM.askSym
+  sym <- T.askSym
   inInput <- andPred sym (T.memInput test) $ go sym
   inOutput <- andPred sym (T.memOutput test) $ go sym
   liftIO $ S.andPred sym inInput inOutput

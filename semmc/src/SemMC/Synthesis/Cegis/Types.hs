@@ -1,5 +1,6 @@
-{-# LANGUAGE RankNTypes, TypeApplications, ScopedTypeVariables, KindSignatures,
-  ViewPatterns, GADTs, FlexibleContexts, UndecidableInstances, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes, InstanceSigs, TypeApplications, ScopedTypeVariables,
+  KindSignatures, ViewPatterns, GADTs, FlexibleContexts, UndecidableInstances,
+  GeneralizedNewtypeDeriving #-}
 
 module SemMC.Synthesis.Cegis.Types
   ( -- * Cegis types
@@ -9,12 +10,12 @@ module SemMC.Synthesis.Cegis.Types
   , mkCegisState
   , Cegis(..)
   , runCegis
-  , askSym
+  , HasSym(..)
   , askSemantics
   , askTarget
   , askTests
   , askCheck
-  , askMemExpr
+  , HasMemExpr(..)
   -- * Templatable Instructions
   , TemplatableInstruction(..)
   , templInsnToDism
@@ -67,6 +68,11 @@ data CegisParams sym arch =
               -- ^ A symbolic expression representing the memory in all tests
               }
 
+class HasSym m where
+  askSym :: m sym arch sym
+class HasMemExpr m where
+  askMemExpr :: m sym arch (S.SymExpr sym (A.MemType arch))
+
 -- | Construct parameters for Cegis
 mkCegisParams :: (S.IsSymExprBuilder sym, A.Architecture arch)
               => sym 
@@ -109,8 +115,8 @@ newtype Cegis sym arch a = Cegis (ReaderT (CegisParams sym arch) (StateT (CegisS
 runCegis :: CegisParams sym arch -> CegisState sym arch -> Cegis sym arch a -> IO a
 runCegis params st (Cegis op) = evalStateT (runReaderT op params) st
 
-askSym :: Cegis sym arch sym
-askSym = Cegis $ reader cpSym
+instance HasSym Cegis where
+  askSym = Cegis $ reader cpSym
 
 askSemantics :: Cegis sym arch (T.TemplatedSemantics sym arch)
 askSemantics = Cegis $ reader cpSemantics
@@ -124,8 +130,9 @@ askTests = Cegis . lift $ csTests <$> get
 askCheck :: Cegis sym arch (S.Pred sym)
 askCheck = Cegis . lift $ csCheck <$> get
 
-askMemExpr :: Cegis sym arch (S.SymExpr sym (A.MemType arch))
-askMemExpr = Cegis $ reader cpMem
+instance HasMemExpr Cegis where
+  askMemExpr :: Cegis sym arch (S.SymExpr sym (A.MemType arch))
+  askMemExpr = Cegis $ reader cpMem
 
 
 -- ** Templatable instructions
@@ -166,8 +173,12 @@ tryExtractingConcrete :: (A.ArchRepr arch)
                       => [T.TemplatedInstructionFormula (WE.ExprBuilder t st fs) arch]
                       -> SAT.SatResult (GE.GroundEvalFn t) a
                       -> IO (Maybe [TemplatableInstruction arch])
-tryExtractingConcrete insns (SAT.Sat evalFn) = Just <$> extractConcreteInstructions evalFn insns
-tryExtractingConcrete _ SAT.Unsat{} = return Nothing
+tryExtractingConcrete insns (SAT.Sat evalFn) = do
+  putStrLn "Got Sat"
+  Just <$> extractConcreteInstructions evalFn insns
+tryExtractingConcrete _ SAT.Unsat{} = do
+  putStrLn "Got Unsat"
+  return Nothing
 tryExtractingConcrete _ SAT.Unknown = fail "got Unknown when checking sat-ness"
 
 

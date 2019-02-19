@@ -103,6 +103,9 @@ cegis' trial trialFormula = do
   insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
 
   case insns of
+    Nothing -> do
+        tests <- askTests
+        return (CegisUnmatchable tests)
     Just insns' -> do
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
@@ -147,9 +150,6 @@ cegis' trial trialFormula = do
             -- Adds newTest to params
             CT.addTest trialFormula newTest
             cegis' trial trialFormula
-    Nothing -> do
-        tests <- askTests
-        return (CegisUnmatchable tests)
 
 cegis :: forall arch sym t solver fs.
         ( Architecture arch, ArchRepr arch
