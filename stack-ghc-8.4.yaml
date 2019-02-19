@@ -45,6 +45,8 @@ extra-deps:
 - megaparsec-7.0.1
 - monadLib-3.7.3
 - ansi-wl-pprint-0.6.8.2
+- itanium-abi-0.1.0.0
+- boomerang-1.4.5.5
  
 # Extra package databases containing global packages
 extra-package-dbs: []
