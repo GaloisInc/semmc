@@ -9,11 +9,13 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+
 module SemMC.Formula.Equivalence
   ( EquivalenceResult(..)
   , checkSat
   , formulasEquiv
   , formulasEquivSym
+  , formulasEquivSymWithCondition
   , formulasEquivConcrete
   ) where
 
@@ -68,10 +70,29 @@ formulasEquivSym :: forall arch t solver fs .
                  -> IO (EquivalenceResult arch (Expr t))
 formulasEquivSym sym indices =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (Expr t tp)
-      eval (GroundEvalFn evalFn) e = do 
+      eval (GroundEvalFn evalFn) e = do
         e' <- evalFn e
         U.groundValToExpr sym indices (S.exprType e) e'
   in formulasEquiv eval sym
+
+-- | Check the equivalence of two formulas, under some condition of the final
+-- predicate. The counterexample values are 'Elt's.
+formulasEquivSymWithCondition :: forall arch t solver fs .
+                    (A.Architecture arch, WPO.OnlineSolver t solver)
+                 => CBO.OnlineBackend t solver fs
+                 -> (S.Pred (CBO.OnlineBackend t solver fs) -> IO (S.Pred (CBO.OnlineBackend t solver fs)))
+                 -- ^ The predicate to check
+                 -> [Integer]
+                 -- ^ Only check equivalence of memory at these addresses.
+                 -> F.Formula (CBO.OnlineBackend t solver fs) arch
+                 -> F.Formula (CBO.OnlineBackend t solver fs) arch
+                 -> IO (EquivalenceResult arch (Expr t))
+formulasEquivSymWithCondition sym cond indices =
+  let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (Expr t tp)
+      eval (GroundEvalFn evalFn) e = do
+        e' <- evalFn e
+        U.groundValToExpr sym indices (S.exprType e) e'
+  in formulasEquivWithCondition eval sym cond
 
 
 
@@ -97,17 +118,21 @@ allPairwiseEquality :: (S.IsExprBuilder sym)
 allPairwiseEquality sym = foldrM andPairEquality (S.truePred sym)
   where andPairEquality (Pair e1 e2) accum = S.andPred sym accum =<< S.isEq sym e1 e2
 
+
 -- | Check the equivalence of two formulas, using the first parameter to extract
 -- expression values for the counterexample.
-formulasEquiv :: forall t solver fs arch ex.
+--
+-- The first output is a predicate expressing if the formula @f1@ is equivalent
+-- to the formula @f2@. The second output is a map from locations used in @f1@
+-- or @f2@ to the symbolic variables representing them in the predicate.
+formulasEquivPred :: forall t solver fs arch.
                  (A.Architecture arch, WPO.OnlineSolver t solver)
-              => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
-              -> CBO.OnlineBackend t solver fs
+              => CBO.OnlineBackend t solver fs
               -> F.Formula (CBO.OnlineBackend t solver fs) arch
               -> F.Formula (CBO.OnlineBackend t solver fs) arch
-              -> IO (EquivalenceResult arch ex)
-formulasEquiv
-  eval
+              -> IO ( S.Pred (CBO.OnlineBackend t solver fs)
+                    , MapF.MapF (L.Location arch) (Expr t))
+formulasEquivPred
   sym
   f1@(F.Formula { F.formParamVars = bvars1, F.formDefs = defs1 } )
   f2@(F.Formula { F.formParamVars = bvars2, F.formDefs = defs2 } ) =
@@ -160,13 +185,40 @@ formulasEquiv
     -- ~((d1 = d1') /\ ... /\ (dm = dm'))
     testExpr <- S.notPred sym allDefsEqual
 
-    let handler (Sat evalFn) = do
-          -- Extract the failing test case.
-          DifferentBehavior <$> traverseF (eval evalFn) varConstants
-        handler Unsat{} = return Equivalent
-        handler Unknown = return Timeout
+    return (testExpr, varConstants)
 
-    checkSat sym testExpr handler
+
+
+-- | Check the equivalence of two formulas, using the first parameter to extract
+-- expression values for the counterexample.
+formulasEquiv :: forall t solver fs arch ex.
+                 (A.Architecture arch, WPO.OnlineSolver t solver)
+              => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
+              -> CBO.OnlineBackend t solver fs
+              -> F.Formula (CBO.OnlineBackend t solver fs) arch
+              -> F.Formula (CBO.OnlineBackend t solver fs) arch
+              -> IO (EquivalenceResult arch ex)
+formulasEquiv eval sym f1 f2 = do
+    (testExpr,varConstants) <- formulasEquivPred sym f1 f2
+    checkSatEvalFn eval sym varConstants testExpr
+
+-- | Check the equivalence of two formulas, using the first parameter to extract
+-- expression values for the counterexample. Also assert that the resulting
+-- predicate satisfies the condition given.
+formulasEquivWithCondition :: forall t solver fs arch ex sym.
+                 (A.Architecture arch, WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs)
+              => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
+              -> sym
+              -> (S.Pred sym -> IO (S.Pred sym))
+              -> F.Formula sym arch
+              -> F.Formula sym arch
+              -> IO (EquivalenceResult arch ex)
+formulasEquivWithCondition eval sym check f1 f2 = do
+    (testExpr,varConstants) <- formulasEquivPred sym f1 f2
+    condCheck <- check testExpr
+    testExprWithCheck <- S.andPred sym testExpr condCheck
+    checkSatEvalFn eval sym varConstants testExprWithCheck
+
 
 -- | Check the satisfiability of a formula using the given solver backend.
 --
@@ -185,3 +237,17 @@ checkSat sym testExpr handler = do
     WPS.assumeFormula conn f
     res <- WPO.checkAndGetModel sp "semmc equivalence formula"
     handler res
+
+checkSatEvalFn :: (WPO.OnlineSolver t solver)
+          => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
+          -> CBO.OnlineBackend t solver fs
+          -> MapF.MapF (L.Location arch) (Expr t)
+          -> WE.BoolExpr t
+          -> IO (EquivalenceResult arch ex)
+checkSatEvalFn eval sym varConstants test =
+    let handler (Sat evalFn) = do
+          -- Extract the failing test case.
+          DifferentBehavior <$> traverseF (eval evalFn) varConstants
+        handler Unsat{} = return Equivalent
+        handler Unknown = return Timeout
+    in checkSat sym test handler

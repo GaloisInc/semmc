@@ -192,9 +192,8 @@ synthesizeFormula params target = do
   let baseSet = synthBaseSet $ synthEnv params
   let ufEnv = synthUFEnv $ synthEnv params
   cegisParams <- liftIO $ mkCegisParams sym baseSet target ufEnv
-  seed <- initTest sym target (cpMem cegisParams)
   evalStateT (runReaderT (synthesizeFormula' cegisParams target) params) $
-    SynthesisState { synthTests = [seed]
+    SynthesisState { synthTests = []
                    , synthPrefixes = Seq.singleton []
                    }
 

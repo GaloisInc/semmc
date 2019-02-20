@@ -37,6 +37,7 @@ import qualified Data.Set as Set
 
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.Backend as CB
+import qualified Lang.Crucible.Simulator.SimError as CS
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 import qualified What4.Protocol.Online as WPO
@@ -73,6 +74,30 @@ condenseInstructions insns = do
   insnFormulas <- traverse instantiateFormula' insns
   liftIO $ condenseFormulas sym insnFormulas
 
+-- For each index i in the set, assert that 0 < i < 2^64-2^12. This ensures that
+-- we will never overflow the address space, assuming that the largest
+-- read/write is no more than e.g. 8 bytes = 64 bits.
+getBounds :: forall arch sym.
+             (S.IsExprBuilder sym, Architecture arch)
+          => sym
+          -> Set.Set (AccessData sym arch)
+          -> IO (S.Pred sym)
+getBounds sym dat = do
+  CT.andPred sym dat $ \case
+    WriteData i _ -> inBounds i
+    ReadData  i   -> inBounds i
+  where
+    -- 0 < i < 2^64-1 - 2^12
+    inBounds i = do
+      bv0 <- S.bvLit sym rw 0
+      bv4096 <- S.bvLit sym rw (-4096)
+      iGt0 <-S.bvUlt sym bv0 i
+      iLtMinus4096 <- S.bvUlt sym i bv4096
+      S.andPred sym iGt0 iLtMinus4096
+
+    rw = S.knownNat @(RegWidth arch)
+
+
 data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- ^ There is no way to make the target and the
                           -- candidate do the same thing. This is proven by the
@@ -82,7 +107,8 @@ data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- of the candidate instructions given, has the same
                           -- behavior as the target formula.
 
-cegis' :: (Architecture arch, ArchRepr arch
+cegis' :: forall arch t solver fs.
+          (Architecture arch, ArchRepr arch
           , WPO.OnlineSolver t solver
           , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
           )
@@ -115,7 +141,9 @@ cegis' trial trialFormula = do
       -- TODO: are these formStripIP's necessary?
       filledInFormula <- formStripIP <$> condenseInstructions insns'
       targetFormula <- askTarget
-      equiv <- liftIO $ formulasEquivSym sym 
+
+      equiv <- liftIO $ formulasEquivSymWithCondition sym
+                                         (\e -> getBounds @arch sym (MA.liveMemInExpr e))
                                          (MA.liveMemConst filledInFormula)
                                          targetFormula 
                                          filledInFormula

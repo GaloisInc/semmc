@@ -21,6 +21,7 @@ module SemMC.Synthesis.Cegis.Tests
   , addTests
   , mkTest
   , initTest
+  , andPred
   ) where
 
 import           Control.Monad.IO.Class ( MonadIO,  liftIO )

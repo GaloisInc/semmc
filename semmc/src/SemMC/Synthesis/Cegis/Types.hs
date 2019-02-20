@@ -236,4 +236,4 @@ isExistingTest :: (A.Architecture arch, S.IsExprBuilder sym)
                -> Cegis sym arch Bool
 isExistingTest test = do
   tests <- askTests
-  return . and $ not . concreteTestEq test <$> tests
+  return . or $ concreteTestEq test <$> tests

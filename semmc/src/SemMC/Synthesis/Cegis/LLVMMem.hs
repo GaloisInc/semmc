@@ -144,16 +144,16 @@ readMemNoOF bits offset = do
   sym <- T.askSym
   ptr <- mkPtr offset
   mem <- askImpl
---  liftIO . print $ PP.text "Attempting to read " <+> PP.text (show bits) <+> PP.text " bits "
---               <+> PP.text " from pointer " <+> LLVM.ppPtr ptr
---               <+> PP.text " from mem " <+> LLVM.ppMem mem
+  liftIO . print $ PP.text "Attempting to read " <+> PP.text (show bits) <+> PP.text " bits "
+               <+> PP.text " from pointer " <+> LLVM.ppPtr ptr
+               <+> PP.text " from mem " <+> LLVM.ppMem mem
   alignment <- askAlignment
   sType <- bvType bits
 
   v <- liftIO $ LLVM.loadRaw sym mem ptr sType alignment
   let v' = llvmValToSymBV bits v
 
---  liftIO . print $ PP.text "Successfully read value " <+> S.printSymExpr v'
+  liftIO . print $ PP.text "Successfully read value " <+> S.printSymExpr v'
 
   return v'
 
@@ -196,7 +196,17 @@ readMem :: forall arch sym bits.
         -> S.SymBV sym (A.RegWidth arch)
         -- ^ The address in memory at which to read
         -> MemM sym arch (S.SymBV sym bits)
-readMem bits addr = case S.asUnsignedBV addr of
+readMem bits addr = readMemNoOF bits addr
+
+-- | Read 'bits' number of bits starting from location i in memory, possibly overflowing the address space
+readMemOF :: forall arch sym bits.
+           (A.Architecture arch, LLVM.HasPtrWidth (A.RegWidth arch), B.IsSymInterface sym, 1 S.<= bits)
+        => S.NatRepr bits
+        -- ^ The number of bits to read
+        -> S.SymBV sym (A.RegWidth arch)
+        -- ^ The address in memory at which to read
+        -> MemM sym arch (S.SymBV sym bits)
+readMemOF bits addr = case S.asUnsignedBV addr of
   Nothing  -> readMemNoOF bits addr
   Just off -> S.withDivModNat bits (S.knownNat @8) $
     \bytes m -> -- bytes is the number of bytes corresponding to bits
@@ -284,8 +294,8 @@ writeMem :: forall arch sym bits.
 writeMem offset v = do
   ptr <- mkPtr offset
   mem <- askImpl
---  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
---  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
+  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
+  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
   align <- askAlignment
 
   sType <- bvType (S.bvWidth v)
@@ -295,7 +305,7 @@ writeMem offset v = do
   sym <- T.askSym
   mem' <- liftIO $ LLVM.storeRaw sym mem ptr sType align v'
 
---  liftIO . print $ PP.text "Successfully wrote value"
+  liftIO . print $ PP.text "Successfully wrote value"
 
   putImpl mem'
 
