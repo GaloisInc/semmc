@@ -74,15 +74,15 @@ condenseInstructions insns = do
   insnFormulas <- traverse instantiateFormula' insns
   liftIO $ condenseFormulas sym insnFormulas
 
--- For each index i in the set, assert that 0 < i < 2^64-2^12. This ensures that
--- we will never overflow the address space, assuming that the largest
--- read/write is no more than e.g. 8 bytes = 64 bits.
-getBounds :: forall arch sym.
-             (S.IsExprBuilder sym, Architecture arch)
+-- For each memory access @e@ in the expression, assert that 0 < i < 2^64-2^12.
+-- This ensures that we will never overflow the address space, assuming that the
+-- largest read/write is no more than e.g. 8 bytes = 64 bits.
+checkBounds :: forall arch sym tp t st fs.
+             (S.IsExprBuilder sym, Architecture arch, sym ~ WE.ExprBuilder t st fs)
           => sym
-          -> Set.Set (AccessData sym arch)
+          -> S.SymExpr sym tp
           -> IO (S.Pred sym)
-getBounds sym dat = do
+checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
   CT.andPred sym dat $ \case
     WriteData i _ -> inBounds i
     ReadData  i   -> inBounds i
@@ -97,6 +97,40 @@ getBounds sym dat = do
 
     rw = S.knownNat @(RegWidth arch)
 
+
+-- Produces a check that we do not generate duplicate tests: check that for all
+-- tests, the LocExprs given is not symbolically equal to the test input.
+checkNoDuplicates :: forall arch sym s t fs.
+             (S.IsExprBuilder sym, Architecture arch, CB.IsSymInterface sym, sym ~ WE.ExprBuilder s t fs)
+          => sym
+          -> [ConcreteTest sym arch]
+          -> LocExprs sym (L.Location arch)
+          -> IO (S.Pred sym)
+checkNoDuplicates sym tests lExprs = CT.andPred sym tests $ \test -> do
+    tInput <- checkTestInput (testInput test)
+    mInput <- checkMemInput (memInput test)
+    S.notPred sym =<< S.andPred sym tInput mInput
+  where
+    -- for all l \in domain(test), test(l) = lExprs(l)
+    checkTestInput :: LocExprs sym (L.Location arch) -> IO (S.Pred sym)
+    checkTestInput test = CT.andPred sym (MapF.toList test) $ \(MapF.Pair l testL) ->
+      case MapF.lookup l lExprs of
+        Nothing   -> return $ S.truePred sym
+        Just lExp -> S.isEq sym lExp testL
+
+    -- for all @WriteData i v \in memInput(test)@, lExprs(l)[i] = v
+    checkMemInput test | Just memE <- getMemExpr = CT.andPred sym test $ \case
+      ReadData _ -> return $ S.truePred sym
+      WriteData i v -> do
+        actuallyIs <- LLVM.readMemIO @arch sym (S.bvWidth v) i memE
+        S.isEq sym actuallyIs v
+    -- if there is no memory in the formula
+    checkMemInput _ | otherwise = return $ S.truePred sym
+
+    getMemExpr :: Maybe (S.SymExpr sym (MemType arch))
+    getMemExpr | L.MemLoc w l:_ <- L.memLocation @(L.Location arch)
+               , Just S.Refl <- S.testEquality w (S.knownNat @(RegWidth arch)) = MapF.lookup l lExprs
+               | otherwise = Nothing
 
 data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- ^ There is no way to make the target and the
@@ -125,7 +159,7 @@ cegis' trial trialFormula = do
   sym <- askSym
 --  check <- buildEqualityTests trialFormula tests
   check <- askCheck
-  liftIO . putStrLn $ "Equality tests: " ++ show check
+  -- liftIO . putStrLn $ "Equality tests: " ++ show check
   insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
 
   case insns of
@@ -142,8 +176,13 @@ cegis' trial trialFormula = do
       filledInFormula <- formStripIP <$> condenseInstructions insns'
       targetFormula <- askTarget
 
+      -- We want to check whether the formulas are equivalent under certain conditions:
+      -- (1) We never access memory that might overflow the address space
+      -- (2) We are not generating an existing test case
+      existingTests <- askTests
       equiv <- liftIO $ formulasEquivSymWithCondition sym
-                                         (\e -> getBounds @arch sym (MA.liveMemInExpr e))
+                                         (checkBounds @arch sym)
+                                         (checkNoDuplicates @arch sym existingTests)
                                          (MA.liveMemConst filledInFormula)
                                          targetFormula 
                                          filledInFormula
@@ -167,8 +206,7 @@ cegis' trial trialFormula = do
           -- avoid infinite loops
           testIsDuplicate <- isExistingTest newTest
           if testIsDuplicate
-          then -- error "Generated a duplicate test in Cegis"
-               askTests >>= return . CegisUnmatchable
+          then error $ "Generated a duplicate test in Cegis"
           else do
             liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
             -- If the template has no degrees of freedom, then we have checked

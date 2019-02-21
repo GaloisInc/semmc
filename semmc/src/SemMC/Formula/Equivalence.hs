@@ -80,19 +80,22 @@ formulasEquivSym sym indices =
 formulasEquivSymWithCondition :: forall arch t solver fs .
                     (A.Architecture arch, WPO.OnlineSolver t solver)
                  => CBO.OnlineBackend t solver fs
-                 -> (S.Pred (CBO.OnlineBackend t solver fs) -> IO (S.Pred (CBO.OnlineBackend t solver fs)))
-                 -- ^ The predicate to check
+                 -> (Expr t BaseBoolType -> IO (Expr t BaseBoolType))
+                 -- ^ This predicate must hold of the resulting equation
+                 -> (MapF.MapF (L.Location arch) (Expr t) -> IO (Expr t BaseBoolType))
+                 -- ^ For locations @ls@ occurring in formula, add the additional
+                 -- condition @checkLoc ls@ to the resulting predicate.
                  -> [Integer]
                  -- ^ Only check equivalence of memory at these addresses.
                  -> F.Formula (CBO.OnlineBackend t solver fs) arch
                  -> F.Formula (CBO.OnlineBackend t solver fs) arch
                  -> IO (EquivalenceResult arch (Expr t))
-formulasEquivSymWithCondition sym cond indices =
+formulasEquivSymWithCondition sym resCheck locCheck indices =
   let eval :: forall tp. GroundEvalFn t -> Expr t tp -> IO (Expr t tp)
       eval (GroundEvalFn evalFn) e = do
         e' <- evalFn e
         U.groundValToExpr sym indices (S.exprType e) e'
-  in formulasEquivWithCondition eval sym cond
+  in formulasEquivWithCondition eval sym resCheck locCheck
 
 
 
@@ -209,14 +212,19 @@ formulasEquivWithCondition :: forall t solver fs arch ex sym.
                  (A.Architecture arch, WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs)
               => (forall tp. GroundEvalFn t -> Expr t tp -> IO (ex tp))
               -> sym
-              -> (S.Pred sym -> IO (S.Pred sym))
+              -> (Expr t BaseBoolType -> IO (Expr t BaseBoolType))
+              -- ^ This predicate must hold of the resulting equation
+              -> (MapF.MapF (L.Location arch) (Expr t) -> IO (Expr t BaseBoolType))
+              -- ^ For locations @ls@ occurring in formula, add the additional
+              -- condition @checkLoc ls@ to the resulting predicate.
               -> F.Formula sym arch
               -> F.Formula sym arch
               -> IO (EquivalenceResult arch ex)
-formulasEquivWithCondition eval sym check f1 f2 = do
+formulasEquivWithCondition eval sym checkRes checkLoc f1 f2 = do
     (testExpr,varConstants) <- formulasEquivPred sym f1 f2
-    condCheck <- check testExpr
-    testExprWithCheck <- S.andPred sym testExpr condCheck
+    locCheck <- checkLoc varConstants
+    resCheck <- checkRes testExpr
+    testExprWithCheck <- S.andPred sym testExpr =<< S.andPred sym locCheck resCheck
     checkSatEvalFn eval sym varConstants testExprWithCheck
 
 
