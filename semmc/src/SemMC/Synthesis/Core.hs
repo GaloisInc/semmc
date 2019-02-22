@@ -31,7 +31,6 @@ import           SemMC.Formula
 import           SemMC.Synthesis.Template
 import           SemMC.Synthesis.Cegis
 import           SemMC.Util
-import Debug.Trace (trace)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           Text.PrettyPrint.ANSI.Leijen ( (<+>) )
 
@@ -109,8 +108,6 @@ instantiate :: (TemplateConstraints arch, ArchRepr arch, WPO.OnlineSolver t solv
 instantiate params target trial
   | footprintFilter target trial = do
       sym <- askSym
-      baseSet <- askBaseSet
-      ufEnv <- askUFEnv
       -- Instantiate the templated formulas for the templated instructions we're
       -- trying. Ideally we'd like to cache these somewhere, but this is hard
       -- due to the implementation of 'TemplatedInstruction'. (It stores a list
@@ -190,8 +187,7 @@ synthesizeFormula params target = do
   putStrLn $ "Calling synthesizeFormula on target " ++ show target
   let sym = synthSym $ synthEnv params
   let baseSet = synthBaseSet $ synthEnv params
-  let ufEnv = synthUFEnv $ synthEnv params
-  cegisParams <- liftIO $ mkCegisParams sym baseSet target ufEnv
+  cegisParams <- liftIO $ mkCegisParams sym baseSet target
   evalStateT (runReaderT (synthesizeFormula' cegisParams target) params) $
     SynthesisState { synthTests = []
                    , synthPrefixes = Seq.singleton []

@@ -16,36 +16,25 @@
 {-# LANGUAGE ViewPatterns #-}
 module SemMC.Synthesis.Cegis
   ( ConcreteTest
-  , CT.initTest
   , CegisParams
-  , cpMem
   , mkCegisParams
   , CegisResult(..)
   , cegis
   ) where
 
 import           Control.Monad.IO.Class ( liftIO )
-import           Control.Monad.Trans.State  (get, put )
-import           Control.Monad.Trans.Class  (lift)
-import           Data.Foldable
-import           Data.Maybe ( fromJust, listToMaybe )
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.Classes as P
-import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Set as Set
 
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.Backend as CB
-import qualified Lang.Crucible.Simulator.SimError as CS
 import qualified What4.Interface as S
 import qualified What4.Expr as WE
 import qualified What4.Protocol.Online as WPO
 
-import           SemMC.Architecture
+import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
 import           SemMC.Formula
-import           SemMC.Synthesis.Template
+import qualified SemMC.Synthesis.Template as T
 
 import qualified SemMC.Synthesis.Cegis.MemAccesses as MA
 import qualified SemMC.Synthesis.Cegis.LLVMMem as LLVM
@@ -54,99 +43,21 @@ import qualified SemMC.Synthesis.Cegis.EvalFormula as CE
 import qualified SemMC.Synthesis.Cegis.Tests as CT
 
 
-
--- | Build a formula for the given concrete instruction.
-instantiateFormula' :: Architecture arch
-                    => TemplatableInstruction arch
-                    -> Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
-instantiateFormula' (TemplatableInstruction op oplist) = do
-  sym <- askSym
-  semantics <- askSemantics
-  let pf = unTemplate . fromJust $ MapF.lookup op semantics
-  liftIO (snd <$> instantiateFormula sym pf oplist)
-
--- | Condense a series of instructions in sequential execution into one formula.
-condenseInstructions :: Architecture arch
-                     => [TemplatableInstruction arch]
-                     -> Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
-condenseInstructions insns = do
-  sym <- askSym
-  insnFormulas <- traverse instantiateFormula' insns
-  liftIO $ condenseFormulas sym insnFormulas
-
--- For each memory access @e@ in the expression, assert that 0 < i < 2^64-2^12.
--- This ensures that we will never overflow the address space, assuming that the
--- largest read/write is no more than e.g. 8 bytes = 64 bits.
-checkBounds :: forall arch sym tp t st fs.
-             (S.IsExprBuilder sym, Architecture arch, sym ~ WE.ExprBuilder t st fs)
-          => sym
-          -> S.SymExpr sym tp
-          -> IO (S.Pred sym)
-checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
-  CT.andPred sym dat $ \case
-    WriteData i _ -> inBounds i
-    ReadData  i   -> inBounds i
-  where
-    -- 0 < i < 2^64-1 - 2^12
-    inBounds i = do
-      bv0 <- S.bvLit sym rw 0
-      bv4096 <- S.bvLit sym rw (-4096)
-      iGt0 <-S.bvUlt sym bv0 i
-      iLtMinus4096 <- S.bvUlt sym i bv4096
-      S.andPred sym iGt0 iLtMinus4096
-
-    rw = S.knownNat @(RegWidth arch)
-
-
--- Produces a check that we do not generate duplicate tests: check that for all
--- tests, the LocExprs given is not symbolically equal to the test input.
-checkNoDuplicates :: forall arch sym s t fs.
-             (S.IsExprBuilder sym, Architecture arch, CB.IsSymInterface sym, sym ~ WE.ExprBuilder s t fs)
-          => sym
-          -> [ConcreteTest sym arch]
-          -> LocExprs sym (L.Location arch)
-          -> IO (S.Pred sym)
-checkNoDuplicates sym tests lExprs = CT.andPred sym tests $ \test -> do
-    tInput <- checkTestInput (testInput test)
-    mInput <- checkMemInput (memInput test)
-    S.notPred sym =<< S.andPred sym tInput mInput
-  where
-    -- for all l \in domain(test), test(l) = lExprs(l)
-    checkTestInput :: LocExprs sym (L.Location arch) -> IO (S.Pred sym)
-    checkTestInput test = CT.andPred sym (MapF.toList test) $ \(MapF.Pair l testL) ->
-      case MapF.lookup l lExprs of
-        Nothing   -> return $ S.truePred sym
-        Just lExp -> S.isEq sym lExp testL
-
-    -- for all @WriteData i v \in memInput(test)@, lExprs(l)[i] = v
-    checkMemInput test | Just memE <- getMemExpr = CT.andPred sym test $ \case
-      ReadData _ -> return $ S.truePred sym
-      WriteData i v -> do
-        actuallyIs <- LLVM.readMemIO @arch sym (S.bvWidth v) i memE
-        S.isEq sym actuallyIs v
-    -- if there is no memory in the formula
-    checkMemInput _ | otherwise = return $ S.truePred sym
-
-    getMemExpr :: Maybe (S.SymExpr sym (MemType arch))
-    getMemExpr | L.MemLoc w l:_ <- L.memLocation @(L.Location arch)
-               , Just S.Refl <- S.testEquality w (S.knownNat @(RegWidth arch)) = MapF.lookup l lExprs
-               | otherwise = Nothing
-
 data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- ^ There is no way to make the target and the
                           -- candidate do the same thing. This is proven by the
                           -- set of tests.
-                          | CegisEquivalent [Instruction arch]
+                          | CegisEquivalent [A.Instruction arch]
                           -- ^ This series of instructions, an instantiated form
                           -- of the candidate instructions given, has the same
                           -- behavior as the target formula.
 
 cegis' :: forall arch t solver fs.
-          (Architecture arch, ArchRepr arch
+          (A.Architecture arch, A.ArchRepr arch
           , WPO.OnlineSolver t solver
           , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
           )
-       => [TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
+       => [T.TemplatedInstructionFormula (CBO.OnlineBackend t solver fs) arch]
        -- ^ The trial instructions.
        -> Formula (CBO.OnlineBackend t solver fs) arch
        -- ^ A formula representing the sequence of trial instructions.
@@ -154,12 +65,8 @@ cegis' :: forall arch t solver fs.
 --       -- ^ All the tests we have so far.
        -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis' trial trialFormula = do
---  liftIO . putStrLn $ "Number of tests: " ++ show (length tests)
---   liftIO . putStrLn $ "\n\nTESTS:\n\t" ++ show tests
   sym <- askSym
---  check <- buildEqualityTests trialFormula tests
   check <- askCheck
-  -- liftIO . putStrLn $ "Equality tests: " ++ show check
   insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
 
   case insns of
@@ -173,7 +80,7 @@ cegis' trial trialFormula = do
       liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
 
       -- TODO: are these formStripIP's necessary?
-      filledInFormula <- formStripIP <$> condenseInstructions insns'
+      filledInFormula <- formStripIP <$> CE.condenseInstructions insns'
       targetFormula <- askTarget
 
       -- We want to check whether the formulas are equivalent under certain conditions:
@@ -200,25 +107,13 @@ cegis' trial trialFormula = do
           memExpr <- askMemExpr
           newTest <- liftIO $ CT.mkTest sym targetFormula ctrExample memExpr
 
-          -- JP: it is probably better not to do this check since if the
-          -- algorithm works correctly it should never generate duplicate
-          -- checks. However, for debugging purposes this check is useful to
-          -- avoid infinite loops
-          testIsDuplicate <- isExistingTest newTest
-          if testIsDuplicate
-          then error $ "Generated a duplicate test in Cegis"
-          else do
-            liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
-            -- If the template has no degrees of freedom, then we have checked
-            -- that this template is not equivalent to this formula, and we should
-            -- move on.
+          liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
 
-            -- Adds newTest to params
-            CT.addTest trialFormula newTest
-            cegis' trial trialFormula
+          CT.addTest trialFormula newTest
+          cegis' trial trialFormula
 
 cegis :: forall arch sym t solver fs.
-        ( Architecture arch, ArchRepr arch
+        ( A.Architecture arch, A.ArchRepr arch
         , WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs
         , CB.IsSymInterface sym
         )
@@ -227,24 +122,79 @@ cegis :: forall arch sym t solver fs.
       -- details.
       -> [ConcreteTest sym arch]
       -- ^ The concrete tests
-      -> [TemplatedInstructionFormula sym arch]
-      -- ^ The candidate program.
+      -> [T.TemplatedInstructionFormula sym arch]
+      -- ^ The candidate template program.
       -> IO (CegisResult sym arch)
 cegis params tests trial = do
   let sym = cpSym params
 
   -- Don't want to consider IP here
-  trialFormula <- formStripIP <$> condenseFormulas sym (map tifFormula trial)
+  trialFormula <- formStripIP <$> condenseFormulas sym (map T.tifFormula trial)
 
   liftIO . putStrLn $ "=============\nTRIAL FORMULA:\n============\n" ++ show trialFormula
 
-  -- Is this candidate satisfiable for the concrete tests we have so far? At
-  -- this point, the machine state is concrete, but the immediate values of the
-  -- instructions are symbolic. If the candidate is satisfiable for the tests,
-  -- the SAT solver will give us values for the templated immediates in order to
-  -- make the tests pass.
-
---  liftIO . putStrLn $ "Target formula: " ++ show (cpTarget params)
-  let cst = mkCegisState sym
+  let cst = emptyCegisState sym
   runCegis params cst $ do CT.addTests trialFormula tests
                            cegis' trial trialFormula
+
+-------------------------------------------------------
+
+
+-- For each memory access @e@ in the expression, assert that 0 < i < 2^64-2^12.
+-- This ensures that we will never overflow the address space, assuming that the
+-- largest read/write is no more than e.g. 8 bytes = 64 bits.
+checkBounds :: forall arch sym tp t st fs.
+             (S.IsExprBuilder sym, A.Architecture arch, sym ~ WE.ExprBuilder t st fs)
+          => sym
+          -> S.SymExpr sym tp
+          -> IO (S.Pred sym)
+checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
+  CT.andPred sym dat $ \case
+    A.WriteData i _ -> inBounds i
+    A.ReadData  i   -> inBounds i
+  where
+    -- 0 < i < 2^64-1 - 2^12
+    inBounds i = do
+      bv0 <- S.bvLit sym rw 0
+      bv4096 <- S.bvLit sym rw (-4096)
+      iGt0 <-S.bvUlt sym bv0 i
+      iLtMinus4096 <- S.bvUlt sym i bv4096
+      S.andPred sym iGt0 iLtMinus4096
+
+    rw = S.knownNat @(A.RegWidth arch)
+
+
+-- Produces a check that we do not generate duplicate tests: check that for all
+-- tests, the LocExprs given is not symbolically equal to the test input.
+checkNoDuplicates :: forall arch sym s t fs.
+             (S.IsExprBuilder sym, A.Architecture arch, CB.IsSymInterface sym, sym ~ WE.ExprBuilder s t fs)
+          => sym
+          -> [ConcreteTest sym arch]
+          -> LocExprs sym (L.Location arch)
+          -> IO (S.Pred sym)
+checkNoDuplicates sym tests lExprs = CT.andPred sym tests $ \test -> do
+    tInput <- checkTestInput (testInput test)
+    mInput <- checkMemInput (memInput test)
+    S.notPred sym =<< S.andPred sym tInput mInput
+  where
+    -- for all l \in domain(test), test(l) = lExprs(l)
+    checkTestInput :: LocExprs sym (L.Location arch) -> IO (S.Pred sym)
+    checkTestInput test = CT.andPred sym (MapF.toList test) $ \(MapF.Pair l testL) ->
+      case MapF.lookup l lExprs of
+        Nothing   -> return $ S.truePred sym
+        Just lExp -> S.isEq sym lExp testL
+
+    -- for all @WriteData i v \in memInput(test)@, lExprs(l)[i] = v
+    checkMemInput test | Just memE <- getMemExpr = CT.andPred sym test $ \case
+      A.ReadData _ -> return $ S.truePred sym
+      A.WriteData i v -> do
+        actuallyIs <- LLVM.readMemIO @arch sym (S.bvWidth v) i memE
+        S.isEq sym actuallyIs v
+    -- if there is no memory in the formula
+    checkMemInput _ | otherwise = return $ S.truePred sym
+
+    getMemExpr :: Maybe (S.SymExpr sym (A.MemType arch))
+    getMemExpr | L.MemLoc w l:_ <- L.memLocation @(L.Location arch)
+               , Just S.Refl <- S.testEquality w (S.knownNat @(A.RegWidth arch))
+               = MapF.lookup l lExprs
+               | otherwise = Nothing

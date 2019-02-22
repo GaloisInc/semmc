@@ -13,23 +13,19 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module SemMC.Synthesis.Cegis.MemAccesses
-  ( liveMemInExpr
-  , liveMem
-  , liveMemAddresses
+  ( liveMem
+  , liveMemInExpr
   , liveMemConst
   , liveMemMap
-  , partitionLocs
+  -- * Utilities
   , nonMemIPLocs
-  , someArrayLookup
-  , someIsEq
-  , exprSymFnToUninterpFn
   , isReadMem
   , isWriteMem
   ) where
 
 import qualified Data.Set as Set
 import qualified Data.Text as Text
-import           Data.Maybe (listToMaybe, catMaybes)
+import           Data.Maybe (catMaybes)
 
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.Context as Ctx
@@ -48,22 +44,6 @@ import qualified SemMC.Architecture.Location as L
 import           SemMC.Formula.Formula
 
 
-partitionLocs :: forall arch
-               . A.Architecture arch
-              => Set.Set (Some (L.Location arch))
-              -> ( Set.Set (Some (L.Location arch))
-                 , Maybe (L.MemLoc (L.Location arch)))
-partitionLocs locs = 
-    let memLocs = Set.filter (\(Some l) -> L.isMemLoc l) locs
-        memLocList = (\(Some l) -> L.toMemLoc l) <$> Set.toList memLocs
-    in (locs `Set.difference` memLocs, listToMaybe memLocList)
-
-nonMemIPLocs :: forall arch.
-                A.Architecture arch
-             => Set.Set (Some (L.Location arch))
-             -> Set.Set (Some (L.Location arch))
-nonMemIPLocs locs = Set.filter (\(Some l) -> not (L.isIP l) && not (L.isMemLoc l)) locs
-
 -- | Given a formula @F@, construct a map @i ↦ lookup (F(mem)) i@ for each @i@ in
 -- the live memory addresses of @F@
 liveMemMap :: forall arch t st fs sym.
@@ -76,46 +56,20 @@ liveMemMap f = Set.filter isWrite $ liveMem f
     isWrite (A.WriteData _ _) = True
     isWrite _ = False
 
-  
-
--- | @someArrayLookup sym (Some arr) (Some i)@ results in @Some <$>
--- S.arrayLookup arr i@ as long as @arr@ and @i@ have the correct type;
--- otherwise throws an error
-someArrayLookup :: S.IsExprBuilder sym
-                => sym 
-                -> Some (S.SymExpr sym)
-                -> Some (S.SymExpr sym)
-                -> IO (Some (S.SymExpr sym))
-someArrayLookup sym (Some arr) (Some i)
-  | S.BaseArrayRepr (Ctx.Empty Ctx.:> tp) _ <- S.exprType arr -- does the array expression have the right shape?
-  , Just S.Refl <- S.testEquality tp (S.exprType i) -- does the argument type match the indices of the array?
-  = Some <$> S.arrayLookup sym arr (Ctx.Empty Ctx.:> i)
-  | otherwise = error "Could not construct an array lookup because arguments have the wrong type"
-
-someIsEq :: (S.IsExprBuilder sym, P.ShowF (S.SymExpr sym))
-         => sym
-         -> Some (S.SymExpr sym)
-         -> Some (S.SymExpr sym)
-         -> IO (S.Pred sym)
-someIsEq sym (Some x) (Some y) 
-  | Just S.Refl <- S.testEquality (S.exprType x) (S.exprType y) = S.isEq sym x y
-  | otherwise = error $ "Could not construct an equality predicate because its arguments have the wrong type\n" 
-                     ++ "Expression 1: " ++ P.showF x ++ "\nHas type " ++ show (S.exprType x)
-                     ++ "\nExpression 2: " ++ P.showF y ++ "\nHas type " ++ show (S.exprType y)
-
-
--- | Returns the set of memory addresses that are accessed by the formula
-liveMem :: (A.Architecture arch)
-        => Formula (WE.ExprBuilder t st fs) arch
-        -> Set.Set (A.AccessData (WE.ExprBuilder t st fs) arch)
-liveMem f = foldMapF liveMemInExpr (formDefs f)
-
 liveMemAddresses :: forall arch t st fs. 
                     A.Architecture arch
                  => Formula (WE.ExprBuilder t st fs) arch
                  -> Set.Set (WE.Expr t (S.BaseBVType (A.RegWidth arch)))
 liveMemAddresses = Set.map A.accessAddr . liveMem
 
+-- | Returns the set of memory operations that are accessed by the formula
+liveMem :: (A.Architecture arch)
+        => Formula (WE.ExprBuilder t st fs) arch
+        -> Set.Set (A.AccessData (WE.ExprBuilder t st fs) arch)
+liveMem f = foldMapF liveMemInExpr (formDefs f)
+
+
+-- | Return the concrete addresses accessed by the formula
 liveMemConst :: forall arch t st fs.
                 A.Architecture arch
              => Formula (WE.ExprBuilder t st fs) arch
@@ -127,6 +81,7 @@ liveMemConst f = catMaybes $ exprToInt <$> (Set.toList $ liveMemAddresses f)
     exprToInt _ | otherwise = Nothing
 
 
+-- | Gets the set of memory accesses occurring in an expression
 liveMemInExpr :: forall arch t st fs a.
                  A.Architecture arch
               => WE.Expr t a
@@ -145,6 +100,11 @@ liveMemInExpr (WE.AppExpr a)        = foldMapFC liveMemInExpr $ WE.appExprApp a
 liveMemInExpr (WE.NonceAppExpr a)   = foldMapFC liveMemInExpr $ WE.nonceExprApp a
 liveMemInExpr _                     = Set.empty
 
+
+
+-- * Utilities
+
+
 exprSymFnToUninterpFn :: forall arch t args ret.
                          A.Architecture arch 
                       => WE.ExprSymFn t args ret -> Maybe (A.UninterpFn arch)
@@ -157,6 +117,14 @@ exprSymFnToUninterpFn f =
         (Just P.Refl, Just P.Refl) -> return f'
         (_, _)                     -> Nothing
     _ -> Nothing
+
+
+-- | Filters out locations that do not refer to memory or instruction pointer.
+nonMemIPLocs :: forall arch.
+                A.Architecture arch
+             => Set.Set (Some (L.Location arch))
+             -> Set.Set (Some (L.Location arch))
+nonMemIPLocs locs = Set.filter (\(Some l) -> not (L.isIP l) && not (L.isMemLoc l)) locs
 
 
 -- | Given an expression representing memory, returns 'Just (mem, WriteData idx

@@ -7,15 +7,11 @@ module SemMC.Synthesis.Cegis.ReadWriteEval
   ( instantiateReadMem
   ) where
 
-import Text.Printf ( printf )
 import qualified Data.Set as Set
-import           Data.Proxy                         ( Proxy(..) )
 
 import           Data.Parameterized.Classes (OrdF(..), TestEquality(..))
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as L
-import           Data.Parameterized.Some (Some(..))
-import qualified Data.Parameterized.Vector as V
 import qualified Data.Parameterized.Map as MapF
 
 import qualified Lang.Crucible.Backend as B
@@ -27,8 +23,6 @@ import qualified SemMC.Architecture.Location as AL
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Eval as E
 
-import qualified SemMC.DSL as DSL
-import           SemMC.Synthesis.Cegis.MemAccesses (exprSymFnToUninterpFn)
 import qualified SemMC.Synthesis.Cegis.LLVMMem as LLVM
 
 
@@ -42,10 +36,7 @@ instantiateReadMem :: forall arch t st fs sym tp.
                    -> (forall tp'. AL.Location arch tp' -> IO (WE.Expr t tp'))
                    -> S.SymExpr sym tp
                    -> IO (S.SymExpr sym tp)
-instantiateReadMem sym f evalLoc e = do
---    let exprs = MapF.map (S.varExpr sym) vars
---    let locExprs :: A.Location arch a -> IO (S.SymExpr sym a)
---        locExprs loc = maybe (A.defaultLocationExpr sym loc) return $ MapF.lookup loc exprs
+instantiateReadMem sym f evalLoc e =
     E.evaluateFunctions sym
                         (trivialParameterizedFormula f)
                         L.Nil
@@ -103,9 +94,6 @@ readMemEvaluator sym _f L.Nil (Ctx.Empty Ctx.:> mem Ctx.:> i) evalLoc (S.BaseBVR
   , S.NatEQ <- S.compareNat iType (S.knownNat @(A.RegWidth arch))
   , S.NonZeroNat <- S.isZeroNat iType
     = readMemEvaluatorTotal @arch sym evalLoc w mem i
---    = readMemEvaluatorFast @arch sym endianness byte w mem i
---    let Right symb = S.userSymbol "MyRead"
---    in S.freshConstant sym symb (S.BaseBVRepr w)
 readMemEvaluator _ _ _ _ _ _ = error "read_mem called with incorrect arguments and cannot be evaluated"
 
 
@@ -133,7 +121,7 @@ readMemEvaluatorTotal sym evalLoc w memExpr i
   | [AL.MemLoc w' memLoc] <- AL.memLocation @(AL.Location arch)
   , Just S.Refl <- testEquality w' (S.knownNat @(A.RegWidth arch)) = do
     startingMem <- evalLoc memLoc
-    LLVM.withMem' @arch sym startingMem $ do
-      LLVM.instantiateLLVMExpr memExpr
+    LLVM.withMem @arch sym startingMem $ do
+      LLVM.instantiateMemOps memExpr
       LLVM.readMem w i
   | otherwise = error "Could not find memory location for this architecture"

@@ -29,6 +29,7 @@ import qualified What4.Protocol.Online as WPO
 import           What4.Config
 import           What4.Interface
 import           What4.Solver
+import           What4.Solver.Z3
 import           Control.Monad
 import qualified Data.Text as Text
 
@@ -44,7 +45,7 @@ import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
 
 
 main :: IO ()
-main = executeTests $ memProgs ++ nonMemProgs
+main = executeTests $  [longProg] ++ memProgs ++ nonMemProgs
 
 -- just test tests for programs that deal with memory
 memtest :: IO ()
@@ -53,24 +54,27 @@ memtest = executeTests memProgs
 nonmemtest :: IO ()
 nonmemtest = executeTests nonMemProgs
 
+longtest :: IO ()
+longtest = executeTests [longProg]
+
+
 executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
   PN.withIONonceGenerator $ \ng ->
 
---    CBO.withYicesOnlineBackend @_ @(CBO.Flags CBO.FloatReal) ng $ \sym -> do
-      -- set the path to yices
---      void $ join (setOpt <$> getOptionSetting yicesPath (getConfiguration sym)
---                          <*> pure (Text.pack "path/to/yices"))
-
    CBO.withZ3OnlineBackend @(CBO.Flags CBO.FloatReal) ng CBO.NoUnsatFeatures $ \sym -> do
       -- set the path to z3
---      void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
---                          <*> pure (Text.pack "path/to/z3"))
+      -- void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
+      --                     <*> pure (Text.pack "../submodules/crucible/scripts/yices-tee"))
+
+      -- set timeout for individual invocations of z3
+      void $ join (setOpt <$> getOptionSetting z3Timeout (getConfiguration sym)
+                          <*> pure (toInteger 100000))
 
 
       -- set the verbosity level
---      void $ join (setOpt <$> getOptionSetting verbosity (getConfiguration sym)
---                          <*> pure (toInteger 3))
+      -- void $ join (setOpt <$> getOptionSetting verbosity (getConfiguration sym)
+      --                     <*> pure (toInteger 3))
 
       let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
@@ -88,38 +92,16 @@ allTests baseSet synthEnv progsToTest =
     T.testGroup "synthesis" (map (toSynthesisTest baseSet synthEnv) progsToTest)
 
 insns :: S.Set (Some (D.Opcode o))
-insns = S.fromList [Some D.STD, Some D.LHA, Some D.STDU, Some D.ADD4, Some D.NEG, Some D.LI]
-{-        [ Some D.ADD4
-        -- , Some D.ADDC
-        -- , Some D.ADDI
-        -- , Some D.ADDIS
-        -- , Some D.AND
-        -- , Some D.ANDC
-        -- , Some D.EQV
+insns = S.fromList
+        [ Some D.ADD4
         , Some D.LHA
         , Some D.LI
-        -- , Some D.MULLW
-        -- , Some D.MULLD
-        -- , Some D.NAND
         , Some D.NEG
-        -- , Some D.NOR
-        -- , Some D.OR
-        -- , Some D.ORI
-        -- , Some D.ORC
-        -- , Some D.ORIS
-        -- , Some D.SLD
-        -- , Some D.SLW
-        -- , Some D.SRAW
-        -- , Some D.SRAD
-        -- , Some D.SRD
-        -- , Some D.SRW
-        -- , Some D.SUBF
-        -- , 
+        , Some D.NOR
         , Some D.STD
         , Some D.STDU
-        -- , Some D.SC
+        , Some D.LWZ
         ]
--}
 
 nonMemProgs :: [(String, [D.Instruction])]
 nonMemProgs =
@@ -135,24 +117,46 @@ nonMemProgs =
                       , D.Instruction D.ADD4 (mkGPR 11 :< mkGPR 5 :< mkGPR 3 :< Nil)
                       ])]
       ++
-      [("LI", [ D.Instruction D.LI   $ mkGPR 0 :< D.S16imm 1 :< Nil ])]
+      [("LI", [ D.Instruction D.LI $ mkGPR 0 :< D.S16imm 1 :< Nil ])]
+      ++
+      [("redundency", [ D.Instruction D.LI $ mkGPR 2 :< D.S16imm 1 :< Nil
+                      , D.Instruction D.LI $ mkGPR 2 :< D.S16imm 2 :< Nil ])]
 
+longProg :: (String, [D.Instruction])
+longProg = ("LongProg", [ D.Instruction D.STD  $ mkMemRIX 1 (-1)   :< mkGPR 31 :< Nil
+                        , D.Instruction D.LI   $ mkGPR 31 :< D.S16imm 3 :< Nil
+                        , D.Instruction D.LHA  $ mkGPR 31 :< mkMemRI 1 2 :< Nil
+                        ])
         
          
 
 memProgs  :: [(String,[D.Instruction])] 
 memProgs =
-    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-2)  :< mkGPR 31     :< Nil])]
-    ++
     [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])]
+    ++
+    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-4)   :< mkGPR 31     :< Nil])]
+    ++
+    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-1)   :< mkGPR 31     :< Nil])]
     ++
     [("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (16) :< mkGPR 2      :< Nil ])]
     ++
-    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (2) :< Nil ])]
+    [("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-3)  :< mkGPR 2      :< Nil ])]
     ++
-    [("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-16) :< mkGPR 2      :< Nil ])]
+    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 4  :< Nil ])]
     ++
-    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-2) :< Nil ])]
+    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 0  :< Nil ])]
+    ++
+    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-1)  :< Nil ])]
+    ++
+    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-16) :< Nil ])]
+    ++
+   -- These run forever when in the presence of LI
+    [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (363)  :< Nil ])]
+    ++
+    [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (-2)  :< Nil ])]
+    ++
+    [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (-82)  :< Nil ])]
+
 
 mkGPR :: Word8 -> D.Operand "Gprc"
 mkGPR n = D.Gprc (D.GPR n)
@@ -163,19 +167,22 @@ mkMemRIX n i = D.Memrix (D.MemRIX (Just (D.GPR n)) (i :: I.I 14))
 mkMemRI :: Word8 -> Int16 -> D.Operand "Memri"
 mkMemRI n i = D.Memri (D.MemRI (Just (D.GPR n)) i)
 
-toSynthesisTest :: (WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
-                => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
-                -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
+toSynthesisTest :: ( WPO.OnlineSolver t solver
+                   , CB.IsSymInterface sym
+                   , sym ~ CBO.OnlineBackend t solver fs
+                   )
+                => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula sym PPC64.PPC)
+                -> SS.SynthesisEnvironment sym PPC64.PPC
                 -> (String, [D.Instruction])
                 -> T.TestTree
 toSynthesisTest baseSet synthEnv (name, p) = T.testCase name $ do
   res <- SST.synthesizeAndCheck (Proxy @PPC64.PPC) synthEnv baseSet matchInsn p
   T.assertEqual "Expected equivalence" SST.Equivalent res
 
-matchInsn :: forall a . D.Instruction -> (forall sh . D.Opcode D.Operand sh -> List D.Operand sh -> a) -> a
-matchInsn i k =
-  case i of
-    D.Instruction opc operands -> k opc operands
+matchInsn :: D.Instruction
+          -> (forall sh . D.Opcode D.Operand sh -> List D.Operand sh -> a)
+          -> a
+matchInsn (D.Instruction opc operands) k = k opc operands
 
 loadBaseSet :: forall sym t solver fs.
                (WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs, CB.IsSymInterface sym)

@@ -7,7 +7,7 @@ module SemMC.Synthesis.Cegis.Types
     CegisParams(..)
   , mkCegisParams
   , CegisState(..)
-  , mkCegisState
+  , emptyCegisState
   , Cegis(..)
   , runCegis
   , HasSym(..)
@@ -23,8 +23,6 @@ module SemMC.Synthesis.Cegis.Types
   -- * Concrete Tests
   , ConcreteTest(..)
   , LocExprs
-  , concreteTestEq
-  , isExistingTest
   ) where
 
 import           Data.Kind (Type)
@@ -32,7 +30,6 @@ import           Control.Monad.IO.Class ( MonadIO )
 import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
 import           Control.Monad.Trans.State  (StateT(..), evalStateT, get)
 import           Control.Monad.Trans.Class  (lift)
-import           Data.Maybe ( isJust )
 
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
@@ -62,10 +59,9 @@ data CegisParams sym arch =
               -- ^ The base set of opcode semantics.
               , cpTarget :: Formula sym arch
               -- ^ The target formula we're trying to match.
-              , cpUFEnv :: FormulaEnv sym arch
-              -- ^ The uninterpreted functions in scope
               , cpMem :: S.SymExpr sym (A.MemType arch)
-              -- ^ A symbolic expression representing the memory in all tests
+              -- ^ A symbolic expression representing the memory, to be used in
+              -- concrete test checks
               }
 
 class HasSym m where
@@ -80,24 +76,21 @@ mkCegisParams :: (S.IsSymExprBuilder sym, A.Architecture arch)
               -- ^ The base set of opcode semantics
               -> Formula sym arch
               -- ^ The target formula we're trying to match
-              -> FormulaEnv sym arch
-              -- ^ The uninterpreted functions in scope
               -> IO (CegisParams sym arch)
-mkCegisParams sym sem target ufEnv = case S.userSymbol "Mem" of
+mkCegisParams sym sem target = case S.userSymbol "Mem" of
     Left  err       -> error (show $ WS.ppSolverSymbolError err)
     Right memSymbol -> do
       memExpr <- S.freshConstant sym memSymbol S.knownRepr
       return $ CegisParams { cpSym = sym
                            , cpSemantics = sem
                            , cpTarget = target
-                           , cpUFEnv = ufEnv
                            , cpMem   = memExpr
                            }
 
-mkCegisState :: (S.IsSymExprBuilder sym, A.Architecture arch)
+emptyCegisState :: (S.IsSymExprBuilder sym, A.Architecture arch)
              => sym
              -> CegisState sym arch
-mkCegisState sym = CegisState { csTests = []
+emptyCegisState sym = CegisState { csTests = []
                              , csCheck = S.truePred sym
                              }
 
@@ -174,12 +167,9 @@ tryExtractingConcrete :: (A.ArchRepr arch)
                       -> SAT.SatResult (GE.GroundEvalFn t) a
                       -> IO (Maybe [TemplatableInstruction arch])
 tryExtractingConcrete insns (SAT.Sat evalFn) = do
-  putStrLn "Got Sat"
   Just <$> extractConcreteInstructions evalFn insns
-tryExtractingConcrete _ SAT.Unsat{} = do
-  putStrLn "Got Unsat"
-  return Nothing
-tryExtractingConcrete _ SAT.Unknown = fail "got Unknown when checking sat-ness"
+tryExtractingConcrete _ SAT.Unsat{} = return Nothing
+tryExtractingConcrete _ SAT.Unknown = return Nothing
 
 
 
@@ -190,12 +180,20 @@ type LocExprs sym loc = MapF.MapF loc (S.SymExpr sym)
 
 -- | Concrete input and output states of a formula. There's nothing in the types
 -- that prevents the values from being symbolic, but please don't let them be!
+-- The @memInput@ and @memOutput@ fields record the input and output state of
+-- memory, respectively, as a list of writes.
+--
+-- That is, a concrete test makes the assertion that if registers r_i map to
+-- concrete values c_i as specified by the @testInput@, and if the memory
+-- initially has the writes given by @memInput@, then the output will see
+-- registers having values indicated by @testOutput@, and memory will perform
+-- the writes specified by @memOutput@.
 data ConcreteTest sym arch =
   ConcreteTest { testInput  :: LocExprs sym (L.Location arch)
-                , testOutput :: LocExprs sym (L.Location arch)
-                , memInput   :: [A.AccessData sym arch]
-                , memOutput  :: [A.AccessData sym arch]
-                }
+               , testOutput :: LocExprs sym (L.Location arch)
+               , memInput   :: [A.AccessData sym arch]
+               , memOutput  :: [A.AccessData sym arch]
+               }
 
 instance (A.Architecture arch, P.ShowF (S.SymExpr sym))
       => Show (ConcreteTest sym arch)
@@ -204,36 +202,3 @@ instance (A.Architecture arch, P.ShowF (S.SymExpr sym))
                 ++ "\n|||\t" ++ show (testOutput test)
                 ++ "\n|||\t" ++ show (memInput test) 
                 ++ "\n|||\t" ++ show (memOutput test) ++ "\n⟩"
-
--- | The equality of concrete tests only relies on their input
-concreteTestEq :: forall sym arch.
-                  (S.IsExprBuilder sym, A.Architecture arch)
-               => ConcreteTest sym arch -> ConcreteTest sym arch -> Bool
-concreteTestEq test1 test2 =
-    concreteLocExprsEq (testInput test1) (testInput test2)
-    && and (zipWith concreteAccessDataEq (memInput test1) (memInput test2))
-  where
-    concreteLocExprsEq :: S.TestEquality loc => LocExprs sym loc -> LocExprs sym loc -> Bool
-    concreteLocExprsEq (MapF.toList -> l1) (MapF.toList -> l2) =
-        length l1 == length l2
-        && and (zipWith (\(MapF.Pair loc1 v1) (MapF.Pair loc2 v2) ->
-                            isJust (S.testEquality loc1 loc2) && concreteSymExprEq v1 v2)
-                l1 l2)
-
-    concreteAccessDataEq :: A.AccessData sym arch -> A.AccessData sym arch -> Bool
-    concreteAccessDataEq (A.ReadData idx1) (A.ReadData idx2) = concreteSymExprEq idx1 idx2
-    concreteAccessDataEq (A.WriteData idx1 v1) (A.WriteData idx2 v2) =
-        concreteSymExprEq idx1 idx2 && concreteSymExprEq v1 v2
-    concreteAccessDataEq _ _ = False
-
-    concreteSymExprEq :: S.SymExpr sym tp1 -> S.SymExpr sym tp2 -> Bool
-    concreteSymExprEq e1 e2 | Just c1 <- S.asConcrete e1, Just c2 <- S.asConcrete e2 =
-        isJust (S.testEquality c1 c2)
-                            | otherwise = False
-
-isExistingTest :: (A.Architecture arch, S.IsExprBuilder sym)
-               => ConcreteTest sym arch
-               -> Cegis sym arch Bool
-isExistingTest test = do
-  tests <- askTests
-  return . or $ concreteTestEq test <$> tests

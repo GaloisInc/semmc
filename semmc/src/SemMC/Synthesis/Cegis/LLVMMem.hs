@@ -3,20 +3,18 @@
   AllowAmbiguousTypes, FlexibleContexts, ViewPatterns #-}
 
 module SemMC.Synthesis.Cegis.LLVMMem
-  ( MemData(..)
-  , MemM(..)
+  ( -- * LLVM memory monad
+    MemM
   , withMem
-  , withMem'
   , askImpl
   , askBase
+  -- * Memory operations
   , readMem
   , readMemIO
   , readMemOF
   , writeMem
-  , doMemAccesses
-  , LLVM.MemImpl
-  , instantiateMemOpsLLVM
-  , instantiateLLVMExpr
+  , doWrites
+  , instantiateMemOps
   ) where
 
 import           Data.Proxy (Proxy(..))
@@ -35,7 +33,6 @@ import qualified What4.Concrete as WC
 import qualified Lang.Crucible.LLVM.MemModel as LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as LLVM
 import qualified Lang.Crucible.LLVM.MemType as MemType
-import qualified Lang.Crucible.LLVM.Bytes as B
 
 import qualified SemMC.Architecture as A
 import qualified SemMC.Synthesis.Cegis.Types as T
@@ -47,6 +44,10 @@ data MemData sym arch = MemData { memSym :: sym
                                 , memAlignment :: LLVM.Alignment
                                 , memExpr :: S.SymExpr sym (A.MemType arch)
                                 }
+
+-- | This monad has an underlying 'LLMV.MemImpl' that holds the current state of
+-- the memory, which is an unbounded array of bytes indexed by @RegWidth
+-- arch@-bit bitvectors.
 newtype MemM sym arch a = MemM {runMemM :: StateT (MemData sym arch) IO a}
   deriving (Functor, Applicative, Monad, MonadIO)
 
@@ -75,49 +76,28 @@ putImpl m = MemM $ do
 -- | Start an LLVM memory model instance consisting of a single block of memory
 -- of size 2^w where w is the width of registers in the architecture. All values
 -- in memory are initialized to the values of an uninterpreted symbolic array. 
-withMem' :: forall arch sym a.
+withMem :: forall arch sym a.
            (A.Architecture arch, B.IsSymInterface sym)
         => sym
         -> S.SymExpr sym (A.MemType arch)
         -> (LLVM.HasPtrWidth (A.RegWidth arch) => MemM sym arch a)
         -> IO a
-withMem' sym memExp op = do
+withMem sym memExp op = do
   let w = A.regWidth @arch in LLVM.withPtrWidth w $ do
 
     -- 1) Construct an LLVM memory implelementation with no blocks
     initMem <- LLVM.emptyMem (A.archEndianForm (Proxy @arch))
 
-    let alignment = LLVM.noAlignment
-
     -- 2) Allocate a block of uninitialized memory
---    print $ PP.text "Initializing memory of unbounded size"
     (base,mem) <- LLVM.doMallocUnbounded sym LLVM.GlobalAlloc LLVM.Mutable "Mem" 
-                                initMem alignment
+                                initMem LLVM.noAlignment
 
---    print $ PP.text "Base value: " <+> LLVM.ppPtr base
-
-    mem' <- LLVM.doArrayStoreUnbounded sym mem base alignment memExp
-
---    print $ PP.text "Creating uninterpreted memory: " <+> LLVM.ppMem mem'
-
+    -- 3) Write the initial memory expression array to the allocated block
+    mem' <- LLVM.doArrayStoreUnbounded sym mem base LLVM.noAlignment memExp
     
     -- 4) Execute the operation with these starting conditions
-    evalStateT (runMemM op) (MemData sym mem' base alignment memExp)
+    evalStateT (runMemM op) (MemData sym mem' base LLVM.noAlignment memExp)
 
-
--- | Start an LLVM memory model instance consisting of a single block of memory
--- of size 2^w where w is the width of registers in the architecture. All values
--- in memory are initialized to a single uninterpreted constant, which is also returned.
-withMem :: forall arch sym a.
-           (A.Architecture arch, B.IsSymInterface sym)
-        => sym
-        -> (LLVM.HasPtrWidth (A.RegWidth arch) => S.SymBV sym 8 -> MemM sym arch a)
-        -> IO a
-withMem sym op = do
-  let Right dSymbol = S.userSymbol "d"
-  d <- S.freshConstant sym dSymbol (S.BaseBVRepr (S.knownNat @8))
-  uninterpMem <- S.constantArray sym (Ctx.empty Ctx.:> S.BaseBVRepr S.knownNat) d
-  withMem' @arch sym uninterpMem (op d)
 
 -- Input: a bit vector representing the offset from the base ptr for memory
 mkPtr :: forall arch sym.
@@ -146,16 +126,16 @@ readMemNoOF bits offset = do
   sym <- T.askSym
   ptr <- mkPtr offset
   mem <- askImpl
---  liftIO . print $ PP.text "Attempting to read " <+> PP.text (show bits) <+> PP.text " bits "
---               <+> PP.text " from pointer " <+> LLVM.ppPtr ptr
---               <+> PP.text " from mem " <+> LLVM.ppMem mem
+  -- liftIO . print $ PP.text "Attempting to read " <+> PP.text (show bits) <+> PP.text " bits "
+  --              <+> PP.text " from pointer " <+> LLVM.ppPtr ptr
+  --              <+> PP.text " from mem " <+> LLVM.ppMem mem
   alignment <- askAlignment
   sType <- bvType bits
 
   v <- liftIO $ LLVM.loadRaw sym mem ptr sType alignment
   let v' = llvmValToSymBV bits v
 
---  liftIO . print $ PP.text "Successfully read value " --  <+> S.printSymExpr v'
+  -- liftIO . print $ PP.text "Successfully read value " --  <+> S.printSymExpr v'
 
   return v'
 
@@ -210,7 +190,7 @@ readMemIO :: forall arch sym bits.
           -> S.SymExpr sym (A.MemType arch)
           -- ^ The memory expression from which to read
           -> IO (S.SymBV sym bits)
-readMemIO sym bits i mem = withMem' @arch sym mem $ readMem bits i
+readMemIO sym bits i mem = withMem @arch sym mem $ readMem bits i
 
 
 -- | Read 'bits' number of bits starting from location i in memory, possibly overflowing the address space
@@ -309,8 +289,8 @@ writeMem :: forall arch sym bits.
 writeMem offset v = do
   ptr <- mkPtr offset
   mem <- askImpl
---  liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
---  liftIO . print $ PP.text "to pointer " <+> LLVM.ppPtr ptr
+  -- liftIO . print $ PP.text "Attempting to write value " <+> S.printSymExpr v
+  --              <+> PP.text "to pointer " <+> LLVM.ppPtr ptr
   align <- askAlignment
 
   sType <- bvType (S.bvWidth v)
@@ -320,22 +300,23 @@ writeMem offset v = do
   sym <- T.askSym
   mem' <- liftIO $ LLVM.storeRaw sym mem ptr sType align v'
 
---  liftIO . print $ PP.text "Successfully wrote value"
-
+  -- liftIO . print $ PP.text "Successfully wrote value"
   putImpl mem'
 
 
-doMemAccesses :: (A.Architecture arch, B.IsSymInterface sym, LLVM.HasPtrWidth (A.RegWidth arch))
+-- | For each @WriteData@ that occurs in the list of 'A.AccessData', write that
+-- value to the underlying 'LLVM.MemImpl'.
+doWrites :: (A.Architecture arch, B.IsSymInterface sym, LLVM.HasPtrWidth (A.RegWidth arch))
               => [A.AccessData sym arch]
               -> MemM sym arch ()
-doMemAccesses [] = return ()
-doMemAccesses (A.ReadData _ : ls) = doMemAccesses ls
-doMemAccesses (A.WriteData i v : ls) = do
+doWrites [] = return ()
+doWrites (A.ReadData _ : ls) = doWrites ls
+doWrites (A.WriteData i v : ls) = do
   writeMem i v
-  doMemAccesses ls
+  doWrites ls
 
 
----------------------------------------
+--------------------------------------
 
 
 -- | Interpret a symbolic array as a sequence of operations on the memory.
@@ -346,16 +327,23 @@ doMemAccesses (A.WriteData i v : ls) = do
 -- recursive structure into account.
 --
 -- TODO: add support for 'arrayIte' and 'arrayFromMap'?
-instantiateMemOpsLLVM :: forall sym t st fs arch.
-                         ( sym ~ WE.ExprBuilder t st fs
-                         , A.Architecture arch
-                         , B.IsSymInterface sym)
-                      => Maybe (S.SymExpr sym (A.MemType arch))
-                      -- ^ A symbolic expression representing memory
-                      -> MemM sym arch ()
-instantiateMemOpsLLVM (Just e) = LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ 
-                                     instantiateLLVMExpr e
-instantiateMemOpsLLVM Nothing  = return () -- or error?
+instantiateMemOps :: forall arch sym t st fs.
+                       (sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
+                       , A.Architecture arch
+                       )
+                    => S.SymExpr sym (A.MemType arch)
+                    -> MemM sym arch ()
+instantiateMemOps mem
+  | Just (mem', A.WriteData idx val) <- isUpdateArray @arch mem =
+  LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
+    instantiateMemOps mem'
+    writeMem idx val
+instantiateMemOps mem
+  | Just (mem', A.WriteData idx val) <- MA.isWriteMem @arch mem = do
+  LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
+    instantiateMemOps mem'
+    writeMem idx val
+instantiateMemOps _ | otherwise = return ()
 
 
 isUpdateArray :: forall arch t st fs sym.
@@ -371,23 +359,3 @@ isUpdateArray (WE.AppExpr a)
   , Just S.Refl <- S.testEquality regWidth (S.knownNat @(A.RegWidth arch)) = 
     Just (mem, A.WriteData idx val)
 isUpdateArray _ | otherwise = Nothing
-
-
-
-instantiateLLVMExpr :: forall arch sym t st fs.
-                       (sym ~ WE.ExprBuilder t st fs, B.IsSymInterface sym
-                       , A.Architecture arch
-                       )
-                    => S.SymExpr sym (A.MemType arch)
-                    -> MemM sym arch ()
-instantiateLLVMExpr mem
-  | Just (mem', A.WriteData idx val) <- isUpdateArray @arch mem = 
-  LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
-    instantiateLLVMExpr mem'
-    writeMem idx val
-instantiateLLVMExpr mem
-  | Just (mem', A.WriteData idx val) <- MA.isWriteMem @arch mem = do
-  LLVM.withPtrWidth (S.knownNat @(A.RegWidth arch)) $ do
-    instantiateLLVMExpr mem'
-    writeMem idx val
-instantiateLLVMExpr _ | otherwise = return ()

@@ -11,6 +11,7 @@ module SemMC.Synthesis.Cegis.EvalFormula
   , evalFormula'
   , evalFormulaMem
   , evalFormulaMem'
+  , condenseInstructions
   ) where
 
 import           Control.Monad.IO.Class ( liftIO )
@@ -26,12 +27,14 @@ import           SemMC.Formula
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
 
+import qualified SemMC.Synthesis.Template as Temp
 import qualified SemMC.Synthesis.Cegis.ReadWriteEval as RW
 import qualified SemMC.Synthesis.Cegis.Types as T
 
     
--- A data structure holding functions from locations to expressions
-data LocEval loc expr = LocEval {evalLoc :: forall (tp :: S.BaseType). loc tp -> IO (expr tp)}
+-- A data structure representing functions from locations to expressions
+data LocEval loc expr =
+  LocEval { evalLoc :: forall (tp :: S.BaseType). loc tp -> IO (expr tp) }
 
 -- | Convert an ArchState (a finite map from locations to expressions) into a
 -- total function that maps locations @l@ to their default value
@@ -42,7 +45,6 @@ mkEvalLoc :: forall arch sym.
              -> L.ArchState arch (S.SymExpr sym)
              -> LocEval (L.Location arch) (S.SymExpr sym)
 mkEvalLoc sym st = LocEval $ lookupInState sym st
-
 
 -- | Look up the given location in the given machine state. If the location is
 -- 'Mem', return the mem-expression. Otherwise, if the location is not found, return the
@@ -84,8 +86,6 @@ evalExpression :: forall arch t st fs tp.
 evalExpression sym vars state = evalExpression' sym vars (mkEvalLoc @arch sym state)
 
 
-
--- Both replace literal vars and call 'instantiateReadMem'
 evalExpression' :: (L.IsLocation loc)
                => WE.ExprBuilder t st fs
                -> MapF.MapF loc (WE.ExprBoundVar t)
@@ -167,3 +167,26 @@ evalFormula f st = do
   let locEval = mkEvalLoc @arch sym st
   liftIO $ evalFormula' sym f locEval
 
+
+-- | Build a formula corresponding to the semantics of the given concrete instruction.
+instantiateFormula' :: A.Architecture arch
+                    => T.TemplatableInstruction arch
+                    -> T.Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
+instantiateFormula' (T.TemplatableInstruction op oplist) = do
+  sym <- T.askSym
+  semantics <- T.askSemantics
+  case MapF.lookup op semantics of
+    Nothing -> error ("Missing semantics for opcode " ++ MapF.showF op)
+    Just x  -> do
+      (_,f) <- liftIO $ instantiateFormula sym (Temp.unTemplate x) oplist
+      return f
+
+-- | Condense a series of instructions in sequential execution into one formula
+-- describing the semantics of the block.
+condenseInstructions :: A.Architecture arch
+                     => [T.TemplatableInstruction arch]
+                     -> T.Cegis (WE.ExprBuilder t st fs) arch (Formula (WE.ExprBuilder t st fs) arch)
+condenseInstructions insns = do
+  sym <- T.askSym
+  insnFormulas <- traverse instantiateFormula' insns
+  liftIO $ condenseFormulas sym insnFormulas

@@ -82,6 +82,7 @@ mcSynth env target = do
                                , synthMaxLength = 0
                                }
   safeAssumptionFrame (synthSym env) $ do
+   --  synthesizeFormula (params {synthMaxLength = 1}) target'
     ret1 <- divideAndConquer (params { synthMaxLength = 1 }) target'
     case ret1 of
       Just _ -> return ret1
