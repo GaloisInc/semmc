@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SemMC.Architecture (
   Architecture(..),
@@ -48,31 +49,27 @@ module SemMC.Architecture (
   showShapeRepr,
   createSymbolicEntries,
   createSymbolicName,
-  regWidth
+  regWidth,
+  taggedExprImmediate
   ) where
 
-import           Data.List (find)
 import           Data.EnumF
 import           Data.Kind
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
-import           Data.Parameterized.Pair ( Pair(..) )
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.HasRepr as HR
-import           Data.Parameterized.TraversableFC (testEqualityFC)
 import           Data.Proxy ( Proxy(..) )
 import           Data.Typeable ( Typeable )
 import           GHC.TypeLits ( Symbol, Nat, KnownNat )
 import qualified Language.Haskell.TH as TH
-import           Debug.Trace (trace)
 
 import           What4.BaseTypes
 import qualified What4.Interface as S
 import qualified What4.Expr as S
 
 import qualified Lang.Crucible.LLVM.DataLayout as LLVM
-import qualified Lang.Crucible.LLVM.MemModel as LLVM
 
 import           SemMC.Architecture.AllocatedOperand
 import           SemMC.Architecture.Internal
@@ -121,6 +118,9 @@ class (IsOperand (Operand arch),
 
   -- | Extract the 'AllocatedOperand' from a 'TaggedExpr'
   taggedOperand :: TaggedExpr arch sym s -> AllocatedOperand arch sym s
+
+  -- | Extract expressions corresponding to the symbolic offset/immediate value of an OperandComponent
+  operandComponentsImmediate :: proxy sym -> OperandComponents arch sym s -> Maybe (Some (S.SymExpr sym))
 
   -- | The uninterpreted functions referred to by this architecture. These
   -- should include readMemUF and writeMemUF
@@ -174,7 +174,6 @@ showShapeRepr _ rep =
       SL.Nil -> ""
       (r SL.:< rep') -> let showr = operandTypeReprSymbol (Proxy @arch) r
                        in showr  ++ " " ++ (showShapeRepr (Proxy @arch) rep')
-
 
 type family RegWidth arch :: Nat
 
@@ -254,6 +253,16 @@ memTypeRepr :: forall arch.
             => S.BaseTypeRepr (MemType arch)
 memTypeRepr = S.knownRepr
 
+
+taggedExprImmediate :: forall sym arch s proxy.
+                       Architecture arch
+                    => proxy sym
+                    -> TaggedExpr arch sym s
+                    -> Maybe (Some (S.SymExpr sym))
+taggedExprImmediate _   (taggedOperand -> ValueOperand imm)      = Just (Some imm)
+taggedExprImmediate _   (taggedOperand -> LocationOperand _ _)   = Nothing
+taggedExprImmediate sym (taggedOperand -> CompoundOperand oComp) = operandComponentsImmediate @arch sym oComp
+taggedExprImmediate _ _ = error "Other tagged operand"
 
 -- | This type encapsulates an evaluator for operations represented as
 -- uninterpreted functions in semantics.  It may seem strange to interpret

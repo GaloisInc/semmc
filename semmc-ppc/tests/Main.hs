@@ -150,7 +150,6 @@ memProgs =
     ++
     [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-16) :< Nil ])]
     ++
-   -- These run forever when in the presence of LI
     [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (363)  :< Nil ])]
     ++
     [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (-2)  :< Nil ])]

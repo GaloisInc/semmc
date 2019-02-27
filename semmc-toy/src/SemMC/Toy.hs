@@ -349,6 +349,9 @@ instance A.Architecture Toy where
   taggedOperand = unTaggedExpr
 
   uninterpretedFunctions _ = []
+  readMemUF _ = undefined
+  writeMemUF _ = undefined
+  archEndianForm _ = undefined
 
   allocateSymExprsForOperand _ _ newVars (R32 reg) =
     let loc = RegLoc reg
@@ -361,6 +364,8 @@ instance A.Architecture Toy where
   locationFuncInterpretation _ = []
 
   shapeReprToTypeRepr _proxy = shapeReprType
+
+  operandComponentsImmediate _ _ = Nothing
 
 ----------------------------------------------------------------
 -- ** Locations

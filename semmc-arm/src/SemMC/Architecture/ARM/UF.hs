@@ -20,11 +20,8 @@ module SemMC.Architecture.ARM.UF
     where
 
 import Data.Parameterized.Context
-import Data.Parameterized.Some ( Some(..) )
 import GHC.TypeLits
 import qualified SemMC.Architecture as A
-import SemMC.Architecture.ARM.Location
-import SemMC.Architecture.ARM.UFgen
 import What4.BaseTypes
 import Data.Proxy
 

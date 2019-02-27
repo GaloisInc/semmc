@@ -15,22 +15,31 @@ module SemMC.Synthesis.Cegis.Types
   , askTarget
   , askTests
   , askCheck
+  , putCheck
   , HasMemExpr(..)
   -- * Templatable Instructions
   , TemplatableInstruction(..)
   , templInsnToDism
-  , tryExtractingConcrete
+  , extractConcreteInstructions
+--  , tryExtractingConcrete
+  , tryExtractingConcreteWithParamsCheck
   -- * Concrete Tests
   , ConcreteTest(..)
   , LocExprs
+  , andPred
   ) where
 
 import           Data.Kind (Type)
-import           Control.Monad.IO.Class ( MonadIO )
-import           Control.Monad.Trans.Reader ( ReaderT(..), reader )
-import           Control.Monad.Trans.State  (StateT(..), evalStateT, get)
+import           Control.Monad.IO.Class ( MonadIO, liftIO )
+import           Control.Monad.Trans.Reader ( ReaderT(..), reader)
+import           Control.Monad.Trans.State  (StateT(..), evalStateT, get, put)
 import           Control.Monad.Trans.Class  (lift)
+import           Data.Proxy (Proxy(..))
+import           Control.Monad (join)
+import           Data.Foldable (toList, foldrM)
 
+import           Data.Parameterized.Some (Some(..))
+import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Classes as P
@@ -44,6 +53,7 @@ import qualified What4.SatResult as SAT
 
 import qualified Dismantle.Instruction as D
 
+import qualified SemMC.Util as U
 import qualified SemMC.Architecture as A
 import qualified SemMC.Architecture.Location as L
 
@@ -123,6 +133,11 @@ askTests = Cegis . lift $ csTests <$> get
 askCheck :: Cegis sym arch (S.Pred sym)
 askCheck = Cegis . lift $ csCheck <$> get
 
+putCheck :: S.Pred sym -> Cegis sym arch ()
+putCheck check = Cegis . lift $ do
+  st <- get
+  put st{csCheck = check}
+
 instance HasMemExpr Cegis where
   askMemExpr :: Cegis sym arch (S.SymExpr sym (A.MemType arch))
   askMemExpr = Cegis $ reader cpMem
@@ -165,12 +180,43 @@ extractConcreteInstructions (GE.GroundEvalFn evalFn) = mapM f
 tryExtractingConcrete :: (A.ArchRepr arch)
                       => [T.TemplatedInstructionFormula (WE.ExprBuilder t st fs) arch]
                       -> SAT.SatResult (GE.GroundEvalFn t) a
-                      -> IO (Maybe [TemplatableInstruction arch])
+                      -> IO (Maybe ([TemplatableInstruction arch]))
 tryExtractingConcrete insns (SAT.Sat evalFn) = do
-  Just <$> extractConcreteInstructions evalFn insns
+  cInsns <- extractConcreteInstructions evalFn insns
+  return (Just cInsns)
 tryExtractingConcrete _ SAT.Unsat{} = return Nothing
 tryExtractingConcrete _ SAT.Unknown = return Nothing
 
+-- | Use a SAT model to both instantiate a list of templated instructions, and
+-- also construct a predicate saying: for all immediate parameters @i@ occurring
+-- in the templated instructions, @i <> model(i)@. This check is used in future
+-- satisfiability checks to ensure we never generate duplicate models.
+tryExtractingConcreteWithParamsCheck :: forall arch t st fs a sym.
+                                  ( sym ~ WE.ExprBuilder t st fs
+                                  , A.ArchRepr arch, A.Architecture arch, A.Architecture (T.TemplatedArch arch))
+                               => sym
+                               -> [T.TemplatedInstructionFormula sym arch]
+                               -> SAT.SatResult (GE.GroundEvalFn t) a
+                               -> IO (Maybe ([TemplatableInstruction arch], S.Pred sym))
+tryExtractingConcreteWithParamsCheck _ _ SAT.Unsat{} = return Nothing
+tryExtractingConcreteWithParamsCheck _ _ SAT.Unknown = return Nothing
+tryExtractingConcreteWithParamsCheck sym tInsns (SAT.Sat model) = do
+  cInsns <- extractConcreteInstructions model tInsns
+  let params = join $ mapM tInsnToParams tInsns
+  paramsCheck <- liftIO $ andPred sym params $ \(Some e) -> do
+    gv <- WE.groundEval @t model e
+    v <- U.groundValToExpr sym [] (S.exprType e) gv
+    S.notPred sym =<< S.isEq sym e v
+  return (Just (cInsns, paramsCheck))
+  where
+    tInsnToParams :: T.TemplatedInstructionFormula sym arch
+                  -> [Some (S.SymExpr sym)]
+    tInsnToParams (T.TemplatedInstructionFormula _ tf) =
+      join $ FC.toListFC tExprToImm (T.tfOperandExprs tf)
+
+    tExprToImm :: A.TaggedExpr (T.TemplatedArch arch) sym x
+               -> [Some (WE.Expr t)]
+    tExprToImm tExpr = toList $ A.taggedExprImmediate (Proxy @sym) tExpr
 
 
 -- ** Tests
@@ -202,3 +248,11 @@ instance (A.Architecture arch, P.ShowF (S.SymExpr sym))
                 ++ "\n|||\t" ++ show (testOutput test)
                 ++ "\n|||\t" ++ show (memInput test) 
                 ++ "\n|||\t" ++ show (memOutput test) ++ "\n⟩"
+
+-- | Take the conjunction of (f a) for each a in some foldable data structure
+andPred :: forall t sym m a. (Foldable t, S.IsExprBuilder sym, MonadIO m)
+        => sym -> t a -> (a -> m (S.Pred sym)) -> m (S.Pred sym)
+andPred sym ls f = foldrM go (S.truePred sym) ls
+  where
+    go :: a -> S.Pred sym -> m (S.Pred sym)
+    go accA accP = f accA >>= liftIO . (S.andPred sym accP)

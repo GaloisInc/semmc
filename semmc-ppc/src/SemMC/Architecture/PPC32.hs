@@ -446,6 +446,7 @@ instance A.Architecture PPC where
   locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation
   archEndianForm _proxy = A.BigEndian
   shapeReprToTypeRepr _proxy = shapeReprType
+  operandComponentsImmediate = POC.operandComponentsImmediate
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =

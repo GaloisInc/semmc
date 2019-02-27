@@ -6,7 +6,6 @@ module Main ( main ) where
 import qualified Control.Concurrent.Async as CC
 import qualified Control.Exception as CC
 import           Control.Monad
-import           Data.Monoid
 -- Do we actually care about this for Toy arch?
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR

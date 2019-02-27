@@ -193,7 +193,7 @@ replaceLiterals (AC.LiteralRef ix) loc (ops, s) =
 truncateValue :: ARMDis.Operand s
               -> V.Value (A.OperandType A32 s)
               -> (V.Value (A.OperandType A32 s), ARMDis.Operand s)
-truncateValue op v =
+truncateValue op _v =
   case op of
     _ -> L.error "truncateValue for A32 not yet implemented"
 
@@ -463,6 +463,9 @@ instance A.Architecture A32 where
     writeMemUF = UF.mkWriteMemUF
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
+    operandComponentsImmediate = AOC.operandComponentsImmediate
+    -- FIXME: architecture endianness is configurable, not sure how to represent this
+    archEndianForm _ = A.LittleEndian
 
 -- | Deconstruct an argument list for the 'a32.is_r15' pseudo-operation and
 -- interpret the arguments.

@@ -216,7 +216,9 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Abscondbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
                       let recover evalFn =
                             PPC.Abscondbrtarget . PPC.mkAbsCondBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
+                      return ( A.ValueOperand offsetRaw
+                             , T.RecoverOperandFn recover
+                             )
       PPC.CondbrtargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Condbrtarget"
@@ -224,7 +226,9 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Condbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 14))
                       let recover evalFn =
                             PPC.Condbrtarget . PPC.mkCondBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
+                      return ( A.ValueOperand offsetRaw
+                             , T.RecoverOperandFn recover
+                             )
 
       PPC.CrbitmRepr ->
         [T.TemplatedOperand Nothing Set.empty mkDirect]
@@ -233,7 +237,9 @@ instance T.TemplatableOperand PPC where
                        crrc <- S.freshConstant sym (U.makeSymbol "Crbitm") (knownRepr :: BaseTypeRepr (BaseBVType 8))
                        let recover evalFn =
                              PPC.Crbitm . PPC.CRBitM . fromInteger <$> evalFn crrc
-                       return (A.ValueOperand crrc, T.RecoverOperandFn recover)
+                       return ( A.ValueOperand crrc
+                              , T.RecoverOperandFn recover
+                              )
       PPC.I1immRepr ->
         [PPCS.symbolicTemplatedOperand (Proxy @1) True "I1imm" (PPC.I1imm . fromInteger)]
       PPC.FprcRepr -> PPCS.concreteTemplatedOperand (PPC.Fprc . PPC.FR) (LocVSR . PPC.VSReg) <$> [0..31]
@@ -267,7 +273,9 @@ instance T.TemplatableOperand PPC where
                       offsetRaw <- S.freshConstant sym (U.makeSymbol "Directbrtarget") (knownRepr :: BaseTypeRepr (BaseBVType 24))
                       let recover evalFn =
                             PPC.Directbrtarget . PPC.mkBranchTarget . fromInteger <$> evalFn offsetRaw
-                      return (A.ValueOperand offsetRaw, T.RecoverOperandFn recover)
+                      return ( A.ValueOperand offsetRaw
+                             , T.RecoverOperandFn recover
+                             )
       PPC.U5immRepr -> [PPCS.symbolicTemplatedOperand (Proxy @5) False "U5imm" (PPC.U5imm . fromInteger)]
       PPC.U6immRepr -> [PPCS.symbolicTemplatedOperand (Proxy @6) False "U6imm" (PPC.U6imm . fromInteger)]
       PPC.S17immRepr ->
@@ -276,7 +284,9 @@ instance T.TemplatableOperand PPC where
                     mkImm sym _ = do
                       v <- S.freshConstant sym (U.makeSymbol "S17imm") (knownRepr :: BaseTypeRepr (BaseBVType 16))
                       let recover evalFn = PPC.S17imm . fromInteger <$> evalFn v
-                      return (A.ValueOperand v, T.RecoverOperandFn recover)
+                      return ( A.ValueOperand v
+                             , T.RecoverOperandFn recover
+                             )
       PPC.AbsdirectbrtargetRepr ->
             [T.TemplatedOperand Nothing Set.empty mkDirect]
               where mkDirect :: T.TemplatedOperandFn PPC "Absdirectbrtarget"
@@ -443,6 +453,7 @@ instance A.Architecture PPC where
   locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation
   archEndianForm _proxy = A.BigEndian
   shapeReprToTypeRepr _proxy = shapeReprType
+  operandComponentsImmediate = POC.operandComponentsImmediate
 
 operandTypePPC :: PPC.Operand s -> BaseTypeRepr (A.OperandType PPC s)
 operandTypePPC o =

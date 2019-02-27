@@ -6,10 +6,12 @@
 
 module SemMC.Architecture.ARM.OperandComponents (
   OperandComponents(..)
+  , operandComponentsImmediate
   ) where
 
 import           GHC.TypeLits ( Symbol )
 import           Data.Parameterized.Classes ( ShowF, showF )
+import           Data.Parameterized.Some (Some(..))
 import           What4.BaseTypes
 import qualified What4.Interface as WI
 
@@ -80,3 +82,15 @@ instance (WI.IsExpr (WI.SymExpr sym), ShowF (A.Location arch)) => Show (OperandC
                                             ]
 
 instance (WI.IsExpr (WI.SymExpr sym), ShowF (A.Location arch)) => ShowF (OperandComponents arch sym)
+
+-- | Record the immediate values of the operand components
+operandComponentsImmediate :: proxy sym -> OperandComponents arch sym s -> Maybe (Some (WI.SymExpr sym))
+operandComponentsImmediate _ c@(OCAddrmodeImm12{})= Just . Some $ addrmodeImm12OffsetExpr c
+operandComponentsImmediate _ c@(OCT2SoReg{})      = Just . Some $ t2SoRegImmExpr c
+operandComponentsImmediate _ c@(OCTAddrModeIs4{}) = Just . Some $ addrmodeIs4ImmExpr c
+operandComponentsImmediate _ c@(OCTAddrModeIs2{}) = Just . Some $ addrmodeIs12ImmExpr c
+operandComponentsImmediate _ (OCSoRegReg{})       = Nothing
+operandComponentsImmediate _ c@(OCSoRegImm{})     = Just . Some $ soRegImmImmExpr c
+operandComponentsImmediate _ c@(OCLdstSoReg{})    = Just . Some $ ldstSoRegImmExpr c
+operandComponentsImmediate _ c@(OCModImm{})       = Just . Some $ modImmImmExpr c
+operandComponentsImmediate _ c@(OCAm2OffsetImm{}) = Just . Some $ am2OffsetImmImmExpr c

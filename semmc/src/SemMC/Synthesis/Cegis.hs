@@ -53,7 +53,7 @@ data CegisResult sym arch = CegisUnmatchable [ConcreteTest sym arch]
                           -- behavior as the target formula.
 
 cegis' :: forall arch t solver fs.
-          (A.Architecture arch, A.ArchRepr arch
+          (A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
           , WPO.OnlineSolver t solver
           , CB.IsSymInterface (CBO.OnlineBackend t solver fs)
           )
@@ -61,31 +61,34 @@ cegis' :: forall arch t solver fs.
        -- ^ The trial instructions.
        -> Formula (CBO.OnlineBackend t solver fs) arch
        -- ^ A formula representing the sequence of trial instructions.
---       -> [ConcreteTest (CBO.OnlineBackend t solver fs) arch]
---       -- ^ All the tests we have so far.
        -> Cegis (CBO.OnlineBackend t solver fs) arch (CegisResult (CBO.OnlineBackend t solver fs) arch)
 cegis' trial trialFormula = do
   sym <- askSym
   check <- askCheck
-  insns <- liftIO $ checkSat sym check (tryExtractingConcrete trial)
-
-  case insns of
+  insns' <- liftIO $ checkSat sym check (tryExtractingConcreteWithParamsCheck sym trial)
+  case insns' of
     Nothing -> do
         tests <- askTests
         return (CegisUnmatchable tests)
-    Just insns' -> do
+    Just (insns,paramsCheck) -> do
+
       -- For the concrete immediate values that the solver just gave us, are the
       -- target formula and the concrete candidate instructions equivalent for
       -- all symbolic machine states?
-      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns'
+      liftIO . putStrLn $ "TRIAL INSTRUCTIONS:\n\t" ++ show insns
 
       -- TODO: are these formStripIP's necessary?
-      filledInFormula <- formStripIP <$> CE.condenseInstructions insns'
+      filledInFormula <- formStripIP <$> CE.condenseInstructions insns
       targetFormula <- askTarget
 
       -- We want to check whether the formulas are equivalent under certain conditions:
       -- (1) We never access memory that might overflow the address space
       -- (2) We are not generating an existing test case
+      --
+      -- This could potentially return @Equivalence@ not because the two
+      -- formulae are actually equivalent, but because these side conditions are
+      -- unsatisfiable. This situation will be caught e.g. by the function
+      -- 'synthesizeAndCheck' in SemMC.Synthesis.Testing.
       existingTests <- askTests
       equiv <- liftIO $ formulasEquivSymWithCondition sym
                                          (checkBounds @arch sym)
@@ -102,7 +105,7 @@ cegis' trial trialFormula = do
           return (CegisUnmatchable tests)
         Equivalent -> do
           liftIO . putStrLn $ "Equivalent"
-          return . CegisEquivalent $ map templInsnToDism insns'
+          return . CegisEquivalent $ map templInsnToDism insns
         DifferentBehavior ctrExample -> do
           memExpr <- askMemExpr
           newTest <- liftIO $ CT.mkTest sym targetFormula ctrExample memExpr
@@ -110,10 +113,12 @@ cegis' trial trialFormula = do
           liftIO . putStrLn $ "=============Added counterexample:=============== \n" ++ show newTest
 
           CT.addTest trialFormula newTest
+          -- Add the params check for future iterations of cegis
+          addModelOverlapCheck paramsCheck
           cegis' trial trialFormula
 
 cegis :: forall arch sym t solver fs.
-        ( A.Architecture arch, A.ArchRepr arch
+        ( A.Architecture arch, A.ArchRepr arch, A.Architecture (T.TemplatedArch arch)
         , WPO.OnlineSolver t solver, sym ~ CBO.OnlineBackend t solver fs
         , CB.IsSymInterface sym
         )
@@ -149,7 +154,7 @@ checkBounds :: forall arch sym tp t st fs.
           -> S.SymExpr sym tp
           -> IO (S.Pred sym)
 checkBounds sym e | dat <- MA.liveMemInExpr @arch e = do
-  CT.andPred sym dat $ \case
+  andPred sym dat $ \case
     A.WriteData i _ -> inBounds i
     A.ReadData  i   -> inBounds i
   where
@@ -172,20 +177,20 @@ checkNoDuplicates :: forall arch sym s t fs.
           -> [ConcreteTest sym arch]
           -> LocExprs sym (L.Location arch)
           -> IO (S.Pred sym)
-checkNoDuplicates sym tests lExprs = CT.andPred sym tests $ \test -> do
+checkNoDuplicates sym tests lExprs = andPred sym tests $ \test -> do
     tInput <- checkTestInput (testInput test)
     mInput <- checkMemInput (memInput test)
     S.notPred sym =<< S.andPred sym tInput mInput
   where
     -- for all l \in domain(test), test(l) = lExprs(l)
     checkTestInput :: LocExprs sym (L.Location arch) -> IO (S.Pred sym)
-    checkTestInput test = CT.andPred sym (MapF.toList test) $ \(MapF.Pair l testL) ->
+    checkTestInput test = andPred sym (MapF.toList test) $ \(MapF.Pair l testL) ->
       case MapF.lookup l lExprs of
         Nothing   -> return $ S.truePred sym
         Just lExp -> S.isEq sym lExp testL
 
     -- for all @WriteData i v \in memInput(test)@, lExprs(l)[i] = v
-    checkMemInput test | Just memE <- getMemExpr = CT.andPred sym test $ \case
+    checkMemInput test | Just memE <- getMemExpr = andPred sym test $ \case
       A.ReadData _ -> return $ S.truePred sym
       A.WriteData i v -> do
         actuallyIs <- LLVM.readMemIO @arch sym (S.bvWidth v) i memE
@@ -198,3 +203,18 @@ checkNoDuplicates sym tests lExprs = CT.andPred sym tests $ \test -> do
                , Just S.Refl <- S.testEquality w (S.knownNat @(A.RegWidth arch))
                = MapF.lookup l lExprs
                | otherwise = Nothing
+
+
+-- | Conjoin the given predicate to the 'csCheck' field of the 'CegisState'.
+addModelOverlapCheck :: forall sym t st fs arch.
+                      ( sym ~ CBO.OnlineBackend t st fs
+                      , A.Architecture arch
+                      , A.Architecture (T.TemplatedArch arch)
+                      )
+                     => S.Pred sym
+                     -> Cegis sym arch ()
+addModelOverlapCheck paramsCheck = do
+  sym <- askSym
+  oldCheck <- askCheck
+  newCheck <- liftIO $ S.andPred sym oldCheck paramsCheck
+  putCheck newCheck

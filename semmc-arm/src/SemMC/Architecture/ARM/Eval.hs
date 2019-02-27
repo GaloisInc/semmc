@@ -65,7 +65,6 @@ import qualified Dismantle.Thumb.Operands as ThumbOperands
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.Location
 import qualified SemMC.Architecture.ARM.OperandComponents as AOC
-import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula as F
 import           What4.BaseTypes

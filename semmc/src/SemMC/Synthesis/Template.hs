@@ -101,8 +101,9 @@ type TemplatedOperandFn arch s = forall sym.
                                   S.IsSymExprBuilder sym)
                               => sym
                               -> (forall tp. Location arch tp -> IO (S.SymExpr sym tp))
-                              -> IO (AllocatedOperand arch sym s,
-                                     RecoverOperandFn sym (Operand arch s))
+                              -> IO ( AllocatedOperand arch sym s
+                                    , RecoverOperandFn sym (Operand arch s)
+                                    )
 
 -- | An operand for 'TemplatedArch'.
 data TemplatedOperand (arch :: Type) (s :: Symbol) =
@@ -182,6 +183,8 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
                                  ]
 
   archEndianForm _ = archEndianForm (Proxy @arch)
+
+  operandComponentsImmediate = operandComponentsImmediate @arch
 
 -- | This function unwraps 'FunctionInterpretation's and then rewraps them to
 -- change the @arch@ of the interpretation.  This lets us re-use the

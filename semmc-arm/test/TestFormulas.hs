@@ -23,6 +23,7 @@ import           SemMC.Architecture.ARM.Opcodes ( allA32Semantics, allT32Semanti
                                                 , a32DefinedFunctions, t32DefinedFunctions )
 import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Load as FL
+import qualified SemMC.Formula.Env as FE
 import qualified SemMC.Util as U
 import           System.IO
 import           Test.Tasty
@@ -78,8 +79,9 @@ testFormula :: [(String, BS.ByteString)]
 testFormula dfs a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
   do Some ng <- PN.newIONonceGenerator
      sym <- S.newSimpleBackend @_ @(S.Flags S.FloatIEEE) ng
-     lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym dfs
-     fm <- withTestLogging $ loadFormula sym lib a
+     env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
+     lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym env dfs
+     fm <- withTestLogging $ loadFormula sym env lib a
      -- The Main test is loadFormula doesn't generate an exception.
      -- The result should be a MapF with a valid entry in it.
      MapF.size fm @?= 1
@@ -89,7 +91,8 @@ loadFormula :: ( CRUB.IsSymInterface sym
                , ShowF (CRU.SymExpr sym)
                , U.HasLogCfg) =>
                sym
+            -> FE.FormulaEnv sym ARM.AArch32
             -> F.Library sym
             -> (Some (ARMOpcode ARMOperand), BS.ByteString)
             -> IO (MapF.MapF (ARMOpcode ARMOperand) (F.ParameterizedFormula sym ARM.AArch32))
-loadFormula sym lib a = FL.loadFormulas sym lib [a]
+loadFormula sym env lib a = FL.loadFormulas sym env lib [a]

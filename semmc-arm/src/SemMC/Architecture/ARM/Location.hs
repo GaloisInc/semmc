@@ -18,7 +18,6 @@ import           Data.Parameterized.TH.GADT
 import           Data.Semigroup
 import qualified Dismantle.ARM.Operands as ARMOprnds
 import qualified Dismantle.Thumb.Operands as ThumbOprnds
-import           GHC.TypeLits
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.ARM.BaseSemantics.Registers ( GPRIdent )
 import           What4.BaseTypes

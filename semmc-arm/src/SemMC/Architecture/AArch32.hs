@@ -241,7 +241,7 @@ operandValue sym locLookup op = TaggedExpr <$> opV op
         opVa (ARMDis.So_reg_imm v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.soRegImmToBits v))
         opVa (ARMDis.So_reg_reg v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.soRegRegToBits v))
         opVa (ARMDis.Unpredictable v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger v)
-        -- opV unhandled = error $ "operandValue not implemented for " <> show unhandled
+        opVa unhandled = error $ "operandValue not implemented for " <> show unhandled
 
         opVt :: ThumbDis.Operand s -> IO (A.AllocatedOperand AArch32 sym s)
         opVt (ThumbDis.Cc_out v) = A.ValueOperand <$> S.bvLit sym knownNat (toInteger (ARMOperands.sBitToBits v))
@@ -362,6 +362,9 @@ instance A.Architecture AArch32 where
     writeMemUF = UF.mkWriteMemUF
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
+    operandComponentsImmediate = AOC.operandComponentsImmediate
+    -- FIXME: architecture endianness is configurable, not sure how to represent this
+    archEndianForm _ = A.LittleEndian
 
 noLocation :: PL.List (A.AllocatedOperand arch sym) sh
            -> F.WrappedOperand arch sh s

@@ -5,10 +5,12 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module SemMC.Architecture.PPC.OperandComponents (
-  OperandComponents(..)
+    OperandComponents(..)
+  , operandComponentsImmediate
   ) where
 
 import           Data.Parameterized.Classes ( ShowF )
+import           Data.Parameterized.Some (Some(..))
 import           GHC.TypeLits ( Symbol )
 
 import qualified SemMC.Architecture as A
@@ -53,3 +55,9 @@ instance (S.IsExpr (S.SymExpr sym)) => Show (OperandComponents ppc sym s) where
                                     ]
 
 instance (S.IsExpr (S.SymExpr sym)) => ShowF (OperandComponents ppc sym)
+
+-- | Record the immediate values of the operand components
+operandComponentsImmediate :: proxy sym -> OperandComponents ppc sym s -> Maybe (Some (S.SymExpr sym))
+operandComponentsImmediate _ (OCMemri _loc _base off)          = Just (Some off)
+operandComponentsImmediate _ (OCMemrix _loc _base off)         = Just (Some off)
+operandComponentsImmediate _ (OCMemrr _loc1 _off1 _loc2 _off2) = Nothing

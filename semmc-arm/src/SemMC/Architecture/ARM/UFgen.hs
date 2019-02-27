@@ -11,7 +11,6 @@ module SemMC.Architecture.ARM.UFgen
 
 import Data.Parameterized.Context
 import Data.Parameterized.Some ( Some(..) )
-import Data.Semigroup
 import Language.Haskell.TH
 import SemMC.Architecture.ARM.BaseSemantics.Registers
 import What4.BaseTypes

@@ -20,7 +20,6 @@ module SemMC.Synthesis.Cegis.Tests
   ( addTest
   , addTests
   , mkTest
-  , andPred
   ) where
 
 import           Control.Monad.IO.Class ( MonadIO,  liftIO )
@@ -115,19 +114,10 @@ simplifyWithTestNonMem trialFormula test = do
                          `Set.union` F.formOutputs trialFormula
                          `Set.union` F.formInputs  targetFormula
                          `Set.union` F.formOutputs targetFormula
-  andPred sym locs $ \(Some l) ->
+  T.andPred sym locs $ \(Some l) ->
     buildEqualityLocation sym test vars l (MapF.lookup l defs')
   where
     vars = F.formParamVars trialFormula
-
--- | Take the conjunction of (f a) for each a in some foldable data structure
-andPred :: forall t sym m a. (Foldable t, S.IsExprBuilder sym, MonadIO m)
-        => sym -> t a -> (a -> m (S.Pred sym)) -> m (S.Pred sym)
-andPred sym ls f = foldrM go (S.truePred sym) ls
-  where
-    go :: a -> S.Pred sym -> m (S.Pred sym)
-    go accA accP = f accA >>= liftIO . (S.andPred sym accP)
-
 
 
 -- | Build an equality expression for the given non-memory location, under the given
@@ -196,8 +186,8 @@ checkNoOverlap :: forall arch t st fs sym tp m.
 checkNoOverlap sym e1 e2 = do
   let acc1 = MA.liveMemInExpr @arch e1
   let acc2 = MA.liveMemInExpr @arch e2
-  andPred sym acc1 $ \i ->
-    andPred sym acc2 $ \j ->
+  T.andPred sym acc1 $ \i ->
+    T.andPred sym acc2 $ \j ->
       inMemAccesses $ getIndices i j
   where
     getIndices (A.ReadData i) (A.ReadData j) = (i,j)
@@ -251,7 +241,7 @@ simplifyWithTestMem (Just (L.MemLoc w_mem mem)) f test
     traverse_ LLVM.instantiateMemOps $ MapF.lookup mem defs'
 
     -- 4) Compare the prepared state with the output part of the test
-    andPred sym (T.memOutput test) $ \case
+    T.andPred sym (T.memOutput test) $ \case
       A.ReadData _    -> error "Ill-formed concrete test"
       A.WriteData i shouldBe -> do
         let numBytes = S.bvWidth shouldBe
