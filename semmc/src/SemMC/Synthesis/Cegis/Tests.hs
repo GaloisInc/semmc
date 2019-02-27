@@ -27,7 +27,7 @@ import           Control.Monad.Trans.Class  (lift)
 import qualified Data.Set as Set
 import           Control.Monad.Trans.State  (get, put )
 import           Data.Maybe ( listToMaybe )
-import           Data.Foldable (foldrM, traverse_)
+import           Data.Foldable (traverse_)
 
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
@@ -324,6 +324,8 @@ mkTest sym targetFormula ctrExample memExpr = do
     return $ T.ConcreteTest testInput' testOutput'
                           (Set.toList inputAddrMap) (Set.toList outputAddrMap)
 
+
+{-
 -- | Construct an initial test from concrete values
 --
 -- FIXME: In order to do this properly, we need to select default locExprs that
@@ -355,3 +357,4 @@ defaultLocExprs sym = do locExprList <- mapM pairDefault $ L.nonIPLocations @loc
   where
     pairDefault :: Some loc -> IO (MapF.Pair loc (S.SymExpr sym))
     pairDefault (Some l) = MapF.Pair l <$> L.defaultLocationExpr sym l
+-}

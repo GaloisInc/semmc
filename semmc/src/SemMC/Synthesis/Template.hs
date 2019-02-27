@@ -138,9 +138,6 @@ instance (IsOperandTypeRepr arch) => IsOperandTypeRepr (TemplatedArch arch) wher
   operandTypeReprSymbol _ = operandTypeReprSymbol (Proxy @arch)
 type instance RegWidth (TemplatedArch arch) = RegWidth arch
 
-deTemplateAccessData :: AccessData sym (TemplatedArch arch) -> AccessData sym arch
-deTemplateAccessData (ReadData e) = ReadData e
-deTemplateAccessData (WriteData e v) = WriteData e v
 templateAccessData :: AccessData sym arch -> AccessData sym (TemplatedArch arch)
 templateAccessData (ReadData e) = ReadData e
 templateAccessData (WriteData e v) = WriteData e v
@@ -171,6 +168,8 @@ instance (TemplateConstraints arch) => Architecture (TemplatedArch arch) where
   uninterpretedFunctions _ = do 
     MkUninterpFn name args res live <- uninterpretedFunctions (Proxy @arch)
     return $ MkUninterpFn name args res (fmap templateAccessData . live)
+  readMemUF n = readMemUF @arch n
+  writeMemUF n = writeMemUF @arch n
 
   allocateSymExprsForOperand _ sym locLookup (TemplatedOperand _ _ f) = do
     (e, r) <- f sym locLookup

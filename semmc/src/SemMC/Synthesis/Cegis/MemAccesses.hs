@@ -142,7 +142,7 @@ isWriteMem memExpr@(WE.NonceAppExpr a)
   , Just uf <- exprSymFnToUninterpFn @arch f
   , S.BaseBVRepr w <- S.exprType v
   , S.BaseBVRepr iSize <- S.exprType i
-  , A.uninterpFnName uf == A.uninterpFnName (A.writeMemUF @arch (S.intValue w))
+  , A.uninterpFnName uf == A.writeMemUF @arch (S.intValue w)
   , Just S.Refl <- S.testEquality (S.exprType mem) (S.exprType memExpr)
   , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr iSize)
   , Just S.Refl <- S.testEquality (iSize) (S.knownNat @(A.RegWidth arch))
@@ -164,7 +164,7 @@ isReadMem :: forall arch sym t st fs w.
 isReadMem e@(WE.NonceAppExpr a)
   | WE.FnApp f (Ctx.Empty Ctx.:> mem Ctx.:> i) <- WE.nonceExprApp a
   , Just uf <- exprSymFnToUninterpFn @arch f
-  , A.uninterpFnName uf == A.uninterpFnName (A.readMemUF @arch (S.intValue $ S.bvWidth e))
+  , A.uninterpFnName uf == A.readMemUF @arch (S.intValue $ S.bvWidth e)
   , Just S.Refl <- S.testEquality (S.exprType i) (S.BaseBVRepr (S.knownNat @(A.RegWidth arch)))
   , Just S.Refl <- S.testEquality (S.exprType mem) (A.memTypeRepr @arch)
   = Just (mem, A.ReadData i)

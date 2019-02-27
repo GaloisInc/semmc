@@ -283,7 +283,7 @@ mcmcSynthesizeOne target = do
                   U.throwIO (userError msg)
                 U.logM U.Debug "The rvwp optimization fixed the candidate!"
                 return (fixedCost, fixedCandidate)
-          Just numRvwps -> do
+          Just _numRvwps -> do
             let Just rvwpSemViews = mRvwpSemViews
             -- Warn here since we don't handle this case.
             U.logM U.Warn (rvwpSummaryMsg rvwpSemViews)

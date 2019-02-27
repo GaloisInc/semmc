@@ -155,8 +155,7 @@ doThing2 = do
   -- target <- fooFormula sym
   target <- independentFormula sym
 
-  let formEnv = FormulaEnv Map.empty undefined
-  let synthEnv = setupEnvironment sym formEnv (toBaseSet baseset)
+  let synthEnv = setupEnvironment sym (toBaseSet baseset)
   print =<< mcSynth synthEnv target
   print $ extractUsedLocs (formParamVars target) (fromJust $ MapF.lookup (RegLoc Reg2) $ formDefs target)
 
@@ -182,8 +181,7 @@ doThing4 = do
               $ MapF.empty
 
   ind <- independentFormula sym
-  let formEnv = FormulaEnv Map.empty undefined
-  let synthEnv = setupEnvironment sym formEnv (toBaseSet baseset)
+  let synthEnv = setupEnvironment sym (toBaseSet baseset)
   print =<< mcSynth synthEnv ind
 
 ----------------------------------------------------------------

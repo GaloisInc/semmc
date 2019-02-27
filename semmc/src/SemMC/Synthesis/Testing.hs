@@ -7,7 +7,6 @@ module SemMC.Synthesis.Testing (
   ) where
 
 import qualified Data.Foldable as F
-import           Data.Parameterized.Classes ( OrdF )
 import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
 import qualified What4.Protocol.Online as WPO

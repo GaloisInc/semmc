@@ -26,7 +26,6 @@ import qualified System.Directory as S
 import qualified System.FilePath as S
 
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Pair as Pair
@@ -84,7 +83,6 @@ loadFormulas :: forall sym arch a
              -> [(Some a, BS.ByteString)]
              -> IO (MapF.MapF a (F.ParameterizedFormula sym arch))
 loadFormulas sym initEnv lib contents = do
---  initEnv <- formulaEnv (Proxy @arch) sym
   let env = FE.addLibrary initEnv lib
   F.foldlM (parseFormulaBS env) MapF.empty contents
   where

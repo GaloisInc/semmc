@@ -19,8 +19,8 @@ module SemMC.Synthesis.Cegis.LLVMMem
 
 import           Data.Proxy (Proxy(..))
 import           Control.Monad.State
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
-import           Text.PrettyPrint.ANSI.Leijen ( (<+>) )
+-- import qualified Text.PrettyPrint.ANSI.Leijen as PP
+-- import           Text.PrettyPrint.ANSI.Leijen ( (<+>) )
 
 import           Data.Parameterized.Some (Some(..))
 import qualified Data.Parameterized.Context as Ctx

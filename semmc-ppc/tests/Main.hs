@@ -28,10 +28,8 @@ import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Protocol.Online as WPO
 import           What4.Config
 import           What4.Interface
-import           What4.Solver
 import           What4.Solver.Z3
 import           Control.Monad
-import qualified Data.Text as Text
 
 
 import qualified SemMC.Architecture as SA
@@ -45,15 +43,17 @@ import qualified SemMC.Architecture.PPC64.Opcodes as PPC64
 
 
 main :: IO ()
-main = executeTests $  [longProg] ++ memProgs ++ nonMemProgs
+main = executeTests $ memProgs ++ nonMemProgs -- ++ [longProg]
 
--- just test tests for programs that deal with memory
+-- just test for programs that deal with memory
 memtest :: IO ()
 memtest = executeTests memProgs
 
+-- just test for programs that do not deal with memory
 nonmemtest :: IO ()
 nonmemtest = executeTests nonMemProgs
 
+-- synthesize a "long" sequence of memory instructions
 longtest :: IO ()
 longtest = executeTests [longProg]
 
@@ -69,7 +69,7 @@ executeTests progsToTest = do
 
       -- set timeout for individual invocations of z3
       void $ join (setOpt <$> getOptionSetting z3Timeout (getConfiguration sym)
-                          <*> pure (toInteger 100000))
+                          <*> pure 100000)
 
 
       -- set the verbosity level
@@ -132,29 +132,29 @@ longProg = ("LongProg", [ D.Instruction D.STD  $ mkMemRIX 1 (-1)   :< mkGPR 31 :
 
 memProgs  :: [(String,[D.Instruction])] 
 memProgs =
-    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])]
+    [("STD2",    [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])]
     ++
-    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-4)   :< mkGPR 31     :< Nil])]
+    [("STD-4",   [ D.Instruction D.STD  $ mkMemRIX 1 (-4)   :< mkGPR 31     :< Nil])]
     ++
-    [("STD",  [ D.Instruction D.STD  $ mkMemRIX 1 (-1)   :< mkGPR 31     :< Nil])]
+    [("STD-1",   [ D.Instruction D.STD  $ mkMemRIX 1 (-1)   :< mkGPR 31     :< Nil])]
     ++
-    [("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (16) :< mkGPR 2      :< Nil ])]
+    [("STDU16",  [ D.Instruction D.STDU $ mkMemRIX 1 (16) :< mkGPR 2      :< Nil ])]
     ++
-    [("STDU", [ D.Instruction D.STDU $ mkMemRIX 1 (-3)  :< mkGPR 2      :< Nil ])]
+    [("STDU-3",  [ D.Instruction D.STDU $ mkMemRIX 1 (-3)  :< mkGPR 2      :< Nil ])]
     ++
-    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 4  :< Nil ])]
+    [("LHA4",    [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 4  :< Nil ])]
     ++
-    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 0  :< Nil ])]
+    [("LHA0",    [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 0  :< Nil ])]
     ++
-    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-1)  :< Nil ])]
+    [("LHA-1",   [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-1)  :< Nil ])]
     ++
-    [("LHA",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-16) :< Nil ])]
+    [("LHA-16",  [ D.Instruction D.LHA  $ mkGPR 31         :< mkMemRI 1 (-16) :< Nil ])]
     ++
-    [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (363)  :< Nil ])]
+    [("LWZ363",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (363)  :< Nil ])]
     ++
-    [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (-2)  :< Nil ])]
+    [("LWZ-2",   [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (-2)  :< Nil ])]
     ++
-    [("LWZ",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (-82)  :< Nil ])]
+    [("LWZ-82",  [ D.Instruction D.LWZ  $ mkGPR 31         :< mkMemRI 1 (-82)  :< Nil ])]
 
 
 mkGPR :: Word8 -> D.Operand "Gprc"
@@ -196,7 +196,7 @@ loadBaseSet funcs ops sym = do
   env <- SF.formulaEnv (Proxy @PPC64.PPC) sym
   lib <- SF.loadLibrary (Proxy @PPC64.PPC) sym env funcs
   baseSet <- SF.loadFormulas sym (templateEnv env) lib ops
-  let synthEnv = SS.setupEnvironment sym env baseSet
+  let synthEnv = SS.setupEnvironment sym baseSet
   return (removeTemplates baseSet, synthEnv)
   where
     templateEnv :: SF.FormulaEnv sym arch -> SF.FormulaEnv sym (SS.TemplatedArch arch)

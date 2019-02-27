@@ -129,7 +129,7 @@ loadBaseSet ops sym = do
   env <- F.formulaEnv (Proxy @PPC32.PPC) sym
   baseSet <- F.loadFormulas sym (templateEnv env) F.emptyLibrary ops
   let plainBaseSet = makePlain baseSet
-      synthEnv = SemMC.setupEnvironment sym env baseSet
+      synthEnv = SemMC.setupEnvironment sym baseSet
   return (plainBaseSet, synthEnv)
   where
     templateEnv :: F.FormulaEnv sym arch -> F.FormulaEnv sym (SemMC.TemplatedArch arch)

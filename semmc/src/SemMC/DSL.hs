@@ -1283,7 +1283,7 @@ exprTypeToBaseType repr =
   case repr of
     EBool -> Some CRU.BaseBoolRepr
     EInt -> Some CRU.BaseIntegerRepr
-    EBV n | Just (Some n') <- NR.someNat (fromIntegral n)
+    EBV n | Just (Some n') <- NR.someNat @Integer (fromIntegral n)
           , Just NR.LeqProof <- NR.isPosNat n'
           -> Some (CRU.BaseBVRepr n')
     EFloat -> Some $

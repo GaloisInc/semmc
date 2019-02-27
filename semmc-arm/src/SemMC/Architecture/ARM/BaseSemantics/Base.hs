@@ -3,7 +3,6 @@
 module SemMC.Architecture.ARM.BaseSemantics.Base
     where
 
-import Data.Semigroup
 import SemMC.Architecture.ARM.BaseSemantics.Natural
 import SemMC.DSL
 

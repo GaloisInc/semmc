@@ -174,21 +174,10 @@ extractConcreteInstructions (GE.GroundEvalFn evalFn) = mapM f
   where f (T.TemplatedInstructionFormula (T.TemplatedInstruction op _ _) tf) =
           TemplatableInstruction op <$> T.recoverOperands (HR.typeRepr op) evalFn (T.tfOperandExprs tf)
 
--- | Meant to be used as the callback in a check SAT operation. If the result is
--- Sat, it pulls out concrete instructions corresponding to the SAT model.
--- Otherwise, it returns Nothing.
-tryExtractingConcrete :: (A.ArchRepr arch)
-                      => [T.TemplatedInstructionFormula (WE.ExprBuilder t st fs) arch]
-                      -> SAT.SatResult (GE.GroundEvalFn t) a
-                      -> IO (Maybe ([TemplatableInstruction arch]))
-tryExtractingConcrete insns (SAT.Sat evalFn) = do
-  cInsns <- extractConcreteInstructions evalFn insns
-  return (Just cInsns)
-tryExtractingConcrete _ SAT.Unsat{} = return Nothing
-tryExtractingConcrete _ SAT.Unknown = return Nothing
 
--- | Use a SAT model to both instantiate a list of templated instructions, and
--- also construct a predicate saying: for all immediate parameters @i@ occurring
+-- | Meant to be used as the callback in a check SAT operation. If the result is
+-- Sat, it pulls out concrete instructions corresponding to the SAT model, and
+-- also constructs a predicate saying: for all immediate parameters @i@ occurring
 -- in the templated instructions, @i <> model(i)@. This check is used in future
 -- satisfiability checks to ensure we never generate duplicate models.
 tryExtractingConcreteWithParamsCheck :: forall arch t st fs a sym.

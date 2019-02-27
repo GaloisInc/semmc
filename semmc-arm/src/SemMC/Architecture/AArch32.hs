@@ -358,8 +358,8 @@ instance A.Architecture AArch32 where
     allocateSymExprsForOperand _ = operandValue
     operandToLocation _ = operandToLocation
     uninterpretedFunctions = UF.uninterpretedFunctions
-    readMemUF = UF.mkReadMemUF
-    writeMemUF = UF.mkWriteMemUF
+    readMemUF = A.uninterpFnName . UF.mkReadMemUF @AArch32
+    writeMemUF = A.uninterpFnName . UF.mkWriteMemUF @AArch32
     locationFuncInterpretation _proxy = A.createSymbolicEntries locationFuncInterpretation
     shapeReprToTypeRepr _proxy = shapeReprType
     operandComponentsImmediate = AOC.operandComponentsImmediate

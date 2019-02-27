@@ -22,7 +22,6 @@ module SemMC.Formula.Instantiate
 import           Data.Foldable                      ( foldlM, foldrM )
 import           Data.Kind
 import           Data.Maybe                         ( isNothing )
-import qualified Data.Set                           as Set
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context         as Ctx
 import           Data.Parameterized.Ctx

@@ -68,9 +68,8 @@ readMemInterp :: forall arch t st fs sym.
                 )
               => Integer
               -> (String, A.Evaluator arch t st fs)
-readMemInterp n =
-    let f = A.readMemUF @arch n
-    in (A.createSymbolicName (A.uninterpFnName f), A.Evaluator readMemEvaluator)
+readMemInterp n = ( A.createSymbolicName (A.readMemUF @arch n)
+                  , A.Evaluator readMemEvaluator)
 
 -- read_mem is not an operand, so we throw an error if 'sh' is not 'Nil'
 readMemEvaluator :: forall arch sym t st fs sh u tp.

@@ -448,8 +448,8 @@ instance A.Architecture PPC where
   allocateSymExprsForOperand _ = operandValue
   operandToLocation _ = operandToLocation
   uninterpretedFunctions = UF.uninterpretedFunctions
-  readMemUF  = UF.mkUninterpFnReadMem
-  writeMemUF = UF.mkUninterpFnWriteMem
+  readMemUF  = A.uninterpFnName . UF.mkUninterpFnReadMem @PPC
+  writeMemUF = A.uninterpFnName . UF.mkUninterpFnWriteMem @PPC
   locationFuncInterpretation _proxy = A.createSymbolicEntries PPCS.locationFuncInterpretation
   archEndianForm _proxy = A.BigEndian
   shapeReprToTypeRepr _proxy = shapeReprType

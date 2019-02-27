@@ -9,7 +9,6 @@ module Main where
 import           Control.Exception
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
-import           Data.Monoid
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.List as SL

@@ -16,6 +16,8 @@ module SemMC.Util
   ( -- * Misc
     groundValToExpr
   , exprToGroundVal
+  , showGroundValue
+  , showGroundValues
   , concreteToGVW
   , makeSymbol
   , mapFReverse
@@ -35,27 +37,19 @@ module SemMC.Util
   ) where
 
 import           Control.Monad.ST ( runST )
-import           Control.Monad (foldM)
 import qualified Data.HashTable.Class as H
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Context
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Map as MapF
-import           GHC.TypeNats (KnownNat)
 import           Data.Parameterized.NatRepr (knownNat)
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Set as Set
 import           Text.Printf ( printf )
 
-import           Data.Foldable
 import qualified Data.Map as Map
-import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Context as Ctx
-import           Data.Parameterized.Ctx
-import           Data.Parameterized.Utils.Endian (Endian(..))
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TraversableFC
-import qualified Data.Parameterized.Vector as Vector
 
 
 import qualified UnliftIO as U
@@ -65,7 +59,7 @@ import           What4.BaseTypes
 import qualified What4.Expr.Builder as B
 import qualified What4.Expr.GroundEval as GE
 import qualified What4.Interface as S
-import           What4.Symbol ( SolverSymbol, userSymbol, emptySymbol )
+import           What4.Symbol ( SolverSymbol, userSymbol )
 import qualified What4.Utils.Hashable as Hash
 import qualified What4.Concrete as W
 
@@ -138,7 +132,7 @@ makeSymbol name = case userSymbol sanitizedName of
 
 -- | Convert a 'GroundValue' (a primitive type that represents the given
 -- Crucible type) back into a symbolic expression, just as a literal.
-groundValToExpr :: forall sym tp n.
+groundValToExpr :: forall sym tp.
                    (S.IsSymExprBuilder sym)
                 => sym
                 -> [Integer]
@@ -205,12 +199,12 @@ showGroundValue BaseBoolRepr b = show b
 showGroundValue BaseNatRepr n = show n
 showGroundValue BaseIntegerRepr i = show i
 showGroundValue BaseRealRepr r = show r
-showGroundValue (BaseBVRepr w) i = show i
-showGroundValue (BaseFloatRepr fpp) f = show f
+showGroundValue (BaseBVRepr _w) i = show i
+showGroundValue (BaseFloatRepr _fpp) f = show f
 showGroundValue BaseComplexRepr i = show i
 showGroundValue BaseStringRepr s = show s
-showGroundValue (BaseArrayRepr idx b) i = "No show instance for BaseArrayRepr"
-showGroundValue (BaseStructRepr ctx) i = "No show instance for BaseStructType"
+showGroundValue (BaseArrayRepr _idx _b) _i = "No show instance for BaseArrayRepr"
+showGroundValue (BaseStructRepr _ctx) _i = "No show instance for BaseStructType"
 
 showGroundValues :: Assignment BaseTypeRepr idx -> Assignment GE.GroundValueWrapper idx -> String
 showGroundValues Empty Empty = "Empty"
@@ -246,14 +240,14 @@ exprToGroundVal :: forall sym tp.
                 -> S.SymExpr sym tp
                 -> Maybe (GE.GroundValue tp)
 exprToGroundVal BaseBoolRepr                 e = S.asConstantPred e
-exprToGroundVal (BaseBVRepr w)               e = S.asSignedBV e
+exprToGroundVal (BaseBVRepr _w)              e = S.asSignedBV e
 exprToGroundVal BaseNatRepr                  e = S.asNat e 
 exprToGroundVal BaseIntegerRepr              e = S.asInteger e
-exprToGroundVal BaseRealRepr                 e = Nothing
-exprToGroundVal (BaseFloatRepr fpp)          e = Nothing
+exprToGroundVal BaseRealRepr                _e = Nothing
+exprToGroundVal (BaseFloatRepr _fpp)        _e = Nothing
 exprToGroundVal BaseComplexRepr              e = S.asComplex e
-exprToGroundVal (BaseArrayRepr idxTp elemTp) e = Nothing
-exprToGroundVal (BaseStructRepr r)           e = do
+exprToGroundVal (BaseArrayRepr _iTp _elmTp) _e = Nothing
+exprToGroundVal (BaseStructRepr _r)          e = do
     v <- S.asStruct e
     traverseFC (\e' -> GE.GVW <$> exprToGroundVal @sym (S.exprType e') e') v
 exprToGroundVal BaseStringRepr               e = S.asString e
@@ -271,7 +265,7 @@ concreteToGroundVal (W.ConcreteString s) = s
 concreteToGroundVal (W.ConcreteComplex c) = c
 concreteToGroundVal (W.ConcreteBV _ i) = i
 concreteToGroundVal (W.ConcreteStruct ctx) = fmapFC (GE.GVW . concreteToGroundVal) ctx
-concreteToGroundVal (W.ConcreteArray idx def m) = GE.ArrayConcrete (concreteToGroundVal def) $ 
+concreteToGroundVal (W.ConcreteArray _idx def m) = GE.ArrayConcrete (concreteToGroundVal def) $ 
                                                      Map.fromList (concToGV' <$> Map.toList m)
   where
     concToGV' :: (Assignment W.ConcreteVal idx, W.ConcreteVal tp) 
@@ -282,22 +276,6 @@ concreteToIndexLit :: W.ConcreteVal tp -> S.IndexLit tp
 concreteToIndexLit (W.ConcreteNat n) = S.NatIndexLit n
 concreteToIndexLit (W.ConcreteBV r i) = S.BVIndexLit r i
 concreteToIndexLit v = error $ "Cannot turn conrete value of type " ++ show (W.concreteType v) ++ " into an IndexLit"
-
-inlineDefineFun' :: S.IsSymExprBuilder sym
-                 => sym
-                 -> SolverSymbol
-                 -> Assignment BaseTypeRepr args
-                 -> (Assignment (S.SymExpr sym) args 
-                     -> IO (S.SymExpr sym ret))
-                 -> IO (S.SymFn sym args ret)
-inlineDefineFun' sym nm tps f = do
-    -- Create bound variables for function
-    vars <- traverseFC (S.freshBoundVar sym emptySymbol) tps
-    -- Call operation on expressions created from variables
-    r <- f (fmapFC (S.varExpr sym) vars)
-    -- Define function
-    S.definedFn sym nm vars r (\_ -> False)
-
 
 
 -- | Reverse a MapF, so that the old keys are the new values and the old values

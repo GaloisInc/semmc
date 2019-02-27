@@ -126,9 +126,9 @@ class (IsOperand (Operand arch),
   -- should include readMemUF and writeMemUF
   uninterpretedFunctions :: proxy arch -> [UninterpFn arch]
   readMemUF :: Integer -- ^ Number of bits to read, undefined if not in 'uninterpretedFunctions'
-            -> (UninterpFn arch)
+            -> String
   writeMemUF :: Integer -- ^ Number of bits to read, undefined if not in 'uninterpretedFunctions'
-             -> (UninterpFn arch)
+             -> String
 
   -- | Map an operand to a Crucible expression, given a mapping from each state
   -- variable to a Crucible variable.

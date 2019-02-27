@@ -12,8 +12,6 @@ module SemMC.Architecture.PPC.Location (
 --  parseLocation
   ) where
 
-import GHC.TypeLits
-
 import qualified Data.Parameterized.Ctx as Ctx
 import           Data.Parameterized.Classes
 import           Data.Parameterized.NatRepr

@@ -42,7 +42,6 @@ import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified What4.Interface as S
 import qualified What4.Expr.Builder as S
-import qualified What4.BaseTypes as S
 import qualified What4.Protocol.Online as WPO
 
 import qualified Dismantle.Instruction as D

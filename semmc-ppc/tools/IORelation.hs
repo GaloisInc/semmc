@@ -6,7 +6,6 @@ module Main ( main ) where
 import qualified Control.Concurrent.Async as A
 import           Control.Monad
 import qualified Data.Foldable as F
-import           Data.Monoid
 import           Data.Proxy ( Proxy(..) )
 import qualified Options.Applicative as O
 import qualified System.Directory as DIR

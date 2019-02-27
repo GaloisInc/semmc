@@ -5,6 +5,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MonoLocalBinds #-}
 module SemMC.Synthesis.Core
   ( synthesizeFormula
   , SynthesisEnvironment(..)
@@ -45,7 +46,6 @@ data SynthesisEnvironment sym arch =
   SynthesisEnvironment { synthSym :: sym
                        , synthBaseSet :: BaseSet sym arch
                        , synthInsns :: [Some (TemplatedInstruction sym arch)]
-                       , synthUFEnv :: FormulaEnv sym arch
                        }
 
 data SynthesisParams sym arch =
@@ -63,14 +63,8 @@ type Synth sym arch = ReaderT (SynthesisParams sym arch) (StateT (SynthesisState
 askSym :: Synth sym arch sym
 askSym = reader (synthSym . synthEnv)
 
-askBaseSet :: Synth sym arch (BaseSet sym arch)
-askBaseSet = reader (synthBaseSet . synthEnv)
-
 askInsns :: Synth sym arch [Some (TemplatedInstruction sym arch)]
 askInsns = reader (synthInsns . synthEnv)
-
-askUFEnv :: Synth sym arch (FormulaEnv sym arch)
-askUFEnv = reader (synthUFEnv . synthEnv)
 
 askMaxLength :: Synth sym arch Int
 askMaxLength = reader synthMaxLength
