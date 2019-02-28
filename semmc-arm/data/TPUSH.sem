@@ -1,0 +1,3111 @@
+;; Push register list, Encoding T1 (F7.1.137, F7-2760)
+(let
+ ((var31
+  (('Mem
+   ((_ call "uf.write_mem.32")
+    'Mem
+    (stack_13)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus13)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_13)))))
+   (var12)
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_11)
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus11)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_11)))))
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_10)
+     (var18)))
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_9)
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus9)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_9)))))
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_8)
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus8)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_8)))))
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     var24))
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_6)
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus6)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_6)))))
+   ('Mem
+    (var4))
+   ('Mem
+    (var8))
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_3)
+     (ite var11)))
+   var30))
+  (var30
+   (('Mem var15)
+    ('Mem
+     ((_ call "uf.write_mem.32")
+      'Mem
+      (stack_1)
+      (ite
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
+       (pshval_SPminus1)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_1)))))
+    ('Mem
+     ((_ call "uf.write_mem.32")
+      'Mem
+      (stack_0)
+      (ite
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
+       (pshval_SPminus0)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_0)))))))
+  (stack_0
+   (bvsub 'R13 #x00000004))
+  (pshval_SPminus0
+   (ite
+    (isActive_SPminus0_R0)
+    'R0
+    (ite
+     (isActive_SPminus0_R1)
+     'R1
+     (ite
+      (isActive_SPminus0_R2)
+      'R2
+      var9))))
+  (var9
+   ((ite
+    (isActive_SPminus0_R3)
+    'R3
+    (ite
+     (isActive_SPminus0_R4)
+     'R4
+     var1))))
+  (var1
+   ((ite
+    (isActive_SPminus0_R5)
+    'R5
+    (ite
+     (isActive_SPminus0_R6)
+     'R6
+     (ite
+      (isActive_SPminus0_R7)
+      'R7
+      (ite
+       (isActive_SPminus0_R8)
+       var20))))))
+  (var20
+   ('R8
+    (ite
+     (isActive_SPminus0_R9)
+     'R9
+     (ite
+      (isActive_SPminus0_R10)
+      'R10
+      (ite
+       (isActive_SPminus0_R11)
+       'R11
+       (ite
+        (isActive_SPminus0_R12)
+        'R12
+        (ite
+         (isActive_SPminus0_R13)
+         'R13
+         (ite
+          (isActive_SPminus0_R14)
+          'R14
+          (ite
+           (isActive_SPminus0_R15)
+           (bvadd 'PC #x00000008)
+           ((_ call "uf.read_mem.32")
+            'Mem
+            (stack_0)))))))))))
+  (isActive_SPminus0_R15
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R15)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regCnt
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 16)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (regMask_SPminus0_R15
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 16)
+      ((_ extract 15 0)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R14
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R14)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R14
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 17)
+      ((_ extract 15 1)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R13
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R13)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R13
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 18)
+      ((_ extract 15 2)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R12
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R12)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R12
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 19)
+      ((_ extract 15 3)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R11
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R11)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R11
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 20)
+      ((_ extract 15 4)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R10)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R10
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 15 5)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R9)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R9
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 15 6)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R8)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R7)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R6)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R5)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R4)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R3)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R2)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R1)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus0_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0000)
+    (bveq
+     (regMask_SPminus0_R0)
+     (bvsub
+      (regCnt)
+      #x0000))))
+  (regMask_SPminus0_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_1
+   (bvsub 'R13 #x00000008))
+  (pshval_SPminus1
+   (ite
+    (isActive_SPminus1_R0)
+    'R0
+    (ite
+     (isActive_SPminus1_R1)
+     var28)))
+  (var28
+   ('R1
+    (ite
+     (isActive_SPminus1_R2)
+     'R2
+     var5)))
+  (var5
+   ((ite
+    (isActive_SPminus1_R3)
+    'R3
+    (ite
+     (isActive_SPminus1_R4)
+     var25))))
+  (var25
+   ('R4
+    (ite
+     (isActive_SPminus1_R5)
+     'R5
+     (ite
+      (isActive_SPminus1_R6)
+      'R6
+      (ite
+       (isActive_SPminus1_R7)
+       'R7
+       (ite
+        (isActive_SPminus1_R8)
+        'R8
+        (ite
+         (isActive_SPminus1_R9)
+         'R9
+         (ite
+          (isActive_SPminus1_R10)
+          'R10
+          (ite
+           (isActive_SPminus1_R11)
+           'R11
+           (ite
+            (isActive_SPminus1_R12)
+            'R12
+            (ite
+             (isActive_SPminus1_R13)
+             'R13
+             (ite
+              (isActive_SPminus1_R14)
+              'R14
+              ((_ call "uf.read_mem.32")
+               'Mem
+               (stack_1))))))))))))))
+  (isActive_SPminus1_R14
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R14)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R14
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 17)
+      ((_ extract 15 1)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R13
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R13)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R13
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 18)
+      ((_ extract 15 2)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R12
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R12)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R12
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 19)
+      ((_ extract 15 3)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R11
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R11)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R11
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 20)
+      ((_ extract 15 4)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R10)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R10
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 15 5)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R9)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R9
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 15 6)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R8)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R7)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R6)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R5)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R4)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R3)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R2)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R1)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus1_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0001)
+    (bveq
+     (regMask_SPminus1_R0)
+     (bvsub
+      (regCnt)
+      #x0001))))
+  (regMask_SPminus1_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (var15
+   (((_ call "uf.write_mem.32")
+    var29)))
+  (var29
+   ('Mem
+    (stack_2)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus2)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_2)))))
+  (stack_2
+   (bvsub 'R13 #x0000000c))
+  (pshval_SPminus2
+   (ite
+    (isActive_SPminus2_R0)
+    'R0
+    (ite
+     (isActive_SPminus2_R1)
+     'R1
+     (ite
+      (isActive_SPminus2_R2)
+      'R2
+      (ite
+       (isActive_SPminus2_R3)
+       'R3
+       (ite
+        (isActive_SPminus2_R4)
+        'R4
+        (var23)))))))
+  (var23
+   (ite
+    (isActive_SPminus2_R5)
+    var22))
+  (var22
+   ('R5
+    (ite
+     (isActive_SPminus2_R6)
+     'R6
+     (var19))))
+  (var19
+   (ite
+    (isActive_SPminus2_R7)
+    'R7
+    (ite
+     (isActive_SPminus2_R8)
+     'R8
+     (ite
+      (isActive_SPminus2_R9)
+      'R9
+      (var10)))))
+  (var10
+   (ite
+    (isActive_SPminus2_R10)
+    'R10
+    (ite
+     (isActive_SPminus2_R11)
+     'R11
+     (ite
+      (isActive_SPminus2_R12)
+      'R12
+      (ite
+       (isActive_SPminus2_R13)
+       'R13
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_2)))))))
+  (isActive_SPminus2_R13
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R13)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R13
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 18)
+      ((_ extract 15 2)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R12
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R12)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R12
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 19)
+      ((_ extract 15 3)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R11
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R11)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R11
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 20)
+      ((_ extract 15 4)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R10)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R10
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 15 5)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R9)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R9
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 15 6)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R8)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R7)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R6)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R5)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R4)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R3)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R2)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R1)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus2_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0002)
+    (bveq
+     (regMask_SPminus2_R0)
+     (bvsub
+      (regCnt)
+      #x0002))))
+  (regMask_SPminus2_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (var11
+   (((_ call "df.testCondition")
+    ((_ call "df.ITState")
+     'CPSR)
+    'CPSR)
+    (pshval_SPminus3)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (stack_3))))
+  (stack_3
+   (bvsub 'R13 #x00000010))
+  (pshval_SPminus3
+   (ite
+    (isActive_SPminus3_R0)
+    var27))
+  (var27
+   ('R0
+    (ite
+     (isActive_SPminus3_R1)
+     var26)))
+  (var26
+   ('R1
+    (ite
+     (isActive_SPminus3_R2)
+     'R2
+     (ite
+      (isActive_SPminus3_R3)
+      'R3
+      (ite
+       (isActive_SPminus3_R4)
+       'R4
+       (ite
+        (isActive_SPminus3_R5)
+        'R5
+        (ite
+         (isActive_SPminus3_R6)
+         'R6
+         (ite
+          (isActive_SPminus3_R7)
+          'R7
+          (ite
+           (isActive_SPminus3_R8)
+           'R8
+           (ite
+            (isActive_SPminus3_R9)
+            'R9
+            (ite
+             (isActive_SPminus3_R10)
+             'R10
+             (ite
+              (isActive_SPminus3_R11)
+              'R11
+              (ite
+               (isActive_SPminus3_R12)
+               'R12
+               ((_ call "uf.read_mem.32")
+                'Mem
+                (stack_3)))))))))))))))
+  (isActive_SPminus3_R12
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R12)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R12
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 19)
+      ((_ extract 15 3)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R11
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R11)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R11
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 20)
+      ((_ extract 15 4)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R10)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R10
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 15 5)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R9)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R9
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 15 6)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R8)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R7)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R6)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R5)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R4)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R3)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R2)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R1)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus3_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0003)
+    (bveq
+     (regMask_SPminus3_R0)
+     (bvsub
+      (regCnt)
+      #x0003))))
+  (regMask_SPminus3_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (var8
+   ((_ call "uf.write_mem.32")
+    'Mem
+    (stack_4)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus4)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_4)))))
+  (stack_4
+   (bvsub 'R13 #x00000014))
+  (pshval_SPminus4
+   (ite
+    (isActive_SPminus4_R0)
+    'R0
+    (ite
+     (isActive_SPminus4_R1)
+     'R1
+     (ite
+      (isActive_SPminus4_R2)
+      'R2
+      (ite
+       (isActive_SPminus4_R3)
+       'R3
+       (ite
+        (isActive_SPminus4_R4)
+        'R4
+        (ite
+         (isActive_SPminus4_R5)
+         var17)))))))
+  (var17
+   ('R5
+    (ite
+     (isActive_SPminus4_R6)
+     'R6
+     (ite
+      (isActive_SPminus4_R7)
+      'R7
+      (ite
+       (isActive_SPminus4_R8)
+       'R8
+       (ite
+        (isActive_SPminus4_R9)
+        'R9
+        (var2)))))))
+  (var2
+   (ite
+    (isActive_SPminus4_R10)
+    'R10
+    (ite
+     (isActive_SPminus4_R11)
+     'R11
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_4)))))
+  (isActive_SPminus4_R11
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R11)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R11
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 20)
+      ((_ extract 15 4)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R10)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R10
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 15 5)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R9)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R9
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 15 6)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R8)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R7)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R6)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R5)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R4)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R3)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R2)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R1)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus4_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0004)
+    (bveq
+     (regMask_SPminus4_R0)
+     (bvsub
+      (regCnt)
+      #x0004))))
+  (regMask_SPminus4_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (var4
+   ((_ call "uf.write_mem.32")
+    'Mem
+    (stack_5)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus5)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_5)))))
+  (stack_5
+   (bvsub 'R13 #x00000018))
+  (pshval_SPminus5
+   (ite
+    (isActive_SPminus5_R0)
+    'R0
+    (ite
+     (isActive_SPminus5_R1)
+     'R1
+     (ite
+      (isActive_SPminus5_R2)
+      'R2
+      (ite
+       (isActive_SPminus5_R3)
+       'R3
+       (ite
+        (isActive_SPminus5_R4)
+        'R4
+        (ite
+         (isActive_SPminus5_R5)
+         var14)))))))
+  (var14
+   ('R5
+    (ite
+     (isActive_SPminus5_R6)
+     'R6
+     (ite
+      (isActive_SPminus5_R7)
+      'R7
+      (var6)))))
+  (var6
+   (ite
+    (isActive_SPminus5_R8)
+    'R8
+    (ite
+     (isActive_SPminus5_R9)
+     'R9
+     (ite
+      (isActive_SPminus5_R10)
+      'R10
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_5))))))
+  (isActive_SPminus5_R10
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R10)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R10
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 21)
+      ((_ extract 15 5)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R9)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R9
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 15 6)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R8)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R7)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R6)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R5)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R4)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R3)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R2)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R1)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus5_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0005)
+    (bveq
+     (regMask_SPminus5_R0)
+     (bvsub
+      (regCnt)
+      #x0005))))
+  (regMask_SPminus5_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_6
+   (bvsub 'R13 #x0000001c))
+  (pshval_SPminus6
+   (ite
+    (isActive_SPminus6_R0)
+    'R0
+    (ite
+     (isActive_SPminus6_R1)
+     'R1
+     (var21))))
+  (var21
+   (ite
+    (isActive_SPminus6_R2)
+    'R2
+    (ite
+     (isActive_SPminus6_R3)
+     'R3
+     (var16))))
+  (var16
+   (ite
+    (isActive_SPminus6_R4)
+    'R4
+    (var13)))
+  (var13
+   (ite
+    (isActive_SPminus6_R5)
+    'R5
+    (ite
+     (isActive_SPminus6_R6)
+     var7)))
+  (var7
+   ('R6
+    (ite
+     (isActive_SPminus6_R7)
+     var3)))
+  (var3
+   ('R7
+    (ite
+     (isActive_SPminus6_R8)
+     'R8
+     (ite
+      (isActive_SPminus6_R9)
+      'R9
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_6))))))
+  (isActive_SPminus6_R9
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R9)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R9
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 22)
+      ((_ extract 15 6)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R8)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R7)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R6)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R5)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R4)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R3)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R2)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R1)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus6_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0006)
+    (bveq
+     (regMask_SPminus6_R0)
+     (bvsub
+      (regCnt)
+      #x0006))))
+  (regMask_SPminus6_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (var24
+   ('Mem
+    (stack_7)
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (pshval_SPminus7)
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_7)))))
+  (stack_7
+   (bvsub 'R13 #x00000020))
+  (pshval_SPminus7
+   (ite
+    (isActive_SPminus7_R0)
+    'R0
+    (ite
+     (isActive_SPminus7_R1)
+     'R1
+     (ite
+      (isActive_SPminus7_R2)
+      'R2
+      (ite
+       (isActive_SPminus7_R3)
+       'R3
+       (ite
+        (isActive_SPminus7_R4)
+        'R4
+        (ite
+         (isActive_SPminus7_R5)
+         'R5
+         (ite
+          (isActive_SPminus7_R6)
+          'R6
+          (ite
+           (isActive_SPminus7_R7)
+           'R7
+           (ite
+            (isActive_SPminus7_R8)
+            'R8
+            ((_ call "uf.read_mem.32")
+             'Mem
+             (stack_7))))))))))))
+  (isActive_SPminus7_R8
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R8)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R8
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 23)
+      ((_ extract 15 7)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R7)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R6)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R5)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R4)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R3)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R2)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R1)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus7_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0007)
+    (bveq
+     (regMask_SPminus7_R0)
+     (bvsub
+      (regCnt)
+      #x0007))))
+  (regMask_SPminus7_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_8
+   (bvsub 'R13 #x00000024))
+  (pshval_SPminus8
+   (ite
+    (isActive_SPminus8_R0)
+    'R0
+    (ite
+     (isActive_SPminus8_R1)
+     'R1
+     (ite
+      (isActive_SPminus8_R2)
+      'R2
+      (ite
+       (isActive_SPminus8_R3)
+       'R3
+       (ite
+        (isActive_SPminus8_R4)
+        'R4
+        (ite
+         (isActive_SPminus8_R5)
+         'R5
+         (ite
+          (isActive_SPminus8_R6)
+          'R6
+          (ite
+           (isActive_SPminus8_R7)
+           'R7
+           ((_ call "uf.read_mem.32")
+            'Mem
+            (stack_8)))))))))))
+  (isActive_SPminus8_R7
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R7)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R7
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 24)
+      ((_ extract 15 8)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R6)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R5)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R4)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R3)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R2)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R1)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus8_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0008)
+    (bveq
+     (regMask_SPminus8_R0)
+     (bvsub
+      (regCnt)
+      #x0008))))
+  (regMask_SPminus8_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_9
+   (bvsub 'R13 #x00000028))
+  (pshval_SPminus9
+   (ite
+    (isActive_SPminus9_R0)
+    'R0
+    (ite
+     (isActive_SPminus9_R1)
+     'R1
+     (ite
+      (isActive_SPminus9_R2)
+      'R2
+      (ite
+       (isActive_SPminus9_R3)
+       'R3
+       (ite
+        (isActive_SPminus9_R4)
+        'R4
+        (ite
+         (isActive_SPminus9_R5)
+         'R5
+         (ite
+          (isActive_SPminus9_R6)
+          'R6
+          ((_ call "uf.read_mem.32")
+           'Mem
+           (stack_9))))))))))
+  (isActive_SPminus9_R6
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R6)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R6
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 25)
+      ((_ extract 15 9)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus9_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R5)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus9_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R4)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus9_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R3)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus9_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R2)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus9_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R1)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus9_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x0009)
+    (bveq
+     (regMask_SPminus9_R0)
+     (bvsub
+      (regCnt)
+      #x0009))))
+  (regMask_SPminus9_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (var18
+   (ite
+    ((_ call "df.testCondition")
+     ((_ call "df.ITState")
+      'CPSR)
+     'CPSR)
+    (pshval_SPminus10)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (stack_10))))
+  (stack_10
+   (bvsub 'R13 #x0000002c))
+  (pshval_SPminus10
+   (ite
+    (isActive_SPminus10_R0)
+    'R0
+    (ite
+     (isActive_SPminus10_R1)
+     'R1
+     (ite
+      (isActive_SPminus10_R2)
+      'R2
+      (ite
+       (isActive_SPminus10_R3)
+       'R3
+       (ite
+        (isActive_SPminus10_R4)
+        'R4
+        (ite
+         (isActive_SPminus10_R5)
+         'R5
+         ((_ call "uf.read_mem.32")
+          'Mem
+          (stack_10)))))))))
+  (isActive_SPminus10_R5
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R5)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R5
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 26)
+      ((_ extract 15 10)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus10_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R4)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus10_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R3)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus10_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R2)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus10_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R1)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus10_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000a)
+    (bveq
+     (regMask_SPminus10_R0)
+     (bvsub
+      (regCnt)
+      #x000a))))
+  (regMask_SPminus10_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_11
+   (bvsub 'R13 #x00000030))
+  (pshval_SPminus11
+   (ite
+    (isActive_SPminus11_R0)
+    'R0
+    (ite
+     (isActive_SPminus11_R1)
+     'R1
+     (ite
+      (isActive_SPminus11_R2)
+      'R2
+      (ite
+       (isActive_SPminus11_R3)
+       'R3
+       (ite
+        (isActive_SPminus11_R4)
+        'R4
+        ((_ call "uf.read_mem.32")
+         'Mem
+         (stack_11))))))))
+  (isActive_SPminus11_R4
+   (andp
+    (bvugt
+     (regCnt)
+     #x000b)
+    (bveq
+     (regMask_SPminus11_R4)
+     (bvsub
+      (regCnt)
+      #x000b))))
+  (regMask_SPminus11_R4
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 27)
+      ((_ extract 15 11)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus11_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x000b)
+    (bveq
+     (regMask_SPminus11_R3)
+     (bvsub
+      (regCnt)
+      #x000b))))
+  (regMask_SPminus11_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus11_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x000b)
+    (bveq
+     (regMask_SPminus11_R2)
+     (bvsub
+      (regCnt)
+      #x000b))))
+  (regMask_SPminus11_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus11_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x000b)
+    (bveq
+     (regMask_SPminus11_R1)
+     (bvsub
+      (regCnt)
+      #x000b))))
+  (regMask_SPminus11_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus11_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000b)
+    (bveq
+     (regMask_SPminus11_R0)
+     (bvsub
+      (regCnt)
+      #x000b))))
+  (regMask_SPminus11_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (var12
+   ('Mem
+    ((_ call "uf.write_mem.32")
+     'Mem
+     (stack_12)
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (pshval_SPminus12)
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_12))))))
+  (stack_12
+   (bvsub 'R13 #x00000034))
+  (pshval_SPminus12
+   (ite
+    (isActive_SPminus12_R0)
+    'R0
+    (ite
+     (isActive_SPminus12_R1)
+     'R1
+     (ite
+      (isActive_SPminus12_R2)
+      'R2
+      (ite
+       (isActive_SPminus12_R3)
+       'R3
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_12)))))))
+  (isActive_SPminus12_R3
+   (andp
+    (bvugt
+     (regCnt)
+     #x000c)
+    (bveq
+     (regMask_SPminus12_R3)
+     (bvsub
+      (regCnt)
+      #x000c))))
+  (regMask_SPminus12_R3
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 28)
+      ((_ extract 15 12)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus12_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x000c)
+    (bveq
+     (regMask_SPminus12_R2)
+     (bvsub
+      (regCnt)
+      #x000c))))
+  (regMask_SPminus12_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus12_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x000c)
+    (bveq
+     (regMask_SPminus12_R1)
+     (bvsub
+      (regCnt)
+      #x000c))))
+  (regMask_SPminus12_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus12_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000c)
+    (bveq
+     (regMask_SPminus12_R0)
+     (bvsub
+      (regCnt)
+      #x000c))))
+  (regMask_SPminus12_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_13
+   (bvsub 'R13 #x00000038))
+  (pshval_SPminus13
+   (ite
+    (isActive_SPminus13_R0)
+    'R0
+    (ite
+     (isActive_SPminus13_R1)
+     'R1
+     (ite
+      (isActive_SPminus13_R2)
+      'R2
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (stack_13))))))
+  (isActive_SPminus13_R2
+   (andp
+    (bvugt
+     (regCnt)
+     #x000d)
+    (bveq
+     (regMask_SPminus13_R2)
+     (bvsub
+      (regCnt)
+      #x000d))))
+  (regMask_SPminus13_R2
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 29)
+      ((_ extract 15 13)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus13_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x000d)
+    (bveq
+     (regMask_SPminus13_R1)
+     (bvsub
+      (regCnt)
+      #x000d))))
+  (regMask_SPminus13_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus13_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000d)
+    (bveq
+     (regMask_SPminus13_R0)
+     (bvsub
+      (regCnt)
+      #x000d))))
+  (regMask_SPminus13_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_14
+   (bvsub 'R13 #x0000003c))
+  (pshval_SPminus14
+   (ite
+    (isActive_SPminus14_R0)
+    'R0
+    (ite
+     (isActive_SPminus14_R1)
+     'R1
+     ((_ call "uf.read_mem.32")
+      'Mem
+      (stack_14)))))
+  (isActive_SPminus14_R1
+   (andp
+    (bvugt
+     (regCnt)
+     #x000e)
+    (bveq
+     (regMask_SPminus14_R1)
+     (bvsub
+      (regCnt)
+      #x000e))))
+  (regMask_SPminus14_R1
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 30)
+      ((_ extract 15 14)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (isActive_SPminus14_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000e)
+    (bveq
+     (regMask_SPminus14_R0)
+     (bvsub
+      (regCnt)
+      #x000e))))
+  (regMask_SPminus14_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (stack_15
+   (bvsub 'R13 #x00000040))
+  (pshval_SPminus15
+   (ite
+    (isActive_SPminus15_R0)
+    'R0
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (stack_15))))
+  (isActive_SPminus15_R0
+   (andp
+    (bvugt
+     (regCnt)
+     #x000f)
+    (bveq
+     (regMask_SPminus15_R0)
+     (bvsub
+      (regCnt)
+      #x000f))))
+  (regMask_SPminus15_R0
+   ((_ extract 31 16)
+    ((_ call "uf.popcnt.32")
+     ((_ zero_extend 31)
+      ((_ extract 15 15)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (newSP
+   (bvsub
+    'R13
+    (bvmul
+     #x00000004
+     ((_ call "uf.popcnt.32")
+      ((_ zero_extend 16)
+       ((_ call "uf.t32.reglist")
+        registers)))))))
+ ((operands
+  ((registers . 'Reglist)))
+  (in
+   ('R14 'R13 'R12 'R11 'R10 'R9 'R8 'R7 'R6 'R5 'R4 'R3 'R2 'R1 'R0 'Mem registers 'CPSR 'PC))
+  (defs
+   (('PC
+    (bvadd 'PC #x00000002))
+    ('CPSR 'CPSR)
+    ('R13
+     (newSP))
+    ('Mem
+     ((_ call "uf.write_mem.32")
+      'Mem
+      (stack_15)
+      (ite
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
+       (pshval_SPminus15)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_15)))))
+    ('Mem
+     ((_ call "uf.write_mem.32")
+      'Mem
+      (stack_14)
+      (ite
+       ((_ call "df.testCondition")
+        ((_ call "df.ITState")
+         'CPSR)
+        'CPSR)
+       (pshval_SPminus14)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (stack_14)))))
+    var31))))

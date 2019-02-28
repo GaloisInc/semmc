@@ -1,0 +1,93 @@
+;; Load Register immediate, Encoding T1 (F7.1.68, F7-2634)
+(let
+ ((updAddr
+  (bvadd
+   ((_ call "uf.t32.addrmode_is4_reg")
+    addris)
+   ((_ zero_extend 25)
+    (concat
+     ((_ call "uf.t32.addrmode_is4_imm")
+      addris)
+     #b00))))
+  (SetA32Mode
+   (bvand
+    #xfeffffff
+    (bvand #xffffffdf 'CPSR)))
+  (bxWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     gpr)
+    (ite
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (updAddr))))
+     (bvand
+      #xfffffffe
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (updAddr)))
+     (ite
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        ((_ call "uf.read_mem.32")
+         'Mem
+         (updAddr))))
+      (bvand
+       #xfffffffd
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (updAddr)))
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (updAddr))))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((gpr . 'TGPR)
+   (addris . 'T_addrmode_is4)))
+  (in
+   ('Mem addris 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        gpr)
+       (ite
+        (bveq
+         #b1
+         ((_ extract 31 31)
+          ((_ call "uf.read_mem.32")
+           'Mem
+           (updAddr))))
+        'CPSR
+        (SetA32Mode))
+       'CPSR)
+      'CPSR))
+    (((_ call "uf.t32.addrmode_is4_reg")
+     addris)
+     ((_ call "uf.t32.addrmode_is4_reg")
+      addris))
+    (gpr
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        gpr)
+       gpr
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (updAddr)))
+      gpr))))))

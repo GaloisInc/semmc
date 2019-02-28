@@ -1,0 +1,97 @@
+;; Logical Shift Left, Encoding T1
+;; doc: F7.1.99, page F7-2692
+(let
+ ((immShift
+  (concat
+   #b000
+   ((_ zero_extend 27)
+    imm)))
+  (nzcv
+   (concat
+    ((_ extract 0 0)
+     'CPSR)
+    (concat
+     ((_ extract 1 1)
+      'CPSR)
+     (concat
+      ((_ extract 0 0)
+       ((_ call "df.shiftC")
+        rM
+        #b000
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))
+      ((_ extract 3 3)
+       'CPSR)))))
+  (branchWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     ((_ extract 32 1)
+      ((_ call "df.shiftC")
+       rM
+       #b000
+       ((_ extract 34 3)
+        (immShift))
+       ((_ extract 2 2)
+        'CPSR))))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'TGPR)
+   (imm . 'Imm0_31)
+   (rM . 'TGPR)))
+  (in
+   (rM imm 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (andp
+        (notp
+         (bvne
+          #x00
+          (concat
+           ((_ extract 19 16)
+            'CPSR)
+           (concat
+            ((_ extract 21 20)
+             'CPSR)
+            ((_ extract 6 5)
+             'CPSR)))))
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (nzcv)
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         rM
+         #b000
+         ((_ extract 34 3)
+          (immShift))
+         ((_ extract 2 2)
+          'CPSR))))
+      rD))))))

@@ -1,0 +1,209 @@
+;; ORR register, Encoding A1 (A8.8.123, A8-518)
+(let
+ ((immShift
+  (concat
+   #b000
+   ((_ zero_extend 27)
+    #b00000)))
+  (SetT32Mode
+   (bvand
+    #xfeffffff
+    (bvor #x00000020 'CPSR)))
+  (bxWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (ite
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       (bvor
+        rM
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          rN
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR))))))
+     (bvand
+      #xfffffffe
+      (bvor
+       rM
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         rN
+         ((_ extract 2 0)
+          (immShift))
+         ((_ extract 34 3)
+          (immShift))
+         ((_ extract 2 2)
+          'CPSR)))))
+     (ite
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        (bvor
+         rM
+         ((_ extract 32 1)
+          ((_ call "df.shiftC")
+           rN
+           ((_ extract 2 0)
+            (immShift))
+           ((_ extract 34 3)
+            (immShift))
+           ((_ extract 2 2)
+            'CPSR))))))
+      (bvand
+       #xfffffffd
+       (bvor
+        rM
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          rN
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR)))))
+      (bvor
+       rM
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         rN
+         ((_ extract 2 0)
+          (immShift))
+         ((_ extract 34 3)
+          (immShift))
+         ((_ extract 2 2)
+          'CPSR))))))
+    (bvadd 'PC #x00000004))))
+ ((operands
+  ((rD . 'GPR)
+   (setcc . 'Cc_out)
+   (predBits . 'Pred)
+   (rM . 'GPR)
+   (rN . 'GPR)))
+  (in
+   (setcc rM rN 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (concat
+         ((_ extract 0 0)
+          (bvor
+           rM
+           ((_ extract 32 1)
+            ((_ call "df.shiftC")
+             rN
+             ((_ extract 2 0)
+              (immShift))
+             ((_ extract 34 3)
+              (immShift))
+             ((_ extract 2 2)
+              'CPSR)))))
+         (concat
+          ((_ call "df.isZeroBit")
+           (bvor
+            rM
+            ((_ extract 32 1)
+             ((_ call "df.shiftC")
+              rN
+              ((_ extract 2 0)
+               (immShift))
+              ((_ extract 34 3)
+               (immShift))
+              ((_ extract 2 2)
+               'CPSR)))))
+          (concat
+           ((_ extract 0 0)
+            ((_ call "df.shiftC")
+             rN
+             ((_ extract 2 0)
+              (immShift))
+             ((_ extract 34 3)
+              (immShift))
+             ((_ extract 2 2)
+              'CPSR)))
+           ((_ extract 3 3)
+            'CPSR))))
+        ((_ extract 31 4)
+         (ite
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (ite
+           (bveq
+            #b1
+            ((_ extract 31 31)
+             (bvor
+              rM
+              ((_ extract 32 1)
+               ((_ call "df.shiftC")
+                rN
+                ((_ extract 2 0)
+                 (immShift))
+                ((_ extract 34 3)
+                 (immShift))
+                ((_ extract 2 2)
+                 'CPSR))))))
+           (SetT32Mode)
+           'CPSR)
+          'CPSR)))
+       (ite
+        ((_ call "uf.arm.is_r15")
+         rD)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 31 31)
+           (bvor
+            rM
+            ((_ extract 32 1)
+             ((_ call "df.shiftC")
+              rN
+              ((_ extract 2 0)
+               (immShift))
+              ((_ extract 34 3)
+               (immShift))
+              ((_ extract 2 2)
+               'CPSR))))))
+         (SetT32Mode)
+         'CPSR)
+        'CPSR))
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       (bvor
+        rM
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          rN
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR)))))
+      rD))))))

@@ -1,0 +1,25 @@
+;; BL, branch with link, Encoding A1
+;; F7.1.25, F7-2576
+;; Used to call a subroutine (branch)
+;; Writes to PC, not R15.
+(let
+ ((branchWritePC
+  (bvand
+   #xfffffffc
+   (imm32)))
+  (imm32
+   ((_ sign_extend 6)
+    (concat
+     ((_ extract 31 8)
+      blTarget)
+     #b00))))
+ ((operands
+  ((blTarget . 'Arm_bl_target)))
+  (in
+   ('R14 'PC blTarget 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR 'CPSR)
+    ('R14
+     (bvsub 'PC #x00000004))))))

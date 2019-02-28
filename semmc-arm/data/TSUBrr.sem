@@ -1,0 +1,228 @@
+;; SUB (register), T32, encoding T1 (F7.1.236, F7-2918)
+(let
+ ((var2
+  (ite
+   ((_ call "df.testCondition")
+    ((_ call "df.ITState")
+     'CPSR)
+    'CPSR)
+   (ite
+    (orp
+     (orp
+      (andp
+       ((_ call "uf.arm.is_r15")
+        rD)
+       (notp
+        (notp
+         (bvne
+          #x00
+          (concat
+           ((_ extract 19 16)
+            'CPSR)
+           (concat
+            ((_ extract 21 20)
+             'CPSR)
+            ((_ extract 6 5)
+             'CPSR)))))))
+      ((_ call "uf.arm.is_r15")
+       rN))
+     ((_ call "uf.arm.is_r15")
+      rM))
+    rD
+    (ite
+     ((_ call "uf.arm.is_r15")
+      rD)
+     rD
+     ((_ extract 35 4)
+      (concat
+       (addResult)
+       (addCarry)))))
+   rD))
+  (addCarry
+   (concat
+    ((_ extract 0 0)
+     ((_ extract 32 1)
+      (bvadd
+       (bvadd
+        ((_ zero_extend 1)
+         rN)
+        (bvnot
+         ((_ call "df.shiftC")
+          rM
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR))))
+       ((_ zero_extend 1)
+        #x00000001))))
+    (var1)))
+  (var1
+   (concat
+    (ite
+     (bveq
+      ((_ extract 32 1)
+       (bvadd
+        (bvadd
+         ((_ zero_extend 1)
+          rN)
+         (bvnot
+          ((_ call "df.shiftC")
+           rM
+           ((_ extract 2 0)
+            (immShift))
+           ((_ extract 34 3)
+            (immShift))
+           ((_ extract 2 2)
+            'CPSR))))
+        ((_ zero_extend 1)
+         #x00000001)))
+      #x00000000)
+     #b1
+     #b0)
+    (concat
+     ((_ extract 0 0)
+      (bvadd
+       (bvadd
+        ((_ zero_extend 1)
+         rN)
+        (bvnot
+         ((_ call "df.shiftC")
+          rM
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR))))
+       ((_ zero_extend 1)
+        #x00000001)))
+     (bvand
+      ((_ extract 0 0)
+       ((_ extract 32 1)
+        (bvadd
+         (bvadd
+          ((_ zero_extend 1)
+           rN)
+          (bvnot
+           ((_ call "df.shiftC")
+            rM
+            ((_ extract 2 0)
+             (immShift))
+            ((_ extract 34 3)
+             (immShift))
+            ((_ extract 2 2)
+             'CPSR))))
+         ((_ zero_extend 1)
+          #x00000001))))
+      ((_ extract 0 0)
+       (bvadd
+        (bvadd
+         ((_ zero_extend 1)
+          rN)
+         (bvnot
+          ((_ call "df.shiftC")
+           rM
+           ((_ extract 2 0)
+            (immShift))
+           ((_ extract 34 3)
+            (immShift))
+           ((_ extract 2 2)
+            'CPSR))))
+        ((_ zero_extend 1)
+         #x00000001)))))))
+  (immShift
+   (concat
+    #b000
+    ((_ zero_extend 27)
+     #b00000)))
+  (addResult
+   ((_ extract 32 1)
+    (bvadd
+     (bvadd
+      ((_ zero_extend 1)
+       rN)
+      (bvnot
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR))))
+     ((_ zero_extend 1)
+      #x00000001))))
+  (branchWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     ((_ extract 35 4)
+      (concat
+       (addResult)
+       (addCarry))))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'TGPR)
+   (rN . 'TGPR)
+   (rM . 'TGPR)))
+  (in
+   (rN rM rD 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (andp
+        (notp
+         (bvne
+          #x00
+          (concat
+           ((_ extract 19 16)
+            'CPSR)
+           (concat
+            ((_ extract 21 20)
+             'CPSR)
+            ((_ extract 6 5)
+             'CPSR)))))
+        (notp
+         (orp
+          (orp
+           (andp
+            ((_ call "uf.arm.is_r15")
+             rD)
+            (notp
+             (notp
+              (bvne
+               #x00
+               (concat
+                ((_ extract 19 16)
+                 'CPSR)
+                (concat
+                 ((_ extract 21 20)
+                  'CPSR)
+                 ((_ extract 6 5)
+                  'CPSR)))))))
+           ((_ call "uf.arm.is_r15")
+            rN))
+          ((_ call "uf.arm.is_r15")
+           rM))))
+       (concat
+        ((_ extract 3 0)
+         (concat
+          (addResult)
+          (addCarry)))
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (var2))))))

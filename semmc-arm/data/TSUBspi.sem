@@ -1,0 +1,42 @@
+;; SUB SP - immediate, T32, encoding T1 (F7.1.238, F7-2922)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   'R13
+   (bvnot
+    ((_ zero_extend 22)
+     (concat
+      ((_ call "uf.t32.imm0_508S4_imm")
+       imm)
+      #b00)))
+   #x00000001))
+  (branchWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     'R13)
+    (bvand
+     #xfffffffd
+     ((_ extract 35 4)
+      (res_nzcv)))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((imm . 'T_imm0_508s4)))
+  (in
+   ('R13 'R13 imm 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR 'CPSR)
+    ('R13
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        'R13)
+       'R13
+       ((_ extract 35 4)
+        (res_nzcv)))
+      'R13))))))

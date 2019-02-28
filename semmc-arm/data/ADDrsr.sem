@@ -1,0 +1,85 @@
+;; ADD (register-shifted register), Encoding A1 (F7.1.8, F7-2547)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   ((_ extract 32 1)
+    ((_ call "df.shiftC")
+     ((_ call "uf.a32.soregreg_reg2")
+      sorr)
+     (concat
+      #b0
+      ((_ call "uf.a32.soregreg_type")
+       sorr))
+     ((_ zero_extend 24)
+      ((_ extract 31 24)
+       ((_ call "uf.a32.soregreg_reg1")
+        sorr)))
+     ((_ extract 2 2)
+      'CPSR)))
+   #x00000000))
+  (nzcv
+   ((_ extract 3 0)
+    (res_nzcv))))
+ ((operands
+  ((rD . 'GPR)
+   (setcc . 'Cc_out)
+   (predBits . 'Pred)
+   (sorr . 'So_reg_reg)
+   (rN . 'GPR)))
+  (in
+   (setcc rN sorr rD 'CPSR 'PC))
+  (defs
+   (('PC
+    (bvadd 'PC #x00000004))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         (orp
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (orp
+           ((_ call "uf.arm.is_r15")
+            ((_ call "uf.a32.soregreg_reg2")
+             sorr))
+           (orp
+            ((_ call "uf.arm.is_r15")
+             rN)
+            ((_ call "uf.arm.is_r15")
+             ((_ call "uf.a32.soregreg_reg1")
+              sorr)))))))
+       (concat
+        (nzcv)
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (orp
+        ((_ call "uf.arm.is_r15")
+         rD)
+        (orp
+         ((_ call "uf.arm.is_r15")
+          ((_ call "uf.a32.soregreg_reg2")
+           sorr))
+         (orp
+          ((_ call "uf.arm.is_r15")
+           rN)
+          ((_ call "uf.arm.is_r15")
+           ((_ call "uf.a32.soregreg_reg1")
+            sorr)))))
+       rD
+       ((_ extract 35 4)
+        (res_nzcv)))
+      rD))))))

@@ -1,0 +1,67 @@
+;; SUB immediate, T32, encoding T3 (F7.1.234, F7-2914)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   (bvnot
+    (thumbExpandImm))
+   #x00000001))
+  (thumbExpandImm
+   ((_ extract 32 1)
+    (imm32_carry_out)))
+  (imm32_carry_out
+   ((_ call "df.thumbexpandimm_c")
+    ((_ call "uf.t32.t2soimm_imm")
+     imm)
+    #b0)))
+ ((operands
+  ((rD . 'GPRnopc)
+   (setcc . 'Cc_out)
+   (imm . 'T2_so_imm)
+   (rN . 'GPRnopc)))
+  (in
+   (imm rN 'CPSR 'PC))
+  (defs
+   (('PC
+    (bvadd 'PC #x00000002))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (andp
+        (orp
+         (andp
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (notp
+           (bveq setcc #b1)))
+         ((_ call "uf.arm.is_r15")
+          rN))
+        (andp
+         (notp
+          ((_ call "uf.arm.is_r15")
+           rD))
+         (notp
+          (bveq setcc #b1))))
+       (concat
+        ((_ extract 3 0)
+         (res_nzcv))
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (bveq setcc #b1)
+       rD
+       ((_ extract 35 4)
+        (res_nzcv)))
+      rD))))))

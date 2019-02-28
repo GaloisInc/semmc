@@ -1,0 +1,251 @@
+;; AND register, Encoding A1 (F7.1.14, F7-2558)
+(let
+ ((immShift
+  (ite
+   (bveq
+    ((_ call "uf.a32.soregimm_type")
+     sori)
+    #b00)
+   (concat
+    #b000
+    ((_ zero_extend 27)
+     ((_ call "uf.a32.soregimm_imm")
+      sori)))
+   (var1)))
+  (var1
+   (ite
+    (bveq
+     ((_ call "uf.a32.soregimm_type")
+      sori)
+     #b01)
+    (concat
+     #b001
+     (ite
+      (bveq
+       #b00000
+       ((_ call "uf.a32.soregimm_imm")
+        sori))
+      #x00000020
+      ((_ zero_extend 27)
+       ((_ call "uf.a32.soregimm_imm")
+        sori))))
+    (ite
+     (bveq
+      ((_ call "uf.a32.soregimm_type")
+       sori)
+      #b10)
+     (concat
+      #b010
+      (ite
+       (bveq
+        #b00000
+        ((_ call "uf.a32.soregimm_imm")
+         sori))
+       #x00000020
+       ((_ zero_extend 27)
+        ((_ call "uf.a32.soregimm_imm")
+         sori))))
+     (ite
+      (bveq
+       ((_ call "uf.a32.soregimm_imm")
+        sori)
+       #b00000)
+      (concat #b111 #x00000001)
+      (concat
+       #b011
+       ((_ zero_extend 27)
+        ((_ call "uf.a32.soregimm_imm")
+         sori)))))))
+  (SetT32Mode
+   (bvand
+    #xfeffffff
+    (bvor #x00000020 'CPSR)))
+  (var2
+   (bveq
+    #b1
+    ((_ extract 31 31)
+     (bvand
+      rN
+      ((_ extract 32 1)
+       ((_ call "df.shiftC")
+        ((_ call "uf.a32.soregimm_reg")
+         sori)
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))))))
+  (nzcv
+   (concat
+    ((_ extract 0 0)
+     (bvand
+      rN
+      ((_ extract 32 1)
+       ((_ call "df.shiftC")
+        ((_ call "uf.a32.soregimm_reg")
+         sori)
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))))
+    (concat
+     ((_ call "df.isZeroBit")
+      (bvand
+       rN
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         ((_ call "uf.a32.soregimm_reg")
+          sori)
+         ((_ extract 2 0)
+          (immShift))
+         ((_ extract 34 3)
+          (immShift))
+         ((_ extract 2 2)
+          'CPSR)))))
+     (concat
+      ((_ extract 0 0)
+       ((_ call "df.shiftC")
+        ((_ call "uf.a32.soregimm_reg")
+         sori)
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))
+      ((_ extract 3 3)
+       'CPSR)))))
+  (bxWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    var3))
+  (var3
+   ((var4)
+    (bvadd 'PC #x00000004)))
+  (var4
+   (ite
+    (var2)
+    (bvand
+     #xfffffffe
+     (bvand
+      rN
+      ((_ extract 32 1)
+       ((_ call "df.shiftC")
+        ((_ call "uf.a32.soregimm_reg")
+         sori)
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))))
+    (ite
+     (bveq
+      #b1
+      ((_ extract 30 30)
+       (bvand
+        rN
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          ((_ call "uf.a32.soregimm_reg")
+           sori)
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR))))))
+     (bvand
+      #xfffffffd
+      (bvand
+       rN
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         ((_ call "uf.a32.soregimm_reg")
+          sori)
+         ((_ extract 2 0)
+          (immShift))
+         ((_ extract 34 3)
+          (immShift))
+         ((_ extract 2 2)
+          'CPSR)))))
+     (bvand
+      rN
+      ((_ extract 32 1)
+       ((_ call "df.shiftC")
+        ((_ call "uf.a32.soregimm_reg")
+         sori)
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR))))))))
+ ((operands
+  ((rD . 'GPR)
+   (setcc . 'Cc_out)
+   (predBits . 'Pred)
+   (sori . 'So_reg_imm)
+   (rN . 'GPR)))
+  (in
+   (rN setcc sori 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (nzcv)
+        ((_ extract 31 4)
+         (ite
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (ite
+           (var2)
+           (SetT32Mode)
+           'CPSR)
+          'CPSR)))
+       (ite
+        ((_ call "uf.arm.is_r15")
+         rD)
+        (ite
+         (var2)
+         (SetT32Mode)
+         'CPSR)
+        'CPSR))
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       (bvand
+        rN
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          ((_ call "uf.a32.soregimm_reg")
+           sori)
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR)))))
+      rD))))))

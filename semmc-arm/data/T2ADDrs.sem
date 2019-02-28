@@ -1,0 +1,125 @@
+;; ADD register, T32, encoding T3 [no shift] (F7.1.6, F7-2544)
+(let
+ ((var1
+  (rD
+   ((_ extract 35 4)
+    (res_nzcv))))
+  (res_nzcv
+   ((_ call "df.addWithCarry")
+    ((_ call "uf.t32.t2soreg_reg")
+     rN)
+    ((_ extract 32 1)
+     ((_ call "df.shiftC")
+      rM
+      ((_ extract 2 0)
+       (immShift))
+      ((_ extract 34 3)
+       (immShift))
+      ((_ extract 2 2)
+       'CPSR)))
+    #x00000000))
+  (immShift
+   (ite
+    (bveq
+     ((_ call "uf.t32.t2soreg_type")
+      rN)
+     #b00)
+    (concat
+     #b000
+     ((_ zero_extend 27)
+      ((_ call "uf.t32.t2soreg_imm")
+       rN)))
+    (ite
+     (bveq
+      ((_ call "uf.t32.t2soreg_type")
+       rN)
+      #b01)
+     (concat
+      #b001
+      (ite
+       (bveq
+        #b00000
+        ((_ call "uf.t32.t2soreg_imm")
+         rN))
+       #x00000020
+       ((_ zero_extend 27)
+        ((_ call "uf.t32.t2soreg_imm")
+         rN))))
+     (ite
+      (bveq
+       ((_ call "uf.t32.t2soreg_type")
+        rN)
+       #b10)
+      (concat
+       #b010
+       (ite
+        (bveq
+         #b00000
+         ((_ call "uf.t32.t2soreg_imm")
+          rN))
+        #x00000020
+        ((_ zero_extend 27)
+         ((_ call "uf.t32.t2soreg_imm")
+          rN))))
+      (ite
+       (bveq
+        ((_ call "uf.t32.t2soreg_imm")
+         rN)
+        #b00000)
+       (concat #b111 #x00000001)
+       (concat
+        #b011
+        ((_ zero_extend 27)
+         ((_ call "uf.t32.t2soreg_imm")
+          rN))))))))
+  (nzcv
+   ((_ extract 3 0)
+    (res_nzcv)))
+  (branchWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     ((_ extract 35 4)
+      (res_nzcv)))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'GPRnopc)
+   (setcc . 'Cc_out)
+   (rN . 'T2_so_reg)
+   (rM . 'GPRnopc)))
+  (in
+   (setcc rN rM 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (nzcv)
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       var1)
+      rD))))))

@@ -1,0 +1,29 @@
+;; MOV register, T32, Encoding T1  (F7.1.108, F7-2710)
+(let
+ ((branchWritePC
+  (ite
+   ((_ call "uf.arm.is_r15")
+    rD)
+   (bvand #xfffffffd rM)
+   (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'GPR)
+   (rM . 'GPR)))
+  (in
+   (rM 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR 'CPSR)
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       rM)
+      rD))))))

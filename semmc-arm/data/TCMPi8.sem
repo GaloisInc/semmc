@@ -1,0 +1,29 @@
+;; Compare immediate, Encoding T1 (F7.1.36, F7-2589)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   (bvnot
+    ((_ zero_extend 24)
+     imm))
+   #x00000001)))
+ ((operands
+  ((imm . 'Imm0_255)
+   (rN . 'TGPR)))
+  (in
+   (rN imm 'CPSR 'PC))
+  (defs
+   (('PC
+    (bvadd 'PC #x00000002))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (concat
+       ((_ extract 3 0)
+        (res_nzcv))
+       ((_ extract 31 4)
+        'CPSR))
+      'CPSR))))))

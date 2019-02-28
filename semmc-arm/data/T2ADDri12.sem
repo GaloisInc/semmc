@@ -1,0 +1,27 @@
+;; Add immediate, T32, encoding T4 (F7.1.4, F7-2540)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   ((_ zero_extend 16)
+    imm)
+   #x00000000)))
+ ((operands
+  ((rD . 'GPRnopc)
+   (imm . 'Imm0_4095)
+   (rN . 'GPR)))
+  (in
+   (imm rN 'CPSR 'PC))
+  (defs
+   (('PC
+    (bvadd 'PC #x00000002))
+    ('CPSR 'CPSR)
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      ((_ extract 35 4)
+       (res_nzcv))
+      rD))))))

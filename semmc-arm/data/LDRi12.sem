@@ -1,0 +1,100 @@
+;; Load Register, offset addressing (P=1, W=0, U=1), immediate (A32), Encoding A1
+;; doc: F7.1.69, page F7-2636
+(let
+ ((updAddr
+  (ite
+   ((_ call "uf.a32.imm12_add")
+    imm12)
+   (bvadd
+    ((_ call "uf.a32.imm12_reg")
+     imm12)
+    ((_ zero_extend 20)
+     ((_ call "uf.a32.imm12_off")
+      imm12)))
+   (bvsub
+    ((_ call "uf.a32.imm12_reg")
+     imm12)
+    ((_ zero_extend 20)
+     ((_ call "uf.a32.imm12_off")
+      imm12)))))
+  (SetT32Mode
+   (bvand
+    #xfeffffff
+    (bvor #x00000020 'CPSR)))
+  (bxWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     gpr)
+    (ite
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (updAddr))))
+     (bvand
+      #xfffffffe
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (updAddr)))
+     (ite
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        ((_ call "uf.read_mem.32")
+         'Mem
+         (updAddr))))
+      (bvand
+       #xfffffffd
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (updAddr)))
+      ((_ call "uf.read_mem.32")
+       'Mem
+       (updAddr))))
+    (bvadd 'PC #x00000004))))
+ ((operands
+  ((gpr . 'GPR)
+   (predBits . 'Pred)
+   (imm12 . 'Addrmode_imm12)))
+  (in
+   ('Mem imm12 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        gpr)
+       (ite
+        (bveq
+         #b1
+         ((_ extract 31 31)
+          ((_ call "uf.read_mem.32")
+           'Mem
+           (updAddr))))
+        (SetT32Mode)
+        'CPSR)
+       'CPSR)
+      'CPSR))
+    (((_ call "uf.a32.imm12_reg")
+     imm12)
+     ((_ call "uf.a32.imm12_reg")
+      imm12))
+    (gpr
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        gpr)
+       gpr
+       ((_ call "uf.read_mem.32")
+        'Mem
+        (updAddr)))
+      gpr))))))

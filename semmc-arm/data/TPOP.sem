@@ -1,0 +1,593 @@
+;; Pop registers, Encoding T1 (F7.1.136, F7-2756)
+(let
+ ((var1
+  (('R14
+   (ite
+    ((_ call "df.testCondition")
+     ((_ call "df.ITState")
+      'CPSR)
+     'CPSR)
+    (stkVal_R14)
+    'R14))
+   ('R12
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R12)
+     'R12))
+   ('R11
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R11)
+     'R11))
+   ('R10
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R10)
+     'R10))
+   ('R9
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R9)
+     'R9))
+   ('R8
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R8)
+     'R8))
+   ('R7
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R7)
+     'R7))
+   ('R6
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R6)
+     'R6))
+   ('R5
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R5)
+     'R5))
+   ('R4
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R4)
+     'R4))
+   ('R3
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R3)
+     'R3))
+   ('R2
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R2)
+     'R2))
+   ('R1
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R1)
+     'R1))
+   ('R0
+    (ite
+     ((_ call "df.testCondition")
+      ((_ call "df.ITState")
+       'CPSR)
+      'CPSR)
+     (stkVal_R0)
+     'R0))))
+  (stkVal_R0
+   (ite
+    (isActive_R0)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R0))))
+    'R0))
+  (stkOff_R0
+   (bvsub
+    (cntReg_uptoR0)
+    #x00000001))
+  (cntReg_uptoR0
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 31)
+     ((_ extract 15 15)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R0
+   (bvne
+    #x0000
+    (bvand
+     #x0001
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R1
+   (ite
+    (isActive_R1)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R1))))
+    'R1))
+  (stkOff_R1
+   (bvsub
+    (cntReg_uptoR1)
+    #x00000001))
+  (cntReg_uptoR1
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 30)
+     ((_ extract 15 14)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R1
+   (bvne
+    #x0000
+    (bvand
+     #x0002
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R2
+   (ite
+    (isActive_R2)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R2))))
+    'R2))
+  (stkOff_R2
+   (bvsub
+    (cntReg_uptoR2)
+    #x00000001))
+  (cntReg_uptoR2
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 29)
+     ((_ extract 15 13)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R2
+   (bvne
+    #x0000
+    (bvand
+     #x0004
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R3
+   (ite
+    (isActive_R3)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R3))))
+    'R3))
+  (stkOff_R3
+   (bvsub
+    (cntReg_uptoR3)
+    #x00000001))
+  (cntReg_uptoR3
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 28)
+     ((_ extract 15 12)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R3
+   (bvne
+    #x0000
+    (bvand
+     #x0008
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R4
+   (ite
+    (isActive_R4)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R4))))
+    'R4))
+  (stkOff_R4
+   (bvsub
+    (cntReg_uptoR4)
+    #x00000001))
+  (cntReg_uptoR4
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 27)
+     ((_ extract 15 11)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R4
+   (bvne
+    #x0000
+    (bvand
+     #x0010
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R5
+   (ite
+    (isActive_R5)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R5))))
+    'R5))
+  (stkOff_R5
+   (bvsub
+    (cntReg_uptoR5)
+    #x00000001))
+  (cntReg_uptoR5
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 26)
+     ((_ extract 15 10)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R5
+   (bvne
+    #x0000
+    (bvand
+     #x0020
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R6
+   (ite
+    (isActive_R6)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R6))))
+    'R6))
+  (stkOff_R6
+   (bvsub
+    (cntReg_uptoR6)
+    #x00000001))
+  (cntReg_uptoR6
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 25)
+     ((_ extract 15 9)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R6
+   (bvne
+    #x0000
+    (bvand
+     #x0040
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R7
+   (ite
+    (isActive_R7)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R7))))
+    'R7))
+  (stkOff_R7
+   (bvsub
+    (cntReg_uptoR7)
+    #x00000001))
+  (cntReg_uptoR7
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 24)
+     ((_ extract 15 8)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R7
+   (bvne
+    #x0000
+    (bvand
+     #x0080
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R8
+   (ite
+    (isActive_R8)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R8))))
+    'R8))
+  (stkOff_R8
+   (bvsub
+    (cntReg_uptoR8)
+    #x00000001))
+  (cntReg_uptoR8
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 23)
+     ((_ extract 15 7)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R8
+   (bvne
+    #x0000
+    (bvand
+     #x0100
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R9
+   (ite
+    (isActive_R9)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R9))))
+    'R9))
+  (stkOff_R9
+   (bvsub
+    (cntReg_uptoR9)
+    #x00000001))
+  (cntReg_uptoR9
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 22)
+     ((_ extract 15 6)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R9
+   (bvne
+    #x0000
+    (bvand
+     #x0200
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R10
+   (ite
+    (isActive_R10)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R10))))
+    'R10))
+  (stkOff_R10
+   (bvsub
+    (cntReg_uptoR10)
+    #x00000001))
+  (cntReg_uptoR10
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 21)
+     ((_ extract 15 5)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R10
+   (bvne
+    #x0000
+    (bvand
+     #x0400
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R11
+   (ite
+    (isActive_R11)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R11))))
+    'R11))
+  (stkOff_R11
+   (bvsub
+    (cntReg_uptoR11)
+    #x00000001))
+  (cntReg_uptoR11
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 20)
+     ((_ extract 15 4)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R11
+   (bvne
+    #x0000
+    (bvand
+     #x0800
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R12
+   (ite
+    (isActive_R12)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R12))))
+    'R12))
+  (stkOff_R12
+   (bvsub
+    (cntReg_uptoR12)
+    #x00000001))
+  (cntReg_uptoR12
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 19)
+     ((_ extract 15 3)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R12
+   (bvne
+    #x0000
+    (bvand
+     #x1000
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (stkVal_R14
+   (ite
+    (isActive_R14)
+    ((_ call "uf.read_mem.32")
+     'Mem
+     (bvadd
+      'R13
+      (bvmul
+       #x00000004
+       (stkOff_R14))))
+    'R14))
+  (stkOff_R14
+   (bvsub
+    (cntReg_uptoR14)
+    #x00000001))
+  (cntReg_uptoR14
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 17)
+     ((_ extract 15 1)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R14
+   (bvne
+    #x0000
+    (bvand
+     #x4000
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (newSP
+   (bvadd
+    'R13
+    (bvmul
+     #x00000004
+     ((_ call "uf.popcnt.32")
+      ((_ zero_extend 16)
+       ((_ call "uf.t32.reglist")
+        registers))))))
+  (SetA32Mode
+   (bvand
+    #xfeffffff
+    (bvand #xffffffdf 'CPSR)))
+  (pcStkVal
+   ((_ call "uf.read_mem.32")
+    'Mem
+    (bvadd
+     'R13
+     (bvmul
+      #x00000004
+      (stkOff_R15)))))
+  (stkOff_R15
+   (bvsub
+    (cntReg_uptoR15)
+    #x00000001))
+  (cntReg_uptoR15
+   ((_ call "uf.popcnt.32")
+    ((_ zero_extend 16)
+     ((_ extract 15 0)
+      ((_ call "uf.t32.reglist")
+       registers)))))
+  (isActive_R15
+   (bvne
+    #x0000
+    (bvand
+     #x8000
+     ((_ call "uf.t32.reglist")
+      registers))))
+  (bxWritePC
+   (ite
+    (isActive_R15)
+    (ite
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       (pcStkVal)))
+     (bvand
+      #xfffffffe
+      (pcStkVal))
+     (ite
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        (pcStkVal)))
+      (bvand
+       #xfffffffd
+       (pcStkVal))
+      (pcStkVal)))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((registers . 'Reglist)))
+  (in
+   ('R14 'R13 'R12 'R11 'R10 'R9 'R8 'R7 'R6 'R5 'R4 'R3 'R2 'R1 'R0 'Mem registers 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (isActive_R15)
+       (ite
+        (bveq
+         #b1
+         ((_ extract 31 31)
+          (pcStkVal)))
+        'CPSR
+        (SetA32Mode))
+       'CPSR)
+      'CPSR))
+    ('R13
+     (newSP))
+    var1))))

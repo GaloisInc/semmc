@@ -1,0 +1,115 @@
+;; AND register, Encoding T2 (F7.1.14, F7-2558)
+;; This encoding has no shift; fixed to 0
+(let
+ ((immShift
+  (concat
+   #b000
+   ((_ zero_extend 27)
+    #b00000)))
+  (nzcv
+   (concat
+    ((_ extract 0 0)
+     (bvand
+      rN
+      ((_ extract 32 1)
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))))
+    (concat
+     ((_ call "df.isZeroBit")
+      (bvand
+       rN
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         rM
+         ((_ extract 2 0)
+          (immShift))
+         ((_ extract 34 3)
+          (immShift))
+         ((_ extract 2 2)
+          'CPSR)))))
+     (concat
+      ((_ extract 0 0)
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))
+      ((_ extract 3 3)
+       'CPSR)))))
+  (branchWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     (bvand
+      rN
+      ((_ extract 32 1)
+       ((_ call "df.shiftC")
+        rM
+        ((_ extract 2 0)
+         (immShift))
+        ((_ extract 34 3)
+         (immShift))
+        ((_ extract 2 2)
+         'CPSR)))))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'RGPR)
+   (setcc . 'Cc_out)
+   (rN . 'RGPR)
+   (rM . 'RGPR)))
+  (in
+   (setcc rM rN rD 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (nzcv)
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       (bvand
+        rN
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          rM
+          ((_ extract 2 0)
+           (immShift))
+          ((_ extract 34 3)
+           (immShift))
+          ((_ extract 2 2)
+           'CPSR)))))
+      rD))))))

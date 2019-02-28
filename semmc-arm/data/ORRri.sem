@@ -1,0 +1,248 @@
+;; ORR immediate, Encoding A1  (F7.1.127, F7-2738)
+(let
+ ((SetT32Mode
+  (bvand
+   #xfeffffff
+   (bvor #x00000020 'CPSR)))
+  (bxWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (ite
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       (bvor
+        rN
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          ((_ zero_extend 24)
+           ((_ call "uf.a32.modimm_imm")
+            mimm))
+          #b011
+          (bvshl
+           #x00000001
+           ((_ zero_extend 28)
+            ((_ call "uf.a32.modimm_rot")
+             mimm)))
+          ((_ extract 2 2)
+           'CPSR))))))
+     (bvand
+      #xfffffffe
+      (bvor
+       rN
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         ((_ zero_extend 24)
+          ((_ call "uf.a32.modimm_imm")
+           mimm))
+         #b011
+         (bvshl
+          #x00000001
+          ((_ zero_extend 28)
+           ((_ call "uf.a32.modimm_rot")
+            mimm)))
+         ((_ extract 2 2)
+          'CPSR)))))
+     (ite
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        (bvor
+         rN
+         ((_ extract 32 1)
+          ((_ call "df.shiftC")
+           ((_ zero_extend 24)
+            ((_ call "uf.a32.modimm_imm")
+             mimm))
+           #b011
+           (bvshl
+            #x00000001
+            ((_ zero_extend 28)
+             ((_ call "uf.a32.modimm_rot")
+              mimm)))
+           ((_ extract 2 2)
+            'CPSR))))))
+      (bvand
+       #xfffffffd
+       (bvor
+        rN
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          ((_ zero_extend 24)
+           ((_ call "uf.a32.modimm_imm")
+            mimm))
+          #b011
+          (bvshl
+           #x00000001
+           ((_ zero_extend 28)
+            ((_ call "uf.a32.modimm_rot")
+             mimm)))
+          ((_ extract 2 2)
+           'CPSR)))))
+      (bvor
+       rN
+       ((_ extract 32 1)
+        ((_ call "df.shiftC")
+         ((_ zero_extend 24)
+          ((_ call "uf.a32.modimm_imm")
+           mimm))
+         #b011
+         (bvshl
+          #x00000001
+          ((_ zero_extend 28)
+           ((_ call "uf.a32.modimm_rot")
+            mimm)))
+         ((_ extract 2 2)
+          'CPSR))))))
+    (bvadd 'PC #x00000004))))
+ ((operands
+  ((rD . 'GPR)
+   (setcc . 'Cc_out)
+   (predBits . 'Pred)
+   (mimm . 'Mod_imm)
+   (rN . 'GPR)))
+  (in
+   (mimm setcc rN 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (concat
+         ((_ extract 0 0)
+          (bvor
+           rN
+           ((_ extract 32 1)
+            ((_ call "df.shiftC")
+             ((_ zero_extend 24)
+              ((_ call "uf.a32.modimm_imm")
+               mimm))
+             #b011
+             (bvshl
+              #x00000001
+              ((_ zero_extend 28)
+               ((_ call "uf.a32.modimm_rot")
+                mimm)))
+             ((_ extract 2 2)
+              'CPSR)))))
+         (concat
+          ((_ call "df.isZeroBit")
+           (bvor
+            rN
+            ((_ extract 32 1)
+             ((_ call "df.shiftC")
+              ((_ zero_extend 24)
+               ((_ call "uf.a32.modimm_imm")
+                mimm))
+              #b011
+              (bvshl
+               #x00000001
+               ((_ zero_extend 28)
+                ((_ call "uf.a32.modimm_rot")
+                 mimm)))
+              ((_ extract 2 2)
+               'CPSR)))))
+          (concat
+           ((_ extract 0 0)
+            ((_ call "df.shiftC")
+             ((_ zero_extend 24)
+              ((_ call "uf.a32.modimm_imm")
+               mimm))
+             #b011
+             (bvshl
+              #x00000001
+              ((_ zero_extend 28)
+               ((_ call "uf.a32.modimm_rot")
+                mimm)))
+             ((_ extract 2 2)
+              'CPSR)))
+           ((_ extract 3 3)
+            'CPSR))))
+        ((_ extract 31 4)
+         (ite
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (ite
+           (bveq
+            #b1
+            ((_ extract 31 31)
+             (bvor
+              rN
+              ((_ extract 32 1)
+               ((_ call "df.shiftC")
+                ((_ zero_extend 24)
+                 ((_ call "uf.a32.modimm_imm")
+                  mimm))
+                #b011
+                (bvshl
+                 #x00000001
+                 ((_ zero_extend 28)
+                  ((_ call "uf.a32.modimm_rot")
+                   mimm)))
+                ((_ extract 2 2)
+                 'CPSR))))))
+           (SetT32Mode)
+           'CPSR)
+          'CPSR)))
+       (ite
+        ((_ call "uf.arm.is_r15")
+         rD)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 31 31)
+           (bvor
+            rN
+            ((_ extract 32 1)
+             ((_ call "df.shiftC")
+              ((_ zero_extend 24)
+               ((_ call "uf.a32.modimm_imm")
+                mimm))
+              #b011
+              (bvshl
+               #x00000001
+               ((_ zero_extend 28)
+                ((_ call "uf.a32.modimm_rot")
+                 mimm)))
+              ((_ extract 2 2)
+               'CPSR))))))
+         (SetT32Mode)
+         'CPSR)
+        'CPSR))
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       (bvor
+        rN
+        ((_ extract 32 1)
+         ((_ call "df.shiftC")
+          ((_ zero_extend 24)
+           ((_ call "uf.a32.modimm_imm")
+            mimm))
+          #b011
+          (bvshl
+           #x00000001
+           ((_ zero_extend 28)
+            ((_ call "uf.a32.modimm_rot")
+             mimm)))
+          ((_ extract 2 2)
+           'CPSR)))))
+      rD))))))

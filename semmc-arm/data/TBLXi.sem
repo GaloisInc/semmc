@@ -1,0 +1,65 @@
+;; Branch with Link and Exchange (F7.1.25, F7-2576)
+;; Encoding T2
+;; Used to call a subroutine (branch) and switch from InstrSet_T32 to InstrSet_A32
+;; Writes to PC, not R15.
+(let
+ ((SetA32Mode
+  (bvand
+   #xfeffffff
+   (bvand #xffffffdf 'CPSR)))
+  (branchWritePC
+   (bvand
+    #xfffffffd
+    (bvadd
+     ((_ sign_extend 7)
+      (concat
+       ((_ call "uf.t32.blxtarget_S")
+        target)
+       (concat
+        (bvnot
+         (bvxor
+          ((_ call "uf.t32.blxtarget_J1")
+           target)
+          ((_ call "uf.t32.blxtarget_S")
+           target)))
+        (concat
+         (bvnot
+          (bvxor
+           ((_ call "uf.t32.blxtarget_J2")
+            target)
+           ((_ call "uf.t32.blxtarget_S")
+            target)))
+         (concat
+          ((_ call "uf.t32.blxtarget_imm10H")
+           target)
+          (concat
+           ((_ call "uf.t32.blxtarget_imm10L")
+            target)
+           #b00))))))
+     (bvand #xfffffffc 'PC)))))
+ ((operands
+  ((target . 'Thumb_blx_target)))
+  (in
+   ('R14 target 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (SetA32Mode)
+      'CPSR))
+    ('R14
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (concat
+       ((_ extract 30 0)
+        'PC)
+       #b1)
+      'R14))))))

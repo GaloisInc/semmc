@@ -1,0 +1,43 @@
+;; Branch and Exchange, Encoding T1 (F7.1.27, F7-2579)
+;; unpredictable argument is ignored
+(let
+ ((SetA32Mode
+  (bvand
+   #xfeffffff
+   (bvand #xffffffdf 'CPSR)))
+  (bxWritePC
+   (ite
+    (bveq
+     #b1
+     ((_ extract 31 31)
+      rM))
+    (bvand #xfffffffe rM)
+    (ite
+     (bveq
+      #b1
+      ((_ extract 30 30)
+       rM))
+     (bvand #xfffffffd rM)
+     rM))))
+ ((operands
+  ((rM . 'GPR)
+   (unpredictable . 'Unpredictable)))
+  (in
+   (rM 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (bveq
+        #b1
+        ((_ extract 31 31)
+         rM))
+       'CPSR
+       (SetA32Mode))
+      'CPSR))))))

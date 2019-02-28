@@ -1,0 +1,92 @@
+;; MOV register, A32, Encoding A1  (F7.1.109, F7-2712)
+(let
+ ((SetT32Mode
+  (bvand
+   #xfeffffff
+   (bvor #x00000020 'CPSR)))
+  (bxWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (ite
+     (bveq
+      #b1
+      ((_ extract 31 31)
+       rM))
+     (bvand #xfffffffe rM)
+     (ite
+      (bveq
+       #b1
+       ((_ extract 30 30)
+        rM))
+      (bvand #xfffffffd rM)
+      rM))
+    (bvadd 'PC #x00000004))))
+ ((operands
+  ((rD . 'GPR)
+   (setcc . 'Cc_out)
+   (predBits . 'Pred)
+   (rM . 'GPR)))
+  (in
+   (setcc rM 'CPSR 'PC))
+  (defs
+   (('PC
+    (bxWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       (andp
+        (bveq setcc #b1)
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (concat
+         ((_ extract 0 0)
+          rM)
+         (concat
+          ((_ call "df.isZeroBit")
+           rM)
+          (concat
+           ((_ extract 2 2)
+            'CPSR)
+           ((_ extract 3 3)
+            'CPSR))))
+        ((_ extract 31 4)
+         (ite
+          ((_ call "uf.arm.is_r15")
+           rD)
+          (ite
+           (bveq
+            #b1
+            ((_ extract 31 31)
+             rM))
+           (SetT32Mode)
+           'CPSR)
+          'CPSR)))
+       (ite
+        ((_ call "uf.arm.is_r15")
+         rD)
+        (ite
+         (bveq
+          #b1
+          ((_ extract 31 31)
+           rM))
+         (SetT32Mode)
+         'CPSR)
+        'CPSR))
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       predBits
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       rM)
+      rD))))))

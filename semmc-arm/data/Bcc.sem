@@ -1,0 +1,24 @@
+;; B, branch, Encoding A1
+;; F7.1.18, F7-2566
+(let
+ ((branchWritePCrel
+  (bvand
+   #xfffffffc
+   (bvadd
+    'PC
+    (imm32))))
+  (imm32
+   ((_ sign_extend 6)
+    (concat
+     ((_ extract 31 8)
+      brTarget)
+     #b00))))
+ ((operands
+  ((predBits . 'Pred)
+   (brTarget . 'Arm_br_target)))
+  (in
+   (brTarget 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePCrel))
+    ('CPSR 'CPSR)))))

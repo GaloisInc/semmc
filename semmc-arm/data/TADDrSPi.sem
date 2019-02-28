@@ -1,0 +1,42 @@
+;; ADD SP + immediate, T32, encoding T1 (F7.1.9, F7-2548)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   'R13
+   ((_ zero_extend 22)
+    (concat
+     ((_ call "uf.t32.imm0_1020S4_imm")
+      imm)
+     #b00))
+   #x00000000))
+  (branchWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     ((_ extract 35 4)
+      (res_nzcv)))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'TGPR)
+   (imm . 'T_imm0_1020s4)))
+  (in
+   ('R13 imm rD 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR 'CPSR)
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       ((_ extract 35 4)
+        (res_nzcv)))
+      rD))))))

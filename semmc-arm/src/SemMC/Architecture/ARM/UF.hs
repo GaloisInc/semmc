@@ -28,7 +28,7 @@ import Data.Proxy
 -- | The basic type of indices into the array
 type BaseIdxType arch = BaseBVType (A.RegWidth arch)
 -- | The type of the memory array
-type BaseMemType arch = BaseArrayType (SingleCtx (BaseIdxType arch)) (BaseBVType 8) 
+type BaseMemType arch = BaseArrayType (SingleCtx (BaseIdxType arch)) (BaseBVType 8)
 
 uninterpretedFunctions :: forall proxy arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
                          proxy arm
@@ -36,12 +36,12 @@ uninterpretedFunctions :: forall proxy arm. (KnownNat (A.RegWidth arm), 1 <= A.R
 uninterpretedFunctions _ =
   [ -- is_r15
     A.mkUninterpFn @(SingleCtx (BaseIdxType arm))
-                   @BaseBoolType @arm 
-                   "arm.is_r15" 
+                   @BaseBoolType @arm
+                   "arm.is_r15"
                    (\_ -> [])
   , -- conditionPassed; can execute instr? inputs are Pred and CCR
-    A.mkUninterpFn @(EmptyCtx ::> BaseBVType 4 ::> BaseBVType 4) 
-                   @BaseBoolType 
+    A.mkUninterpFn @(EmptyCtx ::> BaseBVType 4 ::> BaseBVType 4)
+                   @BaseBoolType
                    "arm.conditionPassed"
                    (\_ -> [])
   -- A32 operands
@@ -49,9 +49,9 @@ uninterpretedFunctions _ =
   -- imm12_reg: reference to register by register number from an addrmode_imm12_pre operand
   , A.mkUninterpFn @(SingleCtx (BaseIdxType arm))
                    @(BaseIdxType arm)
-                   "a32.imm12_reg" 
+                   "a32.imm12_reg"
                    (\_ -> [])
-  -- imm12_off: reference to immediate offset value from an addrmode_imm12_pre operand  
+  -- imm12_off: reference to immediate offset value from an addrmode_imm12_pre operand
   , A.mkUninterpFn @(SingleCtx (BaseIdxType arm))
                    @(BaseBVType 12)
                    "a32.imm12_off"
@@ -91,7 +91,7 @@ uninterpretedFunctions _ =
                    (\_ -> [])
   -- "a32.ldst_so_reg_immediate" -- ref to immediate value from ldst_so_reg operand
   , A.mkUninterpFn @(SingleCtx (BaseIdxType arm))
-                   @BaseBoolType
+                   @(BaseBVType 5)
                    "a32.ldst_so_reg_immediate"
                    (\_ -> [])
   -- "a32.ldst_so_reg_shift_type" -- ref to shift type value from ldst_so_reg operand
@@ -251,7 +251,7 @@ uninterpretedFunctions _ =
   ++ (mkPopcntUF <$> [16,32])
   ++ (mkWriteMemUF <$> [8,16,32,64])
   ++ (mkReadMemUF <$> [8,16,32,64])
-  
+
 mkPopcntUF :: forall arm. (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm)
            => Integer
            -> A.UninterpFn arm
@@ -259,7 +259,7 @@ mkPopcntUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                     , NatGT _ <- compareNat (knownNat @n) (knownNat @0)
   = A.mkUninterpFn @(SingleCtx (BaseBVType n))
                    @(BaseBVType n)
-                   ("read_mem." ++ show n)
+                   ("popcnt." ++ show n)
                    (\_ -> [])
 mkPopcntUF n | otherwise = error $ "Cannot construct popcnt." ++ show n
 
@@ -285,7 +285,7 @@ mkWriteMemUF n | Just (SomeNat (_ :: Proxy n)) <- someNatVal n
                    $ \(_ :> _ :> idx :> val) -> [A.WriteData idx val]
 mkWriteMemUF n | otherwise = error $ "Cannot construct write_mem." ++ show n
 
-  
+
 
 {-
   [ ("arm.is_r15",

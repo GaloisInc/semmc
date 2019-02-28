@@ -1,0 +1,69 @@
+;; ADD immediate, T32, encoding T1 (F7.1.4, F7-2540)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   ((_ zero_extend 29)
+    imm)
+   #x00000000)))
+ ((operands
+  ((rD . 'TGPR)
+   (imm . 'Imm0_7)
+   (rN . 'TGPR)))
+  (in
+   (imm rN 'CPSR 'PC))
+  (defs
+   (('PC
+    (bvadd 'PC #x00000002))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (andp
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD))
+        (notp
+         (notp
+          (bvne
+           #x00
+           (concat
+            ((_ extract 19 16)
+             'CPSR)
+            (concat
+             ((_ extract 21 20)
+              'CPSR)
+             ((_ extract 6 5)
+              'CPSR)))))))
+       (concat
+        ((_ extract 3 0)
+         (res_nzcv))
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (notp
+        (bvne
+         #x00
+         (concat
+          ((_ extract 19 16)
+           'CPSR)
+          (concat
+           ((_ extract 21 20)
+            'CPSR)
+           ((_ extract 6 5)
+            'CPSR)))))
+       rD
+       ((_ extract 35 4)
+        (res_nzcv)))
+      rD))))))

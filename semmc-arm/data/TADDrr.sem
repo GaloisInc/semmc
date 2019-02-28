@@ -1,0 +1,75 @@
+;; ADD register, T32, Encoding T1 (F7.1.6, F7-2544)
+(let
+ ((res_nzcv
+  ((_ call "df.addWithCarry")
+   rN
+   ((_ extract 32 1)
+    ((_ call "df.shiftC")
+     rM
+     #b000
+     #x00000000
+     ((_ extract 2 2)
+      'CPSR)))
+   #x00000000))
+  (nzcv
+   ((_ extract 3 0)
+    (res_nzcv)))
+  (branchWritePC
+   (ite
+    ((_ call "uf.arm.is_r15")
+     rD)
+    (bvand
+     #xfffffffd
+     ((_ extract 35 4)
+      (res_nzcv)))
+    (bvadd 'PC #x00000002))))
+ ((operands
+  ((rD . 'TGPR)
+   (rM . 'TGPR)
+   (rN . 'TGPR)))
+  (in
+   (rN rM 'CPSR 'PC))
+  (defs
+   (('PC
+    (branchWritePC))
+    ('CPSR
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       (andp
+        (notp
+         (bvne
+          #x00
+          (concat
+           ((_ extract 19 16)
+            'CPSR)
+           (concat
+            ((_ extract 21 20)
+             'CPSR)
+            ((_ extract 6 5)
+             'CPSR)))))
+        (notp
+         ((_ call "uf.arm.is_r15")
+          rD)))
+       (concat
+        (nzcv)
+        ((_ extract 31 4)
+         'CPSR))
+       'CPSR)
+      'CPSR))
+    (rD
+     (ite
+      ((_ call "df.testCondition")
+       ((_ call "df.ITState")
+        'CPSR)
+       'CPSR)
+      (ite
+       ((_ call "uf.arm.is_r15")
+        rD)
+       rD
+       ((_ extract 35 4)
+        (res_nzcv)))
+      rD))))))
