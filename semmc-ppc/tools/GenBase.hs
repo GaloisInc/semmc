@@ -8,7 +8,7 @@ module Main ( main ) where
 import           Control.Exception
 import qualified Data.ByteString as BS
 import qualified Data.Foldable as F
-import           Data.Monoid
+--import           Data.Monoid
 import           Data.Parameterized.Classes
 import           Data.Parameterized.HasRepr
 import           Data.Parameterized.List as SL
@@ -147,7 +147,7 @@ checkFunction arch sym sem name =
   U.withLogging "semmc-ppc-genbase"
       (U.stdErrLogEventConsumer (\le -> U.leLevel le >= U.Warn)) $
       catch (Right <$> loadFunction arch sym (name, sem)) $
-                 \(e :: SomeException) -> return $ Left $ show e   
+                 \(e :: SomeException) -> return $ Left $ show e
 
 loadFunction :: ( CRUB.IsSymInterface sym
                 , ShowF (CRU.SymExpr sym)

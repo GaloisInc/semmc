@@ -258,6 +258,7 @@ fp2op name = do
   defLoc frT (highBits' 128 res)
   defLoc fpscr (lowBits' 32 res)
 
+{-
 fp3op :: String -> SemM 'Def ()
 fp3op name = do
   (frT, frA, frB, frC) <- aform4
@@ -265,6 +266,7 @@ fp3op name = do
   let res = ppcvec3 name (Loc frA) (Loc frB) (Loc frC) (Loc fpscr)
   defLoc frT (highBits' 128 res)
   defLoc fpscr (lowBits' 32 res)
+-}
 
 -- | Extract the double-precision part of a vector register
 extractDouble :: (HasCallStack) => Expr 'TBV -> Expr 'TBV
