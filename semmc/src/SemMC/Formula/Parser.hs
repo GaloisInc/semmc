@@ -839,7 +839,7 @@ readUndefined (SC.SCons (SC.SAtom (AIdent "_"))
         BaseBVRepr {}
           | Just size <- S.asUnsignedBV ex -> do
               sym <- MR.reader getSym
-              case NR.someNat (fromIntegral size) of
+              case NR.someNat ((fromIntegral size) :: Integer) of
                 Just (Some nr) -> mkUndefined nr sym
                 Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" size
         ety -> E.throwError $ printf "Invalid expr type: %s" (show ety)

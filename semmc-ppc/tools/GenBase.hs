@@ -36,6 +36,8 @@ import qualified System.Directory as D
 import           System.FilePath ( (<.>), (</>) )
 import qualified What4.Interface as CRU
 
+import           Prelude
+
 data Options = Options { oManualDir :: FilePath
                        , oBaseDir :: FilePath
                        , oPseudoDir :: FilePath

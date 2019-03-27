@@ -37,7 +37,6 @@ import qualified Data.Text                          as T
 import           What4.Interface as S
 import qualified What4.Expr.Builder as S
 import qualified What4.Symbol as S
-import           Lang.Crucible.Types
 import qualified SemMC.Architecture as A
 import           SemMC.Architecture.Location        as A
 import qualified SemMC.BoundVar as BV

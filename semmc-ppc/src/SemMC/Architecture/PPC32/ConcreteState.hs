@@ -25,7 +25,6 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import           Data.Int ( Int32 )
 import           Data.Parameterized.Classes ( testEquality )
-import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Serialize.Get as G
 import qualified Data.Word.Indexed as W
@@ -57,11 +56,11 @@ randomState gen = St.execStateT randomize MapF.empty
     -- | Create a random 128 bit bitvector with the high 64 bits as zero.  We
     -- want this for the FRs, which would normally overlap with the VSRs.  If we
     -- had the VSRs, then we would want to generate full 128 bit values instead.
-    addRandomBV64 :: Location ppc (BaseBVType 128) -> St.StateT (ConcreteState ppc) IO ()
-    addRandomBV64 loc = do
-      bv :: V.Value (BaseBVType 64)
-         <- V.ValueBV <$> liftIO (DA.arbitrary gen)
-      St.modify' $ MapF.insert loc (PPCS.extendBV bv)
+    -- addRandomBV64 :: Location ppc (BaseBVType 128) -> St.StateT (ConcreteState ppc) IO ()
+    -- addRandomBV64 loc = do
+    --   bv :: V.Value (BaseBVType 64)
+    --      <- V.ValueBV <$> liftIO (DA.arbitrary gen)
+    --   St.modify' $ MapF.insert loc (PPCS.extendBV bv)
 
     addRandomBV :: (1 <= n, KnownNat n) => Location ppc (BaseBVType n) -> St.StateT (ConcreteState ppc) IO ()
     addRandomBV loc = do
@@ -128,10 +127,10 @@ serialize s = LB.toStrict (B.toLazyByteString b)
 --                , mconcat (map serializeMem (extractLocs s [LocMem]))
                 ]
 
-serializeMem :: V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> B.Builder
-serializeMem val =
-  case val of
-    V.ValueMem bs -> B.byteString bs
+-- serializeMem :: V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)) -> B.Builder
+-- serializeMem val =
+--   case val of
+--     V.ValueMem bs -> B.byteString bs
 
 extractLocs :: ConcreteState ppc
             -> [Location ppc tp]
@@ -178,20 +177,14 @@ getWith g loc = do
   w <- g
   return (loc, w)
 
-getBS :: G.Get (V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
-getBS = V.ValueMem <$> G.getBytes 64
+-- getBS :: G.Get (V.Value (BaseArrayType (Ctx.SingleCtx (BaseBVType 32)) (BaseBVType 8)))
+-- getBS = V.ValueMem <$> G.getBytes 64
 
 gprs :: [Location ppc (BaseBVType (ArchRegWidth ppc))]
 gprs = fmap (LocGPR . PPC.GPR) [0..31]
 
 vsrs :: [Location ppc (BaseBVType 128)]
 vsrs = fmap (LocVSR . PPC.VSReg) [0..63]
-
-frs :: [Location ppc (BaseBVType 128)]
-frs = fmap (LocVSR . PPC.VSReg) [0..31]
-
-vrs :: [Location ppc (BaseBVType 128)]
-vrs = fmap (LocVSR . PPC.VSReg) [32..63]
 
 -- These are all of the special registers that we support; they are all 32 bits
 -- in 32 bit mode.
