@@ -1,5 +1,6 @@
 packages:
   semmc/
+  semmc-asl/
   semmc-fuzzer/
   semmc-ppc/
   semmc-x86_64/
@@ -11,6 +12,7 @@ packages:
   submodules/dismantle/dismantle-thumb/
   submodules/dismantle/dismantle-ppc/
   submodules/s-cargot
+  submodules/arm-asl-parser/
 
 optional-packages:
   submodules/crucible/crucible
