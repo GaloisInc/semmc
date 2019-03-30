@@ -26,9 +26,11 @@ module SemMC.ASL.Crucible (
   , TranslationException(..)
   ) where
 
+import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad.ST ( stToIO )
 import qualified Control.Monad.State.Class as MS
+import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
@@ -42,9 +44,9 @@ import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.CFG.SSAConversion as CCS
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Lang.Crucible.Types as CT
+import           Unsafe.Coerce ( unsafeCoerce )
 import qualified What4.BaseTypes as WT
 import qualified What4.ProgramLoc as WP
-import           Unsafe.Coerce ( unsafeCoerce )
 
 import qualified Language.ASL.Syntax as AS
 
@@ -191,8 +193,32 @@ data TranslationState ret s =
                    -- transitively-referenced globals in the signature.
                    }
 
-lookupVarRef :: T.Text -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s tp)
-lookupVarRef = undefined
+data ExprConstructor h s ret tp where
+  ExprConstructor :: a tp
+                  -> (a tp -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s tp))
+                  -> ExprConstructor h  s ret tp
+
+lookupVarRef :: forall tp h s ret
+              . CT.TypeRepr tp
+             -> T.Text
+             -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s tp)
+lookupVarRef rep name = do
+  ts <- MS.get
+  let k :: TypedName tp
+      k = TypedName name
+  let err = X.throw (UnboundName rep name)
+  case fromMaybe err (lookupArg k ts <|> lookupRef k ts <|> lookupGlobal k ts) of
+    ExprConstructor e con -> con e
+  where
+    lookupArg k ts = do
+      e <- CCG.AtomExpr <$> MapF.lookup k (tsArgAtoms ts)
+      return (ExprConstructor e return)
+    lookupRef k ts = do
+      r <- MapF.lookup k (tsVarRefs ts)
+      return (ExprConstructor r CCG.readReg)
+    lookupGlobal k ts = do
+      g <- MapF.lookup k (tsGlobals ts)
+      return (ExprConstructor g CCG.readGlobal)
 
 defineFunction :: (ret ~ CT.BaseToType tp)
                => FunctionSignature sym init ret tp
@@ -250,6 +276,7 @@ data TranslationException = forall sym . NoReturnInFunction (SomeSignature sym)
                           | UnsupportedExpr AS.Expr
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
+                          | forall tp . UnboundName (CT.TypeRepr tp) T.Text
 
 deriving instance Show TranslationException
 
