@@ -114,12 +114,12 @@ simulateProcedure symCfg sig (CCC.SomeCFG cfg) = do
 
 allocateFreshArg :: (CB.IsSymInterface sym)
                  => sym
-                 -> AC.LabeledValue String CT.TypeRepr tp
+                 -> AC.LabeledValue T.Text CT.TypeRepr tp
                  -> IO (CS.RegEntry sym tp)
 allocateFreshArg sym (AC.LabeledValue name rep) =
   case rep of
     CT.BVRepr w -> do
-      sname <- toSolverSymbol name
+      sname <- toSolverSymbol (T.unpack name)
       rv <- WI.freshConstant sym sname (WT.BaseBVRepr w)
       return CS.RegEntry { CS.regType = rep
                          , CS.regValue = rv
@@ -150,16 +150,16 @@ initialSimulatorState symCfg symGlobalState econt = do
 initGlobals :: forall sym env
              . (CB.IsSymInterface sym)
             => SimulatorConfig sym
-            -> Ctx.Assignment (AC.LabeledValue String CT.TypeRepr) env
+            -> Ctx.Assignment (AC.LabeledValue T.Text CT.TypeRepr) env
             -> IO (CS.SymGlobalState sym)
 initGlobals symCfg reps = do
   globals <- FC.traverseFC allocGlobal reps
   return (FC.foldrFC addGlobal CS.emptyGlobals globals)
   where
-    allocGlobal :: forall tp . AC.LabeledValue String CT.TypeRepr tp -> IO (Product CS.GlobalVar (CS.RegEntry sym) tp)
+    allocGlobal :: forall tp . AC.LabeledValue T.Text CT.TypeRepr tp -> IO (Product CS.GlobalVar (CS.RegEntry sym) tp)
     allocGlobal lv@(AC.LabeledValue name rep) = do
       entry <- allocateFreshArg (simSym symCfg) lv
-      gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) (T.pack name) rep
+      gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) name rep
       return (Pair gv entry)
     addGlobal (Pair gv entry) = CSG.insertGlobal gv (CS.regValue entry)
 

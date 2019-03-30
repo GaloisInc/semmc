@@ -1,5 +1,7 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 -- | Convert fragments of ASL code into Crucible CFGs
 module SemMC.ASL.Crucible (
@@ -20,18 +22,29 @@ module SemMC.ASL.Crucible (
   , asCallable
   , LabeledValue(..)
   , BaseGlobalVar(..)
+  -- * Exceptions
+  , TranslationException(..)
   ) where
 
+import qualified Control.Exception as X
+import           Control.Monad.ST ( stToIO )
+import qualified Control.Monad.State.Class as MS
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Map as MapF
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Core as CCC
+import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.CFG.SSAConversion as CCS
-import qualified Lang.Crucible.Simulator as CS
+import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
+import qualified What4.ProgramLoc as WP
+import           Unsafe.Coerce ( unsafeCoerce )
 
 import qualified Language.ASL.Syntax as AS
 
@@ -45,8 +58,8 @@ import qualified Language.ASL.Syntax as AS
 -- locations touched by that function.
 data FunctionSignature sym init ret tp =
   FunctionSignature { funcSigRepr :: WT.BaseTypeRepr tp
-                    , funcArgReprs :: Ctx.Assignment (LabeledValue String CT.TypeRepr) init
-                    , funcGlobalReprs :: Some (Ctx.Assignment (LabeledValue String CT.TypeRepr))
+                    , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+                    , funcGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
                     }
   deriving (Show)
 
@@ -78,8 +91,8 @@ instance ShowF BaseGlobalVar
 -- indirect updates)
 data ProcedureSignature sym init ret tps =
   ProcedureSignature { procSigRepr :: Ctx.Assignment BaseGlobalVar tps
-                     , procArgReprs :: Ctx.Assignment (LabeledValue String CT.TypeRepr) init
-                     , procGlobalReprs :: Some (Ctx.Assignment (LabeledValue String CT.TypeRepr))
+                     , procArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+                     , procGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
                      }
   deriving (Show)
 
@@ -122,8 +135,122 @@ computeDefinitionSignature = undefined
 computeInstructionSignature :: [(String, SomeSignature sym)] -> [AS.Stmt] -> IO (SomeSignature sym)
 computeInstructionSignature = undefined
 
-functionToCrucible :: FunctionSignature sym init ret tp -> [AS.Stmt] -> IO (CCC.SomeCFG () init ret)
-functionToCrucible = undefined
+functionToCrucible :: (ret ~ CT.BaseToType tp)
+                   => FunctionSignature sym init ret tp
+                   -> CFH.FnHandle init ret
+                   -> [AS.Stmt]
+                   -> IO (CCC.SomeCFG () init ret)
+functionToCrucible sig hdl stmts = do
+  let pos = WP.InternalPos
+  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef sig stmts)
+  return (CCS.toSSA cfg0)
+
+funcDef :: (ret ~ CT.BaseToType tp)
+        => FunctionSignature sym init ret tp
+        -> [AS.Stmt]
+        -> Ctx.Assignment (CCG.Atom s) init
+        -> (TranslationState ret s, CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s ret))
+funcDef sig stmts args = (initialState sig args, defineFunction sig stmts args)
+
+initialState :: forall sym init ret tp s
+              . FunctionSignature sym init ret tp
+             -> Ctx.Assignment (CCG.Atom s) init
+             -> TranslationState ret s
+initialState sig args = TranslationState m1 MapF.empty (error "globals")
+  where
+    m1 = Ctx.forIndex (Ctx.size args) addArgumentAtom MapF.empty
+    addArgumentAtom :: forall tp0
+                     . MapF.MapF TypedName (CCG.Atom s)
+                    -> Ctx.Index init tp0
+                    -> MapF.MapF TypedName (CCG.Atom s)
+    addArgumentAtom m idx =
+      let atom = args Ctx.! idx
+          LabeledValue argName _ = funcArgReprs sig Ctx.! idx
+      in MapF.insert (TypedName argName) atom m
+
+newtype TypedName tp = TypedName T.Text
+
+instance TestEquality TypedName where
+  testEquality (TypedName t1) (TypedName t2)
+    | t1 == t2 = Just (unsafeCoerce Refl)
+    | otherwise = Nothing
+
+instance OrdF TypedName where
+  compareF (TypedName t1) (TypedName t2) = unsafeCoerce (fromOrdering (compare t1 t2))
+
+-- Will track the mapping from (ASL) identifiers to Crucible Atoms
+data TranslationState ret s =
+  TranslationState { tsArgAtoms :: MapF.MapF TypedName (CCG.Atom s)
+                   -- ^ Atoms corresponding to function/procedure inputs.  We assume that these are
+                   -- immutable and allocated before we start executing.
+                   , tsVarRefs :: MapF.MapF TypedName (CCG.Reg s)
+                   -- ^ Local registers containing values; these are created on first use
+                   , tsGlobals :: MapF.MapF TypedName CCG.GlobalVar
+                   -- ^ Global variables corresponding to machine state (e.g., machine registers).
+                   -- These are allocated before we start executing based on the list of
+                   -- transitively-referenced globals in the signature.
+                   }
+
+lookupVarRef :: T.Text -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s tp)
+lookupVarRef = undefined
+
+defineFunction :: (ret ~ CT.BaseToType tp)
+               => FunctionSignature sym init ret tp
+               -> [AS.Stmt]
+               -> Ctx.Assignment (CCG.Atom s) init
+               -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s ret)
+defineFunction sig stmts args = do
+  mapM_ (translateStatement (CT.baseToType (funcSigRepr sig))) stmts
+  -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
+  -- translating.
+  X.throw (NoReturnInFunction (SomeFunctionSignature sig))
+
+translateStatement :: CT.TypeRepr ret -> AS.Stmt -> CCG.Generator () h s (TranslationState ret) ret ()
+translateStatement rep stmt =
+  case stmt of
+    AS.StmtReturn Nothing
+      | Just Refl <- testEquality rep CT.UnitRepr -> CCG.returnFromFunction (CCG.App CCE.EmptyApp)
+      | otherwise -> X.throw (InvalidReturnType CT.UnitRepr)
+    AS.StmtReturn (Just expr) -> do
+      a <- translateExpr rep expr
+      CCG.returnFromFunction (CCG.AtomExpr a)
+
+-- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
+--
+-- Atoms may be written to registers, which are mutable locals
+translateExpr :: CT.TypeRepr tp -> AS.Expr -> CCG.Generator () h s (TranslationState ret) ret (CCG.Atom s tp)
+translateExpr rep expr =
+  case expr of
+    AS.ExprLitInt i
+      | Just Refl <- testEquality rep CT.IntegerRepr -> CCG.mkAtom (CCG.App (CCE.IntLit i))
+      | otherwise -> X.throw (UnexpectedExprType rep expr)
+    AS.ExprLitBin bits -> do
+      let nBits = length bits
+      case NR.mkNatRepr (fromIntegral nBits) of
+        Some nr ->
+          case NR.isZeroOrGT1 nr of
+            Left _ -> X.throw InvalidZeroLengthBitvector
+            Right NR.LeqProof -> do
+              let bvrep = CT.BVRepr nr
+              if | Just Refl <- testEquality rep bvrep ->
+                   CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
+                 | otherwise -> X.throw (UnexpectedBitvectorLength rep bvrep)
+
+    AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
+
+bitsToInteger :: [Bool] -> Integer
+bitsToInteger = undefined
 
 procedureToCrucible :: ProcedureSignature sym init ret tps -> [AS.Stmt] -> IO (CCC.SomeCFG () init ret)
 procedureToCrucible = undefined
+
+data TranslationException = forall sym . NoReturnInFunction (SomeSignature sym)
+                          | forall tp . InvalidReturnType (CT.TypeRepr tp)
+                          | forall tp .  UnexpectedExprType (CT.TypeRepr tp) AS.Expr
+                          | UnsupportedExpr AS.Expr
+                          | InvalidZeroLengthBitvector
+                          | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
+
+deriving instance Show TranslationException
+
+instance X.Exception TranslationException

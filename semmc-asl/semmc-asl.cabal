@@ -21,6 +21,7 @@ library
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
                        text >= 1 && < 2,
+                       mtl,
                        lens,
                        parameterized-utils,
                        crucible,
