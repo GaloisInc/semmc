@@ -1,8 +1,10 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 -- | Convert fragments of ASL code into Crucible CFGs
 module SemMC.ASL.Crucible (
     functionToCrucible
@@ -238,30 +240,25 @@ translateStatement rep stmt =
       | Just Refl <- testEquality rep CT.UnitRepr -> CCG.returnFromFunction (CCG.App CCE.EmptyApp)
       | otherwise -> X.throw (InvalidReturnType CT.UnitRepr)
     AS.StmtReturn (Just expr) -> do
-      a <- translateExpr rep expr
-      CCG.returnFromFunction (CCG.AtomExpr a)
+      Some a <- translateExpr expr
+      if | Just Refl <- testEquality (CCG.typeOfAtom a) rep ->
+           CCG.returnFromFunction (CCG.AtomExpr a)
+         | otherwise -> X.throw (UnexpectedExprType (CCG.typeOfAtom a) expr)
 
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
-translateExpr :: CT.TypeRepr tp -> AS.Expr -> CCG.Generator () h s (TranslationState ret) ret (CCG.Atom s tp)
-translateExpr rep expr =
+translateExpr :: AS.Expr -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
+translateExpr expr =
   case expr of
-    AS.ExprLitInt i
-      | Just Refl <- testEquality rep CT.IntegerRepr -> CCG.mkAtom (CCG.App (CCE.IntLit i))
-      | otherwise -> X.throw (UnexpectedExprType rep expr)
+    AS.ExprLitInt i -> Some <$> CCG.mkAtom (CCG.App (CCE.IntLit i))
     AS.ExprLitBin bits -> do
       let nBits = length bits
       case NR.mkNatRepr (fromIntegral nBits) of
-        Some nr ->
-          case NR.isZeroOrGT1 nr of
-            Left _ -> X.throw InvalidZeroLengthBitvector
-            Right NR.LeqProof -> do
-              let bvrep = CT.BVRepr nr
-              if | Just Refl <- testEquality rep bvrep ->
-                   CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
-                 | otherwise -> X.throw (UnexpectedBitvectorLength rep bvrep)
-
+        Some nr
+          | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
+            Some <$> CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
+          | otherwise -> X.throw InvalidZeroLengthBitvector
     AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
 
 bitsToInteger :: [Bool] -> Integer
