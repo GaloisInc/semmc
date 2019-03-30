@@ -35,10 +35,10 @@ import qualified Control.Monad.State.Class as MS
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -160,17 +160,17 @@ initialState :: forall sym init ret tp s
               . FunctionSignature sym init ret tp
              -> Ctx.Assignment (CCG.Atom s) init
              -> TranslationState ret s
-initialState sig args = TranslationState m1 MapF.empty (error "globals")
+initialState sig args = TranslationState m1 Map.empty (error "globals")
   where
-    m1 = Ctx.forIndex (Ctx.size args) addArgumentAtom MapF.empty
+    m1 = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
     addArgumentAtom :: forall tp0
-                     . MapF.MapF TypedName (CCG.Atom s)
+                     . Map.Map T.Text (Some (CCG.Atom s))
                     -> Ctx.Index init tp0
-                    -> MapF.MapF TypedName (CCG.Atom s)
+                    -> Map.Map T.Text (Some (CCG.Atom s))
     addArgumentAtom m idx =
       let atom = args Ctx.! idx
           LabeledValue argName _ = funcArgReprs sig Ctx.! idx
-      in MapF.insert (TypedName argName) atom m
+      in Map.insert argName (Some atom) m
 
 newtype TypedName tp = TypedName T.Text
 
@@ -184,42 +184,39 @@ instance OrdF TypedName where
 
 -- Will track the mapping from (ASL) identifiers to Crucible Atoms
 data TranslationState ret s =
-  TranslationState { tsArgAtoms :: MapF.MapF TypedName (CCG.Atom s)
+  TranslationState { tsArgAtoms :: Map.Map T.Text (Some (CCG.Atom s))
                    -- ^ Atoms corresponding to function/procedure inputs.  We assume that these are
                    -- immutable and allocated before we start executing.
-                   , tsVarRefs :: MapF.MapF TypedName (CCG.Reg s)
+                   , tsVarRefs :: Map.Map T.Text (Some (CCG.Reg s))
                    -- ^ Local registers containing values; these are created on first use
-                   , tsGlobals :: MapF.MapF TypedName CCG.GlobalVar
+                   , tsGlobals :: Map.Map T.Text (Some CCG.GlobalVar)
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
                    -- transitively-referenced globals in the signature.
                    }
 
-data ExprConstructor h s ret tp where
+data ExprConstructor h s ret where
   ExprConstructor :: a tp
                   -> (a tp -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s tp))
-                  -> ExprConstructor h  s ret tp
+                  -> ExprConstructor h s ret
 
-lookupVarRef :: forall tp h s ret
-              . CT.TypeRepr tp
-             -> T.Text
-             -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s tp)
-lookupVarRef rep name = do
+lookupVarRef :: forall h s ret
+              . T.Text
+             -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Expr () s))
+lookupVarRef name = do
   ts <- MS.get
-  let k :: TypedName tp
-      k = TypedName name
-  let err = X.throw (UnboundName rep name)
-  case fromMaybe err (lookupArg k ts <|> lookupRef k ts <|> lookupGlobal k ts) of
-    ExprConstructor e con -> con e
+  let err = X.throw (UnboundName name)
+  case fromMaybe err (lookupArg ts <|> lookupRef ts <|> lookupGlobal ts) of
+    ExprConstructor e con -> Some <$> con e
   where
-    lookupArg k ts = do
-      e <- CCG.AtomExpr <$> MapF.lookup k (tsArgAtoms ts)
-      return (ExprConstructor e return)
-    lookupRef k ts = do
-      r <- MapF.lookup k (tsVarRefs ts)
+    lookupArg ts = do
+      Some e <- Map.lookup name (tsArgAtoms ts)
+      return (ExprConstructor (CCG.AtomExpr e) return)
+    lookupRef ts = do
+      Some r <- Map.lookup name (tsVarRefs ts)
       return (ExprConstructor r CCG.readReg)
-    lookupGlobal k ts = do
-      g <- MapF.lookup k (tsGlobals ts)
+    lookupGlobal ts = do
+      Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g CCG.readGlobal)
 
 defineFunction :: (ret ~ CT.BaseToType tp)
@@ -259,7 +256,11 @@ translateExpr expr =
           | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
             Some <$> CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
           | otherwise -> X.throw InvalidZeroLengthBitvector
+    AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
+      Some e <- lookupVarRef ident
+      Some <$> CCG.mkAtom e
     AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
+    AS.ExprLitString {} -> X.throw (UnsupportedExpr expr)
 
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger = undefined
@@ -273,7 +274,7 @@ data TranslationException = forall sym . NoReturnInFunction (SomeSignature sym)
                           | UnsupportedExpr AS.Expr
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
-                          | forall tp . UnboundName (CT.TypeRepr tp) T.Text
+                          | UnboundName T.Text
 
 deriving instance Show TranslationException
 
