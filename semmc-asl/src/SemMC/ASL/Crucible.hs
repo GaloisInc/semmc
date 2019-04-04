@@ -2,9 +2,11 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 -- | Convert fragments of ASL code into Crucible CFGs
 module SemMC.ASL.Crucible (
     functionToCrucible
@@ -24,6 +26,7 @@ module SemMC.ASL.Crucible (
   , asCallable
   , LabeledValue(..)
   , BaseGlobalVar(..)
+  , Overrides(..)
   -- * Exceptions
   , TranslationException(..)
   ) where
@@ -140,21 +143,23 @@ computeInstructionSignature :: [(String, SomeSignature sym)] -> [AS.Stmt] -> IO 
 computeInstructionSignature = undefined
 
 functionToCrucible :: (ret ~ CT.BaseToType tp)
-                   => FunctionSignature sym init ret tp
+                   => Overrides
+                   -> FunctionSignature sym init ret tp
                    -> CFH.FnHandle init ret
                    -> [AS.Stmt]
                    -> IO (CCC.SomeCFG () init ret)
-functionToCrucible sig hdl stmts = do
+functionToCrucible ov sig hdl stmts = do
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef sig stmts)
+  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef ov sig stmts)
   return (CCS.toSSA cfg0)
 
 funcDef :: (ret ~ CT.BaseToType tp)
-        => FunctionSignature sym init ret tp
+        => Overrides
+        -> FunctionSignature sym init ret tp
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState ret s, CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s ret))
-funcDef sig stmts args = (initialState sig args, defineFunction sig stmts args)
+funcDef ov sig stmts args = (initialState sig args, defineFunction ov sig stmts args)
 
 initialState :: forall sym init ret tp s
               . FunctionSignature sym init ret tp
@@ -219,48 +224,85 @@ lookupVarRef name = do
       Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g CCG.readGlobal)
 
+data Overrides =
+  Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator () h s (TranslationState ret) ret ())
+            , overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s)))
+            }
+
 defineFunction :: (ret ~ CT.BaseToType tp)
-               => FunctionSignature sym init ret tp
+               => Overrides
+               -> FunctionSignature sym init ret tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
                -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s ret)
-defineFunction sig stmts args = do
-  mapM_ (translateStatement (CT.baseToType (funcSigRepr sig))) stmts
+defineFunction ov sig stmts args = do
+  mapM_ (translateStatement ov (CT.baseToType (funcSigRepr sig))) stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
-translateStatement :: CT.TypeRepr ret -> AS.Stmt -> CCG.Generator () h s (TranslationState ret) ret ()
-translateStatement rep stmt =
-  case stmt of
-    AS.StmtReturn Nothing
-      | Just Refl <- testEquality rep CT.UnitRepr -> CCG.returnFromFunction (CCG.App CCE.EmptyApp)
-      | otherwise -> X.throw (InvalidReturnType CT.UnitRepr)
-    AS.StmtReturn (Just expr) -> do
-      Some a <- translateExpr expr
-      if | Just Refl <- testEquality (CCG.typeOfAtom a) rep ->
-           CCG.returnFromFunction (CCG.AtomExpr a)
-         | otherwise -> X.throw (UnexpectedExprType (CCG.typeOfAtom a) expr)
+translateStatement :: Overrides -> CT.TypeRepr ret -> AS.Stmt -> CCG.Generator () h s (TranslationState ret) ret ()
+translateStatement ov rep stmt
+  | Just so <- overrideStmt ov stmt = so
+  | otherwise =
+    case stmt of
+      AS.StmtReturn Nothing
+        | Just Refl <- testEquality rep CT.UnitRepr -> CCG.returnFromFunction (CCG.App CCE.EmptyApp)
+        | otherwise -> X.throw (InvalidReturnType CT.UnitRepr)
+      AS.StmtReturn (Just expr) -> do
+        Some a <- translateExpr ov expr
+        Refl <- assertAtomType expr rep a
+        CCG.returnFromFunction (CCG.AtomExpr a)
+      AS.StmtIf clauses melse -> translateIf ov rep clauses melse
+
+translateIf :: Overrides
+            -> CT.TypeRepr ret
+            -> [(AS.Expr, [AS.Stmt])]
+            -> Maybe [AS.Stmt]
+            -> CCG.Generator () h s (TranslationState ret) ret ()
+translateIf ov rep clauses melse =
+  case clauses of
+    [] -> mapM_ (translateStatement ov rep) (fromMaybe [] melse)
+    (cond, body) : rest -> do
+      Some condAtom <- translateExpr ov cond
+      Refl <- assertAtomType cond CT.BoolRepr condAtom
+      let genThen = mapM_ (translateStatement ov rep) body
+      let genElse = translateIf ov rep rest melse
+      CCG.ifte_ (CCG.AtomExpr condAtom) genThen genElse
+
+assertAtomType :: AS.Expr
+               -- ^ Expression that was translated
+               -> CT.TypeRepr tp1
+               -- ^ Expected type
+               -> CCG.Atom s tp2
+               -- ^ Translation (which contains the actual type)
+               -> CCG.Generator () h s (TranslationState ret) ret (tp1 :~: tp2)
+assertAtomType expr expectedRepr atom =
+  case testEquality expectedRepr (CCG.typeOfAtom atom) of
+    Nothing -> X.throw (UnexpectedExprType expr (CCG.typeOfAtom atom) expectedRepr)
+    Just Refl -> return Refl
 
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
-translateExpr :: AS.Expr -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
-translateExpr expr =
-  case expr of
-    AS.ExprLitInt i -> Some <$> CCG.mkAtom (CCG.App (CCE.IntLit i))
-    AS.ExprLitBin bits -> do
-      let nBits = length bits
-      case NR.mkNatRepr (fromIntegral nBits) of
-        Some nr
-          | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
-            Some <$> CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
-          | otherwise -> X.throw InvalidZeroLengthBitvector
-    AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
-      Some e <- lookupVarRef ident
-      Some <$> CCG.mkAtom e
-    AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
-    AS.ExprLitString {} -> X.throw (UnsupportedExpr expr)
+translateExpr :: Overrides -> AS.Expr -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
+translateExpr ov expr
+  | Just eo <- overrideExpr ov expr = eo
+  | otherwise =
+    case expr of
+      AS.ExprLitInt i -> Some <$> CCG.mkAtom (CCG.App (CCE.IntLit i))
+      AS.ExprLitBin bits -> do
+        let nBits = length bits
+        case NR.mkNatRepr (fromIntegral nBits) of
+          Some nr
+            | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
+              Some <$> CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
+            | otherwise -> X.throw InvalidZeroLengthBitvector
+      AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
+        Some e <- lookupVarRef ident
+        Some <$> CCG.mkAtom e
+      AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
+      AS.ExprLitString {} -> X.throw (UnsupportedExpr expr)
 
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger = undefined
@@ -270,7 +312,8 @@ procedureToCrucible = undefined
 
 data TranslationException = forall sym . NoReturnInFunction (SomeSignature sym)
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
-                          | forall tp .  UnexpectedExprType (CT.TypeRepr tp) AS.Expr
+                          | forall tp1 tp2 .  UnexpectedExprType AS.Expr (CT.TypeRepr tp1) (CT.TypeRepr tp2)
+                          -- ^ Expression, actual type, expected type
                           | UnsupportedExpr AS.Expr
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
