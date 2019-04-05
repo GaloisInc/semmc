@@ -281,6 +281,29 @@ translateStatement ov rep stmt
               return (CCG.AtomExpr testA)
         let bodyG = mapM_ (translateStatement ov rep) body
         CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+      AS.StmtRepeat body test -> translateRepeat ov rep body test
+
+translateRepeat :: (CCE.IsSyntaxExtension ext)
+                => Overrides ext
+                -> CT.TypeRepr ret
+                -> [AS.Stmt]
+                -> AS.Expr
+                -> CCG.Generator ext h s (TranslationState ret) ret ()
+translateRepeat ov rtp body test = do
+  cond_lbl <- CCG.newLabel
+  loop_lbl <- CCG.newLabel
+  exit_lbl <- CCG.newLabel
+
+  CCG.defineBlock loop_lbl $ do
+    mapM_ (translateStatement ov rtp) body
+    CCG.jump cond_lbl
+
+  CCG.defineBlock cond_lbl $ do
+    Some testA <- translateExpr ov test
+    Refl <- assertAtomType test CT.BoolRepr testA
+    CCG.branch (CCG.AtomExpr testA) loop_lbl exit_lbl
+
+  CCG.continue exit_lbl (CCG.jump loop_lbl)
 
 translateDefinedVar :: (CCE.IsSyntaxExtension ext)
                     => Overrides ext
