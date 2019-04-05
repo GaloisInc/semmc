@@ -6,6 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 -- | Convert fragments of ASL code into Crucible CFGs
 module SemMC.ASL.Crucible (
@@ -143,23 +145,23 @@ computeDefinitionSignature = undefined
 computeInstructionSignature :: [(String, SomeSignature sym)] -> [AS.Stmt] -> IO (SomeSignature sym)
 computeInstructionSignature = undefined
 
-functionToCrucible :: (ret ~ CT.BaseToType tp)
-                   => Overrides
+functionToCrucible :: (CCE.IsSyntaxExtension ext, ret ~ CT.BaseToType tp)
+                   => Overrides ext
                    -> FunctionSignature sym init ret tp
                    -> CFH.FnHandle init ret
                    -> [AS.Stmt]
-                   -> IO (CCC.SomeCFG () init ret)
+                   -> IO (CCC.SomeCFG ext init ret)
 functionToCrucible ov sig hdl stmts = do
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef ov sig stmts)
   return (CCS.toSSA cfg0)
 
-funcDef :: (ret ~ CT.BaseToType tp)
-        => Overrides
+funcDef :: (CCE.IsSyntaxExtension ext, ret ~ CT.BaseToType tp)
+        => Overrides ext
         -> FunctionSignature sym init ret tp
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState ret s, CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s ret))
+        -> (TranslationState ret s, CCG.Generator ext h s (TranslationState ret) ret (CCG.Expr ext s ret))
 funcDef ov sig stmts args = (initialState sig args, defineFunction ov sig stmts args)
 
 initialState :: forall sym init ret tp s
@@ -201,14 +203,15 @@ data TranslationState ret s =
                    -- transitively-referenced globals in the signature.
                    }
 
-data ExprConstructor h s ret where
+data ExprConstructor ext h s ret where
   ExprConstructor :: a tp
-                  -> (a tp -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s tp))
-                  -> ExprConstructor h s ret
+                  -> (a tp -> CCG.Generator ext h s (TranslationState ret) ret (CCG.Expr ext s tp))
+                  -> ExprConstructor ext h s ret
 
-lookupVarRef :: forall h s ret
-              . T.Text
-             -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Expr () s))
+lookupVarRef :: forall ext h s ret
+              . (CCE.IsSyntaxExtension ext)
+             => T.Text
+             -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Expr ext s))
 lookupVarRef name = do
   ts <- MS.get
   let err = X.throw (UnboundName name)
@@ -225,24 +228,28 @@ lookupVarRef name = do
       Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g CCG.readGlobal)
 
-data Overrides =
-  Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator () h s (TranslationState ret) ret ())
-            , overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s)))
+data Overrides ext =
+  Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator ext h s (TranslationState ret) ret ())
+            , overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s)))
             }
 
-defineFunction :: (ret ~ CT.BaseToType tp)
-               => Overrides
+defineFunction :: (CCE.IsSyntaxExtension ext, ret ~ CT.BaseToType tp)
+               => Overrides ext
                -> FunctionSignature sym init ret tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
-               -> CCG.Generator () h s (TranslationState ret) ret (CCG.Expr () s ret)
+               -> CCG.Generator ext h s (TranslationState ret) ret (CCG.Expr ext s ret)
 defineFunction ov sig stmts args = do
   mapM_ (translateStatement ov (CT.baseToType (funcSigRepr sig))) stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
-translateStatement :: Overrides -> CT.TypeRepr ret -> AS.Stmt -> CCG.Generator () h s (TranslationState ret) ret ()
+translateStatement :: (CCE.IsSyntaxExtension ext)
+                   => Overrides ext
+                   -> CT.TypeRepr ret
+                   -> AS.Stmt
+                   -> CCG.Generator ext h s (TranslationState ret) ret ()
 translateStatement ov rep stmt
   | Just so <- overrideStmt ov stmt = so
   | otherwise =
@@ -267,12 +274,20 @@ translateStatement ov rep stmt
         -- ASL doesn't attempt to modify a constant.
         translateDefinedVar ov ty ident expr
       AS.StmtAssign lval expr -> translateAssignment ov lval expr
+      AS.StmtWhile test body -> do
+        let testG = do
+              Some testA <- translateExpr ov test
+              Refl <- assertAtomType test CT.BoolRepr testA
+              return (CCG.AtomExpr testA)
+        let bodyG = mapM_ (translateStatement ov rep) body
+        CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
-translateDefinedVar :: Overrides
+translateDefinedVar :: (CCE.IsSyntaxExtension ext)
+                    => Overrides ext
                     -> AS.Type
                     -> AS.Identifier
                     -> AS.Expr
-                    -> CCG.Generator () h s (TranslationState ret) ret ()
+                    -> CCG.Generator ext h s (TranslationState ret) ret ()
 translateDefinedVar ov ty ident expr =
   case translateType ty of
     Some expected -> do
@@ -289,10 +304,11 @@ translateDefinedVar ov ty ident expr =
 -- This case is interesting, as assignments can be to locals or globals.
 --
 -- NOTE: We are assuming that there cannot be assignments to arguments.
-translateAssignment :: Overrides
+translateAssignment :: (CCE.IsSyntaxExtension ext)
+                    => Overrides ext
                     -> AS.LValExpr
                     -> AS.Expr
-                    -> CCG.Generator () h s (TranslationState ret) ret ()
+                    -> CCG.Generator ext h s (TranslationState ret) ret ()
 translateAssignment ov lval e = do
   Some atom <- translateExpr ov e
   case lval of
@@ -312,9 +328,10 @@ translateAssignment ov lval e = do
             Nothing -> X.throw (UnboundName ident)
 
 -- | Put a new local in scope and initialize it to an undefined value
-declareUndefinedVar :: AS.Type
+declareUndefinedVar :: (CCE.IsSyntaxExtension ext)
+                    => AS.Type
                     -> AS.Identifier
-                    -> CCG.Generator () h s (TranslationState ret) ret ()
+                    -> CCG.Generator ext h s (TranslationState ret) ret ()
 declareUndefinedVar ty ident = do
   locals <- MS.gets tsVarRefs
   when (Map.member ident locals) $ do
@@ -327,11 +344,12 @@ declareUndefinedVar ty ident = do
 translateType :: AS.Type -> Some CT.TypeRepr
 translateType = error "translateType unimplemented"
 
-translateIf :: Overrides
+translateIf :: (CCE.IsSyntaxExtension ext)
+            => Overrides ext
             -> CT.TypeRepr ret
             -> [(AS.Expr, [AS.Stmt])]
             -> Maybe [AS.Stmt]
-            -> CCG.Generator () h s (TranslationState ret) ret ()
+            -> CCG.Generator ext h s (TranslationState ret) ret ()
 translateIf ov rep clauses melse =
   case clauses of
     [] -> mapM_ (translateStatement ov rep) (fromMaybe [] melse)
@@ -348,7 +366,7 @@ assertAtomType :: AS.Expr
                -- ^ Expected type
                -> CCG.Atom s tp2
                -- ^ Translation (which contains the actual type)
-               -> CCG.Generator () h s (TranslationState ret) ret (tp1 :~: tp2)
+               -> CCG.Generator ext h s (TranslationState ret) ret (tp1 :~: tp2)
 assertAtomType expr expectedRepr atom =
   case testEquality expectedRepr (CCG.typeOfAtom atom) of
     Nothing -> X.throw (UnexpectedExprType expr (CCG.typeOfAtom atom) expectedRepr)
@@ -357,7 +375,10 @@ assertAtomType expr expectedRepr atom =
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
-translateExpr :: Overrides -> AS.Expr -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
+translateExpr :: (CCE.IsSyntaxExtension ext)
+              => Overrides ext
+              -> AS.Expr
+              -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
 translateExpr ov expr
   | Just eo <- overrideExpr ov expr = eo
   | otherwise =
@@ -383,64 +404,190 @@ translateExpr ov expr
           Some asgn -> do
             let reprs = FC.fmapFC CCG.typeOfAtom asgn
             Some <$> CCG.mkAtom (CCG.App (CCE.MkStruct reprs (FC.fmapFC CCG.AtomExpr asgn)))
+      AS.ExprInSet e elts -> do
+        Some atom <- translateExpr ov e
+        when (null elts) $ X.throw (EmptySetElementList expr)
+        preds <- mapM (translateSetElementTest ov expr atom) elts
+        Some <$> CCG.mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
+      AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
 
-translateBinaryOp :: Overrides
+-- | Translate the expression form of a conditional into a Crucible atom
+translateIfExpr :: (CCE.IsSyntaxExtension ext)
+                => Overrides ext
+                -> AS.Expr
+                -> [(AS.Expr, AS.Expr)]
+                -> AS.Expr
+                -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
+translateIfExpr ov orig clauses elseExpr =
+  case clauses of
+    [] -> X.throw (MalformedConditionalExpression orig)
+    [(test, res)] -> do
+      Some testA <- translateExpr ov test
+      Some resA <- translateExpr ov res
+      Some elseA <- translateExpr ov elseExpr
+      Refl <- assertAtomType test CT.BoolRepr testA
+      Refl <- assertAtomType res (CCG.typeOfAtom elseA) resA
+      case CT.asBaseType (CCG.typeOfAtom elseA) of
+        CT.NotBaseType -> X.throw (ExpectedBaseType orig (CCG.typeOfAtom elseA))
+        CT.AsBaseType btr ->
+          Some <$> CCG.mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr elseA)))
+    (test, res) : rest -> do
+      Some trA <- translateIfExpr ov orig rest elseExpr
+      Some testA <- translateExpr ov test
+      Some resA <- translateExpr ov res
+      Refl <- assertAtomType test CT.BoolRepr testA
+      Refl <- assertAtomType res (CCG.typeOfAtom trA) resA
+      case CT.asBaseType (CCG.typeOfAtom trA) of
+        CT.NotBaseType -> X.throw (ExpectedBaseType orig (CCG.typeOfAtom trA))
+        CT.AsBaseType btr ->
+          Some <$> CCG.mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr trA)))
+
+-- | Translate set element tests
+--
+-- Single element tests are translated into a simple equality test
+--
+-- Ranges are translated as a conjunction of inclusive tests. x IN [5..10] => 5 <= x && x <= 10
+translateSetElementTest :: (CCE.IsSyntaxExtension ext)
+                        => Overrides ext
+                        -> AS.Expr
+                        -> CCG.Atom s tp
+                        -> AS.SetElement
+                        -> CCG.Generator ext h s (TranslationState ret) ret (CCG.Expr ext s CT.BoolType)
+translateSetElementTest ov e0 a0 elt =
+  case elt of
+    AS.SetEltSingle expr -> do
+      Some atom1 <- translateExpr ov expr
+      Refl <- assertAtomType expr (CCG.typeOfAtom a0) atom1
+      Some atom2 <- applyBinOp eqOp (e0, a0) (expr, atom1)
+      Refl <- assertAtomType expr CT.BoolRepr atom2
+      return (CCG.AtomExpr atom2)
+    AS.SetEltRange lo hi -> do
+      Some loA <- translateExpr ov lo
+      Some hiA <- translateExpr ov hi
+      Refl <- assertAtomType lo (CCG.typeOfAtom a0) loA
+      Refl <- assertAtomType hi (CCG.typeOfAtom a0) hiA
+      Some loTest <- applyBinOp leOp (lo, loA) (e0, a0)
+      Some hiTest <- applyBinOp leOp (e0, a0) (hi, hiA)
+      Refl <- assertAtomType lo CT.BoolRepr loTest
+      Refl <- assertAtomType hi CT.BoolRepr hiTest
+      return (CCG.App (CCE.And (CCG.AtomExpr loTest) (CCG.AtomExpr hiTest)))
+
+
+
+disjoin :: (CCE.IsSyntaxExtension ext)
+        => CCG.Expr ext s CT.BoolType
+        -> CCG.Expr ext s CT.BoolType
+        -> CCG.Expr ext s CT.BoolType
+disjoin p1 p2 = CCG.App (CCE.Or p1 p2)
+
+translateBinaryOp :: forall ext h s ret
+                   . (CCE.IsSyntaxExtension ext)
+                  => Overrides ext
                   -> AS.BinOp
                   -> AS.Expr
                   -> AS.Expr
-                  -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
+                  -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
 translateBinaryOp ov op e1 e2 = do
   Some a1 <- translateExpr ov e1
   Some a2 <- translateExpr ov e2
+  let p1 = (e1, a1)
+  let p2 = (e2, a2)
   case op of
     AS.BinOpPlusPlus -> X.throw (UnsupportedBinaryOperator op)
-    AS.BinOpLogicalAnd -> logicalBinOp CCE.And (e1, a1) (e2, a2)
-    AS.BinOpLogicalOr -> logicalBinOp CCE.Or (e1, a1) (e2, a2)
-    AS.BinOpBitwiseOr -> bvBinOp CCE.BVOr (e1, a1) (e2, a2)
-    AS.BinOpBitwiseAnd -> bvBinOp CCE.BVAnd (e1, a1) (e2, a2)
-    AS.BinOpBitwiseXor -> bvBinOp CCE.BVXor (e1, a1) (e2, a2)
-    AS.BinOpEQ -> compareBinOp CCE.BVEq CCE.NatEq CCE.IntEq (e1, a1) (e2, a2)
+    AS.BinOpLogicalAnd -> logicalBinOp CCE.And p1 p2
+    AS.BinOpLogicalOr -> logicalBinOp CCE.Or p1 p2
+    AS.BinOpBitwiseOr -> bvBinOp CCE.BVOr p1 p2
+    AS.BinOpBitwiseAnd -> bvBinOp CCE.BVAnd p1 p2
+    AS.BinOpBitwiseXor -> bvBinOp CCE.BVXor p1 p2
+    AS.BinOpEQ -> applyBinOp eqOp p1 p2
     AS.BinOpNEQ -> do
-      Some atom <- compareBinOp CCE.BVEq CCE.NatEq CCE.IntEq (e1, a1) (e2, a2)
+      Some atom <- applyBinOp eqOp p1 p2
       Refl <- assertAtomType (AS.ExprBinOp op e1 e2) CT.BoolRepr atom
       Some <$> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
     AS.BinOpGT -> do
       -- NOTE: We always use unsigned comparison for bitvectors - is that correct?
-      Some atom <- compareBinOp CCE.BVUle CCE.NatLe CCE.IntLe (e1, a1) (e2, a2)
+      Some atom <- applyBinOp leOp p1 p2
       Refl <- assertAtomType (AS.ExprBinOp op e1 e2) CT.BoolRepr atom
       Some <$> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
-    AS.BinOpLTEQ ->
-      compareBinOp CCE.BVUle CCE.NatLe CCE.IntLe (e1, a1) (e2, a2)
-    AS.BinOpLT ->
-      compareBinOp CCE.BVUlt CCE.NatLt CCE.IntLt (e1, a1) (e2, a2)
+    AS.BinOpLTEQ -> applyBinOp leOp p1 p2
+    AS.BinOpLT -> applyBinOp ltOp p1 p2
     AS.BinOpGTEQ -> do
-      Some atom <- compareBinOp CCE.BVUlt CCE.NatLt CCE.IntLt (e1, a1) (e2, a2)
+      Some atom <- applyBinOp ltOp p1 p2
       Refl <- assertAtomType (AS.ExprBinOp op e1 e2) CT.BoolRepr atom
       Some <$> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
+    AS.BinOpAdd -> applyBinOp addOp p1 p2
+    AS.BinOpSub -> applyBinOp subOp p1 p2
+    AS.BinOpMul -> applyBinOp mulOp p1 p2
+    AS.BinOpMod -> applyBinOp modOp p1 p2
+    AS.BinOpShiftLeft -> bvBinOp CCE.BVShl p1 p2
+    AS.BinOpShiftRight -> bvBinOp CCE.BVLshr p1 p2
+    -- FIXME: What is the difference between BinOpDiv and BinOpDivide?
 
-compareBinOp :: (forall n . (1 WT.<= n) => WT.NatRepr n -> CCG.Expr () s (CT.BVType n) -> CCG.Expr () s (CT.BVType n) -> CCE.App () (CCG.Expr () s) CT.BoolType)
-             -> (CCG.Expr () s CT.NatType -> CCG.Expr () s CT.NatType -> CCE.App () (CCG.Expr () s) CT.BoolType)
-             -> (CCG.Expr () s CT.IntegerType -> CCG.Expr () s CT.IntegerType -> CCE.App () (CCG.Expr () s) CT.BoolType)
-             -> (AS.Expr, CCG.Atom s tp1)
-             -> (AS.Expr, CCG.Atom s tp2)
-             -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
-compareBinOp mkBV mkNat mkInt (e1, a1) (e2, a2) =
+-- Arithmetic operators
+
+addOp :: BinaryOperatorBundle ext s 'SameK
+addOp = BinaryOperatorBundle CCE.BVAdd CCE.NatAdd CCE.IntAdd
+
+subOp :: BinaryOperatorBundle ext s 'SameK
+subOp = BinaryOperatorBundle CCE.BVSub CCE.NatSub CCE.IntSub
+
+mulOp :: BinaryOperatorBundle ext s 'SameK
+mulOp = BinaryOperatorBundle CCE.BVMul CCE.NatMul CCE.IntMul
+
+modOp :: BinaryOperatorBundle ext s 'SameK
+modOp = BinaryOperatorBundle (error "BV mod not supported") CCE.NatMod CCE.IntMod
+
+-- Comparison operators
+
+eqOp :: BinaryOperatorBundle ext s 'BoolK
+eqOp = BinaryOperatorBundle CCE.BVEq CCE.NatEq CCE.IntEq
+
+leOp :: BinaryOperatorBundle ext s 'BoolK
+leOp = BinaryOperatorBundle CCE.BVUle CCE.NatLe CCE.IntLe
+
+ltOp :: BinaryOperatorBundle ext s 'BoolK
+ltOp = BinaryOperatorBundle CCE.BVUlt CCE.NatLt CCE.IntLt
+
+
+data ReturnK = BoolK
+             -- ^ Tag used for comparison operations, which always return BoolType
+             | SameK
+             -- ^ Tag used for other operations, which preserve the type
+
+type family BinaryOperatorReturn (r :: ReturnK) (tp :: CT.CrucibleType) where
+  BinaryOperatorReturn 'BoolK tp = CT.BoolType
+  BinaryOperatorReturn 'SameK tp = tp
+
+data BinaryOperatorBundle ext s (rtp :: ReturnK) =
+  BinaryOperatorBundle { obBV :: forall n . (1 WT.<= n) => WT.NatRepr n -> CCG.Expr ext s (CT.BVType n) -> CCG.Expr ext s (CT.BVType n) -> CCE.App ext (CCG.Expr ext s) (BinaryOperatorReturn rtp (CT.BVType n))
+                       , obNat :: CCG.Expr ext s CT.NatType -> CCG.Expr ext s CT.NatType -> CCE.App ext (CCG.Expr ext s) (BinaryOperatorReturn rtp CT.NatType)
+                       , obInt :: CCG.Expr ext s CT.IntegerType -> CCG.Expr ext s CT.IntegerType -> CCE.App ext (CCG.Expr ext s) (BinaryOperatorReturn rtp CT.IntegerType)
+                       }
+
+-- | Apply a binary operator to two operands, performing the necessary type checks
+applyBinOp :: (CCE.IsSyntaxExtension ext)
+           => BinaryOperatorBundle ext s rtp
+           -> (AS.Expr, CCG.Atom s tp1)
+           -> (AS.Expr, CCG.Atom s tp2)
+           -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
+applyBinOp bundle (e1, a1) (e2, a2) =
   case CCG.typeOfAtom a1 of
     CT.BVRepr nr -> do
       Refl <- assertAtomType e2 (CT.BVRepr nr) a2
-      Some <$> CCG.mkAtom (CCG.App (mkBV nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      Some <$> CCG.mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     CT.NatRepr -> do
       Refl <- assertAtomType e2 CT.NatRepr a2
-      Some <$> CCG.mkAtom (CCG.App (mkNat (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
-    CT.IntegerRepr -> do
+      Some <$> CCG.mkAtom (CCG.App (obNat bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+    CT.IntegerRepr ->do
       Refl <- assertAtomType e2 CT.IntegerRepr a2
-      Some <$> CCG.mkAtom (CCG.App (mkInt (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      Some <$> CCG.mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     _ -> X.throw (UnsupportedComparisonType e1 (CCG.typeOfAtom a1))
 
-bvBinOp :: (forall n . (1 WT.<= n) => WT.NatRepr n -> CCG.Expr () s (CT.BVType n) -> CCG.Expr () s (CT.BVType n) -> CCE.App () (CCG.Expr () s) (CT.BVType n))
+bvBinOp :: (CCE.IsSyntaxExtension ext)
+        => (forall n . (1 WT.<= n) => WT.NatRepr n -> CCG.Expr ext s (CT.BVType n) -> CCG.Expr ext s (CT.BVType n) -> CCE.App ext (CCG.Expr ext s) (CT.BVType n))
         -> (AS.Expr, CCG.Atom s tp1)
         -> (AS.Expr, CCG.Atom s tp2)
-        -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
+        -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
 bvBinOp con (e1, a1) (e2, a2) =
   case CCG.typeOfAtom a1 of
     CT.BVRepr nr -> do
@@ -448,10 +595,11 @@ bvBinOp con (e1, a1) (e2, a2) =
       Some <$> CCG.mkAtom (CCG.App (con nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     _ -> X.throw (ExpectedBVType e1 (CCG.typeOfAtom a1))
 
-logicalBinOp :: (CCG.Expr () s CT.BoolType -> CCG.Expr () s CT.BoolType -> CCE.App () (CCG.Expr () s) CT.BoolType)
+logicalBinOp :: (CCE.IsSyntaxExtension ext)
+             => (CCG.Expr ext s CT.BoolType -> CCG.Expr ext s CT.BoolType -> CCE.App ext (CCG.Expr ext s) CT.BoolType)
              -> (AS.Expr, CCG.Atom s tp1)
              -> (AS.Expr, CCG.Atom s tp2)
-             -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
+             -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
 logicalBinOp con (e1, a1) (e2, a2) = do
   Refl <- assertAtomType e1 CT.BoolRepr a1
   Refl <- assertAtomType e2 CT.BoolRepr a2
@@ -464,10 +612,11 @@ assignmentFromList (Some asgn0) elts =
     [] -> Some asgn0
     Some elt : rest -> assignmentFromList (Some (Ctx.extend asgn0 elt)) rest
 
-translateUnaryOp :: Overrides
+translateUnaryOp :: (CCE.IsSyntaxExtension ext)
+                 => Overrides ext
                  -> AS.UnOp
                  -> AS.Expr
-                 -> CCG.Generator () h s (TranslationState ret) ret (Some (CCG.Atom s))
+                 -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
 translateUnaryOp ov op expr = do
   Some atom <- translateExpr ov expr
   case op of
@@ -499,6 +648,9 @@ data TranslationException = forall sym . NoReturnInFunction (SomeSignature sym)
                           | UnboundName T.Text
                           | LocalAlreadyDefined T.Text
                           | UnsupportedBinaryOperator AS.BinOp
+                          | EmptySetElementList AS.Expr
+                          | MalformedConditionalExpression AS.Expr
+                          | forall tp . ExpectedBaseType AS.Expr (CT.TypeRepr tp)
 
 deriving instance Show TranslationException
 
