@@ -168,7 +168,7 @@ initialState :: forall sym init ret tp s
               . FunctionSignature sym init ret tp
              -> Ctx.Assignment (CCG.Atom s) init
              -> TranslationState ret s
-initialState sig args = TranslationState m1 Map.empty (error "globals")
+initialState sig args = TranslationState m1 Map.empty (error "globals") (error "undefined") (error "unpredictable")
   where
     m1 = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
     addArgumentAtom :: forall tp0
@@ -201,6 +201,12 @@ data TranslationState ret s =
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
                    -- transitively-referenced globals in the signature.
+                   , tsUndefinedVar :: CCG.GlobalVar CT.BoolType
+                   -- ^ A variable that starts as False, but transitions to True when an instruction
+                   -- triggers undefined behavior
+                   , tsUnpredictableVar :: CCG.GlobalVar CT.BoolType
+                   -- ^ A variable that starts as False, but transitions to True when an instruction
+                   -- triggers unpredictable behavior
                    }
 
 data ExprConstructor ext h s ret where
@@ -282,6 +288,12 @@ translateStatement ov rep stmt
         let bodyG = mapM_ (translateStatement ov rep) body
         CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
       AS.StmtRepeat body test -> translateRepeat ov rep body test
+      AS.StmtUndefined -> do
+        gv <- MS.gets tsUndefinedVar
+        CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+      AS.StmtUnpredictable -> do
+        gv <- MS.gets tsUnpredictableVar
+        CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
 
 translateRepeat :: (CCE.IsSyntaxExtension ext)
                 => Overrides ext
