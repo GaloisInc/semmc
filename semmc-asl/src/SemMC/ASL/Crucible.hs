@@ -288,12 +288,51 @@ translateStatement ov rep stmt
         let bodyG = mapM_ (translateStatement ov rep) body
         CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
       AS.StmtRepeat body test -> translateRepeat ov rep body test
+      AS.StmtFor var (lo, hi) body -> translateFor ov rep var lo hi body
       AS.StmtUndefined -> do
         gv <- MS.gets tsUndefinedVar
         CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
       AS.StmtUnpredictable -> do
         gv <- MS.gets tsUnpredictableVar
         CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+
+-- | Translate a for statement into Crucible
+--
+-- The translation is from
+--
+-- > for i = X to Y
+-- >    body
+--
+-- to
+--
+-- > i = X
+-- > while(i <= Y)
+-- >   body
+-- >   i = i + 1
+--
+-- NOTE: The translation is inclusive of the upper bound - is that right?
+--
+-- NOTE: We are assuming that the variable assignment is actually a declaration of integer type
+translateFor :: (CCE.IsSyntaxExtension ext)
+             => Overrides ext
+             -> CT.TypeRepr ret
+             -> AS.Identifier
+             -> AS.Expr
+             -> AS.Expr
+             -> [AS.Stmt]
+             -> CCG.Generator ext h s (TranslationState ret) ret ()
+translateFor ov rep var lo hi body = do
+  let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
+  translateDefinedVar ov ty var lo
+  let testG = do
+        let ident = AS.QualifiedIdentifier AS.ArchQualAny var
+        let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
+        Some testA <- translateExpr ov testE
+        Refl <- assertAtomType testE CT.BoolRepr testA
+        return (CCG.AtomExpr testA)
+  let bodyG = mapM_ (translateStatement ov rep) body
+  CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+
 
 translateRepeat :: (CCE.IsSyntaxExtension ext)
                 => Overrides ext
