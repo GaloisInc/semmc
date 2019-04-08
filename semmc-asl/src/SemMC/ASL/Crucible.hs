@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE PolyKinds #-}
@@ -29,6 +30,11 @@ module SemMC.ASL.Crucible (
   , LabeledValue(..)
   , BaseGlobalVar(..)
   , Overrides(..)
+  -- * Syntax extension
+  , ASLExt
+  , ASLApp(..)
+  , ASLStmt
+  , aslExtImpl
   -- * Exceptions
   , TranslationException(..)
   ) where
@@ -58,61 +64,9 @@ import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
 
--- | The signature describes the inputs and outputs of an ASL function or procedure
---
--- Procedures have side effects, while functions are side-effect free and return a single value
--- (which may be a tuple).
---
--- Top-level code sequences (like the @instExecute@ field of an instruction) have a trivial type
--- signature with no inputs (just global refs) and a set of outputs that is the union of all of the
--- locations touched by that function.
-data FunctionSignature sym init ret tp =
-  FunctionSignature { funcSigRepr :: WT.BaseTypeRepr tp
-                    , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
-                    , funcGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
-                    }
-  deriving (Show)
-
-data LabeledValue a b tp = LabeledValue a (b tp)
-
-instance FC.FunctorFC (LabeledValue a) where
-  fmapFC f (LabeledValue a b) = LabeledValue a (f b)
-
-instance FC.FoldableFC (LabeledValue a) where
-  foldrFC f s (LabeledValue _ b) = f b s
-
-instance FC.TraversableFC (LabeledValue a) where
-  traverseFC f (LabeledValue a b) = LabeledValue a <$> f b
-
-instance (Show a, ShowF b) => ShowF (LabeledValue a b) where
-  showF (LabeledValue l v) = concat [ "LabeledValue ", show l, " ", showF v ]
-
-instance (Show a, ShowF b) => Show (LabeledValue a b tp) where
-  show (LabeledValue l v) = concat [ "LabeledValue ", show l, " ", showF v ]
-
-newtype BaseGlobalVar tp = BaseGlobalVar (CCG.GlobalVar (CT.BaseToType tp))
-  deriving (Show)
-
-instance ShowF BaseGlobalVar
-
--- | Like 'FunctionSignature', except with a different return value
---
--- The return here is actually a list of global variables updated by the function (both direct and
--- indirect updates)
-data ProcedureSignature sym init ret tps =
-  ProcedureSignature { procSigRepr :: Ctx.Assignment BaseGlobalVar tps
-                     , procArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
-                     , procGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
-                     }
-  deriving (Show)
-
-instance ShowF (ProcedureSignature sym init ret)
-
-data SomeSignature sym where
-  SomeFunctionSignature :: FunctionSignature sym init ret tp -> SomeSignature sym
-  SomeProcedureSignature :: ProcedureSignature sym init rep tps -> SomeSignature sym
-
-deriving instance Show (SomeSignature sym)
+import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt, aslExtImpl )
+import           SemMC.ASL.Exceptions ( TranslationException(..) )
+import           SemMC.ASL.Signature
 
 data Callable = Callable { callableName :: AS.QualifiedIdentifier
                          , callableArgs :: [AS.SymbolDecl]
@@ -139,36 +93,37 @@ asCallable def =
 --
 -- FIXME: This may need to take all of the signatures of called functions to compute its own
 -- signature (since they might be procedures updating state that isn't obvious)
-computeDefinitionSignature :: [(String, SomeSignature sym)] -> Callable -> IO (SomeSignature sym)
+computeDefinitionSignature :: [(String, SomeSignature)] -> Callable -> IO SomeSignature
 computeDefinitionSignature = undefined
 
-computeInstructionSignature :: [(String, SomeSignature sym)] -> [AS.Stmt] -> IO (SomeSignature sym)
+computeInstructionSignature :: [(String, SomeSignature)] -> [AS.Stmt] -> IO SomeSignature
 computeInstructionSignature = undefined
 
-functionToCrucible :: (CCE.IsSyntaxExtension ext, ret ~ CT.BaseToType tp)
-                   => Overrides ext
-                   -> FunctionSignature sym init ret tp
+functionToCrucible :: (ret ~ CT.BaseToType tp)
+                   => Overrides ASLExt
+                   -> FunctionSignature init ret tp
                    -> CFH.FnHandle init ret
                    -> [AS.Stmt]
-                   -> IO (CCC.SomeCFG ext init ret)
+                   -> IO (CCC.SomeCFG ASLExt init ret)
 functionToCrucible ov sig hdl stmts = do
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef ov sig stmts)
   return (CCS.toSSA cfg0)
 
-funcDef :: (CCE.IsSyntaxExtension ext, ret ~ CT.BaseToType tp)
-        => Overrides ext
-        -> FunctionSignature sym init ret tp
+funcDef :: (ret ~ CT.BaseToType tp)
+        => Overrides ASLExt
+        -> FunctionSignature init ret tp
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState ret s, CCG.Generator ext h s (TranslationState ret) ret (CCG.Expr ext s ret))
+        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret))
 funcDef ov sig stmts args = (initialState sig args, defineFunction ov sig stmts args)
 
-initialState :: forall sym init ret tp s
-              . FunctionSignature sym init ret tp
+initialState :: forall init ret tp s
+              . FunctionSignature init ret tp
              -> Ctx.Assignment (CCG.Atom s) init
              -> TranslationState ret s
-initialState sig args = TranslationState m1 Map.empty (error "globals") (error "undefined") (error "unpredictable")
+initialState sig args =
+  TranslationState m1 Map.empty (error "globals") (error "undefined") (error "unpredictable") (error "sigs")
   where
     m1 = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
     addArgumentAtom :: forall tp0
@@ -207,6 +162,9 @@ data TranslationState ret s =
                    , tsUnpredictableVar :: CCG.GlobalVar CT.BoolType
                    -- ^ A variable that starts as False, but transitions to True when an instruction
                    -- triggers unpredictable behavior
+                   , tsFunctionSigs :: Map.Map T.Text SomeSignature
+                   -- ^ A collection of all of the signatures of defined functions (both functions
+                   -- and procedures)
                    }
 
 data ExprConstructor ext h s ret where
@@ -239,23 +197,24 @@ data Overrides ext =
             , overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s)))
             }
 
-defineFunction :: (CCE.IsSyntaxExtension ext, ret ~ CT.BaseToType tp)
-               => Overrides ext
-               -> FunctionSignature sym init ret tp
+defineFunction :: forall ret tp init h s
+                . (ret ~ CT.BaseToType tp)
+               => Overrides ASLExt
+               -> FunctionSignature init ret tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
-               -> CCG.Generator ext h s (TranslationState ret) ret (CCG.Expr ext s ret)
+               -> CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret)
 defineFunction ov sig stmts args = do
   mapM_ (translateStatement ov (CT.baseToType (funcSigRepr sig))) stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
-translateStatement :: (CCE.IsSyntaxExtension ext)
-                   => Overrides ext
+
+translateStatement :: Overrides ASLExt
                    -> CT.TypeRepr ret
                    -> AS.Stmt
-                   -> CCG.Generator ext h s (TranslationState ret) ret ()
+                   -> CCG.Generator ASLExt h s (TranslationState ret) ret ()
 translateStatement ov rep stmt
   | Just so <- overrideStmt ov stmt = so
   | otherwise =
@@ -313,14 +272,13 @@ translateStatement ov rep stmt
 -- NOTE: The translation is inclusive of the upper bound - is that right?
 --
 -- NOTE: We are assuming that the variable assignment is actually a declaration of integer type
-translateFor :: (CCE.IsSyntaxExtension ext)
-             => Overrides ext
+translateFor :: Overrides ASLExt
              -> CT.TypeRepr ret
              -> AS.Identifier
              -> AS.Expr
              -> AS.Expr
              -> [AS.Stmt]
-             -> CCG.Generator ext h s (TranslationState ret) ret ()
+             -> CCG.Generator ASLExt h s (TranslationState ret) ret ()
 translateFor ov rep var lo hi body = do
   let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
   translateDefinedVar ov ty var lo
@@ -334,12 +292,11 @@ translateFor ov rep var lo hi body = do
   CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
-translateRepeat :: (CCE.IsSyntaxExtension ext)
-                => Overrides ext
+translateRepeat :: Overrides ASLExt
                 -> CT.TypeRepr ret
                 -> [AS.Stmt]
                 -> AS.Expr
-                -> CCG.Generator ext h s (TranslationState ret) ret ()
+                -> CCG.Generator ASLExt h s (TranslationState ret) ret ()
 translateRepeat ov rtp body test = do
   cond_lbl <- CCG.newLabel
   loop_lbl <- CCG.newLabel
@@ -356,12 +313,11 @@ translateRepeat ov rtp body test = do
 
   CCG.continue exit_lbl (CCG.jump loop_lbl)
 
-translateDefinedVar :: (CCE.IsSyntaxExtension ext)
-                    => Overrides ext
+translateDefinedVar :: Overrides ASLExt
                     -> AS.Type
                     -> AS.Identifier
                     -> AS.Expr
-                    -> CCG.Generator ext h s (TranslationState ret) ret ()
+                    -> CCG.Generator ASLExt h s (TranslationState ret) ret ()
 translateDefinedVar ov ty ident expr =
   case translateType ty of
     Some expected -> do
@@ -378,11 +334,10 @@ translateDefinedVar ov ty ident expr =
 -- This case is interesting, as assignments can be to locals or globals.
 --
 -- NOTE: We are assuming that there cannot be assignments to arguments.
-translateAssignment :: (CCE.IsSyntaxExtension ext)
-                    => Overrides ext
+translateAssignment :: Overrides ASLExt
                     -> AS.LValExpr
                     -> AS.Expr
-                    -> CCG.Generator ext h s (TranslationState ret) ret ()
+                    -> CCG.Generator ASLExt h s (TranslationState ret) ret ()
 translateAssignment ov lval e = do
   Some atom <- translateExpr ov e
   case lval of
@@ -418,12 +373,11 @@ declareUndefinedVar ty ident = do
 translateType :: AS.Type -> Some CT.TypeRepr
 translateType = error "translateType unimplemented"
 
-translateIf :: (CCE.IsSyntaxExtension ext)
-            => Overrides ext
+translateIf :: Overrides ASLExt
             -> CT.TypeRepr ret
             -> [(AS.Expr, [AS.Stmt])]
             -> Maybe [AS.Stmt]
-            -> CCG.Generator ext h s (TranslationState ret) ret ()
+            -> CCG.Generator ASLExt h s (TranslationState ret) ret ()
 translateIf ov rep clauses melse =
   case clauses of
     [] -> mapM_ (translateStatement ov rep) (fromMaybe [] melse)
@@ -449,10 +403,9 @@ assertAtomType expr expectedRepr atom =
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
-translateExpr :: (CCE.IsSyntaxExtension ext)
-              => Overrides ext
+translateExpr :: Overrides ASLExt
               -> AS.Expr
-              -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
+              -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (CCG.Atom s))
 translateExpr ov expr
   | Just eo <- overrideExpr ov expr = eo
   | otherwise =
@@ -484,14 +437,29 @@ translateExpr ov expr
         preds <- mapM (translateSetElementTest ov expr atom) elts
         Some <$> CCG.mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
       AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
+      AS.ExprCall (AS.QualifiedIdentifier _ ident) args -> do
+        sigMap <- MS.gets tsFunctionSigs
+        case Map.lookup ident sigMap of
+          Nothing -> X.throw (MissingFunctionDefinition ident)
+          Just (SomeProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
+          Just (SomeFunctionSignature sig) -> do
+            argAtoms <- mapM (translateExpr ov) args
+            case assignmentFromList (Some Ctx.empty) argAtoms of
+              Some argAssign -> do
+                let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
+                let expectedTypes = FC.fmapFC projectValue (funcArgReprs sig)
+                if | Just Refl <- testEquality atomTypes expectedTypes -> do
+                       let vals = FC.fmapFC CCG.AtomExpr argAssign
+                       let uf = UF ident (funcSigRepr sig) atomTypes vals
+                       Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+                   | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
 
 -- | Translate the expression form of a conditional into a Crucible atom
-translateIfExpr :: (CCE.IsSyntaxExtension ext)
-                => Overrides ext
+translateIfExpr :: Overrides ASLExt
                 -> AS.Expr
                 -> [(AS.Expr, AS.Expr)]
                 -> AS.Expr
-                -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
+                -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (CCG.Atom s))
 translateIfExpr ov orig clauses elseExpr =
   case clauses of
     [] -> X.throw (MalformedConditionalExpression orig)
@@ -521,12 +489,11 @@ translateIfExpr ov orig clauses elseExpr =
 -- Single element tests are translated into a simple equality test
 --
 -- Ranges are translated as a conjunction of inclusive tests. x IN [5..10] => 5 <= x && x <= 10
-translateSetElementTest :: (CCE.IsSyntaxExtension ext)
-                        => Overrides ext
+translateSetElementTest :: Overrides ASLExt
                         -> AS.Expr
                         -> CCG.Atom s tp
                         -> AS.SetElement
-                        -> CCG.Generator ext h s (TranslationState ret) ret (CCG.Expr ext s CT.BoolType)
+                        -> CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s CT.BoolType)
 translateSetElementTest ov e0 a0 elt =
   case elt of
     AS.SetEltSingle expr -> do
@@ -554,13 +521,12 @@ disjoin :: (CCE.IsSyntaxExtension ext)
         -> CCG.Expr ext s CT.BoolType
 disjoin p1 p2 = CCG.App (CCE.Or p1 p2)
 
-translateBinaryOp :: forall ext h s ret
-                   . (CCE.IsSyntaxExtension ext)
-                  => Overrides ext
+translateBinaryOp :: forall h s ret
+                   . Overrides ASLExt
                   -> AS.BinOp
                   -> AS.Expr
                   -> AS.Expr
-                  -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
+                  -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (CCG.Atom s))
 translateBinaryOp ov op e1 e2 = do
   Some a1 <- translateExpr ov e1
   Some a2 <- translateExpr ov e2
@@ -686,11 +652,10 @@ assignmentFromList (Some asgn0) elts =
     [] -> Some asgn0
     Some elt : rest -> assignmentFromList (Some (Ctx.extend asgn0 elt)) rest
 
-translateUnaryOp :: (CCE.IsSyntaxExtension ext)
-                 => Overrides ext
+translateUnaryOp :: Overrides ASLExt
                  -> AS.UnOp
                  -> AS.Expr
-                 -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Atom s))
+                 -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (CCG.Atom s))
 translateUnaryOp ov op expr = do
   Some atom <- translateExpr ov expr
   case op of
@@ -707,25 +672,6 @@ translateUnaryOp ov op expr = do
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger = undefined
 
-procedureToCrucible :: ProcedureSignature sym init ret tps -> [AS.Stmt] -> IO (CCC.SomeCFG () init ret)
+procedureToCrucible :: ProcedureSignature init ret tps -> [AS.Stmt] -> IO (CCC.SomeCFG () init ret)
 procedureToCrucible = undefined
 
-data TranslationException = forall sym . NoReturnInFunction (SomeSignature sym)
-                          | forall tp . InvalidReturnType (CT.TypeRepr tp)
-                          | forall tp1 tp2 .  UnexpectedExprType AS.Expr (CT.TypeRepr tp1) (CT.TypeRepr tp2)
-                          -- ^ Expression, actual type, expected type
-                          | UnsupportedExpr AS.Expr
-                          | InvalidZeroLengthBitvector
-                          | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
-                          | forall tp . ExpectedBVType AS.Expr (CT.TypeRepr tp)
-                          | forall tp . UnsupportedComparisonType AS.Expr (CT.TypeRepr tp)
-                          | UnboundName T.Text
-                          | LocalAlreadyDefined T.Text
-                          | UnsupportedBinaryOperator AS.BinOp
-                          | EmptySetElementList AS.Expr
-                          | MalformedConditionalExpression AS.Expr
-                          | forall tp . ExpectedBaseType AS.Expr (CT.TypeRepr tp)
-
-deriving instance Show TranslationException
-
-instance X.Exception TranslationException

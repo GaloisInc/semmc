@@ -48,7 +48,7 @@ data SimulatorConfig sym =
 -- also the global location to which it should be assigned
 simulateFunction :: (CB.IsSymInterface sym, CS.RegValue sym ret ~ WI.SymExpr sym tp)
                  => SimulatorConfig sym
-                 -> AC.FunctionSignature sym init ret tp
+                 -> AC.FunctionSignature init ret tp
                  -> CCC.SomeCFG () init ret
                  -> IO (WI.SymExpr sym tp)
 simulateFunction symCfg sig (CCC.SomeCFG cfg) = do
@@ -86,7 +86,7 @@ simulateFunction symCfg sig (CCC.SomeCFG cfg) = do
 -- Note that the type tps works out, as the sequence collection of types is BaseStructType
 simulateProcedure :: (CB.IsSymInterface sym)
                   => SimulatorConfig sym
-                  -> AC.ProcedureSignature sym init ret tps
+                  -> AC.ProcedureSignature init ret tps
                   -> CCC.SomeCFG () init ret
                   -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) tps)
 simulateProcedure symCfg sig (CCC.SomeCFG cfg) = do
@@ -166,8 +166,8 @@ initGlobals symCfg reps = do
 executionFeatures :: [CS.ExecutionFeature p sym ext rtp]
 executionFeatures = []
 
-data SimulationException = forall sym . SimulationTimeout (AC.SomeSignature sym)
-                         | forall sym . SimulationAbort (AC.SomeSignature sym)
+data SimulationException = SimulationTimeout AC.SomeSignature
+                         | SimulationAbort AC.SomeSignature
                          | forall tp . NonBaseTypeReturn (CT.TypeRepr tp)
                          | forall btp . UnexpectedReturnType (WT.BaseTypeRepr btp)
                          | forall tp . MissingGlobalDefinition (CS.GlobalVar tp)

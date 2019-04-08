@@ -18,12 +18,16 @@ extra-source-files:  CHANGELOG.md
 library
   exposed-modules:     SemMC.ASL
   other-modules:       SemMC.ASL.Crucible
+                       SemMC.ASL.Extension
+                       SemMC.ASL.Exceptions
+                       SemMC.ASL.Signature
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
                        containers,
                        text >= 1 && < 2,
                        mtl,
                        lens,
+                       ansi-wl-pprint,
                        parameterized-utils,
                        crucible,
                        what4,
