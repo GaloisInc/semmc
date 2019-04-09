@@ -54,7 +54,7 @@ instance (Show a, ShowF b) => ShowF (LabeledValue a b) where
 instance (Show a, ShowF b) => Show (LabeledValue a b tp) where
   show (LabeledValue l v) = concat [ "LabeledValue ", show l, " ", showF v ]
 
-newtype BaseGlobalVar tp = BaseGlobalVar (CCG.GlobalVar (CT.BaseToType tp))
+newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseToType tp) }
   deriving (Show)
 
 instance ShowF BaseGlobalVar

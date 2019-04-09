@@ -254,6 +254,38 @@ translateStatement ov rep stmt
       AS.StmtUnpredictable -> do
         gv <- MS.gets tsUnpredictableVar
         CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+      AS.StmtCall qi@(AS.QualifiedIdentifier _ ident) args -> do
+        sigMap <- MS.gets tsFunctionSigs
+        case Map.lookup ident sigMap of
+          Nothing -> X.throw (MissingFunctionDefinition ident)
+          Just (SomeFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
+          Just (SomeProcedureSignature sig) -> do
+            argAtoms <- mapM (translateExpr ov) args
+            case assignmentFromList (Some Ctx.empty) argAtoms of
+              Some argAssign -> do
+                let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
+                let expectedTypes = FC.fmapFC projectValue (procArgReprs sig)
+                if | Just Refl <- testEquality atomTypes expectedTypes -> do
+                       let vals = FC.fmapFC CCG.AtomExpr argAssign
+                       Some retRep <- procBaseRep (AS.ExprCall qi args) sig
+                       let uf = UF ident (WT.BaseStructRepr retRep) atomTypes vals
+                       atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+                       return ()
+                   | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
+
+procBaseRep :: AS.Expr
+            -> ProcedureSignature init ret0 tps
+            -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (Ctx.Assignment WT.BaseTypeRepr))
+procBaseRep e sig = do
+  baseTypes <- mapM (assertAsBaseType e) (FC.toListFC Some (procSigRepr sig))
+  return (assignmentFromList (Some Ctx.empty) baseTypes)
+
+assertAsBaseType :: (Monad m) => AS.Expr -> Some BaseGlobalVar -> m (Some WT.BaseTypeRepr)
+assertAsBaseType e (Some gv) =
+  case CT.asBaseType (CCG.globalType (unBaseVar gv)) of
+    -- This isn't really an expr, but this is good enough
+    CT.NotBaseType -> X.throw (ExpectedBaseType e (CCG.globalType (unBaseVar gv)))
+    CT.AsBaseType btr -> return (Some btr)
 
 -- | Translate a for statement into Crucible
 --
