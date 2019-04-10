@@ -44,6 +44,7 @@ import qualified Control.Exception as X
 import           Control.Monad ( when )
 import           Control.Monad.ST ( stToIO )
 import qualified Control.Monad.State.Class as MS
+import           Data.Functor.Product ( Product(..) )
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -116,13 +117,13 @@ funcDef :: (ret ~ CT.BaseToType tp)
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret))
-funcDef ov sig stmts args = (initialState sig args, defineFunction ov sig stmts args)
+funcDef ov sig stmts args = (funcInitialState sig args, defineFunction ov sig stmts args)
 
-initialState :: forall init ret tp s
-              . FunctionSignature init ret tp
-             -> Ctx.Assignment (CCG.Atom s) init
-             -> TranslationState ret s
-initialState sig args =
+funcInitialState :: forall init ret tp s
+                  . FunctionSignature init ret tp
+                 -> Ctx.Assignment (CCG.Atom s) init
+                 -> TranslationState ret s
+funcInitialState sig args =
   TranslationState m1 Map.empty (error "globals") (error "undefined") (error "unpredictable") (error "sigs")
   where
     m1 = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
@@ -704,6 +705,49 @@ translateUnaryOp ov op expr = do
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger = undefined
 
-procedureToCrucible :: ProcedureSignature init ret tps -> [AS.Stmt] -> IO (CCC.SomeCFG () init ret)
-procedureToCrucible = undefined
+procedureToCrucible :: Overrides ASLExt
+                    -> ProcedureSignature init ret tps
+                    -> CFH.FnHandle init ret
+                    -> [AS.Stmt]
+                    -> IO (CCC.SomeCFG ASLExt init ret)
+procedureToCrucible ov sig hdl stmts = do
+  let pos = WP.InternalPos
+  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef ov sig stmts)
+  return (CCS.toSSA cfg0)
 
+procDef :: Overrides ASLExt
+        -> ProcedureSignature init ret tp
+        -> [AS.Stmt]
+        -> Ctx.Assignment (CCG.Atom s) init
+        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret))
+procDef ov sig stmts args =
+  (procInitialState sig args, defineProcedure ov sig stmts args)
+
+procInitialState :: ProcedureSignature init ret tp
+                 -> Ctx.Assignment (CCG.Atom s) init
+                 -> TranslationState ret s
+procInitialState = undefined
+
+defineProcedure :: Overrides ASLExt
+                -> ProcedureSignature init ret tp
+                -> [AS.Stmt]
+                -> Ctx.Assignment (CCG.Atom s) init
+                -> CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret)
+defineProcedure ov sig stmts args = do
+  mapM_ (translateStatement ov (error "ret type")) stmts
+  -- Read all of the globals in the signature to produce a struct expr
+  -- typedVals <- FC.traverseFC readTypedGlobal (procSigRepr sig)
+  -- let reprs = FC.fmapFC fstFC typedVals
+  -- let vals = FC.fmapFC sndFC typedVals
+  -- return (CCG.App (CCE.MkStruct reprs vals))
+  return undefined
+
+-- fstFC :: Product a b tp -> a tp
+-- fstFC (Pair a _) = a
+
+-- sndFC :: Product a b tp -> b tp
+-- sndFC (Pair _ b) = b
+
+-- readTypedGlobal :: BaseGlobalVar bt
+--                 -> CCG.Generator ext h s (TranslationState ret) ret (Product CT.TypeRepr (CCG.Expr ext s) (CT.BaseToType bt))
+-- readTypedGlobal = undefined

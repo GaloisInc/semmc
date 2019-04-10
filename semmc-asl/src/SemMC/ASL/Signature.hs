@@ -1,6 +1,8 @@
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators #-}
 module SemMC.ASL.Signature (
     FunctionSignature(..)
   , ProcedureSignature(..)
@@ -69,6 +71,22 @@ data ProcedureSignature init ret tps =
                      , procGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
                      }
   deriving (Show)
+
+data ProcedureSignature' init ret bts =
+  forall tps .
+  ProcedureSignature' { procSigBaseRepr' :: WT.BaseTypeRepr (WT.BaseStructType bts)
+                      , procSigRepr' :: CT.TypeRepr (CT.StructType tps)
+                      , procSigProof :: CT.StructType tps :~: CT.BaseToType (WT.BaseStructType bts)
+                      }
+
+-- data ReprEq tp where
+--   ReprEq :: (tp ~ CT.BaseToType bt) => WT.BaseTypeRepr bt -> CT.TypeRepr tp -> ReprEq tp
+
+-- projectReprs :: Ctx.Assignment ReprEq tps -> Ctx.Assignment CT.TypeRepr tps
+-- projectReprs = FC.fmapFC (\(ReprEq _ r) -> r)
+
+-- projectBaseReprs :: Ctx.Assignment ReprEq tps -> Ctx.Assignment WT.BaseTypeRepr tps
+-- projectBaseReprs = FC.fmapFC (\(ReprEq b _) -> b)
 
 instance ShowF (ProcedureSignature init ret)
 
