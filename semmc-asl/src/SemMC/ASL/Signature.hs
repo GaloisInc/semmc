@@ -74,9 +74,24 @@ data ProcedureSignature init ret tps =
 
 data ProcedureSignature' init ret bts =
   forall tps .
-  ProcedureSignature' { procSigBaseRepr' :: WT.BaseTypeRepr (WT.BaseStructType bts)
-                      , procSigRepr' :: CT.TypeRepr (CT.StructType tps)
-                      , procSigProof :: CT.StructType tps :~: CT.BaseToType (WT.BaseStructType bts)
+  ProcedureSignature' { procSig'BaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
+                      -- ^ The return type (in terms of base types) of the procedure
+                      , procSig'Repr :: CT.TypeRepr (CT.StructType tps)
+                      -- ^ The return type (in terms of Crucible types) of the procedure
+                      , procSig'Proof :: CT.StructType tps :~: CT.BaseToType (WT.BaseStructType bts)
+                      -- ^ The proof of correspondence between the two
+                      , procSig'Globals :: Ctx.Assignment CCG.GlobalVar tps
+                      -- ^ The globals written to by the procedure - note that the type parameter is
+                      -- the same as the return type repr by design, as we need to convert the
+                      -- global writes into a struct return type
+                      , procSig'Assigned :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) tps
+                      -- ^ The variables written to by the procedure, used to compute to footprint
+                      -- of the function
+                      , procSig'ArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+                      -- ^ The types (and names) of the arguments to the procedure
+                      --
+                      -- Note that this has a different type compared to the footprint, and that we
+                      -- don't need base types to talk about the parameters.
                       }
 
 -- data ReprEq tp where
