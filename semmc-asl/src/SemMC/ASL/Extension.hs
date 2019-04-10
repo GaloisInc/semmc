@@ -54,26 +54,31 @@ data ASLExt
 
 data ASLApp f tp where
   UF :: T.Text -> WT.BaseTypeRepr rtp -> Ctx.Assignment CT.TypeRepr tps -> Ctx.Assignment f tps -> ASLApp f (CT.BaseToType rtp)
+  GetBaseStruct :: CT.TypeRepr (CT.SymbolicStructType ctx) -> Ctx.Index ctx tp -> f (CT.SymbolicStructType ctx) -> ASLApp f (CT.BaseToType tp)
 
 instance FC.FunctorFC ASLApp where
   fmapFC f a =
     case a of
       UF name trep argReps vals -> UF name trep argReps (FC.fmapFC f vals)
+      GetBaseStruct rep i t -> GetBaseStruct rep i (f t)
 
 instance FC.FoldableFC ASLApp where
   foldrFC f seed a =
     case a of
       UF _ _ _ vals -> FC.foldrFC f seed vals
+      GetBaseStruct _ _ t -> f t seed
 
 instance FC.TraversableFC ASLApp where
   traverseFC f a =
     case a of
       UF name trep argReps vals -> UF name trep argReps <$> FC.traverseFC f vals
+      GetBaseStruct rep i t -> GetBaseStruct rep i <$> f t
 
 instance CCExt.TypeApp ASLApp where
   appType a =
     case a of
       UF _ trep _ _ -> CT.baseToType trep
+      GetBaseStruct (CT.SymbolicStructRepr reprs) i _ -> CT.baseToType (reprs Ctx.! i)
 
 instance CCExt.PrettyApp ASLApp where
   ppApp pp a =
@@ -84,6 +89,11 @@ instance CCExt.PrettyApp ASLApp where
                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) argReps)))
                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC pp vals)))
                ]
+      GetBaseStruct _r i t ->
+        PP.hsep [ PP.text "GetBaseStruct"
+                , PP.text (showF i)
+                , pp t
+                ]
 
 instance FC.TestEqualityFC ASLApp where
   testEqualityFC testFC a1 a2 =
@@ -94,6 +104,12 @@ instance FC.TestEqualityFC ASLApp where
         Refl <- testEquality rs1 rs2
         Refl <- FC.testEqualityFC testFC vs1 vs2
         return Refl
+      (GetBaseStruct r1 i1 t1, GetBaseStruct r2 i2 t2) -> do
+        Refl <- testEquality r1 r2
+        Refl <- testEquality i1 i2
+        Refl <- testFC t1 t2
+        return Refl
+      _ -> Nothing
 
 instance FC.OrdFC ASLApp where
   compareFC compareTerm a1 a2 =
@@ -112,6 +128,19 @@ instance FC.OrdFC ASLApp where
                 LTF -> LTF
                 GTF -> GTF
                 EQF -> EQF
+      (GetBaseStruct r1 i1 t1, GetBaseStruct r2 i2 t2) ->
+        case compareF r1 r2 of
+          LTF -> LTF
+          GTF -> GTF
+          EQF -> case compareF i1 i2 of
+            LTF -> LTF
+            GTF -> GTF
+            EQF -> case compareTerm t1 t2 of
+              LTF -> LTF
+              GTF -> GTF
+              EQF -> EQF
+      (UF {}, _) -> LTF
+      (GetBaseStruct {}, _) -> GTF
 
 data ASLStmt f tp where
 
@@ -160,6 +189,9 @@ aslAppEvalFunc sigs sym _ _ = \evalApp app ->
           let baseArgs = FC.fmapFC (unSE @sym . sndFC) baseTypesArgs
           symFn <- WI.freshTotalUninterpFn sym funcSymbol baseTps trep
           WI.applySymFn sym symFn baseArgs
+    GetBaseStruct _srep idx term -> do
+      rv <- evalApp term
+      WI.structField sym rv idx
 
 -- | A wrapper around 'WI.SymExpr' because it is a type family and not injective
 data SymExpr' sym tp = SE { unSE :: WI.SymExpr sym tp }
