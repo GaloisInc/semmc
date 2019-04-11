@@ -19,6 +19,7 @@ import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( when )
 import qualified Control.Monad.State.Class as MS
+import           Data.Functor.Const ( Const(..) )
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -148,9 +149,26 @@ translateStatement ov rep stmt
                        let vals = FC.fmapFC CCG.AtomExpr argAssign
                        let uf = UF ident (procSigBaseRepr sig) atomTypes vals
                        atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-                       -- FIXME: Use GetBaseStruct to assign to each global
+                       let prep = liftBaseRepr (procSigBaseRepr sig)
+                       _ <- Ctx.traverseWithIndex (generateGlobalAssignmentFrom prep atom) (procSigGlobals sig)
                        return ()
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
+
+liftBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType ctx)
+             -> CT.TypeRepr (CT.SymbolicStructType ctx)
+liftBaseRepr rep =
+  case rep of
+    WT.BaseStructRepr ctx -> CT.SymbolicStructRepr ctx
+
+generateGlobalAssignmentFrom :: CT.TypeRepr (CT.SymbolicStructType ctx)
+                             -> CCG.Atom s (CT.SymbolicStructType ctx)
+                             -> Ctx.Index ctx tp
+                             -> BaseGlobalVar tp
+                             -> CCG.Generator ASLExt h s (TranslationState ret) ret (Const () tp)
+generateGlobalAssignmentFrom rep structAtom idx (BaseGlobalVar gv) = do
+  let ext = GetBaseStruct rep idx (CCG.AtomExpr structAtom)
+  CCG.writeGlobal gv (CCG.App (CCE.ExtensionApp ext))
+  return (Const ())
 
 -- | Translate a for statement into Crucible
 --
