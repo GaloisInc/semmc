@@ -17,7 +17,7 @@ import           Control.Monad.ST ( RealWorld, stToIO )
 import           Data.Functor.Product ( Product(Pair) )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
-import           Data.Parameterized.Some ( viewSome )
+import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Lang.Crucible.Backend as CB
@@ -90,11 +90,11 @@ simulateProcedure :: (CB.IsSymInterface sym)
                   -> CCC.SomeCFG () init ret
                   -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) tps)
 simulateProcedure symCfg sig (CCC.SomeCFG cfg) = do
-  initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procArgReprs sig)
+  initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procSigArgReprs sig)
   let econt = CS.runOverrideSim CT.UnitRepr $ do
         _ <- CS.callCFG cfg (CS.RegMap initArgs)
         return ()
-  globals <- viewSome (initGlobals symCfg) (AC.procGlobalReprs sig)
+  globals <- viewSome (initGlobals symCfg) (AC.procSigAssigned sig)
   s0 <- initialSimulatorState symCfg globals econt
   eres <- CS.executeCrucible executionFeatures s0
   case eres of
@@ -106,7 +106,7 @@ simulateProcedure symCfg sig (CCC.SomeCFG cfg) = do
         CS.PartialRes _ gp _ -> extractResult gp
   where
     -- Look up all of the values of the globals we allocated (which capture all of the side effects)
-    extractResult gp = FC.traverseFC (lookupBaseGlobalVal (gp ^. CS.gpGlobals)) (AC.procSigRepr sig)
+    extractResult gp = FC.traverseFC (lookupBaseGlobalVal (gp ^. CS.gpGlobals)) (AC.procSigGlobals sig)
     lookupBaseGlobalVal gs (AC.BaseGlobalVar gv) = do
       case CSG.lookupGlobal gv gs of
         Just rv -> return (AC.LabeledValue (CCG.globalName gv) rv)
@@ -116,7 +116,12 @@ allocateFreshArg :: (CB.IsSymInterface sym)
                  => sym
                  -> AC.LabeledValue T.Text CT.TypeRepr tp
                  -> IO (CS.RegEntry sym tp)
-allocateFreshArg sym (AC.LabeledValue name rep) =
+allocateFreshArg sym (AC.LabeledValue name rep) = do
+  -- sname <- toSolverSymbol (T.unpack name)
+  -- rv <- WI.freshConstant sym sname rep
+  -- return CS.RegEntry { CS.regType = CT.baseToType rep
+  --                    , CS.regValue = rv
+  --                    }
   case rep of
     CT.BVRepr w -> do
       sname <- toSolverSymbol (T.unpack name)
@@ -150,18 +155,33 @@ initialSimulatorState symCfg symGlobalState econt = do
 initGlobals :: forall sym env
              . (CB.IsSymInterface sym)
             => SimulatorConfig sym
-            -> Ctx.Assignment (AC.LabeledValue T.Text CT.TypeRepr) env
+            -> Ctx.Assignment (AC.LabeledValue T.Text WT.BaseTypeRepr) env -- CT.TypeRepr) env
             -> IO (CS.SymGlobalState sym)
 initGlobals symCfg reps = do
-  globals <- FC.traverseFC allocGlobal reps
-  return (FC.foldrFC addGlobal CS.emptyGlobals globals)
+  globals <- mapM allocGlobal (FC.toListFC Some reps)
+    -- FC.traverseFC allocGlobal reps
+  return (foldr addGlobal CS.emptyGlobals globals)
+  -- (FC.foldrFC addGlobal CS.emptyGlobals globals)
   where
-    allocGlobal :: forall tp . AC.LabeledValue T.Text CT.TypeRepr tp -> IO (Product CS.GlobalVar (CS.RegEntry sym) tp)
-    allocGlobal lv@(AC.LabeledValue name rep) = do
+    allocGlobal :: Some (AC.LabeledValue T.Text WT.BaseTypeRepr) -> IO (Some (Product CS.GlobalVar (CS.RegEntry sym)))
+    allocGlobal (Some lv@(AC.LabeledValue name rep)) = do
       entry <- allocateFreshArg (simSym symCfg) lv
-      gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) name rep
-      return (Pair gv entry)
-    addGlobal (Pair gv entry) = CSG.insertGlobal gv (CS.regValue entry)
+      gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) name (CT.baseToType rep)
+      return (Some (Pair gv entry))
+    addGlobal :: Some (Product CS.GlobalVar (CS.RegEntry sym))
+              -> CSG.SymGlobalState sym
+              -> CSG.SymGlobalState sym
+    addGlobal (Some (Pair gv entry)) = CSG.insertGlobal gv (CS.regValue entry)
+    -- allocGlobal :: forall tp . AC.LabeledValue T.Text WT.BaseTypeRepr tp -> IO (Product CS.GlobalVar (CS.RegEntry sym) (CT.BaseToType tp))
+    -- allocGlobal lv@(AC.LabeledValue name rep) = do
+    --   entry <- allocateFreshArg (simSym symCfg) lv
+    --   gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) name (CT.baseToType rep)
+    --   return (Pair gv entry)
+    -- addGlobal :: forall tp
+    --            . Product CS.GlobalVar (CS.RegEntry sym) tp
+    --           -> CSG.SymGlobalState sym
+    --           -> CSG.SymGlobalState sym
+    -- addGlobal (Pair gv entry) = CSG.insertGlobal gv (CS.regValue entry)
 
 executionFeatures :: [CS.ExecutionFeature p sym ext rtp]
 executionFeatures = []

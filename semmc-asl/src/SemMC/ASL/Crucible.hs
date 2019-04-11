@@ -19,9 +19,12 @@ module SemMC.ASL.Crucible (
   , funcArgReprs
   , funcGlobalReprs
   , ProcedureSignature
+  , procSigBaseRepr
+  , procSigArgReprs
+  , procSigGlobals
+  , procSigAssigned
+  , procSigAssignedBase
   , procSigRepr
-  , procArgReprs
-  , procGlobalReprs
   , SomeSignature(..)
   , computeDefinitionSignature
   , computeInstructionSignature
@@ -265,21 +268,22 @@ translateStatement ov rep stmt
             case assignmentFromList (Some Ctx.empty) argAtoms of
               Some argAssign -> do
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                let expectedTypes = FC.fmapFC projectValue (procArgReprs sig)
+                let expectedTypes = FC.fmapFC projectValue (procSigArgReprs sig)
                 if | Just Refl <- testEquality atomTypes expectedTypes -> do
                        let vals = FC.fmapFC CCG.AtomExpr argAssign
-                       Some retRep <- procBaseRep (AS.ExprCall qi args) sig
-                       let uf = UF ident (WT.BaseStructRepr retRep) atomTypes vals
+                       -- Some retRep <- procBaseRep (AS.ExprCall qi args) sig
+                       -- let uf = UF ident (WT.BaseStructRepr retRep) atomTypes vals
+                       let uf = UF ident (procSigBaseRepr sig) atomTypes vals
                        atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                        return ()
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
 
-procBaseRep :: AS.Expr
-            -> ProcedureSignature init ret0 tps
-            -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (Ctx.Assignment WT.BaseTypeRepr))
-procBaseRep e sig = do
-  baseTypes <- mapM (assertAsBaseType e) (FC.toListFC Some (procSigRepr sig))
-  return (assignmentFromList (Some Ctx.empty) baseTypes)
+-- procBaseRep :: AS.Expr
+--             -> ProcedureSignature init ret0 tps
+--             -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (Ctx.Assignment WT.BaseTypeRepr))
+-- procBaseRep e sig = do
+--   baseTypes <- mapM (assertAsBaseType e) (FC.toListFC Some (procSigRepr sig))
+--   return (assignmentFromList (Some Ctx.empty) baseTypes)
 
 assertAsBaseType :: (Monad m) => AS.Expr -> Some BaseGlobalVar -> m (Some WT.BaseTypeRepr)
 assertAsBaseType e (Some gv) =

@@ -65,32 +65,33 @@ instance ShowF BaseGlobalVar
 --
 -- The return here is actually a list of global variables updated by the function (both direct and
 -- indirect updates)
-data ProcedureSignature init ret tps =
-  ProcedureSignature { procSigRepr :: Ctx.Assignment BaseGlobalVar tps
-                     , procArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
-                     , procGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
-                     }
-  deriving (Show)
+-- data ProcedureSignature init ret tps =
+--   ProcedureSignature { procSigRepr :: Ctx.Assignment BaseGlobalVar tps
+--                      , procArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+--                      , procGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
+--                      }
+--   deriving (Show)
 
-data ProcedureSignature' init ret bts =
-  forall tps .
-  ProcedureSignature' { procSig'BaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
+data ProcedureSignature init ret bts =
+  ProcedureSignature { procSigBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
                       -- ^ The return type (in terms of base types) of the procedure
-                      , procSig'Repr :: CT.TypeRepr (CT.BaseToType (WT.BaseStructType bts))
+                      , procSigRepr :: CT.TypeRepr (CT.BaseToType (WT.BaseStructType bts))
                       -- ^ The return type (in terms of Crucible types) of the procedure
-                      , procSig'Globals :: Ctx.Assignment BaseGlobalVar bts
+                      , procSigGlobals :: Ctx.Assignment BaseGlobalVar bts
                       -- ^ The globals written to by the procedure - note that the type parameter is
                       -- the same as the return type repr by design, as we need to convert the
                       -- global writes into a struct return type
-                      , procSig'Assigned :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) bts
+                      , procSigAssignedBase :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) bts
                       -- ^ The variables written to by the procedure, used to compute to footprint
                       -- of the function
-                      , procSig'ArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+                      , procSigAssigned :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
+                      , procSigArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
                       -- ^ The types (and names) of the arguments to the procedure
                       --
                       -- Note that this has a different type compared to the footprint, and that we
                       -- don't need base types to talk about the parameters.
                       }
+  deriving (Show)
 
 instance ShowF (ProcedureSignature init ret)
 
