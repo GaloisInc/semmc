@@ -21,6 +21,7 @@ library
                        SemMC.ASL.Extension
                        SemMC.ASL.Exceptions
                        SemMC.ASL.Signature
+                       SemMC.ASL.Translation
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
                        containers,
