@@ -46,7 +46,7 @@ data SimulatorConfig sym =
 --
 -- Procedures have a different return type, where we need to track not only the value returned, but
 -- also the global location to which it should be assigned
-simulateFunction :: (CB.IsSymInterface sym, CS.RegValue sym ret ~ WI.SymExpr sym tp)
+simulateFunction :: (CB.IsSymInterface sym, CS.RegValue sym ret ~ WI.SymExpr sym tp, ret ~ CT.BaseToType tp)
                  => SimulatorConfig sym
                  -> AC.FunctionSignature init ret tp
                  -> CCC.SomeCFG () init ret
@@ -117,11 +117,6 @@ allocateFreshArg :: (CB.IsSymInterface sym)
                  -> AC.LabeledValue T.Text CT.TypeRepr tp
                  -> IO (CS.RegEntry sym tp)
 allocateFreshArg sym (AC.LabeledValue name rep) = do
-  -- sname <- toSolverSymbol (T.unpack name)
-  -- rv <- WI.freshConstant sym sname rep
-  -- return CS.RegEntry { CS.regType = CT.baseToType rep
-  --                    , CS.regValue = rv
-  --                    }
   case rep of
     CT.BVRepr w -> do
       sname <- toSolverSymbol (T.unpack name)
@@ -152,36 +147,26 @@ initialSimulatorState symCfg symGlobalState econt = do
   return (CS.InitialState simContext symGlobalState hdlr econt)
 
 -- | Allocate all of the globals that will be referred to by the statement sequence (even indirectly)
+--
+-- FIXME: Take the globals as an argument and allocate them as part of the signatures
 initGlobals :: forall sym env
              . (CB.IsSymInterface sym)
             => SimulatorConfig sym
-            -> Ctx.Assignment (AC.LabeledValue T.Text WT.BaseTypeRepr) env -- CT.TypeRepr) env
+            -> Ctx.Assignment (AC.LabeledValue T.Text CT.TypeRepr) env
             -> IO (CS.SymGlobalState sym)
 initGlobals symCfg reps = do
   globals <- mapM allocGlobal (FC.toListFC Some reps)
-    -- FC.traverseFC allocGlobal reps
   return (foldr addGlobal CS.emptyGlobals globals)
-  -- (FC.foldrFC addGlobal CS.emptyGlobals globals)
   where
-    allocGlobal :: Some (AC.LabeledValue T.Text WT.BaseTypeRepr) -> IO (Some (Product CS.GlobalVar (CS.RegEntry sym)))
+    allocGlobal :: Some (AC.LabeledValue T.Text CT.TypeRepr) -> IO (Some (Product CS.GlobalVar (CS.RegEntry sym)))
     allocGlobal (Some lv@(AC.LabeledValue name rep)) = do
       entry <- allocateFreshArg (simSym symCfg) lv
-      gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) name (CT.baseToType rep)
+      gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) name rep -- (CT.baseToType rep)
       return (Some (Pair gv entry))
     addGlobal :: Some (Product CS.GlobalVar (CS.RegEntry sym))
               -> CSG.SymGlobalState sym
               -> CSG.SymGlobalState sym
     addGlobal (Some (Pair gv entry)) = CSG.insertGlobal gv (CS.regValue entry)
-    -- allocGlobal :: forall tp . AC.LabeledValue T.Text WT.BaseTypeRepr tp -> IO (Product CS.GlobalVar (CS.RegEntry sym) (CT.BaseToType tp))
-    -- allocGlobal lv@(AC.LabeledValue name rep) = do
-    --   entry <- allocateFreshArg (simSym symCfg) lv
-    --   gv <- stToIO $ CCG.freshGlobalVar (simHandleAllocator symCfg) name (CT.baseToType rep)
-    --   return (Pair gv entry)
-    -- addGlobal :: forall tp
-    --            . Product CS.GlobalVar (CS.RegEntry sym) tp
-    --           -> CSG.SymGlobalState sym
-    --           -> CSG.SymGlobalState sym
-    -- addGlobal (Pair gv entry) = CSG.insertGlobal gv (CS.regValue entry)
 
 executionFeatures :: [CS.ExecutionFeature p sym ext rtp]
 executionFeatures = []

@@ -35,6 +35,7 @@ data TranslationException = NoReturnInFunction SomeSignature
                           | ExpectedFunctionSignature T.Text
                           | ExpectedProcedureSignature T.Text
                           | forall tps . InvalidArgumentTypes T.Text (Ctx.Assignment CT.TypeRepr tps)
+                          | forall tp1 tp2 . UnexpectedProcedureReturn (CT.TypeRepr tp1) (CT.TypeRepr tp2)
 
 deriving instance Show TranslationException
 

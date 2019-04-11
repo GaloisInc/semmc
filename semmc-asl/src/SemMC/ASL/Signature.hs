@@ -61,21 +61,10 @@ newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseTo
 
 instance ShowF BaseGlobalVar
 
--- | Like 'FunctionSignature', except with a different return value
---
--- The return here is actually a list of global variables updated by the function (both direct and
--- indirect updates)
--- data ProcedureSignature init ret tps =
---   ProcedureSignature { procSigRepr :: Ctx.Assignment BaseGlobalVar tps
---                      , procArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
---                      , procGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
---                      }
---   deriving (Show)
-
 data ProcedureSignature init ret bts =
   ProcedureSignature { procSigBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
                       -- ^ The return type (in terms of base types) of the procedure
-                      , procSigRepr :: CT.TypeRepr (CT.BaseToType (WT.BaseStructType bts))
+                      , procSigRepr :: CT.TypeRepr ret
                       -- ^ The return type (in terms of Crucible types) of the procedure
                       , procSigGlobals :: Ctx.Assignment BaseGlobalVar bts
                       -- ^ The globals written to by the procedure - note that the type parameter is
@@ -85,6 +74,9 @@ data ProcedureSignature init ret bts =
                       -- ^ The variables written to by the procedure, used to compute to footprint
                       -- of the function
                       , procSigAssigned :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
+                      -- ^ The names and types of all of the globals assigned to by this procedure
+                      -- (including transitive assignments).  Note that these are Crucible types,
+                      -- and that we can't easily relate this type to @bts@
                       , procSigArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
                       -- ^ The types (and names) of the arguments to the procedure
                       --
@@ -96,7 +88,7 @@ data ProcedureSignature init ret bts =
 instance ShowF (ProcedureSignature init ret)
 
 data SomeSignature where
-  SomeFunctionSignature :: FunctionSignature init ret tp -> SomeSignature
+  SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature init ret tp -> SomeSignature
   SomeProcedureSignature :: ProcedureSignature init rep tps -> SomeSignature
 
 deriving instance Show SomeSignature

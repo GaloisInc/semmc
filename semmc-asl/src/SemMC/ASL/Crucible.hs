@@ -209,6 +209,7 @@ defineFunction :: forall ret tp init h s
                -> Ctx.Assignment (CCG.Atom s) init
                -> CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret)
 defineFunction ov sig stmts args = do
+  -- FIXME: Put args into the environment as locals (that can be read from)
   mapM_ (translateStatement ov (CT.baseToType (funcSigRepr sig))) stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
@@ -271,19 +272,11 @@ translateStatement ov rep stmt
                 let expectedTypes = FC.fmapFC projectValue (procSigArgReprs sig)
                 if | Just Refl <- testEquality atomTypes expectedTypes -> do
                        let vals = FC.fmapFC CCG.AtomExpr argAssign
-                       -- Some retRep <- procBaseRep (AS.ExprCall qi args) sig
-                       -- let uf = UF ident (WT.BaseStructRepr retRep) atomTypes vals
                        let uf = UF ident (procSigBaseRepr sig) atomTypes vals
                        atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                        return ()
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
 
--- procBaseRep :: AS.Expr
---             -> ProcedureSignature init ret0 tps
---             -> CCG.Generator ASLExt h s (TranslationState ret) ret (Some (Ctx.Assignment WT.BaseTypeRepr))
--- procBaseRep e sig = do
---   baseTypes <- mapM (assertAsBaseType e) (FC.toListFC Some (procSigRepr sig))
---   return (assignmentFromList (Some Ctx.empty) baseTypes)
 
 assertAsBaseType :: (Monad m) => AS.Expr -> Some BaseGlobalVar -> m (Some WT.BaseTypeRepr)
 assertAsBaseType e (Some gv) =
@@ -738,20 +731,20 @@ defineProcedure :: Overrides ASLExt
                 -> Ctx.Assignment (CCG.Atom s) init
                 -> CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret)
 defineProcedure ov sig stmts args = do
-  mapM_ (translateStatement ov (error "ret type")) stmts
+  -- FIXME: Initialize arguments with args
+  mapM_ (translateStatement ov (procSigRepr sig)) stmts
   -- Read all of the globals in the signature to produce a struct expr
-  -- typedVals <- FC.traverseFC readTypedGlobal (procSigRepr sig)
-  -- let reprs = FC.fmapFC fstFC typedVals
-  -- let vals = FC.fmapFC sndFC typedVals
-  -- return (CCG.App (CCE.MkStruct reprs vals))
-  return undefined
+  someVals <- mapM readBaseGlobal (FC.toListFC Some (procSigGlobals sig))
+  case assignmentFromList (Some Ctx.empty) someVals of
+    Some vals -> do
+      let reprs = FC.fmapFC CCG.exprType vals
+      retAtom <- CCG.mkAtom (CCG.App (CCE.MkStruct reprs vals))
+      if | Just Refl <- testEquality (CCG.typeOfAtom retAtom) (procSigRepr sig) ->
+           return (CCG.AtomExpr retAtom)
+         | otherwise -> X.throw (UnexpectedProcedureReturn (procSigRepr sig) (CCG.typeOfAtom retAtom))
 
--- fstFC :: Product a b tp -> a tp
--- fstFC (Pair a _) = a
+readBaseGlobal :: (CCE.IsSyntaxExtension ext)
+               => Some BaseGlobalVar
+               -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Expr ext s))
+readBaseGlobal (Some (BaseGlobalVar gv)) = Some <$> CCG.readGlobal gv
 
--- sndFC :: Product a b tp -> b tp
--- sndFC (Pair _ b) = b
-
--- readTypedGlobal :: BaseGlobalVar bt
---                 -> CCG.Generator ext h s (TranslationState ret) ret (Product CT.TypeRepr (CCG.Expr ext s) (CT.BaseToType bt))
--- readTypedGlobal = undefined
