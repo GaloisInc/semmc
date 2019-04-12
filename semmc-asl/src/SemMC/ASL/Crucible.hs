@@ -195,3 +195,26 @@ readBaseGlobal :: (CCE.IsSyntaxExtension ext)
                -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Expr ext s))
 readBaseGlobal (Some (BaseGlobalVar gv)) = Some <$> CCG.readGlobal gv
 
+{- Note [Call Translation]
+
+There are two types of calls in ASL: functions and procedures.
+
+Functions are simple and are already purely functional, and thus need no additional support.
+
+Procedures are more complicated, as they return no values but instead update processor state through
+side effects.  Our challenge in this code is to turn these imperative procedures into pure
+functions.  The strategy will be to arrange it so that, in addition to its natural set of
+parameters, each procedure takes an entire machine state as a BaseStruct.  It will also return an
+entire BaseStruct register state.
+
+At procedure initialization time, the procedure will copy all of its input machine state into a set
+of locals (Crucible refs).  Before calling a procedure, the caller takes a snapshot of the current
+machine state (from the refs) to construct the BaseStruct to pass to the callee.  After a procedure
+call returns, the caller will assign the contents of the register state back to its locals (refs).
+
+Question: do we need any additional components to the return value of procedures?  Anything that
+isn't a global is local, and local modifications can't be reflected to callers.
+
+For the semantics of an *instruction*, we'll set up the global state as globals.
+
+-}
