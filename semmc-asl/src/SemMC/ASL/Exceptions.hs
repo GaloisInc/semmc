@@ -14,7 +14,7 @@ import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Signature
 
-data TranslationException = NoReturnInFunction SomeSignature
+data TranslationException = forall regs . NoReturnInFunction (SomeSignature regs)
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
                           | forall tp1 tp2 .  UnexpectedExprType AS.Expr (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           -- ^ Expression, actual type, expected type

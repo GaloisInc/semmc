@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
@@ -61,7 +62,7 @@ newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseTo
 
 instance ShowF BaseGlobalVar
 
-data ProcedureSignature init ret bts =
+data ProcedureSignature init regs ret bts =
   ProcedureSignature { procSigBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
                       -- ^ The return type (in terms of base types) of the procedure
                       , procSigRepr :: CT.TypeRepr ret
@@ -85,10 +86,27 @@ data ProcedureSignature init ret bts =
                       }
   deriving (Show)
 
-instance ShowF (ProcedureSignature init ret)
+instance ShowF (ProcedureSignature init regs ret)
 
-data SomeSignature where
-  SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature init ret tp -> SomeSignature
-  SomeProcedureSignature :: ProcedureSignature init rep tps -> SomeSignature
+-- init are the non-global args
+-- regs are the list of global registers
+-- ret is the return type (actually a whole reg state, and basically congruent to regs)
+-- bts is the list of extra return values - I think it will likely always be empty
+--
+-- Note that the actual args below (psArgReprs) has the full register state appended (as a struct)
+data PS (init :: Ctx.Ctx CT.CrucibleType)
+        (regs :: Ctx.Ctx WT.BaseType)
+        (ret :: CT.CrucibleType)
+        (bts :: Ctx.Ctx WT.BaseType) =
+  PS { psBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType (Ctx.SingleCtx (WT.BaseStructType regs) Ctx.::> WT.BaseStructType bts))
+     , psSigRepr :: CT.TypeRepr ret
+     , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) (init Ctx.::> CT.SymbolicStructType regs)
+     }
 
-deriving instance Show SomeSignature
+data SomeSignature regs where
+  SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature init ret tp -> SomeSignature regs
+  SomeProcedureSignature :: WT.BaseTypeRepr (WT.BaseStructType regs)
+                         -> ProcedureSignature init regs rep tps
+                         -> SomeSignature regs
+
+deriving instance Show (SomeSignature regs)

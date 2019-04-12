@@ -170,9 +170,9 @@ instance CCES.HasStructuredAssertions ASLExt where
 --
 -- NOTE: Right now, this generates a fresh uninterpreted function for each call.  That should be
 -- fine, as we don't need to test for equality between the results of any calls.
-aslAppEvalFunc :: forall sym
+aslAppEvalFunc :: forall sym regs
                 . (CB.IsSymInterface sym)
-               => (Map.Map T.Text SomeSignature)
+               => (Map.Map T.Text (SomeSignature regs))
                -- ^ A mapping from function names to signatures, which we'll use to generate (and check) call signatures
                -> sym
                -> CS.IntrinsicTypes sym
@@ -225,7 +225,7 @@ type instance CCExt.StmtExtension ASLExt = ASLStmt
 
 instance CCExt.IsSyntaxExtension ASLExt
 
-aslExtImpl :: Map.Map T.Text SomeSignature -> CS.ExtensionImpl p sym ASLExt
+aslExtImpl :: Map.Map T.Text (SomeSignature regs) -> CS.ExtensionImpl p sym ASLExt
 aslExtImpl sigs =
   CS.ExtensionImpl { CS.extensionEval = aslAppEvalFunc sigs
                    , CS.extensionExec = \case
