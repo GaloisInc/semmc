@@ -98,7 +98,7 @@ library
                        s-cargot-letbind >= 0.2.2.0 && < 0.3,
                        dismantle-tablegen,
                        crucible >= 0.4,
-                       parameterized-utils >= 1 && < 2,
+                       parameterized-utils >= 1 && < 2.1,
                        process >= 1.4 && < 1.7,
                        async >= 2.2 && < 2.3,
                        time,
