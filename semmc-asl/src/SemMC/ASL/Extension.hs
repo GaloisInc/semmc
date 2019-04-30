@@ -16,7 +16,7 @@ module SemMC.ASL.Extension (
   ) where
 
 import qualified Control.Exception as X
-import           Control.Lens ( (^.) )
+import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Monad ( guard )
 import           Data.Functor.Product ( Product(..) )
 import qualified Data.Map as Map
@@ -72,9 +72,6 @@ data ASLApp f tp where
                 -> Ctx.Index ctx tp
                 -> f (CT.SymbolicStructType ctx)
                 -> ASLApp f (CT.BaseToType tp)
-  -- GetRegState :: Ctx.Assignment CCCo.GlobalVar regs
-  --             -> ASLApp arch f (CT.SymbolicStructType regs)
-
 
 instance FC.FunctorFC ASLApp where
   fmapFC f a =
@@ -169,33 +166,46 @@ instance FC.OrdFC ASLApp where
 data ASLStmt arch f tp where
   GetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
               -> ASLStmt arch f (CT.SymbolicStructType (ASLExtRegs arch))
+  SetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
+              -> f (CT.SymbolicStructType (ASLExtRegs arch))
+              -> ASLStmt arch f CT.UnitType
 
 instance FC.FunctorFC (ASLStmt arch) where
-  fmapFC _ a =
+  fmapFC f a =
     case a of
       GetRegState gvs -> GetRegState gvs
+      SetRegState gvs s -> SetRegState gvs (f s)
 
 instance FC.FoldableFC (ASLStmt arch) where
   foldrFC _f seed a =
     case a of
       GetRegState _ -> seed
+      SetRegState _ _ -> seed
 
 instance FC.TraversableFC (ASLStmt arch) where
-  traverseFC _f a =
+  traverseFC f a =
     case a of
       GetRegState gvs -> pure (GetRegState gvs)
+      SetRegState gvs s -> SetRegState gvs <$> f s
 
 instance (ASLArch arch) => CCExt.TypeApp (ASLStmt arch) where
   appType a =
     case a of
       GetRegState _ -> CT.baseToType (archRegBaseRepr (Proxy @arch))
+      SetRegState _ _ -> CT.UnitRepr
 
 instance CCExt.PrettyApp (ASLStmt arch) where
-  ppApp _ a =
+  ppApp pp a =
     case a of
       GetRegState regs ->
         PP.hsep [ PP.text "GetRegState"
-                , PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) regs))
+                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) regs)))
+                ]
+      SetRegState gvs vs ->
+        PP.hsep [ PP.text "SetRegState"
+                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) gvs)))
+                , PP.comma
+                , PP.brackets (pp vs)
                 ]
 
 type instance CCES.AssertionClassifier (ASLExt arch) = CCES.NoAssertionClassifier
@@ -232,7 +242,8 @@ aslAppEvalFunc sigs sym _ _ = \evalApp app ->
       rv <- evalApp term
       WI.structField sym rv idx
 
-aslStmtEvalFunc :: ASLStmt arch f tp
+aslStmtEvalFunc :: forall arch sym tp p rtp blocks r ctx
+                 . ASLStmt arch (CS.RegEntry sym) tp
                 -> CS.CrucibleState p sym (ASLExt arch) rtp blocks r ctx
                 -> IO (CSR.RegValue sym tp, CS.CrucibleState p sym (ASLExt arch) rtp blocks r ctx)
 aslStmtEvalFunc stmt ctx =
@@ -244,6 +255,21 @@ aslStmtEvalFunc stmt ctx =
       gvals <- FC.traverseFC (readBaseGlobal globals) bvs
       struct <- WI.mkStruct sym gvals
       return (struct, ctx)
+    SetRegState bvs vals -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
+      let sym = ctx ^. CS.stateContext . CS.ctxSymInterface
+      let fr = ctx ^. (CSET.stateTree . CSET.actFrame)
+      let globals = fr ^. CSET.gpGlobals
+      let updateGlobal :: forall tp' . IO (CSG.SymGlobalState sym) -> Ctx.Index (ASLExtRegs arch) tp' -> IO (CSG.SymGlobalState sym)
+          updateGlobal mgs idx =
+            case bvs Ctx.! idx of
+              BaseGlobalVar gv -> do
+                gs <- mgs
+                let rv = CS.regValue vals
+                val <- WI.structField sym rv idx
+                return (CSG.insertGlobal gv val gs)
+      globals' <- Ctx.forIndex (Ctx.size bvs) updateGlobal (pure globals)
+      return ((), ctx & CSET.stateTree . CSET.actFrame . CSET.gpGlobals .~ globals')
+
 
 readBaseGlobal :: (Monad m)
                => CS.SymGlobalState sym
