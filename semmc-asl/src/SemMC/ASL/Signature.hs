@@ -62,31 +62,31 @@ newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseTo
 
 instance ShowF BaseGlobalVar
 
-data ProcedureSignature init regs ret bts =
-  ProcedureSignature { procSigBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
-                      -- ^ The return type (in terms of base types) of the procedure
-                      , procSigRepr :: CT.TypeRepr ret
-                      -- ^ The return type (in terms of Crucible types) of the procedure
-                      , procSigGlobals :: Ctx.Assignment BaseGlobalVar bts
-                      -- ^ The globals written to by the procedure - note that the type parameter is
-                      -- the same as the return type repr by design, as we need to convert the
-                      -- global writes into a struct return type
-                      , procSigAssignedBase :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) bts
-                      -- ^ The variables written to by the procedure, used to compute to footprint
-                      -- of the function
-                      , procSigAssigned :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
-                      -- ^ The names and types of all of the globals assigned to by this procedure
-                      -- (including transitive assignments).  Note that these are Crucible types,
-                      -- and that we can't easily relate this type to @bts@
-                      , procSigArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
-                      -- ^ The types (and names) of the arguments to the procedure
-                      --
-                      -- Note that this has a different type compared to the footprint, and that we
-                      -- don't need base types to talk about the parameters.
-                      }
-  deriving (Show)
+-- data ProcedureSignature init regs ret bts =
+--   ProcedureSignature { procSigBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
+--                       -- ^ The return type (in terms of base types) of the procedure
+--                       , procSigRepr :: CT.TypeRepr ret
+--                       -- ^ The return type (in terms of Crucible types) of the procedure
+--                       , procSigGlobals :: Ctx.Assignment BaseGlobalVar bts
+--                       -- ^ The globals written to by the procedure - note that the type parameter is
+--                       -- the same as the return type repr by design, as we need to convert the
+--                       -- global writes into a struct return type
+--                       , procSigAssignedBase :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) bts
+--                       -- ^ The variables written to by the procedure, used to compute to footprint
+--                       -- of the function
+--                       , procSigAssigned :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
+--                       -- ^ The names and types of all of the globals assigned to by this procedure
+--                       -- (including transitive assignments).  Note that these are Crucible types,
+--                       -- and that we can't easily relate this type to @bts@
+--                       , procSigArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+--                       -- ^ The types (and names) of the arguments to the procedure
+--                       --
+--                       -- Note that this has a different type compared to the footprint, and that we
+--                       -- don't need base types to talk about the parameters.
+--                       }
+--   deriving (Show)
 
-instance ShowF (ProcedureSignature init regs ret)
+-- instance ShowF (ProcedureSignature init regs ret)
 
 -- init are the non-global args
 -- regs are the list of global registers
@@ -94,19 +94,36 @@ instance ShowF (ProcedureSignature init regs ret)
 -- bts is the list of extra return values - I think it will likely always be empty
 --
 -- Note that the actual args below (psArgReprs) has the full register state appended (as a struct)
-data PS (init :: Ctx.Ctx CT.CrucibleType)
-        (regs :: Ctx.Ctx WT.BaseType)
-        (ret :: CT.CrucibleType)
-        (bts :: Ctx.Ctx WT.BaseType) =
-  PS { psBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType (Ctx.SingleCtx (WT.BaseStructType regs) Ctx.::> WT.BaseStructType bts))
-     , psSigRepr :: CT.TypeRepr ret
-     , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) (init Ctx.::> CT.SymbolicStructType regs)
-     }
+data ProcedureSignature (init :: Ctx.Ctx CT.CrucibleType)
+                        (regs :: Ctx.Ctx WT.BaseType)
+                        (ret :: CT.CrucibleType) =
+  ProcedureSignature { psRegsRepr :: WT.BaseTypeRepr (WT.BaseStructType regs)
+                       -- ^ The type of the register file
+                       --
+                       -- Note that this will include state that isn't exactly a machine register,
+                       -- but is CPU state that we track globally and need to thread through
+                       -- procedure calls.  This is also the return type of the procedure
+                       , psSigRepr :: CT.TypeRepr ret
+                       -- ^ The return value of the procedure (in Crucible types).
+                       --
+                       -- Note that, morally, ret ~ regs, but we can't really write that.
+                       , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) (init Ctx.::> CT.SymbolicStructType regs)
+                       -- ^ The full repr for the arguments to the procedure
+                       --
+                       -- The arguments are the stated arguments (the @init@ type, which is the
+                       -- list of explicit arguments), as well as a struct containing all of the
+                       -- register values at the time the procedure is called, passed as a struct
+                       -- in the last argument position.
+                       }
+  deriving (Show)
+
+-- instance ShowF (ProcedureSignature init regs ret)
+
+
 
 data SomeSignature regs where
   SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature init ret tp -> SomeSignature regs
-  SomeProcedureSignature :: WT.BaseTypeRepr (WT.BaseStructType regs)
-                         -> ProcedureSignature init regs rep tps
+  SomeProcedureSignature :: ProcedureSignature init regs ret
                          -> SomeSignature regs
 
 deriving instance Show (SomeSignature regs)

@@ -139,7 +139,7 @@ translateStatement ov rep stmt
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
-          Just (SomeProcedureSignature _regRepr sig) -> do
+          Just (SomeProcedureSignature sig) -> do
             argAtoms <- mapM (translateExpr ov) args
             case assignmentFromList (Some Ctx.empty) argAtoms of
               Some argAssign -> do
@@ -356,7 +356,7 @@ translateExpr ov expr
         sigMap <- MS.gets tsFunctionSigs
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
-          Just (SomeProcedureSignature _ _) -> X.throw (ExpectedFunctionSignature ident)
+          Just (SomeProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
           Just (SomeFunctionSignature sig) -> do
             argAtoms <- mapM (translateExpr ov) args
             case assignmentFromList (Some Ctx.empty) argAtoms of

@@ -112,13 +112,13 @@ funcDef :: (ret ~ CT.BaseToType tp)
         -> FunctionSignature init ret tp
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret))
+        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret))
 funcDef ov sig stmts args = (funcInitialState sig args, defineFunction ov sig stmts args)
 
-funcInitialState :: forall init ret tp s
+funcInitialState :: forall init ret tp s regs
                   . FunctionSignature init ret tp
                  -> Ctx.Assignment (CCG.Atom s) init
-                 -> TranslationState ret s
+                 -> TranslationState regs ret s
 funcInitialState sig args =
   TranslationState m1 Map.empty (error "globals") (error "undefined") (error "unpredictable") (error "sigs")
   where
@@ -133,13 +133,13 @@ funcInitialState sig args =
       in Map.insert argName (Some atom) m
 
 
-defineFunction :: forall ret tp init h s
+defineFunction :: forall ret tp init h s regs
                 . (ret ~ CT.BaseToType tp)
                => Overrides ASLExt
                -> FunctionSignature init ret tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
-               -> CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret)
+               -> CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret)
 defineFunction ov sig stmts args = do
   -- FIXME: Put args into the environment as locals (that can be read from)
   mapM_ (translateStatement ov (CT.baseToType (funcSigRepr sig))) stmts
@@ -163,7 +163,7 @@ procDef :: Overrides ASLExt
         -> ProcedureSignature init ret tp
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret))
+        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret))
 procDef ov sig stmts args =
   (procInitialState sig args, defineProcedure ov sig stmts args)
 
@@ -176,7 +176,7 @@ defineProcedure :: Overrides ASLExt
                 -> ProcedureSignature init ret tp
                 -> [AS.Stmt]
                 -> Ctx.Assignment (CCG.Atom s) init
-                -> CCG.Generator ASLExt h s (TranslationState ret) ret (CCG.Expr ASLExt s ret)
+                -> CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret)
 defineProcedure ov sig stmts args = do
   -- FIXME: Initialize arguments with args
   mapM_ (translateStatement ov (procSigRepr sig)) stmts
@@ -192,7 +192,7 @@ defineProcedure ov sig stmts args = do
 
 readBaseGlobal :: (CCE.IsSyntaxExtension ext)
                => Some BaseGlobalVar
-               -> CCG.Generator ext h s (TranslationState ret) ret (Some (CCG.Expr ext s))
+               -> CCG.Generator ext h s (TranslationState regs ret) ret (Some (CCG.Expr ext s))
 readBaseGlobal (Some (BaseGlobalVar gv)) = Some <$> CCG.readGlobal gv
 
 {- Note [Call Translation]
