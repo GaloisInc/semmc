@@ -19,7 +19,6 @@ import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( when )
 import qualified Control.Monad.State.Class as MS
-import           Data.Functor.Const ( Const(..) )
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
