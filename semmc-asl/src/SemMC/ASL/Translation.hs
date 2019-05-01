@@ -26,6 +26,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -92,7 +93,8 @@ data TranslationState arch regs ret s =
                    -- and procedures)
                    , tsGlobalCtx :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
                    }
-translateStatement :: (ASLArch arch)
+translateStatement :: forall arch regs ret h s
+                    . (ASLArch arch)
                    => Overrides arch regs
                    -> CT.TypeRepr ret
                    -> AS.Stmt
@@ -149,8 +151,10 @@ translateStatement ov rep stmt
                 let expectedTypes = FC.fmapFC projectValue (psArgReprs sig)
                 if | Just Refl <- testEquality atomTypes expectedTypes -> do
                        globals <- MS.gets tsGlobalCtx
+                       globalsSnapshot <- CCG.extensionStmt (GetRegState globals)
                        let vals = FC.fmapFC CCG.AtomExpr argAssign
-                       let uf = UF ident (psRegsRepr sig) atomTypes vals
+                       let globalsType = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (archRegBaseRepr (Proxy @arch))))
+                       let uf = UF ident (psRegsRepr sig) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
                        atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                        _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
                        return ()
