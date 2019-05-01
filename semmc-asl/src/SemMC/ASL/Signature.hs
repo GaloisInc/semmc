@@ -33,7 +33,7 @@ import qualified What4.BaseTypes as WT
 data FunctionSignature init ret tp =
   FunctionSignature { funcSigRepr :: WT.BaseTypeRepr tp
                     , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
-                    , funcGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
+                    , funcGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr))
                     }
   deriving (Show)
 
@@ -62,32 +62,6 @@ newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseTo
 
 instance ShowF BaseGlobalVar
 
--- data ProcedureSignature init regs ret bts =
---   ProcedureSignature { procSigBaseRepr :: WT.BaseTypeRepr (WT.BaseStructType bts)
---                       -- ^ The return type (in terms of base types) of the procedure
---                       , procSigRepr :: CT.TypeRepr ret
---                       -- ^ The return type (in terms of Crucible types) of the procedure
---                       , procSigGlobals :: Ctx.Assignment BaseGlobalVar bts
---                       -- ^ The globals written to by the procedure - note that the type parameter is
---                       -- the same as the return type repr by design, as we need to convert the
---                       -- global writes into a struct return type
---                       , procSigAssignedBase :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) bts
---                       -- ^ The variables written to by the procedure, used to compute to footprint
---                       -- of the function
---                       , procSigAssigned :: Some (Ctx.Assignment (LabeledValue T.Text CT.TypeRepr))
---                       -- ^ The names and types of all of the globals assigned to by this procedure
---                       -- (including transitive assignments).  Note that these are Crucible types,
---                       -- and that we can't easily relate this type to @bts@
---                       , procSigArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
---                       -- ^ The types (and names) of the arguments to the procedure
---                       --
---                       -- Note that this has a different type compared to the footprint, and that we
---                       -- don't need base types to talk about the parameters.
---                       }
---   deriving (Show)
-
--- instance ShowF (ProcedureSignature init regs ret)
-
 -- init are the non-global args
 -- regs are the list of global registers
 -- ret is the return type (actually a whole reg state, and basically congruent to regs)
@@ -107,7 +81,7 @@ data ProcedureSignature (init :: Ctx.Ctx CT.CrucibleType)
                        -- ^ The return value of the procedure (in Crucible types).
                        --
                        -- Note that, morally, ret ~ regs, but we can't really write that.
-                       , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) (init Ctx.::> CT.SymbolicStructType regs)
+                       , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
                        -- ^ The full repr for the arguments to the procedure
                        --
                        -- The arguments are the stated arguments (the @init@ type, which is the
@@ -116,10 +90,6 @@ data ProcedureSignature (init :: Ctx.Ctx CT.CrucibleType)
                        -- in the last argument position.
                        }
   deriving (Show)
-
--- instance ShowF (ProcedureSignature init regs ret)
-
-
 
 data SomeSignature regs where
   SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature init ret tp -> SomeSignature regs

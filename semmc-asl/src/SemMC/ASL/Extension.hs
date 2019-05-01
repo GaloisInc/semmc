@@ -10,8 +10,9 @@
 {-# LANGUAGE TypeFamilies #-}
 module SemMC.ASL.Extension (
     ASLExt
+  , ASLArch(..)
   , ASLApp(..)
-  , ASLStmt
+  , ASLStmt(..)
   , aslExtImpl
   ) where
 
@@ -41,7 +42,7 @@ import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
 
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
-import           SemMC.ASL.Signature ( SomeSignature, BaseGlobalVar(..) )
+import           SemMC.ASL.Signature ( SomeSignature, BaseGlobalVar(..), LabeledValue, projectValue )
 
 -- NOTE: Translate calls (both expr and stmt) as What4 uninterpreted functions
 --
@@ -60,7 +61,7 @@ data ASLExt arch
 
 class ASLArch arch where
   type family ASLExtRegs arch :: CT.Ctx WT.BaseType
-  archRegBaseRepr :: proxy arch -> WT.BaseTypeRepr (WT.BaseStructType (ASLExtRegs arch))
+  archRegBaseRepr :: proxy arch -> Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) (ASLExtRegs arch)
 
 data ASLApp f tp where
   UF :: T.Text
@@ -72,6 +73,168 @@ data ASLApp f tp where
                 -> Ctx.Index ctx tp
                 -> f (CT.SymbolicStructType ctx)
                 -> ASLApp f (CT.BaseToType tp)
+
+-- | The statement extension type
+--
+-- These forms must be statements because only statements have access to the
+-- solver state
+data ASLStmt arch f tp where
+  GetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
+              -> ASLStmt arch f (CT.SymbolicStructType (ASLExtRegs arch))
+  SetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
+              -> f (CT.SymbolicStructType (ASLExtRegs arch))
+              -> ASLStmt arch f CT.UnitType
+
+
+-- | The ASLExt app evaluator
+--
+-- NOTE: Right now, this generates a fresh uninterpreted function for each call.  That should be
+-- fine, as we don't need to test for equality between the results of any calls.
+aslAppEvalFunc :: forall sym arch proxy
+                . (CB.IsSymInterface sym)
+               => proxy arch
+               -> (Map.Map T.Text (SomeSignature (ASLExtRegs arch)))
+               -- ^ A mapping from function names to signatures, which we'll use to generate (and check) call signatures
+               -> sym
+               -> CS.IntrinsicTypes sym
+               -> (Int -> String -> IO ())
+               -> CSE.EvalAppFunc sym ASLApp
+aslAppEvalFunc _ sigs sym _ _ = \evalApp app ->
+  case app of
+    UF name trep argTps args ->
+      case WS.userSymbol (T.unpack name) of
+        Left _err -> X.throw (InvalidFunctionName name)
+        Right funcSymbol -> do
+          Some baseTypesArgs <- extractBase name (\v -> CS.RV <$> evalApp v) argTps args (Some Ctx.empty)
+          let baseTps = FC.fmapFC fstFC baseTypesArgs
+          let baseArgs = FC.fmapFC (unSE @sym . sndFC) baseTypesArgs
+          symFn <- WI.freshTotalUninterpFn sym funcSymbol baseTps trep
+          WI.applySymFn sym symFn baseArgs
+    GetBaseStruct _srep idx term -> do
+      rv <- evalApp term
+      WI.structField sym rv idx
+
+aslStmtEvalFunc :: forall arch sym tp p rtp blocks r ctx
+                 . ASLStmt arch (CS.RegEntry sym) tp
+                -> CS.CrucibleState p sym (ASLExt arch) rtp blocks r ctx
+                -> IO (CSR.RegValue sym tp, CS.CrucibleState p sym (ASLExt arch) rtp blocks r ctx)
+aslStmtEvalFunc stmt ctx =
+  case stmt of
+    GetRegState bvs -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
+      let sym = ctx ^. CS.stateContext . CS.ctxSymInterface
+      let fr = ctx ^. (CSET.stateTree . CSET.actFrame)
+      let globals = fr ^. CSET.gpGlobals
+      gvals <- FC.traverseFC (readBaseGlobal globals) bvs
+      struct <- WI.mkStruct sym gvals
+      return (struct, ctx)
+    SetRegState bvs vals -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
+      let sym = ctx ^. CS.stateContext . CS.ctxSymInterface
+      let fr = ctx ^. (CSET.stateTree . CSET.actFrame)
+      let globals = fr ^. CSET.gpGlobals
+      let updateGlobal :: forall tp' . IO (CSG.SymGlobalState sym) -> Ctx.Index (ASLExtRegs arch) tp' -> IO (CSG.SymGlobalState sym)
+          updateGlobal mgs idx =
+            case bvs Ctx.! idx of
+              BaseGlobalVar gv -> do
+                gs <- mgs
+                let rv = CS.regValue vals
+                val <- WI.structField sym rv idx
+                return (CSG.insertGlobal gv val gs)
+      globals' <- Ctx.forIndex (Ctx.size bvs) updateGlobal (pure globals)
+      return ((), ctx & CSET.stateTree . CSET.actFrame . CSET.gpGlobals .~ globals')
+
+
+readBaseGlobal :: (Monad m)
+               => CS.SymGlobalState sym
+               -> BaseGlobalVar tp
+               -> m (WI.SymExpr sym tp)
+readBaseGlobal gs (BaseGlobalVar gv) =
+  case CSG.lookupGlobal gv gs of
+    Nothing -> error ("Unbound global register: " ++ show gv)
+    Just rv -> return rv
+
+-- | A wrapper around 'WI.SymExpr' because it is a type family and not injective
+data SymExpr' sym tp = SE { unSE :: WI.SymExpr sym tp }
+
+fstFC :: Product f g a -> f a
+fstFC (Pair f _) = f
+
+sndFC :: Product f g a -> g a
+sndFC (Pair _ g) = g
+
+extractBase :: T.Text
+            -> (forall tp1 . f tp1 -> IO (CS.RegValue' sym tp1))
+            -> Ctx.Assignment CT.TypeRepr tps
+            -> Ctx.Assignment f tps
+            -> Some (Ctx.Assignment (Product WT.BaseTypeRepr (SymExpr' sym)))
+            -> IO (Some (Ctx.Assignment (Product WT.BaseTypeRepr (SymExpr' sym))))
+extractBase fname evalExpr tps vals (Some acc) = do
+  case (Ctx.viewAssign tps, Ctx.viewAssign vals) of
+    (Ctx.AssignEmpty, Ctx.AssignEmpty) -> return (Some acc)
+    (Ctx.AssignExtend restReps rep, Ctx.AssignExtend restVals val) -> do
+      case CT.asBaseType rep of
+        CT.NotBaseType -> X.throwIO (ExpectedBaseTypeArgument fname rep)
+        CT.AsBaseType btr -> do
+          CS.RV se <- evalExpr val
+          let acc' = Ctx.extend acc (Pair btr (SE se))
+          extractBase fname evalExpr restReps restVals (Some acc')
+
+
+type instance CCExt.ExprExtension (ASLExt arch) = ASLApp
+type instance CCExt.StmtExtension (ASLExt arch) = ASLStmt arch
+
+instance (ASLArch arch) => CCExt.IsSyntaxExtension (ASLExt arch)
+
+aslExtImpl :: forall arch p sym . Map.Map T.Text (SomeSignature (ASLExtRegs arch)) -> CS.ExtensionImpl p sym (ASLExt arch)
+aslExtImpl sigs =
+  CS.ExtensionImpl { CS.extensionEval = aslAppEvalFunc (Proxy @arch) sigs
+                   , CS.extensionExec = aslStmtEvalFunc
+                   }
+
+
+instance FC.FunctorFC (ASLStmt arch) where
+  fmapFC f a =
+    case a of
+      GetRegState gvs -> GetRegState gvs
+      SetRegState gvs s -> SetRegState gvs (f s)
+
+instance FC.FoldableFC (ASLStmt arch) where
+  foldrFC _f seed a =
+    case a of
+      GetRegState _ -> seed
+      SetRegState _ _ -> seed
+
+instance FC.TraversableFC (ASLStmt arch) where
+  traverseFC f a =
+    case a of
+      GetRegState gvs -> pure (GetRegState gvs)
+      SetRegState gvs s -> SetRegState gvs <$> f s
+
+instance (ASLArch arch) => CCExt.TypeApp (ASLStmt arch) where
+  appType a =
+    case a of
+      GetRegState _ -> CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (archRegBaseRepr (Proxy @arch))))
+      SetRegState _ _ -> CT.UnitRepr
+
+instance CCExt.PrettyApp (ASLStmt arch) where
+  ppApp pp a =
+    case a of
+      GetRegState regs ->
+        PP.hsep [ PP.text "GetRegState"
+                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) regs)))
+                ]
+      SetRegState gvs vs ->
+        PP.hsep [ PP.text "SetRegState"
+                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) gvs)))
+                , PP.comma
+                , PP.brackets (pp vs)
+                ]
+
+type instance CCES.AssertionClassifier (ASLExt arch) = CCES.NoAssertionClassifier
+
+instance CCES.HasStructuredAssertions (ASLExt arch) where
+  explain _ = \case
+  toPredicate _ _ = \case
+
 
 instance FC.FunctorFC ASLApp where
   fmapFC f a =
@@ -158,162 +321,3 @@ instance FC.OrdFC ASLApp where
               EQF -> EQF
       (UF {}, _) -> LTF
       (GetBaseStruct {}, _) -> GTF
-
--- | The statement extension type
---
--- These forms must be statements because only statements have access to the
--- solver state
-data ASLStmt arch f tp where
-  GetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
-              -> ASLStmt arch f (CT.SymbolicStructType (ASLExtRegs arch))
-  SetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
-              -> f (CT.SymbolicStructType (ASLExtRegs arch))
-              -> ASLStmt arch f CT.UnitType
-
-instance FC.FunctorFC (ASLStmt arch) where
-  fmapFC f a =
-    case a of
-      GetRegState gvs -> GetRegState gvs
-      SetRegState gvs s -> SetRegState gvs (f s)
-
-instance FC.FoldableFC (ASLStmt arch) where
-  foldrFC _f seed a =
-    case a of
-      GetRegState _ -> seed
-      SetRegState _ _ -> seed
-
-instance FC.TraversableFC (ASLStmt arch) where
-  traverseFC f a =
-    case a of
-      GetRegState gvs -> pure (GetRegState gvs)
-      SetRegState gvs s -> SetRegState gvs <$> f s
-
-instance (ASLArch arch) => CCExt.TypeApp (ASLStmt arch) where
-  appType a =
-    case a of
-      GetRegState _ -> CT.baseToType (archRegBaseRepr (Proxy @arch))
-      SetRegState _ _ -> CT.UnitRepr
-
-instance CCExt.PrettyApp (ASLStmt arch) where
-  ppApp pp a =
-    case a of
-      GetRegState regs ->
-        PP.hsep [ PP.text "GetRegState"
-                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) regs)))
-                ]
-      SetRegState gvs vs ->
-        PP.hsep [ PP.text "SetRegState"
-                , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) gvs)))
-                , PP.comma
-                , PP.brackets (pp vs)
-                ]
-
-type instance CCES.AssertionClassifier (ASLExt arch) = CCES.NoAssertionClassifier
-
-instance CCES.HasStructuredAssertions (ASLExt arch) where
-  explain _ = \case
-  toPredicate _ _ = \case
-
-
--- | The ASLExt app evaluator
---
--- NOTE: Right now, this generates a fresh uninterpreted function for each call.  That should be
--- fine, as we don't need to test for equality between the results of any calls.
-aslAppEvalFunc :: forall sym regs
-                . (CB.IsSymInterface sym)
-               => (Map.Map T.Text (SomeSignature regs))
-               -- ^ A mapping from function names to signatures, which we'll use to generate (and check) call signatures
-               -> sym
-               -> CS.IntrinsicTypes sym
-               -> (Int -> String -> IO ())
-               -> CSE.EvalAppFunc sym ASLApp
-aslAppEvalFunc sigs sym _ _ = \evalApp app ->
-  case app of
-    UF name trep argTps args ->
-      case WS.userSymbol (T.unpack name) of
-        Left _err -> X.throw (InvalidFunctionName name)
-        Right funcSymbol -> do
-          Some baseTypesArgs <- extractBase name (\v -> CS.RV <$> evalApp v) argTps args (Some Ctx.empty)
-          let baseTps = FC.fmapFC fstFC baseTypesArgs
-          let baseArgs = FC.fmapFC (unSE @sym . sndFC) baseTypesArgs
-          symFn <- WI.freshTotalUninterpFn sym funcSymbol baseTps trep
-          WI.applySymFn sym symFn baseArgs
-    GetBaseStruct _srep idx term -> do
-      rv <- evalApp term
-      WI.structField sym rv idx
-
-aslStmtEvalFunc :: forall arch sym tp p rtp blocks r ctx
-                 . ASLStmt arch (CS.RegEntry sym) tp
-                -> CS.CrucibleState p sym (ASLExt arch) rtp blocks r ctx
-                -> IO (CSR.RegValue sym tp, CS.CrucibleState p sym (ASLExt arch) rtp blocks r ctx)
-aslStmtEvalFunc stmt ctx =
-  case stmt of
-    GetRegState bvs -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
-      let sym = ctx ^. CS.stateContext . CS.ctxSymInterface
-      let fr = ctx ^. (CSET.stateTree . CSET.actFrame)
-      let globals = fr ^. CSET.gpGlobals
-      gvals <- FC.traverseFC (readBaseGlobal globals) bvs
-      struct <- WI.mkStruct sym gvals
-      return (struct, ctx)
-    SetRegState bvs vals -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
-      let sym = ctx ^. CS.stateContext . CS.ctxSymInterface
-      let fr = ctx ^. (CSET.stateTree . CSET.actFrame)
-      let globals = fr ^. CSET.gpGlobals
-      let updateGlobal :: forall tp' . IO (CSG.SymGlobalState sym) -> Ctx.Index (ASLExtRegs arch) tp' -> IO (CSG.SymGlobalState sym)
-          updateGlobal mgs idx =
-            case bvs Ctx.! idx of
-              BaseGlobalVar gv -> do
-                gs <- mgs
-                let rv = CS.regValue vals
-                val <- WI.structField sym rv idx
-                return (CSG.insertGlobal gv val gs)
-      globals' <- Ctx.forIndex (Ctx.size bvs) updateGlobal (pure globals)
-      return ((), ctx & CSET.stateTree . CSET.actFrame . CSET.gpGlobals .~ globals')
-
-
-readBaseGlobal :: (Monad m)
-               => CS.SymGlobalState sym
-               -> BaseGlobalVar tp
-               -> m (WI.SymExpr sym tp)
-readBaseGlobal gs (BaseGlobalVar gv) =
-  case CSG.lookupGlobal gv gs of
-    Nothing -> error ("Unbound global register: " ++ show gv)
-    Just rv -> return rv
-
--- | A wrapper around 'WI.SymExpr' because it is a type family and not injective
-data SymExpr' sym tp = SE { unSE :: WI.SymExpr sym tp }
-
-fstFC :: Product f g a -> f a
-fstFC (Pair f _) = f
-
-sndFC :: Product f g a -> g a
-sndFC (Pair _ g) = g
-
-extractBase :: T.Text
-            -> (forall tp1 . f tp1 -> IO (CS.RegValue' sym tp1))
-            -> Ctx.Assignment CT.TypeRepr tps
-            -> Ctx.Assignment f tps
-            -> Some (Ctx.Assignment (Product WT.BaseTypeRepr (SymExpr' sym)))
-            -> IO (Some (Ctx.Assignment (Product WT.BaseTypeRepr (SymExpr' sym))))
-extractBase fname evalExpr tps vals (Some acc) = do
-  case (Ctx.viewAssign tps, Ctx.viewAssign vals) of
-    (Ctx.AssignEmpty, Ctx.AssignEmpty) -> return (Some acc)
-    (Ctx.AssignExtend restReps rep, Ctx.AssignExtend restVals val) -> do
-      case CT.asBaseType rep of
-        CT.NotBaseType -> X.throwIO (ExpectedBaseTypeArgument fname rep)
-        CT.AsBaseType btr -> do
-          CS.RV se <- evalExpr val
-          let acc' = Ctx.extend acc (Pair btr (SE se))
-          extractBase fname evalExpr restReps restVals (Some acc')
-
-
-type instance CCExt.ExprExtension (ASLExt arch) = ASLApp
-type instance CCExt.StmtExtension (ASLExt arch) = ASLStmt arch
-
-instance (ASLArch arch) => CCExt.IsSyntaxExtension (ASLExt arch)
-
-aslExtImpl :: Map.Map T.Text (SomeSignature regs) -> CS.ExtensionImpl p sym (ASLExt arch)
-aslExtImpl sigs =
-  CS.ExtensionImpl { CS.extensionEval = aslAppEvalFunc sigs
-                   , CS.extensionExec = aslStmtEvalFunc
-                   }

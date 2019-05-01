@@ -19,12 +19,7 @@ module SemMC.ASL.Crucible (
   , funcArgReprs
   , funcGlobalReprs
   , ProcedureSignature
-  , procSigBaseRepr
-  , procSigArgReprs
-  , procSigGlobals
-  , procSigAssigned
-  , procSigAssignedBase
-  , procSigRepr
+  , psArgReprs
   , SomeSignature(..)
   , computeDefinitionSignature
   , computeInstructionSignature
@@ -35,6 +30,7 @@ module SemMC.ASL.Crucible (
   , Overrides(..)
   -- * Syntax extension
   , ASLExt
+  , ASLArch(..)
   , ASLApp(..)
   , ASLStmt
   , aslExtImpl
@@ -44,6 +40,7 @@ module SemMC.ASL.Crucible (
 
 import qualified Control.Exception as X
 import           Control.Monad.ST ( stToIO )
+import qualified Control.Monad.State.Strict as MS
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
@@ -60,7 +57,7 @@ import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
 
-import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt, aslExtImpl )
+import           SemMC.ASL.Extension ( ASLExt, ASLArch(..), ASLApp(..), ASLStmt, aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( TranslationState(..), Overrides(..), translateStatement, assignmentFromList )
@@ -90,37 +87,37 @@ asCallable def =
 --
 -- FIXME: This may need to take all of the signatures of called functions to compute its own
 -- signature (since they might be procedures updating state that isn't obvious)
-computeDefinitionSignature :: [(String, SomeSignature)] -> Callable -> IO SomeSignature
+computeDefinitionSignature :: [(String, SomeSignature regs)] -> Callable -> IO (SomeSignature regs)
 computeDefinitionSignature = undefined
 
-computeInstructionSignature :: [(String, SomeSignature)] -> [AS.Stmt] -> IO SomeSignature
+computeInstructionSignature :: [(String, SomeSignature regs)] -> [AS.Stmt] -> IO (SomeSignature regs)
 computeInstructionSignature = undefined
 
-functionToCrucible :: (ret ~ CT.BaseToType tp)
-                   => Overrides ASLExt
+functionToCrucible :: (ret ~ CT.BaseToType tp, ASLArch arch)
+                   => Overrides arch regs
                    -> FunctionSignature init ret tp
                    -> CFH.FnHandle init ret
                    -> [AS.Stmt]
-                   -> IO (CCC.SomeCFG ASLExt init ret)
+                   -> IO (CCC.SomeCFG (ASLExt arch) init ret)
 functionToCrucible ov sig hdl stmts = do
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef ov sig stmts)
   return (CCS.toSSA cfg0)
 
-funcDef :: (ret ~ CT.BaseToType tp)
-        => Overrides ASLExt
+funcDef :: (ret ~ CT.BaseToType tp, ASLArch arch)
+        => Overrides arch regs
         -> FunctionSignature init ret tp
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret))
+        -> (TranslationState arch regs ret s, CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret))
 funcDef ov sig stmts args = (funcInitialState sig args, defineFunction ov sig stmts args)
 
-funcInitialState :: forall init ret tp s regs
+funcInitialState :: forall init ret tp s regs arch
                   . FunctionSignature init ret tp
                  -> Ctx.Assignment (CCG.Atom s) init
-                 -> TranslationState regs ret s
+                 -> TranslationState arch regs ret s
 funcInitialState sig args =
-  TranslationState m1 Map.empty (error "globals") (error "undefined") (error "unpredictable") (error "sigs")
+  TranslationState m1 Map.empty (error "globals") (error "undefined") (error "unpredictable") (error "sigs") (error "globalctx")
   where
     m1 = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
     addArgumentAtom :: forall tp0
@@ -133,13 +130,13 @@ funcInitialState sig args =
       in Map.insert argName (Some atom) m
 
 
-defineFunction :: forall ret tp init h s regs
-                . (ret ~ CT.BaseToType tp)
-               => Overrides ASLExt
+defineFunction :: forall ret tp init h s regs arch
+                . (ret ~ CT.BaseToType tp, ASLArch arch)
+               => Overrides arch regs
                -> FunctionSignature init ret tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
-               -> CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret)
+               -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig stmts args = do
   -- FIXME: Put args into the environment as locals (that can be read from)
   mapM_ (translateStatement ov (CT.baseToType (funcSigRepr sig))) stmts
@@ -148,51 +145,57 @@ defineFunction ov sig stmts args = do
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
 
-
-procedureToCrucible :: Overrides ASLExt
-                    -> ProcedureSignature init ret tps
+-- FIXME: Make a wrapper to capture the constructed CFG and all of the global
+-- variables used in the definition, as they will also be required to simulate
+-- it (and we don't want to duplicate globals).
+procedureToCrucible :: (ASLArch arch)
+                    => Overrides arch regs
+                    -> ProcedureSignature init regs ret
                     -> CFH.FnHandle init ret
                     -> [AS.Stmt]
-                    -> IO (CCC.SomeCFG ASLExt init ret)
+                    -> IO (CCC.SomeCFG (ASLExt arch) init ret)
 procedureToCrucible ov sig hdl stmts = do
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef ov sig stmts)
   return (CCS.toSSA cfg0)
 
-procDef :: Overrides ASLExt
-        -> ProcedureSignature init ret tp
+procDef :: (ASLArch arch)
+        => Overrides arch regs
+        -> ProcedureSignature init regs ret
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState ret s, CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret))
+        -> (TranslationState arch regs ret s, CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret))
 procDef ov sig stmts args =
   (procInitialState sig args, defineProcedure ov sig stmts args)
 
-procInitialState :: ProcedureSignature init ret tp
+procInitialState :: ProcedureSignature init regs ret
                  -> Ctx.Assignment (CCG.Atom s) init
-                 -> TranslationState ret s
+                 -> TranslationState arch regs ret s
 procInitialState = undefined
 
-defineProcedure :: Overrides ASLExt
-                -> ProcedureSignature init ret tp
+defineProcedure :: (ASLArch arch)
+                => Overrides arch regs
+                -> ProcedureSignature init regs ret
                 -> [AS.Stmt]
                 -> Ctx.Assignment (CCG.Atom s) init
-                -> CCG.Generator ASLExt h s (TranslationState regs ret) ret (CCG.Expr ASLExt s ret)
+                -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig stmts args = do
   -- FIXME: Initialize arguments with args
-  mapM_ (translateStatement ov (procSigRepr sig)) stmts
+  mapM_ (translateStatement ov (psSigRepr sig)) stmts
   -- Read all of the globals in the signature to produce a struct expr
-  someVals <- mapM readBaseGlobal (FC.toListFC Some (procSigGlobals sig))
+  baseGlobals <- MS.gets tsGlobalCtx
+  someVals <- mapM readBaseGlobal (FC.toListFC Some baseGlobals) -- (procSigGlobals sig))
   case assignmentFromList (Some Ctx.empty) someVals of
     Some vals -> do
       let reprs = FC.fmapFC CCG.exprType vals
       retAtom <- CCG.mkAtom (CCG.App (CCE.MkStruct reprs vals))
-      if | Just Refl <- testEquality (CCG.typeOfAtom retAtom) (procSigRepr sig) ->
+      if | Just Refl <- testEquality (CCG.typeOfAtom retAtom) (psSigRepr sig) ->
            return (CCG.AtomExpr retAtom)
-         | otherwise -> X.throw (UnexpectedProcedureReturn (procSigRepr sig) (CCG.typeOfAtom retAtom))
+         | otherwise -> X.throw (UnexpectedProcedureReturn (psSigRepr sig) (CCG.typeOfAtom retAtom))
 
 readBaseGlobal :: (CCE.IsSyntaxExtension ext)
                => Some BaseGlobalVar
-               -> CCG.Generator ext h s (TranslationState regs ret) ret (Some (CCG.Expr ext s))
+               -> CCG.Generator ext h s (TranslationState arch regs ret) ret (Some (CCG.Expr ext s))
 readBaseGlobal (Some (BaseGlobalVar gv)) = Some <$> CCG.readGlobal gv
 
 {- Note [Call Translation]
