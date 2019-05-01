@@ -20,7 +20,6 @@ import qualified Control.Exception as X
 import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Monad ( guard )
 import           Data.Functor.Product ( Product(..) )
-import qualified Data.Map as Map
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
@@ -42,7 +41,7 @@ import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
 
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
-import           SemMC.ASL.Signature ( SomeSignature, BaseGlobalVar(..), LabeledValue, projectValue )
+import           SemMC.ASL.Signature ( BaseGlobalVar(..), LabeledValue, projectValue )
 
 -- NOTE: Translate calls (both expr and stmt) as What4 uninterpreted functions
 --
@@ -93,13 +92,11 @@ data ASLStmt arch f tp where
 aslAppEvalFunc :: forall sym arch proxy
                 . (CB.IsSymInterface sym)
                => proxy arch
-               -> (Map.Map T.Text (SomeSignature (ASLExtRegs arch)))
-               -- ^ A mapping from function names to signatures, which we'll use to generate (and check) call signatures
                -> sym
                -> CS.IntrinsicTypes sym
                -> (Int -> String -> IO ())
                -> CSE.EvalAppFunc sym ASLApp
-aslAppEvalFunc _ sigs sym _ _ = \evalApp app ->
+aslAppEvalFunc _ sym _ _ = \evalApp app ->
   case app of
     UF name trep argTps args ->
       case WS.userSymbol (T.unpack name) of
@@ -184,9 +181,9 @@ type instance CCExt.StmtExtension (ASLExt arch) = ASLStmt arch
 
 instance (ASLArch arch) => CCExt.IsSyntaxExtension (ASLExt arch)
 
-aslExtImpl :: forall arch p sym . Map.Map T.Text (SomeSignature (ASLExtRegs arch)) -> CS.ExtensionImpl p sym (ASLExt arch)
-aslExtImpl sigs =
-  CS.ExtensionImpl { CS.extensionEval = aslAppEvalFunc (Proxy @arch) sigs
+aslExtImpl :: forall arch p sym . CS.ExtensionImpl p sym (ASLExt arch)
+aslExtImpl =
+  CS.ExtensionImpl { CS.extensionEval = aslAppEvalFunc (Proxy @arch)
                    , CS.extensionExec = aslStmtEvalFunc
                    }
 

@@ -14,6 +14,7 @@
 module SemMC.ASL.Crucible (
     functionToCrucible
   , procedureToCrucible
+  , Procedure(..)
   , FunctionSignature
   , funcSigRepr
   , funcArgReprs
@@ -39,13 +40,14 @@ module SemMC.ASL.Crucible (
   ) where
 
 import qualified Control.Exception as X
-import           Control.Monad.ST ( stToIO )
+import           Control.Monad.ST ( stToIO, RealWorld )
 import qualified Control.Monad.State.Strict as MS
+import qualified Data.Map as Map
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
-import qualified Data.Map as Map
+import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -53,6 +55,8 @@ import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.CFG.SSAConversion as CCS
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Lang.Crucible.Types as CT
+import qualified What4.BaseTypes as WT
+import qualified What4.FunctionName as WFN
 import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
@@ -144,34 +148,71 @@ defineFunction ov sig stmts args = do
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
+data Procedure arch init regs ret =
+  Procedure { procSig :: ProcedureSignature init regs ret
+            , procCFG :: CCC.SomeCFG (ASLExt arch) init ret
+            , procGlobals :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
+            }
 
 -- FIXME: Make a wrapper to capture the constructed CFG and all of the global
 -- variables used in the definition, as they will also be required to simulate
 -- it (and we don't want to duplicate globals).
-procedureToCrucible :: (ASLArch arch)
+procedureToCrucible :: forall arch regs ret init
+                     . (ASLArch arch)
                     => Overrides arch regs
                     -> ProcedureSignature init regs ret
-                    -> CFH.FnHandle init ret
+                    -> CFH.HandleAllocator RealWorld
                     -> [AS.Stmt]
-                    -> IO (CCC.SomeCFG (ASLExt arch) init ret)
-procedureToCrucible ov sig hdl stmts = do
+                    -> IO (Procedure arch init regs ret)
+procedureToCrucible ov sig hdlAlloc stmts = do
+  let argReprs = FC.fmapFC projectValue (psArgReprs sig)
+  let retRepr = psSigRepr sig
+  hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (psName sig)) argReprs retRepr)
+  globals <- FC.traverseFC allocateGlobal (archRegBaseRepr (Proxy @arch))
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef ov sig stmts)
-  return (CCS.toSSA cfg0)
+  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef ov sig globals stmts)
+  return Procedure { procSig = sig
+                   , procCFG = CCS.toSSA cfg0
+                   , procGlobals = globals
+                   }
+  where
+    allocateGlobal :: forall tp . LabeledValue T.Text WT.BaseTypeRepr tp -> IO (BaseGlobalVar tp)
+    allocateGlobal (LabeledValue name rep) =
+      stToIO (BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep))
 
 procDef :: (ASLArch arch)
         => Overrides arch regs
         -> ProcedureSignature init regs ret
+        -> Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState arch regs ret s, CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret))
-procDef ov sig stmts args =
-  (procInitialState sig args, defineProcedure ov sig stmts args)
+procDef ov sig globals stmts args =
+  (procInitialState sig globals args, defineProcedure ov sig stmts args)
 
-procInitialState :: ProcedureSignature init regs ret
+procInitialState :: forall init regs ret arch s
+                  . ProcedureSignature init regs ret
+                 -> Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState arch regs ret s
-procInitialState = undefined
+procInitialState sig globals args =
+  TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
+                   , tsVarRefs = Map.empty
+                   , tsGlobals = FC.foldrFC addGlobal Map.empty globals
+                   , tsUndefinedVar = error "proc: tsUndefinedVar"
+                   , tsUnpredictableVar = error "proc: tsUnpredictableVar"
+                   , tsFunctionSigs = error "proc: tsFunctionSigs"
+                   , tsGlobalCtx = globals
+                   }
+  where
+    addArgument :: forall tp
+                 . Map.Map T.Text (Some (CCG.Atom s))
+                -> Ctx.Index init tp
+                -> Map.Map T.Text (Some (CCG.Atom s))
+    addArgument m idx =
+      Map.insert (projectLabel (psArgReprs sig Ctx.! idx)) (Some (args Ctx.! idx)) m
+    addGlobal (BaseGlobalVar gv) m =
+      Map.insert (CCG.globalName gv) (Some gv) m
 
 defineProcedure :: (ASLArch arch)
                 => Overrides arch regs
@@ -184,7 +225,7 @@ defineProcedure ov sig stmts args = do
   mapM_ (translateStatement ov (psSigRepr sig)) stmts
   -- Read all of the globals in the signature to produce a struct expr
   baseGlobals <- MS.gets tsGlobalCtx
-  someVals <- mapM readBaseGlobal (FC.toListFC Some baseGlobals) -- (procSigGlobals sig))
+  someVals <- mapM readBaseGlobal (FC.toListFC Some baseGlobals)
   case assignmentFromList (Some Ctx.empty) someVals of
     Some vals -> do
       let reprs = FC.fmapFC CCG.exprType vals

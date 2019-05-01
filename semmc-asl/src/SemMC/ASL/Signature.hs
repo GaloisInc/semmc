@@ -10,6 +10,7 @@ module SemMC.ASL.Signature (
   , SomeSignature(..)
   , LabeledValue(..)
   , projectValue
+  , projectLabel
   , BaseGlobalVar(..)
   ) where
 
@@ -42,6 +43,9 @@ data LabeledValue a b tp = LabeledValue a (b tp)
 projectValue :: LabeledValue a b tp -> b tp
 projectValue (LabeledValue _ v) = v
 
+projectLabel :: LabeledValue a b tp -> a
+projectLabel (LabeledValue l _) = l
+
 instance FC.FunctorFC (LabeledValue a) where
   fmapFC f (LabeledValue a b) = LabeledValue a (f b)
 
@@ -71,7 +75,8 @@ instance ShowF BaseGlobalVar
 data ProcedureSignature (init :: Ctx.Ctx CT.CrucibleType)
                         (regs :: Ctx.Ctx WT.BaseType)
                         (ret :: CT.CrucibleType) =
-  ProcedureSignature { psRegsRepr :: WT.BaseTypeRepr (WT.BaseStructType regs)
+  ProcedureSignature { psName :: T.Text
+                     , psRegsRepr :: WT.BaseTypeRepr (WT.BaseStructType regs)
                        -- ^ The type of the register file
                        --
                        -- Note that this will include state that isn't exactly a machine register,

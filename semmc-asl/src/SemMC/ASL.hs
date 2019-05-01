@@ -13,7 +13,7 @@ module SemMC.ASL (
 
 import qualified Control.Exception as X
 import           Control.Lens ( (^.) )
-import           Control.Monad.ST ( RealWorld, stToIO )
+import           Control.Monad.ST ( RealWorld )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
@@ -45,10 +45,14 @@ data SimulatorConfig sym =
 --
 -- Procedures have a different return type, where we need to track not only the value returned, but
 -- also the global location to which it should be assigned
-simulateFunction :: (CB.IsSymInterface sym, CS.RegValue sym ret ~ WI.SymExpr sym tp, ret ~ CT.BaseToType tp)
+simulateFunction :: ( AC.ASLArch arch
+                    , CB.IsSymInterface sym
+                    , CS.RegValue sym ret ~ WI.SymExpr sym tp
+                    , ret ~ CT.BaseToType tp
+                    )
                  => SimulatorConfig sym
                  -> AC.FunctionSignature init ret tp
-                 -> CCC.SomeCFG () init ret
+                 -> CCC.SomeCFG (AC.ASLExt arch) init ret
                  -> IO (WI.SymExpr sym tp)
 simulateFunction symCfg sig (CCC.SomeCFG cfg) = do
   initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.funcArgReprs sig)
@@ -57,8 +61,10 @@ simulateFunction symCfg sig (CCC.SomeCFG cfg) = do
         return (CS.regValue re)
   case AC.funcGlobalReprs sig of
     Some globalReprs -> do
-      (_, globals) <- initGlobals symCfg globalReprs
-      s0 <- initialSimulatorState symCfg globals econt
+      -- FIXME: Have the function type capture all of the referenced globals
+      let globals = undefined
+      globalState <- initGlobals symCfg globals
+      s0 <- initialSimulatorState symCfg globalState econt
       eres <- CS.executeCrucible executionFeatures s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeFunctionSignature sig))
@@ -85,28 +91,32 @@ simulateFunction symCfg sig (CCC.SomeCFG cfg) = do
 -- arguments)
 --
 -- Note that the type tps works out, as the sequence collection of types is BaseStructType
-simulateProcedure :: forall arch sym init regs ret proxy
+simulateProcedure :: forall arch sym init regs ret
                    . (CB.IsSymInterface sym, AC.ASLArch arch, regs ~ AC.ASLExtRegs arch)
-                  => proxy arch
-                  -> SimulatorConfig sym
-                  -> AC.ProcedureSignature init regs ret
-                  -> CCC.SomeCFG () init ret
+                  => SimulatorConfig sym
+                  -> AC.Procedure arch init regs ret
+                  -- -> AC.ProcedureSignature init regs ret
+                  -- -> CCC.SomeCFG () init ret
                   -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) regs)
-simulateProcedure proxy symCfg sig (CCC.SomeCFG cfg) = do
-  initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.psArgReprs sig)
-  let econt = CS.runOverrideSim CT.UnitRepr $ do
-        _ <- CS.callCFG cfg (CS.RegMap initArgs)
-        return ()
-  (globalVars, globalState) <- initGlobals symCfg (AC.archRegBaseRepr proxy)
-  s0 <- initialSimulatorState symCfg globalState econt
-  eres <- CS.executeCrucible executionFeatures s0
-  case eres of
-    CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeProcedureSignature sig))
-    CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeProcedureSignature sig))
-    CS.FinishedResult _ pres ->
-      case pres of
-        CS.TotalRes gp -> extractResult globalVars gp
-        CS.PartialRes _ gp _ -> extractResult globalVars gp
+simulateProcedure symCfg crucProc = do
+  case AC.procCFG crucProc of
+    CCC.SomeCFG cfg -> do
+      let sig = AC.procSig crucProc
+      let globalVars = AC.procGlobals crucProc
+      initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.psArgReprs sig)
+      let econt = CS.runOverrideSim CT.UnitRepr $ do
+            _ <- CS.callCFG cfg (CS.RegMap initArgs)
+            return ()
+      globalState <- initGlobals symCfg globalVars
+      s0 <- initialSimulatorState symCfg globalState econt
+      eres <- CS.executeCrucible executionFeatures s0
+      case eres of
+        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeProcedureSignature sig))
+        CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeProcedureSignature sig))
+        CS.FinishedResult _ pres ->
+          case pres of
+            CS.TotalRes gp -> extractResult globalVars gp
+            CS.PartialRes _ gp _ -> extractResult globalVars gp
   where
     -- Look up all of the values of the globals we allocated (which capture all of the side effects)
     extractResult globalVars gp = FC.traverseFC (lookupBaseGlobalVal (gp ^. CS.gpGlobals)) globalVars
@@ -138,36 +148,27 @@ toSolverSymbol s =
 initialSimulatorState :: (CB.IsSymInterface sym)
                       => SimulatorConfig sym
                       -> CS.SymGlobalState sym
-                      -> CS.ExecCont () sym () (CS.RegEntry sym ret) (CSC.OverrideLang ret) ('Just CT.EmptyCtx)
-                      -> IO (CS.ExecState () sym () (CS.RegEntry sym ret))
+                      -> CS.ExecCont () sym (AC.ASLExt arch) (CS.RegEntry sym ret) (CSC.OverrideLang ret) ('Just CT.EmptyCtx)
+                      -> IO (CS.ExecState () sym (AC.ASLExt arch) (CS.RegEntry sym ret))
 initialSimulatorState symCfg symGlobalState econt = do
   let intrinsics = CS.emptyIntrinsicTypes
   let sym = simSym symCfg
   let hdlAlloc = simHandleAllocator symCfg
   let outputHandle = simOutputHandle symCfg
-  let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle CFH.emptyHandleMap CS.emptyExtensionImpl ()
+  let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle CFH.emptyHandleMap AC.aslExtImpl ()
   let hdlr = CS.defaultAbortHandler
   return (CS.InitialState simContext symGlobalState hdlr econt)
 
 -- | Allocate all of the globals that will be referred to by the statement
 -- sequence (even indirectly) and use them to populate a 'CS.GlobalSymState'
---
--- FIXME: Take the globals as an argument and allocate them as part of the signatures
 initGlobals :: forall sym env
              . (CB.IsSymInterface sym)
             => SimulatorConfig sym
-            -> Ctx.Assignment (AC.LabeledValue T.Text WT.BaseTypeRepr) env
-            -> IO (Ctx.Assignment AC.BaseGlobalVar env, CS.SymGlobalState sym)
-initGlobals symCfg reps = do
-  globals <- FC.traverseFC allocGlobal reps
-  sgs <- FC.foldrFC addGlobal (pure CS.emptyGlobals) globals
-  return (globals, sgs)
+            -> Ctx.Assignment AC.BaseGlobalVar env
+            -> IO (CS.SymGlobalState sym)
+initGlobals symCfg globals = do
+  FC.foldrFC addGlobal (pure CS.emptyGlobals) globals
   where
-    allocGlobal :: forall tp
-                 . AC.LabeledValue T.Text WT.BaseTypeRepr tp
-                -> IO (AC.BaseGlobalVar tp)
-    allocGlobal (AC.LabeledValue name rep) =
-      stToIO (AC.BaseGlobalVar <$> CCG.freshGlobalVar (simHandleAllocator symCfg) name (CT.baseToType rep))
     addGlobal :: forall tp
                . AC.BaseGlobalVar tp
               -> IO (CSG.SymGlobalState sym)
