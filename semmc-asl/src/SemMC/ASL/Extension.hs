@@ -41,7 +41,7 @@ import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
 
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
-import           SemMC.ASL.Signature ( BaseGlobalVar(..), LabeledValue, projectValue )
+import           SemMC.ASL.Signature ( BaseGlobalVar(..), LabeledValue )
 
 -- NOTE: Translate calls (both expr and stmt) as What4 uninterpreted functions
 --
@@ -78,10 +78,11 @@ data ASLApp f tp where
 -- These forms must be statements because only statements have access to the
 -- solver state
 data ASLStmt arch f tp where
-  GetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
-              -> ASLStmt arch f (CT.SymbolicStructType (ASLExtRegs arch))
-  SetRegState :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
-              -> f (CT.SymbolicStructType (ASLExtRegs arch))
+  GetRegState :: Ctx.Assignment WT.BaseTypeRepr regs
+              -> Ctx.Assignment BaseGlobalVar regs
+              -> ASLStmt arch f (CT.SymbolicStructType regs)
+  SetRegState :: Ctx.Assignment BaseGlobalVar regs
+              -> f (CT.SymbolicStructType regs)
               -> ASLStmt arch f CT.UnitType
 
 
@@ -117,18 +118,18 @@ aslStmtEvalFunc :: forall arch sym tp p rtp blocks r ctx
                 -> IO (CSR.RegValue sym tp, CS.CrucibleState p sym (ASLExt arch) rtp blocks r ctx)
 aslStmtEvalFunc stmt ctx =
   case stmt of
-    GetRegState bvs -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
+    GetRegState _reps bvs -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
       let sym = ctx ^. CS.stateContext . CS.ctxSymInterface
       let fr = ctx ^. (CSET.stateTree . CSET.actFrame)
       let globals = fr ^. CSET.gpGlobals
       gvals <- FC.traverseFC (readBaseGlobal globals) bvs
       struct <- WI.mkStruct sym gvals
       return (struct, ctx)
-    SetRegState bvs vals -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
+    SetRegState (bvs :: Ctx.Assignment BaseGlobalVar regs) vals -> CS.ctxSolverProof (ctx ^. CS.stateContext) $ do
       let sym = ctx ^. CS.stateContext . CS.ctxSymInterface
       let fr = ctx ^. (CSET.stateTree . CSET.actFrame)
       let globals = fr ^. CSET.gpGlobals
-      let updateGlobal :: forall tp' . IO (CSG.SymGlobalState sym) -> Ctx.Index (ASLExtRegs arch) tp' -> IO (CSG.SymGlobalState sym)
+      let updateGlobal :: forall tp' . IO (CSG.SymGlobalState sym) -> Ctx.Index regs tp' -> IO (CSG.SymGlobalState sym)
           updateGlobal mgs idx =
             case bvs Ctx.! idx of
               BaseGlobalVar gv -> do
@@ -191,31 +192,31 @@ aslExtImpl =
 instance FC.FunctorFC (ASLStmt arch) where
   fmapFC f a =
     case a of
-      GetRegState gvs -> GetRegState gvs
+      GetRegState reps gvs -> GetRegState reps gvs
       SetRegState gvs s -> SetRegState gvs (f s)
 
 instance FC.FoldableFC (ASLStmt arch) where
   foldrFC _f seed a =
     case a of
-      GetRegState _ -> seed
+      GetRegState _ _ -> seed
       SetRegState _ _ -> seed
 
 instance FC.TraversableFC (ASLStmt arch) where
   traverseFC f a =
     case a of
-      GetRegState gvs -> pure (GetRegState gvs)
+      GetRegState reps gvs -> pure (GetRegState reps gvs)
       SetRegState gvs s -> SetRegState gvs <$> f s
 
 instance (ASLArch arch) => CCExt.TypeApp (ASLStmt arch) where
   appType a =
     case a of
-      GetRegState _ -> CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (archRegBaseRepr (Proxy @arch))))
+      GetRegState reps _ -> CT.baseToType (WT.BaseStructRepr reps)
       SetRegState _ _ -> CT.UnitRepr
 
 instance CCExt.PrettyApp (ASLStmt arch) where
   ppApp pp a =
     case a of
-      GetRegState regs ->
+      GetRegState _reps regs ->
         PP.hsep [ PP.text "GetRegState"
                 , PP.brackets (PP.cat (PP.punctuate PP.comma (FC.toListFC (PP.text . showF) regs)))
                 ]

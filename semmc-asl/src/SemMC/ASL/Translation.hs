@@ -150,7 +150,8 @@ translateStatement ov rep stmt
                 let expectedTypes = FC.fmapFC projectValue (psArgReprs sig)
                 if | Just Refl <- testEquality atomTypes expectedTypes -> do
                        globals <- MS.gets tsGlobalCtx
-                       globalsSnapshot <- CCG.extensionStmt (GetRegState globals)
+                       let globalReps = FC.fmapFC projectValue (archRegBaseRepr (Proxy @arch))
+                       globalsSnapshot <- CCG.extensionStmt (GetRegState globalReps globals)
                        let vals = FC.fmapFC CCG.AtomExpr argAssign
                        let globalsType = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (archRegBaseRepr (Proxy @arch))))
                        let uf = UF ident (psRegsRepr sig) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
