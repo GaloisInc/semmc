@@ -63,6 +63,10 @@ simulateFunction symCfg func = do
             return (CS.regValue re)
       -- FIXME: Do functions ever reference globals?  I think the answer is no,
       -- so we might be able to just not do any handling of globals at all here.
+      --
+      -- NOTE: It turns out that functions can reference globals.  We should
+      -- just pass in the whole global state snapshot (but we don't need to
+      -- return it).
       case AC.funcGlobalReprs sig of
         Some globalReprs -> do
           -- FIXME: Have the function type capture all of the referenced globals
