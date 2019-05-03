@@ -4,6 +4,18 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeOperators #-}
+
+{-|
+
+This module contains types that describe signatures of ASL functions and
+procedures. Procedures have side effects, while functions are side-effect free and
+return a single value (which may be a tuple).
+
+Top-level code sequences (like the @instExecute@ field of an instruction) have a trivial type
+signature with no inputs (just global refs) and a set of outputs that is the union of all of the
+locations touched by that function.
+
+-}
 module SemMC.ASL.Signature (
     FunctionSignature(..)
   , ProcedureSignature(..)
@@ -23,14 +35,11 @@ import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
 
--- | The signature describes the inputs and outputs of an ASL function or procedure
+-- | A 'FunctionSignature' describes the inputs and output of an ASL function.
 --
--- Procedures have side effects, while functions are side-effect free and return a single value
--- (which may be a tuple).
---
--- Top-level code sequences (like the @instExecute@ field of an instruction) have a trivial type
--- signature with no inputs (just global refs) and a set of outputs that is the union of all of the
--- locations touched by that function.
+-- An ASL function is side-effect free and returns a single value (which may be a
+-- tuple). It takes as input a set of arguments, 'funcArgReprs', and a set of global
+-- refs, 'funcGlobalReprs'.
 data FunctionSignature init ret tp =
   FunctionSignature { funcSigRepr :: WT.BaseTypeRepr tp
                     , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
@@ -66,6 +75,8 @@ newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseTo
 
 instance ShowF BaseGlobalVar
 
+-- | A 'ProcedureSignature' captures the signature of an ASL procedure.
+--
 -- init are the non-global args
 -- regs are the list of global registers
 -- ret is the return type (actually a whole reg state, and basically congruent to regs)
