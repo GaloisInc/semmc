@@ -13,6 +13,7 @@
 -- | Convert fragments of ASL code into Crucible CFGs
 module SemMC.ASL.Crucible (
     functionToCrucible
+  , Function(..)
   , procedureToCrucible
   , Procedure(..)
   , FunctionSignature
@@ -97,16 +98,31 @@ computeDefinitionSignature = undefined
 computeInstructionSignature :: [(String, SomeSignature regs)] -> [AS.Stmt] -> IO (SomeSignature regs)
 computeInstructionSignature = undefined
 
+-- | Convert an ASL function (signature + list of statements) into a Crucible CFG
+--
+-- We currently assume that functions take arguments and return a single value,
+-- while not accessing /any/ global state.
+--
+-- Note that there are a bunch of intermediate functions to set up the
+-- 'CCG.Generator' monad; the real work is done in 'defineFunction'.
 functionToCrucible :: (ret ~ CT.BaseToType tp, ASLArch arch)
                    => Overrides arch regs
                    -> FunctionSignature init ret tp
                    -> CFH.FnHandle init ret
                    -> [AS.Stmt]
-                   -> IO (CCC.SomeCFG (ASLExt arch) init ret)
+                   -> IO (Function arch init ret tp)
 functionToCrucible ov sig hdl stmts = do
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef ov sig stmts)
-  return (CCS.toSSA cfg0)
+  return Function { funcSig = sig
+                  , funcCFG = CCS.toSSA cfg0
+                  }
+
+-- | A wrapper around translated functions to keep signatures with CFGs
+data Function arch init ret tp =
+  Function { funcSig :: FunctionSignature init ret tp
+           , funcCFG :: CCC.SomeCFG (ASLExt arch) init ret
+           }
 
 funcDef :: (ret ~ CT.BaseToType tp, ASLArch arch)
         => Overrides arch regs
@@ -143,6 +159,9 @@ defineFunction :: forall ret tp init h s regs arch
                -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig stmts args = do
   -- FIXME: Put args into the environment as locals (that can be read from)
+  --
+  -- We have the assignment of atoms available, but the arguments will be
+  -- referenced by /name/ by ASL statements.
   mapM_ (translateStatement ov (CT.baseToType (funcSigRepr sig))) stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
@@ -154,9 +173,23 @@ data Procedure arch init regs ret =
             , procGlobals :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
             }
 
--- FIXME: Make a wrapper to capture the constructed CFG and all of the global
--- variables used in the definition, as they will also be required to simulate
--- it (and we don't want to duplicate globals).
+-- | Translate an ASL procedure (signature plus statements) into a Crucible procedure
+--
+-- We bundle up the signature, CFG, and allocated globals.  We need to keep the
+-- globals around for re-use during simulation.
+--
+-- The overall strategy is to allocate a Crucible global variable for each part
+-- of the CPU state (i.e., machine register) that could be read or written by
+-- the procedure.  We'll use symbolic simulation to determine the effect of the
+-- procedure on each register.
+--
+-- Every procedure takes its natural argument list plus one extra argument: the
+-- register file (a struct of all of the register values).  When the procedure
+-- starts, we'll copy all of the values from the register struct into the globals.
+--
+-- We assume that all procedures have void type in ASL.  We translate all
+-- procedures to return a single argument: a struct with the updated register
+-- values.
 procedureToCrucible :: forall arch regs ret init
                      . (ASLArch arch)
                     => Overrides arch regs
@@ -252,13 +285,26 @@ parameters, each procedure takes an entire machine state as a BaseStruct.  It wi
 entire BaseStruct register state.
 
 At procedure initialization time, the procedure will copy all of its input machine state into a set
-of locals (Crucible refs).  Before calling a procedure, the caller takes a snapshot of the current
+of locals (Crucible or globals).  Before calling a procedure, the caller takes a snapshot of the current
 machine state (from the refs) to construct the BaseStruct to pass to the callee.  After a procedure
 call returns, the caller will assign the contents of the register state back to its locals (refs).
 
 Question: do we need any additional components to the return value of procedures?  Anything that
 isn't a global is local, and local modifications can't be reflected to callers.
 
-For the semantics of an *instruction*, we'll set up the global state as globals.
+Note that we have an additional unusual constraint: we need to represent calls
+in any context as uninterpreted functions, since we don't want to eagerly expand
+definitions of functions.  Doing so produces an enormous code explosion that we
+can't handle.  Crucible can support uninterpreted functions via what4; however,
+they aren't exactly first class.  Uninterpreted functions can only take as
+arguments and return base types.  Crucible doesn't have great support for
+working with base types.
+
+Beyond the normal machine registers, we introduce two extra state variables:
+- Undefined
+- Unpredictable
+
+Each is a boolean that starts as False and is switched to True if an instruction
+has undefined or unpredictable behavior, respectively.
 
 -}

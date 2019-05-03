@@ -51,35 +51,39 @@ simulateFunction :: ( AC.ASLArch arch
                     , ret ~ CT.BaseToType tp
                     )
                  => SimulatorConfig sym
-                 -> AC.FunctionSignature init ret tp
-                 -> CCC.SomeCFG (AC.ASLExt arch) init ret
+                 -> AC.Function arch init ret tp
                  -> IO (WI.SymExpr sym tp)
-simulateFunction symCfg sig (CCC.SomeCFG cfg) = do
-  initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.funcArgReprs sig)
-  let econt = CS.runOverrideSim (CT.baseToType (AC.funcSigRepr sig)) $ do
-        re <- CS.callCFG cfg (CS.RegMap initArgs)
-        return (CS.regValue re)
-  case AC.funcGlobalReprs sig of
-    Some globalReprs -> do
-      -- FIXME: Have the function type capture all of the referenced globals
-      let globals = undefined
-      globalState <- initGlobals symCfg globals
-      s0 <- initialSimulatorState symCfg globalState econt
-      eres <- CS.executeCrucible executionFeatures s0
-      case eres of
-        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeFunctionSignature sig))
-        CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeFunctionSignature sig))
-        CS.FinishedResult _ pres ->
-          case pres of
-            CS.TotalRes gp -> extractResult gp
-            CS.PartialRes _ gp _ -> extractResult gp
+simulateFunction symCfg func = do
+  case AC.funcCFG func of
+    CCC.SomeCFG cfg -> do
+      let sig = AC.funcSig func
+      initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.funcArgReprs sig)
+      let econt = CS.runOverrideSim (CT.baseToType (AC.funcSigRepr sig)) $ do
+            re <- CS.callCFG cfg (CS.RegMap initArgs)
+            return (CS.regValue re)
+      -- FIXME: Do functions ever reference globals?  I think the answer is no,
+      -- so we might be able to just not do any handling of globals at all here.
+      case AC.funcGlobalReprs sig of
+        Some globalReprs -> do
+          -- FIXME: Have the function type capture all of the referenced globals
+          let globals = undefined
+          globalState <- initGlobals symCfg globals
+          s0 <- initialSimulatorState symCfg globalState econt
+          eres <- CS.executeCrucible executionFeatures s0
+          case eres of
+            CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeFunctionSignature sig))
+            CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeFunctionSignature sig))
+            CS.FinishedResult _ pres ->
+              case pres of
+                CS.TotalRes gp -> extractResult gp
+                CS.PartialRes _ gp _ -> extractResult gp
   where
     extractResult gp =
       let re = gp ^. CS.gpValue
       in case CT.asBaseType (CS.regType re) of
         CT.NotBaseType -> X.throwIO (NonBaseTypeReturn (CS.regType re))
         CT.AsBaseType btr
-          | Just Refl <- testEquality btr (AC.funcSigRepr sig) ->
+          | Just Refl <- testEquality btr (AC.funcSigRepr (AC.funcSig func)) ->
             return (CS.regValue re)
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
