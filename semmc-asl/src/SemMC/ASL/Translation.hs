@@ -25,7 +25,6 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
-import           Data.Proxy ( Proxy(..) )
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -36,7 +35,7 @@ import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
 
-import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), ASLArch(..) )
+import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 
@@ -46,8 +45,7 @@ data ExprConstructor arch regs h s ret where
                   -> ExprConstructor (ASLExt arch) regs h s ret
 
 lookupVarRef :: forall arch h s ret regs
-              . (ASLArch arch)
-             => T.Text
+              . T.Text
              -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (Some (CCG.Expr (ASLExt arch) s))
 lookupVarRef name = do
   ts <- MS.get
@@ -87,14 +85,32 @@ data TranslationState arch regs ret s =
                    , tsUnpredictableVar :: CCG.GlobalVar CT.BoolType
                    -- ^ A variable that starts as False, but transitions to True when an instruction
                    -- triggers unpredictable behavior
-                   , tsFunctionSigs :: Map.Map T.Text (SomeSignature (ASLExtRegs arch))
+                   , tsFunctionSigs :: Map.Map T.Text SomeSignature
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
-                   , tsGlobalCtx :: Ctx.Assignment BaseGlobalVar (ASLExtRegs arch)
                    }
+
+withProcGlobals :: (m ~ CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret)
+                => ProcedureSignature globals init ret2
+                -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
+                -> m r
+withProcGlobals sig k = do
+  globMap <- MS.gets tsGlobals
+  let reprs = psGlobalReprs sig
+  let globReprs = FC.fmapFC projectValue reprs
+  k globReprs (FC.fmapFC (fetchGlobal globMap) reprs)
+  where
+    fetchGlobal :: forall tp . Map.Map T.Text (Some CCG.GlobalVar)
+                -> LabeledValue T.Text WT.BaseTypeRepr tp
+                -> BaseGlobalVar tp
+    fetchGlobal globMap (LabeledValue globName rep)
+      | Just (Some gv) <- Map.lookup globName globMap
+      , Just Refl <- testEquality (CT.baseToType rep) (CCG.globalType gv) =
+          BaseGlobalVar gv
+      | otherwise = error ("Missing global (or wrong type): " ++ show globName)
+
 translateStatement :: forall arch regs ret h s
-                    . (ASLArch arch)
-                   => Overrides arch regs
+                    . Overrides arch regs
                    -> CT.TypeRepr ret
                    -> AS.Stmt
                    -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret ()
@@ -149,15 +165,23 @@ translateStatement ov rep stmt
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
                 let expectedTypes = FC.fmapFC projectValue (psArgReprs sig)
                 if | Just Refl <- testEquality atomTypes expectedTypes -> do
-                       globals <- MS.gets tsGlobalCtx
-                       let globalReps = FC.fmapFC projectValue (archRegBaseRepr (Proxy @arch))
-                       globalsSnapshot <- CCG.extensionStmt (GetRegState globalReps globals)
-                       let vals = FC.fmapFC CCG.AtomExpr argAssign
-                       let globalsType = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (archRegBaseRepr (Proxy @arch))))
-                       let uf = UF ident (psRegsRepr sig) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
-                       atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-                       _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
-                       return ()
+                       -- FIXME: The problem is that we might need to snapshot a
+                       -- subset of globals for each call.  Each subset might be
+                       -- different.
+                       --
+                       -- How do we select a subset with the right types?
+                       --
+                       -- We could key everything on name and do dynamic type
+                       -- checks to assert that globals with the right name have
+                       -- the right type.
+                       withProcGlobals sig $ \globalReprs globals -> do
+                         let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
+                         globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
+                         let vals = FC.fmapFC CCG.AtomExpr argAssign
+                         let uf = UF ident (psRegsRepr sig) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
+                         atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+                         _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
+                         return ()
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
 
 -- | Translate a for statement into Crucible
@@ -177,8 +201,7 @@ translateStatement ov rep stmt
 -- NOTE: The translation is inclusive of the upper bound - is that right?
 --
 -- NOTE: We are assuming that the variable assignment is actually a declaration of integer type
-translateFor :: (ASLArch arch)
-             => Overrides arch regs
+translateFor :: Overrides arch regs
              -> CT.TypeRepr ret
              -> AS.Identifier
              -> AS.Expr
@@ -198,8 +221,7 @@ translateFor ov rep var lo hi body = do
   CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
-translateRepeat :: (ASLArch arch)
-                => Overrides arch regs
+translateRepeat :: Overrides arch regs
                 -> CT.TypeRepr ret
                 -> [AS.Stmt]
                 -> AS.Expr
@@ -220,8 +242,7 @@ translateRepeat ov rtp body test = do
 
   CCG.continue exit_lbl (CCG.jump loop_lbl)
 
-translateDefinedVar :: (ASLArch arch)
-                    => Overrides arch regs
+translateDefinedVar :: Overrides arch regs
                     -> AS.Type
                     -> AS.Identifier
                     -> AS.Expr
@@ -242,8 +263,7 @@ translateDefinedVar ov ty ident expr =
 -- This case is interesting, as assignments can be to locals or globals.
 --
 -- NOTE: We are assuming that there cannot be assignments to arguments.
-translateAssignment :: (ASLArch arch)
-                    => Overrides arch regs
+translateAssignment :: Overrides arch regs
                     -> AS.LValExpr
                     -> AS.Expr
                     -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret ()
@@ -282,8 +302,7 @@ declareUndefinedVar ty ident = do
 translateType :: AS.Type -> Some CT.TypeRepr
 translateType = error "translateType unimplemented"
 
-translateIf :: (ASLArch arch)
-            => Overrides arch regs
+translateIf :: Overrides arch regs
             -> CT.TypeRepr ret
             -> [(AS.Expr, [AS.Stmt])]
             -> Maybe [AS.Stmt]
@@ -313,8 +332,7 @@ assertAtomType expr expectedRepr atom =
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
-translateExpr :: (ASLArch arch)
-              => Overrides arch regs
+translateExpr :: Overrides arch regs
               -> AS.Expr
               -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (Some (CCG.Atom s))
 translateExpr ov expr
@@ -366,8 +384,7 @@ translateExpr ov expr
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
 
 -- | Translate the expression form of a conditional into a Crucible atom
-translateIfExpr :: (ASLArch arch)
-                => Overrides arch regs
+translateIfExpr :: Overrides arch regs
                 -> AS.Expr
                 -> [(AS.Expr, AS.Expr)]
                 -> AS.Expr
@@ -401,8 +418,7 @@ translateIfExpr ov orig clauses elseExpr =
 -- Single element tests are translated into a simple equality test
 --
 -- Ranges are translated as a conjunction of inclusive tests. x IN [5..10] => 5 <= x && x <= 10
-translateSetElementTest :: (ASLArch arch)
-                        => Overrides arch regs
+translateSetElementTest :: Overrides arch regs
                         -> AS.Expr
                         -> CCG.Atom s tp
                         -> AS.SetElement
@@ -435,8 +451,7 @@ disjoin :: (CCE.IsSyntaxExtension ext)
 disjoin p1 p2 = CCG.App (CCE.Or p1 p2)
 
 translateBinaryOp :: forall h s ret regs arch
-                   . (ASLArch arch)
-                  => Overrides arch regs
+                   . Overrides arch regs
                   -> AS.BinOp
                   -> AS.Expr
                   -> AS.Expr
@@ -566,8 +581,7 @@ assignmentFromList (Some asgn0) elts =
     [] -> Some asgn0
     Some elt : rest -> assignmentFromList (Some (Ctx.extend asgn0 elt)) rest
 
-translateUnaryOp :: (ASLArch arch)
-                 => Overrides arch regs
+translateUnaryOp :: Overrides arch regs
                  -> AS.UnOp
                  -> AS.Expr
                  -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (Some (CCG.Atom s))

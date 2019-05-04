@@ -16,7 +16,6 @@ import           Control.Lens ( (^.) )
 import           Control.Monad.ST ( RealWorld )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
-import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Lang.Crucible.Backend as CB
@@ -45,13 +44,12 @@ data SimulatorConfig sym =
 --
 -- Procedures have a different return type, where we need to track not only the value returned, but
 -- also the global location to which it should be assigned
-simulateFunction :: ( AC.ASLArch arch
-                    , CB.IsSymInterface sym
+simulateFunction :: ( CB.IsSymInterface sym
                     , CS.RegValue sym ret ~ WI.SymExpr sym tp
                     , ret ~ CT.BaseToType tp
                     )
                  => SimulatorConfig sym
-                 -> AC.Function arch init ret tp
+                 -> AC.Function arch globals init ret tp
                  -> IO (WI.SymExpr sym tp)
 simulateFunction symCfg func = do
   case AC.funcCFG func of
@@ -61,26 +59,17 @@ simulateFunction symCfg func = do
       let econt = CS.runOverrideSim (CT.baseToType (AC.funcSigRepr sig)) $ do
             re <- CS.callCFG cfg (CS.RegMap initArgs)
             return (CS.regValue re)
-      -- FIXME: Do functions ever reference globals?  I think the answer is no,
-      -- so we might be able to just not do any handling of globals at all here.
-      --
-      -- NOTE: It turns out that functions can reference globals.  We should
-      -- just pass in the whole global state snapshot (but we don't need to
-      -- return it).
-      case AC.funcGlobalReprs sig of
-        Some globalReprs -> do
-          -- FIXME: Have the function type capture all of the referenced globals
-          let globals = undefined
-          globalState <- initGlobals symCfg globals
-          s0 <- initialSimulatorState symCfg globalState econt
-          eres <- CS.executeCrucible executionFeatures s0
-          case eres of
-            CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeFunctionSignature sig))
-            CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeFunctionSignature sig))
-            CS.FinishedResult _ pres ->
-              case pres of
-                CS.TotalRes gp -> extractResult gp
-                CS.PartialRes _ gp _ -> extractResult gp
+      let globals = AC.funcGlobals func
+      globalState <- initGlobals symCfg globals
+      s0 <- initialSimulatorState symCfg globalState econt
+      eres <- CS.executeCrucible executionFeatures s0
+      case eres of
+        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeFunctionSignature sig))
+        CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeFunctionSignature sig))
+        CS.FinishedResult _ pres ->
+          case pres of
+            CS.TotalRes gp -> extractResult gp
+            CS.PartialRes _ gp _ -> extractResult gp
   where
     extractResult gp =
       let re = gp ^. CS.gpValue
@@ -99,12 +88,10 @@ simulateFunction symCfg func = do
 -- arguments)
 --
 -- Note that the type tps works out, as the sequence collection of types is BaseStructType
-simulateProcedure :: forall arch sym init regs ret
-                   . (CB.IsSymInterface sym, AC.ASLArch arch, regs ~ AC.ASLExtRegs arch)
+simulateProcedure :: forall arch sym init regs ret globals
+                   . (CB.IsSymInterface sym, regs ~ globals)
                   => SimulatorConfig sym
-                  -> AC.Procedure arch init regs ret
-                  -- -> AC.ProcedureSignature init regs ret
-                  -- -> CCC.SomeCFG () init ret
+                  -> AC.Procedure arch globals init regs ret
                   -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) regs)
 simulateProcedure symCfg crucProc = do
   case AC.procCFG crucProc of
@@ -189,8 +176,8 @@ initGlobals symCfg globals = do
 executionFeatures :: [CS.ExecutionFeature p sym ext rtp]
 executionFeatures = []
 
-data SimulationException = forall regs . SimulationTimeout (AC.SomeSignature regs)
-                         | forall regs. SimulationAbort (AC.SomeSignature regs)
+data SimulationException = SimulationTimeout AC.SomeSignature
+                         | SimulationAbort AC.SomeSignature
                          | forall tp . NonBaseTypeReturn (CT.TypeRepr tp)
                          | forall btp . UnexpectedReturnType (WT.BaseTypeRepr btp)
                          | forall tp . MissingGlobalDefinition (CS.GlobalVar tp)

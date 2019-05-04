@@ -28,7 +28,6 @@ module SemMC.ASL.Signature (
 
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
-import           Data.Parameterized.Some ( Some )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Generator as CCG
@@ -40,10 +39,11 @@ import qualified What4.BaseTypes as WT
 -- An ASL function is side-effect free and returns a single value (which may be a
 -- tuple). It takes as input a set of arguments, 'funcArgReprs', and a set of global
 -- refs, 'funcGlobalReprs'.
-data FunctionSignature init ret tp =
-  FunctionSignature { funcSigRepr :: WT.BaseTypeRepr tp
+data FunctionSignature globals init ret tp =
+  FunctionSignature { funcName :: T.Text
+                    , funcSigRepr :: WT.BaseTypeRepr tp
                     , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
-                    , funcGlobalReprs :: Some (Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr))
+                    , funcGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                     }
   deriving (Show)
 
@@ -80,14 +80,16 @@ instance ShowF BaseGlobalVar
 -- init are the non-global args
 -- regs are the list of global registers
 -- ret is the return type (actually a whole reg state, and basically congruent to regs)
--- bts is the list of extra return values - I think it will likely always be empty
 --
 -- Note that the actual args below (psArgReprs) has the full register state appended (as a struct)
-data ProcedureSignature (init :: Ctx.Ctx CT.CrucibleType)
-                        (regs :: Ctx.Ctx WT.BaseType)
+--
+-- NOTE: We currently assume that each procedure can access all globals.  We
+-- will want to improve on this at some point.
+data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
+                        (init :: Ctx.Ctx CT.CrucibleType)
                         (ret :: CT.CrucibleType) =
   ProcedureSignature { psName :: T.Text
-                     , psRegsRepr :: WT.BaseTypeRepr (WT.BaseStructType regs)
+                     , psRegsRepr :: WT.BaseTypeRepr (WT.BaseStructType globals)
                        -- ^ The type of the register file
                        --
                        -- Note that this will include state that isn't exactly a machine register,
@@ -104,12 +106,17 @@ data ProcedureSignature (init :: Ctx.Ctx CT.CrucibleType)
                        -- list of explicit arguments), as well as a struct containing all of the
                        -- register values at the time the procedure is called, passed as a struct
                        -- in the last argument position.
+                       , psGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
+                       -- ^ The globals possibly accessed by this procedure.
+                       --
+                       -- For now, we can always make it the full set of
+                       -- globals; later, we can find a tighter bound.
                        }
   deriving (Show)
 
-data SomeSignature regs where
-  SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature init ret tp -> SomeSignature regs
-  SomeProcedureSignature :: ProcedureSignature init regs ret
-                         -> SomeSignature regs
+data SomeSignature where
+  SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature globals init ret tp -> SomeSignature
+  SomeProcedureSignature :: ProcedureSignature globals init ret
+                         -> SomeSignature
 
-deriving instance Show (SomeSignature regs)
+deriving instance Show SomeSignature

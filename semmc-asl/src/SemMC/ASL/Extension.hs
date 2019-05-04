@@ -10,7 +10,6 @@
 {-# LANGUAGE TypeFamilies #-}
 module SemMC.ASL.Extension (
     ASLExt
-  , ASLArch(..)
   , ASLApp(..)
   , ASLStmt(..)
   , aslExtImpl
@@ -41,7 +40,7 @@ import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
 
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
-import           SemMC.ASL.Signature ( BaseGlobalVar(..), LabeledValue )
+import           SemMC.ASL.Signature ( BaseGlobalVar(..) )
 
 -- NOTE: Translate calls (both expr and stmt) as What4 uninterpreted functions
 --
@@ -57,10 +56,6 @@ import           SemMC.ASL.Signature ( BaseGlobalVar(..), LabeledValue )
 -- doesn't seem like we can represent that directly in Crucible; this allows us to translate
 -- uninterpreted functions into UFs directly in What4.
 data ASLExt arch
-
-class ASLArch arch where
-  type family ASLExtRegs arch :: CT.Ctx WT.BaseType
-  archRegBaseRepr :: proxy arch -> Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) (ASLExtRegs arch)
 
 data ASLApp f tp where
   UF :: T.Text
@@ -180,7 +175,7 @@ extractBase fname evalExpr tps vals (Some acc) = do
 type instance CCExt.ExprExtension (ASLExt arch) = ASLApp
 type instance CCExt.StmtExtension (ASLExt arch) = ASLStmt arch
 
-instance (ASLArch arch) => CCExt.IsSyntaxExtension (ASLExt arch)
+instance CCExt.IsSyntaxExtension (ASLExt arch)
 
 aslExtImpl :: forall arch p sym . CS.ExtensionImpl p sym (ASLExt arch)
 aslExtImpl =
@@ -207,7 +202,7 @@ instance FC.TraversableFC (ASLStmt arch) where
       GetRegState reps gvs -> pure (GetRegState reps gvs)
       SetRegState gvs s -> SetRegState gvs <$> f s
 
-instance (ASLArch arch) => CCExt.TypeApp (ASLStmt arch) where
+instance CCExt.TypeApp (ASLStmt arch) where
   appType a =
     case a of
       GetRegState reps _ -> CT.baseToType (WT.BaseStructRepr reps)
