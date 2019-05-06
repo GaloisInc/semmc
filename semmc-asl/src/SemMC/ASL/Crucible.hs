@@ -152,8 +152,6 @@ funcInitialState sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
-                   , tsUndefinedVar = error "func: tsUndefinedVar"
-                   , tsUnpredictableVar = error "func: tsUnpredictableVar"
                    , tsFunctionSigs = error "func: tsFunctionSigs"
                    }
   where
@@ -192,6 +190,10 @@ data Procedure arch globals init =
             , procGlobals :: Ctx.Assignment BaseGlobalVar globals
             }
 
+-- | This type alias is a constraint relating the 'globals' (base types) to the
+-- actual return type in terms of Crucible types
+--
+-- The constraint is simple but a bit annoying to write
 type ReturnsGlobals ret globals = (ret ~ CT.SymbolicStructType globals)
 
 -- | Translate an ASL procedure (signature plus statements) into a Crucible procedure
@@ -211,6 +213,10 @@ type ReturnsGlobals ret globals = (ret ~ CT.SymbolicStructType globals)
 -- We assume that all procedures have void type in ASL.  We translate all
 -- procedures to return a single argument: a struct with the updated register
 -- values.
+--
+-- NOTE: The signature computation MUST account for the UNPREDICTABLE and
+-- UNDEFINED globals.  They may be accessed during the translation and must be
+-- available in the 'TranslationState'
 procedureToCrucible :: forall arch init globals ret
                      . (ReturnsGlobals ret globals)
                     => Overrides arch
@@ -253,8 +259,6 @@ procInitialState sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
-                   , tsUndefinedVar = error "proc: tsUndefinedVar"
-                   , tsUnpredictableVar = error "proc: tsUnpredictableVar"
                    , tsFunctionSigs = error "proc: tsFunctionSigs"
                    }
   where

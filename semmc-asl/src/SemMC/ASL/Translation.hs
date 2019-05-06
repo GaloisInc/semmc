@@ -79,16 +79,16 @@ data TranslationState s =
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
                    -- transitively-referenced globals in the signature.
-                   , tsUndefinedVar :: CCG.GlobalVar CT.BoolType
-                   -- ^ A variable that starts as False, but transitions to True when an instruction
-                   -- triggers undefined behavior
-                   , tsUnpredictableVar :: CCG.GlobalVar CT.BoolType
-                   -- ^ A variable that starts as False, but transitions to True when an instruction
-                   -- triggers unpredictable behavior
                    , tsFunctionSigs :: Map.Map T.Text SomeSignature
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
                    }
+
+unpredictableVarName :: T.Text
+unpredictableVarName = T.pack "UNPREDICTABLE"
+
+undefinedVarName :: T.Text
+undefinedVarName = T.pack "UNDEFINED"
 
 withProcGlobals :: (m ~ CCG.Generator (ASLExt arch) h s TranslationState ret)
                 => ProcedureSignature globals init
@@ -148,11 +148,21 @@ translateStatement ov rep stmt
       AS.StmtRepeat body test -> translateRepeat ov rep body test
       AS.StmtFor var (lo, hi) body -> translateFor ov rep var lo hi body
       AS.StmtUndefined -> do
-        gv <- MS.gets tsUndefinedVar
-        CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+        gs <- MS.gets tsGlobals
+        case Map.lookup undefinedVarName gs of
+          Just (Some gv)
+            | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
+                CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+            | otherwise -> X.throw (UnexpectedGlobalType undefinedVarName (CCG.globalType gv))
+          _ -> X.throw (MissingGlobal undefinedVarName)
       AS.StmtUnpredictable -> do
-        gv <- MS.gets tsUnpredictableVar
-        CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+        gs <- MS.gets tsGlobals
+        case Map.lookup unpredictableVarName gs of
+          Just (Some gv)
+            | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
+                CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+            | otherwise -> X.throw (UnexpectedGlobalType unpredictableVarName (CCG.globalType gv))
+          _ -> X.throw (MissingGlobal unpredictableVarName)
       AS.StmtCall (AS.QualifiedIdentifier _ ident) args -> do
         sigMap <- MS.gets tsFunctionSigs
         case Map.lookup ident sigMap of
