@@ -42,9 +42,14 @@ import qualified What4.BaseTypes as WT
 -- refs, 'funcGlobalReprs'.
 data FunctionSignature globals init tp =
   FunctionSignature { funcName :: T.Text
+                    -- ^ The name of the function
                     , funcSigRepr :: WT.BaseTypeRepr tp
+                    -- ^ The return type of the function
                     , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+                    -- ^ The types of the natural arguments of the function
                     , funcGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
+                    -- ^ The globals referenced by the function; NOTE that we
+                    -- assume that globals are read-only in functions
                     }
   deriving (Show)
 
