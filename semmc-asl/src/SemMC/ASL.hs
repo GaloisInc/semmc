@@ -95,7 +95,7 @@ simulateProcedure symCfg crucProc = do
     CCC.SomeCFG cfg -> do
       let sig = AC.procSig crucProc
       let globalVars = AC.procGlobals crucProc
-      initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.psArgReprs sig)
+      initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procArgReprs sig)
       let econt = CS.runOverrideSim CT.UnitRepr $ do
             _ <- CS.callCFG cfg (CS.RegMap initArgs)
             return ()

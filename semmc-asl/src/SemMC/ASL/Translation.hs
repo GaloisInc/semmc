@@ -96,7 +96,7 @@ withProcGlobals :: (m ~ CCG.Generator (ASLExt arch) h s TranslationState ret)
                 -> m r
 withProcGlobals sig k = do
   globMap <- MS.gets tsGlobals
-  let reprs = psGlobalReprs sig
+  let reprs = procGlobalReprs sig
   let globReprs = FC.fmapFC projectValue reprs
   k globReprs (FC.fmapFC (fetchGlobal globMap) reprs)
   where
@@ -163,7 +163,7 @@ translateStatement ov rep stmt
             case assignmentFromList (Some Ctx.empty) argAtoms of
               Some argAssign -> do
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                let expectedTypes = FC.fmapFC projectValue (psArgReprs sig)
+                let expectedTypes = FC.fmapFC projectValue (procArgReprs sig)
                 if | Just Refl <- testEquality atomTypes expectedTypes -> do
                        -- FIXME: The problem is that we might need to snapshot a
                        -- subset of globals for each call.  Each subset might be
@@ -178,7 +178,8 @@ translateStatement ov rep stmt
                          let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
                          globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
                          let vals = FC.fmapFC CCG.AtomExpr argAssign
-                         let uf = UF ident (psRegsRepr sig) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
+                         let ufRep = WT.BaseStructRepr (FC.fmapFC projectValue (procGlobalReprs sig))
+                         let uf = UF ident ufRep (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
                          atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                          _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
                          return ()

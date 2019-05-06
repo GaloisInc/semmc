@@ -22,7 +22,7 @@ module SemMC.ASL.Crucible (
   , funcArgReprs
   , funcGlobalReprs
   , ProcedureSignature
-  , psArgReprs
+  , procArgReprs
   , SomeSignature(..)
   , computeDefinitionSignature
   , computeInstructionSignature
@@ -219,10 +219,10 @@ procedureToCrucible :: forall arch init globals ret
                     -> [AS.Stmt]
                     -> IO (Procedure arch globals init)
 procedureToCrucible ov sig hdlAlloc stmts = do
-  let argReprs = FC.fmapFC projectValue (psArgReprs sig)
+  let argReprs = FC.fmapFC projectValue (procArgReprs sig)
   let retRepr = procSigRepr sig
-  hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (psName sig)) argReprs retRepr)
-  globals <- FC.traverseFC allocateGlobal (psGlobalReprs sig)
+  hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (procName sig)) argReprs retRepr)
+  globals <- FC.traverseFC allocateGlobal (procGlobalReprs sig)
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef ov sig globals stmts)
   return Procedure { procSig = sig
@@ -263,7 +263,7 @@ procInitialState sig globals args =
                 -> Ctx.Index init tp
                 -> Map.Map T.Text (Some (CCG.Atom s))
     addArgument m idx =
-      Map.insert (projectLabel (psArgReprs sig Ctx.! idx)) (Some (args Ctx.! idx)) m
+      Map.insert (projectLabel (procArgReprs sig Ctx.! idx)) (Some (args Ctx.! idx)) m
     addGlobal (BaseGlobalVar gv) m =
       Map.insert (CCG.globalName gv) (Some gv) m
 
@@ -276,13 +276,10 @@ defineProcedure :: (ReturnsGlobals ret globals)
                 -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig baseGlobals stmts args = do
   mapM_ (translateStatement ov (procSigRepr sig)) stmts
-  retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (psGlobalReprs sig)) baseGlobals)
+  retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (procGlobalReprs sig)) baseGlobals)
   if | Just Refl <- testEquality (CCG.exprType retExpr) (procSigRepr sig) ->
        return retExpr
      | otherwise -> X.throw (UnexpectedProcedureReturn (procSigRepr sig) (CCG.exprType retExpr))
-
-procSigRepr :: ProcedureSignature globals init -> CT.TypeRepr (CT.SymbolicStructType globals)
-procSigRepr sig = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (psGlobalReprs sig)))
 
 {- Note [Call Translation]
 

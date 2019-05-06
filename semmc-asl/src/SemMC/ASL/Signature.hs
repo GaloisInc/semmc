@@ -19,6 +19,7 @@ locations touched by that function.
 module SemMC.ASL.Signature (
     FunctionSignature(..)
   , ProcedureSignature(..)
+  , procSigRepr
   , SomeSignature(..)
   , LabeledValue(..)
   , projectValue
@@ -80,34 +81,26 @@ instance ShowF BaseGlobalVar
 -- init are the non-global args
 -- regs are the list of global registers
 -- ret is the return type (actually a whole reg state, and basically congruent to regs)
---
--- Note that the actual args below (psArgReprs) has the full register state appended (as a struct)
---
--- NOTE: We currently assume that each procedure can access all globals.  We
--- will want to improve on this at some point.
 data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                         (init :: Ctx.Ctx CT.CrucibleType) =
-  ProcedureSignature { psName :: T.Text
-                     , psRegsRepr :: WT.BaseTypeRepr (WT.BaseStructType globals)
-                       -- ^ The type of the register file
-                       --
-                       -- Note that this will include state that isn't exactly a machine register,
-                       -- but is CPU state that we track globally and need to thread through
-                       -- procedure calls.  This is also the return type of the procedure
-                       , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
-                       -- ^ The full repr for the arguments to the procedure
+  ProcedureSignature { procName :: T.Text
+                       --  The name of the procedure
+                     , procArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
+                       -- ^ The full repr for the natural arguments to the procedure
                        --
                        -- The arguments are the stated arguments (the @init@ type, which is the
-                       -- list of explicit arguments), as well as a struct containing all of the
-                       -- register values at the time the procedure is called, passed as a struct
-                       -- in the last argument position.
-                       , psGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
+                       -- list of explicit arguments)
+                     , procGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                        -- ^ The globals possibly accessed by this procedure.
                        --
                        -- For now, we can always make it the full set of
                        -- globals; later, we can find a tighter bound.
                        }
   deriving (Show)
+
+-- | Compute the return type (repr) of a procedure in Crucible types (lifted from base types)
+procSigRepr :: ProcedureSignature globals init -> CT.TypeRepr (CT.SymbolicStructType globals)
+procSigRepr sig = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (procGlobalReprs sig)))
 
 data SomeSignature where
   SomeFunctionSignature :: FunctionSignature globals init tp -> SomeSignature
