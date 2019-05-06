@@ -106,7 +106,7 @@ computeInstructionSignature = undefined
 -- Note that there are a bunch of intermediate functions to set up the
 -- 'CCG.Generator' monad; the real work is done in 'defineFunction'.
 functionToCrucible :: (ret ~ CT.BaseToType tp)
-                   => Overrides arch regs
+                   => Overrides arch
                    -> FunctionSignature globals init tp
                    -> CFH.HandleAllocator RealWorld
                    -> [AS.Stmt]
@@ -135,7 +135,7 @@ data Function arch globals init tp =
            }
 
 funcDef :: (ret ~ CT.BaseToType tp)
-        => Overrides arch regs
+        => Overrides arch
         -> FunctionSignature globals init tp
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
@@ -169,9 +169,9 @@ funcInitialState sig globals args =
       Map.insert (CCG.globalName gv) (Some gv) m
 
 
-defineFunction :: forall ret tp init h s regs arch globals
+defineFunction :: forall ret tp init h s arch globals
                 . (ret ~ CT.BaseToType tp)
-               => Overrides arch regs
+               => Overrides arch
                -> FunctionSignature globals init tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
@@ -211,9 +211,9 @@ type ReturnsGlobals ret globals = (ret ~ CT.SymbolicStructType globals)
 -- We assume that all procedures have void type in ASL.  We translate all
 -- procedures to return a single argument: a struct with the updated register
 -- values.
-procedureToCrucible :: forall arch regs init globals ret
+procedureToCrucible :: forall arch init globals ret
                      . (ReturnsGlobals ret globals)
-                    => Overrides arch regs
+                    => Overrides arch
                     -> ProcedureSignature globals init
                     -> CFH.HandleAllocator RealWorld
                     -> [AS.Stmt]
@@ -235,7 +235,7 @@ procedureToCrucible ov sig hdlAlloc stmts = do
       stToIO (BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep))
 
 procDef :: (ReturnsGlobals ret globals)
-        => Overrides arch regs
+        => Overrides arch
         -> ProcedureSignature globals init
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
@@ -268,7 +268,7 @@ procInitialState sig globals args =
       Map.insert (CCG.globalName gv) (Some gv) m
 
 defineProcedure :: (ReturnsGlobals ret globals)
-                => Overrides arch regs
+                => Overrides arch
                 -> ProcedureSignature globals init
                 -> Ctx.Assignment BaseGlobalVar globals
                 -> [AS.Stmt]

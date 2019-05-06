@@ -44,7 +44,7 @@ data ExprConstructor arch regs h s ret where
                   -> (a tp -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s tp))
                   -> ExprConstructor (ASLExt arch) regs h s ret
 
-lookupVarRef :: forall arch h s ret regs
+lookupVarRef :: forall arch h s ret
               . T.Text
              -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Expr (ASLExt arch) s))
 lookupVarRef name = do
@@ -63,7 +63,7 @@ lookupVarRef name = do
       Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g CCG.readGlobal)
 
-data Overrides arch regs =
+data Overrides arch =
   Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret ())
             , overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s)))
             }
@@ -109,8 +109,8 @@ withProcGlobals sig k = do
           BaseGlobalVar gv
       | otherwise = error ("Missing global (or wrong type): " ++ show globName)
 
-translateStatement :: forall arch regs ret h s
-                    . Overrides arch regs
+translateStatement :: forall arch ret h s
+                    . Overrides arch
                    -> CT.TypeRepr ret
                    -> AS.Stmt
                    -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
@@ -201,7 +201,7 @@ translateStatement ov rep stmt
 -- NOTE: The translation is inclusive of the upper bound - is that right?
 --
 -- NOTE: We are assuming that the variable assignment is actually a declaration of integer type
-translateFor :: Overrides arch regs
+translateFor :: Overrides arch
              -> CT.TypeRepr ret
              -> AS.Identifier
              -> AS.Expr
@@ -221,7 +221,7 @@ translateFor ov rep var lo hi body = do
   CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
-translateRepeat :: Overrides arch regs
+translateRepeat :: Overrides arch
                 -> CT.TypeRepr ret
                 -> [AS.Stmt]
                 -> AS.Expr
@@ -242,7 +242,7 @@ translateRepeat ov rtp body test = do
 
   CCG.continue exit_lbl (CCG.jump loop_lbl)
 
-translateDefinedVar :: Overrides arch regs
+translateDefinedVar :: Overrides arch
                     -> AS.Type
                     -> AS.Identifier
                     -> AS.Expr
@@ -263,7 +263,7 @@ translateDefinedVar ov ty ident expr =
 -- This case is interesting, as assignments can be to locals or globals.
 --
 -- NOTE: We are assuming that there cannot be assignments to arguments.
-translateAssignment :: Overrides arch regs
+translateAssignment :: Overrides arch
                     -> AS.LValExpr
                     -> AS.Expr
                     -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
@@ -302,7 +302,7 @@ declareUndefinedVar ty ident = do
 translateType :: AS.Type -> Some CT.TypeRepr
 translateType = error "translateType unimplemented"
 
-translateIf :: Overrides arch regs
+translateIf :: Overrides arch
             -> CT.TypeRepr ret
             -> [(AS.Expr, [AS.Stmt])]
             -> Maybe [AS.Stmt]
@@ -332,7 +332,7 @@ assertAtomType expr expectedRepr atom =
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
-translateExpr :: Overrides arch regs
+translateExpr :: Overrides arch
               -> AS.Expr
               -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
 translateExpr ov expr
@@ -384,7 +384,7 @@ translateExpr ov expr
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
 
 -- | Translate the expression form of a conditional into a Crucible atom
-translateIfExpr :: Overrides arch regs
+translateIfExpr :: Overrides arch
                 -> AS.Expr
                 -> [(AS.Expr, AS.Expr)]
                 -> AS.Expr
@@ -418,7 +418,7 @@ translateIfExpr ov orig clauses elseExpr =
 -- Single element tests are translated into a simple equality test
 --
 -- Ranges are translated as a conjunction of inclusive tests. x IN [5..10] => 5 <= x && x <= 10
-translateSetElementTest :: Overrides arch regs
+translateSetElementTest :: Overrides arch
                         -> AS.Expr
                         -> CCG.Atom s tp
                         -> AS.SetElement
@@ -450,8 +450,8 @@ disjoin :: (CCE.IsSyntaxExtension ext)
         -> CCG.Expr ext s CT.BoolType
 disjoin p1 p2 = CCG.App (CCE.Or p1 p2)
 
-translateBinaryOp :: forall h s ret regs arch
-                   . Overrides arch regs
+translateBinaryOp :: forall h s ret arch
+                   . Overrides arch
                   -> AS.BinOp
                   -> AS.Expr
                   -> AS.Expr
@@ -581,7 +581,7 @@ assignmentFromList (Some asgn0) elts =
     [] -> Some asgn0
     Some elt : rest -> assignmentFromList (Some (Ctx.extend asgn0 elt)) rest
 
-translateUnaryOp :: Overrides arch regs
+translateUnaryOp :: Overrides arch
                  -> AS.UnOp
                  -> AS.Expr
                  -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
