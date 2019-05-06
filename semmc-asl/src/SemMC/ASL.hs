@@ -88,11 +88,11 @@ simulateFunction symCfg func = do
 -- arguments)
 --
 -- Note that the type tps works out, as the sequence collection of types is BaseStructType
-simulateProcedure :: forall arch sym init regs ret globals
-                   . (CB.IsSymInterface sym, regs ~ globals)
+simulateProcedure :: forall arch sym init ret globals
+                   . (CB.IsSymInterface sym)
                   => SimulatorConfig sym
-                  -> AC.Procedure arch globals init regs ret
-                  -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) regs)
+                  -> AC.Procedure arch globals init ret
+                  -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) globals)
 simulateProcedure symCfg crucProc = do
   case AC.procCFG crucProc of
     CCC.SomeCFG cfg -> do

@@ -89,6 +89,9 @@ asCallable def =
 --
 -- FIXME: This may need to take all of the signatures of called functions to compute its own
 -- signature (since they might be procedures updating state that isn't obvious)
+--
+-- We could avoid having to topologically sort functions and procedures by just
+-- doing this in a state monad and computing signatures whenever we hit a call.
 computeDefinitionSignature :: [(String, SomeSignature)] -> Callable -> IO SomeSignature
 computeDefinitionSignature = undefined
 
@@ -183,7 +186,7 @@ defineFunction ov sig stmts args = do
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
-data Procedure arch globals init regs ret =
+data Procedure arch globals init ret =
   Procedure { procSig :: ProcedureSignature globals init ret
             , procCFG :: CCC.SomeCFG (ASLExt arch) init ret
             , procGlobals :: Ctx.Assignment BaseGlobalVar globals
@@ -211,7 +214,7 @@ procedureToCrucible :: forall arch regs ret init globals
                     -> ProcedureSignature globals init ret
                     -> CFH.HandleAllocator RealWorld
                     -> [AS.Stmt]
-                    -> IO (Procedure arch globals init regs ret)
+                    -> IO (Procedure arch globals init ret)
 procedureToCrucible ov sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (psArgReprs sig)
   let retRepr = psSigRepr sig
