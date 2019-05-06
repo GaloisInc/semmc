@@ -39,7 +39,7 @@ import qualified What4.BaseTypes as WT
 -- An ASL function is side-effect free and returns a single value (which may be a
 -- tuple). It takes as input a set of arguments, 'funcArgReprs', and a set of global
 -- refs, 'funcGlobalReprs'.
-data FunctionSignature globals init ret tp =
+data FunctionSignature globals init tp =
   FunctionSignature { funcName :: T.Text
                     , funcSigRepr :: WT.BaseTypeRepr tp
                     , funcArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
@@ -115,7 +115,7 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
   deriving (Show)
 
 data SomeSignature where
-  SomeFunctionSignature :: (ret ~ CT.BaseToType tp) => FunctionSignature globals init ret tp -> SomeSignature
+  SomeFunctionSignature :: FunctionSignature globals init tp -> SomeSignature
   SomeProcedureSignature :: ProcedureSignature globals init ret
                          -> SomeSignature
 

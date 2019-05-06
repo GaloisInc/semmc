@@ -44,12 +44,9 @@ data SimulatorConfig sym =
 --
 -- Procedures have a different return type, where we need to track not only the value returned, but
 -- also the global location to which it should be assigned
-simulateFunction :: ( CB.IsSymInterface sym
-                    , CS.RegValue sym ret ~ WI.SymExpr sym tp
-                    , ret ~ CT.BaseToType tp
-                    )
+simulateFunction :: (CB.IsSymInterface sym)
                  => SimulatorConfig sym
-                 -> AC.Function arch globals init ret tp
+                 -> AC.Function arch globals init tp
                  -> IO (WI.SymExpr sym tp)
 simulateFunction symCfg func = do
   case AC.funcCFG func of

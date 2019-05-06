@@ -107,10 +107,10 @@ computeInstructionSignature = undefined
 -- 'CCG.Generator' monad; the real work is done in 'defineFunction'.
 functionToCrucible :: (ret ~ CT.BaseToType tp)
                    => Overrides arch regs
-                   -> FunctionSignature globals init ret tp
+                   -> FunctionSignature globals init tp
                    -> CFH.HandleAllocator RealWorld
                    -> [AS.Stmt]
-                   -> IO (Function arch globals init ret tp)
+                   -> IO (Function arch globals init tp)
 functionToCrucible ov sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (funcArgReprs sig)
   let retRepr = CT.baseToType (funcSigRepr sig)
@@ -128,15 +128,15 @@ functionToCrucible ov sig hdlAlloc stmts = do
       stToIO (BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep))
 
 -- | A wrapper around translated functions to keep signatures with CFGs
-data Function arch globals init ret tp =
-  Function { funcSig :: FunctionSignature globals init ret tp
-           , funcCFG :: CCC.SomeCFG (ASLExt arch) init ret
+data Function arch globals init tp =
+  Function { funcSig :: FunctionSignature globals init tp
+           , funcCFG :: CCC.SomeCFG (ASLExt arch) init (CT.BaseToType tp)
            , funcGlobals :: Ctx.Assignment BaseGlobalVar globals
            }
 
 funcDef :: (ret ~ CT.BaseToType tp)
         => Overrides arch regs
-        -> FunctionSignature globals init ret tp
+        -> FunctionSignature globals init tp
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
@@ -144,7 +144,7 @@ funcDef :: (ret ~ CT.BaseToType tp)
 funcDef ov sig globals stmts args = (funcInitialState sig globals args, defineFunction ov sig stmts args)
 
 funcInitialState :: forall init ret tp s regs arch globals
-                  . FunctionSignature globals init ret tp
+                  . FunctionSignature globals init tp
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState arch regs ret s
@@ -172,7 +172,7 @@ funcInitialState sig globals args =
 defineFunction :: forall ret tp init h s regs arch globals
                 . (ret ~ CT.BaseToType tp)
                => Overrides arch regs
-               -> FunctionSignature globals init ret tp
+               -> FunctionSignature globals init tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
                -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret)
