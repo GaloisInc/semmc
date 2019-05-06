@@ -186,9 +186,9 @@ defineFunction ov sig stmts args = do
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
-data Procedure arch globals init ret =
-  Procedure { procSig :: ProcedureSignature globals init ret
-            , procCFG :: CCC.SomeCFG (ASLExt arch) init ret
+data Procedure arch globals init =
+  Procedure { procSig :: ProcedureSignature globals init
+            , procCFG :: CCC.SomeCFG (ASLExt arch) init (CT.SymbolicStructType globals)
             , procGlobals :: Ctx.Assignment BaseGlobalVar globals
             }
 
@@ -211,13 +211,13 @@ type ReturnsGlobals ret globals = (ret ~ CT.SymbolicStructType globals)
 -- We assume that all procedures have void type in ASL.  We translate all
 -- procedures to return a single argument: a struct with the updated register
 -- values.
-procedureToCrucible :: forall arch regs ret init globals
+procedureToCrucible :: forall arch regs init globals ret
                      . (ReturnsGlobals ret globals)
                     => Overrides arch regs
-                    -> ProcedureSignature globals init ret
+                    -> ProcedureSignature globals init
                     -> CFH.HandleAllocator RealWorld
                     -> [AS.Stmt]
-                    -> IO (Procedure arch globals init ret)
+                    -> IO (Procedure arch globals init)
 procedureToCrucible ov sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (psArgReprs sig)
   let retRepr = procSigRepr sig
@@ -236,7 +236,7 @@ procedureToCrucible ov sig hdlAlloc stmts = do
 
 procDef :: (ReturnsGlobals ret globals)
         => Overrides arch regs
-        -> ProcedureSignature globals init ret
+        -> ProcedureSignature globals init
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
@@ -244,8 +244,8 @@ procDef :: (ReturnsGlobals ret globals)
 procDef ov sig globals stmts args =
   (procInitialState sig globals args, defineProcedure ov sig globals stmts args)
 
-procInitialState :: forall init globals ret s
-                  . ProcedureSignature globals init ret
+procInitialState :: forall init globals s
+                  . ProcedureSignature globals init
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState s
@@ -269,19 +269,19 @@ procInitialState sig globals args =
 
 defineProcedure :: (ReturnsGlobals ret globals)
                 => Overrides arch regs
-                -> ProcedureSignature globals init ret
+                -> ProcedureSignature globals init
                 -> Ctx.Assignment BaseGlobalVar globals
                 -> [AS.Stmt]
                 -> Ctx.Assignment (CCG.Atom s) init
                 -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig baseGlobals stmts args = do
-  mapM_ (translateStatement ov (psSigRepr sig)) stmts
+  mapM_ (translateStatement ov (procSigRepr sig)) stmts
   retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (psGlobalReprs sig)) baseGlobals)
   if | Just Refl <- testEquality (CCG.exprType retExpr) (procSigRepr sig) ->
        return retExpr
      | otherwise -> X.throw (UnexpectedProcedureReturn (procSigRepr sig) (CCG.exprType retExpr))
 
-procSigRepr :: ProcedureSignature globals init ret -> CT.TypeRepr (CT.SymbolicStructType globals)
+procSigRepr :: ProcedureSignature globals init -> CT.TypeRepr (CT.SymbolicStructType globals)
 procSigRepr sig = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (psGlobalReprs sig)))
 
 {- Note [Call Translation]

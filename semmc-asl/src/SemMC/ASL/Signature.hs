@@ -86,8 +86,7 @@ instance ShowF BaseGlobalVar
 -- NOTE: We currently assume that each procedure can access all globals.  We
 -- will want to improve on this at some point.
 data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
-                        (init :: Ctx.Ctx CT.CrucibleType)
-                        (ret :: CT.CrucibleType) =
+                        (init :: Ctx.Ctx CT.CrucibleType) =
   ProcedureSignature { psName :: T.Text
                      , psRegsRepr :: WT.BaseTypeRepr (WT.BaseStructType globals)
                        -- ^ The type of the register file
@@ -95,10 +94,6 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                        -- Note that this will include state that isn't exactly a machine register,
                        -- but is CPU state that we track globally and need to thread through
                        -- procedure calls.  This is also the return type of the procedure
-                       , psSigRepr :: CT.TypeRepr ret
-                       -- ^ The return value of the procedure (in Crucible types).
-                       --
-                       -- Note that, morally, ret ~ globals, but we can't really write that.
                        , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
                        -- ^ The full repr for the arguments to the procedure
                        --
@@ -116,7 +111,6 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
 
 data SomeSignature where
   SomeFunctionSignature :: FunctionSignature globals init tp -> SomeSignature
-  SomeProcedureSignature :: ProcedureSignature globals init ret
-                         -> SomeSignature
+  SomeProcedureSignature :: ProcedureSignature globals init -> SomeSignature
 
 deriving instance Show SomeSignature

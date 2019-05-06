@@ -91,7 +91,7 @@ data TranslationState s =
                    }
 
 withProcGlobals :: (m ~ CCG.Generator (ASLExt arch) h s TranslationState ret)
-                => ProcedureSignature globals init ret2
+                => ProcedureSignature globals init
                 -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
                 -> m r
 withProcGlobals sig k = do
