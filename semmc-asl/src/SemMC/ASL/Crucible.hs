@@ -140,14 +140,14 @@ funcDef :: (ret ~ CT.BaseToType tp)
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState arch regs ret s, CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret))
+        -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
 funcDef ov sig globals stmts args = (funcInitialState sig globals args, defineFunction ov sig stmts args)
 
-funcInitialState :: forall init ret tp s regs arch globals
+funcInitialState :: forall init tp s globals
                   . FunctionSignature globals init tp
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
-                 -> TranslationState arch regs ret s
+                 -> TranslationState s
 funcInitialState sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
@@ -175,7 +175,7 @@ defineFunction :: forall ret tp init h s regs arch globals
                -> FunctionSignature globals init tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
-               -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret)
+               -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig stmts args = do
   -- FIXME: Put args into the environment as locals (that can be read from)
   --
@@ -236,15 +236,15 @@ procDef :: Overrides arch regs
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState arch regs ret s, CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret))
+        -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
 procDef ov sig globals stmts args =
   (procInitialState sig globals args, defineProcedure ov sig globals stmts args)
 
-procInitialState :: forall init globals ret arch s regs
+procInitialState :: forall init globals ret s
                   . ProcedureSignature globals init ret
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
-                 -> TranslationState arch regs ret s
+                 -> TranslationState s
 procInitialState sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
@@ -268,7 +268,7 @@ defineProcedure :: Overrides arch regs
                 -> Ctx.Assignment BaseGlobalVar globals
                 -> [AS.Stmt]
                 -> Ctx.Assignment (CCG.Atom s) init
-                -> CCG.Generator (ASLExt arch) h s (TranslationState arch regs ret) ret (CCG.Expr (ASLExt arch) s ret)
+                -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig baseGlobals stmts args = do
   mapM_ (translateStatement ov (psSigRepr sig)) stmts
   someVals <- mapM readBaseGlobal (FC.toListFC Some baseGlobals)
@@ -282,7 +282,7 @@ defineProcedure ov sig baseGlobals stmts args = do
 
 readBaseGlobal :: (CCE.IsSyntaxExtension ext)
                => Some BaseGlobalVar
-               -> CCG.Generator ext h s (TranslationState arch regs ret) ret (Some (CCG.Expr ext s))
+               -> CCG.Generator ext h s TranslationState ret (Some (CCG.Expr ext s))
 readBaseGlobal (Some (BaseGlobalVar gv)) = Some <$> CCG.readGlobal gv
 
 {- Note [Call Translation]
