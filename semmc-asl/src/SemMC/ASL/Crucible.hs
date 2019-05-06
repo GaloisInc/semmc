@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GADTs #-}
@@ -48,7 +49,6 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Core as CCC
-import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.CFG.SSAConversion as CCS
 import qualified Lang.Crucible.FunctionHandle as CFH
@@ -59,10 +59,10 @@ import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
 
-import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt, aslExtImpl )
+import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( TranslationState(..), Overrides(..), translateStatement, assignmentFromList )
+import           SemMC.ASL.Translation ( TranslationState(..), Overrides(..), translateStatement )
 
 data Callable = Callable { callableName :: AS.QualifiedIdentifier
                          , callableArgs :: [AS.SymbolDecl]
@@ -192,6 +192,8 @@ data Procedure arch globals init ret =
             , procGlobals :: Ctx.Assignment BaseGlobalVar globals
             }
 
+type ReturnsGlobals ret globals = (ret ~ CT.SymbolicStructType globals)
+
 -- | Translate an ASL procedure (signature plus statements) into a Crucible procedure
 --
 -- We bundle up the signature, CFG, and allocated globals.  We need to keep the
@@ -210,14 +212,15 @@ data Procedure arch globals init ret =
 -- procedures to return a single argument: a struct with the updated register
 -- values.
 procedureToCrucible :: forall arch regs ret init globals
-                     . Overrides arch regs
+                     . (ReturnsGlobals ret globals)
+                    => Overrides arch regs
                     -> ProcedureSignature globals init ret
                     -> CFH.HandleAllocator RealWorld
                     -> [AS.Stmt]
                     -> IO (Procedure arch globals init ret)
 procedureToCrucible ov sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (psArgReprs sig)
-  let retRepr = psSigRepr sig
+  let retRepr = procSigRepr sig
   hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (psName sig)) argReprs retRepr)
   globals <- FC.traverseFC allocateGlobal (psGlobalReprs sig)
   let pos = WP.InternalPos
@@ -231,7 +234,8 @@ procedureToCrucible ov sig hdlAlloc stmts = do
     allocateGlobal (LabeledValue name rep) =
       stToIO (BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep))
 
-procDef :: Overrides arch regs
+procDef :: (ReturnsGlobals ret globals)
+        => Overrides arch regs
         -> ProcedureSignature globals init ret
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
@@ -263,7 +267,8 @@ procInitialState sig globals args =
     addGlobal (BaseGlobalVar gv) m =
       Map.insert (CCG.globalName gv) (Some gv) m
 
-defineProcedure :: Overrides arch regs
+defineProcedure :: (ReturnsGlobals ret globals)
+                => Overrides arch regs
                 -> ProcedureSignature globals init ret
                 -> Ctx.Assignment BaseGlobalVar globals
                 -> [AS.Stmt]
@@ -271,19 +276,13 @@ defineProcedure :: Overrides arch regs
                 -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig baseGlobals stmts args = do
   mapM_ (translateStatement ov (psSigRepr sig)) stmts
-  someVals <- mapM readBaseGlobal (FC.toListFC Some baseGlobals)
-  case assignmentFromList (Some Ctx.empty) someVals of
-    Some vals -> do
-      let reprs = FC.fmapFC CCG.exprType vals
-      retAtom <- CCG.mkAtom (CCG.App (CCE.MkStruct reprs vals))
-      if | Just Refl <- testEquality (CCG.typeOfAtom retAtom) (psSigRepr sig) ->
-           return (CCG.AtomExpr retAtom)
-         | otherwise -> X.throw (UnexpectedProcedureReturn (psSigRepr sig) (CCG.typeOfAtom retAtom))
+  retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (psGlobalReprs sig)) baseGlobals)
+  if | Just Refl <- testEquality (CCG.exprType retExpr) (procSigRepr sig) ->
+       return retExpr
+     | otherwise -> X.throw (UnexpectedProcedureReturn (procSigRepr sig) (CCG.exprType retExpr))
 
-readBaseGlobal :: (CCE.IsSyntaxExtension ext)
-               => Some BaseGlobalVar
-               -> CCG.Generator ext h s TranslationState ret (Some (CCG.Expr ext s))
-readBaseGlobal (Some (BaseGlobalVar gv)) = Some <$> CCG.readGlobal gv
+procSigRepr :: ProcedureSignature globals init ret -> CT.TypeRepr (CT.SymbolicStructType globals)
+procSigRepr sig = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (psGlobalReprs sig)))
 
 {- Note [Call Translation]
 

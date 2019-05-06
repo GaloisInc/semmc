@@ -98,7 +98,7 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                        , psSigRepr :: CT.TypeRepr ret
                        -- ^ The return value of the procedure (in Crucible types).
                        --
-                       -- Note that, morally, ret ~ regs, but we can't really write that.
+                       -- Note that, morally, ret ~ globals, but we can't really write that.
                        , psArgReprs :: Ctx.Assignment (LabeledValue T.Text CT.TypeRepr) init
                        -- ^ The full repr for the arguments to the procedure
                        --
