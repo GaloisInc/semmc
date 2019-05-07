@@ -13,7 +13,7 @@ module SemMC.ASL.Translation (
     TranslationState(..)
   , translateStatement
   , Overrides(..)
-  , assignmentFromList
+  , UserType(..)
   ) where
 
 import           Control.Applicative ( (<|>) )
