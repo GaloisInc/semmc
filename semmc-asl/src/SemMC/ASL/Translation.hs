@@ -39,11 +39,21 @@ import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 
+-- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
+-- the lookup types (arguments, locals, or globals) technically return different
+-- values, but they are values that are pretty easy to handle uniformly.
+--
+-- We could probably get rid of this wrapper if we made a function like
+-- @withVarValue@ that took a continuation instead.
 data ExprConstructor arch regs h s ret where
   ExprConstructor :: a tp
                   -> (a tp -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s tp))
                   -> ExprConstructor (ASLExt arch) regs h s ret
 
+-- | Inside of the translator, look up the current definition of a name
+--
+-- We currently assume that arguments are never assigned to (i.e., there is no
+-- name shadowing).
 lookupVarRef :: forall arch h s ret
               . T.Text
              -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Expr (ASLExt arch) s))
@@ -63,12 +73,20 @@ lookupVarRef name = do
       Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g CCG.readGlobal)
 
+-- | Overrides for syntactic forms
+--
+-- Each of the frontends can match on different bits of syntax and handle their
+-- translation specially.  This should be useful for replacing some trivial
+-- accessors with simpler forms in Crucible.
 data Overrides arch =
   Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret ())
             , overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s)))
             }
 
--- Will track the mapping from (ASL) identifiers to Crucible Atoms
+-- Tracks state necessary for the translation of ASL into Crucible
+--
+-- This is primarily storing variable bindings and the set of signatures
+-- available for other callees.
 data TranslationState s =
   TranslationState { tsArgAtoms :: Map.Map T.Text (Some (CCG.Atom s))
                    -- ^ Atoms corresponding to function/procedure inputs.  We assume that these are
@@ -84,12 +102,23 @@ data TranslationState s =
                    -- and procedures)
                    }
 
+-- | The distinguished name of the global variable that represents the bit of
+-- information indicating that the processor is in the UNPREDICTABLE state
+--
+-- We simulate the UNPREDICATABLE and UNDEFINED ASL statements with virtual
+-- processor state.
 unpredictableVarName :: T.Text
 unpredictableVarName = T.pack "UNPREDICTABLE"
 
+-- | The distinguished name of the global variable that represents the bit of
+-- state indicating that the processor is in the UNDEFINED state.
 undefinedVarName :: T.Text
 undefinedVarName = T.pack "UNDEFINED"
 
+-- | Obtain the global variables touched by the given 'ProcedureSignature'
+--
+-- This is a subset of all of the global state (and a subset of the current
+-- global state).
 withProcGlobals :: (m ~ CCG.Generator (ASLExt arch) h s TranslationState ret)
                 => ProcedureSignature globals init
                 -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
@@ -109,6 +138,7 @@ withProcGlobals sig k = do
           BaseGlobalVar gv
       | otherwise = error ("Missing global (or wrong type): " ++ show globName)
 
+-- | Translate a single ASL statement into Crucible
 translateStatement :: forall arch ret h s
                     . Overrides arch
                    -> CT.TypeRepr ret
