@@ -156,6 +156,7 @@ funcInitialState sigMap sig globals args =
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsFunctionSigs = sigMap
+                   , tsUserTypes = Map.empty
                    }
   where
     addArgumentAtom :: forall tp0
@@ -266,6 +267,7 @@ procInitialState sigMap sig globals args =
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsFunctionSigs = sigMap
+                   , tsUserTypes = Map.empty
                    }
   where
     addArgument :: forall tp

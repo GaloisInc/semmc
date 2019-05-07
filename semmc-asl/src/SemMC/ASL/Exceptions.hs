@@ -38,6 +38,7 @@ data TranslationException = NoReturnInFunction SomeSignature
                           | forall tp1 tp2 . UnexpectedProcedureReturn (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           | MissingGlobal T.Text
                           | forall tp . UnexpectedGlobalType T.Text (CT.TypeRepr tp)
+                          | UnexpectedType AS.QualifiedIdentifier
 
 deriving instance Show TranslationException
 

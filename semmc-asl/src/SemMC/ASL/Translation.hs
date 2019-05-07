@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -30,6 +31,7 @@ import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
+import           Numeric.Natural ( Natural )
 import qualified What4.BaseTypes as WT
 import qualified What4.ProgramLoc as WP
 
@@ -97,10 +99,27 @@ data TranslationState s =
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
                    -- transitively-referenced globals in the signature.
+                   , tsUserTypes :: Map.Map T.Text (Some UserType)
+                   -- ^ The base types assigned to user-defined types (defined in the ASL script)
+                   -- , tsEnumBounds :: Map.Map T.Text Natural
+                   -- ^ The number of constructors in an enumerated type.  These
+                   -- bounds are used in assertions checking the completeness of
+                   -- case statements.
+                   -- ,
                    , tsFunctionSigs :: Map.Map T.Text SomeSignature
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
                    }
+
+data UserType (tp :: WT.BaseType) where
+  UserEnum :: Natural -> UserType WT.BaseIntegerType
+  UserStruct :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) tps -> UserType (WT.BaseStructType tps)
+
+userTypeRepr :: UserType tp -> WT.BaseTypeRepr tp
+userTypeRepr ut =
+  case ut of
+    UserEnum _ -> WT.BaseIntegerRepr
+    UserStruct tps -> WT.BaseStructRepr (FC.fmapFC projectValue tps)
 
 -- | The distinguished name of the global variable that represents the bit of
 -- information indicating that the processor is in the UNPREDICTABLE state
@@ -288,8 +307,9 @@ translateDefinedVar :: Overrides arch
                     -> AS.Identifier
                     -> AS.Expr
                     -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateDefinedVar ov ty ident expr =
-  case translateType ty of
+translateDefinedVar ov ty ident expr = do
+  tty <- translateType ty
+  case tty of
     Some expected -> do
       Some atom <- translateExpr ov expr
       Refl <- assertAtomType expr expected atom
@@ -327,21 +347,46 @@ translateAssignment ov lval e = do
             Nothing -> X.throw (UnboundName ident)
 
 -- | Put a new local in scope and initialize it to an undefined value
-declareUndefinedVar :: (CCE.IsSyntaxExtension ext)
-                    => AS.Type
+declareUndefinedVar :: AS.Type
                     -> AS.Identifier
-                    -> CCG.Generator ext h s TranslationState ret ()
+                    -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
 declareUndefinedVar ty ident = do
   locals <- MS.gets tsVarRefs
   when (Map.member ident locals) $ do
     X.throw (LocalAlreadyDefined ident)
-  case translateType ty of
+  tty <- translateType ty
+  case tty of
     Some rep -> do
       reg <- CCG.newUnassignedReg rep
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
-translateType :: AS.Type -> Some CT.TypeRepr
-translateType = error "translateType unimplemented"
+-- | Translate types (including user-defined types) into Crucible type reprs
+--
+-- Translations of user-defined types (i.e., types defined in an ASL program)
+-- are stored in the 'TranslationState' and are looked up when needed.
+--
+-- FIXME: Handle polymorphic types (i.e., `bits(N)`)
+translateType :: AS.Type -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some CT.TypeRepr)
+translateType t =
+  case t of
+    AS.TypeRef (AS.QualifiedIdentifier _ "integer") -> return (Some CT.IntegerRepr)
+    AS.TypeRef (AS.QualifiedIdentifier _ "boolean") -> return (Some CT.BoolRepr)
+    AS.TypeRef (AS.QualifiedIdentifier _ "bit") -> return (Some (CT.BVRepr (NR.knownNat @1)))
+    AS.TypeRef qi@(AS.QualifiedIdentifier _ ident) -> do
+      uts <- MS.gets tsUserTypes
+      case Map.lookup ident uts of
+        Nothing -> X.throw (UnexpectedType qi)
+        Just (Some ut) -> return (Some (CT.baseToType (userTypeRepr ut)))
+    AS.TypeFun "bits" e ->
+      case e of
+        AS.ExprLitInt nBits
+          | Just (Some nr) <- NR.someNat nBits
+          , Just NR.LeqProof <- NR.isPosNat nr -> return (Some (CT.BVRepr nr))
+        _ -> error ("Unsupported type: " ++ show t)
+    AS.TypeFun _ _ -> error ("Unsupported type: " ++ show t)
+    AS.TypeArray _ty _idxTy -> error ("Unsupported type: " ++ show t)
+    AS.TypeReg _i _flds -> error ("Unsupported type: " ++ show t)
+    AS.TypeOf _e -> error ("Unsupported type: " ++ show t)
 
 translateIf :: Overrides arch
             -> CT.TypeRepr ret
