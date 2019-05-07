@@ -247,6 +247,8 @@ translateStatement ov rep stmt
                          _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
                          return ()
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
+      AS.StmtTry {} -> error "Try statements are not implemented"
+      AS.StmtThrow {} -> error "Throw statements are not implemented"
 
 -- | Translate a for statement into Crucible
 --
