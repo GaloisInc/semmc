@@ -212,6 +212,10 @@ translateStatement ov rep stmt
                 CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
             | otherwise -> X.throw (UnexpectedGlobalType unpredictableVarName (CCG.globalType gv))
           _ -> X.throw (MissingGlobal unpredictableVarName)
+      -- NOTE: Ensure that this is safe.  Most SEE statements seem to not be
+      -- particularly actionable, but many may need to be manually overridden.
+      AS.StmtSeeExpr {} -> return ()
+      AS.StmtSeeString {} -> return ()
       AS.StmtCall (AS.QualifiedIdentifier _ ident) args -> do
         sigMap <- MS.gets tsFunctionSigs
         case Map.lookup ident sigMap of
