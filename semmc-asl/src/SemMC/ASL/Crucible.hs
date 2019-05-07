@@ -107,17 +107,18 @@ computeInstructionSignature = undefined
 -- 'CCG.Generator' monad; the real work is done in 'defineFunction'.
 functionToCrucible :: (ret ~ CT.BaseToType tp)
                    => Overrides arch
+                   -> Map.Map T.Text SomeSignature
                    -> FunctionSignature globals init tp
                    -> CFH.HandleAllocator RealWorld
                    -> [AS.Stmt]
                    -> IO (Function arch globals init tp)
-functionToCrucible ov sig hdlAlloc stmts = do
+functionToCrucible ov sigMap sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (funcArgReprs sig)
   let retRepr = CT.baseToType (funcSigRepr sig)
   hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr)
   globals <- FC.traverseFC allocateGlobal (funcGlobalReprs sig)
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef ov sig globals stmts)
+  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef ov sigMap sig globals stmts)
   return Function { funcSig = sig
                   , funcCFG = CCS.toSSA cfg0
                   , funcGlobals = globals
@@ -136,23 +137,25 @@ data Function arch globals init tp =
 
 funcDef :: (ret ~ CT.BaseToType tp)
         => Overrides arch
+        -> Map.Map T.Text SomeSignature
         -> FunctionSignature globals init tp
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
-funcDef ov sig globals stmts args = (funcInitialState sig globals args, defineFunction ov sig stmts args)
+funcDef ov sigs sig globals stmts args = (funcInitialState sigs sig globals args, defineFunction ov sig stmts args)
 
 funcInitialState :: forall init tp s globals
-                  . FunctionSignature globals init tp
+                  . Map.Map T.Text SomeSignature
+                 -> FunctionSignature globals init tp
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState s
-funcInitialState sig globals args =
+funcInitialState sigMap sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
-                   , tsFunctionSigs = error "func: tsFunctionSigs"
+                   , tsFunctionSigs = sigMap
                    }
   where
     addArgumentAtom :: forall tp0
@@ -220,17 +223,18 @@ type ReturnsGlobals ret globals = (ret ~ CT.SymbolicStructType globals)
 procedureToCrucible :: forall arch init globals ret
                      . (ReturnsGlobals ret globals)
                     => Overrides arch
+                    -> Map.Map T.Text SomeSignature
                     -> ProcedureSignature globals init
                     -> CFH.HandleAllocator RealWorld
                     -> [AS.Stmt]
                     -> IO (Procedure arch globals init)
-procedureToCrucible ov sig hdlAlloc stmts = do
+procedureToCrucible ov sigMap sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (procArgReprs sig)
   let retRepr = procSigRepr sig
   hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (procName sig)) argReprs retRepr)
   globals <- FC.traverseFC allocateGlobal (procGlobalReprs sig)
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef ov sig globals stmts)
+  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef ov sigMap sig globals stmts)
   return Procedure { procSig = sig
                    , procCFG = CCS.toSSA cfg0
                    , procGlobals = globals
@@ -242,24 +246,26 @@ procedureToCrucible ov sig hdlAlloc stmts = do
 
 procDef :: (ReturnsGlobals ret globals)
         => Overrides arch
+        -> Map.Map T.Text SomeSignature
         -> ProcedureSignature globals init
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
-procDef ov sig globals stmts args =
-  (procInitialState sig globals args, defineProcedure ov sig globals stmts args)
+procDef ov sigMap sig globals stmts args =
+  (procInitialState sigMap sig globals args, defineProcedure ov sig globals stmts args)
 
 procInitialState :: forall init globals s
-                  . ProcedureSignature globals init
+                  . Map.Map T.Text SomeSignature
+                 -> ProcedureSignature globals init
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState s
-procInitialState sig globals args =
+procInitialState sigMap sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
-                   , tsFunctionSigs = error "proc: tsFunctionSigs"
+                   , tsFunctionSigs = sigMap
                    }
   where
     addArgument :: forall tp
