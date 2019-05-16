@@ -55,6 +55,14 @@ data FunctionSignature globals init tp =
 
 data LabeledValue a b tp = LabeledValue a (b tp)
 
+instance (Eq a, TestEquality b) => TestEquality (LabeledValue a b) where
+  LabeledValue a b `testEquality` LabeledValue a' b' =
+    case b `testEquality` b' of
+      Just Refl -> case a == a' of
+        True -> Just Refl
+        False -> Nothing
+      Nothing -> Nothing
+
 projectValue :: LabeledValue a b tp -> b tp
 projectValue (LabeledValue _ v) = v
 

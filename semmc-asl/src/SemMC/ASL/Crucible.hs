@@ -2,11 +2,15 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
@@ -24,15 +28,18 @@ module SemMC.ASL.Crucible (
   , ProcedureSignature
   , procArgReprs
   , SomeSignature(..)
-  , computeDefinitionSignature
-  , computeInstructionSignature
-  , Callable
-  , asCallable
+  , Callable(..) , asCallable
+  , DefType(..), asDefType
   , LabeledValue(..)
   , BaseGlobalVar(..)
   , Overrides(..)
   -- * Preprocessing
-  , collectUserTypes
+  , SigM(..)
+  , SigState(..)
+  , computeType
+  -- , computeDefinitionSignature
+  -- , computeInstructionSignature
+  -- , collectUserTypes
   , UserType
   , Definitions(..)
   -- * Syntax extension
@@ -45,13 +52,18 @@ module SemMC.ASL.Crucible (
   ) where
 
 import qualified Control.Exception as X
+import qualified Control.Monad.Except as E
+import qualified Control.Monad.Identity as I
+import qualified Control.Monad.RWS as RWS
 import           Control.Monad.ST ( stToIO, RealWorld )
 import qualified Data.Map as Map
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
+import           Data.Traversable (forM)
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.CFG.SSAConversion as CCS
@@ -89,22 +101,126 @@ asCallable def =
                     }
     _ -> Nothing
 
--- | Compute the signature for a definition
---
--- FIXME: This may need to take all of the signatures of called functions to compute its own
--- signature (since they might be procedures updating state that isn't obvious)
---
--- We could avoid having to topologically sort functions and procedures by just
--- doing this in a state monad and computing signatures whenever we hit a call.
-computeDefinitionSignature :: [(String, SomeSignature)] -> Callable -> IO SomeSignature
-computeDefinitionSignature = undefined
+data DefType = DefTypeBuiltin AS.Identifier
+             | DefTypeAbstract AS.Identifier
+             | DefTypeAlias AS.Identifier AS.Type
+             | DefTypeStruct AS.QualifiedIdentifier [AS.SymbolDecl]
+             | DefTypeEnum AS.Identifier [AS.Identifier]
 
-computeInstructionSignature :: [(String, SomeSignature)] -> [AS.Stmt] -> IO SomeSignature
-computeInstructionSignature = undefined
+asDefType :: AS.Definition -> Maybe DefType
+asDefType def =
+  case def of
+    AS.DefTypeBuiltin ident -> Just $ DefTypeBuiltin ident
+    AS.DefTypeAbstract ident -> Just $ DefTypeAbstract ident
+    AS.DefTypeAlias ident tp -> Just $ DefTypeAlias ident tp
+    AS.DefTypeStruct ident decls -> Just $ DefTypeStruct ident decls
+    AS.DefTypeEnum ident idents -> Just $ DefTypeEnum ident idents
+    _ -> Nothing
 
--- | Traverse all of the definitions available to produce a list of user-defined types
-collectUserTypes :: [AS.Definition] -> [(T.Text, Some UserType)]
-collectUserTypes = undefined
+-- | Monad for computing ASL signatures of 'AS.Definition's.
+--
+-- The environment provided is a list of ASL definitions -- callables, type
+-- declarations, and global variable declarations.
+--
+-- The state is a mapping from names to signatures. The idea is that we start with an
+-- empty state, then traverse the definitions, running 'computeDefinitionSignature'
+-- on each one and storing its definition in the lookup table.
+
+newtype SigM a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv () SigState) a }
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , RWS.MonadReader SigEnv
+           , RWS.MonadState SigState
+           , E.MonadError SigException
+           )
+
+data SigEnv = SigEnv { callables :: Map.Map T.Text Callable
+                     , types :: Map.Map T.Text DefType
+                     , builtinTypes :: Map.Map T.Text (Some WT.BaseTypeRepr)
+                     }
+
+data SigState = SigState { userTypes :: Map.Map T.Text (Some WT.BaseTypeRepr)
+                           -- ^ signatures for types
+                         , callableSigs :: Map.Map T.Text SomeSignature
+                           -- ^ signatures for callables
+                         }
+
+data SigException = TypeNotFound T.Text
+                  | BuiltinTypeNotFound T.Text
+
+storeType :: T.Text -> Some WT.BaseTypeRepr -> SigM ()
+storeType tpName tp = do
+  st <- RWS.get
+  RWS.put $ st { userTypes = Map.insert tpName tp (userTypes st) }
+
+lookupBuiltinType :: T.Text -> SigM (Some WT.BaseTypeRepr)
+lookupBuiltinType tpName = do
+  env <- RWS.ask
+  case Map.lookup tpName (builtinTypes env) of
+    Just tp -> return tp
+    Nothing -> E.throwError $ BuiltinTypeNotFound tpName
+
+lookupType :: T.Text -> SigM DefType
+lookupType tpName = do
+  env <- RWS.ask
+  case Map.lookup tpName (types env) of
+    Just defType -> return defType
+    Nothing -> E.throwError $ TypeNotFound tpName
+
+-- | Compute the What4 representation of a user-defined ASL type, from the name of
+-- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
+computeUserType :: T.Text -> SigM (Some WT.BaseTypeRepr)
+computeUserType tpName = do
+  -- If the type has already been computed, it will be in the 'userTypes' map.
+  mTp <- Map.lookup tpName <$> userTypes <$> RWS.get
+  case mTp of
+    Just tp -> return tp
+    Nothing -> do
+      -- If it has not already been computed, then compute, store and return it.
+      defType <- lookupType tpName
+      tp <- case defType of
+        DefTypeBuiltin builtinTpName -> lookupBuiltinType builtinTpName
+        DefTypeEnum _ _enumVals -> do
+          -- Enumeration types are represented as integers.
+          -- FIXME: Add a 'NatRepr' representing the number of members of the
+          -- enumeration
+          -- FIXME: somehow store the 'enumVals' in the 'SigM' monad so that we
+          -- can resolve their type when we encounter them
+          return $ Some WT.BaseIntegerRepr
+        DefTypeStruct _ structVars -> do
+          varTps <- forM structVars $ \(_, varType) -> computeType varType
+          Some varTpAssignment <- return $ someAssignment varTps
+          return $ Some (WT.BaseStructRepr varTpAssignment)
+        DefTypeAbstract _ -> error "computeUserType: abstract type"
+        _ -> error $ "computeUserType: unsupported type " ++ T.unpack tpName
+      storeType tpName tp
+      return tp
+
+-- | Compute the What4 representation of an ASL 'AS.Type'.
+computeType :: AS.Type -> SigM (Some WT.BaseTypeRepr)
+computeType tp = case tp of
+  AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> computeUserType tpName
+  AS.TypeFun "bits" e ->
+    case e of
+      AS.ExprLitInt w
+        | Just (Some wRepr) <- NR.someNat w
+        , Just NR.LeqProof <- NR.isPosNat wRepr -> return $ Some (WT.BaseBVRepr wRepr)
+      _ -> error "computeType"
+  AS.TypeOf _ -> error "computeType"
+  AS.TypeReg _ _ -> error "computeType"
+  AS.TypeArray _ _ -> error "computeType"
+  _ -> error "computeType"
+
+someAssignment :: [Some f] -> Some (Ctx.Assignment f)
+someAssignment [] = Some Ctx.empty
+-- | FIXME: Is there a less awkward way to avoid the rigid type variable error here?
+someAssignment (Some f : rst) = I.runIdentity $ do
+  Some assignRst <- return $ someAssignment rst
+  return $ Some (Ctx.extend assignRst f)
+
+-- computeInstructionSignature :: [(T.Text, SomeSignature)] -> [AS.Stmt] -> IO SomeSignature
+-- computeInstructionSignature = undefined
 
 data Definitions arch =
   Definitions { defSignatures :: Map.Map T.Text SomeSignature
@@ -190,7 +306,7 @@ defineFunction :: forall ret tp init h s arch globals
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
                -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
-defineFunction ov sig stmts args = do
+defineFunction ov sig stmts _args = do
   -- FIXME: Put args into the environment as locals (that can be read from)
   --
   -- We have the assignment of atoms available, but the arguments will be
@@ -296,7 +412,7 @@ defineProcedure :: (ReturnsGlobals ret globals)
                 -> [AS.Stmt]
                 -> Ctx.Assignment (CCG.Atom s) init
                 -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
-defineProcedure ov sig baseGlobals stmts args = do
+defineProcedure ov sig baseGlobals stmts _args = do
   mapM_ (translateStatement ov (procSigRepr sig)) stmts
   retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (procGlobalReprs sig)) baseGlobals)
   if | Just Refl <- testEquality (CCG.exprType retExpr) (procSigRepr sig) ->
