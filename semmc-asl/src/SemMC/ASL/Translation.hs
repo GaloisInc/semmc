@@ -14,6 +14,7 @@ module SemMC.ASL.Translation (
   , translateStatement
   , Overrides(..)
   , UserType(..)
+  , userTypeRepr
   ) where
 
 import           Control.Applicative ( (<|>) )
