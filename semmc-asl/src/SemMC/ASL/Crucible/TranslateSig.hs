@@ -18,20 +18,15 @@
 {-# LANGUAGE TypeOperators #-}
 
 module SemMC.ASL.Crucible.TranslateSig (
-    Callable(..) , asCallable
-  , DefType(..), asDefType
-  , Const(..), asConst
-  , DefVariable(..), asDefVariable
-  , SigM(..)
-  , SigEnv(..)
-  , SigState(..)
-  , computeType
-  , computeCallableSignature
+    computeSignatures
+  , SignatureMap
+  , SigException(..)
   ) where
 
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.Identity as I
 import qualified Control.Monad.RWS as RWS
+import           Data.Foldable (forM_)
 import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import qualified Data.Map as Map
@@ -47,6 +42,36 @@ import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
+
+type SignatureMap = Map.Map T.Text SomeSignature
+
+computeSignatures :: [AS.Definition] -> Either SigException SignatureMap
+computeSignatures defs =
+  let env = buildEnv defs
+  in execSigM env $ do
+    forM_ (Map.elems (callables env)) $ \def -> do
+      computeCallableSignature def
+    finalState <- RWS.get
+    return $ callableSignatureMap finalState
+
+buildEnv :: [AS.Definition] -> SigEnv
+buildEnv defs =
+  let callables = Map.fromList ((\c -> (getCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
+      globalVars = Map.fromList ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
+      types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
+      -- | TODO: Populate builtin types
+      builtinTypes = Map.empty
+      getCallableName c = let AS.QualifiedIdentifier _ name = callableName c
+                          in name
+      getVariableName v = let DefVariable name _ = v
+                          in name
+      getTypeName t = case t of
+        DefTypeBuiltin name -> name
+        DefTypeAbstract name -> name
+        DefTypeAlias name _ -> name
+        DefTypeStruct (AS.QualifiedIdentifier _ name) _ -> name
+        DefTypeEnum name _ -> name
+  in SigEnv {..}
 
 data Callable = Callable { callableName :: AS.QualifiedIdentifier
                          , callableArgs :: [AS.SymbolDecl]
@@ -85,19 +110,20 @@ asDefType def =
     AS.DefTypeEnum ident idents -> Just $ DefTypeEnum ident idents
     _ -> Nothing
 
-data Const = DefConst AS.Identifier AS.Type AS.Expr
+-- data Const = DefConst AS.Identifier AS.Type AS.Expr
 
-asConst :: AS.Definition -> Maybe Const
-asConst def =
-  case def of
-    AS.DefConst ident tp e -> Just $ DefConst ident tp e
-    _ -> Nothing
+-- asConst :: AS.Definition -> Maybe Const
+-- asConst def =
+--   case def of
+--     AS.DefConst ident tp e -> Just $ DefConst ident tp e
+--     _ -> Nothing
 
-data DefVariable = DefVariable AS.QualifiedIdentifier AS.Type
+data DefVariable = DefVariable T.Text AS.Type
 
 asDefVariable :: AS.Definition -> Maybe DefVariable
 asDefVariable def = case def of
-  AS.DefVariable ident tp -> Just (DefVariable ident tp)
+  AS.DefVariable (AS.QualifiedIdentifier _ ident) tp -> Just (DefVariable ident tp)
+  AS.DefConst ident tp _ -> Just (DefVariable ident tp)
   _ -> Nothing
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
@@ -118,6 +144,13 @@ newtype SigM a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv () Sig
            , E.MonadError SigException
            )
 
+execSigM :: SigEnv -> SigM a -> Either SigException a
+execSigM env action =
+  let rws = E.runExceptT $ getSigM action
+      (e, _, _) = RWS.runRWS rws env initState
+  in e
+  where initState = SigState Map.empty Map.empty Map.empty
+
 data SigEnv = SigEnv { callables :: Map.Map T.Text Callable
                      , globalVars :: Map.Map T.Text DefVariable
                      , types :: Map.Map T.Text DefType
@@ -128,7 +161,7 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
                          , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
                            -- ^ map from function/procedure name to list of global
-                           -- variables referred to by that function/procedure (with their types)
+                         , callableSignatureMap :: Map.Map T.Text SomeSignature
                          }
 
 data SigException = TypeNotFound T.Text
@@ -176,6 +209,16 @@ storeCallableGlobals :: T.Text -> [(T.Text, Some WT.BaseTypeRepr)] -> SigM ()
 storeCallableGlobals callableName globals = do
   st <- RWS.get
   RWS.put $ st { callableGlobalsMap = Map.insert callableName globals (callableGlobalsMap st) }
+
+lookupCallableSignature :: T.Text -> SigM (Maybe SomeSignature)
+lookupCallableSignature callableName = do
+  signatureMap <- callableSignatureMap <$> RWS.get
+  return $ Map.lookup callableName signatureMap
+
+storeCallableSignature :: T.Text -> SomeSignature -> SigM ()
+storeCallableSignature callableName sig = do
+  st <- RWS.get
+  RWS.put $ st { callableSignatureMap = Map.insert callableName sig (callableSignatureMap st) }
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -406,37 +449,44 @@ callableGlobalVars Callable{..} = do
 -- it is a function.
 computeCallableSignature :: Callable -> SigM SomeSignature
 computeCallableSignature callable@Callable{..} = do
-  globalVars <- callableGlobalVars callable
-  labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
-    return $ Some (LabeledValue varName varTp)
-  labeledArgs <- forM callableArgs $ \(argName, asType) -> do
-    Some tp <- computeType asType
-    let ctp = CT.baseToType tp-- traverse computeType (snd <$> callableArgs)
-    return (Some (LabeledValue argName ctp))
-
-  Some globalReprs <- return $ someAssignment labeledVals
-  Some argReprs <- return $ someAssignment labeledArgs
   let AS.QualifiedIdentifier _ name = callableName
-  case callableRets of
-    [] -> do -- procedure
-      return $ SomeProcedureSignature $ ProcedureSignature
-        { procName = name
-        , procArgReprs = argReprs
-        , procGlobalReprs = globalReprs
-        }
-    _ -> do -- function
-      Some sigRepr <- case callableRets of
-        [asType] -> computeType asType
-        asTypes -> do
-          someTypes <- traverse computeType asTypes
-          Some assignment <- return $ someAssignment someTypes
-          return $ Some (WT.BaseStructRepr assignment)
-      return $ SomeFunctionSignature $ FunctionSignature
-        { funcName = name
-        , funcSigRepr = sigRepr
-        , funcArgReprs = argReprs
-        , funcGlobalReprs = globalReprs
-        }
+  mSig <- lookupCallableSignature name
+
+  case mSig of
+    Just sig -> return sig
+    Nothing -> do
+      globalVars <- callableGlobalVars callable
+      labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
+        return $ Some (LabeledValue varName varTp)
+      labeledArgs <- forM callableArgs $ \(argName, asType) -> do
+        Some tp <- computeType asType
+        let ctp = CT.baseToType tp-- traverse computeType (snd <$> callableArgs)
+        return (Some (LabeledValue argName ctp))
+
+      Some globalReprs <- return $ someAssignment labeledVals
+      Some argReprs <- return $ someAssignment labeledArgs
+      sig <- case callableRets of
+        [] -> do -- procedure
+          return $ SomeProcedureSignature $ ProcedureSignature
+            { procName = name
+            , procArgReprs = argReprs
+            , procGlobalReprs = globalReprs
+            }
+        _ -> do -- function
+          Some sigRepr <- case callableRets of
+            [asType] -> computeType asType
+            asTypes -> do
+              someTypes <- traverse computeType asTypes
+              Some assignment <- return $ someAssignment someTypes
+              return $ Some (WT.BaseStructRepr assignment)
+          return $ SomeFunctionSignature $ FunctionSignature
+            { funcName = name
+            , funcSigRepr = sigRepr
+            , funcArgReprs = argReprs
+            , funcGlobalReprs = globalReprs
+            }
+      storeCallableSignature name sig
+      return sig
 
 someAssignment :: [Some f] -> Some (Ctx.Assignment f)
 someAssignment [] = Some Ctx.empty
