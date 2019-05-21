@@ -37,8 +37,10 @@ module SemMC.ASL.Crucible (
   , Overrides(..)
   -- * Preprocessing
   , SigM(..)
+  , SigEnv(..)
   , SigState(..)
   , computeType
+  , computeCallableSignature
   -- , computeDefinitionSignature
   -- , computeInstructionSignature
   -- , collectUserTypes
@@ -58,6 +60,7 @@ import qualified Control.Monad.Except as E
 import qualified Control.Monad.Identity as I
 import qualified Control.Monad.RWS as RWS
 import           Control.Monad.ST ( stToIO, RealWorld )
+import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import qualified Data.Map as Map
 import           Data.Parameterized.Classes
@@ -408,8 +411,8 @@ stmtGlobalVars stmt = case stmt of
     eGlobals <- exprGlobalVars e
     altGlobals <- concat <$> traverse caseAlternativeGlobalVars alts
     return $ eGlobals ++ altGlobals
-  AS.StmtFor _ (init, term) stmts -> do
-    initGlobals <- exprGlobalVars init
+  AS.StmtFor _ (initialize, term) stmts -> do
+    initGlobals <- exprGlobalVars initialize
     termGlobals <- exprGlobalVars term
     stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
     return $ initGlobals ++ termGlobals ++ stmtGlobals
@@ -436,10 +439,42 @@ callableGlobalVars Callable{..} = do
       storeCallableGlobals name globals
       return globals
 
+-- | Compute the signature of a callable (function/procedure). Currently, we assume
+-- that if the return list is empty, it is a procedure, and if it is nonempty, then
+-- it is a function.
 computeCallableSignature :: Callable -> SigM SomeSignature
-computeCallableSignature Callable{..} = case callableRets of
-  [] -> undefined -- procedure
-  retTypes -> undefined -- function
+computeCallableSignature callable@Callable{..} = do
+  globalVars <- callableGlobalVars callable
+  labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
+    return $ Some (LabeledValue varName varTp)
+  labeledArgs <- forM callableArgs $ \(argName, asType) -> do
+    Some tp <- computeType asType
+    let ctp = CT.baseToType tp-- traverse computeType (snd <$> callableArgs)
+    return (Some (LabeledValue argName ctp))
+
+  Some globalReprs <- return $ someAssignment labeledVals
+  Some argReprs <- return $ someAssignment labeledArgs
+  let AS.QualifiedIdentifier _ name = callableName
+  case callableRets of
+    [] -> do -- procedure
+      return $ SomeProcedureSignature $ ProcedureSignature
+        { procName = name
+        , procArgReprs = argReprs
+        , procGlobalReprs = globalReprs
+        }
+    _ -> do -- function
+      Some sigRepr <- case callableRets of
+        [asType] -> computeType asType
+        asTypes -> do
+          someTypes <- traverse computeType asTypes
+          Some assignment <- return $ someAssignment someTypes
+          return $ Some (WT.BaseStructRepr assignment)
+      return $ SomeFunctionSignature $ FunctionSignature
+        { funcName = name
+        , funcSigRepr = sigRepr
+        , funcArgReprs = argReprs
+        , funcGlobalReprs = globalReprs
+        }
 
 someAssignment :: [Some f] -> Some (Ctx.Assignment f)
 someAssignment [] = Some Ctx.empty
