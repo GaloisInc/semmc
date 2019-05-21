@@ -17,7 +17,8 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:     SemMC.ASL
-  other-modules:       SemMC.ASL.Crucible
+                       SemMC.ASL.Crucible
+                       SemMC.ASL.Crucible.TranslateSig
                        SemMC.ASL.Extension
                        SemMC.ASL.Exceptions
                        SemMC.ASL.Signature
