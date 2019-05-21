@@ -58,7 +58,7 @@ import qualified Control.Monad.Except as E
 import qualified Control.Monad.Identity as I
 import qualified Control.Monad.RWS as RWS
 import           Control.Monad.ST ( stToIO, RealWorld )
-import           Data.Maybe (maybeToList, catMaybes)
+import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import qualified Data.Map as Map
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -161,11 +161,9 @@ data SigEnv = SigEnv { callables :: Map.Map T.Text Callable
 
 data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
-                         -- , globalVarTypes :: Map.Map T.Text (Some WT.BaseTypeRepr)
-                         --   -- ^ types for global variables
-                         , callableSigs :: Map.Map T.Text SomeSignature
-                           -- ^ signatures for callables
-                         -- , consts :: Map.Map T.Text (Some WT.BaseTypeRepr)
+                         , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
+                           -- ^ map from function/procedure name to list of global
+                           -- variables referred to by that function/procedure (with their types)
                          }
 
 data SigException = TypeNotFound T.Text
@@ -203,6 +201,16 @@ lookupGlobalVar :: T.Text -> SigM (Maybe DefVariable)
 lookupGlobalVar varName = do
   env <- RWS.ask
   return $ Map.lookup varName (globalVars env)
+
+lookupCallableGlobals :: T.Text -> SigM (Maybe [(T.Text, Some WT.BaseTypeRepr)])
+lookupCallableGlobals callableName = do
+  globalsMap <- callableGlobalsMap <$> RWS.get
+  return $ Map.lookup callableName globalsMap
+
+storeCallableGlobals :: T.Text -> [(T.Text, Some WT.BaseTypeRepr)] -> SigM ()
+storeCallableGlobals callableName globals = do
+  st <- RWS.get
+  RWS.put $ st { callableGlobalsMap = Map.insert callableName globals (callableGlobalsMap st) }
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -293,10 +301,36 @@ lValExprGlobalVars lValExpr = case lValExpr of
     leGlobals <- lValExprGlobalVars le
     sliceGlobals <- concat <$> traverse sliceGlobalVars slices
     return $ leGlobals ++ sliceGlobals
+  AS.LValSliceOf le slices -> do
+    leGlobals <- lValExprGlobalVars le
+    sliceGlobals <- concat <$> traverse sliceGlobalVars slices
+    return $ leGlobals ++ sliceGlobals
+  AS.LValArray les ->
+    concat <$> traverse lValExprGlobalVars les
+  AS.LValTuple les ->
+    concat <$> traverse lValExprGlobalVars les
+  AS.LValMemberBits le vars -> do
+    leGlobals <- lValExprGlobalVars le
+    varGlobals <- catMaybes <$> traverse varGlobal vars
+    return $ leGlobals ++ varGlobals
+  AS.LValSlice les ->
+    concat <$> traverse lValExprGlobalVars les
+  _ -> return []
+
+casePatternGlobalVars :: AS.CasePattern -> SigM [(T.Text, Some WT.BaseTypeRepr)]
+casePatternGlobalVars pat = case pat of
+  AS.CasePatternIdentifier varName -> maybeToList <$> varGlobal varName
+  AS.CasePatternTuple pats -> concat <$> traverse casePatternGlobalVars pats
   _ -> return []
 
 caseAlternativeGlobalVars :: AS.CaseAlternative -> SigM [(T.Text, Some WT.BaseTypeRepr)]
-caseAlternativeGlobalVars _ = undefined
+caseAlternativeGlobalVars alt = case alt of
+  AS.CaseWhen pats mExpr stmts -> do
+    patGlobals <- concat <$> traverse casePatternGlobalVars pats
+    eGlobals <- fromMaybe [] <$> traverse exprGlobalVars mExpr
+    stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+    return $ patGlobals ++ eGlobals ++ stmtGlobals
+  AS.CaseOtherwise stmts -> concat <$> traverse stmtGlobalVars stmts
 
 -- | Collect all global variables from a single 'AS.Expr'.
 exprGlobalVars :: AS.Expr -> SigM [(T.Text, Some WT.BaseTypeRepr)]
@@ -389,8 +423,18 @@ stmtGlobalVars stmt = case stmt of
     return $ termGlobals ++ stmtGlobals
   _ -> return []
 
+-- | Compute the list of global variables in a 'Callable' and store it in the
+-- state. If it has already been computed, simply return it.
 callableGlobalVars :: Callable -> SigM [(T.Text, Some WT.BaseTypeRepr)]
-callableGlobalVars _ = undefined
+callableGlobalVars Callable{..} = do
+  let AS.QualifiedIdentifier _ name = callableName
+  mGlobals <- lookupCallableGlobals name
+  case mGlobals of
+    Just globals -> return globals
+    Nothing -> do
+      globals <- concat <$> traverse stmtGlobalVars callableStmts
+      storeCallableGlobals name globals
+      return globals
 
 computeCallableSignature :: Callable -> SigM SomeSignature
 computeCallableSignature Callable{..} = case callableRets of
