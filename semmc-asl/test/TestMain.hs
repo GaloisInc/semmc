@@ -1,5 +1,10 @@
 module Main where
 
+import Control.Monad (forM_)
+import Data.Foldable (toList)
+import Data.List (intercalate)
+import qualified Data.Map as Map
+import qualified Data.Sequence as Seq
 import qualified Language.ASL.Parser as AS
 import qualified Language.ASL.Syntax as AS
 import System.IO (FilePath)
@@ -19,5 +24,18 @@ main = do
       putStrLn $ "Loaded " ++ show (length defs) ++ " definitions."
       let eSigs = computeSignatures defs
       case eSigs of
-        Left err -> putStrLn $ "Error computing signatures: " ++ show err
+        Left (err, finalState) -> do
+          putStrLn $ "Error computing signatures: " ++ show err
+          putStrLn $ "User types found:"
+          forM_ (Map.toList (userTypes finalState)) $ \(name, tp) ->
+            putStrLn $ "  " ++ show name ++ ": " ++ show tp
+          putStrLn $ "Globals found:"
+          forM_ (Map.toList (callableGlobalsMap finalState)) $ \(name, globals) ->
+            putStrLn $ "  " ++ show name ++ ": " ++ intercalate ", " (show <$> fst <$> globals)
+          putStrLn $ "Signatures found:"
+          forM_ (Map.toList (callableSignatureMap finalState)) $ \(name, sig) ->
+            putStrLn $ "  " ++ show name
+          putStrLn $ "Unfound callables:"
+          forM_ (toList (unfoundCallables finalState)) $ \name ->
+            putStrLn $ "  " ++ show name
         Right sigs -> putStrLn $ "Computed " ++ show (length sigs) ++ " signatures."

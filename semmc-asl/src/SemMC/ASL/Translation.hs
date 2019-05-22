@@ -6,6 +6,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -115,6 +116,10 @@ data TranslationState s =
 data UserType (tp :: WT.BaseType) where
   UserEnum :: Natural -> UserType WT.BaseIntegerType
   UserStruct :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) tps -> UserType (WT.BaseStructType tps)
+
+deriving instance Show (UserType tp)
+
+instance ShowF UserType where
 
 userTypeRepr :: UserType tp -> WT.BaseTypeRepr tp
 userTypeRepr ut =

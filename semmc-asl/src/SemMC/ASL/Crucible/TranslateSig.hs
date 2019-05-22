@@ -21,6 +21,7 @@ module SemMC.ASL.Crucible.TranslateSig (
     computeSignatures
   , SignatureMap
   , SigException(..)
+  , SigState(..)
   ) where
 
 import qualified Control.Monad.Except as E
@@ -33,6 +34,7 @@ import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
+import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Data.Traversable (forM)
 import qualified Lang.Crucible.Types as CT
@@ -45,7 +47,7 @@ import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
 
 type SignatureMap = Map.Map T.Text SomeSignature
 
-computeSignatures :: [AS.Definition] -> Either SigException SignatureMap
+computeSignatures :: [AS.Definition] -> Either (SigException, SigState) SignatureMap
 computeSignatures defs =
   let env = buildEnv defs
   in execSigM env $ do
@@ -142,12 +144,14 @@ newtype SigM a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv () Sig
            , E.MonadError SigException
            )
 
-execSigM :: SigEnv -> SigM a -> Either SigException a
+execSigM :: SigEnv -> SigM a -> Either (SigException, SigState) a
 execSigM env action =
   let rws = E.runExceptT $ getSigM action
-      (e, _, _) = RWS.runRWS rws env initState
-  in e
-  where initState = SigState Map.empty Map.empty Map.empty
+      (e, finalState, _) = RWS.runRWS rws env initState
+  in case e of
+    Left err -> Left (err, finalState)
+    Right a -> Right a
+  where initState = SigState Map.empty Map.empty Map.empty Seq.empty
 
 data SigEnv = SigEnv { callables :: Map.Map T.Text Callable
                      , globalVars :: Map.Map T.Text DefVariable
@@ -158,8 +162,12 @@ data SigEnv = SigEnv { callables :: Map.Map T.Text Callable
 data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
                          , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
-                           -- ^ map from function/procedure name to list of global
+                           -- ^ map from function/procedure name to list of globals
                          , callableSignatureMap :: Map.Map T.Text SomeSignature
+                           -- ^ map of all signatures found thus far
+                         , unfoundCallables :: Seq.Seq T.Text
+                           -- ^ list of callables we encountered that were not in the
+                           -- pre-loaded environment
                          }
 
 data SigException = TypeNotFound T.Text
@@ -218,6 +226,11 @@ storeCallableSignature :: T.Text -> SomeSignature -> SigM ()
 storeCallableSignature callableName sig = do
   st <- RWS.get
   RWS.put $ st { callableSignatureMap = Map.insert callableName sig (callableSignatureMap st) }
+
+addUnfoundCallable :: T.Text -> SigM ()
+addUnfoundCallable callableName = do
+  st <- RWS.get
+  RWS.put $ st { unfoundCallables = callableName Seq.:<| unfoundCallables st }
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -367,8 +380,15 @@ exprGlobalVars expr = case expr of
     varGlobals <- catMaybes <$> traverse varGlobal vars
     return $ eGlobals ++ varGlobals
   AS.ExprCall (AS.QualifiedIdentifier _ callableName) argEs -> do
-    callable <- lookupCallable callableName
-    callableGlobals <- callableGlobalVars callable
+    callableGlobals <- E.catchError
+      (do callable <- lookupCallable callableName
+          callableGlobalVars callable )
+      $ \e -> case e of
+                CallableNotFound _ -> do
+                  addUnfoundCallable callableName
+                  return []
+                _ -> E.throwError e
+    -- callableGlobals <- callableGlobalVars callable
     argGlobals <- concat <$> traverse exprGlobalVars argEs
     return $ callableGlobals ++ argGlobals
   AS.ExprInSet e setElts -> do
