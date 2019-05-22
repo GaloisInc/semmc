@@ -73,6 +73,9 @@ buildEnv defs =
         DefTypeEnum name _ -> name
   in SigEnv {..}
 
+-- FIXME: We currently do not capture 'DefArray', 'DefGetter', and 'DefSetter'
+-- constructors; that needs to happen.
+
 data Callable = Callable { callableName :: AS.QualifiedIdentifier
                          , callableArgs :: [AS.SymbolDecl]
                          , callableRets :: [AS.Type]
@@ -110,16 +113,11 @@ asDefType def =
     AS.DefTypeEnum ident idents -> Just $ DefTypeEnum ident idents
     _ -> Nothing
 
--- data Const = DefConst AS.Identifier AS.Type AS.Expr
 
--- asConst :: AS.Definition -> Maybe Const
--- asConst def =
---   case def of
---     AS.DefConst ident tp e -> Just $ DefConst ident tp e
---     _ -> Nothing
+data DefVariable = DefVariable AS.Identifier AS.Type
 
-data DefVariable = DefVariable T.Text AS.Type
-
+-- | We also capture 'DefConst's here to simplify things; they are also
+-- straightforward mappings from names to types, just like variables.
 asDefVariable :: AS.Definition -> Maybe DefVariable
 asDefVariable def = case def of
   AS.DefVariable (AS.QualifiedIdentifier _ ident) tp -> Just (DefVariable ident tp)
@@ -167,6 +165,7 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
 data SigException = TypeNotFound T.Text
                   | BuiltinTypeNotFound T.Text
                   | CallableNotFound T.Text
+  deriving (Eq, Show)
 
 storeType :: T.Text -> UserType tp -> SigM ()
 storeType tpName tp = do
