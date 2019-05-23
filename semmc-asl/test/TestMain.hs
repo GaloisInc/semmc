@@ -26,16 +26,19 @@ main = do
       case eSigs of
         Left (err, finalState) -> do
           putStrLn $ "Error computing signatures: " ++ show err
-          putStrLn $ "User types found:"
+          putStrLn $ "\nUser types found:"
           forM_ (Map.toList (userTypes finalState)) $ \(name, tp) ->
             putStrLn $ "  " ++ show name ++ ": " ++ show tp
-          putStrLn $ "Globals found:"
+          putStrLn $ "\nGlobals found:"
           forM_ (Map.toList (callableGlobalsMap finalState)) $ \(name, globals) ->
             putStrLn $ "  " ++ show name ++ ": " ++ intercalate ", " (show <$> fst <$> globals)
-          putStrLn $ "Signatures found:"
+          putStrLn $ "\nSignatures found:"
           forM_ (Map.toList (callableSignatureMap finalState)) $ \(name, sig) ->
-            putStrLn $ "  " ++ show name
-          putStrLn $ "Unfound callables:"
+            putStrLn $ "  " ++ show name ++ ": " ++ show sig
+          putStrLn $ "\nUnfound callables:"
           forM_ (toList (unfoundCallables finalState)) $ \name ->
             putStrLn $ "  " ++ show name
-        Right sigs -> putStrLn $ "Computed " ++ show (length sigs) ++ " signatures."
+        Right sigs -> do
+          putStrLn $ "Computed " ++ show (length sigs) ++ " signatures."
+          forM_ (Map.toList sigs) $ \(name, sig) ->
+            putStrLn $ "  " ++ show name ++ ": " ++ show sig

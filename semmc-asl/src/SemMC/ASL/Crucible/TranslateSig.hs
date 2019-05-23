@@ -265,8 +265,13 @@ computeUserType tpName = do
 computeType :: AS.Type -> SigM (Some WT.BaseTypeRepr)
 computeType tp = case tp of
   AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> do
-    Some userType <- computeUserType tpName
-    return $ Some $ userTypeRepr userType
+    case tpName of
+      "integer" -> return (Some WT.BaseIntegerRepr)
+      "boolean" -> return (Some WT.BaseBoolRepr)
+      "bit" -> return (Some (WT.BaseBVRepr (NR.knownNat @1)))
+      _ -> do
+        Some userType <- computeUserType tpName
+        return $ Some $ userTypeRepr userType
   AS.TypeFun "bits" e ->
     case e of
       AS.ExprLitInt w
