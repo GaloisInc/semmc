@@ -15,6 +15,7 @@ import           Control.Monad (replicateM, forM_, when, forM)
 import qualified Control.Exception as E
 import qualified Data.Ini.Config as CI
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Encode.Pretty as AE
 import qualified Data.Foldable as F
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as BS8
@@ -590,8 +591,17 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                   -- If a report URL is configured, construct a batch of
                   -- results and upload it to the reporting service.
                   L.logIO L.Info $ "Report URL: " <> show (fuzzerReportURL mainConfig)
+                  let numSuccesses = length . filter (\r -> testOutcome r == Success) $
+                                     catMaybes entries
+                  L.logIO L.Info $ printf "%i/%i test cases succeeded"
+                    numSuccesses (length cases)
                   case fuzzerReportURL mainConfig of
-                      Nothing -> return ()
+                      Nothing -> do
+                        -- Report failures to stdout when no fuzzermon
+                        forM_ (catMaybes entries) $ \result -> do
+                          when (testOutcome result /= Success) $
+                            L.logIO L.Warn $ unlines [ "Test failure:"
+                                                     , BSC8.unpack $ AE.encodePretty result ]
                       Just reportURL -> do
                           let b = Batch { batchFuzzerHost = hostname
                                         , batchFuzzerUser = fromMaybe self $ fuzzerTestUser hostConfig
