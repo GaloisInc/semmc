@@ -390,13 +390,13 @@ updateXER xb xerExp newBit
 -- have to in order to interface with crucible/macaw.  The bit numbering in PPC
 -- is somewhat odd compared to other architectures.
 lowBits64 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-lowBits64 n = extract 63 (63 - n + 1)
+lowBits64 n = extract' 63 (63 - n + 1)
 
 lowBits32 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-lowBits32 n = extract 31 (31 - n + 1)
+lowBits32 n = extract' 31 (31 - n + 1)
 
 lowBits128 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-lowBits128 n = extract 127 (127 - n + 1)
+lowBits128 n = extract' 127 (127 - n + 1)
 
 -- | A wrapper around the two low bit extractors parameterized by bit size (it
 -- selects the appropriate extractor based on architecture size)
@@ -409,19 +409,19 @@ lowBits n e
 
 lowBits' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
 lowBits' n e
-  | nBits >= n = extract (nBits - 1) (nBits - n) e
+  | nBits >= n = extract' (nBits - 1) (nBits - n) e
   | otherwise = error ("Unexpected small slice: " ++ show n ++ " from " ++ show e)
   where
     nBits = exprBVSize e
 
 highBits64 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-highBits64 n = extract (n - 1) 0
+highBits64 n = extract' (n - 1) 0
 
 highBits32 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-highBits32 n = extract (n - 1) 0
+highBits32 n = extract' (n - 1) 0
 
 highBits128 :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
-highBits128 n = extract (n - 1) 0
+highBits128 n = extract' (n - 1) 0
 
 highBits :: (HasCallStack, ?bitSize :: BitSize) => Int -> Expr 'TBV -> Expr 'TBV
 highBits n e
@@ -433,7 +433,7 @@ highBits n e
 -- | Take the @n@ high bits of the given value
 highBits' :: (HasCallStack) => Int -> Expr 'TBV -> Expr 'TBV
 highBits' n e
-  | exprBVSize e >= n = extract (n - 1) 0 e
+  | exprBVSize e >= n = extract' (n - 1) 0 e
   | otherwise = error ("Unexpected small slice: " ++ show n ++ " from " ++ show e)
 
 -- Uninterpreted function helpers
