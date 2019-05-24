@@ -18,12 +18,22 @@
 {-# LANGUAGE TypeOperators #-}
 
 module SemMC.ASL.Crucible.TranslateSig (
-    computeSignatures
+  -- * Top-level interface
+    computeAllSignatures
+  , computeSignature
+  , computeCallableSignature
+  , Callable(..)
   , SignatureMap
+  -- * 'SigM' monad
+  , SigM
+  , execSigM
   , SigException(..)
   , SigState(..)
+  -- , DefVariable(..)
+  -- , DefType(..)
   ) where
 
+import           Control.Monad (void)
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.Identity as I
 import qualified Control.Monad.RWS as RWS
@@ -45,26 +55,35 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
 
+import Debug.Trace (traceM)
+
 type SignatureMap = Map.Map T.Text SomeSignature
 
-computeSignatures :: [AS.Definition] -> Either (SigException, SigState) SignatureMap
-computeSignatures defs =
-  let env = buildEnv defs
-  in execSigM env $ do
-    forM_ (Map.elems (callables env)) $ \def -> do
-      computeCallableSignature def
-    finalState <- RWS.get
-    return $ callableSignatureMap finalState
+-- | Compute signatures for every callable, given a list of 'AS.Definition's.
+computeAllSignatures :: [AS.Definition] -> Either (SigException, SigState) SignatureMap
+computeAllSignatures defs = execSigM defs $ do
+  env <- RWS.ask
+  forM_ (Map.elems (callables env)) $ \def -> do
+    computeCallableSignature def
+  finalState <- RWS.get
+  return $ callableSignatureMap finalState
+
+-- | Compute the signature of a single callable, given its name and arity.
+computeSignature :: T.Text -> Int -> SigM SignatureMap
+computeSignature name arity = do
+  env <- RWS.ask
+  def <- lookupCallable name arity
+  computeCallableSignature def
+  finalState <- RWS.get
+  return $ callableSignatureMap finalState
 
 buildEnv :: [AS.Definition] -> SigEnv
 buildEnv defs =
-  let callables = Map.fromList ((\c -> (getCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
+  let callables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
       globalVars = Map.fromList ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
       types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
       -- | TODO: Populate builtin types
       builtinTypes = Map.empty
-      getCallableName c = let AS.QualifiedIdentifier _ name = callableName c
-                          in name
       getVariableName v = let DefVariable name _ = v
                           in name
       getTypeName t = case t of
@@ -105,6 +124,15 @@ data DefType = DefTypeBuiltin AS.Identifier
              | DefTypeStruct AS.QualifiedIdentifier [AS.SymbolDecl]
              | DefTypeEnum AS.Identifier [AS.Identifier]
 
+callableNameWithArity :: Callable -> T.Text
+callableNameWithArity c =
+  let AS.QualifiedIdentifier _ name = callableName c
+      numArgs = length (callableArgs c)
+  in callableNameWithArity' name numArgs
+
+callableNameWithArity' :: T.Text -> Int -> T.Text
+callableNameWithArity' name numArgs = name <> T.pack "/" <> T.pack (show numArgs)
+
 asDefType :: AS.Definition -> Maybe DefType
 asDefType def =
   case def of
@@ -127,14 +155,6 @@ asDefVariable def = case def of
   _ -> Nothing
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
---
--- The environment provided is a list of ASL definitions -- callables, type
--- declarations, and global variable declarations.
---
--- The state is a mapping from names to signatures. The idea is that we start with an
--- empty state, then traverse the definitions, running 'computeDefinitionSignature'
--- on each one and storing its definition in the lookup table.
-
 newtype SigM a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv () SigState) a }
   deriving ( Functor
            , Applicative
@@ -144,10 +164,12 @@ newtype SigM a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv () Sig
            , E.MonadError SigException
            )
 
-execSigM :: SigEnv -> SigM a -> Either (SigException, SigState) a
-execSigM env action =
+-- | Given a list of ASL 'AS.Definition's, execute a 'SigM' action and either return
+-- the result or an exception coupled with the final state.
+execSigM :: [AS.Definition] -> SigM a -> Either (SigException, SigState) a
+execSigM defs action =
   let rws = E.runExceptT $ getSigM action
-      (e, finalState, _) = RWS.runRWS rws env initState
+      (e, finalState, _) = RWS.runRWS rws (buildEnv defs) initState
   in case e of
     Left err -> Left (err, finalState)
     Right a -> Right a
@@ -180,12 +202,13 @@ storeType tpName tp = do
   st <- RWS.get
   RWS.put $ st { userTypes = Map.insert tpName (Some tp) (userTypes st) }
 
-lookupCallable :: T.Text -> SigM Callable
-lookupCallable fnName = do
+lookupCallable :: T.Text -> Int -> SigM Callable
+lookupCallable name' arity = do
   env <- RWS.ask
-  case Map.lookup fnName (callables env) of
+  let name = callableNameWithArity' name' arity
+  case Map.lookup name (callables env) of
     Just callable -> return callable
-    Nothing -> E.throwError $ CallableNotFound fnName
+    Nothing -> E.throwError $ CallableNotFound name
 
 lookupBuiltinType :: T.Text -> SigM (Some UserType)
 lookupBuiltinType tpName = do
@@ -207,30 +230,34 @@ lookupGlobalVar varName = do
   env <- RWS.ask
   return $ Map.lookup varName (globalVars env)
 
-lookupCallableGlobals :: T.Text -> SigM (Maybe [(T.Text, Some WT.BaseTypeRepr)])
-lookupCallableGlobals callableName = do
+lookupCallableGlobals :: Callable -> SigM (Maybe [(T.Text, Some WT.BaseTypeRepr)])
+lookupCallableGlobals c = do
   globalsMap <- callableGlobalsMap <$> RWS.get
-  return $ Map.lookup callableName globalsMap
+  let name = callableNameWithArity c
+  return $ Map.lookup name globalsMap
 
-storeCallableGlobals :: T.Text -> [(T.Text, Some WT.BaseTypeRepr)] -> SigM ()
-storeCallableGlobals callableName globals = do
+storeCallableGlobals :: Callable -> [(T.Text, Some WT.BaseTypeRepr)] -> SigM ()
+storeCallableGlobals c globals = do
   st <- RWS.get
-  RWS.put $ st { callableGlobalsMap = Map.insert callableName globals (callableGlobalsMap st) }
+  let name = callableNameWithArity c
+  RWS.put $ st { callableGlobalsMap = Map.insert name globals (callableGlobalsMap st) }
 
-lookupCallableSignature :: T.Text -> SigM (Maybe SomeSignature)
-lookupCallableSignature callableName = do
+lookupCallableSignature :: Callable -> SigM (Maybe SomeSignature)
+lookupCallableSignature c = do
   signatureMap <- callableSignatureMap <$> RWS.get
-  return $ Map.lookup callableName signatureMap
+  let name = callableNameWithArity c
+  return $ Map.lookup name signatureMap
 
-storeCallableSignature :: T.Text -> SomeSignature -> SigM ()
-storeCallableSignature callableName sig = do
+storeCallableSignature :: Callable -> SomeSignature -> SigM ()
+storeCallableSignature c sig = do
   st <- RWS.get
-  RWS.put $ st { callableSignatureMap = Map.insert callableName sig (callableSignatureMap st) }
+  let name = callableNameWithArity c
+  RWS.put $ st { callableSignatureMap = Map.insert name sig (callableSignatureMap st) }
 
 addUnfoundCallable :: T.Text -> SigM ()
-addUnfoundCallable callableName = do
+addUnfoundCallable name = do
   st <- RWS.get
-  RWS.put $ st { unfoundCallables = callableName Seq.:<| unfoundCallables st }
+  RWS.put $ st { unfoundCallables = name Seq.:<| unfoundCallables st }
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -256,7 +283,7 @@ computeUserType tpName = do
             return $ Some $ LabeledValue varName tp
           Some varTpAssignment <- return $ someAssignment varTps
           return $ Some $ UserStruct varTpAssignment
-        DefTypeAbstract _ -> error "computeUserType: abstract type"
+        DefTypeAbstract _ -> error $ "computeUserType: abstract type " ++ show tpName
         _ -> error $ "computeUserType: unsupported type " ++ T.unpack tpName
       storeType tpName tp
       return $ Some tp
@@ -313,6 +340,7 @@ setEltGlobalVars setElt = case setElt of
 
 lValExprGlobalVars :: AS.LValExpr -> SigM [(T.Text, Some WT.BaseTypeRepr)]
 lValExprGlobalVars lValExpr = case lValExpr of
+  -- FIXME: how do we want to handle structs and their members? (PSTATE in particular)
   AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> maybeToList <$> varGlobal varName
   AS.LValMember le varName -> do
     leGlobals <- lValExprGlobalVars le
@@ -384,13 +412,13 @@ exprGlobalVars expr = case expr of
     eGlobals <- exprGlobalVars e
     varGlobals <- catMaybes <$> traverse varGlobal vars
     return $ eGlobals ++ varGlobals
-  AS.ExprCall (AS.QualifiedIdentifier _ callableName) argEs -> do
+  AS.ExprCall (AS.QualifiedIdentifier _ name) argEs -> do
     callableGlobals <- E.catchError
-      (do callable <- lookupCallable callableName
+      (do callable <- lookupCallable name (length argEs)
           callableGlobalVars callable )
       $ \e -> case e of
                 CallableNotFound _ -> do
-                  addUnfoundCallable callableName
+                  addUnfoundCallable name
                   return []
                 _ -> E.throwError e
     -- callableGlobals <- callableGlobalVars callable
@@ -420,8 +448,8 @@ stmtGlobalVars :: AS.Stmt -> SigM [(T.Text, Some WT.BaseTypeRepr)]
 stmtGlobalVars stmt = case stmt of
   AS.StmtVarDeclInit _ e -> exprGlobalVars e
   AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
-  AS.StmtCall (AS.QualifiedIdentifier _ callableName) argEs -> do
-    callable <- lookupCallable callableName
+  AS.StmtCall (AS.QualifiedIdentifier _ name) argEs -> do
+    callable <- lookupCallable name (length argEs)
     callableGlobals <- callableGlobalVars callable
     argGlobals <- concat <$> traverse exprGlobalVars argEs
     return $ callableGlobals ++ argGlobals
@@ -458,28 +486,27 @@ stmtGlobalVars stmt = case stmt of
 -- | Compute the list of global variables in a 'Callable' and store it in the
 -- state. If it has already been computed, simply return it.
 callableGlobalVars :: Callable -> SigM [(T.Text, Some WT.BaseTypeRepr)]
-callableGlobalVars Callable{..} = do
-  let AS.QualifiedIdentifier _ name = callableName
-  mGlobals <- lookupCallableGlobals name
+callableGlobalVars c@Callable{..} = do
+  mGlobals <- lookupCallableGlobals c
   case mGlobals of
     Just globals -> return globals
     Nothing -> do
       globals <- concat <$> traverse stmtGlobalVars callableStmts
-      storeCallableGlobals name globals
+      storeCallableGlobals c globals
       return globals
 
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
 -- it is a function.
 computeCallableSignature :: Callable -> SigM SomeSignature
-computeCallableSignature callable@Callable{..} = do
-  let AS.QualifiedIdentifier _ name = callableName
-  mSig <- lookupCallableSignature name
+computeCallableSignature c@Callable{..} = do
+  let name = callableNameWithArity c
+  mSig <- lookupCallableSignature c
 
   case mSig of
     Just sig -> return sig
     Nothing -> do
-      globalVars <- callableGlobalVars callable
+      globalVars <- callableGlobalVars c
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
       labeledArgs <- forM callableArgs $ \(argName, asType) -> do
@@ -509,7 +536,7 @@ computeCallableSignature callable@Callable{..} = do
             , funcArgReprs = argReprs
             , funcGlobalReprs = globalReprs
             }
-      storeCallableSignature name sig
+      storeCallableSignature c sig
       return sig
 
 someAssignment :: [Some f] -> Some (Ctx.Assignment f)

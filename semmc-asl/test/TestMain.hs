@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import Control.Monad (forM_)
@@ -22,7 +24,7 @@ main = do
     Left err -> putStrLn $ "Error loading ASL definitions: " ++ show err
     Right defs -> do
       putStrLn $ "Loaded " ++ show (length defs) ++ " definitions."
-      let eSigs = computeSignatures defs
+      let eSigs = execSigM defs $ computeSignature "BranchTo" 2
       case eSigs of
         Left (err, finalState) -> do
           putStrLn $ "Error computing signatures: " ++ show err
