@@ -1,0 +1,184 @@
+;; ADDO. (XO-form, OE=1, RC=1)
+(let
+ ((false
+  (bvne #b0 #b0)))
+ ((operands
+  ((rT . 'Gprc)
+   (rB . 'Gprc)
+   (rA . 'Gprc)))
+  (in
+   ('XER 'CR rA rB 'IP))
+  (defs
+   (('CR
+    ((_ call "df.cmpImm")
+     (bvslt
+      (bvadd rA rB)
+      #x0000000000000000)
+     (bvsgt
+      (bvadd rA rB)
+      #x0000000000000000)
+     #b000
+     (concat
+      ((_ extract 63 32)
+       (concat
+        ((_ extract 63 31)
+         'XER)
+        (concat
+         (ite
+          (ite
+           (andp
+            (bvslt rA #x0000000000000000)
+            (bvslt rB #x0000000000000000))
+           (notp
+            (bvslt
+             (bvadd rA rB)
+             #x0000000000000000))
+           (ite
+            (andp
+             (bvsge rA #x0000000000000000)
+             (bvsge rB #x0000000000000000))
+            (notp
+             (bvsge
+              (bvadd rA rB)
+              #x0000000000000000))
+            (false)))
+          #b1
+          #b0)
+         ((_ extract 29 0)
+          'XER))))
+      (concat
+       (bvor
+        ((_ extract 31 31)
+         'XER)
+        (ite
+         (ite
+          (andp
+           (bvslt rA #x0000000000000000)
+           (bvslt rB #x0000000000000000))
+          (notp
+           (bvslt
+            (bvadd rA rB)
+            #x0000000000000000))
+          (ite
+           (andp
+            (bvsge rA #x0000000000000000)
+            (bvsge rB #x0000000000000000))
+           (notp
+            (bvsge
+             (bvadd rA rB)
+             #x0000000000000000))
+           (false)))
+         #b1
+         #b0))
+       ((_ extract 30 0)
+        (concat
+         ((_ extract 63 31)
+          'XER)
+         (concat
+          (ite
+           (ite
+            (andp
+             (bvslt rA #x0000000000000000)
+             (bvslt rB #x0000000000000000))
+            (notp
+             (bvslt
+              (bvadd rA rB)
+              #x0000000000000000))
+            (ite
+             (andp
+              (bvsge rA #x0000000000000000)
+              (bvsge rB #x0000000000000000))
+             (notp
+              (bvsge
+               (bvadd rA rB)
+               #x0000000000000000))
+             (false)))
+           #b1
+           #b0)
+          ((_ extract 29 0)
+           'XER))))))
+     'CR))
+    ('XER
+     (concat
+      ((_ extract 63 32)
+       (concat
+        ((_ extract 63 31)
+         'XER)
+        (concat
+         (ite
+          (ite
+           (andp
+            (bvslt rA #x0000000000000000)
+            (bvslt rB #x0000000000000000))
+           (notp
+            (bvslt
+             (bvadd rA rB)
+             #x0000000000000000))
+           (ite
+            (andp
+             (bvsge rA #x0000000000000000)
+             (bvsge rB #x0000000000000000))
+            (notp
+             (bvsge
+              (bvadd rA rB)
+              #x0000000000000000))
+            (false)))
+          #b1
+          #b0)
+         ((_ extract 29 0)
+          'XER))))
+      (concat
+       (bvor
+        ((_ extract 31 31)
+         'XER)
+        (ite
+         (ite
+          (andp
+           (bvslt rA #x0000000000000000)
+           (bvslt rB #x0000000000000000))
+          (notp
+           (bvslt
+            (bvadd rA rB)
+            #x0000000000000000))
+          (ite
+           (andp
+            (bvsge rA #x0000000000000000)
+            (bvsge rB #x0000000000000000))
+           (notp
+            (bvsge
+             (bvadd rA rB)
+             #x0000000000000000))
+           (false)))
+         #b1
+         #b0))
+       ((_ extract 30 0)
+        (concat
+         ((_ extract 63 31)
+          'XER)
+         (concat
+          (ite
+           (ite
+            (andp
+             (bvslt rA #x0000000000000000)
+             (bvslt rB #x0000000000000000))
+            (notp
+             (bvslt
+              (bvadd rA rB)
+              #x0000000000000000))
+            (ite
+             (andp
+              (bvsge rA #x0000000000000000)
+              (bvsge rB #x0000000000000000))
+             (notp
+              (bvsge
+               (bvadd rA rB)
+               #x0000000000000000))
+             (false)))
+           #b1
+           #b0)
+          ((_ extract 29 0)
+           'XER)))))))
+    (rT
+     (bvadd rA rB))
+    ('IP
+     (bvadd 'IP #x0000000000000004))))))

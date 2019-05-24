@@ -1,4 +1,4 @@
-;; ADD. (XO-form, RC=1)
+;; ADD. (XO-form, OE=0, RC=1)
 ((operands
  ((rT . 'Gprc)
   (rB . 'Gprc)
