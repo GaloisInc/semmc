@@ -37,6 +37,7 @@ module SemMC.DSL (
   testBitDynamic32,
   testBitDynamic64,
   extract,
+  extract',
   zeroExtend, zeroExtendTo, zext',
   signExtend, signExtendTo, sext',
   concat,
@@ -763,6 +764,28 @@ extract i j e =
         True -> TheoryFunc (EBV n) "extract" [i', j'] [Some e]
         False -> error (printf "Invalid slice (%d,%d) of a %d-bit vector" i j m)
 
+-- | Like 'extract', but doesn't crash if you try to extract a
+-- zero-length sequence.
+--
+-- We only allow zero length sequences specified as @extract' (i-1) i
+-- e@, to avoid masking bugs that manifest as negative size slices.
+extract' :: (HasCallStack)
+        => Int
+        -- ^ i (the highest bit number in the range to extract, inclusive)
+        -> Int
+        -- ^ j (the lowest bit number in the range to extract, inclusive)
+        -> Expr 'TBV
+        -- ^ A bitvector expression
+        -> Expr 'TBV
+extract' i j e
+  | i == j - 1 =
+    case exprType e of
+      EBV m | m > j && j >= 0 -> LitBV 0 0
+            | otherwise -> error $
+              printf "Out of range empty slice (%d) of a %d-bit vector" j m
+  | otherwise = extract i j e
+
+
 -- | Zero extend a value (add the requested number of zeros on the left)
 --
 -- The new type of the expression reflects the increased bit width
@@ -823,6 +846,12 @@ sext' = signExtendTo
 concat :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 concat e1 e2 =
   case (exprType e1, exprType e2) of
+    (EBV 0, EBV 0) -> LitBV 0 0
+    (EBV 0, _) -> e2
+    (_, EBV 0) -> e1
+    -- Without the above special cases for zero length bit vectors,
+    -- the "builtin concat" here produces wrong results, apparently
+    -- treating zero length bit vectors as length one!?!?
     (EBV w1, EBV w2) -> Builtin (EBV (w1 + w2)) "concat" [Some e1, Some e2]
 
 -- | Set bits, specifying the list of bit numbers to set (0-based)
