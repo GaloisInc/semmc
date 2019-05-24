@@ -55,8 +55,6 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
 
-import Debug.Trace (traceM)
-
 type SignatureMap = Map.Map T.Text SomeSignature
 
 -- | Compute signatures for every callable, given a list of 'AS.Definition's.
@@ -69,13 +67,10 @@ computeAllSignatures defs = execSigM defs $ do
   return $ callableSignatureMap finalState
 
 -- | Compute the signature of a single callable, given its name and arity.
-computeSignature :: T.Text -> Int -> SigM SignatureMap
+computeSignature :: T.Text -> Int -> SigM ()
 computeSignature name arity = do
-  env <- RWS.ask
   def <- lookupCallable name arity
-  computeCallableSignature def
-  finalState <- RWS.get
-  return $ callableSignatureMap finalState
+  void $ computeCallableSignature def
 
 buildEnv :: [AS.Definition] -> SigEnv
 buildEnv defs =
@@ -195,6 +190,9 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
 data SigException = TypeNotFound T.Text
                   | BuiltinTypeNotFound T.Text
                   | CallableNotFound T.Text
+                  | VariableNotFound T.Text
+                  | WrongType T.Text T.Text
+                  | StructMissingField T.Text T.Text
   deriving (Eq, Show)
 
 storeType :: T.Text -> UserType tp -> SigM ()
@@ -310,7 +308,8 @@ computeType tp = case tp of
   AS.TypeArray _ _ -> error "computeType, TypeArray"
   _ -> error "computeType"
 
--- | If the identifier is a global variable, return its type. Otherwise, return 'Nothing'.
+-- | If the identifier is a global variable, return its type. Otherwise, return
+-- 'Nothing', indicating the variable is not global.
 computeGlobalVarType :: T.Text -> SigM (Maybe (Some WT.BaseTypeRepr))
 computeGlobalVarType varName = do
   mVar <- lookupGlobalVar varName
@@ -319,6 +318,26 @@ computeGlobalVarType varName = do
     Just (DefVariable _ asType) -> do
       tp <- computeType asType
       return $ Just tp
+
+-- | Compute the type of a struct member. If the struct is not a global variable,
+-- return 'Nothing'.
+computeGlobalStructMemberType :: T.Text -> T.Text -> SigM (Maybe (Some WT.BaseTypeRepr))
+computeGlobalStructMemberType structName memberName = do
+  mStructVar <- lookupGlobalVar structName
+  case mStructVar of
+    Just (DefVariable _ (AS.TypeRef (AS.QualifiedIdentifier _ structTypeName))) -> do
+      defStructType <- lookupDefType structTypeName
+      case defStructType of
+        DefTypeStruct _ decls -> do
+          let mAsType = lookup memberName decls
+          case mAsType of
+            Nothing -> E.throwError $ StructMissingField structName memberName
+            Just asType -> do
+              tp <- computeType asType
+              return $ Just tp
+        _ -> E.throwError $ WrongType structName structTypeName
+    -- FIXME: Is there a difference between the Just and Nothing cases here?
+    _ -> return Nothing
 
 -- | Given a variable name, determine whether it is a global variable or not. If so,
 -- return a pair containing the variable and its type; if not, return 'Nothing'.
@@ -338,14 +357,16 @@ setEltGlobalVars setElt = case setElt of
   AS.SetEltSingle e -> exprGlobalVars e
   AS.SetEltRange e1 e2 -> (++) <$> exprGlobalVars e1 <*> exprGlobalVars e2
 
+-- | Whenever we encounter a member variable of a struct, we treat it as an
+-- independent global variable and use this function to construct its qualified name.
+mkStructMemberName :: T.Text -> T.Text -> T.Text
+mkStructMemberName s m = s <> "." <> m
+
 lValExprGlobalVars :: AS.LValExpr -> SigM [(T.Text, Some WT.BaseTypeRepr)]
 lValExprGlobalVars lValExpr = case lValExpr of
-  -- FIXME: how do we want to handle structs and their members? (PSTATE in particular)
+  -- If the variable isn't in the list of globals, we assume it is locally bound and
+  -- simply return the empty list.
   AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> maybeToList <$> varGlobal varName
-  AS.LValMember le varName -> do
-    leGlobals <- lValExprGlobalVars le
-    varGlobals <- maybeToList <$> varGlobal varName
-    return $ leGlobals ++ varGlobals
   AS.LValMemberArray le vars -> do
     leGlobals <- lValExprGlobalVars le
     varGlobals <- catMaybes <$> traverse varGlobal vars
@@ -362,10 +383,20 @@ lValExprGlobalVars lValExpr = case lValExpr of
     concat <$> traverse lValExprGlobalVars les
   AS.LValTuple les ->
     concat <$> traverse lValExprGlobalVars les
-  AS.LValMemberBits le vars -> do
-    leGlobals <- lValExprGlobalVars le
-    varGlobals <- catMaybes <$> traverse varGlobal vars
-    return $ leGlobals ++ varGlobals
+  AS.LValMember (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
+    mVarType <- computeGlobalStructMemberType structName memberName
+    case mVarType of
+      Nothing -> return []
+      Just varType -> return [(mkStructMemberName structName memberName, varType)]
+  AS.LValMember _ _ -> error "lValExprGlobalVars"
+  AS.LValMemberBits (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
+    mVarTypes <- forM memberNames $ \memberName -> do
+      mVarType <- computeGlobalStructMemberType structName memberName
+      case mVarType of
+        Nothing -> return []
+        Just varType -> return [(mkStructMemberName structName memberName, varType)]
+    return $ concat mVarTypes
+  AS.LValMemberBits _ _ -> error "lValExprGlobalVars"
   AS.LValSlice les ->
     concat <$> traverse lValExprGlobalVars les
   _ -> return []
@@ -408,10 +439,6 @@ exprGlobalVars expr = case expr of
     varGlobals <- catMaybes <$> traverse varGlobal vars
     return $ eGlobals ++ varGlobals
   AS.ExprInMask e _ -> exprGlobalVars e
-  AS.ExprMemberBits e vars -> do
-    eGlobals <- exprGlobalVars e
-    varGlobals <- catMaybes <$> traverse varGlobal vars
-    return $ eGlobals ++ varGlobals
   AS.ExprCall (AS.QualifiedIdentifier _ name) argEs -> do
     callableGlobals <- E.catchError
       (do callable <- lookupCallable name (length argEs)
@@ -437,10 +464,27 @@ exprGlobalVars expr = case expr of
       return $ testExprGlobals ++ resExprGlobals
     defaultGlobals <- exprGlobalVars def
     return $ concat branchGlobals ++ defaultGlobals
-  AS.ExprMember e var -> do
-    eGlobals <- exprGlobalVars e
-    varGlobals <- maybeToList <$> varGlobal var
-    return $ eGlobals ++ varGlobals
+  -- AS.ExprMember e var -> do
+    -- eGlobals <- exprGlobalVars e
+    -- varGlobals <- maybeToList <$> varGlobal var
+    -- return $ eGlobals ++ varGlobals
+  AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
+    mVarType <- computeGlobalStructMemberType structName memberName
+    case mVarType of
+      Nothing -> return []
+      Just varType -> return [(mkStructMemberName structName memberName, varType)]
+  AS.ExprMember _ _ -> error "exprGlobalVars"
+  AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
+    mVarTypes <- forM memberNames $ \memberName -> do
+      mVarType <- computeGlobalStructMemberType structName memberName
+      case mVarType of
+        Nothing -> return []
+        Just varType -> return [(mkStructMemberName structName memberName, varType)]
+    return $ concat mVarTypes
+  AS.ExprMemberBits _ _ -> error "exprGlobalVars"
+    -- eGlobals <- exprGlobalVars e
+    -- varGlobals <- catMaybes <$> traverse varGlobal vars
+    -- return $ eGlobals ++ varGlobals
   _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.

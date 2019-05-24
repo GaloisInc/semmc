@@ -56,4 +56,5 @@ test-suite semmc-asl-tests
   build-depends:       base >= 4.10.0.0 && < 5,
                        asl-parser,
                        containers,
+                       mtl,
                        semmc-asl

@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Monad (forM_)
+import qualified Control.Monad.State as St
 import Data.Foldable (toList)
 import Data.List (intercalate)
 import qualified Data.Map as Map
@@ -24,7 +25,9 @@ main = do
     Left err -> putStrLn $ "Error loading ASL definitions: " ++ show err
     Right defs -> do
       putStrLn $ "Loaded " ++ show (length defs) ++ " definitions."
-      let eSigs = execSigM defs $ computeSignature "BranchTo" 2
+      let eSigs = execSigM defs $ do
+            computeSignature "UsingAArch32" 0
+            callableSignatureMap <$> St.get
       case eSigs of
         Left (err, finalState) -> do
           putStrLn $ "Error computing signatures: " ++ show err
