@@ -55,6 +55,23 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
 
+----------------
+-- Notes
+--
+-- * Currently we are storing enumerations as global variables, and recording them
+-- when we compute signatures. This needs to be fixed.
+--
+-- * Investigate SCR and make sure we are doing the right thing for that. I don't
+-- actually think we are.
+--
+-- Questions
+--
+-- * Should we handle getters and setters as functions & procedures? It might
+-- actually be relatively straightforward to do so. At the moment, these are silently
+-- skipped.
+--
+-- * How do we deal with dependently-typed functions? Do we actually need to?
+
 type SignatureMap = Map.Map T.Text SomeSignature
 
 -- | Compute signatures for every callable, given a list of 'AS.Definition's.
@@ -141,12 +158,9 @@ asDefType def =
 
 data DefVariable = DefVariable AS.Identifier AS.Type
 
--- | We also capture 'DefConst's here to simplify things; they are also
--- straightforward mappings from names to types, just like variables.
 asDefVariable :: AS.Definition -> Maybe DefVariable
 asDefVariable def = case def of
   AS.DefVariable (AS.QualifiedIdentifier _ ident) tp -> Just (DefVariable ident tp)
-  AS.DefConst ident tp _ -> Just (DefVariable ident tp)
   _ -> Nothing
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
@@ -388,7 +402,7 @@ lValExprGlobalVars lValExpr = case lValExpr of
     case mVarType of
       Nothing -> return []
       Just varType -> return [(mkStructMemberName structName memberName, varType)]
-  AS.LValMember _ _ -> error "lValExprGlobalVars"
+  AS.LValMember _ _ -> return [] -- error "lValExprGlobalVars"
   AS.LValMemberBits (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
     mVarTypes <- forM memberNames $ \memberName -> do
       mVarType <- computeGlobalStructMemberType structName memberName
@@ -396,7 +410,7 @@ lValExprGlobalVars lValExpr = case lValExpr of
         Nothing -> return []
         Just varType -> return [(mkStructMemberName structName memberName, varType)]
     return $ concat mVarTypes
-  AS.LValMemberBits _ _ -> error "lValExprGlobalVars"
+  AS.LValMemberBits _ _ -> return [] -- error "lValExprGlobalVars"
   AS.LValSlice les ->
     concat <$> traverse lValExprGlobalVars les
   _ -> return []
@@ -473,7 +487,7 @@ exprGlobalVars expr = case expr of
     case mVarType of
       Nothing -> return []
       Just varType -> return [(mkStructMemberName structName memberName, varType)]
-  AS.ExprMember _ _ -> error "exprGlobalVars"
+  AS.ExprMember _ _ -> return []-- error "exprGlobalVars"
   AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
     mVarTypes <- forM memberNames $ \memberName -> do
       mVarType <- computeGlobalStructMemberType structName memberName
@@ -481,7 +495,7 @@ exprGlobalVars expr = case expr of
         Nothing -> return []
         Just varType -> return [(mkStructMemberName structName memberName, varType)]
     return $ concat mVarTypes
-  AS.ExprMemberBits _ _ -> error "exprGlobalVars"
+  AS.ExprMemberBits _ _ -> return [] --error "exprGlobalVars"
     -- eGlobals <- exprGlobalVars e
     -- varGlobals <- catMaybes <$> traverse varGlobal vars
     -- return $ eGlobals ++ varGlobals

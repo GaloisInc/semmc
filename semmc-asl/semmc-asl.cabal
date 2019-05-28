@@ -57,4 +57,5 @@ test-suite semmc-asl-tests
                        asl-parser,
                        containers,
                        mtl,
-                       semmc-asl
+                       semmc-asl,
+                       text >= 1 && < 2
