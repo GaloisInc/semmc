@@ -37,7 +37,6 @@ module SemMC.DSL (
   testBitDynamic32,
   testBitDynamic64,
   extract,
-  extract',
   zeroExtend, zeroExtendTo, zext',
   signExtend, signExtendTo, sext',
   concat,
@@ -746,6 +745,11 @@ testBitDynamic64 expr index
 -- >    - i, j, m, n are numerals
 -- >    - m > i ≥ j ≥ 0,
 -- >    - n = i - j + 1
+--
+-- We only allow zero length sequences specified as @extract' (j-1) j
+-- e@, to avoid masking bugs that manifest as negative size
+-- slices. For zero length, we return a zero-length literal, instead
+-- of calling the underlying SMTLib @extract@.
 extract :: (HasCallStack)
         => Int
         -- ^ i (the highest bit number in the range to extract, inclusive)
@@ -760,31 +764,10 @@ extract i j e =
       let n = i - j + 1
           i' = Some . LitInt . fromIntegral $ m-1 - j
           j' = Some . LitInt . fromIntegral $ m-1 - i
-      in case m > i && i >= j && j >= 0 of
-        True -> TheoryFunc (EBV n) "extract" [i', j'] [Some e]
+      in case m > i && i >= j - 1 && j >= 0 of
+        True | n == 0    -> LitBV 0 0
+             | otherwise -> TheoryFunc (EBV n) "extract" [i', j'] [Some e]
         False -> error (printf "Invalid slice (%d,%d) of a %d-bit vector" i j m)
-
--- | Like 'extract', but doesn't crash if you try to extract a
--- zero-length sequence.
---
--- We only allow zero length sequences specified as @extract' (i-1) i
--- e@, to avoid masking bugs that manifest as negative size slices.
-extract' :: (HasCallStack)
-        => Int
-        -- ^ i (the highest bit number in the range to extract, inclusive)
-        -> Int
-        -- ^ j (the lowest bit number in the range to extract, inclusive)
-        -> Expr 'TBV
-        -- ^ A bitvector expression
-        -> Expr 'TBV
-extract' i j e
-  | i == j - 1 =
-    case exprType e of
-      EBV m | m > j && j >= 0 -> LitBV 0 0
-            | otherwise -> error $
-              printf "Out of range empty slice (%d) of a %d-bit vector" j m
-  | otherwise = extract i j e
-
 
 -- | Zero extend a value (add the requested number of zeros on the left)
 --

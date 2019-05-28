@@ -12,7 +12,7 @@ GEN=$(which semmc-ppc-genbase)
 DATA="${DIR}/../data"
 
 if ! which semmc-ppc-genbase &>/dev/null; then
-  echo "No $GEN on PATH!" > /dev/stderr
+  echo "No semmc-ppc-genbase on PATH!" > /dev/stderr
   echo "Try 'cabal v2-exec $0' or 'stack exec $0'."
   exit 1
 fi
