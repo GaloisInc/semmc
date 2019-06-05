@@ -53,25 +53,21 @@ genNatParameter = HG.choice
                     -- -> Parameter arch sh tp
                   ]
 
--- instance Arbitrary (F.Parameter TestGenArch sh BaseNatType) where
---   arbitrary = oneof [ undefined -- return $ F.OperandParameter oprepr1 undefined
---                     , F.LiteralParameter <$> arbitrary
---                     -- , return $ F.FunctionParameter undefined undefined oprepr2
---                     ]
---               where oprepr1 = undefined
---                     oprepr2 = undefined
---                     -- loc :: TestLocation ty
---                     -- loc = arbitrary
+genIntParameter :: Monad m => GenT m (F.Parameter TestGenArch sh BaseIntegerType)
+genIntParameter = HG.choice
+                  [
+                    -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> Parameter arch sh (A.OperandType arch s)
+                    F.LiteralParameter <$> genIntLocation
+                    -- , FunctionParameter :: String
+                    -- -- The name of the uninterpreted function
+                    -- -> WrappedOperand arch sh s
+                    -- -- The operand we are calling the function on (this is a newtype so
+                    -- -- we don't need an extra typerepr)
+                    -- -> BaseTypeRepr tp
+                    -- -- The typerepr for the return type of the function
+                    -- -> Parameter arch sh tp
+                  ]
 
--- instance Arbitrary (F.Parameter TestGenArch sh BaseIntegerType) where
---   arbitrary = oneof [ undefined -- return $ F.OperandParameter oprepr1 undefined
---                     , F.LiteralParameter <$> arbitrary
---                     -- , return $ F.FunctionParameter undefined undefined oprepr2
---                     ]
---               where oprepr1 = undefined
---                     oprepr2 = undefined
---                     -- loc :: TestLocation ty
---                     -- loc = arbitrary
 
 ----------------------------------------------------------------------
 -- Formula.ParameterizedFormula generators

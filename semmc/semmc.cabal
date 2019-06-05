@@ -154,6 +154,7 @@ test-suite semmc-semstore-tests
   ghc-options: -Wall
   main-is: SemStore.hs
   other-modules: LocationsTests
+               , ParameterTests
                , TestArch
                , TestArchPropGen
   hs-source-dirs: tests/semstore

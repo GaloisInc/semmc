@@ -20,6 +20,7 @@ import qualified Data.Set as Set
 import           Data.Type.Equality
 import           GHC.TypeNats as TypeNats
 import           LocationsTests
+import           ParameterTests
 import           Numeric.Natural
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula as F
@@ -33,4 +34,5 @@ import qualified What4.Expr.Builder as SB
 import           Prelude
 
 main :: IO ()
-main = defaultMain $ testGroup "Storable Semantics" $ locationTests
+main = defaultMain $ testGroup "Storable Semantics" $
+       locationTests <> parameterTests
