@@ -15,11 +15,12 @@ where
 import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import           Numeric.Natural
+import qualified SemMC.Architecture as SA
 import qualified SemMC.Architecture.Location as L
 import           What4.BaseTypes
 
 
-data TestGenArch
+data TestGenArch  -- ^ the architecture type for testing
 
 ----------------------------------------------------------------------
 -- Location
@@ -58,3 +59,9 @@ instance L.IsLocation TestLocation where
 
 
 type instance L.Location TestGenArch = TestLocation
+
+
+----------------------------------------------------------------------
+-- Operands
+
+type instance SA.OperandType TestGenArch "NatArg:Foo" = BaseNatType

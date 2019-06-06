@@ -155,6 +155,7 @@ test-suite semmc-semstore-tests
   main-is: SemStore.hs
   other-modules: LocationsTests
                , ParameterTests
+               , ParamFormulaTests
                , TestArch
                , TestArchPropGen
   hs-source-dirs: tests/semstore

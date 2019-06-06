@@ -21,6 +21,7 @@ import           Data.Type.Equality
 import           GHC.TypeNats as TypeNats
 import           LocationsTests
 import           ParameterTests
+import           ParamFormulaTests
 import           Numeric.Natural
 import qualified SemMC.Architecture.Location as L
 import qualified SemMC.Formula as F
@@ -35,4 +36,4 @@ import           Prelude
 
 main :: IO ()
 main = defaultMain $ testGroup "Storable Semantics" $
-       locationTests <> parameterTests
+       locationTests <> parameterTests <> parameterizedFormulaTests
