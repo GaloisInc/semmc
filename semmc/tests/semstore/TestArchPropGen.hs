@@ -12,8 +12,11 @@ module TestArchPropGen
 where
 
 import           Data.Int ( Int64 )
+import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.List as SL
+import           Data.Parameterized.List ( List( (:<) ) )
+import qualified Data.Parameterized.List as PL
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
@@ -56,7 +59,7 @@ genIntLocation = TestIntLoc <$>
 genNatParameter :: Monad m => GenT m (F.Parameter TestGenArch sh BaseNatType)
 genNatParameter = HG.choice
                   [
-                    -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> Parameter arch sh (A.OperandType arch s)
+                    -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> PL.Index sh s -> Parameter arch sh (A.OperandType arch s)
                     F.LiteralParameter <$> genNatLocation
                     -- , FunctionParameter :: String
                     -- -- The name of the uninterpreted function
@@ -71,7 +74,7 @@ genNatParameter = HG.choice
 genIntParameter :: Monad m => GenT m (F.Parameter TestGenArch sh BaseIntegerType)
 genIntParameter = HG.choice
                   [
-                    -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> SL.Index sh s -> Parameter arch sh (A.OperandType arch s)
+                    -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> PL.Index sh s -> Parameter arch sh (A.OperandType arch s)
                     F.LiteralParameter <$> genIntLocation
                     -- , FunctionParameter :: String
                     -- -- The name of the uninterpreted function
@@ -134,18 +137,23 @@ genBoundVar_NatArgFoo = BV.BoundVar <$> genBoundNatVar
 genParameterizedFormula :: forall sh sym m .  -- reordered args to allow TypeApplication of sh first
                            ( Monad m
                            , TestSymbolicBackend ~ sym
-                           , MkOperands (GenT m) (SL.List TestOperand) sh
+                           , MkOperands (GenT m) (PL.List TestOperand) sh
                            ) =>
                            sym
                         -> GenT m (F.ParameterizedFormula sym TestGenArch (sh :: [Symbol]))
 genParameterizedFormula _ = do
   params <- Set.fromList <$> HG.list (linear 0 10) genSomeParameter
-  operandVars <- mkOperand -- SL.List (BV.BoundVar sym arch) sh
-  return F.ParameterizedFormula { F.pfUses = params
-                                , F.pfOperandVars = operandVars
-                                , F.pfLiteralVars = undefined
-                                , F.pfDefs = undefined
-                                }
+  operandVars <- mkOperand
+  literalVars <- MapF.fromList <$> HG.list (linear 0 10)
+                 (HG.choice [ (Pair <$> genNatLocation <*> genBoundNatVar)
+                            , (Pair <$> genIntLocation <*> genBoundIntVar)
+                            ])
+  return F.ParameterizedFormula
+    { F.pfUses = params
+    , F.pfOperandVars = operandVars  -- PL.List (BV.BoundVar sym arch) sh
+    , F.pfLiteralVars = literalVars  -- MapF.MapF (L.Location arch) (WI.BoundVar sym)
+    , F.pfDefs = undefined
+    }
 
 
 --------------------------------------------------------------------------------
@@ -155,13 +163,13 @@ genParameterizedFormula _ = do
 class Monad m => MkOperands m (f :: k -> *) (ctx :: k) where
   mkOperand :: m (f ctx)
 
-instance (Monad m) => MkOperands m (SL.List TestOperand) '[] where
-  mkOperand = return SL.Nil
-instance (Monad m, MkOperands m TestOperand o, MkOperands m (SL.List TestOperand) os) =>
-  MkOperands m (SL.List TestOperand) (o ': os) where
+instance (Monad m) => MkOperands m (PL.List TestOperand) '[] where
+  mkOperand = return PL.Nil
+instance (Monad m, MkOperands m TestOperand o, MkOperands m (PL.List TestOperand) os) =>
+  MkOperands m (PL.List TestOperand) (o ': os) where
   mkOperand = do opl <- mkOperand
                  opr <- mkOperand
-                 return $ opl SL.:< opr
+                 return $ opl :< opr
 
 instance (Monad m) => MkOperands (GenT m) TestOperand "NatArg:Foo" where
   mkOperand = genBoundVar_NatArgFoo
