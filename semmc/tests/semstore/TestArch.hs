@@ -49,6 +49,9 @@ instance TestEquality TestLocation where
 instance OrdF TestLocation where
   TestNatLoc l1 `compareF` TestNatLoc l2 = fromOrdering $ l1 `compare` l2
   TestIntLoc l1 `compareF` TestIntLoc l2 = fromOrdering $ l1 `compare` l2
+  -- for mismatched location types, arbitrarily: any Int < any Nat
+  TestIntLoc _ `compareF` TestNatLoc _ = LTF
+  TestNatLoc _ `compareF` TestIntLoc _ = GTF
   -- _ `compareF` _ = LTF
 
 instance L.IsLocation TestLocation where
