@@ -11,11 +11,9 @@
 module TestArchPropGen
 where
 
-import           Control.Monad.IO.Class
 import           Data.Int ( Int64 )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as SL
-import           Data.Parameterized.Nonce ( newIONonceGenerator )
 import           Data.Parameterized.Some
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
@@ -23,12 +21,10 @@ import           Hedgehog
 import qualified Hedgehog.Gen as HG
 import           Hedgehog.Range
 import           Numeric.Natural
-import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Formula as F
 import           TestArch
 import           What4.BaseTypes
-import qualified What4.Expr.Builder as WB
 import qualified What4.Interface as WI
 
 

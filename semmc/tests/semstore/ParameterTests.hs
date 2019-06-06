@@ -5,11 +5,9 @@
 module ParameterTests where
 
 import           Data.Parameterized.Classes
-import qualified SemMC.Architecture.Location as L
 import           Test.Tasty
 import           Test.Tasty.Hedgehog
 import qualified SemMC.Formula.Formula as F
-import           TestArch
 import           TestArchPropGen
 import           What4.BaseTypes
 import           Hedgehog
