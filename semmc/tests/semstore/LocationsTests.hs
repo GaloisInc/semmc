@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -59,6 +60,28 @@ locationTests = [
                       assert $ not $ L.isMemoryLocation l
       -- TBD: needs other tests
       ]
+
+    , testGroup "Reg32" $
+      [ testProperty "location value distribution" $ -- test generator validity
+        property $ do l <- forAll genRegLocation
+                      let locVal = case l of { TestRegLoc n -> n }
+                      cover 10 "reg32loc 0" $ locVal == 0
+                      cover 10 "reg32loc 1" $ locVal == 1
+                      cover 10 "reg32loc 2" $ locVal == 2
+                      cover 10 "reg32loc 3" $ locVal == 3
+                      success
+      , testProperty "location type" $
+        property $ do l <- forAll $ genRegLocation
+                      let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32)
+                      case testEquality (L.locationType l) aBV32 of
+                        Just Refl -> success
+                        Nothing -> assert False
+      , testProperty "is mem location" $
+        property $ do l <- forAll genNatLocation
+                      assert $ not $ L.isMemoryLocation l
+      -- TBD: needs other tests
+      ]
+
     ]
 
   ]

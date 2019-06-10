@@ -61,6 +61,9 @@ genIntLocation = TestIntLoc <$>
                               ]
                  -- Ensures that 0 and 1 are present in any reasonably-sized distribution
 
+genRegLocation :: Monad m => GenT m (TestLocation (BaseBVType 32))
+genRegLocation = TestRegLoc <$> HG.element [0..3]
+
 ----------------------------------------------------------------------
 -- Function.Parameter Generators
 
@@ -94,11 +97,27 @@ genIntParameter = HG.choice
                     -- -> Parameter arch sh tp
                   ]
 
+genRegParameter :: Monad m => GenT m (F.Parameter TestGenArch sh (BaseBVType 32))
+genRegParameter = HG.choice
+                  [
+                    -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> PL.Index sh s -> Parameter arch sh (A.OperandType arch s)
+                    F.LiteralParameter <$> genRegLocation
+                    -- , FunctionParameter :: String
+                    -- -- The name of the uninterpreted function
+                    -- -> WrappedOperand arch sh s
+                    -- -- The operand we are calling the function on (this is a newtype so
+                    -- -- we don't need an extra typerepr)
+                    -- -> BaseTypeRepr tp
+                    -- -- The typerepr for the return type of the function
+                    -- -> Parameter arch sh tp
+                  ]
+
 genSomeParameter :: Monad m => GenT m (Some (F.Parameter TestGenArch sh))
 genSomeParameter =
   HG.choice
   [ Some <$> genNatParameter
   , Some <$> genIntParameter
+    Some <$> genRegParameter
   ]
 
 
@@ -183,6 +202,14 @@ genBoundIntVar :: ( Monad m
 genBoundIntVar sym = do s <- genSolverSymbol
                         liftIO $ WI.freshBoundVar sym s BaseIntegerRepr
 
+genBoundBV32Var :: ( Monad m
+                  , MonadIO m
+                  , WI.IsSymExprBuilder sym
+                  ) =>
+                  sym -> GenT m (WI.BoundVar sym (BaseBVType 32))
+genBoundBV32Var sym = do s <- genSolverSymbol
+                         liftIO $ WI.freshBoundVar sym s (BaseBVRepr knownNat)
+
 type TestBoundVar sym = BV.BoundVar sym TestGenArch
 
 genBoundVar_NatArgFoo :: Monad m => MonadIO m =>
@@ -208,14 +235,20 @@ genNatSymExpr sym = liftIO $ -- WI.natLit sym 3
                     do x <- WI.natLit sym 3
                        y <- WI.natLit sym 5
                        WI.natAdd sym x y
-  -- where sym = TestSymbolicBackend
+
 
 genIntSymExpr :: ( MonadIO m
                  , WI.IsExprBuilder sym
                  ) =>
                  sym -> GenT m (WI.SymExpr sym BaseIntegerType)
 genIntSymExpr sym = liftIO $ WI.intLit sym 9
-  -- where sym = TestSymbolicBackend
+
+
+genBV32SymExpr :: ( MonadIO m
+                  , WI.IsExprBuilder sym
+                  ) =>
+                  sym -> GenT m (WI.SymExpr sym (BaseBVType 32))
+genBV32SymExpr sym = liftIO $ WI.bvLit sym knownNat 0x5555aaaa
 
 ----------------------------------------------------------------------
 -- Formula.ParameterizedFormula generators
@@ -237,23 +270,54 @@ genParameterizedFormula sym = do
                  else MapF.fromList <$> HG.list (linear 0 10)
                       (HG.choice [ (Pair <$> genNatLocation <*> genBoundNatVar sym)
                                  , (Pair <$> genIntLocation <*> genBoundIntVar sym)
+                                 , (Pair <$> genRegLocation <*> genBoundBV32Var sym)
                                  ])
   defs <- if F.length params == 0
           then return MapF.empty
-          else MapF.fromList <$> HG.list (linear 0 10)  -- keys should be a (sub-)Set from params
-               (do Some p <- HG.element $ F.toList params
-                   case testEquality (F.paramType p) BaseNatRepr of
-                     Just Refl -> Pair p <$> genNatSymExpr sym
-                     Nothing -> case testEquality (F.paramType p) BaseIntegerRepr of
-                                  Just Refl -> Pair p <$> genIntSymExpr sym
-                                  Nothing -> error "unsupported parameter type in generator"
-               )
+          else let genExpr = natdefexpr $
+                             intdefexpr $
+                             bv32defexpr $
+                             error "unsupported parameter type in generator"
+                   anElem = do Some p <- HG.element $ F.toList params
+                               -- keys should be a (sub-)Set from params
+                               genExpr sym p
+               in MapF.fromList <$> HG.list (linear 0 10) anElem
   return F.ParameterizedFormula
     { F.pfUses = params
     , F.pfOperandVars = operandVars  -- PL.List (BV.BoundVar sym arch) sh
     , F.pfLiteralVars = literalVars  -- MapF.MapF (L.Location arch) (WI.BoundVar sym)
     , F.pfDefs = defs  -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
     }
+
+type GenDefRes sym sh = Pair (F.Parameter TestGenArch sh) (WI.SymExpr sym)
+type GenDefParam sh tp = F.Parameter TestGenArch sh tp
+type GenDefFunc = forall m sym sh tp .
+                  ( MonadIO m
+                  , WI.IsExprBuilder sym
+                  ) =>
+                  (sym -> GenDefParam sh tp -> GenT m (GenDefRes sym sh))
+               -> sym
+               -> GenDefParam sh tp
+               -> GenT m (GenDefRes sym sh)
+
+natdefexpr :: GenDefFunc
+natdefexpr next sym p =
+  case testEquality (F.paramType p) BaseNatRepr of
+    Just Refl -> Pair p <$> genNatSymExpr sym
+    Nothing -> next sym p
+
+intdefexpr :: GenDefFunc
+intdefexpr next sym p =
+  case testEquality (F.paramType p) BaseIntegerRepr of
+    Just Refl -> Pair p <$> genIntSymExpr sym
+    Nothing -> next sym p
+
+bv32defexpr :: GenDefFunc
+bv32defexpr next sym p =
+  let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32)
+  in case testEquality (F.paramType p) aBV32 of
+       Just Refl -> Pair p <$> genBV32SymExpr sym
+       Nothing -> next sym p
 
 
 --------------------------------------------------------------------------------

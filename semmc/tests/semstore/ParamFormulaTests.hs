@@ -96,4 +96,8 @@ parameterizedFormulaTests = [
         Nothing ->
           case testEquality (SF.paramType param) BaseIntegerRepr of
             Just Refl -> True
-            Nothing -> False
+            Nothing ->
+              let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
+              case testEquality (SF.paramType param) aBV32 of
+                Just Refl -> True
+                Nothing -> False

@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -36,6 +37,17 @@ parameterTests = [
                         Nothing -> assert False
       -- TBD: needs other tests
       ]
+
+    , testGroup "Register (32-bit)" $
+      [ testProperty "parameter type" $
+        property $ do p <- forAll $ genRegParameter
+                      let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32)
+                      case testEquality (F.paramType p) aBV32 of
+                        Just Refl -> success
+                        Nothing -> assert False
+        -- TBD: needs other tests
+      ]
+
     ]
 
   ]

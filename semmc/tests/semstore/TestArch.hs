@@ -18,6 +18,7 @@ import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.List ( List( (:<) ) )
 import qualified Data.Parameterized.List as PL
+import           Data.Parameterized.Some
 import           GHC.TypeLits ( Symbol )
 import           Numeric.Natural
 import qualified SemMC.Architecture as SA
@@ -37,35 +38,53 @@ instance SA.Architecture TestGenArch where
 data TestLocation :: BaseType -> Type where
   TestNatLoc :: Natural -> TestLocation BaseNatType
   TestIntLoc :: Integer -> TestLocation BaseIntegerType
+  TestRegLoc :: Natural -> TestLocation (BaseBVType 32)
   -- TBD: more basetype locations
   -- TBD: some memory locations
   -- MemLoc :: Mem -> Location (BaseBVType 32)
 
-deriving instance Show (TestLocation tp)
+instance Show (TestLocation tp) where
+  show (TestRegLoc n) = "Reg_" <> show n  -- KWQ: must be parseable; Reg#0 fails with the #... needs quoting or input validation in the Printer
+  show (TestNatLoc n) = "NAT_" <> show n  -- KWQ: want NAT@... see above
+  show (TestIntLoc i) = "INT_" <> show i  -- KWQ: want INT@... see above
+
+instance ShowF TestLocation
+
+-- must be the inverse of the show instance above
+readTestLocation "Reg_0" = Just $ Some $ TestRegLoc 0
+readTestLocation "Reg_1" = Just $ Some $ TestRegLoc 1
+readTestLocation "Reg_2" = Just $ Some $ TestRegLoc 2
+readTestLocation "Reg_3" = Just $ Some $ TestRegLoc 3
+readTestLocation _ = Nothing
+
 deriving instance Eq (TestLocation tp)
 deriving instance Ord (TestLocation tp)
-
-instance ShowF TestLocation where
-  showF = show
 
 instance TestEquality TestLocation where
   TestNatLoc l1 `testEquality` TestNatLoc l2 | l1 == l2 = Just Refl
                                              | otherwise = Nothing
   TestIntLoc l1 `testEquality` TestIntLoc l2 | l1 == l2 = Just Refl
                                              | otherwise = Nothing
+  TestRegLoc l1 `testEquality` TestRegLoc l2 | l1 == l2 = Just Refl
+                                             | otherwise = Nothing
   _ `testEquality` _ = Nothing
 
 instance OrdF TestLocation where
   TestNatLoc l1 `compareF` TestNatLoc l2 = fromOrdering $ l1 `compare` l2
   TestIntLoc l1 `compareF` TestIntLoc l2 = fromOrdering $ l1 `compare` l2
-  -- for mismatched location types, arbitrarily: any Int < any Nat
-  TestIntLoc _ `compareF` TestNatLoc _ = LTF
+  TestRegLoc l1 `compareF` TestRegLoc l2 = fromOrdering $ l1 `compare` l2
+  -- for mismatched location types, arbitrarily: any Int < any Nat < any Reg
   TestNatLoc _ `compareF` TestIntLoc _ = GTF
-  -- _ `compareF` _ = LTF
+  TestRegLoc _ `compareF` TestIntLoc _ = GTF
+  TestRegLoc _ `compareF` TestNatLoc _ = GTF
+  _ `compareF` _ = LTF
 
 instance L.IsLocation TestLocation where
   locationType (TestNatLoc _) = BaseNatRepr
   locationType (TestIntLoc _) = BaseIntegerRepr
+  locationType (TestRegLoc _) = BaseBVRepr knownNat
+
+  readLocation = readTestLocation
 
   isMemoryLocation _ = False
 
