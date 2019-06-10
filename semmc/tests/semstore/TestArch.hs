@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -12,8 +13,12 @@
 module TestArch
 where
 
+import           Data.EnumF -- in Dismantle Tablegen!
 import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
+import           Data.Parameterized.List ( List( (:<) ) )
+import qualified Data.Parameterized.List as PL
+import           GHC.TypeLits ( Symbol )
 import           Numeric.Natural
 import qualified SemMC.Architecture as SA
 import qualified SemMC.Architecture.Location as L
@@ -21,6 +26,10 @@ import           What4.BaseTypes
 
 
 data TestGenArch  -- ^ the architecture type for testing
+
+instance SA.Architecture TestGenArch where
+  shapeReprToTypeRepr _ FooArg = BaseNatRepr
+
 
 ----------------------------------------------------------------------
 -- Location
@@ -67,4 +76,61 @@ type instance L.Location TestGenArch = TestLocation
 ----------------------------------------------------------------------
 -- Operands
 
-type instance SA.OperandType TestGenArch "NatArg:Foo" = BaseNatType
+-- type ShapeRepr arch = SL.List (OperandTypeRepr arch)
+-- type family OperandType (arch::Type) (op[erand]::Symbol) :: BaseType
+
+type instance SA.OperandType TestGenArch "Foo" = BaseNatType
+
+data TestGenOperand (nm::Symbol) where
+  FooArg :: TestGenOperand "Foo"
+
+deriving instance Show (TestGenOperand nm)
+instance ShowF TestGenOperand
+  where
+    showF _ = "<<OPERAND>>"
+instance TestEquality TestGenOperand where
+  FooArg `testEquality` FooArg = Just Refl
+
+instance OrdF TestGenOperand where
+  compareF FooArg FooArg = EQF
+
+-- data TestGenOperandType (operand :: Symbol) where
+--   "Wave" :: TestGenOpcodeType "Wave"
+
+data TestGenOpcode (operand_type :: Symbol -> Type) (opcodes :: [Symbol]) where
+  OpWave :: TestGenOpcode TestGenOperand '[]
+  -- TestGenOperand ["Wave"] = OpWave
+
+deriving instance Show (TestGenOpcode operand_type opcodes)
+
+instance TestEquality (TestGenOpcode operand_type) where
+  OpWave `testEquality` OpWave = Just Refl
+
+opWaveShape :: List TestGenOperand '["Foo"]
+opWaveShape = FooArg :< PL.Nil
+
+type instance SA.Opcode TestGenArch = TestGenOpcode
+type instance SA.Operand TestGenArch = TestGenOperand
+
+instance SA.IsOperand TestGenOperand
+instance SA.IsOpcode TestGenOpcode
+
+instance SA.IsOperandTypeRepr TestGenArch where
+  type OperandTypeRepr TestGenArch = TestGenOperand
+  operandTypeReprSymbol arch operandType =
+    case testEquality operandType FooArg of
+      Just Refl -> "Foo"
+      Nothing -> error "unrecognized operandtype for reprsymbol"
+
+instance ShowF (TestGenOpcode TestGenOperand)
+  where
+    showF _ = "<<OPCODE>>"
+instance EnumF (TestGenOpcode TestGenOperand) where
+instance OrdF (TestGenOpcode TestGenOperand)
+
+-- BV :: SemMC.BoundVar
+-- newtype BoundVar (sym :: Type) (arch :: Type) (op :: Symbol) =
+--   BoundVar { unBoundVar :: S.BoundVar sym (OperandType arch op) }
+
+-- S (What4.Interface):
+-- type family BoundVar (sym :: Type) :: BaseType -> Type

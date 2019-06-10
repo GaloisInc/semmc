@@ -163,10 +163,13 @@ test-suite semmc-semstore-tests
                , bytestring
                , containers
                , crucible
+               , dismantle-tablegen
+               , hashable
                , hedgehog
                , parameterized-utils
                , semmc
                , tasty
                , tasty-hunit
                , tasty-hedgehog
+               , text
                , what4
