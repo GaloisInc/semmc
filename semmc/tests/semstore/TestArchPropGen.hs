@@ -115,8 +115,9 @@ genRegParameter = HG.choice
 genSomeParameter :: Monad m => GenT m (Some (F.Parameter TestGenArch sh))
 genSomeParameter =
   HG.choice
-  [ Some <$> genNatParameter
-  , Some <$> genIntParameter
+  [
+    -- Some <$> genNatParameter  -- not supported for formula printing
+    -- , Some <$> genIntParameter  -- not supported for formula printing
     Some <$> genRegParameter
   ]
 
