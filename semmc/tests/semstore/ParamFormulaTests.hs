@@ -9,13 +9,12 @@
 module ParamFormulaTests where
 
 import           Control.Monad.IO.Class ( liftIO )
-import           Data.Either
-import qualified Data.Foldable as F
+import           Data.Function ( on )
+import           Data.Maybe
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Nonce
-import qualified SemMC.Log as Log
 import           Data.Parameterized.Some
 import qualified Data.Set as Set
 import           Hedgehog
@@ -25,10 +24,12 @@ import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Formula as SF
 import qualified SemMC.Formula.Parser as FI
 import qualified SemMC.Formula.Printer as FO
+import qualified SemMC.Log as Log
 import           Test.Tasty
 import           Test.Tasty.Hedgehog
 import           TestArch
 import           TestArchPropGen
+import           TestUtils
 import           What4.BaseTypes
 
 import           Prelude
@@ -60,27 +61,53 @@ parameterizedFormulaTests = [
                     p <- forAllT (genParameterizedFormula @'["Foo"] sym)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
 
-    , testProperty "serialized formula" $
+    , testProperty "serialized formula round trip" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     p <- forAllT (genParameterizedFormula @'["Foo"] sym)
-                    liftIO $ putStrLn $ "parameterizedFormula: " <> show p
-                    liftIO $ putStrLn $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    liftIO $ putStrLn $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    debugPrint $ "parameterizedFormula: " <> show p
+                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula opWaveShape p
-                    liftIO $ putStrLn $ "printedFormula: " <> show printedFormula
+                    debugPrint $ "printedFormula: " <> show printedFormula
                     let fenv = undefined
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
                               FI.readFormula sym fenv opWaveShape printedFormula
-                    liftIO $ putStrLn $ "re-Formulized: " <> show reForm
-                    case reForm of
-                      Left e -> ("read got error for: " <> show printedFormula) === e
-                      Right f -> do SF.pfUses p === SF.pfUses f
-                                    -- SF.pfOperandVars p === SF.pfOperandVars f
-                                    -- SF.pfLiteralVars p === SF.pfLiteralVars f
-                                    -- SF.pfDefs p === SF.pfDefs f
+                    debugPrint $ "re-Formulized: " <> show reForm
+                    f <- evalEither reForm
+                    on (===) SF.pfUses p f
+                    compareOperandLists 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
+    , testProperty "serialized formula double round trip" $
+      property $ do Some r <- liftIO newIONonceGenerator
+                    sym <- liftIO $ newSimpleBackend r
+                    lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+
+                    p <- forAllT (genParameterizedFormula @'["Foo"] sym)
+
+                    -- first round trip:
+                    let printedFormula = FO.printParameterizedFormula opWaveShape p  -- KWQ: opWaveShape?!
+                    let fenv = undefined
+                    reForm <- liftIO $
+                              Log.withLogCfg lcfg $
+                              FI.readFormula sym fenv opWaveShape printedFormula
+                    f <- evalEither reForm
+
+                    -- second round trip:
+                    let printedFormula' = FO.printParameterizedFormula opWaveShape f
+                    reForm' <- liftIO $
+                               Log.withLogCfg lcfg $
+                               FI.readFormula sym fenv opWaveShape printedFormula'
+                    f' <- evalEither reForm'
+
+                    -- verification of results
+                    on (===) SF.pfUses p f
+                    on (===) SF.pfUses p f'
+                    on (===) SF.pfUses f f'
+                    compareOperandLists 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
+                    compareOperandLists 2 (SF.pfOperandVars p) (SF.pfOperandVars f')
+                    compareOperandLists 1 (SF.pfOperandVars f) (SF.pfOperandVars f')
 
     ]
   ]

@@ -158,6 +158,7 @@ test-suite semmc-semstore-tests
                , ParamFormulaTests
                , TestArch
                , TestArchPropGen
+               , TestUtils
   hs-source-dirs: tests/semstore
   build-depends: base
                , bytestring
