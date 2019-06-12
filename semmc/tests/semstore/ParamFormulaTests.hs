@@ -78,7 +78,9 @@ parameterizedFormulaTests = [
                     debugPrint $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     on (===) SF.pfUses p f
-                    compareOperandLists 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
+                    compareOperandLists sym 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
+                    compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f)
+
     , testProperty "serialized formula double round trip" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
@@ -105,9 +107,12 @@ parameterizedFormulaTests = [
                     on (===) SF.pfUses p f
                     on (===) SF.pfUses p f'
                     on (===) SF.pfUses f f'
-                    compareOperandLists 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
-                    compareOperandLists 2 (SF.pfOperandVars p) (SF.pfOperandVars f')
-                    compareOperandLists 1 (SF.pfOperandVars f) (SF.pfOperandVars f')
+                    compareOperandLists sym 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
+                    compareOperandLists sym 2 (SF.pfOperandVars p) (SF.pfOperandVars f')
+                    compareOperandLists sym 1 (SF.pfOperandVars f) (SF.pfOperandVars f')
+                    compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f)
+                    compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f')
+                    compareLiteralVarMaps sym (SF.pfLiteralVars f) (SF.pfLiteralVars f)
 
     ]
   ]

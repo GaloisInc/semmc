@@ -191,32 +191,49 @@ genBoundNatVar :: ( Monad m
                   , MonadIO m
                   , WI.IsSymExprBuilder sym
                   ) =>
-                  sym -> GenT m (WI.BoundVar sym BaseNatType)
-genBoundNatVar sym = do s <- genSolverSymbol
-                        liftIO $ WI.freshBoundVar sym s BaseNatRepr
+                  sym
+               -> Maybe String
+               -> GenT m (WI.BoundVar sym BaseNatType)
+genBoundNatVar sym mbName = do
+  s <- bvSymName mbName
+  liftIO $ WI.freshBoundVar sym s BaseNatRepr
 
 genBoundIntVar :: ( Monad m
                   , MonadIO m
                   , WI.IsSymExprBuilder sym
                   ) =>
-                  sym -> GenT m (WI.BoundVar sym BaseIntegerType)
-genBoundIntVar sym = do s <- genSolverSymbol
-                        liftIO $ WI.freshBoundVar sym s BaseIntegerRepr
+                  sym
+               -> Maybe String
+               -> GenT m (WI.BoundVar sym BaseIntegerType)
+genBoundIntVar sym mbName = do
+  s <- bvSymName mbName
+  liftIO $ WI.freshBoundVar sym s BaseIntegerRepr
 
 genBoundBV32Var :: ( Monad m
-                  , MonadIO m
-                  , WI.IsSymExprBuilder sym
-                  ) =>
-                  sym -> GenT m (WI.BoundVar sym (BaseBVType 32))
-genBoundBV32Var sym = do s <- genSolverSymbol
-                         liftIO $ WI.freshBoundVar sym s (BaseBVRepr knownNat)
+                   , MonadIO m
+                   , WI.IsSymExprBuilder sym
+                   ) =>
+                   sym
+                -> Maybe String
+                -> GenT m (WI.BoundVar sym (BaseBVType 32))
+genBoundBV32Var sym mbName = do
+  s <- bvSymName mbName
+  liftIO $ WI.freshBoundVar sym s (BaseBVRepr knownNat)
+
+bvSymName :: Monad m => Maybe String -> GenT m WI.SolverSymbol
+bvSymName = \case
+    Nothing -> genSolverSymbol
+    Just n ->
+           case WI.userSymbol n of
+             Left e -> error $ "invalid genBoundBV32Var name '" <> n <> "': " <> show e
+             Right us -> return us
 
 type TestBoundVar sym = BV.BoundVar sym TestGenArch
 
 genBoundVar_NatArgFoo :: Monad m => MonadIO m =>
                          WI.IsSymExprBuilder sym =>
                          sym -> GenT m (TestBoundVar sym "Foo")
-genBoundVar_NatArgFoo sym = BV.BoundVar <$> genBoundNatVar sym  -- KWQ: generic genBoundVar?
+genBoundVar_NatArgFoo sym = BV.BoundVar <$> genBoundNatVar sym Nothing  -- KWQ: generic genBoundVar?
 -- genBoundVar_NatArgFoo sym =
 --   do bnv <- genBoundNatVar sym  -- KWQ: generic genBoundVar?
 --      liftIO $ putStrLn
@@ -266,13 +283,7 @@ genParameterizedFormula :: forall sh sym m .  -- reordered args to allow TypeApp
 genParameterizedFormula sym = do
   params <- Set.fromList <$> HG.list (linear 0 10) genSomeParameter
   operandVars <- mkOperand sym
-  literalVars <- if F.length params == 0
-                 then return MapF.empty
-                 else MapF.fromList <$> HG.list (linear 0 10)
-                      (HG.choice [ (Pair <$> genNatLocation <*> genBoundNatVar sym)
-                                 , (Pair <$> genIntLocation <*> genBoundIntVar sym)
-                                 , (Pair <$> genRegLocation <*> genBoundBV32Var sym)
-                                 ])
+  literalVars <- locationsForLiteralParams sym params
   defs <- if F.length params == 0
           then return MapF.empty
           else let genExpr = natdefexpr $
@@ -290,8 +301,38 @@ genParameterizedFormula sym = do
     , F.pfDefs = defs  -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
     }
 
-type GenDefRes sym sh = Pair (F.Parameter TestGenArch sh) (WI.SymExpr sym)
-type GenDefParam sh tp = F.Parameter TestGenArch sh tp
+
+locationsForLiteralParams :: ( F.Foldable t
+                             , MonadIO m
+                             , WI.IsSymExprBuilder sym
+                             ) =>
+                             sym
+                          -> t (Some (F.Parameter TestGenArch sh))
+                          -> GenT m (MapF.MapF TestLocation (WI.BoundVar sym))
+locationsForLiteralParams sym params = MapF.fromList <$> F.foldrM appendLitVarPair [] params
+  where appendLitVarPair (Some p@(F.LiteralParameter loc)) rs = do
+          let nm = Just $ show loc
+          e <- case F.paramType p of
+                 BaseNatRepr -> Pair loc <$> genBoundNatVar sym nm
+                 BaseIntegerRepr -> Pair loc <$> genBoundIntVar sym nm
+                 (BaseBVRepr w) ->
+                   case testEquality w (knownNat :: NatRepr 32) of
+                     Just Refl -> Pair loc <$> genBoundBV32Var sym nm
+                     Nothing -> error $ "lFLP unsupported BVRepr size: " <> show w
+                 BaseBoolRepr -> error "lFLP unimplemented BaseBoolRepr"
+                 BaseRealRepr -> error "lFLP unimplemented BaseRealRepr"
+                 (BaseFloatRepr _) -> error "lFLP unimplemented BaseFloatRepr"
+                 BaseStringRepr -> error "lFLP unimplemented BaseStringRepr"
+                 BaseComplexRepr -> error "lFLP unimplemented BaseComplexRepr"
+                 (BaseStructRepr _) -> error "lFLP unimplemented BaseStructRepr"
+                 (BaseArrayRepr _ _) -> error "lFLP unimplemented BaseArrayRepr"
+          atEnd <- HG.bool
+          return $ if atEnd then rs <> [e] else e : rs
+        appendLitVarPair _ rs = return rs
+
+
+type GenDefParam      = F.Parameter TestGenArch
+type GenDefRes sym sh = Pair (GenDefParam sh) (WI.SymExpr sym)
 type GenDefFunc = forall m sym sh tp .
                   ( MonadIO m
                   , WI.IsExprBuilder sym
