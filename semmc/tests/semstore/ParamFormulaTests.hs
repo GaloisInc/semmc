@@ -9,7 +9,6 @@
 module ParamFormulaTests where
 
 import           Control.Monad.IO.Class ( liftIO )
-import           Data.Function ( on )
 import           Data.Maybe
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.List as SL
@@ -77,9 +76,7 @@ parameterizedFormulaTests = [
                               FI.readFormula sym fenv opWaveShape printedFormula
                     debugPrint $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
-                    on (===) SF.pfUses p f
-                    compareOperandLists sym 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
-                    compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f)
+                    compareParameterizedFormulas sym 1 p f
 
     , testProperty "serialized formula double round trip" $
       property $ do Some r <- liftIO newIONonceGenerator
@@ -104,15 +101,9 @@ parameterizedFormulaTests = [
                     f' <- evalEither reForm'
 
                     -- verification of results
-                    on (===) SF.pfUses p f
-                    on (===) SF.pfUses p f'
-                    on (===) SF.pfUses f f'
-                    compareOperandLists sym 1 (SF.pfOperandVars p) (SF.pfOperandVars f)
-                    compareOperandLists sym 2 (SF.pfOperandVars p) (SF.pfOperandVars f')
-                    compareOperandLists sym 1 (SF.pfOperandVars f) (SF.pfOperandVars f')
-                    compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f)
-                    compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f')
-                    compareLiteralVarMaps sym (SF.pfLiteralVars f) (SF.pfLiteralVars f')
+                    compareParameterizedFormulas sym 1 p f
+                    compareParameterizedFormulas sym 1 f f'
+                    compareParameterizedFormulas sym 2 p f'
 
     ]
   ]

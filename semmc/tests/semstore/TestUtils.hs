@@ -21,6 +21,7 @@ import           GHC.TypeLits ( Symbol )
 import           Hedgehog
 import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
+import qualified SemMC.Formula.Formula as SF
 import           SemMC.Formula.Parser ( literalVarPrefix
                                       , operandVarPrefix )
 import           TestArch
@@ -34,6 +35,43 @@ debugPrint, alwaysPrint :: MonadIO m => String -> m ()
 debugPrint = alwaysPrint
 -- debugPrint _ = return ()
 alwaysPrint = liftIO . putStrLn
+
+
+----------------------------------------------------------------------
+-- Formulas
+
+-- | Compare two ParameterizedFormulas.  The expectation is that the
+-- second formula is related to the first (e.g. via a round trip
+-- through SemMC.Formula.Printer+SemMC.Formula.Parser) and so they are
+-- similar modulo small elements like alpha-renaming and nonce values.
+--
+-- The ncycles argument specifies the number of round-trips (and
+-- therefore the number of adjustments that may need to be accounted
+-- for).
+
+compareParameterizedFormulas :: ( MonadIO m
+                                , MonadTest m
+                                , TestEquality (SA.Location arch)
+                                , Eq (WI.BoundVar sym (SA.OperandType arch op))
+                                , ShowF (SA.Location arch)
+                                , ShowF (WI.BoundVar sym)
+                                , WI.BoundVar sym ~ WE.ExprBoundVar t
+                                , SA.Location arch ~ TestLocation
+                                ) =>
+                                sym
+                             -> Integer
+                             -> SF.ParameterizedFormula sym arch (op : r)
+                             -> SF.ParameterizedFormula sym arch (op : r)
+                             -> m ()
+compareParameterizedFormulas sym ncycles origFormula resultFormula = do
+  on (===) SF.pfUses origFormula resultFormula
+  compareOperandLists sym ncycles
+    (SF.pfOperandVars origFormula)
+    (SF.pfOperandVars resultFormula)
+  compareLiteralVarMaps sym
+    (SF.pfLiteralVars origFormula)
+    (SF.pfLiteralVars resultFormula)
+  -- compareDefs sym p f
 
 
 ----------------------------------------------------------------------
