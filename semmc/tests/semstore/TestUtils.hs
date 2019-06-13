@@ -139,10 +139,10 @@ compareBVars :: ( MonadIO m
              -> WI.BoundVar sym ty
              -> m ()
 compareBVars mbPrefix _ ncycles origOprnd resultOprnd = do
-  debugPrint $ "bvId=" <> show (WE.bvarId origOprnd)
-  debugPrint $ "bvLoc=" <> show (WE.bvarLoc origOprnd)
-  debugPrint $ "bvName=" <> show (WE.bvarName origOprnd)
-  debugPrint $ "bvType=" <> show (WE.bvarType origOprnd)
+  -- debugPrint $ "bvId=" <> show (WE.bvarId origOprnd)
+  -- debugPrint $ "bvLoc=" <> show (WE.bvarLoc origOprnd)
+  -- debugPrint $ "bvName=" <> show (WE.bvarName origOprnd)
+  -- debugPrint $ "bvType=" <> show (WE.bvarType origOprnd)
   -- If the resultOprnd is supplied via a Formula Parse, the Parse
   -- operation will add an 'operandVarPrefix' (e.g. "op_") prefix to
   -- the parsed names to indicate they occurred in the operand
