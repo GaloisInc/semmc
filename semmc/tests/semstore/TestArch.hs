@@ -32,6 +32,7 @@ data TestGenArch  -- ^ the architecture type for testing
 
 instance SA.Architecture TestGenArch where
   shapeReprToTypeRepr _ FooArg = BaseNatRepr
+  shapeReprToTypeRepr _ BarArg = BaseBVRepr (knownNat :: NatRepr 32)
 
 
 ----------------------------------------------------------------------
@@ -81,10 +82,12 @@ type instance L.Location TestGenArch = TestLocation
 -- type ShapeRepr arch = SL.List (OperandTypeRepr arch)
 -- type family OperandType (arch::Type) (op[erand]::Symbol) :: BaseType
 
-type instance SA.OperandType TestGenArch "Foo" = BaseNatType
+type instance SA.OperandType TestGenArch "Foo" = BaseNatType  -- unsupported for Printer
+type instance SA.OperandType TestGenArch "Bar" = BaseBVType 32  -- unsupported for Printer
 
 data TestGenOperand (nm::Symbol) where
   FooArg :: TestGenOperand "Foo"
+  BarArg :: TestGenOperand "Bar"
 
 deriving instance Show (TestGenOperand nm)
 instance ShowF TestGenOperand
@@ -94,12 +97,13 @@ instance ShowF TestGenOperand
 --   "Wave" :: TestGenOpcodeType "Wave"
 
 data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) where
-  OpWave :: TestGenOpcode TestGenOperand '["Foo"]
+  OpWave :: TestGenOpcode TestGenOperand '["Bar"]
+  OpSurf :: TestGenOpcode TestGenOperand '["Foo"]
 
 deriving instance Show (TestGenOpcode operand_constr operands)
 
-opWaveShape :: List TestGenOperand '["Foo"]
-opWaveShape = FooArg :< PL.Nil
+opWaveShape :: List TestGenOperand '["Bar"]
+opWaveShape = BarArg :< PL.Nil
 
 type instance SA.Opcode TestGenArch = TestGenOpcode
 type instance SA.Operand TestGenArch = TestGenOperand
@@ -110,9 +114,12 @@ instance SA.IsOpcode TestGenOpcode
 instance SA.IsOperandTypeRepr TestGenArch where
   type OperandTypeRepr TestGenArch = TestGenOperand
   operandTypeReprSymbol arch operandType =
-    case testEquality operandType FooArg of
-      Just Refl -> "Foo"
-      Nothing -> error "unrecognized operandtype for reprsymbol"
+    case testEquality operandType BarArg of
+      Just Refl -> "Bar"
+      Nothing ->
+        case testEquality operandType FooArg of
+          Just Refl -> "Foo"
+          Nothing -> error "unrecognized operandtype for reprsymbol"
 
 instance ShowF (TestGenOpcode TestGenOperand)
   where

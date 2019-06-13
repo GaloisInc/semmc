@@ -64,7 +64,7 @@ parameterizedFormulaTests = [
     , testProperty "serialized formula round trip" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    p <- forAllT (genParameterizedFormula @'["Foo"] sym)
+                    p <- forAllT (genParameterizedFormula @'["Bar"] sym)
                     debugPrint $ "parameterizedFormula: " <> show p
                     debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
@@ -86,7 +86,7 @@ parameterizedFormulaTests = [
                     sym <- liftIO $ newSimpleBackend r
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
-                    p <- forAllT (genParameterizedFormula @'["Foo"] sym)
+                    p <- forAllT (genParameterizedFormula @'["Bar"] sym)
 
                     -- first round trip:
                     let printedFormula = FO.printParameterizedFormula opWaveShape p  -- KWQ: opWaveShape?!

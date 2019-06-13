@@ -205,7 +205,12 @@ type TestBoundVar sym = BV.BoundVar sym TestGenArch
 genBoundVar_NatArgFoo :: Monad m => MonadIO m =>
                          WI.IsSymExprBuilder sym =>
                          sym -> GenT m (TestBoundVar sym "Foo")
-genBoundVar_NatArgFoo sym = BV.BoundVar <$> genBoundNatVar sym Nothing  -- KWQ: generic genBoundVar?
+genBoundVar_NatArgFoo sym = BV.BoundVar <$> genBoundNatVar sym Nothing
+
+genBoundVar_BV32ArgBar :: Monad m => MonadIO m =>
+                          WI.IsSymExprBuilder sym =>
+                          sym -> GenT m (TestBoundVar sym "Bar")
+genBoundVar_BV32ArgBar sym = BV.BoundVar <$> genBoundBV32Var sym Nothing
 
 ----------------------------------------------------------------------
 -- What4.Interface.SymExpr generators
@@ -411,3 +416,10 @@ instance ( Monad m
          ) =>
          MkOperands (GenT m) sym (TestBoundVar sym) "Foo" where
   mkOperand = genBoundVar_NatArgFoo
+
+instance ( Monad m
+         , MonadIO m
+         , WI.IsSymExprBuilder sym
+         ) =>
+         MkOperands (GenT m) sym (TestBoundVar sym) "Bar" where
+  mkOperand = genBoundVar_BV32ArgBar
