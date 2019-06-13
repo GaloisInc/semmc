@@ -25,15 +25,19 @@ import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Pair ( Pair(..) )
 import           Data.Parameterized.Some
+import           Data.Parameterized.TraversableFC
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
 import           Hedgehog
 import qualified Hedgehog.Gen as HG
 import           Hedgehog.Range
 import           Numeric.Natural
+import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Formula as F
+import           SemMC.Util ( fromJust' )
 import           TestArch
+import           TestUtils
 import           What4.BaseTypes
 import qualified What4.Interface as WI
 import           What4.Symbol ( systemSymbol )
@@ -264,9 +268,40 @@ genIntSymExpr sym = liftIO $ WI.intLit sym 9
 
 genBV32SymExpr :: ( MonadIO m
                   , WI.IsExprBuilder sym
+                  , WI.IsSymExprBuilder sym
+--                  , KnownRepr BaseTypeRepr bt
                   ) =>
-                  sym -> GenT m (WI.SymExpr sym (BaseBVType 32))
-genBV32SymExpr sym = liftIO $ WI.bvLit sym knownNat 0x5555aaaa
+                  sym
+               -> Set.Set (Some (F.Parameter arch sh))
+               -> PL.List (BV.BoundVar sym arch) sh
+               -- -> MapF.MapF (SA.Location arch) (WI.BoundVar sym)
+               -> MapF.MapF TestLocation (WI.BoundVar sym)
+               -> GenT m (WI.SymExpr sym (BaseBVType 32))
+genBV32SymExpr sym params opvars litvars = do
+  -- get a set of the possible variables that can be used as sources
+  -- in the defs, which are declared already as freshBoundVars.
+  HG.recursive HG.choice
+    [ -- non-recursive
+      (liftIO . WI.bvLit sym knownNat) =<< (toInteger <$> HG.int32 linearBounded)
+
+    , varExprBV32 sym litvars <$> HG.element (MapF.keys litvars)
+    ]
+    [ -- recursive
+      HG.subtermM (genBV32SymExpr sym params opvars litvars) (\t -> liftIO $ WI.bvNeg sym t)
+    ]
+
+varExprBV32 :: (WI.IsSymExprBuilder sym) =>
+               sym
+            -> MapF.MapF TestLocation (WI.BoundVar sym)
+            -> Some TestLocation
+            -> WI.SymBV sym 32
+            -- -> WI.SymExpr sym (BaseBVType 32)
+varExprBV32 sym litvars (Some key) =
+  case SA.locationType key of
+    (BaseBVRepr w) ->
+      case testEquality w (knownNat :: NatRepr 32) of
+        Just Refl -> WI.varExpr sym $ fromJust' "varExprBV32.BVRepr32.lookup" $ MapF.lookup key litvars
+        Nothing -> error $ "varExprBV32 unsupported BVRepr size: " <> show w
 
 ----------------------------------------------------------------------
 -- Formula.ParameterizedFormula generators
@@ -281,8 +316,28 @@ genParameterizedFormula :: forall sh sym m .  -- reordered args to allow TypeApp
                            sym
                         -> GenT m (F.ParameterizedFormula sym TestGenArch (sh :: [Symbol]))
 genParameterizedFormula sym = do
-  params <- Set.fromList <$> HG.list (linear 0 10) genSomeParameter
-  operandVars <- mkOperand sym
+  -- creates operands for 'sh'
+  operandVars <- mkOperand sym -- :: GenT m (PL.List (TestBoundVar sym) sh)
+
+  -- Operands could be inputs, outputs, or both, and the same operand
+  -- can appear multiple times in the list with different roles in
+  -- each.  Examples:
+  --     MOVL R0, R1
+  --     MOVL (R0)+, R1
+  --     ADDL R1, R0, R1
+
+  -- params are all the parameters useable as inputs for the various
+  -- defs that will be generated.  These are the input operands
+  -- (OperandParameter) plus any known locations (LiteralParameter).
+  -- An operand takes precendence over a location if they match.
+  -- There may be locations that are not in the operands.
+  locParams <- HG.list (linear 0 10) genSomeParameter
+  -- let inpParams = mkOperandParameter locParams sym <$> inputs
+  let params = -- Set.fromList inpParams <>
+               Set.fromList locParams  -- assumes left biasing for <>
+
+  -- Any location (LiteralParameter) in either the operands or the
+  -- params.  Output-only locations are not present here.
   literalVars <- locationsForLiteralParams sym params
   defs <- if F.length params == 0
           then return MapF.empty
@@ -292,7 +347,7 @@ genParameterizedFormula sym = do
                              error "unsupported parameter type in generator"
                    anElem = do Some p <- HG.element $ F.toList params
                                -- keys should be a (sub-)Set from params
-                               genExpr sym p
+                               genExpr sym p params operandVars literalVars
                in MapF.fromList <$> HG.list (linear 0 10) anElem
   return F.ParameterizedFormula
     { F.pfUses = params
@@ -333,33 +388,38 @@ locationsForLiteralParams sym params = MapF.fromList <$> F.foldrM appendLitVarPa
 
 type GenDefParam      = F.Parameter TestGenArch
 type GenDefRes sym sh = Pair (GenDefParam sh) (WI.SymExpr sym)
-type GenDefFunc = forall m sym sh tp .
+type GenDefDirect m sym arch sh tp =
+                  (sym -> GenDefParam sh tp
+                       -> Set.Set (Some (F.Parameter arch sh))
+                       -> PL.List (BV.BoundVar sym arch) sh
+                       -> MapF.MapF TestLocation (WI.BoundVar sym)
+                       -> GenT m (GenDefRes sym sh))
+type GenDefFunc = forall m sym arch sh tp .
                   ( MonadIO m
                   , WI.IsExprBuilder sym
+                  , WI.IsSymExprBuilder sym
                   ) =>
-                  (sym -> GenDefParam sh tp -> GenT m (GenDefRes sym sh))
-               -> sym
-               -> GenDefParam sh tp
-               -> GenT m (GenDefRes sym sh)
+                  GenDefDirect m sym arch sh tp
+               -> GenDefDirect m sym arch sh tp
 
 natdefexpr :: GenDefFunc
-natdefexpr next sym p =
+natdefexpr next sym p params opvars litvars =
   case testEquality (F.paramType p) BaseNatRepr of
     Just Refl -> Pair p <$> genNatSymExpr sym
-    Nothing -> next sym p
+    Nothing -> next sym p params opvars litvars
 
 intdefexpr :: GenDefFunc
-intdefexpr next sym p =
+intdefexpr next sym p params opvars litvars =
   case testEquality (F.paramType p) BaseIntegerRepr of
     Just Refl -> Pair p <$> genIntSymExpr sym
-    Nothing -> next sym p
+    Nothing -> next sym p params opvars litvars
 
 bv32defexpr :: GenDefFunc
-bv32defexpr next sym p =
+bv32defexpr next sym p params opvars litvars =
   let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32)
   in case testEquality (F.paramType p) aBV32 of
-       Just Refl -> Pair p <$> genBV32SymExpr sym
-       Nothing -> next sym p
+       Just Refl -> Pair p <$> genBV32SymExpr sym params opvars litvars
+       Nothing -> next sym p params opvars litvars
 
 
 --------------------------------------------------------------------------------
