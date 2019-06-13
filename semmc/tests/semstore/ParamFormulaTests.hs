@@ -112,7 +112,7 @@ parameterizedFormulaTests = [
                     compareOperandLists sym 1 (SF.pfOperandVars f) (SF.pfOperandVars f')
                     compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f)
                     compareLiteralVarMaps sym (SF.pfLiteralVars p) (SF.pfLiteralVars f')
-                    compareLiteralVarMaps sym (SF.pfLiteralVars f) (SF.pfLiteralVars f)
+                    compareLiteralVarMaps sym (SF.pfLiteralVars f) (SF.pfLiteralVars f')
 
     ]
   ]
