@@ -19,6 +19,7 @@ import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import           Data.Int ( Int64 )
 import qualified Data.List as L
+import           Data.Maybe ( catMaybes, Maybe(..) )
 import           Data.Parameterized.Classes
 import           Data.Parameterized.List ( List( (:<) ) )
 import qualified Data.Parameterized.List as PL
@@ -249,12 +250,18 @@ genBV32SymExpr :: ( MonadIO m
 genBV32SymExpr sym params opvars litvars = do
   -- get a set of the possible variables that can be used as sources
   -- in the defs, which are declared already as freshBoundVars.
-  HG.recursive HG.choice
-    [ -- non-recursive
-      (liftIO . WI.bvLit sym knownNat) =<< (toInteger <$> HG.int32 linearBounded)
+  let optional = catMaybes
+                 [
+                   case MapF.size litvars of
+                     0 -> Nothing
+                     _ -> Just (varExprBV32 sym litvars <$> HG.element (MapF.keys litvars))
+                 ]
+      nonrecursive =
+        [ -- non-recursive
+          (liftIO . WI.bvLit sym knownNat) =<< (toInteger <$> HG.int32 linearBounded)
+        ] <> optional
 
-    , varExprBV32 sym litvars <$> HG.element (MapF.keys litvars)
-    ]
+  HG.recursive HG.choice nonrecursive
     [ -- recursive
       HG.subtermM (genBV32SymExpr sym params opvars litvars) (\t -> liftIO $ WI.bvNeg sym t)
     ]
@@ -276,11 +283,12 @@ varExprBV32 sym litvars (Some key) =
 -- Formula.ParameterizedFormula generators
 
   -- KWQ: proxy sym?
-genParameterizedFormula :: forall sh sym m .  -- reordered args to allow TypeApplication of sh first
+genParameterizedFormula :: forall sh sym m t .  -- reordered args to allow TypeApplication of sh first
                            ( Monad m
                            , MonadIO m
                            , WI.IsSymExprBuilder sym
                            , MkOperands (GenT m) sym (PL.List (TestBoundVar sym)) sh
+                           , WI.BoundVar sym ~ WE.ExprBoundVar t
                            ) =>
                            sym
                         -> GenT m (F.ParameterizedFormula sym TestGenArch (sh :: [Symbol]))
@@ -301,8 +309,9 @@ genParameterizedFormula sym = do
   -- An operand takes precendence over a location if they match.
   -- There may be locations that are not in the operands.
   locParams <- HG.list (linear 0 10) genSomeParameter
-  -- let inpParams = mkOperandParameter locParams sym <$> inputs
-  let params = -- Set.fromList inpParams <>
+  inputOrOutput <- sequence $ replicate (lengthFC operandVars) HG.bool
+  let inpParams = snd $ PL.ifoldr possibleInput (inputOrOutput, []) operandVars
+  let params = Set.fromList inpParams <>
                Set.fromList locParams  -- assumes left biasing for <>
 
   -- Any location (LiteralParameter) in either the operands or the
@@ -324,6 +333,30 @@ genParameterizedFormula sym = do
     , F.pfLiteralVars = literalVars  -- MapF.MapF (L.Location arch) (WI.BoundVar sym)
     , F.pfDefs = defs  -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
     }
+
+
+possibleInput :: ( WI.IsSymExprBuilder sym
+                 , WI.IsExprBuilder sym
+                , WI.BoundVar sym ~ WE.ExprBoundVar t
+                 ) =>
+                 PL.Index sh tp
+              -> BV.BoundVar sym TestGenArch tp
+              -> ([Bool], [Some (F.Parameter TestGenArch sh)])
+              -> ([Bool], [Some (F.Parameter TestGenArch sh)])
+possibleInput idx opBV (isInput:r, inps) =
+  let inpParam = Some $
+                 F.OperandParameter
+                 -- (inpTy opBV)
+                 -- knownRepr
+                 (WE.bvarType $ BV.unBoundVar opBV)
+                 idx
+      -- inpTy :: BaseTypeRepr (SA.OperandType TestGenArch sh)
+      -- inpTy = undefined
+      -- inpTy = SA.shapeReprToTypeRepr TestGenArch undefined
+  in if isInput
+     then (r, inpParam : inps)
+     else (r, inps)
+possibleInput _ _ a = a
 
 
 locationsForLiteralParams :: ( F.Foldable t
