@@ -38,12 +38,13 @@ import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Formula as F
 import           SemMC.Util ( fromJust' )
 import           TestArch
-import           TestUtils
 import           What4.BaseTypes
 import qualified What4.Expr.Builder as WE
 import qualified What4.Interface as WI
 import           What4.Symbol ( systemSymbol )
 
+
+----------------------------------------------------------------------
 
 genNat :: Monad m => GenT m Natural
 genNat = HG.frequency [ (5, return 0)
@@ -351,33 +352,25 @@ genParameterizedFormula sym = do
                                genExpr sym p params operandVars literalVars
                in MapF.fromList <$> HG.list (linear 0 10) anElem
   return F.ParameterizedFormula
-    { F.pfUses = params
+    { F.pfUses = params              -- Set.Set (Some (Parameter arch sh))
     , F.pfOperandVars = operandVars  -- PL.List (BV.BoundVar sym arch) sh
     , F.pfLiteralVars = literalVars  -- MapF.MapF (L.Location arch) (WI.BoundVar sym)
-    , F.pfDefs = defs  -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
+    , F.pfDefs = defs                -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
     }
 
 
 possibleInput :: ( WI.IsSymExprBuilder sym
                  , WI.IsExprBuilder sym
-                , WI.BoundVar sym ~ WE.ExprBoundVar t
+                 , WI.BoundVar sym ~ WE.ExprBoundVar t
                  ) =>
                  PL.Index sh tp
               -> BV.BoundVar sym TestGenArch tp
               -> ([Bool], [Some (F.Parameter TestGenArch sh)])
               -> ([Bool], [Some (F.Parameter TestGenArch sh)])
 possibleInput idx opBV (isInput:r, inps) =
-  let inpParam = Some $
-                 F.OperandParameter
-                 -- (inpTy opBV)
-                 -- knownRepr
-                 (WE.bvarType $ BV.unBoundVar opBV)
-                 idx
-      -- inpTy :: BaseTypeRepr (SA.OperandType TestGenArch sh)
-      -- inpTy = undefined
-      -- inpTy = SA.shapeReprToTypeRepr TestGenArch undefined
+  let inpParam = F.OperandParameter (WE.bvarType $ BV.unBoundVar opBV) idx
   in if isInput
-     then (r, inpParam : inps)
+     then (r, Some inpParam : inps)
      else (r, inps)
 possibleInput _ _ a = a
 
