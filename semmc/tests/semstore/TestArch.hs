@@ -62,25 +62,6 @@ readTestLocation _ = Nothing
 deriving instance Eq (TestLocation tp)
 deriving instance Ord (TestLocation tp)
 
-instance TestEquality TestLocation where
-  TestNatLoc l1 `testEquality` TestNatLoc l2 | l1 == l2 = Just Refl
-                                             | otherwise = Nothing
-  TestIntLoc l1 `testEquality` TestIntLoc l2 | l1 == l2 = Just Refl
-                                             | otherwise = Nothing
-  TestRegLoc l1 `testEquality` TestRegLoc l2 | l1 == l2 = Just Refl
-                                             | otherwise = Nothing
-  _ `testEquality` _ = Nothing
-
-instance OrdF TestLocation where
-  TestNatLoc l1 `compareF` TestNatLoc l2 = fromOrdering $ l1 `compare` l2
-  TestIntLoc l1 `compareF` TestIntLoc l2 = fromOrdering $ l1 `compare` l2
-  TestRegLoc l1 `compareF` TestRegLoc l2 = fromOrdering $ l1 `compare` l2
-  -- for mismatched location types, arbitrarily: any Int < any Nat < any Reg
-  TestNatLoc _ `compareF` TestIntLoc _ = GTF
-  TestRegLoc _ `compareF` TestIntLoc _ = GTF
-  TestRegLoc _ `compareF` TestNatLoc _ = GTF
-  _ `compareF` _ = LTF
-
 instance L.IsLocation TestLocation where
   locationType (TestNatLoc _) = BaseNatRepr
   locationType (TestIntLoc _) = BaseIntegerRepr
@@ -109,12 +90,6 @@ deriving instance Show (TestGenOperand nm)
 instance ShowF TestGenOperand
   where
     showF _ = "<<OPERAND>>"
-instance TestEquality TestGenOperand where
-  FooArg `testEquality` FooArg = Just Refl
-
-instance OrdF TestGenOperand where
-  compareF FooArg FooArg = EQF
-
 -- data TestGenOperandType (operand :: Symbol) where
 --   "Wave" :: TestGenOpcodeType "Wave"
 
@@ -122,11 +97,6 @@ data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) whe
   OpWave :: TestGenOpcode TestGenOperand '["Foo"]
 
 deriving instance Show (TestGenOpcode operand_constr operands)
-
-$(return [])
-
-instance TestEquality (TestGenOpcode operand_constr) where
-  testEquality = $(TH.structuralTypeEquality [t| TestGenOpcode |] [])
 
 opWaveShape :: List TestGenOperand '["Foo"]
 opWaveShape = FooArg :< PL.Nil
@@ -156,3 +126,23 @@ instance OrdF (TestGenOpcode TestGenOperand)
 
 -- S (What4.Interface):
 -- type family BoundVar (sym :: Type) :: BaseType -> Type
+
+----------------------------------------------------------------------
+-- TestEquality and OrdF instances
+
+$(return [])
+
+instance TestEquality TestGenOperand where
+  testEquality = $(TH.structuralTypeEquality [t| TestGenOperand |] [])
+
+instance OrdF TestGenOperand where
+  compareF = $(TH.structuralTypeOrd [t| TestGenOperand |] [])
+
+instance TestEquality (TestGenOpcode operand_constr) where
+  testEquality = $(TH.structuralTypeEquality [t| TestGenOpcode |] [])
+
+instance TestEquality TestLocation where
+  testEquality = $(TH.structuralTypeEquality [t| TestLocation |] [])
+
+instance OrdF TestLocation where
+  compareF = $(TH.structuralTypeOrd [t| TestLocation |] [])
