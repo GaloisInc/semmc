@@ -32,8 +32,8 @@ import           Prelude
 
 
 debugPrint, alwaysPrint :: MonadIO m => String -> m ()
-debugPrint = alwaysPrint
--- debugPrint _ = return ()
+-- debugPrint = alwaysPrint
+debugPrint _ = return ()
 alwaysPrint = liftIO . putStrLn
 
 
