@@ -245,7 +245,6 @@ genBV32SymExpr :: ( MonadIO m
                   , WI.IsSymExprBuilder sym
                   , SA.IsLocation (SA.Location arch)
                   , SA.Location arch ~ TestLocation
---                  , KnownRepr BaseTypeRepr bt
                   ) =>
                   sym
                -> Set.Set (Some (F.Parameter arch sh))
@@ -269,7 +268,80 @@ genBV32SymExpr sym params opvars litvars = do
 
   HG.recursive HG.choice nonrecursive
     [ -- recursive
-      HG.subtermM (genBV32SymExpr sym params opvars litvars) (\t -> liftIO $ WI.bvNeg sym t)
+      HG.subtermM
+      (genBV32SymExpr sym params opvars litvars)
+      (\t -> liftIO $ WI.bvNeg sym t)
+
+    , HG.subtermM
+      (genBV32SymExpr sym params opvars litvars)
+      (liftIO . WI.bvNotBits sym)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvAdd sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvSub sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvMul sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvUdiv sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvUrem sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvSdiv sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvSrem sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvAndBits sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvOrBits sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvXorBits sym x y)
+
+    -- unhandled App in Printer.hs:232
+    -- , HG.subtermM
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (liftIO . WI.bvPopcount sym)
+
+    -- unhandled App in Printer.hs:232
+    -- , HG.subtermM
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (liftIO . WI.bvCountLeadingZeros sym)
+
+    -- unhandled App in Printer.hs:232
+    -- , HG.subtermM
+    --   (genBV32SymExpr sym params opvars litvars)
+    --   (liftIO . WI.bvCountTrailingZeros sym)
+
+    -- , (liftIO . WI.bvNeg sym) =<< genBV32SymExpr sym
     ]
 
 
