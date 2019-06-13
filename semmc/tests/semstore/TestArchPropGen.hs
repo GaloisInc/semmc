@@ -40,6 +40,7 @@ import           SemMC.Util ( fromJust' )
 import           TestArch
 import           TestUtils
 import           What4.BaseTypes
+import qualified What4.Expr.Builder as WE
 import qualified What4.Interface as WI
 import           What4.Symbol ( systemSymbol )
 
@@ -239,12 +240,13 @@ genIntSymExpr sym = liftIO $ WI.intLit sym 9
 genBV32SymExpr :: ( MonadIO m
                   , WI.IsExprBuilder sym
                   , WI.IsSymExprBuilder sym
+                  , SA.IsLocation (SA.Location arch)
+                  , SA.Location arch ~ TestLocation
 --                  , KnownRepr BaseTypeRepr bt
                   ) =>
                   sym
                -> Set.Set (Some (F.Parameter arch sh))
                -> PL.List (BV.BoundVar sym arch) sh
-               -- -> MapF.MapF (SA.Location arch) (WI.BoundVar sym)
                -> MapF.MapF TestLocation (WI.BoundVar sym)
                -> GenT m (WI.SymExpr sym (BaseBVType 32))
 genBV32SymExpr sym params opvars litvars = do
@@ -252,9 +254,10 @@ genBV32SymExpr sym params opvars litvars = do
   -- in the defs, which are declared already as freshBoundVars.
   let optional = catMaybes
                  [
-                   case MapF.size litvars of
+                   case F.length params of
                      0 -> Nothing
-                     _ -> Just (varExprBV32 sym litvars <$> HG.element (MapF.keys litvars))
+                     _ -> Just (paramExprBV32 sym opvars litvars
+                                =<< HG.element (Set.toList params))
                  ]
       nonrecursive =
         [ -- non-recursive
@@ -266,17 +269,37 @@ genBV32SymExpr sym params opvars litvars = do
       HG.subtermM (genBV32SymExpr sym params opvars litvars) (\t -> liftIO $ WI.bvNeg sym t)
     ]
 
-varExprBV32 :: (WI.IsSymExprBuilder sym) =>
-               sym
-            -> MapF.MapF TestLocation (WI.BoundVar sym)
-            -> Some TestLocation
-            -> WI.SymBV sym 32
-varExprBV32 sym litvars (Some key) =
-  case SA.locationType key of
+
+paramExprBV32 :: ( MonadIO m
+                 , WI.IsSymExprBuilder sym
+                 , SA.IsLocation (SA.Location arch)
+                 , SA.Location arch ~ TestLocation
+                 ) =>
+                 sym
+              -> PL.List (BV.BoundVar sym arch) sh
+              -> MapF.MapF TestLocation (WI.BoundVar sym)
+              -> Some (F.Parameter arch sh)
+              -> m (WI.SymBV sym 32)
+paramExprBV32 sym opvars litvars (Some param) =
+  case F.paramType param of
     (BaseBVRepr w) ->
       case testEquality w (knownNat :: NatRepr 32) of
-        Just Refl -> WI.varExpr sym $ fromJust' "varExprBV32.BVRepr32.lookup" $ MapF.lookup key litvars
-        Nothing -> error $ "varExprBV32 unsupported BVRepr size: " <> show w
+        Just Refl -> return $
+          case param of
+            F.OperandParameter _ idx -> WI.varExpr sym $ BV.unBoundVar $ opvars PL.!! idx
+            F.LiteralParameter loc -> WI.varExpr sym $ fromJust' "paramExprBV32.BVRepr32.lookup" $ MapF.lookup loc litvars
+        Nothing -> error $ "paramExprBV32 unsupported BVRepr size: " <> show w
+    BaseNatRepr ->
+      case param of
+        F.OperandParameter _ idx ->
+          liftIO $ do let v = WI.varExpr sym $ BV.unBoundVar $ opvars PL.!! idx
+                      i <- WI.natToInteger sym v
+                      WI.integerToBV sym i (knownRepr :: NatRepr 32)
+        F.LiteralParameter loc ->
+          liftIO $ do let v = WI.varExpr sym $ fromJust' "paramExprBV32.BVRepr32.lookup" $ MapF.lookup loc litvars
+                      i <- WI.natToInteger sym v
+                      WI.integerToBV sym i (knownRepr :: NatRepr 32)
+    BaseIntegerRepr -> error "paramExprBV32 BaseNatRepr TBD"
 
 
 ----------------------------------------------------------------------
@@ -400,6 +423,8 @@ type GenDefFunc = forall m sym arch sh tp .
                   ( MonadIO m
                   , WI.IsExprBuilder sym
                   , WI.IsSymExprBuilder sym
+                  , SA.IsLocation (SA.Location arch)
+                  , SA.Location arch ~ TestLocation
                   ) =>
                   GenDefDirect m sym arch sh tp
                -> GenDefDirect m sym arch sh tp
