@@ -326,6 +326,21 @@ genBV32SymExpr sym params opvars litvars = do
       (genBV32SymExpr sym params opvars litvars)
       (\x y -> liftIO $ WI.bvXorBits sym x y)
 
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvShl sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvLshr sym x y)
+
+    , HG.subtermM2
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (\x y -> liftIO $ WI.bvAshr sym x y)
+
     -- unhandled App in Printer.hs:232
     -- , HG.subtermM
     --   (genBV32SymExpr sym params opvars litvars)
