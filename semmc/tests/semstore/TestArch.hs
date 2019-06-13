@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {-| Minimal definition of a test architecture which allows various
@@ -19,6 +20,7 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.List ( List( (:<) ) )
 import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some
+import qualified Data.Parameterized.TH.GADT as TH
 import           GHC.TypeLits ( Symbol )
 import           Numeric.Natural
 import qualified SemMC.Architecture as SA
@@ -116,14 +118,15 @@ instance OrdF TestGenOperand where
 -- data TestGenOperandType (operand :: Symbol) where
 --   "Wave" :: TestGenOpcodeType "Wave"
 
-data TestGenOpcode (operand_type :: Symbol -> Type) (opcodes :: [Symbol]) where
-  OpWave :: TestGenOpcode TestGenOperand '[]
-  -- TestGenOperand ["Wave"] = OpWave
+data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) where
+  OpWave :: TestGenOpcode TestGenOperand '["Foo"]
 
-deriving instance Show (TestGenOpcode operand_type opcodes)
+deriving instance Show (TestGenOpcode operand_constr operands)
 
-instance TestEquality (TestGenOpcode operand_type) where
-  OpWave `testEquality` OpWave = Just Refl
+$(return [])
+
+instance TestEquality (TestGenOpcode operand_constr) where
+  testEquality = $(TH.structuralTypeEquality [t| TestGenOpcode |] [])
 
 opWaveShape :: List TestGenOperand '["Foo"]
 opWaveShape = FooArg :< PL.Nil
