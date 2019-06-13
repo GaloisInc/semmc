@@ -43,6 +43,11 @@ parameterizedFormulaTests = [
                     sym <- liftIO $ newSimpleBackend r
                     p <- forAllT (genParameterizedFormula @'["Foo"] sym)
                     assert (all isValidParamType (SF.pfUses p))
+    , testProperty "parameter type multiple" $
+      property $ do Some r <- liftIO newIONonceGenerator
+                    sym <- liftIO $ newSimpleBackend r
+                    p <- forAllT (genParameterizedFormula @'["Foo", "Bar"] sym)
+                    assert (all isValidParamType (SF.pfUses p))
     , testProperty "operand type" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
