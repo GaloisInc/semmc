@@ -120,46 +120,14 @@ genSomeParameter :: Monad m => GenT m (Some (F.Parameter TestGenArch sh))
 genSomeParameter =
   HG.choice
   [
-    -- Some <$> genNatParameter  -- not supported for formula printing
-    -- , Some <$> genIntParameter  -- not supported for formula printing
     Some <$> genRegParameter
+    -- , Some <$> genNatParameter  -- not supported for formula printing
+    -- , Some <$> genIntParameter  -- not supported for formula printing
   ]
 
 
 ----------------------------------------------------------------------
-
--- data TestSymLocation :: BaseType -> Type where
---   TestSymLocation :: TestSymBackend
-
-
-----------------------------------------------------------------------
--- What4.Interface.BoundVar generators
-
-{-
-data TestBoundVar (th :: BaseType) = TestBoundVar
-  deriving Show
-
-instance ShowF TestBoundVar
-type instance WI.BoundVar TestSymbolicBackend = TestBoundVar
-
-genBoundNatVar :: Monad m => GenT m (WI.BoundVar TestSymbolicBackend BaseNatType)
-genBoundNatVar = return TestBoundVar
-
-genBoundIntVar :: Monad m => GenT m (WI.BoundVar TestSymbolicBackend BaseIntegerType)
-genBoundIntVar = return TestBoundVar
-
-genBoundVar_NatArgFoo :: Monad m => GenT m (BV.BoundVar TestSymbolicBackend TestGenArch "NatArg:Foo")
-genBoundVar_NatArgFoo = BV.BoundVar <$> genBoundNatVar
--}
-
-------------------------------
-
-  -- KWQ: proxy sym? pass sym?
--- genBoundNatVar :: Monad m => sym -> GenT m (WI.BoundVar sym BaseNatType)
--- genBoundNatVar _ = return TestBoundVar
-
--- genBoundIntVar :: Monad m => sym -> GenT m (WI.BoundVar sym BaseIntegerType)
--- genBoundIntVar _ = return TestBoundVar
+-- SolverSymbol Generators
 
 genSolverSymbol :: Monad m => GenT m WI.SolverSymbol
 genSolverSymbol = HG.choice [ -- return WI.emptySymbol  -- KWQ: generates eqns with this, but the eqns are invalid!
@@ -238,10 +206,6 @@ genBoundVar_NatArgFoo :: Monad m => MonadIO m =>
                          WI.IsSymExprBuilder sym =>
                          sym -> GenT m (TestBoundVar sym "Foo")
 genBoundVar_NatArgFoo sym = BV.BoundVar <$> genBoundNatVar sym Nothing  -- KWQ: generic genBoundVar?
--- genBoundVar_NatArgFoo sym =
---   do bnv <- genBoundNatVar sym  -- KWQ: generic genBoundVar?
---      liftIO $ putStrLn
---      return BV.BoundVar bnv
 
 ----------------------------------------------------------------------
 -- What4.Interface.SymExpr generators
@@ -295,13 +259,13 @@ varExprBV32 :: (WI.IsSymExprBuilder sym) =>
             -> MapF.MapF TestLocation (WI.BoundVar sym)
             -> Some TestLocation
             -> WI.SymBV sym 32
-            -- -> WI.SymExpr sym (BaseBVType 32)
 varExprBV32 sym litvars (Some key) =
   case SA.locationType key of
     (BaseBVRepr w) ->
       case testEquality w (knownNat :: NatRepr 32) of
         Just Refl -> WI.varExpr sym $ fromJust' "varExprBV32.BVRepr32.lookup" $ MapF.lookup key litvars
         Nothing -> error $ "varExprBV32 unsupported BVRepr size: " <> show w
+
 
 ----------------------------------------------------------------------
 -- Formula.ParameterizedFormula generators
