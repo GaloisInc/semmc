@@ -137,8 +137,10 @@ genSolverSymbol = HG.choice [ -- return WI.emptySymbol  -- KWQ: generates eqns w
                              genUserSymbol
                             -- , genSystemSymbol  -- KWQ: cannot parse the printed name with a !
                             ]
-  where genUSym = HG.string (linear 1 32) (HG.choice [ HG.alphaNum
-                                                     , return '_' ])
+  where genUSym = HG.string (linear 1 32) $
+                  HG.frequency [ (90, HG.alphaNum)
+                               , (10, return '_')
+                               ]
         genSSym s = let sp = zip3 (L.inits s) (repeat "!") (L.tails s)
                         join3 (a,b,c) = a <> b <> c
                         s' = map join3 $ tail sp
