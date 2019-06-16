@@ -153,7 +153,8 @@ test-suite semmc-semstore-tests
   type: exitcode-stdio-1.0
   ghc-options: -Wall
   main-is: SemStore.hs
-  other-modules: LocationsTests
+  other-modules: HedgehogUtil
+               , LocationsTests
                , ParameterTests
                , ParamFormulaTests
                , TestArch
@@ -165,6 +166,7 @@ test-suite semmc-semstore-tests
                , containers
                , crucible
                , dismantle-tablegen
+               , exceptions
                , hashable
                , hedgehog
                , parameterized-utils
@@ -173,4 +175,5 @@ test-suite semmc-semstore-tests
                , tasty-hunit
                , tasty-hedgehog
                , text
+               , transformers
                , what4
