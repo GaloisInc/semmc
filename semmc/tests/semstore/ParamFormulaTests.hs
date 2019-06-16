@@ -8,6 +8,7 @@
 
 module ParamFormulaTests where
 
+import qualified Control.Monad.Catch as E
 import           Control.Monad.IO.Class ( liftIO )
 import           Data.Maybe
 import           Data.Parameterized.Classes
@@ -18,6 +19,8 @@ import           Data.Parameterized.Some
 import qualified Data.Set as Set
 import           Hedgehog
 import           Hedgehog.Internal.Property ( forAllT )
+import           HedgehogUtil ( )
+import qualified Lang.Crucible.Backend.Online as CBO
 import           Lang.Crucible.Backend.Simple ( newSimpleBackend )
 import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Formula as SF
@@ -65,7 +68,7 @@ parameterizedFormulaTests = [
                     p <- forAllT (genParameterizedFormula @'["Foo"] sym)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
 
-    , testProperty "serialized formula round trip" $
+    , testProperty "serialized formula round trip, simple backend" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     p <- forAllT (genParameterizedFormula @'["Bar"] sym)
@@ -82,6 +85,25 @@ parameterizedFormulaTests = [
                     debugPrint $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulas sym 1 p f
+
+    , testProperty "serialized formula round trip, online backend" $ property $
+      E.handleAll (\e -> annotate (show e) >> failure) $ do
+        Some r <- liftIO newIONonceGenerator
+        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          p <- forAllT (genParameterizedFormula @'["Bar"] sym)
+          debugPrint $ "parameterizedFormula: " <> show p
+          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          let printedFormula = FO.printParameterizedFormula opWaveShape p
+          debugPrint $ "printedFormula: " <> show printedFormula
+          let fenv = undefined
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+          reForm <- liftIO $
+                    Log.withLogCfg lcfg $
+                    FI.readFormula sym fenv opWaveShape printedFormula
+          debugPrint $ "re-Formulized: " <> show reForm
+          f <- evalEither reForm
+          compareParameterizedFormulas sym 1 p f
 
     , testProperty "serialized formula double round trip" $
       property $ do Some r <- liftIO newIONonceGenerator
