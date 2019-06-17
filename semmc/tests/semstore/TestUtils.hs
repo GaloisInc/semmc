@@ -13,7 +13,7 @@ import           Data.Function ( on )
 import qualified Data.List as L
 import           Data.Parameterized.Classes
 import           Data.Parameterized.List ( List( (:<) ) )
-import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some
 import           Data.Parameterized.TraversableFC
@@ -97,14 +97,14 @@ compareOperandLists :: ( MonadIO m
                        ) =>
                        sym
                     -> Integer
-                    -> SL.List (BV.BoundVar sym arch) (op : r)
-                    -> SL.List (BV.BoundVar sym arch) (op : r)
+                    -> PL.List (BV.BoundVar sym arch) (op : r)
+                    -> PL.List (BV.BoundVar sym arch) (op : r)
                     -> m ()
 compareOperandLists sym ncycle origOprnds resultOprnds = do
   on (===) lengthFC origOprnds resultOprnds
   compareEachOperand sym ncycle origOprnds resultOprnds
 
--- | Iterates through the SL.List elements pairwise, comparing each
+-- | Iterates through the PL.List elements pairwise, comparing each
 -- pair of elements for "equality".
 compareEachOperand :: ( MonadIO m
                       , MonadTest m
@@ -112,10 +112,10 @@ compareEachOperand :: ( MonadIO m
                       ) =>
                       sym
                    -> Integer
-                   -> SL.List (BV.BoundVar sym arch) sh
-                   -> SL.List (BV.BoundVar sym arch) sh
+                   -> PL.List (BV.BoundVar sym arch) sh
+                   -> PL.List (BV.BoundVar sym arch) sh
                    -> m ()
-compareEachOperand _ _ SL.Nil SL.Nil = return ()
+compareEachOperand _ _ PL.Nil PL.Nil = return ()
 compareEachOperand sym ncycle (l :< ls) (r :< rs) = do
   compareOperands sym ncycle l r
   compareEachOperand sym ncycle ls rs
