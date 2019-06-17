@@ -31,8 +31,27 @@ import           What4.BaseTypes
 data TestGenArch  -- ^ the architecture type for testing
 
 instance SA.Architecture TestGenArch where
+  data TaggedExpr TestGenArch sym s =
+    TaggedExpr { unTaggedExpr :: SA.AllocatedOperand TestGenArch sym s }
+
+  unTagged te = case unTaggedExpr te of
+    SA.LocationOperand _ se -> Just se
+
+  taggedOperand = unTaggedExpr
+
+  operandToLocation _ BarArg = Just (TestRegLoc 0)
+
+  uninterpretedFunctions _ = []  -- TODO: add some
+
   shapeReprToTypeRepr _ FooArg = BaseNatRepr
   shapeReprToTypeRepr _ BarArg = BaseBVRepr (knownNat :: NatRepr 32)
+
+  allocateSymExprsForOperand _arch _sym newVars FooArg = undefined
+  allocateSymExprsForOperand _arch _sym newVars BarArg =
+    let loc = TestRegLoc 0 in
+    TaggedExpr <$> SA.LocationOperand loc <$> newVars loc
+
+  locationFuncInterpretation _ = []
 
 
 ----------------------------------------------------------------------
@@ -49,7 +68,9 @@ data TestLocation :: BaseType -> Type where
 instance Show (TestLocation tp) where
   show (TestRegLoc n) = "Reg_" <> show n  -- KWQ: must be parseable; Reg#0 fails with the #... needs quoting or input validation in the Printer
   show (TestNatLoc n) = "NAT_" <> show n  -- KWQ: want NAT@... see above
-  show (TestIntLoc i) = "INT_" <> show i  -- KWQ: want INT@... see above
+  show (TestIntLoc i) = if i >= 0
+                        then "INT_" <> show i  -- KWQ: want INT@... see above
+                        else "NEGINT_" <> show (-i)
 
 instance ShowF TestLocation
 
@@ -71,6 +92,11 @@ instance L.IsLocation TestLocation where
   readLocation = readTestLocation
 
   isMemoryLocation _ = False
+
+  allLocations = []
+                 <> (Some . TestRegLoc <$> [0..3])
+                 <> (Some . TestNatLoc <$> [0..6])
+                 <> (Some . TestIntLoc <$> [-10..10])
 
 
 type instance L.Location TestGenArch = TestLocation
