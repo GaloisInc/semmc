@@ -19,14 +19,18 @@ import           Data.Parameterized.Some
 import           Data.Parameterized.TraversableFC
 import           GHC.TypeLits ( Symbol )
 import           Hedgehog
+import qualified Lang.Crucible.Backend.Online as CBO
 import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
+import           SemMC.Formula.Equivalence
 import qualified SemMC.Formula.Formula as SF
+import           SemMC.Formula.Instantiate ( instantiateFormula )
 import           SemMC.Formula.Parser ( literalVarPrefix
                                       , operandVarPrefix )
 import           TestArch
 import qualified What4.Expr.Builder as WE
 import qualified What4.Interface as WI
+import qualified What4.Protocol.Online as WPO
 
 import           Prelude
 
@@ -40,8 +44,9 @@ alwaysPrint = liftIO . putStrLn
 ----------------------------------------------------------------------
 -- Formulas
 
--- | Compare two ParameterizedFormulas.  The expectation is that the
--- second formula is related to the first (e.g. via a round trip
+-- | Compare two ParameterizedFormulas using a simple backend (which
+-- provides limited comparison capability).  The expectation is that
+-- the second formula is related to the first (e.g. via a round trip
 -- through SemMC.Formula.Printer+SemMC.Formula.Parser) and so they are
 -- similar modulo small elements like alpha-renaming and nonce values.
 --
@@ -49,29 +54,89 @@ alwaysPrint = liftIO . putStrLn
 -- therefore the number of adjustments that may need to be accounted
 -- for).
 
-compareParameterizedFormulas :: ( MonadIO m
-                                , MonadTest m
-                                , TestEquality (SA.Location arch)
-                                , Eq (WI.BoundVar sym (SA.OperandType arch op))
-                                , ShowF (SA.Location arch)
-                                , ShowF (WI.BoundVar sym)
-                                , WI.BoundVar sym ~ WE.ExprBoundVar t
-                                , SA.Location arch ~ TestLocation
-                                ) =>
-                                sym
-                             -> Integer
-                             -> SF.ParameterizedFormula sym arch (op : r)
-                             -> SF.ParameterizedFormula sym arch (op : r)
-                             -> m ()
-compareParameterizedFormulas sym ncycles origFormula resultFormula = do
-  on (===) SF.pfUses origFormula resultFormula
-  compareOperandLists sym ncycles
-    (SF.pfOperandVars origFormula)
-    (SF.pfOperandVars resultFormula)
-  compareLiteralVarMaps sym
-    (SF.pfLiteralVars origFormula)
-    (SF.pfLiteralVars resultFormula)
-  -- compareDefs sym p f
+compareParameterizedFormulasSimply
+  :: ( MonadIO m
+     , MonadTest m
+     , TestEquality (SA.Location arch)
+     , Eq (WI.BoundVar sym (SA.OperandType arch op))
+     , ShowF (SA.Location arch)
+     , ShowF (WI.BoundVar sym)
+     , WI.BoundVar sym ~ WE.ExprBoundVar t
+     , SA.Location arch ~ TestLocation
+     ) =>
+     sym
+  -> Integer
+  -> SF.ParameterizedFormula sym arch (op : r)
+  -> SF.ParameterizedFormula sym arch (op : r)
+  -> m ()
+compareParameterizedFormulasSimply sym ncycles origFormula resultFormula =
+  do on (===) SF.pfUses origFormula resultFormula
+
+     compareOperandLists sym ncycles
+       (SF.pfOperandVars origFormula)
+       (SF.pfOperandVars resultFormula)
+
+     compareLiteralVarMaps sym
+       (SF.pfLiteralVars origFormula)
+       (SF.pfLiteralVars resultFormula)
+
+     on (===) (MapF.size . SF.pfDefs) origFormula resultFormula
+     on (===) (MapF.keys . SF.pfDefs) origFormula resultFormula
+
+
+-- | Compare two ParameterizedFormulas using a symbolic backend to
+-- prove formula equivalence.  The expectation is that the second
+-- formula is related to the first (e.g. via a round trip through
+-- SemMC.Formula.Printer+SemMC.Formula.Parser) and so they are similar
+-- modulo small elements like alpha-renaming and nonce values.
+--
+-- The ncycles argument specifies the number of round-trips (and
+-- therefore the number of adjustments that may need to be accounted
+-- for).
+--
+-- This comparison is an extension of the
+-- 'compareParameterizedFormulasSimply' with additional functionality.
+
+compareParameterizedFormulasSymbolically
+  :: ( MonadIO m
+     , MonadTest m
+     , TestEquality (SA.Location arch)
+     , Eq (WI.BoundVar sym (SA.OperandType arch op))
+     , ShowF (SA.Location arch)
+     , ShowF (WI.BoundVar sym)
+     , WI.BoundVar sym ~ WE.ExprBoundVar t
+     , SA.Architecture arch
+     , SA.Location arch ~ TestLocation
+     , sym ~ CBO.OnlineBackend t solver fs
+     , WPO.OnlineSolver t solver
+     ) =>
+     sym
+  -> PL.List (SA.Operand arch) (op : r)
+  -> Integer
+  -> SF.ParameterizedFormula sym arch (op : r)
+  -> SF.ParameterizedFormula sym arch (op : r)
+  -> m ()
+compareParameterizedFormulasSymbolically sym operands ncycles origFormula resultFormula =
+  do on (===) SF.pfUses origFormula resultFormula
+
+     compareOperandLists sym ncycles
+       (SF.pfOperandVars origFormula)
+       (SF.pfOperandVars resultFormula)
+
+     compareLiteralVarMaps sym
+       (SF.pfLiteralVars origFormula)
+       (SF.pfLiteralVars resultFormula)
+
+     on (===) (MapF.size . SF.pfDefs) origFormula resultFormula
+     on (===) (MapF.keys . SF.pfDefs) origFormula resultFormula
+     (_te1, f1) <- liftIO $ instantiateFormula sym origFormula operands
+     (_te2, f2) <- liftIO $ instantiateFormula sym resultFormula operands
+     liftIO $ putStrLn "checkin' equiv..."
+     equiv <- liftIO $ formulasEquivSym sym f1 f2
+     case equiv of
+       Equivalent -> liftIO (putStrLn "boo yah!") >> success
+       DifferentBehavior _ -> failure
+       Timeout -> failure
 
 
 ----------------------------------------------------------------------

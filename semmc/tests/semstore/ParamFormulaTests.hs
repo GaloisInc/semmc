@@ -84,18 +84,24 @@ parameterizedFormulaTests = [
                               FI.readFormula sym fenv opWaveShape printedFormula
                     debugPrint $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
-                    compareParameterizedFormulas sym 1 p f
+                    compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, online backend" $ property $
+    , testProperty "serialized formula round trip, online backend" $
+      property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          -- generate a formula
           p <- forAllT (genParameterizedFormula @'["Bar"] sym)
+          -- ensure that formula compares as equivalent to itself
+          compareParameterizedFormulasSymbolically sym opWaveShape 1 p p
+          -- now print the formula to a text string
           debugPrint $ "parameterizedFormula: " <> show p
           debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
           debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula opWaveShape p
           debugPrint $ "printedFormula: " <> show printedFormula
+          -- convert the printed text string back into a formula
           let fenv = undefined
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
@@ -103,34 +109,39 @@ parameterizedFormulaTests = [
                     FI.readFormula sym fenv opWaveShape printedFormula
           debugPrint $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
-          compareParameterizedFormulas sym 1 p f
+          -- verify the recreated formula matches the original
+          compareParameterizedFormulasSymbolically sym opWaveShape 1 p f
 
     , testProperty "serialized formula double round trip" $
-      property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
-                    lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+      property $
+      E.handleAll (\e -> annotate (show e) >> failure) $ do
+        Some r <- liftIO newIONonceGenerator
+        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
-                    p <- forAllT (genParameterizedFormula @'["Bar"] sym)
+          p <- forAllT (genParameterizedFormula @'["Bar"] sym)
 
-                    -- first round trip:
-                    let printedFormula = FO.printParameterizedFormula opWaveShape p  -- KWQ: opWaveShape?!
-                    let fenv = undefined
-                    reForm <- liftIO $
-                              Log.withLogCfg lcfg $
-                              FI.readFormula sym fenv opWaveShape printedFormula
-                    f <- evalEither reForm
+          -- first round trip:
+          let printedFormula = FO.printParameterizedFormula opWaveShape p  -- KWQ: opWaveShape?!
+          let fenv = undefined
+          reForm <- liftIO $
+                    Log.withLogCfg lcfg $
+                    FI.readFormula sym fenv opWaveShape printedFormula
+          f <- evalEither reForm
 
-                    -- second round trip:
-                    let printedFormula' = FO.printParameterizedFormula opWaveShape f
-                    reForm' <- liftIO $
-                               Log.withLogCfg lcfg $
-                               FI.readFormula sym fenv opWaveShape printedFormula'
-                    f' <- evalEither reForm'
+          -- second round trip:
+          let printedFormula' = FO.printParameterizedFormula opWaveShape f
+          reForm' <- liftIO $
+                     Log.withLogCfg lcfg $
+                     FI.readFormula sym fenv opWaveShape printedFormula'
+          f' <- evalEither reForm'
 
-                    -- verification of results
-                    compareParameterizedFormulas sym 1 p f
-                    compareParameterizedFormulas sym 1 f f'
-                    compareParameterizedFormulas sym 2 p f'
+          -- verification of results
+          -- KWQ: is variable renaming OK as long as the renaming is consistent and non-overlapping?
+          compareParameterizedFormulasSymbolically sym opWaveShape 1 p f
+          compareParameterizedFormulasSymbolically sym opWaveShape 1 f f'
+          compareParameterizedFormulasSymbolically sym opWaveShape 2 p f'
+
 
     ]
   ]
