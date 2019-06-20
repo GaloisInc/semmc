@@ -610,3 +610,10 @@ instance ( Monad m
          ) =>
          MkOperands (GenT m) sym (OperandPair sym) "Bar" where
   mkOperand = genBoundVar_BV32ArgBar
+
+instance ( Monad m
+         , MonadIO m
+         , WI.IsSymExprBuilder sym
+         ) =>
+         MkOperands (GenT m) sym (OperandPair sym) "Box" where
+  mkOperand = genBoundVar_BV32ArgBox

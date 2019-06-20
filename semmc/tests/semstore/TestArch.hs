@@ -46,7 +46,9 @@ instance SA.Architecture TestGenArch where
 
   taggedOperand = unTaggedExpr
 
-  operandToLocation _ BarArg = Just (TestRegLoc 0)
+  operandToLocation _ FooArg     = Nothing
+  operandToLocation _ BarArg     = Just TestBarLoc
+  operandToLocation _ (BoxArg n) = Just (TestRegLoc n)
 
   uninterpretedFunctions _ = []  -- TODO: add some
 
@@ -58,11 +60,17 @@ instance SA.Architecture TestGenArch where
       "Bar"
         | Just Refl <- testEquality sr (SR.knownSymbol @"Bar")
           -> BaseBVRepr (knownNat :: NatRepr 32)
+      "Box"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"Box")
+          -> BaseBVRepr (knownNat :: NatRepr 32)
       _ -> error ("Invalid shape repr: " ++ show sr)
 
   allocateSymExprsForOperand _arch _sym newVars FooArg = undefined
   allocateSymExprsForOperand _arch _sym newVars BarArg =
-    let loc = TestRegLoc 0 in
+    let loc = TestBarLoc in
+    TaggedExpr <$> SA.LocationOperand loc <$> newVars loc
+  allocateSymExprsForOperand _arch _sym newVars (BoxArg n) =
+    let loc = TestRegLoc n in
     TaggedExpr <$> SA.LocationOperand loc <$> newVars loc
 
   locationFuncInterpretation _ = []
@@ -75,11 +83,13 @@ data TestLocation :: BaseType -> Type where
   TestNatLoc :: Natural -> TestLocation BaseNatType
   TestIntLoc :: Integer -> TestLocation BaseIntegerType
   TestRegLoc :: Natural -> TestLocation (BaseBVType 32)
+  TestBarLoc :: TestLocation (BaseBVType 32)
   -- TBD: more basetype locations
   -- TBD: some memory locations
   -- MemLoc :: Mem -> Location (BaseBVType 32)
 
 instance Show (TestLocation tp) where
+  show TestBarLoc     = "Bar"
   show (TestRegLoc n) = "Reg_" <> show n  -- KWQ: must be parseable; Reg#0 fails with the #... needs quoting or input validation in the Printer
   show (TestNatLoc n) = "NAT_" <> show n  -- KWQ: want NAT@... see above
   show (TestIntLoc i) = if i >= 0
@@ -93,6 +103,7 @@ readTestLocation "Reg_0" = Just $ Some $ TestRegLoc 0
 readTestLocation "Reg_1" = Just $ Some $ TestRegLoc 1
 readTestLocation "Reg_2" = Just $ Some $ TestRegLoc 2
 readTestLocation "Reg_3" = Just $ Some $ TestRegLoc 3
+readTestLocation "Bar"   = Just $ Some $ TestBarLoc
 readTestLocation _ = Nothing
 
 deriving instance Eq (TestLocation tp)
@@ -102,12 +113,13 @@ instance L.IsLocation TestLocation where
   locationType (TestNatLoc _) = BaseNatRepr
   locationType (TestIntLoc _) = BaseIntegerRepr
   locationType (TestRegLoc _) = BaseBVRepr knownNat
+  locationType TestBarLoc     = BaseBVRepr knownNat
 
   readLocation = readTestLocation
 
   isMemoryLocation _ = False
 
-  allLocations = []
+  allLocations = [Some TestBarLoc]
                  <> (Some . TestRegLoc <$> [0..3])
                  <> (Some . TestNatLoc <$> [0..6])
                  <> (Some . TestIntLoc <$> [-10..10])
@@ -123,11 +135,13 @@ type instance L.Location TestGenArch = TestLocation
 -- type family OperandType (arch::Type) (op[erand]::Symbol) :: BaseType
 
 type instance SA.OperandType TestGenArch "Foo" = BaseNatType  -- unsupported for Printer
-type instance SA.OperandType TestGenArch "Bar" = BaseBVType 32  -- unsupported for Printer
+type instance SA.OperandType TestGenArch "Bar" = BaseBVType 32
+type instance SA.OperandType TestGenArch "Box" = BaseBVType 32
 
 data TestGenOperand (nm::Symbol) where
   FooArg :: TestGenOperand "Foo"
   BarArg :: TestGenOperand "Bar"
+  BoxArg :: Natural -> TestGenOperand "Box"
 
 deriving instance Show (TestGenOperand nm)
 instance ShowF TestGenOperand
@@ -139,12 +153,15 @@ instance ShowF TestGenOperand
 data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) where
   OpWave :: TestGenOpcode TestGenOperand '["Bar"]
   OpSurf :: TestGenOpcode TestGenOperand '["Foo"]
+  OpPack :: TestGenOpcode TestGenOperand '["Box", "Bar", "Box", "Box"]
 
 deriving instance Show (TestGenOpcode operand_constr operands)
 
 instance HR.HasRepr (TestGenOpcode TestGenOperand) (PL.List SR.SymbolRepr) where
   typeRepr OpWave = knownRepr
   typeRepr OpSurf = knownRepr
+  typeRepr OpPack = knownRepr
+
 
 type instance SA.Opcode TestGenArch = TestGenOpcode
 type instance SA.Operand TestGenArch = TestGenOperand

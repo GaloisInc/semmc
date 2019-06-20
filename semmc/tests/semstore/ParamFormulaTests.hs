@@ -69,7 +69,26 @@ parameterizedFormulaTests = [
                     (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
 
-    , testProperty "serialized formula round trip, simple backend" $
+    , testProperty "serialized formula round trip, simple backend, OpPack" $
+      property $ do Some r <- liftIO newIONonceGenerator
+                    sym <- liftIO $ newSimpleBackend r
+                    let opcode = OpPack
+                    (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
+                    debugPrint $ "parameterizedFormula: " <> show p
+                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
+                    debugPrint $ "printedFormula: " <> show printedFormula
+                    let fenv = undefined
+                    lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+                    reForm <- liftIO $
+                              Log.withLogCfg lcfg $
+                              FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
+                    debugPrint $ "re-Formulized: " <> show reForm
+                    f <- evalEither reForm
+                    compareParameterizedFormulasSimply sym 1 p f
+
+    , testProperty "serialized formula round trip, simple backend, OpWave" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpWave
