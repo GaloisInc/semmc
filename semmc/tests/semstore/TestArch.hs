@@ -2,9 +2,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {-| Minimal definition of a test architecture which allows various
@@ -18,6 +21,7 @@ where
 import           Data.EnumF -- in Dismantle Tablegen!
 import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.HasRepr as HR
 import           Data.Parameterized.List ( List( (:<) ) )
 import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some
@@ -138,8 +142,9 @@ data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) whe
 
 deriving instance Show (TestGenOpcode operand_constr operands)
 
-opWaveShape :: List (SA.OperandTypeRepr TestGenArch) '["Bar"]
-opWaveShape = SR.knownSymbol :< PL.Nil
+instance HR.HasRepr (TestGenOpcode TestGenOperand) (PL.List SR.SymbolRepr) where
+  typeRepr OpWave = knownRepr
+  typeRepr OpSurf = knownRepr
 
 type instance SA.Opcode TestGenArch = TestGenOpcode
 type instance SA.Operand TestGenArch = TestGenOperand

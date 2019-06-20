@@ -12,6 +12,7 @@ import qualified Control.Monad.Catch as E
 import           Control.Monad.IO.Class ( liftIO )
 import           Data.Maybe
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.HasRepr as HR
 import qualified Data.Parameterized.List as SL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Nonce
@@ -76,13 +77,13 @@ parameterizedFormulaTests = [
                     debugPrint $ "parameterizedFormula: " <> show p
                     debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
-                    let printedFormula = FO.printParameterizedFormula opWaveShape p
+                    let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugPrint $ "printedFormula: " <> show printedFormula
                     let fenv = undefined
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
-                              FI.readFormula sym fenv opWaveShape printedFormula
+                              FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
                     debugPrint $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
@@ -101,14 +102,14 @@ parameterizedFormulaTests = [
           debugPrint $ "parameterizedFormula: " <> show p
           debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
           debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
-          let printedFormula = FO.printParameterizedFormula opWaveShape p
+          let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           debugPrint $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
           let fenv = undefined
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
-                    FI.readFormula sym fenv opWaveShape printedFormula
+                    FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
           debugPrint $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
@@ -125,18 +126,18 @@ parameterizedFormulaTests = [
           (p, operands) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
-          let printedFormula = FO.printParameterizedFormula opWaveShape p  -- KWQ: opWaveShape?!
+          let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           let fenv = undefined
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
-                    FI.readFormula sym fenv opWaveShape printedFormula
+                    FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
           f <- evalEither reForm
 
           -- second round trip:
-          let printedFormula' = FO.printParameterizedFormula opWaveShape f
+          let printedFormula' = FO.printParameterizedFormula (HR.typeRepr opcode) f
           reForm' <- liftIO $
                      Log.withLogCfg lcfg $
-                     FI.readFormula sym fenv opWaveShape printedFormula'
+                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula'
           f' <- evalEither reForm'
 
           -- verification of results
