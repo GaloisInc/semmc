@@ -44,34 +44,35 @@ parameterizedFormulaTests = [
     [ testProperty "parameter type" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    p <- forAllT (genParameterizedFormula @'["Foo"] sym)
+                    (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "parameter type multiple" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    p <- forAllT (genParameterizedFormula @'["Foo", "Bar"] sym)
+                    (p, _operands) <- forAllT (genParameterizedFormula sym OpPack)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "operand type" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    p <- forAllT (genParameterizedFormula @'["Foo"] sym)
+                    (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert $ isNatArgFoo ((SF.pfOperandVars p) SL.!! SL.index0)
     , testProperty "literal vars" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    p <- forAllT (genParameterizedFormula @'["Foo"] sym)
+                    _ <- forAllT (genParameterizedFormula sym OpSurf)
                     success -- TBD: something (manything?) to test literal vars here
       -- TBD: needs other tests
     , testProperty "defs keys in uses" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    p <- forAllT (genParameterizedFormula @'["Foo"] sym)
+                    (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
 
     , testProperty "serialized formula round trip, simple backend" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    p <- forAllT (genParameterizedFormula @'["Bar"] sym)
+                    let opcode = OpWave
+                    (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
                     debugPrint $ "parameterizedFormula: " <> show p
                     debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
@@ -92,9 +93,10 @@ parameterizedFormulaTests = [
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
           -- generate a formula
-          p <- forAllT (genParameterizedFormula @'["Bar"] sym)
+          let opcode = OpWave
+          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
-          compareParameterizedFormulasSymbolically sym opWaveShape 1 p p
+          compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
           debugPrint $ "parameterizedFormula: " <> show p
           debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
@@ -110,16 +112,17 @@ parameterizedFormulaTests = [
           debugPrint $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
-          compareParameterizedFormulasSymbolically sym opWaveShape 1 p f
+          compareParameterizedFormulasSymbolically sym operands 1 p f
 
     , testProperty "serialized formula double round trip" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          let opcode = OpWave
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
-          p <- forAllT (genParameterizedFormula @'["Bar"] sym)
+          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula opWaveShape p  -- KWQ: opWaveShape?!
@@ -138,9 +141,9 @@ parameterizedFormulaTests = [
 
           -- verification of results
           -- KWQ: is variable renaming OK as long as the renaming is consistent and non-overlapping?
-          compareParameterizedFormulasSymbolically sym opWaveShape 1 p f
-          compareParameterizedFormulasSymbolically sym opWaveShape 1 f f'
-          compareParameterizedFormulasSymbolically sym opWaveShape 2 p f'
+          compareParameterizedFormulasSymbolically sym operands 1 p f
+          compareParameterizedFormulasSymbolically sym operands 1 f f'
+          compareParameterizedFormulasSymbolically sym operands 2 p f'
 
 
     ]

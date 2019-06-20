@@ -41,7 +41,7 @@ import           TestArch
 import           What4.BaseTypes
 import qualified What4.Expr.Builder as WE
 import qualified What4.Interface as WI
-import           What4.Symbol ( systemSymbol )
+import           What4.Symbol ( systemSymbol, solverSymbolAsText )
 
 
 ----------------------------------------------------------------------
@@ -207,15 +207,34 @@ bvSymName = \case
 
 type TestBoundVar sym = BV.BoundVar sym TestGenArch
 
+-- | OperandPair is a helper to contain both of the parameterized
+-- TestBoundVar and Operand values.
+data OperandPair sym x = OpP (TestGenOperand x) (TestBoundVar sym x)
+
+operandName :: ( WI.BoundVar sym ~ WE.ExprBoundVar t) =>
+               OperandPair sym x -> String
+operandName (OpP _ bv) = show $ WE.bvarName $ BV.unBoundVar bv
+
+
+
 genBoundVar_NatArgFoo :: Monad m => MonadIO m =>
                          WI.IsSymExprBuilder sym =>
-                         sym -> GenT m (TestBoundVar sym "Foo")
-genBoundVar_NatArgFoo sym = BV.BoundVar <$> genBoundNatVar sym Nothing
+                         sym -> GenT m (OperandPair sym "Foo")
+genBoundVar_NatArgFoo sym =
+  OpP FooArg . BV.BoundVar <$> genBoundNatVar sym Nothing
 
 genBoundVar_BV32ArgBar :: Monad m => MonadIO m =>
                           WI.IsSymExprBuilder sym =>
-                          sym -> GenT m (TestBoundVar sym "Bar")
-genBoundVar_BV32ArgBar sym = BV.BoundVar <$> genBoundBV32Var sym Nothing
+                          sym -> GenT m (OperandPair sym "Bar")
+genBoundVar_BV32ArgBar sym = do
+  OpP BarArg . BV.BoundVar <$> genBoundBV32Var sym Nothing
+
+genBoundVar_BV32ArgBox :: Monad m => MonadIO m =>
+                          WI.IsSymExprBuilder sym =>
+                          sym -> GenT m (OperandPair sym "Box")
+genBoundVar_BV32ArgBox sym = do
+  n <- HG.element [0..3]
+  OpP (BoxArg n) . BV.BoundVar <$> genBoundBV32Var sym Nothing
 
 ----------------------------------------------------------------------
 -- What4.Interface.SymExpr generators
@@ -400,14 +419,19 @@ genParameterizedFormula :: forall sh sym m t .  -- reordered args to allow TypeA
                            ( Monad m
                            , MonadIO m
                            , WI.IsSymExprBuilder sym
-                           , MkOperands (GenT m) sym (PL.List (TestBoundVar sym)) sh
+                           , MkOperands (GenT m) sym (PL.List (OperandPair sym)) sh
                            , WI.BoundVar sym ~ WE.ExprBoundVar t
                            ) =>
                            sym
-                        -> GenT m (F.ParameterizedFormula sym TestGenArch (sh :: [Symbol]))
-genParameterizedFormula sym = do
+                        -> TestGenOpcode TestGenOperand sh
+                        -> GenT m (F.ParameterizedFormula sym TestGenArch (sh :: [Symbol])
+                                  , List TestGenOperand sh
+                                  )
+genParameterizedFormula sym _opcode = do
   -- creates operands for 'sh'
-  operandVars <- mkOperand sym -- :: GenT m (PL.List (TestBoundVar sym) sh)
+  ops <- mkOperand sym  -- KWQ: all of the operand symnames need to be unique
+  let operandVars = fmapFC (\(OpP _ bv) -> bv) ops
+      actualOperands = fmapFC (\(OpP o _) -> o) ops
 
   -- Operands could be inputs, outputs, or both, and the same operand
   -- can appear multiple times in the list with different roles in
@@ -440,12 +464,15 @@ genParameterizedFormula sym = do
                                -- keys should be a (sub-)Set from params
                                genExpr sym p params operandVars literalVars
                in MapF.fromList <$> HG.list (linear 0 10) anElem
-  return F.ParameterizedFormula
-    { F.pfUses = params              -- Set.Set (Some (Parameter arch sh))
-    , F.pfOperandVars = operandVars  -- PL.List (BV.BoundVar sym arch) sh
-    , F.pfLiteralVars = literalVars  -- MapF.MapF (L.Location arch) (WI.BoundVar sym)
-    , F.pfDefs = defs                -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
-    }
+  return
+    ( F.ParameterizedFormula
+      { F.pfUses = params              -- Set.Set (Some (Parameter arch sh))
+      , F.pfOperandVars = operandVars  -- PL.List (BV.BoundVar sym arch) sh
+      , F.pfLiteralVars = literalVars  -- MapF.MapF (L.Location arch) (WI.BoundVar sym)
+      , F.pfDefs = defs                -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
+      }
+    , actualOperands
+    )
 
 
 possibleInput :: ( WI.IsSymExprBuilder sym
@@ -535,31 +562,51 @@ bv32defexpr next sym p params opvars litvars =
 -- Helpers to generate the operandVars based on the caller-specified
 -- ParameterizedFormula 'sh'
 
+
 class Monad m => MkOperands m sym (f :: k -> *) (ctx :: k) where
   mkOperand :: sym -> m (f ctx)
 
-instance Monad m => MkOperands m sym (PL.List (TestBoundVar sym)) '[] where
+instance Monad m => MkOperands m sym (PL.List (OperandPair sym)) '[] where
   mkOperand _ = return PL.Nil
 
 instance ( Monad m
-         , MkOperands m sym (TestBoundVar sym) o
-         , MkOperands m sym (PL.List (TestBoundVar sym)) os
+         , MkOperands m sym (OperandPair sym) o
+         , MkOperands m sym (PL.List (OperandPair sym)) os
+         , WI.BoundVar sym ~ WE.ExprBoundVar t
          ) =>
-         MkOperands m sym (PL.List (TestBoundVar sym)) (o ': os) where
-  mkOperand sym = do opl <- mkOperand sym
-                     opr <- mkOperand sym
-                     return $ opl :< opr
+         MkOperands m sym (PL.List (OperandPair sym)) (o ': os) where
+  mkOperand sym =
+    do opr <- mkOperand sym
+       let oprNames = foldrFC ((:) . operandName) [] opr
+           -- oprNames = foldrFC (\op -> \l -> operandName op : l) [] opr
+       -- operand boundvar symbol names must be unique within a
+       -- list. Retry a limited number of times to get a name for the
+       -- current element that doesn't match any name already
+       -- obtained; the limit is high enough that uniqueness should
+       -- always be provided via Hedgehog string generation, but low
+       -- enough to ensure termination.
+       opl <- mkUniqueOperand {-attempts=-}(20::Int) oprNames
+       return $ opl :< opr
+    where
+      mkUniqueOperand 0 _ =
+        error "too many attempts to create a unique operand!"
+      mkUniqueOperand n names =
+        do o <- mkOperand sym
+           let oName = operandName o
+           if oName `elem` names
+             then mkUniqueOperand (n-1) names
+             else return o
 
 instance ( Monad m
          , MonadIO m
          , WI.IsSymExprBuilder sym
          ) =>
-         MkOperands (GenT m) sym (TestBoundVar sym) "Foo" where
+         MkOperands (GenT m) sym (OperandPair sym) "Foo" where
   mkOperand = genBoundVar_NatArgFoo
 
 instance ( Monad m
          , MonadIO m
          , WI.IsSymExprBuilder sym
          ) =>
-         MkOperands (GenT m) sym (TestBoundVar sym) "Bar" where
+         MkOperands (GenT m) sym (OperandPair sym) "Bar" where
   mkOperand = genBoundVar_BV32ArgBar
