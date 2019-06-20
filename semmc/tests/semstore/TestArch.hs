@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -20,7 +21,9 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.List ( List( (:<) ) )
 import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some
+import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Parameterized.TH.GADT as TH
+import qualified Data.Text as T
 import           GHC.TypeLits ( Symbol )
 import           Numeric.Natural
 import qualified SemMC.Architecture as SA
@@ -43,8 +46,15 @@ instance SA.Architecture TestGenArch where
 
   uninterpretedFunctions _ = []  -- TODO: add some
 
-  shapeReprToTypeRepr _ FooArg = BaseNatRepr
-  shapeReprToTypeRepr _ BarArg = BaseBVRepr (knownNat :: NatRepr 32)
+  shapeReprToTypeRepr _ sr =
+    case SR.symbolRepr sr of
+      "Foo"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"Foo")
+          -> BaseNatRepr
+      "Bar"
+        | Just Refl <- testEquality sr (SR.knownSymbol @"Bar")
+          -> BaseBVRepr (knownNat :: NatRepr 32)
+      _ -> error ("Invalid shape repr: " ++ show sr)
 
   allocateSymExprsForOperand _arch _sym newVars FooArg = undefined
   allocateSymExprsForOperand _arch _sym newVars BarArg =
@@ -128,8 +138,8 @@ data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) whe
 
 deriving instance Show (TestGenOpcode operand_constr operands)
 
-opWaveShape :: List TestGenOperand '["Bar"]
-opWaveShape = BarArg :< PL.Nil
+opWaveShape :: List (SA.OperandTypeRepr TestGenArch) '["Bar"]
+opWaveShape = SR.knownSymbol :< PL.Nil
 
 type instance SA.Opcode TestGenArch = TestGenOpcode
 type instance SA.Operand TestGenArch = TestGenOperand
@@ -138,14 +148,8 @@ instance SA.IsOperand TestGenOperand
 instance SA.IsOpcode TestGenOpcode
 
 instance SA.IsOperandTypeRepr TestGenArch where
-  type OperandTypeRepr TestGenArch = TestGenOperand
-  operandTypeReprSymbol arch operandType =
-    case testEquality operandType BarArg of
-      Just Refl -> "Bar"
-      Nothing ->
-        case testEquality operandType FooArg of
-          Just Refl -> "Foo"
-          Nothing -> error "unrecognized operandtype for reprsymbol"
+  type OperandTypeRepr TestGenArch = SR.SymbolRepr
+  operandTypeReprSymbol arch = T.unpack . SR.symbolRepr
 
 instance ShowF (TestGenOpcode TestGenOperand)
   where
