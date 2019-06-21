@@ -58,7 +58,6 @@ compareParameterizedFormulasSimply
   :: ( MonadIO m
      , MonadTest m
      , TestEquality (SA.Location arch)
-     , Eq (WI.BoundVar sym (SA.OperandType arch op))
      , ShowF (SA.Location arch)
      , ShowF (WI.BoundVar sym)
      , WI.BoundVar sym ~ WE.ExprBoundVar t
@@ -66,8 +65,8 @@ compareParameterizedFormulasSimply
      ) =>
      sym
   -> Integer
-  -> SF.ParameterizedFormula sym arch (op : r)
-  -> SF.ParameterizedFormula sym arch (op : r)
+  -> SF.ParameterizedFormula sym arch sh
+  -> SF.ParameterizedFormula sym arch sh
   -> m ()
 compareParameterizedFormulasSimply sym ncycles origFormula resultFormula =
   do on (===) SF.pfUses origFormula resultFormula
@@ -101,7 +100,6 @@ compareParameterizedFormulasSymbolically
   :: ( MonadIO m
      , MonadTest m
      , TestEquality (SA.Location arch)
-     , Eq (WI.BoundVar sym (SA.OperandType arch op))
      , ShowF (SA.Location arch)
      , ShowF (WI.BoundVar sym)
      , WI.BoundVar sym ~ WE.ExprBoundVar t
@@ -111,10 +109,10 @@ compareParameterizedFormulasSymbolically
      , WPO.OnlineSolver t solver
      ) =>
      sym
-  -> PL.List (SA.Operand arch) (op : r)
+  -> PL.List (SA.Operand arch) sh
   -> Integer
-  -> SF.ParameterizedFormula sym arch (op : r)
-  -> SF.ParameterizedFormula sym arch (op : r)
+  -> SF.ParameterizedFormula sym arch sh
+  -> SF.ParameterizedFormula sym arch sh
   -> m ()
 compareParameterizedFormulasSymbolically sym operands ncycles origFormula resultFormula =
   do on (===) SF.pfUses origFormula resultFormula
@@ -155,14 +153,13 @@ compareParameterizedFormulasSymbolically sym operands ncycles origFormula result
 -- each time it reads a pfOperandVar).
 compareOperandLists :: ( MonadIO m
                        , MonadTest m
-                       , Eq (WI.BoundVar sym (SA.OperandType arch op))
                        , ShowF (WI.BoundVar sym)
                        , WI.BoundVar sym ~ WE.ExprBoundVar t
                        ) =>
                        sym
                     -> Integer
-                    -> PL.List (BV.BoundVar sym arch) (op : r)
-                    -> PL.List (BV.BoundVar sym arch) (op : r)
+                    -> PL.List (BV.BoundVar sym arch) sh
+                    -> PL.List (BV.BoundVar sym arch) sh
                     -> m ()
 compareOperandLists sym ncycle origOprnds resultOprnds = do
   on (===) lengthFC origOprnds resultOprnds

@@ -148,6 +148,7 @@ data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) whe
   OpWave :: TestGenOpcode TestGenOperand '["Bar"]
   OpSurf :: TestGenOpcode TestGenOperand '["Foo"]
   OpPack :: TestGenOpcode TestGenOperand '["Box", "Bar", "Box", "Box"]
+  OpSolo :: TestGenOpcode TestGenOperand '[]
 
 deriving instance Show (TestGenOpcode operand_constr operands)
 
@@ -155,6 +156,7 @@ instance HR.HasRepr (TestGenOpcode TestGenOperand) (PL.List SR.SymbolRepr) where
   typeRepr OpWave = knownRepr
   typeRepr OpSurf = knownRepr
   typeRepr OpPack = knownRepr
+  typeRepr OpSolo = knownRepr
 
 
 type instance SA.Opcode TestGenArch = TestGenOpcode
