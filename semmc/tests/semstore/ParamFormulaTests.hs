@@ -171,9 +171,6 @@ parameterizedFormulaTests = [
   where
     isNatArgFoo :: BV.BoundVar sym TestGenArch "Foo" -> Bool
     isNatArgFoo _ = True
-    -- isValidParamType :: forall arch (m :: * -> *) (sh :: [ghc-prim-0.5.3:GHC.Types.Symbol]).
-    --                     (L.IsLocation (L.Location arch), MonadTest m) =>
-    --                     Some (SF.Parameter arch sh) -> m ()
     isValidParamType (Some param) =
       case testEquality (SF.paramType param) BaseNatRepr of
         Just Refl -> True

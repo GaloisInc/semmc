@@ -53,6 +53,7 @@ genNat = HG.frequency [ (5, return 0)
                       ]
          -- Ensures that 0 and 1 are present in any reasonably-sized distribution
 
+
 ----------------------------------------------------------------------
 -- Location Generators
 

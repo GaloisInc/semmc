@@ -131,10 +131,9 @@ compareParameterizedFormulasSymbolically sym operands ncycles origFormula result
      on (===) (MapF.keys . SF.pfDefs) origFormula resultFormula
      (_te1, f1) <- liftIO $ instantiateFormula sym origFormula operands
      (_te2, f2) <- liftIO $ instantiateFormula sym resultFormula operands
-     liftIO $ putStrLn "checkin' equiv..."
      equiv <- liftIO $ formulasEquivSym sym f1 f2
      case equiv of
-       Equivalent -> liftIO (putStrLn "boo yah!") >> success
+       Equivalent -> success
        DifferentBehavior _ -> failure
        Timeout -> failure
 

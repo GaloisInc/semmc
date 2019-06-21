@@ -22,7 +22,6 @@ import           Data.EnumF -- in Dismantle Tablegen!
 import           Data.Kind ( Type )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.HasRepr as HR
-import           Data.Parameterized.List ( List( (:<) ) )
 import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.SymbolRepr as SR
@@ -129,9 +128,6 @@ type instance L.Location TestGenArch = TestLocation
 ----------------------------------------------------------------------
 -- Operands
 
--- type ShapeRepr arch = SL.List (OperandTypeRepr arch)
--- type family OperandType (arch::Type) (op[erand]::Symbol) :: BaseType
-
 type instance SA.OperandType TestGenArch "Foo" = BaseNatType  -- unsupported for Printer
 type instance SA.OperandType TestGenArch "Bar" = BaseBVType 32
 type instance SA.OperandType TestGenArch "Box" = BaseBVType 32
@@ -169,20 +165,13 @@ instance SA.IsOpcode TestGenOpcode
 
 instance SA.IsOperandTypeRepr TestGenArch where
   type OperandTypeRepr TestGenArch = SR.SymbolRepr
-  operandTypeReprSymbol arch = T.unpack . SR.symbolRepr
+  operandTypeReprSymbol _arch = T.unpack . SR.symbolRepr
 
 instance ShowF (TestGenOpcode TestGenOperand)
   where
     showF _ = "<<OPCODE>>"
 instance EnumF (TestGenOpcode TestGenOperand) where
 instance OrdF (TestGenOpcode TestGenOperand)
-
--- BV :: SemMC.BoundVar
--- newtype BoundVar (sym :: Type) (arch :: Type) (op :: Symbol) =
---   BoundVar { unBoundVar :: S.BoundVar sym (OperandType arch op) }
-
--- S (What4.Interface):
--- type family BoundVar (sym :: Type) :: BaseType -> Type
 
 ----------------------------------------------------------------------
 -- TestEquality and OrdF instances
