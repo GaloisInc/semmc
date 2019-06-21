@@ -107,7 +107,7 @@ parameterizedFormulaTests = [
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, online backend" $
+    , testProperty "serialized formula round trip, online backend, OpWave" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
@@ -134,7 +134,34 @@ parameterizedFormulaTests = [
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
 
-    , testProperty "serialized formula double round trip" $
+    , testProperty "serialized formula round trip, online backend, OpPack" $
+      property $
+      E.handleAll (\e -> annotate (show e) >> failure) $ do
+        Some r <- liftIO newIONonceGenerator
+        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          -- generate a formula
+          let opcode = OpPack
+          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+          -- ensure that formula compares as equivalent to itself
+          compareParameterizedFormulasSymbolically sym operands 1 p p
+          -- now print the formula to a text string
+          debugPrint $ "parameterizedFormula: " <> show p
+          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
+          debugPrint $ "printedFormula: " <> show printedFormula
+          -- convert the printed text string back into a formula
+          let fenv = undefined
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+          reForm <- liftIO $
+                    Log.withLogCfg lcfg $
+                    FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
+          debugPrint $ "re-Formulized: " <> show reForm
+          f <- evalEither reForm
+          -- verify the recreated formula matches the original
+          compareParameterizedFormulasSymbolically sym operands 1 p f
+
+    , testProperty "serialized formula double round trip, OpWave" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
@@ -160,7 +187,37 @@ parameterizedFormulaTests = [
           f' <- evalEither reForm'
 
           -- verification of results
+          compareParameterizedFormulasSymbolically sym operands 1 p f
+          compareParameterizedFormulasSymbolically sym operands 1 f f'
           -- KWQ: is variable renaming OK as long as the renaming is consistent and non-overlapping?
+          compareParameterizedFormulasSymbolically sym operands 2 p f'
+
+    , testProperty "serialized formula double round trip, OpPack" $
+      property $
+      E.handleAll (\e -> annotate (show e) >> failure) $ do
+        Some r <- liftIO newIONonceGenerator
+        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          let opcode = OpPack
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+
+          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+
+          -- first round trip:
+          let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
+          let fenv = undefined
+          reForm <- liftIO $
+                    Log.withLogCfg lcfg $
+                    FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
+          f <- evalEither reForm
+
+          -- second round trip:
+          let printedFormula' = FO.printParameterizedFormula (HR.typeRepr opcode) f
+          reForm' <- liftIO $
+                     Log.withLogCfg lcfg $
+                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula'
+          f' <- evalEither reForm'
+
+          -- verification of results
           compareParameterizedFormulasSymbolically sym operands 1 p f
           compareParameterizedFormulasSymbolically sym operands 1 f f'
           compareParameterizedFormulasSymbolically sym operands 2 p f'
