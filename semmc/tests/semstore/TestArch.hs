@@ -48,7 +48,7 @@ instance SA.Architecture TestGenArch where
 
   operandToLocation _ FooArg     = Nothing
   operandToLocation _ BarArg     = Just TestBarLoc
-  operandToLocation _ (BoxArg n) = Just (TestRegLoc n)
+  operandToLocation _ (BoxArg n) = Just (TestBoxLoc n)
 
   uninterpretedFunctions _ = []  -- TODO: add some
 
@@ -70,7 +70,7 @@ instance SA.Architecture TestGenArch where
     let loc = TestBarLoc in
     TaggedExpr <$> SA.LocationOperand loc <$> newVars loc
   allocateSymExprsForOperand _arch _sym newVars (BoxArg n) =
-    let loc = TestRegLoc n in
+    let loc = TestBoxLoc n in
     TaggedExpr <$> SA.LocationOperand loc <$> newVars loc
 
   locationFuncInterpretation _ = []
@@ -82,7 +82,7 @@ instance SA.Architecture TestGenArch where
 data TestLocation :: BaseType -> Type where
   TestNatLoc :: Natural -> TestLocation BaseNatType
   TestIntLoc :: Integer -> TestLocation BaseIntegerType
-  TestRegLoc :: Natural -> TestLocation (BaseBVType 32)
+  TestBoxLoc :: Natural -> TestLocation (BaseBVType 32)
   TestBarLoc :: TestLocation (BaseBVType 32)
   -- TBD: more basetype locations
   -- TBD: some memory locations
@@ -90,7 +90,7 @@ data TestLocation :: BaseType -> Type where
 
 instance Show (TestLocation tp) where
   show TestBarLoc     = "Bar"
-  show (TestRegLoc n) = "Reg_" <> show n  -- KWQ: must be parseable; Reg#0 fails with the #... needs quoting or input validation in the Printer
+  show (TestBoxLoc n) = "Box_" <> show n
   show (TestNatLoc n) = "NAT_" <> show n  -- KWQ: want NAT@... see above
   show (TestIntLoc i) = if i >= 0
                         then "INT_" <> show i  -- KWQ: want INT@... see above
@@ -98,29 +98,27 @@ instance Show (TestLocation tp) where
 
 instance ShowF TestLocation
 
--- must be the inverse of the show instance above
-readTestLocation "Reg_0" = Just $ Some $ TestRegLoc 0
-readTestLocation "Reg_1" = Just $ Some $ TestRegLoc 1
-readTestLocation "Reg_2" = Just $ Some $ TestRegLoc 2
-readTestLocation "Reg_3" = Just $ Some $ TestRegLoc 3
-readTestLocation "Bar"   = Just $ Some $ TestBarLoc
-readTestLocation _ = Nothing
-
 deriving instance Eq (TestLocation tp)
 deriving instance Ord (TestLocation tp)
 
 instance L.IsLocation TestLocation where
   locationType (TestNatLoc _) = BaseNatRepr
   locationType (TestIntLoc _) = BaseIntegerRepr
-  locationType (TestRegLoc _) = BaseBVRepr knownNat
+  locationType (TestBoxLoc _) = BaseBVRepr knownNat
   locationType TestBarLoc     = BaseBVRepr knownNat
 
-  readLocation = readTestLocation
+  -- must be the inverse of the show instance above
+  readLocation "Box_0" = Just $ Some $ TestBoxLoc 0
+  readLocation "Box_1" = Just $ Some $ TestBoxLoc 1
+  readLocation "Box_2" = Just $ Some $ TestBoxLoc 2
+  readLocation "Box_3" = Just $ Some $ TestBoxLoc 3
+  readLocation "Bar"   = Just $ Some $ TestBarLoc
+  readLocation _ = Nothing
 
   isMemoryLocation _ = False
 
   allLocations = [Some TestBarLoc]
-                 <> (Some . TestRegLoc <$> [0..3])
+                 <> (Some . TestBoxLoc <$> [0..3])
                  <> (Some . TestNatLoc <$> [0..6])
                  <> (Some . TestIntLoc <$> [-10..10])
 

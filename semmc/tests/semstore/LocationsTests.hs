@@ -65,7 +65,7 @@ locationTests = [
       [ testProperty "location value distribution" $ -- test generator validity
         property $ do l <- forAll genRegLocation
                       let locVal = case l of
-                                     TestRegLoc n -> n
+                                     TestBoxLoc n -> n
                                      TestBarLoc -> 99
                       cover 10 "reg32loc 0" $ locVal == 0
                       cover 10 "reg32loc 1" $ locVal == 1

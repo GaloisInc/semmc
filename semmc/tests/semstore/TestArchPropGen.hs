@@ -69,7 +69,7 @@ genIntLocation = TestIntLoc <$>
                  -- Ensures that 0 and 1 are present in any reasonably-sized distribution
 
 genRegLocation :: Monad m => GenT m (TestLocation (BaseBVType 32))
-genRegLocation = TestRegLoc <$> HG.element [0..3]
+genRegLocation = TestBoxLoc <$> HG.element [0..3]
 
 ----------------------------------------------------------------------
 -- Function.Parameter Generators
