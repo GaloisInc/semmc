@@ -79,7 +79,7 @@ parameterizedFormulaTests = [
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugPrint $ "printedFormula: " <> show printedFormula
-                    let fenv = undefined
+                    let fenv = error "Formula Environment TBD"
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
@@ -98,7 +98,7 @@ parameterizedFormulaTests = [
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugPrint $ "printedFormula: " <> show printedFormula
-                    let fenv = undefined
+                    let fenv = error "Formula Environment TBD"
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
@@ -117,7 +117,7 @@ parameterizedFormulaTests = [
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugPrint $ "printedFormula: " <> show printedFormula
-                    let fenv = undefined
+                    let fenv = error "Formula Environment TBD"
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
@@ -143,7 +143,7 @@ parameterizedFormulaTests = [
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           debugPrint $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
-          let fenv = undefined
+          let fenv = error "Formula Environment TBD"
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -170,7 +170,7 @@ parameterizedFormulaTests = [
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           debugPrint $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
-          let fenv = undefined
+          let fenv = error "Formula Environment TBD"
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -197,7 +197,7 @@ parameterizedFormulaTests = [
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           debugPrint $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
-          let fenv = undefined
+          let fenv = error "Formula Environment TBD"
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -219,7 +219,7 @@ parameterizedFormulaTests = [
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          let fenv = undefined
+          let fenv = error "Formula Environment TBD"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
@@ -250,7 +250,7 @@ parameterizedFormulaTests = [
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          let fenv = undefined
+          let fenv = error "Formula Environment TBD"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
@@ -280,7 +280,7 @@ parameterizedFormulaTests = [
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          let fenv = undefined
+          let fenv = error "Formula Environment TBD"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula

@@ -64,7 +64,8 @@ instance SA.Architecture TestGenArch where
           -> BaseBVRepr (knownNat :: NatRepr 32)
       _ -> error ("Invalid shape repr: " ++ show sr)
 
-  allocateSymExprsForOperand _arch _sym newVars FooArg = undefined
+  allocateSymExprsForOperand _arch _sym _newVars FooArg =
+    error "allocateSymExprsForOperand FooArg TBD"
   allocateSymExprsForOperand _arch _sym newVars BarArg =
     let loc = TestBarLoc in
     TaggedExpr <$> SA.LocationOperand loc <$> newVars loc
@@ -120,6 +121,10 @@ instance L.IsLocation TestLocation where
                  <> (Some . TestBoxLoc <$> [0..3])
                  <> (Some . TestNatLoc <$> [0..6])
                  <> (Some . TestIntLoc <$> [-10..10])
+
+  defaultLocationExpr = error "TestLocation defaultLocationExpr TBD"
+
+  registerizationLocations = error "TestLocation registerizationLocations TBD"
 
 
 type instance L.Location TestGenArch = TestLocation
