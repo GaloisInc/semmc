@@ -133,12 +133,22 @@ genSomeParameter =
 ----------------------------------------------------------------------
 -- SolverSymbol Generators
 
-genSolverSymbol :: Monad m => GenT m WI.SolverSymbol
-genSolverSymbol = HG.choice [ -- return WI.emptySymbol  -- KWQ: generates eqns with this, but the eqns are invalid!
-                             genUserSymbol
-                            -- , genSystemSymbol  -- KWQ: cannot parse the printed name with a !
-                            ]
-  where genUSym = HG.string (linear 1 32) $
+-- | Generates a solver symbol (e.g. the name of a bound var).  The
+-- 'forPrinting' argument is true if this will be used for generating
+-- Formula's that are printed (serialized); the serialization process
+-- only supports user symbols, not system symbols (in part because a
+-- system symbol has an exclamation point which is not a valid
+-- s-expression symbol name).
+genSolverSymbol :: Monad m => Bool -> GenT m WI.SolverSymbol
+genSolverSymbol forPrinting =
+  HG.choice $ catMaybes
+  [ Just genUserSymbol
+  , if forPrinting then Nothing else Just genSystemSymbol
+  -- , return WI.emptySymbol   -- can generate eqns with this, but the eqns are invalid!
+  ]
+  where userSymPrefix = "user__"
+        systemSymPrefix = "sys__"
+        genUSym = HG.string (linear 1 32) $
                   HG.frequency [ (90, HG.alphaNum)
                                , (10, return '_')
                                ]
@@ -146,8 +156,7 @@ genSolverSymbol = HG.choice [ -- return WI.emptySymbol  -- KWQ: generates eqns w
                         join3 (a,b,c) = a <> b <> c
                         s' = map join3 $ tail sp
                     in HG.element s'
-        -- genUserSymbol = (WI.userSymbol <$> genUSym) >>= \case
-        genUserSymbol = (WI.userSymbol . (<>) "user__" <$> genUSym) >>= \case
+        genUserSymbol = (WI.userSymbol . (<>) userSymPrefix <$> genUSym) >>= \case
           -- alphaNum and _, but must not match a known Yices/smtlib keyword
           Left _ -> genUserSymbol  -- could repeat forever...
           Right s -> return s
@@ -160,8 +169,7 @@ genSolverSymbol = HG.choice [ -- return WI.emptySymbol  -- KWQ: generates eqns w
                              -- to prevent failure.
                              case WI.userSymbol s of
                                Left _ -> genSystemSymbol -- could repeat forever...
-                               -- Right _ -> systemSymbol <$> genSSym s
-                               Right _ -> systemSymbol . (<>) "sys__" <$> genSSym s
+                               Right _ -> systemSymbol . (<>) systemSymPrefix <$> genSSym s
 
 ----------------------------------------------------------------------
 
@@ -200,7 +208,7 @@ genBoundBV32Var sym mbName = do
 
 bvSymName :: Monad m => Maybe String -> GenT m WI.SolverSymbol
 bvSymName = \case
-    Nothing -> genSolverSymbol
+    Nothing -> genSolverSymbol True
     Just n ->
            case WI.userSymbol n of
              Left e -> error $ "invalid genBoundBV32Var name '" <> n <> "': " <> show e
@@ -272,10 +280,11 @@ genBV32SymExpr :: ( MonadIO m
                -> MapF.MapF TestLocation (WI.BoundVar sym)
                -> GenT m (WI.SymExpr sym (BaseBVType 32))
 genBV32SymExpr sym params opvars litvars = do
-  -- get a set of the possible variables that can be used as sources
-  -- in the defs, which are declared already as freshBoundVars.
   let optional = catMaybes
                  [
+                   -- get one of the possible variables (params) that
+                   -- can be used as sources in the defs, which are
+                   -- declared already as freshBoundVars.
                    case F.length params of
                      0 -> Nothing
                      _ -> Just (paramExprBV32 sym opvars litvars
@@ -435,16 +444,24 @@ genParameterizedFormula :: forall sh sym m t .  -- reordered args to allow TypeA
                                   )
 genParameterizedFormula sym _opcode = do
   -- creates operands for 'sh'
-  ops <- mkOperand sym  -- KWQ: all of the operand symnames need to be unique
+  ops <- mkOperand sym
   let operandVars = fmapFC (\(OpP _ bv) -> bv) ops
       actualOperands = fmapFC (\(OpP o _) -> o) ops
 
   -- Operands could be inputs, outputs, or both, and the same operand
   -- can appear multiple times in the list with different roles in
   -- each.  Examples:
+  --
   --     MOVL R0, R1
   --     MOVL (R0)+, R1
   --     ADDL R1, R0, R1
+  --
+  -- Each actual Operand has a unique name (handled by mkOperand
+  -- above) for referencing (e.g. the ADDL might be "ADDL RBase,
+  -- RAddend, ROut" but the type of all three is a "GeneralRegister".
+  -- A particular instantiation of an operand will have specific
+  -- Location bindings for each operand (e.g. RBase and ROut location
+  -- is R1, RAddend location is R0"
 
   -- params are all the parameters useable as inputs for the various
   -- defs that will be generated.  These are the input operands
@@ -584,14 +601,14 @@ instance ( Monad m
   mkOperand sym =
     do opr <- mkOperand sym
        let oprNames = foldrFC ((:) . operandName) [] opr
-           -- oprNames = foldrFC (\op -> \l -> operandName op : l) [] opr
        -- operand boundvar symbol names must be unique within a
        -- list. Retry a limited number of times to get a name for the
        -- current element that doesn't match any name already
        -- obtained; the limit is high enough that uniqueness should
        -- always be provided via Hedgehog string generation, but low
        -- enough to ensure termination.
-       opl <- mkUniqueOperand {-attempts=-}(20::Int) oprNames
+       let attempts = 20 :: Int
+       opl <- mkUniqueOperand attempts oprNames
        return $ opl :< opr
     where
       mkUniqueOperand 0 _ =

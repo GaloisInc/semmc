@@ -88,12 +88,15 @@ data TestLocation :: BaseType -> Type where
   -- TBD: some memory locations
   -- MemLoc :: Mem -> Location (BaseBVType 32)
 
+-- Specifies the serialized S-expression form of these locations.
+-- These must be valid S-expression symbols: alphanumeric and
+-- underscores only.
 instance Show (TestLocation tp) where
   show TestBarLoc     = "Bar"
   show (TestBoxLoc n) = "Box_" <> show n
-  show (TestNatLoc n) = "NAT_" <> show n  -- KWQ: want NAT@... see above
+  show (TestNatLoc n) = "NAT_" <> show n
   show (TestIntLoc i) = if i >= 0
-                        then "INT_" <> show i  -- KWQ: want INT@... see above
+                        then "INT_" <> show i
                         else "NEGINT_" <> show (-i)
 
 instance ShowF TestLocation
@@ -145,9 +148,9 @@ data TestGenOperand (nm::Symbol) where
 deriving instance Show (TestGenOperand nm)
 instance ShowF TestGenOperand
   where
+    -- once it's clear where this is needed, a more descriptive form
+    -- can be provided.
     showF _ = "<<OPERAND>>"
--- data TestGenOperandType (operand :: Symbol) where
---   "Wave" :: TestGenOpcodeType "Wave"
 
 data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) where
   OpWave :: TestGenOpcode TestGenOperand '["Bar"]
@@ -176,6 +179,8 @@ instance SA.IsOperandTypeRepr TestGenArch where
 
 instance ShowF (TestGenOpcode TestGenOperand)
   where
+    -- once it's clear where this is needed, a more descriptive form
+    -- can be provided.
     showF _ = "<<OPCODE>>"
 instance EnumF (TestGenOpcode TestGenOperand) where
 instance OrdF (TestGenOpcode TestGenOperand)
