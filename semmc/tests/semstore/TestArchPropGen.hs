@@ -41,7 +41,7 @@ import           TestArch
 import           What4.BaseTypes
 import qualified What4.Expr.Builder as WE
 import qualified What4.Interface as WI
-import           What4.Symbol ( systemSymbol, solverSymbolAsText )
+import           What4.Symbol ( systemSymbol )
 
 
 ----------------------------------------------------------------------
@@ -69,8 +69,8 @@ genIntLocation = TestIntLoc <$>
                               ]
                  -- Ensures that 0 and 1 are present in any reasonably-sized distribution
 
-genRegLocation :: Monad m => GenT m (TestLocation (BaseBVType 32))
-genRegLocation = TestBoxLoc <$> HG.element [0..3]
+genBoxLocation :: Monad m => GenT m (TestLocation (BaseBVType 32))
+genBoxLocation = TestBoxLoc <$> HG.element [0..3]
 
 ----------------------------------------------------------------------
 -- Function.Parameter Generators
@@ -105,11 +105,11 @@ genIntParameter = HG.choice
                     -- -> Parameter arch sh tp
                   ]
 
-genRegParameter :: Monad m => GenT m (F.Parameter TestGenArch sh (BaseBVType 32))
-genRegParameter = HG.choice
+genBoxParameter :: Monad m => GenT m (F.Parameter TestGenArch sh (BaseBVType 32))
+genBoxParameter = HG.choice -- KWQ: more of theses!
                   [
                     -- , F.OperandParameter :: BaseTypeRepr (A.OperandType arch s) -> PL.Index sh s -> Parameter arch sh (A.OperandType arch s)
-                    F.LiteralParameter <$> genRegLocation
+                    F.LiteralParameter <$> genBoxLocation
                     -- , FunctionParameter :: String
                     -- -- The name of the uninterpreted function
                     -- -> WrappedOperand arch sh s
@@ -124,7 +124,7 @@ genSomeParameter :: Monad m => GenT m (Some (F.Parameter TestGenArch sh))
 genSomeParameter =
   HG.choice
   [
-    Some <$> genRegParameter
+    Some <$> genBoxParameter
     -- , Some <$> genNatParameter  -- not supported for formula printing
     -- , Some <$> genIntParameter  -- not supported for formula printing
   ]
@@ -375,6 +375,11 @@ genBV32SymExpr sym params opvars litvars = do
     -- , HG.subtermM
     --   (genBV32SymExpr sym params opvars litvars)
     --   (liftIO . WI.bvCountTrailingZeros sym)
+
+    -- TODO: bvZext, bvSext, bvTrunc operations
+    -- TODO: comparators: bvIsNonzero, bvUle, bvEq, bvNe, bvIsNeg, testBitBV, etc.
+    -- TODO: branching: bvIte
+
 
     -- , (liftIO . WI.bvNeg sym) =<< genBV32SymExpr sym
     ]

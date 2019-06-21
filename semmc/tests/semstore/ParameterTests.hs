@@ -38,9 +38,9 @@ parameterTests = [
       -- TBD: needs other tests
       ]
 
-    , testGroup "Register (32-bit)" $
+    , testGroup "Box (32-bit BV)" $
       [ testProperty "parameter type" $
-        property $ do p <- forAll $ genRegParameter
+        property $ do p <- forAll $ genBoxParameter
                       let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32)
                       case testEquality (F.paramType p) aBV32 of
                         Just Refl -> success
