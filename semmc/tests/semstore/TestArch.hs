@@ -26,6 +26,7 @@ import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Parameterized.TH.GADT as TH
+import qualified Data.Set.NonEmpty as NES
 import qualified Data.Text as T
 import           GHC.TypeLits ( Symbol )
 import           Numeric.Natural
@@ -103,22 +104,6 @@ instance ShowF TestLocation
 
 deriving instance Eq (TestLocation tp)
 
--- With GHC 8.6 and later, simply: deriving instance Ord (TestLocation tp)
--- but GHC 8.4 and previous cannot automatically derive this
-
-instance Ord (TestLocation tp) where
-  compare TestBarLoc TestBarLoc = EQ
-  compare TestBarLoc _ = LT
-  compare (TestBoxLoc _) TestBarLoc = GT
-  compare (TestBoxLoc x) (TestBoxLoc y) = compare x y
-  compare (TestBoxLoc _) _ = LT
-  compare (TestNatLoc _) TestBarLoc = GT
-  compare (TestNatLoc _) (TestBoxLoc _) = GT
-  compare (TestNatLoc x) (TestNatLoc y) = compare x y
-  compare (TestNatLoc _) _  = LT
-  compare (TestIntLoc x) (TestIntLoc y) = compare x y
-  compare (TestIntLoc _) _ = GT
-
 instance L.IsLocation TestLocation where
   locationType (TestNatLoc _) = BaseNatRepr
   locationType (TestIntLoc _) = BaseIntegerRepr
@@ -174,6 +159,8 @@ data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) whe
   OpSolo :: TestGenOpcode TestGenOperand '[]
 
 deriving instance Show (TestGenOpcode operand_constr operands)
+deriving instance Eq   (TestGenOpcode operand_constr operands)
+deriving instance Ord  (TestGenOpcode operand_constr operands)
 
 instance HR.HasRepr (TestGenOpcode TestGenOperand) (PL.List SR.SymbolRepr) where
   typeRepr OpWave = knownRepr
@@ -198,7 +185,14 @@ instance ShowF (TestGenOpcode TestGenOperand)
     -- can be provided.
     showF _ = "<<OPCODE>>"
 instance EnumF (TestGenOpcode TestGenOperand) where
-instance OrdF (TestGenOpcode TestGenOperand)
+  enumF OpWave = 0
+  enumF OpSurf = 1
+  enumF OpPack = 2
+  enumF OpSolo = 3
+  congruentF op = NES.singleton op
+
+instance OrdF (TestGenOpcode TestGenOperand) where
+  compareF = enumCompareF
 
 ----------------------------------------------------------------------
 -- TestEquality and OrdF instances
