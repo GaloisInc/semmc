@@ -449,6 +449,7 @@ parameterizedFormulaTests = [
             Right _ -> return ()
             Left e -> assertEqual (T.unpack $ "valid parse of " <> sexprTxt) "error" e
 
+      ]
     ]
   ]
   where
