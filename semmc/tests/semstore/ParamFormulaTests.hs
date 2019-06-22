@@ -18,17 +18,24 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
 import qualified Data.Set as Set
+import qualified Data.Text as T
 import           Hedgehog
 import           Hedgehog.Internal.Property ( forAllT )
 import           HedgehogUtil ( )
 import qualified Lang.Crucible.Backend.Online as CBO
 import           Lang.Crucible.Backend.Simple ( newSimpleBackend )
 import qualified SemMC.BoundVar as BV
+import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param
+                           , bvadd, bvmul, bvshl, bvnot
+                           , runSem, printDefinition
+                           , ExprTypeRepr(..), Literal(..), Expr(..)
+                           , Definition, Location(..), Package(..), Parameter(..) )
 import qualified SemMC.Formula.Formula as SF
 import qualified SemMC.Formula.Parser as FI
 import qualified SemMC.Formula.Printer as FO
 import qualified SemMC.Log as Log
 import           Test.Tasty
+import           Test.Tasty.HUnit ( assertBool, assertEqual, testCase, (@?=) )
 import           Test.Tasty.Hedgehog
 import           TestArch
 import           TestArchPropGen
@@ -297,6 +304,150 @@ parameterizedFormulaTests = [
           compareParameterizedFormulasSymbolically sym operands 1 p f
           compareParameterizedFormulasSymbolically sym operands 1 f f'
           compareParameterizedFormulasSymbolically sym operands 2 p f'
+
+    , testGroup "DSL specified"
+      [
+        testCase "Trivial formula, OpSolo" $ do
+          let opcode = OpSolo
+          -- Use the SemMC DSL to specify a Formula
+          let opdef = defineOpcode (show opcode) $
+                      do comment $ (show opcode) <> " (no arguments)"
+              pkg = runSem opdef
+          -- Verify the S-expression stored form of the Formula is as expected
+          length (pkgFunctions pkg) @?= 0
+          length (pkgFormulas pkg) @?= 1
+          let (pkgN, pkgD) = head $ pkgFormulas pkg
+          pkgN @?= show opcode
+          let sexprTxt = printDefinition pkgD
+          sexprTxt @?= (T.strip $ T.pack $ unlines
+                        [ ";; " <> show opcode <> " (no arguments)"
+                        , "((operands ())"
+                        , " (in ())"
+                        , " (defs ()))"
+                        ])
+          -- verify that the expression can be parsed back into a Formula
+          Some r <- liftIO newIONonceGenerator
+          sym <- liftIO $ newSimpleBackend r
+          let fenv = error "Formula Environment TBD"
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+          reForm <- liftIO $
+                    Log.withLogCfg lcfg $
+                    FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
+          debugPrint $ "re-Formulized: " <> show reForm
+          -- n.b. no actual validation of the proper semantics here,
+          -- just that it had enough valid syntax to be parsed.
+          case reForm of
+            Right _ -> return ()
+            Left e -> assertEqual (T.unpack $ "valid parse of " <> sexprTxt) "error" e
+
+      , testCase "Small formula, OpSolo" $ do
+          let opcode = OpSolo
+              foo = LiteralLoc Literal { lName = "Box_0", lExprType = EBV 32 }
+              bar = LiteralLoc Literal { lName = "Bar",   lExprType = EBV 32 }
+          -- Use the SemMC DSL to specify a Formula
+          let opdef = defineOpcode (show opcode) $
+                      do comment $ (show opcode) <> " (no operands, two locations)"
+                         input foo
+                         input bar
+                         defLoc foo (bvadd (Loc bar) (LitBV 32 0x4a4a))
+                         defLoc bar $ LitBV 32 0
+              pkg = runSem opdef
+          -- Verify the S-expression stored form of the Formula is as expected
+          length (pkgFunctions pkg) @?= 0
+          length (pkgFormulas pkg) @?= 1
+          let (pkgN, pkgD) = head $ pkgFormulas pkg
+          pkgN @?= show opcode
+          let sexprTxt = printDefinition pkgD
+          sexprTxt @?= (T.strip $ T.pack $ unlines
+                        [ ";; " <> show opcode <> " (no operands, two locations)"
+                        , "((operands ())"
+                        , " (in"
+                        , "  ('Bar 'Box_0))"
+                        , " (defs"
+                        , "  (('Bar #x00000000)"
+                        , "   ('Box_0"
+                        , "    (bvadd 'Bar #x00004a4a)))))"
+                        ])
+          -- verify that the expression can be parsed back into a Formula
+          Some r <- liftIO newIONonceGenerator
+          sym <- liftIO $ newSimpleBackend r
+          let fenv = error "Formula Environment TBD"
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+          reForm <- liftIO $
+                    Log.withLogCfg lcfg $
+                    FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
+          debugPrint $ "re-Formulized: " <> show reForm
+          -- n.b. no actual validation of the proper semantics here,
+          -- just that it had enough valid syntax to be parsed.
+          case reForm of
+            Right _ -> return ()
+            Left e -> assertEqual (T.unpack $ "valid parse of " <> sexprTxt) "error" e
+
+      , testCase "Medium formula, OpPack" $ do
+          let opcode = OpPack
+              foo = LiteralLoc Literal { lName = "Box_0", lExprType = EBV 32 }
+              bar = LiteralLoc Literal { lName = "Bar",   lExprType = EBV 32 }
+          -- Use the SemMC DSL to specify a Formula
+          let opdef = defineOpcode (show opcode) $
+                      do comment $ (show opcode) <> " four operands, two locations"
+                         box0 <- param "box__0" "Box" (EBV 32)
+                         bar1 <- param "bar__1" "Bar" (EBV 32)
+                         box2 <- param "box__2" "Box" (EBV 32)
+                         box3 <- param "box__3" "Box" (EBV 32)
+                         input foo
+                         input bar
+                         input box2
+                         input bar1
+                         let zero = LitBV 32 0
+                             two  = LitBV 32 2
+                             nineteen = LitBV 32 19
+                             nine = LitBV 32 9
+                         defLoc foo (bvadd (Loc bar) (LitBV 32 0x4a4a))
+                         defLoc bar zero
+                         defLoc box0 (bvmul
+                                      (bvadd (bvshl two (Loc box3)) nineteen)
+                                      (bvnot nine))
+              pkg = runSem opdef
+          -- Verify the S-expression stored form of the Formula is as expected
+          length (pkgFunctions pkg) @?= 0
+          length (pkgFormulas pkg) @?= 1
+          let (pkgN, pkgD) = head $ pkgFormulas pkg
+          pkgN @?= show opcode
+          let sexprTxt = printDefinition pkgD
+          sexprTxt @?= (T.strip $ T.pack $ unlines
+                        [ ";; " <> show opcode <> " four operands, two locations"
+                        , "((operands"
+                        , " ((box__0 . 'Box)"
+                        , "  (bar__1 . 'Bar)"
+                        , "  (box__2 . 'Box)"
+                        , "  (box__3 . 'Box)))"
+                        , " (in"
+                        , "  (bar__1 box__2 'Bar 'Box_0))"
+                        , " (defs"
+                        , "  ((box__0"
+                        , "   (bvmul"
+                        , "    (bvadd"
+                        , "     (bvshl #x00000002 box__3)"
+                        , "     #x00000013)"
+                        , "    (bvnot #x00000009)))"
+                        , "   ('Bar #x00000000)"
+                        , "   ('Box_0"
+                        , "    (bvadd 'Bar #x00004a4a)))))"
+                        ])
+          -- verify that the expression can be parsed back into a Formula
+          Some r <- liftIO newIONonceGenerator
+          sym <- liftIO $ newSimpleBackend r
+          let fenv = error "Formula Environment TBD"
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
+          reForm <- liftIO $
+                    Log.withLogCfg lcfg $
+                    FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
+          debugPrint $ "re-Formulized: " <> show reForm
+          -- n.b. no actual validation of the proper semantics here,
+          -- just that it had enough valid syntax to be parsed.
+          case reForm of
+            Right _ -> return ()
+            Left e -> assertEqual (T.unpack $ "valid parse of " <> sexprTxt) "error" e
 
     ]
   ]

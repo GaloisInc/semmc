@@ -102,7 +102,22 @@ instance Show (TestLocation tp) where
 instance ShowF TestLocation
 
 deriving instance Eq (TestLocation tp)
-deriving instance Ord (TestLocation tp)
+
+-- With GHC 8.6 and later, simply: deriving instance Ord (TestLocation tp)
+-- but GHC 8.4 and previous cannot automatically derive this
+
+instance Ord (TestLocation tp) where
+  compare TestBarLoc TestBarLoc = EQ
+  compare TestBarLoc _ = LT
+  compare (TestBoxLoc _) TestBarLoc = GT
+  compare (TestBoxLoc x) (TestBoxLoc y) = compare x y
+  compare (TestBoxLoc _) _ = LT
+  compare (TestNatLoc _) TestBarLoc = GT
+  compare (TestNatLoc _) (TestBoxLoc _) = GT
+  compare (TestNatLoc x) (TestNatLoc y) = compare x y
+  compare (TestNatLoc _) _  = LT
+  compare (TestIntLoc x) (TestIntLoc y) = compare x y
+  compare (TestIntLoc _) _ = GT
 
 instance L.IsLocation TestLocation where
   locationType (TestNatLoc _) = BaseNatRepr
