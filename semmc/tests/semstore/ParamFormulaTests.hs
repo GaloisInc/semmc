@@ -29,13 +29,13 @@ import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param
                            , bvadd, bvmul, bvshl, bvnot
                            , runSem, printDefinition
                            , ExprTypeRepr(..), Literal(..), Expr(..)
-                           , Definition, Location(..), Package(..), Parameter(..) )
+                           , Location(..), Package(..) )
 import qualified SemMC.Formula.Formula as SF
 import qualified SemMC.Formula.Parser as FI
 import qualified SemMC.Formula.Printer as FO
 import qualified SemMC.Log as Log
 import           Test.Tasty
-import           Test.Tasty.HUnit ( assertBool, assertEqual, testCase, (@?=) )
+import           Test.Tasty.HUnit ( assertEqual, testCase, (@?=) )
 import           Test.Tasty.Hedgehog
 import           TestArch
 import           TestArchPropGen
@@ -449,19 +449,20 @@ parameterizedFormulaTests = [
             Right _ -> return ()
             Left e -> assertEqual (T.unpack $ "valid parse of " <> sexprTxt) "error" e
 
+      ]
     ]
   ]
   where
     isNatArgFoo :: BV.BoundVar sym TestGenArch "Foo" -> Bool
     isNatArgFoo _ = True
-    isValidParamType (Some param) =
-      case testEquality (SF.paramType param) BaseNatRepr of
+    isValidParamType (Some parameter) =
+      case testEquality (SF.paramType parameter) BaseNatRepr of
         Just Refl -> True
         Nothing ->
-          case testEquality (SF.paramType param) BaseIntegerRepr of
+          case testEquality (SF.paramType parameter) BaseIntegerRepr of
             Just Refl -> True
             Nothing ->
               let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
-              case testEquality (SF.paramType param) aBV32 of
+              case testEquality (SF.paramType parameter) aBV32 of
                 Just Refl -> True
                 Nothing -> False
