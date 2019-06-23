@@ -25,7 +25,7 @@ import           HedgehogUtil ( )
 import qualified Lang.Crucible.Backend.Online as CBO
 import           Lang.Crucible.Backend.Simple ( newSimpleBackend )
 import qualified SemMC.BoundVar as BV
-import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param
+import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param, ite, uf
                            , bvadd, bvmul, bvshl, bvnot
                            , runSem, printDefinition
                            , ExprTypeRepr(..), Literal(..), Expr(..)
@@ -86,7 +86,7 @@ parameterizedFormulaTests = [
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugPrint $ "printedFormula: " <> show printedFormula
-                    let fenv = error "Formula Environment TBD"
+                    fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
@@ -105,7 +105,7 @@ parameterizedFormulaTests = [
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugPrint $ "printedFormula: " <> show printedFormula
-                    let fenv = error "Formula Environment TBD"
+                    fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
@@ -124,7 +124,7 @@ parameterizedFormulaTests = [
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugPrint $ "printedFormula: " <> show printedFormula
-                    let fenv = error "Formula Environment TBD"
+                    fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
@@ -150,7 +150,7 @@ parameterizedFormulaTests = [
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           debugPrint $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -177,7 +177,7 @@ parameterizedFormulaTests = [
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           debugPrint $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -204,7 +204,7 @@ parameterizedFormulaTests = [
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           debugPrint $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -226,7 +226,7 @@ parameterizedFormulaTests = [
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
@@ -257,7 +257,7 @@ parameterizedFormulaTests = [
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
@@ -287,7 +287,7 @@ parameterizedFormulaTests = [
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
@@ -328,7 +328,7 @@ parameterizedFormulaTests = [
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
           sym <- liftIO $ newSimpleBackend r
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -371,7 +371,7 @@ parameterizedFormulaTests = [
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
           sym <- liftIO $ newSimpleBackend r
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
@@ -402,7 +402,11 @@ parameterizedFormulaTests = [
                              two  = LitBV 32 2
                              nineteen = LitBV 32 19
                              nine = LitBV 32 9
-                         defLoc foo (bvadd (Loc bar) (LitBV 32 0x4a4a))
+                             isBox3 = uf EBool "tst.isBox3" . ((:[]) . Some) . Loc
+                         defLoc foo (bvadd (ite (isBox3 bar)
+                                            (Loc bar)
+                                            (LitBV 32 0xa4))
+                                      (LitBV 32 0x4a4a))
                          defLoc bar zero
                          defLoc box0 (bvmul
                                       (bvadd (bvshl two (Loc box3)) nineteen)
@@ -432,12 +436,18 @@ parameterizedFormulaTests = [
                         , "    (bvnot #x00000009)))"
                         , "   ('Bar #x00000000)"
                         , "   ('Box_0"
-                        , "    (bvadd 'Bar #x00004a4a)))))"
+                        , "    (bvadd"
+                        , "     (ite"
+                        , "      ((_ call \"uf.tst.isBox3\")"
+                        , "       'Bar)"
+                        , "      'Bar"
+                        , "      #x000000a4)"
+                        , "     #x00004a4a)))))"
                         ])
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
           sym <- liftIO $ newSimpleBackend r
-          let fenv = error "Formula Environment TBD"
+          fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
