@@ -18,6 +18,7 @@ where
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import           Data.Int ( Int64 )
+import qualified Data.Map as Map
 import qualified Data.List as L
 import           Data.Maybe ( catMaybes, Maybe(..) )
 import           Data.Parameterized.Classes
@@ -30,13 +31,15 @@ import           Data.Parameterized.TraversableFC
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
 import           Hedgehog
+import qualified Data.Parameterized.Context as Ctx
 import qualified Hedgehog.Gen as HG
 import           Hedgehog.Range
 import           Numeric.Natural
 import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
 import qualified SemMC.Formula.Formula as F
-import           SemMC.Util ( fromJust' )
+import qualified SemMC.Formula.Env as FE
+import           SemMC.Util ( fromJust', makeSymbol )
 import           TestArch
 import           What4.BaseTypes
 import qualified What4.Expr.Builder as WE
@@ -640,3 +643,39 @@ instance ( Monad m
          ) =>
          MkOperands (GenT m) sym (OperandPair sym) "Box" where
   mkOperand = genBoundVar_BV32ArgBox
+
+
+----------------------------------------------------------------------
+-- Formula Environment sample
+
+testFormulaEnv :: ( MonadIO m
+                  , WI.IsSymExprBuilder sym
+                  ) =>
+                  sym -> m (FE.FormulaEnv sym TestGenArch)
+testFormulaEnv sym = do
+  tst_isBox3 <- liftIO $ testUF sym
+                "tst.isBox3"
+                (Some (Ctx.singleton (BaseBVRepr (knownNat :: NatRepr 32))))
+                (Some BaseBoolRepr)
+  tst_smash <- liftIO $ testUF sym
+               "tst.smash"
+               (Some (Ctx.Empty
+                      Ctx.:> (BaseBVRepr (knownNat :: NatRepr 32))
+                      Ctx.:> (BaseBVRepr (knownNat :: NatRepr 32))))
+               (Some (BaseBVRepr (knownNat :: NatRepr 32)))
+  envUndef <- liftIO $ WI.freshConstant sym (makeSymbol "undefined_bit") knownRepr
+  return $ FE.FormulaEnv
+    {
+      FE.envFunctions = Map.fromList [ tst_isBox3, tst_smash ]
+    , FE.envUndefinedBit = envUndef
+    }
+
+testUF :: (WI.IsSymExprBuilder sym) =>
+          sym
+       -> String
+       -> Some (Ctx.Assignment BaseTypeRepr)
+       -> Some BaseTypeRepr
+       -> IO (String, (FE.SomeSome (WI.SymFn sym), Some BaseTypeRepr))
+testUF sym name (Some args) retRep@(Some ret) = do
+  uf <- FE.SomeSome <$> WI.freshTotalUninterpFn sym (makeSymbol ("uf." ++ name)) args ret
+  return (("uf." ++ name), (uf, retRep))
