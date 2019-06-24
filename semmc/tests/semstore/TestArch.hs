@@ -26,6 +26,7 @@ import qualified Data.Parameterized.List as PL
 import           Data.Parameterized.Some
 import qualified Data.Parameterized.SymbolRepr as SR
 import qualified Data.Parameterized.TH.GADT as TH
+import qualified Data.Set.NonEmpty as NES
 import qualified Data.Text as T
 import           GHC.TypeLits ( Symbol )
 import           Numeric.Natural
@@ -102,7 +103,6 @@ instance Show (TestLocation tp) where
 instance ShowF TestLocation
 
 deriving instance Eq (TestLocation tp)
-deriving instance Ord (TestLocation tp)
 
 instance L.IsLocation TestLocation where
   locationType (TestNatLoc _) = BaseNatRepr
@@ -159,6 +159,8 @@ data TestGenOpcode (operand_constr :: Symbol -> Type) (operands :: [Symbol]) whe
   OpSolo :: TestGenOpcode TestGenOperand '[]
 
 deriving instance Show (TestGenOpcode operand_constr operands)
+deriving instance Eq   (TestGenOpcode operand_constr operands)
+deriving instance Ord  (TestGenOpcode operand_constr operands)
 
 instance HR.HasRepr (TestGenOpcode TestGenOperand) (PL.List SR.SymbolRepr) where
   typeRepr OpWave = knownRepr
@@ -183,7 +185,14 @@ instance ShowF (TestGenOpcode TestGenOperand)
     -- can be provided.
     showF _ = "<<OPCODE>>"
 instance EnumF (TestGenOpcode TestGenOperand) where
-instance OrdF (TestGenOpcode TestGenOperand)
+  enumF OpWave = 0
+  enumF OpSurf = 1
+  enumF OpPack = 2
+  enumF OpSolo = 3
+  congruentF op = NES.singleton op
+
+instance OrdF (TestGenOpcode TestGenOperand) where
+  compareF = enumCompareF
 
 ----------------------------------------------------------------------
 -- TestEquality and OrdF instances
