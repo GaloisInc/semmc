@@ -12,8 +12,9 @@
 module SemMC.Formula.SETokens
     ( FAtom(..)
     , string, ident, quoted, int
+    , string', ident', quoted', int'
     , fromFoldable, fromFoldable'
-    , printAtom, printTokens
+    , printAtom, printTokens, printTokens'
     , parseLL
     )
     where
@@ -23,6 +24,7 @@ import qualified Data.SCargot as SC
 import qualified Data.SCargot.Comments as SC
 import           Data.SCargot.LetBind
 import qualified Data.SCargot.Repr as SC
+import qualified Data.SCargot.Repr.Rich as SE
 import           Data.Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
@@ -42,19 +44,27 @@ data FAtom = AIdent String
 
 
 string :: String -> SC.SExpr FAtom
-string = SC.SAtom . AString
+string = SE.fromRich . string'
+string' :: String -> SC.RichSExpr FAtom
+string' = SE.A . AString
 
 -- | Lift an unquoted identifier.
 ident :: String -> SC.SExpr FAtom
-ident = SC.SAtom . AIdent
+ident = SE.fromRich . ident'
+ident' :: String -> SC.RichSExpr FAtom
+ident' = SE.A . AIdent
 
 -- | Lift a quoted identifier.
 quoted :: String -> SC.SExpr FAtom
-quoted = SC.SAtom . AQuoted
+quoted = SE.fromRich . quoted'
+quoted' :: String -> SE.RichSExpr FAtom
+quoted' = SE.A . AQuoted
 
 -- | Lift an integer.
 int :: Integer -> SC.SExpr FAtom
-int = SC.SAtom . AInt
+int = SE.fromRich . int'
+int' :: Integer -> SE.RichSExpr FAtom
+int' = SE.A . AInt
 
 
 
@@ -74,6 +84,9 @@ fromFoldable' = fromFoldable id
 
 -- | Generates the the S-expression tokens represented by the sexpr
 -- argument, preceeded by a list of strings output as comments.
+printTokens' :: Seq.Seq String -> SC.RichSExpr FAtom -> T.Text
+printTokens' comments = printTokens comments . SE.fromRich
+
 printTokens :: Seq.Seq String -> SC.SExpr FAtom -> T.Text
 printTokens comments sexpr =
   let oguide = nativeGuide AIdent nameFor
