@@ -48,7 +48,13 @@ import           Prelude
 parameterizedFormulaTests :: [TestTree]
 parameterizedFormulaTests = [
   testGroup "Parameterized Formulas" $
+    testBasicParameters
+    <> testRoundTripPrintParse
+  ]
 
+
+testBasicParameters :: [TestTree]
+testBasicParameters =
     [ testProperty "parameter type" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
@@ -75,8 +81,27 @@ parameterizedFormulaTests = [
                     sym <- liftIO $ newSimpleBackend r
                     (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
+    ]
+  where
+    isNatArgFoo :: BV.BoundVar sym TestGenArch "Foo" -> Bool
+    isNatArgFoo _ = True
+    isValidParamType (Some parameter) =
+      case testEquality (SF.paramType parameter) BaseNatRepr of
+        Just Refl -> True
+        Nothing ->
+          case testEquality (SF.paramType parameter) BaseIntegerRepr of
+            Just Refl -> True
+            Nothing ->
+              let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
+              case testEquality (SF.paramType parameter) aBV32 of
+                Just Refl -> True
+                Nothing -> False
 
     , testProperty "serialized formula round trip, simple backend, OpPack" $
+
+testRoundTripPrintParse :: [TestTree]
+testRoundTripPrintParse =
+  [
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpPack
@@ -463,17 +488,3 @@ parameterizedFormulaTests = [
       ]
     ]
   ]
-  where
-    isNatArgFoo :: BV.BoundVar sym TestGenArch "Foo" -> Bool
-    isNatArgFoo _ = True
-    isValidParamType (Some parameter) =
-      case testEquality (SF.paramType parameter) BaseNatRepr of
-        Just Refl -> True
-        Nothing ->
-          case testEquality (SF.paramType parameter) BaseIntegerRepr of
-            Just Refl -> True
-            Nothing ->
-              let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
-              case testEquality (SF.paramType parameter) aBV32 of
-                Just Refl -> True
-                Nothing -> False
