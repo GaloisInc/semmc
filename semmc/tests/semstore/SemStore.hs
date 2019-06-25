@@ -1,12 +1,14 @@
 module Main where
 
-import           LocationsTests
-import           ParameterTests
-import           ParamFormulaTests
-import           Test.Tasty
+import LocationsTests
+import ParamFormulaTests
+import ParameterTests
+import Test.Tasty
+import TestUtils
 
-import           Prelude
+import Prelude
 
 main :: IO ()
-main = defaultMain $ testGroup "Storable Semantics" $
-       locationTests <> parameterTests <> parameterizedFormulaTests
+main = do debugReset
+          defaultMain $ testGroup "Storable Semantics" $
+            locationTests <> parameterTests <> parameterizedFormulaTests

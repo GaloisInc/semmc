@@ -7,7 +7,7 @@
 
 module TestUtils where
 
-import           Control.Monad ( forM_ )
+import           Control.Monad ( forM_, when )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import           Data.Function ( on )
 import qualified Data.List as L
@@ -27,6 +27,7 @@ import qualified SemMC.Formula.Formula as SF
 import           SemMC.Formula.Instantiate ( instantiateFormula )
 import           SemMC.Formula.Parser ( literalVarPrefix
                                       , operandVarPrefix )
+import           System.Directory
 import           TestArch
 import qualified What4.Expr.Builder as WE
 import qualified What4.Interface as WI
@@ -35,9 +36,17 @@ import qualified What4.Protocol.Online as WPO
 import           Prelude
 
 
-debugPrint, alwaysPrint :: MonadIO m => String -> m ()
--- debugPrint = alwaysPrint
-debugPrint _ = return ()
+debugFile :: FilePath
+debugFile = "semstore.log"
+
+debugReset :: IO ()
+debugReset = do e <- doesFileExist debugFile
+                when e $ removeFile debugFile
+
+debugOut, alwaysPrint :: MonadIO m => String -> m ()
+debugOut msg = liftIO $ do appendFile debugFile msg
+                           -- alwaysPrint  -- comment this out to disable printing
+                           return ()
 alwaysPrint = liftIO . putStrLn
 
 

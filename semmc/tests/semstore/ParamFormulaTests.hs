@@ -81,17 +81,17 @@ parameterizedFormulaTests = [
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpPack
                     (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugPrint $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
                               FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-                    debugPrint $ "re-Formulized: " <> show reForm
+                    debugOut $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
@@ -100,17 +100,17 @@ parameterizedFormulaTests = [
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpWave
                     (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugPrint $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
                               FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-                    debugPrint $ "re-Formulized: " <> show reForm
+                    debugOut $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
@@ -119,17 +119,17 @@ parameterizedFormulaTests = [
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpSolo
                     (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugPrint $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
                               FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-                    debugPrint $ "re-Formulized: " <> show reForm
+                    debugOut $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
@@ -144,18 +144,18 @@ parameterizedFormulaTests = [
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
-          debugPrint $ "parameterizedFormula: " <> show p
-          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          debugOut $ "parameterizedFormula: " <> show p
+          debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugPrint $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
@@ -171,18 +171,19 @@ parameterizedFormulaTests = [
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
-          debugPrint $ "parameterizedFormula: " <> show p
-          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          debugOut $ "trace: " <> show trace
+          debugOut $ "parameterizedFormula: " <> show p
+          debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugPrint $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
@@ -198,18 +199,18 @@ parameterizedFormulaTests = [
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
-          debugPrint $ "parameterizedFormula: " <> show p
-          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          debugOut $ "parameterizedFormula: " <> show p
+          debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugPrint $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
@@ -333,7 +334,7 @@ parameterizedFormulaTests = [
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           -- n.b. no actual validation of the proper semantics here,
           -- just that it had enough valid syntax to be parsed.
           case reForm of
@@ -376,7 +377,7 @@ parameterizedFormulaTests = [
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           -- n.b. no actual validation of the proper semantics here,
           -- just that it had enough valid syntax to be parsed.
           case reForm of
@@ -452,7 +453,7 @@ parameterizedFormulaTests = [
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           -- n.b. no actual validation of the proper semantics here,
           -- just that it had enough valid syntax to be parsed.
           case reForm of

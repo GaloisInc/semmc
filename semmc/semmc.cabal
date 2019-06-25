@@ -165,6 +165,7 @@ test-suite semmc-semstore-tests
                , bytestring
                , containers
                , crucible
+               , directory
                , dismantle-tablegen
                , exceptions
                , hashable
