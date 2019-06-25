@@ -97,11 +97,11 @@ testBasicParameters =
                 Just Refl -> True
                 Nothing -> False
 
-    , testProperty "serialized formula round trip, simple backend, OpPack" $
 
 testRoundTripPrintParse :: [TestTree]
 testRoundTripPrintParse =
   [
+    testProperty "ser/des round trip, simple backend, OpPack" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpPack
@@ -120,7 +120,7 @@ testRoundTripPrintParse =
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, simple backend, OpWave" $
+    , testProperty "ser/des round trip, simple backend, OpWave" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpWave
@@ -139,7 +139,7 @@ testRoundTripPrintParse =
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, simple backend, OpSolo" $
+    , testProperty "ser/des round trip, simple backend, OpSolo" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpSolo
@@ -158,7 +158,7 @@ testRoundTripPrintParse =
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, online backend, OpWave" $
+    , testProperty "ser/des round trip, online backend, OpWave" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
@@ -185,7 +185,7 @@ testRoundTripPrintParse =
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
 
-    , testProperty "serialized formula round trip, online backend, OpPack" $
+    , testProperty "ser/des round trip, online backend, OpPack" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
@@ -240,7 +240,7 @@ testRoundTripPrintParse =
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
 
-    , testProperty "serialized formula double round trip, OpWave" $
+    , testProperty "ser/des double round trip, OpWave" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
@@ -271,7 +271,7 @@ testRoundTripPrintParse =
           -- KWQ: is variable renaming OK as long as the renaming is consistent and non-overlapping?
           compareParameterizedFormulasSymbolically sym operands 2 p f'
 
-    , testProperty "serialized formula double round trip, OpPack" $
+    , testProperty "ser/des double round trip, OpPack" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
@@ -301,7 +301,7 @@ testRoundTripPrintParse =
           compareParameterizedFormulasSymbolically sym operands 1 f f'
           compareParameterizedFormulasSymbolically sym operands 2 p f'
 
-    , testProperty "serialized formula double round trip, OpSolo" $
+    , testProperty "ser/des double round trip, OpSolo" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
