@@ -47,6 +47,10 @@ import qualified What4.Interface as WI
 import           What4.Symbol ( systemSymbol )
 
 
+-- | The Trace provides user information on the generated input
+type Trace = String
+
+
 ----------------------------------------------------------------------
 
 genNat :: Monad m => GenT m Natural
@@ -255,20 +259,19 @@ genNatSymExpr :: ( Monad m
                  , MonadIO m
                  , WI.IsExprBuilder sym
                  ) =>
-                 sym ->
-                 GenT m (WI.SymExpr sym BaseNatType)
--- genNatSymExpr = return $ TestLitNat 3
-genNatSymExpr sym = liftIO $ -- WI.natLit sym 3
-                    do x <- WI.natLit sym 3
-                       y <- WI.natLit sym 5
-                       WI.natAdd sym x y
+                 sym -> GenT m (Trace, WI.SymExpr sym BaseNatType)
+genNatSymExpr sym = do expr <- liftIO $ do x <- WI.natLit sym 3
+                                           y <- WI.natLit sym 5
+                                           WI.natAdd sym x y
+                       return ("natAdd (3::nat) (5::nat)", expr)
 
 
 genIntSymExpr :: ( MonadIO m
                  , WI.IsExprBuilder sym
                  ) =>
-                 sym -> GenT m (WI.SymExpr sym BaseIntegerType)
-genIntSymExpr sym = liftIO $ WI.intLit sym 9
+                 sym -> GenT m (Trace, WI.SymExpr sym BaseIntegerType)
+genIntSymExpr sym = do expr <- liftIO $ WI.intLit sym 9
+                       return ("(9::int)", expr)
 
 
 genBV32SymExpr :: ( MonadIO m
@@ -281,7 +284,7 @@ genBV32SymExpr :: ( MonadIO m
                -> Set.Set (Some (F.Parameter arch sh))
                -> PL.List (BV.BoundVar sym arch) sh
                -> MapF.MapF TestLocation (WI.BoundVar sym)
-               -> GenT m (WI.SymExpr sym (BaseBVType 32))
+               -> GenT m (Trace, WI.SymExpr sym (BaseBVType 32))
 genBV32SymExpr sym params opvars litvars = do
   let optional = catMaybes
                  [
@@ -291,17 +294,22 @@ genBV32SymExpr sym params opvars litvars = do
                    case F.length params of
                      0 -> Nothing
                      _ -> Just $ do p <- HG.element (Set.toList params)
-                                    paramExprBV32 sym opvars litvars p
+                                    e <- paramExprBV32 sym opvars litvars p
+                                    return ("(param'" <> show p <> "'::bv32", e)
                  ]
       nonrecursive =
         [ -- non-recursive
-          (liftIO . WI.bvLit sym knownNat) =<< (toInteger <$> HG.int32 linearBounded)
+          do i <- toInteger <$> HG.int32 linearBounded
+             expr <- liftIO $ WI.bvLit sym knownNat i
+             return ("bvLit32", expr)
         ] <> optional
 
-      f1 n i = \t -> do e <- liftIO $ i sym t
-                        return e
-      f2 n i = \t -> \u -> do e <- liftIO $ i sym t u
-                              return e
+      t1 n a = n <> "(" <> a <> ")"
+      t2 n a b = n <> "(" <> a <> ", " <> b <> ")"
+      f1 n i = \(l,t) -> do e <- liftIO $ i sym t
+                            return (t1 n l, e)
+      f2 n i = \(l,t) -> \(m,u) -> do e <- liftIO $ i sym t u
+                                      return (t2 n l m, e)
 
   HG.recursive HG.choice nonrecursive
     [ -- recursive
@@ -449,6 +457,7 @@ genParameterizedFormula :: forall sh sym m t .  -- reordered args to allow TypeA
                         -> TestGenOpcode TestGenOperand sh
                         -> GenT m (F.ParameterizedFormula sym TestGenArch (sh :: [Symbol])
                                   , List TestGenOperand sh
+                                  , Trace
                                   )
 genParameterizedFormula sym _opcode = do
   -- creates operands for 'sh'
@@ -485,16 +494,21 @@ genParameterizedFormula sym _opcode = do
   -- Any location (LiteralParameter) in either the operands or the
   -- params.  Output-only locations are not present here.
   literalVars <- locationsForLiteralParams sym params
-  defs <- if F.length params == 0
-          then return MapF.empty
-          else let genExpr = natdefexpr $
-                             intdefexpr $
-                             bv32defexpr $
-                             error "unsupported parameter type in generator"
-                   anElem = do Some p <- HG.element $ F.toList params
-                               -- keys should be a (sub-)Set from params
-                               genExpr sym p params operandVars literalVars
-               in MapF.fromList <$> HG.list (linear 0 10) anElem
+  (trace, defs) <-
+    if F.length params == 0
+    then return ("<no params>", MapF.empty)
+    else let genExpr = natdefexpr $
+                       intdefexpr $
+                       bv32defexpr $
+                       error "unsupported parameter type in generator"
+             anElem = do Some p <- HG.element $ F.toList params -- KWQ: repl params with defOuts
+                         -- keys should be a (sub-)Set from params
+                         genExpr sym p params operandVars literalVars
+             joinTraces t1 t2 = t1 <> "  || " <> t2
+         in do g <- HG.list (linear 0 10) anElem
+               return ( foldr joinTraces "" $ fst <$> g
+                      , MapF.fromList $ snd <$> g
+                      )
   return
     ( F.ParameterizedFormula
       { F.pfUses = params              -- Set.Set (Some (Parameter arch sh))
@@ -503,6 +517,7 @@ genParameterizedFormula sym _opcode = do
       , F.pfDefs = defs                -- MapF.MapF (Parameter arch sh) (WI.SymExpr sym)
       }
     , actualOperands
+    , trace
     )
 
 
@@ -552,7 +567,7 @@ locationsForLiteralParams sym params = MapF.fromList <$> F.foldrM appendLitVarPa
 
 
 type GenDefParam      = F.Parameter TestGenArch
-type GenDefRes sym sh = Pair (GenDefParam sh) (WI.SymExpr sym)
+type GenDefRes sym sh = (Trace, Pair (GenDefParam sh) (WI.SymExpr sym))
 type GenDefDirect m sym arch sh tp =
                   (sym -> GenDefParam sh tp
                        -> Set.Set (Some (F.Parameter arch sh))
@@ -572,20 +587,20 @@ type GenDefFunc = forall m sym arch sh tp .
 natdefexpr :: GenDefFunc
 natdefexpr next sym p params opvars litvars =
   case testEquality (F.paramType p) BaseNatRepr of
-    Just Refl -> Pair p <$> genNatSymExpr sym
+    Just Refl -> fmap (Pair p) <$> genNatSymExpr sym
     Nothing -> next sym p params opvars litvars
 
 intdefexpr :: GenDefFunc
 intdefexpr next sym p params opvars litvars =
   case testEquality (F.paramType p) BaseIntegerRepr of
-    Just Refl -> Pair p <$> genIntSymExpr sym
+    Just Refl -> fmap (Pair p) <$> genIntSymExpr sym
     Nothing -> next sym p params opvars litvars
 
 bv32defexpr :: GenDefFunc
 bv32defexpr next sym p params opvars litvars =
   let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32)
   in case testEquality (F.paramType p) aBV32 of
-       Just Refl -> Pair p <$> genBV32SymExpr sym params opvars litvars
+       Just Refl -> fmap (Pair p) <$> genBV32SymExpr sym params opvars litvars
        Nothing -> next sym p params opvars litvars
 
 

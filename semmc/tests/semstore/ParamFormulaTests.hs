@@ -52,17 +52,17 @@ parameterizedFormulaTests = [
     [ testProperty "parameter type" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
+                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "parameter type multiple" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    (p, _operands) <- forAllT (genParameterizedFormula sym OpPack)
+                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpPack)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "operand type" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
+                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert $ isNatArgFoo ((SF.pfOperandVars p) SL.!! SL.index0)
     , testProperty "literal vars" $
       property $ do Some r <- liftIO newIONonceGenerator
@@ -73,14 +73,14 @@ parameterizedFormulaTests = [
     , testProperty "defs keys in uses" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
-                    (p, _operands) <- forAllT (genParameterizedFormula sym OpSurf)
+                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
 
     , testProperty "serialized formula round trip, simple backend, OpPack" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpPack
-                    (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
+                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugPrint $ "parameterizedFormula: " <> show p
                     debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
@@ -99,7 +99,7 @@ parameterizedFormulaTests = [
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpWave
-                    (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
+                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugPrint $ "parameterizedFormula: " <> show p
                     debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
@@ -118,7 +118,7 @@ parameterizedFormulaTests = [
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpSolo
-                    (p, _operands) <- forAllT (genParameterizedFormula sym opcode)
+                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugPrint $ "parameterizedFormula: " <> show p
                     debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
                     debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
@@ -140,7 +140,7 @@ parameterizedFormulaTests = [
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
           -- generate a formula
           let opcode = OpWave
-          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
@@ -167,7 +167,7 @@ parameterizedFormulaTests = [
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
           -- generate a formula
           let opcode = OpPack
-          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
@@ -194,7 +194,7 @@ parameterizedFormulaTests = [
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
           -- generate a formula
           let opcode = OpSolo
-          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
@@ -222,7 +222,7 @@ parameterizedFormulaTests = [
           let opcode = OpWave
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
-          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
@@ -253,7 +253,7 @@ parameterizedFormulaTests = [
           let opcode = OpPack
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
-          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
@@ -283,7 +283,7 @@ parameterizedFormulaTests = [
           let opcode = OpSolo
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
-          (p, operands) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
