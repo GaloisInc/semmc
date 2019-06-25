@@ -311,7 +311,7 @@ genBV32SymExpr sym params opvars litvars = do
       f2 n i = \(l,t) -> \(m,u) -> do e <- liftIO $ i sym t u
                                       return (t2 n l m, e)
 
-  HG.recursive HG.choice nonrecursive
+  HG.small $ HG.recursive HG.choice nonrecursive
     [ -- recursive
       HG.subtermM
       (genBV32SymExpr sym params opvars litvars)
