@@ -219,13 +219,20 @@ convertApp paramLookup = convertApp'
           where i = intValue n + j - 1
                 j = intValue idx
 
+        -- Note that because the SemiRing has an identity element that
+        -- always gets applied, resulting in lots of additional,
+        -- unnecessary elements like: "(bvand #xffffffff TERM)".
+        -- These will get manifested in the stored form (but generally
+        -- _not_ via DSL-generated versions since they don't output
+        -- via Printer) and result in longer stored forms.  They could
+        -- be eliminated by checking for the identity (e.g. "if mul ==
+        -- SR.one (WSum.sumRepr sm)") but the re-loaded representation
+        -- will still use the SemiRing, so it's probably not worth the
+        -- effort to reduce these.
         convertApp' (S.SemiRingSum sm) =
           case WSum.sumRepr sm of
             S.SemiRingBVRepr S.BVArithRepr w ->
               let smul mul e = SE.L [ ident' "bvmul", bitvec' (natValue w) mul, convert e ]
-                  -- smul mul e = if mul == SR.one (WSum.sumRepr sm)
-                  --              then [ convert e ]
-                  --              else SE.L [ ident' "bvmul", bitvec' (natValue w) mul, convert e ]
                   sval v = bitvec' (natValue w) v
                   add x y = SE.L [ ident' "bvadd", x, y ]
               in WSum.eval add smul sval sm
