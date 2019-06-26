@@ -105,13 +105,15 @@ testRoundTripPrintParse :: [TestTree]
 testRoundTripPrintParse =
   [
     testProperty "ser/des round trip, simple backend, OpPack" $
+      withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpPack
-                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut $ "trace: " <> show trace
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
@@ -124,13 +126,15 @@ testRoundTripPrintParse =
                     compareParameterizedFormulasSimply sym 1 p f
 
     , testProperty "ser/des round trip, simple backend, OpWave" $
+      withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpWave
-                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut $ "trace: " <> show trace
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
@@ -143,13 +147,15 @@ testRoundTripPrintParse =
                     compareParameterizedFormulasSimply sym 1 p f
 
     , testProperty "ser/des round trip, simple backend, OpSolo" $
+      withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpSolo
-                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut $ "trace: " <> show trace
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
                     debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
@@ -171,10 +177,11 @@ testRoundTripPrintParse =
                                 <*> pure False)
           -- generate a formula
           let opcode = OpWave
-          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
+          debugOut $ "trace: " <> show trace
           debugOut $ "parameterizedFormula: " <> show p
           debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
           debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
@@ -201,7 +208,7 @@ testRoundTripPrintParse =
                                 <*> pure False)
           -- generate a formula
           let opcode = OpPack
-          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
@@ -222,7 +229,7 @@ testRoundTripPrintParse =
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
 
-    , testProperty "serialized formula round trip, online backend, OpSolo" $
+    , testProperty "ser/des round trip, online backend, OpSolo" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
@@ -232,10 +239,12 @@ testRoundTripPrintParse =
                                 <*> pure False)
           -- generate a formula
           let opcode = OpSolo
-          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
+          debugOut $ "trace: " <> show trace
           debugOut $ "parameterizedFormula: " <> show p
           debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
           debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
