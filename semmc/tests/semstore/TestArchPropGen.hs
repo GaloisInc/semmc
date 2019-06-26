@@ -725,7 +725,7 @@ instance ( Monad m
        -- obtained; the limit is high enough that uniqueness should
        -- always be provided via Hedgehog string generation, but low
        -- enough to ensure termination.
-       let attempts = 20 :: Int
+       let attempts = 100 :: Int
        opl <- mkUniqueOperand attempts oprNames
        return $ opl :< opr
     where
