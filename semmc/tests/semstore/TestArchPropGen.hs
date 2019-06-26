@@ -396,7 +396,7 @@ genBV32SymExpr sym params opvars litvars = do
                      0 -> Nothing
                      _ -> Just $ do p <- HG.element (Set.toList params)
                                     e <- paramExprBV32 sym opvars litvars p
-                                    return ("(param'" <> show p <> "'::bv32", e)
+                                    return ("param'" <> show p <> "'::bv32", e)
                  ]
       nonrecursive =
         [ -- non-recursive
