@@ -5,6 +5,7 @@
 --
 -- Primarily at this point:
 --  * a MonadMask instance for PropertyT.
+--  * non-identical subterm argument support
 
 module HedgehogUtil where
 
@@ -14,6 +15,35 @@ import           Hedgehog.Internal.Gen
 import           Hedgehog.Internal.Property
 import           Hedgehog.Internal.Tree
 
+-- Hedgehog provides subtermM, subtermM2, and subtermM3, which can be
+-- used for recursively reproducing a structure from combinations of
+-- _itself_ (once, twice, or thrice), but it does not support the use
+-- of constructions from *other* types.  These are provided here.
+--
+-- NOTE: currently these are extremely simplistic and unsound because
+-- there is no controlled shrinking provided so there is no guarantee
+-- that they will converge during shrinking.
+
+subtermM' :: MonadGen m => m a -> (a -> m d) -> m d
+subtermM' gx f = do
+  x <- gx
+  f x
+
+subtermM2' :: MonadGen m => m a -> m b -> (a -> b -> m d) -> m d
+subtermM2' gx gy f = do
+  x <- gx
+  y <- gy
+  f x y
+
+subtermM3' :: MonadGen m => m a -> m b -> m c -> (a -> b -> c -> m d) -> m d
+subtermM3' gx gy gz f = do
+  x <- gx
+  y <- gy
+  z <- gz
+  f x y z
+
+
+----------------------------------------------------------------------
 
 instance E.MonadMask m => E.MonadMask (TreeT m) where
   mask a = TreeT $ E.mask $ \u -> runTreeT (a $ mapTreeT u)

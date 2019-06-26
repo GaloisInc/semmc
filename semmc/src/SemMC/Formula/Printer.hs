@@ -15,7 +15,7 @@ module SemMC.Formula.Printer
   ) where
 
 import qualified Data.Map as Map
-import           Data.Maybe ( fromJust )
+import           SemMC.Util ( fromJust' )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
@@ -167,7 +167,7 @@ convertElt paramLookup (S.NonceAppExpr nae) =
     S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
     S.MapOverArrays {} -> error "MapOverArrays NonceAppExpr not supported"
     S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppExpr not supported"
-convertElt paramLookup (S.BoundVarExpr var) = fromJust $ paramLookup var
+convertElt paramLookup (S.BoundVarExpr var) = fromJust' "SemMC.Formula.Printer paramLookup boundvar" $ paramLookup var
 
 convertFnApp :: ParamLookup t
              -> S.ExprSymFn t args ret
@@ -199,9 +199,9 @@ convertApp paramLookup = SE.L . convertApp'
         convertApp' :: S.App (S.Expr t) tp -> [SE.RichSExpr FAtom]
         convertApp' S.TrueBool = [ident' "true"]
         convertApp' S.FalseBool = [ident' "false"]
-        convertApp' (S.NotBool b) = [ident' "not", convert b]
-        convertApp' (S.AndBool b1 b2) = [ident' "and", convert b1, convert b2]
-        convertApp' (S.XorBool b1 b2) = [ident' "xor", convert b1, convert b2]
+        convertApp' (S.NotBool b) = [ident' "notp", convert b]
+        convertApp' (S.AndBool b1 b2) = [ident' "andp", convert b1, convert b2]
+        convertApp' (S.XorBool b1 b2) = [ident' "xorp", convert b1, convert b2]
         convertApp' (S.IteBool bp bt be) = [ident' "ite", convert bp, convert bt, convert be]
         convertApp' (S.BVIte _ _ bp bvt bve) = [ident' "ite", convert bp, convert bvt, convert bve]
         convertApp' (S.BVEq bv1 bv2) = [ident' "=", convert bv1, convert bv2]
