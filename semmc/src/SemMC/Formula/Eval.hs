@@ -174,9 +174,9 @@ evaluateFunctions'
 evaluateFunctions' sym pf operands locExpr rewriters e =
   case e of
     S.SemiRingLiteral {} -> return e
-    S.BVExpr {} -> return e
     S.BoundVarExpr {} -> return e
     S.StringExpr {} -> return e
+    S.BoolExpr {} -> return e
     S.AppExpr a -> do
       app <- S.traverseApp (evaluateFunctions' sym pf operands locExpr rewriters) (S.appExprApp a)
       S.sbMakeExpr sym app
