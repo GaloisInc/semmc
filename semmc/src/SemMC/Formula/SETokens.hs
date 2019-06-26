@@ -11,8 +11,8 @@
 
 module SemMC.Formula.SETokens
     ( FAtom(..)
-    , string, ident, quoted, int
-    , string', ident', quoted', int'
+    , string, ident, quoted, int, bitvec
+    , string', ident', quoted', int', bitvec'
     , fromFoldable, fromFoldable'
     , printAtom, printTokens, printTokens'
     , parseLL
@@ -28,6 +28,7 @@ import qualified Data.SCargot.Repr.Rich as SE
 import           Data.Semigroup
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
+import           Numeric.Natural ( Natural )
 import qualified Text.Parsec as P
 import           Text.Parsec.Text ( Parser )
 import           Text.Printf ( printf )
@@ -66,6 +67,11 @@ int = SE.fromRich . int'
 int' :: Integer -> SE.RichSExpr FAtom
 int' = SE.A . AInt
 
+-- | Lift a bitvector.
+bitvec :: Natural -> Integer -> SC.SExpr FAtom
+bitvec w v = SE.fromRich $ bitvec' w v
+bitvec' :: Natural -> Integer -> SE.RichSExpr FAtom
+bitvec' w v = SE.A $ ABV (fromEnum w) v
 
 
 -- * Miscellaneous operations on the S-Expressions
