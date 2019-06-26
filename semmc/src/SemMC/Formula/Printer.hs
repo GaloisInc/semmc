@@ -15,7 +15,7 @@ module SemMC.Formula.Printer
   ) where
 
 import qualified Data.Map as Map
-import           Data.Maybe ( fromJust )
+import           SemMC.Util ( fromJust' )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
@@ -170,7 +170,7 @@ convertElt paramLookup (S.NonceAppExpr nae) =
     S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
     S.MapOverArrays {} -> error "MapOverArrays NonceAppExpr not supported"
     S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppExpr not supported"
-convertElt paramLookup (S.BoundVarExpr var) = fromJust $ paramLookup var
+convertElt paramLookup (S.BoundVarExpr var) = fromJust' "SemMC.Formula.Printer paramLookup boundvar" $ paramLookup var
 
 convertFnApp :: ParamLookup t -> S.ExprSymFn t args ret -> Ctx.Assignment (S.Expr t) args -> SC.SExpr FAtom
 convertFnApp paramLookup fn args
