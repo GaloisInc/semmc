@@ -34,6 +34,7 @@ import           Hedgehog
 import qualified Data.Parameterized.Context as Ctx
 import qualified Hedgehog.Gen as HG
 import           Hedgehog.Range
+import           HedgehogUtil
 import           Numeric.Natural
 import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
@@ -255,6 +256,25 @@ genBoundVar_BV32ArgBox sym = do
 ----------------------------------------------------------------------
 -- What4.Interface.SymExpr generators
 
+-- First, some helpers for expressions with arguments and tracing
+t1 :: String -> String -> String
+t1 n a = n <> "(" <> a <> ")"
+t2 :: String -> String -> String -> String
+t2 n a b = n <> "(" <> a <> ", " <> b <> ")"
+t3 :: String -> String -> String -> String -> String
+t3 n c a b = n <> "(" <> c <> "; " <> a <> ", " <> b <> ")"
+fn1 :: MonadIO m => t1 -> String -> (t1 -> t2 -> IO b) -> (Trace, t2) -> m (Trace, b)
+fn1 sym n i = \(l,t) -> do e <- liftIO $ i sym t
+                           return (t1 n l, e)
+fn2 :: MonadIO m => t1 -> String -> (t1 -> t2 -> t3 -> IO b)
+    -> (Trace, t2) -> (Trace, t3) -> m (Trace, b)
+fn2 sym n i = \(l,t) -> \(m,u) -> do e <- liftIO $ i sym t u
+                                     return (t2 n l m, e)
+fn3 :: MonadIO m => t1 -> String -> (t1 -> t2 -> t3 -> t4 -> IO b)
+    -> (Trace, t2) -> (Trace, t3) -> (Trace, t4) -> m (Trace, b)
+fn3 sym n i = \(l,t) -> \(m,u) -> \(o,v) -> do e <- liftIO $ i sym t u v
+                                               return (t3 n l m o, e)
+
 genNatSymExpr :: ( Monad m
                  , MonadIO m
                  , WI.IsExprBuilder sym
@@ -272,6 +292,82 @@ genIntSymExpr :: ( MonadIO m
                  sym -> GenT m (Trace, WI.SymExpr sym BaseIntegerType)
 genIntSymExpr sym = do expr <- liftIO $ WI.intLit sym 9
                        return ("(9::int)", expr)
+
+
+genBoolSymExpr :: ( MonadIO m
+                  , WI.IsExprBuilder sym
+                  , WI.IsSymExprBuilder sym
+                  , SA.Location arch ~ TestLocation
+                  ) =>
+                  sym
+               -> Set.Set (Some (F.Parameter arch sh))
+               -> PL.List (BV.BoundVar sym arch) sh
+               -> MapF.MapF TestLocation (WI.BoundVar sym)
+               -> GenT m (Trace, WI.SymExpr sym BaseBoolType)
+genBoolSymExpr sym params opvars litvars =
+  do let nonrecursive =
+           [
+             return ("true", WI.truePred sym)
+           , return ("false", WI.falsePred sym)
+           ]
+
+     HG.small $ HG.recursive HG.choice nonrecursive
+       [ -- recursive
+         HG.subtermM
+         (genBoolSymExpr sym params opvars litvars)
+         (fn1 sym "notPred" WI.notPred)
+
+       , subtermM'
+         (genBV32SymExpr sym params opvars litvars)
+         (fn1 sym "bvIsNeg" WI.bvIsNeg)
+
+       , HG.subtermM2
+         (genBoolSymExpr sym params opvars litvars)
+         (genBoolSymExpr sym params opvars litvars)
+         (fn2 sym "andPred" WI.andPred)
+
+       , HG.subtermM2
+         (genBoolSymExpr sym params opvars litvars)
+         (genBoolSymExpr sym params opvars litvars)
+         (fn2 sym "orPred" WI.orPred)
+
+       , HG.subtermM2
+         (genBoolSymExpr sym params opvars litvars)
+         (genBoolSymExpr sym params opvars litvars)
+         (fn2 sym "xorPred" WI.xorPred)
+
+       , subtermM2'
+         (genBV32SymExpr sym params opvars litvars)
+         (genBV32SymExpr sym params opvars litvars)
+         (fn2 sym "bvEq" WI.bvEq)
+
+       , subtermM2'
+         (genBV32SymExpr sym params opvars litvars)
+         (genBV32SymExpr sym params opvars litvars)
+         (fn2 sym "bvUlt" WI.bvUlt)
+
+       , subtermM2'
+         (genBV32SymExpr sym params opvars litvars)
+         (genBV32SymExpr sym params opvars litvars)
+         (fn2 sym "bvSlt" WI.bvSlt)
+
+       -- unhandled App in Printer.hs:232
+       -- , subtermM2'
+       --   ((,) "nat" <$> HG.element [(0::Natural) .. 31 {- BV32 valid bits -}])
+       --   (genBV32SymExpr sym params opvars litvars)
+       --   (fn2 sym "testBitBV" WI.testBitBV)
+
+       , subtermM3'
+         (genBoolSymExpr sym params opvars litvars)
+         (genBoolSymExpr sym params opvars litvars)
+         (genBoolSymExpr sym params opvars litvars)
+         (fn3 sym "itePred" WI.itePred)
+
+       -- n.b. the following Interface expressions are not provided
+       -- here because they are combinations of existing expressions:
+       --   bvNe, bvUle, bvUge bvUgt bvSgt bvSle bvSge bvIsNonzero
+
+       ]
 
 
 genBV32SymExpr :: ( MonadIO m
@@ -304,109 +400,103 @@ genBV32SymExpr sym params opvars litvars = do
              return ("bvLit32", expr)
         ] <> optional
 
-      t1 n a = n <> "(" <> a <> ")"
-      t2 n a b = n <> "(" <> a <> ", " <> b <> ")"
-      f1 n i = \(l,t) -> do e <- liftIO $ i sym t
-                            return (t1 n l, e)
-      f2 n i = \(l,t) -> \(m,u) -> do e <- liftIO $ i sym t u
-                                      return (t2 n l m, e)
-
   HG.small $ HG.recursive HG.choice nonrecursive
     [ -- recursive
       HG.subtermM
       (genBV32SymExpr sym params opvars litvars)
-      (f1 "bvNeg" WI.bvNeg)
+      (fn1 sym "bvNeg" WI.bvNeg)
 
     , HG.subtermM
       (genBV32SymExpr sym params opvars litvars)
-      (f1 "bvNotBits" WI.bvNotBits)
+      (fn1 sym "bvNotBits" WI.bvNotBits)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvAdd" WI.bvAdd)
+      (fn2 sym "bvAdd" WI.bvAdd)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvSub" WI.bvSub)
+      (fn2 sym "bvSub" WI.bvSub)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvMul" WI.bvMul)
+      (fn2 sym "bvMul" WI.bvMul)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvUdiv" WI.bvUdiv)
+      (fn2 sym "bvUdiv" WI.bvUdiv)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvUrem" WI.bvUrem)
+      (fn2 sym "bvUrem" WI.bvUrem)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvSdiv" WI.bvSdiv)
+      (fn2 sym "bvSdiv" WI.bvSdiv)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvSrem" WI.bvSrem)
+      (fn2 sym "bvSrem" WI.bvSrem)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvAndBits" WI.bvAndBits)
+      (fn2 sym "bvAndBits" WI.bvAndBits)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvOrBits" WI.bvOrBits)
+      (fn2 sym "bvOrBits" WI.bvOrBits)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvXorBits" WI.bvXorBits)
+      (fn2 sym "bvXorBits" WI.bvXorBits)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvShl" WI.bvShl)
+      (fn2 sym "bvShl" WI.bvShl)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvLshr" WI.bvLshr)
+      (fn2 sym "bvLshr" WI.bvLshr)
 
     , HG.subtermM2
       (genBV32SymExpr sym params opvars litvars)
       (genBV32SymExpr sym params opvars litvars)
-      (f2 "bvAshr" WI.bvAshr)
+      (fn2 sym "bvAshr" WI.bvAshr)
 
     -- unhandled App in Printer.hs:232
     -- , HG.subtermM
     --   (genBV32SymExpr sym params opvars litvars)
-    --   (f1 "bvPopcount" WI.bvPopcount)
+    --   (fn1 sym "bvPopcount" WI.bvPopcount)
 
     -- unhandled App in Printer.hs:232
     -- , HG.subtermM
     --   (genBV32SymExpr sym params opvars litvars)
-    --   (f1 "bvCountLeadingZeros" WI.bvCountLeadingZeros)
+    --   (fn1 sym "bvCountLeadingZeros" WI.bvCountLeadingZeros)
 
     -- unhandled App in Printer.hs:232
     -- , HG.subtermM
     --   (genBV32SymExpr sym params opvars litvars)
-    --   (f1 "bvCountTrailingZeros WI.bvCountTrailingZeros)
+    --   (fn1 sym "bvCountTrailingZeros WI.bvCountTrailingZeros)
 
-    -- TODO: bvZext, bvSext, bvTrunc operations
-    -- TODO: comparators: bvIsNonzero, bvUle, bvEq, bvNe, bvIsNeg, testBitBV, etc.
-    -- TODO: branching: bvIte
+    -- TODO: bvZext, bvSext, bvTrunc(bvSelect) operations
 
-
-    -- , (liftIO . WI.bvNeg sym) =<< genBV32SymExpr sym
+    , subtermM3'
+      (genBoolSymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (genBV32SymExpr sym params opvars litvars)
+      (fn3 sym "bvIte" WI.bvIte)
     ]
 
 
@@ -504,7 +594,7 @@ genParameterizedFormula sym _opcode = do
              anElem = do Some p <- HG.element $ F.toList params -- KWQ: repl params with defOuts
                          -- keys should be a (sub-)Set from params
                          genExpr sym p params operandVars literalVars
-             joinTraces t1 t2 = t1 <> "  || " <> t2
+             joinTraces trc1 trc2 = trc1 <> "  || " <> trc2
          in do g <- HG.list (linear 0 10) anElem
                return ( foldr joinTraces "" $ fst <$> g
                       , MapF.fromList $ snd <$> g
