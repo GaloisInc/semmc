@@ -279,11 +279,16 @@ genNatSymExpr :: ( Monad m
                  , MonadIO m
                  , WI.IsExprBuilder sym
                  ) =>
-                 sym -> GenT m (Trace, WI.SymExpr sym BaseNatType)
-genNatSymExpr sym = do expr <- liftIO $ do x <- WI.natLit sym 3
-                                           y <- WI.natLit sym 5
-                                           WI.natAdd sym x y
-                       return ("natAdd (3::nat) (5::nat)", expr)
+                 sym
+              -> Set.Set (Some (F.Parameter arch sh))
+              -> PL.List (BV.BoundVar sym arch) sh
+              -> MapF.MapF TestLocation (WI.BoundVar sym)
+              -> GenT m (Trace, WI.SymExpr sym BaseNatType)
+genNatSymExpr sym _params _opvars _litvars =
+  do expr <- liftIO $ do x <- WI.natLit sym 3
+                         y <- WI.natLit sym 5
+                         WI.natAdd sym x y
+     return ("natAdd (3::nat) (5::nat)", expr)
 
 
 genIntSymExpr :: ( MonadIO m
@@ -677,7 +682,7 @@ type GenDefFunc = forall m sym arch sh tp .
 natdefexpr :: GenDefFunc
 natdefexpr next sym p params opvars litvars =
   case testEquality (F.paramType p) BaseNatRepr of
-    Just Refl -> fmap (Pair p) <$> genNatSymExpr sym
+    Just Refl -> fmap (Pair p) <$> genNatSymExpr sym params opvars litvars
     Nothing -> next sym p params opvars litvars
 
 intdefexpr :: GenDefFunc
