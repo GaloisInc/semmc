@@ -402,7 +402,7 @@ genBV32SymExpr sym params opvars litvars = do
         [ -- non-recursive
           do i <- toInteger <$> HG.int32 linearBounded
              expr <- liftIO $ WI.bvLit sym knownNat i
-             return ("bvLit32", expr)
+             return ("bvLit32=" <> show i, expr)
         ] <> optional
 
   HG.small $ HG.recursive HG.choice nonrecursive
