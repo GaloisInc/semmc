@@ -24,20 +24,17 @@ import           Hedgehog.Internal.Tree
 -- there is no controlled shrinking provided so there is no guarantee
 -- that they will converge during shrinking.
 
--- very simplisic alternative; no good shrinking characteristics
 subtermM' :: MonadGen m => m a -> (a -> m d) -> m d
 subtermM' gx f = do
   x <- gx
   f x
 
--- very simplisic alternative; no good shrinking characteristics
 subtermM2' :: MonadGen m => m a -> m b -> (a -> b -> m d) -> m d
 subtermM2' gx gy f = do
   x <- gx
   y <- gy
   f x y
 
--- very simplisic alternative; no good shrinking characteristics
 subtermM3' :: MonadGen m => m a -> m b -> m c -> (a -> b -> c -> m d) -> m d
 subtermM3' gx gy gz f = do
   x <- gx

@@ -18,10 +18,11 @@ where
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.Foldable as F
 import           Data.Int ( Int64 )
-import qualified Data.Map as Map
 import qualified Data.List as L
+import qualified Data.Map as Map
 import           Data.Maybe ( catMaybes, Maybe(..) )
 import           Data.Parameterized.Classes
+import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.List ( List( (:<) ) )
 import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
@@ -31,15 +32,14 @@ import           Data.Parameterized.TraversableFC
 import qualified Data.Set as Set
 import           GHC.TypeLits ( Symbol )
 import           Hedgehog
-import qualified Data.Parameterized.Context as Ctx
 import qualified Hedgehog.Gen as HG
 import           Hedgehog.Range
 import           HedgehogUtil
 import           Numeric.Natural
 import qualified SemMC.Architecture as SA
 import qualified SemMC.BoundVar as BV
-import qualified SemMC.Formula.Formula as F
 import qualified SemMC.Formula.Env as FE
+import qualified SemMC.Formula.Formula as F
 import           SemMC.Util ( fromJust', makeSymbol )
 import           TestArch
 import           What4.BaseTypes
@@ -493,7 +493,7 @@ genBV32SymExpr sym params opvars litvars = do
     -- unhandled App in Printer.hs:232
     -- , HG.subtermM
     --   (genBV32SymExpr sym params opvars litvars)
-    --   (fn1 sym "bvCountTrailingZeros WI.bvCountTrailingZeros)
+    --   (fn1 sym "bvCountTrailingZeros" WI.bvCountTrailingZeros)
 
     -- TODO: bvZext, bvSext, bvTrunc(bvSelect) operations
 
@@ -596,7 +596,7 @@ genParameterizedFormula sym _opcode = do
                        intdefexpr $
                        bv32defexpr $
                        error "unsupported parameter type in generator"
-             anElem = do Some p <- HG.element $ F.toList params -- KWQ: repl params with defOuts
+             anElem = do Some p <- HG.element $ F.toList params
                          -- keys should be a (sub-)Set from params
                          genExpr sym p params operandVars literalVars
              joinTraces trc1 trc2 = trc1 <> "  || " <> trc2
