@@ -44,7 +44,7 @@ debugReset = do e <- doesFileExist debugFile
                 when e $ removeFile debugFile
 
 debugOut, alwaysPrint :: MonadIO m => String -> m ()
-debugOut msg = liftIO $ do appendFile debugFile msg
+debugOut msg = liftIO $ do appendFile debugFile (msg <> "\n")
                            -- alwaysPrint  -- comment this out to disable printing
                            return ()
 alwaysPrint = liftIO . putStrLn

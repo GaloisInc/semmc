@@ -83,10 +83,10 @@ sexprConvertParameterized :: (A.Architecture arch)
                           -> ParameterizedFormula (S.ExprBuilder t st fs) arch sh
                           -> SE.RichSExpr FAtom
 sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
-                                       , pfOperandVars = opVars
-                                       , pfLiteralVars = litVars
-                                       , pfDefs = defs
-                                       }) =
+                                                    , pfOperandVars = opVars
+                                                    , pfLiteralVars = litVars
+                                                    , pfDefs = defs
+                                                    }) =
   SE.L [ SE.L [SE.A (AIdent "operands"), convertOperandVars rep opVars]
        , SE.L [SE.A (AIdent "in"),       convertUses opVars uses]
        , SE.L [SE.A (AIdent "defs"),     convertDefs opVars litVars defs]
