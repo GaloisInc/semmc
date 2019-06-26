@@ -8,6 +8,7 @@
 
 module ParamFormulaTests where
 
+import           Control.Monad ( join, void )
 import qualified Control.Monad.Catch as E
 import           Control.Monad.IO.Class ( liftIO )
 import           Data.Maybe
@@ -41,6 +42,8 @@ import           TestArch
 import           TestArchPropGen
 import           TestUtils
 import           What4.BaseTypes
+import           What4.Config
+import qualified What4.Interface as WI -- ( getConfiguration )
 
 import           Prelude
 
@@ -163,6 +166,9 @@ testRoundTripPrintParse =
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           -- generate a formula
           let opcode = OpWave
           (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
@@ -190,6 +196,9 @@ testRoundTripPrintParse =
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           -- generate a formula
           let opcode = OpPack
           (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
@@ -218,6 +227,9 @@ testRoundTripPrintParse =
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           -- generate a formula
           let opcode = OpSolo
           (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
@@ -245,14 +257,17 @@ testRoundTripPrintParse =
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
+          -- generate a formula
           let opcode = OpWave
-          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
-
           (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           fenv <- testFormulaEnv sym
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
@@ -276,6 +291,9 @@ testRoundTripPrintParse =
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           let opcode = OpPack
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
@@ -306,6 +324,9 @@ testRoundTripPrintParse =
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           let opcode = OpSolo
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
@@ -487,4 +508,8 @@ testRoundTripPrintParse =
 
       ]
     ]
+
+
+enable_mcsat :: ConfigOption BaseBoolType
+enable_mcsat = configOption knownRepr "yices_enable-mcsat"
   ]
