@@ -8,6 +8,7 @@
 
 module ParamFormulaTests where
 
+import           Control.Monad ( join, void )
 import qualified Control.Monad.Catch as E
 import           Control.Monad.IO.Class ( liftIO )
 import           Data.Maybe
@@ -41,6 +42,8 @@ import           TestArch
 import           TestArchPropGen
 import           TestUtils
 import           What4.BaseTypes
+import           What4.Config
+import qualified What4.Interface as WI -- ( getConfiguration )
 
 import           Prelude
 
@@ -48,7 +51,13 @@ import           Prelude
 parameterizedFormulaTests :: [TestTree]
 parameterizedFormulaTests = [
   testGroup "Parameterized Formulas" $
+    testBasicParameters
+    <> testRoundTripPrintParse
+  ]
 
+
+testBasicParameters :: [TestTree]
+testBasicParameters =
     [ testProperty "parameter type" $
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
@@ -75,158 +84,199 @@ parameterizedFormulaTests = [
                     sym <- liftIO $ newSimpleBackend r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
+    ]
+  where
+    isNatArgFoo :: BV.BoundVar sym TestGenArch "Foo" -> Bool
+    isNatArgFoo _ = True
+    isValidParamType (Some parameter) =
+      case testEquality (SF.paramType parameter) BaseNatRepr of
+        Just Refl -> True
+        Nothing ->
+          case testEquality (SF.paramType parameter) BaseIntegerRepr of
+            Just Refl -> True
+            Nothing ->
+              let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
+              case testEquality (SF.paramType parameter) aBV32 of
+                Just Refl -> True
+                Nothing -> False
 
-    , testProperty "serialized formula round trip, simple backend, OpPack" $
+
+testRoundTripPrintParse :: [TestTree]
+testRoundTripPrintParse =
+  [
+    testProperty "ser/des round trip, simple backend, OpPack" $
+      withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpPack
-                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut $ "trace: " <> show trace
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugPrint $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
                               FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-                    debugPrint $ "re-Formulized: " <> show reForm
+                    debugOut $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, simple backend, OpWave" $
+    , testProperty "ser/des round trip, simple backend, OpWave" $
+      withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpWave
-                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut $ "trace: " <> show trace
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugPrint $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
                               FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-                    debugPrint $ "re-Formulized: " <> show reForm
+                    debugOut $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, simple backend, OpSolo" $
+    , testProperty "ser/des round trip, simple backend, OpSolo" $
+      withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
                     sym <- liftIO $ newSimpleBackend r
                     let opcode = OpSolo
-                    (p, _operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
-                    debugPrint $ "parameterizedFormula: " <> show p
-                    debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-                    debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+                    (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+                    debugOut $ "trace: " <> show trace
+                    debugOut $ "parameterizedFormula: " <> show p
+                    debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+                    debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
                     let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-                    debugPrint $ "printedFormula: " <> show printedFormula
+                    debugOut $ "printedFormula: " <> show printedFormula
                     fenv <- testFormulaEnv sym
                     lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
                     reForm <- liftIO $
                               Log.withLogCfg lcfg $
                               FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-                    debugPrint $ "re-Formulized: " <> show reForm
+                    debugOut $ "re-Formulized: " <> show reForm
                     f <- evalEither reForm
                     compareParameterizedFormulasSimply sym 1 p f
 
-    , testProperty "serialized formula round trip, online backend, OpWave" $
+    , testProperty "ser/des round trip, online backend, OpWave" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           -- generate a formula
           let opcode = OpWave
-          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
-          debugPrint $ "parameterizedFormula: " <> show p
-          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          debugOut $ "trace: " <> show trace
+          debugOut $ "parameterizedFormula: " <> show p
+          debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugPrint $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
 
-    , testProperty "serialized formula round trip, online backend, OpPack" $
+    , testProperty "ser/des round trip, online backend, OpPack" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           -- generate a formula
           let opcode = OpPack
-          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
-          debugPrint $ "parameterizedFormula: " <> show p
-          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          debugOut $ "trace: " <> show trace
+          debugOut $ "parameterizedFormula: " <> show p
+          debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugPrint $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
 
-    , testProperty "serialized formula round trip, online backend, OpSolo" $
+    , testProperty "ser/des round trip, online backend, OpSolo" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           -- generate a formula
           let opcode = OpSolo
-          (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
+          (p, operands, trace) <- forAllT (genParameterizedFormula sym opcode)
+
           -- ensure that formula compares as equivalent to itself
           compareParameterizedFormulasSymbolically sym operands 1 p p
           -- now print the formula to a text string
-          debugPrint $ "parameterizedFormula: " <> show p
-          debugPrint $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
-          debugPrint $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
+          debugOut $ "trace: " <> show trace
+          debugOut $ "parameterizedFormula: " <> show p
+          debugOut $ "# literalVars: " <> show (MapF.size $ SF.pfLiteralVars p)
+          debugOut $ "# defs: " <> show (MapF.size $ SF.pfDefs p)
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
-          debugPrint $ "printedFormula: " <> show printedFormula
+          debugOut $ "printedFormula: " <> show printedFormula
           -- convert the printed text string back into a formula
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           f <- evalEither reForm
           -- verify the recreated formula matches the original
           compareParameterizedFormulasSymbolically sym operands 1 p f
 
-    , testProperty "serialized formula double round trip, OpWave" $
+    , testProperty "ser/des double round trip, OpWave" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
+          -- generate a formula
           let opcode = OpWave
-          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
-
           (p, operands, _trace) <- forAllT (genParameterizedFormula sym opcode)
 
           -- first round trip:
           let printedFormula = FO.printParameterizedFormula (HR.typeRepr opcode) p
           fenv <- testFormulaEnv sym
+          lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula sym fenv (HR.typeRepr opcode) printedFormula
@@ -245,11 +295,14 @@ parameterizedFormulaTests = [
           -- KWQ: is variable renaming OK as long as the renaming is consistent and non-overlapping?
           compareParameterizedFormulasSymbolically sym operands 2 p f'
 
-    , testProperty "serialized formula double round trip, OpPack" $
+    , testProperty "ser/des double round trip, OpPack" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           let opcode = OpPack
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
@@ -275,11 +328,14 @@ parameterizedFormulaTests = [
           compareParameterizedFormulasSymbolically sym operands 1 f f'
           compareParameterizedFormulasSymbolically sym operands 2 p f'
 
-    , testProperty "serialized formula double round trip, OpSolo" $
+    , testProperty "ser/des double round trip, OpSolo" $
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
         CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+          void $ liftIO $ join (setOpt
+                                <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
+                                <*> pure False)
           let opcode = OpSolo
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
 
@@ -333,7 +389,7 @@ parameterizedFormulaTests = [
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           -- n.b. no actual validation of the proper semantics here,
           -- just that it had enough valid syntax to be parsed.
           case reForm of
@@ -376,7 +432,7 @@ parameterizedFormulaTests = [
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           -- n.b. no actual validation of the proper semantics here,
           -- just that it had enough valid syntax to be parsed.
           case reForm of
@@ -452,7 +508,7 @@ parameterizedFormulaTests = [
           reForm <- liftIO $
                     Log.withLogCfg lcfg $
                     FI.readFormula @_ @TestGenArch sym fenv (HR.typeRepr opcode) sexprTxt
-          debugPrint $ "re-Formulized: " <> show reForm
+          debugOut $ "re-Formulized: " <> show reForm
           -- n.b. no actual validation of the proper semantics here,
           -- just that it had enough valid syntax to be parsed.
           case reForm of
@@ -461,18 +517,8 @@ parameterizedFormulaTests = [
 
       ]
     ]
+
+
+enable_mcsat :: ConfigOption BaseBoolType
+enable_mcsat = configOption knownRepr "yices_enable-mcsat"
   ]
-  where
-    isNatArgFoo :: BV.BoundVar sym TestGenArch "Foo" -> Bool
-    isNatArgFoo _ = True
-    isValidParamType (Some parameter) =
-      case testEquality (SF.paramType parameter) BaseNatRepr of
-        Just Refl -> True
-        Nothing ->
-          case testEquality (SF.paramType parameter) BaseIntegerRepr of
-            Just Refl -> True
-            Nothing ->
-              let aBV32 = BaseBVRepr knownNat :: BaseTypeRepr (BaseBVType 32) in
-              case testEquality (SF.paramType parameter) aBV32 of
-                Just Refl -> True
-                Nothing -> False
