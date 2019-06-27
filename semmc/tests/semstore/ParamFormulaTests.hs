@@ -521,4 +521,3 @@ testRoundTripPrintParse =
 
 enable_mcsat :: ConfigOption BaseBoolType
 enable_mcsat = configOption knownRepr "yices_enable-mcsat"
-  ]
