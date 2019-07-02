@@ -58,8 +58,8 @@ import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
 ----------------
 -- Notes
 --
--- * Currently we are storing enumerations as global variables, and recording them
--- when we compute signatures. This needs to be fixed.
+-- * Arrays - capture 'DefArray' as a bunch of individual global variables, one for
+-- each index value.
 --
 -- * Investigate SCR and make sure we are doing the right thing for that. I don't
 -- actually think we are.
@@ -72,7 +72,7 @@ import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
 --
 -- * How do we deal with dependently-typed functions? Do we actually need to?
 
-type SignatureMap = Map.Map T.Text SomeSignature
+type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
 
 -- | Compute signatures for every callable, given a list of 'AS.Definition's.
 computeAllSignatures :: [AS.Definition] -> Either (SigException, SigState) SignatureMap
@@ -92,12 +92,18 @@ computeSignature name arity = do
 buildEnv :: [AS.Definition] -> SigEnv
 buildEnv defs =
   let callables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
-      globalVars = Map.fromList ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
+      globalVars = Map.fromList $
+        ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs))) ++
+        ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)
       types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
       -- | TODO: Populate builtin types
       builtinTypes = Map.empty
       getVariableName v = let DefVariable name _ = v
                           in name
+      getEnumVariables v = case v of
+                         AS.DefTypeEnum _ names ->
+                           (\n -> DefVariable n (AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer"))) <$> names
+                         _ -> []
       getTypeName t = case t of
         DefTypeBuiltin name -> name
         DefTypeAbstract name -> name
@@ -114,6 +120,7 @@ data Callable = Callable { callableName :: AS.QualifiedIdentifier
                          , callableRets :: [AS.Type]
                          , callableStmts :: [AS.Stmt]
                          }
+  deriving Show
 
 asCallable :: AS.Definition -> Maybe Callable
 asCallable def =
@@ -135,6 +142,7 @@ data DefType = DefTypeBuiltin AS.Identifier
              | DefTypeAlias AS.Identifier AS.Type
              | DefTypeStruct AS.QualifiedIdentifier [AS.SymbolDecl]
              | DefTypeEnum AS.Identifier [AS.Identifier]
+  deriving Show
 
 callableNameWithArity :: Callable -> T.Text
 callableNameWithArity c =
@@ -157,6 +165,7 @@ asDefType def =
 
 
 data DefVariable = DefVariable AS.Identifier AS.Type
+  deriving Show
 
 asDefVariable :: AS.Definition -> Maybe DefVariable
 asDefVariable def = case def of
@@ -189,12 +198,13 @@ data SigEnv = SigEnv { callables :: Map.Map T.Text Callable
                      , types :: Map.Map T.Text DefType
                      , builtinTypes :: Map.Map T.Text (Some UserType)
                      }
+  deriving Show
 
 data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
                          , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
                            -- ^ map from function/procedure name to list of globals
-                         , callableSignatureMap :: Map.Map T.Text SomeSignature
+                         , callableSignatureMap :: Map.Map T.Text (SomeSignature, Callable)
                            -- ^ map of all signatures found thus far
                          , unfoundCallables :: Seq.Seq T.Text
                            -- ^ list of callables we encountered that were not in the
@@ -258,13 +268,13 @@ lookupCallableSignature :: Callable -> SigM (Maybe SomeSignature)
 lookupCallableSignature c = do
   signatureMap <- callableSignatureMap <$> RWS.get
   let name = callableNameWithArity c
-  return $ Map.lookup name signatureMap
+  return $ (fst <$> Map.lookup name signatureMap)
 
 storeCallableSignature :: Callable -> SomeSignature -> SigM ()
 storeCallableSignature c sig = do
   st <- RWS.get
   let name = callableNameWithArity c
-  RWS.put $ st { callableSignatureMap = Map.insert name sig (callableSignatureMap st) }
+  RWS.put $ st { callableSignatureMap = Map.insert name (sig, c) (callableSignatureMap st) }
 
 addUnfoundCallable :: T.Text -> SigM ()
 addUnfoundCallable name = do
