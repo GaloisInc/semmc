@@ -47,6 +47,8 @@ module SemMC.ASL.Crucible (
   , TranslationException(..)
   ) where
 
+import Debug.Trace (traceM)
+
 import qualified Control.Exception as X
 import           Control.Monad.ST ( stToIO, RealWorld )
 import qualified Data.Map as Map

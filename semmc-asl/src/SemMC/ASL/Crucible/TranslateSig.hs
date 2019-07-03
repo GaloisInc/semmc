@@ -167,9 +167,11 @@ asDefType def =
 data DefVariable = DefVariable AS.Identifier AS.Type
   deriving Show
 
+-- FIXME: Consts?
 asDefVariable :: AS.Definition -> Maybe DefVariable
 asDefVariable def = case def of
   AS.DefVariable (AS.QualifiedIdentifier _ ident) tp -> Just (DefVariable ident tp)
+  AS.DefConst ident tp _ -> Just (DefVariable ident tp)
   _ -> Nothing
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
@@ -563,6 +565,11 @@ callableGlobalVars c@Callable{..} = do
       storeCallableGlobals c globals
       return globals
 
+builtinGlobals :: [Some (LabeledValue T.Text WT.BaseTypeRepr)]
+builtinGlobals = [ Some (LabeledValue "TRUE" WT.BaseBoolRepr)
+                 , Some (LabeledValue "FALSE" WT.BaseBoolRepr)
+                 ]
+
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
 -- it is a function.
@@ -582,7 +589,7 @@ computeCallableSignature c@Callable{..} = do
         let ctp = CT.baseToType tp-- traverse computeType (snd <$> callableArgs)
         return (Some (LabeledValue argName ctp))
 
-      Some globalReprs <- return $ someAssignment labeledVals
+      Some globalReprs <- return $ someAssignment (builtinGlobals ++ labeledVals)
       Some argReprs <- return $ someAssignment labeledArgs
       sig <- case callableRets of
         [] -> do -- procedure

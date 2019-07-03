@@ -58,5 +58,6 @@ test-suite semmc-asl-tests
                        containers,
                        crucible,
                        mtl,
+                       parameterized-utils,
                        semmc-asl,
                        text >= 1 && < 2

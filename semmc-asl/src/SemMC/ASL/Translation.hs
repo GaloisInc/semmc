@@ -18,6 +18,8 @@ module SemMC.ASL.Translation (
   , userTypeRepr
   ) where
 
+import Debug.Trace (traceM)
+
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( when )
@@ -175,7 +177,8 @@ translateStatement ov rep stmt
     case stmt of
       AS.StmtReturn Nothing
         | Just Refl <- testEquality rep CT.UnitRepr -> CCG.returnFromFunction (CCG.App CCE.EmptyApp)
-        | otherwise -> X.throw (InvalidReturnType CT.UnitRepr)
+        | otherwise -> do
+            X.throw (InvalidReturnType CT.UnitRepr)
       AS.StmtReturn (Just expr) -> do
         Some a <- translateExpr ov expr
         Refl <- assertAtomType expr rep a
@@ -222,8 +225,10 @@ translateStatement ov rep stmt
       -- particularly actionable, but many may need to be manually overridden.
       AS.StmtSeeExpr {} -> return ()
       AS.StmtSeeString {} -> return ()
-      AS.StmtCall (AS.QualifiedIdentifier _ ident) args -> do
+      AS.StmtCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
+        -- FIXME: make this nicer?
+        let ident = ident' <> "/" <> T.pack (show (length args))
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
@@ -464,8 +469,10 @@ translateExpr ov expr
         preds <- mapM (translateSetElementTest ov expr atom) elts
         Some <$> CCG.mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
       AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
-      AS.ExprCall (AS.QualifiedIdentifier _ ident) args -> do
+      AS.ExprCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
+        -- FIXME: make this nicer?
+        let ident = ident' <> "/" <> T.pack (show (length args))
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
@@ -480,6 +487,8 @@ translateExpr ov expr
                        let uf = UF ident (funcSigRepr sig) atomTypes vals
                        Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
+      -- FIXME: What to do here?
+      AS.ExprImpDef _ -> Some <$> CCG.mkAtom (CCG.App (CCE.BoolLit True))
 
 -- | Translate the expression form of a conditional into a Crucible atom
 translateIfExpr :: Overrides arch

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -7,6 +8,8 @@ import qualified Control.Monad.State as St
 import Data.Foldable (toList)
 import Data.List (intercalate)
 import qualified Data.Map as Map
+import Data.Parameterized.Nonce
+import Data.Parameterized.Some
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Language.ASL.Parser as AS
@@ -14,8 +17,10 @@ import qualified Language.ASL.Syntax as AS
 import System.IO (FilePath)
 import System.Exit (exitFailure)
 
+import Lang.Crucible.Backend.Simple as CBS
 import Lang.Crucible.FunctionHandle as CFH
 
+import SemMC.ASL
 import SemMC.ASL.Crucible
 import SemMC.ASL.Crucible.TranslateSig
 
@@ -23,25 +28,26 @@ defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
 callables :: [(T.Text, Int)]
-callables = [ ("HasArchVersion", 1)
-            -- , ("HaveEL", 1)
-            -- , ("HaveAnyAArch32", 0)
-            -- , ("HighestELUsingAArch32", 0)
-            -- , ("IsSecureBelowEL3", 0)
-            -- , ("ConstrainUnpredictable", 1)
-            -- , ("ConstrainUnpredictableBool", 1)
-            -- , ("Unreachable", 0)
-            -- , ("RBankSelect", 8)
-            -- , ("LookUpRIndex", 2)
-            -- , ("HighestEL", 0)
-            -- , ("HaveAArch32EL", 1)
-            -- , ("BadMode", 1)
-            -- , ("UsingAArch32", 0)
-            -- , ("IsSecure", 0)
-            -- , ("S1TranslationRegime", 1)
-            -- , ("S1TranslationRegime", 0)
-            -- , ("CurrentCond", 0)
-            ]
+callables =  [
+  ("HasArchVersion", 1)
+  , ("HaveEL", 1)
+  , ("HaveAnyAArch32", 0)
+  , ("HighestELUsingAArch32", 0)
+  -- , ("IsSecureBelowEL3", 0)
+  -- , ("ConstrainUnpredictable", 1)
+  -- , ("ConstrainUnpredictableBool", 1)
+  -- , ("Unreachable", 0)
+  -- , ("RBankSelect", 8)
+  -- , ("LookUpRIndex", 2)
+  -- , ("HighestEL", 0)
+  -- , ("HaveAArch32EL", 1)
+  -- , ("BadMode", 1)
+  -- , ("UsingAArch32", 0)
+  -- , ("IsSecure", 0)
+  -- , ("S1TranslationRegime", 1)
+  -- , ("S1TranslationRegime", 0)
+  -- , ("CurrentCond", 0)
+  ]
 
 main :: IO ()
 main = do
@@ -90,7 +96,12 @@ main = do
             case sig of
               SomeFunctionSignature sig -> do
                 handleAllocator <- CFH.newHandleAllocator
-                print (funcGlobalReprs sig)
-                -- f <- functionToCrucible definitions sig handleAllocator (callableStmts c)
+                f <- functionToCrucible definitions sig handleAllocator (callableStmts c)
+                -- backend <- CBS.newSimpleBackend globalNonceGenerator
+                -- let cfg :: SimulatorConfig (SimpleBackend GlobalNonceGenerator  = SimulatorConfig { simOutputHandle = undefined
+                --                           , simHandleAllocator = handleAllocator
+                --                           , simSym = backend
+                --                           }
+                -- symExpr <- simulateFunction cfg f
                 return ()
               _ -> return ()
