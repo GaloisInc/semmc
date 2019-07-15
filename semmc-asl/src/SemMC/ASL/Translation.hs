@@ -16,6 +16,7 @@ module SemMC.ASL.Translation (
   , Overrides(..)
   , UserType(..)
   , userTypeRepr
+  , mkStructMemberName
   ) where
 
 import Debug.Trace (traceM)
@@ -184,6 +185,7 @@ translateStatement ov rep stmt
         Refl <- assertAtomType expr rep a
         CCG.returnFromFunction (CCG.AtomExpr a)
       AS.StmtIf clauses melse -> translateIf ov rep clauses melse
+      AS.StmtCase e alts -> translateCase ov rep e alts
       AS.StmtAssert e -> do
         Some atom <- translateExpr ov e
         Refl <- assertAtomType e CT.BoolRepr atom
@@ -228,7 +230,7 @@ translateStatement ov rep stmt
       AS.StmtCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
-        let ident = ident' <> "/" <> T.pack (show (length args))
+        let ident = ident' <> "_" <> T.pack (show (length args))
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
@@ -260,6 +262,7 @@ translateStatement ov rep stmt
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
       AS.StmtTry {} -> error "Try statements are not implemented"
       AS.StmtThrow {} -> error "Throw statements are not implemented"
+      _ -> error (show stmt)
 
 -- | Translate a for statement into Crucible
 --
@@ -420,6 +423,22 @@ translateIf ov rep clauses melse =
       let genElse = translateIf ov rep rest melse
       CCG.ifte_ (CCG.AtomExpr condAtom) genThen genElse
 
+translateCase :: Overrides arch
+              -> CT.TypeRepr ret
+              -> AS.Expr
+              -> [AS.CaseAlternative]
+              -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+translateCase ov rep e alts = case alts of
+  [AS.CaseOtherwise els] -> mapM_ (translateStatement ov rep) els
+  (AS.CaseWhen pats Nothing stmts : rst) -> do
+    let [patExpr] = patternToExpr <$> pats
+    let condAtom = translateBinaryOp ov AS.BinOpEQ e patExpr
+    undefined
+  _ -> error "translateCase"
+
+patternToExpr :: AS.CasePattern -> AS.Expr
+patternToExpr = undefined
+
 assertAtomType :: AS.Expr
                -- ^ Expression that was translated
                -> CT.TypeRepr tp1
@@ -472,7 +491,7 @@ translateExpr ov expr
       AS.ExprCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
-        let ident = ident' <> "/" <> T.pack (show (length args))
+        let ident = ident' <> "_" <> T.pack (show (length args))
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
@@ -489,6 +508,12 @@ translateExpr ov expr
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
       -- FIXME: What to do here?
       AS.ExprImpDef _ -> Some <$> CCG.mkAtom (CCG.App (CCE.BoolLit True))
+      -- This is just like a variable lookup, since struct members are stored as
+      -- individual global variables.
+      AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
+        let ident = mkStructMemberName structName memberName
+        Some e <- lookupVarRef ident
+        Some <$> CCG.mkAtom e
 
 -- | Translate the expression form of a conditional into a Crucible atom
 translateIfExpr :: Overrides arch
@@ -707,3 +732,8 @@ translateUnaryOp ov op expr = do
 
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger = undefined
+
+-- | Whenever we encounter a member variable of a struct, we treat it as an
+-- independent global variable and use this function to construct its qualified name.
+mkStructMemberName :: T.Text -> T.Text -> T.Text
+mkStructMemberName s m = s <> "." <> m

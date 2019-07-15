@@ -18,11 +18,11 @@ extra-source-files:  CHANGELOG.md
 library
   exposed-modules:     SemMC.ASL
                        SemMC.ASL.Crucible
-                       SemMC.ASL.Crucible.TranslateSig
                        SemMC.ASL.Extension
                        SemMC.ASL.Exceptions
                        SemMC.ASL.Signature
                        SemMC.ASL.Translation
+                       SemMC.ASL.Translation.Signature
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
                        containers,
@@ -33,7 +33,8 @@ library
                        parameterized-utils,
                        crucible,
                        what4,
-                       asl-parser
+                       asl-parser,
+                       semmc
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wcompat -Wall
@@ -60,4 +61,5 @@ test-suite semmc-asl-tests
                        mtl,
                        parameterized-utils,
                        semmc-asl,
-                       text >= 1 && < 2
+                       text >= 1 && < 2,
+                       what4

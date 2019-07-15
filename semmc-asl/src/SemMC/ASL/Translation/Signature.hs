@@ -17,7 +17,7 @@
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 
-module SemMC.ASL.Crucible.TranslateSig (
+module SemMC.ASL.Translation.Signature (
   -- * Top-level interface
     computeAllSignatures
   , computeSignature
@@ -29,6 +29,7 @@ module SemMC.ASL.Crucible.TranslateSig (
   , execSigM
   , SigException(..)
   , SigState(..)
+  -- * Utilities
   -- , DefVariable(..)
   -- , DefType(..)
   ) where
@@ -53,10 +54,13 @@ import qualified What4.BaseTypes as WT
 import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), userTypeRepr )
+import           SemMC.ASL.Translation ( UserType(..), userTypeRepr, mkStructMemberName )
 
 ----------------
 -- Notes
+--
+-- * Structs - capture each member of a struct as an individual global
+-- variable.
 --
 -- * Arrays - capture 'DefArray' as a bunch of individual global variables, one for
 -- each index value.
@@ -151,7 +155,7 @@ callableNameWithArity c =
   in callableNameWithArity' name numArgs
 
 callableNameWithArity' :: T.Text -> Int -> T.Text
-callableNameWithArity' name numArgs = name <> T.pack "/" <> T.pack (show numArgs)
+callableNameWithArity' name numArgs = name <> T.pack "_" <> T.pack (show numArgs)
 
 asDefType :: AS.Definition -> Maybe DefType
 asDefType def =
@@ -383,11 +387,6 @@ setEltGlobalVars setElt = case setElt of
   AS.SetEltSingle e -> exprGlobalVars e
   AS.SetEltRange e1 e2 -> (++) <$> exprGlobalVars e1 <*> exprGlobalVars e2
 
--- | Whenever we encounter a member variable of a struct, we treat it as an
--- independent global variable and use this function to construct its qualified name.
-mkStructMemberName :: T.Text -> T.Text -> T.Text
-mkStructMemberName s m = s <> "." <> m
-
 lValExprGlobalVars :: AS.LValExpr -> SigM [(T.Text, Some WT.BaseTypeRepr)]
 lValExprGlobalVars lValExpr = case lValExpr of
   -- If the variable isn't in the list of globals, we assume it is locally bound and
@@ -451,6 +450,7 @@ exprGlobalVars expr = case expr of
     eGlobals <- exprGlobalVars e
     sliceGlobals <- concat <$> traverse sliceGlobalVars slices
     return $ eGlobals ++ sliceGlobals
+  -- IAMHERE: Fix handling of SCR_GEN here
   AS.ExprIndex e slices -> do
     eGlobals <- exprGlobalVars e
     sliceGlobals <- concat <$> traverse sliceGlobalVars slices

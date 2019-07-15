@@ -14,15 +14,17 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Language.ASL.Parser as AS
 import qualified Language.ASL.Syntax as AS
+import System.IO as IO
 import System.IO (FilePath)
 import System.Exit (exitFailure)
 
 import Lang.Crucible.Backend.Simple as CBS
 import Lang.Crucible.FunctionHandle as CFH
+import What4.Interface as WI
 
 import SemMC.ASL
 import SemMC.ASL.Crucible
-import SemMC.ASL.Crucible.TranslateSig
+import SemMC.ASL.Translation.Signature
 
 defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
@@ -32,14 +34,14 @@ callables =  [
   ("HasArchVersion", 1)
   , ("HaveEL", 1)
   , ("HaveAnyAArch32", 0)
-  , ("HighestELUsingAArch32", 0)
+  -- , ("HighestELUsingAArch32", 0)
   -- , ("IsSecureBelowEL3", 0)
   -- , ("ConstrainUnpredictable", 1)
   -- , ("ConstrainUnpredictableBool", 1)
   -- , ("Unreachable", 0)
   -- , ("RBankSelect", 8)
   -- , ("LookUpRIndex", 2)
-  -- , ("HighestEL", 0)
+  , ("HighestEL", 0)
   -- , ("HaveAArch32EL", 1)
   -- , ("BadMode", 1)
   -- , ("UsingAArch32", 0)
@@ -47,6 +49,7 @@ callables =  [
   -- , ("S1TranslationRegime", 1)
   -- , ("S1TranslationRegime", 0)
   -- , ("CurrentCond", 0)
+  -- , ("DecodeImmShift", 2)
   ]
 
 main :: IO ()
@@ -97,11 +100,13 @@ main = do
               SomeFunctionSignature sig -> do
                 handleAllocator <- CFH.newHandleAllocator
                 f <- functionToCrucible definitions sig handleAllocator (callableStmts c)
-                -- backend <- CBS.newSimpleBackend globalNonceGenerator
-                -- let cfg :: SimulatorConfig (SimpleBackend GlobalNonceGenerator  = SimulatorConfig { simOutputHandle = undefined
-                --                           , simHandleAllocator = handleAllocator
-                --                           , simSym = backend
-                --                           }
-                -- symExpr <- simulateFunction cfg f
+                backend <- CBS.newSimpleBackend globalNonceGenerator
+                let cfg :: SimulatorConfig (SimpleBackend GlobalNonceGenerator (Flags FloatIEEE))
+                      = SimulatorConfig { simOutputHandle = IO.stdout
+                                        , simHandleAllocator = handleAllocator
+                                        , simSym = backend
+                                        }
+                symExpr <- simulateFunction cfg f
                 return ()
+                -- print (WI.printSymFn symExpr)
               _ -> return ()

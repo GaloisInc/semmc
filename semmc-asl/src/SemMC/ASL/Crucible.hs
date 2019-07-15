@@ -47,8 +47,6 @@ module SemMC.ASL.Crucible (
   , TranslationException(..)
   ) where
 
-import Debug.Trace (traceM)
-
 import qualified Control.Exception as X
 import           Control.Monad.ST ( stToIO, RealWorld )
 import qualified Data.Map as Map
@@ -68,7 +66,6 @@ import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
 
-import           SemMC.ASL.Crucible.TranslateSig ()
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature

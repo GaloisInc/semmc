@@ -4,6 +4,9 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module SemMC.ASL (
     simulateFunction
   , simulateProcedure
@@ -14,10 +17,13 @@ module SemMC.ASL (
 import qualified Control.Exception as X
 import           Control.Lens ( (^.) )
 import           Control.Monad.ST ( RealWorld )
+import qualified Data.Functor.Product as FP
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
+import qualified Data.Type.List as TL
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Generator as CCG
@@ -31,13 +37,34 @@ import qualified What4.BaseTypes as WT
 import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
 
+import qualified SemMC.Formula as SF
 import qualified SemMC.ASL.Crucible as AC
+import qualified SemMC.ASL.Signature as AS
+
+import GHC.TypeNats
 
 data SimulatorConfig sym =
   SimulatorConfig { simOutputHandle :: IO.Handle
                   , simHandleAllocator :: CFH.HandleAllocator RealWorld
                   , simSym :: sym
                   }
+
+type family ToBaseType (ctp :: CT.CrucibleType) :: WI.BaseType where
+  ToBaseType (CT.BaseToType bt) = bt
+
+type family ToBaseTypes (ctps :: CT.Ctx CT.CrucibleType) :: CT.Ctx WI.BaseType where
+  ToBaseTypes CT.EmptyCtx = CT.EmptyCtx
+  ToBaseTypes (tps CT.::> tp) = ToBaseTypes tps CT.::> ToBaseType tp
+
+type family ToBaseTypesList (ctps :: CT.Ctx CT.CrucibleType) :: [WI.BaseType] where
+  ToBaseTypesList CT.EmptyCtx = '[]
+  ToBaseTypesList (tps CT.::> tp) = ToBaseType tp ': ToBaseTypesList tps
+
+reshape :: Ctx.Assignment CT.TypeRepr ctps -> PL.List WT.BaseTypeRepr (ToBaseTypesList ctps)
+reshape Ctx.Empty = PL.Nil
+reshape (reprs Ctx.:> repr) = case CT.asBaseType repr of
+  CT.NotBaseType -> error "Illegal crucible type"
+  CT.AsBaseType brepr -> brepr PL.:< reshape reprs
 
 -- | Symbolically simulate a function, which has a single return value (which may itself be a tuple
 -- i.e., struct)
@@ -47,14 +74,15 @@ data SimulatorConfig sym =
 simulateFunction :: (CB.IsSymInterface sym)
                  => SimulatorConfig sym
                  -> AC.Function arch globals init tp
-                 -> IO (WI.SymExpr sym tp)
+                 -- -> IO (WI.SymExpr sym tp)
+                 -> IO (SF.FunctionFormula sym '(ToBaseTypesList init, tp))
 simulateFunction symCfg func = do
   case AC.funcCFG func of
     CCC.SomeCFG cfg -> do
       let sig = AC.funcSig func
       initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.funcArgReprs sig)
       let econt = CS.runOverrideSim (CT.baseToType (AC.funcSigRepr sig)) $ do
-            re <- CS.callCFG cfg (CS.RegMap initArgs)
+            re <- CS.callCFG cfg (CS.RegMap (FC.fmapFC freshArgEntry initArgs))
             return (CS.regValue re)
       let globals = AC.funcGlobals func
       globalState <- initGlobals symCfg globals
@@ -65,16 +93,31 @@ simulateFunction symCfg func = do
         CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeFunctionSignature sig))
         CS.FinishedResult _ pres ->
           case pres of
-            CS.TotalRes gp -> extractResult gp
-            CS.PartialRes _ gp _ -> extractResult gp
+            CS.TotalRes gp -> extractResult gp initArgs
+            CS.PartialRes _ gp _ -> extractResult gp initArgs
   where
-    extractResult gp =
+    extractResult gp initArgs =
       let re = gp ^. CS.gpValue
       in case CT.asBaseType (CS.regType re) of
         CT.NotBaseType -> X.throwIO (NonBaseTypeReturn (CS.regType re))
         CT.AsBaseType btr
-          | Just Refl <- testEquality btr (AC.funcSigRepr (AC.funcSig func)) ->
-            return (CS.regValue re)
+          | Just Refl <- testEquality btr (AC.funcSigRepr (AC.funcSig func)) -> do
+              print (WI.printSymExpr (CS.regValue re))
+              let name = T.unpack (AS.funcName (AC.funcSig func))
+                  argTypes = reshape (FC.fmapFC AS.projectValue (AS.funcArgReprs (AC.funcSig func)))
+                  argVars = undefined
+                  retType = AS.funcSigRepr (AC.funcSig func)
+                  retExpr = CS.regValue re
+                  solverSymbolName = case WI.userSymbol name of
+                    Left err -> error (show err)
+                    Right symbol -> symbol
+              fn <- WI.definedFn
+                (simSym symCfg)
+                solverSymbolName
+                (freshArgBoundVars initArgs)
+                (CS.regValue re)
+                (const False)
+              return $ SF.FunctionFormula name argTypes argVars retType fn -- (CS.regValue re)
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
 -- | Simulate a procedure
@@ -91,44 +134,80 @@ simulateProcedure :: forall arch sym init globals
                   -> AC.Procedure arch globals init
                   -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) globals)
 simulateProcedure symCfg crucProc = do
-  case AC.procCFG crucProc of
-    CCC.SomeCFG cfg -> do
-      let sig = AC.procSig crucProc
-      let globalVars = AC.procGlobals crucProc
-      initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procArgReprs sig)
-      let econt = CS.runOverrideSim CT.UnitRepr $ do
-            _ <- CS.callCFG cfg (CS.RegMap initArgs)
-            return ()
-      globalState <- initGlobals symCfg globalVars
-      s0 <- initialSimulatorState symCfg globalState econt
-      eres <- CS.executeCrucible executionFeatures s0
-      case eres of
-        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeProcedureSignature sig))
-        CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeProcedureSignature sig))
-        CS.FinishedResult _ pres ->
-          case pres of
-            CS.TotalRes gp -> extractResult globalVars gp
-            CS.PartialRes _ gp _ -> extractResult globalVars gp
-  where
-    -- Look up all of the values of the globals we allocated (which capture all of the side effects)
-    extractResult globalVars gp = FC.traverseFC (lookupBaseGlobalVal (gp ^. CS.gpGlobals)) globalVars
-    lookupBaseGlobalVal gs (AC.BaseGlobalVar gv) = do
-      case CSG.lookupGlobal gv gs of
-        Just rv -> return (AC.LabeledValue (CCG.globalName gv) rv)
-        Nothing -> X.throwIO (MissingGlobalDefinition gv)
+  undefined
+  -- case AC.procCFG crucProc of
+  --   CCC.SomeCFG cfg -> do
+  --     let sig = AC.procSig crucProc
+  --     let globalVars = AC.procGlobals crucProc
+  --     initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procArgReprs sig)
+  --     let econt = CS.runOverrideSim CT.UnitRepr $ do
+  --           _ <- CS.callCFG cfg (CS.RegMap initArgs)
+  --           return ()
+  --     globalState <- initGlobals symCfg globalVars
+  --     s0 <- initialSimulatorState symCfg globalState econt
+  --     eres <- CS.executeCrucible executionFeatures s0
+  --     case eres of
+  --       CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeProcedureSignature sig))
+  --       CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeProcedureSignature sig))
+  --       CS.FinishedResult _ pres ->
+  --         case pres of
+  --           CS.TotalRes gp -> extractResult globalVars gp
+  --           CS.PartialRes _ gp _ -> extractResult globalVars gp
+  -- where
+  --   -- Look up all of the values of the globals we allocated (which capture all of the side effects)
+  --   extractResult globalVars gp = FC.traverseFC (lookupBaseGlobalVal (gp ^. CS.gpGlobals)) globalVars
+  --   lookupBaseGlobalVal gs (AC.BaseGlobalVar gv) = do
+  --     case CSG.lookupGlobal gv gs of
+  --       Just rv -> return (AC.LabeledValue (CCG.globalName gv) rv)
+  --       Nothing -> X.throwIO (MissingGlobalDefinition gv)
+
+data FreshArg sym tp = FreshArg { freshArgEntry :: CS.RegEntry sym tp
+                                , freshArgBoundVar :: WI.BoundVar sym (ToBaseType tp)
+                                }
+
+freshArgBoundVars :: Ctx.Assignment (FreshArg sym) init -> Ctx.Assignment (WI.BoundVar sym) (TL.ToContextFwd (ToBaseTypesList init))
+freshArgBoundVars args = TL.toAssignment (TL.reverse (freshArgBoundVars' args))
+
+freshArgBoundVars' :: Ctx.Assignment (FreshArg sym) init -> PL.List (WI.BoundVar sym) (ToBaseTypesList init)
+freshArgBoundVars' Ctx.Empty = PL.Nil
+freshArgBoundVars' (args Ctx.:> arg) = freshArgBoundVar arg PL.:< freshArgBoundVars' args
 
 allocateFreshArg :: (CB.IsSymInterface sym)
                  => sym
                  -> AC.LabeledValue T.Text CT.TypeRepr tp
-                 -> IO (CS.RegEntry sym tp)
+                 -> IO (FreshArg sym tp)
+--                 -> IO (CS.RegEntry sym tp, WI.BoundVar sym (ToBaseType tp))
+-- TODO: use freshBoundVar (kind of a declaration to What4
+--                 -> IO (CS.RegEntry sym tp, BoundVar ...)
 allocateFreshArg sym (AC.LabeledValue name rep) = do
   case rep of
     CT.BVRepr w -> do
       sname <- toSolverSymbol (T.unpack name)
+      bv <- WI.freshBoundVar sym sname (WT.BaseBVRepr w)
       rv <- WI.freshConstant sym sname (WT.BaseBVRepr w)
-      return CS.RegEntry { CS.regType = rep
-                         , CS.regValue = rv
-                         }
+      return $ FreshArg
+        ( CS.RegEntry { CS.regType = rep
+                      , CS.regValue = rv
+                      } )
+        bv
+    CT.IntegerRepr -> do
+      sname <- toSolverSymbol (T.unpack name)
+      bv <- WI.freshBoundVar sym sname WT.BaseIntegerRepr
+      rv <- WI.freshConstant sym sname WT.BaseIntegerRepr
+      return $ FreshArg
+        ( CS.RegEntry { CS.regType = rep
+                      , CS.regValue = rv
+                      } )
+        bv
+    CT.BoolRepr -> do
+      sname <- toSolverSymbol (T.unpack name)
+      bv <- WI.freshBoundVar sym sname WT.BaseBoolRepr
+      rv <- WI.freshConstant sym sname WT.BaseBoolRepr
+      return $ FreshArg
+        ( CS.RegEntry { CS.regType = rep
+                      , CS.regValue = rv
+                      } )
+        bv
     _ -> X.throwIO (CannotAllocateFresh rep)
 
 toSolverSymbol :: String -> IO WS.SolverSymbol
@@ -167,8 +246,8 @@ initGlobals symCfg globals = do
               -> IO (CSG.SymGlobalState sym)
     addGlobal (AC.BaseGlobalVar gv) mgs = do
       gs <- mgs
-      entry <- allocateFreshArg (simSym symCfg) (AC.LabeledValue (CCG.globalName gv) (CCG.globalType gv))
-      return (CSG.insertGlobal gv (CS.regValue entry) gs)
+      arg <- allocateFreshArg (simSym symCfg) (AC.LabeledValue (CCG.globalName gv) (CCG.globalType gv))
+      return (CSG.insertGlobal gv (CS.regValue (freshArgEntry arg)) gs)
 
 executionFeatures :: [CS.ExecutionFeature p sym ext rtp]
 executionFeatures = []
