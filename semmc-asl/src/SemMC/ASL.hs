@@ -17,7 +17,6 @@ module SemMC.ASL (
 import qualified Control.Exception as X
 import           Control.Lens ( (^.) )
 import           Control.Monad.ST ( RealWorld )
-import qualified Data.Functor.Product as FP
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as PL
@@ -105,7 +104,7 @@ simulateFunction symCfg func = do
               print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.funcName (AC.funcSig func))
                   argTypes = reshape (FC.fmapFC AS.projectValue (AS.funcArgReprs (AC.funcSig func)))
-                  argVars = undefined
+                  argVars = freshArgBoundVars' initArgs
                   retType = AS.funcSigRepr (AC.funcSig func)
                   retExpr = CS.regValue re
                   solverSymbolName = case WI.userSymbol name of

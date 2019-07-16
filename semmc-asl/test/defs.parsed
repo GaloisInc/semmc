@@ -27,6 +27,20 @@
     ArchVersion
     (list ARMv8p0 ARMv8p1 ARMv8p2))
   (DefCallable
+    (QualifiedIdentifier Any BenFunction)
+    (list )
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprLitNat 1)))))))
+  (DefCallable
     (QualifiedIdentifier Any HasArchVersion)
     (list
       (SymDecl

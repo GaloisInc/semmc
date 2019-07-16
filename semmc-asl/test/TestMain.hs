@@ -1,4 +1,7 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
@@ -18,12 +21,16 @@ import System.IO as IO
 import System.IO (FilePath)
 import System.Exit (exitFailure)
 
+import Lang.Crucible.CFG.Expr as CCE
+import Lang.Crucible.CFG.Generator as CCG
+import Lang.Crucible.Types as CT
 import Lang.Crucible.Backend.Simple as CBS
 import Lang.Crucible.FunctionHandle as CFH
 import What4.Interface as WI
 
 import SemMC.ASL
 import SemMC.ASL.Crucible
+import SemMC.ASL.Translation
 import SemMC.ASL.Translation.Signature
 
 defsFilePath :: FilePath
@@ -31,9 +38,10 @@ defsFilePath = "test/defs.parsed"
 
 callables :: [(T.Text, Int)]
 callables =  [
-  ("HasArchVersion", 1)
-  , ("HaveEL", 1)
-  , ("HaveAnyAArch32", 0)
+  -- ("HasArchVersion", 1)
+  ("BenFunction", 0)
+  -- , ("HaveEL", 1)
+  -- , ("HaveAnyAArch32", 0)
   -- , ("HighestELUsingAArch32", 0)
   -- , ("IsSecureBelowEL3", 0)
   -- , ("ConstrainUnpredictable", 1)
@@ -41,7 +49,7 @@ callables =  [
   -- , ("Unreachable", 0)
   -- , ("RBankSelect", 8)
   -- , ("LookUpRIndex", 2)
-  , ("HighestEL", 0)
+  -- , ("HighestEL", 0)
   -- , ("HaveAArch32EL", 1)
   -- , ("BadMode", 1)
   -- , ("UsingAArch32", 0)
@@ -49,8 +57,13 @@ callables =  [
   -- , ("S1TranslationRegime", 1)
   -- , ("S1TranslationRegime", 0)
   -- , ("CurrentCond", 0)
-  -- , ("DecodeImmShift", 2)
+  , ("DecodeImmShift", 2)
   ]
+
+overrides :: Overrides arch
+overrides = Overrides {..}
+  where overrideStmt stmt = Nothing
+        overrideExpr expr = Nothing
 
 main :: IO ()
 main = do
@@ -93,7 +106,7 @@ main = do
           let definitions = Definitions
                 { defSignatures = (fst <$> sigs)
                 , defTypes = userTypes
-                , defOverrides = Overrides (\_ -> Nothing) (\_ -> Nothing)
+                , defOverrides = overrides
                 }
           forM_ sigs $ \(sig, c) -> do
             case sig of
@@ -108,5 +121,4 @@ main = do
                                         }
                 symExpr <- simulateFunction cfg f
                 return ()
-                -- print (WI.printSymFn symExpr)
               _ -> return ()

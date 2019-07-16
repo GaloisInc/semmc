@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeOperators #-}
 module SemMC.ASL.Translation (
     TranslationState(..)
+  , translateExpr
   , translateStatement
   , Overrides(..)
   , UserType(..)
@@ -364,7 +365,11 @@ translateAssignment ov lval e = do
             Just (Some gv) -> do
               Refl <- assertAtomType e (CCG.globalType gv) atom
               CCG.writeGlobal gv (CCG.AtomExpr atom)
-            Nothing -> X.throw (UnboundName ident)
+            Nothing -> do
+              let atomType = CCG.typeOfAtom atom
+              reg <- CCG.newUnassignedReg atomType
+              MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
+              CCG.assignReg reg (CCG.AtomExpr atom)
 
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
@@ -428,16 +433,31 @@ translateCase :: Overrides arch
               -> AS.Expr
               -> [AS.CaseAlternative]
               -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateCase ov rep e alts = case alts of
+translateCase ov rep expr alts = case alts of
   [AS.CaseOtherwise els] -> mapM_ (translateStatement ov rep) els
-  (AS.CaseWhen pats Nothing stmts : rst) -> do
-    let [patExpr] = patternToExpr <$> pats
-    let condAtom = translateBinaryOp ov AS.BinOpEQ e patExpr
-    undefined
-  _ -> error "translateCase"
+  -- FIXME: We assume that the case below is equivalent to "otherwise"
+  [AS.CaseWhen pats Nothing body] -> mapM_ (translateStatement ov rep) body
+  (AS.CaseWhen pats Nothing body : rst) -> do
+    let matchExpr = caseWhenExpr expr pats
+    Some matchAtom <- translateExpr ov matchExpr
+    Refl <- assertAtomType matchExpr CT.BoolRepr matchAtom
+    let genThen = mapM_ (translateStatement ov rep) body
+    let genRest = translateCase ov rep expr rst
+    CCG.ifte_ (CCG.AtomExpr matchAtom) genThen genRest
+  alts -> error (show alts)
 
-patternToExpr :: AS.CasePattern -> AS.Expr
-patternToExpr = undefined
+caseWhenExpr :: AS.Expr -> [AS.CasePattern] -> AS.Expr
+caseWhenExpr expr [] = error "caseWhenExpr"
+caseWhenExpr expr [pat] = matchPat expr pat
+caseWhenExpr expr (pat:pats) = AS.ExprBinOp AS.BinOpLogicalOr (matchPat expr pat) (caseWhenExpr expr pats)
+
+matchPat :: AS.Expr -> AS.CasePattern -> AS.Expr
+matchPat expr (AS.CasePatternInt i) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitInt i)
+matchPat expr (AS.CasePatternBin bv) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitBin bv)
+matchPat expr (AS.CasePatternIdentifier id) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny id))
+matchPat _ (AS.CasePatternMask mask) = error "bitmask pattern unimplemented"
+matchPat _ AS.CasePatternIgnore = error "ignore pattern unimplemented"
+matchPat _ (AS.CasePatternTuple _) = error "tuple pattern unimplemented"
 
 assertAtomType :: AS.Expr
                -- ^ Expression that was translated
@@ -488,6 +508,12 @@ translateExpr ov expr
         preds <- mapM (translateSetElementTest ov expr atom) elts
         Some <$> CCG.mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
       AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
+      AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> do
+        Some atom <- translateExpr ov argExpr
+        case CCG.typeOfAtom atom of
+          CT.BVRepr nr -> do
+            Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+          _ -> error "Called UInt on non-bitvector"
       AS.ExprCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
