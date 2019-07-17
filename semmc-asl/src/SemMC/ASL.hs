@@ -39,6 +39,7 @@ import qualified What4.Symbol as WS
 import qualified SemMC.Formula as SF
 import qualified SemMC.ASL.Crucible as AC
 import qualified SemMC.ASL.Signature as AS
+import qualified SemMC.ASL.Types as AT
 
 import GHC.TypeNats
 
@@ -48,16 +49,9 @@ data SimulatorConfig sym =
                   , simSym :: sym
                   }
 
-type family ToBaseType (ctp :: CT.CrucibleType) :: WI.BaseType where
-  ToBaseType (CT.BaseToType bt) = bt
-
-type family ToBaseTypes (ctps :: CT.Ctx CT.CrucibleType) :: CT.Ctx WI.BaseType where
-  ToBaseTypes CT.EmptyCtx = CT.EmptyCtx
-  ToBaseTypes (tps CT.::> tp) = ToBaseTypes tps CT.::> ToBaseType tp
-
 type family ToBaseTypesList (ctps :: CT.Ctx CT.CrucibleType) :: [WI.BaseType] where
   ToBaseTypesList CT.EmptyCtx = '[]
-  ToBaseTypesList (tps CT.::> tp) = ToBaseType tp ': ToBaseTypesList tps
+  ToBaseTypesList (tps CT.::> tp) = AT.ToBaseType tp ': ToBaseTypesList tps
 
 reshape :: Ctx.Assignment CT.TypeRepr ctps -> PL.List WT.BaseTypeRepr (ToBaseTypesList ctps)
 reshape Ctx.Empty = PL.Nil
@@ -161,7 +155,7 @@ simulateProcedure symCfg crucProc = do
   --       Nothing -> X.throwIO (MissingGlobalDefinition gv)
 
 data FreshArg sym tp = FreshArg { freshArgEntry :: CS.RegEntry sym tp
-                                , freshArgBoundVar :: WI.BoundVar sym (ToBaseType tp)
+                                , freshArgBoundVar :: WI.BoundVar sym (AT.ToBaseType tp)
                                 }
 
 freshArgBoundVars :: Ctx.Assignment (FreshArg sym) init -> Ctx.Assignment (WI.BoundVar sym) (TL.ToContextFwd (ToBaseTypesList init))

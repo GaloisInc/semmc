@@ -8,6 +8,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 module SemMC.ASL.Extension (
     ASLExt
   , ASLApp(..)
@@ -41,6 +42,7 @@ import qualified What4.Symbol as WS
 
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature ( BaseGlobalVar(..) )
+import           SemMC.ASL.Types
 
 -- NOTE: Translate calls (both expr and stmt) as What4 uninterpreted functions
 --
@@ -67,6 +69,9 @@ data ASLApp f tp where
                 -> Ctx.Index ctx tp
                 -> f (CT.SymbolicStructType ctx)
                 -> ASLApp f (CT.BaseToType tp)
+  MkBaseStruct :: Ctx.Assignment CT.TypeRepr ctx
+               -> Ctx.Assignment f ctx
+               -> ASLApp f (CT.SymbolicStructType (ToBaseTypes ctx))
 
 -- | The statement extension type
 --
@@ -106,6 +111,10 @@ aslAppEvalFunc _ sym _ _ = \evalApp app ->
     GetBaseStruct _srep idx term -> do
       rv <- evalApp term
       WI.structField sym rv idx
+    MkBaseStruct reprs mems -> do
+      evalMems <- extractBase' (\v -> CS.RV <$> evalApp v) reprs mems
+      let evalMems' = FC.fmapFC (unSE @sym) evalMems
+      WI.mkStruct sym evalMems'
 
 aslStmtEvalFunc :: forall arch sym tp p rtp blocks r ctx
                  . ASLStmt arch (CS.RegEntry sym) tp
@@ -171,6 +180,19 @@ extractBase fname evalExpr tps vals (Some acc) = do
           let acc' = Ctx.extend acc (Pair btr (SE se))
           extractBase fname evalExpr restReps restVals (Some acc')
 
+extractBase' :: (forall tp . f tp -> IO (CS.RegValue' sym tp))
+             -> Ctx.Assignment CT.TypeRepr tps
+             -> Ctx.Assignment f tps
+             -> IO (Ctx.Assignment (SymExpr' sym) (ToBaseTypes tps))
+extractBase' evalExpr tps asgn = case (tps, asgn) of
+  (Ctx.Empty, Ctx.Empty) -> return Ctx.Empty
+  (reprs Ctx.:> repr, vals Ctx.:> val) -> do
+    rst <- extractBase' evalExpr reprs vals
+    case CT.asBaseType repr of
+      CT.NotBaseType -> X.throwIO (ExpectedBaseTypeRepr repr)
+      CT.AsBaseType brepr -> do
+        CS.RV se <- evalExpr val
+        return $ rst Ctx.:> SE se
 
 type instance CCExt.ExprExtension (ASLExt arch) = ASLApp
 type instance CCExt.StmtExtension (ASLExt arch) = ASLStmt arch
@@ -234,24 +256,28 @@ instance FC.FunctorFC ASLApp where
     case a of
       UF name trep argReps vals -> UF name trep argReps (FC.fmapFC f vals)
       GetBaseStruct rep i t -> GetBaseStruct rep i (f t)
+      MkBaseStruct rep mems -> MkBaseStruct rep (FC.fmapFC f mems)
 
 instance FC.FoldableFC ASLApp where
   foldrFC f seed a =
     case a of
       UF _ _ _ vals -> FC.foldrFC f seed vals
       GetBaseStruct _ _ t -> f t seed
+      MkBaseStruct _ mems -> FC.foldrFC f seed mems
 
 instance FC.TraversableFC ASLApp where
   traverseFC f a =
     case a of
       UF name trep argReps vals -> UF name trep argReps <$> FC.traverseFC f vals
       GetBaseStruct rep i t -> GetBaseStruct rep i <$> f t
+      MkBaseStruct rep mems -> MkBaseStruct rep <$> FC.traverseFC f mems
 
 instance CCExt.TypeApp ASLApp where
   appType a =
     case a of
       UF _ trep _ _ -> CT.baseToType trep
       GetBaseStruct (CT.SymbolicStructRepr reprs) i _ -> CT.baseToType (reprs Ctx.! i)
+      MkBaseStruct reprs _ -> CT.SymbolicStructRepr (toBaseTypes reprs)
 
 instance CCExt.PrettyApp ASLApp where
   ppApp pp a =
@@ -267,6 +293,10 @@ instance CCExt.PrettyApp ASLApp where
                 , PP.text (showF i)
                 , pp t
                 ]
+      MkBaseStruct _r mems ->
+        PP.hsep [ PP.text "MkBaseStruct"
+                , PP.text "PP UNIMPLEMENTED"
+                ]
 
 instance FC.TestEqualityFC ASLApp where
   testEqualityFC testFC a1 a2 =
@@ -281,6 +311,10 @@ instance FC.TestEqualityFC ASLApp where
         Refl <- testEquality r1 r2
         Refl <- testEquality i1 i2
         Refl <- testFC t1 t2
+        return Refl
+      (MkBaseStruct t1 mems1, MkBaseStruct t2 mems2) -> do
+        Refl <- testEquality t1 t2
+        Refl <- FC.testEqualityFC testFC mems1 mems2
         return Refl
       _ -> Nothing
 
@@ -312,5 +346,15 @@ instance FC.OrdFC ASLApp where
               LTF -> LTF
               GTF -> GTF
               EQF -> EQF
+      (MkBaseStruct t1 mems1, MkBaseStruct t2 mems2) ->
+        case compareF t1 t2 of
+          LTF -> LTF
+          GTF -> GTF
+          EQF -> case FC.compareFC compareTerm mems1 mems2 of
+            LTF -> LTF
+            GTF -> GTF
+            EQF -> EQF
       (UF {}, _) -> LTF
+      (GetBaseStruct {}, MkBaseStruct {}) -> LTF
       (GetBaseStruct {}, _) -> GTF
+      (MkBaseStruct {}, _) -> GTF

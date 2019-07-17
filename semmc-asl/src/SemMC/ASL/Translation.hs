@@ -18,9 +18,11 @@ module SemMC.ASL.Translation (
   , UserType(..)
   , userTypeRepr
   , mkStructMemberName
+  , ToBaseType
+  , ToBaseTypes
   ) where
 
-import Debug.Trace (traceM)
+import Debug.Trace (traceM, trace)
 
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
@@ -46,6 +48,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
+import           SemMC.ASL.Types
 
 -- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
 -- the lookup types (arguments, locals, or globals) technically return different
@@ -471,6 +474,8 @@ assertAtomType expr expectedRepr atom =
     Nothing -> X.throw (UnexpectedExprType expr (CCG.typeOfAtom atom) expectedRepr)
     Just Refl -> return Refl
 
+
+
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
@@ -501,7 +506,9 @@ translateExpr ov expr
         case assignmentFromList (Some Ctx.empty) atoms of
           Some asgn -> do
             let reprs = FC.fmapFC CCG.typeOfAtom asgn
-            Some <$> CCG.mkAtom (CCG.App (CCE.MkStruct reprs (FC.fmapFC CCG.AtomExpr asgn)))
+            let atoms = FC.fmapFC CCG.AtomExpr asgn
+            let struct = MkBaseStruct reprs atoms
+            Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
       AS.ExprInSet e elts -> do
         Some atom <- translateExpr ov e
         when (null elts) $ X.throw (EmptySetElementList expr)
@@ -757,7 +764,8 @@ translateUnaryOp ov op expr = do
 
 
 bitsToInteger :: [Bool] -> Integer
-bitsToInteger = undefined
+bitsToInteger [x] = fromIntegral (fromEnum x)
+bitsToInteger (x:xs) = fromIntegral (fromEnum x) * 2 + bitsToInteger xs
 
 -- | Whenever we encounter a member variable of a struct, we treat it as an
 -- independent global variable and use this function to construct its qualified name.

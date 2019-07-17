@@ -28,6 +28,7 @@ data TranslationException = NoReturnInFunction SomeSignature
                           | UnsupportedBinaryOperator AS.BinOp
                           | EmptySetElementList AS.Expr
                           | MalformedConditionalExpression AS.Expr
+                          | forall tp . ExpectedBaseTypeRepr (CT.TypeRepr tp)
                           | forall tp . ExpectedBaseType AS.Expr (CT.TypeRepr tp)
                           | forall tp . ExpectedBaseTypeArgument T.Text (CT.TypeRepr tp)
                           | InvalidFunctionName T.Text
