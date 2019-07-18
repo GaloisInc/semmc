@@ -29,6 +29,7 @@ module SemMC.ASL.Translation.Signature (
   , execSigM
   , SigException(..)
   , SigState(..)
+  , SigEnv(..)
   -- * Utilities
   -- , DefVariable(..)
   -- , DefType(..)
@@ -82,7 +83,7 @@ type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
 computeAllSignatures :: [AS.Definition] -> Either (SigException, SigState) SignatureMap
 computeAllSignatures defs = execSigM defs $ do
   env <- RWS.ask
-  forM_ (Map.elems (callables env)) $ \def -> do
+  forM_ (Map.elems (envCallables env)) $ \def -> do
     computeCallableSignature def
   finalState <- RWS.get
   return $ callableSignatureMap finalState
@@ -93,21 +94,30 @@ computeSignature name arity = do
   def <- lookupCallable name arity
   void $ computeCallableSignature def
 
+-- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
+-- signatures.
 buildEnv :: [AS.Definition] -> SigEnv
 buildEnv defs =
-  let callables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
+  let envCallables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
       globalVars = Map.fromList $
-        ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs))) ++
-        ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)
+        ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
+        -- ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)
       types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
+      -- | TODO: Populate enums
+      enums = Map.fromList (concatMap getEnumValues defs)
       -- | TODO: Populate builtin types
       builtinTypes = Map.empty
       getVariableName v = let DefVariable name _ = v
                           in name
-      getEnumVariables v = case v of
-                         AS.DefTypeEnum _ names ->
-                           (\n -> DefVariable n (AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer"))) <$> names
-                         _ -> []
+      -- getEnumVariables v = case v of
+      --                    AS.DefTypeEnum _ names ->
+      --                      (\n -> DefVariable n (AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer"))) <$> names
+      --                    _ -> []
+
+      -- Map each enum type to a name->integer map.
+      getEnumValues d = case d of
+        AS.DefTypeEnum _ names -> zip names [0..]
+        _ -> []
       getTypeName t = case t of
         DefTypeBuiltin name -> name
         DefTypeAbstract name -> name
@@ -199,8 +209,9 @@ execSigM defs action =
     Right a -> Right a
   where initState = SigState Map.empty Map.empty Map.empty Seq.empty
 
-data SigEnv = SigEnv { callables :: Map.Map T.Text Callable
+data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                      , globalVars :: Map.Map T.Text DefVariable
+                     , enums :: Map.Map T.Text Integer
                      , types :: Map.Map T.Text DefType
                      , builtinTypes :: Map.Map T.Text (Some UserType)
                      }
@@ -234,7 +245,7 @@ lookupCallable :: T.Text -> Int -> SigM Callable
 lookupCallable name' arity = do
   env <- RWS.ask
   let name = callableNameWithArity' name' arity
-  case Map.lookup name (callables env) of
+  case Map.lookup name (envCallables env) of
     Just callable -> return callable
     Nothing -> E.throwError $ CallableNotFound name
 

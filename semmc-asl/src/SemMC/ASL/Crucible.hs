@@ -77,6 +77,7 @@ import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Ove
 data Definitions arch =
   Definitions { defSignatures :: Map.Map T.Text SomeSignature
               , defTypes :: Map.Map T.Text (Some UserType)
+              , defEnums :: Map.Map T.Text Integer
               , defOverrides :: Overrides arch
               }
 
@@ -135,6 +136,7 @@ funcInitialState defs sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
+                   , tsEnums = defEnums defs
                    , tsFunctionSigs = defSignatures defs
                    , tsUserTypes = defTypes defs
                    }

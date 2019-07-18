@@ -22,8 +22,6 @@ module SemMC.ASL.Translation (
   , ToBaseTypes
   ) where
 
-import Debug.Trace (traceM, trace)
-
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( when )
@@ -71,7 +69,7 @@ lookupVarRef :: forall arch h s ret
 lookupVarRef name = do
   ts <- MS.get
   let err = X.throw (UnboundName name)
-  case fromMaybe err (lookupArg ts <|> lookupRef ts <|> lookupGlobal ts) of
+  case fromMaybe err (lookupArg ts <|> lookupRef ts <|> lookupGlobal ts <|> lookupEnum ts) of
     ExprConstructor e con -> Some <$> con e
   where
     lookupArg ts = do
@@ -83,6 +81,9 @@ lookupVarRef name = do
     lookupGlobal ts = do
       Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g CCG.readGlobal)
+    lookupEnum ts = do
+      e <- Map.lookup name (tsEnums ts)
+      return (ExprConstructor (CCG.App (CCE.IntLit e)) return)
 
 -- | Overrides for syntactic forms
 --
@@ -108,6 +109,8 @@ data TranslationState s =
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
                    -- transitively-referenced globals in the signature.
+                   , tsEnums :: Map.Map T.Text Integer
+                   -- ^ Map from enumeration constant names to their integer values.
                    , tsUserTypes :: Map.Map T.Text (Some UserType)
                    -- ^ The base types assigned to user-defined types (defined in the ASL script)
                    -- , tsEnumBounds :: Map.Map T.Text Natural
@@ -373,6 +376,7 @@ translateAssignment ov lval e = do
               reg <- CCG.newUnassignedReg atomType
               MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
               CCG.assignReg reg (CCG.AtomExpr atom)
+    _ -> error $ "Unsupported LVal: " ++ show lval
 
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
@@ -439,7 +443,7 @@ translateCase :: Overrides arch
 translateCase ov rep expr alts = case alts of
   [AS.CaseOtherwise els] -> mapM_ (translateStatement ov rep) els
   -- FIXME: We assume that the case below is equivalent to "otherwise"
-  [AS.CaseWhen pats Nothing body] -> mapM_ (translateStatement ov rep) body
+  [AS.CaseWhen _ Nothing body] -> mapM_ (translateStatement ov rep) body
   (AS.CaseWhen pats Nothing body : rst) -> do
     let matchExpr = caseWhenExpr expr pats
     Some matchAtom <- translateExpr ov matchExpr
@@ -447,18 +451,18 @@ translateCase ov rep expr alts = case alts of
     let genThen = mapM_ (translateStatement ov rep) body
     let genRest = translateCase ov rep expr rst
     CCG.ifte_ (CCG.AtomExpr matchAtom) genThen genRest
-  alts -> error (show alts)
+  _ -> error (show alts)
 
 caseWhenExpr :: AS.Expr -> [AS.CasePattern] -> AS.Expr
-caseWhenExpr expr [] = error "caseWhenExpr"
+caseWhenExpr _ [] = error "caseWhenExpr"
 caseWhenExpr expr [pat] = matchPat expr pat
 caseWhenExpr expr (pat:pats) = AS.ExprBinOp AS.BinOpLogicalOr (matchPat expr pat) (caseWhenExpr expr pats)
 
 matchPat :: AS.Expr -> AS.CasePattern -> AS.Expr
 matchPat expr (AS.CasePatternInt i) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitInt i)
 matchPat expr (AS.CasePatternBin bv) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitBin bv)
-matchPat expr (AS.CasePatternIdentifier id) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny id))
-matchPat _ (AS.CasePatternMask mask) = error "bitmask pattern unimplemented"
+matchPat expr (AS.CasePatternIdentifier ident) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny ident))
+matchPat _ (AS.CasePatternMask _) = error "bitmask pattern unimplemented"
 matchPat _ AS.CasePatternIgnore = error "ignore pattern unimplemented"
 matchPat _ (AS.CasePatternTuple _) = error "tuple pattern unimplemented"
 
@@ -506,8 +510,8 @@ translateExpr ov expr
         case assignmentFromList (Some Ctx.empty) atoms of
           Some asgn -> do
             let reprs = FC.fmapFC CCG.typeOfAtom asgn
-            let atoms = FC.fmapFC CCG.AtomExpr asgn
-            let struct = MkBaseStruct reprs atoms
+            let atomExprs = FC.fmapFC CCG.AtomExpr asgn
+            let struct = MkBaseStruct reprs atomExprs
             Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
       AS.ExprInSet e elts -> do
         Some atom <- translateExpr ov e
@@ -766,6 +770,7 @@ translateUnaryOp ov op expr = do
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger [x] = fromIntegral (fromEnum x)
 bitsToInteger (x:xs) = fromIntegral (fromEnum x) * 2 + bitsToInteger xs
+bitsToInteger _ = error $ "bitsToInteger empty list"
 
 -- | Whenever we encounter a member variable of a struct, we treat it as an
 -- independent global variable and use this function to construct its qualified name.

@@ -190,7 +190,7 @@ extractBase' evalExpr tps asgn = case (tps, asgn) of
     rst <- extractBase' evalExpr reprs vals
     case CT.asBaseType repr of
       CT.NotBaseType -> X.throwIO (ExpectedBaseTypeRepr repr)
-      CT.AsBaseType brepr -> do
+      CT.AsBaseType _brepr -> do
         CS.RV se <- evalExpr val
         return $ rst Ctx.:> SE se
 
@@ -293,7 +293,7 @@ instance CCExt.PrettyApp ASLApp where
                 , PP.text (showF i)
                 , pp t
                 ]
-      MkBaseStruct _r mems ->
+      MkBaseStruct _r _mems ->
         PP.hsep [ PP.text "MkBaseStruct"
                 , PP.text "PP UNIMPLEMENTED"
                 ]

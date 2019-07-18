@@ -169,9 +169,6 @@ allocateFreshArg :: (CB.IsSymInterface sym)
                  => sym
                  -> AC.LabeledValue T.Text CT.TypeRepr tp
                  -> IO (FreshArg sym tp)
---                 -> IO (CS.RegEntry sym tp, WI.BoundVar sym (ToBaseType tp))
--- TODO: use freshBoundVar (kind of a declaration to What4
---                 -> IO (CS.RegEntry sym tp, BoundVar ...)
 allocateFreshArg sym (AC.LabeledValue name rep) = do
   case rep of
     CT.BVRepr w -> do

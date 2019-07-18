@@ -8,6 +8,7 @@ module Main where
 
 import Control.Monad (forM_)
 import qualified Control.Monad.State as St
+import qualified Control.Monad.Reader as Rd
 import Data.Foldable (toList)
 import Data.List (intercalate)
 import qualified Data.Map as Map
@@ -38,15 +39,14 @@ defsFilePath = "test/defs.parsed"
 
 callables :: [(T.Text, Int)]
 callables =  [
-  -- ("HasArchVersion", 1)
-  ("BenFunction", 0)
+  ("HasArchVersion", 1)
   -- , ("HaveEL", 1)
   -- , ("HaveAnyAArch32", 0)
   -- , ("HighestELUsingAArch32", 0)
   -- , ("IsSecureBelowEL3", 0)
   -- , ("ConstrainUnpredictable", 1)
   -- , ("ConstrainUnpredictableBool", 1)
-  -- , ("Unreachable", 0)
+  , ("Unreachable", 0)
   -- , ("RBankSelect", 8)
   -- , ("LookUpRIndex", 2)
   -- , ("HighestEL", 0)
@@ -57,6 +57,7 @@ callables =  [
   -- , ("S1TranslationRegime", 1)
   -- , ("S1TranslationRegime", 0)
   -- , ("CurrentCond", 0)
+  -- , ("RBankSelect", 8)
   , ("DecodeImmShift", 2)
   ]
 
@@ -77,7 +78,8 @@ main = do
       let eSigs = execSigM defs $ do
             forM_ callables $ \(name, arity) -> computeSignature name arity
             st <- St.get
-            return (callableSignatureMap st, callableGlobalsMap st, userTypes st)
+            env <- Rd.ask
+            return (callableSignatureMap st, callableGlobalsMap st, userTypes st, enums env)
       case eSigs of
         Left (err, finalState) -> do
           putStrLn $ "Error computing signatures: " ++ show err
@@ -95,7 +97,7 @@ main = do
             putStrLn $ "  " ++ show name
           putStrLn "----------------------------------------------"
           exitFailure
-        Right (sigs, globals, userTypes) -> do
+        Right (sigs, globals, userTypes, enums) -> do
           putStrLn $ "Computed " ++ show (length sigs) ++ " signatures."
           forM_ (Map.toList sigs) $ \(name, sig) ->
             putStrLn $ "  " ++ show name ++ ": " ++ show (fst sig)
@@ -106,6 +108,7 @@ main = do
           let definitions = Definitions
                 { defSignatures = (fst <$> sigs)
                 , defTypes = userTypes
+                , defEnums = enums
                 , defOverrides = overrides
                 }
           forM_ sigs $ \(sig, c) -> do
