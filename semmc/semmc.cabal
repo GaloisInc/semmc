@@ -98,7 +98,7 @@ library
                        s-cargot-letbind >= 0.2.2.0 && < 0.3,
                        dismantle-tablegen,
                        crucible >= 0.4,
-                       parameterized-utils >= 1 && < 2,
+                       parameterized-utils >= 1 && < 2.1,
                        process >= 1.4 && < 1.7,
                        async >= 2.2 && < 2.3,
                        time,
@@ -144,3 +144,37 @@ test-suite semmc-tests
                  , tasty-hunit
                  , async
                  , directory
+
+
+test-suite semmc-semstore-tests
+  -- Tests for verifying semantics can be stored and subsequently read
+  -- back in as a round-trip (validating the parser and the printer).
+  default-language: Haskell2010
+  type: exitcode-stdio-1.0
+  ghc-options: -Wall
+  main-is: SemStore.hs
+  other-modules: HedgehogUtil
+               , LocationsTests
+               , ParameterTests
+               , ParamFormulaTests
+               , TestArch
+               , TestArchPropGen
+               , TestUtils
+  hs-source-dirs: tests/semstore
+  build-depends: base
+               , bytestring
+               , containers
+               , crucible
+               , directory
+               , dismantle-tablegen
+               , exceptions
+               , hashable
+               , hedgehog
+               , parameterized-utils
+               , semmc
+               , tasty
+               , tasty-hunit
+               , tasty-hedgehog
+               , text
+               , transformers
+               , what4

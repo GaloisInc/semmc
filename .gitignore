@@ -13,3 +13,5 @@ result
 cabal.project.local
 *~
 /.ghc.environment.*
+/tools/remote-runner
+/tools/remote-runner.ppc32

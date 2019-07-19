@@ -12,14 +12,51 @@ import qualified Dismantle.PPC as P
 import SemMC.DSL
 import SemMC.Architecture.PPC.Base.Core
 
+-- | Update @XER[SO]@ and @XER[OV]@ bits for adding @in1@ and @in2@.
+--
+-- The @XER[OV]@ bit gets set if @add in1 in2@ signed overflows.
+--
+-- The @XER[SO]@ bit get set if it was already set, or if @XER[OV]@
+-- gets set.
+updateXEROVSOForAdd :: (?bitSize :: BitSize)
+                    => Expr 'TBV
+                    -> Expr 'TBV
+                    -> Expr 'TBV
+                    -> Expr 'TBV
+updateXEROVSOForAdd xer in1 in2 =
+  let out = bvadd in1 in2
+      zero = naturalLitBV 0
+      -- Check for signed overflow. Note that grouping numbers into
+      -- negative and non-negative here, instead of positive and
+      -- non-positive, is important: @MIN_INT + MIN_INT == 0@, but
+      -- @MAX_INT + MAX_INT < 0@. Our definition of signed overflow
+      -- is: both inputs are in the same group, but the output is in
+      -- not in that group.
+      --
+      -- The PPC ISA manual defines signed overflow as "the carry out
+      -- bit of the most significant and second most sigificant bits
+      -- differ", but that seems much harder to calculate, and I
+      -- believe it's equivalent to our definition here.
+      ov = bvPredToBit $ cases
+        [ ( bvslt in1 zero `andp` bvslt in2 zero
+          , notp (bvslt out zero) )
+        , ( bvsge in1 zero `andp` bvsge in2 zero
+          , notp (bvsge out zero) ) ]
+        (LitBool False)
+      so = xerBit SO xer `bvor` ov
+  in updateXER SO (updateXER OV xer ov) so
+
 baseArithmetic :: (?bitSize :: BitSize) => SemM 'Top ()
 baseArithmetic = do
   definePPCOpcode P.ADD4 xoform3c $ \rT rB rA -> do
-    comment "ADD (XO-form, RC=0)"
+    comment "ADD (XO-form, OE=0, RC=0)"
     let val = bvadd (Loc rA) (Loc rB)
     defLoc rT val
     definePPCOpcodeRC P.ADD4o val $ do
-      comment "ADD. (XO-form, RC=1)"
+      comment "ADD. (XO-form, OE=0, RC=1)"
+    let modifiedXer = updateXEROVSOForAdd (Loc xer) (Loc rA) (Loc rB)
+    defineOERCVariant P.ADD4Oo val modifiedXer $ do
+      comment "ADDO. (XO-form, OE=1, RC=1)"
   definePPCOpcode P.SUBF xoform3c $ \rT rB rA -> do
     comment "SUBF (XO-form, RC=0)"
     let val = bvsub (Loc rB) (Loc rA)

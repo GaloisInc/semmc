@@ -104,8 +104,8 @@ findFunctionFiles dir = do
   fs <- listFunctionFiles dir
   forM fs $ \f -> do
     let funName = dropExtension f
-    bs <- BS.readFile (dir </> f)
-    return (dir </> f, funName, bs)
+    bs <- BS.readFile f
+    return (f, funName, bs)
 
 toFunctionPair :: (FilePath, String, BS.ByteString) -> ExpQ
 toFunctionPair (_, name, bs) = tupE [ [| $(litE (StringL name)) |], embedByteString bs ]
