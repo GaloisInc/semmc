@@ -87,7 +87,7 @@ simulateFunction symCfg func = do
         CS.FinishedResult _ pres ->
           case pres of
             CS.TotalRes gp -> extractResult gp initArgs
-            CS.PartialRes _ gp _ -> extractResult gp initArgs
+            CS.PartialRes _ _ gp _ -> extractResult gp initArgs
   where
     extractResult gp initArgs =
       let re = gp ^. CS.gpValue
