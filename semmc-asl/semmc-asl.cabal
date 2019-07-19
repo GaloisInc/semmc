@@ -26,6 +26,7 @@ library
                        SemMC.ASL.Types
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
+                       bv-sized >= 0.7.0,
                        containers,
                        text >= 1 && < 2,
                        mtl,

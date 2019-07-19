@@ -1,0 +1,29 @@
+========
+ASL syntax translation TODOs
+========
+
+* bits(N) - passing in N as a parameter and returning it
+
+In the signature of a function we also have an optional argument that indicates
+whether that function requires a Nat to be passed in at the call site. Then, when
+translating a function call, we look up the signature by name and argument types, but
+we need to somehow allow the lookup function to "match" with a polymorphic argument
+type. 
+
+* Functions with same name and same number of arguments, but differently typed
+  arguments (Abs)
+
+During signature translation, we will store the argument types as part of the key in
+the lookup table.
+
+At call sites, we'll have to look up which function to use based on not just its
+name, but also the types of its arguments. Hopefully that is enough -- although it
+could also be the case that a function can be overloaded not just with respect to the
+types of its arguments, but also with respect to the return value, which would be
+even grosser.
+
+* Figure out how to handle IMPLEMENTATION_DEFINED
+
+========
+Translating whole instructions
+========

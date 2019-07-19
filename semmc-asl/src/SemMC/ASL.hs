@@ -41,8 +41,6 @@ import qualified SemMC.ASL.Crucible as AC
 import qualified SemMC.ASL.Signature as AS
 import qualified SemMC.ASL.Types as AT
 
-import GHC.TypeNats
-
 data SimulatorConfig sym =
   SimulatorConfig { simOutputHandle :: IO.Handle
                   , simHandleAllocator :: CFH.HandleAllocator RealWorld
@@ -100,7 +98,6 @@ simulateFunction symCfg func = do
                   argTypes = reshape (FC.fmapFC AS.projectValue (AS.funcArgReprs (AC.funcSig func)))
                   argVars = freshArgBoundVars' initArgs
                   retType = AS.funcSigRepr (AC.funcSig func)
-                  retExpr = CS.regValue re
                   solverSymbolName = case WI.userSymbol name of
                     Left err -> error (show err)
                     Right symbol -> symbol
@@ -110,7 +107,7 @@ simulateFunction symCfg func = do
                 (freshArgBoundVars initArgs)
                 (CS.regValue re)
                 (const False)
-              return $ SF.FunctionFormula name argTypes argVars retType fn -- (CS.regValue re)
+              return $ SF.FunctionFormula name argTypes argVars retType fn
           | otherwise -> X.throwIO (UnexpectedReturnType btr)
 
 -- | Simulate a procedure

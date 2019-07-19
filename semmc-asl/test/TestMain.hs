@@ -39,26 +39,12 @@ defsFilePath = "test/defs.parsed"
 
 callables :: [(T.Text, Int)]
 callables =  [
-  ("HasArchVersion", 1)
-  -- , ("HaveEL", 1)
-  -- , ("HaveAnyAArch32", 0)
-  -- , ("HighestELUsingAArch32", 0)
-  -- , ("IsSecureBelowEL3", 0)
-  -- , ("ConstrainUnpredictable", 1)
-  -- , ("ConstrainUnpredictableBool", 1)
-  , ("Unreachable", 0)
+--    ("DecodeImmShift", 2)
+    -- , ("DecodeRegShift", 1)
+  -- , ("Unreachable", 0)
+  ("HaveEL", 1)
   -- , ("RBankSelect", 8)
-  -- , ("LookUpRIndex", 2)
-  -- , ("HighestEL", 0)
-  -- , ("HaveAArch32EL", 1)
-  -- , ("BadMode", 1)
-  -- , ("UsingAArch32", 0)
-  -- , ("IsSecure", 0)
-  -- , ("S1TranslationRegime", 1)
-  -- , ("S1TranslationRegime", 0)
-  -- , ("CurrentCond", 0)
-  -- , ("RBankSelect", 8)
-  , ("DecodeImmShift", 2)
+  -- , ("Shift_C", 4)
   ]
 
 overrides :: Overrides arch
@@ -79,7 +65,11 @@ main = do
             forM_ callables $ \(name, arity) -> computeSignature name arity
             st <- St.get
             env <- Rd.ask
-            return (callableSignatureMap st, callableGlobalsMap st, userTypes st, enums env)
+            return ( callableSignatureMap st
+                   , callableGlobalsMap st
+                   , userTypes st
+                   , enums env
+                   , consts env)
       case eSigs of
         Left (err, finalState) -> do
           putStrLn $ "Error computing signatures: " ++ show err
@@ -97,7 +87,7 @@ main = do
             putStrLn $ "  " ++ show name
           putStrLn "----------------------------------------------"
           exitFailure
-        Right (sigs, globals, userTypes, enums) -> do
+        Right (sigs, globals, userTypes, enums, consts) -> do
           putStrLn $ "Computed " ++ show (length sigs) ++ " signatures."
           forM_ (Map.toList sigs) $ \(name, sig) ->
             putStrLn $ "  " ++ show name ++ ": " ++ show (fst sig)
@@ -109,6 +99,7 @@ main = do
                 { defSignatures = (fst <$> sigs)
                 , defTypes = userTypes
                 , defEnums = enums
+                , defConsts = consts
                 , defOverrides = overrides
                 }
           forM_ sigs $ \(sig, c) -> do

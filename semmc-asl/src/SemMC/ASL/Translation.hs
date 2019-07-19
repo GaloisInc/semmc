@@ -20,12 +20,15 @@ module SemMC.ASL.Translation (
   , mkStructMemberName
   , ToBaseType
   , ToBaseTypes
+  , ConstVal(..)
+  , bitsToInteger
   ) where
 
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( when )
 import qualified Control.Monad.State.Class as MS
+import qualified Data.BitVector.Sized as BVS
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -48,6 +51,14 @@ import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 
+type family BaseLitType (tp :: WT.BaseType) :: * where
+  BaseLitType WT.BaseIntegerType = Integer
+  BaseLitType WT.BaseBoolType = Bool
+  BaseLitType (WT.BaseBVType w) = BVS.BitVector w
+
+data ConstVal tp =
+  ConstVal (WT.BaseTypeRepr tp) (BaseLitType tp)
+
 -- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
 -- the lookup types (arguments, locals, or globals) technically return different
 -- values, but they are values that are pretty easy to handle uniformly.
@@ -69,7 +80,11 @@ lookupVarRef :: forall arch h s ret
 lookupVarRef name = do
   ts <- MS.get
   let err = X.throw (UnboundName name)
-  case fromMaybe err (lookupArg ts <|> lookupRef ts <|> lookupGlobal ts <|> lookupEnum ts) of
+  case fromMaybe err (lookupArg ts <|>
+                      lookupRef ts <|>
+                      lookupGlobal ts <|>
+                      lookupEnum ts <|>
+                      lookupConst ts) of
     ExprConstructor e con -> Some <$> con e
   where
     lookupArg ts = do
@@ -84,6 +99,14 @@ lookupVarRef name = do
     lookupEnum ts = do
       e <- Map.lookup name (tsEnums ts)
       return (ExprConstructor (CCG.App (CCE.IntLit e)) return)
+    lookupConst ts = do
+      Some (ConstVal repr e) <- Map.lookup name (tsConsts ts)
+      case repr of
+        WT.BaseBoolRepr -> return (ExprConstructor (CCG.App (CCE.BoolLit e)) return)
+        WT.BaseIntegerRepr -> return (ExprConstructor (CCG.App (CCE.IntLit e)) return)
+        WT.BaseBVRepr wRepr ->
+          return (ExprConstructor (CCG.App (CCE.BVLit wRepr (BVS.bvIntegerU e))) return)
+        _ -> error "bad const type"
 
 -- | Overrides for syntactic forms
 --
@@ -111,6 +134,7 @@ data TranslationState s =
                    -- transitively-referenced globals in the signature.
                    , tsEnums :: Map.Map T.Text Integer
                    -- ^ Map from enumeration constant names to their integer values.
+                   , tsConsts :: Map.Map T.Text (Some ConstVal)
                    , tsUserTypes :: Map.Map T.Text (Some UserType)
                    -- ^ The base types assigned to user-defined types (defined in the ASL script)
                    -- , tsEnumBounds :: Map.Map T.Text Natural

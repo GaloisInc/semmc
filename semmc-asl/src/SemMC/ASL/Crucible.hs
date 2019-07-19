@@ -69,7 +69,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), translateStatement )
+import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), translateStatement, ConstVal(..) )
 
 -- computeInstructionSignature :: [(T.Text, SomeSignature)] -> [AS.Stmt] -> IO SomeSignature
 -- computeInstructionSignature = undefined
@@ -78,6 +78,7 @@ data Definitions arch =
   Definitions { defSignatures :: Map.Map T.Text SomeSignature
               , defTypes :: Map.Map T.Text (Some UserType)
               , defEnums :: Map.Map T.Text Integer
+              , defConsts :: Map.Map T.Text (Some ConstVal)
               , defOverrides :: Overrides arch
               }
 
@@ -137,6 +138,7 @@ funcInitialState defs sig globals args =
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsEnums = defEnums defs
+                   , tsConsts = defConsts defs
                    , tsFunctionSigs = defSignatures defs
                    , tsUserTypes = defTypes defs
                    }
@@ -246,6 +248,8 @@ procInitialState defs sig globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
+                   , tsConsts = defConsts defs
+                   , tsEnums = defEnums defs
                    , tsFunctionSigs = defSignatures defs
                    , tsUserTypes = defTypes defs
                    }
