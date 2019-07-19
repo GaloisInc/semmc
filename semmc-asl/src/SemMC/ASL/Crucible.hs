@@ -71,11 +71,10 @@ import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), translateStatement, ConstVal(..) )
 
--- computeInstructionSignature :: [(T.Text, SomeSignature)] -> [AS.Stmt] -> IO SomeSignature
--- computeInstructionSignature = undefined
+-- type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
 
 data Definitions arch =
-  Definitions { defSignatures :: Map.Map T.Text SomeSignature
+  Definitions { defSignatures :: Map.Map T.Text (SomeSignature, [AS.Stmt])
               , defTypes :: Map.Map T.Text (Some UserType)
               , defEnums :: Map.Map T.Text Integer
               , defConsts :: Map.Map T.Text (Some ConstVal)
@@ -139,7 +138,7 @@ funcInitialState defs sig globals args =
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsEnums = defEnums defs
                    , tsConsts = defConsts defs
-                   , tsFunctionSigs = defSignatures defs
+                   , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
                    }
   where
@@ -250,7 +249,7 @@ procInitialState defs sig globals args =
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsConsts = defConsts defs
                    , tsEnums = defEnums defs
-                   , tsFunctionSigs = defSignatures defs
+                   , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
                    }
   where

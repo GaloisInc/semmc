@@ -32,13 +32,13 @@ import What4.Interface as WI
 import SemMC.ASL
 import SemMC.ASL.Crucible
 import SemMC.ASL.Translation
-import SemMC.ASL.Translation.Signature
+import SemMC.ASL.Translation.Preprocess
 
 defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
-callables :: [(T.Text, Int)]
-callables =  [
+functions :: [(T.Text, Int)]
+functions =  [
 --    ("DecodeImmShift", 2)
     -- , ("DecodeRegShift", 1)
   -- , ("Unreachable", 0)
@@ -56,57 +56,24 @@ main :: IO ()
 main = do
   putStrLn "----------------------------------------------"
   putStrLn "Loading ASL definitions..."
-  eDefs <- AS.parseAslDefsFile defsFilePath
-  case eDefs of
+  eASLDefs <- AS.parseAslDefsFile defsFilePath
+  case eASLDefs of
     Left err -> putStrLn $ "Error loading ASL definitions: " ++ show err
-    Right defs -> do
-      putStrLn $ "Loaded " ++ show (length defs) ++ " definitions."
-      let eSigs = execSigM defs $ do
-            forM_ callables $ \(name, arity) -> computeSignature name arity
-            st <- St.get
-            env <- Rd.ask
-            return ( callableSignatureMap st
-                   , callableGlobalsMap st
-                   , userTypes st
-                   , enums env
-                   , consts env)
-      case eSigs of
-        Left (err, finalState) -> do
+    Right aslDefs -> do
+      putStrLn $ "Loaded " ++ show (length aslDefs) ++ " definitions."
+      let eDef = computeDefinitions functions aslDefs
+      case eDef of
+        Left err -> do
           putStrLn $ "Error computing signatures: " ++ show err
-          putStrLn $ "\nUser types found:"
-          forM_ (Map.toList (userTypes finalState)) $ \(name, tp) ->
-            putStrLn $ "  " ++ show name ++ ": " ++ show tp
-          putStrLn $ "\nGlobals found:"
-          forM_ (Map.toList (callableGlobalsMap finalState)) $ \(name, globals) ->
-            putStrLn $ "  " ++ show name ++ ": " ++ intercalate ", " (show <$> fst <$> globals)
-          putStrLn $ "\nSignatures found:"
-          forM_ (Map.toList (callableSignatureMap finalState)) $ \(name, sig) ->
-            putStrLn $ "  " ++ show name ++ ": " ++ show (fst sig)
-          putStrLn $ "\nUnfound callables:"
-          forM_ (toList (unfoundCallables finalState)) $ \name ->
-            putStrLn $ "  " ++ show name
           putStrLn "----------------------------------------------"
           exitFailure
-        Right (sigs, globals, userTypes, enums, consts) -> do
-          putStrLn $ "Computed " ++ show (length sigs) ++ " signatures."
-          forM_ (Map.toList sigs) $ \(name, sig) ->
-            putStrLn $ "  " ++ show name ++ ": " ++ show (fst sig)
-          putStrLn $ "\nFound globals for " ++ show (length globals) ++ " callables."
-          forM_ (Map.toList globals) $ \(name, _globals) ->
-            putStrLn $ "  " ++ show name
+        Right defs -> do
           putStrLn "----------------------------------------------"
-          let definitions = Definitions
-                { defSignatures = (fst <$> sigs)
-                , defTypes = userTypes
-                , defEnums = enums
-                , defConsts = consts
-                , defOverrides = overrides
-                }
-          forM_ sigs $ \(sig, c) -> do
-            case sig of
-              SomeFunctionSignature sig -> do
+          forM_ functions $ \(fName, fArity) -> do
+            case Map.lookup (callableNameWithArity' fName fArity) (defSignatures defs) of
+              Just (SomeFunctionSignature sig, stmts) -> do
                 handleAllocator <- CFH.newHandleAllocator
-                f <- functionToCrucible definitions sig handleAllocator (callableStmts c)
+                f <- functionToCrucible defs sig handleAllocator stmts
                 backend <- CBS.newSimpleBackend globalNonceGenerator
                 let cfg :: SimulatorConfig (SimpleBackend GlobalNonceGenerator (Flags FloatIEEE))
                       = SimulatorConfig { simOutputHandle = IO.stdout

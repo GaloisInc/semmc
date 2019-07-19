@@ -22,7 +22,7 @@ library
                        SemMC.ASL.Exceptions
                        SemMC.ASL.Signature
                        SemMC.ASL.Translation
-                       SemMC.ASL.Translation.Signature
+                       SemMC.ASL.Translation.Preprocess
                        SemMC.ASL.Types
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,

@@ -17,19 +17,21 @@
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 
-module SemMC.ASL.Translation.Signature (
-  -- * Top-level interface
-    computeAllSignatures
-  , computeSignature
-  , computeCallableSignature
-  , Callable(..)
-  , SignatureMap
-  -- * 'SigM' monad
-  , SigM
-  , execSigM
-  , SigException(..)
-  , SigState(..)
-  , SigEnv(..)
+module SemMC.ASL.Translation.Preprocess
+  ( -- * Top-level interface
+    computeDefinitions
+  , callableNameWithArity'
+  -- , computeAllSignatures
+  -- , computeSignature
+  -- , computeCallableSignature
+  -- , Callable(..)
+  -- , SignatureMap
+  -- -- * 'SigM' monad
+  -- , SigM
+  -- , execSigM
+  -- , SigException(..)
+  -- , SigState(..)
+  -- , SigEnv(..)
   -- * Utilities
   -- , DefVariable(..)
   -- , DefType(..)
@@ -61,6 +63,10 @@ import           SemMC.ASL.Translation
   , mkStructMemberName
   , ConstVal(..)
   , bitsToInteger
+  , Overrides(..)
+  )
+import           SemMC.ASL.Crucible
+  ( Definitions(..)
   )
 
 ----------------
@@ -83,69 +89,34 @@ import           SemMC.ASL.Translation
 --
 -- * How do we deal with dependently-typed functions? Do we actually need to?
 
-type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
-
--- | Compute signatures for every callable, given a list of 'AS.Definition's.
-computeAllSignatures :: [AS.Definition] -> Either (SigException, SigState) SignatureMap
-computeAllSignatures defs = execSigM defs $ do
-  env <- RWS.ask
-  forM_ (Map.elems (envCallables env)) $ \def -> do
-    computeCallableSignature def
-  finalState <- RWS.get
-  return $ callableSignatureMap finalState
-
 -- | Compute the signature of a single callable, given its name and arity.
 computeSignature :: T.Text -> Int -> SigM ext f ()
 computeSignature name arity = do
   def <- lookupCallable name arity
   void $ computeCallableSignature def
 
+computeDefinitions :: [(T.Text, Int)] -> [AS.Definition] -> Either SigException (Definitions arch)
+computeDefinitions namesWithArity defs = execSigM defs $ do
+  forM_ namesWithArity $ \(name, arity) -> computeSignature name arity
+  st <- RWS.get
+  env <- RWS.ask
+  return $ Definitions
+    { defSignatures = (\(sig, c) -> (sig, callableStmts c)) <$> callableSignatureMap st
+    , defTypes = userTypes st
+    , defEnums = enums env
+    , defConsts = consts env
+    , defOverrides = overrides
+    }
+  where overrides = Overrides {..}
+        overrideStmt _ = Nothing
+        overrideExpr _ = Nothing
+
+
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
   [ ("TRUE", Some $ ConstVal WT.BaseBoolRepr True)
   , ("FALSE", Some $ ConstVal WT.BaseBoolRepr False)
   ]
-
--- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
--- signatures.
-buildEnv :: [AS.Definition] -> SigEnv ext f
-buildEnv defs =
-  let envCallables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
-      globalVars = Map.fromList $
-        ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
-        -- ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)
-      types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
-      -- | TODO: Populate enums
-      enums = Map.fromList (concatMap getEnumValues defs)
-      consts = Map.fromList (builtinConsts ++ catMaybes (getConst <$> defs))
-      -- | TODO: Populate builtin types
-      builtinTypes = Map.empty
-      getVariableName v = let DefVariable name _ = v
-                          in name
-
-      -- Map each enum type to a name->integer map.
-      getEnumValues d = case d of
-        AS.DefTypeEnum _ names -> zip names [0..]
-        _ -> []
-      getConst d = case d of
-        AS.DefConst name asType e -> case (asType, e) of
-          (AS.TypeRef (AS.QualifiedIdentifier _ "integer"), (AS.ExprLitInt i)) ->
-            Just (name, Some $ ConstVal WT.BaseIntegerRepr i)
-          (AS.TypeFun "bits" (AS.ExprLitInt n), AS.ExprLitBin bv) -> case NR.someNat n of
-            Just (Some wRepr) -> case NR.testLeq (NR.knownNat @1) wRepr of
-              Just NR.LeqProof ->
-                Just (name, Some $ ConstVal (WT.BaseBVRepr wRepr) (BVS.bitVector' wRepr (bitsToInteger bv)))
-              Nothing -> error $ "bv width 0"
-            Nothing -> error $ "negative natural " ++ show n
-          _ -> Nothing
-        _ -> Nothing
-      getTypeName t = case t of
-        DefTypeBuiltin name -> name
-        DefTypeAbstract name -> name
-        DefTypeAlias name _ -> name
-        DefTypeStruct (AS.QualifiedIdentifier _ name) _ -> name
-        DefTypeEnum name _ -> name
-  in SigEnv {..}
 
 -- FIXME: We currently do not capture 'DefArray', 'DefGetter', and 'DefSetter'
 -- constructors; that needs to happen.
@@ -219,14 +190,55 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv
            , E.MonadError SigException
            )
 
+-- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
+-- signatures.
+buildEnv :: [AS.Definition] -> SigEnv ext f
+buildEnv defs =
+  let envCallables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
+      globalVars = Map.fromList $
+        ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
+        -- ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)
+      types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
+      -- | TODO: Populate enums
+      enums = Map.fromList (concatMap getEnumValues defs)
+      consts = Map.fromList (builtinConsts ++ catMaybes (getConst <$> defs))
+      -- | TODO: Populate builtin types
+      builtinTypes = Map.empty
+      getVariableName v = let DefVariable name _ = v
+                          in name
+
+      -- Map each enum type to a name->integer map.
+      getEnumValues d = case d of
+        AS.DefTypeEnum _ names -> zip names [0..]
+        _ -> []
+      getConst d = case d of
+        AS.DefConst name asType e -> case (asType, e) of
+          (AS.TypeRef (AS.QualifiedIdentifier _ "integer"), (AS.ExprLitInt i)) ->
+            Just (name, Some $ ConstVal WT.BaseIntegerRepr i)
+          (AS.TypeFun "bits" (AS.ExprLitInt n), AS.ExprLitBin bv) -> case NR.someNat n of
+            Just (Some wRepr) -> case NR.testLeq (NR.knownNat @1) wRepr of
+              Just NR.LeqProof ->
+                Just (name, Some $ ConstVal (WT.BaseBVRepr wRepr) (BVS.bitVector' wRepr (bitsToInteger bv)))
+              Nothing -> error $ "bv width 0"
+            Nothing -> error $ "negative natural " ++ show n
+          _ -> Nothing
+        _ -> Nothing
+      getTypeName t = case t of
+        DefTypeBuiltin name -> name
+        DefTypeAbstract name -> name
+        DefTypeAlias name _ -> name
+        DefTypeStruct (AS.QualifiedIdentifier _ name) _ -> name
+        DefTypeEnum name _ -> name
+  in SigEnv {..}
+
 -- | Given a list of ASL 'AS.Definition's, execute a 'SigM' action and either return
 -- the result or an exception coupled with the final state.
-execSigM :: [AS.Definition] -> SigM ext f a -> Either (SigException, SigState) a
+execSigM :: [AS.Definition] -> SigM ext f a -> Either SigException a
 execSigM defs action =
   let rws = E.runExceptT $ getSigM action
-      (e, finalState, _) = RWS.runRWS rws (buildEnv defs) initState
+      (e, _, _) = RWS.runRWS rws (buildEnv defs) initState
   in case e of
-    Left err -> Left (err, finalState)
+    Left err -> Left err
     Right a -> Right a
   where initState = SigState Map.empty Map.empty Map.empty Seq.empty
 
@@ -648,3 +660,21 @@ someAssignment [] = Some Ctx.empty
 someAssignment (Some f : rst) = I.runIdentity $ do
   Some assignRst <- return $ someAssignment rst
   return $ Some (Ctx.extend assignRst f)
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeInType #-}
+{-# LANGUAGE TypeOperators #-}
