@@ -6,6 +6,7 @@
 module SemMC.ASL.Types
   ( ToBaseType
   , ToBaseTypes
+  , ToBaseTypesList
   , ToCrucibleTypes
   , toBaseType
   , toBaseTypes
@@ -35,3 +36,7 @@ toBaseTypes (reprs Ctx.:> repr) = toBaseTypes reprs Ctx.:> toBaseType repr
 type family ToCrucibleTypes (wtps :: CT.Ctx WT.BaseType) :: CT.Ctx CT.CrucibleType where
   ToCrucibleTypes CT.EmptyCtx = CT.EmptyCtx
   ToCrucibleTypes (tps CT.::> tp) = ToCrucibleTypes tps CT.::> CT.BaseToType tp
+
+type family ToBaseTypesList (ctps :: CT.Ctx CT.CrucibleType) :: [WT.BaseType] where
+  ToBaseTypesList CT.EmptyCtx = '[]
+  ToBaseTypesList (tps CT.::> tp) = ToBaseType tp ': ToBaseTypesList tps

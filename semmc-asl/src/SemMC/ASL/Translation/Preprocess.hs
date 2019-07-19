@@ -49,7 +49,7 @@ import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Sequence as Seq
+-- import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Data.Traversable (forM)
 import qualified Lang.Crucible.Types as CT
@@ -110,7 +110,6 @@ computeDefinitions namesWithArity defs = execSigM defs $ do
   where overrides = Overrides {..}
         overrideStmt _ = Nothing
         overrideExpr _ = Nothing
-
 
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
@@ -240,7 +239,7 @@ execSigM defs action =
   in case e of
     Left err -> Left err
     Right a -> Right a
-  where initState = SigState Map.empty Map.empty Map.empty Seq.empty
+  where initState = SigState Map.empty Map.empty Map.empty
 
 data SigEnv ext s = SigEnv { envCallables :: Map.Map T.Text Callable
                            , globalVars :: Map.Map T.Text DefVariable
@@ -258,9 +257,9 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ map from function/procedure name to list of globals
                          , callableSignatureMap :: Map.Map T.Text (SomeSignature, Callable)
                            -- ^ map of all signatures found thus far
-                         , unfoundCallables :: Seq.Seq T.Text
-                           -- ^ list of callables we encountered that were not in the
-                           -- pre-loaded environment
+                         -- , unfoundCallables :: Seq.Seq T.Text
+                         --   -- ^ list of callables we encountered that were not in the
+                         --   -- pre-loaded environment
                          }
 
 data SigException = TypeNotFound T.Text
@@ -328,10 +327,10 @@ storeCallableSignature c sig = do
   let name = callableNameWithArity c
   RWS.put $ st { callableSignatureMap = Map.insert name (sig, c) (callableSignatureMap st) }
 
-addUnfoundCallable :: T.Text -> SigM ext f ()
-addUnfoundCallable name = do
-  st <- RWS.get
-  RWS.put $ st { unfoundCallables = name Seq.:<| unfoundCallables st }
+-- addUnfoundCallable :: T.Text -> SigM ext f ()
+-- addUnfoundCallable name = do
+--   st <- RWS.get
+--   RWS.put $ st { unfoundCallables = name Seq.:<| unfoundCallables st }
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -512,14 +511,18 @@ exprGlobalVars expr = case expr of
     return $ eGlobals ++ varGlobals
   AS.ExprInMask e _ -> exprGlobalVars e
   AS.ExprCall (AS.QualifiedIdentifier _ name) argEs -> do
-    callableGlobals <- E.catchError
-      (do callable <- lookupCallable name (length argEs)
-          callableGlobalVars callable )
-      $ \e -> case e of
-                CallableNotFound _ -> do
-                  addUnfoundCallable name
-                  return []
-                _ -> E.throwError e
+    callable <- lookupCallable name (length argEs)
+    -- Compute the signature of the callable
+    void $ computeCallableSignature callable
+    callableGlobals <- callableGlobalVars callable
+    -- callableGlobals <- E.catchError
+    --   (do callable <- lookupCallable name (length argEs)
+    --       callableGlobalVars callable )
+    --   $ \e -> case e of
+    --             CallableNotFound _ -> do
+    --               addUnfoundCallable name
+    --               return []
+    --             _ -> E.throwError e
     -- callableGlobals <- callableGlobalVars callable
     argGlobals <- concat <$> traverse exprGlobalVars argEs
     return $ callableGlobals ++ argGlobals
@@ -566,6 +569,8 @@ stmtGlobalVars stmt = case stmt of
   AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
   AS.StmtCall (AS.QualifiedIdentifier _ name) argEs -> do
     callable <- lookupCallable name (length argEs)
+    -- Compute the signature of the callable
+    void $ computeCallableSignature callable
     callableGlobals <- callableGlobalVars callable
     argGlobals <- concat <$> traverse exprGlobalVars argEs
     return $ callableGlobals ++ argGlobals
@@ -660,21 +665,3 @@ someAssignment [] = Some Ctx.empty
 someAssignment (Some f : rst) = I.runIdentity $ do
   Some assignRst <- return $ someAssignment rst
   return $ Some (Ctx.extend assignRst f)
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeInType #-}
-{-# LANGUAGE TypeOperators #-}

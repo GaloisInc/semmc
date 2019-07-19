@@ -38,14 +38,7 @@ defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
 functions :: [(T.Text, Int)]
-functions =  [
---    ("DecodeImmShift", 2)
-    -- , ("DecodeRegShift", 1)
-  -- , ("Unreachable", 0)
-  ("HaveEL", 1)
-  -- , ("RBankSelect", 8)
-  -- , ("Shift_C", 4)
-  ]
+functions =  [("HaveVirtHostExt", 0)]
 
 overrides :: Overrides arch
 overrides = Overrides {..}

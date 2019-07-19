@@ -24,6 +24,11 @@ even grosser.
 
 * Figure out how to handle IMPLEMENTATION_DEFINED
 
+* Figure out how to force preprocessing to provide signatures for all functions on
+  the dependency graph so that translation doesn't choke.
+
+* Fix procedure translation
+
 ========
 Translating whole instructions
 ========

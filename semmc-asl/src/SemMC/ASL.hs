@@ -47,11 +47,7 @@ data SimulatorConfig sym =
                   , simSym :: sym
                   }
 
-type family ToBaseTypesList (ctps :: CT.Ctx CT.CrucibleType) :: [WI.BaseType] where
-  ToBaseTypesList CT.EmptyCtx = '[]
-  ToBaseTypesList (tps CT.::> tp) = AT.ToBaseType tp ': ToBaseTypesList tps
-
-reshape :: Ctx.Assignment CT.TypeRepr ctps -> PL.List WT.BaseTypeRepr (ToBaseTypesList ctps)
+reshape :: Ctx.Assignment CT.TypeRepr ctps -> PL.List WT.BaseTypeRepr (AT.ToBaseTypesList ctps)
 reshape Ctx.Empty = PL.Nil
 reshape (reprs Ctx.:> repr) = case CT.asBaseType repr of
   CT.NotBaseType -> error "Illegal crucible type"
@@ -66,7 +62,7 @@ simulateFunction :: (CB.IsSymInterface sym)
                  => SimulatorConfig sym
                  -> AC.Function arch globals init tp
                  -- -> IO (WI.SymExpr sym tp)
-                 -> IO (SF.FunctionFormula sym '(ToBaseTypesList init, tp))
+                 -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesList init, tp))
 simulateFunction symCfg func = do
   case AC.funcCFG func of
     CCC.SomeCFG cfg -> do
@@ -155,10 +151,10 @@ data FreshArg sym tp = FreshArg { freshArgEntry :: CS.RegEntry sym tp
                                 , freshArgBoundVar :: WI.BoundVar sym (AT.ToBaseType tp)
                                 }
 
-freshArgBoundVars :: Ctx.Assignment (FreshArg sym) init -> Ctx.Assignment (WI.BoundVar sym) (TL.ToContextFwd (ToBaseTypesList init))
+freshArgBoundVars :: Ctx.Assignment (FreshArg sym) init -> Ctx.Assignment (WI.BoundVar sym) (TL.ToContextFwd (AT.ToBaseTypesList init))
 freshArgBoundVars args = TL.toAssignment (TL.reverse (freshArgBoundVars' args))
 
-freshArgBoundVars' :: Ctx.Assignment (FreshArg sym) init -> PL.List (WI.BoundVar sym) (ToBaseTypesList init)
+freshArgBoundVars' :: Ctx.Assignment (FreshArg sym) init -> PL.List (WI.BoundVar sym) (AT.ToBaseTypesList init)
 freshArgBoundVars' Ctx.Empty = PL.Nil
 freshArgBoundVars' (args Ctx.:> arg) = freshArgBoundVar arg PL.:< freshArgBoundVars' args
 
