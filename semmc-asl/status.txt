@@ -44,7 +44,9 @@ I'm not sure if the Abs function is used in any of the instructions we care abou
 * Fix RBankSelect
 
 toSSA raises an exception because the "result" register is never allocated in the
-"unreachable" case. I'm not sure what to do here.
+"unreachable" case. I'm not sure what to do here - is there any construct in crucible
+that models "panic"? At the moment, I'm just detecting "Unreachable" in case blocks
+and pre-empting them by interpreting the previous case as an "otherwise".
 
 ========
 Translating whole instructions

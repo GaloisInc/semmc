@@ -476,6 +476,10 @@ translateCase ov rep expr alts = case alts of
   [AS.CaseOtherwise els] -> mapM_ (translateStatement ov rep) els
   -- FIXME: We assume that the case below is equivalent to "otherwise"
   [AS.CaseWhen _ Nothing body] -> mapM_ (translateStatement ov rep) body
+  -- FIXME: If we detect an "unreachable", translate it as if the preceding "when"
+  -- were "otherwise"
+  [AS.CaseWhen _ Nothing body, AS.CaseOtherwise [AS.StmtCall (AS.QualifiedIdentifier _ "Unreachable") []]] ->
+    mapM_ (translateStatement ov rep) body
   (AS.CaseWhen pats Nothing body : rst) -> do
     let matchExpr = caseWhenExpr expr pats
     Some matchAtom <- translateExpr ov matchExpr
