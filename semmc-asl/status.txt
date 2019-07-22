@@ -1,4 +1,14 @@
 ========
+Things of note
+========
+
+* Global variables
+Current approach is to declare these in code rather than translate them from ASL --
+there are few enough of them, I think, to do this without too much pain. However, I
+don't think it would be too much effort to do this the "right" way -- I just haven't
+gotten around to it and haven't had any need.
+
+========
 ASL syntax translation TODOs
 ========
 
@@ -22,12 +32,19 @@ could also be the case that a function can be overloaded not just with respect t
 types of its arguments, but also with respect to the return value, which would be
 even grosser.
 
+I'm not sure if the Abs function is used in any of the instructions we care about.
+
 * Figure out how to handle IMPLEMENTATION_DEFINED
 
 * Figure out how to force preprocessing to provide signatures for all functions on
   the dependency graph so that translation doesn't choke.
 
 * Fix procedure translation
+
+* Fix RBankSelect
+
+toSSA raises an exception because the "result" register is never allocated in the
+"unreachable" case. I'm not sure what to do here.
 
 ========
 Translating whole instructions

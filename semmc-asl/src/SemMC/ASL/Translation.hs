@@ -59,6 +59,13 @@ type family BaseLitType (tp :: WT.BaseType) :: * where
 data ConstVal tp =
   ConstVal (WT.BaseTypeRepr tp) (BaseLitType tp)
 
+instance Show (ConstVal tp) where
+  show (ConstVal WT.BaseIntegerRepr l) = show l
+  show (ConstVal WT.BaseBoolRepr l) = show l
+  show (ConstVal (WT.BaseBVRepr _) l) = show l
+
+instance ShowF ConstVal
+
 -- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
 -- the lookup types (arguments, locals, or globals) technically return different
 -- values, but they are values that are pretty easy to handle uniformly.
@@ -135,6 +142,7 @@ data TranslationState s =
                    , tsEnums :: Map.Map T.Text Integer
                    -- ^ Map from enumeration constant names to their integer values.
                    , tsConsts :: Map.Map T.Text (Some ConstVal)
+                   -- ^ Map from constants to their types and values.
                    , tsUserTypes :: Map.Map T.Text (Some UserType)
                    -- ^ The base types assigned to user-defined types (defined in the ASL script)
                    -- , tsEnumBounds :: Map.Map T.Text Natural
@@ -799,4 +807,4 @@ bitsToInteger _ = error $ "bitsToInteger empty list"
 -- | Whenever we encounter a member variable of a struct, we treat it as an
 -- independent global variable and use this function to construct its qualified name.
 mkStructMemberName :: T.Text -> T.Text -> T.Text
-mkStructMemberName s m = s <> "." <> m
+mkStructMemberName s m = s <> "_" <> m

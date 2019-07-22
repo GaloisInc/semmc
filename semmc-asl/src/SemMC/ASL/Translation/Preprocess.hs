@@ -37,6 +37,8 @@ module SemMC.ASL.Translation.Preprocess
   -- , DefType(..)
   ) where
 
+import Debug.Trace (traceM)
+
 import           Control.Monad (void)
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.Identity as I
@@ -110,6 +112,9 @@ computeDefinitions namesWithArity defs = execSigM defs $ do
   where overrides = Overrides {..}
         overrideStmt _ = Nothing
         overrideExpr _ = Nothing
+
+builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
+builtinGlobals = [("PSTATE_nRW", Some (WT.BaseBVRepr (WT.knownNat @1)))]
 
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
@@ -194,8 +199,9 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv
 buildEnv :: [AS.Definition] -> SigEnv ext f
 buildEnv defs =
   let envCallables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
-      globalVars = Map.fromList $
-        ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
+      globalVars = Map.fromList builtinGlobals
+      -- globalVars = Map.fromList $
+      --   ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
         -- ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)
       types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
       -- | TODO: Populate enums
@@ -242,7 +248,8 @@ execSigM defs action =
   where initState = SigState Map.empty Map.empty Map.empty
 
 data SigEnv ext s = SigEnv { envCallables :: Map.Map T.Text Callable
-                           , globalVars :: Map.Map T.Text DefVariable
+                           -- , globalVars :: Map.Map T.Text DefVariable
+                           , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
                            , enums :: Map.Map T.Text Integer
                            , consts :: Map.Map T.Text (Some ConstVal)
                            , types :: Map.Map T.Text DefType
@@ -298,7 +305,8 @@ lookupDefType tpName = do
     Nothing -> E.throwError $ TypeNotFound tpName
 
 -- | If the variable is present, return its definition. Otherwise, return 'Nothing'.
-lookupGlobalVar :: T.Text -> SigM ext f(Maybe DefVariable)
+--lookupGlobalVar :: T.Text -> SigM ext f (Maybe DefVariable)
+lookupGlobalVar :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 lookupGlobalVar varName = do
   env <- RWS.ask
   return $ Map.lookup varName (globalVars env)
@@ -387,32 +395,36 @@ computeType tp = case tp of
 -- 'Nothing', indicating the variable is not global.
 computeGlobalVarType :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 computeGlobalVarType varName = do
-  mVar <- lookupGlobalVar varName
-  case mVar of
-    Nothing -> return Nothing
-    Just (DefVariable _ asType) -> do
-      tp <- computeType asType
-      return $ Just tp
+  lookupGlobalVar varName
+  -- mVar <- lookupGlobalVar varName
+  -- case mVar of
+  --   Nothing -> return Nothing
+  --   Just (DefVariable _ asType) -> do
+  --     tp <- computeType asType
+  --     return $ Just tp
 
 -- | Compute the type of a struct member. If the struct is not a global variable,
 -- return 'Nothing'.
+-- FIXME: Simply intercalate the struct and member names with a "_" and look it up in
+-- the built-in globals.
 computeGlobalStructMemberType :: T.Text -> T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 computeGlobalStructMemberType structName memberName = do
-  mStructVar <- lookupGlobalVar structName
-  case mStructVar of
-    Just (DefVariable _ (AS.TypeRef (AS.QualifiedIdentifier _ structTypeName))) -> do
-      defStructType <- lookupDefType structTypeName
-      case defStructType of
-        DefTypeStruct _ decls -> do
-          let mAsType = lookup memberName decls
-          case mAsType of
-            Nothing -> E.throwError $ StructMissingField structName memberName
-            Just asType -> do
-              tp <- computeType asType
-              return $ Just tp
-        _ -> E.throwError $ WrongType structName structTypeName
-    -- FIXME: Is there a difference between the Just and Nothing cases here?
-    _ -> return Nothing
+  lookupGlobalVar (mkStructMemberName structName memberName)
+  -- mStructVar <- lookupGlobalVar structName
+  -- case mStructVar of
+  --   Just (DefVariable _ (AS.TypeRef (AS.QualifiedIdentifier _ structTypeName))) -> do
+  --     defStructType <- lookupDefType structTypeName
+  --     case defStructType of
+  --       DefTypeStruct _ decls -> do
+  --         let mAsType = lookup memberName decls
+  --         case mAsType of
+  --           Nothing -> E.throwError $ StructMissingField structName memberName
+  --           Just asType -> do
+  --             tp <- computeType asType
+  --             return $ Just tp
+  --       _ -> E.throwError $ WrongType structName structTypeName
+  --   -- FIXME: Is there a difference between the Just and Nothing cases here?
+  --   _ -> return Nothing
 
 -- | Given a variable name, determine whether it is a global variable or not. If so,
 -- return a pair containing the variable and its type; if not, return 'Nothing'.

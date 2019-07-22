@@ -38,7 +38,7 @@ defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
 functions :: [(T.Text, Int)]
-functions =  [("HaveVirtHostExt", 0)]
+functions =  [("UsingAArch32", 0)]
 
 overrides :: Overrides arch
 overrides = Overrides {..}
@@ -65,6 +65,7 @@ main = do
           forM_ functions $ \(fName, fArity) -> do
             case Map.lookup (callableNameWithArity' fName fArity) (defSignatures defs) of
               Just (SomeFunctionSignature sig, stmts) -> do
+                print sig
                 handleAllocator <- CFH.newHandleAllocator
                 f <- functionToCrucible defs sig handleAllocator stmts
                 backend <- CBS.newSimpleBackend globalNonceGenerator
@@ -73,6 +74,6 @@ main = do
                                         , simHandleAllocator = handleAllocator
                                         , simSym = backend
                                         }
-                symExpr <- simulateFunction cfg f
+                symFn <- simulateFunction cfg f
                 return ()
               _ -> return ()
