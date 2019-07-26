@@ -38,7 +38,7 @@ defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
 functions :: [(T.Text, Int)]
-functions =  [ ("AddWithCarry", 3)
+functions =  [ ("AddrTop", 2)
              ]
 
 overrides :: Overrides arch

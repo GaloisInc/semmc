@@ -631,6 +631,9 @@ translateSlice ov e slice = do
         _ -> X.throw $ InvalidSliceRange lo hi
     AS.SliceRange (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) (AS.ExprLitInt 0) ->
       return (Some (WT.knownNat @0), Some (WT.knownNat @31))
+    AS.SliceSingle (AS.ExprLitInt i) -> case WT.someNat i of
+      Just someRepr -> return (someRepr, someRepr)
+      _ -> X.throw $ InvalidSliceRange i i
     AS.SliceSingle (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) ->
       return (Some (WT.knownNat @31), Some (WT.knownNat @31))
     _ -> error $ "unsupported slice: " ++ show slice

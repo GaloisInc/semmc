@@ -61,7 +61,6 @@ reshape (reprs Ctx.:> repr) = case CT.asBaseType repr of
 simulateFunction :: (CB.IsSymInterface sym)
                  => SimulatorConfig sym
                  -> AC.Function arch globals init tp
-                 -- -> IO (WI.SymExpr sym tp)
                  -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesList init, tp))
 simulateFunction symCfg func = do
   case AC.funcCFG func of
@@ -118,9 +117,54 @@ simulateProcedure :: forall arch sym init globals
                    . (CB.IsSymInterface sym)
                   => SimulatorConfig sym
                   -> AC.Procedure arch globals init
-                  -> IO (Ctx.Assignment (AC.LabeledValue T.Text (WI.SymExpr sym)) globals)
-simulateProcedure symCfg crucProc = do
-  undefined
+                  -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesList init, WT.BaseStructType globals))
+simulateProcedure symCfg crucProc =
+  case AC.procCFG crucProc of
+    CCC.SomeCFG cfg -> do
+      let sig = AC.procSig crucProc
+      initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procArgReprs sig)
+      let globalTypes = FC.fmapFC AS.projectValue (AS.procGlobalReprs sig)
+      let econt = CS.runOverrideSim (CT.baseToType (WT.BaseStructRepr globalTypes)) $ do
+            re <- CS.callCFG cfg (CS.RegMap (FC.fmapFC freshArgEntry initArgs))
+            return (CS.regValue re)
+      let globals = AC.procGlobals crucProc
+      globalState <- initGlobals symCfg globals
+      s0 <- initialSimulatorState symCfg globalState econt
+      eres <- CS.executeCrucible executionFeatures s0
+      case eres of
+        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeProcedureSignature sig))
+        CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeProcedureSignature sig))
+        CS.FinishedResult _ pres ->
+          case pres of
+            CS.TotalRes gp -> extractResult gp initArgs
+            CS.PartialRes _ _ gp _ -> extractResult gp initArgs
+  where
+    extractResult gp initArgs =
+      let re = gp ^. CS.gpValue
+          sig = AC.procSig crucProc
+          globalTypes = FC.fmapFC AS.projectValue (AS.procGlobalReprs sig)
+          retType = WT.BaseStructRepr globalTypes
+          -- argTypes = FC.fmapFC AS.projectValue (AS.procArgReprs sig)
+      in case CT.asBaseType (CS.regType re) of
+        CT.NotBaseType -> X.throwIO (NonBaseTypeReturn (CS.regType re))
+        CT.AsBaseType btr
+          | Just Refl <- testEquality btr retType -> do
+              print (WI.printSymExpr (CS.regValue re))
+              let name = T.unpack (AS.procName sig)
+                  argTypes = reshape (FC.fmapFC AS.projectValue (AS.procArgReprs sig))
+                  argVars = freshArgBoundVars' initArgs
+                  solverSymbolName = case WI.userSymbol name of
+                    Left err -> error (show err)
+                    Right symbol -> symbol
+              fn <- WI.definedFn
+                (simSym symCfg)
+                solverSymbolName
+                (freshArgBoundVars initArgs)
+                (CS.regValue re)
+                (const False)
+              return $ SF.FunctionFormula name argTypes argVars retType fn
+          | otherwise -> X.throwIO (UnexpectedReturnType btr)
+
   -- case AC.procCFG crucProc of
   --   CCC.SomeCFG cfg -> do
   --     let sig = AC.procSig crucProc
