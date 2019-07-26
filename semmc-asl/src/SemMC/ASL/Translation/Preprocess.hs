@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -20,28 +21,11 @@
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
     computeDefinitions
-  , callableNameWithArity'
-  -- , computeAllSignatures
-  -- , computeSignature
-  -- , computeCallableSignature
-  -- , Callable(..)
-  -- , SignatureMap
-  -- -- * 'SigM' monad
-  -- , SigM
-  -- , execSigM
-  -- , SigException(..)
-  -- , SigState(..)
-  -- , SigEnv(..)
-  -- * Utilities
-  -- , DefVariable(..)
-  -- , DefType(..)
   ) where
 
-import Debug.Trace (traceM)
-
+import qualified Control.Exception as X
 import           Control.Monad (void)
 import qualified Control.Monad.Except as E
-import qualified Control.Monad.Identity as I
 import qualified Control.Monad.RWS as RWS
 import qualified Data.BitVector.Sized as BVS
 import           Data.Foldable (forM_)
@@ -54,6 +38,8 @@ import           Data.Parameterized.Some ( Some(..) )
 -- import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Data.Traversable (forM)
+import qualified Lang.Crucible.CFG.Expr as CCE
+import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
 
@@ -61,15 +47,11 @@ import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation
-  ( UserType(..), userTypeRepr
-  , mkStructMemberName
-  , ConstVal(..)
-  , bitsToInteger
-  , Overrides(..)
-  )
 import           SemMC.ASL.Crucible
   ( Definitions(..)
+  , ASLExt
   )
+import           SemMC.ASL.Exceptions
 
 ----------------
 -- Notes
@@ -94,9 +76,15 @@ import           SemMC.ASL.Crucible
 -- | Compute the signature of a single callable, given its name and arity.
 computeSignature :: T.Text -> Int -> SigM ext f ()
 computeSignature name arity = do
-  def <- lookupCallable name arity
-  void $ computeCallableSignature def
+  mCallable <- lookupCallable name arity
+  case mCallable of
+    Nothing -> error "computeSignature"
+    Just c -> void $ computeCallableSignature c
 
+-- | Compute the signature of a list of functions and procedures, given their names
+-- and arities, from the list of ASL definitions. If the callables requested call
+-- other functions or procedures, we compute their signatures as well and include
+-- them in the result.
 computeDefinitions :: [(T.Text, Int)] -> [AS.Definition] -> Either SigException (Definitions arch)
 computeDefinitions namesWithArity defs = execSigM defs $ do
   forM_ namesWithArity $ \(name, arity) -> computeSignature name arity
@@ -104,14 +92,27 @@ computeDefinitions namesWithArity defs = execSigM defs $ do
   env <- RWS.ask
   return $ Definitions
     { defSignatures = (\(sig, c) -> (sig, callableStmts c)) <$> callableSignatureMap st
+    , defDepSignatures = Map.empty
     , defTypes = userTypes st
     , defEnums = enums env
     , defConsts = consts env
     , defOverrides = overrides
     }
-  where overrides = Overrides {..}
-        overrideStmt _ = Nothing
-        overrideExpr _ = Nothing
+
+overrides :: forall arch . Overrides arch
+overrides = Overrides {..}
+  where overrideStmt _ = Nothing
+        overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s)))
+        overrideExpr e = case e of
+          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ do
+            Some valAtom <- translateExpr overrides val
+            case CCG.typeOfAtom valAtom of
+              CT.BVRepr valWidth
+                | Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` (WT.knownNat @32) -> do
+                  atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @32) valWidth (CCG.AtomExpr valAtom)))
+                  return $ Some atom
+              tp -> X.throw $ ExpectedBVType val tp
+          _ -> Nothing
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
 builtinGlobals = [("PSTATE_nRW", Some (WT.BaseBVRepr (WT.knownNat @1)))]
@@ -154,14 +155,11 @@ data DefType = DefTypeBuiltin AS.Identifier
              | DefTypeEnum AS.Identifier [AS.Identifier]
   deriving Show
 
-callableNameWithArity :: Callable -> T.Text
-callableNameWithArity c =
+mkCallableName :: Callable -> T.Text
+mkCallableName c =
   let AS.QualifiedIdentifier _ name = callableName c
       numArgs = length (callableArgs c)
-  in callableNameWithArity' name numArgs
-
-callableNameWithArity' :: T.Text -> Int -> T.Text
-callableNameWithArity' name numArgs = name <> T.pack "_" <> T.pack (show numArgs)
+  in mkFunctionName name numArgs
 
 asDefType :: AS.Definition -> Maybe DefType
 asDefType def =
@@ -173,16 +171,6 @@ asDefType def =
     AS.DefTypeEnum ident idents -> Just $ DefTypeEnum ident idents
     _ -> Nothing
 
-
-data DefVariable = DefVariable AS.Identifier AS.Type
-  deriving Show
-
--- FIXME: Consts?
-asDefVariable :: AS.Definition -> Maybe DefVariable
-asDefVariable def = case def of
-  AS.DefVariable (AS.QualifiedIdentifier _ ident) tp -> Just (DefVariable ident tp)
-  -- AS.DefConst ident tp _ -> Just (DefVariable ident tp)
-  _ -> Nothing
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
 newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv ext f) () SigState) a }
@@ -198,7 +186,7 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv
 -- signatures.
 buildEnv :: [AS.Definition] -> SigEnv ext f
 buildEnv defs =
-  let envCallables = Map.fromList ((\c -> (callableNameWithArity c, c)) <$> (catMaybes (asCallable <$> defs)))
+  let envCallables = Map.fromList ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
       globalVars = Map.fromList builtinGlobals
       -- globalVars = Map.fromList $
       --   ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
@@ -209,8 +197,8 @@ buildEnv defs =
       consts = Map.fromList (builtinConsts ++ catMaybes (getConst <$> defs))
       -- | TODO: Populate builtin types
       builtinTypes = Map.empty
-      getVariableName v = let DefVariable name _ = v
-                          in name
+      -- getVariableName v = let DefVariable name _ = v
+      --                     in name
 
       -- Map each enum type to a name->integer map.
       getEnumValues d = case d of
@@ -282,13 +270,14 @@ storeType tpName tp = do
   st <- RWS.get
   RWS.put $ st { userTypes = Map.insert tpName (Some tp) (userTypes st) }
 
-lookupCallable :: T.Text -> Int -> SigM ext f Callable
+lookupCallable :: T.Text -> Int -> SigM ext f (Maybe Callable)
 lookupCallable name' arity = do
   env <- RWS.ask
-  let name = callableNameWithArity' name' arity
-  case Map.lookup name (envCallables env) of
-    Just callable -> return callable
-    Nothing -> E.throwError $ CallableNotFound name
+  let name = mkFunctionName name' arity
+  return $ Map.lookup name (envCallables env)
+  -- case Map.lookup name (envCallables env) of
+  --   Just callable -> return callable
+  --   Nothing -> E.throwError $ CallableNotFound name
 
 lookupBuiltinType :: T.Text -> SigM ext f (Some UserType)
 lookupBuiltinType tpName = do
@@ -314,31 +303,26 @@ lookupGlobalVar varName = do
 lookupCallableGlobals :: Callable -> SigM ext f (Maybe [(T.Text, Some WT.BaseTypeRepr)])
 lookupCallableGlobals c = do
   globalsMap <- callableGlobalsMap <$> RWS.get
-  let name = callableNameWithArity c
+  let name = mkCallableName c
   return $ Map.lookup name globalsMap
 
 storeCallableGlobals :: Callable -> [(T.Text, Some WT.BaseTypeRepr)] -> SigM ext f ()
 storeCallableGlobals c globals = do
   st <- RWS.get
-  let name = callableNameWithArity c
+  let name = mkCallableName c
   RWS.put $ st { callableGlobalsMap = Map.insert name globals (callableGlobalsMap st) }
 
 lookupCallableSignature :: Callable -> SigM ext f (Maybe SomeSignature)
 lookupCallableSignature c = do
   signatureMap <- callableSignatureMap <$> RWS.get
-  let name = callableNameWithArity c
+  let name = mkCallableName c
   return $ (fst <$> Map.lookup name signatureMap)
 
 storeCallableSignature :: Callable -> SomeSignature -> SigM ext f()
 storeCallableSignature c sig = do
   st <- RWS.get
-  let name = callableNameWithArity c
+  let name = mkCallableName c
   RWS.put $ st { callableSignatureMap = Map.insert name (sig, c) (callableSignatureMap st) }
-
--- addUnfoundCallable :: T.Text -> SigM ext f ()
--- addUnfoundCallable name = do
---   st <- RWS.get
---   RWS.put $ st { unfoundCallables = name Seq.:<| unfoundCallables st }
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -362,7 +346,7 @@ computeUserType tpName = do
           varTps <- forM structVars $ \(varName, varType) -> do
             Some tp <- computeType varType
             return $ Some $ LabeledValue varName tp
-          Some varTpAssignment <- return $ someAssignment varTps
+          Some varTpAssignment <- return $ Ctx.fromList varTps
           return $ Some $ UserStruct varTpAssignment
         DefTypeAbstract _ -> error $ "computeUserType: abstract type " ++ show tpName
         _ -> error $ "computeUserType: unsupported type " ++ T.unpack tpName
@@ -385,6 +369,8 @@ computeType tp = case tp of
       AS.ExprLitInt w
         | Just (Some wRepr) <- NR.someNat w
         , Just NR.LeqProof <- NR.isPosNat wRepr -> return $ Some (WT.BaseBVRepr wRepr)
+      -- FIXME: For now, we interpret polymorphic bits(N) as bits(32).
+      AS.ExprVarRef (AS.QualifiedIdentifier _ _) -> return $ Some (WT.BaseBVRepr (WT.knownNat @32))
       _ -> error "computeType, TypeFun"
   AS.TypeOf _ -> error "computeType, TypeOf"
   AS.TypeReg _ _ -> error "computeType, TypeReg"
@@ -396,35 +382,12 @@ computeType tp = case tp of
 computeGlobalVarType :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 computeGlobalVarType varName = do
   lookupGlobalVar varName
-  -- mVar <- lookupGlobalVar varName
-  -- case mVar of
-  --   Nothing -> return Nothing
-  --   Just (DefVariable _ asType) -> do
-  --     tp <- computeType asType
-  --     return $ Just tp
 
 -- | Compute the type of a struct member. If the struct is not a global variable,
 -- return 'Nothing'.
--- FIXME: Simply intercalate the struct and member names with a "_" and look it up in
--- the built-in globals.
 computeGlobalStructMemberType :: T.Text -> T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 computeGlobalStructMemberType structName memberName = do
   lookupGlobalVar (mkStructMemberName structName memberName)
-  -- mStructVar <- lookupGlobalVar structName
-  -- case mStructVar of
-  --   Just (DefVariable _ (AS.TypeRef (AS.QualifiedIdentifier _ structTypeName))) -> do
-  --     defStructType <- lookupDefType structTypeName
-  --     case defStructType of
-  --       DefTypeStruct _ decls -> do
-  --         let mAsType = lookup memberName decls
-  --         case mAsType of
-  --           Nothing -> E.throwError $ StructMissingField structName memberName
-  --           Just asType -> do
-  --             tp <- computeType asType
-  --             return $ Just tp
-  --       _ -> E.throwError $ WrongType structName structTypeName
-  --   -- FIXME: Is there a difference between the Just and Nothing cases here?
-  --   _ -> return Nothing
 
 -- | Given a variable name, determine whether it is a global variable or not. If so,
 -- return a pair containing the variable and its type; if not, return 'Nothing'.
@@ -523,21 +486,24 @@ exprGlobalVars expr = case expr of
     return $ eGlobals ++ varGlobals
   AS.ExprInMask e _ -> exprGlobalVars e
   AS.ExprCall (AS.QualifiedIdentifier _ name) argEs -> do
-    callable <- lookupCallable name (length argEs)
-    -- Compute the signature of the callable
-    void $ computeCallableSignature callable
-    callableGlobals <- callableGlobalVars callable
-    -- callableGlobals <- E.catchError
-    --   (do callable <- lookupCallable name (length argEs)
-    --       callableGlobalVars callable )
-    --   $ \e -> case e of
-    --             CallableNotFound _ -> do
-    --               addUnfoundCallable name
-    --               return []
-    --             _ -> E.throwError e
-    -- callableGlobals <- callableGlobalVars callable
     argGlobals <- concat <$> traverse exprGlobalVars argEs
-    return $ callableGlobals ++ argGlobals
+    mCallable <- lookupCallable name (length argEs)
+    case mCallable of
+      Just callable -> do
+        -- Compute the signature of the callable
+        void $ computeCallableSignature callable
+        callableGlobals <- callableGlobalVars callable
+        -- callableGlobals <- E.catchError
+        --   (do callable <- lookupCallable name (length argEs)
+        --       callableGlobalVars callable )
+        --   $ \e -> case e of
+        --             CallableNotFound _ -> do
+        --               addUnfoundCallable name
+        --               return []
+        --             _ -> E.throwError e
+        -- callableGlobals <- callableGlobalVars callable
+        return $ callableGlobals ++ argGlobals
+      Nothing -> return argGlobals
   AS.ExprInSet e setElts -> do
     eGlobals <- exprGlobalVars e
     setEltGlobals <- concat <$> traverse setEltGlobalVars setElts
@@ -580,12 +546,15 @@ stmtGlobalVars stmt = case stmt of
   AS.StmtVarDeclInit _ e -> exprGlobalVars e
   AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
   AS.StmtCall (AS.QualifiedIdentifier _ name) argEs -> do
-    callable <- lookupCallable name (length argEs)
-    -- Compute the signature of the callable
-    void $ computeCallableSignature callable
-    callableGlobals <- callableGlobalVars callable
     argGlobals <- concat <$> traverse exprGlobalVars argEs
-    return $ callableGlobals ++ argGlobals
+    mCallable <- lookupCallable name (length argEs)
+    case mCallable of
+      Just callable -> do
+        -- Compute the signature of the callable
+        void $ computeCallableSignature callable
+        callableGlobals <- callableGlobalVars callable
+        return $ callableGlobals ++ argGlobals
+      Nothing -> return argGlobals
   AS.StmtReturn (Just e) -> exprGlobalVars e
   AS.StmtAssert e -> exprGlobalVars e
   AS.StmtIf branches mDefault -> do
@@ -633,7 +602,7 @@ callableGlobalVars c@Callable{..} = do
 -- it is a function.
 computeCallableSignature :: Callable -> SigM ext f SomeSignature
 computeCallableSignature c@Callable{..} = do
-  let name = callableNameWithArity c
+  let name = mkCallableName c
   mSig <- lookupCallableSignature c
 
   case mSig of
@@ -644,11 +613,11 @@ computeCallableSignature c@Callable{..} = do
         return $ Some (LabeledValue varName varTp)
       labeledArgs <- forM callableArgs $ \(argName, asType) -> do
         Some tp <- computeType asType
-        let ctp = CT.baseToType tp-- traverse computeType (snd <$> callableArgs)
+        let ctp = CT.baseToType tp
         return (Some (LabeledValue argName ctp))
 
-      Some globalReprs <- return $ someAssignment labeledVals
-      Some argReprs <- return $ someAssignment labeledArgs
+      Some globalReprs <- return $ Ctx.fromList labeledVals
+      Some argReprs <- return $ Ctx.fromList labeledArgs
       sig <- case callableRets of
         [] -> do -- procedure
           return $ SomeProcedureSignature $ ProcedureSignature
@@ -661,7 +630,7 @@ computeCallableSignature c@Callable{..} = do
             [asType] -> computeType asType
             asTypes -> do
               someTypes <- traverse computeType asTypes
-              Some assignment <- return $ someAssignment someTypes
+              Some assignment <- return $ Ctx.fromList someTypes
               return $ Some (WT.BaseStructRepr assignment)
           return $ SomeFunctionSignature $ FunctionSignature
             { funcName = name
@@ -671,9 +640,3 @@ computeCallableSignature c@Callable{..} = do
             }
       storeCallableSignature c sig
       return sig
-
-someAssignment :: [Some f] -> Some (Ctx.Assignment f)
-someAssignment [] = Some Ctx.empty
-someAssignment (Some f : rst) = I.runIdentity $ do
-  Some assignRst <- return $ someAssignment rst
-  return $ Some (Ctx.extend assignRst f)

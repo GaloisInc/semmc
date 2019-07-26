@@ -75,6 +75,7 @@ import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Ove
 
 data Definitions arch =
   Definitions { defSignatures :: Map.Map T.Text (SomeSignature, [AS.Stmt])
+              , defDepSignatures :: Map.Map T.Text (SomeDFS, [AS.Stmt])
               , defTypes :: Map.Map T.Text (Some UserType)
               , defEnums :: Map.Map T.Text Integer
               , defConsts :: Map.Map T.Text (Some ConstVal)

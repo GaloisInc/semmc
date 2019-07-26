@@ -18,12 +18,15 @@ locations touched by that function.
 -}
 module SemMC.ASL.Signature (
     FunctionSignature(..)
+  , DependentFunctionSignature(..)
   , ProcedureSignature(..)
   , procSigRepr
   , SomeSignature(..)
+  , SomeDFS(..)
   , LabeledValue(..)
   , projectValue
   , projectLabel
+  , DependentTypeRepr(..)
   , BaseGlobalVar(..)
   ) where
 
@@ -52,6 +55,29 @@ data FunctionSignature globals init tp =
                     -- assume that globals are read-only in functions
                     }
   deriving (Show)
+
+data DependentFunctionSignature globals init tp =
+  DependentFunctionSignature
+  { pFuncName :: T.Text
+  -- ^ The name of the function
+  , pFuncSigRepr :: DependentTypeRepr init tp
+  -- ^ The return type of the function (might reference an argument
+  -- type)
+  , pFuncArgReprs :: Ctx.Assignment (LabeledValue T.Text (DependentTypeRepr init)) init
+  -- ^ The types of the natural arguments of the function
+  , pFuncGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
+  -- ^ The globals referenced by the function; NOTE that we assume
+  -- that globals are read-only in functions
+  }
+  deriving (Show)
+
+data DependentTypeRepr init tp where
+  DependentBaseRepr :: WT.BaseTypeRepr tp -> DependentTypeRepr init tp
+  DependentBVRepr :: Ctx.Index init tp -> DependentTypeRepr init tp
+
+deriving instance Show (DependentTypeRepr init tp)
+
+instance ShowF (DependentTypeRepr init)
 
 data LabeledValue a b tp = LabeledValue a (b tp)
 
@@ -118,5 +144,8 @@ procSigRepr sig = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (proc
 data SomeSignature where
   SomeFunctionSignature :: FunctionSignature globals init tp -> SomeSignature
   SomeProcedureSignature :: ProcedureSignature globals init -> SomeSignature
+
+data SomeDFS where
+  SomeDFS :: DependentFunctionSignature globals init tp -> SomeDFS
 
 deriving instance Show SomeSignature

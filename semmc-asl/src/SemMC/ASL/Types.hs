@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -13,6 +14,7 @@ module SemMC.ASL.Types
   ) where
 
 import qualified Data.Parameterized.Context as Ctx
+import           Data.Parameterized.Some (Some(..))
 
 import qualified Lang.Crucible.Types as CT
 import What4.BaseTypes as WT

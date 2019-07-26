@@ -16,12 +16,13 @@ import           SemMC.ASL.Signature
 
 data TranslationException = NoReturnInFunction SomeSignature
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
-                          | forall tp1 tp2 .  UnexpectedExprType AS.Expr (CT.TypeRepr tp1) (CT.TypeRepr tp2)
+                          | forall tp1 tp2 .  UnexpectedExprType (Maybe AS.Expr) (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           -- ^ Expression, actual type, expected type
                           | UnsupportedExpr AS.Expr
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           | forall tp . ExpectedBVType AS.Expr (CT.TypeRepr tp)
+                          | forall tp . ExpectedStructType (Maybe AS.Expr) (CT.TypeRepr tp)
                           | forall tp . UnsupportedComparisonType AS.Expr (CT.TypeRepr tp)
                           | UnboundName T.Text
                           | LocalAlreadyDefined T.Text
@@ -40,6 +41,7 @@ data TranslationException = NoReturnInFunction SomeSignature
                           | MissingGlobal T.Text
                           | forall tp . UnexpectedGlobalType T.Text (CT.TypeRepr tp)
                           | UnexpectedType AS.QualifiedIdentifier
+                          | InvalidSliceRange Integer Integer
 
 deriving instance Show TranslationException
 

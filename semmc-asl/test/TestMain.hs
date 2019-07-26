@@ -38,7 +38,7 @@ defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
 functions :: [(T.Text, Int)]
-functions =  [("UsingAArch32", 0)]
+functions =  [("A32ExpandImm_C", 2)]
 
 overrides :: Overrides arch
 overrides = Overrides {..}
@@ -63,7 +63,7 @@ main = do
         Right defs -> do
           putStrLn "----------------------------------------------"
           forM_ functions $ \(fName, fArity) -> do
-            case Map.lookup (callableNameWithArity' fName fArity) (defSignatures defs) of
+            case Map.lookup (mkFunctionName fName fArity) (defSignatures defs) of
               Just (SomeFunctionSignature sig, stmts) -> do
                 print sig
                 handleAllocator <- CFH.newHandleAllocator

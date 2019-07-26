@@ -18,6 +18,7 @@ module SemMC.ASL.Translation (
   , UserType(..)
   , userTypeRepr
   , mkStructMemberName
+  , mkFunctionName
   , ToBaseType
   , ToBaseTypes
   , ConstVal(..)
@@ -26,9 +27,10 @@ module SemMC.ASL.Translation (
 
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
-import           Control.Monad ( when )
+import           Control.Monad ( when, forM_, void )
 import qualified Control.Monad.State.Class as MS
 import qualified Data.BitVector.Sized as BVS
+import           Data.Functor.Const
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -269,13 +271,13 @@ translateStatement ov rep stmt
       AS.StmtCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
-        let ident = ident' <> "_" <> T.pack (show (length args))
+        let ident = mkFunctionName ident' (length args)
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
           Just (SomeProcedureSignature sig) -> do
             argAtoms <- mapM (translateExpr ov) args
-            case assignmentFromList (Some Ctx.empty) argAtoms of
+            case Ctx.fromList argAtoms of
               Some argAssign -> do
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
                 let expectedTypes = FC.fmapFC projectValue (procArgReprs sig)
@@ -389,26 +391,55 @@ translateAssignment :: Overrides arch
                     -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
 translateAssignment ov lval e = do
   Some atom <- translateExpr ov e
+  translateAssignment' ov lval atom
+
+translateAssignment' :: forall arch s tp h ret . Overrides arch
+                     -> AS.LValExpr
+                     -> CCG.Atom s tp
+                     -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+translateAssignment' ov lval atom = do
   case lval of
     AS.LValIgnore -> return () -- Totally ignore - this probably shouldn't happen (except inside of a tuple)
     AS.LValVarRef (AS.QualifiedIdentifier _ ident) -> do
       locals <- MS.gets tsVarRefs
       case Map.lookup ident locals of
         Just (Some lreg) -> do
-          Refl <- assertAtomType e (CCG.typeOfReg lreg) atom
+          Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
           CCG.assignReg lreg (CCG.AtomExpr atom)
         Nothing -> do
           globals <- MS.gets tsGlobals
           case Map.lookup ident globals of
             Just (Some gv) -> do
-              Refl <- assertAtomType e (CCG.globalType gv) atom
+              Refl <- assertAtomType' (CCG.globalType gv) atom
               CCG.writeGlobal gv (CCG.AtomExpr atom)
             Nothing -> do
               let atomType = CCG.typeOfAtom atom
               reg <- CCG.newUnassignedReg atomType
               MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
               CCG.assignReg reg (CCG.AtomExpr atom)
+    AS.LValTuple lvals ->
+      case CCG.typeOfAtom atom of
+        CT.SymbolicStructRepr tps -> traverseWithIndex_ (assignTupleElt lvals tps atom) tps
+        tp -> X.throw $ ExpectedStructType Nothing tp
     _ -> error $ "Unsupported LVal: " ++ show lval
+    where assignTupleElt :: [AS.LValExpr]
+                         -> Ctx.Assignment WT.BaseTypeRepr ctx
+                         -> CCG.Atom s (CT.SymbolicStructType ctx)
+                         -> Ctx.Index ctx tp'
+                         -> WT.BaseTypeRepr tp'
+                         -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+          assignTupleElt lvals tps struct ix tp = do
+            let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
+            getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+            translateAssignment' ov (lvals !! Ctx.indexVal ix) getAtom
+
+traverseWithIndex_ :: forall m f ctx . Applicative m
+                   => (forall tp . Ctx.Index ctx tp -> f tp -> m ())
+                   -> Ctx.Assignment f ctx
+                   -> m ()
+traverseWithIndex_ f a = void $ Ctx.traverseWithIndex f' a
+  where f' :: forall tp . Ctx.Index ctx tp -> f tp -> m (Const () tp)
+        f' i x = f i x *> pure (Const ())
 
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
@@ -488,11 +519,11 @@ translateCase ov rep expr alts = case alts of
     let genRest = translateCase ov rep expr rst
     CCG.ifte_ (CCG.AtomExpr matchAtom) genThen genRest
   _ -> error (show alts)
-
-caseWhenExpr :: AS.Expr -> [AS.CasePattern] -> AS.Expr
-caseWhenExpr _ [] = error "caseWhenExpr"
-caseWhenExpr expr [pat] = matchPat expr pat
-caseWhenExpr expr (pat:pats) = AS.ExprBinOp AS.BinOpLogicalOr (matchPat expr pat) (caseWhenExpr expr pats)
+  where
+    caseWhenExpr :: AS.Expr -> [AS.CasePattern] -> AS.Expr
+    caseWhenExpr _ [] = error "caseWhenExpr"
+    caseWhenExpr expr [pat] = matchPat expr pat
+    caseWhenExpr expr (pat:pats) = AS.ExprBinOp AS.BinOpLogicalOr (matchPat expr pat) (caseWhenExpr expr pats)
 
 matchPat :: AS.Expr -> AS.CasePattern -> AS.Expr
 matchPat expr (AS.CasePatternInt i) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitInt i)
@@ -511,9 +542,18 @@ assertAtomType :: AS.Expr
                -> CCG.Generator ext h s TranslationState ret (tp1 :~: tp2)
 assertAtomType expr expectedRepr atom =
   case testEquality expectedRepr (CCG.typeOfAtom atom) of
-    Nothing -> X.throw (UnexpectedExprType expr (CCG.typeOfAtom atom) expectedRepr)
+    Nothing -> X.throw (UnexpectedExprType (Just expr) (CCG.typeOfAtom atom) expectedRepr)
     Just Refl -> return Refl
 
+assertAtomType' :: CT.TypeRepr tp1
+                -- ^ Expected type
+                -> CCG.Atom s tp2
+                -- ^ Translation (which contains the actual type)
+                -> CCG.Generator ext h s TranslationState ret (tp1 :~: tp2)
+assertAtomType' expectedRepr atom =
+  case testEquality expectedRepr (CCG.typeOfAtom atom) of
+    Nothing -> X.throw (UnexpectedExprType Nothing (CCG.typeOfAtom atom) expectedRepr)
+    Just Refl -> return Refl
 
 
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
@@ -543,7 +583,7 @@ translateExpr ov expr
       AS.ExprBinOp op e1 e2 -> translateBinaryOp ov op e1 e2
       AS.ExprTuple exprs -> do
         atoms <- mapM (translateExpr ov) exprs
-        case assignmentFromList (Some Ctx.empty) atoms of
+        case Ctx.fromList atoms of
           Some asgn -> do
             let reprs = FC.fmapFC CCG.typeOfAtom asgn
             let atomExprs = FC.fmapFC CCG.AtomExpr asgn
@@ -564,13 +604,13 @@ translateExpr ov expr
       AS.ExprCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
-        let ident = ident' <> "_" <> T.pack (show (length args))
+        let ident = mkFunctionName ident' (length args)
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
           Just (SomeFunctionSignature sig) -> do
             argAtoms <- mapM (translateExpr ov) args
-            case assignmentFromList (Some Ctx.empty) argAtoms of
+            case Ctx.fromList argAtoms of
               Some argAssign -> do
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
                 let expectedTypes = FC.fmapFC projectValue (funcArgReprs sig)
@@ -587,6 +627,28 @@ translateExpr ov expr
         let ident = mkStructMemberName structName memberName
         Some e <- lookupVarRef ident
         Some <$> CCG.mkAtom e
+      AS.ExprSlice e [slice] -> translateSlice ov e slice
+      _ -> error (show expr)
+
+translateSlice :: Overrides arch
+               -> AS.Expr
+               -> AS.Slice
+               -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
+translateSlice ov e slice = do
+  Some atom <- translateExpr ov e
+  case CCG.typeOfAtom atom of
+    atomTp@(CT.BVRepr wRepr) -> case slice of
+      AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo) -> do
+        case (WT.someNat lo, WT.someNat hi) of
+          (Just (Some loRepr), Just (Some hiRepr))
+            | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
+            , lenRepr <- hiRepr `WT.subNat` loRepr
+            , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr
+            , Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr ->
+              Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom)))
+          _ -> X.throw $ InvalidSliceRange lo hi
+      _ -> error "translateSlice"
+    repr -> X.throw (ExpectedBVType e repr)
 
 -- | Translate the expression form of a conditional into a Crucible atom
 translateIfExpr :: Overrides arch
@@ -779,13 +841,6 @@ logicalBinOp con (e1, a1) (e2, a2) = do
   Refl <- assertAtomType e2 CT.BoolRepr a2
   Some <$> CCG.mkAtom (CCG.App (con (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
 
-
-assignmentFromList :: Some (Ctx.Assignment a) -> [Some a] -> Some (Ctx.Assignment a)
-assignmentFromList (Some asgn0) elts =
-  case elts of
-    [] -> Some asgn0
-    Some elt : rest -> assignmentFromList (Some (Ctx.extend asgn0 elt)) rest
-
 translateUnaryOp :: Overrides arch
                  -> AS.UnOp
                  -> AS.Expr
@@ -812,3 +867,7 @@ bitsToInteger _ = error $ "bitsToInteger empty list"
 -- independent global variable and use this function to construct its qualified name.
 mkStructMemberName :: T.Text -> T.Text -> T.Text
 mkStructMemberName s m = s <> "_" <> m
+
+-- | Make a function name given its ASL name and arity.
+mkFunctionName :: T.Text -> Int -> T.Text
+mkFunctionName name numArgs = name <> T.pack "_" <> T.pack (show numArgs)
