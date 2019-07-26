@@ -419,7 +419,7 @@ translateAssignment' ov lval atom = do
               CCG.assignReg reg (CCG.AtomExpr atom)
     AS.LValTuple lvals ->
       case CCG.typeOfAtom atom of
-        CT.SymbolicStructRepr tps -> traverseWithIndex_ (assignTupleElt lvals tps atom) tps
+        CT.SymbolicStructRepr tps -> void $ Ctx.traverseAndCollect (assignTupleElt lvals tps atom) tps
         tp -> X.throw $ ExpectedStructType Nothing tp
     _ -> error $ "Unsupported LVal: " ++ show lval
     where assignTupleElt :: [AS.LValExpr]
@@ -432,14 +432,6 @@ translateAssignment' ov lval atom = do
             let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
             getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
             translateAssignment' ov (lvals !! Ctx.indexVal ix) getAtom
-
-traverseWithIndex_ :: forall m f ctx . Applicative m
-                   => (forall tp . Ctx.Index ctx tp -> f tp -> m ())
-                   -> Ctx.Assignment f ctx
-                   -> m ()
-traverseWithIndex_ f a = void $ Ctx.traverseWithIndex f' a
-  where f' :: forall tp . Ctx.Index ctx tp -> f tp -> m (Const () tp)
-        f' i x = f i x *> pure (Const ())
 
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
