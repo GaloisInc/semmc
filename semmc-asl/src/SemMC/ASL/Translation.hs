@@ -27,10 +27,9 @@ module SemMC.ASL.Translation (
 
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
-import           Control.Monad ( when, forM_, void )
+import           Control.Monad ( when, void )
 import qualified Control.Monad.State.Class as MS
 import qualified Data.BitVector.Sized as BVS
-import           Data.Functor.Const
 import           Data.Maybe ( fromMaybe )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -65,6 +64,7 @@ instance Show (ConstVal tp) where
   show (ConstVal WT.BaseIntegerRepr l) = show l
   show (ConstVal WT.BaseBoolRepr l) = show l
   show (ConstVal (WT.BaseBVRepr _) l) = show l
+  show _ = "??"
 
 instance ShowF ConstVal
 
@@ -428,7 +428,7 @@ translateAssignment' ov lval atom = do
                          -> Ctx.Index ctx tp'
                          -> WT.BaseTypeRepr tp'
                          -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-          assignTupleElt lvals tps struct ix tp = do
+          assignTupleElt lvals tps struct ix _ = do
             let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
             getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
             translateAssignment' ov (lvals !! Ctx.indexVal ix) getAtom
@@ -469,6 +469,8 @@ translateType t =
         AS.ExprLitInt nBits
           | Just (Some nr) <- NR.someNat nBits
           , Just NR.LeqProof <- NR.isPosNat nr -> return (Some (CT.BVRepr nr))
+        -- FIXME: We assume that N is always 32!!! This needs to be fixed, probably.
+        AS.ExprVarRef (AS.QualifiedIdentifier _ "N") -> return (Some (CT.BVRepr (WT.knownNat @32)))
         _ -> error ("Unsupported type: " ++ show t)
     AS.TypeFun _ _ -> error ("Unsupported type: " ++ show t)
     AS.TypeArray _ty _idxTy -> error ("Unsupported type: " ++ show t)
@@ -587,12 +589,6 @@ translateExpr ov expr
         preds <- mapM (translateSetElementTest ov expr atom) elts
         Some <$> CCG.mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
       AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
-      AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> do
-        Some atom <- translateExpr ov argExpr
-        case CCG.typeOfAtom atom of
-          CT.BVRepr nr -> do
-            Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
-          _ -> error "Called UInt on non-bitvector"
       AS.ExprCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
@@ -628,19 +624,31 @@ translateSlice :: Overrides arch
                -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
 translateSlice ov e slice = do
   Some atom <- translateExpr ov e
-  case CCG.typeOfAtom atom of
-    atomTp@(CT.BVRepr wRepr) -> case slice of
-      AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo) -> do
-        case (WT.someNat lo, WT.someNat hi) of
-          (Just (Some loRepr), Just (Some hiRepr))
-            | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
-            , lenRepr <- hiRepr `WT.subNat` loRepr
-            , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr
-            , Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr ->
-              Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom)))
-          _ -> X.throw $ InvalidSliceRange lo hi
-      _ -> error "translateSlice"
-    repr -> X.throw (ExpectedBVType e repr)
+  (Some loRepr, Some hiRepr) <- case slice of
+    AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo) ->
+      case (WT.someNat lo, WT.someNat hi) of
+        (Just someLoRepr, Just someHiRepr) -> return (someLoRepr, someHiRepr)
+        _ -> X.throw $ InvalidSliceRange lo hi
+    AS.SliceRange (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) (AS.ExprLitInt 0) ->
+      return (Some (WT.knownNat @0), Some (WT.knownNat @31))
+    AS.SliceSingle (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) ->
+      return (Some (WT.knownNat @31), Some (WT.knownNat @31))
+    _ -> error $ "unsupported slice: " ++ show slice
+  case () of
+    _ | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
+      , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
+      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr
+      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` hiRepr -> do
+        case CCG.typeOfAtom atom of
+          CT.BVRepr wRepr | Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr ->
+                Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom)))
+          CT.IntegerRepr | wRepr <- hiRepr `WT.addNat` (WT.knownNat @1)
+                         , WT.LeqProof <- WT.leqAddPos hiRepr (WT.knownNat @1)
+                         , Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr -> do
+                let bv = CCE.IntegerToBV wRepr (CCG.AtomExpr atom)
+                Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.App bv)))
+          repr -> X.throw (ExpectedBVType e repr)
+    _ -> X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
 
 -- | Translate the expression form of a conditional into a Crucible atom
 translateIfExpr :: Overrides arch
@@ -750,6 +758,13 @@ translateBinaryOp ov op e1 e2 = do
     AS.BinOpShiftLeft -> bvBinOp CCE.BVShl p1 p2
     AS.BinOpShiftRight -> bvBinOp CCE.BVLshr p1 p2
     -- FIXME: What is the difference between BinOpDiv and BinOpDivide?
+    AS.BinOpConcat -> case (CCG.typeOfAtom a1, CCG.typeOfAtom a2) of
+      (CT.BVRepr n1, CT.BVRepr n2)
+        | Just n1PosProof <- WT.isPosNat n1
+        , WT.LeqProof <- WT.leqAdd n1PosProof n2 ->
+          Some <$> CCG.mkAtom (CCG.App (CCE.BVConcat n1 n2 (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      (CT.BVRepr _, t2) -> X.throw $ ExpectedBVType e2 t2
+      (t1, _) -> X.throw $ ExpectedBVType e1 t1
 
 -- Arithmetic operators
 

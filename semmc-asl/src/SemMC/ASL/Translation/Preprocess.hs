@@ -104,6 +104,26 @@ overrides = Overrides {..}
   where overrideStmt _ = Nothing
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s)))
         overrideExpr e = case e of
+          AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
+            Some atom <- translateExpr overrides argExpr
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+              _ -> error "Called UInt on non-bitvector"
+          -- FIXME: BvToInteger isn't right here, because it's unsigned. We need a
+          -- signed version.
+          AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> Just $ do
+            Some atom <- translateExpr overrides argExpr
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+              _ -> error "Called SInt on non-bitvector"
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ do
+            Some atom <- translateExpr overrides argExpr
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                Some <$> CCG.mkAtom (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
+              _ -> error "Called IsZero on non-bitvector"
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ do
             Some valAtom <- translateExpr overrides val
             case CCG.typeOfAtom valAtom of
@@ -115,7 +135,29 @@ overrides = Overrides {..}
           _ -> Nothing
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
-builtinGlobals = [("PSTATE_nRW", Some (WT.BaseBVRepr (WT.knownNat @1)))]
+builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_Z", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_C", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_V", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_D", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_A", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_I", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_F", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_PAN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_UAO", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_SS", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_IL", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_EL", Some (WT.BaseBVRepr (WT.knownNat @2)))
+                 , ("PSTATE_nRW", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_SP", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_Q", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_GE", Some (WT.BaseBVRepr (WT.knownNat @4)))
+                 , ("PSTATE_IT", Some (WT.BaseBVRepr (WT.knownNat @8)))
+                 , ("PSTATE_J", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_T", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_E", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("PSTATE_M", Some (WT.BaseBVRepr (WT.knownNat @5)))
+                 ]
 
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =

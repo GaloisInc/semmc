@@ -38,7 +38,8 @@ defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
 functions :: [(T.Text, Int)]
-functions =  [("A32ExpandImm_C", 2)]
+functions =  [ ("AddWithCarry", 3)
+             ]
 
 overrides :: Overrides arch
 overrides = Overrides {..}
