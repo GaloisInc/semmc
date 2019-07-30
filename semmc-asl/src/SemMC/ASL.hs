@@ -20,6 +20,7 @@ import           Control.Monad.ST ( RealWorld )
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as PL
+import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Data.Type.List as TL
@@ -75,8 +76,8 @@ simulateFunction symCfg func = do
       s0 <- initialSimulatorState symCfg globalState econt
       eres <- CS.executeCrucible executionFeatures s0
       case eres of
-        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeFunctionSignature sig))
-        CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeFunctionSignature sig))
+        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeFunctionSignature sig)))
+        CS.AbortedResult {} -> X.throwIO (SimulationAbort (Some (AC.SomeFunctionSignature sig)))
         CS.FinishedResult _ pres ->
           case pres of
             CS.TotalRes gp -> extractResult gp initArgs
@@ -132,8 +133,8 @@ simulateProcedure symCfg crucProc =
       s0 <- initialSimulatorState symCfg globalState econt
       eres <- CS.executeCrucible executionFeatures s0
       case eres of
-        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (AC.SomeProcedureSignature sig))
-        CS.AbortedResult {} -> X.throwIO (SimulationAbort (AC.SomeProcedureSignature sig))
+        CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeProcedureSignature sig)))
+        CS.AbortedResult {} -> X.throwIO (SimulationAbort (Some (AC.SomeProcedureSignature sig)))
         CS.FinishedResult _ pres ->
           case pres of
             CS.TotalRes gp -> extractResult gp initArgs
@@ -279,8 +280,8 @@ initGlobals symCfg globals = do
 executionFeatures :: [CS.ExecutionFeature p sym ext rtp]
 executionFeatures = []
 
-data SimulationException = SimulationTimeout AC.SomeSignature
-                         | SimulationAbort AC.SomeSignature
+data SimulationException = SimulationTimeout (Some AC.SomeSignature)
+                         | SimulationAbort (Some AC.SomeSignature)
                          | forall tp . NonBaseTypeReturn (CT.TypeRepr tp)
                          | forall btp . UnexpectedReturnType (WT.BaseTypeRepr btp)
                          | forall tp . MissingGlobalDefinition (CS.GlobalVar tp)

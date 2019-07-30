@@ -292,7 +292,7 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
                          , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
                            -- ^ map from function/procedure name to list of globals
-                         , callableSignatureMap :: Map.Map T.Text (SomeSignature, Callable)
+                         , callableSignatureMap :: Map.Map T.Text (Some SomeSignature, Callable)
                            -- ^ map of all signatures found thus far
                          -- , unfoundCallables :: Seq.Seq T.Text
                          --   -- ^ list of callables we encountered that were not in the
@@ -354,17 +354,17 @@ storeCallableGlobals c globals = do
   let name = mkCallableName c
   RWS.put $ st { callableGlobalsMap = Map.insert name globals (callableGlobalsMap st) }
 
-lookupCallableSignature :: Callable -> SigM ext f (Maybe SomeSignature)
+lookupCallableSignature :: Callable -> SigM ext f (Maybe (Some SomeSignature))
 lookupCallableSignature c = do
   signatureMap <- callableSignatureMap <$> RWS.get
   let name = mkCallableName c
   return $ (fst <$> Map.lookup name signatureMap)
 
-storeCallableSignature :: Callable -> SomeSignature -> SigM ext f()
+storeCallableSignature :: Callable -> SomeSignature ret -> SigM ext f()
 storeCallableSignature c sig = do
   st <- RWS.get
   let name = mkCallableName c
-  RWS.put $ st { callableSignatureMap = Map.insert name (sig, c) (callableSignatureMap st) }
+  RWS.put $ st { callableSignatureMap = Map.insert name (Some sig, c) (callableSignatureMap st) }
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -642,7 +642,7 @@ callableGlobalVars c@Callable{..} = do
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
 -- it is a function.
-computeCallableSignature :: Callable -> SigM ext f SomeSignature
+computeCallableSignature :: Callable -> SigM ext f (Some SomeSignature)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
   mSig <- lookupCallableSignature c
@@ -660,9 +660,9 @@ computeCallableSignature c@Callable{..} = do
 
       Some globalReprs <- return $ Ctx.fromList labeledVals
       Some argReprs <- return $ Ctx.fromList labeledArgs
-      sig <- case callableRets of
-        [] -> do -- procedure
-          return $ SomeProcedureSignature $ ProcedureSignature
+      Some sig <- case callableRets of
+        [] -> -- procedure
+          return $ Some $ SomeProcedureSignature $ ProcedureSignature
             { procName = name
             , procArgReprs = argReprs
             , procGlobalReprs = globalReprs
@@ -674,11 +674,11 @@ computeCallableSignature c@Callable{..} = do
               someTypes <- traverse computeType asTypes
               Some assignment <- return $ Ctx.fromList someTypes
               return $ Some (WT.BaseStructRepr assignment)
-          return $ SomeFunctionSignature $ FunctionSignature
+          return $ Some $ SomeFunctionSignature $ FunctionSignature
             { funcName = name
             , funcSigRepr = sigRepr
             , funcArgReprs = argReprs
             , funcGlobalReprs = globalReprs
             }
       storeCallableSignature c sig
-      return sig
+      return (Some sig)

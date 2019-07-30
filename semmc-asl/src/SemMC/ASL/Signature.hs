@@ -22,6 +22,7 @@ module SemMC.ASL.Signature (
   , ProcedureSignature(..)
   , procSigRepr
   , SomeSignature(..)
+  , someSigRepr
   , SomeDFS(..)
   , LabeledValue(..)
   , projectValue
@@ -141,11 +142,17 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
 procSigRepr :: ProcedureSignature globals init -> CT.TypeRepr (CT.SymbolicStructType globals)
 procSigRepr sig = CT.baseToType (WT.BaseStructRepr (FC.fmapFC projectValue (procGlobalReprs sig)))
 
-data SomeSignature where
-  SomeFunctionSignature :: FunctionSignature globals init tp -> SomeSignature
-  SomeProcedureSignature :: ProcedureSignature globals init -> SomeSignature
+data SomeSignature ret where
+  SomeFunctionSignature :: FunctionSignature globals init tp -> SomeSignature (CT.BaseToType tp)
+  SomeProcedureSignature :: ProcedureSignature globals init -> SomeSignature (CT.SymbolicStructType globals)
+
+someSigRepr :: SomeSignature ret -> CT.TypeRepr ret
+someSigRepr (SomeFunctionSignature fSig) = CT.baseToType (funcSigRepr fSig)
+someSigRepr (SomeProcedureSignature pSig) = procSigRepr pSig
 
 data SomeDFS where
   SomeDFS :: DependentFunctionSignature globals init tp -> SomeDFS
 
-deriving instance Show SomeSignature
+deriving instance Show (SomeSignature ret)
+
+instance ShowF SomeSignature

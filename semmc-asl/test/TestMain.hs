@@ -38,7 +38,7 @@ defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
 functions :: [(T.Text, Int)]
-functions =  [ ("AddrTop", 2)
+functions =  [ ("SelectInstrSet", 1)
              ]
 
 overrides :: Overrides arch
@@ -63,18 +63,30 @@ main = do
           exitFailure
         Right defs -> do
           putStrLn "----------------------------------------------"
-          forM_ functions $ \(fName, fArity) -> do
-            case Map.lookup (mkFunctionName fName fArity) (defSignatures defs) of
-              Just (SomeFunctionSignature sig, stmts) -> do
-                print sig
-                handleAllocator <- CFH.newHandleAllocator
-                f <- functionToCrucible defs sig handleAllocator stmts
-                backend <- CBS.newSimpleBackend globalNonceGenerator
-                let cfg :: SimulatorConfig (SimpleBackend GlobalNonceGenerator (Flags FloatIEEE))
-                      = SimulatorConfig { simOutputHandle = IO.stdout
-                                        , simHandleAllocator = handleAllocator
-                                        , simSym = backend
-                                        }
-                symFn <- simulateFunction cfg f
-                return ()
-              _ -> return ()
+          forM_ functions $ \(fName, fArity) -> processFunction fName fArity defs
+
+processFunction :: T.Text -> Int -> Definitions arch -> IO ()
+processFunction fName fArity defs =
+  case Map.lookup (mkFunctionName fName fArity) (defSignatures defs) of
+  Just (Some (SomeFunctionSignature sig), stmts) -> do
+    handleAllocator <- CFH.newHandleAllocator
+    f <- functionToCrucible defs sig handleAllocator stmts
+    backend <- CBS.newSimpleBackend globalNonceGenerator
+    let cfg :: SimulatorConfig (SimpleBackend GlobalNonceGenerator (Flags FloatIEEE))
+          = SimulatorConfig { simOutputHandle = IO.stdout
+                            , simHandleAllocator = handleAllocator
+                            , simSym = backend
+                            }
+    symFn <- simulateFunction cfg f
+    return ()
+  Just (Some (SomeProcedureSignature sig), stmts) -> do
+    handleAllocator <- CFH.newHandleAllocator
+    p <- procedureToCrucible defs sig handleAllocator stmts
+    backend <- CBS.newSimpleBackend globalNonceGenerator
+    let cfg :: SimulatorConfig (SimpleBackend GlobalNonceGenerator (Flags FloatIEEE))
+          = SimulatorConfig { simOutputHandle = IO.stdout
+                            , simHandleAllocator = handleAllocator
+                            , simSym = backend
+                            }
+    symProc <- simulateProcedure cfg p
+    return ()

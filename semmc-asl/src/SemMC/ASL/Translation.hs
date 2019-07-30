@@ -152,7 +152,7 @@ data TranslationState s =
                    -- bounds are used in assertions checking the completeness of
                    -- case statements.
                    -- ,
-                   , tsFunctionSigs :: Map.Map T.Text SomeSignature
+                   , tsFunctionSigs :: Map.Map T.Text (Some SomeSignature)
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
                    }
@@ -210,23 +210,34 @@ withProcGlobals sig k = do
 -- | Translate a single ASL statement into Crucible
 translateStatement :: forall arch ret h s
                     . Overrides arch
-                   -> CT.TypeRepr ret
+                   -> SomeSignature ret
+                   -- ^ Signature of the function/procedure we are translating. We
+                   -- need this to check that return statements return the correct
+                   -- type.
                    -> AS.Stmt
+                   -- ^ Statement we are translating
                    -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateStatement ov rep stmt
+translateStatement ov sig stmt
   | Just so <- overrideStmt ov stmt = so
   | otherwise =
-    case stmt of
-      AS.StmtReturn Nothing
-        | Just Refl <- testEquality rep CT.UnitRepr -> CCG.returnFromFunction (CCG.App CCE.EmptyApp)
-        | otherwise -> do
-            X.throw (InvalidReturnType CT.UnitRepr)
+    let rep = someSigRepr sig
+    in case stmt of
+      AS.StmtReturn Nothing -> case sig of
+        SomeProcedureSignature pSig
+          | globalBaseTypes <- FC.fmapFC projectValue (procGlobalReprs pSig)
+          , pSigRepr <- procSigRepr pSig
+          , Just Refl <- testEquality pSigRepr (CT.SymbolicStructRepr globalBaseTypes) ->
+            withProcGlobals pSig $ \globalBaseTypes globals -> do
+              Refl <- return $ baseCrucProof globalBaseTypes
+              globalsSnapshot <- CCG.extensionStmt (GetRegState globalBaseTypes globals)
+              CCG.returnFromFunction globalsSnapshot
+        _ -> X.throw (InvalidReturnType rep)
       AS.StmtReturn (Just expr) -> do
         Some a <- translateExpr ov expr
         Refl <- assertAtomType expr rep a
         CCG.returnFromFunction (CCG.AtomExpr a)
-      AS.StmtIf clauses melse -> translateIf ov rep clauses melse
-      AS.StmtCase e alts -> translateCase ov rep e alts
+      AS.StmtIf clauses melse -> translateIf ov sig clauses melse
+      AS.StmtCase e alts -> translateCase ov sig e alts
       AS.StmtAssert e -> do
         Some atom <- translateExpr ov e
         Refl <- assertAtomType e CT.BoolRepr atom
@@ -244,10 +255,10 @@ translateStatement ov rep stmt
               Some testA <- translateExpr ov test
               Refl <- assertAtomType test CT.BoolRepr testA
               return (CCG.AtomExpr testA)
-        let bodyG = mapM_ (translateStatement ov rep) body
+        let bodyG = mapM_ (translateStatement ov sig) body
         CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
-      AS.StmtRepeat body test -> translateRepeat ov rep body test
-      AS.StmtFor var (lo, hi) body -> translateFor ov rep var lo hi body
+      AS.StmtRepeat body test -> translateRepeat ov sig body test
+      AS.StmtFor var (lo, hi) body -> translateFor ov sig var lo hi body
       AS.StmtUndefined -> do
         gs <- MS.gets tsGlobals
         case Map.lookup undefinedVarName gs of
@@ -270,17 +281,16 @@ translateStatement ov rep stmt
       AS.StmtSeeString {} -> return ()
       AS.StmtCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
-        -- FIXME: make this nicer?
         let ident = mkFunctionName ident' (length args)
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
-          Just (SomeFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
-          Just (SomeProcedureSignature sig) -> do
+          Just (Some (SomeFunctionSignature _)) -> X.throw (ExpectedProcedureSignature ident)
+          Just (Some (SomeProcedureSignature pSig)) -> do
             argAtoms <- mapM (translateExpr ov) args
             case Ctx.fromList argAtoms of
               Some argAssign -> do
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                let expectedTypes = FC.fmapFC projectValue (procArgReprs sig)
+                let expectedTypes = FC.fmapFC projectValue (procArgReprs pSig)
                 if | Just Refl <- testEquality atomTypes expectedTypes -> do
                        -- FIXME: The problem is that we might need to snapshot a
                        -- subset of globals for each call.  Each subset might be
@@ -291,11 +301,11 @@ translateStatement ov rep stmt
                        -- We could key everything on name and do dynamic type
                        -- checks to assert that globals with the right name have
                        -- the right type.
-                       withProcGlobals sig $ \globalReprs globals -> do
+                       withProcGlobals pSig $ \globalReprs globals -> do
                          let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
                          globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
                          let vals = FC.fmapFC CCG.AtomExpr argAssign
-                         let ufRep = WT.BaseStructRepr (FC.fmapFC projectValue (procGlobalReprs sig))
+                         let ufRep = WT.BaseStructRepr (FC.fmapFC projectValue (procGlobalReprs pSig))
                          let uf = UF ident ufRep (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
                          atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                          _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
@@ -323,13 +333,13 @@ translateStatement ov rep stmt
 --
 -- NOTE: We are assuming that the variable assignment is actually a declaration of integer type
 translateFor :: Overrides arch
-             -> CT.TypeRepr ret
+             -> SomeSignature ret
              -> AS.Identifier
              -> AS.Expr
              -> AS.Expr
              -> [AS.Stmt]
              -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateFor ov rep var lo hi body = do
+translateFor ov sig var lo hi body = do
   let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
   translateDefinedVar ov ty var lo
   let testG = do
@@ -338,22 +348,22 @@ translateFor ov rep var lo hi body = do
         Some testA <- translateExpr ov testE
         Refl <- assertAtomType testE CT.BoolRepr testA
         return (CCG.AtomExpr testA)
-  let bodyG = mapM_ (translateStatement ov rep) body
+  let bodyG = mapM_ (translateStatement ov sig) body
   CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
 translateRepeat :: Overrides arch
-                -> CT.TypeRepr ret
+                -> SomeSignature ret
                 -> [AS.Stmt]
                 -> AS.Expr
                 -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateRepeat ov rtp body test = do
+translateRepeat ov sig body test = do
   cond_lbl <- CCG.newLabel
   loop_lbl <- CCG.newLabel
   exit_lbl <- CCG.newLabel
 
   CCG.defineBlock loop_lbl $ do
-    mapM_ (translateStatement ov rtp) body
+    mapM_ (translateStatement ov sig) body
     CCG.jump cond_lbl
 
   CCG.defineBlock cond_lbl $ do
@@ -417,6 +427,14 @@ translateAssignment' ov lval atom = do
               reg <- CCG.newUnassignedReg atomType
               MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
               CCG.assignReg reg (CCG.AtomExpr atom)
+    -- FIXME: For now, all structs must be globals.
+    AS.LValMember (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
+      globals <- MS.gets tsGlobals
+      case Map.lookup (mkStructMemberName structName memberName) globals of
+        Just (Some gv) -> do
+          Refl <- assertAtomType' (CCG.globalType gv) atom
+          CCG.writeGlobal gv (CCG.AtomExpr atom)
+        Nothing -> error $ "Non-global struct lval: " ++ show structName
     AS.LValTuple lvals ->
       case CCG.typeOfAtom atom of
         CT.SymbolicStructRepr tps -> void $ Ctx.traverseAndCollect (assignTupleElt lvals tps atom) tps
@@ -478,39 +496,39 @@ translateType t =
     AS.TypeOf _e -> error ("Unsupported type: " ++ show t)
 
 translateIf :: Overrides arch
-            -> CT.TypeRepr ret
+            -> SomeSignature ret
             -> [(AS.Expr, [AS.Stmt])]
             -> Maybe [AS.Stmt]
             -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateIf ov rep clauses melse =
+translateIf ov sig clauses melse =
   case clauses of
-    [] -> mapM_ (translateStatement ov rep) (fromMaybe [] melse)
+    [] -> mapM_ (translateStatement ov sig) (fromMaybe [] melse)
     (cond, body) : rest -> do
       Some condAtom <- translateExpr ov cond
       Refl <- assertAtomType cond CT.BoolRepr condAtom
-      let genThen = mapM_ (translateStatement ov rep) body
-      let genElse = translateIf ov rep rest melse
+      let genThen = mapM_ (translateStatement ov sig) body
+      let genElse = translateIf ov sig rest melse
       CCG.ifte_ (CCG.AtomExpr condAtom) genThen genElse
 
 translateCase :: Overrides arch
-              -> CT.TypeRepr ret
+              -> SomeSignature ret
               -> AS.Expr
               -> [AS.CaseAlternative]
               -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateCase ov rep expr alts = case alts of
-  [AS.CaseOtherwise els] -> mapM_ (translateStatement ov rep) els
+translateCase ov sig expr alts = case alts of
+  [AS.CaseOtherwise els] -> mapM_ (translateStatement ov sig) els
   -- FIXME: We assume that the case below is equivalent to "otherwise"
-  [AS.CaseWhen _ Nothing body] -> mapM_ (translateStatement ov rep) body
+  [AS.CaseWhen _ Nothing body] -> mapM_ (translateStatement ov sig) body
   -- FIXME: If we detect an "unreachable", translate it as if the preceding "when"
   -- were "otherwise"
   [AS.CaseWhen _ Nothing body, AS.CaseOtherwise [AS.StmtCall (AS.QualifiedIdentifier _ "Unreachable") []]] ->
-    mapM_ (translateStatement ov rep) body
+    mapM_ (translateStatement ov sig) body
   (AS.CaseWhen pats Nothing body : rst) -> do
     let matchExpr = caseWhenExpr expr pats
     Some matchAtom <- translateExpr ov matchExpr
     Refl <- assertAtomType matchExpr CT.BoolRepr matchAtom
-    let genThen = mapM_ (translateStatement ov rep) body
-    let genRest = translateCase ov rep expr rst
+    let genThen = mapM_ (translateStatement ov sig) body
+    let genRest = translateCase ov sig expr rst
     CCG.ifte_ (CCG.AtomExpr matchAtom) genThen genRest
   _ -> error (show alts)
   where
@@ -595,8 +613,8 @@ translateExpr ov expr
         let ident = mkFunctionName ident' (length args)
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
-          Just (SomeProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
-          Just (SomeFunctionSignature sig) -> do
+          Just (Some (SomeProcedureSignature _)) -> X.throw (ExpectedFunctionSignature ident)
+          Just (Some (SomeFunctionSignature sig)) -> do
             argAtoms <- mapM (translateExpr ov) args
             case Ctx.fromList argAtoms of
               Some argAssign -> do
