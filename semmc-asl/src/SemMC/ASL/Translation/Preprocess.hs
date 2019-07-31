@@ -21,6 +21,8 @@
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
     computeDefinitions
+  , computeInstructionDefinitions
+  , computeInstructionSignature
   ) where
 
 import qualified Control.Exception as X
@@ -28,7 +30,7 @@ import           Control.Monad (void)
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.RWS as RWS
 import qualified Data.BitVector.Sized as BVS
-import           Data.Foldable (forM_)
+import           Data.Foldable (forM_, find)
 import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import qualified Data.Map as Map
@@ -99,6 +101,22 @@ computeDefinitions namesWithArity defs = execSigM defs $ do
     , defOverrides = overrides
     }
 
+computeInstructionDefinitions :: [(T.Text, T.Text)]
+                              -> [AS.Instruction]
+                              -> [AS.Definition]
+                              -> Either SigException (Definitions arch)
+computeInstructionDefinitions namesAndEncodings insts defs = undefined
+
+computeInstructionSignature :: T.Text
+                            -> T.Text
+                            -> [AS.Instruction]
+                            -> [AS.Definition]
+                            -> Either SigException (Some SomeSignature)
+computeInstructionSignature instName encName insts defs = execSigM defs $
+  case find (\i -> AS.instName i == instName) insts of
+    Nothing -> error $ "couldn't find instruction " ++ show instName
+    Just i -> computeInstructionSignature' i encName
+
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt _ = Nothing
@@ -124,6 +142,14 @@ overrides = Overrides {..}
               CT.BVRepr nr -> do
                 Some <$> CCG.mkAtom (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
               _ -> error "Called IsZero on non-bitvector"
+          -- FIXME: ZeroExtend defaults to 64 for single arguments...
+          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val] -> Just $ do
+            Some valAtom <- translateExpr overrides val
+            case CCG.typeOfAtom valAtom of
+              CT.BVRepr valWidth
+                | Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` (WT.knownNat @64) -> do
+                    atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @64) valWidth (CCG.AtomExpr valAtom)))
+                    return $ Some atom
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ do
             Some valAtom <- translateExpr overrides val
             case CCG.typeOfAtom valAtom of
@@ -157,6 +183,7 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_T", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_E", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_M", Some (WT.BaseBVRepr (WT.knownNat @5)))
+--                 , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  ]
 
 builtinConsts :: [(T.Text, Some ConstVal)]
@@ -436,7 +463,9 @@ computeGlobalStructMemberType structName memberName = do
 varGlobal :: T.Text -> SigM ext f (Maybe (T.Text, Some WT.BaseTypeRepr))
 varGlobal varName = do
   mVarType <- computeGlobalVarType varName
-  return $ (varName,) <$> mVarType
+  case mVarType of
+    Nothing -> return Nothing
+    Just varType -> return $ Just (varName, varType)
 
 sliceGlobalVars :: AS.Slice -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
 sliceGlobalVars slice = case slice of
@@ -535,15 +564,6 @@ exprGlobalVars expr = case expr of
         -- Compute the signature of the callable
         void $ computeCallableSignature callable
         callableGlobals <- callableGlobalVars callable
-        -- callableGlobals <- E.catchError
-        --   (do callable <- lookupCallable name (length argEs)
-        --       callableGlobalVars callable )
-        --   $ \e -> case e of
-        --             CallableNotFound _ -> do
-        --               addUnfoundCallable name
-        --               return []
-        --             _ -> E.throwError e
-        -- callableGlobals <- callableGlobalVars callable
         return $ callableGlobals ++ argGlobals
       Nothing -> return argGlobals
   AS.ExprInSet e setElts -> do
@@ -682,3 +702,57 @@ computeCallableSignature c@Callable{..} = do
             }
       storeCallableSignature c sig
       return (Some sig)
+
+mkInstructionName :: T.Text -- ^ name of instruction
+                  -> T.Text -- ^ name of encoding
+                  -> T.Text
+mkInstructionName instName encName = instName <> "_" <> encName
+
+-- -- | Compute the list of global variables in a 'Callable' and store it in the
+-- -- state. If it has already been computed, simply return it.
+-- callableGlobalVars :: Callable -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+-- callableGlobalVars c@Callable{..} = do
+--   mGlobals <- lookupCallableGlobals c
+--   case mGlobals of
+--     Just globals -> return globals
+--     Nothing -> do
+--       globals <- concat <$> traverse stmtGlobalVars callableStmts
+--       storeCallableGlobals c globals
+--       return globals
+
+computeFieldType :: AS.InstructionField -> SigM ext f (Some WT.BaseTypeRepr)
+computeFieldType AS.InstructionField{..} = do
+  case WT.someNat instFieldOffset of
+    Nothing -> error $ "Bad field width: " ++ show instFieldName ++ ", " ++ show instFieldOffset
+    Just (Some repr) -> case (WT.knownNat @1) `WT.testLeq` repr of
+      Nothing -> error $ "Bad field width: " ++ show instFieldName ++ ", " ++ show instFieldOffset
+      Just WT.LeqProof -> return $ Some (WT.BaseBVRepr repr)
+
+computeInstructionSignature' :: AS.Instruction
+                             -> T.Text -- ^ name of encoding
+                             -> SigM ext f (Some SomeSignature)
+computeInstructionSignature' i@AS.Instruction{..} encName = do
+  let name = mkInstructionName instName encName
+
+  let mEnc = find (\e -> AS.encName e == encName) instEncodings
+  case mEnc of
+    Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
+    Just enc -> do
+      let instStmts = AS.encDecode enc ++ instExecute
+      let instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
+      globalVars <- instGlobalVars
+      labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
+        return $ Some (LabeledValue varName varTp)
+      labeledArgs <- forM (AS.encFields enc) $ \field -> do
+        Some tp <- computeFieldType field
+        let ctp = CT.baseToType tp
+        return (Some (LabeledValue (AS.instFieldName field) ctp))
+
+      Some globalReprs <- return $ Ctx.fromList labeledVals
+      Some argReprs <- return $ Ctx.fromList labeledArgs
+      let pSig = ProcedureSignature { procName = name
+                                    , procArgReprs = argReprs
+                                    , procGlobalReprs = globalReprs
+                                    }
+
+      return $ Some (SomeProcedureSignature pSig)

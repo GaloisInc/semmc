@@ -586,6 +586,9 @@ translateExpr ov expr
             | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
               Some <$> CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
             | otherwise -> X.throw InvalidZeroLengthBitvector
+      -- FIXME: Interpret all "N" as 32
+      AS.ExprVarRef (AS.QualifiedIdentifier _ "N") ->
+        Some <$> CCG.mkAtom (CCG.App (CCE.IntLit 32))
       AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
         Some e <- lookupVarRef ident
         Some <$> CCG.mkAtom e
@@ -668,7 +671,7 @@ translateSlice ov e slice = do
                          , Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr -> do
                 let bv = CCE.IntegerToBV wRepr (CCG.AtomExpr atom)
                 Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.App bv)))
-          repr -> X.throw (ExpectedBVType e repr)
+          repr -> X.throw $ InvalidSlice (WT.intValue loRepr) (WT.intValue hiRepr) repr
     _ -> X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
 
 -- | Translate the expression form of a conditional into a Crucible atom

@@ -20,6 +20,10 @@ translating a function call, we look up the signature by name and argument types
 we need to somehow allow the lookup function to "match" with a polymorphic argument
 type. 
 
+For now, I'm just going to handle these on a case-by-case basis to just get an
+instruction translated all the way, but we will have to come up with a more general
+mechanism at some point.
+
 * Functions with same name and same number of arguments, but differently typed
   arguments (Abs)
 

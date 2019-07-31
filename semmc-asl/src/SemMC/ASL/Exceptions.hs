@@ -42,6 +42,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | forall tp . UnexpectedGlobalType T.Text (CT.TypeRepr tp)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
+                          | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
 
 deriving instance Show TranslationException
 

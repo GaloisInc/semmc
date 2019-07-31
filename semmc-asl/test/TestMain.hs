@@ -37,9 +37,15 @@ import SemMC.ASL.Translation.Preprocess
 defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
+instsFilePath :: FilePath
+instsFilePath = "test/insts.parsed"
+
 functions :: [(T.Text, Int)]
-functions =  [ ("SelectInstrSet", 1)
+functions =  [ ("AddWithCarry", 3)
              ]
+
+instructions :: [(T.Text, T.Text)]
+instructions = []
 
 overrides :: Overrides arch
 overrides = Overrides {..}
@@ -64,6 +70,15 @@ main = do
         Right defs -> do
           putStrLn "----------------------------------------------"
           forM_ functions $ \(fName, fArity) -> processFunction fName fArity defs
+
+          eASLInsts <- AS.parseAslInstsFile instsFilePath
+          case eASLInsts of
+            Left err -> putStrLn $ "Error loading ASL instructions: " ++ show err
+            Right aslInsts -> do
+              putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions."
+              case computeInstructionSignature "aarch32_ADC_r_A" "aarch32_ADC_r_A1_A" aslInsts aslDefs of
+                Left err -> print err
+                Right (Some iSig) -> print iSig
 
 processFunction :: T.Text -> Int -> Definitions arch -> IO ()
 processFunction fName fArity defs =
