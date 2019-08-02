@@ -96,10 +96,12 @@ computeSignature' name = do
 -- | Compute the signature of a list of functions and procedures, given their names,
 -- from the list of ASL definitions. If the callables requested call other functions
 -- or procedures, we compute their signatures as well and include them in the result.
-computeDefinitions :: [T.Text] -> [AS.Definition] -> Either SigException (Definitions arch)
+computeDefinitions :: [T.Text]
+                   -- ^ The names should be qualified with "_n", where n is the
+                   -- number of arguments
+                   -> [AS.Definition]
+                   -> Either SigException (Definitions arch)
 computeDefinitions names defs = execSigM defs $ do
-  foo <- lookupCallable "A32ExpandImm" 1
-  traceM $ show foo
   mapM_ computeSignature' names
   st <- RWS.get
   env <- RWS.ask
@@ -120,14 +122,14 @@ computeInstructionSignature :: T.Text
                             -- ^ list of loaded instructinos
                             -> [AS.Definition]
                             -- ^ list of loaded definitions
-                            -> Either SigException (Some SomeSignature, Map.Map T.Text (Some SomeSignature, Callable))
+                            -> Either SigException (Some SomeSignature, [AS.Stmt], Map.Map T.Text (Some SomeSignature, Callable))
 computeInstructionSignature instName encName insts defs = execSigM defs $
   case find (\i -> AS.instName i == instName) insts of
     Nothing -> error $ "couldn't find instruction " ++ show instName
     Just i -> do
-      sig <- computeInstructionSignature' i encName
+      (sig, stmts) <- computeInstructionSignature' i encName
       sigMap <- callableSignatureMap <$> RWS.get
-      return (sig, sigMap)
+      return (sig, stmts, sigMap)
 
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
@@ -189,7 +191,7 @@ overrides = Overrides {..}
                 struct = MkBaseStruct structType structElts
             structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
             return $ Some structAtom
-          -- FIXME: fix definition below; currently it just returns its args
+           -- FIXME: fix definition below; currently it just returns its args
           AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ do
             Some xAtom <- translateExpr overrides x
             Some shiftAtom <- translateExpr overrides shift
@@ -229,6 +231,24 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> Just $ do
             atom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @4) 0))
             return $ Some atom
+          AS.ExprIndex
+            (AS.ExprVarRef (AS.QualifiedIdentifier _ "R"))
+            [AS.SliceSingle ix] -> Just $ do
+            zeroAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @32) 0))
+            return $ Some zeroAtom
+            -- Some ixAtom <- translateExpr overrides ix
+            -- case CCG.typeOfAtom ixAtom of
+            --   CT.IntegerRepr -> do
+            --     let testExpr = CCE.IntEq (CCG.AtomExpr ixAtom) (CCG.App (CCE.IntLit 15))
+            --         lExpr = _
+            --         rExpr = _
+            --         ite = CCE.BVIte
+            --               (CCG.App testExpr)
+            --               (WT.knownNat @32)
+            --               lExpr
+            --               rExpr
+            --     iteAtom <- CCG.mkAtom (CCG.App ite)
+            --     return $ Some iteAtom
           _ -> Nothing
 
 -- FIXME: Change this to set some global flag?
@@ -259,7 +279,10 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_E", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_M", Some (WT.BaseBVRepr (WT.knownNat @5)))
                  , ("UNDEFINED", Some WT.BaseBoolRepr)
---                 , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
+                 , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
+                 , ("_R", Some (WT.BaseArrayRepr
+                                (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
+                                (WT.BaseBVRepr (WT.knownNat @32))))
                  ]
 
 builtinConsts :: [(T.Text, Some ConstVal)]
@@ -291,7 +314,23 @@ asCallable def =
                     , callableRets = rets
                     , callableStmts = stmts
                     }
+    AS.DefGetter qName args rets stmts ->
+      Just Callable { callableName = mkGetterName qName
+                    , callableArgs = args
+                    , callableRets = rets
+                    , callableStmts = stmts
+                    }
+    AS.DefSetter qName args rhs stmts -> do
+      argNames <- sequence (argName <$> args)
+      Just $ Callable { callableName = mkSetterName qName
+                      , callableArgs = rhs : argNames
+                      , callableRets = []
+                      , callableStmts = stmts
+                      }
     _ -> Nothing
+
+  where argName (AS.SetterArg name False) = Just name
+        argName _ = Nothing
 
 data DefType = DefTypeBuiltin AS.Identifier
              | DefTypeAbstract AS.Identifier
@@ -305,6 +344,12 @@ mkCallableName c =
   let AS.QualifiedIdentifier _ name = callableName c
       numArgs = length (callableArgs c)
   in mkFunctionName name numArgs
+
+mkGetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
+mkGetterName (AS.QualifiedIdentifier q name) = AS.QualifiedIdentifier q ("GETTER_" <> name)
+
+mkSetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
+mkSetterName (AS.QualifiedIdentifier q name) = AS.QualifiedIdentifier q ("SETTER_" <> name)
 
 asDefType :: AS.Definition -> Maybe DefType
 asDefType def =
@@ -565,6 +610,7 @@ lValExprGlobalVars lValExpr = case lValExpr of
     leGlobals <- lValExprGlobalVars le
     varGlobals <- catMaybes <$> traverse varGlobal vars
     return $ leGlobals ++ varGlobals
+  -- TODO: Setter case here!
   AS.LValArrayIndex le slices -> do
     leGlobals <- lValExprGlobalVars le
     sliceGlobals <- concat <$> traverse sliceGlobalVars slices
@@ -622,7 +668,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       eGlobals <- exprGlobalVars e
       sliceGlobals <- concat <$> traverse sliceGlobalVars slices
       return $ eGlobals ++ sliceGlobals
-    -- IAMHERE: Fix handling of SCR_GEN here
+    -- TODO: Getter case here
     AS.ExprIndex e slices -> do
       eGlobals <- exprGlobalVars e
       sliceGlobals <- concat <$> traverse sliceGlobalVars slices
@@ -804,7 +850,7 @@ computeFieldType AS.InstructionField{..} = do
 
 computeInstructionSignature' :: AS.Instruction
                              -> T.Text -- ^ name of encoding
-                             -> SigM ext f (Some SomeSignature)
+                             -> SigM ext f (Some SomeSignature, [AS.Stmt])
 computeInstructionSignature' AS.Instruction{..} encName = do
   let name = mkInstructionName instName encName
 
@@ -829,7 +875,7 @@ computeInstructionSignature' AS.Instruction{..} encName = do
                                     , procGlobalReprs = globalReprs
                                     }
 
-      return $ Some (SomeProcedureSignature pSig)
+      return (Some (SomeProcedureSignature pSig), instStmts)
 
 -- | Create the full list of statements in an instruction given the main execute
 -- block and the encoding-specific operations.

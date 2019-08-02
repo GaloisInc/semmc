@@ -5,6 +5,7 @@
 
 module Main ( main ) where
 
+import qualified Control.Exception as X
 import           Control.Monad (forM_)
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
@@ -47,7 +48,7 @@ main = do
         Left err -> do
           putStrLn $ "Error computing instruction signature: " ++ show err
           exitFailure
-        Right (Some (SomeProcedureSignature iSig), sigMap) -> do
+        Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
           putStrLn $ "Instruction signature:"
           print iSig
           case computeDefinitions (Map.keys sigMap) aslDefs of
@@ -61,10 +62,23 @@ main = do
               forM_ (Map.toList sigMap) $ \(fnName, (Some sig, c)) -> do
                 putStrLn $ show fnName ++ " definition:"
                 processFunction fnName sig c defs
+              putStrLn $ "--------------------------------"
+              putStrLn "Translating instruction: "
+              processInstruction iSig instStmts defs
         _ -> error "Panic"
-  -- where arity :: (Some SomeSignature, Callable) -> Int
-  --       arity (Some (SomeFunctionSignature s), _) = Ctx.sizeInt (Ctx.size (funcArgReprs s))
-  --       arity (Some (SomeProcedureSignature s), _) = Ctx.sizeInt (Ctx.size (procArgReprs s))
+
+processInstruction :: ProcedureSignature globals init -> [AS.Stmt] -> Definitions arch -> IO ()
+processInstruction pSig stmts defs = do
+  handleAllocator <- CFH.newHandleAllocator
+  p <- procedureToCrucible defs pSig handleAllocator stmts
+  backend <- CBS.newSimpleBackend globalNonceGenerator
+  let cfg :: SimulatorConfig (CBS.SimpleBackend GlobalNonceGenerator (CBS.Flags CBS.FloatIEEE))
+        = SimulatorConfig { simOutputHandle = IO.stdout
+                          , simHandleAllocator = handleAllocator
+                          , simSym = backend
+                          }
+  symFn <- simulateProcedure cfg p
+  return ()
 
 processFunction :: T.Text -> SomeSignature ret -> Callable -> Definitions arch -> IO ()
 processFunction fnName sig c defs =
