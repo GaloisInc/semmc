@@ -231,24 +231,6 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> Just $ do
             atom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @4) 0))
             return $ Some atom
-          AS.ExprIndex
-            (AS.ExprVarRef (AS.QualifiedIdentifier _ "R"))
-            [AS.SliceSingle ix] -> Just $ do
-            zeroAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @32) 0))
-            return $ Some zeroAtom
-            -- Some ixAtom <- translateExpr overrides ix
-            -- case CCG.typeOfAtom ixAtom of
-            --   CT.IntegerRepr -> do
-            --     let testExpr = CCE.IntEq (CCG.AtomExpr ixAtom) (CCG.App (CCE.IntLit 15))
-            --         lExpr = _
-            --         rExpr = _
-            --         ite = CCE.BVIte
-            --               (CCG.App testExpr)
-            --               (WT.knownNat @32)
-            --               lExpr
-            --               rExpr
-            --     iteAtom <- CCG.mkAtom (CCG.App ite)
-            --     return $ Some iteAtom
           _ -> Nothing
 
 -- FIXME: Change this to set some global flag?
@@ -460,6 +442,17 @@ storeType tpName tp = do
   st <- RWS.get
   RWS.put $ st { userTypes = Map.insert tpName (Some tp) (userTypes st) }
 
+lookupSetter :: AS.QualifiedIdentifier -> Int -> SigM ext f (Maybe Callable)
+lookupSetter qName arity =
+  case (mkSetterName qName) of
+    AS.QualifiedIdentifier _ ident -> lookupCallable ident  arity
+
+lookupGetter :: AS.QualifiedIdentifier -> Int -> SigM ext f (Maybe Callable)
+lookupGetter qName arity =
+  case (mkGetterName qName) of
+    AS.QualifiedIdentifier _ ident -> lookupCallable ident  arity
+
+
 lookupCallable :: T.Text -> Int -> SigM ext f (Maybe Callable)
 lookupCallable name' arity = do
   env <- RWS.ask
@@ -610,9 +603,16 @@ lValExprGlobalVars lValExpr = case lValExpr of
     leGlobals <- lValExprGlobalVars le
     varGlobals <- catMaybes <$> traverse varGlobal vars
     return $ leGlobals ++ varGlobals
-  -- TODO: Setter case here!
   AS.LValArrayIndex le slices -> do
-    leGlobals <- lValExprGlobalVars le
+    leGlobals <- case le of
+      AS.LValVarRef ident -> do
+        mCallable <- lookupSetter ident (length slices + 1)
+        case mCallable of
+          Just callable -> do
+            void $ computeCallableSignature callable
+            callableGlobalVars callable
+          Nothing -> lValExprGlobalVars le
+      _ -> lValExprGlobalVars le
     sliceGlobals <- concat <$> traverse sliceGlobalVars slices
     return $ leGlobals ++ sliceGlobals
   AS.LValSliceOf le slices -> do
@@ -668,9 +668,16 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       eGlobals <- exprGlobalVars e
       sliceGlobals <- concat <$> traverse sliceGlobalVars slices
       return $ eGlobals ++ sliceGlobals
-    -- TODO: Getter case here
     AS.ExprIndex e slices -> do
-      eGlobals <- exprGlobalVars e
+      eGlobals <- case e of
+        AS.ExprVarRef qIdent -> do
+          mCallable <- lookupGetter qIdent (length slices)
+          case mCallable of
+            Just callable -> do
+              void $ computeCallableSignature callable
+              callableGlobalVars callable
+            Nothing -> exprGlobalVars e
+        _ -> exprGlobalVars e
       sliceGlobals <- concat <$> traverse sliceGlobalVars slices
       return $ eGlobals ++ sliceGlobals
     AS.ExprUnOp _ e -> exprGlobalVars e
