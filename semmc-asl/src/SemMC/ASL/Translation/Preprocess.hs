@@ -21,16 +21,18 @@
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
     computeDefinitions
-  , computeInstructionDefinitions
   , computeInstructionSignature
+  , Callable(..)
   ) where
+
+import Debug.Trace (traceM)
 
 import qualified Control.Exception as X
 import           Control.Monad (void)
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.RWS as RWS
 import qualified Data.BitVector.Sized as BVS
-import           Data.Foldable (forM_, find)
+import           Data.Foldable (find)
 import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import qualified Data.Map as Map
@@ -47,6 +49,7 @@ import qualified What4.BaseTypes as WT
 
 import qualified Language.ASL.Syntax as AS
 
+import           SemMC.ASL.Extension
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation
 import           SemMC.ASL.Crucible
@@ -80,16 +83,24 @@ computeSignature :: T.Text -> Int -> SigM ext f ()
 computeSignature name arity = do
   mCallable <- lookupCallable name arity
   case mCallable of
-    Nothing -> error "computeSignature"
+    Nothing -> E.throwError $ CallableNotFound name
     Just c -> void $ computeCallableSignature c
 
--- | Compute the signature of a list of functions and procedures, given their names
--- and arities, from the list of ASL definitions. If the callables requested call
--- other functions or procedures, we compute their signatures as well and include
--- them in the result.
-computeDefinitions :: [(T.Text, Int)] -> [AS.Definition] -> Either SigException (Definitions arch)
-computeDefinitions namesWithArity defs = execSigM defs $ do
-  forM_ namesWithArity $ \(name, arity) -> computeSignature name arity
+computeSignature' :: T.Text -> SigM ext f ()
+computeSignature' name = do
+  mCallable <- lookupCallable' name
+  case mCallable of
+    Nothing -> E.throwError $ CallableNotFound name
+    Just c -> void $ computeCallableSignature c
+
+-- | Compute the signature of a list of functions and procedures, given their names,
+-- from the list of ASL definitions. If the callables requested call other functions
+-- or procedures, we compute their signatures as well and include them in the result.
+computeDefinitions :: [T.Text] -> [AS.Definition] -> Either SigException (Definitions arch)
+computeDefinitions names defs = execSigM defs $ do
+  foo <- lookupCallable "A32ExpandImm" 1
+  traceM $ show foo
+  mapM_ computeSignature' names
   st <- RWS.get
   env <- RWS.ask
   return $ Definitions
@@ -101,25 +112,33 @@ computeDefinitions namesWithArity defs = execSigM defs $ do
     , defOverrides = overrides
     }
 
-computeInstructionDefinitions :: [(T.Text, T.Text)]
-                              -> [AS.Instruction]
-                              -> [AS.Definition]
-                              -> Either SigException (Definitions arch)
-computeInstructionDefinitions namesAndEncodings insts defs = undefined
-
 computeInstructionSignature :: T.Text
+                            -- ^ name of instruction
                             -> T.Text
+                            -- ^ name of encoding
                             -> [AS.Instruction]
+                            -- ^ list of loaded instructinos
                             -> [AS.Definition]
-                            -> Either SigException (Some SomeSignature)
+                            -- ^ list of loaded definitions
+                            -> Either SigException (Some SomeSignature, Map.Map T.Text (Some SomeSignature, Callable))
 computeInstructionSignature instName encName insts defs = execSigM defs $
   case find (\i -> AS.instName i == instName) insts of
     Nothing -> error $ "couldn't find instruction " ++ show instName
-    Just i -> computeInstructionSignature' i encName
+    Just i -> do
+      sig <- computeInstructionSignature' i encName
+      sigMap <- callableSignatureMap <$> RWS.get
+      return (sig, sigMap)
 
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
-  where overrideStmt _ = Nothing
+  where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret ())
+        overrideStmt s = case s of
+          AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ do
+            raiseException
+          -- FIXME: write pc
+          AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ do
+            return ()
+          _ -> Nothing
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s)))
         overrideExpr e = case e of
           AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
@@ -158,7 +177,63 @@ overrides = Overrides {..}
                   atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @32) valWidth (CCG.AtomExpr valAtom)))
                   return $ Some atom
               tp -> X.throw $ ExpectedBVType val tp
+          -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+          -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+          -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+          -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "RRX_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+          -- FIXME: fix definition below to actually get the "cond" local variable
+          AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @4) 0))
+            return $ Some atom
           _ -> Nothing
+
+-- FIXME: Change this to set some global flag?
+raiseException :: CCG.Generator (ASLExt arch) h s TranslationState ret ()
+raiseException = return ()
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
 builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
@@ -183,6 +258,7 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_T", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_E", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_M", Some (WT.BaseBVRepr (WT.knownNat @5)))
+                 , ("UNDEFINED", Some WT.BaseBoolRepr)
 --                 , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  ]
 
@@ -344,9 +420,11 @@ lookupCallable name' arity = do
   env <- RWS.ask
   let name = mkFunctionName name' arity
   return $ Map.lookup name (envCallables env)
-  -- case Map.lookup name (envCallables env) of
-  --   Just callable -> return callable
-  --   Nothing -> E.throwError $ CallableNotFound name
+
+lookupCallable' :: T.Text -> SigM ext f (Maybe Callable)
+lookupCallable' name = do
+  env <- RWS.ask
+  return $ Map.lookup name (envCallables env)
 
 lookupBuiltinType :: T.Text -> SigM ext f (Some UserType)
 lookupBuiltinType tpName = do
@@ -534,118 +612,126 @@ caseAlternativeGlobalVars alt = case alt of
 
 -- | Collect all global variables from a single 'AS.Expr'.
 exprGlobalVars :: AS.Expr -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
-exprGlobalVars expr = case expr of
-  AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
-    maybeToList <$> varGlobal varName
-  AS.ExprSlice e slices -> do
-    eGlobals <- exprGlobalVars e
-    sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-    return $ eGlobals ++ sliceGlobals
-  -- IAMHERE: Fix handling of SCR_GEN here
-  AS.ExprIndex e slices -> do
-    eGlobals <- exprGlobalVars e
-    sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-    return $ eGlobals ++ sliceGlobals
-  AS.ExprUnOp _ e -> exprGlobalVars e
-  AS.ExprBinOp _ e1 e2 -> do
-    e1Globals <- exprGlobalVars e1
-    e2Globals <- exprGlobalVars e2
-    return $ e1Globals ++ e2Globals
-  AS.ExprMembers e vars -> do
-    eGlobals <- exprGlobalVars e
-    varGlobals <- catMaybes <$> traverse varGlobal vars
-    return $ eGlobals ++ varGlobals
-  AS.ExprInMask e _ -> exprGlobalVars e
-  AS.ExprCall (AS.QualifiedIdentifier _ name) argEs -> do
-    argGlobals <- concat <$> traverse exprGlobalVars argEs
-    mCallable <- lookupCallable name (length argEs)
-    case mCallable of
-      Just callable -> do
-        -- Compute the signature of the callable
-        void $ computeCallableSignature callable
-        callableGlobals <- callableGlobalVars callable
-        return $ callableGlobals ++ argGlobals
-      Nothing -> return argGlobals
-  AS.ExprInSet e setElts -> do
-    eGlobals <- exprGlobalVars e
-    setEltGlobals <- concat <$> traverse setEltGlobalVars setElts
-    return $ eGlobals ++ setEltGlobals
-  AS.ExprTuple es ->
-    concat <$> traverse exprGlobalVars es
-  AS.ExprIf branches def -> do
-    branchGlobals <- forM branches $ \(testExpr, resExpr) -> do
-      testExprGlobals <- exprGlobalVars testExpr
-      resExprGlobals <- exprGlobalVars resExpr
-      return $ testExprGlobals ++ resExprGlobals
-    defaultGlobals <- exprGlobalVars def
-    return $ concat branchGlobals ++ defaultGlobals
-  -- AS.ExprMember e var -> do
-    -- eGlobals <- exprGlobalVars e
-    -- varGlobals <- maybeToList <$> varGlobal var
-    -- return $ eGlobals ++ varGlobals
-  AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-    mVarType <- computeGlobalStructMemberType structName memberName
-    case mVarType of
-      Nothing -> return []
-      Just varType -> return [(mkStructMemberName structName memberName, varType)]
-  AS.ExprMember _ _ -> return []-- error "exprGlobalVars"
-  AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
-    mVarTypes <- forM memberNames $ \memberName -> do
+exprGlobalVars expr = case overrideExpr overrides expr of
+  -- FIXME: Attach a list of global variables to every override
+  Just _ -> return []
+  Nothing -> case expr of
+    AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
+      maybeToList <$> varGlobal varName
+    AS.ExprSlice e slices -> do
+      eGlobals <- exprGlobalVars e
+      sliceGlobals <- concat <$> traverse sliceGlobalVars slices
+      return $ eGlobals ++ sliceGlobals
+    -- IAMHERE: Fix handling of SCR_GEN here
+    AS.ExprIndex e slices -> do
+      eGlobals <- exprGlobalVars e
+      sliceGlobals <- concat <$> traverse sliceGlobalVars slices
+      return $ eGlobals ++ sliceGlobals
+    AS.ExprUnOp _ e -> exprGlobalVars e
+    AS.ExprBinOp _ e1 e2 -> do
+      e1Globals <- exprGlobalVars e1
+      e2Globals <- exprGlobalVars e2
+      return $ e1Globals ++ e2Globals
+    AS.ExprMembers e vars -> do
+      eGlobals <- exprGlobalVars e
+      varGlobals <- catMaybes <$> traverse varGlobal vars
+      return $ eGlobals ++ varGlobals
+    AS.ExprInMask e _ -> exprGlobalVars e
+    AS.ExprCall (AS.QualifiedIdentifier _ name) argEs -> do
+      argGlobals <- concat <$> traverse exprGlobalVars argEs
+      mCallable <- lookupCallable name (length argEs)
+      case mCallable of
+        Just callable -> do
+          -- Compute the signature of the callable
+          void $ computeCallableSignature callable
+          callableGlobals <- callableGlobalVars callable
+          return $ callableGlobals ++ argGlobals
+        Nothing -> return argGlobals
+    AS.ExprInSet e setElts -> do
+      eGlobals <- exprGlobalVars e
+      setEltGlobals <- concat <$> traverse setEltGlobalVars setElts
+      return $ eGlobals ++ setEltGlobals
+    AS.ExprTuple es ->
+      concat <$> traverse exprGlobalVars es
+    AS.ExprIf branches def -> do
+      branchGlobals <- forM branches $ \(testExpr, resExpr) -> do
+        testExprGlobals <- exprGlobalVars testExpr
+        resExprGlobals <- exprGlobalVars resExpr
+        return $ testExprGlobals ++ resExprGlobals
+      defaultGlobals <- exprGlobalVars def
+      return $ concat branchGlobals ++ defaultGlobals
+    -- AS.ExprMember e var -> do
+      -- eGlobals <- exprGlobalVars e
+      -- varGlobals <- maybeToList <$> varGlobal var
+      -- return $ eGlobals ++ varGlobals
+    AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
       mVarType <- computeGlobalStructMemberType structName memberName
       case mVarType of
         Nothing -> return []
         Just varType -> return [(mkStructMemberName structName memberName, varType)]
-    return $ concat mVarTypes
-  AS.ExprMemberBits _ _ -> return [] --error "exprGlobalVars"
-    -- eGlobals <- exprGlobalVars e
-    -- varGlobals <- catMaybes <$> traverse varGlobal vars
-    -- return $ eGlobals ++ varGlobals
-  _ -> return []
+    AS.ExprMember _ _ -> return []-- error "exprGlobalVars"
+    AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
+      mVarTypes <- forM memberNames $ \memberName -> do
+        mVarType <- computeGlobalStructMemberType structName memberName
+        case mVarType of
+          Nothing -> return []
+          Just varType -> return [(mkStructMemberName structName memberName, varType)]
+      return $ concat mVarTypes
+    AS.ExprMemberBits _ _ -> return [] --error "exprGlobalVars"
+      -- eGlobals <- exprGlobalVars e
+      -- varGlobals <- catMaybes <$> traverse varGlobal vars
+      -- return $ eGlobals ++ varGlobals
+    _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
 stmtGlobalVars :: AS.Stmt -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
-stmtGlobalVars stmt = case stmt of
-  AS.StmtVarDeclInit _ e -> exprGlobalVars e
-  AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
-  AS.StmtCall (AS.QualifiedIdentifier _ name) argEs -> do
-    argGlobals <- concat <$> traverse exprGlobalVars argEs
-    mCallable <- lookupCallable name (length argEs)
-    case mCallable of
-      Just callable -> do
-        -- Compute the signature of the callable
-        void $ computeCallableSignature callable
-        callableGlobals <- callableGlobalVars callable
-        return $ callableGlobals ++ argGlobals
-      Nothing -> return argGlobals
-  AS.StmtReturn (Just e) -> exprGlobalVars e
-  AS.StmtAssert e -> exprGlobalVars e
-  AS.StmtIf branches mDefault -> do
-    branchGlobals <- forM branches $ \(testExpr, stmts) -> do
-      testExprGlobals <- exprGlobalVars testExpr
-      stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-      return $ testExprGlobals ++ stmtGlobals
-    defaultGlobals <- case mDefault of
-      Nothing -> return []
-      Just stmts -> concat <$> traverse stmtGlobalVars stmts
-    return $ concat branchGlobals ++ defaultGlobals
-  AS.StmtCase e alts -> do
-    eGlobals <- exprGlobalVars e
-    altGlobals <- concat <$> traverse caseAlternativeGlobalVars alts
-    return $ eGlobals ++ altGlobals
-  AS.StmtFor _ (initialize, term) stmts -> do
-    initGlobals <- exprGlobalVars initialize
-    termGlobals <- exprGlobalVars term
-    stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-    return $ initGlobals ++ termGlobals ++ stmtGlobals
-  AS.StmtWhile term stmts -> do
-    termGlobals <- exprGlobalVars term
-    stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-    return $ termGlobals ++ stmtGlobals
-  AS.StmtRepeat stmts term -> do
-    termGlobals <- exprGlobalVars term
-    stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-    return $ termGlobals ++ stmtGlobals
-  _ -> return []
+stmtGlobalVars stmt =
+  -- FIXME: If the stmt has an override, then we should provide a custom set of
+  -- globals as well.
+  case overrideStmt overrides stmt of
+    Just _ -> return []
+    Nothing -> case stmt of
+      AS.StmtVarDeclInit _ e -> exprGlobalVars e
+      AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
+      AS.StmtCall (AS.QualifiedIdentifier _ name) argEs -> do
+        argGlobals <- concat <$> traverse exprGlobalVars argEs
+        mCallable <- lookupCallable name (length argEs)
+        case mCallable of
+          Just callable -> do
+            -- Compute the signature of the callable
+            void $ computeCallableSignature callable
+            callableGlobals <- callableGlobalVars callable
+            return $ callableGlobals ++ argGlobals
+          Nothing -> return argGlobals
+      AS.StmtReturn (Just e) -> exprGlobalVars e
+      AS.StmtAssert e -> exprGlobalVars e
+      AS.StmtIf branches mDefault -> do
+        branchGlobals <- forM branches $ \(testExpr, stmts) -> do
+          testExprGlobals <- exprGlobalVars testExpr
+          stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+          return $ testExprGlobals ++ stmtGlobals
+        defaultGlobals <- case mDefault of
+          Nothing -> return []
+          Just stmts -> concat <$> traverse stmtGlobalVars stmts
+        return $ concat branchGlobals ++ defaultGlobals
+      AS.StmtCase e alts -> do
+        eGlobals <- exprGlobalVars e
+        altGlobals <- concat <$> traverse caseAlternativeGlobalVars alts
+        return $ eGlobals ++ altGlobals
+      AS.StmtFor _ (initialize, term) stmts -> do
+        initGlobals <- exprGlobalVars initialize
+        termGlobals <- exprGlobalVars term
+        stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+        return $ initGlobals ++ termGlobals ++ stmtGlobals
+      AS.StmtWhile term stmts -> do
+        termGlobals <- exprGlobalVars term
+        stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+        return $ termGlobals ++ stmtGlobals
+      AS.StmtRepeat stmts term -> do
+        termGlobals <- exprGlobalVars term
+        stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+        return $ termGlobals ++ stmtGlobals
+      _ -> return []
 
 -- | Compute the list of global variables in a 'Callable' and store it in the
 -- state. If it has already been computed, simply return it.
@@ -708,18 +794,6 @@ mkInstructionName :: T.Text -- ^ name of instruction
                   -> T.Text
 mkInstructionName instName encName = instName <> "_" <> encName
 
--- -- | Compute the list of global variables in a 'Callable' and store it in the
--- -- state. If it has already been computed, simply return it.
--- callableGlobalVars :: Callable -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
--- callableGlobalVars c@Callable{..} = do
---   mGlobals <- lookupCallableGlobals c
---   case mGlobals of
---     Just globals -> return globals
---     Nothing -> do
---       globals <- concat <$> traverse stmtGlobalVars callableStmts
---       storeCallableGlobals c globals
---       return globals
-
 computeFieldType :: AS.InstructionField -> SigM ext f (Some WT.BaseTypeRepr)
 computeFieldType AS.InstructionField{..} = do
   case WT.someNat instFieldOffset of
@@ -731,14 +805,14 @@ computeFieldType AS.InstructionField{..} = do
 computeInstructionSignature' :: AS.Instruction
                              -> T.Text -- ^ name of encoding
                              -> SigM ext f (Some SomeSignature)
-computeInstructionSignature' i@AS.Instruction{..} encName = do
+computeInstructionSignature' AS.Instruction{..} encName = do
   let name = mkInstructionName instName encName
 
   let mEnc = find (\e -> AS.encName e == encName) instEncodings
   case mEnc of
     Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
     Just enc -> do
-      let instStmts = AS.encDecode enc ++ instExecute
+      let instStmts = createInstStmts (AS.encDecode enc) instExecute
       let instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
       globalVars <- instGlobalVars
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
@@ -756,3 +830,21 @@ computeInstructionSignature' i@AS.Instruction{..} encName = do
                                     }
 
       return $ Some (SomeProcedureSignature pSig)
+
+-- | Create the full list of statements in an instruction given the main execute
+-- block and the encoding-specific operations.
+createInstStmts :: [AS.Stmt]
+                -- ^ Encoding-specific operations
+                -> [AS.Stmt]
+                -- ^ Execute block
+                -> [AS.Stmt]
+createInstStmts encodingSpecificOperations stmts = case stmts of
+  [AS.StmtIf
+    [ ( (AS.ExprCall (AS.QualifiedIdentifier archQual "ConditionPassed") [])
+      , (AS.StmtCall (AS.QualifiedIdentifier _ "EncodingSpecificOperations") [] : rst) ) ]
+    Nothing] ->
+    [AS.StmtIf
+      [ ( (AS.ExprCall (AS.QualifiedIdentifier archQual "ConditionPassed") [])
+        , encodingSpecificOperations ++ rst ) ]
+      Nothing]
+  _ -> error "createInstStmts"

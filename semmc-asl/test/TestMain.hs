@@ -47,11 +47,6 @@ functions =  [ ("AddWithCarry", 3)
 instructions :: [(T.Text, T.Text)]
 instructions = []
 
-overrides :: Overrides arch
-overrides = Overrides {..}
-  where overrideStmt stmt = Nothing
-        overrideExpr expr = Nothing
-
 main :: IO ()
 main = do
   putStrLn "----------------------------------------------"
@@ -69,7 +64,7 @@ main = do
           exitFailure
         Right defs -> do
           putStrLn "----------------------------------------------"
-          forM_ functions $ \(fName, fArity) -> processFunction fName fArity defs
+          -- forM_ functions $ \(fName, fArity) -> processFunction fName fArity defs
 
           eASLInsts <- AS.parseAslInstsFile instsFilePath
           case eASLInsts of
@@ -78,7 +73,10 @@ main = do
               putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions."
               case computeInstructionSignature "aarch32_ADC_r_A" "aarch32_ADC_r_A1_A" aslInsts aslDefs of
                 Left err -> print err
-                Right (Some iSig) -> print iSig
+                Right (Some (SomeProcedureSignature iSig)) -> do
+                  print iSig
+                  -- iProc <- procedureToCrucible aslDefs iSig
+                _ -> error "Panic"
 
 processFunction :: T.Text -> Int -> Definitions arch -> IO ()
 processFunction fName fArity defs =

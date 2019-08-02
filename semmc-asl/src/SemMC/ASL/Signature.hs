@@ -23,6 +23,7 @@ module SemMC.ASL.Signature (
   , procSigRepr
   , SomeSignature(..)
   , someSigRepr
+  , someSigName
   , SomeDFS(..)
   , LabeledValue(..)
   , projectValue
@@ -149,6 +150,10 @@ data SomeSignature ret where
 someSigRepr :: SomeSignature ret -> CT.TypeRepr ret
 someSigRepr (SomeFunctionSignature fSig) = CT.baseToType (funcSigRepr fSig)
 someSigRepr (SomeProcedureSignature pSig) = procSigRepr pSig
+
+someSigName :: SomeSignature ret -> T.Text
+someSigName (SomeFunctionSignature fSig) = funcName fSig
+someSigName (SomeProcedureSignature pSig) = procName pSig
 
 data SomeDFS where
   SomeDFS :: DependentFunctionSignature globals init tp -> SomeDFS

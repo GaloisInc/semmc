@@ -38,7 +38,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | ExpectedProcedureSignature T.Text
                           | forall tps . InvalidArgumentTypes T.Text (Ctx.Assignment CT.TypeRepr tps)
                           | forall tp1 tp2 . UnexpectedProcedureReturn (CT.TypeRepr tp1) (CT.TypeRepr tp2)
-                          | MissingGlobal T.Text
+                          | MissingGlobal T.Text T.Text
                           | forall tp . UnexpectedGlobalType T.Text (CT.TypeRepr tp)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer

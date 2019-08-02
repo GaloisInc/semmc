@@ -27,20 +27,6 @@
     ArchVersion
     (list ARMv8p0 ARMv8p1 ARMv8p2))
   (DefCallable
-    (QualifiedIdentifier Any BenFunction)
-    (list )
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any integer)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprLitNat 1)))))))
-  (DefCallable
     (QualifiedIdentifier Any HasArchVersion)
     (list
       (SymDecl
@@ -9670,10 +9656,9 @@
     (Just
       (StmtBlock
         (list
-          (StmtVarsDecl
-            (list)
-            (TypeFun
-              Hint_Branch
+          (StmtCall
+            (QualifiedIdentifier Any Hint_Branch)
+            (list
               (ExprVarRef
                 (QualifiedIdentifier Any branch_type))))
           (StmtIf
@@ -10496,10 +10481,9 @@
                     (QualifiedIdentifier Any iesb_req))
                   (ExprVarRef
                     (QualifiedIdentifier Any TRUE)))
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    TakeUnmaskedPhysicalSErrorInterrupts
+                (StmtCall
+                  (QualifiedIdentifier Any TakeUnmaskedPhysicalSErrorInterrupts)
+                  (list
                     (ExprVarRef
                       (QualifiedIdentifier Any iesb_req))))))
             (list)
@@ -47097,10 +47081,9 @@
     (Just
       (StmtBlock
         (list
-          (StmtVarsDecl
-            (list)
-            (TypeFun
-              CTI_SignalEvent
+          (StmtCall
+            (QualifiedIdentifier Any CTI_SignalEvent)
+            (list
               (ExprVarRef
                 (QualifiedIdentifier Any CrossTriggerIn_CrossHalt))))
           (StmtIf
@@ -49225,10 +49208,9 @@
                     (QualifiedIdentifier Any reason))
                   (ExprVarRef
                     (QualifiedIdentifier Any DebugHalt_Breakpoint)))
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    Halt
+                (StmtCall
+                  (QualifiedIdentifier Any Halt)
+                  (list
                     (ExprVarRef
                       (QualifiedIdentifier Any reason))))))
             (list
@@ -50007,10 +49989,9 @@
                     (QualifiedIdentifier Any reason))
                   (ExprVarRef
                     (QualifiedIdentifier Any DebugHalt_Watchpoint)))
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    Halt
+                (StmtCall
+                  (QualifiedIdentifier Any Halt)
+                  (list
                     (ExprVarRef
                       (QualifiedIdentifier Any reason))))))
             (list
@@ -53283,10 +53264,9 @@
                     (QualifiedIdentifier Any reason))
                   (ExprVarRef
                     (QualifiedIdentifier Any DebugHalt_Watchpoint)))
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    Halt
+                (StmtCall
+                  (QualifiedIdentifier Any Halt)
+                  (list
                     (ExprVarRef
                       (QualifiedIdentifier Any reason))))))
             (list
@@ -53767,10 +53747,9 @@
                     (QualifiedIdentifier Any reason))
                   (ExprVarRef
                     (QualifiedIdentifier Any DebugHalt_Breakpoint)))
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    Halt
+                (StmtCall
+                  (QualifiedIdentifier Any Halt)
+                  (list
                     (ExprVarRef
                       (QualifiedIdentifier Any reason))))))
             (list
@@ -60238,10 +60217,9 @@
               (ExprLitBin '1'))
             (StmtBlock
               (list
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    SelectInstrSet
+                (StmtCall
+                  (QualifiedIdentifier Any SelectInstrSet)
+                  (list
                     (ExprVarRef
                       (QualifiedIdentifier Any InstrSet_T32))))
                 (StmtAssign
@@ -60256,10 +60234,9 @@
             (Just
               (StmtBlock
                 (list
-                  (StmtVarsDecl
-                    (list)
-                    (TypeFun
-                      SelectInstrSet
+                  (StmtCall
+                    (QualifiedIdentifier Any SelectInstrSet)
+                    (list
                       (ExprVarRef
                         (QualifiedIdentifier Any InstrSet_A32))))
                   (StmtIf
@@ -60320,20 +60297,18 @@
                 (QualifiedIdentifier Any InstrSet_A32)))
             (StmtBlock
               (list
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    BXWritePC
+                (StmtCall
+                  (QualifiedIdentifier Any BXWritePC)
+                  (list
                     (ExprVarRef
                       (QualifiedIdentifier Any address))))))
             (list)
             (Just
               (StmtBlock
                 (list
-                  (StmtVarsDecl
-                    (list)
-                    (TypeFun
-                      BranchWritePC
+                  (StmtCall
+                    (QualifiedIdentifier Any BranchWritePC)
+                    (list
                       (ExprVarRef
                         (QualifiedIdentifier Any address))))))))))))
   (DefGetter
@@ -62172,10 +62147,9 @@
     (Just
       (StmtBlock
         (list
-          (StmtVarsDecl
-            (list)
-            (TypeFun
-              BXWritePC
+          (StmtCall
+            (QualifiedIdentifier Any BXWritePC)
+            (list
               (ExprVarRef
                 (QualifiedIdentifier Any address))))))))
   (DefCallable
@@ -66852,16 +66826,14 @@
     (Just
       (StmtBlock
         (list
-          (StmtVarsDecl
-            (list)
-            (TypeFun
-              SetPSTATEFromPSR
+          (StmtCall
+            (QualifiedIdentifier Any SetPSTATEFromPSR)
+            (list
               (ExprVarRef
                 (QualifiedIdentifier Any spsr))))
-          (StmtVarsDecl
-            (list)
-            (TypeFun
-              ClearExclusiveLocal
+          (StmtCall
+            (QualifiedIdentifier Any ClearExclusiveLocal)
+            (list
               (ExprCall
                 (QualifiedIdentifier Any ProcessorID)
                 (list))))
@@ -68990,10 +68962,9 @@
               (QualifiedIdentifier Any passed))
             (StmtBlock
               (list
-                (StmtVarsDecl
-                  (list)
-                  (TypeFun
-                    ClearExclusiveLocal
+                (StmtCall
+                  (QualifiedIdentifier Any ClearExclusiveLocal)
+                  (list
                     (ExprCall
                       (QualifiedIdentifier Any ProcessorID)
                       (list))))

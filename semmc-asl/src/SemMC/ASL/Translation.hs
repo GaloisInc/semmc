@@ -266,7 +266,7 @@ translateStatement ov sig stmt
             | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
                 CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
             | otherwise -> X.throw (UnexpectedGlobalType undefinedVarName (CCG.globalType gv))
-          _ -> X.throw (MissingGlobal undefinedVarName)
+          _ -> X.throw (MissingGlobal (someSigName sig) undefinedVarName)
       AS.StmtUnpredictable -> do
         gs <- MS.gets tsGlobals
         case Map.lookup unpredictableVarName gs of
@@ -274,7 +274,7 @@ translateStatement ov sig stmt
             | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
                 CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
             | otherwise -> X.throw (UnexpectedGlobalType unpredictableVarName (CCG.globalType gv))
-          _ -> X.throw (MissingGlobal unpredictableVarName)
+          _ -> X.throw (MissingGlobal (someSigName sig) unpredictableVarName)
       -- NOTE: Ensure that this is safe.  Most SEE statements seem to not be
       -- particularly actionable, but many may need to be manually overridden.
       AS.StmtSeeExpr {} -> return ()
@@ -401,13 +401,14 @@ translateAssignment :: Overrides arch
                     -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
 translateAssignment ov lval e = do
   Some atom <- translateExpr ov e
-  translateAssignment' ov lval atom
+  translateAssignment' ov lval atom (Just e)
 
 translateAssignment' :: forall arch s tp h ret . Overrides arch
                      -> AS.LValExpr
                      -> CCG.Atom s tp
+                     -> Maybe (AS.Expr)
                      -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
-translateAssignment' ov lval atom = do
+translateAssignment' ov lval atom mE = do
   case lval of
     AS.LValIgnore -> return () -- Totally ignore - this probably shouldn't happen (except inside of a tuple)
     AS.LValVarRef (AS.QualifiedIdentifier _ ident) -> do
@@ -438,7 +439,7 @@ translateAssignment' ov lval atom = do
     AS.LValTuple lvals ->
       case CCG.typeOfAtom atom of
         CT.SymbolicStructRepr tps -> void $ Ctx.traverseAndCollect (assignTupleElt lvals tps atom) tps
-        tp -> X.throw $ ExpectedStructType Nothing tp
+        tp -> X.throw $ ExpectedStructType mE tp
     _ -> error $ "Unsupported LVal: " ++ show lval
     where assignTupleElt :: [AS.LValExpr]
                          -> Ctx.Assignment WT.BaseTypeRepr ctx
@@ -449,7 +450,7 @@ translateAssignment' ov lval atom = do
           assignTupleElt lvals tps struct ix _ = do
             let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
             getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
-            translateAssignment' ov (lvals !! Ctx.indexVal ix) getAtom
+            translateAssignment' ov (lvals !! Ctx.indexVal ix) getAtom Nothing
 
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
@@ -661,13 +662,13 @@ translateSlice ov e slice = do
   case () of
     _ | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
       , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
-      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr
-      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` hiRepr -> do
+      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr -> do
         case CCG.typeOfAtom atom of
           CT.BVRepr wRepr | Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr ->
                 Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom)))
           CT.IntegerRepr | wRepr <- hiRepr `WT.addNat` (WT.knownNat @1)
-                         , WT.LeqProof <- WT.leqAddPos hiRepr (WT.knownNat @1)
+                         , WT.LeqProof <- WT.leqAdd (WT.leqRefl (WT.knownNat @1)) hiRepr
+                         , Refl <- WT.plusComm (WT.knownNat @1) hiRepr
                          , Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr -> do
                 let bv = CCE.IntegerToBV wRepr (CCG.AtomExpr atom)
                 Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.App bv)))
