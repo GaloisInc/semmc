@@ -56,7 +56,6 @@ type family BaseLitType (tp :: WT.BaseType) :: * where
   BaseLitType WT.BaseIntegerType = Integer
   BaseLitType WT.BaseBoolType = Bool
   BaseLitType (WT.BaseBVType w) = BVS.BitVector w
-
 data ConstVal tp =
   ConstVal (WT.BaseTypeRepr tp) (BaseLitType tp)
 
@@ -611,6 +610,7 @@ translateExpr ov expr
         preds <- mapM (translateSetElementTest ov expr atom) elts
         Some <$> CCG.mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
       AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
+      
       AS.ExprCall (AS.QualifiedIdentifier _ ident') args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?

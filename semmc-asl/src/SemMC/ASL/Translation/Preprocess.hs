@@ -22,6 +22,7 @@ module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
     computeDefinitions
   , computeInstructionSignature
+  , prepASL
   , Callable(..)
   ) where
 
@@ -36,6 +37,7 @@ import           Data.Foldable (find)
 import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
@@ -296,23 +298,7 @@ asCallable def =
                     , callableRets = rets
                     , callableStmts = stmts
                     }
-    AS.DefGetter qName args rets stmts ->
-      Just Callable { callableName = mkGetterName qName
-                    , callableArgs = args
-                    , callableRets = rets
-                    , callableStmts = stmts
-                    }
-    AS.DefSetter qName args rhs stmts -> do
-      argNames <- sequence (argName <$> args)
-      Just $ Callable { callableName = mkSetterName qName
-                      , callableArgs = rhs : argNames
-                      , callableRets = []
-                      , callableStmts = stmts
-                      }
     _ -> Nothing
-
-  where argName (AS.SetterArg name False) = Just name
-        argName _ = Nothing
 
 data DefType = DefTypeBuiltin AS.Identifier
              | DefTypeAbstract AS.Identifier
@@ -323,15 +309,15 @@ data DefType = DefTypeBuiltin AS.Identifier
 
 mkCallableName :: Callable -> T.Text
 mkCallableName c =
-  let AS.QualifiedIdentifier _ name = callableName c
+  let AS.QualifiedIdentifier _ name =  callableName c
       numArgs = length (callableArgs c)
   in mkFunctionName name numArgs
 
-mkGetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
-mkGetterName (AS.QualifiedIdentifier q name) = AS.QualifiedIdentifier q ("GETTER_" <> name)
+mkGetterName :: T.Text -> T.Text
+mkGetterName name = "GETTER_" <> name
 
-mkSetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
-mkSetterName (AS.QualifiedIdentifier q name) = AS.QualifiedIdentifier q ("SETTER_" <> name)
+mkSetterName :: T.Text -> T.Text
+mkSetterName name = "SETTER_" <> name
 
 asDefType :: AS.Definition -> Maybe DefType
 asDefType def =
@@ -353,6 +339,159 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv
            , RWS.MonadState SigState
            , E.MonadError SigException
            )
+
+mkSyntaxOverrides :: [AS.Definition] -> SyntaxOverrides
+mkSyntaxOverrides defs =
+  let getters = Set.fromList $ catMaybes $ getterName <$> defs
+      setters = Set.fromList $ catMaybes $ setterName <$> defs
+
+      getterName d = case d of
+        AS.DefGetter (AS.QualifiedIdentifier _ name) args _ _ ->
+          Just (mkFunctionName (mkGetterName name) (length args))
+        _ -> Nothing
+
+      setterName d = case d of
+        AS.DefSetter (AS.QualifiedIdentifier _ name) args _ _ ->
+           Just (mkFunctionName (mkSetterName name) (length args + 1))
+        _ -> Nothing
+
+      -- This is not complete, since in general we might encounter args followed by an actual slice.
+      -- It may be necessary to guess what prefix of the slices corresponds to getter/setter
+      -- arguments and what is an actual slice of the result.
+      getSliceExpr slice = case slice of
+        AS.SliceSingle e -> e
+        _ -> error "Unexpected slice argument."
+      
+      stmtOverrides stmt = case stmt of
+        AS.StmtAssign (AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier q ident)) slices) rhs ->
+          if Set.member (mkFunctionName (mkSetterName ident) (length slices + 1)) setters then
+            AS.StmtCall (AS.QualifiedIdentifier q (mkSetterName ident)) (rhs : map getSliceExpr slices)
+          else stmt
+        AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier q ident)) rhs ->
+          if Set.member (mkFunctionName (mkSetterName ident) 1) setters then
+            AS.StmtCall (AS.QualifiedIdentifier q (mkSetterName ident)) [rhs]
+          else stmt
+        _ -> stmt
+        
+      exprOverrides expr = case expr of
+        AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) slices ->
+          if Set.member (mkFunctionName (mkGetterName ident) (length slices)) getters then
+            AS.ExprCall (AS.QualifiedIdentifier q (mkGetterName ident)) (map getSliceExpr slices)
+          else expr
+        AS.ExprVarRef (AS.QualifiedIdentifier q ident) ->
+          if Set.member (mkFunctionName (mkGetterName ident) 0) getters then
+            AS.ExprCall (AS.QualifiedIdentifier q (mkGetterName ident)) []
+          else expr
+        _ -> expr
+
+  in SyntaxOverrides stmtOverrides exprOverrides
+  
+
+applyExprSyntaxOverride :: SyntaxOverrides -> AS.Expr -> AS.Expr
+applyExprSyntaxOverride ovrs expr =
+  let
+    f = applyExprSyntaxOverride ovrs
+    mapSlice slice = case slice of
+      AS.SliceSingle e -> AS.SliceSingle (f e)
+      AS.SliceOffset e e' -> AS.SliceOffset (f e) (f e')
+      AS.SliceRange e e' -> AS.SliceRange (f e) (f e')
+
+    mapSetElement selem = case selem of
+      AS.SetEltSingle e -> AS.SetEltSingle (f e)
+      AS.SetEltRange e e' -> AS.SetEltRange (f e) (f e')
+
+    expr' = exprOverrides ovrs expr
+  in case expr' of
+    AS.ExprSlice e slices -> AS.ExprSlice (f e) (mapSlice <$> slices)
+    AS.ExprIndex e slices -> AS.ExprIndex (f e) (mapSlice <$> slices)
+    AS.ExprUnOp o e -> AS.ExprUnOp o (f e)
+    AS.ExprBinOp o e e' -> AS.ExprBinOp o (f e) (f e')
+    AS.ExprMembers e is -> AS.ExprMembers (f e) is
+    AS.ExprInMask e m -> AS.ExprInMask (f e) m
+    AS.ExprMemberBits e is -> AS.ExprMemberBits (f e) is
+    AS.ExprCall i es -> AS.ExprCall i (f <$> es)
+    AS.ExprInSet e se -> AS.ExprInSet (f e) se
+    AS.ExprTuple es -> AS.ExprTuple (f <$> es)
+    AS.ExprIf pes e -> AS.ExprIf ((\(x,y) -> (f x, f y)) <$> pes) (f e)
+    AS.ExprMember e i -> AS.ExprMember (f e) i
+    _ -> expr'
+
+applyStmtSyntaxOverride :: SyntaxOverrides -> AS.Stmt -> AS.Stmt
+applyStmtSyntaxOverride ovrs stmt =
+  let
+    g = applyStmtSyntaxOverride ovrs
+    f = applyExprSyntaxOverride ovrs
+    mapCases cases = case cases of
+      AS.CaseWhen pat me stmts -> AS.CaseWhen pat (f <$> me) (g <$> stmts)
+      AS.CaseOtherwise stmts -> AS.CaseOtherwise (g <$> stmts)
+    mapCatches catches = case catches of
+      AS.CatchWhen e stmts -> AS.CatchWhen (f e) (g <$> stmts)
+      AS.CatchOtherwise stmts -> AS.CatchOtherwise (g <$> stmts)
+    stmt' = stmtOverrides ovrs stmt
+  in case stmt' of
+    AS.StmtVarDeclInit decl e -> AS.StmtVarDeclInit decl (f e)
+    AS.StmtConstDecl decl e -> AS.StmtConstDecl decl (f e)
+    AS.StmtAssign lv e -> AS.StmtAssign lv (f e)
+    AS.StmtCall qi es -> AS.StmtCall qi (f <$> es)
+    AS.StmtReturn me -> AS.StmtReturn (f <$> me)
+    AS.StmtAssert e -> AS.StmtAssert (f e)
+    AS.StmtIf tests body -> AS.StmtIf ((\(e, stmts) -> (f e, g <$> stmts)) <$> tests) ((fmap g) <$> body)
+    AS.StmtCase e alts -> AS.StmtCase (f e) (mapCases <$> alts)
+    AS.StmtFor ident (e,e') stmts -> AS.StmtFor ident (f e, f e') (g <$> stmts)
+    AS.StmtWhile e stmts -> AS.StmtWhile (f e) (g <$> stmts)
+    AS.StmtRepeat stmts e -> AS.StmtRepeat (g <$> stmts) (f e)
+    AS.StmtSeeExpr e -> AS.StmtSeeExpr (f e)
+    AS.StmtTry stmts ident alts -> AS.StmtTry (g <$> stmts) ident (mapCatches <$> alts)
+    _ -> stmt'
+    
+
+applySyntaxOverridesDefs :: SyntaxOverrides -> [AS.Definition] -> [AS.Definition]
+applySyntaxOverridesDefs ovrs defs =
+  let
+    g = applyStmtSyntaxOverride ovrs
+    f = applyExprSyntaxOverride ovrs
+
+
+    -- TODO: For sanity we delete setter definitions which require
+    -- pass-by-reference since we don't have a sane semantics for this
+    
+    argName (AS.SetterArg name False) = Just name
+    argName _ = Nothing
+    
+    mapDefs d = case d of
+      AS.DefGetter (AS.QualifiedIdentifier q name) args rets stmts ->
+        Just AS.DefCallable { callableName = AS.QualifiedIdentifier q (mkGetterName name)
+                       , callableArgs = args
+                       , callableRets = rets
+                       , callableStmts = g <$> stmts
+                       }
+      AS.DefSetter (AS.QualifiedIdentifier q name) args rhs stmts -> do
+        argNames <- sequence (argName <$> args)
+        Just $ AS.DefCallable { callableName = AS.QualifiedIdentifier q (mkSetterName name)
+                       , callableArgs = rhs : argNames
+                       , callableRets = []
+                       , callableStmts = g <$> stmts
+                       }
+      AS.DefConst i t e -> Just $ AS.DefConst i t (f e)
+      _ -> Just d
+
+  in catMaybes $ mapDefs <$> defs
+
+applySyntaxOverridesInstrs :: SyntaxOverrides -> [AS.Instruction] -> [AS.Instruction]
+applySyntaxOverridesInstrs ovrs instrs =
+  let
+    g = applyStmtSyntaxOverride ovrs
+    
+    mapInstr (AS.Instruction instName instEncodings instPostDecode instExecute) =
+      AS.Instruction instName instEncodings (g <$> instPostDecode) (g <$> instExecute)
+
+  in mapInstr <$> instrs
+
+prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
+prepASL (instrs, defs) =
+  let ovrs = mkSyntaxOverrides defs
+  in (applySyntaxOverridesInstrs ovrs instrs, applySyntaxOverridesDefs ovrs defs)
+      
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
 -- signatures.
@@ -407,6 +546,14 @@ execSigM defs action =
     Right a -> Right a
   where initState = SigState Map.empty Map.empty Map.empty
 
+
+-- | Syntactic-level expansions that should happen aggressively before
+-- any interpretation.
+data SyntaxOverrides = SyntaxOverrides { stmtOverrides :: AS.Stmt -> AS.Stmt
+                                       , exprOverrides :: AS.Expr -> AS.Expr }
+
+
+
 data SigEnv ext s = SigEnv { envCallables :: Map.Map T.Text Callable
                            -- , globalVars :: Map.Map T.Text DefVariable
                            , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
@@ -441,17 +588,6 @@ storeType :: T.Text -> UserType tp -> SigM ext f ()
 storeType tpName tp = do
   st <- RWS.get
   RWS.put $ st { userTypes = Map.insert tpName (Some tp) (userTypes st) }
-
-lookupSetter :: AS.QualifiedIdentifier -> Int -> SigM ext f (Maybe Callable)
-lookupSetter qName arity =
-  case (mkSetterName qName) of
-    AS.QualifiedIdentifier _ ident -> lookupCallable ident  arity
-
-lookupGetter :: AS.QualifiedIdentifier -> Int -> SigM ext f (Maybe Callable)
-lookupGetter qName arity =
-  case (mkGetterName qName) of
-    AS.QualifiedIdentifier _ ident -> lookupCallable ident  arity
-
 
 lookupCallable :: T.Text -> Int -> SigM ext f (Maybe Callable)
 lookupCallable name' arity = do
@@ -508,6 +644,7 @@ storeCallableSignature c sig = do
   st <- RWS.get
   let name = mkCallableName c
   RWS.put $ st { callableSignatureMap = Map.insert name (Some sig, c) (callableSignatureMap st) }
+
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -604,15 +741,7 @@ lValExprGlobalVars lValExpr = case lValExpr of
     varGlobals <- catMaybes <$> traverse varGlobal vars
     return $ leGlobals ++ varGlobals
   AS.LValArrayIndex le slices -> do
-    leGlobals <- case le of
-      AS.LValVarRef ident -> do
-        mCallable <- lookupSetter ident (length slices + 1)
-        case mCallable of
-          Just callable -> do
-            void $ computeCallableSignature callable
-            callableGlobalVars callable
-          Nothing -> lValExprGlobalVars le
-      _ -> lValExprGlobalVars le
+    leGlobals <- lValExprGlobalVars le
     sliceGlobals <- concat <$> traverse sliceGlobalVars slices
     return $ leGlobals ++ sliceGlobals
   AS.LValSliceOf le slices -> do
@@ -669,15 +798,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       sliceGlobals <- concat <$> traverse sliceGlobalVars slices
       return $ eGlobals ++ sliceGlobals
     AS.ExprIndex e slices -> do
-      eGlobals <- case e of
-        AS.ExprVarRef qIdent -> do
-          mCallable <- lookupGetter qIdent (length slices)
-          case mCallable of
-            Just callable -> do
-              void $ computeCallableSignature callable
-              callableGlobalVars callable
-            Nothing -> exprGlobalVars e
-        _ -> exprGlobalVars e
+      eGlobals <- exprGlobalVars e
       sliceGlobals <- concat <$> traverse sliceGlobalVars slices
       return $ eGlobals ++ sliceGlobals
     AS.ExprUnOp _ e -> exprGlobalVars e

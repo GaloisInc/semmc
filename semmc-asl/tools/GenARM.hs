@@ -26,15 +26,15 @@ import SemMC.ASL.Translation.Preprocess
 import SemMC.ASL.Signature
 
 instsFilePath :: FilePath
-instsFilePath = "data/insts.parsed"
+instsFilePath = "test/insts.parsed"
 
 defsFilePath :: FilePath
-defsFilePath = "data/defs.parsed"
+defsFilePath = "test/defs.parsed"
 
 main :: IO ()
 main = do
+  eAslDefs <- AP.parseAslDefsFile defsFilePath
   eAslInsts <- AP.parseAslInstsFile instsFilePath
-  eAslDefs  <- AP.parseAslDefsFile defsFilePath
   case (eAslInsts, eAslDefs) of
     (Left err, _) -> do
       putStrLn $ "Error loading ASL instructions: " ++ show err
@@ -42,7 +42,8 @@ main = do
     (_, Left err) -> do
       putStrLn $ "Error loading ASL definitions: " ++ show err
       exitFailure
-    (Right aslInsts, Right aslDefs) -> do
+    (Right aslInsts', Right aslDefs') -> do
+      (aslInsts, aslDefs) <- return $ prepASL (aslInsts', aslDefs')
       putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
       case computeInstructionSignature "aarch32_ADC_i_A" "aarch32_ADC_i_A1_A" aslInsts aslDefs of
         Left err -> do
