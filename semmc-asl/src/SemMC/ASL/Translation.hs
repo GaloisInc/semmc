@@ -656,6 +656,13 @@ translateExpr ov expr
         let ident = mkStructMemberName structName memberName
         Some e <- lookupVarRef ident
         Some <$> CCG.mkAtom e
+
+      -- FIXME: We might fetch a struct indirectly, so we need to figure out
+      -- how to encode that
+      AS.ExprMember (AS.ExprCall ident args) memberName -> do
+        call <- translateExpr ov (AS.ExprCall ident args)
+        error (show expr)
+
       AS.ExprSlice e [slice] -> translateSlice ov e slice
       AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice]  -> do
         Some e <- lookupVarRef arrName

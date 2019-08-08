@@ -32,6 +32,7 @@ import qualified Control.Exception as X
 import           Control.Monad (void)
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.RWS as RWS
+import qualified Control.Monad.State.Class as MS
 import qualified Data.BitVector.Sized as BVS
 import           Data.Foldable (find)
 import           Data.List (nub)
@@ -266,6 +267,8 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_T", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_E", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_M", Some (WT.BaseBVRepr (WT.knownNat @5)))
+                 , ("SCR_EL3_EA", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("SCR_NS", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("UNDEFINED", Some WT.BaseBoolRepr)
                  , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  , ("_R", Some (WT.BaseArrayRepr
@@ -353,6 +356,9 @@ mkSyntaxOverrides defs =
       setters = Set.fromList $ catMaybes $ setterName <$> defs
 
       getterName d = case d of
+        -- FIXME: This is either SCR or SCR_EL3 based on the architecture
+        AS.DefGetter (AS.QualifiedIdentifier _ "SCR_GEN") _ _ _ ->
+           Nothing
         AS.DefGetter (AS.QualifiedIdentifier _ name) args _ _ ->
           Just (mkFunctionName (mkGetterName name) (length args))
         _ -> Nothing
@@ -381,6 +387,9 @@ mkSyntaxOverrides defs =
         _ -> stmt
         
       exprOverrides expr = case expr of
+         -- FIXME: This is either SCR or SCR_EL3 based on the architecture
+        AS.ExprMember (AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier q "SCR_GEN")) []) mem ->
+          AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier q "SCR")) mem
         AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) slices ->
           if Set.member (mkFunctionName (mkGetterName ident) (length slices)) getters then
             AS.ExprCall (AS.QualifiedIdentifier q (mkGetterName ident)) (map getSliceExpr slices)
@@ -417,7 +426,7 @@ applyExprSyntaxOverride ovrs expr =
     AS.ExprInMask e m -> AS.ExprInMask (f e) m
     AS.ExprMemberBits e is -> AS.ExprMemberBits (f e) is
     AS.ExprCall i es -> AS.ExprCall i (f <$> es)
-    AS.ExprInSet e se -> AS.ExprInSet (f e) se
+    AS.ExprInSet e se -> AS.ExprInSet (f e) (mapSetElement <$> se)
     AS.ExprTuple es -> AS.ExprTuple (f <$> es)
     AS.ExprIf pes e -> AS.ExprIf ((\(x,y) -> (f x, f y)) <$> pes) (f e)
     AS.ExprMember e i -> AS.ExprMember (f e) i
@@ -506,6 +515,8 @@ callableOverrides = Map.fromList [
   ("GETTER_R", [AS.StmtIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n")) (AS.ExprLitInt 15),[AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset")) (AS.ExprIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "CurrentInstrSet") []) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "InstrSet_A32")),wrapLitInt32 8)] (wrapLitInt32 4)),AS.StmtReturn (Just (AS.ExprBinOp AS.BinOpAdd (AS.ExprSlice (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "_PC")) [AS.SliceRange (AS.ExprLitInt 31) (AS.ExprLitInt 0)]) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset"))))])] (Just [AS.StmtReturn (Just (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTER_Rmode") [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n"),AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "PSTATE")) "M"]))])] )
   ]
   where wrapLitInt32 i = AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "__BVTOINT32") [AS.ExprLitInt i]
+
+
 
 prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
 prepASL (instrs, defs) =
