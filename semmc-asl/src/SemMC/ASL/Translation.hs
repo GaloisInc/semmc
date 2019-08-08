@@ -657,31 +657,19 @@ translateExpr ov expr
         Some e <- lookupVarRef ident
         Some <$> CCG.mkAtom e
 
-      -- FIXME: We might fetch a struct indirectly, so we need to figure out
-      -- how to encode that
-      AS.ExprMember (AS.ExprCall ident args) memberName -> do
-        call <- translateExpr ov (AS.ExprCall ident args)
-        error (show expr)
-
       AS.ExprSlice e [slice] -> translateSlice ov e slice
+
       AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice]  -> do
         Some e <- lookupVarRef arrName
         atom <- CCG.mkAtom e
         Some idxAtom <- translateExpr ov slice
-
-        case CT.asBaseType (CCG.typeOfAtom idxAtom) of
-          CT.AsBaseType bt ->
-            case CCG.typeOfAtom atom of
-              CT.SymbolicArrayRepr idxTy retTy ->
-                case Ctx.decompose idxTy of
-                  (Ctx.Empty, bt') ->
-                    if | Just Refl <- testEquality bt bt' -> do
-                           Some <$> CCG.mkAtom (CCG.App (CCE.SymArrayLookup retTy (CCG.AtomExpr atom)
-                                                (Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom)))))
-                       | otherwise -> X.throw (UnsupportedExpr expr)
-                  _ -> X.throw (UnsupportedExpr expr)
-              _ -> X.throw (UnsupportedExpr expr)
-          _ ->  X.throw (UnsupportedExpr expr)
+        if | CT.AsBaseType bt <- CT.asBaseType (CCG.typeOfAtom idxAtom)
+           , CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> bt') retTy <- CCG.typeOfAtom atom
+           , Just Refl <- testEquality bt bt' -> do
+               let asn = Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom))
+               let arr = CCE.SymArrayLookup retTy (CCG.AtomExpr atom) asn
+               Some <$> CCG.mkAtom (CCG.App arr)
+           | otherwise ->  X.throw (UnsupportedExpr expr)
 
       _ -> error (show expr)
 
