@@ -14,6 +14,7 @@ module SemMC.ASL.Translation (
     TranslationState(..)
   , translateExpr
   , translateStatement
+  , translateStatements
   , Overrides(..)
   , UserType(..)
   , userTypeRepr
@@ -36,6 +37,7 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -206,6 +208,20 @@ withProcGlobals sig k = do
           BaseGlobalVar gv
       | otherwise = error ("Missing global (or wrong type): " ++ show globName)
 
+-- | Translate a series of ASL statements into Crucible that represent a function
+-- | or prodecure body.
+translateStatements :: forall ret tp h s arch
+                . (ret ~ CT.BaseToType tp)
+               => Overrides arch
+               -> SomeSignature ret
+               -> [AS.Stmt]
+               -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+translateStatements ov sig stmts = do
+  let errmsg = "Function " ++ T.unpack (someSigName sig) ++ " does not return."
+  mapM_ (translateStatement ov sig) stmts
+  errStr <- CCG.mkAtom (CCG.App (CCE.TextLit (T.pack errmsg)))
+  CCG.reportError (CCG.AtomExpr errStr)
+
 -- | Translate a single ASL statement into Crucible
 translateStatement :: forall arch ret h s
                     . Overrides arch
@@ -311,7 +327,10 @@ translateStatement ov sig stmt
                          return ()
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
       AS.StmtTry {} -> error "Try statements are not implemented"
-      AS.StmtThrow {} -> error "Throw statements are not implemented"
+      AS.StmtThrow err -> do
+        false <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+        errStr <- CCG.mkAtom (CCG.App (CCE.TextLit err))
+        CCG.assertExpr (CCG.AtomExpr false) (CCG.AtomExpr errStr)
       _ -> error (show stmt)
 
 -- | Translate a for statement into Crucible
@@ -638,7 +657,28 @@ translateExpr ov expr
         Some e <- lookupVarRef ident
         Some <$> CCG.mkAtom e
       AS.ExprSlice e [slice] -> translateSlice ov e slice
+      AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice]  -> do
+        Some e <- lookupVarRef arrName
+        atom <- CCG.mkAtom e
+        Some idxAtom <- translateExpr ov slice
+
+        case CT.asBaseType (CCG.typeOfAtom idxAtom) of
+          CT.AsBaseType bt ->
+            case CCG.typeOfAtom atom of
+              CT.SymbolicArrayRepr idxTy retTy ->
+                case Ctx.decompose idxTy of
+                  (Ctx.Empty, bt') ->
+                    if | Just Refl <- testEquality bt bt' -> do
+                           Some <$> CCG.mkAtom (CCG.App (CCE.SymArrayLookup retTy (CCG.AtomExpr atom)
+                                                (Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom)))))
+                       | otherwise -> X.throw (UnsupportedExpr expr)
+                  _ -> X.throw (UnsupportedExpr expr)
+              _ -> X.throw (UnsupportedExpr expr)
+          _ ->  X.throw (UnsupportedExpr expr)
+
       _ -> error (show expr)
+
+
 
 translateSlice :: Overrides arch
                -> AS.Expr

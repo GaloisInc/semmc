@@ -43,6 +43,7 @@ main = do
       putStrLn $ "Error loading ASL definitions: " ++ show err
       exitFailure
     (Right aslInsts', Right aslDefs') -> do
+      --(aslInsts, aslDefs) <- return $ (aslInsts', aslDefs')
       (aslInsts, aslDefs) <- return $ prepASL (aslInsts', aslDefs')
       putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
       case computeInstructionSignature "aarch32_ADC_i_A" "aarch32_ADC_i_A1_A" aslInsts aslDefs of
@@ -52,6 +53,9 @@ main = do
         Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
           putStrLn $ "Instruction signature:"
           print iSig
+          --Just mySig <- return $ Map.lookup "HighestEL_0" sigMap
+          --sigMap <- return $ Map.fromList [("HighestEL_0", mySig)]
+
           case computeDefinitions (Map.keys sigMap) aslDefs of
             Left err -> do
               putStrLn $ "Error computing ASL definitions: " ++ show err

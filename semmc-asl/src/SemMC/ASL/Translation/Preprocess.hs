@@ -233,6 +233,10 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> Just $ do
             atom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @4) 0))
             return $ Some atom
+          AS.ExprCall (AS.QualifiedIdentifier _ "__BVTOINT32") [AS.ExprLitInt i] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.IntegerToBV (WT.knownNat @32)
+                                         (CCG.App (CCE.IntLit i))))
+            return $ Some atom
           _ -> Nothing
 
 -- FIXME: Change this to set some global flag?
@@ -266,7 +270,9 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  , ("_R", Some (WT.BaseArrayRepr
                                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
-                                (WT.BaseBVRepr (WT.knownNat @32))))
+                                (WT.BaseBVRepr (WT.knownNat @64))))
+                 , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
+                 , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  ]
 
 builtinConsts :: [(T.Text, Some ConstVal)]
@@ -339,6 +345,7 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv
            , RWS.MonadState SigState
            , E.MonadError SigException
            )
+
 
 mkSyntaxOverrides :: [AS.Definition] -> SyntaxOverrides
 mkSyntaxOverrides defs =
@@ -459,6 +466,8 @@ applySyntaxOverridesDefs ovrs defs =
     argName _ = Nothing
     
     mapDefs d = case d of
+      AS.DefCallable qName args rets stmts ->
+        Just $ AS.DefCallable qName args rets (g <$> stmts)
       AS.DefGetter (AS.QualifiedIdentifier q name) args rets stmts ->
         Just AS.DefCallable { callableName = AS.QualifiedIdentifier q (mkGetterName name)
                        , callableArgs = args
@@ -487,10 +496,28 @@ applySyntaxOverridesInstrs ovrs instrs =
 
   in mapInstr <$> instrs
 
+
+
+-- Syntactic overrides for entire definitions.
+callableOverrides :: Map.Map T.Text [AS.Stmt]
+callableOverrides = Map.fromList [
+  -- In the getter for R we have int literals that should actually be interpreted
+  -- a 32 bit bv
+  ("GETTER_R", [AS.StmtIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n")) (AS.ExprLitInt 15),[AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset")) (AS.ExprIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "CurrentInstrSet") []) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "InstrSet_A32")),wrapLitInt32 8)] (wrapLitInt32 4)),AS.StmtReturn (Just (AS.ExprBinOp AS.BinOpAdd (AS.ExprSlice (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "_PC")) [AS.SliceRange (AS.ExprLitInt 31) (AS.ExprLitInt 0)]) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset"))))])] (Just [AS.StmtReturn (Just (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTER_Rmode") [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n"),AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "PSTATE")) "M"]))])] )
+  ]
+  where wrapLitInt32 i = AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "__BVTOINT32") [AS.ExprLitInt i]
+
 prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
 prepASL (instrs, defs) =
   let ovrs = mkSyntaxOverrides defs
-  in (applySyntaxOverridesInstrs ovrs instrs, applySyntaxOverridesDefs ovrs defs)
+
+      mapDefs d = case d of
+        AS.DefCallable (AS.QualifiedIdentifier q name) args rets _ ->
+          case Map.lookup name callableOverrides of
+            Just stmts' -> AS.DefCallable (AS.QualifiedIdentifier q name) args rets stmts'
+            _ -> d
+        _ -> d
+  in (applySyntaxOverridesInstrs ovrs instrs, mapDefs <$> applySyntaxOverridesDefs ovrs defs)
       
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
@@ -499,6 +526,8 @@ buildEnv :: [AS.Definition] -> SigEnv ext f
 buildEnv defs =
   let envCallables = Map.fromList ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
       globalVars = Map.fromList builtinGlobals
+
+
       -- globalVars = Map.fromList $
       --   ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
         -- ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)

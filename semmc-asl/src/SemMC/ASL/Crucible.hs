@@ -69,8 +69,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), translateStatement, ConstVal(..) )
-
+import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), translateStatement, translateStatements, ConstVal(..) )
 -- type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
 
 data Definitions arch =
@@ -155,6 +154,7 @@ funcInitialState defs sig globals args =
       Map.insert (CCG.globalName gv) (Some gv) m
 
 
+
 defineFunction :: forall ret tp init h s arch globals
                 . (ret ~ CT.BaseToType tp)
                => Overrides arch
@@ -167,7 +167,7 @@ defineFunction ov sig stmts _args = do
   --
   -- We have the assignment of atoms available, but the arguments will be
   -- referenced by /name/ by ASL statements.
-  mapM_ (translateStatement ov (SomeFunctionSignature sig)) stmts
+  translateStatements ov (SomeFunctionSignature sig) stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
@@ -271,7 +271,7 @@ defineProcedure :: (ReturnsGlobals ret globals)
                 -> Ctx.Assignment (CCG.Atom s) init
                 -> CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig baseGlobals stmts _args = do
-  mapM_ (translateStatement ov (SomeProcedureSignature sig)) stmts
+  translateStatements ov (SomeProcedureSignature sig) stmts
   retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (procGlobalReprs sig)) baseGlobals)
   if | Just Refl <- testEquality (CCG.exprType retExpr) (procSigRepr sig) ->
        return retExpr

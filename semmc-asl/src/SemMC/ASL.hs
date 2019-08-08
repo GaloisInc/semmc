@@ -236,11 +236,22 @@ allocateFreshArg sym (AC.LabeledValue name rep) = do
                       , CS.regValue = rv
                       } )
         bv
-    _ -> X.throwIO (CannotAllocateFresh rep)
+    CT.SymbolicArrayRepr idxTy vTy -> do
+      sname <- toSolverSymbol (T.unpack name)
+      bv <- WI.freshBoundVar sym sname (WT.BaseArrayRepr idxTy vTy)
+      rv <- WI.freshConstant sym sname (WT.BaseArrayRepr idxTy vTy)
+      return $ FreshArg
+        ( CS.RegEntry { CS.regType = rep
+                      , CS.regValue = rv
+                      } )
+        bv
+    _ -> X.throwIO (CannotAllocateFresh name rep)
 
 toSolverSymbol :: String -> IO WS.SolverSymbol
-toSolverSymbol s =
-  case WS.userSymbol s of
+toSolverSymbol s' =
+  let s = case s' of '_' : rst -> "UU_" ++ rst
+                     _ -> s'
+  in case WS.userSymbol s of
     Right sy -> return sy
     Left _err -> X.throwIO (InvalidSymbolName s)
 
@@ -285,7 +296,7 @@ data SimulationException = SimulationTimeout (Some AC.SomeSignature)
                          | forall tp . NonBaseTypeReturn (CT.TypeRepr tp)
                          | forall btp . UnexpectedReturnType (WT.BaseTypeRepr btp)
                          | forall tp . MissingGlobalDefinition (CS.GlobalVar tp)
-                         | forall tp . CannotAllocateFresh (CT.TypeRepr tp)
+                         | forall tp . CannotAllocateFresh T.Text (CT.TypeRepr tp)
                          | InvalidSymbolName String
 
 deriving instance Show SimulationException
