@@ -208,8 +208,8 @@ withProcGlobals sig k = do
           BaseGlobalVar gv
       | otherwise = error ("Missing global (or wrong type): " ++ show globName)
 
--- | Translate a series of ASL statements into Crucible that represent a function
--- | or prodecure body.
+-- | Translate a list of statements, reporting an error if the execution
+-- runs off the end.
 translateStatements :: forall ret tp h s arch
                 . (ret ~ CT.BaseToType tp)
                => Overrides arch
@@ -408,6 +408,17 @@ translateDefinedVar ov ty ident expr = do
       reg <- CCG.newReg (CCG.AtomExpr atom)
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
+
+-- | Convert an lVal to its equivalent expression in order to determine
+-- its value for a sliced assignement. These are the only forms seen
+-- in an LValSliceOf
+lValToExpr :: AS.LValExpr -> AS.Expr
+lValToExpr lval = case lval of
+  AS.LValVarRef qName -> AS.ExprVarRef qName
+  AS.LValMember lv memberName -> AS.ExprMember (lValToExpr lv) memberName
+  AS.LValArrayIndex lv slices -> AS.ExprIndex (lValToExpr lv) slices
+  _ -> error $ "Unsupported LVal: " ++ show lval
+
 -- | Translate general assignment statements into Crucible
 --
 -- This case is interesting, as assignments can be to locals or globals.
@@ -458,6 +469,30 @@ translateAssignment' ov lval atom mE = do
       case CCG.typeOfAtom atom of
         CT.SymbolicStructRepr tps -> void $ Ctx.traverseAndCollect (assignTupleElt lvals tps atom) tps
         tp -> X.throw $ ExpectedStructType mE tp
+
+
+    AS.LValSliceOf lv [slice] -> do
+      translatelValSlice ov lv slice atom
+
+    -- FIXME: This form appears only twice and could easily be broken
+    -- into two assignments. The above case covers all other cases.
+    AS.LValSliceOf (AS.LValVarRef _) [AS.SliceSingle slice, AS.SliceRange lo hi] -> do
+
+      error $ "Unsupported LVal: " ++ show lval
+
+
+    AS.LValArrayIndex ident slices -> do
+
+      return () -- FIXME: Actually compute assignment
+
+    AS.LValMemberBits ref bits -> do
+
+      return () -- FIXME: Actually compuete assignment
+
+    -- This never appears
+    AS.LValMemberArray _ _ ->
+      error $ "Unsupported LVal: " ++ show lval
+
     _ -> error $ "Unsupported LVal: " ++ show lval
     where assignTupleElt :: [AS.LValExpr]
                          -> Ctx.Assignment WT.BaseTypeRepr ctx
@@ -469,6 +504,108 @@ translateAssignment' ov lval atom mE = do
             let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
             getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
             translateAssignment' ov (lvals !! Ctx.indexVal ix) getAtom Nothing
+
+
+-- These functions push all the bitvector type matching into runtime checks.
+
+unsafeBVSelect :: WT.NatRepr idx
+                           -> WT.NatRepr len
+                           -> WT.NatRepr w
+                           -> CCG.Atom s (CT.BVType w)
+                           -> (CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType len))
+unsafeBVSelect lo len w atom =
+  if | Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` len
+     , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` w
+     , Just WT.LeqProof <- (lo `WT.addNat` len) `WT.testLeq` w
+     -> CCG.App (CCE.BVSelect lo len w (CCG.AtomExpr atom))
+     | otherwise -> error "BVSelect type mismatch"
+
+maybeBVSelect :: WT.NatRepr idx
+                           -> WT.NatRepr len
+                           -> WT.NatRepr w
+                           -> CCG.Atom s (CT.BVType w)
+                           -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType len)))
+maybeBVSelect lo len w atom =
+  if (1 <= WT.natValue len &&
+      1 <= WT.natValue w &&
+      WT.natValue lo + WT.natValue len <= WT.natValue w)
+  then Just (unsafeBVSelect lo len w atom)
+  else Nothing
+
+
+unsafeBVConcat :: WT.NatRepr u
+                  -> WT.NatRepr v
+                  -> CCG.Expr ext s (CT.BVType u)
+                  -> CCG.Expr ext s (CT.BVType v)
+                  -> (CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType (u WT.+ v)))
+unsafeBVConcat lo len pre atom =
+  if | Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` len
+     , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lo
+     , Just WT.LeqProof <- (WT.knownNat @1)  `WT.testLeq` (lo `WT.addNat` len)
+     -> CCG.App (CCE.BVConcat lo len pre atom)
+     | otherwise -> error "BVConcat type mismatch"
+
+maybeBVConcat :: WT.NatRepr u
+                  -> WT.NatRepr v
+                  -> Maybe (CCG.Expr ext s (CT.BVType u))
+                  -> Maybe (CCG.Expr ext s (CT.BVType v))
+                  -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType (u WT.+ v))))
+maybeBVConcat lo len (Just pre) (Just atom) =
+  if (1 <= WT.natValue len &&
+      1 <= WT.natValue lo &&
+      1 <= (WT.natValue lo + WT.natValue len))
+  then Just (unsafeBVConcat lo len pre atom)
+  else Nothing
+maybeBVConcat lo _ Nothing (Just atom) =
+  if | Just Refl <- testEquality (WT.knownNat @0) lo
+     -> Just atom
+     | otherwise -> error "BVConcat type mismatch"
+maybeBVConcat _ len (Just pre) Nothing =
+  if | Just Refl <- testEquality (WT.knownNat @0) len
+     -> Just pre
+     | otherwise -> error "BVConcat type mismatch"
+
+
+
+translatelValSlice :: Overrides arch
+               -> AS.LValExpr
+               -> AS.Slice
+               -> CCG.Atom s tp
+               -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+translatelValSlice ov lv slice asnAtom = do
+  Some atom <- translateExpr ov (lValToExpr lv)
+  (Some loRepr, Some hiRepr) <- return $ getSliceRange slice
+  if | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
+     , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
+     , CT.BVRepr wRepr <- CCG.typeOfAtom atom
+     , Just WT.LeqProof <- (hiRepr `WT.addNat` (WT.knownNat @1)) `WT.testLeq` wRepr
+     , lenUpper <- wRepr `WT.subNat` (hiRepr `WT.addNat` (WT.knownNat @1))
+     , CT.BVRepr wReprAsn <- CCG.typeOfAtom asnAtom
+     , Just Refl <- testEquality lenRepr wReprAsn
+     --,
+
+     -> do
+         -- [x0 .. x_loRepr .. x_hiRepr .. x_wRepr-1 ] -- original bitvector in lv
+         -- [y_loRepr .. y_hiRepr] -- asnAtom value
+
+
+         let pre = maybeBVSelect (WT.knownNat @0) loRepr wRepr atom
+           -- pre = [x0 .. x_loRepr-1]
+         let first = maybeBVConcat loRepr lenRepr pre (Just (CCG.AtomExpr asnAtom))
+           -- first = pre ++ [y_loRepr .. y_hiRepr]
+         let post = maybeBVSelect (hiRepr `WT.addNat` (WT.knownNat @1)) lenUpper wRepr atom
+           -- post = [x_hiRepr+1 .. x_wRepr-1]
+         let fin = maybeBVConcat (loRepr `WT.addNat` lenRepr) lenUpper first post
+           -- fin = first ++ post
+           --     = [x0 .. x_loRepr-1] ++ [y_loRepr .. y_hiRepr] ++ [x_hiRepr+1 .. x_wRepr-1]
+         case fin of
+           Just r -> do
+             result <- CCG.mkAtom r
+             translateAssignment' ov lv result Nothing
+           Nothing -> error "Bad slice"
+
+     | otherwise -> X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
+
 
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
@@ -659,6 +796,7 @@ translateExpr ov expr
 
       AS.ExprSlice e [slice] -> translateSlice ov e slice
 
+      -- This covers the only form of ExprIndex that appears in ASL
       AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice]  -> do
         Some e <- lookupVarRef arrName
         atom <- CCG.mkAtom e
@@ -673,7 +811,44 @@ translateExpr ov expr
 
       _ -> error (show expr)
 
+-- (1 <= w, 1 <= len, idx + len <= w)
 
+-- data SliceContinue s a where
+--   SliceContinue :: (WT.NatRepr lo
+--             ->  WT.NatRepr len
+--             -> WT.NatRepr w
+--             -> WT.LeqProof 1 len
+--             -> WT.LeqProof 1 w
+--             -> WT.LeqProof (lo WT.+ len) w
+--             -> CCG.Generator (ASLExt arch) h s TranslationState ret a)
+--            -> SliceContinue s a
+
+-- translateSliceAccess :: (Some (CCG.Atom s)) -> SliceContinue s (Some (CCG.Atom s))
+-- translateSliceAccess (Some atom) =
+--   case CCG.typeOfAtom atom of
+--       CT.BVRepr wRepr' ->
+--         SliceContinue (\loRepr lenRepr wRepr prf1 prf2 prf3 ->
+--                                 if | Just Refl <- testEquality wRepr' wRepr
+--                                    , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr
+--                                    , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` wRepr'
+--                                    , WT.LeqProof <- prf3 ->
+--                                        Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom))))
+
+
+getSliceRange :: AS.Slice -> (Some WT.NatRepr, Some WT.NatRepr)
+getSliceRange slice = case slice of
+    AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo) ->
+      case (WT.someNat lo, WT.someNat hi) of
+        (Just someLoRepr, Just someHiRepr) -> (someLoRepr, someHiRepr)
+        _ -> X.throw $ InvalidSliceRange lo hi
+    AS.SliceRange (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) (AS.ExprLitInt 0) ->
+      (Some (WT.knownNat @0), Some (WT.knownNat @31))
+    AS.SliceSingle (AS.ExprLitInt i) -> case WT.someNat i of
+      Just someRepr -> (someRepr, someRepr)
+      _ -> X.throw $ InvalidSliceRange i i
+    AS.SliceSingle (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) ->
+      (Some (WT.knownNat @31), Some (WT.knownNat @31))
+    _ -> error $ "unsupported slice: " ++ show slice
 
 translateSlice :: Overrides arch
                -> AS.Expr
@@ -681,19 +856,7 @@ translateSlice :: Overrides arch
                -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
 translateSlice ov e slice = do
   Some atom <- translateExpr ov e
-  (Some loRepr, Some hiRepr) <- case slice of
-    AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo) ->
-      case (WT.someNat lo, WT.someNat hi) of
-        (Just someLoRepr, Just someHiRepr) -> return (someLoRepr, someHiRepr)
-        _ -> X.throw $ InvalidSliceRange lo hi
-    AS.SliceRange (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) (AS.ExprLitInt 0) ->
-      return (Some (WT.knownNat @0), Some (WT.knownNat @31))
-    AS.SliceSingle (AS.ExprLitInt i) -> case WT.someNat i of
-      Just someRepr -> return (someRepr, someRepr)
-      _ -> X.throw $ InvalidSliceRange i i
-    AS.SliceSingle (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) ->
-      return (Some (WT.knownNat @31), Some (WT.knownNat @31))
-    _ -> error $ "unsupported slice: " ++ show slice
+  (Some loRepr, Some hiRepr) <- return $ getSliceRange slice
   case () of
     _ | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
       , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)

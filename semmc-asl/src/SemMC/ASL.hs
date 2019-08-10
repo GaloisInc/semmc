@@ -134,7 +134,7 @@ simulateProcedure symCfg crucProc =
       eres <- CS.executeCrucible executionFeatures s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeProcedureSignature sig)))
-        CS.AbortedResult {} -> X.throwIO (SimulationAbort (Some (AC.SomeProcedureSignature sig)))
+        CS.AbortedResult context ab -> X.throwIO (SimulationAbort (Some (AC.SomeProcedureSignature sig)))
         CS.FinishedResult _ pres ->
           case pres of
             CS.TotalRes gp -> extractResult gp initArgs

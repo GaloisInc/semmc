@@ -23,6 +23,7 @@ module SemMC.ASL.Translation.Preprocess
     computeDefinitions
   , computeInstructionSignature
   , prepASL
+  , foldASL
   , Callable(..)
   ) where
 
@@ -401,7 +402,7 @@ mkSyntaxOverrides defs =
         _ -> expr
 
   in SyntaxOverrides stmtOverrides exprOverrides
-  
+
 
 applyExprSyntaxOverride :: SyntaxOverrides -> AS.Expr -> AS.Expr
 applyExprSyntaxOverride ovrs expr =
@@ -431,6 +432,122 @@ applyExprSyntaxOverride ovrs expr =
     AS.ExprIf pes e -> AS.ExprIf ((\(x,y) -> (f x, f y)) <$> pes) (f e)
     AS.ExprMember e i -> AS.ExprMember (f e) i
     _ -> expr'
+
+-- | Fold over the nested expressions of a given expression
+foldExpr :: (AS.Expr -> b -> b) -> AS.Expr -> b -> b
+foldExpr f' expr b' =
+  let
+    b = f' expr b' -- resolve top expression first
+    f = foldExpr f' -- inner expressions are recursively folded
+
+    foldSlice slice = case slice of
+      AS.SliceSingle e -> f e
+      AS.SliceOffset e e' -> f e' . f e
+      AS.SliceRange e e' -> f e' . f e
+
+    foldSetElems slice = case slice of
+      AS.SetEltSingle e -> f e
+      AS.SetEltRange e e' -> f e' . f e
+
+  in case expr of
+    AS.ExprSlice e slices -> f e $ foldr foldSlice b slices
+    AS.ExprIndex e slices -> f e $ foldr foldSlice b slices
+    AS.ExprUnOp _ e -> f e b
+    AS.ExprBinOp _ e e' -> f e' $ f e b
+    AS.ExprMembers e _ -> f e b
+    AS.ExprInMask e _ -> f e b
+    AS.ExprMemberBits e _ -> f e b
+    AS.ExprCall _ es -> foldr f b es
+    AS.ExprInSet e se -> foldr foldSetElems (f e b) se
+    AS.ExprTuple es -> foldr f b es
+    AS.ExprIf pes e -> f e $ foldr (\(x,y) -> f y . f x) b pes
+    AS.ExprMember e _ -> f e b
+    _ -> b
+
+foldLVal :: (AS.LValExpr -> b -> b) -> AS.LValExpr -> b -> b
+foldLVal h' lval b' =
+  let
+    b = h' lval b'
+    h = foldLVal h'
+  in case lval of
+    AS.LValMember lv _ -> h lv b
+    AS.LValMemberArray lv _ -> h lv b
+    AS.LValArrayIndex lv _ -> h lv b
+    AS.LValSliceOf lv _ -> h lv b
+    AS.LValArray lvs -> foldr h b lvs
+    AS.LValTuple lvs -> foldr h b lvs
+    AS.LValMemberBits lv _ -> h lv b
+    AS.LValSlice lvs -> foldr h b lvs
+    _ -> b
+
+-- | Fold over nested statements and their *top-level* expressions
+foldStmt' :: (AS.Expr -> b -> b) ->
+             (AS.LValExpr -> b -> b) ->
+             (AS.Stmt -> b -> b) ->
+             AS.Stmt -> b -> b
+foldStmt' f h g' stmt b' =
+  let
+    b = g' stmt b' -- resolve top statement first
+    g = foldStmt' f h g' -- inner statments are recursively folded
+
+    foldCases cases b'' = case cases of
+      AS.CaseWhen _ me stmts -> foldr g (foldr f b'' me) stmts
+      AS.CaseOtherwise stmts -> foldr g b'' stmts
+    foldCatches catches b'' = case catches of
+      AS.CatchWhen e stmts -> foldr g (f e b'') stmts
+      AS.CatchOtherwise stmts -> foldr g b'' stmts
+  in case stmt of
+    AS.StmtVarDeclInit _ e -> f e b
+    AS.StmtConstDecl _ e -> f e b
+    AS.StmtAssign lv e -> f e (h lv b)
+    AS.StmtCall _ es -> foldr f b es
+    AS.StmtReturn me -> foldr f b me
+    AS.StmtAssert e -> f e b
+    AS.StmtIf tests body ->
+      let testsb = foldr (\(e, stmts) -> \b'' -> foldr g (f e b'') stmts) b tests in
+        foldr (\stmts -> \b'' -> foldr g b'' stmts) testsb body
+    AS.StmtCase e alts -> foldr foldCases (f e b) alts
+    AS.StmtFor _ (e, e') stmts -> foldr g (f e' $ f e b) stmts
+    AS.StmtWhile e stmts -> foldr g (f e b) stmts
+    AS.StmtRepeat stmts e -> f e $ foldr g b stmts
+    AS.StmtSeeExpr e -> f e b
+    AS.StmtTry stmts _ alts -> foldr foldCatches (foldr g b stmts) alts
+    _ -> b
+
+-- | Fold over nested statements and nested expressions
+foldStmt :: (AS.Expr -> b -> b) ->
+            (AS.LValExpr -> b -> b) ->
+            (AS.Stmt -> b -> b) ->
+            AS.Stmt -> b -> b
+foldStmt f h = foldStmt' (foldExpr f) (foldLVal h)
+
+
+foldDef :: (AS.Expr -> b -> b) ->
+           (AS.LValExpr -> b -> b) ->
+           (AS.Stmt -> b -> b) ->
+           AS.Definition -> b -> b
+foldDef f h g d b = case d of
+  AS.DefCallable _ _ _ stmts -> foldr (foldStmt f h g) b stmts
+  _ -> b
+
+foldInstruction :: (AS.Expr -> b -> b) ->
+                   (AS.LValExpr -> b -> b) ->
+                   (AS.Stmt -> b -> b) ->
+                   AS.Instruction -> b -> b
+foldInstruction f h g (AS.Instruction _ instEncodings instPostDecode instExecute) b =
+  let
+    foldEncoding (AS.InstructionEncoding {encDecode=stmts}) b' =
+      foldr (foldStmt f h g) b' stmts
+  in
+  foldr (foldStmt f h g) (foldr foldEncoding b instEncodings) (instPostDecode ++ instExecute)
+
+foldASL :: (AS.Expr -> b -> b) ->
+           (AS.LValExpr -> b -> b) ->
+           (AS.Stmt -> b -> b) ->
+  [AS.Definition] -> [AS.Instruction] -> b -> b
+foldASL f h g defs instrs b = foldr (foldInstruction f h g) (foldr (foldDef f h g) b defs) instrs
+
+
 
 applyStmtSyntaxOverride :: SyntaxOverrides -> AS.Stmt -> AS.Stmt
 applyStmtSyntaxOverride ovrs stmt =
@@ -512,7 +629,11 @@ callableOverrides :: Map.Map T.Text [AS.Stmt]
 callableOverrides = Map.fromList [
   -- In the getter for R we have int literals that should actually be interpreted
   -- a 32 bit bv
-  ("GETTER_R", [AS.StmtIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n")) (AS.ExprLitInt 15),[AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset")) (AS.ExprIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "CurrentInstrSet") []) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "InstrSet_A32")),wrapLitInt32 8)] (wrapLitInt32 4)),AS.StmtReturn (Just (AS.ExprBinOp AS.BinOpAdd (AS.ExprSlice (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "_PC")) [AS.SliceRange (AS.ExprLitInt 31) (AS.ExprLitInt 0)]) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset"))))])] (Just [AS.StmtReturn (Just (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTER_Rmode") [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n"),AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "PSTATE")) "M"]))])] )
+  ("GETTER_R", [AS.StmtIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n")) (AS.ExprLitInt 15),[AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset")) (AS.ExprIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "CurrentInstrSet") []) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "InstrSet_A32")),wrapLitInt32 8)] (wrapLitInt32 4)),AS.StmtReturn (Just (AS.ExprBinOp AS.BinOpAdd (AS.ExprSlice (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "_PC")) [AS.SliceRange (AS.ExprLitInt 31) (AS.ExprLitInt 0)]) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset"))))])] (Just [AS.StmtReturn (Just (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTER_Rmode") [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n"),AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "PSTATE")) "M"]))])] ),
+  -- Needs to be capped with a return
+  -- FIXME: The the assert seems to be tripping the simulator during globals collection
+  -- AS.StmtAssert (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")),
+  ("Unreachable", [AS.StmtReturn Nothing])
   ]
   where wrapLitInt32 i = AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "__BVTOINT32") [AS.ExprLitInt i]
 

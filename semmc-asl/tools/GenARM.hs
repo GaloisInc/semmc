@@ -33,6 +33,45 @@ defsFilePath = "test/defs.parsed"
 
 main :: IO ()
 main = do
+  (aslInsts, aslDefs) <- getASL
+  putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
+  case computeInstructionSignature "aarch32_ADC_i_A" "aarch32_ADC_i_A1_A" aslInsts aslDefs of
+    Left err -> do
+      putStrLn $ "Error computing instruction signature: " ++ show err
+      exitFailure
+    Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
+      putStrLn $ "Instruction signature:"
+      print iSig
+      --Just mySig <- return $ Map.lookup "Unreachable_0" sigMap
+      --sigMap <- return $ Map.fromList [("Unreachable_0", mySig)]
+
+      case computeDefinitions (Map.keys sigMap) aslDefs of
+        Left err -> do
+          putStrLn $ "Error computing ASL definitions: " ++ show err
+          exitFailure
+        Right defs -> do
+          putStrLn $ "--------------------------------"
+          putStrLn "Translating functions: "
+          forM_ (Map.toList sigMap) $ \(fnName, _) -> putStrLn $ "  * " ++ show fnName
+          forM_ (Map.toList sigMap) $ \(fnName, (Some sig, c)) -> do
+            putStrLn $ show fnName ++ " definition:"
+            processFunction fnName sig c defs
+          putStrLn $ "--------------------------------"
+          putStrLn "Translating instruction: "
+          processInstruction iSig instStmts defs
+    _ -> error "Panic"
+
+-- Debugging function for determining what syntactic forms
+-- actually exist
+queryASL :: (AS.Expr -> b -> b) ->
+            (AS.LValExpr -> b -> b) ->
+            (AS.Stmt -> b -> b) -> b -> IO b
+queryASL f h g b = do
+  (aslInsts, aslDefs) <- getASL
+  return $ foldASL f h g aslDefs aslInsts b
+
+getASL :: IO ([AS.Instruction], [AS.Definition])
+getASL = do
   eAslDefs <- AP.parseAslDefsFile defsFilePath
   eAslInsts <- AP.parseAslInstsFile instsFilePath
   case (eAslInsts, eAslDefs) of
@@ -43,34 +82,7 @@ main = do
       putStrLn $ "Error loading ASL definitions: " ++ show err
       exitFailure
     (Right aslInsts', Right aslDefs') -> do
-      --(aslInsts, aslDefs) <- return $ (aslInsts', aslDefs')
-      (aslInsts, aslDefs) <- return $ prepASL (aslInsts', aslDefs')
-      putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-      case computeInstructionSignature "aarch32_ADC_i_A" "aarch32_ADC_i_A1_A" aslInsts aslDefs of
-        Left err -> do
-          putStrLn $ "Error computing instruction signature: " ++ show err
-          exitFailure
-        Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
-          putStrLn $ "Instruction signature:"
-          print iSig
-          --Just mySig <- return $ Map.lookup "HighestEL_0" sigMap
-          --sigMap <- return $ Map.fromList [("HighestEL_0", mySig)]
-
-          case computeDefinitions (Map.keys sigMap) aslDefs of
-            Left err -> do
-              putStrLn $ "Error computing ASL definitions: " ++ show err
-              exitFailure
-            Right defs -> do
-              putStrLn $ "--------------------------------"
-              putStrLn "Translating functions: "
-              forM_ (Map.toList sigMap) $ \(fnName, _) -> putStrLn $ "  * " ++ show fnName
-              forM_ (Map.toList sigMap) $ \(fnName, (Some sig, c)) -> do
-                putStrLn $ show fnName ++ " definition:"
-                processFunction fnName sig c defs
-              putStrLn $ "--------------------------------"
-              putStrLn "Translating instruction: "
-              processInstruction iSig instStmts defs
-        _ -> error "Panic"
+      return $ prepASL (aslInsts', aslDefs')
 
 processInstruction :: ProcedureSignature globals init -> [AS.Stmt] -> Definitions arch -> IO ()
 processInstruction pSig stmts defs = do
