@@ -12,6 +12,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
+import qualified Data.List as List
 import qualified Lang.Crucible.Backend.Simple as CBS
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
@@ -31,11 +32,45 @@ instsFilePath = "test/insts.parsed"
 defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
+
+collectInstructions :: [AS.Instruction] -> [(T.Text, T.Text)]
+collectInstructions aslInsts =
+  List.concat $ map (\(AS.Instruction nm encs _ _) ->
+                       map (\(AS.InstructionEncoding {AS.encName=encName}) ->
+                              (nm, encName)) encs) aslInsts
+  
+
+--"aarch32_ADC_i_A" "aarch32_ADC_i_A1_A"
 main :: IO ()
 main = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  case computeInstructionSignature "aarch32_ADC_i_A" "aarch32_ADC_i_A1_A" aslInsts aslDefs of
+  --let instrs = collectInstructions aslInsts
+  --let instrs = [("aarch32_REV_A","aarch32_REV_T1_A")]
+  let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
+  
+  mapM_ (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs) instrs
+
+computeDefs :: [T.Text] -> IO ()
+computeDefs defIn = do
+  (_, aslDefs) <- getASL
+  case computeDefinitions defIn aslDefs of
+    Left err -> do
+      putStrLn $ "Error computing ASL definitions: " ++ show err
+      exitFailure
+    Right defs -> do
+      putStrLn $ "--------------------------------"
+      putStrLn "Translating functions: "
+      sigMap <- return $ defSignatures defs
+      forM_ (Map.toList sigMap) $ \(fnName, _) -> putStrLn $ "  * " ++ show fnName
+      forM_ (Map.toList sigMap) $ \(fnName, (Some sig, c)) -> do
+        putStrLn $ show fnName ++ " definition:"
+        processFunction fnName sig c defs
+   
+
+runTranslation :: T.Text -> T.Text -> [AS.Instruction] -> [AS.Definition] -> IO ()
+runTranslation instr enc aslInsts aslDefs = do
+  case computeInstructionSignature instr enc aslInsts aslDefs of
     Left err -> do
       putStrLn $ "Error computing instruction signature: " ++ show err
       exitFailure
@@ -55,17 +90,18 @@ main = do
           forM_ (Map.toList sigMap) $ \(fnName, _) -> putStrLn $ "  * " ++ show fnName
           forM_ (Map.toList sigMap) $ \(fnName, (Some sig, c)) -> do
             putStrLn $ show fnName ++ " definition:"
-            processFunction fnName sig c defs
+            processFunction fnName sig (callableStmts c) defs
           putStrLn $ "--------------------------------"
-          putStrLn "Translating instruction: "
+          putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
+          putStrLn $ (show iSig)
           processInstruction iSig instStmts defs
     _ -> error "Panic"
 
 -- Debugging function for determining what syntactic forms
 -- actually exist
-queryASL :: (AS.Expr -> b -> b) ->
-            (AS.LValExpr -> b -> b) ->
-            (AS.Stmt -> b -> b) -> b -> IO b
+queryASL :: (T.Text -> AS.Expr -> b -> b) ->
+            (T.Text -> AS.LValExpr -> b -> b) ->
+            (T.Text -> AS.Stmt -> b -> b) -> b -> IO b
 queryASL f h g b = do
   (aslInsts, aslDefs) <- getASL
   return $ foldASL f h g aslDefs aslInsts b
@@ -97,12 +133,12 @@ processInstruction pSig stmts defs = do
   symFn <- simulateProcedure cfg p
   return ()
 
-processFunction :: T.Text -> SomeSignature ret -> Callable -> Definitions arch -> IO ()
-processFunction fnName sig c defs =
+processFunction :: T.Text -> SomeSignature ret -> [AS.Stmt] -> Definitions arch -> IO ()
+processFunction fnName sig stmts defs =
   case sig of
     SomeFunctionSignature fSig -> do
       handleAllocator <- CFH.newHandleAllocator
-      f <- functionToCrucible defs fSig handleAllocator (callableStmts c)
+      f <- functionToCrucible defs fSig handleAllocator stmts
       backend <- CBS.newSimpleBackend globalNonceGenerator
       let cfg :: SimulatorConfig (CBS.SimpleBackend GlobalNonceGenerator (CBS.Flags CBS.FloatIEEE))
             = SimulatorConfig { simOutputHandle = IO.stdout
@@ -113,7 +149,7 @@ processFunction fnName sig c defs =
       return ()
     SomeProcedureSignature pSig -> do
       handleAllocator <- CFH.newHandleAllocator
-      p <- procedureToCrucible defs pSig handleAllocator (callableStmts c)
+      p <- procedureToCrucible defs pSig handleAllocator stmts
       backend <- CBS.newSimpleBackend globalNonceGenerator
       let cfg :: SimulatorConfig (CBS.SimpleBackend GlobalNonceGenerator (CBS.Flags CBS.FloatIEEE))
             = SimulatorConfig { simOutputHandle = IO.stdout

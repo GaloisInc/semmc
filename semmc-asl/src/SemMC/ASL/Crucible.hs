@@ -70,6 +70,8 @@ import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtIm
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), translateStatement, translateStatements, ConstVal(..) )
+
+import System.IO.Unsafe -- FIXME: For debugging
 -- type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
 
 data Definitions arch =

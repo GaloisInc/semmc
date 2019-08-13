@@ -273,6 +273,7 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("SCR_EL3_EA", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("SCR_NS", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("UNDEFINED", Some WT.BaseBoolRepr)
+                 , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
                  , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  , ("_R", Some (WT.BaseArrayRepr
                                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
@@ -528,28 +529,36 @@ foldStmt :: (AS.Expr -> b -> b) ->
 foldStmt f h = foldStmt' (foldExpr f) (foldLVal h)
 
 
-foldDef :: (AS.Expr -> b -> b) ->
-           (AS.LValExpr -> b -> b) ->
-           (AS.Stmt -> b -> b) ->
+foldDef :: (T.Text -> AS.Expr -> b -> b) ->
+           (T.Text -> AS.LValExpr -> b -> b) ->
+           (T.Text -> AS.Stmt -> b -> b) ->
            AS.Definition -> b -> b
-foldDef f h g d b = case d of
-  AS.DefCallable _ _ _ stmts -> foldr (foldStmt f h g) b stmts
+foldDef f' h' g' d b = case d of
+  AS.DefCallable (AS.QualifiedIdentifier _ ident) _ _ stmts ->
+    let
+      f = f' ident
+      h = h' ident
+      g = g' ident
+    in foldr (foldStmt f h g) b stmts
   _ -> b
 
-foldInstruction :: (AS.Expr -> b -> b) ->
-                   (AS.LValExpr -> b -> b) ->
-                   (AS.Stmt -> b -> b) ->
+foldInstruction :: (T.Text -> AS.Expr -> b -> b) ->
+                   (T.Text -> AS.LValExpr -> b -> b) ->
+                   (T.Text -> AS.Stmt -> b -> b) ->
                    AS.Instruction -> b -> b
-foldInstruction f h g (AS.Instruction _ instEncodings instPostDecode instExecute) b =
+foldInstruction f' h' g' (AS.Instruction ident instEncodings instPostDecode instExecute) b =
   let
+    f = f' ident
+    h = h' ident
+    g = g' ident
+    
     foldEncoding (AS.InstructionEncoding {encDecode=stmts}) b' =
       foldr (foldStmt f h g) b' stmts
-  in
-  foldr (foldStmt f h g) (foldr foldEncoding b instEncodings) (instPostDecode ++ instExecute)
+  in foldr (foldStmt f h g) (foldr foldEncoding b instEncodings) (instPostDecode ++ instExecute)
 
-foldASL :: (AS.Expr -> b -> b) ->
-           (AS.LValExpr -> b -> b) ->
-           (AS.Stmt -> b -> b) ->
+foldASL :: (T.Text -> AS.Expr -> b -> b) ->
+           (T.Text -> AS.LValExpr -> b -> b) ->
+           (T.Text -> AS.Stmt -> b -> b) ->
   [AS.Definition] -> [AS.Instruction] -> b -> b
 foldASL f h g defs instrs b = foldr (foldInstruction f h g) (foldr (foldDef f h g) b defs) instrs
 
@@ -1010,7 +1019,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       case mVarType of
         Nothing -> return []
         Just varType -> return [(mkStructMemberName structName memberName, varType)]
-    AS.ExprMember _ _ -> return []-- error "exprGlobalVars"
+    AS.ExprMember _ _ -> error "exprGlobalVars"
     AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
       mVarTypes <- forM memberNames $ \memberName -> do
         mVarType <- computeGlobalStructMemberType structName memberName
@@ -1018,10 +1027,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
           Nothing -> return []
           Just varType -> return [(mkStructMemberName structName memberName, varType)]
       return $ concat mVarTypes
-    AS.ExprMemberBits _ _ -> return [] --error "exprGlobalVars"
-      -- eGlobals <- exprGlobalVars e
-      -- varGlobals <- catMaybes <$> traverse varGlobal vars
-      -- return $ eGlobals ++ varGlobals
+    AS.ExprMemberBits _ _ -> error "exprGlobalVars"
     _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
@@ -1072,6 +1078,16 @@ stmtGlobalVars stmt =
         termGlobals <- exprGlobalVars term
         stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
         return $ termGlobals ++ stmtGlobals
+      AS.StmtUnpredictable -> do
+        gb <- varGlobal "UNPREDICTABLE"
+        case gb of
+          Just g -> return [g]
+          _ -> error "Missing global variable: UNPREDICTABLE"
+      AS.StmtUndefined -> do
+        gb <- varGlobal "UNDEFINED"
+        case gb of
+          Just g -> return [g]
+          _ -> error "Missing global variable: UNDEFINED"
       _ -> return []
 
 -- | Compute the list of global variables in a 'Callable' and store it in the
@@ -1162,7 +1178,6 @@ computeInstructionSignature' AS.Instruction{..} encName = do
         Some tp <- computeFieldType field
         let ctp = CT.baseToType tp
         return (Some (LabeledValue (AS.instFieldName field) ctp))
-
       Some globalReprs <- return $ Ctx.fromList labeledVals
       Some argReprs <- return $ Ctx.fromList labeledArgs
       let pSig = ProcedureSignature { procName = name

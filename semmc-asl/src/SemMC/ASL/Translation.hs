@@ -471,15 +471,12 @@ translateAssignment' ov lval atom mE = do
         CT.SymbolicStructRepr tps -> void $ Ctx.traverseAndCollect (assignTupleElt lvals tps atom) tps
         tp -> X.throw $ ExpectedStructType mE tp
 
-
     AS.LValSliceOf lv [slice] -> translatelValSlice ov lv slice atom
 
     -- FIXME: This form appears only twice and could easily be broken
     -- into two assignments. The above case covers all other cases.
     AS.LValSliceOf (AS.LValVarRef _) [AS.SliceSingle slice, AS.SliceRange lo hi] -> do
-
       error $ "Unsupported LVal: " ++ show lval
-
 
     AS.LValArrayIndex ref@(AS.LValVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice] -> do
         Some e <- lookupVarRef arrName
