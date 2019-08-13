@@ -38,6 +38,7 @@ import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.List as List
+import           Data.List.Index (imap)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -53,6 +54,8 @@ import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
+
+import System.IO.Unsafe
 
 type family BaseLitType (tp :: WT.BaseType) :: * where
   BaseLitType WT.BaseIntegerType = Integer
@@ -328,9 +331,7 @@ translateStatement ov sig stmt
                    | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
       AS.StmtTry {} -> error "Try statements are not implemented"
       AS.StmtThrow err -> do
-        false <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
-        errStr <- CCG.mkAtom (CCG.App (CCE.TextLit err))
-        CCG.assertExpr (CCG.AtomExpr false) (CCG.AtomExpr errStr)
+        CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit err))
       _ -> error (show stmt)
 
 -- | Translate a for statement into Crucible
@@ -471,8 +472,7 @@ translateAssignment' ov lval atom mE = do
         tp -> X.throw $ ExpectedStructType mE tp
 
 
-    AS.LValSliceOf lv [slice] -> do
-      translatelValSlice ov lv slice atom
+    AS.LValSliceOf lv [slice] -> translatelValSlice ov lv slice atom
 
     -- FIXME: This form appears only twice and could easily be broken
     -- into two assignments. The above case covers all other cases.
@@ -481,13 +481,32 @@ translateAssignment' ov lval atom mE = do
       error $ "Unsupported LVal: " ++ show lval
 
 
-    AS.LValArrayIndex ident slices -> do
+    AS.LValArrayIndex ref@(AS.LValVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice] -> do
+        Some e <- lookupVarRef arrName
+        arrAtom <- CCG.mkAtom e
+        Some idxAtom <- translateExpr ov slice
+        if | CT.AsBaseType bt <- CT.asBaseType (CCG.typeOfAtom idxAtom)
+           , CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> bt') retTy <- CCG.typeOfAtom arrAtom
+           , Just Refl <- testEquality bt bt' -- index types match
+           , CT.AsBaseType btAsn <- CT.asBaseType (CCG.typeOfAtom atom)
+           , Just Refl <- testEquality btAsn retTy -- array element types match
+           -> do
+               let asn = Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom))
+               let arr = CCE.SymArrayUpdate retTy (CCG.AtomExpr arrAtom) asn (CCG.AtomExpr atom)
+               newArr <- CCG.mkAtom (CCG.App arr)
+               translateAssignment' ov ref newArr Nothing
+           | otherwise -> error $ "Invalid array assignment: " ++ show lval
 
-      return () -- FIXME: Actually compute assignment
+    AS.LValArrayIndex _ (_ : _ : _) -> do
+      error $
+        "Unexpected multi-argument array assignment. Is this actually a setter?" ++ show lval
 
     AS.LValMemberBits ref bits -> do
-
-      return () -- FIXME: Actually compuete assignment
+      let ibits = imap (\i -> \e -> (i, e)) bits
+      mapM_ (\(i, e) -> do
+        Some aslice <- translateSlice' ov atom (AS.SliceSingle (AS.ExprLitInt (toInteger i)))
+        let lv' = AS.LValMember ref e in
+          translateAssignment' ov lv' aslice Nothing) ibits
 
     -- This never appears
     AS.LValMemberArray _ _ ->
@@ -508,54 +527,31 @@ translateAssignment' ov lval atom mE = do
 
 -- These functions push all the bitvector type matching into runtime checks.
 
-unsafeBVSelect :: WT.NatRepr idx
-                           -> WT.NatRepr len
-                           -> WT.NatRepr w
-                           -> CCG.Atom s (CT.BVType w)
-                           -> (CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType len))
-unsafeBVSelect lo len w atom =
+maybeBVSelect :: WT.NatRepr idx
+               -> WT.NatRepr len
+               -> WT.NatRepr w
+               -> Maybe (CCG.Expr ext s (CT.BVType w))
+               -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType len)))
+maybeBVSelect lo len w (Just expr) =
   if | Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` len
      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` w
      , Just WT.LeqProof <- (lo `WT.addNat` len) `WT.testLeq` w
-     -> CCG.App (CCE.BVSelect lo len w (CCG.AtomExpr atom))
-     | otherwise -> error "BVSelect type mismatch"
-
-maybeBVSelect :: WT.NatRepr idx
-                           -> WT.NatRepr len
-                           -> WT.NatRepr w
-                           -> CCG.Atom s (CT.BVType w)
-                           -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType len)))
-maybeBVSelect lo len w atom =
-  if (1 <= WT.natValue len &&
-      1 <= WT.natValue w &&
-      WT.natValue lo + WT.natValue len <= WT.natValue w)
-  then Just (unsafeBVSelect lo len w atom)
-  else Nothing
+     -> Just $ CCG.App (CCE.BVSelect lo len w expr)
+     | otherwise -> Nothing
+maybeBVSelect _ _ _ Nothing = Nothing
 
 
-unsafeBVConcat :: WT.NatRepr u
-                  -> WT.NatRepr v
-                  -> CCG.Expr ext s (CT.BVType u)
-                  -> CCG.Expr ext s (CT.BVType v)
-                  -> (CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType (u WT.+ v)))
-unsafeBVConcat lo len pre atom =
+maybeBVConcat :: WT.NatRepr u
+               -> WT.NatRepr v
+               -> Maybe (CCG.Expr ext s (CT.BVType u))
+               -> Maybe (CCG.Expr ext s (CT.BVType v))
+               -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType (u WT.+ v))))
+maybeBVConcat lo len (Just pre) (Just atom) =
   if | Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` len
      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lo
      , Just WT.LeqProof <- (WT.knownNat @1)  `WT.testLeq` (lo `WT.addNat` len)
-     -> CCG.App (CCE.BVConcat lo len pre atom)
-     | otherwise -> error "BVConcat type mismatch"
-
-maybeBVConcat :: WT.NatRepr u
-                  -> WT.NatRepr v
-                  -> Maybe (CCG.Expr ext s (CT.BVType u))
-                  -> Maybe (CCG.Expr ext s (CT.BVType v))
-                  -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType (u WT.+ v))))
-maybeBVConcat lo len (Just pre) (Just atom) =
-  if (1 <= WT.natValue len &&
-      1 <= WT.natValue lo &&
-      1 <= (WT.natValue lo + WT.natValue len))
-  then Just (unsafeBVConcat lo len pre atom)
-  else Nothing
+     -> Just $ CCG.App (CCE.BVConcat lo len pre atom)
+     | otherwise -> Nothing
 maybeBVConcat lo _ Nothing (Just atom) =
   if | Just Refl <- testEquality (WT.knownNat @0) lo
      -> Just atom
@@ -564,14 +560,14 @@ maybeBVConcat _ len (Just pre) Nothing =
   if | Just Refl <- testEquality (WT.knownNat @0) len
      -> Just pre
      | otherwise -> error "BVConcat type mismatch"
-
+maybeBVConcat _ _ _ _ = error "BVConcat type mismatch"
 
 
 translatelValSlice :: Overrides arch
-               -> AS.LValExpr
-               -> AS.Slice
-               -> CCG.Atom s tp
-               -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+                   -> AS.LValExpr
+                   -> AS.Slice
+                   -> CCG.Atom s tp
+                   -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
 translatelValSlice ov lv slice asnAtom = do
   Some atom <- translateExpr ov (lValToExpr lv)
   (Some loRepr, Some hiRepr) <- return $ getSliceRange slice
@@ -588,23 +584,32 @@ translatelValSlice ov lv slice asnAtom = do
          -- [x0 .. x_loRepr .. x_hiRepr .. x_wRepr-1 ] -- original bitvector in lv
          -- [y_loRepr .. y_hiRepr] -- asnAtom value
 
-
-         let pre = maybeBVSelect (WT.knownNat @0) loRepr wRepr atom
+         let lvBV = Just (CCG.AtomExpr atom)
+         let asnBV = Just (CCG.AtomExpr asnAtom)
+         let pre = maybeBVSelect (WT.knownNat @0) loRepr wRepr lvBV
            -- pre = [x0 .. x_loRepr-1]
-         let first = maybeBVConcat loRepr lenRepr pre (Just (CCG.AtomExpr asnAtom))
+         let first = maybeBVConcat loRepr lenRepr pre asnBV
            -- first = pre ++ [y_loRepr .. y_hiRepr]
-         let post = maybeBVSelect (hiRepr `WT.addNat` (WT.knownNat @1)) lenUpper wRepr atom
+         let post = maybeBVSelect (hiRepr `WT.addNat` (WT.knownNat @1)) lenUpper wRepr lvBV
            -- post = [x_hiRepr+1 .. x_wRepr-1]
          let fin = maybeBVConcat (loRepr `WT.addNat` lenRepr) lenUpper first post
+           -- Final bv has the correct length:
+           -- (lo + len) + lenUpper = lo + 1 + (hi - lo) + (w - (1 + hi))
+           --                       = lo + 1 + hi - lo + w - 1 - hi
+           --                       = (lo - lo) + (hi - hi) + (1 - 1) + w
+           --                       = w
+           -- Shape of final bv:
            -- fin = first ++ post
            --     = [x0 .. x_loRepr-1] ++ [y_loRepr .. y_hiRepr] ++ [x_hiRepr+1 .. x_wRepr-1]
          case fin of
            Just r -> do
              result <- CCG.mkAtom r
              translateAssignment' ov lv result Nothing
-           Nothing -> error "Bad slice"
+           Nothing ->
+             X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
 
-     | otherwise -> X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
+     | otherwise ->
+         X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
 
 
 -- | Put a new local in scope and initialize it to an undefined value
@@ -850,12 +855,21 @@ getSliceRange slice = case slice of
       (Some (WT.knownNat @31), Some (WT.knownNat @31))
     _ -> error $ "unsupported slice: " ++ show slice
 
+  
 translateSlice :: Overrides arch
                -> AS.Expr
                -> AS.Slice
                -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
 translateSlice ov e slice = do
-  Some atom <- translateExpr ov e
+   Some atom <- translateExpr ov e
+   translateSlice' ov atom slice
+   
+
+translateSlice' :: Overrides arch
+                -> CCG.Atom s tp
+                -> AS.Slice
+                -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
+translateSlice' _ atom slice = do
   (Some loRepr, Some hiRepr) <- return $ getSliceRange slice
   case () of
     _ | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr

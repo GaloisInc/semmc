@@ -62,6 +62,8 @@ import           SemMC.ASL.Crucible
   )
 import           SemMC.ASL.Exceptions
 
+import System.IO.Unsafe -- FIXME: For debugging
+
 ----------------
 -- Notes
 --
@@ -375,6 +377,10 @@ mkSyntaxOverrides defs =
       getSliceExpr slice = case slice of
         AS.SliceSingle e -> e
         _ -> error "Unexpected slice argument."
+
+
+      --FIXME: There are a few cases of tuple assignments with setters that need to
+      --be specially handled
       
       stmtOverrides stmt = case stmt of
         AS.StmtAssign (AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier q ident)) slices) rhs ->
