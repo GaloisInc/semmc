@@ -24850,12 +24850,12 @@
                       (list
                         (ExprVarRef
                           (QualifiedIdentifier Any fault))))
-                    (ExprMember
-                      (ExprUnOp
-                        "!"
+                    (ExprUnOp
+                      "!"
+                      (ExprMember
                         (ExprVarRef
-                          (QualifiedIdentifier Any fault)))
-                      s2fs1walk))
+                          (QualifiedIdentifier Any fault))
+                        s2fs1walk)))
                   (StmtBlock
                     (list
                       (StmtAssign
@@ -25997,12 +25997,12 @@
                       (list
                         (ExprVarRef
                           (QualifiedIdentifier Any fault))))
-                    (ExprMember
-                      (ExprUnOp
-                        "!"
+                    (ExprUnOp
+                      "!"
+                      (ExprMember
                         (ExprVarRef
-                          (QualifiedIdentifier Any fault)))
-                      s2fs1walk))
+                          (QualifiedIdentifier Any fault))
+                        s2fs1walk)))
                   (StmtBlock
                     (list
                       (StmtAssign
