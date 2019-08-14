@@ -608,7 +608,6 @@ translatelValSlice ov lv slice asnAtom = do
      | otherwise ->
          X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
 
-
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
                     -> AS.Identifier
@@ -619,6 +618,11 @@ declareUndefinedVar ty ident = do
     X.throw (LocalAlreadyDefined ident)
   tty <- translateType ty
   case tty of
+    -- Bit slicing may need to read this value (i.e. to incrementally build a bv)
+    -- so it is explicitly assigned an undefined value.
+    Some (CT.BVRepr wRepr) -> do
+      reg <- CCG.newReg (CCG.App $ CCE.BVUndef wRepr)
+      MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
     Some rep -> do
       reg <- CCG.newUnassignedReg rep
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }

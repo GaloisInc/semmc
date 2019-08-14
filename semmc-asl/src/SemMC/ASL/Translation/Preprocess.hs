@@ -1019,7 +1019,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       case mVarType of
         Nothing -> return []
         Just varType -> return [(mkStructMemberName structName memberName, varType)]
-    AS.ExprMember _ _ -> error "exprGlobalVars"
+    AS.ExprMember _ _ -> X.throw $ UnsupportedExpr expr
     AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
       mVarTypes <- forM memberNames $ \memberName -> do
         mVarType <- computeGlobalStructMemberType structName memberName
@@ -1027,7 +1027,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
           Nothing -> return []
           Just varType -> return [(mkStructMemberName structName memberName, varType)]
       return $ concat mVarTypes
-    AS.ExprMemberBits _ _ -> error "exprGlobalVars"
+    AS.ExprMemberBits _ _ -> X.throw $ UnsupportedExpr expr
     _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
