@@ -441,9 +441,6 @@ mkSyntaxOverrides defs =
       setters = Set.fromList $ catMaybes $ setterName <$> defs
 
       getterName d = case d of
-        -- FIXME: This is either SCR or SCR_EL3 based on the architecture
-        --AS.DefGetter (AS.QualifiedIdentifier _ "SCR_GEN") _ _ _ ->
-           --Nothing
         AS.DefGetter qName args [_] _ ->
           Just $ mkFunctionName (mkGetterName qName) (length args)
         AS.DefGetter (AS.QualifiedIdentifier _ name) _ _ _ ->
@@ -455,13 +452,9 @@ mkSyntaxOverrides defs =
            Just $ mkFunctionName (mkSetterName qName) (length args + 1)
         _ -> Nothing
 
-      -- This is not complete, since in general we might encounter args followed by an actual slice.
-      -- It may be necessary to guess what prefix of the slices corresponds to getter/setter
-      -- arguments and what is an actual slice of the result.
       getSliceExpr slice = case slice of
         AS.SliceSingle e -> e
         _ -> error "Unexpected slice argument."
-
 
       --FIXME: There are a few cases of tuple assignments with setters that need to
       --be specially handled
@@ -476,7 +469,6 @@ mkSyntaxOverrides defs =
             AS.StmtCall (mkSetterName qName) [rhs]
           else stmt
         _ -> stmt
-
 
       exprOverrides' expr mmem = case expr of
         AS.ExprIndex (AS.ExprVarRef qName) slices ->
@@ -493,9 +485,6 @@ mkSyntaxOverrides defs =
         AS.ExprMember e mem | Just e' <- exprOverrides' e (Just mem) -> e'
         _ | Just e' <- exprOverrides' expr Nothing -> e'
         _ -> expr
-
-
-
   in SyntaxOverrides stmtOverrides exprOverrides
 
 
