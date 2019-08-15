@@ -42,7 +42,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
-import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Some ( Some(..), viewSome, mapSome )
 -- import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import           Data.Traversable (forM)
@@ -85,11 +85,11 @@ import System.IO.Unsafe -- FIXME: For debugging
 -- * How do we deal with dependently-typed functions? Do we actually need to?
 
 -- | Compute the signature of a single callable, given its name and arity.
-computeSignature :: T.Text -> Int -> SigM ext f ()
-computeSignature name arity = do
-  mCallable <- lookupCallable name arity
+computeSignature :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
+computeSignature qName arity = do
+  mCallable <- lookupCallable qName arity
   case mCallable of
-    Nothing -> E.throwError $ CallableNotFound name
+    Nothing -> E.throwError $ CallableNotFound (mkFunctionName qName arity)
     Just c -> void $ computeCallableSignature c
 
 computeSignature' :: T.Text -> SigM ext f ()
@@ -237,6 +237,36 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> Just $ do
             atom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @4) 0))
             return $ Some atom
+          -- FIXME: implement this (asl definition is recursive and dependently typed)
+          AS.ExprCall (AS.QualifiedIdentifier _ "BigEndianReverse") [x] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            atom <- CCG.mkAtom (CCG.AtomExpr xAtom)
+            return $ Some atom
+          -- FIXME: implement this (asl definition is recursive and dependently typed)
+          -- There are two overloadings of this based on the type of x
+          AS.ExprCall (AS.QualifiedIdentifier _ "Align") [x, y] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            atom <- CCG.mkAtom (CCG.AtomExpr xAtom)
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
           AS.ExprCall (AS.QualifiedIdentifier _ "__BVTOINT32") [AS.ExprLitInt i] -> Just $ do
             atom <- CCG.mkAtom (CCG.App (CCE.IntegerToBV (WT.knownNat @32)
                                          (CCG.App (CCE.IntLit i))))
@@ -270,8 +300,6 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_T", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_E", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("PSTATE_M", Some (WT.BaseBVRepr (WT.knownNat @5)))
-                 , ("SCR_EL3_EA", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("SCR_NS", Some (WT.BaseBVRepr (WT.knownNat @1)))
                  , ("UNDEFINED", Some WT.BaseBoolRepr)
                  , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
                  , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
@@ -280,7 +308,55 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                                 (WT.BaseBVRepr (WT.knownNat @64))))
                  , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 ]
+                 ] ++
+                 concat (mkGlobalStruct <$>
+                         [("SCTLR_EL1", "SCTLRType")
+                         ,("SCTLR_EL2", "SCTLRType")
+                         ,("CNTKCTL_EL1", "CNTKCTLType")
+                         ,("CNTKCTL_EL2", "CNTKCTLType")
+                         ,("ESR_EL1", "ESRType")
+                         ,("ESR_EL2", "ESRType")
+                         ,("ESR_EL3", "ESRType")
+                         ,("MAIR_EL1", "MAIRType")
+                         ,("MAIR_EL2", "MAIRType")
+                         ,("MAIR_EL3", "MAIRType")
+                         ,("SCR", "SCRType")
+                         ,("SCR_EL3", "SCRType")
+                         ])
+  where
+    mkGlobalStruct (nm,tnm) =
+      case lookup tnm globalStructTypes of
+        Just fields -> mkField nm <$> fields
+        _ -> case lookup tnm globalTypeSynonyms of
+          Just syn -> [(nm, toSimpleBVType syn)]
+          _  -> error $ "Missing global struct: " <> (T.unpack tnm)
+    mkField nm (fnm, ftype) = (nm <> "_" <> fnm, toSimpleBVType ftype)
+
+
+globalStructTypes :: [(T.Text, [(T.Text, AS.Type)])]
+globalStructTypes =
+  [ ("SCRType", [("EL3_A", bit 1), ("NS", bit 1)])
+  , ("SCTLRType", [("SED", bit 1)])
+  , ("CPACRType", [("FPEN", bit 2)])
+  , ("CNTKCTLType", [("EL0PTEN", bit 1)])
+  ]
+  where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
+
+globalTypeSynonyms :: [(T.Text, AS.Type)]
+globalTypeSynonyms =
+  [ ("MAIRType", AS.TypeFun "bits" (AS.ExprLitInt 64))
+  , ("ESRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
+  ]
+
+toSimpleBVType :: AS.Type -> Some WT.BaseTypeRepr
+toSimpleBVType t =
+  if | AS.TypeFun "bits" e <- t
+     , AS.ExprLitInt w <- e
+     , Just (Some wRepr) <- NR.someNat w
+     , Just NR.LeqProof <- NR.isPosNat wRepr
+       -> Some (WT.BaseBVRepr wRepr)
+     | otherwise -> error $ "Bad simple BV Type:" <> show t
+
 
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
@@ -322,15 +398,19 @@ data DefType = DefTypeBuiltin AS.Identifier
 
 mkCallableName :: Callable -> T.Text
 mkCallableName c =
-  let AS.QualifiedIdentifier _ name =  callableName c
-      numArgs = length (callableArgs c)
-  in mkFunctionName name numArgs
+  let numArgs = length (callableArgs c)
+  in mkFunctionName (callableName c) numArgs
 
-mkGetterName :: T.Text -> T.Text
-mkGetterName name = "GETTER_" <> name
+mkGetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
+mkGetterName = mapInnerName (\s -> "GETTER_" <> s)
 
-mkSetterName :: T.Text -> T.Text
-mkSetterName name = "SETTER_" <> name
+mkGetterNameField :: AS.QualifiedIdentifier -> Maybe T.Text -> AS.QualifiedIdentifier
+mkGetterNameField name (Just field) =
+  mapInnerName (\s -> s <> "_" <> field) $ mkGetterName name
+mkGetterNameField name Nothing = mkGetterName name
+
+mkSetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
+mkSetterName = mapInnerName (\s -> "SETTER_" <> s)
 
 asDefType :: AS.Definition -> Maybe DefType
 asDefType def =
@@ -354,6 +434,7 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv
            )
 
 
+
 mkSyntaxOverrides :: [AS.Definition] -> SyntaxOverrides
 mkSyntaxOverrides defs =
   let getters = Set.fromList $ catMaybes $ getterName <$> defs
@@ -361,15 +442,17 @@ mkSyntaxOverrides defs =
 
       getterName d = case d of
         -- FIXME: This is either SCR or SCR_EL3 based on the architecture
-        AS.DefGetter (AS.QualifiedIdentifier _ "SCR_GEN") _ _ _ ->
-           Nothing
-        AS.DefGetter (AS.QualifiedIdentifier _ name) args _ _ ->
-          Just (mkFunctionName (mkGetterName name) (length args))
+        --AS.DefGetter (AS.QualifiedIdentifier _ "SCR_GEN") _ _ _ ->
+           --Nothing
+        AS.DefGetter qName args [_] _ ->
+          Just $ mkFunctionName (mkGetterName qName) (length args)
+        AS.DefGetter (AS.QualifiedIdentifier _ name) _ _ _ ->
+          error $ "Unexpected getter for: " <> T.unpack name
         _ -> Nothing
 
       setterName d = case d of
-        AS.DefSetter (AS.QualifiedIdentifier _ name) args _ _ ->
-           Just (mkFunctionName (mkSetterName name) (length args + 1))
+        AS.DefSetter qName args _ _ ->
+           Just $ mkFunctionName (mkSetterName qName) (length args + 1)
         _ -> Nothing
 
       -- This is not complete, since in general we might encounter args followed by an actual slice.
@@ -384,29 +467,34 @@ mkSyntaxOverrides defs =
       --be specially handled
       
       stmtOverrides stmt = case stmt of
-        AS.StmtAssign (AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier q ident)) slices) rhs ->
-          if Set.member (mkFunctionName (mkSetterName ident) (length slices + 1)) setters then
-            AS.StmtCall (AS.QualifiedIdentifier q (mkSetterName ident)) (rhs : map getSliceExpr slices)
+        AS.StmtAssign (AS.LValArrayIndex (AS.LValVarRef qName) slices) rhs ->
+          if Set.member (mkFunctionName (mkSetterName qName) (length slices + 1)) setters then
+            AS.StmtCall (mkSetterName qName) (rhs : map getSliceExpr slices)
           else stmt
-        AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier q ident)) rhs ->
-          if Set.member (mkFunctionName (mkSetterName ident) 1) setters then
-            AS.StmtCall (AS.QualifiedIdentifier q (mkSetterName ident)) [rhs]
+        AS.StmtAssign (AS.LValVarRef qName) rhs ->
+          if Set.member (mkFunctionName (mkSetterName qName) 1) setters then
+            AS.StmtCall (mkSetterName qName) [rhs]
           else stmt
         _ -> stmt
-        
+
+
+      exprOverrides' expr mmem = case expr of
+        AS.ExprIndex (AS.ExprVarRef qName) slices ->
+          if Set.member (mkFunctionName (mkGetterName qName) (length slices)) getters then
+            Just $ AS.ExprCall (mkGetterNameField qName mmem) (map getSliceExpr slices)
+          else Nothing
+        AS.ExprVarRef qName ->
+          if Set.member (mkFunctionName (mkGetterName qName) 0) getters then
+            Just $ AS.ExprCall (mkGetterNameField qName mmem) []
+          else Nothing
+        _ -> Nothing
+
       exprOverrides expr = case expr of
-         -- FIXME: This is either SCR or SCR_EL3 based on the architecture
-        AS.ExprMember (AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier q "SCR_GEN")) []) mem ->
-          AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier q "SCR")) mem
-        AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) slices ->
-          if Set.member (mkFunctionName (mkGetterName ident) (length slices)) getters then
-            AS.ExprCall (AS.QualifiedIdentifier q (mkGetterName ident)) (map getSliceExpr slices)
-          else expr
-        AS.ExprVarRef (AS.QualifiedIdentifier q ident) ->
-          if Set.member (mkFunctionName (mkGetterName ident) 0) getters then
-            AS.ExprCall (AS.QualifiedIdentifier q (mkGetterName ident)) []
-          else expr
+        AS.ExprMember e mem | Just e' <- exprOverrides' e (Just mem) -> e'
+        _ | Just e' <- exprOverrides' expr Nothing -> e'
         _ -> expr
+
+
 
   in SyntaxOverrides stmtOverrides exprOverrides
 
@@ -591,6 +679,55 @@ applyStmtSyntaxOverride ovrs stmt =
     AS.StmtSeeExpr e -> AS.StmtSeeExpr (f e)
     AS.StmtTry stmts ident alts -> AS.StmtTry (g <$> stmts) ident (mapCatches <$> alts)
     _ -> stmt'
+
+
+-- | Transform a function that returns a struct type
+-- into one that instead returns a specific member @mem@ of the resulting struct
+collapseReturn :: T.Text -> [AS.Stmt] -> [AS.Stmt]
+collapseReturn mem stmts =
+  let assignLast finident stmts' =
+        reverse $ case reverse stmts' of
+          AS.StmtAssign (AS.LValVarRef lvident) eident
+            : rest | lvident == finident ->
+                AS.StmtReturn (Just $ AS.ExprMember eident mem) : rest
+          _ -> error $ "Unexpected statement structure: " <> show stmts
+      mapCases finident cases = case cases of
+        AS.CaseWhen pat me stmts' -> AS.CaseWhen pat me (assignLast finident stmts')
+        AS.CaseOtherwise stmts' -> AS.CaseOtherwise (assignLast finident stmts')
+
+  in reverse $ case reverse stmts of
+    AS.StmtReturn (Just (AS.ExprVarRef finident)) : cond : rest ->
+      case cond of
+        AS.StmtIf tests body ->
+          AS.StmtIf ((\(e, stmts') -> (e, assignLast finident stmts')) <$> tests)
+                    (assignLast finident <$> body) : rest
+        AS.StmtCase e alts ->
+          AS.StmtCase e (mapCases finident <$> alts) : rest
+        _ -> error $ "Unexpected statement structure: " <> show stmts
+    _ -> error $ "Unexpected statement structure: " <> show stmts
+
+callablesFromGetter :: (AS.Stmt -> AS.Stmt) -> AS.Definition -> [AS.Definition]
+callablesFromGetter g
+  (AS.DefGetter qName args [AS.TypeRef (AS.QualifiedIdentifier _ tname)] stmts) =
+  case lookup tname globalStructTypes of
+    Just fields -> (\(fnm, ftype) -> mkCallable (Just fnm) ftype) <$> fields
+    _ -> case lookup tname globalTypeSynonyms of
+      Just syn -> [mkCallable Nothing syn]
+      _ -> error $
+             "Missing struct definition for getter:" <> show qName <>
+             " and type " <> T.unpack tname
+  where
+    getStatements (Just fnm) = collapseReturn fnm (g <$> stmts)
+    getStatements Nothing = g <$> stmts
+    mkCallable mfnm ftype =
+      AS.DefCallable { callableName = mkGetterNameField qName mfnm
+                     , callableArgs = args
+                     , callableRets = [ftype]
+                     , callableStmts = getStatements mfnm
+                     }
+callablesFromGetter g (AS.DefGetter qName args rets stmts) =
+  [AS.DefCallable (mkGetterName qName) args rets (g <$> stmts)]
+callablesFromGetter _ _ = error "Unexpected Definition."
     
 
 applySyntaxOverridesDefs :: SyntaxOverrides -> [AS.Definition] -> [AS.Definition]
@@ -605,27 +742,27 @@ applySyntaxOverridesDefs ovrs defs =
     
     argName (AS.SetterArg name False) = Just name
     argName _ = Nothing
+
+    updDecls d = if | (name, AS.TypeRef (AS.QualifiedIdentifier _ tname)) <- d
+                    , Just syn <- lookup tname globalTypeSynonyms
+                      -> (name, syn)
+                    | otherwise -> d
     
     mapDefs d = case d of
       AS.DefCallable qName args rets stmts ->
-        Just $ AS.DefCallable qName args rets (g <$> stmts)
-      AS.DefGetter (AS.QualifiedIdentifier q name) args rets stmts ->
-        Just AS.DefCallable { callableName = AS.QualifiedIdentifier q (mkGetterName name)
-                       , callableArgs = args
-                       , callableRets = rets
-                       , callableStmts = g <$> stmts
-                       }
-      AS.DefSetter (AS.QualifiedIdentifier q name) args rhs stmts -> do
+        [AS.DefCallable qName args rets (g <$> stmts)]
+      c@AS.DefGetter {} -> callablesFromGetter g c
+      AS.DefSetter qName args rhs stmts -> maybeToList $ do
         argNames <- sequence (argName <$> args)
-        Just $ AS.DefCallable { callableName = AS.QualifiedIdentifier q (mkSetterName name)
-                       , callableArgs = rhs : argNames
+        Just $ AS.DefCallable { callableName = mkSetterName qName
+                       , callableArgs = updDecls <$> (rhs : argNames)
                        , callableRets = []
                        , callableStmts = g <$> stmts
                        }
-      AS.DefConst i t e -> Just $ AS.DefConst i t (f e)
-      _ -> Just d
+      AS.DefConst i t e -> [AS.DefConst i t (f e)]
+      _ -> [d]
 
-  in catMaybes $ mapDefs <$> defs
+  in concat $ mapDefs <$> defs
 
 applySyntaxOverridesInstrs :: SyntaxOverrides -> [AS.Instruction] -> [AS.Instruction]
 applySyntaxOverridesInstrs ovrs instrs =
@@ -720,7 +857,7 @@ execSigM defs action =
   in case e of
     Left err -> Left err
     Right a -> Right a
-  where initState = SigState Map.empty Map.empty Map.empty
+  where initState = SigState Map.empty Map.empty Map.empty []
 
 
 -- | Syntactic-level expansions that should happen aggressively before
@@ -746,6 +883,8 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                          , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
                            -- ^ map from function/procedure name to list of globals
                          , callableSignatureMap :: Map.Map T.Text (Some SomeSignature, Callable)
+                         , callableOpenSearches :: [T.Text]
+                           -- ^ all callables encountered on the current search path
                            -- ^ map of all signatures found thus far
                          -- , unfoundCallables :: Seq.Seq T.Text
                          --   -- ^ list of callables we encountered that were not in the
@@ -765,7 +904,27 @@ storeType tpName tp = do
   st <- RWS.get
   RWS.put $ st { userTypes = Map.insert tpName (Some tp) (userTypes st) }
 
-lookupCallable :: T.Text -> Int -> SigM ext f (Maybe Callable)
+pushCallableSearch :: AS.QualifiedIdentifier -> Int -> SigM ext f Bool
+pushCallableSearch name' arity = do
+  st <- RWS.get
+  let name = mkFunctionName name' arity
+  if elem name (callableOpenSearches st) then
+    return True
+  else do
+    RWS.put $ st { callableOpenSearches = name : (callableOpenSearches st) }
+    return False
+
+popCallableSearch :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
+popCallableSearch name' arity = do
+  st <- RWS.get
+  let name = mkFunctionName name' arity
+  case callableOpenSearches st of
+    x : xs | True <- x == name ->
+      RWS.put $ st { callableOpenSearches = xs }
+    _ -> error $ "Mismatched callable pops and pushes:" <> show name
+
+
+lookupCallable :: AS.QualifiedIdentifier -> Int -> SigM ext f (Maybe Callable)
 lookupCallable name' arity = do
   env <- RWS.ask
   let name = mkFunctionName name' arity
@@ -869,7 +1028,7 @@ computeType tp = case tp of
         , Just NR.LeqProof <- NR.isPosNat wRepr -> return $ Some (WT.BaseBVRepr wRepr)
       -- FIXME: For now, we interpret polymorphic bits(N) as bits(32).
       AS.ExprVarRef (AS.QualifiedIdentifier _ _) -> return $ Some (WT.BaseBVRepr (WT.knownNat @32))
-      _ -> error "computeType, TypeFun"
+      e' -> error $ "computeType, TypeFun" <> show e'
   AS.TypeOf _ -> error "computeType, TypeOf"
   AS.TypeReg _ _ -> error "computeType, TypeReg"
   AS.TypeArray _ _ -> error "computeType, TypeArray"
@@ -987,15 +1146,20 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       varGlobals <- catMaybes <$> traverse varGlobal vars
       return $ eGlobals ++ varGlobals
     AS.ExprInMask e _ -> exprGlobalVars e
-    AS.ExprCall (AS.QualifiedIdentifier _ name) argEs -> do
+    AS.ExprCall qName argEs -> do
       argGlobals <- concat <$> traverse exprGlobalVars argEs
-      mCallable <- lookupCallable name (length argEs)
+      mCallable <- lookupCallable qName (length argEs)
       case mCallable of
         Just callable -> do
           -- Compute the signature of the callable
-          void $ computeCallableSignature callable
-          callableGlobals <- callableGlobalVars callable
-          return $ callableGlobals ++ argGlobals
+          recursed <- pushCallableSearch qName (length argEs)
+          if recursed then
+            return argGlobals
+          else do
+            void $ computeCallableSignature callable
+            callableGlobals <- callableGlobalVars callable
+            popCallableSearch qName (length argEs)
+            return $ callableGlobals ++ argGlobals
         Nothing -> return argGlobals
     AS.ExprInSet e setElts -> do
       eGlobals <- exprGlobalVars e
@@ -1019,7 +1183,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       case mVarType of
         Nothing -> return []
         Just varType -> return [(mkStructMemberName structName memberName, varType)]
-    AS.ExprMember _ _ -> X.throw $ UnsupportedExpr expr
+    AS.ExprMember _ _ -> return [] -- "Assuming no nested global structs"
     AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
       mVarTypes <- forM memberNames $ \memberName -> do
         mVarType <- computeGlobalStructMemberType structName memberName
@@ -1035,20 +1199,26 @@ stmtGlobalVars :: AS.Stmt -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
 stmtGlobalVars stmt =
   -- FIXME: If the stmt has an override, then we should provide a custom set of
   -- globals as well.
+  --seq (unsafePerformIO $ putStrLn $ show stmt) $
   case overrideStmt overrides stmt of
     Just _ -> return []
     Nothing -> case stmt of
       AS.StmtVarDeclInit _ e -> exprGlobalVars e
       AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
-      AS.StmtCall (AS.QualifiedIdentifier _ name) argEs -> do
+      AS.StmtCall qName argEs -> do
         argGlobals <- concat <$> traverse exprGlobalVars argEs
-        mCallable <- lookupCallable name (length argEs)
+        mCallable <- lookupCallable qName (length argEs)
         case mCallable of
           Just callable -> do
             -- Compute the signature of the callable
-            void $ computeCallableSignature callable
-            callableGlobals <- callableGlobalVars callable
-            return $ callableGlobals ++ argGlobals
+            recursed <- pushCallableSearch qName (length argEs)
+            if recursed then
+              return argGlobals
+            else do
+              void $ computeCallableSignature callable
+              callableGlobals <- callableGlobalVars callable
+              popCallableSearch qName (length argEs)
+              return $ callableGlobals ++ argGlobals
           Nothing -> return argGlobals
       AS.StmtReturn (Just e) -> exprGlobalVars e
       AS.StmtAssert e -> exprGlobalVars e

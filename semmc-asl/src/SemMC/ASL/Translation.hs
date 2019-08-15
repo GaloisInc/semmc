@@ -20,6 +20,7 @@ module SemMC.ASL.Translation (
   , userTypeRepr
   , mkStructMemberName
   , mkFunctionName
+  , mapInnerName
   , ToBaseType
   , ToBaseTypes
   , ConstVal(..)
@@ -297,9 +298,9 @@ translateStatement ov sig stmt
       -- particularly actionable, but many may need to be manually overridden.
       AS.StmtSeeExpr {} -> return ()
       AS.StmtSeeString {} -> return ()
-      AS.StmtCall (AS.QualifiedIdentifier _ ident') args -> do
+      AS.StmtCall qIdent args -> do
         sigMap <- MS.gets tsFunctionSigs
-        let ident = mkFunctionName ident' (length args)
+        let ident = mkFunctionName qIdent (length args)
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (Some (SomeFunctionSignature _)) -> X.throw (ExpectedProcedureSignature ident)
@@ -773,10 +774,10 @@ translateExpr ov expr
         Some <$> CCG.mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
       AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
       
-      AS.ExprCall (AS.QualifiedIdentifier _ ident') args -> do
+      AS.ExprCall qIdent args -> do
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
-        let ident = mkFunctionName ident' (length args)
+        let ident = mkFunctionName qIdent (length args)
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (Some (SomeProcedureSignature _)) -> X.throw (ExpectedFunctionSignature ident)
@@ -1114,5 +1115,13 @@ mkStructMemberName :: T.Text -> T.Text -> T.Text
 mkStructMemberName s m = s <> "_" <> m
 
 -- | Make a function name given its ASL name and arity.
-mkFunctionName :: T.Text -> Int -> T.Text
-mkFunctionName name numArgs = name <> T.pack "_" <> T.pack (show numArgs)
+mkFunctionName :: AS.QualifiedIdentifier -> Int -> T.Text
+mkFunctionName name numArgs = collapseQualID name <> T.pack "_" <> T.pack (show numArgs)
+
+collapseQualID :: AS.QualifiedIdentifier -> T.Text
+collapseQualID (AS.QualifiedIdentifier AS.ArchQualAArch64 name) = "AArch64_" <> name
+collapseQualID (AS.QualifiedIdentifier AS.ArchQualAArch32 name) = "AArch32_" <> name
+collapseQualID (AS.QualifiedIdentifier _ name) = name
+
+mapInnerName :: (T.Text -> T.Text) -> AS.QualifiedIdentifier -> AS.QualifiedIdentifier
+mapInnerName f (AS.QualifiedIdentifier q name) = AS.QualifiedIdentifier q (f name)

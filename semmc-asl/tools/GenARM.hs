@@ -45,11 +45,11 @@ main :: IO ()
 main = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  --let instrs = collectInstructions aslInsts
-  --let instrs = [("aarch32_REV_A","aarch32_REV_T1_A")]
-  let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
+  let instrs = [collectInstructions aslInsts !! 4]
+  --let instrs = [("aarch32_REV_A","aarch32_REV_T2_A")]
+  --let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
   
-  mapM_ (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs) instrs
+  forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)
 
 computeDefs :: [T.Text] -> IO ()
 computeDefs defIn = do
@@ -70,6 +70,7 @@ computeDefs defIn = do
 
 runTranslation :: T.Text -> T.Text -> [AS.Instruction] -> [AS.Definition] -> IO ()
 runTranslation instr enc aslInsts aslDefs = do
+  putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
   case computeInstructionSignature instr enc aslInsts aslDefs of
     Left err -> do
       putStrLn $ "Error computing instruction signature: " ++ show err
