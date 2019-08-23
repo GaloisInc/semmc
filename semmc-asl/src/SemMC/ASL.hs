@@ -91,7 +91,7 @@ simulateFunction symCfg func = do
           | Just Refl <- testEquality btr (AC.funcSigRepr (AC.funcSig func)) -> do
               print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.funcName (AC.funcSig func))
-                  argTypes = reshape (FC.fmapFC AS.projectValue (AS.funcArgReprs (AC.funcSig func)))
+                  argTypes = reshape (FC.fmapFC AT.projectValue (AS.funcArgReprs (AC.funcSig func)))
                   argVars = freshArgBoundVars' initArgs
                   retType = AS.funcSigRepr (AC.funcSig func)
                   solverSymbolName = case WI.userSymbol name of
@@ -124,7 +124,7 @@ simulateProcedure symCfg crucProc =
     CCC.SomeCFG cfg -> do
       let sig = AC.procSig crucProc
       initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procArgReprs sig)
-      let globalTypes = FC.fmapFC AS.projectValue (AS.procGlobalReprs sig)
+      let globalTypes = FC.fmapFC AT.projectValue (AS.procGlobalReprs sig)
       let econt = CS.runOverrideSim (CT.baseToType (WT.BaseStructRepr globalTypes)) $ do
             re <- CS.callCFG cfg (CS.RegMap (FC.fmapFC freshArgEntry initArgs))
             return (CS.regValue re)
@@ -143,7 +143,7 @@ simulateProcedure symCfg crucProc =
     extractResult gp initArgs =
       let re = gp ^. CS.gpValue
           sig = AC.procSig crucProc
-          globalTypes = FC.fmapFC AS.projectValue (AS.procGlobalReprs sig)
+          globalTypes = FC.fmapFC AT.projectValue (AS.procGlobalReprs sig)
           retType = WT.BaseStructRepr globalTypes
           -- argTypes = FC.fmapFC AS.projectValue (AS.procArgReprs sig)
       in case CT.asBaseType (CS.regType re) of
@@ -152,7 +152,7 @@ simulateProcedure symCfg crucProc =
           | Just Refl <- testEquality btr retType -> do
               print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.procName sig)
-                  argTypes = reshape (FC.fmapFC AS.projectValue (AS.procArgReprs sig))
+                  argTypes = reshape (FC.fmapFC AT.projectValue (AS.procArgReprs sig))
                   argVars = freshArgBoundVars' initArgs
                   solverSymbolName = case WI.userSymbol name of
                     Left err -> error (show err)

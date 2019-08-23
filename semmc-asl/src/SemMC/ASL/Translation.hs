@@ -10,21 +10,19 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE RecordWildCards #-}
 module SemMC.ASL.Translation (
     TranslationState(..)
   , translateExpr
   , translateStatement
   , translateStatements
   , Overrides(..)
+  , overrides
   , UserType(..)
+  , Definitions(..)
   , userTypeRepr
-  , mkStructMemberName
-  , mkFunctionName
-  , mapInnerName
   , ToBaseType
   , ToBaseTypes
-  , ConstVal(..)
-  , bitsToInteger
   ) where
 
 import           Control.Applicative ( (<|>) )
@@ -55,23 +53,11 @@ import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
+import           SemMC.ASL.Translation.Preprocess
+
 
 import System.IO.Unsafe
 
-type family BaseLitType (tp :: WT.BaseType) :: * where
-  BaseLitType WT.BaseIntegerType = Integer
-  BaseLitType WT.BaseBoolType = Bool
-  BaseLitType (WT.BaseBVType w) = BVS.BitVector w
-data ConstVal tp =
-  ConstVal (WT.BaseTypeRepr tp) (BaseLitType tp)
-
-instance Show (ConstVal tp) where
-  show (ConstVal WT.BaseIntegerRepr l) = show l
-  show (ConstVal WT.BaseBoolRepr l) = show l
-  show (ConstVal (WT.BaseBVRepr _) l) = show l
-  show _ = "??"
-
-instance ShowF ConstVal
 
 -- | This wrapper is used as a uniform return type in 'lookupVarRef', as each of
 -- the lookup types (arguments, locals, or globals) technically return different
@@ -162,19 +148,7 @@ data TranslationState s =
                    -- and procedures)
                    }
 
-data UserType (tp :: WT.BaseType) where
-  UserEnum :: Natural -> UserType WT.BaseIntegerType
-  UserStruct :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) tps -> UserType (WT.BaseStructType tps)
 
-deriving instance Show (UserType tp)
-
-instance ShowF UserType where
-
-userTypeRepr :: UserType tp -> WT.BaseTypeRepr tp
-userTypeRepr ut =
-  case ut of
-    UserEnum _ -> WT.BaseIntegerRepr
-    UserStruct tps -> WT.BaseStructRepr (FC.fmapFC projectValue tps)
 
 -- | The distinguished name of the global variable that represents the bit of
 -- information indicating that the processor is in the UNPREDICTABLE state
@@ -1104,24 +1078,145 @@ translateUnaryOp ov op expr = do
         _ -> X.throw (ExpectedBVType expr (CCG.typeOfAtom atom))
 
 
-bitsToInteger :: [Bool] -> Integer
-bitsToInteger [x] = fromIntegral (fromEnum x)
-bitsToInteger (x:xs) = fromIntegral (fromEnum x) * 2 + bitsToInteger xs
-bitsToInteger _ = error $ "bitsToInteger empty list"
 
--- | Whenever we encounter a member variable of a struct, we treat it as an
--- independent global variable and use this function to construct its qualified name.
-mkStructMemberName :: T.Text -> T.Text -> T.Text
-mkStructMemberName s m = s <> "_" <> m
+overrides :: forall arch . Overrides arch
+overrides = Overrides {..}
+  where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret ())
+        overrideStmt s = case s of
+          AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ do
+            raiseException
+          -- FIXME: write pc
+          AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ do
+            return ()
+          _ -> Nothing
+        overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s)))
+        overrideExpr e = case e of
+          AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
+            Some atom <- translateExpr overrides argExpr
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+              _ -> error "Called UInt on non-bitvector"
+          -- FIXME: BvToInteger isn't right here, because it's unsigned. We need a
+          -- signed version.
+          AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> Just $ do
+            Some atom <- translateExpr overrides argExpr
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+              _ -> error "Called SInt on non-bitvector"
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ do
+            Some atom <- translateExpr overrides argExpr
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                Some <$> CCG.mkAtom (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
+              _ -> error "Called IsZero on non-bitvector"
+          -- FIXME: ZeroExtend defaults to 64 for single arguments...
+          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val] -> Just $ do
+            Some valAtom <- translateExpr overrides val
+            case CCG.typeOfAtom valAtom of
+              CT.BVRepr valWidth
+                | Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` (WT.knownNat @64) -> do
+                    atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @64) valWidth (CCG.AtomExpr valAtom)))
+                    return $ Some atom
+          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ do
+            Some valAtom <- translateExpr overrides val
+            case CCG.typeOfAtom valAtom of
+              CT.BVRepr valWidth
+                | Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` (WT.knownNat @32) -> do
+                  atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @32) valWidth (CCG.AtomExpr valAtom)))
+                  return $ Some atom
+              tp -> X.throw $ ExpectedBVType val tp
+          -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+           -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+          -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+          -- FIXME: fix definition below; currently it just returns its args
+          AS.ExprCall (AS.QualifiedIdentifier _ "RRX_C") [x, shift] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            Some shiftAtom <- translateExpr overrides shift
+            bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
+            let xType = CCG.typeOfAtom xAtom
+                bitType = CT.BVRepr (WT.knownNat @1)
+                structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
+                structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
+                struct = MkBaseStruct structType structElts
+            structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+            return $ Some structAtom
+          -- FIXME: fix definition below to actually get the "cond" local variable
+          AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @4) 0))
+            return $ Some atom
+          -- FIXME: implement this (asl definition is recursive and dependently typed)
+          AS.ExprCall (AS.QualifiedIdentifier _ "BigEndianReverse") [x] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            atom <- CCG.mkAtom (CCG.AtomExpr xAtom)
+            return $ Some atom
+          -- FIXME: implement this (asl definition is recursive and dependently typed)
+          -- There are two overloadings of this based on the type of x
+          AS.ExprCall (AS.QualifiedIdentifier _ "Align") [x, y] -> Just $ do
+            Some xAtom <- translateExpr overrides x
+            atom <- CCG.mkAtom (CCG.AtomExpr xAtom)
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          -- FIXME: There are two overloadings of this
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          AS.ExprCall (AS.QualifiedIdentifier _ "__BVTOINT32") [AS.ExprLitInt i] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.IntegerToBV (WT.knownNat @32)
+                                         (CCG.App (CCE.IntLit i))))
+            return $ Some atom
+          _ -> Nothing
 
--- | Make a function name given its ASL name and arity.
-mkFunctionName :: AS.QualifiedIdentifier -> Int -> T.Text
-mkFunctionName name numArgs = collapseQualID name <> T.pack "_" <> T.pack (show numArgs)
 
-collapseQualID :: AS.QualifiedIdentifier -> T.Text
-collapseQualID (AS.QualifiedIdentifier AS.ArchQualAArch64 name) = "AArch64_" <> name
-collapseQualID (AS.QualifiedIdentifier AS.ArchQualAArch32 name) = "AArch32_" <> name
-collapseQualID (AS.QualifiedIdentifier _ name) = name
 
-mapInnerName :: (T.Text -> T.Text) -> AS.QualifiedIdentifier -> AS.QualifiedIdentifier
-mapInnerName f (AS.QualifiedIdentifier q name) = AS.QualifiedIdentifier q (f name)
+-- FIXME: Change this to set some global flag?
+raiseException :: CCG.Generator (ASLExt arch) h s TranslationState ret ()
+raiseException = return ()

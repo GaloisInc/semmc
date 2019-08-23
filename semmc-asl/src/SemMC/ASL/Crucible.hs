@@ -69,19 +69,13 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), translateStatement, translateStatements, ConstVal(..) )
+import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, translateStatements, overrides)
+import           SemMC.ASL.Types
 
 import System.IO.Unsafe -- FIXME: For debugging
 -- type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
 
-data Definitions arch =
-  Definitions { defSignatures :: Map.Map T.Text (Some SomeSignature, [AS.Stmt])
-              , defDepSignatures :: Map.Map T.Text (SomeDFS, [AS.Stmt])
-              , defTypes :: Map.Map T.Text (Some UserType)
-              , defEnums :: Map.Map T.Text Integer
-              , defConsts :: Map.Map T.Text (Some ConstVal)
-              , defOverrides :: Overrides arch
-              }
+
 
 -- | Convert an ASL function (signature + list of statements) into a Crucible CFG
 --
@@ -126,7 +120,7 @@ funcDef :: (ret ~ CT.BaseToType tp)
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
-funcDef defs sig globals stmts args = (funcInitialState defs sig globals args, defineFunction (defOverrides defs) sig stmts args)
+funcDef defs sig globals stmts args = (funcInitialState defs sig globals args, defineFunction overrides sig stmts args)
 
 funcInitialState :: forall init tp s globals arch
                   . Definitions arch
@@ -238,7 +232,7 @@ procDef :: (ReturnsGlobals ret globals)
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
 procDef defs sig globals stmts args =
-  (procInitialState defs sig globals args, defineProcedure (defOverrides defs) sig globals stmts args)
+  (procInitialState defs sig globals args, defineProcedure overrides sig globals stmts args)
 
 procInitialState :: forall init globals s arch
                   . Definitions arch

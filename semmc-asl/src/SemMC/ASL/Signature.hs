@@ -25,9 +25,6 @@ module SemMC.ASL.Signature (
   , someSigRepr
   , someSigName
   , SomeDFS(..)
-  , LabeledValue(..)
-  , projectValue
-  , projectLabel
   , DependentTypeRepr(..)
   , BaseGlobalVar(..)
   ) where
@@ -39,6 +36,7 @@ import qualified Data.Text as T
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
+import           SemMC.ASL.Types
 
 -- | A 'FunctionSignature' describes the inputs and output of an ASL function.
 --
@@ -81,36 +79,7 @@ deriving instance Show (DependentTypeRepr init tp)
 
 instance ShowF (DependentTypeRepr init)
 
-data LabeledValue a b tp = LabeledValue a (b tp)
 
-instance (Eq a, TestEquality b) => TestEquality (LabeledValue a b) where
-  LabeledValue a b `testEquality` LabeledValue a' b' =
-    case b `testEquality` b' of
-      Just Refl -> case a == a' of
-        True -> Just Refl
-        False -> Nothing
-      Nothing -> Nothing
-
-projectValue :: LabeledValue a b tp -> b tp
-projectValue (LabeledValue _ v) = v
-
-projectLabel :: LabeledValue a b tp -> a
-projectLabel (LabeledValue l _) = l
-
-instance FC.FunctorFC (LabeledValue a) where
-  fmapFC f (LabeledValue a b) = LabeledValue a (f b)
-
-instance FC.FoldableFC (LabeledValue a) where
-  foldrFC f s (LabeledValue _ b) = f b s
-
-instance FC.TraversableFC (LabeledValue a) where
-  traverseFC f (LabeledValue a b) = LabeledValue a <$> f b
-
-instance (Show a, ShowF b) => ShowF (LabeledValue a b) where
-  showF (LabeledValue l v) = concat [ "LabeledValue ", show l, " ", showF v ]
-
-instance (Show a, ShowF b) => Show (LabeledValue a b tp) where
-  show (LabeledValue l v) = concat [ "LabeledValue ", show l, " ", showF v ]
 
 newtype BaseGlobalVar tp = BaseGlobalVar { unBaseVar :: CCG.GlobalVar (CT.BaseToType tp) }
   deriving (Show)
