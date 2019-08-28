@@ -23,14 +23,17 @@ module SemMC.ASL.Translation (
   , userTypeRepr
   , ToBaseType
   , ToBaseTypes
+  , unpackCFG
   ) where
 
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
-import           Control.Monad ( when, void )
+import           Control.Monad ( when, void, foldM )
 import qualified Control.Monad.State.Class as MS
+import qualified Control.Monad.State as MSS
 import qualified Data.BitVector.Sized as BVS
-import           Data.Maybe ( fromMaybe )
+import           Data.Maybe ( fromMaybe, catMaybes )
+import qualified Data.Bimap as BM
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
@@ -39,12 +42,15 @@ import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.List as List
 import           Data.List.Index (imap)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
+import qualified Lang.Crucible.CFG.Core as CC
 import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 import           Numeric.Natural ( Natural )
 import qualified What4.BaseTypes as WT
+import qualified What4.FunctionName as WF
 import qualified What4.ProgramLoc as WP
 
 import qualified Language.ASL.Syntax as AS
@@ -55,6 +61,8 @@ import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.Translation.Preprocess
 
+import qualified Lang.Crucible.FunctionHandle as FH
+import qualified Lang.Crucible.CFG.Reg as CCR
 
 import System.IO.Unsafe
 
@@ -80,13 +88,17 @@ lookupVarRef :: forall arch h s ret
 lookupVarRef name = do
   ts <- MS.get
   let err = X.throw (UnboundName name)
-  case fromMaybe err (lookupArg ts <|>
+  case fromMaybe err (lookupLocalConst ts <|>
+                      lookupArg ts <|>
                       lookupRef ts <|>
                       lookupGlobal ts <|>
                       lookupEnum ts <|>
                       lookupConst ts) of
     ExprConstructor e con -> Some <$> con e
   where
+    lookupLocalConst ts = do
+      i <- lookupTypeEnvir name (tsTypeEnvir ts)
+      return (ExprConstructor (CCG.App (CCE.IntLit i)) return)
     lookupArg ts = do
       Some e <- Map.lookup name (tsArgAtoms ts)
       return (ExprConstructor (CCG.AtomExpr e) return)
@@ -143,9 +155,14 @@ data TranslationState s =
                    -- bounds are used in assertions checking the completeness of
                    -- case statements.
                    -- ,
-                   , tsFunctionSigs :: Map.Map T.Text (Some SomeSignature)
+                   , tsFunctionSigs :: Map.Map T.Text SomeSimpleSignature
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
+                   , tsHandle :: FH.FnHandle Ctx.EmptyCtx CT.AnyType
+                   -- ^ Used to name functions encountered during translation
+                   , tsTypeEnvir :: TypeEnvir
+                   -- ^ Type environment to give concrete instantiations to polymorphic variables
+                   
                    }
 
 
@@ -168,12 +185,11 @@ undefinedVarName = T.pack "UNDEFINED"
 -- This is a subset of all of the global state (and a subset of the current
 -- global state).
 withProcGlobals :: (m ~ CCG.Generator (ASLExt arch) h s TranslationState ret)
-                => ProcedureSignature globals init
+                => Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                 -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
                 -> m r
-withProcGlobals sig k = do
+withProcGlobals reprs k = do
   globMap <- MS.gets tsGlobals
-  let reprs = procGlobalReprs sig
   let globReprs = FC.fmapFC projectValue reprs
   k globReprs (FC.fmapFC (fetchGlobal globMap) reprs)
   where
@@ -220,7 +236,7 @@ translateStatement ov sig stmt
           | globalBaseTypes <- FC.fmapFC projectValue (procGlobalReprs pSig)
           , pSigRepr <- procSigRepr pSig
           , Just Refl <- testEquality pSigRepr (CT.SymbolicStructRepr globalBaseTypes) ->
-            withProcGlobals pSig $ \globalBaseTypes globals -> do
+            withProcGlobals (procGlobalReprs pSig) $ \globalBaseTypes globals -> do
               Refl <- return $ baseCrucProof globalBaseTypes
               globalsSnapshot <- CCG.extensionStmt (GetRegState globalBaseTypes globals)
               CCG.returnFromFunction globalsSnapshot
@@ -277,33 +293,30 @@ translateStatement ov sig stmt
         let ident = mkFunctionName qIdent (length args)
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
-          Just (Some (SomeFunctionSignature _)) -> X.throw (ExpectedProcedureSignature ident)
-          Just (Some (SomeProcedureSignature pSig)) -> do
-            argAtoms <- mapM (translateExpr ov) args
+          Just (SomeSimpleFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
+          Just (SomeSimpleProcedureSignature pSig) -> do
+            (finalIdent, argAtoms, _) <- unifyArgs ov ident (zip (sprocArgs pSig) args) []
             case Ctx.fromList argAtoms of
-              Some argAssign -> do
+              Some argAssign -> do               
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                let expectedTypes = FC.fmapFC projectValue (procArgReprs pSig)
-                if | Just Refl <- testEquality atomTypes expectedTypes -> do
-                       -- FIXME: The problem is that we might need to snapshot a
-                       -- subset of globals for each call.  Each subset might be
-                       -- different.
-                       --
-                       -- How do we select a subset with the right types?
-                       --
-                       -- We could key everything on name and do dynamic type
-                       -- checks to assert that globals with the right name have
-                       -- the right type.
-                       withProcGlobals pSig $ \globalReprs globals -> do
-                         let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
-                         globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
-                         let vals = FC.fmapFC CCG.AtomExpr argAssign
-                         let ufRep = WT.BaseStructRepr (FC.fmapFC projectValue (procGlobalReprs pSig))
-                         let uf = UF ident ufRep (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
-                         atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-                         _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
-                         return ()
-                   | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
+                -- FIXME: The problem is that we might need to snapshot a
+                -- subset of globals for each call.  Each subset might be
+                -- different.
+                --
+                -- How do we select a subset with the right types?
+                --
+                -- We could key everything on name and do dynamic type
+                -- checks to assert that globals with the right name have
+                -- the right type.
+                withProcGlobals (sprocGlobalReprs pSig) $ \globalReprs globals -> do
+                  let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
+                  globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
+                  let vals = FC.fmapFC CCG.AtomExpr argAssign
+                  let ufRep = WT.BaseStructRepr (FC.fmapFC projectValue (sprocGlobalReprs pSig))
+                  let uf = UF finalIdent ufRep (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
+                  atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+                  _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
+                  return ()
       AS.StmtTry {} -> error "Try statements are not implemented"
       AS.StmtThrow err -> do
         CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit err))
@@ -542,7 +555,7 @@ translatelValSlice :: Overrides arch
                    -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
 translatelValSlice ov lv slice asnAtom = do
   Some atom <- translateExpr ov (lValToExpr lv)
-  (Some loRepr, Some hiRepr) <- return $ getSliceRange slice
+  (Some loRepr, Some hiRepr) <- getSliceRange slice
   if | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
      , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
      , CT.BVRepr wRepr <- CCG.typeOfAtom atom
@@ -609,8 +622,9 @@ declareUndefinedVar ty ident = do
 --
 -- FIXME: Handle polymorphic types (i.e., `bits(N)`)
 translateType :: AS.Type -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some CT.TypeRepr)
-translateType t =
-  case t of
+translateType t = do
+  env <- MS.gets tsTypeEnvir
+  case applyTypeEnvir env t of
     AS.TypeRef (AS.QualifiedIdentifier _ "integer") -> return (Some CT.IntegerRepr)
     AS.TypeRef (AS.QualifiedIdentifier _ "boolean") -> return (Some CT.BoolRepr)
     AS.TypeRef (AS.QualifiedIdentifier _ "bit") -> return (Some (CT.BVRepr (NR.knownNat @1)))
@@ -625,12 +639,182 @@ translateType t =
           | Just (Some nr) <- NR.someNat nBits
           , Just NR.LeqProof <- NR.isPosNat nr -> return (Some (CT.BVRepr nr))
         -- FIXME: We assume that N is always 32!!! This needs to be fixed, probably.
-        AS.ExprVarRef (AS.QualifiedIdentifier _ "N") -> return (Some (CT.BVRepr (WT.knownNat @32)))
+        --AS.ExprVarRef (AS.QualifiedIdentifier _ "N") -> return (Some (CT.BVRepr (WT.knownNat @32)))
         _ -> error ("Unsupported type: " ++ show t)
     AS.TypeFun _ _ -> error ("Unsupported type: " ++ show t)
     AS.TypeArray _ty _idxTy -> error ("Unsupported type: " ++ show t)
     AS.TypeReg _i _flds -> error ("Unsupported type: " ++ show t)
-    AS.TypeOf _e -> error ("Unsupported type: " ++ show t)
+    _ -> error ("Unsupported type: " ++ show t)
+
+withTypeEnvironment :: TypeEnvir
+                    -> CCG.Generator (ASLExt arch) h s TranslationState ret a
+                    -> CCG.Generator (ASLExt arch) h s TranslationState ret a
+withTypeEnvironment tenv f = do
+  env <- MS.gets tsTypeEnvir
+  MS.modify' $ \s -> s { tsTypeEnvir = tenv }
+  x <- f
+  MS.modify' $ \s -> s { tsTypeEnvir = env }
+  return x
+
+
+dependentVarsOfType :: AS.Type -> [T.Text]
+dependentVarsOfType t = case t of
+  AS.TypeFun "bits" e -> varsOfExpr e
+  _ -> []
+
+varsOfExpr :: AS.Expr -> [T.Text]
+varsOfExpr e = foldExpr getVar e []
+  where
+    getVar (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) = (:) ident
+    getVar _ = id
+
+
+mapTypeEnvir :: (TypeEnvir -> TypeEnvir)
+             -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+mapTypeEnvir f = do
+  env <- MS.gets tsTypeEnvir
+  MS.modify' $ \s -> s { tsTypeEnvir = f env }
+
+
+
+-- Unify a syntactic ASL type against a crucible type, and update
+-- the current typing evironment with any discovered instantiations
+unifyType :: AS.Type
+          -> Some (CT.TypeRepr)
+          -> (CCG.Generator (ASLExt arch) h s TranslationState ret) ()
+unifyType aslT (Some atomT) = do
+  env <- MS.gets tsTypeEnvir
+  case (aslT, atomT) of
+    (AS.TypeFun "bits" e, CT.BVRepr repr) ->
+      case e of
+        AS.ExprLitInt i | Just (Some nr) <- NR.someNat i, Just Refl <- testEquality repr nr -> return ()
+        AS.ExprVarRef (AS.QualifiedIdentifier _ id) ->
+          case lookupTypeEnvir id env of
+            Just i | Just (Some nr) <- NR.someNat i, Just Refl <- testEquality repr nr -> return ()
+            Nothing -> mapTypeEnvir $ insertTypeEnvir id (toInteger (NR.natValue repr))
+            _ -> X.throw $ TypeUnificationFailure aslT atomT env
+        AS.ExprBinOp AS.BinOpMul e e' ->
+          case (mInt env e, mInt env e') of
+            (Left i, Left i') | Just (Some nr) <- NR.someNat (i * i'), Just Refl <- testEquality repr nr -> return ()
+            (Right (AS.ExprVarRef (AS.QualifiedIdentifier _ id)), Left i')
+              | reprVal <- toInteger $ WT.natValue repr
+              , (innerVal, 0) <- reprVal `divMod` i' ->
+                mapTypeEnvir $ insertTypeEnvir id innerVal
+            (Left i, Right (AS.ExprVarRef (AS.QualifiedIdentifier _ id)))
+              | reprVal <- toInteger $ WT.natValue repr
+              , (innerVal, 0) <- reprVal `divMod` i ->
+                mapTypeEnvir $ insertTypeEnvir id innerVal
+            _ -> X.throw $ TypeUnificationFailure aslT atomT env
+        _ -> X.throw $ TypeUnificationFailure aslT atomT env
+    _ -> do
+      Some atomT' <- translateType aslT
+      case testEquality atomT atomT' of
+        Just Refl -> return ()
+        _ -> X.throw $ TypeUnificationFailure aslT atomT env
+  where
+    mInt env e = case exprToInt env e of
+      Just i -> Left i
+      Nothing -> Right e
+
+collectConstIntegers :: AS.SymbolDecl
+                     -> AS.Expr
+                     -> MSS.StateT (TypeEnvir) (CCG.Generator (ASLExt arch) h s TranslationState ret) ()
+collectConstIntegers (nm, t) e = do
+  env <- MS.get
+  case e of
+    AS.ExprLitInt i -> MS.put (insertTypeEnvir nm i env)
+    _ -> return ()
+
+-- Unify a syntactic ASL type against a crucible type, and update
+-- the current typing evironment with any discovered instantiations
+unifyType' :: AS.Type
+          -> Some (CT.TypeRepr)
+          -> MSS.StateT (TypeEnvir) (CCG.Generator (ASLExt arch) h s TranslationState ret) ()
+unifyType' aslT (Some atomT) = do
+  env <- MS.get
+  case (aslT, atomT) of
+    (AS.TypeFun "bits" e, CT.BVRepr repr) ->
+      case e of
+        AS.ExprLitInt i | Just (Some nr) <- NR.someNat i, Just Refl <- testEquality repr nr -> return ()
+        AS.ExprVarRef (AS.QualifiedIdentifier _ id) ->
+          case lookupTypeEnvir id env of
+            Just i | Just (Some nr) <- NR.someNat i, Just Refl <- testEquality repr nr -> return ()
+            Nothing -> MS.modify' (insertTypeEnvir id (toInteger (NR.natValue repr)))
+            _ -> X.throw $ TypeUnificationFailure aslT atomT env
+        AS.ExprBinOp AS.BinOpMul e e' ->
+          case (mInt env e, mInt env e') of
+            (Left i, Left i') | Just (Some nr) <- NR.someNat (i * i'), Just Refl <- testEquality repr nr -> return ()
+            (Right (AS.ExprVarRef (AS.QualifiedIdentifier _ id)), Left i')
+              | reprVal <- toInteger $ WT.natValue repr
+              , (innerVal, 0) <- reprVal `divMod` i' ->
+                MS.modify' $ insertTypeEnvir id innerVal
+            (Left i, Right (AS.ExprVarRef (AS.QualifiedIdentifier _ id)))
+              | reprVal <- toInteger $ WT.natValue repr
+              , (innerVal, 0) <- reprVal `divMod` i ->
+                MS.modify' $ insertTypeEnvir id innerVal
+            _ -> X.throw $ TypeUnificationFailure aslT atomT env
+        _ -> X.throw $ TypeUnificationFailure aslT atomT env
+    _ -> do
+      Some atomT' <- MSS.lift $ withTypeEnvironment env $ translateType aslT
+      case testEquality atomT atomT' of
+        Just Refl -> return ()
+        _ -> X.throw $ TypeUnificationFailure aslT atomT env
+  where
+    mInt env e = case exprToInt env e of
+      Just i -> Left i
+      Nothing -> Right e
+
+        
+unifyArg' :: Overrides arch
+         -> AS.SymbolDecl
+         -> AS.Expr
+         -> MSS.StateT (TypeEnvir) (CCG.Generator (ASLExt arch) h s TranslationState ret) (Some (CCG.Atom s))
+unifyArg' ov (nm,t) e = do
+  Some atom <- MSS.lift $ translateExpr ov e
+  let atomT = CCG.typeOfAtom atom
+  unifyType' t (Some $ CCG.typeOfAtom atom)
+  return $ Some atom
+
+unifyArg :: Overrides arch
+         -> AS.SymbolDecl
+         -> AS.Expr
+         -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
+unifyArg ov (nm,t) e = do
+  Some atom <- translateExpr ov e
+  let atomT = CCG.typeOfAtom atom
+  unifyType t (Some $ CCG.typeOfAtom atom)
+  return $ Some atom
+
+asBaseType :: Some CT.TypeRepr -> Some WT.BaseTypeRepr
+asBaseType (Some t) = case CT.asBaseType t of
+  CT.AsBaseType bt -> Some bt
+  CT.NotBaseType -> error $ "Expected base type: " <> show t
+
+
+
+unifyArgs :: Overrides arch
+          -> T.Text
+          -> [(AS.SymbolDecl, AS.Expr)]
+          -> [AS.Type]
+          -> CCG.Generator (ASLExt arch) h s TranslationState ret (T.Text, [Some (CCG.Atom s)], Maybe (Some WT.BaseTypeRepr))
+unifyArgs ov fnname args rets = do
+  (atoms, tenv) <- MSS.runStateT (do
+      mapM_ (\(decl, e) -> collectConstIntegers decl e) args
+      mapM (\(decl, e) -> unifyArg' ov decl e) args) emptyTypeEnvir
+  let dvars = concat $ map dependentVarsOfType rets ++ map (\((_,t), _) -> dependentVarsOfType t) args
+  let env = List.sort $ map (\nm -> case lookupTypeEnvir nm tenv of {Just i -> (nm,i)}) dvars
+  packCFG fnname env -- store the polymorphic type environment used to resolve this function
+  retsT <- mapM (\t -> withTypeEnvironment tenv (translateType t)) rets
+  retT <- case map asBaseType retsT of
+            [] -> return Nothing
+            [retbT] -> return $ Just retbT
+            retbsT -> do
+              Some assignment <- return $ Ctx.fromList retbsT
+              return $ Just $ Some (WT.BaseStructRepr assignment)
+  
+  return (mkFinalFunctionName (fromListTypeEnvir env) fnname, atoms, retT)
+
+
 
 translateIf :: Overrides arch
             -> SomeSignature ret
@@ -704,7 +888,6 @@ assertAtomType' expectedRepr atom =
     Nothing -> X.throw (UnexpectedExprType Nothing (CCG.typeOfAtom atom) expectedRepr)
     Just Refl -> return Refl
 
-
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
@@ -723,9 +906,6 @@ translateExpr ov expr
             | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
               Some <$> CCG.mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
             | otherwise -> X.throw InvalidZeroLengthBitvector
-      -- FIXME: Interpret all "N" as 32
-      AS.ExprVarRef (AS.QualifiedIdentifier _ "N") ->
-        Some <$> CCG.mkAtom (CCG.App (CCE.IntLit 32))
       AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
         Some e <- lookupVarRef ident
         Some <$> CCG.mkAtom e
@@ -752,20 +932,18 @@ translateExpr ov expr
         sigMap <- MS.gets tsFunctionSigs
         -- FIXME: make this nicer?
         let ident = mkFunctionName qIdent (length args)
+        
         case Map.lookup ident sigMap of
           Nothing -> X.throw (MissingFunctionDefinition ident)
-          Just (Some (SomeProcedureSignature _)) -> X.throw (ExpectedFunctionSignature ident)
-          Just (Some (SomeFunctionSignature sig)) -> do
-            argAtoms <- mapM (translateExpr ov) args
+          Just (SomeSimpleProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
+          Just (SomeSimpleFunctionSignature sig) -> do
+            (finalIdent, argAtoms, Just (Some retT)) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig)
             case Ctx.fromList argAtoms of
               Some argAssign -> do
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                let expectedTypes = FC.fmapFC projectValue (funcArgReprs sig)
-                if | Just Refl <- testEquality atomTypes expectedTypes -> do
-                       let vals = FC.fmapFC CCG.AtomExpr argAssign
-                       let uf = UF ident (funcSigRepr sig) atomTypes vals
-                       Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-                   | otherwise -> X.throw (InvalidArgumentTypes ident atomTypes)
+                let vals = FC.fmapFC CCG.AtomExpr argAssign
+                let uf = UF finalIdent retT atomTypes vals
+                Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
       -- FIXME: What to do here?
       AS.ExprImpDef _ -> Some <$> CCG.mkAtom (CCG.App (CCE.BoolLit True))
       -- This is just like a variable lookup, since struct members are stored as
@@ -816,19 +994,21 @@ translateExpr ov expr
 --                                        Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom))))
 
 
-getSliceRange :: AS.Slice -> (Some WT.NatRepr, Some WT.NatRepr)
-getSliceRange slice = case slice of
-    AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo) ->
-      case (WT.someNat lo, WT.someNat hi) of
-        (Just someLoRepr, Just someHiRepr) -> (someLoRepr, someHiRepr)
-        _ -> X.throw $ InvalidSliceRange lo hi
-    AS.SliceRange (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) (AS.ExprLitInt 0) ->
-      (Some (WT.knownNat @0), Some (WT.knownNat @31))
-    AS.SliceSingle (AS.ExprLitInt i) -> case WT.someNat i of
-      Just someRepr -> (someRepr, someRepr)
-      _ -> X.throw $ InvalidSliceRange i i
-    AS.SliceSingle (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef (AS.QualifiedIdentifier _ "N")) (AS.ExprLitInt 1)) ->
-      (Some (WT.knownNat @31), Some (WT.knownNat @31))
+getSliceRange :: AS.Slice ->
+                 CCG.Generator (ASLExt arch) h s TranslationState ret (Some WT.NatRepr, Some WT.NatRepr)
+getSliceRange slice = do
+  env <- MS.gets tsTypeEnvir
+  case slice of
+    AS.SliceRange e e' |
+        Just lo <- exprToInt env e'
+      , Just hi <- exprToInt env e
+      , Just someLoRepr <- WT.someNat lo
+      , Just someHiRepr <- WT.someNat hi ->
+        return (someLoRepr, someHiRepr)
+    AS.SliceSingle e |
+        Just i <- exprToInt env e
+      , Just someRepr <- WT.someNat i ->
+        return (someRepr, someRepr)
     _ -> error $ "unsupported slice: " ++ show slice
 
   
@@ -846,7 +1026,7 @@ translateSlice' :: Overrides arch
                 -> AS.Slice
                 -> CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s))
 translateSlice' _ atom slice = do
-  (Some loRepr, Some hiRepr) <- return $ getSliceRange slice
+  (Some loRepr, Some hiRepr) <- getSliceRange slice
   case () of
     _ | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
       , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
@@ -1077,6 +1257,17 @@ translateUnaryOp ov op expr = do
           Some <$> CCG.mkAtom (CCG.App (CCE.BVNot nr (CCG.AtomExpr atom)))
         _ -> X.throw (ExpectedBVType expr (CCG.typeOfAtom atom))
 
+translateKnownVar :: (Some CT.TypeRepr)
+                    -> AS.Identifier
+                    -> Some (CCG.Atom s)
+                    -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+translateKnownVar (Some expected) ident (Some atom) = do
+  Refl <- assertAtomType' expected atom
+  locals <- MS.gets tsVarRefs
+  when (Map.member ident locals) $ do
+    X.throw (LocalAlreadyDefined ident)
+  reg <- CCG.newReg (CCG.AtomExpr atom)
+  MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
 
 overrides :: forall arch . Overrides arch
@@ -1088,6 +1279,16 @@ overrides = Overrides {..}
           -- FIXME: write pc
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ do
             return ()
+          AS.StmtVarDeclInit (ident,ty) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ do
+            env <- MS.gets tsTypeEnvir
+            retT <- translateType ty
+            if | Some (CT.BVRepr valWidth) <- retT
+               , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth
+                 -> do
+                  atom <- CCG.mkAtom (CCG.App (CCE.BVLit valWidth 0))
+                  translateKnownVar retT ident (Some atom)
+               | otherwise -> error $ "Invalid return type for Zeros():" <> show ty
+          
           _ -> Nothing
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s TranslationState ret (Some (CCG.Atom s)))
         overrideExpr e = case e of
@@ -1127,6 +1328,15 @@ overrides = Overrides {..}
                   atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @32) valWidth (CCG.AtomExpr valAtom)))
                   return $ Some atom
               tp -> X.throw $ ExpectedBVType val tp
+          AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [e] -> Just $ do
+            env <- MS.gets tsTypeEnvir
+            case exprToInt env e of
+              Just width |
+                  Just (Some valWidth) <- WT.someNat width
+                , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
+                  atom <- CCG.mkAtom (CCG.App (CCE.BVLit valWidth 0))
+                  return $ Some atom
+              _ ->  error $ "Invalid argument type for Zeros(int):" <> show e
           -- FIXME: fix definition below; currently it just returns its args
           AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ do
             Some xAtom <- translateExpr overrides x
@@ -1139,7 +1349,7 @@ overrides = Overrides {..}
                 struct = MkBaseStruct structType structElts
             structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
             return $ Some structAtom
-           -- FIXME: fix definition below; currently it just returns its args
+          -- FIXME: fix definition below; currently it just returns its args
           AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ do
             Some xAtom <- translateExpr overrides x
             Some shiftAtom <- translateExpr overrides shift
@@ -1220,3 +1430,55 @@ overrides = Overrides {..}
 -- FIXME: Change this to set some global flag?
 raiseException :: CCG.Generator (ASLExt arch) h s TranslationState ret ()
 raiseException = return ()
+
+
+packCFG :: T.Text
+        -> [(T.Text, Integer)]
+        -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+packCFG nm tenv = do
+  hdl <- MS.gets tsHandle
+  let h = (CC.CFG {cfgHandle = hdl,
+               cfgBlockMap = Ctx.singleton (CC.Block
+                                            { blockID = CC.BlockID idx',
+                                              blockInputs = Ctx.Empty,
+                                              _blockStmts = packStmts $ tenv
+                                            }),
+               cfgEntryBlockID = CC.BlockID idx',
+               cfgBreakpoints = BM.singleton (CC.BreakpointName nm) (Some (CC.BlockID idx'))
+               })
+  CCG.recordCFG (CC.AnyCFG h)
+  where
+  idx' = (Ctx.natIndex @0) :: Ctx.Index (Ctx.EmptyCtx Ctx.::> Ctx.EmptyCtx) (Ctx.EmptyCtx)
+    
+  packStmts :: [(T.Text, Integer)] -> CC.StmtSeq ext (CC.EmptyCtx CC.::> CC.EmptyCtx) ret ctx
+  packStmts ((nm,i) : rest) =
+           CC.ConsStmt WP.initializationLoc (CC.FreshConstant CT.BaseStringRepr Nothing)
+            $ CC.ConsStmt WP.initializationLoc (CC.SetReg CT.StringRepr (CC.App (CCE.TextLit nm)))
+             $ CC.ConsStmt WP.initializationLoc (CC.FreshConstant CT.BaseIntegerRepr Nothing)
+              $ CC.ConsStmt WP.initializationLoc (CC.SetReg CT.IntegerRepr (CC.App (CCE.IntLit i)))
+              (packStmts rest)
+  packStmts _ = (CC.TermStmt (WP.initializationLoc) 
+                  (CC.Jump (CC.JumpTarget (CC.BlockID idx') Ctx.Empty Ctx.Empty)))
+
+
+unpackCFG :: CC.AnyCFG h -> (T.Text, [(T.Text, Integer)])
+unpackCFG (CC.AnyCFG cfg) = let
+  args = case Ctx.viewAssign (CC.cfgBlockMap cfg) of
+    Ctx.AssignExtend _ e -> unpackStmts (CC._blockStmts e)
+    _ -> []
+
+  nm = case BM.toList (CC.cfgBreakpoints cfg) of
+    [(CC.BreakpointName nm,_)] -> nm
+    _ -> error "Unexpected packed CFG."
+  
+
+  in (nm, args)
+  where
+  unpackStmts :: CC.StmtSeq ext blocks ret ctx -> [(T.Text, Integer)]
+  unpackStmts (CC.ConsStmt _ (CC.FreshConstant CT.BaseStringRepr Nothing)
+               (CC.ConsStmt _ (CC.SetReg CT.StringRepr (CC.App (CCE.TextLit nm)))
+                (CC.ConsStmt _ (CC.FreshConstant CT.BaseIntegerRepr Nothing)
+                 (CC.ConsStmt _ (CC.SetReg CT.IntegerRepr (CC.App (CCE.IntLit i))) rest)))) = 
+    (nm,i) : unpackStmts rest
+  unpackStmts (CC.TermStmt _ _) = []
+  unpackStmts _ = error "Unexpected packed CFG."

@@ -27,6 +27,9 @@ module SemMC.ASL.Signature (
   , SomeDFS(..)
   , DependentTypeRepr(..)
   , BaseGlobalVar(..)
+  , SimpleFunctionSignature(..)
+  , SimpleProcedureSignature(..)
+  , SomeSimpleSignature(..)
   ) where
 
 import           Data.Parameterized.Classes
@@ -37,6 +40,7 @@ import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
 import           SemMC.ASL.Types
+import qualified Language.ASL.Syntax as AS
 
 -- | A 'FunctionSignature' describes the inputs and output of an ASL function.
 --
@@ -53,6 +57,8 @@ data FunctionSignature globals init tp =
                     , funcGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                     -- ^ The globals referenced by the function; NOTE that we
                     -- assume that globals are read-only in functions
+                    , funcTypeEnvir :: TypeEnvir
+                    -- ^ The typing environment used to monomorphize this function
                     }
   deriving (Show)
 
@@ -105,6 +111,8 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                        --
                        -- For now, we can always make it the full set of
                        -- globals; later, we can find a tighter bound.
+                     , procTypeEnvir :: TypeEnvir
+                       -- ^ The typing environment used to monomorphize this function
                        }
   deriving (Show)
 
@@ -130,3 +138,48 @@ data SomeDFS where
 deriving instance Show (SomeSignature ret)
 
 instance ShowF SomeSignature
+
+
+
+-- | A 'SimpleFunctionSignature' describes the inputs and output of an ASL function.
+-- 
+-- Similar to a FunctionSignature but retains the syntactic types in order to
+-- potentially represent multiple monomorphic variants
+data SimpleFunctionSignature globals =
+  SimpleFunctionSignature { sfuncName :: T.Text
+                           -- ^ The name of the function
+                           , sfuncRet :: [AS.Type]
+                           -- ^ The return type of the function
+                           , sfuncArgs :: [AS.SymbolDecl]
+                           -- ^ The types of the natural arguments of the function
+                           , sfuncGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
+                           -- ^ The globals referenced by the function; NOTE that we
+                           -- assume that globals are read-only in functions
+                           }
+  deriving (Show)
+
+-- | A 'ProcedureSignature' captures the signature of an ASL procedure.
+--
+-- init are the non-global args
+-- regs are the list of global registers
+-- ret is the return type (actually a whole reg state, and basically congruent to regs)
+data SimpleProcedureSignature (globals :: Ctx.Ctx WT.BaseType) =
+  SimpleProcedureSignature { sprocName :: T.Text
+                       --  The name of the procedure
+                           , sprocArgs :: [AS.SymbolDecl]
+                             -- ^ The natural arguments to the procedure
+                           , sprocGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
+                             -- ^ The globals possibly accessed by this procedure.
+                             --
+                             -- For now, we can always make it the full set of
+                             -- globals; later, we can find a tighter bound.
+                             }
+  deriving (Show)
+
+
+data SomeSimpleSignature where
+  SomeSimpleFunctionSignature :: SimpleFunctionSignature globals -> SomeSimpleSignature
+  SomeSimpleProcedureSignature :: SimpleProcedureSignature globals -> SomeSimpleSignature
+
+
+deriving instance Show (SomeSimpleSignature)

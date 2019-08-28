@@ -7,12 +7,14 @@ module SemMC.ASL.Exceptions (
 
 import qualified Control.Exception as X
 import qualified Data.Text as T
+import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import qualified Lang.Crucible.Types as CT
 
 import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Signature
+import           SemMC.ASL.Types
 
 data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
@@ -43,6 +45,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
+                          | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) TypeEnvir 
 
 deriving instance Show TranslationException
 

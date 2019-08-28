@@ -6,7 +6,7 @@
 module Main ( main ) where
 
 import qualified Control.Exception as X
-import           Control.Monad (forM_)
+import           Control.Monad (forM_, foldM)
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
@@ -25,6 +25,7 @@ import SemMC.ASL.Crucible
 import SemMC.ASL.Translation
 import SemMC.ASL.Translation.Preprocess
 import SemMC.ASL.Signature
+import SemMC.ASL.Types
 
 instsFilePath :: FilePath
 instsFilePath = "test/insts.parsed"
@@ -45,27 +46,11 @@ main :: IO ()
 main = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  --let instrs = [collectInstructions aslInsts !! 4]
+  let instrs = [collectInstructions aslInsts !! 4]
   --let instrs = [("aarch32_REV_A","aarch32_REV_T2_A")]
-  let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
+  --let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
   
   forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)
-
-computeDefs :: [T.Text] -> IO ()
-computeDefs defIn = do
-  (_, aslDefs) <- getASL
-  case computeDefinitions defIn aslDefs of
-    Left err -> do
-      putStrLn $ "Error computing ASL definitions: " ++ show err
-      exitFailure
-    Right defs -> do
-      putStrLn $ "--------------------------------"
-      putStrLn "Translating functions: "
-      sigMap <- return $ defSignatures defs
-      forM_ (Map.toList sigMap) $ \(fnName, _) -> putStrLn $ "  * " ++ show fnName
-      forM_ (Map.toList sigMap) $ \(fnName, (Some sig, c)) -> do
-        putStrLn $ show fnName ++ " definition:"
-        processFunction fnName sig c defs
    
 
 runTranslation :: T.Text -> T.Text -> [AS.Instruction] -> [AS.Definition] -> IO ()
@@ -86,17 +71,32 @@ runTranslation instr enc aslInsts aslDefs = do
           putStrLn $ "Error computing ASL definitions: " ++ show err
           exitFailure
         Right defs -> do
-          putStrLn $ "--------------------------------"
-          putStrLn "Translating functions: "
-          forM_ (Map.toList sigMap) $ \(fnName, _) -> putStrLn $ "  * " ++ show fnName
-          forM_ (Map.toList sigMap) $ \(fnName, (Some sig, c)) -> do
-            putStrLn $ show fnName ++ " definition:"
-            processFunction fnName sig (callableStmts c) defs
-          putStrLn $ "--------------------------------"
           putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
           putStrLn $ (show iSig)
-          processInstruction iSig instStmts defs
+          deps <- processInstruction iSig instStmts defs
+
+          putStrLn $ "--------------------------------"
+          putStrLn "Translating functions: "
+          _ <- foldM (\b -> \a -> translationLoop defs a b) Map.empty deps
+          return ()
     _ -> error "Panic"
+
+translationLoop :: Definitions arch -> (T.Text, [(T.Text, Integer)]) -> Map.Map T.Text (Some (SomeSignature)) -> IO (Map.Map T.Text (Some (SomeSignature)))
+translationLoop defs (fnname, dargs) sigs = do
+  let env = fromListTypeEnvir dargs
+  let finalName =  (mkFinalFunctionName env fnname)
+  putStrLn $ show finalName ++ " definition:"
+  case Map.lookup finalName sigs of
+    Just _ -> return sigs
+    _ -> case Map.lookup fnname (defSignatures defs) of
+           Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
+                 
+                 deps <- processFunction (someSigName sig) sig stmts defs
+                 putStrLn $ "--------------------------------"
+                 foldM (\b -> \a -> translationLoop defs a b) sigs deps
+           _ -> error $ "Missing definition for:" <> (show fnname)
+      
+  
 
 -- Debugging function for determining what syntactic forms
 -- actually exist
@@ -121,7 +121,7 @@ getASL = do
     (Right aslInsts', Right aslDefs') -> do
       return $ prepASL (aslInsts', aslDefs')
 
-processInstruction :: ProcedureSignature globals init -> [AS.Stmt] -> Definitions arch -> IO ()
+processInstruction :: ProcedureSignature globals init -> [AS.Stmt] -> Definitions arch -> IO ([(T.Text, [(T.Text, Integer)])])
 processInstruction pSig stmts defs = do
   handleAllocator <- CFH.newHandleAllocator
   p <- procedureToCrucible defs pSig handleAllocator stmts
@@ -132,9 +132,9 @@ processInstruction pSig stmts defs = do
                           , simSym = backend
                           }
   symFn <- simulateProcedure cfg p
-  return ()
+  return (procDepends p)
 
-processFunction :: T.Text -> SomeSignature ret -> [AS.Stmt] -> Definitions arch -> IO ()
+processFunction :: T.Text -> SomeSignature ret -> [AS.Stmt] -> Definitions arch -> IO ([(T.Text, [(T.Text, Integer)])])
 processFunction fnName sig stmts defs =
   case sig of
     SomeFunctionSignature fSig -> do
@@ -147,7 +147,7 @@ processFunction fnName sig stmts defs =
                               , simSym = backend
                               }
       symFn <- simulateFunction cfg f
-      return ()
+      return (funcDepends f)
     SomeProcedureSignature pSig -> do
       handleAllocator <- CFH.newHandleAllocator
       p <- procedureToCrucible defs pSig handleAllocator stmts
@@ -158,4 +158,4 @@ processFunction fnName sig stmts defs =
                               , simSym = backend
                               }
       symFn <- simulateProcedure cfg p
-      return ()
+      return (procDepends p)

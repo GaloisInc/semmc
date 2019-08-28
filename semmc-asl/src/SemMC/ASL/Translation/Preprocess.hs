@@ -24,12 +24,16 @@ module SemMC.ASL.Translation.Preprocess
   , computeInstructionSignature
   , prepASL
   , foldASL
+  , foldExpr
   , SigState
   , Callable(..)
   , Definitions(..)
   , bitsToInteger
   , mkFunctionName
   , mkStructMemberName
+  , applyTypeEnvir
+  , exprToInt
+  , mkSignature
   ) where
 
 import Debug.Trace (traceM)
@@ -107,7 +111,7 @@ computeSignature' name = do
 
 
 data Definitions arch =
-  Definitions { defSignatures :: Map.Map T.Text (Some SomeSignature, [AS.Stmt])
+  Definitions { defSignatures :: Map.Map T.Text (SomeSimpleSignature, [AS.Stmt])
               , defDepSignatures :: Map.Map T.Text (SomeDFS, [AS.Stmt])
               , defTypes :: Map.Map T.Text (Some UserType)
               , defEnums :: Map.Map T.Text Integer
@@ -143,7 +147,7 @@ computeInstructionSignature :: T.Text
                             -- ^ list of loaded instructinos
                             -> [AS.Definition]
                             -- ^ list of loaded definitions
-                            -> Either SigException (Some SomeSignature, [AS.Stmt], Map.Map T.Text (Some SomeSignature, Callable))
+                            -> Either SigException (Some SomeSignature, [AS.Stmt], Map.Map T.Text (SomeSimpleSignature, Callable))
 computeInstructionSignature instName encName insts defs = execSigM defs $
   case find (\i -> AS.instName i == instName) insts of
     Nothing -> error $ "couldn't find instruction " ++ show instName
@@ -771,7 +775,7 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
                          , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
                            -- ^ map from function/procedure name to list of globals
-                         , callableSignatureMap :: Map.Map T.Text (Some SomeSignature, Callable)
+                         , callableSignatureMap :: Map.Map T.Text (SomeSimpleSignature, Callable)
                          , callableOpenSearches :: [T.Text]
                            -- ^ all callables encountered on the current search path
                            -- ^ map of all signatures found thus far
@@ -857,18 +861,31 @@ storeCallableGlobals c globals = do
   let name = mkCallableName c
   RWS.put $ st { callableGlobalsMap = Map.insert name globals (callableGlobalsMap st) }
 
-lookupCallableSignature :: Callable -> SigM ext f (Maybe (Some SomeSignature))
+lookupCallableSignature :: Callable -> SigM ext f (Maybe SomeSimpleSignature)
 lookupCallableSignature c = do
   signatureMap <- callableSignatureMap <$> RWS.get
   let name = mkCallableName c
   return $ (fst <$> Map.lookup name signatureMap)
 
-storeCallableSignature :: Callable -> SomeSignature ret -> SigM ext f()
+storeCallableSignature :: Callable -> SomeSimpleSignature -> SigM ext f()
 storeCallableSignature c sig = do
   st <- RWS.get
   let name = mkCallableName c
-  RWS.put $ st { callableSignatureMap = Map.insert name (Some sig, c) (callableSignatureMap st) }
+  RWS.put $ st { callableSignatureMap = Map.insert name (sig, c) (callableSignatureMap st) }
 
+
+-- | If the given type is user-defined, compute its signature and store it
+storeUserType :: AS.Type -> SigM ext f ()
+storeUserType tp = case tp of
+  AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> do
+   case tpName of
+     "integer" -> return ()
+     "boolean" -> return ()
+     "bit" -> return ()
+     _ -> do
+       _ <- computeUserType tpName
+       return ()
+  _ -> return ()
 
 -- | Compute the What4 representation of a user-defined ASL type, from the name of
 -- the type as a 'T.Text'. Store it in 'typeSigs' (if it isn't already there).
@@ -899,29 +916,34 @@ computeUserType tpName = do
       storeType tpName tp
       return $ Some tp
 
--- | Compute the What4 representation of an ASL 'AS.Type'.
-computeType :: AS.Type -> SigM ext f (Some WT.BaseTypeRepr)
-computeType tp = case tp of
+-- | Either compute the What4 representation of an ASL 'AS.Type' or
+-- return a name representing a user-defined type.
+computeType' :: AS.Type -> Either (Some WT.BaseTypeRepr) T.Text
+computeType' tp = case tp of
   AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> do
     case tpName of
-      "integer" -> return (Some WT.BaseIntegerRepr)
-      "boolean" -> return (Some WT.BaseBoolRepr)
-      "bit" -> return (Some (WT.BaseBVRepr (NR.knownNat @1)))
-      _ -> do
-        Some userType <- computeUserType tpName
-        return $ Some $ userTypeRepr userType
+      "integer" -> Left (Some WT.BaseIntegerRepr)
+      "boolean" -> Left (Some WT.BaseBoolRepr)
+      "bit" -> Left (Some (WT.BaseBVRepr (NR.knownNat @1)))
+      _ -> Right tpName
   AS.TypeFun "bits" e ->
     case e of
       AS.ExprLitInt w
         | Just (Some wRepr) <- NR.someNat w
-        , Just NR.LeqProof <- NR.isPosNat wRepr -> return $ Some (WT.BaseBVRepr wRepr)
-      -- FIXME: For now, we interpret polymorphic bits(N) as bits(32).
-      AS.ExprVarRef (AS.QualifiedIdentifier _ _) -> return $ Some (WT.BaseBVRepr (WT.knownNat @32))
+        , Just NR.LeqProof <- NR.isPosNat wRepr -> Left $ Some (WT.BaseBVRepr wRepr)
       e' -> error $ "computeType, TypeFun" <> show e'
   AS.TypeOf _ -> error "computeType, TypeOf"
   AS.TypeReg _ _ -> error "computeType, TypeReg"
   AS.TypeArray _ _ -> error "computeType, TypeArray"
   _ -> error "computeType"
+
+-- | Compute the What4 representation of an ASL 'AS.Type'.
+computeType :: AS.Type -> SigM ext f (Some WT.BaseTypeRepr)
+computeType tp = case computeType' tp of
+  Left tp -> return tp
+  Right tpName -> do
+    Some userType <- computeUserType tpName
+    return $ Some $ userTypeRepr userType
 
 -- | If the identifier is a global variable, return its type. Otherwise, return
 -- 'Nothing', indicating the variable is not global.
@@ -1164,7 +1186,7 @@ callableGlobalVars c@Callable{..} = do
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
 -- it is a function.
-computeCallableSignature :: Callable -> SigM ext f (Some SomeSignature)
+computeCallableSignature :: Callable -> SigM ext f (SomeSimpleSignature)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
   mSig <- lookupCallableSignature c
@@ -1172,38 +1194,97 @@ computeCallableSignature c@Callable{..} = do
   case mSig of
     Just sig -> return sig
     Nothing -> do
+      mapM_ (\(_,t) -> storeUserType t) callableArgs
+      mapM_ storeUserType callableRets
+      
       globalVars <- callableGlobalVars c
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
-      labeledArgs <- forM callableArgs $ \(argName, asType) -> do
-        Some tp <- computeType asType
-        let ctp = CT.baseToType tp
-        return (Some (LabeledValue argName ctp))
 
       Some globalReprs <- return $ Ctx.fromList labeledVals
-      Some argReprs <- return $ Ctx.fromList labeledArgs
-      Some sig <- case callableRets of
+      sig <- case callableRets of
         [] -> -- procedure
-          return $ Some $ SomeProcedureSignature $ ProcedureSignature
-            { procName = name
-            , procArgReprs = argReprs
-            , procGlobalReprs = globalReprs
+          return $ SomeSimpleProcedureSignature $ SimpleProcedureSignature
+            { sprocName = name
+            , sprocArgs = callableArgs
+            , sprocGlobalReprs = globalReprs
             }
         _ -> do -- function
-          Some sigRepr <- case callableRets of
-            [asType] -> computeType asType
-            asTypes -> do
-              someTypes <- traverse computeType asTypes
-              Some assignment <- return $ Ctx.fromList someTypes
-              return $ Some (WT.BaseStructRepr assignment)
-          return $ Some $ SomeFunctionSignature $ FunctionSignature
-            { funcName = name
-            , funcSigRepr = sigRepr
-            , funcArgReprs = argReprs
-            , funcGlobalReprs = globalReprs
+          return $ SomeSimpleFunctionSignature $ SimpleFunctionSignature
+            { sfuncName = name
+            , sfuncRet = callableRets
+            , sfuncArgs = callableArgs
+            , sfuncGlobalReprs = globalReprs
             }
       storeCallableSignature c sig
-      return (Some sig)
+      return sig
+
+computeType'' :: Definitions arch -> AS.Type -> Some WT.BaseTypeRepr
+computeType'' defs t = case computeType' t of
+  Left tp -> tp
+  Right tpName -> case Map.lookup tpName (defTypes defs) of
+    Just (Some ut) -> Some $ userTypeRepr ut
+    Nothing -> error $ "Missing user type definition for: " <> (show tpName)
+
+mkReturnType :: [Some WT.BaseTypeRepr] -> Some WT.BaseTypeRepr
+mkReturnType ts = case ts of
+  [t] -> t
+  ts | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
+
+
+applyTypeEnvir :: TypeEnvir -> AS.Type -> AS.Type
+applyTypeEnvir env t = case t of
+  AS.TypeFun "bits" e -> case exprToInt env e of
+    Just i -> AS.TypeFun "bits" (AS.ExprLitInt i)
+    Nothing -> error $ "Missing expected type variable: " <> show t <> " in environment: " <> show env
+  _ -> t
+
+
+exprToInt :: TypeEnvir -> AS.Expr -> Maybe Integer
+exprToInt env e = case e of
+      AS.ExprLitInt i -> Just i
+      AS.ExprVarRef (AS.QualifiedIdentifier q id) -> do
+        i <- lookupTypeEnvir id env
+        return i
+      AS.ExprBinOp AS.BinOpSub e' e'' -> do
+        i <- exprToInt env e'
+        i' <- exprToInt env e''
+        return $ i - i'
+      AS.ExprBinOp AS.BinOpMul e' e'' -> do
+        i <- exprToInt env e'
+        i' <- exprToInt env e''
+        return $ i * i'
+      _ -> Nothing
+
+mkSignature :: Definitions arch -> TypeEnvir -> SomeSimpleSignature -> Some (SomeSignature)
+mkSignature defs env sig =
+  case sig of
+    SomeSimpleFunctionSignature fsig |
+        Some retT <- mkReturnType $ map mkType (sfuncRet fsig)
+      , Some args <- Ctx.fromList $ map mkLabel (sfuncArgs fsig) -> 
+       
+      Some $ SomeFunctionSignature $ FunctionSignature
+        { funcName = mkFinalFunctionName env $ sfuncName fsig
+        , funcSigRepr = retT
+        , funcArgReprs = args
+        , funcGlobalReprs = sfuncGlobalReprs fsig
+        , funcTypeEnvir = env
+        }
+    SomeSimpleProcedureSignature fsig |
+      Some args <-  Ctx.fromList $ map mkLabel (sprocArgs fsig) ->
+
+      Some $ SomeProcedureSignature $ ProcedureSignature
+        { procName = mkFinalFunctionName env $ sprocName fsig
+        , procArgReprs = args
+        , procGlobalReprs = sprocGlobalReprs fsig
+        , procTypeEnvir = env
+        }
+  where
+    mkType t = computeType'' defs (applyTypeEnvir env t)
+    mkLabel (nm, t) =
+      if | Some tp <- mkType t ->
+           Some (LabeledValue nm (CT.baseToType tp))
+        
 
 mkInstructionName :: T.Text -- ^ name of instruction
                   -> T.Text -- ^ name of encoding
@@ -1242,6 +1323,7 @@ computeInstructionSignature' AS.Instruction{..} encName = do
       let pSig = ProcedureSignature { procName = name
                                     , procArgReprs = argReprs
                                     , procGlobalReprs = globalReprs
+                                    , procTypeEnvir = emptyTypeEnvir
                                     }
 
       return (Some (SomeProcedureSignature pSig), instStmts)
@@ -1277,6 +1359,7 @@ overrides = Overrides {..}
         overrideStmt s = case s of
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ AS.StmtUndefined
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ AS.StmtUndefined
+          AS.StmtVarDeclInit (nm,t) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ AS.StmtUndefined
           _ -> Nothing
         overrideExpr :: AS.Expr -> Maybe AS.Expr
         overrideExpr e = case e of
@@ -1285,6 +1368,7 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ AS.ExprUnknown
+          AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [_] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> Just $ AS.ExprUnknown

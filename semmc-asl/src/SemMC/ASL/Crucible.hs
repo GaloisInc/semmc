@@ -48,8 +48,9 @@ module SemMC.ASL.Crucible (
   ) where
 
 import qualified Control.Exception as X
-import           Control.Monad.ST ( stToIO, RealWorld )
+import           Control.Monad.ST ( stToIO, RealWorld, ST )
 import qualified Data.Map as Map
+import qualified Data.Bimap as BM
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
@@ -69,8 +70,15 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, translateStatements, overrides)
+import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, translateStatements, overrides, unpackCFG)
 import           SemMC.ASL.Types
+
+import qualified Control.Monad.State.Class as MS
+
+import qualified Lang.Crucible.CFG.Core as CCC
+import qualified Lang.Crucible.CFG.Extension as CCExt
+
+
 
 import System.IO.Unsafe -- FIXME: For debugging
 -- type SignatureMap = Map.Map T.Text (SomeSignature, Callable)
@@ -94,12 +102,14 @@ functionToCrucible defs sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (funcArgReprs sig)
   let retRepr = CT.baseToType (funcSigRepr sig)
   hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr)
+  hdl' <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText "__dummyFunction") Ctx.Empty CT.AnyRepr)
   globals <- FC.traverseFC allocateGlobal (funcGlobalReprs sig)
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (funcDef defs sig globals stmts)
+  (CCG.SomeCFG cfg0, cfgs) <- stToIO $ CCG.defineFunction pos hdl (funcDef defs sig hdl' globals stmts)
   return Function { funcSig = sig
                   , funcCFG = CCS.toSSA cfg0
                   , funcGlobals = globals
+                  , funcDepends = map unpackCFG cfgs
                   }
   where
     allocateGlobal :: forall tp . LabeledValue T.Text WT.BaseTypeRepr tp -> IO (BaseGlobalVar tp)
@@ -111,24 +121,27 @@ data Function arch globals init tp =
   Function { funcSig :: FunctionSignature globals init tp
            , funcCFG :: CCC.SomeCFG (ASLExt arch) init (CT.BaseToType tp)
            , funcGlobals :: Ctx.Assignment BaseGlobalVar globals
+           , funcDepends :: [(T.Text, [(T.Text, Integer)])]
            }
 
 funcDef :: (ret ~ CT.BaseToType tp)
         => Definitions arch
         -> FunctionSignature globals init tp
+        -> CFH.FnHandle Ctx.EmptyCtx CT.AnyType
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
-funcDef defs sig globals stmts args = (funcInitialState defs sig globals args, defineFunction overrides sig stmts args)
+funcDef defs sig hdl globals stmts args = (funcInitialState defs sig hdl globals args, defineFunction overrides sig stmts args)
 
 funcInitialState :: forall init tp s globals arch
                   . Definitions arch
                  -> FunctionSignature globals init tp
+                 -> CFH.FnHandle Ctx.EmptyCtx CT.AnyType
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState s
-funcInitialState defs sig globals args =
+funcInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
@@ -136,6 +149,8 @@ funcInitialState defs sig globals args =
                    , tsConsts = defConsts defs
                    , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
+                   , tsHandle = hdl
+                   , tsTypeEnvir = funcTypeEnvir sig
                    }
   where
     addArgumentAtom :: forall tp0
@@ -148,8 +163,7 @@ funcInitialState defs sig globals args =
       in Map.insert argName (Some atom) m
     addGlobal (BaseGlobalVar gv) m =
       Map.insert (CCG.globalName gv) (Some gv) m
-
-
+  
 
 defineFunction :: forall ret tp init h s arch globals
                 . (ret ~ CT.BaseToType tp)
@@ -163,15 +177,19 @@ defineFunction ov sig stmts _args = do
   --
   -- We have the assignment of atoms available, but the arguments will be
   -- referenced by /name/ by ASL statements.
+  
   translateStatements ov (SomeFunctionSignature sig) stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
 
+
+    
 data Procedure arch globals init =
   Procedure { procSig :: ProcedureSignature globals init
             , procCFG :: CCC.SomeCFG (ASLExt arch) init (CT.SymbolicStructType globals)
             , procGlobals :: Ctx.Assignment BaseGlobalVar globals
+            , procDepends :: [(T.Text, [(T.Text, Integer)])]
             }
 
 -- | This type alias is a constraint relating the 'globals' (base types) to the
@@ -212,12 +230,15 @@ procedureToCrucible defs sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (procArgReprs sig)
   let retRepr = procSigRepr sig
   hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (procName sig)) argReprs retRepr)
+  hdl' <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText "__dummyFunction") Ctx.Empty CT.AnyRepr)
   globals <- FC.traverseFC allocateGlobal (procGlobalReprs sig)
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, _) <- stToIO $ CCG.defineFunction pos hdl (procDef defs sig globals stmts)
+  (CCG.SomeCFG cfg0, cfgs) <- stToIO $ CCG.defineFunction pos hdl (procDef defs sig hdl' globals stmts)
+  mapM_ (\cfg -> putStrLn (show (unpackCFG cfg))) cfgs
   return Procedure { procSig = sig
                    , procCFG = CCS.toSSA cfg0
                    , procGlobals = globals
+                   , procDepends = map unpackCFG cfgs
                    }
   where
     allocateGlobal :: forall tp . LabeledValue T.Text WT.BaseTypeRepr tp -> IO (BaseGlobalVar tp)
@@ -227,20 +248,22 @@ procedureToCrucible defs sig hdlAlloc stmts = do
 procDef :: (ReturnsGlobals ret globals)
         => Definitions arch
         -> ProcedureSignature globals init
+        -> CFH.FnHandle Ctx.EmptyCtx CT.AnyType
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState s, CCG.Generator (ASLExt arch) h s TranslationState ret (CCG.Expr (ASLExt arch) s ret))
-procDef defs sig globals stmts args =
-  (procInitialState defs sig globals args, defineProcedure overrides sig globals stmts args)
+procDef defs sig hdl globals stmts args =
+  (procInitialState defs sig hdl globals args, defineProcedure overrides sig globals stmts args)
 
 procInitialState :: forall init globals s arch
                   . Definitions arch
                  -> ProcedureSignature globals init
+                 -> CFH.FnHandle Ctx.EmptyCtx CT.AnyType
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState s
-procInitialState defs sig globals args =
+procInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
@@ -248,6 +271,8 @@ procInitialState defs sig globals args =
                    , tsEnums = defEnums defs
                    , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
+                   , tsHandle = hdl
+                   , tsTypeEnvir = procTypeEnvir sig
                    }
   where
     addArgument :: forall tp

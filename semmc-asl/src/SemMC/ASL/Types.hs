@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Functions for converting between What4 and Crucible types.
 module SemMC.ASL.Types
@@ -16,6 +17,7 @@ module SemMC.ASL.Types
   , ConstVal(..)
   , UserType(..)
   , LabeledValue(..)
+  , TypeEnvir
   , userTypeRepr
   , toBaseType
   , toBaseTypes
@@ -23,6 +25,14 @@ module SemMC.ASL.Types
   , baseCrucProof
   , projectLabel
   , projectValue
+  , emptyTypeEnvir
+  , pushFreshTypeEnvir
+  , popTypeEnvir
+  , lookupTypeEnvir
+  , insertTypeEnvir
+  , flatTypeEnvir
+  , fromListTypeEnvir
+  , mkFinalFunctionName
   ) where
 
 import qualified Data.Parameterized.Context as Ctx
@@ -33,6 +43,9 @@ import qualified Lang.Crucible.Types as CT
 import What4.BaseTypes as WT
 import           Data.Parameterized.Classes
 import qualified Data.BitVector.Sized as BVS
+import qualified Language.ASL.Syntax as AS
+import qualified Data.Map as Map
+import qualified Data.List as List
 
 type family ToBaseType (ctp :: CT.CrucibleType) :: WT.BaseType where
   ToBaseType (CT.BaseToType bt) = bt
@@ -132,3 +145,43 @@ userTypeRepr ut =
   case ut of
     UserEnum _ -> WT.BaseIntegerRepr
     UserStruct tps -> WT.BaseStructRepr (FC.fmapFC projectValue tps)
+
+
+data TypeEnvir = TypeEnvir { unTypeEnvir :: [Map.Map T.Text Integer] }
+  deriving Show
+
+emptyTypeEnvir :: TypeEnvir
+emptyTypeEnvir = TypeEnvir [Map.empty]
+
+pushFreshTypeEnvir :: TypeEnvir -> TypeEnvir
+pushFreshTypeEnvir (TypeEnvir e) = TypeEnvir (Map.empty : e)
+
+popTypeEnvir :: TypeEnvir -> TypeEnvir
+popTypeEnvir (TypeEnvir (_ : e)) = TypeEnvir e
+popTypeEnvir _ = error "Cannot pop empty type environment"
+
+lookupTypeEnvir :: T.Text -> TypeEnvir -> Maybe Integer
+lookupTypeEnvir nm (TypeEnvir (e : es)) =
+  case Map.lookup nm e of
+    Just i -> Just i
+    _ -> lookupTypeEnvir nm (TypeEnvir es)
+lookupTypeEnvir nm _ = Nothing
+
+
+insertTypeEnvir :: T.Text -> Integer -> TypeEnvir -> TypeEnvir
+insertTypeEnvir nm i env@(TypeEnvir (e : es)) =
+  case lookupTypeEnvir nm env of
+    Just i' -> if i == i' then env
+               else error $ "Attempted to assign value: " <> show i <>
+                    " to " <> show nm <> " in enviroment: " <> show env
+    Nothing -> TypeEnvir (Map.insert nm i e : es)
+
+flatTypeEnvir :: TypeEnvir -> [(T.Text, Integer)]
+flatTypeEnvir (TypeEnvir (e : es)) = Map.assocs e ++ flatTypeEnvir (TypeEnvir es)
+flatTypeEnvir (TypeEnvir _) = []
+
+mkFinalFunctionName :: TypeEnvir -> T.Text ->  T.Text
+mkFinalFunctionName dargs nm = T.concat $ [nm] ++ map (\(nm,i) -> nm <> "_" <> T.pack (show i)) (flatTypeEnvir dargs)
+
+fromListTypeEnvir :: [(T.Text, Integer)] -> TypeEnvir
+fromListTypeEnvir = List.foldr (\(nm,i) -> insertTypeEnvir nm i) emptyTypeEnvir

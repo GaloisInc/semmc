@@ -29,6 +29,7 @@ library
                        bv-sized >= 0.7.0,
                        containers,
                        ilist,
+                       bimap,
                        text >= 1 && < 2,
                        mtl,
                        lens,
