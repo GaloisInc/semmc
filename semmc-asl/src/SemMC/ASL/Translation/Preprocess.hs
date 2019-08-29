@@ -202,6 +202,10 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                          ,("MAIR_EL3", "MAIRType")
                          ,("SCR", "SCRType")
                          ,("SCR_EL3", "SCRType")
+                         ,("HSCTLR", "HSCTLRType")
+                         ,("HCR_EL2", "HCRType")
+                         ,("HCR2", "HCRType")
+                         ,("MDCR_EL2", "MDCRType")
                          ])
   where
     mkGlobalStruct (nm,tnm) =
@@ -215,8 +219,11 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
 
 globalStructTypes :: [(T.Text, [(T.Text, AS.Type)])]
 globalStructTypes =
-  [ ("SCRType", [("EL3_A", bit 1), ("NS", bit 1)])
-  , ("SCTLRType", [("SED", bit 1)])
+  [ ("SCRType", [("EL3_A", bit 1), ("NS", bit 1), ("EA", bit 1)])
+  , ("SCTLRType", [("SED", bit 1), ("A", bit 1)])
+  , ("HSCTLRType", [("A", bit 1)])
+  , ("HCRType", [("TGE", bit 1), ("TEA", bit 1)])
+  , ("MDCRType", [("TDE", bit 1)])
   , ("CPACRType", [("FPEN", bit 2)])
   , ("CNTKCTLType", [("EL0PTEN", bit 1)])
   ]
@@ -597,6 +604,8 @@ collapseReturn mem stmts =
         AS.StmtCase e alts ->
           AS.StmtCase e (mapCases finident <$> alts) : rest
         _ -> error $ "Unexpected statement structure: " <> show stmts
+    AS.StmtReturn (Just (AS.ExprCall qName args)) : rest ->
+      AS.StmtReturn (Just (AS.ExprCall (mkGetterNameField qName (Just mem)) args)) : rest
     _ -> error $ "Unexpected statement structure: " <> show stmts
 
 callablesFromGetter :: (AS.Stmt -> AS.Stmt) -> AS.Definition -> [AS.Definition]
