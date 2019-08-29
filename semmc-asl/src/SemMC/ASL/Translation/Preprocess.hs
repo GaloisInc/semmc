@@ -668,33 +668,10 @@ applySyntaxOverridesInstrs ovrs instrs =
   in mapInstr <$> instrs
 
 
-
--- Syntactic overrides for entire definitions.
-callableOverrides :: Map.Map T.Text [AS.Stmt]
-callableOverrides = Map.fromList [
-  -- In the getter for R we have int literals that should actually be interpreted
-  -- a 32 bit bv
-  ("GETTER_R", [AS.StmtIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n")) (AS.ExprLitInt 15),[AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset")) (AS.ExprIf [(AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "CurrentInstrSet") []) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "InstrSet_A32")),wrapLitInt32 8)] (wrapLitInt32 4)),AS.StmtReturn (Just (AS.ExprBinOp AS.BinOpAdd (AS.ExprSlice (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "_PC")) [AS.SliceRange (AS.ExprLitInt 31) (AS.ExprLitInt 0)]) (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "offset"))))])] (Just [AS.StmtReturn (Just (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTER_Rmode") [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "n"),AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "PSTATE")) "M"]))])] ),
-  -- Needs to be capped with a return
-  -- FIXME: The the assert seems to be tripping the simulator during globals collection
-  -- AS.StmtAssert (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")),
-  ("Unreachable", [AS.StmtReturn Nothing])
-  ]
-  where wrapLitInt32 i = AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "__BVTOINT32") [AS.ExprLitInt i]
-
-
-
 prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
 prepASL (instrs, defs) =
   let ovrs = mkSyntaxOverrides defs
-
-      mapDefs d = case d of
-        AS.DefCallable (AS.QualifiedIdentifier q name) args rets _ ->
-          case Map.lookup name callableOverrides of
-            Just stmts' -> AS.DefCallable (AS.QualifiedIdentifier q name) args rets stmts'
-            _ -> d
-        _ -> d
-  in (applySyntaxOverridesInstrs ovrs instrs, mapDefs <$> applySyntaxOverridesDefs ovrs defs)
+  in (applySyntaxOverridesInstrs ovrs instrs, applySyntaxOverridesDefs ovrs defs)
       
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
@@ -1384,5 +1361,5 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "__BVTOINT32") [AS.ExprLitInt i] -> Just $ AS.ExprUnknown
+          AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ AS.ExprUnknown
           _ -> Nothing

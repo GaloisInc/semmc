@@ -1454,10 +1454,9 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ do
             atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
             return $ Some atom
-          AS.ExprCall (AS.QualifiedIdentifier _ "__BVTOINT32") [AS.ExprLitInt i] -> Just $ do
-            atom <- CCG.mkAtom (CCG.App (CCE.IntegerToBV (WT.knownNat @32)
-                                         (CCG.App (CCE.IntLit i))))
-            return $ Some atom
+          AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
+            atom <- CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
+            Some <$> CCG.mkAtom (CCG.App CCE.EmptyApp)
           _ -> Nothing
 
 

@@ -46,9 +46,9 @@ main :: IO ()
 main = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  let instrs = [collectInstructions aslInsts !! 4]
+  --let instrs = [collectInstructions aslInsts !! 4]
   --let instrs = [("aarch32_REV_A","aarch32_REV_T2_A")]
-  --let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
+  let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
   
   forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)
    
