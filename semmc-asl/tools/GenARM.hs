@@ -46,9 +46,9 @@ main :: IO ()
 main = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  --let instrs = [collectInstructions aslInsts !! 4]
+  let instrs = [collectInstructions aslInsts !! 4]
   --let instrs = [("aarch32_REV_A","aarch32_REV_T2_A")]
-  let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
+  --let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
   
   forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)
    
@@ -77,13 +77,12 @@ runTranslation instr enc aslInsts aslDefs = do
 
           putStrLn $ "--------------------------------"
           putStrLn "Translating functions: "
-          _ <- foldM (\b -> \a -> translationLoop defs a b) Map.empty deps
+          _ <- foldM (\b -> \a -> translationLoop defs a b) Map.empty (Map.assocs deps)
           return ()
     _ -> error "Panic"
 
-translationLoop :: Definitions arch -> (T.Text, [(T.Text, Integer)]) -> Map.Map T.Text (Some (SomeSignature)) -> IO (Map.Map T.Text (Some (SomeSignature)))
-translationLoop defs (fnname, dargs) sigs = do
-  let env = fromListTypeEnvir dargs
+translationLoop :: Definitions arch -> (T.Text, TypeEnvir) -> Map.Map T.Text (Some (SomeSignature)) -> IO (Map.Map T.Text (Some (SomeSignature)))
+translationLoop defs (fnname, env) sigs = do
   let finalName =  (mkFinalFunctionName env fnname)
   putStrLn $ show finalName ++ " definition:"
   case Map.lookup finalName sigs of
@@ -93,7 +92,7 @@ translationLoop defs (fnname, dargs) sigs = do
                  
                  deps <- processFunction (someSigName sig) sig stmts defs
                  putStrLn $ "--------------------------------"
-                 foldM (\b -> \a -> translationLoop defs a b) sigs deps
+                 foldM (\b -> \a -> translationLoop defs a b) sigs (Map.assocs deps)
            _ -> error $ "Missing definition for:" <> (show fnname)
       
   
@@ -121,7 +120,7 @@ getASL = do
     (Right aslInsts', Right aslDefs') -> do
       return $ prepASL (aslInsts', aslDefs')
 
-processInstruction :: ProcedureSignature globals init -> [AS.Stmt] -> Definitions arch -> IO ([(T.Text, [(T.Text, Integer)])])
+processInstruction :: ProcedureSignature globals init -> [AS.Stmt] -> Definitions arch -> IO (Map.Map T.Text TypeEnvir)
 processInstruction pSig stmts defs = do
   handleAllocator <- CFH.newHandleAllocator
   p <- procedureToCrucible defs pSig handleAllocator stmts
@@ -134,7 +133,7 @@ processInstruction pSig stmts defs = do
   symFn <- simulateProcedure cfg p
   return (procDepends p)
 
-processFunction :: T.Text -> SomeSignature ret -> [AS.Stmt] -> Definitions arch -> IO ([(T.Text, [(T.Text, Integer)])])
+processFunction :: T.Text -> SomeSignature ret -> [AS.Stmt] -> Definitions arch -> IO (Map.Map T.Text TypeEnvir)
 processFunction fnName sig stmts defs =
   case sig of
     SomeFunctionSignature fSig -> do
