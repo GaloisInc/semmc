@@ -1254,6 +1254,10 @@ exprToInt env e = case e of
         i <- exprToInt env e'
         i' <- exprToInt env e''
         return $ i * i'
+      AS.ExprBinOp AS.BinOpAdd e' e'' -> do
+        i <- exprToInt env e'
+        i' <- exprToInt env e''
+        return $ i + i'
       _ -> Nothing
 
 mkSignature :: Definitions arch -> TypeEnvir -> SomeSimpleSignature -> Some (SomeSignature)

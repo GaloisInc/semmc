@@ -347,16 +347,44 @@ translateFor :: Overrides arch
              -> [AS.Stmt]
              -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
 translateFor ov sig var lo hi body = do
-  let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
-  translateDefinedVar ov ty var lo
-  let testG = do
-        let ident = AS.QualifiedIdentifier AS.ArchQualAny var
-        let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
-        Some testA <- translateExpr ov testE
-        Refl <- assertAtomType testE CT.BoolRepr testA
-        return (CCG.AtomExpr testA)
-  let bodyG = mapM_ (translateStatement ov sig) body
-  CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+  env <- MS.gets tsTypeEnvir
+  case (exprToInt env lo, exprToInt env hi) of
+    (Just lo', Just hi') -> unrollFor ov sig var lo' hi' body
+    _ -> do
+      vars <- MS.gets tsVarRefs
+      case Map.lookup var vars of
+        Just (Some lreg) -> do
+          Some atom <- translateExpr ov lo
+          Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
+          CCG.assignReg lreg (CCG.AtomExpr atom)
+        _ -> do
+          let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
+          translateDefinedVar ov ty var lo
+      let testG = do
+            let ident = AS.QualifiedIdentifier AS.ArchQualAny var
+            let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
+            Some testA <- translateExpr ov testE
+            Refl <- assertAtomType testE CT.BoolRepr testA
+            return (CCG.AtomExpr testA)
+      let bodyG = mapM_ (translateStatement ov sig) body
+      CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+
+
+unrollFor :: Overrides arch
+          -> SomeSignature ret
+          -> AS.Identifier
+          -> Integer
+          -> Integer
+          -> [AS.Stmt]
+          -> CCG.Generator (ASLExt arch) h s TranslationState ret ()
+unrollFor ov sig var lo hi body = do
+  mapM_ translateFor [lo .. hi]
+  where
+    translateFor i = do
+      mapTypeEnvir (insertTypeEnvir var i . pushFreshTypeEnvir)
+      mapM_ (translateStatement ov sig) body
+      mapTypeEnvir popTypeEnvir
+       
 
 
 translateRepeat :: Overrides arch
@@ -1200,6 +1228,8 @@ data BinaryOperatorBundle ext s (rtp :: ReturnK) =
                        , obInt :: CCG.Expr ext s CT.IntegerType -> CCG.Expr ext s CT.IntegerType -> CCE.App ext (CCG.Expr ext s) (BinaryOperatorReturn rtp CT.IntegerType)
                        }
 
+
+
 -- | Apply a binary operator to two operands, performing the necessary type checks
 applyBinOp :: (CCE.IsSyntaxExtension ext)
            => BinaryOperatorBundle ext s rtp
@@ -1209,8 +1239,13 @@ applyBinOp :: (CCE.IsSyntaxExtension ext)
 applyBinOp bundle (e1, a1) (e2, a2) =
   case CCG.typeOfAtom a1 of
     CT.BVRepr nr -> do
-      Refl <- assertAtomType e2 (CT.BVRepr nr) a2
-      Some <$> CCG.mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      case CCG.typeOfAtom a2 of
+        CT.IntegerRepr -> do
+            let a2' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a2))
+            Some <$> CCG.mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) a2'))
+        _ -> do
+          Refl <- assertAtomType e2 (CT.BVRepr nr) a2
+          Some <$> CCG.mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     CT.NatRepr -> do
       Refl <- assertAtomType e2 CT.NatRepr a2
       Some <$> CCG.mkAtom (CCG.App (obNat bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
