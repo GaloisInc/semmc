@@ -675,15 +675,16 @@ translateType t = do
     AS.TypeReg _i _flds -> error ("Unsupported type: " ++ show t)
     _ -> error ("Unsupported type: " ++ show t)
 
-withTypeEnvironment :: TypeEnvir
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret a
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret a
-withTypeEnvironment tenv f = do
+withTypeEnvir :: TypeEnvir
+              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret a
+              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (a, TypeEnvir)
+withTypeEnvir tenv f = do
   env <- MS.gets tsTypeEnvir
   MS.modify' $ \s -> s { tsTypeEnvir = tenv }
   x <- f
+  env' <- MS.gets tsTypeEnvir
   MS.modify' $ \s -> s { tsTypeEnvir = env }
-  return x
+  return (x, env')
 
 
 dependentVarsOfType :: AS.Type -> [T.Text]
@@ -706,22 +707,22 @@ mapTypeEnvir f = do
 
 
 
-collectConstIntegers :: AS.SymbolDecl
+collectConstIntegers :: TypeEnvir
+                     -> AS.SymbolDecl
                      -> AS.Expr
-                     -> MSS.StateT (TypeEnvir) (CCG.Generator (ASLExt arch) h s (TranslationState h) ret) ()
-collectConstIntegers (nm, t) e = do
-  env <- MS.get
-  case e of
-    AS.ExprLitInt i -> MS.put (insertTypeEnvir nm i env)
+                     -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+collectConstIntegers outerEnv (nm, t) e = do
+  case exprToInt outerEnv e of
+    Just i -> mapTypeEnvir (insertTypeEnvir nm i)
     _ -> return ()
 
 -- Unify a syntactic ASL type against a crucible type, and update
 -- the current typing evironment with any discovered instantiations
 unifyType :: AS.Type
           -> Some (CT.TypeRepr)
-          -> MSS.StateT (TypeEnvir) (CCG.Generator (ASLExt arch) h s (TranslationState h) ret) ()
+          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 unifyType aslT (Some atomT) = do
-  env <- MS.get
+  env <- MS.gets tsTypeEnvir
   case (aslT, atomT) of
     (AS.TypeFun "bits" e, CT.BVRepr repr) ->
       case e of
@@ -729,7 +730,7 @@ unifyType aslT (Some atomT) = do
         AS.ExprVarRef (AS.QualifiedIdentifier _ id) ->
           case lookupTypeEnvir id env of
             Just i | Just (Some nr) <- NR.someNat i, Just Refl <- testEquality repr nr -> return ()
-            Nothing -> MS.modify' (insertTypeEnvir id (toInteger (NR.natValue repr)))
+            Nothing -> mapTypeEnvir (insertTypeEnvir id (toInteger (NR.natValue repr)))
             _ -> X.throw $ TypeUnificationFailure aslT atomT env
         AS.ExprBinOp AS.BinOpMul e e' ->
           case (mInt env e, mInt env e') of
@@ -737,15 +738,15 @@ unifyType aslT (Some atomT) = do
             (Right (AS.ExprVarRef (AS.QualifiedIdentifier _ id)), Left i')
               | reprVal <- toInteger $ WT.natValue repr
               , (innerVal, 0) <- reprVal `divMod` i' ->
-                MS.modify' $ insertTypeEnvir id innerVal
+                mapTypeEnvir $ insertTypeEnvir id innerVal
             (Left i, Right (AS.ExprVarRef (AS.QualifiedIdentifier _ id)))
               | reprVal <- toInteger $ WT.natValue repr
               , (innerVal, 0) <- reprVal `divMod` i ->
-                MS.modify' $ insertTypeEnvir id innerVal
+               mapTypeEnvir $ insertTypeEnvir id innerVal
             _ -> X.throw $ TypeUnificationFailure aslT atomT env
         _ -> X.throw $ TypeUnificationFailure aslT atomT env
     _ -> do
-      Some atomT' <- MSS.lift $ withTypeEnvironment env $ translateType aslT
+      Some atomT' <- translateType aslT
       case testEquality atomT atomT' of
         Just Refl -> return ()
         _ -> X.throw $ TypeUnificationFailure aslT atomT env
@@ -756,11 +757,12 @@ unifyType aslT (Some atomT) = do
 
         
 unifyArg :: Overrides arch
+         -> TypeEnvir
          -> AS.SymbolDecl
          -> AS.Expr
-         -> MSS.StateT (TypeEnvir) (CCG.Generator (ASLExt arch) h s (TranslationState h) ret) (Some (CCG.Atom s))
-unifyArg ov (nm,t) e = do
-  Some atom <- MSS.lift $ translateExpr ov e
+         -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+unifyArg ov outerEnv (nm,t) e = do
+  (Some atom, _) <- withTypeEnvir outerEnv $ translateExpr ov e
   let atomT = CCG.typeOfAtom atom
   unifyType t (Some $ CCG.typeOfAtom atom)
   return $ Some atom
@@ -778,13 +780,15 @@ unifyArgs :: Overrides arch
           -> [AS.Type]
           -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (T.Text, [Some (CCG.Atom s)], Maybe (Some WT.BaseTypeRepr))
 unifyArgs ov fnname args rets = do
-  (atoms, tenv) <- MSS.runStateT (do
-      mapM_ (\(decl, e) -> collectConstIntegers decl e) args
-      mapM (\(decl, e) -> unifyArg ov decl e) args) emptyTypeEnvir
+  outerEnv <- MS.gets tsTypeEnvir
+  (atoms, tenv) <- withTypeEnvir emptyTypeEnvir $ do
+      mapM_ (\(decl, e) -> collectConstIntegers outerEnv decl e) args
+      mapM (\(decl, e) -> unifyArg ov outerEnv decl e) args
   let dvars = concat $ map dependentVarsOfType rets ++ map (\((_,t), _) -> dependentVarsOfType t) args
-  let env = List.sort $ map (\nm -> case lookupTypeEnvir nm tenv of {Just i -> (nm,i)}) dvars
-  recordDep fnname env -- store the polymorphic type environment used to resolve this function
-  retsT <- mapM (\t -> withTypeEnvironment tenv (translateType t)) rets
+  let env = fromListTypeEnvir $ map (\nm -> case lookupTypeEnvir nm tenv of {Just i -> (nm,i)}) dvars
+  hdl <- MS.gets tsHandle
+  MST.liftST (STRef.modifySTRef hdl (Map.insert fnname env))
+  retsT <- mapM (\t -> withTypeEnvir tenv (translateType t) >>= (\(x,_ ) -> return x)) rets
   retT <- case map asBaseType retsT of
             [] -> return Nothing
             [retbT] -> return $ Just retbT
@@ -792,8 +796,7 @@ unifyArgs ov fnname args rets = do
               Some assignment <- return $ Ctx.fromList retbsT
               return $ Just $ Some (WT.BaseStructRepr assignment)
   
-  return (mkFinalFunctionName (fromListTypeEnvir env) fnname, atoms, retT)
-
+  return (mkFinalFunctionName env fnname, atoms, retT)
 
 
 translateIf :: Overrides arch
@@ -1418,10 +1421,4 @@ raiseException :: CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 raiseException = return ()
 
 
-recordDep :: T.Text
-        -> [(T.Text, Integer)]
-        -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-recordDep nm tenv = do
-  hdl <- MS.gets tsHandle
-  MST.liftST (STRef.modifySTRef hdl (Map.insert nm (fromListTypeEnvir tenv)))
-  return ()
+
