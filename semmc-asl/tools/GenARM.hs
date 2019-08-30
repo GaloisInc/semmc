@@ -89,7 +89,7 @@ translationLoop defs (fnname, env) sigs = do
     Just _ -> return sigs
     _ -> case Map.lookup fnname (defSignatures defs) of
            Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
-                 
+                 putStrLn $ "--------------------------------"
                  deps <- processFunction (someSigName sig) sig stmts defs
                  putStrLn $ "--------------------------------"
                  foldM (\b -> \a -> translationLoop defs a b) sigs (Map.assocs deps)

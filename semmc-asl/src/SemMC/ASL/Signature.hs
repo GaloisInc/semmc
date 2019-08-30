@@ -24,6 +24,7 @@ module SemMC.ASL.Signature (
   , SomeSignature(..)
   , someSigRepr
   , someSigName
+  , someSigArgs
   , SomeDFS(..)
   , DependentTypeRepr(..)
   , BaseGlobalVar(..)
@@ -59,6 +60,7 @@ data FunctionSignature globals init tp =
                     -- assume that globals are read-only in functions
                     , funcTypeEnvir :: TypeEnvir
                     -- ^ The typing environment used to monomorphize this function
+                    , funcArgs :: [AS.SymbolDecl]
                     }
   deriving (Show)
 
@@ -113,7 +115,8 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                        -- globals; later, we can find a tighter bound.
                      , procTypeEnvir :: TypeEnvir
                        -- ^ The typing environment used to monomorphize this function
-                       }
+                     , procArgs :: [AS.SymbolDecl]
+                     }
   deriving (Show)
 
 -- | Compute the return type (repr) of a procedure in Crucible types (lifted from base types)
@@ -131,6 +134,11 @@ someSigRepr (SomeProcedureSignature pSig) = procSigRepr pSig
 someSigName :: SomeSignature ret -> T.Text
 someSigName (SomeFunctionSignature fSig) = funcName fSig
 someSigName (SomeProcedureSignature pSig) = procName pSig
+
+
+someSigArgs :: SomeSignature ret -> [AS.SymbolDecl]
+someSigArgs (SomeProcedureSignature pSig) = procArgs pSig
+someSigArgs (SomeFunctionSignature fSig) = funcArgs fSig
 
 data SomeDFS where
   SomeDFS :: DependentFunctionSignature globals init tp -> SomeDFS

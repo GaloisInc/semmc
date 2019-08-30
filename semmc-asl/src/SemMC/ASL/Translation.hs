@@ -16,6 +16,7 @@ module SemMC.ASL.Translation (
   , translateExpr
   , translateStatement
   , translateStatements
+  , declareLocalStruct
   , Overrides(..)
   , overrides
   , UserType(..)
@@ -83,19 +84,19 @@ data ExprConstructor arch regs h s ret where
 --
 -- We currently assume that arguments are never assigned to (i.e., there is no
 -- name shadowing).
-lookupVarRef :: forall arch h s ret
+lookupVarRef' :: forall arch h s ret
               . T.Text
-             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Expr (ASLExt arch) s))
-lookupVarRef name = do
+             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some (CCG.Expr (ASLExt arch) s)))
+lookupVarRef' name = do
   ts <- MS.get
-  let err = X.throw (UnboundName name)
-  case fromMaybe err (lookupLocalConst ts <|>
-                      lookupArg ts <|>
-                      lookupRef ts <|>
-                      lookupGlobal ts <|>
-                      lookupEnum ts <|>
-                      lookupConst ts) of
-    ExprConstructor e con -> Some <$> con e
+  case (lookupLocalConst ts <|>
+        lookupArg ts <|>
+        lookupRef ts <|>
+        lookupGlobal ts <|>
+        lookupEnum ts <|>
+        lookupConst ts) of
+    Just (ExprConstructor e con) -> Just <$> Some <$> con e
+    Nothing -> return Nothing
   where
     lookupLocalConst ts = do
       i <- lookupTypeEnvir name (tsTypeEnvir ts)
@@ -121,6 +122,12 @@ lookupVarRef name = do
           return (ExprConstructor (CCG.App (CCE.BVLit wRepr (BVS.bvIntegerU e))) return)
         _ -> error "bad const type"
 
+lookupVarRef :: forall arch h s ret
+             . T.Text
+            -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Expr (ASLExt arch) s))
+lookupVarRef name = do
+  fromMaybe (X.throw (UnboundName name)) <$> lookupVarRef' name
+
 -- | Overrides for syntactic forms
 --
 -- Each of the frontends can match on different bits of syntax and handle their
@@ -141,6 +148,9 @@ data TranslationState h s =
                    -- immutable and allocated before we start executing.
                    , tsVarRefs :: Map.Map T.Text (Some (CCG.Reg s))
                    -- ^ Local registers containing values; these are created on first use
+                   , tsStructRefs :: Map.Map T.Text (Map.Map T.Text StructAccessor)
+                   -- ^ Types of local structs so we can find the index of a given member in the
+                   -- base struct
                    , tsGlobals :: Map.Map T.Text (Some CCG.GlobalVar)
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
@@ -213,6 +223,7 @@ translateStatements :: forall ret tp h s arch
                -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 translateStatements ov sig stmts = do
   let errmsg = "Function " ++ T.unpack (someSigName sig) ++ " does not return."
+  mapM_ (\(nm,t) -> declareLocalStruct t nm) (someSigArgs sig)
   mapM_ (translateStatement ov sig) stmts
   errStr <- CCG.mkAtom (CCG.App (CCE.TextLit (T.pack errmsg)))
   CCG.reportError (CCG.AtomExpr errStr)
@@ -296,7 +307,7 @@ translateStatement ov sig stmt
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeSimpleFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
           Just (SomeSimpleProcedureSignature pSig) -> do
-            (finalIdent, argAtoms, _) <- unifyArgs ov ident (zip (sprocArgs pSig) args) []
+            (finalIdent, argAtoms, _) <- unifyArgs ov ident (zip (sprocArgs pSig) args) [] Nothing
             case Ctx.fromList argAtoms of
               Some argAssign -> do               
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
@@ -418,11 +429,12 @@ translateDefinedVar ov ty ident expr = do
   tty <- translateType ty
   case tty of
     Some expected -> do
-      Some atom <- translateExpr ov expr
+      Some atom <- translateExpr' ov expr (Just tty)
       Refl <- assertAtomType expr expected atom
       locals <- MS.gets tsVarRefs
       when (Map.member ident locals) $ do
         X.throw (LocalAlreadyDefined ident)
+      declareLocalStruct ty ident
       reg <- CCG.newReg (CCG.AtomExpr atom)
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
@@ -430,12 +442,16 @@ translateDefinedVar ov ty ident expr = do
 -- | Convert an lVal to its equivalent expression in order to determine
 -- its value for a sliced assignement. These are the only forms seen
 -- in an LValSliceOf
-lValToExpr :: AS.LValExpr -> AS.Expr
+lValToExpr :: AS.LValExpr -> Maybe AS.Expr
 lValToExpr lval = case lval of
-  AS.LValVarRef qName -> AS.ExprVarRef qName
-  AS.LValMember lv memberName -> AS.ExprMember (lValToExpr lv) memberName
-  AS.LValArrayIndex lv slices -> AS.ExprIndex (lValToExpr lv) slices
-  _ -> error $ "Unsupported LVal: " ++ show lval
+  AS.LValVarRef qName -> return $ AS.ExprVarRef qName
+  AS.LValMember lv memberName -> do
+    lve <- lValToExpr lv
+    return $ AS.ExprMember lve memberName
+  AS.LValArrayIndex lv slices -> do
+    lve <- lValToExpr lv
+    return $ AS.ExprIndex lve slices
+  _ -> Nothing
 
 -- | Translate general assignment statements into Crucible
 --
@@ -447,8 +463,17 @@ translateAssignment :: Overrides arch
                     -> AS.Expr
                     -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 translateAssignment ov lval e = do
-  Some atom <- translateExpr ov e
+  Some atom <- case lValToExpr lval of
+    Just lve -> case lve of
+      AS.ExprMember _ _ -> translateInformed lve
+      _ -> translateExpr ov e
+    _ -> translateExpr ov e
+
   translateAssignment' ov lval atom (Just e)
+  where
+    translateInformed lve = do
+      Some lveAtom <- translateExpr ov lve
+      translateExpr' ov e (Just $ Some (CCG.typeOfAtom lveAtom))
 
 translateAssignment' :: forall arch s tp h ret . Overrides arch
                      -> AS.LValExpr
@@ -583,7 +608,8 @@ translatelValSlice :: Overrides arch
                    -> CCG.Atom s tp
                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 translatelValSlice ov lv slice asnAtom = do
-  Some atom <- translateExpr ov (lValToExpr lv)
+  let Just lve = lValToExpr lv
+  Some atom <- translateExpr ov lve
   (Some loRepr, Some hiRepr) <- getSliceRange slice
   if | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
      , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
@@ -633,6 +659,7 @@ declareUndefinedVar ty ident = do
   locals <- MS.gets tsVarRefs
   when (Map.member ident locals) $ do
     X.throw (LocalAlreadyDefined ident)
+  declareLocalStruct ty ident
   tty <- translateType ty
   case tty of
     -- Bit slicing may need to read this value (i.e. to incrementally build a bv)
@@ -643,6 +670,34 @@ declareUndefinedVar ty ident = do
     Some rep -> do
       reg <- CCG.newUnassignedReg rep
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
+
+declareLocalStruct :: AS.Type
+                   -> AS.Identifier
+                   -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+declareLocalStruct ty ident = do
+  case ty of
+    AS.TypeRef qi@(AS.QualifiedIdentifier _ tident) -> do
+      uts <- MS.gets tsUserTypes
+      case Map.lookup tident uts of
+        Just (Some (UserStruct s)) -> do
+          let (_, asn) = MSS.runState (Ctx.traverseAndCollect
+                                       (collectAssignment (FC.fmapFC projectValue s)) s) Map.empty
+          MS.modify' $ \s -> s { tsStructRefs = Map.insert ident asn (tsStructRefs s) }
+        _ -> return ()
+    _ -> return ()
+  where
+    collectAssignment :: Ctx.Assignment WT.BaseTypeRepr tps
+                      -> Ctx.Index tps tp
+                      -> LabeledValue T.Text WT.BaseTypeRepr tp
+                      -> MSS.State (Map.Map T.Text StructAccessor) ()
+    collectAssignment repr idx lblv =
+      MS.modify' (Map.insert (projectLabel lblv) (StructAccessor repr idx))
+
+data StructAccessor = forall tps tp. StructAccessor
+  { structRepr :: Ctx.Assignment WT.BaseTypeRepr tps
+  , structIdx :: Ctx.Index tps tp }
+
+deriving instance Show StructAccessor
 
 -- | Translate types (including user-defined types) into Crucible type reprs
 --
@@ -778,17 +833,24 @@ unifyArgs :: Overrides arch
           -> T.Text
           -> [(AS.SymbolDecl, AS.Expr)]
           -> [AS.Type]
+          -> Maybe (Some (CT.TypeRepr))
           -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (T.Text, [Some (CCG.Atom s)], Maybe (Some WT.BaseTypeRepr))
-unifyArgs ov fnname args rets = do
+unifyArgs ov fnname args rets targetRet = do
   outerEnv <- MS.gets tsTypeEnvir
   (atoms, tenv) <- withTypeEnvir emptyTypeEnvir $ do
       mapM_ (\(decl, e) -> collectConstIntegers outerEnv decl e) args
-      mapM (\(decl, e) -> unifyArg ov outerEnv decl e) args
+      atoms <- mapM (\(decl, e) -> unifyArg ov outerEnv decl e) args
+      unifyRet outerEnv rets targetRet
+      return atoms
   let dvars = concat $ map dependentVarsOfType rets ++ map (\((_,t), _) -> dependentVarsOfType t) args
   let env = fromListTypeEnvir $ map (\nm -> case lookupTypeEnvir nm tenv of {Just i -> (nm,i)}) dvars
   hdl <- MS.gets tsHandle
   MST.liftST (STRef.modifySTRef hdl (Map.insert fnname env))
-  retsT <- mapM (\t -> withTypeEnvir tenv (translateType t) >>= (\(x,_ ) -> return x)) rets
+
+  mapM_ (\nm -> case lookupTypeEnvir nm tenv of {Just _ -> return (); Nothing ->
+          error $ "Could not finalize polymorphic type environment for:" <> (show fnname)}) dvars
+
+  retsT <- mapM (\t -> fst <$> withTypeEnvir tenv (translateType t)) rets
   retT <- case map asBaseType retsT of
             [] -> return Nothing
             [retbT] -> return $ Just retbT
@@ -797,6 +859,17 @@ unifyArgs ov fnname args rets = do
               return $ Just $ Some (WT.BaseStructRepr assignment)
   
   return (mkFinalFunctionName env fnname, atoms, retT)
+  where
+    mInt env e = case exprToInt env e of
+      Just i -> Left i
+      Nothing -> Right e
+
+    unifyRet :: TypeEnvir
+          -> [AS.Type] -- return type of function
+          -> Maybe (Some CT.TypeRepr) -- potential concrete target type
+          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+    unifyRet outerEnv [t] (Just targetRet) = unifyType t targetRet
+    unifyRet _ _ _ = return ()
 
 
 translateIf :: Overrides arch
@@ -874,10 +947,11 @@ assertAtomType' expectedRepr atom =
 -- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
 --
 -- Atoms may be written to registers, which are mutable locals
-translateExpr :: Overrides arch
+translateExpr' :: Overrides arch
               -> AS.Expr
+              -> Maybe (Some (CT.TypeRepr))
               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
-translateExpr ov expr
+translateExpr' ov expr mTy
   | Just eo <- overrideExpr ov expr = eo
   | otherwise =
     case expr of
@@ -920,7 +994,7 @@ translateExpr ov expr
           Nothing -> X.throw (MissingFunctionDefinition ident)
           Just (SomeSimpleProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
           Just (SomeSimpleFunctionSignature sig) -> do
-            (finalIdent, argAtoms, Just (Some retT)) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig)
+            (finalIdent, argAtoms, Just (Some retT)) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig) mTy
             case Ctx.fromList argAtoms of
               Some argAssign -> do
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
@@ -932,9 +1006,22 @@ translateExpr ov expr
       -- This is just like a variable lookup, since struct members are stored as
       -- individual global variables.
       AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-        let ident = mkStructMemberName structName memberName
-        Some e <- lookupVarRef ident
-        Some <$> CCG.mkAtom e
+        srefs <- MS.gets tsStructRefs
+        case Map.lookup structName srefs of
+          Nothing -> do
+            let ident = mkStructMemberName structName memberName
+            Some e <- lookupVarRef ident
+            Some <$> CCG.mkAtom e
+          Just accs -> do
+            Some e <- lookupVarRef structName
+            satom <- CCG.mkAtom e
+            case (CCG.typeOfAtom satom, Map.lookup memberName accs) of
+              (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx)) |
+                Just Refl <- testEquality tps repr -> do
+                  let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr satom)
+                  getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+                  return (Some getAtom)
+              _ -> X.throw (StructFieldMismatch expr)
 
       AS.ExprSlice e [slice] -> translateSlice ov e slice
 
@@ -952,6 +1039,24 @@ translateExpr ov expr
            | otherwise ->  X.throw (UnsupportedExpr expr)
 
       _ -> error (show expr)
+
+translateExpr :: Overrides arch
+              -> AS.Expr
+              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+translateExpr ov expr = translateExpr' ov expr Nothing
+
+getIndexOfLabel :: Ctx.Assignment WT.BaseTypeRepr tps
+                -> T.Text
+                -> CCG.Atom s (CT.SymbolicStructType tps)
+                -> Ctx.Index tps tp
+                -> LabeledValue T.Text WT.BaseTypeRepr tp
+                -> MSS.StateT (Maybe (Some (CCG.Atom s))) (CCG.Generator (ASLExt arch) h s (TranslationState h) ret) ()
+getIndexOfLabel tps lbl struct ix val =
+  if projectLabel val == lbl then do
+    let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
+    getAtom <- MSS.lift $ CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+    MS.put (Just $ Some getAtom)
+  else return ()
 
 -- (1 <= w, 1 <= len, idx + len <= w)
 

@@ -245,6 +245,15 @@ allocateFreshArg sym (AC.LabeledValue name rep) = do
                       , CS.regValue = rv
                       } )
         bv
+    CT.SymbolicStructRepr idxTy -> do
+      sname <- toSolverSymbol (T.unpack name)
+      bv <- WI.freshBoundVar sym sname (WT.BaseStructRepr idxTy)
+      rv <- WI.freshConstant sym sname (WT.BaseStructRepr idxTy)
+      return $ FreshArg
+        ( CS.RegEntry { CS.regType = rep
+                      , CS.regValue = rv
+                      } )
+        bv
     _ -> X.throwIO (CannotAllocateFresh name rep)
 
 toSolverSymbol :: String -> IO WS.SolverSymbol

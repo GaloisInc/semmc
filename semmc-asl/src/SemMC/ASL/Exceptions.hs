@@ -45,7 +45,9 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
-                          | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) TypeEnvir 
+                          | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) TypeEnvir
+                          | ReturnTypeUnificationFailure AS.Type AS.Type TypeEnvir
+                          | StructFieldMismatch AS.Expr
 
 deriving instance Show TranslationException
 

@@ -205,7 +205,10 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                          ,("HSCTLR", "HSCTLRType")
                          ,("HCR_EL2", "HCRType")
                          ,("HCR2", "HCRType")
+                         ,("HCR", "HCRType")
+                         ,("HDCR", "HDCRType")
                          ,("MDCR_EL2", "MDCRType")
+                         ,("DBGDSCRext", "DBGDSCRextType")
                          ])
   where
     mkGlobalStruct (nm,tnm) =
@@ -223,9 +226,11 @@ globalStructTypes =
   , ("SCTLRType", [("SED", bit 1), ("A", bit 1)])
   , ("HSCTLRType", [("A", bit 1)])
   , ("HCRType", [("TGE", bit 1), ("TEA", bit 1)])
+  , ("HDCRType", [("TDE", bit 1)])
   , ("MDCRType", [("TDE", bit 1)])
   , ("CPACRType", [("FPEN", bit 2)])
   , ("CNTKCTLType", [("EL0PTEN", bit 1)])
+  , ("DBGDSCRextType", [("MOE", bit 4)])
   ]
   where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
 
@@ -1259,6 +1264,7 @@ mkSignature defs env sig =
         , funcArgReprs = args
         , funcGlobalReprs = sfuncGlobalReprs fsig
         , funcTypeEnvir = env
+        , funcArgs = sfuncArgs fsig
         }
     SomeSimpleProcedureSignature fsig |
       Some args <-  Ctx.fromList $ map mkLabel (sprocArgs fsig) ->
@@ -1268,6 +1274,7 @@ mkSignature defs env sig =
         , procArgReprs = args
         , procGlobalReprs = sprocGlobalReprs fsig
         , procTypeEnvir = env
+        , procArgs = sprocArgs fsig
         }
   where
     mkType t = computeType'' defs (applyTypeEnvir env t)
@@ -1314,6 +1321,7 @@ computeInstructionSignature' AS.Instruction{..} encName = do
                                     , procArgReprs = argReprs
                                     , procGlobalReprs = globalReprs
                                     , procTypeEnvir = emptyTypeEnvir
+                                    , procArgs = []
                                     }
 
       return (Some (SomeProcedureSignature pSig), instStmts)
