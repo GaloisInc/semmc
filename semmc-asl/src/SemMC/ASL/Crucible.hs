@@ -163,6 +163,7 @@ funcInitialState defs sig hdl globals args =
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
                    , tsTypeEnvir = funcTypeEnvir sig
+                   , tsAtomToStruct = Map.empty
                    }
   where
     addArgumentAtom :: forall tp0
@@ -284,6 +285,7 @@ procInitialState defs sig hdl globals args =
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
                    , tsTypeEnvir = procTypeEnvir sig
+                   , tsAtomToStruct = Map.empty
                    }
   where
     addArgument :: forall tp

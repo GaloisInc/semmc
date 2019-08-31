@@ -683,10 +683,12 @@ applySyntaxOverridesInstrs ovrs instrs =
 
 
 prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
-prepASL (instrs, defs) =
-  let ovrs = mkSyntaxOverrides defs
+prepASL (instrs, defs') =
+  let defs = defs' ++ extraDefs
+      ovrs = mkSyntaxOverrides defs
   in (applySyntaxOverridesInstrs ovrs instrs, applySyntaxOverridesDefs ovrs defs)
-      
+
+
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
 -- signatures.
@@ -1345,6 +1347,17 @@ createInstStmts encodingSpecificOperations stmts = case stmts of
   _ -> error "createInstStmts"
 
 
+extraDefs :: [AS.Definition]
+extraDefs = [
+  AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "Zeros"
+                 , callableArgs = []
+                 , callableRets = [AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N"))]
+                 , callableStmts = [AS.StmtReturn (Just $
+                                                   (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Zeros")
+                                                     [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N")]))]
+                 }
+  ]
+
 -- Syntactic overrides for globals collection that should mirror the overrides
 -- in SemMC.ASL.Translation
 data Overrides arch =
@@ -1379,4 +1392,5 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ AS.ExprUnknown
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> Just $ AS.ExprUnknown
           _ -> Nothing

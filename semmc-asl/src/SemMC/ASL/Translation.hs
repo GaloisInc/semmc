@@ -40,7 +40,7 @@ import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.List as List
-import           Data.List.Index (imap)
+import           Data.List.Index (imap, imapM, imapM_)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -151,6 +151,8 @@ data TranslationState h s =
                    , tsStructRefs :: Map.Map T.Text (Map.Map T.Text StructAccessor)
                    -- ^ Types of local structs so we can find the index of a given member in the
                    -- base struct
+                   , tsAtomToStruct :: Map.Map (Some (CCG.Atom s), Maybe Integer) (Map.Map T.Text StructAccessor)
+                   -- ^ Retain struct labelling for atoms without variable names
                    , tsGlobals :: Map.Map T.Text (Some CCG.GlobalVar)
                    -- ^ Global variables corresponding to machine state (e.g., machine registers).
                    -- These are allocated before we start executing based on the list of
@@ -478,17 +480,19 @@ translateAssignment ov lval e = do
 translateAssignment' :: forall arch s tp h ret . Overrides arch
                      -> AS.LValExpr
                      -> CCG.Atom s tp
-                     -> Maybe (AS.Expr)
+                     -> Maybe AS.Expr
                      -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 translateAssignment' ov lval atom mE = do
   case lval of
     AS.LValIgnore -> return () -- Totally ignore - this probably shouldn't happen (except inside of a tuple)
     AS.LValVarRef (AS.QualifiedIdentifier _ ident) -> do
+      inheritLocalStruct ident (Some atom)
       locals <- MS.gets tsVarRefs
       case Map.lookup ident locals of
         Just (Some lreg) -> do
           Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
           CCG.assignReg lreg (CCG.AtomExpr atom)
+          inheritLocalStruct ident (Some atom)
         Nothing -> do
           globals <- MS.gets tsGlobals
           case Map.lookup ident globals of
@@ -502,12 +506,27 @@ translateAssignment' ov lval atom mE = do
               CCG.assignReg reg (CCG.AtomExpr atom)
     -- FIXME: For now, all structs must be globals.
     AS.LValMember (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
+      srefs <- MS.gets tsStructRefs
       globals <- MS.gets tsGlobals
-      case Map.lookup (mkStructMemberName structName memberName) globals of
-        Just (Some gv) -> do
-          Refl <- assertAtomType' (CCG.globalType gv) atom
-          CCG.writeGlobal gv (CCG.AtomExpr atom)
-        Nothing -> error $ "Non-global struct lval: " ++ show structName
+      case Map.lookup structName srefs of
+        Nothing -> do
+          let ident = mkStructMemberName structName memberName
+          case Map.lookup ident globals of
+            Just (Some gv) -> do
+              Refl <- assertAtomType' (CCG.globalType gv) atom
+              CCG.writeGlobal gv (CCG.AtomExpr atom)
+            _ -> error $ "Missing global struct lval: " ++ show ident
+        Just accs -> do
+          Some e <- lookupVarRef structName
+          satom <- CCG.mkAtom e
+          case (CCG.typeOfAtom satom, Map.lookup memberName accs) of
+            (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx)) |
+              Just Refl <- testEquality tps repr -> do
+                let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr satom)
+                getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+                return () -- FIXME: Construct modified struct here
+            _ -> error $ "Mismatch in struct fields" <> show structName <> "." <> show memberName
+
     AS.LValTuple lvals ->
       case CCG.typeOfAtom atom of
         CT.SymbolicStructRepr tps -> void $ Ctx.traverseAndCollect (assignTupleElt lvals tps atom) tps
@@ -561,6 +580,10 @@ translateAssignment' ov lval atom mE = do
           assignTupleElt lvals tps struct ix _ = do
             let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
             getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+            macc <- getAtomStructAccessor (Some struct) (Just $ fromIntegral $ Ctx.indexVal ix)
+            case macc of
+              Just acc -> setAtomStructAccessor (Some getAtom) Nothing acc
+              Nothing -> return ()
             translateAssignment' ov (lvals !! Ctx.indexVal ix) getAtom Nothing
 
 
@@ -664,6 +687,8 @@ declareUndefinedVar ty ident = do
   case tty of
     -- Bit slicing may need to read this value (i.e. to incrementally build a bv)
     -- so it is explicitly assigned an undefined value.
+
+    -- FIXME: initialize struct with default values
     Some (CT.BVRepr wRepr) -> do
       reg <- CCG.newReg (CCG.App $ CCE.BVUndef wRepr)
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
@@ -692,6 +717,82 @@ declareLocalStruct ty ident = do
                       -> MSS.State (Map.Map T.Text StructAccessor) ()
     collectAssignment repr idx lblv =
       MS.modify' (Map.insert (projectLabel lblv) (StructAccessor repr idx))
+
+inheritLocalStruct :: AS.Identifier
+                   -> Some (CCG.Atom s)
+                   -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+inheritLocalStruct ident atom = do
+  structs <- MS.gets tsAtomToStruct
+  case Map.lookup (atom, Nothing) structs of
+    Just asn ->  MS.modify' $ \s -> s { tsStructRefs = Map.insert ident asn (tsStructRefs s) }
+    _ -> return ()
+
+declareStructAtom :: AS.Type
+                  -> Some (CCG.Atom s)
+                  -> Maybe Integer
+                  -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+declareStructAtom ty atom idx = do
+  case ty of
+    AS.TypeRef qi@(AS.QualifiedIdentifier _ tident) -> do
+      uts <- MS.gets tsUserTypes
+      case Map.lookup tident uts of
+        Just (Some (UserStruct s)) -> do
+          let (_, asn) = MSS.runState (Ctx.traverseAndCollect
+                                       (collectAssignment (FC.fmapFC projectValue s)) s) Map.empty
+          MS.modify' $ \s -> s { tsAtomToStruct = Map.insert (atom, idx) asn (tsAtomToStruct s) }
+        _ -> return ()
+    _ -> return ()
+  where
+    collectAssignment :: Ctx.Assignment WT.BaseTypeRepr tps
+                      -> Ctx.Index tps tp
+                      -> LabeledValue T.Text WT.BaseTypeRepr tp
+                      -> MSS.State (Map.Map T.Text StructAccessor) ()
+    collectAssignment repr idx lblv =
+      MS.modify' (Map.insert (projectLabel lblv) (StructAccessor repr idx))
+
+setAtomStructAccessor :: Some (CCG.Atom s)
+                      -> Maybe Integer
+                      -> UserStructAcc
+                      -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+setAtomStructAccessor atom idx asn = do
+  MS.modify' $ \s -> s { tsAtomToStruct = Map.insert (atom, idx) asn (tsAtomToStruct s) }
+
+getAtomStructAccessor :: Some (CCG.Atom s)
+                      -> Maybe Integer
+                      -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe UserStructAcc)
+getAtomStructAccessor atom idx = do
+  structs <- MS.gets tsAtomToStruct
+  return $ Map.lookup (atom, idx) structs
+
+inheritAtomStructAccessor :: Some (CCG.Atom s)
+                          -> Some (CCG.Atom s)
+                          -> Maybe Integer
+                          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+inheritAtomStructAccessor parent child idx = do
+  structs <- MS.gets tsAtomToStruct
+  case Map.lookup (parent, idx) structs of
+    Just asn -> MS.modify' $ \s -> s { tsAtomToStruct = Map.insert (child, idx) asn (tsAtomToStruct s) }
+    _ -> return ()
+
+markAtomAsStruct :: AS.Identifier
+                 -> Some (CCG.Atom s)
+                 -> Maybe Integer
+                 -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+markAtomAsStruct ident atom idx = do
+  srefs <- MS.gets tsStructRefs
+  case Map.lookup ident srefs of
+    Just asn -> MS.modify' $ \s -> s { tsAtomToStruct = Map.insert (atom, idx) asn (tsAtomToStruct s) }
+    _ -> return ()
+
+mkAtom :: AS.Identifier
+       -> CCG.Expr (ASLExt arch) s tp
+       -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Atom s tp)
+mkAtom ident e = do
+  atom <- CCG.mkAtom e
+  markAtomAsStruct ident (Some atom) Nothing
+  return atom
+
+type UserStructAcc = Map.Map T.Text StructAccessor
 
 data StructAccessor = forall tps tp. StructAccessor
   { structRepr :: Ctx.Assignment WT.BaseTypeRepr tps
@@ -834,7 +935,8 @@ unifyArgs :: Overrides arch
           -> [(AS.SymbolDecl, AS.Expr)]
           -> [AS.Type]
           -> Maybe (Some (CT.TypeRepr))
-          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (T.Text, [Some (CCG.Atom s)], Maybe (Some WT.BaseTypeRepr))
+          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret
+               (T.Text, [Some (CCG.Atom s)], Maybe (Some WT.BaseTypeRepr))
 unifyArgs ov fnname args rets targetRet = do
   outerEnv <- MS.gets tsTypeEnvir
   (atoms, tenv) <- withTypeEnvir emptyTypeEnvir $ do
@@ -965,7 +1067,8 @@ translateExpr' ov expr mTy
             | otherwise -> X.throw InvalidZeroLengthBitvector
       AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
         Some e <- lookupVarRef ident
-        Some <$> CCG.mkAtom e
+        Some <$> mkAtom ident e
+
       AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
       AS.ExprLitString {} -> X.throw (UnsupportedExpr expr)
       AS.ExprUnOp op expr' -> translateUnaryOp ov op expr'
@@ -1000,7 +1103,11 @@ translateExpr' ov expr mTy
                 let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
                 let vals = FC.fmapFC CCG.AtomExpr argAssign
                 let uf = UF finalIdent retT atomTypes vals
-                Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+                satom <- Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+                case (sfuncRet sig) of
+                  [ret] -> declareStructAtom ret satom Nothing
+                  rets -> imapM_ (\i -> \ty -> declareStructAtom ty satom (Just $ fromIntegral i)) rets
+                return satom
       -- FIXME: What to do here?
       AS.ExprImpDef _ -> Some <$> CCG.mkAtom (CCG.App (CCE.BoolLit True))
       -- This is just like a variable lookup, since struct members are stored as
@@ -1517,6 +1624,8 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
             atom <- CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
             Some <$> CCG.mkAtom (CCG.App CCE.EmptyApp)
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> Just $ do
+            Some <$> CCG.mkAtom (CCG.App (CCE.BVUndef (WT.knownNat @11)))
           _ -> Nothing
 
 
