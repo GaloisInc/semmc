@@ -71,7 +71,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, translateStatements, overrides, declareLocalStruct)
+import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, translateStatements, overrides, addExtendedTypeData)
 import           SemMC.ASL.Types
 
 import qualified Control.Monad.State.Class as MS
@@ -155,7 +155,7 @@ funcInitialState :: forall init tp h s globals arch
 funcInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
-                   , tsStructRefs = Map.empty
+                   , tsExtendedTypes = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsEnums = defEnums defs
                    , tsConsts = defConsts defs
@@ -277,7 +277,7 @@ procInitialState :: forall init globals h s arch
 procInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
-                   , tsStructRefs = Map.empty
+                   , tsExtendedTypes = Map.empty
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsConsts = defConsts defs
                    , tsEnums = defEnums defs
@@ -305,7 +305,7 @@ defineProcedure :: (ReturnsGlobals ret globals)
                 -> Ctx.Assignment (CCG.Atom s) init
                 -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig baseGlobals stmts _args = do
-  mapM_ (\(nm,t) -> declareLocalStruct t nm) (procArgs sig)
+  mapM_ (\(nm,t) -> addExtendedTypeData nm t) (procArgs sig)
   mapM_ (translateStatement ov (SomeProcedureSignature sig)) stmts
   retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (procGlobalReprs sig)) baseGlobals)
   if | Just Refl <- testEquality (CCG.exprType retExpr) (procSigRepr sig) ->
