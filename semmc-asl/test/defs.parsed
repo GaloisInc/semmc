@@ -2308,7 +2308,9 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any aarch32))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeRef
+                      (QualifiedIdentifier Any boolean))))))
             (list)
             Nothing)
           (StmtReturn
@@ -7299,7 +7301,10 @@
                                       (SliceRange
                                         (ExprLitNat 3)
                                         (ExprLitNat 0))))
-                                  (ExprUnknown))))))))))))
+                                  (ExprUnknown
+                                    (TypeFun
+                                      bits
+                                      (ExprLitNat 4))))))))))))))
             (list)
             (Just
               (StmtBlock
@@ -7758,7 +7763,10 @@
                                 (SliceRange
                                   (ExprLitNat 8)
                                   (ExprLitNat 5))))
-                            (ExprUnknown))
+                            (ExprUnknown
+                              (TypeFun
+                                bits
+                                (ExprLitNat 4))))
                           (StmtAssign
                             (LValSliceOf
                               (LValVarRef
@@ -8812,7 +8820,10 @@
                         (SliceSingle
                           (ExprVarRef
                             (QualifiedIdentifier Any target_el)))))
-                    (ExprUnknown))))))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 64))))))))
           (StmtIf
             (ExprBinOp
               "=="
@@ -8858,7 +8869,10 @@
                               (SliceRange
                                 (ExprLitNat 43)
                                 (ExprLitNat 4))))
-                          (ExprUnknown))))))))
+                          (ExprUnknown
+                            (TypeFun
+                              bits
+                              (ExprLitNat 40))))))))))
             (list)
             Nothing)
           (StmtReturn Nothing)))))
@@ -10969,7 +10983,10 @@
                                 (SliceRange
                                   (ExprLitNat 9)
                                   (ExprLitNat 5))))
-                            (ExprUnknown))
+                            (ExprUnknown
+                              (TypeFun
+                                bits
+                                (ExprLitNat 5))))
                           (StmtAssign
                             (LValSliceOf
                               (LValVarRef
@@ -11619,7 +11636,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any HDFAR))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 32))))))
             (list
               (StmtElsIf
                 (ExprBinOp
@@ -11633,7 +11653,10 @@
                     (StmtAssign
                       (LValVarRef
                         (QualifiedIdentifier Any HIFAR))
-                      (ExprUnknown))
+                      (ExprUnknown
+                        (TypeFun
+                          bits
+                          (ExprLitNat 32))))
                     (StmtAssign
                       (LValVarRef
                         (QualifiedIdentifier Any HDFAR))
@@ -11683,7 +11706,10 @@
                         (SliceRange
                           (ExprLitNat 31)
                           (ExprLitNat 4))))
-                    (ExprUnknown))))))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 28))))))))
           (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier Any ELFromM32)
@@ -11840,7 +11866,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any el))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 2))))))
             (list)
             Nothing)
           (StmtReturn
@@ -24625,7 +24654,10 @@
                         (StmtAssign
                           (LValVarRef
                             (QualifiedIdentifier Any i_syndrome))
-                          (ExprUnknown))))))
+                          (ExprUnknown
+                            (TypeFun
+                              bits
+                              (ExprLitNat 32))))))))
                 (StmtIf
                   (ExprVarRef
                     (QualifiedIdentifier Any route_to_monitor))
@@ -26307,7 +26339,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any vaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 64))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any exception))
@@ -26415,7 +26450,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any vaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 64))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any exception))
@@ -27503,13 +27541,17 @@
                     (LValVarRef
                       (QualifiedIdentifier Any memattrs))
                     inner)
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeRef
+                      (QualifiedIdentifier Any MemAttrHints))))
                 (StmtAssign
                   (LValMember
                     (LValVarRef
                       (QualifiedIdentifier Any memattrs))
                     outer)
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeRef
+                      (QualifiedIdentifier Any MemAttrHints))))
                 (StmtAssign
                   (LValMember
                     (LValVarRef
@@ -27533,7 +27575,9 @@
                       (LValVarRef
                         (QualifiedIdentifier Any memattrs))
                       device)
-                    (ExprUnknown))
+                    (ExprUnknown
+                      (TypeRef
+                        (QualifiedIdentifier Any DeviceType))))
                   (StmtIf
                     (ExprBinOp
                       "&&"
@@ -27852,7 +27896,10 @@
                       (LValVarRef
                         (QualifiedIdentifier Any fault))
                       domain)
-                    (ExprUnknown))))))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 4))))))))
           (StmtAssign
             (LValMember
               (LValVarRef
@@ -27937,15 +27984,23 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 40))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any domain))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any level))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any acctype))
@@ -27954,19 +28009,29 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any iswrite))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any boolean))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any debugmoe))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -28170,7 +28235,9 @@
                             addrdesc)
                           memattrs)
                         inner)
-                      (ExprUnknown))))))
+                      (ExprUnknown
+                        (TypeRef
+                          (QualifiedIdentifier Any MemAttrHints))))))))
             (Just
               (StmtBlock
                 (list
@@ -28343,7 +28410,10 @@
                   (QualifiedIdentifier Any result))
                 perms)
               ap)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 3))))
           (StmtAssign
             (LValMember
               (LValMember
@@ -28365,31 +28435,42 @@
               (LValVarRef
                 (QualifiedIdentifier Any result))
               nG)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               contiguous)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any boolean))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               domain)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               level)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               blocksize)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValMember
               (LValMember
@@ -28932,7 +29013,11 @@
                         (list
                           (ExprVarRef
                             (QualifiedIdentifier Any c))
-                          (ExprUnknown)))))))))))))
+                          (ExprUnknown
+                            (TypeFun
+                              bits
+                              (ExprVarRef
+                                (QualifiedIdentifier Any width))))))))))))))))
   (DefCallable
     (QualifiedIdentifier AArch32 RemappedTEXDecode)
     (list
@@ -29687,15 +29772,23 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any debugmoe))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -29935,31 +30028,49 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 40))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any domain))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any level))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any debugmoe))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any s2fs1walk))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any boolean))))
           (StmtReturn
             (Just
               (ExprCall
@@ -30034,7 +30145,10 @@
                     (LValVarRef
                       (QualifiedIdentifier Any result))
                     attrs)
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 2))))))
             (list
               (StmtElsIf
                 (ExprBinOp
@@ -30415,7 +30529,9 @@
                           (QualifiedIdentifier Any result))
                         memattrs)
                       device)
-                    (ExprUnknown))
+                    (ExprUnknown
+                      (TypeRef
+                        (QualifiedIdentifier Any DeviceType))))
                   (StmtAssign
                     (LValMember
                       (LValMember
@@ -30562,15 +30678,23 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any debugmoe))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -31500,7 +31624,9 @@
                   (StmtAssign
                     (LValVarRef
                       (QualifiedIdentifier Any memattrs))
-                    (ExprUnknown))))))
+                    (ExprUnknown
+                      (TypeRef
+                        (QualifiedIdentifier Any MemoryAttributes))))))))
           (StmtReturn
             (Just
               (ExprCall
@@ -31552,15 +31678,23 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any debugmoe))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -31648,7 +31782,9 @@
                         (list
                           (ExprVarRef
                             (QualifiedIdentifier Any c))
-                          (ExprUnknown)))))))))))))
+                          (ExprUnknown
+                            (TypeRef
+                              (QualifiedIdentifier Any integer)))))))))))))))
   (DefCallable
     (QualifiedIdentifier AArch32 AccessFlagFault)
     (list
@@ -31693,15 +31829,23 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any debugmoe))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -31852,7 +31996,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any domain))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValMember
               (LValMember
@@ -33333,7 +33480,10 @@
               (LValVarRef
                 (QualifiedIdentifier Any result))
               domain)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValMember
               (LValVarRef
@@ -34043,7 +34193,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any domain))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 4))))
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any secondstage))
@@ -34488,13 +34641,19 @@
               (LValVarRef
                 (QualifiedIdentifier Any fault))
               domain)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any fault))
               debugmoe)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValMember
               (LValVarRef
@@ -34569,11 +34728,16 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 52))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any level))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any acctype))
@@ -34582,15 +34746,22 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any iswrite))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any boolean))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -35055,11 +35226,16 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -35122,11 +35298,16 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -35189,11 +35370,16 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -39077,7 +39263,10 @@
               (LValVarRef
                 (QualifiedIdentifier Any result))
               domain)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValMember
               (LValVarRef
@@ -39494,23 +39683,35 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 52))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any level))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any s2fs1walk))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any boolean))))
           (StmtReturn
             (Just
               (ExprCall
@@ -39573,11 +39774,16 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtReturn
             (Just
               (ExprCall
@@ -39922,7 +40128,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any domain))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 4))))
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any secondstage))
@@ -41162,7 +41371,10 @@
                       (StmtAssign
                         (LValVarRef
                           (QualifiedIdentifier Any domain))
-                        (ExprUnknown))
+                        (ExprUnknown
+                          (TypeFun
+                            bits
+                            (ExprLitNat 4))))
                       (StmtAssign
                         (LValMember
                           (LValVarRef
@@ -41237,7 +41449,10 @@
                       (StmtAssign
                         (LValVarRef
                           (QualifiedIdentifier Any domain))
-                        (ExprUnknown))
+                        (ExprUnknown
+                          (TypeFun
+                            bits
+                            (ExprLitNat 4))))
                       (StmtAssign
                         (LValMember
                           (LValMember
@@ -41411,7 +41626,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 40))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -41425,7 +41643,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any domain))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtVarsDecl
             (list ttbr)
             (TypeFun
@@ -42750,19 +42971,30 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 40))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any debugmoe))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -43882,7 +44114,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any ipaddress))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 40))))
                 (StmtReturn
                   (Just
                     (ExprCall
@@ -44083,7 +44318,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 40))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -44723,7 +44961,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any ipaddress))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 52))))
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any secondstage))
@@ -44882,7 +45123,9 @@
                             addrdesc)
                           memattrs)
                         inner)
-                      (ExprUnknown))))))
+                      (ExprUnknown
+                        (TypeRef
+                          (QualifiedIdentifier Any MemAttrHints))))))))
             (Just
               (StmtBlock
                 (list
@@ -45032,7 +45275,10 @@
                   (QualifiedIdentifier Any result))
                 perms)
               ap)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 3))))
           (StmtAssign
             (LValMember
               (LValMember
@@ -45054,31 +45300,42 @@
               (LValVarRef
                 (QualifiedIdentifier Any result))
               nG)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               contiguous)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any boolean))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               domain)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               level)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValMember
               (LValVarRef
                 (QualifiedIdentifier Any result))
               blocksize)
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValMember
               (LValMember
@@ -45788,7 +46045,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any ipaddress))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 52))))
                 (StmtReturn
                   (Just
                     (ExprCall
@@ -45902,7 +46162,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 52))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -46783,7 +47046,9 @@
                     (LValVarRef
                       (QualifiedIdentifier Any EDSCR))
                     NS)
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeRef
+                      (QualifiedIdentifier Any bit))))
                 (StmtAssign
                   (LValMember
                     (LValVarRef
@@ -47002,7 +47267,10 @@
                               (SliceRange
                                 (ExprLitNat 2)
                                 (ExprLitNat 0))))
-                          (ExprUnknown))))
+                          (ExprUnknown
+                            (TypeFun
+                              bits
+                              (ExprLitNat 3))))))
                     (list
                       (StmtElsIf
                         (ExprBinOp
@@ -47024,7 +47292,10 @@
                                   (SliceRange
                                     (ExprLitNat 1)
                                     (ExprLitNat 0))))
-                              (ExprUnknown)))))
+                              (ExprUnknown
+                                (TypeFun
+                                  bits
+                                  (ExprLitNat 2)))))))
                       (StmtElsIf
                         (ExprBinOp
                           "=="
@@ -47044,7 +47315,9 @@
                                 (list
                                   (SliceSingle
                                     (ExprLitNat 0))))
-                              (ExprUnknown))))))
+                              (ExprUnknown
+                                (TypeRef
+                                  (QualifiedIdentifier Any bit))))))))
                     Nothing)
                   (StmtAssign
                     (LValMember
@@ -47211,7 +47484,10 @@
                     (LValVarRef
                       (QualifiedIdentifier Any PSTATE))
                     (list SS A I F))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 4))))
                 (StmtAssign
                   (LValMember
                     (LValVarRef
@@ -47233,7 +47509,10 @@
                       (LValVarRef
                         (QualifiedIdentifier Any PSTATE))
                       (list SS D A I F))
-                    (ExprUnknown))))))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 5))))))))
           (StmtAssign
             (LValMember
               (LValVarRef
@@ -48584,7 +48863,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any vaddress))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 64))))
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any linked_to))
@@ -48911,19 +49193,29 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 52))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any level))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -50346,7 +50638,9 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any mask))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeRef
+                      (QualifiedIdentifier Any bit))))
                 (StmtReturn
                   (Just
                     (ExprCall
@@ -50542,23 +50836,36 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ipaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 40))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any domain))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 4))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any errortype))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 2))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any level))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any integer))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any extflag))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any bit))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any secondstage))
@@ -52896,7 +53203,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any vaddress))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 32))))
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any linked_to))
@@ -60067,7 +60377,11 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any value))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N)))))))
             (list)
             Nothing)
           (StmtIf
@@ -60148,7 +60462,11 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any result))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N)))))))
             (list)
             (Just
               (StmtBlock
@@ -66053,7 +66371,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any el))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 2))))))
             (list)
             Nothing)
           (StmtReturn
@@ -66858,7 +67179,10 @@
                       (SliceRange
                         (ExprLitNat 1)
                         (ExprLitNat 0))))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 2))))))
             (list)
             (Just
               (StmtBlock
@@ -68635,7 +68959,10 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any vaddress))
-            (ExprUnknown))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 32))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any acctype))
@@ -71760,7 +72087,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any immediate))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 16))))))
             (list)
             Nothing)
           (StmtIf
@@ -72340,11 +72670,17 @@
                       (StmtAssign
                         (LValVarRef
                           (QualifiedIdentifier Any ELR_hyp))
-                        (ExprUnknown))
+                        (ExprUnknown
+                          (TypeFun
+                            bits
+                            (ExprLitNat 32))))
                       (StmtAssign
                         (LValVarRef
                           (QualifiedIdentifier Any HSR))
-                        (ExprUnknown))))
+                        (ExprUnknown
+                          (TypeFun
+                            bits
+                            (ExprLitNat 32))))))
                   (list)
                   (Just
                     (StmtBlock
@@ -72352,13 +72688,19 @@
                         (StmtAssign
                           (LValVarRef
                             (QualifiedIdentifier Any LR))
-                          (ExprUnknown))))))
+                          (ExprUnknown
+                            (TypeFun
+                              bits
+                              (ExprLitNat 32))))))))
                 (StmtAssign
                   (LValArrayIndex
                     (LValVarRef
                       (QualifiedIdentifier Any SPSR))
                     (list))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 32))))
                 (StmtAssign
                   (LValMember
                     (LValVarRef
@@ -72373,11 +72715,17 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any DLR))
-                  (ExprUnknown))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 32))))
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any DSPSR))
-                  (ExprUnknown))))
+                  (ExprUnknown
+                    (TypeFun
+                      bits
+                      (ExprLitNat 32))))))
             (list)
             (Just
               (StmtBlock
@@ -72483,27 +72831,42 @@
                       (LValVarRef
                         (QualifiedIdentifier Any ELR))
                       (list))
-                    (ExprUnknown))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 64))))
                   (StmtAssign
                     (LValArrayIndex
                       (LValVarRef
                         (QualifiedIdentifier Any SPSR))
                       (list))
-                    (ExprUnknown))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 32))))
                   (StmtAssign
                     (LValArrayIndex
                       (LValVarRef
                         (QualifiedIdentifier Any ESR))
                       (list))
-                    (ExprUnknown))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 32))))
                   (StmtAssign
                     (LValVarRef
                       (QualifiedIdentifier Any DLR_EL0))
-                    (ExprUnknown))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 64))))
                   (StmtAssign
                     (LValVarRef
                       (QualifiedIdentifier Any DSPSR_EL0))
-                    (ExprUnknown))
+                    (ExprUnknown
+                      (TypeFun
+                        bits
+                        (ExprLitNat 32))))
                   (StmtIf
                     (ExprCall
                       (QualifiedIdentifier Any HaveUAOExt)
