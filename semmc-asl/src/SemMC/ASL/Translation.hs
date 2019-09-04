@@ -128,6 +128,41 @@ lookupVarRef :: forall arch h s ret
 lookupVarRef name = do
   fromMaybe (X.throw (UnboundName name)) <$> lookupVarRef' name
 
+-- | Inside of the translator, look up the current definition of a name
+--
+-- We currently assume that arguments are never assigned to (i.e., there is no
+-- name shadowing).
+lookupVarType :: forall arch h s ret
+              . T.Text
+             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some (CT.TypeRepr)))
+lookupVarType name = do
+  ts <- MS.get
+  return (lookupLocalConst ts <|>
+          lookupArg ts <|>
+          lookupRef ts <|>
+          lookupGlobal ts <|>
+          lookupEnum ts <|>
+          lookupConst ts)
+  where
+    lookupLocalConst ts = do
+      i <- lookupTypeEnvir name (tsTypeEnvir ts)
+      return $ Some CT.IntegerRepr
+    lookupArg ts = do
+      Some e <- Map.lookup name (tsArgAtoms ts)
+      return $ Some $ CCG.typeOfAtom e
+    lookupRef ts = do
+      Some r <- Map.lookup name (tsVarRefs ts)
+      return $ Some $ CCG.typeOfReg r
+    lookupGlobal ts = do
+      Some g <- Map.lookup name (tsGlobals ts)
+      return $ Some $ CCG.globalType g
+    lookupEnum ts = do
+      e <- Map.lookup name (tsEnums ts)
+      return $ Some $ CT.IntegerRepr
+    lookupConst ts = do
+      Some (ConstVal repr e) <- Map.lookup name (tsConsts ts)
+      return $ Some $ CT.baseToType repr
+
 -- | Overrides for syntactic forms
 --
 -- Each of the frontends can match on different bits of syntax and handle their
@@ -261,10 +296,15 @@ translateStatement ov sig stmt
       AS.StmtIf clauses melse -> translateIf ov sig clauses melse
       AS.StmtCase e alts -> translateCase ov sig e alts
       AS.StmtAssert e -> do
-        Some atom <- translateExpr ov e
-        Refl <- assertAtomType e CT.BoolRepr atom
         let msg = CCG.App (CCE.TextLit (T.pack (show e)))
-        CCG.assertExpr (CCG.AtomExpr atom) msg
+        env <- MS.gets tsTypeEnvir
+        case exprToBool env e of
+          Just True -> return ()
+          Just False -> CCG.reportError msg
+          Nothing -> do
+            Some atom <- translateExpr ov e
+            Refl <- assertAtomType e CT.BoolRepr atom
+            CCG.assertExpr (CCG.AtomExpr atom) msg
       AS.StmtVarsDecl ty idents -> mapM_ (declareUndefinedVar ty) idents
       AS.StmtVarDeclInit (ident, ty) expr -> translateDefinedVar ov ty ident expr
       AS.StmtConstDecl (ident, ty) expr ->
@@ -452,6 +492,9 @@ lValToExpr lval = case lval of
   AS.LValArrayIndex lv slices -> do
     lve <- lValToExpr lv
     return $ AS.ExprIndex lve slices
+  AS.LValSliceOf lv slices -> do
+    lve <- lValToExpr lv
+    return $ AS.ExprSlice lve slices
   _ -> Nothing
 
 -- | Translate general assignment statements into Crucible
@@ -464,11 +507,16 @@ translateAssignment :: Overrides arch
                     -> AS.Expr
                     -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 translateAssignment ov lval e = do
-  (Some atom, ext) <- case lValToExpr lval of
-    Just lve -> case lve of
-      AS.ExprMember _ _ -> translateInformed lve
+  -- If possible, determine the type of the left hand side first in order
+  -- to inform the translation of the given expression
+
+  (Some atom, ext) <- case lval of
+    AS.LValVarRef (AS.QualifiedIdentifier _ ident) -> do
+      mTy <- lookupVarType ident
+      translateExpr' ov e mTy
+    _ -> case lValToExpr lval of
+      Just lve -> translateInformed lve
       _ -> translateExpr' ov e Nothing
-    _ -> translateExpr' ov e Nothing
 
   translateAssignment' ov lval atom ext (Just e)
   where
@@ -538,8 +586,16 @@ translateAssignment' ov lval atom atomext mE = do
 
     -- FIXME: This form appears only twice and could easily be broken
     -- into two assignments. The above case covers all other cases.
-    AS.LValSliceOf (AS.LValVarRef _) [AS.SliceSingle slice, AS.SliceRange lo hi] -> do
-      error $ "Unsupported LVal: " ++ show lval
+    AS.LValSliceOf lv [fstSlice@(AS.SliceSingle _), slice] -> do
+      case CCG.typeOfAtom atom of
+        CT.BVRepr wRepr -> do
+          let topIndex = WT.intValue wRepr - 1
+          Some topBit <- translateSlice' ov atom (AS.SliceSingle (AS.ExprLitInt topIndex))
+          translatelValSlice ov lv fstSlice topBit
+          Some rest <- translateSlice' ov atom (AS.SliceRange (AS.ExprLitInt (topIndex - 1))
+                                                (AS.ExprLitInt 0))
+          translatelValSlice ov lv slice rest
+        _ -> error $ "Unsupported LVal: " ++ show lval
 
     AS.LValArrayIndex ref@(AS.LValVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice] -> do
         Some e <- lookupVarRef arrName
@@ -674,6 +730,30 @@ translatelValSlice ov lv slice asnAtom = do
      | otherwise ->
          X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
 
+
+-- | Get the "default" value for a given crucible type. We can't use unassigned
+-- registers, as ASL functions occasionally return values uninitialized.
+getDefaultValue :: CT.TypeRepr tp
+                -> CCG.Expr (ASLExt arch) s tp
+getDefaultValue repr = case repr of
+  CT.BVRepr wRepr -> CCG.App $ CCE.BVUndef wRepr
+  CT.SymbolicStructRepr tps -> do
+    let crucAsn = toCrucTypes tps
+    if | Refl <- baseCrucProof tps ->
+          CCG.App $ CCE.ExtensionApp $ MkBaseStruct crucAsn (FC.fmapFC getDefaultValue crucAsn)
+  CT.IntegerRepr -> mkUF "UNDEFINED_Integer" repr
+  CT.NatRepr -> mkUF "UNDEFINED_Nat" repr
+  CT.BoolRepr -> mkUF "UNDEFINED_Bool" repr
+  _ -> error $ "Invalid undefined value: " <> show repr
+  where
+    mkUF :: T.Text -> CT.TypeRepr tp -> CCG.Expr (ASLExt arch) s tp
+    mkUF nm repr = case CT.asBaseType repr of
+      CT.AsBaseType brepr -> do
+        let uf = UF nm brepr Ctx.empty Ctx.empty
+        CCG.App (CCE.ExtensionApp uf)
+      _ -> error $ "Illegal crucible type: " <> show repr
+
+
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
                     -> AS.Identifier
@@ -685,15 +765,9 @@ declareUndefinedVar ty ident = do
   addExtendedTypeData ident ty
   tty <- translateType ty
   case tty of
-    -- Bit slicing may need to read this value (i.e. to incrementally build a bv)
-    -- so it is explicitly assigned an undefined value.
-
-    -- FIXME: initialize struct with default values
-    Some (CT.BVRepr wRepr) -> do
-      reg <- CCG.newReg (CCG.App $ CCE.BVUndef wRepr)
-      MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
     Some rep -> do
-      reg <- CCG.newUnassignedReg rep
+      e <- return $ getDefaultValue rep
+      reg <- CCG.newReg e
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
 -- Extended type data for tracking struct member identifiers. This is necessary since Crucible structs
@@ -1113,9 +1187,18 @@ translateExpr' ov expr mTy
                   mkAtom (CCG.App (CCE.ExtensionApp getStruct))
               _ -> X.throw (StructFieldMismatch expr)
 
+      AS.ExprMemberBits var bits -> do
+        let (hdvar : tlvars) = map (\member -> AS.ExprMember var member) bits
+        let expr = foldl (\var -> \e -> AS.ExprBinOp AS.BinOpConcat var e) hdvar tlvars
+        translateExpr' ov expr mTy
+
       AS.ExprSlice e [slice] -> do
         satom <- translateSlice ov e slice
         return (satom, TypeBasic)
+
+      AS.ExprSlice e [slice1, slice2] -> do
+        let expr = AS.ExprBinOp AS.BinOpConcat (AS.ExprSlice e [slice1]) (AS.ExprSlice e [slice2])
+        translateExpr' ov expr mTy
 
       -- This covers the only form of ExprIndex that appears in ASL
       AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice]  -> do
@@ -1129,6 +1212,9 @@ translateExpr' ov expr mTy
                let arr = CCE.SymArrayLookup retTy (CCG.AtomExpr atom) asn
                mkAtom (CCG.App arr)
            | otherwise ->  X.throw (UnsupportedExpr expr)
+      AS.ExprUnknown -> case mTy of
+        Just (Some repr) -> mkAtom (getDefaultValue repr)
+        _ -> error $ "Unknown expression with unknown type."
 
       _ -> error (show expr)
   where
@@ -1535,6 +1621,16 @@ overrides = Overrides {..}
                   Just (Some valWidth) <- WT.someNat width
                 , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
                   atom <- CCG.mkAtom (CCG.App (CCE.BVLit valWidth 0))
+                  return $ Some atom
+              _ ->  error $ "Invalid argument type for Zeros(int):" <> show e
+          AS.ExprCall (AS.QualifiedIdentifier _ "Ones") [e] -> Just $ do
+            env <- MS.gets tsTypeEnvir
+            case exprToInt env e of
+              Just width |
+                  Just (Some valWidth) <- WT.someNat width
+                , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
+                  let zeros = CCG.App (CCE.BVLit valWidth 0)
+                  atom <- CCG.mkAtom (CCG.App (CCE.BVNot valWidth zeros))
                   return $ Some atom
               _ ->  error $ "Invalid argument type for Zeros(int):" <> show e
           -- FIXME: fix definition below; currently it just returns its args

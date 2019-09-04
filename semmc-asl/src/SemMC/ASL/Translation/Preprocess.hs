@@ -33,6 +33,7 @@ module SemMC.ASL.Translation.Preprocess
   , mkStructMemberName
   , applyTypeEnvir
   , exprToInt
+  , exprToBool
   , mkSignature
   ) where
 
@@ -158,40 +159,26 @@ computeInstructionSignature instName encName insts defs = execSigM defs $
 
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
-builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_Z", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_C", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_V", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_D", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_A", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_I", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_F", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_PAN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_UAO", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_SS", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_IL", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_EL", Some (WT.BaseBVRepr (WT.knownNat @2)))
-                 , ("PSTATE_nRW", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_SP", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_Q", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_GE", Some (WT.BaseBVRepr (WT.knownNat @4)))
-                 , ("PSTATE_IT", Some (WT.BaseBVRepr (WT.knownNat @8)))
-                 , ("PSTATE_J", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_T", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_E", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("PSTATE_M", Some (WT.BaseBVRepr (WT.knownNat @5)))
-                 , ("UNDEFINED", Some WT.BaseBoolRepr)
+builtinGlobals = [ ("UNDEFINED", Some WT.BaseBoolRepr)
                  , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
+                 , ("ThisInstrLength", Some WT.BaseIntegerRepr)
                  , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  , ("_R", Some (WT.BaseArrayRepr
                                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
                                 (WT.BaseBVRepr (WT.knownNat @64))))
                  , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
+                 , ("HVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+                 , ("HIFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+                 , ("HDFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+                 , ("HPFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+                 , ("MVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  ] ++
                  concat (mkGlobalStruct <$>
-                         [("SCTLR_EL1", "SCTLRType")
+                         [("PSTATE", "PSTATEType")
+                         ,("SCTLR_EL1", "SCTLRType")
                          ,("SCTLR_EL2", "SCTLRType")
+                         ,("SCTLR_EL3", "SCTLRType")
                          ,("CNTKCTL_EL1", "CNTKCTLType")
                          ,("CNTKCTL_EL2", "CNTKCTLType")
                          ,("ESR_EL1", "ESRType")
@@ -209,6 +196,11 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
                          ,("HDCR", "HDCRType")
                          ,("MDCR_EL2", "MDCRType")
                          ,("DBGDSCRext", "DBGDSCRextType")
+                         ,("VBAR_EL1", "VBARType")
+                         ,("VBAR_EL2", "VBARType")
+                         ,("VBAR_EL3", "VBARType")
+                         ,("TTBCR", "TTBCRType")
+                         ,("TTBCR_S", "TTBCRType")
                          ])
   where
     mkGlobalStruct (nm,tnm) =
@@ -222,22 +214,28 @@ builtinGlobals = [ ("PSTATE_N", Some (WT.BaseBVRepr (WT.knownNat @1)))
 
 globalStructTypes :: [(T.Text, [(T.Text, AS.Type)])]
 globalStructTypes =
-  [ ("SCRType", [("EL3_A", bit 1), ("NS", bit 1), ("EA", bit 1)])
-  , ("SCTLRType", [("SED", bit 1), ("A", bit 1)])
-  , ("HSCTLRType", [("A", bit 1)])
-  , ("HCRType", [("TGE", bit 1), ("TEA", bit 1)])
-  , ("HDCRType", [("TDE", bit 1)])
-  , ("MDCRType", [("TDE", bit 1)])
+  [ ("PSTATEType", bits ["N", "Z", "C", "V", "D", "A", "I", "F", "PAN", "UAO",
+                         "SS", "IL", "nRW", "SP", "Q", "J", "T", "E"] ++
+                   [("EL", bit 2), ("GE", bit 4), ("IT", bit 8), ("M", bit 5)])
+  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "FIQ", "RW"])
+  , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V"])
+  , ("HSCTLRType", bits ["A", "TE", "EE"])
+  , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H"])
+  , ("HDCRType", bits ["TDE"])
+  , ("MDCRType", bits ["TDE"])
   , ("CPACRType", [("FPEN", bit 2)])
   , ("CNTKCTLType", [("EL0PTEN", bit 1)])
   , ("DBGDSCRextType", [("MOE", bit 4)])
+  , ("TTBCRType", bits ["EAE"])
   ]
   where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
+        bits nms = map (\nm -> (nm, bit 1)) nms
 
 globalTypeSynonyms :: [(T.Text, AS.Type)]
 globalTypeSynonyms =
   [ ("MAIRType", AS.TypeFun "bits" (AS.ExprLitInt 64))
   , ("ESRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
+  , ("VBARType", AS.TypeFun "bits" (AS.ExprLitInt 64))
   ]
 
 toSimpleBVType :: AS.Type -> Some WT.BaseTypeRepr
@@ -317,13 +315,22 @@ mkCallableName c =
   let numArgs = length (callableArgs c)
   in mkFunctionName (callableName c) numArgs
 
+getterText :: T.Text
+getterText = "GETTER_"
+
 mkGetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
-mkGetterName = mapInnerName (\s -> "GETTER_" <> s)
+mkGetterName = do
+  mapInnerName (\s -> getterText <> s)
 
 mkGetterNameField :: AS.QualifiedIdentifier -> Maybe T.Text -> AS.QualifiedIdentifier
 mkGetterNameField name (Just field) =
   mapInnerName (\s -> s <> "_" <> field) $ mkGetterName name
 mkGetterNameField name Nothing = mkGetterName name
+
+getterSuffixOf :: AS.QualifiedIdentifier -> Maybe (AS.QualifiedIdentifier)
+getterSuffixOf (AS.QualifiedIdentifier q nm) = case T.stripPrefix getterText nm of
+  Just nm' -> Just (AS.QualifiedIdentifier q nm')
+  Nothing -> Nothing
 
 mkSetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
 mkSetterName = mapInnerName (\s -> "SETTER_" <> s)
@@ -595,7 +602,9 @@ collapseReturn mem stmts =
           AS.StmtAssign (AS.LValVarRef lvident) eident
             : rest | lvident == finident ->
                 AS.StmtReturn (Just $ AS.ExprMember eident mem) : rest
-          _ -> error $ "Unexpected statement structure: " <> show stmts
+          end@(AS.StmtCall (AS.QualifiedIdentifier q "Unreachable") [] : rest) ->
+            end
+          _ -> error $ "Failed to collapse getter structure: " <> show stmts
       mapCases finident cases = case cases of
         AS.CaseWhen pat me stmts' -> AS.CaseWhen pat me (assignLast finident stmts')
         AS.CaseOtherwise stmts' -> AS.CaseOtherwise (assignLast finident stmts')
@@ -610,7 +619,10 @@ collapseReturn mem stmts =
           AS.StmtCase e (mapCases finident <$> alts) : rest
         _ -> error $ "Unexpected statement structure: " <> show stmts
     AS.StmtReturn (Just (AS.ExprCall qName args)) : rest ->
-      AS.StmtReturn (Just (AS.ExprCall (mkGetterNameField qName (Just mem)) args)) : rest
+      case getterSuffixOf qName of
+        Just qName' ->
+          AS.StmtReturn (Just (AS.ExprCall (mkGetterNameField qName' (Just mem)) args)) : rest
+        Nothing -> error $ "Unexpected statement structure: " <> show stmts
     _ -> error $ "Unexpected statement structure: " <> show stmts
 
 callablesFromGetter :: (AS.Stmt -> AS.Stmt) -> AS.Definition -> [AS.Definition]
@@ -959,6 +971,13 @@ varGlobal varName = do
     Nothing -> return Nothing
     Just varType -> return $ Just (varName, varType)
 
+theVarGlobal :: T.Text -> SigM ext f (T.Text, Some WT.BaseTypeRepr)
+theVarGlobal varName = do
+  mg <- varGlobal varName
+  case mg of
+    Just g -> return g
+    Nothing -> error $ "Unknown global variable: " <> show varName
+
 sliceGlobalVars :: AS.Slice -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
 sliceGlobalVars slice = case slice of
   AS.SliceSingle e -> exprGlobalVars e
@@ -1153,15 +1172,11 @@ stmtGlobalVars stmt =
         stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
         return $ termGlobals ++ stmtGlobals
       AS.StmtUnpredictable -> do
-        gb <- varGlobal "UNPREDICTABLE"
-        case gb of
-          Just g -> return [g]
-          _ -> error "Missing global variable: UNPREDICTABLE"
+        gb <- theVarGlobal "UNPREDICTABLE"
+        return [gb]
       AS.StmtUndefined -> do
-        gb <- varGlobal "UNDEFINED"
-        case gb of
-          Just g -> return [g]
-          _ -> error "Missing global variable: UNDEFINED"
+        gb <- theVarGlobal "UNDEFINED"
+        return [gb]
       _ -> return []
 
 -- | Compute the list of global variables in a 'Callable' and store it in the
@@ -1251,6 +1266,30 @@ exprToInt env e = case e of
         i <- exprToInt env e'
         i' <- exprToInt env e''
         return $ i + i'
+      _ -> Nothing
+
+exprToBool :: TypeEnvir -> AS.Expr -> Maybe Bool
+exprToBool env e = case e of
+  AS.ExprBinOp bop e' e'' -> do
+    case (bop, exprToBool env e', exprToBool env e'') of
+      (AS.BinOpLogicalAnd, Just True, Just True) -> Just True
+      (AS.BinOpLogicalAnd, Just False, _) -> Just False
+      (AS.BinOpLogicalAnd, _, Just False) -> Just False
+      (AS.BinOpLogicalOr, Just True, Just True) -> Just True
+      (AS.BinOpLogicalOr, Just False, b) -> b
+      (AS.BinOpLogicalOr, b, Just False) -> b
+      _ -> case (exprToInt env e', exprToInt env e'') of
+             (Just i, Just i') -> bopToTest bop i i'
+             _ -> Nothing
+  _ -> Nothing
+  where
+    bopToTest bop i i' = case bop of
+      AS.BinOpEQ -> Just $ i == i'
+      AS.BinOpNEQ -> Just $ i /= i'
+      AS.BinOpGT -> Just $ i > i'
+      AS.BinOpLT -> Just $ i < i'
+      AS.BinOpGTEQ -> Just $ i >= i'
+      AS.BinOpLTEQ -> Just $ i <= i'
       _ -> Nothing
 
 mkSignature :: Definitions arch -> TypeEnvir -> SomeSimpleSignature -> Some (SomeSignature)
@@ -1346,7 +1385,7 @@ createInstStmts encodingSpecificOperations stmts = case stmts of
       Nothing]
   _ -> error "createInstStmts"
 
-
+-- Extra definitions that give mock definitions to undefined functions
 extraDefs :: [AS.Definition]
 extraDefs = [
   AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "Zeros"
@@ -1355,6 +1394,12 @@ extraDefs = [
                  , callableStmts = [AS.StmtReturn (Just $
                                                    (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Zeros")
                                                      [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N")]))]
+                 },
+  AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "ThisInstrLength"
+                 , callableArgs = []
+                 , callableRets = [AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer")]
+                 , callableStmts = [AS.StmtReturn (Just $ AS.ExprVarRef
+                                                   (AS.QualifiedIdentifier AS.ArchQualAny "ThisInstrLength"))]
                  }
   ]
 
@@ -1380,6 +1425,7 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [_] -> Just $ AS.ExprUnknown
+          AS.ExprCall (AS.QualifiedIdentifier _ "Ones") [_] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ AS.ExprUnknown
           AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> Just $ AS.ExprUnknown
