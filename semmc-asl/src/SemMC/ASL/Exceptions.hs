@@ -48,6 +48,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) TypeEnvir
                           | ReturnTypeUnificationFailure AS.Type AS.Type TypeEnvir
                           | StructFieldMismatch AS.Expr
+                          | RequiredConcreteValue AS.Expr
 
 deriving instance Show TranslationException
 

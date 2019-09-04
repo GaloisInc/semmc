@@ -1395,6 +1395,14 @@ extraDefs = [
                                                    (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Zeros")
                                                      [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N")]))]
                  },
+  AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "ZeroExtend"
+                 , callableArgs = [("val", AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "M")))]
+                 , callableRets = [AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N"))]
+                 , callableStmts = [AS.StmtReturn (Just $
+                                                   (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "ZeroExtend")
+                                                     [ AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "val")
+                                                     , AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N")]))]
+                 },
   AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "ThisInstrLength"
                  , callableArgs = []
                  , callableRets = [AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer")]
@@ -1407,7 +1415,7 @@ extraDefs = [
 -- in SemMC.ASL.Translation
 data Overrides arch =
   Overrides { overrideStmt :: AS.Stmt -> Maybe AS.Stmt
-            , overrideExpr :: AS.Expr -> Maybe AS.Expr
+            , overrideExpr :: AS.Expr -> Maybe ()
             }
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
@@ -1417,26 +1425,26 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ AS.StmtUndefined
           AS.StmtVarDeclInit (nm,t) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ AS.StmtUndefined
           _ -> Nothing
-        overrideExpr :: AS.Expr -> Maybe AS.Expr
+        overrideExpr :: AS.Expr -> Maybe ()
         overrideExpr e = case e of
-          AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [_] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "Ones") [_] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "RRX_C") [x, shift] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "Align") [x, y] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [x] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ AS.ExprUnknown
-          AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> Just $ AS.ExprUnknown
+          AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, _] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [_] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "Ones") [_] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "RRX_C") [x, shift] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "Align") [x, y] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [x] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> defaultOverride
           _ -> Nothing
+        defaultOverride = Just $ ()

@@ -954,6 +954,14 @@ unifyType aslT (Some atomT) = do
       Just i -> Left i
       Nothing -> Right e
 
+getConcreteType :: AS.Type ->  CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some CT.TypeRepr))
+getConcreteType t =
+  case dependentVarsOfType t of
+    [] -> do
+      ty <- translateType t
+      return $ Just ty
+    _ -> return Nothing
+
         
 unifyArg :: Overrides arch
          -> TypeEnvir
@@ -961,7 +969,8 @@ unifyArg :: Overrides arch
          -> AS.Expr
          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
 unifyArg ov outerEnv (nm,t) e = do
-  (Some atom, _) <- withTypeEnvir outerEnv $ translateExpr ov e
+  mTy <- getConcreteType t
+  ((Some atom, _), _) <- withTypeEnvir outerEnv $ translateExpr' ov e mTy
   let atomT = CCG.typeOfAtom atom
   unifyType t (Some $ CCG.typeOfAtom atom)
   return $ Some atom
@@ -1212,9 +1221,9 @@ translateExpr' ov expr mTy
                let arr = CCE.SymArrayLookup retTy (CCG.AtomExpr atom) asn
                mkAtom (CCG.App arr)
            | otherwise ->  X.throw (UnsupportedExpr expr)
-      AS.ExprUnknown -> case mTy of
-        Just (Some repr) -> mkAtom (getDefaultValue repr)
-        _ -> error $ "Unknown expression with unknown type."
+      AS.ExprUnknown t -> do
+        Some ty <- translateType t
+        mkAtom (getDefaultValue ty)
 
       _ -> error (show expr)
   where
@@ -1598,22 +1607,21 @@ overrides = Overrides {..}
               CT.BVRepr nr -> do
                 Some <$> CCG.mkAtom (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
               _ -> error "Called IsZero on non-bitvector"
-          -- FIXME: ZeroExtend defaults to 64 for single arguments...
-          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val] -> Just $ do
+          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, e] -> Just $ do
             Some valAtom <- translateExpr overrides val
-            case CCG.typeOfAtom valAtom of
-              CT.BVRepr valWidth
-                | Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` (WT.knownNat @64) -> do
-                    atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @64) valWidth (CCG.AtomExpr valAtom)))
-                    return $ Some atom
-          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, AS.ExprLitInt 32] -> Just $ do
-            Some valAtom <- translateExpr overrides val
-            case CCG.typeOfAtom valAtom of
-              CT.BVRepr valWidth
-                | Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` (WT.knownNat @32) -> do
-                  atom <- CCG.mkAtom (CCG.App (CCE.BVZext (WT.knownNat @32) valWidth (CCG.AtomExpr valAtom)))
+            env <- MS.gets tsTypeEnvir
+            case (CCG.typeOfAtom valAtom, exprToInt env e) of
+              (CT.BVRepr valWidth, Just i) |
+                i == WT.intValue valWidth -> do
+                  return $ Some valAtom
+              (CT.BVRepr valWidth, Just i)
+                | Just (Some repr) <- WT.someNat i
+                , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` repr
+                , Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` repr -> do
+                  atom <- CCG.mkAtom (CCG.App (CCE.BVZext repr valWidth (CCG.AtomExpr valAtom)))
                   return $ Some atom
-              tp -> X.throw $ ExpectedBVType val tp
+              (_, Nothing) -> X.throw $ RequiredConcreteValue e
+              (tp, _) -> X.throw $ ExpectedBVType val tp
           AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [e] -> Just $ do
             env <- MS.gets tsTypeEnvir
             case exprToInt env e of
