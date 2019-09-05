@@ -166,6 +166,7 @@ builtinGlobals = [ ("UNDEFINED", Some WT.BaseBoolRepr)
                  , ("_R", Some (WT.BaseArrayRepr
                                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
                                 (WT.BaseBVRepr (WT.knownNat @64))))
+                 , ("DACR", Some (WT.BaseBVRepr (WT.knownNat @32))) -- guessed the length
                  , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  , ("HVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
@@ -174,7 +175,17 @@ builtinGlobals = [ ("UNDEFINED", Some WT.BaseBoolRepr)
                  , ("HPFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  , ("HPFAR_EL2", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  , ("MVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 ] ++
+                 , ("SDCR_SPD", Some (WT.BaseBVRepr (WT.knownNat @2)))
+                 , ("DBGEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("NIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("SPIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 , ("SPNIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+                 ]
+                 ++
+                 mkBitFields
+                   [ ("SDER", "SUIDEN")
+                   ]
+                 ++
                  concat (mkGlobalStruct <$>
                          [("PSTATE", "PSTATEType")
                          ,("SCTLR_EL1", "SCTLRType")
@@ -195,13 +206,27 @@ builtinGlobals = [ ("UNDEFINED", Some WT.BaseBoolRepr)
                          ,("HCR2", "HCRType")
                          ,("HCR", "HCRType")
                          ,("HDCR", "HDCRType")
+                         ,("MDCR_EL1", "MDCRType")
                          ,("MDCR_EL2", "MDCRType")
+                         ,("MDCR_EL3", "MDCRType")
                          ,("DBGDSCRext", "DBGDSCRextType")
                          ,("VBAR_EL1", "VBARType")
                          ,("VBAR_EL2", "VBARType")
                          ,("VBAR_EL3", "VBARType")
                          ,("TTBCR", "TTBCRType")
                          ,("TTBCR_S", "TTBCRType")
+                         ,("DBGDIDR", "DBGDIDRType")
+                         ,("ID_AA64DFR0_EL1", "DBGDIDRType")
+                         ,("DBGOSLSR", "LSRType")
+                         ,("OSLSR_EL1", "LSRType")
+                         ,("MDSCR_EL1", "MDSCRType")
+                         ,("DBGOSDLR", "SDLRType")
+                         ,("OSDLR_EL1", "SDLRType")
+                         ,("DBGPRCR_EL1", "PRCRType")
+                         ,("DBGPRCR", "PRCRType")
+                         ,("EDSCR", "SCRType")
+                         ,("HTCR", "HTCRType")
+                         ,("TCR_EL3", "TCRType")
                          ])
   where
     mkGlobalStruct (nm,tnm) =
@@ -210,6 +235,7 @@ builtinGlobals = [ ("UNDEFINED", Some WT.BaseBoolRepr)
         _ -> case lookup tnm globalTypeSynonyms of
           Just syn -> [(nm, toSimpleBVType syn)]
           _  -> error $ "Missing global struct: " <> (T.unpack tnm)
+    mkBitFields = map (\(nm, fnm) -> mkField nm (fnm, AS.TypeFun "bits" (AS.ExprLitInt 1)))
     mkField nm (fnm, ftype) = (nm <> "_" <> fnm, toSimpleBVType ftype)
 
 
@@ -218,16 +244,26 @@ globalStructTypes =
   [ ("PSTATEType", bits ["N", "Z", "C", "V", "D", "A", "I", "F", "PAN", "UAO",
                          "SS", "IL", "nRW", "SP", "Q", "J", "T", "E"] ++
                    [("EL", bit 2), ("GE", bit 4), ("IT", bit 8), ("M", bit 5)])
-  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "FIQ", "RW"])
-  , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB"])
-  , ("HSCTLRType", bits ["A", "TE", "EE"])
-  , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H"])
+  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "FIQ", "RW", "HDE", "SIF"]
+      ++ [("STATUS", bit 6)])
+  , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB", "M",
+                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E"])
+  
+  , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I"])
+  , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H", "DC", "VM", "PTW"])
   , ("HDCRType", bits ["TDE"])
-  , ("MDCRType", bits ["TDE"])
+  , ("MDCRType", bits ["TDE", "SDD"] ++ [("SPD32", bit 2)])
+  , ("MDSCRType", bits ["KDE", "MDE"])
   , ("CPACRType", [("FPEN", bit 2)])
   , ("CNTKCTLType", [("EL0PTEN", bit 1)])
-  , ("DBGDSCRextType", [("MOE", bit 4)])
-  , ("TTBCRType", bits ["EAE"])
+  , ("DBGDSCRextType", bits ["MDBGen"] ++ [("MOE", bit 4)])
+  , ("TTBCRType", bits ["EAE", "N"])
+  , ("DBGDIDRType", [("WRPs", bit 32), ("BRPs", bit 32)])
+  , ("LSRType", bits ["OSLK"])
+  , ("SDLRType", bits ["DLK"])
+  , ("PRCRType", bits ["CORENPDRQ"])
+  , ("HTCRType", bits ["T0SZ"])
+  , ("TCRType", bits ["TG0"])
   ]
   where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
         bits nms = map (\nm -> (nm, bit 1)) nms
@@ -253,6 +289,7 @@ builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
   [ ("TRUE", Some $ ConstVal WT.BaseBoolRepr True)
   , ("FALSE", Some $ ConstVal WT.BaseBoolRepr False)
+  , ("HIGH", Some $ ConstVal (WT.BaseBVRepr (WT.knownNat @1)) (BVS.bitVector (1 :: Integer)))
   ]
 
 -- | Make a function name given its ASL name and arity.
@@ -1417,8 +1454,7 @@ extraDefs = [
                  }
   ]
 
--- Syntactic overrides for globals collection that should mirror the overrides
--- in SemMC.ASL.Translation
+-- Overrides only for the purposes of collecting global variables
 data Overrides arch =
   Overrides { overrideStmt :: AS.Stmt -> Maybe AS.Stmt
             , overrideExpr :: AS.Expr -> Maybe ()
@@ -1433,9 +1469,6 @@ overrides = Overrides {..}
           _ -> Nothing
         overrideExpr :: AS.Expr -> Maybe ()
         overrideExpr e = case e of
-          AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, _] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [_] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "Ones") [_] -> defaultOverride
