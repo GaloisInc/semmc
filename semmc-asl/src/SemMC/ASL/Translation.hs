@@ -413,13 +413,17 @@ translateFor ov sig var lo hi body = do
         _ -> do
           let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
           translateDefinedVar ov ty var lo
+      let ident = AS.QualifiedIdentifier AS.ArchQualAny var
       let testG = do
-            let ident = AS.QualifiedIdentifier AS.ArchQualAny var
             let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
             Some testA <- translateExpr ov testE
             Refl <- assertAtomType testE CT.BoolRepr testA
             return (CCG.AtomExpr testA)
-      let bodyG = mapM_ (translateStatement ov sig) body
+      let increment = do
+            AS.StmtAssign (AS.LValVarRef ident)
+              (AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef ident) (AS.ExprLitInt 1))
+            
+      let bodyG = mapM_ (translateStatement ov sig) (body ++ [increment])
       CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
