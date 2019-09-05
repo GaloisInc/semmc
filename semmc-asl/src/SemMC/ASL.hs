@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 module SemMC.ASL (
     simulateFunction
   , simulateProcedure
@@ -26,27 +27,34 @@ import qualified Data.Text as T
 import qualified Data.Type.List as TL
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Core as CCC
+import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Lang.Crucible.Simulator as CS
 import qualified Lang.Crucible.Simulator.CallFrame as CSC
 import qualified Lang.Crucible.Simulator.GlobalState as CSG
 import qualified Lang.Crucible.Types as CT
+import qualified Lang.Crucible.Backend.Online as CBO
+import qualified Lang.Crucible.Simulator.PathSatisfiability as CSP
 import qualified System.IO as IO
 import qualified What4.BaseTypes as WT
 import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
+import qualified What4.Protocol.Online as WPO
+import qualified What4.Expr.Builder as WEB
 
 import qualified SemMC.Formula as SF
 import qualified SemMC.ASL.Crucible as AC
 import qualified SemMC.ASL.Signature as AS
 import qualified SemMC.ASL.Types as AT
 
-data SimulatorConfig sym =
+data SimulatorConfig scope =
   SimulatorConfig { simOutputHandle :: IO.Handle
                   , simHandleAllocator :: CFH.HandleAllocator RealWorld
-                  , simSym :: sym
+                  , simSym :: CBO.YicesOnlineBackend scope (WEB.Flags WEB.FloatReal)
                   }
+
+type OnlineSolver scope sym = sym ~ CBO.YicesOnlineBackend scope (WEB.Flags WEB.FloatReal)
 
 reshape :: Ctx.Assignment CT.TypeRepr ctps -> PL.List WT.BaseTypeRepr (AT.ToBaseTypesList ctps)
 reshape Ctx.Empty = PL.Nil
@@ -59,8 +67,8 @@ reshape (reprs Ctx.:> repr) = case CT.asBaseType repr of
 --
 -- Procedures have a different return type, where we need to track not only the value returned, but
 -- also the global location to which it should be assigned
-simulateFunction :: (CB.IsSymInterface sym)
-                 => SimulatorConfig sym
+simulateFunction :: (CB.IsSymInterface sym, OnlineSolver scope sym)
+                 => SimulatorConfig scope
                  -> AC.Function arch globals init tp
                  -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesList init, tp))
 simulateFunction symCfg func = do
@@ -74,7 +82,8 @@ simulateFunction symCfg func = do
       let globals = AC.funcGlobals func
       globalState <- initGlobals symCfg globals
       s0 <- initialSimulatorState symCfg globalState econt
-      eres <- CS.executeCrucible executionFeatures s0
+      ft <- executionFeatures (simSym symCfg)
+      eres <- CS.executeCrucible ft s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeFunctionSignature sig)))
         CS.AbortedResult {} -> X.throwIO (SimulationAbort (Some (AC.SomeFunctionSignature sig)))
@@ -114,9 +123,9 @@ simulateFunction symCfg func = do
 -- arguments)
 --
 -- Note that the type tps works out, as the sequence collection of types is BaseStructType
-simulateProcedure :: forall arch sym init globals
-                   . (CB.IsSymInterface sym)
-                  => SimulatorConfig sym
+simulateProcedure :: forall arch sym init globals scope
+                   . (CB.IsSymInterface sym, OnlineSolver scope sym)
+                  => SimulatorConfig scope
                   -> AC.Procedure arch globals init
                   -> IO (SF.FunctionFormula sym '(AT.ToBaseTypesList init, WT.BaseStructType globals))
 simulateProcedure symCfg crucProc =
@@ -131,7 +140,8 @@ simulateProcedure symCfg crucProc =
       let globals = AC.procGlobals crucProc
       globalState <- initGlobals symCfg globals
       s0 <- initialSimulatorState symCfg globalState econt
-      eres <- CS.executeCrucible executionFeatures s0
+      ft <- executionFeatures (simSym symCfg)
+      eres <- CS.executeCrucible ft s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeProcedureSignature sig)))
         CS.AbortedResult context ab -> X.throwIO (SimulationAbort (Some (AC.SomeProcedureSignature sig)))
@@ -264,8 +274,8 @@ toSolverSymbol s' =
     Right sy -> return sy
     Left _err -> X.throwIO (InvalidSymbolName s)
 
-initialSimulatorState :: (CB.IsSymInterface sym)
-                      => SimulatorConfig sym
+initialSimulatorState :: (CB.IsSymInterface sym, OnlineSolver scope sym)
+                      => SimulatorConfig scope
                       -> CS.SymGlobalState sym
                       -> CS.ExecCont () sym (AC.ASLExt arch) (CS.RegEntry sym ret) (CSC.OverrideLang ret) ('Just CT.EmptyCtx)
                       -> IO (CS.ExecState () sym (AC.ASLExt arch) (CS.RegEntry sym ret))
@@ -280,9 +290,9 @@ initialSimulatorState symCfg symGlobalState econt = do
 
 -- | Allocate all of the globals that will be referred to by the statement
 -- sequence (even indirectly) and use them to populate a 'CS.GlobalSymState'
-initGlobals :: forall sym env
-             . (CB.IsSymInterface sym)
-            => SimulatorConfig sym
+initGlobals :: forall sym env scope
+             . (CB.IsSymInterface sym, OnlineSolver scope sym)
+            => SimulatorConfig scope
             -> Ctx.Assignment AC.BaseGlobalVar env
             -> IO (CS.SymGlobalState sym)
 initGlobals symCfg globals = do
@@ -297,8 +307,15 @@ initGlobals symCfg globals = do
       arg <- allocateFreshArg (simSym symCfg) (AC.LabeledValue (CCG.globalName gv) (CCG.globalType gv))
       return (CSG.insertGlobal gv (CS.regValue (freshArgEntry arg)) gs)
 
-executionFeatures :: [CS.ExecutionFeature p sym ext rtp]
-executionFeatures = []
+executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
+                  => WPO.OnlineSolver scope solver
+                  => CB.IsSymInterface sym
+                  => CCE.IsSyntaxExtension ext
+                  => sym -> IO [CS.ExecutionFeature p sym ext rtp]
+executionFeatures sym = do
+  gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
+  let ft = CS.genericToExecutionFeature gft
+  return [ft]
 
 data SimulationException = SimulationTimeout (Some AC.SomeSignature)
                          | SimulationAbort (Some AC.SomeSignature)
