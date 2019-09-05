@@ -34,22 +34,72 @@ instsFilePath = "test/insts.parsed"
 defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
 
+ignoredInstrs :: [(T.Text, T.Text)]
+ignoredInstrs =
+  [("aarch32_VADDL_A", "aarch32_VADDL_T1A1_A") -- unexpected getter structure
+  ,("aarch32_QSUB16_A", "aarch32_QSUB16_A1_A") -- "R" unbound
+  ,("aarch32_QSUB16_A", "aarch32_QSUB16_T1_A") -- "R" unbound
+  ,("aarch32_SHA256H2_A", "aarch32_SHA256H2_A1_A") -- unexpected getter structure
+  ,("aarch32_SHA256H2_A","aarch32_SHA256H2_T1_A") -- unexpected getter structure
+  ,("aarch32_SEL_A", "aarch32_SEL_A1_A") -- "R" unbound
+  ,("aarch32_SEL_A", "aarch32_SEL_T1_A") -- "R" unbound
+  ,("aarch32_SMLAWB_A", "aarch32_SMLAWB_A1_A") -- type mismatch
+  ,("aarch32_SMLAWB_A", "aarch32_SMLAWB_T1_A") -- type mismatch
+  ,("aarch32_ERET_AS", "aarch32_ERET_A1_A") -- unbound global
+  ,("aarch32_ERET_AS", "aarch32_ERET_T1_A") -- unbound global
+  ,("aarch32_VPADD_f_A", "aarch32_VPADD_f_A1_A") -- unexpected getter structure
+  ,("aarch32_VPADD_f_A", "aarch32_VPADD_f_T1_A") -- unexpected getter structure
+  ,("aarch32_VSTM_A", "aarch32_VSTM_T1A1_A") -- unexpected getter structure
+  ,("aarch32_VCMP_A", "aarch32_VCMP_A1_A") -- unexpected getter structure
+  ] 
+  
 
 collectInstructions :: [AS.Instruction] -> [(T.Text, T.Text)]
-collectInstructions aslInsts =
-  List.concat $ map (\(AS.Instruction nm encs _ _) ->
-                       map (\(AS.InstructionEncoding {AS.encName=encName}) ->
-                              (nm, encName)) encs) aslInsts
+collectInstructions aslInsts = do
+  let l = List.concat $ map (\(AS.Instruction nm encs _ _) ->
+                          map (\(AS.InstructionEncoding {AS.encName=encName}) ->
+                                 (nm, encName)) encs) aslInsts
+  [ x | x <- l, not (List.elem x ignoredInstrs)]
+
+
 ignoredDefs :: [T.Text]
-ignoredDefs = ["AArch64_BranchAddr_1"]
+ignoredDefs =
+  ["AArch64_BranchAddr_1",
+   "AArch32_CheckBreakpoint_2", -- stalls
+   "AArch32_VCRMatch_1", -- bad slice
+   "AArch32_CheckWatchpoint_4", -- stalls
+   "AArch32_CheckDomain_5", -- bad slice
+   "AArch32_ExecutingATS1xPInstr_0", -- SliceOffset
+   "AArch32_ExecutingLSMInstr_0", -- SliceOffset
+   "AArch32_TranslationTableWalkLD_7", -- bad slice
+   "AArch32_TranslationTableWalkSD_4", -- bad slice
+   "AArch64_CheckAndUpdateDescriptor_8", -- SSA conversion failure
+   "AArch64_TranslationTableWalk_7", -- type mismatch
+   "AArch64_CheckBreakpoint_2", -- stalls
+   "AArch64_CheckWatchpoint_4", -- stalls
+   "AArch64_ExecutingATS1xPInstr_0", -- bad slice
+   "AArch64_TranslateAddressS1Off_3", -- bad slice
+   "ProcessorID_0", -- simulation abort
+   "Shift_C_4N_32", -- bad extended type information
+   "LSL_2N_32", -- bad extended type information
+   "LSR_2N_32", -- bad extended type information
+   "AArch32_IsExclusiveVA_3", -- simulation abort
+   "IsExclusiveGlobal_3", -- simulation abort
+   "IsExclusiveLocal_3" -- simulation abort
+  ]
+
+testInstrs :: [(T.Text, T.Text)]
+testInstrs =
+  [("aarch32_STRH_r_A", "aarch32_STRH_r_T1_A"),
+   ("aarch32_REV_A","aarch32_REV_T2_A"),
+   ("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
 
 main :: IO ()
 main = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  let instrs = [collectInstructions aslInsts !! 4]
-  --let instrs = [("aarch32_REV_A","aarch32_REV_T2_A")]
-  --let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
+  let instrs = collectInstructions aslInsts
+  --let instrs = testInstrs
   
   MSS.evalStateT (forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)) Map.empty
    
