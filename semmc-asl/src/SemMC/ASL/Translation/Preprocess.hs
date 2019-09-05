@@ -172,6 +172,7 @@ builtinGlobals = [ ("UNDEFINED", Some WT.BaseBoolRepr)
                  , ("HIFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  , ("HDFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  , ("HPFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+                 , ("HPFAR_EL2", Some (WT.BaseBVRepr (WT.knownNat @64)))
                  , ("MVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
                  ] ++
                  concat (mkGlobalStruct <$>
@@ -218,7 +219,7 @@ globalStructTypes =
                          "SS", "IL", "nRW", "SP", "Q", "J", "T", "E"] ++
                    [("EL", bit 2), ("GE", bit 4), ("IT", bit 8), ("M", bit 5)])
   , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "FIQ", "RW"])
-  , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V"])
+  , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB"])
   , ("HSCTLRType", bits ["A", "TE", "EE"])
   , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H"])
   , ("HDCRType", bits ["TDE"])
