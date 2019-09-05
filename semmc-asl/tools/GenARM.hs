@@ -7,6 +7,7 @@ module Main ( main ) where
 
 import qualified Control.Exception as X
 import           Control.Monad (forM_, foldM)
+import qualified Control.Monad.State.Lazy as MSS
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
@@ -39,9 +40,9 @@ collectInstructions aslInsts =
   List.concat $ map (\(AS.Instruction nm encs _ _) ->
                        map (\(AS.InstructionEncoding {AS.encName=encName}) ->
                               (nm, encName)) encs) aslInsts
-  
+ignoredDefs :: [T.Text]
+ignoredDefs = ["AArch64_BranchAddr_1"]
 
---"aarch32_ADC_i_A" "aarch32_ADC_i_A1_A"
 main :: IO ()
 main = do
   (aslInsts, aslDefs) <- getASL
@@ -50,52 +51,57 @@ main = do
   --let instrs = [("aarch32_REV_A","aarch32_REV_T2_A")]
   --let instrs = [("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
   
-  forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)
+  MSS.evalStateT (forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)) Map.empty
    
 
-runTranslation :: T.Text -> T.Text -> [AS.Instruction] -> [AS.Definition] -> IO ()
+runTranslation :: T.Text -> T.Text -> [AS.Instruction] -> [AS.Definition] -> MSS.StateT SigMap IO ()
 runTranslation instr enc aslInsts aslDefs = do
-  putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
+  MSS.lift $ putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
   case computeInstructionSignature instr enc aslInsts aslDefs of
     Left err -> do
-      putStrLn $ "Error computing instruction signature: " ++ show err
-      exitFailure
+      MSS.lift $ putStrLn $ "Error computing instruction signature: " ++ show err
+      MSS.lift $ exitFailure
     Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
-      putStrLn $ "Instruction signature:"
-      print iSig
+      MSS.lift $ putStrLn $ "Instruction signature:"
+      MSS.lift $ print iSig
       --Just mySig <- return $ Map.lookup "Unreachable_0" sigMap
       --sigMap <- return $ Map.fromList [("Unreachable_0", mySig)]
 
       case computeDefinitions (Map.keys sigMap) aslDefs of
         Left err -> do
-          putStrLn $ "Error computing ASL definitions: " ++ show err
-          exitFailure
+          MSS.lift $ putStrLn $ "Error computing ASL definitions: " ++ show err
+          MSS.lift $ exitFailure
         Right defs -> do
-          putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
-          putStrLn $ (show iSig)
-          deps <- processInstruction iSig instStmts defs
+          MSS.lift $ putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
+          MSS.lift $ putStrLn $ (show iSig)
+          deps <- MSS.lift $ processInstruction iSig instStmts defs
 
-          putStrLn $ "--------------------------------"
-          putStrLn "Translating functions: "
-          _ <- foldM (\b -> \a -> translationLoop defs a b) Map.empty (Map.assocs deps)
-          return ()
+          MSS.lift $ putStrLn $ "--------------------------------"
+          MSS.lift $ putStrLn "Translating functions: "
+          mapM_ (translationLoop defs) (Map.assocs deps)
     _ -> error "Panic"
 
-translationLoop :: Definitions arch -> (T.Text, TypeEnvir) -> Map.Map T.Text (Some (SomeSignature)) -> IO (Map.Map T.Text (Some (SomeSignature)))
-translationLoop defs (fnname, env) sigs = do
+type SigMap = Map.Map T.Text (Some (SomeSignature))
+
+translationLoop :: Definitions arch -> (T.Text, TypeEnvir) -> MSS.StateT SigMap IO ()
+translationLoop defs (fnname, env) = do
   let finalName =  (mkFinalFunctionName env fnname)
-  putStrLn $ show finalName ++ " definition:"
-  case Map.lookup finalName sigs of
-    Just _ -> return sigs
-    _ -> case Map.lookup fnname (defSignatures defs) of
-           Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
-                 putStrLn $ "--------------------------------"
-                 deps <- processFunction (someSigName sig) sig stmts defs
-                 putStrLn $ "--------------------------------"
-                 foldM (\b -> \a -> translationLoop defs a b) sigs (Map.assocs deps)
-           _ -> error $ "Missing definition for:" <> (show fnname)
-      
-  
+  if List.elem finalName ignoredDefs
+  then MSS.lift $ putStrLn $ "SKIPPING: " <> show finalName
+  else do
+    sigs <- MSS.get
+    case Map.lookup finalName sigs of
+      Just _ -> return ()
+      _ -> do
+         MSS.lift $ putStrLn $ show finalName ++ " definition:"
+         case Map.lookup fnname (defSignatures defs) of
+             Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
+                   MSS.lift $ putStrLn $ "--------------------------------"
+                   MSS.modify' $ Map.insert finalName (Some sig)
+                   deps <- MSS.lift $ processFunction (someSigName sig) sig stmts defs
+                   MSS.lift $ putStrLn $ "--------------------------------"
+                   mapM_ (translationLoop defs) (Map.assocs deps)
+             _ -> error $ "Missing definition for:" <> (show fnname)
 
 -- Debugging function for determining what syntactic forms
 -- actually exist
