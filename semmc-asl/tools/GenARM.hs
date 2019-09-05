@@ -15,6 +15,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
 import qualified Data.List as List
 import qualified Lang.Crucible.Backend.Simple as CBS
+import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
@@ -96,50 +97,88 @@ testInstrs =
 
 main :: IO ()
 main = do
+  _ <- runWithFilters $ Filters (\_ -> True) (\_ -> True) (\_ -> True) (\_ -> True)
+  return ()
+
+testDefinition :: String -> IO ()
+testDefinition s = do
+  let nm = T.pack s
+  sig <- runWithFilters $ translateOnly $ nm
+  case Map.lookup nm (sMap sig) of
+    Just _ -> return ()
+    Nothing -> error $ "Translation failed to discover function: " <> show nm
+    
+
+filterIgnored :: Filters
+filterIgnored = Filters
+  (\nm -> not $ List.elem nm ignoredDefs)
+  (\nm -> not $ List.elem nm ignoredInstrs)
+  (\_ -> True) (\_ -> True)
+
+translateOnly :: T.Text -> Filters
+translateOnly fnm = Filters
+  (\nm -> (nm == fnm) || (not $ List.elem nm ignoredDefs))
+  (\nm -> not $ List.elem nm ignoredInstrs)
+  (\nm -> nm == fnm) (\_ -> True)
+
+runWithFilters :: Filters -> IO (SigMap)
+runWithFilters filters = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  let instrs = collectInstructions aslInsts
-  --let instrs = testInstrs
-  
-  MSS.evalStateT (forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs)) Map.empty
+  let instrs = collectInstructions aslInsts  
+  MSS.execStateT (forM_ instrs (\(instr, enc) -> runTranslation instr enc aslInsts aslDefs))
+    (SigMap Map.empty filters)
    
 
 runTranslation :: T.Text -> T.Text -> [AS.Instruction] -> [AS.Definition] -> MSS.StateT SigMap IO ()
 runTranslation instr enc aslInsts aslDefs = do
-  MSS.lift $ putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
-  case computeInstructionSignature instr enc aslInsts aslDefs of
-    Left err -> do
-      MSS.lift $ putStrLn $ "Error computing instruction signature: " ++ show err
-      MSS.lift $ exitFailure
-    Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
-      MSS.lift $ putStrLn $ "Instruction signature:"
-      MSS.lift $ print iSig
-      --Just mySig <- return $ Map.lookup "Unreachable_0" sigMap
-      --sigMap <- return $ Map.fromList [("Unreachable_0", mySig)]
+  test <- MSS.gets (instrFilter . sFilters)
+  if not $ test (instr, enc)
+  then MSS.lift $ putStrLn $ "SKIPPING instruction: " ++ show instr ++ " " ++ show enc
+  else do
+    MSS.lift $ putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
+    case computeInstructionSignature instr enc aslInsts aslDefs of
+      Left err -> do
+        MSS.lift $ putStrLn $ "Error computing instruction signature: " ++ show err
+        MSS.lift $ exitFailure
+      Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
+        MSS.lift $ putStrLn $ "Instruction signature:"
+        MSS.lift $ print iSig
+        --Just mySig <- return $ Map.lookup "Unreachable_0" sigMap
+        --sigMap <- return $ Map.fromList [("Unreachable_0", mySig)]
 
-      case computeDefinitions (Map.keys sigMap) aslDefs of
-        Left err -> do
-          MSS.lift $ putStrLn $ "Error computing ASL definitions: " ++ show err
-          MSS.lift $ exitFailure
-        Right defs -> do
-          MSS.lift $ putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
-          MSS.lift $ putStrLn $ (show iSig)
-          deps <- MSS.lift $ processInstruction iSig instStmts defs
+        case computeDefinitions (Map.keys sigMap) aslDefs of
+          Left err -> do
+            MSS.lift $ putStrLn $ "Error computing ASL definitions: " ++ show err
+            MSS.lift $ exitFailure
+          Right defs -> do
+            MSS.lift $ putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
+            MSS.lift $ putStrLn $ (show iSig)
+            deps <- processInstruction instr enc iSig instStmts defs
 
-          MSS.lift $ putStrLn $ "--------------------------------"
-          MSS.lift $ putStrLn "Translating functions: "
-          mapM_ (translationLoop defs) (Map.assocs deps)
-    _ -> error "Panic"
+            MSS.lift $ putStrLn $ "--------------------------------"
+            MSS.lift $ putStrLn "Translating functions: "
+            mapM_ (translationLoop defs) (Map.assocs deps)
+      _ -> error "Panic"
 
-type SigMap = Map.Map T.Text (Some (SomeSignature))
+data Filters = Filters { funFilter :: T.Text -> Bool
+                       , instrFilter :: (T.Text, T.Text) -> Bool
+                       , funTranslationFilter :: T.Text -> Bool
+                       , instrTranslationFilter :: (T.Text, T.Text) -> Bool
+                       }
+
+data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeSignature))
+                     , sFilters :: Filters
+                     }
 
 translationLoop :: Definitions arch -> (T.Text, TypeEnvir) -> MSS.StateT SigMap IO ()
 translationLoop defs (fnname, env) = do
-  let finalName =  (mkFinalFunctionName env fnname)
-  if List.elem finalName ignoredDefs
-  then MSS.lift $ putStrLn $ "SKIPPING: " <> show finalName
+  let finalName = (mkFinalFunctionName env fnname)
+  test <- MSS.gets (funFilter . sFilters)
+  if not $ test finalName
+  then MSS.lift $ putStrLn $ "SKIPPING definition: " <> show finalName
   else do
-    sigs <- MSS.get
+    sigs <- MSS.gets sMap
     case Map.lookup finalName sigs of
       Just _ -> return ()
       _ -> do
@@ -147,8 +186,8 @@ translationLoop defs (fnname, env) = do
          case Map.lookup fnname (defSignatures defs) of
              Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
                    MSS.lift $ putStrLn $ "--------------------------------"
-                   MSS.modify' $ Map.insert finalName (Some sig)
-                   deps <- MSS.lift $ processFunction (someSigName sig) sig stmts defs
+                   MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
+                   deps <- processFunction finalName sig stmts defs
                    MSS.lift $ putStrLn $ "--------------------------------"
                    mapM_ (translationLoop defs) (Map.assocs deps)
              _ -> error $ "Missing definition for:" <> (show fnname)
@@ -176,41 +215,60 @@ getASL = do
     (Right aslInsts', Right aslDefs') -> do
       return $ prepASL (aslInsts', aslDefs')
 
-processInstruction :: ProcedureSignature globals init -> [AS.Stmt] -> Definitions arch -> IO (Map.Map T.Text TypeEnvir)
-processInstruction pSig stmts defs = do
+processInstruction :: T.Text
+                   -> T.Text
+                   -> ProcedureSignature globals init
+                   -> [AS.Stmt] -> Definitions arch
+                   -> MSS.StateT SigMap IO (Map.Map T.Text TypeEnvir)
+processInstruction instr enc pSig stmts defs = do
   handleAllocator <- CFH.newHandleAllocator
-  p <- procedureToCrucible defs pSig handleAllocator stmts
-  backend <- CBS.newSimpleBackend globalNonceGenerator
-  let cfg :: SimulatorConfig (CBS.SimpleBackend GlobalNonceGenerator (CBS.Flags CBS.FloatIEEE))
-        = SimulatorConfig { simOutputHandle = IO.stdout
-                          , simHandleAllocator = handleAllocator
-                          , simSym = backend
-                          }
-  symFn <- simulateProcedure cfg p
-  return (procDepends p)
-
-processFunction :: T.Text -> SomeSignature ret -> [AS.Stmt] -> Definitions arch -> IO (Map.Map T.Text TypeEnvir)
-processFunction fnName sig stmts defs =
-  case sig of
-    SomeFunctionSignature fSig -> do
-      handleAllocator <- CFH.newHandleAllocator
-      f <- functionToCrucible defs fSig handleAllocator stmts
-      backend <- CBS.newSimpleBackend globalNonceGenerator
-      let cfg :: SimulatorConfig (CBS.SimpleBackend GlobalNonceGenerator (CBS.Flags CBS.FloatIEEE))
-            = SimulatorConfig { simOutputHandle = IO.stdout
-                              , simHandleAllocator = handleAllocator
-                              , simSym = backend
-                              }
-      symFn <- simulateFunction cfg f
-      return (funcDepends f)
-    SomeProcedureSignature pSig -> do
-      handleAllocator <- CFH.newHandleAllocator
-      p <- procedureToCrucible defs pSig handleAllocator stmts
-      backend <- CBS.newSimpleBackend globalNonceGenerator
-      let cfg :: SimulatorConfig (CBS.SimpleBackend GlobalNonceGenerator (CBS.Flags CBS.FloatIEEE))
-            = SimulatorConfig { simOutputHandle = IO.stdout
+  p <- MSS.lift $ procedureToCrucible defs pSig handleAllocator stmts
+  test <- MSS.gets (instrTranslationFilter . sFilters)
+  if not $ test (instr, enc)
+  then do
+    MSS.lift $ putStrLn $ "SKIPPING translation for instruction: " ++ show instr ++ " " ++ show enc
+    return (procDepends p)
+  else do
+    MSS.lift $ CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
+      let cfg = SimulatorConfig { simOutputHandle = IO.stdout
                               , simHandleAllocator = handleAllocator
                               , simSym = backend
                               }
       symFn <- simulateProcedure cfg p
       return (procDepends p)
+
+processFunction :: T.Text -> SomeSignature ret -> [AS.Stmt] -> Definitions arch -> MSS.StateT SigMap IO (Map.Map T.Text TypeEnvir)
+processFunction fnName sig stmts defs =
+  case sig of
+    SomeFunctionSignature fSig -> do
+      handleAllocator <- CFH.newHandleAllocator
+      f <- MSS.lift $ functionToCrucible defs fSig handleAllocator stmts
+      test <- MSS.gets (funTranslationFilter . sFilters)
+      if not $ test fnName
+      then do
+        MSS.lift $ putStrLn $ "SKIPPING translation for definition: " <> show fnName
+        return (funcDepends f)
+      else do
+        MSS.lift $ CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
+          let cfg = SimulatorConfig { simOutputHandle = IO.stdout
+                                  , simHandleAllocator = handleAllocator
+                                  , simSym = backend
+                                  }
+          symFn <- simulateFunction cfg f
+          return (funcDepends f)
+    SomeProcedureSignature pSig -> do
+      handleAllocator <- CFH.newHandleAllocator
+      p <- MSS.lift $ procedureToCrucible defs pSig handleAllocator stmts
+      test <- MSS.gets (funTranslationFilter . sFilters)
+      if not $ test fnName
+      then do
+        MSS.lift $ putStrLn $ "SKIPPING translation for definition: " <> show fnName
+        return (procDepends p)
+      else do
+        MSS.lift $ CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
+          let cfg = SimulatorConfig { simOutputHandle = IO.stdout
+                                  , simHandleAllocator = handleAllocator
+                                  , simSym = backend
+                                  }
+          symFn <- simulateProcedure cfg p
+          return (procDepends p)
