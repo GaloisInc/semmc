@@ -594,6 +594,7 @@ applyStmtSyntaxOverride ovrs stmt =
     _ -> stmt'
 
 
+
 -- | Transform a function that returns a struct type
 -- into one that instead returns a specific member @mem@ of the resulting struct
 collapseReturn :: T.Text -> [AS.Stmt] -> [AS.Stmt]
@@ -913,8 +914,12 @@ computeUserType tpName = do
           return $ Some $ UserEnum (fromIntegral (length enumVals))
         DefTypeStruct _ structVars -> do
           varTps <- forM structVars $ \(varName, varType) -> do
-            Some tp <- computeType varType
-            return $ Some $ LabeledValue varName tp
+            case computeType' varType of
+              Left (Some tp) -> do
+                return $ Some $ LabeledValue (varName, Nothing) tp
+              Right nm -> do
+                Some ut <- computeUserType nm
+                return $ Some $ LabeledValue (varName, Just (Some ut)) (userTypeRepr ut)
           Some varTpAssignment <- return $ Ctx.fromList varTps
           return $ Some $ UserStruct varTpAssignment
         DefTypeAbstract _ -> error $ "computeUserType: abstract type " ++ show tpName

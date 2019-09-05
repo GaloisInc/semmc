@@ -555,28 +555,30 @@ translateAssignment' ov lval atom atomext mE = do
               reg <- CCG.newUnassignedReg atomType
               MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
               CCG.assignReg reg (CCG.AtomExpr atom)
-    -- FIXME: For now, all structs must be globals.
-    AS.LValMember (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-      lvalext <- getExtendedTypeData structName
+    AS.LValMember struct memberName -> do
+      lvalext <- lvalExtraTypeData struct
       case lvalext of
         TypeBasic -> do
-          globals <- MS.gets tsGlobals
-          let ident = mkStructMemberName structName memberName
-          case Map.lookup ident globals of
-            Just (Some gv) -> do
-              Refl <- assertAtomType' (CCG.globalType gv) atom
-              CCG.writeGlobal gv (CCG.AtomExpr atom)
-            _ -> error $ "Missing global struct lval: " ++ show ident
-        TypeStruct acc -> do
-          Some e <- lookupVarRef structName
-          satom <- CCG.mkAtom e
-          case (CCG.typeOfAtom satom, Map.lookup memberName acc) of
-            (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx)) |
-              Just Refl <- testEquality tps repr -> do
-                let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr satom)
-                getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+          case struct of
+            AS.LValVarRef (AS.QualifiedIdentifier _ structName) -> do
+              globals <- MS.gets tsGlobals
+              let ident = mkStructMemberName structName memberName
+              case Map.lookup ident globals of
+                Just (Some gv) -> do
+                  Refl <- assertAtomType' (CCG.globalType gv) atom
+                  CCG.writeGlobal gv (CCG.AtomExpr atom)
+                _ -> error $ "Missing global struct lval: " ++ show ident
+            _ -> error $ "Bad struct lval: " ++ show lval
+        TypeStruct acc ->
+          -- Some e <- lookupVarRef structName
+          -- satom <- CCG.mkAtom e
+          -- case (CCG.typeOfAtom satom, Map.lookup memberName acc) of
+          --   (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx _)) |
+          --     Just Refl <- testEquality tps repr -> do
+          --       let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr satom)
+          --       getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
                 return () -- FIXME: Construct modified struct here
-            _ -> error $ "Mismatch in struct fields" <> show structName <> "." <> show memberName
+           -- _ -> error $ "Mismatch in struct fields" <> show struct <> "." <> show memberName
 
     AS.LValTuple lvals ->
       case atomext of
@@ -782,15 +784,16 @@ type UserStructAcc = Map.Map T.Text StructAccessor
 
 data StructAccessor = forall tps tp. StructAccessor
   { structRepr :: Ctx.Assignment WT.BaseTypeRepr tps
-  , structIdx :: Ctx.Index tps tp }
+  , structIdx :: Ctx.Index tps tp
+  , structFieldExt :: ExtendedTypeData}
 
 deriving instance Show StructAccessor
 
 instance Eq StructAccessor where
   (==) a b = case (a, b) of
-    (StructAccessor ar aidx, StructAccessor br bidx) |
+    (StructAccessor ar aidx e, StructAccessor br bidx e') |
         Just Refl <- testEquality ar br
-      , Just Refl <- testEquality aidx bidx -> True
+      , Just Refl <- testEquality aidx bidx -> e == e'
     _ -> False
 
 data ExtendedTypeData =
@@ -805,20 +808,25 @@ mkExtendedTypeData ty = do
   case ty of
     AS.TypeRef qi@(AS.QualifiedIdentifier _ tident) -> do
       uts <- MS.gets tsUserTypes
-      case Map.lookup tident uts of
-        Just (Some (UserStruct s)) -> do
-          let (_, asn) = MSS.runState (Ctx.traverseAndCollect
-                                       (collectAssignment (FC.fmapFC projectValue s)) s) Map.empty
-          return $ TypeStruct asn
-        _ -> return TypeBasic
+      return $ fromUT (Map.lookup tident uts)
     _ -> return TypeBasic
   where
+    fromUT :: Maybe (Some UserType) -> ExtendedTypeData
+    fromUT mUT = case mUT of
+      Just (Some (UserStruct s)) -> do
+        let (_, asn) = MSS.runState (Ctx.traverseAndCollect
+                                     (collectAssignment (FC.fmapFC projectValue s)) s) Map.empty
+        TypeStruct asn
+      _ -> TypeBasic
+    
     collectAssignment :: Ctx.Assignment WT.BaseTypeRepr tps
                       -> Ctx.Index tps tp
-                      -> LabeledValue T.Text WT.BaseTypeRepr tp
+                      -> LabeledValue (T.Text, Maybe (Some UserType)) WT.BaseTypeRepr tp
                       -> MSS.State (Map.Map T.Text StructAccessor) ()
-    collectAssignment repr idx lblv =
-      MS.modify' (Map.insert (projectLabel lblv) (StructAccessor repr idx))
+    collectAssignment repr idx lblv = do
+      let (nm, mUT) = projectLabel lblv
+      let ext = fromUT mUT
+      MS.modify' (Map.insert nm (StructAccessor repr idx ext))
 
 addExtendedTypeData :: AS.Identifier
                     -> AS.Type                    
@@ -838,6 +846,39 @@ getExtendedTypeData :: AS.Identifier
 getExtendedTypeData ident = do
   exts <- MS.gets tsExtendedTypes
   return $ fromMaybe TypeBasic (Map.lookup ident exts)
+
+findExtraTypeData' :: Monad m 
+                   => (T.Text -> m ExtendedTypeData)
+                   -> [T.Text]
+                   -> m ExtendedTypeData
+findExtraTypeData' g quals = case quals of
+  [qual] -> g qual
+  qual : rest -> do
+    ext <- g qual
+    case ext of
+      TypeStruct acc -> findExtraTypeData' (doLookup acc) rest
+      _ -> return TypeBasic
+  _ -> error $ "Unexpected empty qualification."
+  where
+    doLookup acc nm  = case Map.lookup nm acc of
+      Just sacc -> return (structFieldExt sacc)
+      Nothing -> return TypeBasic
+
+exprExtraTypeData :: AS.Expr
+                  -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
+exprExtraTypeData e = findExtraTypeData' getExtendedTypeData (getQual e)
+  where
+    getQual e = case e of
+      AS.ExprMember e q -> getQual e ++ [q]
+      AS.ExprVarRef (AS.QualifiedIdentifier _ q) -> [q]
+
+lvalExtraTypeData :: AS.LValExpr
+                  -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
+lvalExtraTypeData e = findExtraTypeData' getExtendedTypeData (getQual e)
+  where
+    getQual e = case e of
+      AS.LValMember e q -> getQual e ++ [q]
+      AS.LValVarRef (AS.QualifiedIdentifier _ q) -> [q]
 
 assertEqualExtensions :: ExtendedTypeData
                       -> ExtendedTypeData
@@ -1183,20 +1224,22 @@ translateExpr' ov expr mTy
       AS.ExprImpDef _ -> mkAtom (CCG.App (CCE.BoolLit True))
       -- This is just like a variable lookup, since struct members are stored as
       -- individual global variables.
-      AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-        lvalext <- getExtendedTypeData structName
+      AS.ExprMember struct memberName -> do
+        lvalext <- exprExtraTypeData struct
         case lvalext of
           TypeBasic -> do
-            let ident = mkStructMemberName structName memberName
-            Some e <- lookupVarRef ident
-            mkAtom e
+            case struct of
+              AS.ExprVarRef (AS.QualifiedIdentifier _ structName) -> do
+                let ident = mkStructMemberName structName memberName
+                Some e <- lookupVarRef ident
+                mkAtom e
+              _ -> X.throw (StructFieldMismatch expr)
           TypeStruct acc -> do
-            Some e <- lookupVarRef structName
-            satom <- CCG.mkAtom e
-            case (CCG.typeOfAtom satom, Map.lookup memberName acc) of
-              (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx)) |
+            Some atom <- translateExpr ov struct
+            case (CCG.typeOfAtom atom, Map.lookup memberName acc) of
+              (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx _)) |
                 Just Refl <- testEquality tps repr -> do
-                  let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr satom)
+                  let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr atom)
                   mkAtom (CCG.App (CCE.ExtensionApp getStruct))
               _ -> X.throw (StructFieldMismatch expr)
 

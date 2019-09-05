@@ -134,7 +134,8 @@ instance ShowF ConstVal
 
 data UserType (tp :: WT.BaseType) where
   UserEnum :: Natural -> UserType WT.BaseIntegerType
-  UserStruct :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) tps -> UserType (WT.BaseStructType tps)
+  UserStruct :: Ctx.Assignment (LabeledValue (T.Text, Maybe (Some UserType)) WT.BaseTypeRepr) tps ->
+                UserType (WT.BaseStructType tps)
 
 deriving instance Show (UserType tp)
 
