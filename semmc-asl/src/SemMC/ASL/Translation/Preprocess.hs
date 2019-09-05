@@ -159,75 +159,33 @@ computeInstructionSignature instName encName insts defs = execSigM defs $
 
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
-builtinGlobals = [ ("UNDEFINED", Some WT.BaseBoolRepr)
-                 , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
-                 , ("ThisInstrLength", Some WT.BaseIntegerRepr)
-                 , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
-                 , ("_R", Some (WT.BaseArrayRepr
-                                (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
-                                (WT.BaseBVRepr (WT.knownNat @64))))
-                 , ("DACR", Some (WT.BaseBVRepr (WT.knownNat @32))) -- guessed the length
-                 , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 , ("HVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 , ("HIFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 , ("HDFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 , ("HPFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 , ("HPFAR_EL2", Some (WT.BaseBVRepr (WT.knownNat @64)))
-                 , ("MVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-                 , ("SDCR_SPD", Some (WT.BaseBVRepr (WT.knownNat @2)))
-                 , ("DBGEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("NIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("SPIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 , ("SPNIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-                 ]
-                 ++
-                 mkBitFields
-                   [ ("SDER", "SUIDEN")
-                   ]
-                 ++
-                 concat (mkGlobalStruct <$>
-                         [("PSTATE", "PSTATEType")
-                         ,("SCTLR_EL1", "SCTLRType")
-                         ,("SCTLR_EL2", "SCTLRType")
-                         ,("SCTLR_EL3", "SCTLRType")
-                         ,("CNTKCTL_EL1", "CNTKCTLType")
-                         ,("CNTKCTL_EL2", "CNTKCTLType")
-                         ,("ESR_EL1", "ESRType")
-                         ,("ESR_EL2", "ESRType")
-                         ,("ESR_EL3", "ESRType")
-                         ,("MAIR_EL1", "MAIRType")
-                         ,("MAIR_EL2", "MAIRType")
-                         ,("MAIR_EL3", "MAIRType")
-                         ,("SCR", "SCRType")
-                         ,("SCR_EL3", "SCRType")
-                         ,("HSCTLR", "HSCTLRType")
-                         ,("HCR_EL2", "HCRType")
-                         ,("HCR2", "HCRType")
-                         ,("HCR", "HCRType")
-                         ,("HDCR", "HDCRType")
-                         ,("MDCR_EL1", "MDCRType")
-                         ,("MDCR_EL2", "MDCRType")
-                         ,("MDCR_EL3", "MDCRType")
-                         ,("DBGDSCRext", "DBGDSCRextType")
-                         ,("VBAR_EL1", "VBARType")
-                         ,("VBAR_EL2", "VBARType")
-                         ,("VBAR_EL3", "VBARType")
-                         ,("TTBCR", "TTBCRType")
-                         ,("TTBCR_S", "TTBCRType")
-                         ,("DBGDIDR", "DBGDIDRType")
-                         ,("ID_AA64DFR0_EL1", "DBGDIDRType")
-                         ,("DBGOSLSR", "LSRType")
-                         ,("OSLSR_EL1", "LSRType")
-                         ,("MDSCR_EL1", "MDSCRType")
-                         ,("DBGOSDLR", "SDLRType")
-                         ,("OSDLR_EL1", "SDLRType")
-                         ,("DBGPRCR_EL1", "PRCRType")
-                         ,("DBGPRCR", "PRCRType")
-                         ,("EDSCR", "SCRType")
-                         ,("HTCR", "HTCRType")
-                         ,("TCR_EL3", "TCRType")
-                         ])
+builtinGlobals =
+  [ ("UNDEFINED", Some WT.BaseBoolRepr)
+  , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
+  , ("ThisInstrLength", Some WT.BaseIntegerRepr)
+  , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
+  , ("_R", Some (WT.BaseArrayRepr
+                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
+                 (WT.BaseBVRepr (WT.knownNat @64))))
+  , ("DACR", Some (WT.BaseBVRepr (WT.knownNat @32))) -- guessed the length
+  , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("HVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("HIFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("HDFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("HPFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("HPFAR_EL2", Some (WT.BaseBVRepr (WT.knownNat @64)))
+  , ("MVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("SDCR_SPD", Some (WT.BaseBVRepr (WT.knownNat @2)))
+  , ("DBGEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+  , ("NIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+  , ("SPIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+  , ("SPNIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+  ]
+  ++ mkBitFields
+    [ ("SDER", "SUIDEN") ]
+  ++
+  concat (mkGlobalStruct <$> typedGlobalStructs)
   where
     mkGlobalStruct (nm,tnm) =
       case lookup tnm globalStructTypes of
@@ -267,6 +225,50 @@ globalStructTypes =
   ]
   where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
         bits nms = map (\nm -> (nm, bit 1)) nms
+
+typedGlobalStructs :: [(T.Text, T.Text)]
+typedGlobalStructs =
+   [("PSTATE", "PSTATEType")
+   ,("SCTLR_EL1", "SCTLRType")
+   ,("SCTLR_EL2", "SCTLRType")
+   ,("SCTLR_EL3", "SCTLRType")
+   ,("CNTKCTL_EL1", "CNTKCTLType")
+   ,("CNTKCTL_EL2", "CNTKCTLType")
+   ,("ESR_EL1", "ESRType")
+   ,("ESR_EL2", "ESRType")
+   ,("ESR_EL3", "ESRType")
+   ,("MAIR_EL1", "MAIRType")
+   ,("MAIR_EL2", "MAIRType")
+   ,("MAIR_EL3", "MAIRType")
+   ,("SCR", "SCRType")
+   ,("SCR_EL3", "SCRType")
+   ,("HSCTLR", "HSCTLRType")
+   ,("HCR_EL2", "HCRType")
+   ,("HCR2", "HCRType")
+   ,("HCR", "HCRType")
+   ,("HDCR", "HDCRType")
+   ,("MDCR_EL1", "MDCRType")
+   ,("MDCR_EL2", "MDCRType")
+   ,("MDCR_EL3", "MDCRType")
+   ,("DBGDSCRext", "DBGDSCRextType")
+   ,("VBAR_EL1", "VBARType")
+   ,("VBAR_EL2", "VBARType")
+   ,("VBAR_EL3", "VBARType")
+   ,("TTBCR", "TTBCRType")
+   ,("TTBCR_S", "TTBCRType")
+   ,("DBGDIDR", "DBGDIDRType")
+   ,("ID_AA64DFR0_EL1", "DBGDIDRType")
+   ,("DBGOSLSR", "LSRType")
+   ,("OSLSR_EL1", "LSRType")
+   ,("MDSCR_EL1", "MDSCRType")
+   ,("DBGOSDLR", "SDLRType")
+   ,("OSDLR_EL1", "SDLRType")
+   ,("DBGPRCR_EL1", "PRCRType")
+   ,("DBGPRCR", "PRCRType")
+   ,("EDSCR", "SCRType")
+   ,("HTCR", "HTCRType")
+   ,("TCR_EL3", "TCRType")
+   ]
 
 globalTypeSynonyms :: [(T.Text, AS.Type)]
 globalTypeSynonyms =
