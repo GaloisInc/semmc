@@ -1624,6 +1624,16 @@ translateKnownVar (Some expected) ident (Some atom) = do
   reg <- CCG.newReg (CCG.AtomExpr atom)
   MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
+bitsForInt :: Integer -> Integer
+bitsForInt i = case i of
+  0 -> 1
+  1 -> 1
+  2 -> 2
+  4 -> 3
+  8 -> 4
+  _ -> error "Bad integer shift"
+
+
 
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
@@ -1652,6 +1662,21 @@ overrides = Overrides {..}
           _ -> Nothing
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s)))
         overrideExpr e = case e of
+          AS.ExprBinOp AS.BinOpShiftLeft (AS.ExprLitInt i) (AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [e]) -> Just $ do
+            Some atom <- translateExpr overrides e
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                let bitsForShift = 2 ^ (WT.natValue nr) - 1
+                if | Just (Some bvlen) <- WT.someNat $ bitsForInt i + bitsForShift
+                   , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` bvlen
+                   , Just WT.LeqProof <- (nr `WT.addNat` (WT.knownNat @1)) `WT.testLeq` bvlen
+                     -> do
+                       let val = CCG.App $ CCE.IntegerToBV bvlen (CCG.App (CCE.IntLit i))
+                       let shift = CCG.App $ CCE.BVZext bvlen nr (CCG.AtomExpr atom)
+                       Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger bvlen (CCG.App $ CCE.BVShl bvlen val shift)))
+              _ -> error "Called UInt on non-bitvector"
+
+
           AS.ExprCall (AS.QualifiedIdentifier _ "UInt")
             [AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ "DBGDIDR")) "WRPs"] -> Just $ do
               --Some e <- lookupVarRef "DBGDIDR_WRPs_UINT"
