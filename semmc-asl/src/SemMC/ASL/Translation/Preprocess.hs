@@ -187,6 +187,7 @@ builtinGlobals =
   , ("NIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("SPIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("SPNIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+  , ("EventRegister", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("DBGDIDR_WRPs_UINT", Some WT.BaseIntegerRepr)
   ]
   ++ mkBitFields
@@ -215,7 +216,7 @@ globalStructTypes =
   , ("EDSCRType", bits ["NS", "HDE", "ITE", "ITO", "SDD", "MA"]
       ++ [("STATUS", bit 6), ("EL", bit 2), ("RW", bit 4)])
   , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB", "M",
-                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E"])
+                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E", "nTWE"])
   
   , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I", "SED"])
   , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H", "DC", "VM", "PTW"])
@@ -1529,7 +1530,10 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ AS.StmtUndefined
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ AS.StmtUndefined
           AS.StmtVarDeclInit (nm,t) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ AS.StmtUndefined
+          AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _, _ , _] -> Just $ AS.StmtUndefined
+          AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _, _] -> Just $ AS.StmtUndefined
           _ -> Nothing
+
         overrideExpr :: AS.Expr -> Maybe AS.Expr
         overrideExpr e = case e of
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, _] -> defaultOverride
@@ -1546,6 +1550,7 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> defaultOverride
+          AS.ExprCall (AS.QualifiedIdentifier _ "HaveFP16Ext") [] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> defaultOverride
           _ -> Nothing
