@@ -15,7 +15,7 @@ import qualified Control.Monad.RWS as RWS
 import qualified Control.Monad.Except as E
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import           Data.Maybe ( fromMaybe )
+import           Data.Maybe ( fromMaybe, catMaybes )
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
@@ -152,10 +152,9 @@ testInstruction instr enc = do
   _ <- runWithFilters (translateOnlyInstr (T.pack instr, T.pack enc)) 0
   return ()
 
-translateAll :: Int -> IO ()
+translateAll :: Int -> IO (SigMap)
 translateAll startidx = do
-  _ <- runWithFilters filterOnlyTranslate startidx
-  return ()
+  runWithFilters filterOnlyTranslate startidx
 
 filterOnlyTranslate :: Filters
 filterOnlyTranslate = Filters
@@ -212,14 +211,28 @@ reportStats sm = do
        Set.null (Set.filter (\dep -> Map.member dep (funExcepts sm)) deps) 
     then putStrLn $ show instr ++ " " ++ show enc
     else return ()) (instrDeps sm)
-  return ()
+  putStrLn $ "Failing instructions:"
 
+  _ <- Map.traverseWithKey (\(instr, enc) -> \deps ->
+    case Map.lookup (instr, enc) (instrExcepts sm) of
+      Just e -> do
+       putStrLn $ show instr ++ " " ++ show enc ++ " failed to translate:"
+       putStrLn $ show e
+      Nothing -> case Map.lookup (instr, enc) (instrDeps sm) of
+        Just deps -> do
+          let errs = catMaybes $ (\dep -> (\x -> (dep,x)) <$> Map.lookup dep (funExcepts sm)) <$> (Set.toList deps)
+          if null errs then return ()
+          else do
+            putStrLn $ show instr ++ " " ++ show enc ++ " has failing dependencies:"
+            mapM_ (\(dep, err) -> putStrLn $ show dep <> ":" <> show err) errs
+        _ -> return ()) (instrDeps sm)
+  return ()
   
 data TranslatorException =
     TExcept TranslationException
   | SExcept SigException
   | SomeExcept X.SomeException
-  
+
 deriving instance Show TranslatorException
 instance X.Exception TranslatorException
 
