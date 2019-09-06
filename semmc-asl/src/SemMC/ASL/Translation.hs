@@ -556,7 +556,8 @@ translateAssignment' ov lval atom atomext mE = do
               MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
               CCG.assignReg reg (CCG.AtomExpr atom)
     AS.LValMember struct memberName -> do
-      lvalext <- lvalExtraTypeData struct
+      Just lve <- return $ lValToExpr struct
+      lvalext <- exprExtraTypeData lve
       case lvalext of
         TypeBasic -> do
           case struct of
@@ -800,6 +801,7 @@ data ExtendedTypeData =
     TypeBasic
   | TypeStruct UserStructAcc
   | TypeTuple [ExtendedTypeData]
+  | TypeArray ExtendedTypeData
   deriving (Show, Eq)
 
 mkExtendedTypeData :: AS.Type
@@ -847,38 +849,32 @@ getExtendedTypeData ident = do
   exts <- MS.gets tsExtendedTypes
   return $ fromMaybe TypeBasic (Map.lookup ident exts)
 
-findExtraTypeData' :: Monad m 
+findExtraTypeData :: Monad m
                    => (T.Text -> m ExtendedTypeData)
-                   -> [T.Text]
+                   -> AS.Expr
                    -> m ExtendedTypeData
-findExtraTypeData' g quals = case quals of
-  [qual] -> g qual
-  qual : rest -> do
-    ext <- g qual
-    case ext of
-      TypeStruct acc -> findExtraTypeData' (doLookup acc) rest
-      _ -> return TypeBasic
-  _ -> error $ "Unexpected empty qualification."
+findExtraTypeData g expr = do
+  case expr of
+    AS.ExprVarRef (AS.QualifiedIdentifier _ q) -> g q
+    AS.ExprIndex e _ -> do
+      ext <- findExtraTypeData g e
+      case ext of
+        TypeArray ext' -> return ext'
+        _ -> return TypeBasic
+    AS.ExprMember e mem -> do
+      ext <- findExtraTypeData g e
+      case ext of
+        TypeStruct acc -> return $ doLookup acc mem
+        _ -> return TypeBasic
+    _ -> error $ "Unexpected qualification:" <> show expr
   where
     doLookup acc nm  = case Map.lookup nm acc of
-      Just sacc -> return (structFieldExt sacc)
-      Nothing -> return TypeBasic
+      Just sacc -> structFieldExt sacc
+      Nothing -> TypeBasic
 
 exprExtraTypeData :: AS.Expr
                   -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
-exprExtraTypeData e = findExtraTypeData' getExtendedTypeData (getQual e)
-  where
-    getQual e = case e of
-      AS.ExprMember e q -> getQual e ++ [q]
-      AS.ExprVarRef (AS.QualifiedIdentifier _ q) -> [q]
-
-lvalExtraTypeData :: AS.LValExpr
-                  -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
-lvalExtraTypeData e = findExtraTypeData' getExtendedTypeData (getQual e)
-  where
-    getQual e = case e of
-      AS.LValMember e q -> getQual e ++ [q]
-      AS.LValVarRef (AS.QualifiedIdentifier _ q) -> [q]
+exprExtraTypeData e = findExtraTypeData getExtendedTypeData e
 
 assertEqualExtensions :: ExtendedTypeData
                       -> ExtendedTypeData
@@ -1340,7 +1336,7 @@ getSliceRange slice = do
         Just i <- exprToInt env e
       , Just someRepr <- WT.someNat i ->
         return (someRepr, someRepr)
-    _ -> error $ "unsupported slice: " ++ show slice
+    _ -> X.throw $ UnsupportedSlice slice
 
   
 translateSlice :: Overrides arch
@@ -1493,6 +1489,7 @@ translateBinaryOp ov op e1 e2 = do
           Some <$> CCG.mkAtom (CCG.App (CCE.BVConcat n1 n2 (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
       (CT.BVRepr _, t2) -> X.throw $ ExpectedBVType e2 t2
       (t1, _) -> X.throw $ ExpectedBVType e1 t1
+    _ -> X.throw (UnsupportedBinaryOperator op)
 
 -- Arithmetic operators
 
@@ -1634,6 +1631,11 @@ overrides = Overrides {..}
           _ -> Nothing
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s)))
         overrideExpr e = case e of
+          AS.ExprCall (AS.QualifiedIdentifier _ "UInt")
+            [AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ "DBGDIDR")) "WRPs"] -> Just $ do
+              --Some e <- lookupVarRef "DBGDIDR_WRPs_UINT"
+              --Some <$> CCG.mkAtom e
+              Some <$> CCG.mkAtom (CCG.App (CCE.IntLit 10))
           AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
             Some atom <- translateExpr overrides argExpr
             case CCG.typeOfAtom atom of

@@ -49,6 +49,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | ReturnTypeUnificationFailure AS.Type AS.Type TypeEnvir
                           | StructFieldMismatch AS.Expr
                           | RequiredConcreteValue AS.Expr
+                          | UnsupportedSlice AS.Slice
 
 deriving instance Show TranslationException
 

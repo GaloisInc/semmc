@@ -26,6 +26,7 @@ module SemMC.ASL.Translation.Preprocess
   , foldASL
   , foldExpr
   , SigState
+  , SigException
   , Callable(..)
   , Definitions(..)
   , bitsToInteger
@@ -167,6 +168,12 @@ builtinGlobals =
   , ("_R", Some (WT.BaseArrayRepr
                  (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
                  (WT.BaseBVRepr (WT.knownNat @64))))
+  , ("_Dclone", Some (WT.BaseArrayRepr
+                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
+                 (WT.BaseBVRepr (WT.knownNat @64))))
+  , ("_V", Some (WT.BaseArrayRepr
+                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
+                 (WT.BaseBVRepr (WT.knownNat @128))))
   , ("DACR", Some (WT.BaseBVRepr (WT.knownNat @32))) -- guessed the length
   , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
   , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
@@ -176,11 +183,14 @@ builtinGlobals =
   , ("HPFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
   , ("HPFAR_EL2", Some (WT.BaseBVRepr (WT.knownNat @64)))
   , ("MVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("DLR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("DLR_EL0", Some (WT.BaseBVRepr (WT.knownNat @32)))
   , ("SDCR_SPD", Some (WT.BaseBVRepr (WT.knownNat @2)))
   , ("DBGEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("NIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("SPIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("SPNIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
+  , ("DBGDIDR_WRPs_UINT", Some WT.BaseIntegerRepr)
   ]
   ++ mkBitFields
     [ ("SDER", "SUIDEN") ]
@@ -196,23 +206,26 @@ builtinGlobals =
     mkBitFields = map (\(nm, fnm) -> mkField nm (fnm, AS.TypeFun "bits" (AS.ExprLitInt 1)))
     mkField nm (fnm, ftype) = (nm <> "_" <> fnm, toSimpleBVType ftype)
 
-
+-- TODO: Some globals have both a 32 bit and struct representation, this
+-- relationship is not captured currently
+-- (i.e. DLR and DLR.SS
 globalStructTypes :: [(T.Text, [(T.Text, AS.Type)])]
 globalStructTypes =
   [ ("PSTATEType", bits ["N", "Z", "C", "V", "D", "A", "I", "F", "PAN", "UAO",
                          "SS", "IL", "nRW", "SP", "Q", "J", "T", "E"] ++
                    [("EL", bit 2), ("GE", bit 4), ("IT", bit 8), ("M", bit 5)])
-  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "FIQ", "RW", "HDE", "SIF"]
-      ++ [("STATUS", bit 6)])
+  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "RW", "FIQ", "SIF"])
+  , ("EDSCRType", bits ["NS", "HDE", "ITE", "ITO", "SDD", "MA"]
+      ++ [("STATUS", bit 6), ("EL", bit 2), ("RW", bit 4)])
   , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB", "M",
                         "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E"])
   
-  , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I"])
+  , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I", "SED"])
   , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H", "DC", "VM", "PTW"])
   , ("HDCRType", bits ["TDE"])
   , ("MDCRType", bits ["TDE", "SDD"] ++ [("SPD32", bit 2)])
   , ("MDSCRType", bits ["KDE", "MDE"])
-  , ("CPACRType", [("FPEN", bit 2)])
+  , ("CPACRType", bits ["ASEDIS"] ++ [("FPEN", bit 2), ("cp10", bit 2)])
   , ("CNTKCTLType", [("EL0PTEN", bit 1)])
   , ("DBGDSCRextType", bits ["MDBGen"] ++ [("MOE", bit 4)])
   , ("TTBCRType", bits ["EAE", "N"])
@@ -222,6 +235,8 @@ globalStructTypes =
   , ("PRCRType", bits ["CORENPDRQ"])
   , ("HTCRType", bits ["T0SZ"])
   , ("TCRType", bits ["TG0"])
+  , ("DSPSRType", bits ["SS"])
+  , ("NSACRType", bits ["NSASEDIS", "cp10"])
   ]
   where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
         bits nms = map (\nm -> (nm, bit 1)) nms
@@ -233,7 +248,7 @@ typedGlobalStructs =
    ,("SCTLR_EL2", "SCTLRType")
    ,("SCTLR_EL3", "SCTLRType")
    ,("CNTKCTL_EL1", "CNTKCTLType")
-   ,("CNTKCTL_EL2", "CNTKCTLType")
+   ,("CNTHCTL_EL2", "CNTKCTLType")
    ,("ESR_EL1", "ESRType")
    ,("ESR_EL2", "ESRType")
    ,("ESR_EL3", "ESRType")
@@ -265,9 +280,14 @@ typedGlobalStructs =
    ,("OSDLR_EL1", "SDLRType")
    ,("DBGPRCR_EL1", "PRCRType")
    ,("DBGPRCR", "PRCRType")
-   ,("EDSCR", "SCRType")
+   ,("EDSCR", "EDSCRType")
    ,("HTCR", "HTCRType")
    ,("TCR_EL3", "TCRType")
+   ,("DSPSR", "DSPSRType")
+   ,("DSPSR_EL0", "DSPSRType")
+   ,("CPACR_EL1", "CPACRType")
+   ,("CPTR_EL2", "CPACRType")
+   ,("NSACR", "NSACRType")
    ]
 
 globalTypeSynonyms :: [(T.Text, AS.Type)]
@@ -275,6 +295,7 @@ globalTypeSynonyms =
   [ ("MAIRType", AS.TypeFun "bits" (AS.ExprLitInt 64))
   , ("ESRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
   , ("VBARType", AS.TypeFun "bits" (AS.ExprLitInt 64))
+  , ("FPCRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
   ]
 
 toSimpleBVType :: AS.Type -> Some WT.BaseTypeRepr
@@ -632,6 +653,14 @@ applyStmtSyntaxOverride ovrs stmt =
     AS.StmtTry stmts ident alts -> AS.StmtTry (g <$> stmts) ident (mapCatches <$> alts)
     _ -> stmt'
 
+checkValidField :: AS.Expr -> T.Text -> Bool
+checkValidField (AS.ExprVarRef (AS.QualifiedIdentifier _ struct)) mem =
+  fromMaybe (False) $ do
+    tp <- lookup struct typedGlobalStructs
+    mems <- lookup tp globalStructTypes
+    _ <- lookup mem mems
+    return True
+checkValidField _ _ = False
 
 
 -- | Transform a function that returns a struct type
@@ -641,11 +670,15 @@ collapseReturn mem stmts =
   let assignLast finident stmts' =
         reverse $ case reverse stmts' of
           AS.StmtAssign (AS.LValVarRef lvident) eident
-            : rest | lvident == finident ->
+            : rest | lvident == finident
+                   , checkValidField eident mem ->
                 AS.StmtReturn (Just $ AS.ExprMember eident mem) : rest
           end@(AS.StmtCall (AS.QualifiedIdentifier q "Unreachable") [] : rest) ->
             end
-          _ -> error $ "Failed to collapse getter structure: " <> show stmts
+          AS.StmtReturn (Just eident) : rest
+            | checkValidField eident mem ->
+              AS.StmtReturn (Just $ AS.ExprMember eident mem) : rest
+          _ -> error $ "Failed to collapse getter structure: " <> show stmts <> " " <> show mem
       mapCases finident cases = case cases of
         AS.CaseWhen pat me stmts' -> AS.CaseWhen pat me (assignLast finident stmts')
         AS.CaseOtherwise stmts' -> AS.CaseOtherwise (assignLast finident stmts')
@@ -730,7 +763,10 @@ applySyntaxOverridesInstrs ovrs instrs =
     g = applyStmtSyntaxOverride ovrs
     
     mapInstr (AS.Instruction instName instEncodings instPostDecode instExecute) =
-      AS.Instruction instName instEncodings (g <$> instPostDecode) (g <$> instExecute)
+      AS.Instruction instName (mapEnc <$> instEncodings) (g <$> instPostDecode) (g <$> instExecute)
+
+    mapEnc (AS.InstructionEncoding a b c d e f encDecode) =
+      AS.InstructionEncoding a b c d e f (g <$> encDecode)
 
   in mapInstr <$> instrs
 
@@ -922,7 +958,7 @@ storeCallableSignature c sig = do
 
 -- | If the given type is user-defined, compute its signature and store it
 storeUserType :: AS.Type -> SigM ext f ()
-storeUserType tp = case tp of
+storeUserType tp = case applyTypeSynonyms tp of
   AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> do
    case tpName of
      "integer" -> return ()
@@ -966,10 +1002,19 @@ computeUserType tpName = do
       storeType tpName tp
       return $ Some tp
 
+applyTypeSynonyms :: AS.Type -> AS.Type
+applyTypeSynonyms t = case t of
+  AS.TypeRef (AS.QualifiedIdentifier _ tpName) ->
+    case lookup tpName globalTypeSynonyms of
+      Just syn -> syn
+      Nothing -> t
+  _ -> t
+
+
 -- | Either compute the What4 representation of an ASL 'AS.Type' or
 -- return a name representing a user-defined type.
 computeType' :: AS.Type -> Either (Some WT.BaseTypeRepr) T.Text
-computeType' tp = case tp of
+computeType' tp = case applyTypeSynonyms tp of
   AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> do
     case tpName of
       "integer" -> Left (Some WT.BaseIntegerRepr)
@@ -1092,7 +1137,7 @@ caseAlternativeGlobalVars alt = case alt of
 exprGlobalVars :: AS.Expr -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
 exprGlobalVars expr = case overrideExpr overrides expr of
   -- FIXME: Attach a list of global variables to every override
-  Just _ -> return []
+  Just expr' -> exprGlobalVars expr'
   Nothing -> case expr of
     AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
       maybeToList <$> varGlobal varName
@@ -1286,7 +1331,7 @@ mkReturnType ts = case ts of
 
 
 applyTypeEnvir :: TypeEnvir -> AS.Type -> AS.Type
-applyTypeEnvir env t = case t of
+applyTypeEnvir env t = case applyTypeSynonyms t of
   AS.TypeFun "bits" e -> case exprToInt env e of
     Just i -> AS.TypeFun "bits" (AS.ExprLitInt i)
     Nothing -> error $ "Missing expected type variable: " <> show t <> " in environment: " <> show env
@@ -1412,6 +1457,14 @@ computeInstructionSignature' AS.Instruction{..} encName = do
 
       return (Some (SomeProcedureSignature pSig), instStmts)
 
+expandStmts :: (AS.Stmt -> [AS.Stmt]) -> AS.Stmt -> [AS.Stmt]
+expandStmts f stmt = case stmt of
+  AS.StmtIf tests melse ->
+    [AS.StmtIf ((\(e, stmts) -> (e, concat $ expandStmts f <$> stmts)) <$> tests) (fmap expandConcat melse)]
+  stmt -> f stmt
+  where
+    expandConcat stmts = concat $ expandStmts f <$> stmts
+
 -- | Create the full list of statements in an instruction given the main execute
 -- block and the encoding-specific operations.
 createInstStmts :: [AS.Stmt]
@@ -1419,16 +1472,13 @@ createInstStmts :: [AS.Stmt]
                 -> [AS.Stmt]
                 -- ^ Execute block
                 -> [AS.Stmt]
-createInstStmts encodingSpecificOperations stmts = case stmts of
-  [AS.StmtIf
-    [ ( (AS.ExprCall (AS.QualifiedIdentifier archQual "ConditionPassed") [])
-      , (AS.StmtCall (AS.QualifiedIdentifier _ "EncodingSpecificOperations") [] : rst) ) ]
-    Nothing] ->
-    [AS.StmtIf
-      [ ( (AS.ExprCall (AS.QualifiedIdentifier archQual "ConditionPassed") [])
-        , encodingSpecificOperations ++ rst ) ]
-      Nothing]
-  _ -> error "createInstStmts"
+createInstStmts encodingSpecificOperations stmts =
+  concat $ map (expandStmts doExpand) stmts
+  where
+    doExpand stmt = case stmt of
+      AS.StmtCall (AS.QualifiedIdentifier _ "EncodingSpecificOperations") [] ->
+        encodingSpecificOperations
+      _ -> [stmt]
 
 -- Extra definitions that give mock definitions to undefined functions
 extraDefs :: [AS.Definition]
@@ -1459,7 +1509,7 @@ extraDefs = [
 -- Overrides only for the purposes of collecting global variables
 data Overrides arch =
   Overrides { overrideStmt :: AS.Stmt -> Maybe AS.Stmt
-            , overrideExpr :: AS.Expr -> Maybe ()
+            , overrideExpr :: AS.Expr -> Maybe AS.Expr
             }
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
@@ -1469,7 +1519,7 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ AS.StmtUndefined
           AS.StmtVarDeclInit (nm,t) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ AS.StmtUndefined
           _ -> Nothing
-        overrideExpr :: AS.Expr -> Maybe ()
+        overrideExpr :: AS.Expr -> Maybe AS.Expr
         overrideExpr e = case e of
           AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, _] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [_] -> defaultOverride
@@ -1488,4 +1538,4 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> defaultOverride
           _ -> Nothing
-        defaultOverride = Just $ ()
+        defaultOverride = Just $ AS.ExprLitInt 0
