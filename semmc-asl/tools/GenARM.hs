@@ -195,9 +195,12 @@ runWithFilters filters startidx = do
   let instrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts
   let (sigEnv, sigState) = buildSigState aslDefs
   sm <- MSS.execStateT (forM_ (drop startidx $ instrs) (\(i, (instr, enc)) -> do
-                                  MSS.lift $ putStrLn $ "Processing instruction: " ++ show i ++
-                                                         "/" ++ show (length instrs)
-                                  runTranslation instr enc))
+    let iname = AS.instName instr
+    test <- MSS.gets (instrFilter . sFilters)
+    if not $ test (iname, enc) then return ()
+    else do
+     MSS.lift $ putStrLn $ "Processing instruction: " ++ show i ++ "/" ++ show (length instrs)
+     runTranslation instr enc))
     (SigMap Map.empty Map.empty Map.empty filters sigState sigEnv Map.empty Map.empty)
   reportStats sm
   return sm
@@ -239,33 +242,29 @@ instance X.Exception TranslatorException
 runTranslation :: AS.Instruction -> T.Text -> MSS.StateT SigMap IO ()
 runTranslation instruction@AS.Instruction{..} enc = do
   let instr = instName
-  test <- MSS.gets (instrFilter . sFilters)
-  if not $ test (instr, enc)
-  then MSS.lift $ putStrLn $ "SKIPPING instruction: " ++ show instr ++ " " ++ show enc
-  else do
-    MSS.lift $ putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
-    result <- liftSigM (KeyInstr instr enc) $ computeInstructionSignature' instruction enc
-    case result of
-      Left err -> do
-        MSS.lift $ putStrLn $ "Error computing instruction signature: " ++ show err
-      Right (Some (SomeProcedureSignature iSig), instStmts) -> do
-        MSS.lift $ putStrLn $ "Instruction signature:"
-        MSS.lift $ print iSig
-        defs <- liftSigM (KeyInstr instr enc) $ getDefinitions
-        case defs of
-          Left err -> do
-            MSS.lift $ putStrLn $ "Error computing ASL definitions: " ++ show err
-          Right defs -> do
-            MSS.lift $ putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
-            MSS.lift $ putStrLn $ (show iSig)
-            deps <- processInstruction instr enc iSig instStmts defs
+  MSS.lift $ putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
+  result <- liftSigM (KeyInstr instr enc) $ computeInstructionSignature' instruction enc
+  case result of
+    Left err -> do
+      MSS.lift $ putStrLn $ "Error computing instruction signature: " ++ show err
+    Right (Some (SomeProcedureSignature iSig), instStmts) -> do
+      MSS.lift $ putStrLn $ "Instruction signature:"
+      MSS.lift $ print iSig
+      defs <- liftSigM (KeyInstr instr enc) $ getDefinitions
+      case defs of
+        Left err -> do
+          MSS.lift $ putStrLn $ "Error computing ASL definitions: " ++ show err
+        Right defs -> do
+          MSS.lift $ putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
+          MSS.lift $ putStrLn $ (show iSig)
+          deps <- processInstruction instr enc iSig instStmts defs
 
-            MSS.lift $ putStrLn $ "--------------------------------"
-            MSS.lift $ putStrLn "Translating functions: "
-            alldeps <- mapM (translationLoop defs) (Map.assocs deps)
-            let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
-            MSS.modify' $ \s -> s { instrDeps = Map.insert (instr, enc) alldepsSet (instrDeps s) }
-      _ -> error "Panic"
+          MSS.lift $ putStrLn $ "--------------------------------"
+          MSS.lift $ putStrLn "Translating functions: "
+          alldeps <- mapM (translationLoop defs) (Map.assocs deps)
+          let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
+          MSS.modify' $ \s -> s { instrDeps = Map.insert (instr, enc) alldepsSet (instrDeps s) }
+    _ -> error "Panic"
 
 data Filters = Filters { funFilter :: T.Text -> Bool
                        , instrFilter :: (T.Text, T.Text) -> Bool
@@ -321,7 +320,6 @@ translationLoop defs (fnname, env) = do
   test <- MSS.gets (funFilter . sFilters)
   if not $ test finalName
   then do
-    MSS.lift $ putStrLn $ "SKIPPING definition: " <> show finalName
     return Set.empty
   else do
     fdeps <- MSS.gets funDeps
@@ -378,7 +376,6 @@ processInstruction instr enc pSig stmts defs = do
       test <- MSS.gets (instrTranslationFilter . sFilters)
       if not $ test (instr, enc)
       then do
-        MSS.lift $ putStrLn $ "SKIPPING translation for instruction: " ++ show instr ++ " " ++ show enc
         return (procDepends p)
       else do
         mdep <- catchIO (KeyInstr instr enc) $ CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
@@ -402,7 +399,6 @@ processFunction fnName sig stmts defs =
           test <- MSS.gets (funTranslationFilter . sFilters)
           if not $ test fnName
           then do
-            MSS.lift $ putStrLn $ "SKIPPING translation for definition: " <> show fnName
             return (funcDepends f)
           else do
             mdep <- catchIO (KeyFun fnName) $ CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
