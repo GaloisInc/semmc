@@ -58,7 +58,7 @@ import qualified Data.Set as Set
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..), viewSome, mapSome )
--- import qualified Data.Sequence as Seq
+
 import qualified Data.Text as T
 import           Data.Traversable (forM)
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -71,12 +71,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
---import           SemMC.ASL.Translation
---import           SemMC.ASL.Crucible
---  ( Definitions(..)
---  , ASLExt
---  )
---import           SemMC.ASL.Exceptions
+import Control.Concurrent
 
 import System.IO.Unsafe -- FIXME: For debugging
 
@@ -189,6 +184,8 @@ builtinGlobals =
   , ("SPNIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("EventRegister", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("DBGDIDR_WRPs_UINT", Some WT.BaseIntegerRepr)
+  , ("HSTR", Some (WT.BaseBVRepr (WT.knownNat @32)))
+  , ("HSTR_EL2", Some (WT.BaseBVRepr (WT.knownNat @32)))
   ]
   ++ mkBitFields
     [ ("SDER", "SUIDEN") ]
@@ -212,20 +209,22 @@ globalStructTypes =
   [ ("PSTATEType", bits ["N", "Z", "C", "V", "D", "A", "I", "F", "PAN", "UAO",
                          "SS", "IL", "nRW", "SP", "Q", "J", "T", "E"] ++
                    [("EL", bit 2), ("GE", bit 4), ("IT", bit 8), ("M", bit 5)])
-  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "RW", "FIQ", "SIF"])
-  , ("EDSCRType", bits ["NS", "HDE", "ITE", "ITO", "SDD", "MA"]
+  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "RW", "FIQ", "SIF", "SMD",
+                      "HCE", "TWE", "TWI"])
+  , ("EDSCRType", bits ["NS", "HDE", "ITE", "ITO", "SDD", "MA", "TXfull"]
       ++ [("STATUS", bit 6), ("EL", bit 2), ("RW", bit 4)])
   , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB", "M",
-                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E", "nTWE"])
+                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E", "nTWE", "nTWI"])
   
-  , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I", "SED"])
-  , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H", "DC", "VM", "PTW"])
-  , ("HDCRType", bits ["TDE"])
-  , ("MDCRType", bits ["TDE", "SDD"] ++ [("SPD32", bit 2)])
-  , ("MDSCRType", bits ["KDE", "MDE"])
-  , ("CPACRType", bits ["ASEDIS"] ++ [("FPEN", bit 2), ("cp10", bit 2)])
+  , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I", "SED", "ITD"])
+  , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H", "DC", "VM", "PTW",
+                      "TWE", "TDRA", "TWI", "BSU"])
+  , ("HDCRType", bits ["TDE", "TDRA", "TDOSA", "TDA"])
+  , ("MDCRType", bits ["TDE", "SDD", "TDRA", "TDOSA", "TDA"] ++ [("SPD32", bit 2)])
+  , ("MDSCRType", bits ["KDE", "MDE", "TDRA", "TDOSA", "SS", "TDCC"])
+  , ("CPACRType", bits ["ASEDIS", "TTA"] ++ [("FPEN", bit 2), ("cp10", bit 2)])
   , ("CNTKCTLType", [("EL0PTEN", bit 1)])
-  , ("DBGDSCRextType", bits ["MDBGen"] ++ [("MOE", bit 4)])
+  , ("DBGDSCRextType", bits ["MDBGen", "UDCCdis"] ++ [("MOE", bit 4)])
   , ("TTBCRType", bits ["EAE", "N"])
   , ("DBGDIDRType", [("WRPs", bit 32), ("BRPs", bit 32)])
   , ("LSRType", bits ["OSLK"])
@@ -235,25 +234,27 @@ globalStructTypes =
   , ("TCRType", bits ["TG0"])
   , ("DSPSRType", bits ["SS"])
   , ("NSACRType", bits ["NSASEDIS", "cp10"])
+  , ("FPCRType_Struct", [("Len", bit 3), ("Stride", bit 2)])
   ]
   where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
         bits nms = map (\nm -> (nm, bit 1)) nms
 
+typedGlobalStructs' :: [(T.Text, [T.Text])]
+typedGlobalStructs' =
+  [ ("PSTATEType", ["PSTATE"])
+  , ("SCTLRType", ["SCTLR_EL1", "SCTLR_EL2", "SCTLR_EL3"])
+  , ("CNTKCTLType", ["CNTKCTL_EL1", "CNTHCTL_EL2"])
+  , ("ESRType", ["ESR_EL1", "ESR_EL2", "ESR_EL3"])
+  , ("MAIRType", ["MAIR_EL1", "MAIR_EL2", "MAIR_EL3"])
+  , ("SPSRType", ["SPSR_fiq", "SPSR_irq", "SPSR_svc", "SPSR_mon", "SPSR_abt",
+                  "SPSR_hyp", "SPSR_und", "SPSR_EL1", "SPSR_EL2", "SPSR_EL3"])
+  , ("FPCRType_Struct", ["FPSCR"])
+  ]
+   
+
 typedGlobalStructs :: [(T.Text, T.Text)]
 typedGlobalStructs =
-   [("PSTATE", "PSTATEType")
-   ,("SCTLR_EL1", "SCTLRType")
-   ,("SCTLR_EL2", "SCTLRType")
-   ,("SCTLR_EL3", "SCTLRType")
-   ,("CNTKCTL_EL1", "CNTKCTLType")
-   ,("CNTHCTL_EL2", "CNTKCTLType")
-   ,("ESR_EL1", "ESRType")
-   ,("ESR_EL2", "ESRType")
-   ,("ESR_EL3", "ESRType")
-   ,("MAIR_EL1", "MAIRType")
-   ,("MAIR_EL2", "MAIRType")
-   ,("MAIR_EL3", "MAIRType")
-   ,("SCR", "SCRType")
+   [("SCR", "SCRType")
    ,("SCR_EL3", "SCRType")
    ,("HSCTLR", "HSCTLRType")
    ,("HCR_EL2", "HCRType")
@@ -286,7 +287,7 @@ typedGlobalStructs =
    ,("CPACR_EL1", "CPACRType")
    ,("CPTR_EL2", "CPACRType")
    ,("NSACR", "NSACRType")
-   ]
+   ] ++ (concat $ map (\(ty, nms) -> map (\nm -> (nm, ty)) nms) typedGlobalStructs')
 
 globalTypeSynonyms :: [(T.Text, AS.Type)]
 globalTypeSynonyms =
@@ -294,6 +295,8 @@ globalTypeSynonyms =
   , ("ESRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
   , ("VBARType", AS.TypeFun "bits" (AS.ExprLitInt 64))
   , ("FPCRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
+  , ("FPSCRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
+  , ("SPSRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
   ]
 
 toSimpleBVType :: AS.Type -> Some WT.BaseTypeRepr
