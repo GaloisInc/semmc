@@ -1553,9 +1553,14 @@ applyBinOp bundle (e1, a1) (e2, a2) =
     CT.NatRepr -> do
       Refl <- assertAtomType e2 CT.NatRepr a2
       Some <$> CCG.mkAtom (CCG.App (obNat bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
-    CT.IntegerRepr ->do
-      Refl <- assertAtomType e2 CT.IntegerRepr a2
-      Some <$> CCG.mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+    CT.IntegerRepr -> do
+      case CCG.typeOfAtom a2 of
+        CT.BVRepr nr -> do
+          let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
+          Some <$> CCG.mkAtom (CCG.App (obBV bundle nr a1' (CCG.AtomExpr a2)))
+        _ -> do
+          Refl <- assertAtomType e2 CT.IntegerRepr a2
+          Some <$> CCG.mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     _ -> X.throw (UnsupportedComparisonType e1 (CCG.typeOfAtom a1))
 
 bvBinOp :: (CCE.IsSyntaxExtension ext)
@@ -1566,8 +1571,19 @@ bvBinOp :: (CCE.IsSyntaxExtension ext)
 bvBinOp con (e1, a1) (e2, a2) =
   case CCG.typeOfAtom a1 of
     CT.BVRepr nr -> do
-      Refl <- assertAtomType e2 (CT.BVRepr nr) a2
-      Some <$> CCG.mkAtom (CCG.App (con nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      case CCG.typeOfAtom a2 of
+        CT.IntegerRepr -> do
+          let a2' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a2))
+          Some <$> CCG.mkAtom (CCG.App (con nr (CCG.AtomExpr a1) a2'))
+        _ -> do
+          Refl <- assertAtomType e2 (CT.BVRepr nr) a2
+          Some <$> CCG.mkAtom (CCG.App (con nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+    CT.IntegerRepr -> do
+      case CCG.typeOfAtom a2 of
+        CT.BVRepr nr -> do
+          let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
+          Some <$> CCG.mkAtom (CCG.App (con nr a1' (CCG.AtomExpr a2)))
+        _ -> X.throw (ExpectedBVType e1 (CCG.typeOfAtom a2))
     _ -> X.throw (ExpectedBVType e1 (CCG.typeOfAtom a1))
 
 logicalBinOp :: (CCE.IsSyntaxExtension ext)
@@ -1627,7 +1643,12 @@ overrides = Overrides {..}
                   atom <- CCG.mkAtom (CCG.App (CCE.BVLit valWidth 0))
                   translateKnownVar retT ident (Some atom)
                | otherwise -> error $ "Invalid return type for Zeros():" <> show ty
-          
+          -- FIXME: This is a pass-by-reference function so we need to expand it in-place
+          AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _,_ ] -> Just $ do
+            return ()
+          AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _,_, _ ] -> Just $ do
+            return ()
+
           _ -> Nothing
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s)))
         overrideExpr e = case e of
@@ -1770,6 +1791,9 @@ overrides = Overrides {..}
             atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
             return $ Some atom
           AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ do
+            atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
+            return $ Some atom
+          AS.ExprCall (AS.QualifiedIdentifier _ "HaveFP16Ext") [] -> Just $ do
             atom <- CCG.mkAtom (CCG.App (CCE.BoolLit False))
             return $ Some atom
           AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
