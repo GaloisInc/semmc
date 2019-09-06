@@ -20,12 +20,16 @@
 
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
-    computeDefinitions
-  , computeInstructionSignature
+    getDefinitions
+  , computeInstructionSignature'
   , prepASL
   , foldASL
   , foldExpr
   , SigState
+  , SigEnv
+  , SigM
+  , runSigM
+  , buildSigState
   , SigException
   , Callable(..)
   , Definitions(..)
@@ -72,7 +76,7 @@ import           SemMC.ASL.Types
 --  ( Definitions(..)
 --  , ASLExt
 --  )
-import           SemMC.ASL.Exceptions
+--import           SemMC.ASL.Exceptions
 
 import System.IO.Unsafe -- FIXME: For debugging
 
@@ -120,17 +124,10 @@ data Definitions arch =
               , defConsts :: Map.Map T.Text (Some ConstVal)
               }
 
--- | Compute the signature of a list of functions and procedures, given their names,
--- from the list of ASL definitions. If the callables requested call other functions
--- or procedures, we compute their signatures as well and include them in the result.
+-- | Collect the definitions representing the current state
 
-computeDefinitions :: [T.Text]
-                   -- ^ The names should be qualified with "_n", where n is the
-                   -- number of arguments
-                   -> [AS.Definition]
-                   -> Either SigException (Definitions arch)
-computeDefinitions names defs = execSigM defs $ do
-  mapM_ computeSignature' names
+getDefinitions :: SigM ext f (Definitions arch)
+getDefinitions = do
   st <- RWS.get
   env <- RWS.ask
   return $ Definitions
@@ -408,11 +405,11 @@ asDefType def =
 
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
-newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS (SigEnv ext f) () SigState) a }
+newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv () SigState) a }
   deriving ( Functor
            , Applicative
            , Monad
-           , RWS.MonadReader (SigEnv ext f)
+           , RWS.MonadReader SigEnv
            , RWS.MonadState SigState
            , E.MonadError SigException
            )
@@ -781,7 +778,7 @@ prepASL (instrs, defs') =
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
 -- signatures.
-buildEnv :: [AS.Definition] -> SigEnv ext f
+buildEnv :: [AS.Definition] -> SigEnv
 buildEnv defs =
   let envCallables = Map.fromList ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
       globalVars = Map.fromList builtinGlobals
@@ -834,6 +831,17 @@ execSigM defs action =
     Right a -> Right a
   where initState = SigState Map.empty Map.empty Map.empty []
 
+buildSigState :: [AS.Definition] -> (SigEnv, SigState)
+buildSigState defs = (buildEnv defs, SigState Map.empty Map.empty Map.empty [])
+
+runSigM :: SigEnv -> SigState -> SigM ext f a -> (Either SigException a, SigState)
+runSigM env state action =
+  let rws = E.runExceptT $ getSigM action
+      (e, s, _) = RWS.runRWS rws env state
+  in case e of
+    Left err -> (Left err, s)
+    Right a -> (Right a, s)
+
 
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
@@ -842,7 +850,7 @@ data SyntaxOverrides = SyntaxOverrides { stmtOverrides :: AS.Stmt -> AS.Stmt
 
 
 
-data SigEnv ext s = SigEnv { envCallables :: Map.Map T.Text Callable
+data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                            -- , globalVars :: Map.Map T.Text DefVariable
                            , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
                            , enums :: Map.Map T.Text Integer
@@ -872,6 +880,7 @@ data SigException = TypeNotFound T.Text
                   | VariableNotFound T.Text
                   | WrongType T.Text T.Text
                   | StructMissingField T.Text T.Text
+                  | UnsupportedExpr AS.Expr
   deriving (Eq, Show)
 
 storeType :: T.Text -> UserType tp -> SigM ext f ()
@@ -1204,7 +1213,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
           Nothing -> return []
           Just varType -> return [(mkStructMemberName structName memberName, varType)]
       return $ concat mVarTypes
-    AS.ExprMemberBits _ _ -> X.throw $ UnsupportedExpr expr
+    AS.ExprMemberBits _ _ -> E.throwError $ UnsupportedExpr expr
     _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
@@ -1454,6 +1463,8 @@ computeInstructionSignature' AS.Instruction{..} encName = do
                                     , procTypeEnvir = emptyTypeEnvir
                                     , procArgs = []
                                     }
+      sigMap <- callableSignatureMap <$> RWS.get
+      mapM_ computeSignature' (Map.keys sigMap)
 
       return (Some (SomeProcedureSignature pSig), instStmts)
 

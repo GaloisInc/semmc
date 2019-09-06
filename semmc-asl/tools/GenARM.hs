@@ -3,13 +3,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main ( main ) where
 
 import qualified Control.Exception as X
 import           Control.Monad (forM_, foldM)
 import qualified Control.Monad.State.Lazy as MSS
+import qualified Control.Monad.RWS as RWS
+import qualified Control.Monad.Except as E
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import           Data.Maybe ( fromMaybe )
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
@@ -79,13 +84,11 @@ ignoredInstrs =
   ] 
   
 
-collectInstructions :: [AS.Instruction] -> [(T.Text, T.Text)]
+collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text)]
 collectInstructions aslInsts = do
-  let l = List.concat $ map (\(AS.Instruction nm encs _ _) ->
-                          map (\(AS.InstructionEncoding {AS.encName=encName}) ->
-                                 (nm, encName)) encs) aslInsts
-  [ x | x <- l, not (List.elem x ignoredInstrs)]
-
+  List.concat $
+    map (\instr -> map (\(AS.InstructionEncoding {AS.encName=encName}) ->
+                          (instr, encName)) (AS.instEncodings instr)) aslInsts
 
 ignoredDefs :: [T.Text]
 ignoredDefs =
@@ -190,14 +193,28 @@ runWithFilters :: Filters -> Int -> IO (SigMap)
 runWithFilters filters startidx = do
   (aslInsts, aslDefs) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  let instrs = drop startidx $ imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts  
-  MSS.execStateT (forM_ instrs (\(i, (instr, enc)) -> do
+  let instrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts
+  let (sigEnv, sigState) = buildSigState aslDefs
+  sm <- MSS.execStateT (forM_ (drop startidx $ instrs) (\(i, (instr, enc)) -> do
                                   MSS.lift $ putStrLn $ "Processing instruction: " ++ show i ++
                                                          "/" ++ show (length instrs)
-                                  runTranslation instr enc aslInsts aslDefs))
-    (SigMap Map.empty Map.empty filters)
-   
+                                  runTranslation instr enc))
+    (SigMap Map.empty Map.empty Map.empty filters sigState sigEnv Map.empty Map.empty)
+  reportStats sm
+  return sm
 
+reportStats :: SigMap -> IO ()
+reportStats sm = do
+  putStrLn $ "Number of instructions which raised exceptions: \n" <> show (length $ Map.keys $ instrExcepts sm)
+  putStrLn $ "Instructions with no errors in any dependent functions:"
+  _ <- Map.traverseWithKey (\(instr, enc) -> \deps -> do
+    if not (Map.member (instr, enc) (instrExcepts sm)) &&
+       Set.null (Set.filter (\dep -> Map.member dep (funExcepts sm)) deps) 
+    then putStrLn $ show instr ++ " " ++ show enc
+    else return ()) (instrDeps sm)
+  return ()
+
+  
 data TranslatorException =
     TExcept TranslationException
   | SExcept SigException
@@ -206,27 +223,25 @@ data TranslatorException =
 deriving instance Show TranslatorException
 instance X.Exception TranslatorException
 
-runTranslation :: T.Text -> T.Text -> [AS.Instruction] -> [AS.Definition] -> MSS.StateT SigMap IO ()
-runTranslation instr enc aslInsts aslDefs = do
+runTranslation :: AS.Instruction -> T.Text -> MSS.StateT SigMap IO ()
+runTranslation instruction@AS.Instruction{..} enc = do
+  let instr = instName
   test <- MSS.gets (instrFilter . sFilters)
   if not $ test (instr, enc)
   then MSS.lift $ putStrLn $ "SKIPPING instruction: " ++ show instr ++ " " ++ show enc
   else do
     MSS.lift $ putStrLn $ "Computing instruction signature for: " ++ show instr ++ " " ++ show enc
-    case computeInstructionSignature instr enc aslInsts aslDefs of
+    result <- liftSigM (KeyInstr instr enc) $ computeInstructionSignature' instruction enc
+    case result of
       Left err -> do
         MSS.lift $ putStrLn $ "Error computing instruction signature: " ++ show err
-        collectError (KeyInstr instr enc) (SExcept err)
-      Right (Some (SomeProcedureSignature iSig), instStmts, sigMap) -> do
+      Right (Some (SomeProcedureSignature iSig), instStmts) -> do
         MSS.lift $ putStrLn $ "Instruction signature:"
         MSS.lift $ print iSig
-        --Just mySig <- return $ Map.lookup "Unreachable_0" sigMap
-        --sigMap <- return $ Map.fromList [("Unreachable_0", mySig)]
-
-        case computeDefinitions (Map.keys sigMap) aslDefs of
+        defs <- liftSigM (KeyInstr instr enc) $ getDefinitions
+        case defs of
           Left err -> do
             MSS.lift $ putStrLn $ "Error computing ASL definitions: " ++ show err
-            collectError (KeyInstr instr enc) (SExcept err) -- FIXME: find function name here
           Right defs -> do
             MSS.lift $ putStrLn $ "Translating instruction: " ++ T.unpack instr ++ " " ++ T.unpack enc
             MSS.lift $ putStrLn $ (show iSig)
@@ -234,7 +249,9 @@ runTranslation instr enc aslInsts aslDefs = do
 
             MSS.lift $ putStrLn $ "--------------------------------"
             MSS.lift $ putStrLn "Translating functions: "
-            mapM_ (translationLoop defs) (Map.assocs deps)
+            alldeps <- mapM (translationLoop defs) (Map.assocs deps)
+            let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
+            MSS.modify' $ \s -> s { instrDeps = Map.insert (instr, enc) alldepsSet (instrDeps s) }
       _ -> error "Panic"
 
 data Filters = Filters { funFilter :: T.Text -> Bool
@@ -246,16 +263,34 @@ data Filters = Filters { funFilter :: T.Text -> Bool
 data ElemKey =
    KeyInstr T.Text T.Text
  | KeyFun T.Text
- deriving (Eq, Ord)
 
 
 data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeSignature))
-                     , errorMap :: Map.Map ElemKey TranslatorException
+                     , instrExcepts :: Map.Map (T.Text, T.Text) TranslatorException
+                     , funExcepts :: Map.Map T.Text TranslatorException
                      , sFilters :: Filters
+                     , sigState :: SigState
+                     , sigEnv :: SigEnv
+                     , instrDeps :: Map.Map (T.Text, T.Text) (Set.Set T.Text)
+                     , funDeps :: Map.Map T.Text (Set.Set T.Text)
                      }
+              
+liftSigM :: ElemKey -> SigM ext f a -> MSS.StateT SigMap IO (Either SigException a)
+liftSigM k f = do
+  state <- MSS.gets sigState
+  env <- MSS.gets sigEnv
+  let (result, state') = runSigM env state f
+  MSS.modify' $ \s -> s { sigState = state' }
+  case result of
+    Right a -> return $ Right a
+    Left err -> do
+      collectExcept k (SExcept err)
+      return $ Left err
 
-collectError :: ElemKey -> TranslatorException -> MSS.StateT SigMap IO ()
-collectError k e = MSS.modify' $ \s -> s { errorMap = Map.insert k e (errorMap s) }
+collectExcept :: ElemKey -> TranslatorException -> MSS.StateT SigMap IO ()
+collectExcept k e = case k of
+  KeyInstr instr enc -> MSS.modify' $ \s -> s { instrExcepts = Map.insert (instr,enc) e (instrExcepts s) }
+  KeyFun fun -> MSS.modify' $ \s -> s { funExcepts = Map.insert fun e (funExcepts s) }
 
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
@@ -264,19 +299,21 @@ catchIO k f = do
                   `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
   case a of
     Left r -> return (Just r)
-    Right err -> (\_ -> Nothing) <$> collectError k err
+    Right err -> (\_ -> Nothing) <$> collectExcept k err
   
 
-translationLoop :: Definitions arch -> (T.Text, TypeEnvir) -> MSS.StateT SigMap IO ()
+translationLoop :: Definitions arch -> (T.Text, TypeEnvir) -> MSS.StateT SigMap IO (Set.Set T.Text)
 translationLoop defs (fnname, env) = do
   let finalName = (mkFinalFunctionName env fnname)
   test <- MSS.gets (funFilter . sFilters)
   if not $ test finalName
-  then MSS.lift $ putStrLn $ "SKIPPING definition: " <> show finalName
+  then do
+    MSS.lift $ putStrLn $ "SKIPPING definition: " <> show finalName
+    return Set.empty
   else do
-    sigs <- MSS.gets sMap
-    case Map.lookup finalName sigs of
-      Just _ -> return ()
+    fdeps <- MSS.gets funDeps
+    case Map.lookup finalName fdeps of
+      Just deps -> return deps
       _ -> do
          MSS.lift $ putStrLn $ show finalName ++ " definition:"
          case Map.lookup fnname (defSignatures defs) of
@@ -285,7 +322,11 @@ translationLoop defs (fnname, env) = do
                    MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
                    deps <- processFunction finalName sig stmts defs
                    MSS.lift $ putStrLn $ "--------------------------------"
-                   mapM_ (translationLoop defs) (Map.assocs deps)
+                   MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
+                   alldeps <- mapM (translationLoop defs) (Map.assocs deps)
+                   let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
+                   MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
+                   return alldepsSet
              _ -> error $ "Missing definition for:" <> (show fnname)
 
 -- Debugging function for determining what syntactic forms
