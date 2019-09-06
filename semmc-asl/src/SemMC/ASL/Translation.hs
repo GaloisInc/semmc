@@ -1479,6 +1479,7 @@ translateBinaryOp ov op e1 e2 = do
     AS.BinOpSub -> applyBinOp subOp p1 p2
     AS.BinOpMul -> applyBinOp mulOp p1 p2
     AS.BinOpMod -> applyBinOp modOp p1 p2
+    AS.BinOpDiv -> applyBinOp divOp p1 p2
     AS.BinOpShiftLeft -> bvBinOp CCE.BVShl p1 p2
     AS.BinOpShiftRight -> bvBinOp CCE.BVLshr p1 p2
     -- FIXME: What is the difference between BinOpDiv and BinOpDivide?
@@ -1504,6 +1505,9 @@ mulOp = BinaryOperatorBundle CCE.BVMul CCE.NatMul CCE.IntMul
 
 modOp :: BinaryOperatorBundle ext s 'SameK
 modOp = BinaryOperatorBundle (error "BV mod not supported") CCE.NatMod CCE.IntMod
+
+divOp :: BinaryOperatorBundle ext s 'SameK
+divOp = BinaryOperatorBundle (error "BV div not supported") CCE.NatDiv CCE.IntDiv
 
 -- Comparison operators
 
