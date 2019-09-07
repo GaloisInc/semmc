@@ -30,7 +30,7 @@ module SemMC.ASL.Translation.Preprocess
   , SigM
   , runSigM
   , buildSigState
-  , SigException
+  , SigException(..)
   , Callable(..)
   , Definitions(..)
   , bitsToInteger
@@ -71,7 +71,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
-import Control.Concurrent
+import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
 
 import System.IO.Unsafe -- FIXME: For debugging
 
@@ -196,15 +196,15 @@ globalStructTypes =
   , ("EDSCRType", bits ["NS", "HDE", "ITE", "ITO", "SDD", "MA", "TXfull"]
       ++ [("STATUS", bit 6), ("EL", bit 2), ("RW", bit 4)])
   , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB", "M",
-                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E", "nTWE", "nTWI"])
+                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E", "nTWE", "nTWI", "ITD"])
   
   , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I", "SED", "ITD"])
   , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H", "DC", "VM", "PTW",
-                      "TWE", "TDRA", "TWI", "BSU"])
+                      "TWE", "TDRA", "TWI"] ++ [("BSU", bit 2)])
   , ("HDCRType", bits ["TDE", "TDRA", "TDOSA", "TDA"])
   , ("MDCRType", bits ["TDE", "SDD", "TDRA", "TDOSA", "TDA"] ++ [("SPD32", bit 2)])
   , ("MDSCRType", bits ["KDE", "MDE", "TDRA", "TDOSA", "SS", "TDCC"])
-  , ("CPACRType", bits ["ASEDIS", "TTA"] ++ [("FPEN", bit 2), ("cp10", bit 2)])
+  , ("CPACRType", bits ["ASEDIS", "TTA", "TCDIS", "TRCDIS"] ++ [("FPEN", bit 2), ("cp10", bit 2)])
   , ("CNTKCTLType", [("EL0PTEN", bit 1)])
   , ("DBGDSCRextType", bits ["MDBGen", "UDCCdis"] ++ [("MOE", bit 4)])
   , ("TTBCRType", bits ["EAE", "N"])
@@ -213,7 +213,7 @@ globalStructTypes =
   , ("SDLRType", bits ["DLK"])
   , ("PRCRType", bits ["CORENPDRQ"])
   , ("HTCRType", bits ["T0SZ"])
-  , ("TCRType", bits ["TG0"])
+  , ("TCRType", [("TG0", bit 2)])
   , ("DSPSRType", bits ["SS"])
   , ("NSACRType", bits ["NSASEDIS", "cp10"])
   , ("FPCRType_Struct", [("Len", bit 3), ("Stride", bit 2)])
@@ -866,7 +866,7 @@ data SigException = TypeNotFound T.Text
                   | VariableNotFound T.Text
                   | WrongType T.Text T.Text
                   | StructMissingField T.Text T.Text
-                  | UnsupportedExpr AS.Expr
+                  | UnsupportedSigExpr AS.Expr
   deriving (Eq, Show)
 
 storeType :: T.Text -> UserType tp -> SigM ext f ()
@@ -1199,7 +1199,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
           Nothing -> return []
           Just varType -> return [(mkStructMemberName structName memberName, varType)]
       return $ concat mVarTypes
-    AS.ExprMemberBits _ _ -> E.throwError $ UnsupportedExpr expr
+    AS.ExprMemberBits _ _ -> E.throwError $ UnsupportedSigExpr expr
     _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
@@ -1329,7 +1329,7 @@ applyTypeEnvir :: TypeEnvir -> AS.Type -> AS.Type
 applyTypeEnvir env t = case applyTypeSynonyms t of
   AS.TypeFun "bits" e -> case exprToInt env e of
     Just i -> AS.TypeFun "bits" (AS.ExprLitInt i)
-    Nothing -> error $ "Missing expected type variable: " <> show t <> " in environment: " <> show env
+    Nothing -> X.throw $ CannotStaticallyEvaluateType t env
   _ -> t
 
 
@@ -1450,9 +1450,6 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
                                     , procTypeEnvir = emptyTypeEnvir
                                     , procArgs = []
                                     }
-      sigMap <- callableSignatureMap <$> RWS.get
-      mapM_ computeSignature' (Map.keys sigMap)
-
       return (Some (SomeProcedureSignature pSig), instStmts)
 
 expandStmts :: (AS.Stmt -> [AS.Stmt]) -> AS.Stmt -> [AS.Stmt]
@@ -1516,21 +1513,11 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ AS.StmtUndefined
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ AS.StmtUndefined
           AS.StmtVarDeclInit (nm,t) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ AS.StmtUndefined
-          AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _, _ , _] -> Just $ AS.StmtUndefined
-          AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _, _] -> Just $ AS.StmtUndefined
           _ -> Nothing
 
         overrideExpr :: AS.Expr -> Maybe AS.Expr
         overrideExpr e = case e of
-          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, _] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [_] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "Ones") [_] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "RRX_C") [x, shift] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "Align") [x, y] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [x] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [] -> defaultOverride
           AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> defaultOverride

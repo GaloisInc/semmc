@@ -16,7 +16,7 @@ import qualified Control.Monad.RWS as RWS
 import qualified Control.Monad.Except as E
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import           Data.Maybe ( fromMaybe, catMaybes )
+import           Data.Maybe ( fromMaybe, catMaybes, listToMaybe )
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
@@ -139,22 +139,24 @@ testInstrs =
 
 main :: IO ()
 main = do
-  sm <- parTranslateAll defaultOptions 200
-  reportStats sm
+  sm <- runWithFilters defaultOptions
+  let opts = defaultStatOptions {
+        reportKnownExceptions = True,
+        reportSucceedingInstructions = True}
+  reportStats opts sm
 
-testDefinition :: String -> Int -> IO ()
+testDefinition :: String -> Int -> IO (SigMap)
 testDefinition s startidx = do
   let nm = T.pack s
   let opts = defaultOptions 
   sig <- runWithFilters (opts  { optFilters = translateOnlyFun nm } )
   case Map.lookup nm (sMap sig) of
-    Just _ -> return ()
+    Just _ -> return sig
     Nothing -> error $ "Translation failed to discover function: " <> show nm
 
-testInstruction :: String -> String -> IO ()
-testInstruction instr enc = do
-  _ <- runWithFilters (defaultOptions { optFilters = translateOnlyInstr (T.pack instr, T.pack enc) })
-  return ()
+testInstruction :: TranslatorOptions -> String -> String -> IO (SigMap)
+testInstruction opts instr enc = do
+  runWithFilters (opts { optFilters = translateOnlyInstr (T.pack instr, T.pack enc) })
 
 translateAll :: IO (SigMap)
 translateAll = do
@@ -207,39 +209,34 @@ mergeInstrExceptions sms@(s : _) =
          , sigEnv = sigEnv s
          }
 
- 
-
-filterOnlyTranslate :: Filters
-filterOnlyTranslate = Filters
-  (\_ -> True)
-  (\_ -> True)
-  (\_ -> False)
-  (\_ -> False)
+noFilter :: Filters
+noFilter = Filters (\_ -> \_ -> True) (\_ -> True) (\_ -> \_ -> True) (\_ -> True)
     
 filterStalls :: Filters
 filterStalls = Filters
+  (\_ -> \_ -> True)
   (\_ -> True)
-  (\_ -> True)
-  (\nm -> not $ List.elem nm stalledDefs)
+  (\_ -> \nm -> not $ List.elem nm stalledDefs)
   (\_ -> True)
 
 filterIgnored :: Filters
 filterIgnored = Filters
-  (\nm -> not $ List.elem nm ignoredDefs)
+  (\_ -> \nm -> not $ List.elem nm ignoredDefs)
   (\(InstructionIdent nm enc _) -> not $ List.elem (nm, enc) ignoredInstrs)
-  (\_ -> True) (\_ -> True)
+  (\_ -> \_ -> True) (\_ -> True)
 
 translateOnlyFun :: T.Text -> Filters
 translateOnlyFun fnm = Filters
-  (\nm -> (nm == fnm) || (not $ List.elem nm ignoredDefs))
+  (\_ -> \nm -> (nm == fnm) || (not $ List.elem nm ignoredDefs))
   (\(InstructionIdent nm enc _) -> not $ List.elem (nm, enc) ignoredInstrs)
-  (\nm -> nm == fnm) (\_ -> False)
+  (\_ -> \nm -> nm == fnm) (\_ -> False)
 
 translateOnlyInstr :: (T.Text, T.Text) -> Filters
-translateOnlyInstr fnm = Filters
-  (\nm -> False)
-  (\(InstructionIdent nm enc _) -> (nm, enc) == fnm)
-  (\nm -> False) (\(InstructionIdent nm enc _) -> (nm, enc) == fnm)
+translateOnlyInstr inm = Filters
+  (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
+  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
+  (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
+  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
 
 logMsg :: String -> MSS.StateT SigMap IO ()
 logMsg msg = do
@@ -248,21 +245,21 @@ logMsg msg = do
   E.when verbose $ MSS.lift $ putStrLn msg
   
 
-isFunFilteredOut :: T.Text -> MSS.StateT SigMap IO Bool
-isFunFilteredOut fnm = do
+isFunFilteredOut :: InstructionIdent -> T.Text -> MSS.StateT SigMap IO Bool
+isFunFilteredOut inm fnm = do
   test <- MSS.gets (funFilter . optFilters . sOptions)
-  return $ not $ test fnm
+  return $ not $ test inm fnm
 
 isInstrFilteredOut :: InstructionIdent -> MSS.StateT SigMap IO Bool
 isInstrFilteredOut inm = do
   test <- MSS.gets (instrFilter . optFilters . sOptions)
   return $ not $ test inm
 
-isFunTransFilteredOut :: T.Text -> MSS.StateT SigMap IO Bool
-isFunTransFilteredOut fnm = do
+isFunTransFilteredOut :: InstructionIdent -> T.Text -> MSS.StateT SigMap IO Bool
+isFunTransFilteredOut inm fnm = do
   test <- MSS.gets (funTranslationFilter . optFilters . sOptions)
   skipTranslation <- MSS.gets (optSkipTranslation . sOptions)
-  return $ (not $ test fnm) || skipTranslation
+  return $ (not $ test inm fnm) || skipTranslation
 
 isInstrTransFilteredOut :: InstructionIdent -> MSS.StateT SigMap IO Bool
 isInstrTransFilteredOut inm = do
@@ -299,31 +296,114 @@ runWithFilters opts = do
   runWithFilters' opts aslInsts aslDefs
                                                   
 
-reportStats :: SigMap -> IO ()
-reportStats sm = do
-  putStrLn $ "Failing instructions:"
-  _ <- Map.traverseWithKey (\ident -> \deps ->
-    case Map.lookup ident (instrExcepts sm) of
-      Just e -> do
-       putStrLn $ show ident ++ " failed to translate:"
-       putStrLn $ show e
-      Nothing -> case Map.lookup ident (instrDeps sm) of
-        Just deps -> do
-          let errs = catMaybes $ (\dep -> (\x -> (dep,x)) <$> Map.lookup dep (funExcepts sm)) <$> (Set.toList deps)
+data ExpectedException =
+    CannotMonomorphize T.Text
+  | SymbolicArguments T.Text
+  | NotImplementedYet String
+  | LValSlicedSetters
+  | GlobalArrayOfStructs
+  | MissingFunction String
+  | BadInstructionSpecification T.Text
+  | MissingGlobalDeclaration T.Text
+  | InsufficientStaticTypeInformation
+  | BoolComparisonUnsupported
+  | RealValuesUnsupported
+  | LValSliceUnsupported
+  | ParserError
+  deriving (Eq, Ord, Show)
+
+expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
+expectedExceptions k ex = case ex of
+  SExcept (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _)) -> Just $ ParserError
+  SExcept (TypeNotFound "real") -> Just $ RealValuesUnsupported
+  TExcept (CannotMonomorphizeFunctionCall f) -> Just $ CannotMonomorphize f
+  TExcept (UnsupportedSlice (AS.SliceSingle _)) -> Just $ SymbolicArguments "Slice"
+  TExcept (UnsupportedSlice (AS.SliceRange _ _)) -> Just $ SymbolicArguments "Slice"
+  TExcept (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
+  TExcept (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
+  TExcept (UnboundName "R") -> Just $ LValSlicedSetters
+  TExcept (UnboundName "D") -> Just $ LValSlicedSetters
+  TExcept (UnboundName nm) ->
+    if List.elem nm ["imm32", "index", "m", "mode", "regs", "sz"]
+    then Just $ BadInstructionSpecification nm
+    else Just $ MissingGlobalDeclaration nm
+  TExcept (StructFieldMismatch (AS.ExprMember (AS.ExprIndex _ _) _)) -> Just $ GlobalArrayOfStructs
+  TExcept (MissingFunctionDefinition "UndefinedFault_0") -> Just $ MissingFunction "UndefinedFault_0"
+  TExcept (MissingFunctionDefinition "SignExtend_2") -> Just $ MissingFunction "SignExtend_2"
+  TExcept (MissingFunctionDefinition "Replicate_2") -> Just $ MissingFunction "Replicate_2"
+  TExcept (MissingFunctionDefinition "Replicate_1") -> Just $ MissingFunction "Replicate_1"
+  TExcept (MissingFunctionDefinition "RoundTowardsZero_1") -> Just $ MissingFunction "RoundTowardsZero_1"
+  TExcept (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
+  TExcept (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
+  _ -> Nothing
+
+isUnexpectedException :: ElemKey -> TranslatorException -> Bool
+isUnexpectedException k e = expectedExceptions k e == Nothing
+
+data StatOptions = StatOptions
+  { reportKnownExceptions :: Bool
+  , reportSucceedingInstructions :: Bool
+  , reportAllExceptions :: Bool
+  }
+
+defaultStatOptions :: StatOptions
+defaultStatOptions = StatOptions
+  { reportKnownExceptions = False
+  , reportSucceedingInstructions = False
+  , reportAllExceptions = False
+  }
+
+reportStats :: StatOptions -> SigMap -> IO ()
+reportStats sopts sm = do
+  putStrLn $ "Unexpected exceptions:"
+  _ <- Map.traverseWithKey (\ident -> \e ->
+      E.when (unexpected (KeyInstr ident) e) $ do
+        putStrLn $ prettyIdent ident ++ " failed to translate:"
+        putStrLn $ show e) (instrExcepts sm)
+  putStrLn "----------------------"     
+  _ <- Map.traverseWithKey (\ident -> \deps -> do
+          let errs' = catMaybes $ (\dep -> (\x -> (dep,x)) <$> Map.lookup dep (funExcepts sm)) <$> (Set.toList deps)
+          let errs = filter (\(dep, x) -> unexpected (KeyFun dep) x) errs'
           if null errs then return ()
           else do
-            putStrLn $ show ident ++ " has failing dependencies:"
-            mapM_ (\(dep, err) -> putStrLn $ show dep <> ":" <> show err) errs
-        _ -> return ()) (instrDeps sm)
-  putStrLn $ "Total instructions inspected: \n" <> show (Map.size $ instrDeps sm)
-  putStrLn $ "Number of instructions which raised exceptions: " <> show (Map.size $ instrDeps sm)
-  putStrLn $ "Instructions with no errors in any dependent functions:"
-  _ <- Map.traverseWithKey (\ident -> \deps -> do
+            putStrLn $ prettyIdent ident ++ " has failing dependencies:"
+            mapM_ (\(dep, err) -> putStrLn $ show dep <> ":" <> show err) errs) (instrDeps sm)
+  putStrLn "----------------------"
+  E.when (reportKnownExceptions sopts) $ do
+    let expectedInstrs = Map.foldrWithKey (addExpected . KeyInstr) Map.empty (instrExcepts sm) 
+    let expected = Map.foldrWithKey (addExpected . KeyFun) expectedInstrs (funExcepts sm)
+
+    _ <- Map.traverseWithKey (\ex -> \ks -> do
+         putStrLn $ "Failures due to known exception: " <> show ex
+         putStrLn "----------------------"
+         mapM_ (\k -> putStrLn $ prettyKey k) ks
+         putStrLn "") expected
+    return ()
+  
+  putStrLn $ "Total instructions inspected: " <> show (Map.size $ instrDeps sm)
+  putStrLn $ "Number of instructions which raised exceptions: " <> show (Map.size $ instrExcepts sm)
+  putStrLn "----------------------"
+  E.when (reportSucceedingInstructions sopts) $
+    putStrLn $ "Instructions with no errors in any dependent functions:"
+  r <- Map.traverseMaybeWithKey (\ident -> \deps -> do
     if not (Map.member ident (instrExcepts sm)) &&
        Set.null (Set.filter (\dep -> Map.member dep (funExcepts sm)) deps) 
-    then putStrLn $ show ident
-    else return ()) (instrDeps sm)
-  return ()
+    then do
+      E.when (reportSucceedingInstructions sopts) $ putStrLn $ prettyIdent ident
+      return $ Just ident
+    else return Nothing) (instrDeps sm)
+  putStrLn $ "Number of successfully translated functions: " <> show (Map.size $ r)
+
+  where
+    prettyIdent (InstructionIdent nm enc iset) = show nm <> " " <> show enc <> " " <> show iset
+    prettyKey k = case k of
+      KeyInstr ident -> "Instruction: " <> prettyIdent ident
+      KeyFun nm -> "Function: " <> show nm
+    unexpected k err =
+      if reportAllExceptions sopts then True else isUnexpectedException k err
+    addExpected nm err = case expectedExceptions nm err of
+      Just e -> Map.insertWith Set.union e (Set.singleton nm)
+      Nothing -> id
   
 data TranslatorException =
     TExcept TranslationException
@@ -364,20 +444,21 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
 
           logMsg $ "--------------------------------"
           logMsg "Translating functions: "
-          alldeps <- mapM (translationLoop defs) (Map.assocs deps)
+          alldeps <- mapM (translationLoop instrIdent defs) (Map.assocs deps)
           let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
           MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
     _ -> error "Panic"
 
-data Filters = Filters { funFilter :: T.Text -> Bool
+data Filters = Filters { funFilter :: InstructionIdent -> T.Text -> Bool
                        , instrFilter :: InstructionIdent -> Bool
-                       , funTranslationFilter :: T.Text -> Bool
+                       , funTranslationFilter :: InstructionIdent -> T.Text -> Bool
                        , instrTranslationFilter :: InstructionIdent -> Bool
                        }
 
 data ElemKey =
    KeyInstr InstructionIdent
  | KeyFun T.Text
+ deriving (Eq, Ord, Show)
 
 data TranslatorOptions = TranslatorOptions
   { optVerbose :: Bool
@@ -385,6 +466,7 @@ data TranslatorOptions = TranslatorOptions
   , optNumberOfInstructions :: Maybe Int
   , optFilters :: Filters
   , optSkipTranslation :: Bool
+  , optCollectExceptions :: Bool
   }
 
 defaultOptions :: TranslatorOptions
@@ -392,8 +474,19 @@ defaultOptions = TranslatorOptions
   { optVerbose = True
   , optStartIndex = 0
   , optNumberOfInstructions = Nothing
-  , optFilters = filterStalls -- avoid known bad functions
+  , optFilters = noFilter
   , optSkipTranslation = True
+  , optCollectExceptions = True
+  }
+
+doTranslationOptions :: TranslatorOptions
+doTranslationOptions = TranslatorOptions
+  { optVerbose = True
+  , optStartIndex = 0
+  , optNumberOfInstructions = Nothing
+  , optFilters = filterStalls
+  , optSkipTranslation = False
+  , optCollectExceptions = True
   }
 
 -- FIXME: Seperate this into RWS
@@ -423,9 +516,12 @@ liftSigM k f = do
       return $ Left err
 
 collectExcept :: ElemKey -> TranslatorException -> MSS.StateT SigMap IO ()
-collectExcept k e = case k of
-  KeyInstr ident -> MSS.modify' $ \s -> s { instrExcepts = Map.insert ident e (instrExcepts s) }
-  KeyFun fun -> MSS.modify' $ \s -> s { funExcepts = Map.insert fun e (funExcepts s) }
+collectExcept k e = do
+  collectExceptions <- MSS.gets (optCollectExceptions . sOptions)
+  if collectExceptions then case k of 
+    KeyInstr ident -> MSS.modify' $ \s -> s { instrExcepts = Map.insert ident e (instrExcepts s) }
+    KeyFun fun -> MSS.modify' $ \s -> s { funExcepts = Map.insert fun e (funExcepts s) }
+  else X.throw e
 
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
@@ -437,30 +533,30 @@ catchIO k f = do
     Right err -> (\_ -> Nothing) <$> collectExcept k err
   
 
-translationLoop :: Definitions arch -> (T.Text, TypeEnvir) -> MSS.StateT SigMap IO (Set.Set T.Text)
-translationLoop defs (fnname, env) = do
+translationLoop :: InstructionIdent
+                -> Definitions arch
+                -> (T.Text, TypeEnvir)
+                -> MSS.StateT SigMap IO (Set.Set T.Text)
+translationLoop fromInstr defs (fnname, env) = do
   let finalName = (mkFinalFunctionName env fnname)
-  filteredOut <- isFunFilteredOut finalName
-  if filteredOut
-  then return Set.empty
-  else do
-    fdeps <- MSS.gets funDeps
-    case Map.lookup finalName fdeps of
-      Just deps -> return deps
-      _ -> do
-         logMsg $ show finalName ++ " definition:"
-         case Map.lookup fnname (defSignatures defs) of
-             Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
-                   logMsg $ "--------------------------------"
-                   MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
-                   deps <- processFunction finalName sig stmts defs
-                   logMsg $ "--------------------------------"
-                   MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
-                   alldeps <- mapM (translationLoop defs) (Map.assocs deps)
-                   let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
-                   MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
-                   return alldepsSet
-             _ -> error $ "Missing definition for:" <> (show fnname)
+  fdeps <- MSS.gets funDeps
+  case Map.lookup finalName fdeps of
+    Just deps -> return deps
+    _ -> do
+      filteredOut <- isFunFilteredOut fromInstr finalName
+      if filteredOut
+      then return Set.empty
+      else do
+       case Map.lookup fnname (defSignatures defs) of
+           Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
+                 MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
+                 deps <- processFunction fromInstr finalName sig stmts defs
+                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
+                 alldeps <- mapM (translationLoop fromInstr defs) (Map.assocs deps)
+                 let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
+                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
+                 return alldepsSet
+           _ -> error $ "Missing definition for:" <> (show fnname)
 
 -- Debugging function for determining what syntactic forms
 -- actually exist
@@ -509,19 +605,20 @@ processInstruction instr pSig stmts defs = do
         return $ fromMaybe Map.empty mdep
     Nothing -> return Map.empty
 
-processFunction :: T.Text
+processFunction :: InstructionIdent
+                -> T.Text
                 -> SomeSignature ret
                 -> [AS.Stmt]
                 -> Definitions arch
                 -> MSS.StateT SigMap IO (Map.Map T.Text TypeEnvir)
-processFunction fnName sig stmts defs =
+processFunction fromInstr fnName sig stmts defs =
   case sig of
     SomeFunctionSignature fSig -> do
       handleAllocator <- CFH.newHandleAllocator
       mf <- catchIO (KeyFun fnName) $ functionToCrucible defs fSig handleAllocator stmts
       case mf of
         Just f -> do
-          filteredOut <- isFunTransFilteredOut fnName
+          filteredOut <- isFunTransFilteredOut fromInstr fnName
           if filteredOut
           then return (funcDepends f)
           else do
@@ -540,7 +637,7 @@ processFunction fnName sig stmts defs =
       mp <- catchIO (KeyFun fnName) $ procedureToCrucible defs pSig handleAllocator stmts
       case mp of
         Just p -> do
-          filteredOut <- isFunTransFilteredOut fnName
+          filteredOut <- isFunTransFilteredOut fromInstr fnName
           if filteredOut
           then return (procDepends p)
           else do

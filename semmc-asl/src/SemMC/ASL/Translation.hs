@@ -373,6 +373,7 @@ translateStatement ov sig stmt
       AS.StmtTry {} -> error "Try statements are not implemented"
       AS.StmtThrow err -> do
         CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit err))
+      AS.StmtDefEnum _ _ -> X.throw $ UNIMPLEMENTED "local enums"
       _ -> error (show stmt)
 
 -- | Translate a for statement into Crucible
@@ -631,11 +632,7 @@ translateAssignment' ov lval atom atomext mE = do
         let lv' = AS.LValMember ref e in
           translateAssignment' ov lv' aslice TypeBasic Nothing) ibits
 
-    -- This never appears
-    AS.LValMemberArray _ _ ->
-      error $ "Unsupported LVal: " ++ show lval
-
-    _ -> error $ "Unsupported LVal: " ++ show lval
+    _ -> X.throw $ UnsupportedLVal lval
     where assignTupleElt :: [AS.LValExpr]
                          -> [ExtendedTypeData]
                          -> Ctx.Assignment WT.BaseTypeRepr ctx
@@ -1038,13 +1035,10 @@ unifyArgs ov fnname args rets targetRet = do
       unifyRet outerEnv rets targetRet
       return atoms
   let dvars = concat $ map dependentVarsOfType rets ++ map (\((_,t), _) -> dependentVarsOfType t) args
-  let env = fromListTypeEnvir $ map (\nm -> case lookupTypeEnvir nm tenv of {Just i -> (nm,i)}) dvars
+  listenv <- mapM (getConcreteValue tenv) dvars
+  let env = fromListTypeEnvir listenv
   hdl <- MS.gets tsHandle
   MST.liftST (STRef.modifySTRef hdl (Map.insert fnname env))
-
-  mapM_ (\nm -> case lookupTypeEnvir nm tenv of {Just _ -> return (); Nothing ->
-          error $ "Could not finalize polymorphic type environment for:" <> (show fnname)}) dvars
-
   retsT <- mapM (\t -> fst <$> withTypeEnvir tenv (translateType t)) rets
   retT <- case map asBaseType retsT of
             [] -> return Nothing
@@ -1065,6 +1059,10 @@ unifyArgs ov fnname args rets targetRet = do
           -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
     unifyRet outerEnv [t] (Just targetRet) = unifyType t targetRet
     unifyRet _ _ _ = return ()
+
+    getConcreteValue env nm = case lookupTypeEnvir nm env of
+      Just i -> return (nm, i)
+      _ -> X.throw $ CannotMonomorphizeFunctionCall fnname
 
 
 translateIf :: Overrides arch
@@ -1113,9 +1111,9 @@ matchPat :: AS.Expr -> AS.CasePattern -> AS.Expr
 matchPat expr (AS.CasePatternInt i) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitInt i)
 matchPat expr (AS.CasePatternBin bv) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitBin bv)
 matchPat expr (AS.CasePatternIdentifier ident) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny ident))
-matchPat _ (AS.CasePatternMask _) = error "bitmask pattern unimplemented"
-matchPat _ AS.CasePatternIgnore = error "ignore pattern unimplemented"
-matchPat _ (AS.CasePatternTuple _) = error "tuple pattern unimplemented"
+matchPat _ (AS.CasePatternMask _) = X.throw $ UNIMPLEMENTED "bitmask pattern unimplemented"
+matchPat _ AS.CasePatternIgnore = X.throw $ UNIMPLEMENTED "ignore pattern unimplemented"
+matchPat _ (AS.CasePatternTuple _) = X.throw $ UNIMPLEMENTED "tuple pattern unimplemented"
 
 assertAtomType :: AS.Expr
                -- ^ Expression that was translated
@@ -1268,6 +1266,7 @@ translateExpr' ov expr mTy
         Some ty <- translateType t
         mkAtom (getDefaultValue ty)
 
+      AS.ExprLitMask _ -> X.throw $ UNIMPLEMENTED "bitmasking expression"
       _ -> error (show expr)
   where
     mkAtom e = do
@@ -1336,6 +1335,7 @@ getSliceRange slice = do
         Just i <- exprToInt env e
       , Just someRepr <- WT.someNat i ->
         return (someRepr, someRepr)
+    AS.SliceOffset _ _ -> X.throw $ UNIMPLEMENTED "slice offsets"
     _ -> X.throw $ UnsupportedSlice slice
 
   
@@ -1587,6 +1587,11 @@ bvBinOp con (e1, a1) (e2, a2) =
         CT.BVRepr nr -> do
           let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
           Some <$> CCG.mkAtom (CCG.App (con nr a1' (CCG.AtomExpr a2)))
+        CT.IntegerRepr -> do
+          let bvrepr = WT.knownNat @64
+          let a1' = CCG.App $ CCE.IntegerToBV bvrepr (CCG.AtomExpr a1)
+          let a2' = CCG.App $ CCE.IntegerToBV bvrepr (CCG.AtomExpr a2)
+          Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger bvrepr (CCG.App (con bvrepr a1' a2'))))
         _ -> X.throw (ExpectedBVType e1 (CCG.typeOfAtom a2))
     _ -> X.throw (ExpectedBVType e1 (CCG.typeOfAtom a1))
 
@@ -1666,21 +1671,6 @@ overrides = Overrides {..}
           _ -> Nothing
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s)))
         overrideExpr e = case e of
-          AS.ExprBinOp AS.BinOpShiftLeft (AS.ExprLitInt i) (AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [e]) -> Just $ do
-            Some atom <- translateExpr overrides e
-            case CCG.typeOfAtom atom of
-              CT.BVRepr nr -> do
-                let bitsForShift = 2 ^ (WT.natValue nr) - 1
-                if | Just (Some bvlen) <- WT.someNat $ bitsForInt i + bitsForShift
-                   , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` bvlen
-                   , Just WT.LeqProof <- (nr `WT.addNat` (WT.knownNat @1)) `WT.testLeq` bvlen
-                     -> do
-                       let val = CCG.App $ CCE.IntegerToBV bvlen (CCG.App (CCE.IntLit i))
-                       let shift = CCG.App $ CCE.BVZext bvlen nr (CCG.AtomExpr atom)
-                       Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger bvlen (CCG.App $ CCE.BVShl bvlen val shift)))
-              _ -> error "Called UInt on non-bitvector"
-
-
           AS.ExprCall (AS.QualifiedIdentifier _ "UInt")
             [AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ "DBGDIDR")) "WRPs"] -> Just $ do
               --Some e <- lookupVarRef "DBGDIDR_WRPs_UINT"
