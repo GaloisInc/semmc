@@ -49,6 +49,8 @@ executable semmc-asl-genarm
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
                        asl-parser,
+                       mtl,
+                       ilist,
                        containers,
                        crucible,
                        filepath,
@@ -57,7 +59,7 @@ executable semmc-asl-genarm
                        text >= 1 && < 2,
   hs-source-dirs:      tools
   default-language:    Haskell2010
-  ghc-options:         -Wcompat -Wall
+  ghc-options:         -O2 -threaded -rtsopts -Wcompat -Wall
 
 test-suite semmc-asl-tests
   type: exitcode-stdio-1.0
