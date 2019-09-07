@@ -133,24 +133,6 @@ getDefinitions = do
     , defConsts = consts env
     }
 
-computeInstructionSignature :: T.Text
-                            -- ^ name of instruction
-                            -> T.Text
-                            -- ^ name of encoding
-                            -> [AS.Instruction]
-                            -- ^ list of loaded instructinos
-                            -> [AS.Definition]
-                            -- ^ list of loaded definitions
-                            -> Either SigException (Some SomeSignature, [AS.Stmt], Map.Map T.Text (SomeSimpleSignature, Callable))
-computeInstructionSignature instName encName insts defs = execSigM defs $
-  case find (\i -> AS.instName i == instName) insts of
-    Nothing -> error $ "couldn't find instruction " ++ show instName
-    Just i -> do
-      (sig, stmts) <- computeInstructionSignature' i encName
-      sigMap <- callableSignatureMap <$> RWS.get
-      return (sig, stmts, sigMap)
-
-
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
 builtinGlobals =
   [ ("UNDEFINED", Some WT.BaseBoolRepr)
@@ -1442,11 +1424,12 @@ computeFieldType AS.InstructionField{..} = do
 
 computeInstructionSignature' :: AS.Instruction
                              -> T.Text -- ^ name of encoding
+                             -> AS.InstructionSet
                              -> SigM ext f (Some SomeSignature, [AS.Stmt])
-computeInstructionSignature' AS.Instruction{..} encName = do
+computeInstructionSignature' AS.Instruction{..} encName iset = do
   let name = mkInstructionName instName encName
 
-  let mEnc = find (\e -> AS.encName e == encName) instEncodings
+  let mEnc = find (\e -> AS.encName e == encName && AS.encInstrSet e == iset) instEncodings
   case mEnc of
     Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
     Just enc -> do
