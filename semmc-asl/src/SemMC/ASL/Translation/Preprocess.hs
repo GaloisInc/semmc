@@ -590,7 +590,7 @@ foldInstruction :: (T.Text -> AS.Expr -> b -> b) ->
                    (T.Text -> AS.LValExpr -> b -> b) ->
                    (T.Text -> AS.Stmt -> b -> b) ->
                    AS.Instruction -> b -> b
-foldInstruction f' h' g' (AS.Instruction ident instEncodings instPostDecode instExecute) b =
+foldInstruction f' h' g' (AS.Instruction ident instEncodings instPostDecode instExecute _) b =
   let
     f = f' ident
     h = h' ident
@@ -745,8 +745,8 @@ applySyntaxOverridesInstrs ovrs instrs =
   let
     g = applyStmtSyntaxOverride ovrs
     
-    mapInstr (AS.Instruction instName instEncodings instPostDecode instExecute) =
-      AS.Instruction instName (mapEnc <$> instEncodings) (g <$> instPostDecode) (g <$> instExecute)
+    mapInstr (AS.Instruction instName instEncodings instPostDecode instExecute conditional) =
+      AS.Instruction instName (mapEnc <$> instEncodings) (g <$> instPostDecode) (g <$> instExecute) conditional
 
     mapEnc (AS.InstructionEncoding a b c d e f encDecode) =
       AS.InstructionEncoding a b c d e f (g <$> encDecode)
