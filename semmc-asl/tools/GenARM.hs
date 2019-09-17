@@ -40,11 +40,16 @@ import SemMC.ASL.Types
 import Control.Concurrent
 import Control.Concurrent.MVar
 
+import qualified SemMC.ASL.SyntaxTraverse as ASLT
+
 instsFilePath :: FilePath
 instsFilePath = "test/insts.parsed"
 
 defsFilePath :: FilePath
 defsFilePath = "test/defs.parsed"
+
+regsFilePath :: FilePath
+regsFilePath = "test/regs.parsed"
 
 ignoredInstrs :: [(T.Text, T.Text)]
 ignoredInstrs =
@@ -165,7 +170,7 @@ translateAll = do
 
 parTranslateAll :: TranslatorOptions -> Int -> IO (SigMap)
 parTranslateAll opts chunksz = do
-  (aslInsts, aslDefs) <- getASL
+  (aslInsts, aslDefs, _) <- getASL
   let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts
   let (nchunks, _) = length allInstrs `divMod` chunksz
 
@@ -291,7 +296,7 @@ runWithFilters' opts aslInsts aslDefs = do
 
 runWithFilters :: TranslatorOptions -> IO (SigMap)
 runWithFilters opts = do
-  (aslInsts, aslDefs) <- getASL
+  (aslInsts, aslDefs, _) <- getASL
   putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
   runWithFilters' opts aslInsts aslDefs
                                                   
@@ -564,22 +569,27 @@ queryASL :: (T.Text -> AS.Expr -> b -> b) ->
             (T.Text -> AS.LValExpr -> b -> b) ->
             (T.Text -> AS.Stmt -> b -> b) -> b -> IO b
 queryASL f h g b = do
-  (aslInsts, aslDefs) <- getASL
-  return $ foldASL f h g aslDefs aslInsts b
+  (aslInsts, aslDefs, _) <- getASL
+  return $ ASLT.foldASL f h g aslDefs aslInsts b
 
-getASL :: IO ([AS.Instruction], [AS.Definition])
+getASL :: IO ([AS.Instruction], [AS.Definition], [AS.RegisterDefinition])
 getASL = do
   eAslDefs <- AP.parseAslDefsFile defsFilePath
   eAslInsts <- AP.parseAslInstsFile instsFilePath
-  case (eAslInsts, eAslDefs) of
-    (Left err, _) -> do
+  eAslRegs <- AP.parseAslRegsFile regsFilePath
+  case (eAslInsts, eAslDefs, eAslRegs) of
+    (Left err, _, _) -> do
       putStrLn $ "Error loading ASL instructions: " ++ show err
       exitFailure
-    (_, Left err) -> do
+    (_, Left err, _) -> do
       putStrLn $ "Error loading ASL definitions: " ++ show err
       exitFailure
-    (Right aslInsts', Right aslDefs') -> do
-      return $ prepASL (aslInsts', aslDefs')
+    (_, _, Left err) -> do
+      putStrLn $ "Error loading ASL registers: " ++ show err
+      exitFailure
+    (Right aslInsts', Right aslDefs', Right aslRegs') -> do
+      let (aslInsts'', aslDefs'') = prepASL (aslInsts', aslDefs')
+      return (aslInsts'', aslDefs'', aslRegs')
 
 processInstruction :: InstructionIdent
                    -> ProcedureSignature globals init

@@ -60,6 +60,7 @@ import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.Translation.Preprocess
+import qualified SemMC.ASL.SyntaxTraverse as ASLT
 
 import qualified Lang.Crucible.FunctionHandle as FH
 import qualified Lang.Crucible.CFG.Reg as CCR
@@ -930,7 +931,7 @@ dependentVarsOfType t = case t of
   _ -> []
 
 varsOfExpr :: AS.Expr -> [T.Text]
-varsOfExpr e = foldExpr getVar e []
+varsOfExpr e = ASLT.foldExpr getVar e []
   where
     getVar (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) = (:) ident
     getVar _ = id
