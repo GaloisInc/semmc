@@ -29,7 +29,8 @@ where
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Text as T
 import qualified Data.Set as Set
-import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
+import qualified Data.Map as Map
+import           Data.Maybe (maybeToList, catMaybes, fromMaybe, listToMaybe, isJust)
 
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
@@ -38,17 +39,15 @@ import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 -- we are properly handling the register definitions file
 data SyntaxOverrides = SyntaxOverrides { stmtOverrides :: AS.Stmt -> AS.Stmt
                                        , exprOverrides :: AS.Expr -> AS.Expr
-                                       , globalStructTypes :: [(T.Text, [(T.Text, AS.Type)])]
-                                       , globalTypeSynonyms :: [(T.Text, AS.Type)]
-                                       , typedGlobalStructs :: [(T.Text, T.Text)]}
-
-type GlobalInfo = ([(T.Text, [(T.Text, AS.Type)])], [(T.Text, AS.Type)], [(T.Text, T.Text)])
+                                       , typeOverrides :: AS.Type -> AS.Type
+                                       }
 
 applySyntaxOverridesDefs :: SyntaxOverrides -> [AS.Definition] -> [AS.Definition]
 applySyntaxOverridesDefs ovrs defs =
   let
     g = applyStmtSyntaxOverride ovrs
     f = applyExprSyntaxOverride ovrs
+    h = applyTypeSyntaxOverride ovrs
 
 
     -- TODO: For sanity we delete setter definitions which require
@@ -57,23 +56,29 @@ applySyntaxOverridesDefs ovrs defs =
     argName (AS.SetterArg name False) = Just name
     argName _ = Nothing
 
-    updDecls d = if | (name, AS.TypeRef (AS.QualifiedIdentifier _ tname)) <- d
-                    , Just syn <- lookup tname (globalTypeSynonyms ovrs)
-                      -> (name, syn)
-                    | otherwise -> d
+    mapDecl (i, t) = (i, h t)
+
+    mapIxType ix = case ix of
+      AS.IxTypeRange e e' -> AS.IxTypeRange (f e) (f e')
+      _ -> ix
 
     mapDefs d = case d of
       AS.DefCallable qName args rets stmts ->
-        [AS.DefCallable qName args rets (g <$> stmts)]
-      c@AS.DefGetter {} -> callablesFromGetter ovrs g c
+        [AS.DefCallable qName (mapDecl <$> args) (h <$> rets) (g <$> stmts)]
+      AS.DefGetter qName args rets stmts ->
+        [AS.DefCallable (mkGetterName (isJust args) qName)
+         (mapDecl <$> (concat $ maybeToList args)) (h <$> rets) (g <$> stmts)]
       AS.DefSetter qName args rhs stmts -> maybeToList $ do
-        argNames <- sequence (argName <$> args)
-        Just $ AS.DefCallable { callableName = mkSetterName qName
-                       , callableArgs = updDecls <$> (rhs : argNames)
+        argNames <- sequence (argName <$> (concat $ maybeToList args))
+        Just $ AS.DefCallable { callableName = mkSetterName (isJust args) qName
+                       , callableArgs = mapDecl <$> (rhs : argNames)
                        , callableRets = []
                        , callableStmts = g <$> stmts
                        }
-      AS.DefConst i t e -> [AS.DefConst i t (f e)]
+      AS.DefConst i t e -> [AS.DefConst i (h t) (f e)]
+      AS.DefTypeStruct i ds -> [AS.DefTypeStruct i (mapDecl <$> ds)]
+      AS.DefArray i t ixt -> [AS.DefArray i (h t) (mapIxType ixt)]
+      AS.DefVariable i t -> [AS.DefVariable i (h t)]
       _ -> [d]
 
   in concat $ mapDefs <$> defs
@@ -82,40 +87,43 @@ applySyntaxOverridesInstrs :: SyntaxOverrides -> [AS.Instruction] -> [AS.Instruc
 applySyntaxOverridesInstrs ovrs instrs =
   let
     g = applyStmtSyntaxOverride ovrs
+    f = applyExprSyntaxOverride ovrs
 
     mapInstr (AS.Instruction instName instEncodings instPostDecode instExecute conditional) =
       AS.Instruction instName (mapEnc <$> instEncodings) (g <$> instPostDecode) (g <$> instExecute) conditional
 
-    mapEnc (AS.InstructionEncoding a b c d e f encDecode) =
-      AS.InstructionEncoding a b c d e f (g <$> encDecode)
+    mapEnc (AS.InstructionEncoding a b c d encGuard encUnpredictable encDecode) =
+      AS.InstructionEncoding a b c d (f <$> encGuard) encUnpredictable (g <$> encDecode)
 
   in mapInstr <$> instrs
 
 
 prepASL :: ([AS.Instruction], [AS.Definition])
-        -> GlobalInfo
+        -> [(T.Text, AS.Type)]
         -> ([AS.Instruction], [AS.Definition])
-prepASL (instrs, defs) gInfo =
-  let ovrs = mkSyntaxOverrides defs gInfo
+prepASL (instrs, defs) gSyns =
+  let ovrs = mkSyntaxOverrides defs gSyns
   in (applySyntaxOverridesInstrs ovrs instrs, applySyntaxOverridesDefs ovrs defs)
 
 
 
-mkSyntaxOverrides :: [AS.Definition] -> GlobalInfo -> SyntaxOverrides
-mkSyntaxOverrides defs (globalStructTypes, globalTypeSynonyms, typedGlobalStructs) =
+mkSyntaxOverrides :: [AS.Definition] -> [(T.Text, AS.Type)] -> SyntaxOverrides
+mkSyntaxOverrides defs globalTypeSynonyms =
   let getters = Set.fromList $ catMaybes $ getterName <$> defs
       setters = Set.fromList $ catMaybes $ setterName <$> defs
 
       getterName d = case d of
-        AS.DefGetter qName args [_] _ ->
-          Just $ mkFunctionName (mkGetterName qName) (length args)
-        AS.DefGetter (AS.QualifiedIdentifier _ name) _ _ _ ->
-          error $ "Unexpected getter for: " <> T.unpack name
+        AS.DefGetter qName (Just args) _ _ ->
+          Just $ mkFunctionName (mkGetterName True qName) (length args)
+        AS.DefGetter qName Nothing _ _ ->
+          Just $ mkFunctionName (mkGetterName False qName) 0
         _ -> Nothing
 
       setterName d = case d of
-        AS.DefSetter qName args _ _ ->
-           Just $ mkFunctionName (mkSetterName qName) (length args + 1)
+        AS.DefSetter qName (Just args) _ _ ->
+           Just $ mkFunctionName (mkSetterName True qName) (length args + 1)
+        AS.DefSetter qName Nothing _ _ ->
+           Just $ mkFunctionName (mkSetterName False qName) 1
         _ -> Nothing
 
       getSliceExpr slice = case slice of
@@ -127,106 +135,72 @@ mkSyntaxOverrides defs (globalStructTypes, globalTypeSynonyms, typedGlobalStruct
 
       stmtOverrides stmt = case stmt of
         AS.StmtAssign (AS.LValArrayIndex (AS.LValVarRef qName) slices) rhs ->
-          if Set.member (mkFunctionName (mkSetterName qName) (length slices + 1)) setters then
-            AS.StmtCall (mkSetterName qName) (rhs : map getSliceExpr slices)
+          if Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters then
+            AS.StmtCall (mkSetterName True qName) (rhs : map getSliceExpr slices)
           else stmt
         AS.StmtAssign (AS.LValVarRef qName) rhs ->
-          if Set.member (mkFunctionName (mkSetterName qName) 1) setters then
-            AS.StmtCall (mkSetterName qName) [rhs]
+          if Set.member (mkFunctionName (mkSetterName False qName) 1) setters then
+            AS.StmtCall (mkSetterName False qName) [rhs]
           else stmt
         _ -> stmt
 
-      exprOverrides' expr mmem = case expr of
+      exprOverrides expr = case expr of
         AS.ExprIndex (AS.ExprVarRef qName) slices ->
-          if Set.member (mkFunctionName (mkGetterName qName) (length slices)) getters then
-            Just $ AS.ExprCall (mkGetterNameField qName mmem) (map getSliceExpr slices)
-          else Nothing
+          if Set.member (mkFunctionName (mkGetterName True qName) (length slices)) getters then
+            AS.ExprCall (mkGetterName True qName) (map getSliceExpr slices)
+          else expr
         AS.ExprVarRef qName ->
-          if Set.member (mkFunctionName (mkGetterName qName) 0) getters then
-            Just $ AS.ExprCall (mkGetterNameField qName mmem) []
-          else Nothing
+          if Set.member (mkFunctionName (mkGetterName False qName) 0) getters then
+            AS.ExprCall (mkGetterName False qName) []
+          else expr
+        _ -> expr
+
+      typeSynonyms = catMaybes $ typeSyn <$> defs
+      typeSyn d = case d of
+        AS.DefTypeAlias nm t -> Just (nm, t)
         _ -> Nothing
 
-      exprOverrides expr = case expr of
-        AS.ExprMember e mem | Just e' <- exprOverrides' e (Just mem) -> e'
-        _ | Just e' <- exprOverrides' expr Nothing -> e'
-        _ -> expr
-  in SyntaxOverrides stmtOverrides exprOverrides globalStructTypes globalTypeSynonyms typedGlobalStructs
+      typeSynMap = Map.fromList (typeSynonyms ++ globalTypeSynonyms)
 
+      typeOverrides t = case t of
+        AS.TypeRef (AS.QualifiedIdentifier _ nm) -> case Map.lookup nm typeSynMap of
+          Just t' -> t'
+          Nothing -> t
+        _ -> t
 
--- | Transform a function that returns a struct type
--- into one that instead returns a specific member @mem@ of the resulting struct
-collapseReturn :: SyntaxOverrides -> T.Text -> [AS.Stmt] -> [AS.Stmt]
-collapseReturn ovrs mem stmts =
-  let assignLast finident stmts' =
-        reverse $ case reverse stmts' of
-          AS.StmtAssign (AS.LValVarRef lvident) eident
-            : rest | lvident == finident
-                   , checkValidField ovrs eident mem ->
-                AS.StmtReturn (Just $ AS.ExprMember eident mem) : rest
-          end@(AS.StmtCall (AS.QualifiedIdentifier q "Unreachable") [] : rest) ->
-            end
-          AS.StmtReturn (Just eident) : rest
-            | checkValidField ovrs eident mem ->
-              AS.StmtReturn (Just $ AS.ExprMember eident mem) : rest
-          _ -> error $ "Failed to collapse getter structure: " <> show stmts <> " " <> show mem
-      mapCases finident cases = case cases of
-        AS.CaseWhen pat me stmts' -> AS.CaseWhen pat me (assignLast finident stmts')
-        AS.CaseOtherwise stmts' -> AS.CaseOtherwise (assignLast finident stmts')
+  in SyntaxOverrides stmtOverrides exprOverrides typeOverrides
 
-  in reverse $ case reverse stmts of
-    AS.StmtReturn (Just (AS.ExprVarRef finident)) : cond : rest ->
-      case cond of
-        AS.StmtIf tests body ->
-          AS.StmtIf ((\(e, stmts') -> (e, assignLast finident stmts')) <$> tests)
-                    (assignLast finident <$> body) : rest
-        AS.StmtCase e alts ->
-          AS.StmtCase e (mapCases finident <$> alts) : rest
-        _ -> error $ "Unexpected statement structure: " <> show stmts
-    AS.StmtReturn (Just (AS.ExprCall qName args)) : rest ->
-      case getterSuffixOf qName of
-        Just qName' ->
-          AS.StmtReturn (Just (AS.ExprCall (mkGetterNameField qName' (Just mem)) args)) : rest
-        Nothing -> error $ "Unexpected statement structure: " <> show stmts
-    _ -> error $ "Unexpected statement structure: " <> show stmts
+applyTypeSyntaxOverride :: SyntaxOverrides -> AS.Type -> AS.Type
+applyTypeSyntaxOverride ovrs t =
+  let
+    f = applyExprSyntaxOverride ovrs
+    h = applyTypeSyntaxOverride ovrs
 
+    mapSlice slice = case slice of
+      AS.SliceSingle e -> AS.SliceSingle (f e)
+      AS.SliceOffset e e' -> AS.SliceOffset (f e) (f e')
+      AS.SliceRange e e' -> AS.SliceRange (f e) (f e')
 
-callablesFromGetter :: SyntaxOverrides -> (AS.Stmt -> AS.Stmt) -> AS.Definition -> [AS.Definition]
-callablesFromGetter ovrs g
-  (AS.DefGetter qName args [AS.TypeRef (AS.QualifiedIdentifier _ tname)] stmts) =
-  case lookup tname (globalStructTypes ovrs) of
-    Just fields -> (\(fnm, ftype) -> mkCallable (Just fnm) ftype) <$> fields
-    _ -> case lookup tname (globalTypeSynonyms ovrs) of
-      Just syn -> [mkCallable Nothing syn]
-      _ -> error $
-             "Missing struct definition for getter:" <> show qName <>
-             " and type " <> T.unpack tname
-  where
-    getStatements (Just fnm) = collapseReturn ovrs fnm (g <$> stmts)
-    getStatements Nothing = g <$> stmts
-    mkCallable mfnm ftype =
-      AS.DefCallable { callableName = mkGetterNameField qName mfnm
-                     , callableArgs = args
-                     , callableRets = [ftype]
-                     , callableStmts = getStatements mfnm
-                     }
-callablesFromGetter _ g (AS.DefGetter qName args rets stmts) =
-  [AS.DefCallable (mkGetterName qName) args rets (g <$> stmts)]
-callablesFromGetter _ _ _ = error "Unexpected Definition."
+    mapField field = case field of
+      AS.RegField i slices -> AS.RegField i (mapSlice <$> slices)
 
-checkValidField :: SyntaxOverrides -> AS.Expr -> T.Text -> Bool
-checkValidField ovrs (AS.ExprVarRef (AS.QualifiedIdentifier _ struct)) mem =
-  fromMaybe (False) $ do
-    tp <- lookup struct (typedGlobalStructs ovrs)
-    mems <- lookup tp (globalStructTypes ovrs)
-    _ <- lookup mem mems
-    return True
-checkValidField _ _ _ = False
+    mapIxType ix = case ix of
+      AS.IxTypeRange e e' -> AS.IxTypeRange (f e) (f e')
+      _ -> ix
+
+    t' = typeOverrides ovrs t
+  in case t' of
+    AS.TypeFun i e -> AS.TypeFun i (f e)
+    AS.TypeOf e -> AS.TypeOf (f e)
+    AS.TypeReg i fs -> AS.TypeReg i (mapField <$> fs)
+    AS.TypeArray t ixt -> AS.TypeArray (h t) (mapIxType ixt)
+    _ -> t'
 
 applyExprSyntaxOverride :: SyntaxOverrides -> AS.Expr -> AS.Expr
 applyExprSyntaxOverride ovrs expr =
   let
     f = applyExprSyntaxOverride ovrs
+    h = applyTypeSyntaxOverride ovrs
     mapSlice slice = case slice of
       AS.SliceSingle e -> AS.SliceSingle (f e)
       AS.SliceOffset e e' -> AS.SliceOffset (f e) (f e')
@@ -250,7 +224,38 @@ applyExprSyntaxOverride ovrs expr =
     AS.ExprTuple es -> AS.ExprTuple (f <$> es)
     AS.ExprIf pes e -> AS.ExprIf ((\(x,y) -> (f x, f y)) <$> pes) (f e)
     AS.ExprMember e i -> AS.ExprMember (f e) i
+    AS.ExprUnknown t -> AS.ExprUnknown (h t)
     _ -> expr'
+
+applyStmtSyntaxOverride :: SyntaxOverrides -> AS.Stmt -> AS.Stmt
+applyStmtSyntaxOverride ovrs stmt =
+  let
+    g = applyStmtSyntaxOverride ovrs
+    f = applyExprSyntaxOverride ovrs
+    h = applyTypeSyntaxOverride ovrs
+
+    mapCases cases = case cases of
+      AS.CaseWhen pat me stmts -> AS.CaseWhen pat (f <$> me) (g <$> stmts)
+      AS.CaseOtherwise stmts -> AS.CaseOtherwise (g <$> stmts)
+    mapCatches catches = case catches of
+      AS.CatchWhen e stmts -> AS.CatchWhen (f e) (g <$> stmts)
+      AS.CatchOtherwise stmts -> AS.CatchOtherwise (g <$> stmts)
+    stmt' = stmtOverrides ovrs stmt
+  in case stmt' of
+    AS.StmtVarDeclInit decl e -> AS.StmtVarDeclInit (h <$> decl) (f e)
+    AS.StmtConstDecl decl e -> AS.StmtConstDecl decl (f e)
+    AS.StmtAssign lv e -> AS.StmtAssign lv (f e)
+    AS.StmtCall qi es -> AS.StmtCall qi (f <$> es)
+    AS.StmtReturn me -> AS.StmtReturn (f <$> me)
+    AS.StmtAssert e -> AS.StmtAssert (f e)
+    AS.StmtIf tests body -> AS.StmtIf ((\(e, stmts) -> (f e, g <$> stmts)) <$> tests) ((fmap g) <$> body)
+    AS.StmtCase e alts -> AS.StmtCase (f e) (mapCases <$> alts)
+    AS.StmtFor ident (e,e') stmts -> AS.StmtFor ident (f e, f e') (g <$> stmts)
+    AS.StmtWhile e stmts -> AS.StmtWhile (f e) (g <$> stmts)
+    AS.StmtRepeat stmts e -> AS.StmtRepeat (g <$> stmts) (f e)
+    AS.StmtSeeExpr e -> AS.StmtSeeExpr (f e)
+    AS.StmtTry stmts ident alts -> AS.StmtTry (g <$> stmts) ident (mapCatches <$> alts)
+    _ -> stmt'
 
 -- | Fold over the nested expressions of a given expression
 foldExpr :: (AS.Expr -> b -> b) -> AS.Expr -> b -> b
@@ -374,55 +379,18 @@ foldASL :: (T.Text -> AS.Expr -> b -> b) ->
   [AS.Definition] -> [AS.Instruction] -> b -> b
 foldASL f h g defs instrs b = foldr (foldInstruction f h g) (foldr (foldDef f h g) b defs) instrs
 
+getterText :: Bool -> T.Text
+getterText withArgs = if withArgs then "GETTER_" else "BAREGETTER_"
 
+mkGetterName :: Bool -> AS.QualifiedIdentifier -> AS.QualifiedIdentifier
+mkGetterName withArgs = do
+  mapInnerName (\s -> getterText withArgs <> s)
 
-applyStmtSyntaxOverride :: SyntaxOverrides -> AS.Stmt -> AS.Stmt
-applyStmtSyntaxOverride ovrs stmt =
-  let
-    g = applyStmtSyntaxOverride ovrs
-    f = applyExprSyntaxOverride ovrs
-    mapCases cases = case cases of
-      AS.CaseWhen pat me stmts -> AS.CaseWhen pat (f <$> me) (g <$> stmts)
-      AS.CaseOtherwise stmts -> AS.CaseOtherwise (g <$> stmts)
-    mapCatches catches = case catches of
-      AS.CatchWhen e stmts -> AS.CatchWhen (f e) (g <$> stmts)
-      AS.CatchOtherwise stmts -> AS.CatchOtherwise (g <$> stmts)
-    stmt' = stmtOverrides ovrs stmt
-  in case stmt' of
-    AS.StmtVarDeclInit decl e -> AS.StmtVarDeclInit decl (f e)
-    AS.StmtConstDecl decl e -> AS.StmtConstDecl decl (f e)
-    AS.StmtAssign lv e -> AS.StmtAssign lv (f e)
-    AS.StmtCall qi es -> AS.StmtCall qi (f <$> es)
-    AS.StmtReturn me -> AS.StmtReturn (f <$> me)
-    AS.StmtAssert e -> AS.StmtAssert (f e)
-    AS.StmtIf tests body -> AS.StmtIf ((\(e, stmts) -> (f e, g <$> stmts)) <$> tests) ((fmap g) <$> body)
-    AS.StmtCase e alts -> AS.StmtCase (f e) (mapCases <$> alts)
-    AS.StmtFor ident (e,e') stmts -> AS.StmtFor ident (f e, f e') (g <$> stmts)
-    AS.StmtWhile e stmts -> AS.StmtWhile (f e) (g <$> stmts)
-    AS.StmtRepeat stmts e -> AS.StmtRepeat (g <$> stmts) (f e)
-    AS.StmtSeeExpr e -> AS.StmtSeeExpr (f e)
-    AS.StmtTry stmts ident alts -> AS.StmtTry (g <$> stmts) ident (mapCatches <$> alts)
-    _ -> stmt'
+setterText :: Bool -> T.Text
+setterText withArgs = if withArgs then "SETTER_" else "BARESETTER_"
 
-getterText :: T.Text
-getterText = "GETTER_"
-
-mkGetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
-mkGetterName = do
-  mapInnerName (\s -> getterText <> s)
-
-mkGetterNameField :: AS.QualifiedIdentifier -> Maybe T.Text -> AS.QualifiedIdentifier
-mkGetterNameField name (Just field) =
-  mapInnerName (\s -> s <> "_" <> field) $ mkGetterName name
-mkGetterNameField name Nothing = mkGetterName name
-
-getterSuffixOf :: AS.QualifiedIdentifier -> Maybe (AS.QualifiedIdentifier)
-getterSuffixOf (AS.QualifiedIdentifier q nm) = case T.stripPrefix getterText nm of
-  Just nm' -> Just (AS.QualifiedIdentifier q nm')
-  Nothing -> Nothing
-
-mkSetterName :: AS.QualifiedIdentifier -> AS.QualifiedIdentifier
-mkSetterName = mapInnerName (\s -> "SETTER_" <> s)
+mkSetterName :: Bool -> AS.QualifiedIdentifier -> AS.QualifiedIdentifier
+mkSetterName withArgs = mapInnerName (\s -> setterText withArgs <> s)
 
 -- | Make a function name given its ASL name and arity.
 mkFunctionName :: AS.QualifiedIdentifier -> Int -> T.Text

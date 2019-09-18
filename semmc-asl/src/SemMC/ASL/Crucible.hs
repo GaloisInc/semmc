@@ -106,6 +106,7 @@ functionToCrucible defs sig hdlAlloc stmts = do
   globals <- FC.traverseFC allocateGlobal (funcGlobalReprs sig)
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, deps) <- stToIO $ defineCCGFunction pos hdl (\ref -> funcDef defs sig ref globals stmts)
+
   return Function { funcSig = sig
                   , funcCFG = CCS.toSSA cfg0
                   , funcGlobals = globals
@@ -164,6 +165,7 @@ funcInitialState defs sig hdl globals args =
                    , tsHandle = hdl
                    , tsTypeEnvir = funcTypeEnvir sig
                    , tsAtomToStruct = Map.empty
+                   , tsRegisterSlices = defRegisterSlices defs
                    }
   where
     addArgumentAtom :: forall tp0
@@ -286,6 +288,7 @@ procInitialState defs sig hdl globals args =
                    , tsHandle = hdl
                    , tsTypeEnvir = procTypeEnvir sig
                    , tsAtomToStruct = Map.empty
+                   , tsRegisterSlices = defRegisterSlices defs
                    }
   where
     addArgument :: forall tp

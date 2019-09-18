@@ -2,7 +2,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module SemMC.ASL.Exceptions (
-  TranslationException(..)
+    TranslationException(..)
   ) where
 
 import qualified Control.Exception as X

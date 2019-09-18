@@ -37,6 +37,8 @@ import SemMC.ASL.Translation
 import SemMC.ASL.Translation.Preprocess
 import SemMC.ASL.Signature
 import SemMC.ASL.Types
+import SemMC.ASL.Exceptions
+
 import Control.Concurrent
 import Control.Concurrent.MVar
 
@@ -51,82 +53,11 @@ defsFilePath = "test/defs.parsed"
 regsFilePath :: FilePath
 regsFilePath = "test/regs.parsed"
 
-ignoredInstrs :: [(T.Text, T.Text)]
-ignoredInstrs =
-  [("aarch32_VADDL_A", "aarch32_VADDL_T1A1_A") -- unexpected getter structure
-  ,("aarch32_QSUB16_A", "aarch32_QSUB16_A1_A") -- can't slice lval for setters
-  ,("aarch32_QSUB16_A", "aarch32_QSUB16_T1_A") -- can't slice lval for setters
-  ,("aarch32_SEL_A", "aarch32_SEL_A1_A") -- can't slice lval for setters
-  ,("aarch32_SEL_A", "aarch32_SEL_T1_A") -- can't slice lval for setters
-  ,("aarch32_SMLAWB_A", "aarch32_SMLAWB_A1_A") -- type mismatch
-  ,("aarch32_SMLAWB_A", "aarch32_SMLAWB_T1_A") -- type mismatch
-  ,("aarch32_ERET_AS", "aarch32_ERET_A1_A") -- unbound global
-  ,("aarch32_ERET_AS", "aarch32_ERET_T1_A") -- unbound global
-  ,("aarch32_VPADD_f_A", "aarch32_VPADD_f_A1_A") -- TypeNotFound "real"
-  ,("aarch32_VCMP_A", "aarch32_VCMP_A2_A") -- TypeNotFound "real"
-  ,("aarch32_VCMP_A", "aarch32_VCMP_T1_A") -- TypeNotFound "real"
-  ,("aarch32_VCMP_A", "aarch32_VCMP_T2_A") -- TypeNotFound "real"
-  ,("aarch32_VRINTX_asimd_A", "aarch32_VRINTX_asimd_A1_A") -- TypeNotFound "real"
-  ,("aarch32_VRINTX_asimd_A", "aarch32_VRINTX_asimd_T1_A") -- TypeNotFound "real"
-  ,("aarch32_VLDR_A", "aarch32_VLDR_A1_A") -- missing "HaveFP16Ext_0"
-  ,("aarch32_VLDR_A", "aarch32_VLDR_T1_A") -- missing "HaveFP16Ext_0"
-  ,("aarch32_VORN_r_A", "aarch32_VORN_r_T1A1_A") -- implicit integer cast
-  ,("aarch32_VQDMLAL_A", "aarch32_VQDMLAL_T1A1_A") -- implicit integer cast
-  ,("aarch32_VQDMLAL_A", "aarch32_VQDMLAL_T2A2_A") -- can't monomorphize Elem
-  ,("aarch32_SSUB8_A", "aarch32_SSUB8_A1_A") -- can't slice lval for setters
-  ,("aarch32_SSUB8_A", "aarch32_SSUB8_T1_A") -- can't slice lval for setters
-  ,("aarch32_SASX_A", "aarch32_SASX_A1_A") -- can't slice lval for setters
-  ,("aarch32_SASX_A", "aarch32_SASX_T1_A") -- can't slice lval for setters
-  ,("aarch32_STRHT_A", "aarch32_STRHT_A1_A") --  encoding is missing "m" field
-  ,("aarch32_STRHT_A", "aarch32_STRHT_A2_A") --  encoding is missing "imm32" field
-  ,("aarch32_STRHT_A", "aarch32_STRHT_T1_A") --  encoding is missing "m" field
-  ,("aarch32_VRINTA_vfp_A", "aarch32_VRINTA_vfp_A1_A") -- TypeNotFound "real"
-  ,("aarch32_VRINTA_vfp_A", "aarch32_VRINTA_vfp_T1_A") -- TypeNotFound "real"
-  ,("aarch32_CPS_AS", "aarch32_CPS_T1_AS") -- encoding is missing "mode" field
-  ,("aarch32_VMAXNM_A", "aarch32_VMAXNM_A1_A") -- TypeNotFound "real"
-  ,("aarch32_VMAXNM_A", "aarch32_VMAXNM_A2_A") -- TypeNotFound "real"
-  ,("aarch32_VMAXNM_A", "aarch32_VMAXNM_T1_A") -- TypeNotFound "real"
-  ,("aarch32_VSTM_A", "aarch32_VSTM_T1A1_A") -- division not supported
-  ,("aarch32_VMAXNM_A", "aarch32_VMAXNM_T2_A") -- TypeNotFound "real"
-  ,("aarch32_VPMAX_f_A", "aarch32_VPMAX_f_A1_A") -- TypeNotFound "real"
-  ] 
-  
-
 collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text, AS.InstructionSet)]
 collectInstructions aslInsts = do
   List.concat $
     map (\instr -> map (\(AS.InstructionEncoding {AS.encName=encName, AS.encInstrSet=iset}) ->
                           (instr, encName, iset)) (AS.instEncodings instr)) aslInsts
-
-ignoredDefs :: [T.Text]
-ignoredDefs =
-  ["AArch64_BranchAddr_1", -- bad slice
-   "AArch32_CheckBreakpoint_2", -- stalls
-   "AArch32_VCRMatch_1", -- bad slice
-   "AArch32_CheckWatchpoint_4", -- stalls
-   "AArch32_CheckDomain_5", -- bad slice
-   "AArch32_ExecutingATS1xPInstr_0", -- SliceOffset
-   "AArch32_ExecutingLSMInstr_0", -- SliceOffset
-   "AArch32_TranslationTableWalkLD_7", -- bad slice
-   "AArch32_TranslationTableWalkSD_4", -- bad slice
-   "AArch64_CheckAndUpdateDescriptor_8", -- SSA conversion failure
-   "AArch64_TranslationTableWalk_7", -- type mismatch
-   "AArch64_CheckBreakpoint_2", -- stalls
-   "AArch64_CheckWatchpoint_4", -- stalls
-   "AArch64_ExecutingATS1xPInstr_0", -- bad slice
-   "AArch64_TranslateAddressS1Off_3", -- bad slice
-   "ProcessorID_0", -- simulation abort
-   "Shift_C_4N_32", -- bad extended type information
-   "LSL_2N_32", -- bad extended type information
-   "LSR_2N_32", -- bad extended type information
-   "AArch32_IsExclusiveVA_3", -- simulation abort
-   "IsExclusiveGlobal_3", -- simulation abort
-   "IsExclusiveLocal_3" -- simulation abort
-  ,"AArch32_WatchpointMatch_5" -- global array
-  ,"AArch32_CheckAdvSIMDOrFPEnabled_2" -- bitmask pattern unimplemented
-  ,"GETTER_D_1" -- division unimplemented, slicing arithmetic
-  ,"SETTER_D_2" -- division unimplemented, slicing arithmetic
-  ]
 
 stalledDefs :: [T.Text]
 stalledDefs =
@@ -135,12 +66,6 @@ stalledDefs =
   ,"AArch64_CheckBreakpoint_2"
   ,"AArch64_CheckWatchpoint_4"
   ]
-
-testInstrs :: [(T.Text, T.Text)]
-testInstrs =
-  [("aarch32_STRH_r_A", "aarch32_STRH_r_T1_A"),
-   ("aarch32_REV_A","aarch32_REV_T2_A"),
-   ("aarch32_ADC_i_A","aarch32_ADC_i_T1_A")]
 
 main :: IO ()
 main = do
@@ -170,7 +95,7 @@ translateAll = do
 
 parTranslateAll :: TranslatorOptions -> Int -> IO (SigMap)
 parTranslateAll opts chunksz = do
-  (aslInsts, aslDefs, _) <- getASL
+  (aslInsts, aslDefs, aslRegDefs) <- getASL
   let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts
   let (nchunks, _) = length allInstrs `divMod` chunksz
 
@@ -178,12 +103,12 @@ parTranslateAll opts chunksz = do
         let opts' = opts { optVerbose = False,
                            optStartIndex = (chunk * chunksz),
                            optNumberOfInstructions = Just chunksz } 
-        runWithFilters' opts' aslInsts aslDefs
+        runWithFilters' opts' aslInsts aslDefs aslRegDefs
         
   mvs <- mapM (\chunk -> doFork (runFun chunk)) [0 .. nchunks]
   sms <- mapM collapseResult mvs
   let opts' = opts { optStartIndex = (nchunks * chunksz), optNumberOfInstructions = Nothing }
-  sm <- runWithFilters' opts' aslInsts aslDefs
+  sm <- runWithFilters' opts' aslInsts aslDefs aslRegDefs
   E.when (optVerbose opts) $ mapM_ (putStrLn . T.unpack) (reverse $ sLog sm)
   let sm' = mergeInstrExceptions (sm : sms)
   return sm'
@@ -224,16 +149,10 @@ filterStalls = Filters
   (\_ -> \nm -> not $ List.elem nm stalledDefs)
   (\_ -> True)
 
-filterIgnored :: Filters
-filterIgnored = Filters
-  (\_ -> \nm -> not $ List.elem nm ignoredDefs)
-  (\(InstructionIdent nm enc _) -> not $ List.elem (nm, enc) ignoredInstrs)
-  (\_ -> \_ -> True) (\_ -> True)
-
 translateOnlyFun :: T.Text -> Filters
 translateOnlyFun fnm = Filters
-  (\_ -> \nm -> (nm == fnm) || (not $ List.elem nm ignoredDefs))
-  (\(InstructionIdent nm enc _) -> not $ List.elem (nm, enc) ignoredInstrs)
+  (\_ -> \nm -> (nm == fnm))
+  (\(InstructionIdent nm enc _) -> True)
   (\_ -> \nm -> nm == fnm) (\_ -> False)
 
 translateOnlyInstr :: (T.Text, T.Text) -> Filters
@@ -275,12 +194,13 @@ isInstrTransFilteredOut inm = do
 runWithFilters' :: TranslatorOptions
                 -> [AS.Instruction]
                 -> [AS.Definition]
+                -> [AS.RegisterDefinition]
                 -> IO (SigMap)
-runWithFilters' opts aslInsts aslDefs = do
+runWithFilters' opts aslInsts aslDefs aslRegDefs = do
   let startidx = optStartIndex opts
   let numInstrs = optNumberOfInstructions opts
   let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts
-  let (sigEnv, sigState) = buildSigState aslDefs
+  let (sigEnv, sigState) = buildSigState (aslDefs, aslRegDefs)
   let instrs = case numInstrs of {Just i -> take i (drop startidx allInstrs); _ -> drop startidx allInstrs}
   sm <- MSS.execStateT (forM_ instrs (\(i, (instr, enc, iset)) -> do
     let ident = instrToIdent instr enc iset
@@ -296,9 +216,11 @@ runWithFilters' opts aslInsts aslDefs = do
 
 runWithFilters :: TranslatorOptions -> IO (SigMap)
 runWithFilters opts = do
-  (aslInsts, aslDefs, _) <- getASL
-  putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and " ++ show (length aslDefs) ++ " definitions."
-  runWithFilters' opts aslInsts aslDefs
+  (aslInsts, aslDefs, aslRegDefs) <- getASL
+  putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and "
+    ++ show (length aslDefs) ++ " definitions and "
+    ++ show (length aslRegDefs) ++ " register definitions."
+  runWithFilters' opts aslInsts aslDefs aslRegDefs
                                                   
 
 data ExpectedException =
@@ -319,8 +241,8 @@ data ExpectedException =
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
-  SExcept (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _)) -> Just $ ParserError
-  SExcept (TypeNotFound "real") -> Just $ RealValuesUnsupported
+  SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
+  SExcept (SigException _ (TypeNotFound "real")) -> Just $ RealValuesUnsupported
   TExcept (CannotMonomorphizeFunctionCall f) -> Just $ CannotMonomorphize f
   TExcept (UnsupportedSlice (AS.SliceSingle _)) -> Just $ SymbolicArguments "Slice"
   TExcept (UnsupportedSlice (AS.SliceRange _ _)) -> Just $ SymbolicArguments "Slice"

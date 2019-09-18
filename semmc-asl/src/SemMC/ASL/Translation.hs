@@ -206,6 +206,7 @@ data TranslationState h s =
                    , tsFunctionSigs :: Map.Map T.Text SomeSimpleSignature
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
+                   , tsRegisterSlices :: Map.Map (T.Text, T.Text) (Integer, Integer)
                    , tsHandle :: STRef.STRef h (Map.Map T.Text TypeEnvir)
                    -- ^ Used to name functions encountered during translation
                    , tsTypeEnvir :: TypeEnvir
@@ -530,6 +531,9 @@ translateAssignment ov lval e = do
       Some lveAtom <- translateExpr ov lve
       translateExpr' ov e (Just $ Some (CCG.typeOfAtom lveAtom))
 
+mkSliceRange :: (Integer, Integer) -> AS.Slice
+mkSliceRange (lo, hi) = AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo)
+
 translateAssignment' :: forall arch s tp h ret . Overrides arch
                      -> AS.LValExpr
                      -> CCG.Atom s tp
@@ -564,13 +568,11 @@ translateAssignment' ov lval atom atomext mE = do
         TypeBasic -> do
           case struct of
             AS.LValVarRef (AS.QualifiedIdentifier _ structName) -> do
-              globals <- MS.gets tsGlobals
-              let ident = mkStructMemberName structName memberName
-              case Map.lookup ident globals of
-                Just (Some gv) -> do
-                  Refl <- assertAtomType' (CCG.globalType gv) atom
-                  CCG.writeGlobal gv (CCG.AtomExpr atom)
-                _ -> error $ "Missing global struct lval: " ++ show ident
+              regSlices <- MS.gets tsRegisterSlices
+              case Map.lookup (structName, memberName) regSlices of
+                Just slice -> do
+                  translatelValSlice ov struct (mkSliceRange slice) atom
+                _ -> error $ "Missing global struct lval: " ++ show (structName, memberName)
             _ -> error $ "Bad struct lval: " ++ show lval
         TypeStruct acc ->
           -- Some e <- lookupVarRef structName
@@ -1225,10 +1227,12 @@ translateExpr' ov expr mTy
           TypeBasic -> do
             case struct of
               AS.ExprVarRef (AS.QualifiedIdentifier _ structName) -> do
-                let ident = mkStructMemberName structName memberName
-                Some e <- lookupVarRef ident
-                mkAtom e
-              _ -> X.throw (StructFieldMismatch expr)
+                regSlices <- MS.gets tsRegisterSlices
+                case Map.lookup (structName, memberName) regSlices of
+                  Just slice -> do
+                    satom <- translateSlice ov struct (mkSliceRange slice)
+                    return (satom, TypeBasic)
+                  _ -> X.throw (StructFieldMismatch expr)
           TypeStruct acc -> do
             Some atom <- translateExpr ov struct
             case (CCG.typeOfAtom atom, Map.lookup memberName acc) of

@@ -29,11 +29,11 @@ module SemMC.ASL.Translation.Preprocess
   , runSigM
   , buildSigState
   , SigException(..)
+  , InnerSigException(..)
   , Callable(..)
   , Definitions(..)
   , bitsToInteger
   , mkFunctionName
-  , mkStructMemberName
   , applyTypeEnvir
   , exprToInt
   , exprToBool
@@ -53,6 +53,7 @@ import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.List as List
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as NR
 import           Data.Parameterized.Some ( Some(..), viewSome, mapSome )
@@ -100,14 +101,14 @@ computeSignature :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
 computeSignature qName arity = do
   mCallable <- lookupCallable qName arity
   case mCallable of
-    Nothing -> E.throwError $ CallableNotFound (mkFunctionName qName arity)
+    Nothing -> throwError $ CallableNotFound (mkFunctionName qName arity)
     Just c -> void $ computeCallableSignature c
 
 computeSignature' :: T.Text -> SigM ext f ()
 computeSignature' name = do
   mCallable <- lookupCallable' name
   case mCallable of
-    Nothing -> E.throwError $ CallableNotFound name
+    Nothing -> throwError $ CallableNotFound name
     Just c -> void $ computeCallableSignature c
 
 
@@ -117,6 +118,7 @@ data Definitions arch =
               , defTypes :: Map.Map T.Text (Some UserType)
               , defEnums :: Map.Map T.Text Integer
               , defConsts :: Map.Map T.Text (Some ConstVal)
+              , defRegisterSlices :: Map.Map (T.Text, T.Text) (Integer, Integer)
               }
 
 -- | Collect the definitions representing the current state
@@ -131,6 +133,7 @@ getDefinitions = do
     , defTypes = userTypes st
     , defEnums = enums env
     , defConsts = consts env
+    , defRegisterSlices = registerSlices env
     }
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
@@ -148,128 +151,8 @@ builtinGlobals =
   , ("_V", Some (WT.BaseArrayRepr
                  (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
                  (WT.BaseBVRepr (WT.knownNat @128))))
-  , ("DACR", Some (WT.BaseBVRepr (WT.knownNat @32))) -- guessed the length
-  , ("SP_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("LR_mon", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("HVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("HIFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("HDFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("HPFAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("HPFAR_EL2", Some (WT.BaseBVRepr (WT.knownNat @64)))
-  , ("MVBAR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("DLR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("DLR_EL0", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("SDCR_SPD", Some (WT.BaseBVRepr (WT.knownNat @2)))
-  , ("DBGEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-  , ("NIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-  , ("SPIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
-  , ("SPNIDEN", Some (WT.BaseBVRepr (WT.knownNat @1)))
   , ("EventRegister", Some (WT.BaseBVRepr (WT.knownNat @1)))
-  , ("DBGDIDR_WRPs_UINT", Some WT.BaseIntegerRepr)
-  , ("HSTR", Some (WT.BaseBVRepr (WT.knownNat @32)))
-  , ("HSTR_EL2", Some (WT.BaseBVRepr (WT.knownNat @32)))
   ]
-  ++ mkBitFields
-    [ ("SDER", "SUIDEN") ]
-  ++
-  concat (mkGlobalStruct <$> typedGlobalStructs)
-  where
-    mkGlobalStruct (nm,tnm) =
-      case lookup tnm globalStructTypes of
-        Just fields -> mkField nm <$> fields
-        _ -> case lookup tnm globalTypeSynonyms of
-          Just syn -> [(nm, toSimpleBVType syn)]
-          _  -> error $ "Missing global struct: " <> (T.unpack tnm)
-    mkBitFields = map (\(nm, fnm) -> mkField nm (fnm, AS.TypeFun "bits" (AS.ExprLitInt 1)))
-    mkField nm (fnm, ftype) = (nm <> "_" <> fnm, toSimpleBVType ftype)
-
--- TODO: Some globals have both a 32 bit and struct representation, this
--- relationship is not captured currently
--- (i.e. DLR and DLR.SS
-globalStructTypes :: [(T.Text, [(T.Text, AS.Type)])]
-globalStructTypes =
-  [ ("PSTATEType", bits ["N", "Z", "C", "V", "D", "A", "I", "F", "PAN", "UAO",
-                         "SS", "IL", "nRW", "SP", "Q", "J", "T", "E"] ++
-                   [("EL", bit 2), ("GE", bit 4), ("IT", bit 8), ("M", bit 5)])
-  , ("SCRType", bits ["EL3_A", "NS", "EA", "IRQ", "RW", "FIQ", "SIF", "SMD",
-                      "HCE", "TWE", "TWI"])
-  , ("EDSCRType", bits ["NS", "HDE", "ITE", "ITO", "SDD", "MA", "TXfull"]
-      ++ [("STATUS", bit 6), ("EL", bit 2), ("RW", bit 4)])
-  , ("SCTLRType", bits ["SED","A", "TE", "EE", "SPAN", "V", "IESB", "M",
-                        "nTLSMD", "WXN", "AFE", "UWXN", "I", "E0E", "nTWE", "nTWI", "ITD"])
-  
-  , ("HSCTLRType", bits ["A", "TE", "EE", "M", "nTLSMD", "WXN", "I", "SED", "ITD"])
-  , ("HCRType", bits ["TGA", "TEA", "TGE", "RW", "E2H", "DC", "VM", "PTW",
-                      "TWE", "TDRA", "TWI"] ++ [("BSU", bit 2)])
-  , ("HDCRType", bits ["TDE", "TDRA", "TDOSA", "TDA"])
-  , ("MDCRType", bits ["TDE", "SDD", "TDRA", "TDOSA", "TDA"] ++ [("SPD32", bit 2)])
-  , ("MDSCRType", bits ["KDE", "MDE", "TDRA", "TDOSA", "SS", "TDCC"])
-  , ("CPACRType", bits ["ASEDIS", "TTA", "TCDIS", "TRCDIS"] ++ [("FPEN", bit 2), ("cp10", bit 2)])
-  , ("CNTKCTLType", [("EL0PTEN", bit 1)])
-  , ("DBGDSCRextType", bits ["MDBGen", "UDCCdis"] ++ [("MOE", bit 4)])
-  , ("TTBCRType", bits ["EAE", "N"])
-  , ("DBGDIDRType", [("WRPs", bit 32), ("BRPs", bit 32)])
-  , ("LSRType", bits ["OSLK"])
-  , ("SDLRType", bits ["DLK"])
-  , ("PRCRType", bits ["CORENPDRQ"])
-  , ("HTCRType", bits ["T0SZ"])
-  , ("TCRType", [("TG0", bit 2)])
-  , ("DSPSRType", bits ["SS"])
-  , ("NSACRType", bits ["NSASEDIS", "cp10"])
-  , ("FPCRType_Struct", [("Len", bit 3), ("Stride", bit 2)])
-  ]
-  where bit n = AS.TypeFun "bits" (AS.ExprLitInt n)
-        bits nms = map (\nm -> (nm, bit 1)) nms
-
-typedGlobalStructs' :: [(T.Text, [T.Text])]
-typedGlobalStructs' =
-  [ ("PSTATEType", ["PSTATE"])
-  , ("SCTLRType", ["SCTLR_EL1", "SCTLR_EL2", "SCTLR_EL3"])
-  , ("CNTKCTLType", ["CNTKCTL_EL1", "CNTHCTL_EL2"])
-  , ("ESRType", ["ESR_EL1", "ESR_EL2", "ESR_EL3"])
-  , ("MAIRType", ["MAIR_EL1", "MAIR_EL2", "MAIR_EL3"])
-  , ("SPSRType", ["SPSR_fiq", "SPSR_irq", "SPSR_svc", "SPSR_mon", "SPSR_abt",
-                  "SPSR_hyp", "SPSR_und", "SPSR_EL1", "SPSR_EL2", "SPSR_EL3"])
-  , ("FPCRType_Struct", ["FPSCR"])
-  ]
-   
-
-typedGlobalStructs :: [(T.Text, T.Text)]
-typedGlobalStructs =
-   [("SCR", "SCRType")
-   ,("SCR_EL3", "SCRType")
-   ,("HSCTLR", "HSCTLRType")
-   ,("HCR_EL2", "HCRType")
-   ,("HCR2", "HCRType")
-   ,("HCR", "HCRType")
-   ,("HDCR", "HDCRType")
-   ,("MDCR_EL1", "MDCRType")
-   ,("MDCR_EL2", "MDCRType")
-   ,("MDCR_EL3", "MDCRType")
-   ,("DBGDSCRext", "DBGDSCRextType")
-   ,("VBAR_EL1", "VBARType")
-   ,("VBAR_EL2", "VBARType")
-   ,("VBAR_EL3", "VBARType")
-   ,("TTBCR", "TTBCRType")
-   ,("TTBCR_S", "TTBCRType")
-   ,("DBGDIDR", "DBGDIDRType")
-   ,("ID_AA64DFR0_EL1", "DBGDIDRType")
-   ,("DBGOSLSR", "LSRType")
-   ,("OSLSR_EL1", "LSRType")
-   ,("MDSCR_EL1", "MDSCRType")
-   ,("DBGOSDLR", "SDLRType")
-   ,("OSDLR_EL1", "SDLRType")
-   ,("DBGPRCR_EL1", "PRCRType")
-   ,("DBGPRCR", "PRCRType")
-   ,("EDSCR", "EDSCRType")
-   ,("HTCR", "HTCRType")
-   ,("TCR_EL3", "TCRType")
-   ,("DSPSR", "DSPSRType")
-   ,("DSPSR_EL0", "DSPSRType")
-   ,("CPACR_EL1", "CPACRType")
-   ,("CPTR_EL2", "CPACRType")
-   ,("NSACR", "NSACRType")
-   ] ++ (concat $ map (\(ty, nms) -> map (\nm -> (nm, ty)) nms) typedGlobalStructs')
 
 globalTypeSynonyms :: [(T.Text, AS.Type)]
 globalTypeSynonyms =
@@ -281,15 +164,6 @@ globalTypeSynonyms =
   , ("SPSRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
   ]
 
-toSimpleBVType :: AS.Type -> Some WT.BaseTypeRepr
-toSimpleBVType t =
-  if | AS.TypeFun "bits" e <- t
-     , AS.ExprLitInt w <- e
-     , Just (Some wRepr) <- NR.someNat w
-     , Just NR.LeqProof <- NR.isPosNat wRepr
-       -> Some (WT.BaseBVRepr wRepr)
-     | otherwise -> error $ "Bad simple BV Type:" <> show t
-
 
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
@@ -297,13 +171,6 @@ builtinConsts =
   , ("FALSE", Some $ ConstVal WT.BaseBoolRepr False)
   , ("HIGH", Some $ ConstVal (WT.BaseBVRepr (WT.knownNat @1)) (BVS.bitVector (1 :: Integer)))
   ]
-
-
--- | Whenever we encounter a member variable of a struct, we treat it as an
--- independent global variable and use this function to construct its qualified name.
-mkStructMemberName :: T.Text -> T.Text -> T.Text
-mkStructMemberName s m = s <> "_" <> m
-
 
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger [x] = fromIntegral (fromEnum x)
@@ -318,7 +185,7 @@ data Callable = Callable { callableName :: AS.QualifiedIdentifier
                          , callableRets :: [AS.Type]
                          , callableStmts :: [AS.Stmt]
                          }
-  deriving Show
+  deriving (Eq, Show)
 
 asCallable :: AS.Definition -> Maybe Callable
 asCallable def =
@@ -327,7 +194,8 @@ asCallable def =
                    , AS.callableArgs = args
                    , AS.callableRets = rets
                    , AS.callableStmts = stmts
-                   } ->
+                   }
+      | not $ null stmts ->
       Just Callable { callableName = name
                     , callableArgs = args
                     , callableRets = rets
@@ -370,15 +238,61 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv 
 
 
 prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
-prepASL asl = ASLT.prepASL asl (globalStructTypes, globalTypeSynonyms, typedGlobalStructs)
+prepASL (instrs,defs) = ASLT.prepASL (instrs,defs ++ extraDefs)
+  (globalTypeSynonyms)
+
+getRegisterType :: AS.Register -> Some WT.BaseTypeRepr
+getRegisterType r =
+  if | Just (Some wRepr) <- NR.someNat (AS.regLength r)
+     , Just NR.LeqProof <- NR.isPosNat wRepr
+     -> Some (WT.BaseBVRepr wRepr)
+
+getRegisterArrayType :: AS.RegisterArray -> Some WT.BaseTypeRepr
+getRegisterArrayType ra =
+  case getRegisterType (AS.regDef ra) of
+    Some t -> Some (WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) t)
+
+getRegisterDefSig :: AS.RegisterDefinition -> (T.Text, Some WT.BaseTypeRepr)
+getRegisterDefSig rd = case rd of
+  AS.RegisterDefSingle r -> (AS.regName r, getRegisterType r)
+  AS.RegisterDefArray ra -> (AS.regName (AS.regDef ra), getRegisterArrayType ra)
+
+getRegisterFieldSlice :: AS.RegisterField -> Maybe (T.Text, (Integer, Integer))
+getRegisterFieldSlice rf = case AS.regFieldName rf of
+  Just nm -> Just (nm, (AS.regFieldLo rf, AS.regFieldHi rf))
+  _ -> Nothing
+
+getRegisterSlices :: AS.Register -> [((T.Text, T.Text), (Integer, Integer))]
+getRegisterSlices r =
+  map (\(nm, (lo, hi)) -> ((AS.regName r, nm), (lo, hi))) $
+        catMaybes $ map getRegisterFieldSlice (AS.regFields r)
+
+getRegisterDefSlices :: AS.RegisterDefinition -> [((T.Text, T.Text), (Integer, Integer))]
+getRegisterDefSlices rd = case rd of
+  AS.RegisterDefSingle r -> getRegisterSlices r
+  AS.RegisterDefArray ra -> getRegisterSlices (AS.regDef ra)
+
+buildCallableMap :: [(T.Text, Callable)] -> Map.Map T.Text Callable
+buildCallableMap cs =
+  let foo = Map.fromListWith (++) (map (\(nm,c) -> (nm, [c])) cs) in
+    Map.mapMaybeWithKey getOnlyCallable foo
+  where
+    getOnlyCallable _ [c] = Just c
+    getOnlyCallable nm cs = case nub cs of
+           [c] -> Just c
+           (c : _) -> if (overrideFun overrides) $ callableName c then
+             Nothing
+           else error $ "Function " ++ show nm ++ " has multiple overloads of the same arity and is not overloaded"
+
+
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
 -- signatures.
-buildEnv :: [AS.Definition] -> SigEnv
-buildEnv defs =
-  let envCallables = Map.fromList ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
-      globalVars = Map.fromList builtinGlobals
-
+buildEnv :: ([AS.Definition], [AS.RegisterDefinition]) -> SigEnv
+buildEnv (defs, rdefs) =
+  let envCallables = buildCallableMap ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
+      globalVars = Map.fromList (builtinGlobals ++ map getRegisterDefSig rdefs)
+      registerSlices = Map.fromList (concat $ map getRegisterDefSlices rdefs)
 
       -- globalVars = Map.fromList $
       --   ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
@@ -418,7 +332,7 @@ buildEnv defs =
 
 -- | Given a list of ASL 'AS.Definition's, execute a 'SigM' action and either return
 -- the result or an exception coupled with the final state.
-execSigM :: [AS.Definition] -> SigM ext f a -> Either SigException a
+execSigM :: ([AS.Definition], [AS.RegisterDefinition]) -> SigM ext f a -> Either SigException a
 execSigM defs action =
   let rws = E.runExceptT $ getSigM action
       (e, _, _) = RWS.runRWS rws (buildEnv defs) initState
@@ -427,7 +341,7 @@ execSigM defs action =
     Right a -> Right a
   where initState = SigState Map.empty Map.empty Map.empty []
 
-buildSigState :: [AS.Definition] -> (SigEnv, SigState)
+buildSigState :: ([AS.Definition], [AS.RegisterDefinition]) -> (SigEnv, SigState)
 buildSigState defs = (buildEnv defs, SigState Map.empty Map.empty Map.empty [])
 
 runSigM :: SigEnv -> SigState -> SigM ext f a -> (Either SigException a, SigState)
@@ -442,6 +356,7 @@ runSigM env state action =
 data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                            -- , globalVars :: Map.Map T.Text DefVariable
                            , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
+                           , registerSlices :: Map.Map (T.Text, T.Text) (Integer, Integer)
                            , enums :: Map.Map T.Text Integer
                            , consts :: Map.Map T.Text (Some ConstVal)
                            , types :: Map.Map T.Text DefType
@@ -463,13 +378,23 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                          --   -- pre-loaded environment
                          }
 
-data SigException = TypeNotFound T.Text
-                  | BuiltinTypeNotFound T.Text
-                  | CallableNotFound T.Text
-                  | VariableNotFound T.Text
-                  | WrongType T.Text T.Text
-                  | StructMissingField T.Text T.Text
-                  | UnsupportedSigExpr AS.Expr
+throwError :: InnerSigException -> SigM ext f a
+throwError e = do
+  stack <- RWS.gets callableOpenSearches
+  E.throwError (SigException stack e)
+
+data InnerSigException = TypeNotFound T.Text
+                       | BuiltinTypeNotFound T.Text
+                       | CallableNotFound T.Text
+                       | VariableNotFound T.Text
+                       | WrongType T.Text T.Text
+                       | StructMissingField T.Text T.Text
+                       | UnsupportedSigExpr AS.Expr
+  deriving (Eq, Show)
+
+data SigException = SigException
+  { exCallStack :: [T.Text]
+  , exInner :: InnerSigException }
   deriving (Eq, Show)
 
 storeType :: T.Text -> UserType tp -> SigM ext f ()
@@ -513,14 +438,14 @@ lookupBuiltinType tpName = do
   env <- RWS.ask
   case Map.lookup tpName (builtinTypes env) of
     Just tp -> return tp
-    Nothing -> E.throwError $ BuiltinTypeNotFound tpName
+    Nothing -> throwError $ BuiltinTypeNotFound tpName
 
 lookupDefType :: T.Text -> SigM ext f DefType
 lookupDefType tpName = do
   env <- RWS.ask
   case Map.lookup tpName (types env) of
     Just defType -> return defType
-    Nothing -> E.throwError $ TypeNotFound tpName
+    Nothing -> throwError $ TypeNotFound tpName
 
 -- | If the variable is present, return its definition. Otherwise, return 'Nothing'.
 --lookupGlobalVar :: T.Text -> SigM ext f (Maybe DefVariable)
@@ -644,12 +569,6 @@ computeGlobalVarType :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 computeGlobalVarType varName = do
   lookupGlobalVar varName
 
--- | Compute the type of a struct member. If the struct is not a global variable,
--- return 'Nothing'.
-computeGlobalStructMemberType :: T.Text -> T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
-computeGlobalStructMemberType structName memberName = do
-  lookupGlobalVar (mkStructMemberName structName memberName)
-
 -- | Given a variable name, determine whether it is a global variable or not. If so,
 -- return a pair containing the variable and its type; if not, return 'Nothing'.
 varGlobal :: T.Text -> SigM ext f (Maybe (T.Text, Some WT.BaseTypeRepr))
@@ -699,18 +618,10 @@ lValExprGlobalVars lValExpr = case lValExpr of
   AS.LValTuple les ->
     concat <$> traverse lValExprGlobalVars les
   AS.LValMember (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-    mVarType <- computeGlobalStructMemberType structName memberName
-    case mVarType of
-      Nothing -> return []
-      Just varType -> return [(mkStructMemberName structName memberName, varType)]
+    maybeToList <$> varGlobal structName
   AS.LValMember _ _ -> return [] -- error "lValExprGlobalVars"
   AS.LValMemberBits (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
-    mVarTypes <- forM memberNames $ \memberName -> do
-      mVarType <- computeGlobalStructMemberType structName memberName
-      case mVarType of
-        Nothing -> return []
-        Just varType -> return [(mkStructMemberName structName memberName, varType)]
-    return $ concat mVarTypes
+    maybeToList <$> varGlobal structName
   AS.LValMemberBits _ _ -> return [] -- error "lValExprGlobalVars"
   AS.LValSlice les ->
     concat <$> traverse lValExprGlobalVars les
@@ -733,10 +644,7 @@ caseAlternativeGlobalVars alt = case alt of
 
 -- | Collect all global variables from a single 'AS.Expr'.
 exprGlobalVars :: AS.Expr -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
-exprGlobalVars expr = case overrideExpr overrides expr of
-  -- FIXME: Attach a list of global variables to every override
-  Just expr' -> exprGlobalVars expr'
-  Nothing -> case expr of
+exprGlobalVars expr = case expr of
     AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
       maybeToList <$> varGlobal varName
     AS.ExprSlice e slices -> do
@@ -757,7 +665,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       varGlobals <- catMaybes <$> traverse varGlobal vars
       return $ eGlobals ++ varGlobals
     AS.ExprInMask e _ -> exprGlobalVars e
-    AS.ExprCall qName argEs -> do
+    AS.ExprCall qName argEs -> if (overrideFun overrides) qName then return [] else do
       argGlobals <- concat <$> traverse exprGlobalVars argEs
       mCallable <- lookupCallable qName (length argEs)
       case mCallable of
@@ -790,19 +698,11 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       -- varGlobals <- maybeToList <$> varGlobal var
       -- return $ eGlobals ++ varGlobals
     AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-      mVarType <- computeGlobalStructMemberType structName memberName
-      case mVarType of
-        Nothing -> return []
-        Just varType -> return [(mkStructMemberName structName memberName, varType)]
+      maybeToList <$> varGlobal structName
     AS.ExprMember _ _ -> return [] -- "Assuming no nested global structs"
     AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
-      mVarTypes <- forM memberNames $ \memberName -> do
-        mVarType <- computeGlobalStructMemberType structName memberName
-        case mVarType of
-          Nothing -> return []
-          Just varType -> return [(mkStructMemberName structName memberName, varType)]
-      return $ concat mVarTypes
-    AS.ExprMemberBits _ _ -> E.throwError $ UnsupportedSigExpr expr
+      maybeToList <$> varGlobal structName
+    AS.ExprMemberBits _ _ -> throwError $ UnsupportedSigExpr expr
     _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
@@ -811,12 +711,10 @@ stmtGlobalVars stmt =
   -- FIXME: If the stmt has an override, then we should provide a custom set of
   -- globals as well.
   --seq (unsafePerformIO $ putStrLn $ show stmt) $
-  case overrideStmt overrides stmt of
-    Just _ -> return []
-    Nothing -> case stmt of
+  case stmt of
       AS.StmtVarDeclInit _ e -> exprGlobalVars e
       AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
-      AS.StmtCall qName argEs -> do
+      AS.StmtCall qName argEs -> if (overrideFun overrides) qName then return [] else do
         argGlobals <- concat <$> traverse exprGlobalVars argEs
         mCallable <- lookupCallable qName (length argEs)
         case mCallable of
@@ -1106,28 +1004,15 @@ extraDefs = [
 
 -- Overrides only for the purposes of collecting global variables
 data Overrides arch =
-  Overrides { overrideStmt :: AS.Stmt -> Maybe AS.Stmt
-            , overrideExpr :: AS.Expr -> Maybe AS.Expr
+  Overrides { overrideFun :: AS.QualifiedIdentifier -> Bool
             }
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
-  where overrideStmt :: AS.Stmt -> Maybe AS.Stmt
-        overrideStmt s = case s of
-          AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ AS.StmtUndefined
-          AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ AS.StmtUndefined
-          AS.StmtVarDeclInit (nm,t) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ AS.StmtUndefined
-          _ -> Nothing
-
-        overrideExpr :: AS.Expr -> Maybe AS.Expr
-        overrideExpr e = case e of
-          AS.ExprCall (AS.QualifiedIdentifier _ "CurrentCond") [] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [x] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "HaveFP16Ext") [] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> defaultOverride
-          AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> defaultOverride
-          _ -> Nothing
-        defaultOverride = Just $ AS.ExprLitInt 0
+  where overrideFun :: AS.QualifiedIdentifier -> Bool
+        overrideFun ident = case ident of
+          AS.QualifiedIdentifier _ nm ->
+            nm `elem` ["CurrentCond","IsExternalAbort","IsExternalAbort","IsAsyncAbort"
+                       ,"IsExternalSyncAbort","IsSErrorInterrupt","HaveFP16Ext"
+                       ,"Unreachable","LSInstructionSyndrome", "SETTER_SP", "GETTER_SP"
+                       , "ALUExceptionReturn", "ALUWritePC", "Zeros"
+                       , "Min", "Max", "Align", "Abs", "TakeHypTrapException"] -- overloaded
