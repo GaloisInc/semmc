@@ -953,14 +953,6 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
                                     }
       return (Some (SomeProcedureSignature pSig), instStmts)
 
-expandStmts :: (AS.Stmt -> [AS.Stmt]) -> AS.Stmt -> [AS.Stmt]
-expandStmts f stmt = case stmt of
-  AS.StmtIf tests melse ->
-    [AS.StmtIf ((\(e, stmts) -> (e, concat $ expandStmts f <$> stmts)) <$> tests) (fmap expandConcat melse)]
-  stmt -> f stmt
-  where
-    expandConcat stmts = concat $ expandStmts f <$> stmts
-
 -- | Create the full list of statements in an instruction given the main execute
 -- block and the encoding-specific operations.
 createInstStmts :: [AS.Stmt]
@@ -969,12 +961,7 @@ createInstStmts :: [AS.Stmt]
                 -- ^ Execute block
                 -> [AS.Stmt]
 createInstStmts encodingSpecificOperations stmts =
-  concat $ map (expandStmts doExpand) stmts
-  where
-    doExpand stmt = case stmt of
-      AS.StmtCall (AS.QualifiedIdentifier _ "EncodingSpecificOperations") [] ->
-        encodingSpecificOperations
-      _ -> [stmt]
+  encodingSpecificOperations ++ stmts
 
 -- Extra definitions that give mock definitions to undefined functions
 extraDefs :: [AS.Definition]
@@ -1015,4 +1002,4 @@ overrides = Overrides {..}
                        ,"IsExternalSyncAbort","IsSErrorInterrupt","HaveFP16Ext"
                        ,"Unreachable","LSInstructionSyndrome", "SETTER_SP", "GETTER_SP"
                        , "ALUExceptionReturn", "ALUWritePC", "Zeros"
-                       , "Min", "Max", "Align", "Abs", "TakeHypTrapException"] -- overloaded
+                       , "Min", "Max", "Align", "Abs", "TakeHypTrapException", "TakeException"] -- overloaded
