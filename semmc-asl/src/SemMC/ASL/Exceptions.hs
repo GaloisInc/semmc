@@ -25,6 +25,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           | forall tp . ExpectedBVType AS.Expr (CT.TypeRepr tp)
+                          | forall tp . ExpectedIntegerType AS.Expr (CT.TypeRepr tp)
                           | forall tp . ExpectedStructType (Maybe AS.Expr) (CT.TypeRepr tp)
                           | forall tp . UnsupportedComparisonType AS.Expr (CT.TypeRepr tp)
                           | UnboundName T.Text
@@ -53,6 +54,10 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnsupportedSlice AS.Slice
                           | CannotMonomorphizeFunctionCall T.Text
                           | CannotStaticallyEvaluateType AS.Type TypeEnvir
+                          | UnexpectedExtendedType AS.Expr ExtendedTypeData
+                          | MissingRegisterField AS.Expr T.Text
+                          | MissingStructField AS.Expr T.Text
+                          | BadMemoryAccess AS.Expr
                           | UNIMPLEMENTED String
 
 deriving instance Show TranslationException

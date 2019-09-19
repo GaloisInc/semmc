@@ -1,0 +1,89 @@
+(AslDefinitions
+  (DefCallable
+    (QualifiedIdentifier Any Zeros)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any Zeros)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any ZeroExtend)
+    (list
+      (SymDecl
+        val
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any M)))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any ZeroExtend)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any val))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any ConsumptionOfSpeculativeDataBarrier)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any SpeculativeStoreBypassBarrierToPA)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any SpeculationBarrier)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any SpeculativeStoreBypassBarrierToVA)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any SynchronizeErrors)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing))))))

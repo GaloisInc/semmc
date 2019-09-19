@@ -19,7 +19,10 @@
 {-# LANGUAGE TypeOperators #-}
 
 module SemMC.ASL.SyntaxTraverse
-  ( prepASL
+  ( mkSyntaxOverrides
+  , applySyntaxOverridesInstrs
+  , applySyntaxOverridesDefs
+  , SyntaxOverrides
   , foldASL
   , foldExpr
   , mkFunctionName
@@ -98,17 +101,15 @@ applySyntaxOverridesInstrs ovrs instrs =
   in mapInstr <$> instrs
 
 
-prepASL :: ([AS.Instruction], [AS.Definition])
-        -> [(T.Text, AS.Type)]
-        -> ([AS.Instruction], [AS.Definition])
-prepASL (instrs, defs) gSyns =
-  let ovrs = mkSyntaxOverrides defs gSyns
+prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
+prepASL (instrs, defs) =
+  let ovrs = mkSyntaxOverrides defs
   in (applySyntaxOverridesInstrs ovrs instrs, applySyntaxOverridesDefs ovrs defs)
 
 
 
-mkSyntaxOverrides :: [AS.Definition] -> [(T.Text, AS.Type)] -> SyntaxOverrides
-mkSyntaxOverrides defs globalTypeSynonyms =
+mkSyntaxOverrides :: [AS.Definition] -> SyntaxOverrides
+mkSyntaxOverrides defs =
   let getters = Set.fromList $ catMaybes $ getterName <$> defs
       setters = Set.fromList $ catMaybes $ setterName <$> defs
 
@@ -160,7 +161,7 @@ mkSyntaxOverrides defs globalTypeSynonyms =
         AS.DefTypeAlias nm t -> Just (nm, t)
         _ -> Nothing
 
-      typeSynMap = Map.fromList (typeSynonyms ++ globalTypeSynonyms)
+      typeSynMap = Map.fromList typeSynonyms
 
       typeOverrides t = case t of
         AS.TypeRef (AS.QualifiedIdentifier _ nm) -> case Map.lookup nm typeSynMap of

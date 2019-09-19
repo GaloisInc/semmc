@@ -23,6 +23,7 @@ module SemMC.ASL.Translation.Preprocess
     getDefinitions
   , computeInstructionSignature'
   , prepASL
+  , ASLSpec(..)
   , SigState
   , SigEnv
   , SigM
@@ -38,6 +39,7 @@ module SemMC.ASL.Translation.Preprocess
   , exprToInt
   , exprToBool
   , mkSignature
+  , registerTypeSynonyms
   ) where
 
 import Debug.Trace (traceM)
@@ -118,7 +120,7 @@ data Definitions arch =
               , defTypes :: Map.Map T.Text (Some UserType)
               , defEnums :: Map.Map T.Text Integer
               , defConsts :: Map.Map T.Text (Some ConstVal)
-              , defRegisterSlices :: Map.Map (T.Text, T.Text) (Integer, Integer)
+              , defExtendedTypes :: Map.Map T.Text ExtendedTypeData
               }
 
 -- | Collect the definitions representing the current state
@@ -133,14 +135,15 @@ getDefinitions = do
     , defTypes = userTypes st
     , defEnums = enums env
     , defConsts = consts env
-    , defRegisterSlices = registerSlices env
+    , defExtendedTypes = extendedTypeData env
     }
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
 builtinGlobals =
   [ ("UNDEFINED", Some WT.BaseBoolRepr)
   , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
-  , ("ThisInstrLength", Some WT.BaseIntegerRepr)
+  , ("EXCEPTIONTAKEN", Some WT.BaseBoolRepr)
+  , ("__ThisInstrLength", Some WT.BaseIntegerRepr)
   , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
   , ("_R", Some (WT.BaseArrayRepr
                  (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
@@ -154,16 +157,38 @@ builtinGlobals =
   , ("EventRegister", Some (WT.BaseBVRepr (WT.knownNat @1)))
   ]
 
-globalTypeSynonyms :: [(T.Text, AS.Type)]
-globalTypeSynonyms =
-  [ ("MAIRType", AS.TypeFun "bits" (AS.ExprLitInt 64))
-  , ("ESRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
-  , ("VBARType", AS.TypeFun "bits" (AS.ExprLitInt 64))
-  , ("FPCRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
-  , ("FPSCRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
-  , ("SPSRType", AS.TypeFun "bits" (AS.ExprLitInt 32))
+
+-- NOTE: This is clagged from types.asl, in
+-- theory we could read this in instead.
+registerTypeSynonyms :: [(T.Text, T.Text)]
+registerTypeSynonyms =
+  [ ("CPACRType", "CPACR_EL1")
+  , ("CNTKCTLType", "CNTKCTL_EL1")
+  , ("ESRType", "ESR_EL1")
+  , ("FPCRType", "FPCR")
+  , ("MAIRType", "MAIR_EL1")
+  , ("SCRType", "SCR")
+  , ("SCTLRType", "SCTLR_EL1")
   ]
 
+
+-- TODO: Type synonyms are currently a global property,
+-- ideally type normalization should happen with respect to
+-- some typing environment so this can be generated from the above.
+
+-- We can't treat these as normal aliases, since we need to retain the
+-- register field information.
+globalTypeSynonyms :: [(T.Text, AS.Type)]
+globalTypeSynonyms =
+  [ ("CPACRType", bits 32)
+  , ("CNTKCTLType", bits 32)
+  , ("ESRType", bits 32)
+  , ("FPCRType", bits 32)
+  , ("MAIRType", bits 64)
+  , ("SCRType", bits 32)
+  , ("SCTLRType", bits 64)
+  ]
+  where bits n = AS.TypeFun "bits" (AS.ExprLitInt  n)
 
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
@@ -236,10 +261,23 @@ newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv 
            , E.MonadError SigException
            )
 
+data ASLSpec = ASLSpec
+  { aslInstructions :: [AS.Instruction]
+  , aslDefinitions :: [AS.Definition]
+  , aslSupportDefinitions :: [AS.Definition]
+  , aslExtraDefinitions :: [AS.Definition]
+  , aslRegisterDefinitions :: [AS.RegisterDefinition]
+  }
 
-prepASL :: ([AS.Instruction], [AS.Definition]) -> ([AS.Instruction], [AS.Definition])
-prepASL (instrs,defs) = ASLT.prepASL (instrs,defs ++ extraDefs)
-  (globalTypeSynonyms)
+prepASL :: ASLSpec -> ASLSpec
+prepASL (ASLSpec instrs defs sdefs edefs rdefs) =
+  let
+    ovrs = ASLT.mkSyntaxOverrides (defs ++ sdefs ++ edefs)
+    f = ASLT.applySyntaxOverridesDefs ovrs
+    g = ASLT.applySyntaxOverridesInstrs ovrs
+  in
+    ASLSpec (g instrs) (f defs) (f sdefs) (f edefs) rdefs
+
 
 getRegisterType :: AS.Register -> Some WT.BaseTypeRepr
 getRegisterType r =
@@ -252,8 +290,8 @@ getRegisterArrayType ra =
   case getRegisterType (AS.regDef ra) of
     Some t -> Some (WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) t)
 
-getRegisterDefSig :: AS.RegisterDefinition -> (T.Text, Some WT.BaseTypeRepr)
-getRegisterDefSig rd = case rd of
+getRegisterDefType :: AS.RegisterDefinition -> (T.Text, Some WT.BaseTypeRepr)
+getRegisterDefType rd = case rd of
   AS.RegisterDefSingle r -> (AS.regName r, getRegisterType r)
   AS.RegisterDefArray ra -> (AS.regName (AS.regDef ra), getRegisterArrayType ra)
 
@@ -262,15 +300,14 @@ getRegisterFieldSlice rf = case AS.regFieldName rf of
   Just nm -> Just (nm, (AS.regFieldLo rf, AS.regFieldHi rf))
   _ -> Nothing
 
-getRegisterSlices :: AS.Register -> [((T.Text, T.Text), (Integer, Integer))]
-getRegisterSlices r =
-  map (\(nm, (lo, hi)) -> ((AS.regName r, nm), (lo, hi))) $
-        catMaybes $ map getRegisterFieldSlice (AS.regFields r)
+getRegisterSig :: AS.Register -> RegisterSig
+getRegisterSig r =
+  Map.fromList $ catMaybes $ map getRegisterFieldSlice (AS.regFields r)
 
-getRegisterDefSlices :: AS.RegisterDefinition -> [((T.Text, T.Text), (Integer, Integer))]
-getRegisterDefSlices rd = case rd of
-  AS.RegisterDefSingle r -> getRegisterSlices r
-  AS.RegisterDefArray ra -> getRegisterSlices (AS.regDef ra)
+getRegisterDefSig :: AS.RegisterDefinition -> (T.Text, ExtendedTypeData)
+getRegisterDefSig rd = case rd of
+  AS.RegisterDefSingle r -> (AS.regName r, TypeRegister $ getRegisterSig r)
+  AS.RegisterDefArray ra -> (AS.regName (AS.regDef ra), TypeArray $ TypeRegister $ getRegisterSig (AS.regDef ra))
 
 buildCallableMap :: [(T.Text, Callable)] -> Map.Map T.Text Callable
 buildCallableMap cs =
@@ -285,14 +322,18 @@ buildCallableMap cs =
            else error $ "Function " ++ show nm ++ " has multiple overloads of the same arity and is not overloaded"
 
 
-
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
 -- signatures.
-buildEnv :: ([AS.Definition], [AS.RegisterDefinition]) -> SigEnv
-buildEnv (defs, rdefs) =
-  let envCallables = buildCallableMap ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> defs)))
-      globalVars = Map.fromList (builtinGlobals ++ map getRegisterDefSig rdefs)
-      registerSlices = Map.fromList (concat $ map getRegisterDefSlices rdefs)
+buildEnv :: ASLSpec -> SigEnv
+buildEnv ASLSpec{..} =
+  let defs = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
+      getCallables ds = buildCallableMap ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> ds)))
+
+      baseCallables = getCallables aslDefinitions
+      extraCallables = getCallables (aslSupportDefinitions ++ aslExtraDefinitions)
+      envCallables = Map.union extraCallables baseCallables -- extras override base definitions
+      globalVars = Map.fromList (builtinGlobals ++ map getRegisterDefType aslRegisterDefinitions)
+      extendedTypeData = Map.fromList (map getRegisterDefSig aslRegisterDefinitions)
 
       -- globalVars = Map.fromList $
       --   ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
@@ -332,17 +373,17 @@ buildEnv (defs, rdefs) =
 
 -- | Given a list of ASL 'AS.Definition's, execute a 'SigM' action and either return
 -- the result or an exception coupled with the final state.
-execSigM :: ([AS.Definition], [AS.RegisterDefinition]) -> SigM ext f a -> Either SigException a
-execSigM defs action =
+execSigM :: ASLSpec -> SigM ext f a -> Either SigException a
+execSigM spec action =
   let rws = E.runExceptT $ getSigM action
-      (e, _, _) = RWS.runRWS rws (buildEnv defs) initState
+      (e, _, _) = RWS.runRWS rws (buildEnv spec) initState
   in case e of
     Left err -> Left err
     Right a -> Right a
   where initState = SigState Map.empty Map.empty Map.empty []
 
-buildSigState :: ([AS.Definition], [AS.RegisterDefinition]) -> (SigEnv, SigState)
-buildSigState defs = (buildEnv defs, SigState Map.empty Map.empty Map.empty [])
+buildSigState :: ASLSpec -> (SigEnv, SigState)
+buildSigState spec = (buildEnv spec, SigState Map.empty Map.empty Map.empty [])
 
 runSigM :: SigEnv -> SigState -> SigM ext f a -> (Either SigException a, SigState)
 runSigM env state action =
@@ -356,7 +397,7 @@ runSigM env state action =
 data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                            -- , globalVars :: Map.Map T.Text DefVariable
                            , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
-                           , registerSlices :: Map.Map (T.Text, T.Text) (Integer, Integer)
+                           , extendedTypeData :: Map.Map T.Text ExtendedTypeData
                            , enums :: Map.Map T.Text Integer
                            , consts :: Map.Map T.Text (Some ConstVal)
                            , types :: Map.Map T.Text DefType
@@ -617,12 +658,8 @@ lValExprGlobalVars lValExpr = case lValExpr of
     concat <$> traverse lValExprGlobalVars les
   AS.LValTuple les ->
     concat <$> traverse lValExprGlobalVars les
-  AS.LValMember (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-    maybeToList <$> varGlobal structName
-  AS.LValMember _ _ -> return [] -- error "lValExprGlobalVars"
-  AS.LValMemberBits (AS.LValVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
-    maybeToList <$> varGlobal structName
-  AS.LValMemberBits _ _ -> return [] -- error "lValExprGlobalVars"
+  AS.LValMember lv _ -> lValExprGlobalVars lv
+  AS.LValMemberBits lv _ -> lValExprGlobalVars lv
   AS.LValSlice les ->
     concat <$> traverse lValExprGlobalVars les
   _ -> return []
@@ -665,7 +702,9 @@ exprGlobalVars expr = case expr of
       varGlobals <- catMaybes <$> traverse varGlobal vars
       return $ eGlobals ++ varGlobals
     AS.ExprInMask e _ -> exprGlobalVars e
-    AS.ExprCall qName argEs -> if (overrideFun overrides) qName then return [] else do
+    AS.ExprCall qName argEs -> if (overrideFun overrides) qName
+      then concat <$> traverse exprGlobalVars argEs
+      else do
       argGlobals <- concat <$> traverse exprGlobalVars argEs
       mCallable <- lookupCallable qName (length argEs)
       case mCallable of
@@ -693,16 +732,8 @@ exprGlobalVars expr = case expr of
         return $ testExprGlobals ++ resExprGlobals
       defaultGlobals <- exprGlobalVars def
       return $ concat branchGlobals ++ defaultGlobals
-    -- AS.ExprMember e var -> do
-      -- eGlobals <- exprGlobalVars e
-      -- varGlobals <- maybeToList <$> varGlobal var
-      -- return $ eGlobals ++ varGlobals
-    AS.ExprMember (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberName -> do
-      maybeToList <$> varGlobal structName
-    AS.ExprMember _ _ -> return [] -- "Assuming no nested global structs"
-    AS.ExprMemberBits (AS.ExprVarRef (AS.QualifiedIdentifier _ structName)) memberNames -> do
-      maybeToList <$> varGlobal structName
-    AS.ExprMemberBits _ _ -> throwError $ UnsupportedSigExpr expr
+    AS.ExprMember e _ -> exprGlobalVars e
+    AS.ExprMemberBits e _ -> exprGlobalVars e
     _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
@@ -714,7 +745,9 @@ stmtGlobalVars stmt =
   case stmt of
       AS.StmtVarDeclInit _ e -> exprGlobalVars e
       AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
-      AS.StmtCall qName argEs -> if (overrideFun overrides) qName then return [] else do
+      AS.StmtCall qName argEs -> if (overrideFun overrides) qName
+        then concat <$> traverse exprGlobalVars argEs
+        else do
         argGlobals <- concat <$> traverse exprGlobalVars argEs
         mCallable <- lookupCallable qName (length argEs)
         case mCallable of
@@ -963,32 +996,6 @@ createInstStmts :: [AS.Stmt]
 createInstStmts encodingSpecificOperations stmts =
   encodingSpecificOperations ++ stmts
 
--- Extra definitions that give mock definitions to undefined functions
-extraDefs :: [AS.Definition]
-extraDefs = [
-  AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "Zeros"
-                 , callableArgs = []
-                 , callableRets = [AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N"))]
-                 , callableStmts = [AS.StmtReturn (Just $
-                                                   (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Zeros")
-                                                     [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N")]))]
-                 },
-  AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "ZeroExtend"
-                 , callableArgs = [("val", AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "M")))]
-                 , callableRets = [AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N"))]
-                 , callableStmts = [AS.StmtReturn (Just $
-                                                   (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "ZeroExtend")
-                                                     [ AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "val")
-                                                     , AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "N")]))]
-                 },
-  AS.DefCallable { callableName = AS.QualifiedIdentifier AS.ArchQualAny "ThisInstrLength"
-                 , callableArgs = []
-                 , callableRets = [AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer")]
-                 , callableStmts = [AS.StmtReturn (Just $ AS.ExprVarRef
-                                                   (AS.QualifiedIdentifier AS.ArchQualAny "ThisInstrLength"))]
-                 }
-  ]
-
 -- Overrides only for the purposes of collecting global variables
 data Overrides arch =
   Overrides { overrideFun :: AS.QualifiedIdentifier -> Bool
@@ -1000,6 +1007,9 @@ overrides = Overrides {..}
           AS.QualifiedIdentifier _ nm ->
             nm `elem` ["CurrentCond","IsExternalAbort","IsExternalAbort","IsAsyncAbort"
                        ,"IsExternalSyncAbort","IsSErrorInterrupt","HaveFP16Ext"
-                       ,"Unreachable","LSInstructionSyndrome", "SETTER_SP", "GETTER_SP"
-                       , "ALUExceptionReturn", "ALUWritePC", "Zeros"
-                       , "Min", "Max", "Align", "Abs", "TakeHypTrapException", "TakeException"] -- overloaded
+                       ,"Unreachable","LSInstructionSyndrome"
+                       , "ALUExceptionReturn", "ALUWritePC"
+                       , "Min", "Max", "Align", "Abs", "TakeHypTrapException"
+                       , "EndOfInstruction", "TraceSynchronizationBarrier", "ThisInstrLength"
+                       , "__ReadRAM", "__WriteRAM", "ResetExternalDebugRegisters"
+                       ]

@@ -18,6 +18,10 @@ module SemMC.ASL.Types
   , UserType(..)
   , LabeledValue(..)
   , TypeEnvir
+  , UserStructAcc
+  , StructAccessor(..)
+  , RegisterSig
+  , ExtendedTypeData(..)
   , userTypeRepr
   , toBaseType
   , toBaseTypes
@@ -186,3 +190,33 @@ mkFinalFunctionName dargs nm = T.concat $ [nm] ++ map (\(nm,i) -> nm <> "_" <> T
 
 fromListTypeEnvir :: [(T.Text, Integer)] -> TypeEnvir
 fromListTypeEnvir = List.foldr (\(nm,i) -> insertTypeEnvir nm i) emptyTypeEnvir
+
+-- Extended type data for tracking struct member identifiers. This is necessary since Crucible structs
+-- are just tuples, and so extra information is required to resolve ASL struct members to their
+-- corresponding Crucible struct index.
+
+type UserStructAcc = Map.Map T.Text StructAccessor
+
+data StructAccessor = forall tps tp. StructAccessor
+  { structRepr :: Ctx.Assignment WT.BaseTypeRepr tps
+  , structIdx :: Ctx.Index tps tp
+  , structFieldExt :: ExtendedTypeData}
+
+deriving instance Show StructAccessor
+
+instance Eq StructAccessor where
+  (==) a b = case (a, b) of
+    (StructAccessor ar aidx e, StructAccessor br bidx e') |
+        Just Refl <- testEquality ar br
+      , Just Refl <- testEquality aidx bidx -> e == e'
+    _ -> False
+
+type RegisterSig = Map.Map T.Text (Integer, Integer)
+
+data ExtendedTypeData =
+    TypeBasic
+  | TypeRegister RegisterSig
+  | TypeStruct UserStructAcc
+  | TypeTuple [ExtendedTypeData]
+  | TypeArray ExtendedTypeData
+  deriving (Show, Eq)

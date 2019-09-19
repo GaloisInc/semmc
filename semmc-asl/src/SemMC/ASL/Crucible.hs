@@ -156,7 +156,7 @@ funcInitialState :: forall init tp h s globals arch
 funcInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
-                   , tsExtendedTypes = Map.empty
+                   , tsExtendedTypes = defExtendedTypes defs
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsEnums = defEnums defs
                    , tsConsts = defConsts defs
@@ -164,8 +164,6 @@ funcInitialState defs sig hdl globals args =
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
                    , tsTypeEnvir = funcTypeEnvir sig
-                   , tsAtomToStruct = Map.empty
-                   , tsRegisterSlices = defRegisterSlices defs
                    }
   where
     addArgumentAtom :: forall tp0
@@ -279,7 +277,7 @@ procInitialState :: forall init globals h s arch
 procInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
-                   , tsExtendedTypes = Map.empty
+                   , tsExtendedTypes = defExtendedTypes defs
                    , tsGlobals = FC.foldrFC addGlobal Map.empty globals
                    , tsConsts = defConsts defs
                    , tsEnums = defEnums defs
@@ -287,8 +285,6 @@ procInitialState defs sig hdl globals args =
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
                    , tsTypeEnvir = procTypeEnvir sig
-                   , tsAtomToStruct = Map.empty
-                   , tsRegisterSlices = defRegisterSlices defs
                    }
   where
     addArgument :: forall tp

@@ -53,6 +53,12 @@ defsFilePath = "test/defs.parsed"
 regsFilePath :: FilePath
 regsFilePath = "test/regs.parsed"
 
+supportFilePath :: FilePath
+supportFilePath = "test/support.parsed"
+
+extraDefsFilePath :: FilePath
+extraDefsFilePath = "test/extradefs.parsed"
+
 collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text, AS.InstructionSet)]
 collectInstructions aslInsts = do
   List.concat $
@@ -95,20 +101,20 @@ translateAll = do
 
 parTranslateAll :: TranslatorOptions -> Int -> IO (SigMap)
 parTranslateAll opts chunksz = do
-  (aslInsts, aslDefs, aslRegDefs) <- getASL
-  let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts
+  spec <- getASL
+  let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions (aslInstructions spec)
   let (nchunks, _) = length allInstrs `divMod` chunksz
-
+  let (sigEnv, sigState) = buildSigState spec
   let runFun chunk = do
         let opts' = opts { optVerbose = False,
                            optStartIndex = (chunk * chunksz),
                            optNumberOfInstructions = Just chunksz } 
-        runWithFilters' opts' aslInsts aslDefs aslRegDefs
+        runWithFilters' opts' spec sigEnv sigState
         
   mvs <- mapM (\chunk -> doFork (runFun chunk)) [0 .. nchunks]
   sms <- mapM collapseResult mvs
   let opts' = opts { optStartIndex = (nchunks * chunksz), optNumberOfInstructions = Nothing }
-  sm <- runWithFilters' opts' aslInsts aslDefs aslRegDefs
+  sm <- runWithFilters' opts' spec sigEnv sigState
   E.when (optVerbose opts) $ mapM_ (putStrLn . T.unpack) (reverse $ sLog sm)
   let sm' = mergeInstrExceptions (sm : sms)
   return sm'
@@ -192,15 +198,14 @@ isInstrTransFilteredOut inm = do
   return $ (not $ test inm) || skipTranslation
 
 runWithFilters' :: TranslatorOptions
-                -> [AS.Instruction]
-                -> [AS.Definition]
-                -> [AS.RegisterDefinition]
+                -> ASLSpec
+                -> SigEnv
+                -> SigState
                 -> IO (SigMap)
-runWithFilters' opts aslInsts aslDefs aslRegDefs = do
+runWithFilters' opts spec sigEnv sigState = do
   let startidx = optStartIndex opts
   let numInstrs = optNumberOfInstructions opts
-  let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions aslInsts
-  let (sigEnv, sigState) = buildSigState (aslDefs, aslRegDefs)
+  let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions (aslInstructions spec)
   let instrs = case numInstrs of {Just i -> take i (drop startidx allInstrs); _ -> drop startidx allInstrs}
   sm <- MSS.execStateT (forM_ instrs (\(i, (instr, enc, iset)) -> do
     let ident = instrToIdent instr enc iset
@@ -216,12 +221,15 @@ runWithFilters' opts aslInsts aslDefs aslRegDefs = do
 
 runWithFilters :: TranslatorOptions -> IO (SigMap)
 runWithFilters opts = do
-  (aslInsts, aslDefs, aslRegDefs) <- getASL
-  putStrLn $ "Loaded " ++ show (length aslInsts) ++ " instructions and "
-    ++ show (length aslDefs) ++ " definitions and "
-    ++ show (length aslRegDefs) ++ " register definitions."
-  runWithFilters' opts aslInsts aslDefs aslRegDefs
-                                                  
+  spec <- getASL
+  putStrLn $ "Loaded "
+    ++ show (length $ aslInstructions spec) ++ " instructions and "
+    ++ show (length $ aslDefinitions spec) ++ " definitions and "
+    ++ show (length $ aslSupportDefinitions spec) ++ " support definitions and "
+    ++ show (length $ aslExtraDefinitions spec) ++ " extra definitions and "
+    ++ show (length $ aslRegisterDefinitions spec) ++ " register definitions."
+  let (sigEnv, sigState) = buildSigState spec
+  runWithFilters' opts spec sigEnv sigState
 
 data ExpectedException =
     CannotMonomorphize T.Text
@@ -394,6 +402,7 @@ data TranslatorOptions = TranslatorOptions
   , optFilters :: Filters
   , optSkipTranslation :: Bool
   , optCollectExceptions :: Bool
+  , optThrowUnexpectedExceptions :: Bool
   }
 
 defaultOptions :: TranslatorOptions
@@ -404,17 +413,12 @@ defaultOptions = TranslatorOptions
   , optFilters = noFilter
   , optSkipTranslation = True
   , optCollectExceptions = True
+  , optThrowUnexpectedExceptions = True
   }
 
 doTranslationOptions :: TranslatorOptions
-doTranslationOptions = TranslatorOptions
-  { optVerbose = True
-  , optStartIndex = 0
-  , optNumberOfInstructions = Nothing
-  , optFilters = filterStalls
-  , optSkipTranslation = False
-  , optCollectExceptions = True
-  }
+doTranslationOptions = defaultOptions {optFilters = filterStalls, optSkipTranslation = False}
+
 
 -- FIXME: Seperate this into RWS
 data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeSignature))
@@ -445,10 +449,12 @@ liftSigM k f = do
 collectExcept :: ElemKey -> TranslatorException -> MSS.StateT SigMap IO ()
 collectExcept k e = do
   collectExceptions <- MSS.gets (optCollectExceptions . sOptions)
-  if collectExceptions then case k of 
+  throwUnexpectedExceptions <- MSS.gets (optThrowUnexpectedExceptions . sOptions)
+  if (not collectExceptions || (isUnexpectedException k e && throwUnexpectedExceptions))
+    then X.throw e
+  else case k of
     KeyInstr ident -> MSS.modify' $ \s -> s { instrExcepts = Map.insert ident e (instrExcepts s) }
     KeyFun fun -> MSS.modify' $ \s -> s { funExcepts = Map.insert fun e (funExcepts s) }
-  else X.throw e
 
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
@@ -477,6 +483,7 @@ translationLoop fromInstr defs (fnname, env) = do
        case Map.lookup fnname (defSignatures defs) of
            Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
                  MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
+                 logMsg $ "Translating function: " ++ show finalName ++ show sig
                  deps <- processFunction fromInstr finalName sig stmts defs
                  MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
                  alldeps <- mapM (translationLoop fromInstr defs) (Map.assocs deps)
@@ -491,27 +498,34 @@ queryASL :: (T.Text -> AS.Expr -> b -> b) ->
             (T.Text -> AS.LValExpr -> b -> b) ->
             (T.Text -> AS.Stmt -> b -> b) -> b -> IO b
 queryASL f h g b = do
-  (aslInsts, aslDefs, _) <- getASL
-  return $ ASLT.foldASL f h g aslDefs aslInsts b
+  ASLSpec aslInsts aslDefs aslDefs' aslDefs'' _ <- getASL
+  return $ ASLT.foldASL f h g (aslDefs ++ aslDefs' ++ aslDefs'') aslInsts b
 
-getASL :: IO ([AS.Instruction], [AS.Definition], [AS.RegisterDefinition])
+getASL :: IO (ASLSpec)
 getASL = do
   eAslDefs <- AP.parseAslDefsFile defsFilePath
+  eAslSupportDefs <- AP.parseAslDefsFile supportFilePath
+  eAslExtraDefs <- AP.parseAslDefsFile extraDefsFilePath
   eAslInsts <- AP.parseAslInstsFile instsFilePath
   eAslRegs <- AP.parseAslRegsFile regsFilePath
-  case (eAslInsts, eAslDefs, eAslRegs) of
-    (Left err, _, _) -> do
+  case (eAslInsts, eAslDefs, eAslRegs, eAslExtraDefs, eAslSupportDefs) of
+    (Left err, _, _, _, _) -> do
       putStrLn $ "Error loading ASL instructions: " ++ show err
       exitFailure
-    (_, Left err, _) -> do
+    (_, Left err, _, _, _) -> do
       putStrLn $ "Error loading ASL definitions: " ++ show err
       exitFailure
-    (_, _, Left err) -> do
+    (_, _, Left err ,_, _) -> do
       putStrLn $ "Error loading ASL registers: " ++ show err
       exitFailure
-    (Right aslInsts', Right aslDefs', Right aslRegs') -> do
-      let (aslInsts'', aslDefs'') = prepASL (aslInsts', aslDefs')
-      return (aslInsts'', aslDefs'', aslRegs')
+    (_, _, _ , Left err, _) -> do
+      putStrLn $ "Error loading extra ASL definitions: " ++ show err
+      exitFailure
+    (_, _, _ , _, Left err) -> do
+      putStrLn $ "Error loading ASL support definitions: " ++ show err
+      exitFailure
+    (Right aslInsts, Right aslDefs, Right aslRegs, Right aslExtraDefs, Right aslSupportDefs) -> do
+      return $ prepASL $ ASLSpec aslInsts aslDefs aslSupportDefs aslExtraDefs aslRegs
 
 processInstruction :: InstructionIdent
                    -> ProcedureSignature globals init
