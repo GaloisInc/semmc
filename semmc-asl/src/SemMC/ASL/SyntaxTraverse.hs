@@ -44,6 +44,7 @@ import           Data.Maybe (maybeToList, catMaybes, fromMaybe, listToMaybe, isJ
 data SyntaxOverrides = SyntaxOverrides { stmtOverrides :: AS.Stmt -> AS.Stmt
                                        , exprOverrides :: AS.Expr -> AS.Expr
                                        , typeOverrides :: AS.Type -> AS.Type
+                                       , lvalOverrides :: AS.LValExpr -> AS.LValExpr
                                        }
 
 applySyntaxOverridesDefs :: SyntaxOverrides -> [AS.Definition] -> [AS.Definition]
@@ -147,6 +148,11 @@ mkSyntaxOverrides defs =
         _ -> stmt
 
       exprOverrides' expr = case expr of
+        -- Limited support for alternate slice syntax
+        AS.ExprIndex e slices@[AS.SliceOffset _ _] ->
+          AS.ExprSlice e slices
+        AS.ExprIndex e slices@[AS.SliceRange _ _] ->
+          AS.ExprSlice e slices
         AS.ExprIndex (AS.ExprVarRef qName) slices ->
           if Set.member (mkFunctionName (mkGetterName True qName) (length slices)) getters then
             AS.ExprCall (mkGetterName True qName) (map getSliceExpr slices)
@@ -156,6 +162,8 @@ mkSyntaxOverrides defs =
             AS.ExprCall (mkGetterName False qName) []
           else expr
         _ -> expr
+
+      lvalOverrides lval = lval
 
       -- FIXME: This is a simple toplevel rewrite that assumes
       -- aliases and consts are never shadowed
@@ -190,7 +198,7 @@ mkSyntaxOverrides defs =
           Nothing -> exprOverrides' e
         _ -> exprOverrides' e
 
-  in SyntaxOverrides stmtOverrides exprOverrides typeOverrides
+  in SyntaxOverrides stmtOverrides exprOverrides typeOverrides lvalOverrides
 
 applyTypeSyntaxOverride :: SyntaxOverrides -> AS.Type -> AS.Type
 applyTypeSyntaxOverride ovrs t =
@@ -217,6 +225,23 @@ applyTypeSyntaxOverride ovrs t =
     AS.TypeReg i fs -> AS.TypeReg i (mapField <$> fs)
     AS.TypeArray t ixt -> AS.TypeArray (h t) (mapIxType ixt)
     _ -> t'
+
+applyLValSyntaxOverride :: SyntaxOverrides -> AS.LValExpr -> AS.LValExpr
+applyLValSyntaxOverride ovrs lval =
+  let
+    k = applyLValSyntaxOverride ovrs
+    lval' = lvalOverrides ovrs lval
+   in case lval' of
+    AS.LValMember lv i -> AS.LValMember (k lv) i
+    AS.LValMemberArray lv is -> AS.LValMemberArray (k lv) is
+    AS.LValArrayIndex lv sl -> AS.LValArrayIndex (k lv) sl
+    AS.LValSliceOf lv sl -> AS.LValSliceOf (k lv) sl
+    AS.LValArray lvs -> AS.LValArray (k <$> lvs)
+    AS.LValTuple lvs -> AS.LValTuple (k <$> lvs)
+    AS.LValMemberBits lv is -> AS.LValMemberBits (k lv) is
+    AS.LValSlice lvs -> AS.LValSlice (k <$> lvs)
+    _ -> lval'
+
 
 applyExprSyntaxOverride :: SyntaxOverrides -> AS.Expr -> AS.Expr
 applyExprSyntaxOverride ovrs expr =

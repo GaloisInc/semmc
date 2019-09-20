@@ -306,6 +306,20 @@
               (ExprVarRef
                 (QualifiedIdentifier Any FALSE))))))))
   (DefCallable
+    (QualifiedIdentifier Any ResetExternalDebugRegisters)
+    (list
+      (SymDecl
+        cold_reset
+        (TypeRef
+          (QualifiedIdentifier Any boolean))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))))))
+  (DefCallable
     (QualifiedIdentifier Any SoftwareStep_DidNotStep)
     (list)
     (Just
@@ -850,7 +864,7 @@
                     (ExprCall
                       (QualifiedIdentifier AArch64 BranchAddr)
                       (list
-                        (ExprSlice
+                        (ExprIndex
                           (ExprVarRef
                             (QualifiedIdentifier Any target))
                           (list
@@ -925,7 +939,7 @@
                   (StmtAssign
                     (LValVarRef
                       (QualifiedIdentifier Any _PC))
-                    (ExprSlice
+                    (ExprIndex
                       (ExprVarRef
                         (QualifiedIdentifier Any target))
                       (list
@@ -1057,17 +1071,14 @@
         (list
           (StmtReturn
             (Just
-              (ExprSlice
+              (ExprIndex
                 (ExprVarRef
                   (QualifiedIdentifier Any _PC))
                 (list
-                  (SliceRange
-                    (ExprBinOp
-                      "-"
-                      (ExprVarRef
-                        (QualifiedIdentifier Any N))
-                      (ExprLitNat 1))
-                    (ExprLitNat 0))))))))))
+                  (SliceOffset
+                    (ExprLitNat 0)
+                    (ExprVarRef
+                      (QualifiedIdentifier Any N)))))))))))
   (DefCallable
     (QualifiedIdentifier Any NextInstrAddr)
     (list)
@@ -1083,7 +1094,7 @@
         (list
           (StmtReturn
             (Just
-              (ExprSlice
+              (ExprIndex
                 (ExprBinOp
                   "+"
                   (ExprVarRef
@@ -1197,7 +1208,7 @@
                               (QualifiedIdentifier AArch32 MemSingle))
                             (list
                               (SliceSingle
-                                (ExprSlice
+                                (ExprIndex
                                   (ExprVarRef
                                     (QualifiedIdentifier Any pc))
                                   (list
@@ -1266,7 +1277,7 @@
                                       (SliceSingle
                                         (ExprBinOp
                                           "+"
-                                          (ExprSlice
+                                          (ExprIndex
                                             (ExprVarRef
                                               (QualifiedIdentifier Any pc))
                                             (list
@@ -1313,7 +1324,7 @@
                                 (QualifiedIdentifier AArch32 MemSingle))
                               (list
                                 (SliceSingle
-                                  (ExprSlice
+                                  (ExprIndex
                                     (ExprVarRef
                                       (QualifiedIdentifier Any pc))
                                     (list
@@ -1390,7 +1401,7 @@
                     (StmtCall
                       (QualifiedIdentifier Any ExecuteT16)
                       (list
-                        (ExprSlice
+                        (ExprIndex
                           (ExprVarRef
                             (QualifiedIdentifier Any instr))
                           (list
@@ -1406,14 +1417,14 @@
                     (StmtCall
                       (QualifiedIdentifier Any ExecuteT32)
                       (list
-                        (ExprSlice
+                        (ExprIndex
                           (ExprVarRef
                             (QualifiedIdentifier Any instr))
                           (list
                             (SliceRange
                               (ExprLitNat 31)
                               (ExprLitNat 16))))
-                        (ExprSlice
+                        (ExprIndex
                           (ExprVarRef
                             (QualifiedIdentifier Any instr))
                           (list
@@ -1471,7 +1482,7 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any cond))
-                  (ExprSlice
+                  (ExprIndex
                     (ExprLitHex "0xE")
                     (list
                       (SliceRange
@@ -1617,7 +1628,7 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any _PC))
-                  (ExprSlice
+                  (ExprIndex
                     (ExprBinOp
                       "+"
                       (ExprVarRef
@@ -1650,7 +1661,7 @@
                   (ExprVarRef
                     (QualifiedIdentifier Any __T16)))
                 (ExprInMask
-                  (ExprSlice
+                  (ExprIndex
                     (ExprVarRef
                       (QualifiedIdentifier Any __ThisInstr))
                     (list
@@ -1660,7 +1671,7 @@
                   '1011 1111 xxxx xxxx'))
               (ExprBinOp
                 "!="
-                (ExprSlice
+                (ExprIndex
                   (ExprVarRef
                     (QualifiedIdentifier Any __ThisInstr))
                   (list
@@ -2058,7 +2069,7 @@
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any _PC))
-            (ExprSlice
+            (ExprIndex
               (ExprVarRef
                 (QualifiedIdentifier Any x))
               (list
@@ -2627,7 +2638,7 @@
               "=="
               (ExprVarRef
                 (QualifiedIdentifier Any address))
-              (ExprSlice
+              (ExprIndex
                 (ExprLitHex "0x13000000")
                 (list
                   (SliceRange
@@ -3146,6 +3157,18 @@
           (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier AArch64 ResetSystemRegisters)
+    (list
+      (SymDecl
+        cold_reset
+        (TypeRef
+          (QualifiedIdentifier Any boolean))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any ResetExternalDebugRegisters)
     (list
       (SymDecl
         cold_reset
@@ -3920,7 +3943,7 @@
               (ExprCall
                 (QualifiedIdentifier Any ZeroExtend)
                 (list
-                  (ExprSlice
+                  (ExprIndex
                     (ExprVarRef
                       (QualifiedIdentifier Any vaddress))
                     (list
@@ -3976,13 +3999,13 @@
                   (QualifiedIdentifier Any desc))
                 paddress)
               address)
-            (ExprSlice
+            (ExprIndex
               (ExprVarRef
                 (QualifiedIdentifier Any address))
               (list
-                (SliceRange
-                  (ExprLitNat 52)
-                  (ExprLitNat 0)))))
+                (SliceOffset
+                  (ExprLitNat 0)
+                  (ExprLitNat 52)))))
           (StmtReturn
             (Just
               (ExprIndex
@@ -4050,13 +4073,13 @@
                   (QualifiedIdentifier Any desc))
                 paddress)
               address)
-            (ExprSlice
+            (ExprIndex
               (ExprVarRef
                 (QualifiedIdentifier Any address))
               (list
-                (SliceRange
-                  (ExprLitNat 52)
-                  (ExprLitNat 0)))))
+                (SliceOffset
+                  (ExprLitNat 0)
+                  (ExprLitNat 52)))))
           (StmtAssign
             (LValArrayIndex
               (LValVarRef
@@ -4233,6 +4256,16 @@
               (QualifiedIdentifier Any FALSE)))))))
   (DefCallable
     (QualifiedIdentifier Any UnallocatedEncoding)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))))))
+  (DefCallable
+    (QualifiedIdentifier Any EndOfInstruction)
     (list)
     Nothing
     (Just

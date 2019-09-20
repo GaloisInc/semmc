@@ -1048,7 +1048,7 @@ matchPat :: AS.Expr -> AS.CasePattern -> AS.Expr
 matchPat expr (AS.CasePatternInt i) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitInt i)
 matchPat expr (AS.CasePatternBin bv) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitBin bv)
 matchPat expr (AS.CasePatternIdentifier ident) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny ident))
-matchPat _ (AS.CasePatternMask _) = X.throw $ UNIMPLEMENTED "bitmask pattern unimplemented"
+matchPat expr (AS.CasePatternMask mask) = AS.ExprBinOp AS.BinOpEQ expr (AS.ExprLitMask mask)
 matchPat _ AS.CasePatternIgnore = X.throw $ UNIMPLEMENTED "ignore pattern unimplemented"
 matchPat _ (AS.CasePatternTuple _) = X.throw $ UNIMPLEMENTED "tuple pattern unimplemented"
 
@@ -1085,6 +1085,10 @@ translateExpr' ov expr mTy
   | Just eo <- overrideExpr ov expr mTy = eo
   | otherwise =
     case expr of
+      AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) ->
+        translateExpr' ov (AS.ExprInSet e [AS.SetEltSingle mask]) mTy
+      AS.ExprBinOp AS.BinOpNEQ e mask@(AS.ExprLitMask _) ->
+        translateExpr' ov (AS.ExprUnOp AS.UnOpNot (AS.ExprInSet e [AS.SetEltSingle mask])) mTy
       AS.ExprLitInt i -> mkAtom (CCG.App (CCE.IntLit i))
       AS.ExprLitBin bits -> do
         let nBits = length bits
@@ -1207,7 +1211,7 @@ translateExpr' ov expr mTy
         Some ty <- translateType t
         mkAtom (getDefaultValue ty)
 
-      AS.ExprLitMask _ -> X.throw $ UNIMPLEMENTED "bitmasking expression"
+
       _ -> error (show expr)
   where
     mkAtom e = do
@@ -1276,7 +1280,9 @@ getSliceRange slice = do
         Just i <- exprToInt env e
       , Just someRepr <- WT.someNat i ->
         return (someRepr, someRepr)
-    AS.SliceOffset _ _ -> X.throw $ UNIMPLEMENTED "slice offsets"
+    AS.SliceOffset e e' ->
+      let hi = AS.ExprBinOp AS.BinOpAdd e (AS.ExprBinOp AS.BinOpSub e' (AS.ExprLitInt 1)) in
+      getSliceRange (AS.SliceRange hi e)
     _ -> X.throw $ UnsupportedSlice slice
 
   
@@ -1345,6 +1351,14 @@ translateIfExpr ov orig clauses elseExpr =
           atom <- CCG.mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr trA)))
           return (Some atom, ext)
 
+maskToBV :: AS.Mask -> AS.BitVector
+maskToBV mask = map maskBitToBit mask
+  where
+    maskBitToBit mb = case mb of
+      AS.MaskBitSet -> True
+      AS.MaskBitUnset -> False
+      AS.MaskBitEither -> False
+
 -- | Translate set element tests
 --
 -- Single element tests are translated into a simple equality test
@@ -1357,6 +1371,15 @@ translateSetElementTest :: Overrides arch
                         -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s CT.BoolType)
 translateSetElementTest ov e0 a0 elt =
   case elt of
+    AS.SetEltSingle expr@(AS.ExprLitMask mask) -> do
+      let maskExpr = AS.ExprLitBin (maskToBV mask)
+      Some maskAtom <- translateExpr ov maskExpr
+      Refl <- assertAtomType expr (CCG.typeOfAtom a0) maskAtom
+      Some maskedBV <- bvBinOp CCE.BVOr (e0, a0) (maskExpr, maskAtom)
+      Some testAtom <- applyBinOp eqOp (e0, a0) (AS.ExprBinOp AS.BinOpBitwiseOr e0 expr, maskedBV)
+      Refl <- assertAtomType expr CT.BoolRepr testAtom
+      return (CCG.AtomExpr testAtom)
+
     AS.SetEltSingle expr -> do
       Some atom1 <- translateExpr ov expr
       Refl <- assertAtomType expr (CCG.typeOfAtom a0) atom1
@@ -1754,11 +1777,7 @@ overrides = Overrides {..}
                   -> translateExpr' overrides (AS.ExprBinOp AS.BinOpDiv e1 e2) mTy
               _ -> X.throw $ InvalidOverloadedFunctionCall fun args
           AS.ExprCall (AS.QualifiedIdentifier _ "NOT") [e] -> Just $ do
-            Some atom <- translateExpr overrides e
-            case CCG.typeOfAtom atom of
-              CT.BVRepr nr -> do
-                mkAtom (CCG.App (CCE.BVNot nr (CCG.AtomExpr atom)))
-              tp -> X.throw $ ExpectedBVType e tp
+            translateExpr' overrides (AS.ExprUnOp AS.UnOpNeg e) mTy
           AS.ExprCall (AS.QualifiedIdentifier _ "Abs") [e] -> Just $ do
             Some atom <- translateExpr overrides e
             case CCG.typeOfAtom atom of

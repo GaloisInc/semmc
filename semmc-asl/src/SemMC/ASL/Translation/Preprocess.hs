@@ -335,12 +335,28 @@ mkCallableOverrideVariant Callable{..} =
       _ -> error $ "Bad type for override variant" ++ show t
     nm' = ASLT.mapInnerName (\nm -> T.concat $ nm : map (\(nm, t) -> getTypeStr t) callableArgs) callableName
 
-buildCallableMap :: [(T.Text, Callable)] -> Map.Map T.Text Callable
-buildCallableMap cs =
+-- FIXME: This is a gross hack for the fact that the combined support.asl
+-- ends up with multiple versions of the same functions
+preferLongerCallable :: Callable -> Maybe Callable -> Maybe Callable
+preferLongerCallable c1 (Just c2) =
+  if (length $ callableStmts c1) > (length $ callableStmts c2)
+  then Just c1
+  else Just c2
+preferLongerCallable c1 Nothing = Just c1
+
+uniqueCallables :: Callable -> Maybe Callable -> Maybe Callable
+uniqueCallables c1 (Just c2) = error $ "Duplicate function declarations for: " <> (show $ callableName c1)
+uniqueCallables c1 Nothing = Just c1
+
+
+
+buildCallableMap :: (Callable -> Maybe Callable -> Maybe Callable)
+                 -> [(T.Text, Callable)] -> Map.Map T.Text Callable
+buildCallableMap merge cs =
   let foo = Map.fromListWith (++) (map (\(nm,c) -> (nm, [c])) cs)
       (overrides, foo') = Map.mapAccumWithKey getOverrides [] foo
       foo'' = Map.mapMaybe id foo' in
-  foldr (\c -> insertUnique (mkCallableName c) c) foo'' overrides
+  foldr (\c -> Map.alter (merge c) (mkCallableName c))  foo'' overrides
 
   where
     getOverrides a nm [c] = (a, Just c)
@@ -402,10 +418,11 @@ allDefs ASLSpec{..} = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinit
 buildEnv :: ASLSpec -> SigEnv
 buildEnv (spec@ASLSpec{..}) =
   let defs = allDefs spec
-      getCallables ds = buildCallableMap ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> ds)))
+      getCallables merge ds = buildCallableMap merge
+        ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> ds)))
 
-      baseCallables = getCallables aslDefinitions
-      extraCallables = getCallables (aslSupportDefinitions ++ aslExtraDefinitions)
+      baseCallables = getCallables uniqueCallables aslDefinitions
+      extraCallables = getCallables preferLongerCallable (aslSupportDefinitions ++ aslExtraDefinitions)
       envCallables = Map.union extraCallables baseCallables -- extras override base definitions
 
       -- globalVars = Map.fromList $

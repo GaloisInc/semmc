@@ -277,6 +277,7 @@ data StatOptions = StatOptions
   { reportKnownExceptions :: Bool
   , reportSucceedingInstructions :: Bool
   , reportAllExceptions :: Bool
+  , reportKnownExceptionFilter :: ExpectedException -> Bool
   }
 
 defaultStatOptions :: StatOptions
@@ -284,6 +285,7 @@ defaultStatOptions = StatOptions
   { reportKnownExceptions = False
   , reportSucceedingInstructions = False
   , reportAllExceptions = False
+  , reportKnownExceptionFilter = (\_ -> True)
   }
 
 reportStats :: StatOptions -> SigMap -> IO ()
@@ -335,7 +337,9 @@ reportStats sopts sm = do
     unexpected k err =
       if reportAllExceptions sopts then True else isUnexpectedException k err
     addExpected nm err = case expectedExceptions nm err of
-      Just e -> Map.insertWith Set.union e (Set.singleton nm)
+      Just e -> if (reportKnownExceptionFilter sopts e)
+                then Map.insertWith Set.union e (Set.singleton nm)
+                else id
       Nothing -> id
   
 data TranslatorException =
