@@ -50,13 +50,16 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) TypeEnvir
                           | ReturnTypeUnificationFailure AS.Type AS.Type TypeEnvir
                           | StructFieldMismatch AS.Expr
-                          | RequiredConcreteValue AS.Expr
+                          | RequiredConcreteValue T.Text AS.Expr
                           | UnsupportedSlice AS.Slice
                           | CannotMonomorphizeFunctionCall T.Text
+                          | CannotMonomorphizeOverloadedFunctionCall T.Text [AS.Expr]
                           | CannotStaticallyEvaluateType AS.Type TypeEnvir
                           | UnexpectedExtendedType AS.Expr ExtendedTypeData
+                          | ConflictingExtendedTypeData T.Text ExtendedTypeData ExtendedTypeData
                           | MissingRegisterField AS.Expr T.Text
                           | MissingStructField AS.Expr T.Text
+                          | InvalidOverloadedFunctionCall T.Text [AS.Expr]
                           | BadMemoryAccess AS.Expr
                           | UNIMPLEMENTED String
 

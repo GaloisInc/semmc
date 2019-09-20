@@ -143,7 +143,10 @@
             Nothing)
           (StmtReturn
             (Just
-              (ExprImpDef Nothing)))))))
+              (ExprImpDef
+                Nothing
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveAnyAArch32)
     (list)
@@ -157,7 +160,10 @@
         (list
           (StmtReturn
             (Just
-              (ExprImpDef Nothing)))))))
+              (ExprImpDef
+                Nothing
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any HighestELUsingAArch32)
     (list)
@@ -185,7 +191,10 @@
             Nothing)
           (StmtReturn
             (Just
-              (ExprImpDef Nothing)))))))
+              (ExprImpDef
+                Nothing
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefTypeAbstract SCRType)
   (DefGetter
     (QualifiedIdentifier Any SCR_GEN)
@@ -359,7 +368,10 @@
             Nothing)
           (StmtReturn
             (Just
-              (ExprImpDef Nothing)))))))
+              (ExprImpDef
+                Nothing
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any BadMode)
     (list
@@ -1652,7 +1664,10 @@
                     (QualifiedIdentifier Any version))
                   (ExprVarRef
                     (QualifiedIdentifier Any ARMv8p0)))
-                (ExprImpDef Nothing))))))))
+                (ExprImpDef
+                  Nothing
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveSecureEL2Ext)
     (list)
@@ -1732,7 +1747,9 @@
                   (StmtReturn
                     (Just
                       (ExprImpDef
-                        (Just "Secure-only implementation"))))))))))))
+                        (Just "Secure-only implementation")
+                        (TypeRef
+                          (QualifiedIdentifier Any boolean)))))))))))))
   (DefCallable
     (QualifiedIdentifier Any IsSecure)
     (list)
@@ -2837,7 +2854,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has MTE extension"))))))))
+                (Just "Has MTE extension")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveUAOExt)
     (list)
@@ -2877,7 +2896,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p5))))
                 (ExprImpDef
-                  (Just "Has SSBS extension")))))))))
+                  (Just "Has SSBS extension")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveBTIExt)
     (list)
@@ -3901,7 +3922,9 @@
                   (QualifiedIdentifier Any HavePACExt)
                   (list))
                 (ExprImpDef
-                  (Just "Has enhanced PAC functionality")))))))))
+                  (Just "Has enhanced PAC functionality")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any AddrTop)
     (list
@@ -6642,7 +6665,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p2))))
                 (ExprImpDef
-                  (Just "Has RAS extension")))))))))
+                  (Just "Has RAS extension")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier AArch64 FaultSyndrome)
     (list
@@ -7315,7 +7340,9 @@
                       (list
                         (StmtIf
                           (ExprImpDef
-                            (Just "Condition valid for trapped T32"))
+                            (Just "Condition valid for trapped T32")
+                            (TypeRef
+                              (QualifiedIdentifier Any boolean)))
                           (StmtBlock
                             (list
                               (StmtAssign
@@ -7549,7 +7576,9 @@
                   (QualifiedIdentifier Any HaveRASExt)
                   (list))
                 (ExprImpDef
-                  (Just "Has Implicit Error Synchronization Barrier")))))))))
+                  (Just "Has Implicit Error Synchronization Barrier")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveDoubleFaultExt)
     (list)
@@ -8261,7 +8290,10 @@
         (list
           (StmtReturn
             (Just
-              (ExprImpDef Nothing)))))))
+              (ExprImpDef
+                Nothing
+                (TypeRef
+                  (QualifiedIdentifier Any integer)))))))))
   (DefGetter
     (QualifiedIdentifier Any VL)
     Nothing
@@ -10867,40 +10899,40 @@
               (list)))
           (StmtIf
             (ExprBinOp
-              "=="
-              (ExprMemberBits
+              "&&"
+              (ExprBinOp
+                "&&"
                 (ExprBinOp
                   "&&"
                   (ExprBinOp
                     "&&"
                     (ExprBinOp
-                      "&&"
-                      (ExprBinOp
-                        "&&"
-                        (ExprBinOp
-                          "=="
-                          (ExprMember
-                            (ExprVarRef
-                              (QualifiedIdentifier Any PSTATE))
-                            EL)
-                          (ExprVarRef
-                            (QualifiedIdentifier Any EL1)))
-                        (ExprBinOp
-                          "=="
-                          (ExprVarRef
-                            (QualifiedIdentifier Any target_el))
-                          (ExprVarRef
-                            (QualifiedIdentifier Any EL1))))
-                      (ExprCall
-                        (QualifiedIdentifier Any HaveNVExt)
-                        (list)))
-                    (ExprCall
-                      (QualifiedIdentifier Any EL2Enabled)
-                      (list)))
+                      "=="
+                      (ExprMember
+                        (ExprVarRef
+                          (QualifiedIdentifier Any PSTATE))
+                        EL)
+                      (ExprVarRef
+                        (QualifiedIdentifier Any EL1)))
+                    (ExprBinOp
+                      "=="
+                      (ExprVarRef
+                        (QualifiedIdentifier Any target_el))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any EL1))))
+                  (ExprCall
+                    (QualifiedIdentifier Any HaveNVExt)
+                    (list)))
+                (ExprCall
+                  (QualifiedIdentifier Any EL2Enabled)
+                  (list)))
+              (ExprBinOp
+                "=="
+                (ExprMemberBits
                   (ExprVarRef
-                    (QualifiedIdentifier Any HCR_EL2)))
-                (list NV NV1))
-              (ExprLitBin '10'))
+                    (QualifiedIdentifier Any HCR_EL2))
+                  (list NV NV1))
+                (ExprLitBin '10')))
             (StmtBlock
               (list
                 (StmtAssign
@@ -13835,7 +13867,10 @@
                             (LValVarRef
                               (QualifiedIdentifier Any fpexc_en))
                             (ExprImpDef
-                              (Just "FPEXC.EN value when TGE==1 and RW==0")))
+                              (Just "FPEXC.EN value when TGE==1 and RW==0")
+                              (TypeFun
+                                bits
+                                (ExprLitNat 1))))
                           (StmtIf
                             (ExprBinOp
                               "=="
@@ -15431,7 +15466,10 @@
                   (list
                     (ExprVarRef
                       (QualifiedIdentifier Any EL2))))
-                (ExprImpDef Nothing))))))))
+                (ExprImpDef
+                  Nothing
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefVariable
     (QualifiedIdentifier Any DBGEN)
     (TypeRef
@@ -15516,7 +15554,9 @@
                       (ExprVarRef
                         (QualifiedIdentifier Any ARMv8p4)))))
                 (ExprImpDef
-                  (Just "OS Double Lock is implemented")))))))))
+                  (Just "OS Double Lock is implemented")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any DoubleLockStatus)
     (list)
@@ -21427,7 +21467,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p1))))
                 (ExprImpDef
-                  (Just "Have CRC extension")))))))))
+                  (Just "Have CRC extension")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any SelectInstrSet)
     (list
@@ -22205,7 +22247,10 @@
         (list
           (StmtReturn
             (Just
-              (ExprImpDef Nothing)))))))
+              (ExprImpDef
+                Nothing
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any IPAValid)
     (list
@@ -25428,7 +25473,9 @@
                       (ExprVarRef
                         (QualifiedIdentifier Any long_format)))
                     (ExprImpDef
-                      (Just "Report I-cache maintenance fault in IFSR")))
+                      (Just "Report I-cache maintenance fault in IFSR")
+                      (TypeRef
+                        (QualifiedIdentifier Any boolean))))
                   (StmtBlock
                     (list
                       (StmtAssign
@@ -35368,7 +35415,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Maximum Physical Address Size"))))))))
+                (Just "Maximum Physical Address Size")
+                (TypeRef
+                  (QualifiedIdentifier Any integer)))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveE0PDExt)
     (list)
@@ -35549,7 +35598,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p4))))
                 (ExprImpDef
-                  (Just "Has Small Page Table extension")))))))))
+                  (Just "Has Small Page Table extension")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier AArch64 AccessFlagFault)
     (list
@@ -38936,7 +38987,9 @@
                       (LValVarRef
                         (QualifiedIdentifier Any outputsize))
                       (ExprImpDef
-                        (Just "Reserved Intermediate Physical Address size value"))))))))
+                        (Just "Reserved Intermediate Physical Address size value")
+                        (TypeRef
+                          (QualifiedIdentifier Any integer)))))))))
           (StmtIf
             (ExprBinOp
               ">"
@@ -39145,22 +39198,22 @@
               (ExprBinOp
                 "&&"
                 (ExprBinOp
-                  "=="
-                  (ExprMemberBits
-                    (ExprBinOp
-                      "&&"
-                      (ExprBinOp
-                        "&&"
-                        (ExprCall
-                          (QualifiedIdentifier Any HaveNVExt)
-                          (list))
-                        (ExprCall
-                          (QualifiedIdentifier Any EL2Enabled)
-                          (list)))
+                  "&&"
+                  (ExprBinOp
+                    "&&"
+                    (ExprCall
+                      (QualifiedIdentifier Any HaveNVExt)
+                      (list))
+                    (ExprCall
+                      (QualifiedIdentifier Any EL2Enabled)
+                      (list)))
+                  (ExprBinOp
+                    "=="
+                    (ExprMemberBits
                       (ExprVarRef
-                        (QualifiedIdentifier Any HCR_EL2)))
-                    (list NV NV1))
-                  (ExprLitBin '11'))
+                        (QualifiedIdentifier Any HCR_EL2))
+                      (list NV NV1))
+                    (ExprLitBin '11')))
                 (ExprBinOp
                   "=="
                   (ExprCall
@@ -39902,7 +39955,9 @@
               (list
                 (StmtIf
                   (ExprImpDef
-                    (Just "Translation fault on misprogrammed contiguous bit"))
+                    (Just "Translation fault on misprogrammed contiguous bit")
+                    (TypeRef
+                      (QualifiedIdentifier Any boolean)))
                   (StmtBlock
                     (list
                       (StmtAssign
@@ -42000,7 +42055,10 @@
                 (StmtAssign
                   (LValVarRef
                     (QualifiedIdentifier Any memattrs))
-                  (ExprImpDef Nothing))))
+                  (ExprImpDef
+                    Nothing
+                    (TypeRef
+                      (QualifiedIdentifier Any MemoryAttributes))))))
             (list)
             (Just
               (StmtBlock
@@ -42509,7 +42567,10 @@
                     (StmtAssign
                       (LValVarRef
                         (QualifiedIdentifier Any memattrs))
-                      (ExprImpDef Nothing)))))
+                      (ExprImpDef
+                        Nothing
+                        (TypeRef
+                          (QualifiedIdentifier Any MemoryAttributes)))))))
               (CaseAltWhen
                 (list
                   (CasePatternBin '00111'))
@@ -43930,7 +43991,10 @@
                                 (QualifiedIdentifier Any result))
                               addrdesc)
                             memattrs)
-                          (ExprImpDef Nothing))))))))
+                          (ExprImpDef
+                            Nothing
+                            (TypeRef
+                              (QualifiedIdentifier Any MemoryAttributes))))))))))
             (list)
             (Just
               (StmtBlock
@@ -46775,27 +46839,27 @@
                     (ExprBinOp
                       "||"
                       (ExprBinOp
-                        "=="
-                        (ExprMemberBits
+                        "&&"
+                        (ExprBinOp
+                          "&&"
                           (ExprBinOp
-                            "&&"
-                            (ExprBinOp
-                              "&&"
-                              (ExprBinOp
-                                "=="
-                                (ExprMember
-                                  (ExprVarRef
-                                    (QualifiedIdentifier Any PSTATE))
-                                  EL)
-                                (ExprVarRef
-                                  (QualifiedIdentifier Any EL1)))
-                              (ExprCall
-                                (QualifiedIdentifier Any HaveNVExt)
-                                (list)))
+                            "=="
+                            (ExprMember
+                              (ExprVarRef
+                                (QualifiedIdentifier Any PSTATE))
+                              EL)
                             (ExprVarRef
-                              (QualifiedIdentifier Any HCR_EL2)))
-                          (list NV NV1))
-                        (ExprLitBin '11'))
+                              (QualifiedIdentifier Any EL1)))
+                          (ExprCall
+                            (QualifiedIdentifier Any HaveNVExt)
+                            (list)))
+                        (ExprBinOp
+                          "=="
+                          (ExprMemberBits
+                            (ExprVarRef
+                              (QualifiedIdentifier Any HCR_EL2))
+                            (list NV NV1))
+                          (ExprLitBin '11')))
                       (ExprBinOp
                         "&&"
                         (ExprBinOp
@@ -51603,21 +51667,21 @@
                 (ExprBinOp
                   "&&"
                   (ExprBinOp
-                    "!="
-                    (ExprMemberBits
-                      (ExprBinOp
-                        "&&"
-                        (ExprBinOp
-                          "=="
-                          (ExprMember
-                            (ExprVarRef
-                              (QualifiedIdentifier Any HCR_EL2))
-                            ATA)
-                          (ExprLitBin '0'))
+                    "&&"
+                    (ExprBinOp
+                      "=="
+                      (ExprMember
                         (ExprVarRef
-                          (QualifiedIdentifier Any HCR_EL2)))
-                      (list E2H TGE))
-                    (ExprLitBin '11'))
+                          (QualifiedIdentifier Any HCR_EL2))
+                        ATA)
+                      (ExprLitBin '0'))
+                    (ExprBinOp
+                      "!="
+                      (ExprMemberBits
+                        (ExprVarRef
+                          (QualifiedIdentifier Any HCR_EL2))
+                        (list E2H TGE))
+                      (ExprLitBin '11')))
                   (ExprInSet
                     (ExprMember
                       (ExprVarRef
@@ -51713,21 +51777,21 @@
                 (ExprBinOp
                   "&&"
                   (ExprBinOp
-                    "=="
-                    (ExprMemberBits
-                      (ExprBinOp
-                        "&&"
-                        (ExprBinOp
-                          "=="
-                          (ExprMember
-                            (ExprVarRef
-                              (QualifiedIdentifier Any SCTLR_EL2))
-                            ATA0)
-                          (ExprLitBin '0'))
+                    "&&"
+                    (ExprBinOp
+                      "=="
+                      (ExprMember
                         (ExprVarRef
-                          (QualifiedIdentifier Any HCR_EL2)))
-                      (list E2H TGE))
-                    (ExprLitBin '11'))
+                          (QualifiedIdentifier Any SCTLR_EL2))
+                        ATA0)
+                      (ExprLitBin '0'))
+                    (ExprBinOp
+                      "=="
+                      (ExprMemberBits
+                        (ExprVarRef
+                          (QualifiedIdentifier Any HCR_EL2))
+                        (list E2H TGE))
+                      (ExprLitBin '11')))
                   (ExprBinOp
                     "=="
                     (ExprMember
@@ -51746,21 +51810,21 @@
                 (ExprBinOp
                   "&&"
                   (ExprBinOp
-                    "!="
-                    (ExprMemberBits
-                      (ExprBinOp
-                        "&&"
-                        (ExprBinOp
-                          "=="
-                          (ExprMember
-                            (ExprVarRef
-                              (QualifiedIdentifier Any SCTLR_EL1))
-                            ATA0)
-                          (ExprLitBin '0'))
+                    "&&"
+                    (ExprBinOp
+                      "=="
+                      (ExprMember
                         (ExprVarRef
-                          (QualifiedIdentifier Any HCR_EL2)))
-                      (list E2H TGE))
-                    (ExprLitBin '11'))
+                          (QualifiedIdentifier Any SCTLR_EL1))
+                        ATA0)
+                      (ExprLitBin '0'))
+                    (ExprBinOp
+                      "!="
+                      (ExprMemberBits
+                        (ExprVarRef
+                          (QualifiedIdentifier Any HCR_EL2))
+                        (list E2H TGE))
+                      (ExprLitBin '11')))
                   (ExprBinOp
                     "=="
                     (ExprMember
@@ -52371,20 +52435,20 @@
                         TCF)))))
               (StmtElsIf
                 (ExprBinOp
-                  "=="
-                  (ExprMemberBits
-                    (ExprBinOp
-                      "&&"
-                      (ExprBinOp
-                        "=="
-                        (ExprVarRef
-                          (QualifiedIdentifier Any el))
-                        (ExprVarRef
-                          (QualifiedIdentifier Any EL0)))
+                  "&&"
+                  (ExprBinOp
+                    "=="
+                    (ExprVarRef
+                      (QualifiedIdentifier Any el))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any EL0)))
+                  (ExprBinOp
+                    "=="
+                    (ExprMemberBits
                       (ExprVarRef
-                        (QualifiedIdentifier Any HCR_EL2)))
-                    (list E2H TGE))
-                  (ExprLitBin '11'))
+                        (QualifiedIdentifier Any HCR_EL2))
+                      (list E2H TGE))
+                    (ExprLitBin '11')))
                 (StmtBlock
                   (list
                     (StmtAssign
@@ -52396,20 +52460,20 @@
                         TCF0)))))
               (StmtElsIf
                 (ExprBinOp
-                  "!="
-                  (ExprMemberBits
-                    (ExprBinOp
-                      "&&"
-                      (ExprBinOp
-                        "=="
-                        (ExprVarRef
-                          (QualifiedIdentifier Any el))
-                        (ExprVarRef
-                          (QualifiedIdentifier Any EL0)))
+                  "&&"
+                  (ExprBinOp
+                    "=="
+                    (ExprVarRef
+                      (QualifiedIdentifier Any el))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any EL0)))
+                  (ExprBinOp
+                    "!="
+                    (ExprMemberBits
                       (ExprVarRef
-                        (QualifiedIdentifier Any HCR_EL2)))
-                    (list E2H TGE))
-                  (ExprLitBin '11'))
+                        (QualifiedIdentifier Any HCR_EL2))
+                      (list E2H TGE))
+                    (ExprLitBin '11')))
                 (StmtBlock
                   (list
                     (StmtAssign
@@ -67011,25 +67075,25 @@
             (list
               (StmtElsIf
                 (ExprBinOp
-                  "=="
-                  (ExprMemberBits
+                  "&&"
+                  (ExprBinOp
+                    "&&"
+                    (ExprCall
+                      (QualifiedIdentifier Any HaveVirtHostExt)
+                      (list))
                     (ExprBinOp
-                      "&&"
-                      (ExprBinOp
-                        "&&"
-                        (ExprCall
-                          (QualifiedIdentifier Any HaveVirtHostExt)
-                          (list))
-                        (ExprBinOp
-                          "=="
-                          (ExprVarRef
-                            (QualifiedIdentifier Any target))
-                          (ExprVarRef
-                            (QualifiedIdentifier Any EL2))))
+                      "=="
                       (ExprVarRef
-                        (QualifiedIdentifier Any HCR_EL2)))
-                    (list E2H TGE))
-                  (ExprLitBin '11'))
+                        (QualifiedIdentifier Any target))
+                      (ExprVarRef
+                        (QualifiedIdentifier Any EL2))))
+                  (ExprBinOp
+                    "=="
+                    (ExprMemberBits
+                      (ExprVarRef
+                        (QualifiedIdentifier Any HCR_EL2))
+                      (list E2H TGE))
+                    (ExprLitBin '11')))
                 (StmtBlock
                   (list
                     (StmtAssign
@@ -67584,7 +67648,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p2))))
                 (ExprImpDef
-                  (Just "Has accumulate FP16 product into FP32 extension")))))))))
+                  (Just "Has accumulate FP16 product into FP32 extension")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any ASR_C)
     (list
@@ -68605,7 +68671,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has SM3 Crypto instructions"))))))))
+                (Just "Has SM3 Crypto instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefVariable
     (QualifiedIdentifier Any DTRRX)
     (TypeFun
@@ -69336,7 +69404,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Maximum Virtual Address Size"))))))))
+                (Just "Maximum Virtual Address Size")
+                (TypeRef
+                  (QualifiedIdentifier Any integer)))))))))
   (DefCallable
     (QualifiedIdentifier Any CalculateBottomPACBit)
     (list
@@ -71867,7 +71937,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has AES Crypto instructions"))))))))
+                (Just "Has AES Crypto instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any InITBlock)
     (list)
@@ -71941,7 +72013,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has SM4 Crypto instructions"))))))))
+                (Just "Has SM4 Crypto instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any FPCompareNE)
     (list
@@ -73390,7 +73464,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has SHA256 Crypto instructions"))))))))
+                (Just "Has SHA256 Crypto instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any NextRandomTagBit)
     (list)
@@ -83587,7 +83663,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p2))))
                 (ExprImpDef
-                  (Just "Has MPAM extension")))))))))
+                  (Just "Has MPAM extension")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any GenMPAMcurEL)
     (list
@@ -89159,7 +89237,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has SHA1 Crypto instructions"))))))))
+                (Just "Has SHA1 Crypto instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any HaveSHA3Ext)
     (list)
@@ -89202,7 +89282,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has SHA3 Crypto instructions"))))))))
+                (Just "Has SHA3 Crypto instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any ExitDebugState)
     (list)
@@ -89577,7 +89659,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has 128-bit form of PMULL instructions"))))))))
+                (Just "Has 128-bit form of PMULL instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefCallable
     (QualifiedIdentifier Any AESSubBytes)
     (list
@@ -92966,7 +93050,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p2))))
                 (ExprImpDef
-                  (Just "Have SVE ISA")))))))))
+                  (Just "Have SVE ISA")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefCallable
     (QualifiedIdentifier Any ASR)
     (list
@@ -93578,20 +93664,20 @@
                         TCF)))))
               (StmtElsIf
                 (ExprBinOp
-                  "=="
-                  (ExprMemberBits
-                    (ExprBinOp
-                      "&&"
-                      (ExprBinOp
-                        "=="
-                        (ExprVarRef
-                          (QualifiedIdentifier Any el))
-                        (ExprVarRef
-                          (QualifiedIdentifier Any EL0)))
+                  "&&"
+                  (ExprBinOp
+                    "=="
+                    (ExprVarRef
+                      (QualifiedIdentifier Any el))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any EL0)))
+                  (ExprBinOp
+                    "=="
+                    (ExprMemberBits
                       (ExprVarRef
-                        (QualifiedIdentifier Any HCR_EL2)))
-                    (list E2H TGE))
-                  (ExprLitBin '11'))
+                        (QualifiedIdentifier Any HCR_EL2))
+                      (list E2H TGE))
+                    (ExprLitBin '11')))
                 (StmtBlock
                   (list
                     (StmtAssign
@@ -93603,20 +93689,20 @@
                         TCF0)))))
               (StmtElsIf
                 (ExprBinOp
-                  "!="
-                  (ExprMemberBits
-                    (ExprBinOp
-                      "&&"
-                      (ExprBinOp
-                        "=="
-                        (ExprVarRef
-                          (QualifiedIdentifier Any el))
-                        (ExprVarRef
-                          (QualifiedIdentifier Any EL0)))
+                  "&&"
+                  (ExprBinOp
+                    "=="
+                    (ExprVarRef
+                      (QualifiedIdentifier Any el))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any EL0)))
+                  (ExprBinOp
+                    "!="
+                    (ExprMemberBits
                       (ExprVarRef
-                        (QualifiedIdentifier Any HCR_EL2)))
-                    (list E2H TGE))
-                  (ExprLitBin '11'))
+                        (QualifiedIdentifier Any HCR_EL2))
+                      (list E2H TGE))
+                    (ExprLitBin '11')))
                 (StmtBlock
                   (list
                     (StmtAssign
@@ -95471,7 +95557,9 @@
                       (ExprVarRef
                         (QualifiedIdentifier Any ARMv8p2))))
                   (ExprImpDef
-                    (Just "Has Dot Product extension"))))))))))
+                    (Just "Has Dot Product extension")
+                    (TypeRef
+                      (QualifiedIdentifier Any boolean)))))))))))
   (DefCallable
     (QualifiedIdentifier AArch64 TakePhysicalFIQException)
     (list)
@@ -96257,7 +96345,9 @@
               (list
                 (StmtIf
                   (ExprImpDef
-                    (Just "vector instructions set TFV to 1"))
+                    (Just "vector instructions set TFV to 1")
+                    (TypeRef
+                      (QualifiedIdentifier Any boolean)))
                   (StmtBlock
                     (list
                       (StmtAssign
@@ -96986,7 +97076,9 @@
                                   (ExprLitBin '1')
                                   (list)
                                   (ExprImpDef
-                                    (Just "0 or 1"))))))))))
+                                    (Just "0 or 1")
+                                    (TypeRef
+                                      (QualifiedIdentifier Any bit)))))))))))
                   (list)
                   Nothing)))
             (list)
@@ -101073,7 +101165,9 @@
                   (LValVarRef
                     (QualifiedIdentifier Any rcs_el0_trap))
                   (ExprImpDef
-                    (Just "Reserved Control Space EL0 Trapped")))
+                    (Just "Reserved Control Space EL0 Trapped")
+                    (TypeRef
+                      (QualifiedIdentifier Any boolean))))
                 (StmtIf
                   (ExprBinOp
                     "||"
@@ -105619,7 +105713,9 @@
           (StmtReturn
             (Just
               (ExprImpDef
-                (Just "Has SHA512 Crypto instructions"))))))))
+                (Just "Has SHA512 Crypto instructions")
+                (TypeRef
+                  (QualifiedIdentifier Any boolean)))))))))
   (DefGetter
     (QualifiedIdentifier Any Q)
     (Just
@@ -107226,7 +107322,10 @@
                           (LValVarRef
                             (QualifiedIdentifier Any rv))
                           (ExprImpDef
-                            (Just "reset vector address")))))))))
+                            (Just "reset vector address")
+                            (TypeFun
+                              bits
+                              (ExprLitNat 32))))))))))
             (list)
             (Just
               (StmtBlock
@@ -111767,7 +111866,9 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any ARMv8p5))))
                 (ExprImpDef
-                  (Just "Has SB extension")))))))))
+                  (Just "Has SB extension")
+                  (TypeRef
+                    (QualifiedIdentifier Any boolean))))))))))
   (DefGetter
     (QualifiedIdentifier Any P)
     (Just

@@ -40,6 +40,7 @@ module SemMC.ASL.Translation.Preprocess
   , exprToBool
   , mkSignature
   , registerTypeSynonyms
+  , mkExtendedTypeData'
   ) where
 
 import Debug.Trace (traceM)
@@ -49,10 +50,11 @@ import           Control.Monad (void)
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.RWS as RWS
 import qualified Control.Monad.State.Class as MS
+import qualified Control.Monad.State as MSS
 import qualified Data.BitVector.Sized as BVS
 import           Data.Foldable (find)
 import           Data.List (nub)
-import           Data.Maybe (maybeToList, catMaybes, fromMaybe)
+import           Data.Maybe (maybeToList, catMaybes, fromMaybe, isJust)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.List as List
@@ -62,6 +64,7 @@ import           Data.Parameterized.Some ( Some(..), viewSome, mapSome )
 
 import qualified Data.Text as T
 import           Data.Traversable (forM)
+import qualified Data.Parameterized.TraversableFC as FC
 import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
@@ -135,7 +138,7 @@ getDefinitions = do
     , defTypes = userTypes st
     , defEnums = enums env
     , defConsts = consts env
-    , defExtendedTypes = extendedTypeData env
+    , defExtendedTypes = extendedTypeData st
     }
 
 builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
@@ -143,18 +146,6 @@ builtinGlobals =
   [ ("UNDEFINED", Some WT.BaseBoolRepr)
   , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
   , ("EXCEPTIONTAKEN", Some WT.BaseBoolRepr)
-  , ("__ThisInstrLength", Some WT.BaseIntegerRepr)
-  , ("_PC", Some (WT.BaseBVRepr (WT.knownNat @64)))
-  , ("_R", Some (WT.BaseArrayRepr
-                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
-                 (WT.BaseBVRepr (WT.knownNat @64))))
-  , ("_Dclone", Some (WT.BaseArrayRepr
-                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
-                 (WT.BaseBVRepr (WT.knownNat @64))))
-  , ("_V", Some (WT.BaseArrayRepr
-                 (Ctx.empty Ctx.:> WT.BaseIntegerRepr)
-                 (WT.BaseBVRepr (WT.knownNat @128))))
-  , ("EventRegister", Some (WT.BaseBVRepr (WT.knownNat @1)))
   ]
 
 
@@ -269,6 +260,31 @@ data ASLSpec = ASLSpec
   , aslRegisterDefinitions :: [AS.RegisterDefinition]
   }
 
+-- FIXME: One hardcoded register missing from the ASL
+extraRegisters :: [AS.RegisterDefinition]
+extraRegisters = [
+  AS.RegisterDefSingle (AS.Register "TTBCR_S" 32
+                       [ mkField "EAE" 31 31
+                       , mkField "PD1" 5 5
+                       , mkField "PD0" 4 4
+                       , mkField "N" 0 2
+                       , mkField "SH1" 28 29
+                       , mkField "ORGN1" 26 27
+                       , mkField "IRGN1" 24 25
+                       , mkField "EPD1" 23 23
+                       , mkField "T1SZ" 16 18
+                       , mkField "SH0" 12 13
+                       , mkField "ORGN0" 10 11
+                       , mkField "IRGN0" 8 9
+                       , mkField "EPD0" 6 6
+                       , mkField "T2E" 6 6
+                       , mkField "T0SZ" 0 2
+                       ])
+  ]
+  where
+    mkField nm lo hi = AS.RegisterField (Just nm) lo hi
+
+
 prepASL :: ASLSpec -> ASLSpec
 prepASL (ASLSpec instrs defs sdefs edefs rdefs) =
   let
@@ -276,7 +292,7 @@ prepASL (ASLSpec instrs defs sdefs edefs rdefs) =
     f = ASLT.applySyntaxOverridesDefs ovrs
     g = ASLT.applySyntaxOverridesInstrs ovrs
   in
-    ASLSpec (g instrs) (f defs) (f sdefs) (f edefs) rdefs
+    ASLSpec (g instrs) (f defs) (f sdefs) (f edefs) (rdefs ++ extraRegisters)
 
 
 getRegisterType :: AS.Register -> Some WT.BaseTypeRepr
@@ -309,31 +325,88 @@ getRegisterDefSig rd = case rd of
   AS.RegisterDefSingle r -> (AS.regName r, TypeRegister $ getRegisterSig r)
   AS.RegisterDefArray ra -> (AS.regName (AS.regDef ra), TypeArray $ TypeRegister $ getRegisterSig (AS.regDef ra))
 
+mkCallableOverrideVariant :: Callable -> Callable
+mkCallableOverrideVariant Callable{..} =
+  Callable nm' callableArgs callableRets callableStmts
+  where
+    getTypeStr t = case t of
+      AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> tpName
+      AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier _ n)) -> "bits" <> n
+      _ -> error $ "Bad type for override variant" ++ show t
+    nm' = ASLT.mapInnerName (\nm -> T.concat $ nm : map (\(nm, t) -> getTypeStr t) callableArgs) callableName
+
 buildCallableMap :: [(T.Text, Callable)] -> Map.Map T.Text Callable
 buildCallableMap cs =
-  let foo = Map.fromListWith (++) (map (\(nm,c) -> (nm, [c])) cs) in
-    Map.mapMaybeWithKey getOnlyCallable foo
-  where
-    getOnlyCallable _ [c] = Just c
-    getOnlyCallable nm cs = case nub cs of
-           [c] -> Just c
-           (c : _) -> if (overrideFun overrides) $ callableName c then
-             Nothing
-           else error $ "Function " ++ show nm ++ " has multiple overloads of the same arity and is not overloaded"
+  let foo = Map.fromListWith (++) (map (\(nm,c) -> (nm, [c])) cs)
+      (overrides, foo') = Map.mapAccumWithKey getOverrides [] foo
+      foo'' = Map.mapMaybe id foo' in
+  foldr (\c -> insertUnique (mkCallableName c) c) foo'' overrides
 
+  where
+    getOverrides a nm [c] = (a, Just c)
+    getOverrides a nm cs = case nub cs of
+           [c] -> (a, Just c)
+           cs -> (map mkCallableOverrideVariant cs ++ a, Nothing)
+
+
+
+
+mkExtendedTypeData' :: Monad m
+                   => (T.Text -> m (Maybe (Some UserType)))
+                   -> (T.Text -> m ExtendedTypeData)
+                   -> AS.Type
+                   -> m ExtendedTypeData
+mkExtendedTypeData' getUT getET ty = do
+  case ty of
+    AS.TypeRef qi@(AS.QualifiedIdentifier _ tident) -> do
+      uts <- getUT tident
+      case uts of
+        Just s -> return $ fromUT s
+        Nothing -> do
+          case lookup tident registerTypeSynonyms of
+            Just nm -> getET nm
+            Nothing -> return TypeBasic
+    _ -> return TypeBasic
+  where
+    fromUT :: Some UserType -> ExtendedTypeData
+    fromUT ut = case ut of
+      Some (UserStruct s) -> do
+        let (_, asn) = MSS.runState (Ctx.traverseAndCollect
+                                     (collectAssignment (FC.fmapFC projectValue s)) s) Map.empty
+        TypeStruct asn
+      _ -> TypeBasic
+    collectAssignment :: Ctx.Assignment WT.BaseTypeRepr tps
+                      -> Ctx.Index tps tp
+                      -> LabeledValue (T.Text, Maybe (Some UserType)) WT.BaseTypeRepr tp
+                      -> MSS.State (Map.Map T.Text StructAccessor) ()
+    collectAssignment repr idx lblv = do
+      let (nm, mUT) = projectLabel lblv
+      ext <- case mUT of
+        Just sUT -> return $ fromUT sUT
+        Nothing -> return $ TypeBasic
+      MS.modify' (Map.insert nm (StructAccessor repr idx ext))
+
+mkExtendedTypeData :: AS.Type -> SigM ext f (ExtendedTypeData)
+mkExtendedTypeData = mkExtendedTypeData' getUT getET
+  where
+    getUT tpName = Map.lookup tpName <$> userTypes <$> RWS.get
+    getET tpName = do
+      etd <- RWS.gets extendedTypeData
+      return $ fromMaybe TypeBasic (Map.lookup tpName etd)
+
+allDefs :: ASLSpec -> [AS.Definition]
+allDefs ASLSpec{..} = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
 
 -- | Given the top-level list of definitions, build a 'SigEnv' for preprocessing the
 -- signatures.
 buildEnv :: ASLSpec -> SigEnv
-buildEnv ASLSpec{..} =
-  let defs = aslDefinitions ++ aslSupportDefinitions ++ aslExtraDefinitions
+buildEnv (spec@ASLSpec{..}) =
+  let defs = allDefs spec
       getCallables ds = buildCallableMap ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> ds)))
 
       baseCallables = getCallables aslDefinitions
       extraCallables = getCallables (aslSupportDefinitions ++ aslExtraDefinitions)
       envCallables = Map.union extraCallables baseCallables -- extras override base definitions
-      globalVars = Map.fromList (builtinGlobals ++ map getRegisterDefType aslRegisterDefinitions)
-      extendedTypeData = Map.fromList (map getRegisterDefSig aslRegisterDefinitions)
 
       -- globalVars = Map.fromList $
       --   ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
@@ -371,19 +444,50 @@ buildEnv ASLSpec{..} =
         DefTypeEnum name _ -> name
   in SigEnv {..}
 
--- | Given a list of ASL 'AS.Definition's, execute a 'SigM' action and either return
--- the result or an exception coupled with the final state.
-execSigM :: ASLSpec -> SigM ext f a -> Either SigException a
-execSigM spec action =
-  let rws = E.runExceptT $ getSigM action
-      (e, _, _) = RWS.runRWS rws (buildEnv spec) initState
-  in case e of
-    Left err -> Left err
-    Right a -> Right a
-  where initState = SigState Map.empty Map.empty Map.empty []
+buildInitState :: ASLSpec -> SigState
+buildInitState ASLSpec{..} =
+  let globalVars = Map.fromList (builtinGlobals ++ map getRegisterDefType aslRegisterDefinitions)
+      extendedTypeData = Map.fromList (map getRegisterDefSig aslRegisterDefinitions)
+      userTypes = Map.empty
+      callableGlobalsMap  = Map.empty
+      callableSignatureMap = Map.empty
+      callableOpenSearches = []
+  in SigState{..}
+
+insertUnique :: Ord k => Show k => k -> a -> Map.Map k a -> Map.Map k a
+insertUnique k v =
+  Map.alter f k
+  where
+    f x = case x of
+      Just _ -> error $ "Unexpected existing member in map:" ++ show k
+      Nothing -> Just v
+
+initializeSigM :: ASLSpec -> SigM ext f ()
+initializeSigM spec = do
+  mapM_ initDefGlobal (allDefs spec)
+  where
+    initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
+      tp <- computeType ty
+      ext <- mkExtendedTypeData ty
+      st <- RWS.get
+      RWS.put $ st { globalVars = insertUnique nm tp (globalVars st),
+                     extendedTypeData = insertUnique nm ext (extendedTypeData st) }
+    initDefGlobal (AS.DefArray nm ty idxty) = do
+      Some tp <- computeType ty
+      ext <- mkExtendedTypeData ty
+      st <- RWS.get
+      let atp = Some $ WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseIntegerRepr) tp
+      let aext = TypeArray ext
+      RWS.put $ st { globalVars = insertUnique nm atp (globalVars st),
+                     extendedTypeData = insertUnique nm aext (extendedTypeData st) }
+    initDefGlobal _ = return ()
 
 buildSigState :: ASLSpec -> (SigEnv, SigState)
-buildSigState spec = (buildEnv spec, SigState Map.empty Map.empty Map.empty [])
+buildSigState spec =
+  let env = (buildEnv spec) in
+  case runSigM env (buildInitState spec) (initializeSigM spec) of
+    (Left err, _) -> error $ "Unexpected exception when initializing SigState: " ++ show err
+    (Right _, state) -> (env, state)
 
 runSigM :: SigEnv -> SigState -> SigM ext f a -> (Either SigException a, SigState)
 runSigM env state action =
@@ -396,8 +500,6 @@ runSigM env state action =
 
 data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                            -- , globalVars :: Map.Map T.Text DefVariable
-                           , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
-                           , extendedTypeData :: Map.Map T.Text ExtendedTypeData
                            , enums :: Map.Map T.Text Integer
                            , consts :: Map.Map T.Text (Some ConstVal)
                            , types :: Map.Map T.Text DefType
@@ -411,12 +513,11 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                          , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
                            -- ^ map from function/procedure name to list of globals
                          , callableSignatureMap :: Map.Map T.Text (SomeSimpleSignature, Callable)
+                           -- ^ map of all signatures found thus far
                          , callableOpenSearches :: [T.Text]
                            -- ^ all callables encountered on the current search path
-                           -- ^ map of all signatures found thus far
-                         -- , unfoundCallables :: Seq.Seq T.Text
-                         --   -- ^ list of callables we encountered that were not in the
-                         --   -- pre-loaded environment
+                         , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
+                         , extendedTypeData :: Map.Map T.Text ExtendedTypeData
                          }
 
 throwError :: InnerSigException -> SigM ext f a
@@ -492,7 +593,7 @@ lookupDefType tpName = do
 --lookupGlobalVar :: T.Text -> SigM ext f (Maybe DefVariable)
 lookupGlobalVar :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 lookupGlobalVar varName = do
-  env <- RWS.ask
+  env <- RWS.get
   return $ Map.lookup varName (globalVars env)
 
 lookupCallableGlobals :: Callable -> SigM ext f (Maybe [(T.Text, Some WT.BaseTypeRepr)])
@@ -594,7 +695,7 @@ computeType' tp = case applyTypeSynonyms tp of
   AS.TypeOf _ -> error "computeType, TypeOf"
   AS.TypeReg _ _ -> error "computeType, TypeReg"
   AS.TypeArray _ _ -> error "computeType, TypeArray"
-  _ -> error "computeType"
+  _ -> error $ "computeType" ++ show tp
 
 -- | Compute the What4 representation of an ASL 'AS.Type'.
 computeType :: AS.Type -> SigM ext f (Some WT.BaseTypeRepr)
@@ -702,23 +803,23 @@ exprGlobalVars expr = case expr of
       varGlobals <- catMaybes <$> traverse varGlobal vars
       return $ eGlobals ++ varGlobals
     AS.ExprInMask e _ -> exprGlobalVars e
-    AS.ExprCall qName argEs -> if (overrideFun overrides) qName
-      then concat <$> traverse exprGlobalVars argEs
-      else do
-      argGlobals <- concat <$> traverse exprGlobalVars argEs
-      mCallable <- lookupCallable qName (length argEs)
-      case mCallable of
-        Just callable -> do
-          -- Compute the signature of the callable
-          recursed <- pushCallableSearch qName (length argEs)
-          if recursed then
-            return argGlobals
-          else do
-            void $ computeCallableSignature callable
-            callableGlobals <- callableGlobalVars callable
-            popCallableSearch qName (length argEs)
-            return $ callableGlobals ++ argGlobals
-        Nothing -> return argGlobals
+    AS.ExprCall qName argEs -> case (overrideExprCall overrides) qName of
+      Just nms -> concat <$> traverse exprGlobalVars (map (\nm -> AS.ExprCall nm argEs) nms)
+      Nothing -> do
+        argGlobals <- concat <$> traverse exprGlobalVars argEs
+        mCallable <- lookupCallable qName (length argEs)
+        case mCallable of
+          Just callable -> do
+            -- Compute the signature of the callable
+            recursed <- pushCallableSearch qName (length argEs)
+            if recursed then
+              return argGlobals
+            else do
+              void $ computeCallableSignature callable
+              callableGlobals <- callableGlobalVars callable
+              popCallableSearch qName (length argEs)
+              return $ callableGlobals ++ argGlobals
+          Nothing -> return argGlobals
     AS.ExprInSet e setElts -> do
       eGlobals <- exprGlobalVars e
       setEltGlobals <- concat <$> traverse setEltGlobalVars setElts
@@ -743,25 +844,30 @@ stmtGlobalVars stmt =
   -- globals as well.
   --seq (unsafePerformIO $ putStrLn $ show stmt) $
   case stmt of
-      AS.StmtVarDeclInit _ e -> exprGlobalVars e
+      AS.StmtVarsDecl ty i -> do
+        storeUserType ty
+        return []
+      AS.StmtVarDeclInit (_, ty) e -> do
+        storeUserType ty
+        exprGlobalVars e
       AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
-      AS.StmtCall qName argEs -> if (overrideFun overrides) qName
-        then concat <$> traverse exprGlobalVars argEs
-        else do
-        argGlobals <- concat <$> traverse exprGlobalVars argEs
-        mCallable <- lookupCallable qName (length argEs)
-        case mCallable of
-          Just callable -> do
-            -- Compute the signature of the callable
-            recursed <- pushCallableSearch qName (length argEs)
-            if recursed then
-              return argGlobals
-            else do
-              void $ computeCallableSignature callable
-              callableGlobals <- callableGlobalVars callable
-              popCallableSearch qName (length argEs)
-              return $ callableGlobals ++ argGlobals
-          Nothing -> return argGlobals
+      AS.StmtCall qName argEs -> case (overrideStmtCall overrides) qName of
+        Just nms -> concat <$> traverse stmtGlobalVars (map (\nm -> AS.StmtCall nm argEs) nms)
+        Nothing -> do
+          argGlobals <- concat <$> traverse exprGlobalVars argEs
+          mCallable <- lookupCallable qName (length argEs)
+          case mCallable of
+            Just callable -> do
+              -- Compute the signature of the callable
+              recursed <- pushCallableSearch qName (length argEs)
+              if recursed then
+                return argGlobals
+              else do
+                void $ computeCallableSignature callable
+                callableGlobals <- callableGlobalVars callable
+                popCallableSearch qName (length argEs)
+                return $ callableGlobals ++ argGlobals
+            Nothing -> return argGlobals
       AS.StmtReturn (Just e) -> exprGlobalVars e
       AS.StmtAssert e -> exprGlobalVars e
       AS.StmtIf branches mDefault -> do
@@ -998,18 +1104,17 @@ createInstStmts encodingSpecificOperations stmts =
 
 -- Overrides only for the purposes of collecting global variables
 data Overrides arch =
-  Overrides { overrideFun :: AS.QualifiedIdentifier -> Bool
+  Overrides { overrideExprCall :: AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
+            , overrideStmtCall :: AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
             }
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
-  where overrideFun :: AS.QualifiedIdentifier -> Bool
-        overrideFun ident = case ident of
+  where overrideStmtCall ::  AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
+        overrideStmtCall ident = Nothing
+
+        mkIdent nm = (AS.QualifiedIdentifier AS.ArchQualAny nm)
+
+        overrideExprCall :: AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
+        overrideExprCall ident = case ident of
           AS.QualifiedIdentifier _ nm ->
-            nm `elem` ["CurrentCond","IsExternalAbort","IsExternalAbort","IsAsyncAbort"
-                       ,"IsExternalSyncAbort","IsSErrorInterrupt","HaveFP16Ext"
-                       ,"Unreachable","LSInstructionSyndrome"
-                       , "ALUExceptionReturn", "ALUWritePC"
-                       , "Min", "Max", "Align", "Abs", "TakeHypTrapException"
-                       , "EndOfInstruction", "TraceSynchronizationBarrier", "ThisInstrLength"
-                       , "__ReadRAM", "__WriteRAM", "ResetExternalDebugRegisters"
-                       ]
+            lookup nm [("Min",[(mkIdent "Minintegerinteger")])]

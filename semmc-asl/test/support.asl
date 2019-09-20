@@ -85,9 +85,6 @@ boolean HaltingStep_SteppedEX()
     assert FALSE;
     return FALSE;
 
-ResetExternalDebugRegisters(boolean cold_reset)
-    assert FALSE;
-
 boolean SoftwareStep_DidNotStep()
     assert FALSE;
     return FALSE;
@@ -247,7 +244,7 @@ bits(4) AArch32.CurrentCond()
     return __currentCond;
 
 bits(N) ThisInstrAddr()
-    return _PC<N:0>;
+    return _PC<N-1:0>;
 
 bits(N) NextInstrAddr()
     return (_PC + (ThisInstrLength() DIV 8))<N-1:0>;
@@ -629,9 +626,6 @@ AArch64.ResetControlRegisters(boolean cold_reset)
 AArch64.ResetSystemRegisters(boolean cold_reset)
     return;
 
-ResetExternalDebugRegisters(boolean cold_reset)
-    return;
-
 
 bits(64) AArch32.SysRegRead64(integer cp_num, bits(32) instr)
     assert FALSE;
@@ -735,18 +729,18 @@ UndefinedFault()
 bits(64) AArch64.BranchAddr(bits(64) vaddress)
     assert !UsingAArch32();
     integer msbit = 51;
-    return ZeroExtend(vaddress[msbit:0]);
+    return ZeroExtend(vaddress<msbit:0>);
 
 bits(size*8) AArch64.MemSingle[bits(64) address, integer size, AccType acctype, boolean wasaligned]
     AddressDescriptor desc;
     AccessDescriptor accdesc;
-    desc.paddress.address = address[0 +: 52];
+    desc.paddress.address = address<52:0>;
     return _Mem[desc, size, accdesc];
 
 AArch64.MemSingle[bits(64) address, integer size, AccType acctype, boolean wasaligned] = bits(size*8) value
     AddressDescriptor desc;
     AccessDescriptor accdesc;
-    desc.paddress.address = address[0 +: 52];
+    desc.paddress.address = address<52:0>;
     _Mem[desc, size, accdesc] = value;
     return;
 
@@ -772,9 +766,6 @@ ReservedValue()
     assert FALSE;
 
 UnallocatedEncoding()
-    assert FALSE;
-
-EndOfInstruction()
     assert FALSE;
 
 CheckSoftwareStep()

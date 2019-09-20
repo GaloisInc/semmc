@@ -171,7 +171,7 @@ lookupVarType name = do
 -- accessors with simpler forms in Crucible.
 data Overrides arch =
   Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret ())
-            , overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
+            , overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
             }
 
 -- Tracks state necessary for the translation of ASL into Crucible
@@ -303,7 +303,8 @@ translateStatement ov sig stmt
           Nothing -> do
             Some atom <- translateExpr ov e
             Refl <- assertAtomType e CT.BoolRepr atom
-            CCG.assertExpr (CCG.AtomExpr atom) msg
+            return ()
+           -- CCG.assertExpr (CCG.AtomExpr atom) msg -- FIXME: Does this assertion actually get evaluated?
       AS.StmtVarsDecl ty idents -> mapM_ (declareUndefinedVar ty) idents
       AS.StmtVarDeclInit (ident, ty) expr -> translateDefinedVar ov ty ident expr
       AS.StmtConstDecl (ident, ty) expr ->
@@ -555,9 +556,8 @@ translateAssignment' ov lval atom atomext mE = do
               CCG.writeGlobal gv (CCG.AtomExpr atom)
             Nothing -> do
               let atomType = CCG.typeOfAtom atom
-              reg <- CCG.newUnassignedReg atomType
+              reg <- CCG.newReg (CCG.AtomExpr atom)
               MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
-              CCG.assignReg reg (CCG.AtomExpr atom)
     AS.LValMember struct memberName -> do
       Just lve <- return $ lValToExpr struct
       (Some structAtom, ext) <- translateExpr' ov lve Nothing
@@ -775,35 +775,11 @@ declareUndefinedVar ty ident = do
 
 mkExtendedTypeData :: AS.Type
                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
-mkExtendedTypeData ty = do
-  case ty of
-    AS.TypeRef qi@(AS.QualifiedIdentifier _ tident) -> do
-      uts <- MS.gets tsUserTypes
-      case Map.lookup tident uts of
-        Just s -> return $ fromUT s
-        Nothing -> do
-          case lookup tident registerTypeSynonyms of
-            Just nm -> getExtendedTypeData nm
-            Nothing -> return TypeBasic
-    _ -> return TypeBasic
+mkExtendedTypeData = mkExtendedTypeData' getUT getExtendedTypeData
   where
-    fromUT :: Some UserType -> ExtendedTypeData
-    fromUT ut = case ut of
-      Some (UserStruct s) -> do
-        let (_, asn) = MSS.runState (Ctx.traverseAndCollect
-                                     (collectAssignment (FC.fmapFC projectValue s)) s) Map.empty
-        TypeStruct asn
-      _ -> TypeBasic
-    collectAssignment :: Ctx.Assignment WT.BaseTypeRepr tps
-                      -> Ctx.Index tps tp
-                      -> LabeledValue (T.Text, Maybe (Some UserType)) WT.BaseTypeRepr tp
-                      -> MSS.State (Map.Map T.Text StructAccessor) ()
-    collectAssignment repr idx lblv = do
-      let (nm, mUT) = projectLabel lblv
-      ext <- case mUT of
-        Just sUT -> return $ fromUT sUT
-        Nothing -> return $ TypeBasic
-      MS.modify' (Map.insert nm (StructAccessor repr idx ext))
+    getUT :: T.Text -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some UserType))
+    getUT tpName = Map.lookup tpName <$> MS.gets tsUserTypes
+    getET tpName = getUT tpName
 
 addExtendedTypeData :: AS.Identifier
                     -> AS.Type                    
@@ -815,7 +791,9 @@ addExtendedTypeData ident ty = do
 putExtendedTypeData :: AS.Identifier
                     -> ExtendedTypeData
                     -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-putExtendedTypeData ident ext = do
+putExtendedTypeData ident ext' = do
+  ext'' <- getExtendedTypeData ident
+  ext <- mergeExtensions ext' ext''
   MS.modify' $ \s -> s { tsExtendedTypes = Map.insert ident ext (tsExtendedTypes s) }
 
 getExtendedTypeData :: AS.Identifier
@@ -824,12 +802,15 @@ getExtendedTypeData ident = do
   exts <- MS.gets tsExtendedTypes
   return $ fromMaybe TypeBasic (Map.lookup ident exts)
 
-assertEqualExtensions :: ExtendedTypeData
+mergeExtensions :: ExtendedTypeData
                       -> ExtendedTypeData
                       -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
-assertEqualExtensions ext1 ext2 =
-  if ext1 == ext2 then return ext1
-  else error $ "Mismatched extended type data:" <> show ext1 <> " " <> show ext2
+mergeExtensions ext1 ext2 =
+  case (ext1, ext2) of
+  (_, TypeBasic) -> return ext1
+  (TypeBasic, _) -> return ext2
+  _ -> if ext1 == ext2 then return ext1
+    else return TypeBasic
 
 
 -- | Translate types (including user-defined types) into Crucible type reprs
@@ -1101,7 +1082,7 @@ translateExpr' :: Overrides arch
               -> Maybe (Some CT.TypeRepr)
               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData)
 translateExpr' ov expr mTy
-  | Just eo <- overrideExpr ov expr = eo
+  | Just eo <- overrideExpr ov expr mTy = eo
   | otherwise =
     case expr of
       AS.ExprLitInt i -> mkAtom (CCG.App (CCE.IntLit i))
@@ -1168,8 +1149,10 @@ translateExpr' ov expr mTy
                     exts <- mapM mkExtendedTypeData rets
                     return $ TypeTuple exts
                 return (satom, ext)
-      -- FIXME: What to do here?
-      AS.ExprImpDef _ -> mkAtom (CCG.App (CCE.BoolLit True))
+      -- FIXME: Should this trip a global flag?
+      AS.ExprImpDef _ t -> do
+        Some ty <- translateType t
+        mkAtom (getDefaultValue ty)
       -- This is just like a variable lookup, since struct members are stored as
       -- individual global variables.
       AS.ExprMember struct memberName -> do
@@ -1189,7 +1172,9 @@ translateExpr' ov expr mTy
                   atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
                   return (Some atom, fieldExt)
               _ -> X.throw $ MissingStructField struct memberName
-          _ -> X.throw $ UnexpectedExtendedType struct ext
+          _ -> do
+            exts <- MS.gets tsExtendedTypes
+            X.throw $ UnexpectedExtendedType struct ext
 
       AS.ExprMemberBits var bits -> do
         let (hdvar : tlvars) = map (\member -> AS.ExprMember var member) bits
@@ -1339,7 +1324,7 @@ translateIfExpr ov orig clauses elseExpr =
       Some testA <- translateExpr ov test
       (Some resA, extRes) <- translateExpr' ov res Nothing
       (Some elseA, extElse) <- translateExpr' ov elseExpr Nothing
-      ext <- assertEqualExtensions extRes extElse
+      ext <- mergeExtensions extRes extElse
       Refl <- assertAtomType test CT.BoolRepr testA
       Refl <- assertAtomType res (CCG.typeOfAtom elseA) resA
       case CT.asBaseType (CCG.typeOfAtom elseA) of
@@ -1351,7 +1336,7 @@ translateIfExpr ov orig clauses elseExpr =
       (Some trA, extRest) <- translateIfExpr ov orig rest elseExpr
       Some testA <- translateExpr ov test
       (Some resA, extRes) <- translateExpr' ov res Nothing
-      ext <- assertEqualExtensions extRes extRest
+      ext <- mergeExtensions extRes extRest
       Refl <- assertAtomType test CT.BoolRepr testA
       Refl <- assertAtomType res (CCG.typeOfAtom trA) resA
       case CT.asBaseType (CCG.typeOfAtom trA) of
@@ -1611,6 +1596,8 @@ overrides = Overrides {..}
           -- FIXME: write pc
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUWritePC") [result] -> Just $ do
             return ()
+          AS.StmtCall (AS.QualifiedIdentifier _ "TakeHypTrapException") [x] -> Just $ do
+            return ()
           AS.StmtVarDeclInit (ident,ty) (AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") []) -> Just $ do
             env <- MS.gets tsTypeEnvir
             retT <- translateType ty
@@ -1620,6 +1607,12 @@ overrides = Overrides {..}
                   atom <- CCG.mkAtom (CCG.App (CCE.BVLit valWidth 0))
                   translateKnownVar retT ident (Some atom)
                | otherwise -> error $ "Invalid return type for Zeros():" <> show ty
+          -- FIXME: This should raise an exception
+          AS.StmtCall (AS.QualifiedIdentifier _ "SEE") [x] -> Just $ do
+            return ()
+          AS.StmtCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
+            CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
+
           -- FIXME: This is a pass-by-reference function so we need to expand it in-place
           AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _,_ ] -> Just $ do
             return ()
@@ -1648,8 +1641,20 @@ overrides = Overrides {..}
           atom <- CCG.mkAtom e
           return (Some atom, TypeBasic)
 
-        overrideExpr :: forall h s ret . AS.Expr -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
-        overrideExpr e = case e of
+        getMaybeLength :: Maybe (Some CT.TypeRepr)
+                       -> AS.Expr
+                       -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe Integer)
+        getMaybeLength mTy e = do
+          env <- MS.gets tsTypeEnvir
+          case exprToInt env e of
+            Just i -> return $ Just i
+            _ -> case mTy of
+              Just (Some (CT.BVRepr nr)) ->
+                return $ Just $ WT.intValue nr
+              _ -> return Nothing
+
+        overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
+        overrideExpr e mTy = case e of
           AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
             Some atom <- translateExpr overrides argExpr
             case CCG.typeOfAtom atom of
@@ -1670,10 +1675,10 @@ overrides = Overrides {..}
               CT.BVRepr nr -> do
                 mkAtom (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
               _ -> error "Called IsZero on non-bitvector"
-          AS.ExprCall (AS.QualifiedIdentifier _ "ZeroExtend") [val, e] -> Just $ do
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"ZeroExtend") args@[val, e] -> Just $ do
             Some valAtom <- translateExpr overrides val
-            env <- MS.gets tsTypeEnvir
-            case (CCG.typeOfAtom valAtom, exprToInt env e) of
+            mLength <- getMaybeLength mTy e
+            case (CCG.typeOfAtom valAtom, mLength) of
               (CT.BVRepr valWidth, Just i) |
                 i == WT.intValue valWidth -> do
                   return $ (Some valAtom, TypeBasic)
@@ -1683,25 +1688,71 @@ overrides = Overrides {..}
                 , Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` repr -> do
                   atom <- CCG.mkAtom (CCG.App (CCE.BVZext repr valWidth (CCG.AtomExpr valAtom)))
                   return $ (Some atom, TypeBasic)
-              (_, Nothing) -> X.throw $ RequiredConcreteValue e
+              (_, Nothing) -> X.throw $ CannotMonomorphizeOverloadedFunctionCall fun args
               (tp, _) -> X.throw $ ExpectedBVType val tp
-          AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") [e] -> Just $ do
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"SignExtend") args@[val, e] -> Just $ do
+            Some valAtom <- translateExpr overrides val
             env <- MS.gets tsTypeEnvir
-            case exprToInt env e of
+
+            mLength <- case exprToInt env e of
+              Just i -> return $ Just i
+              _ -> case mTy of
+                Just (Some (CT.BVRepr nr)) ->
+                  return $ Just $ WT.intValue nr
+                _ -> return Nothing
+
+            case (CCG.typeOfAtom valAtom, mLength) of
+              (CT.BVRepr valWidth, Just i) |
+                i == WT.intValue valWidth -> do
+                  return $ (Some valAtom, TypeBasic)
+              (CT.BVRepr valWidth, Just i)
+                | Just (Some repr) <- WT.someNat i
+                , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` repr
+                , Just WT.LeqProof <- (valWidth `WT.addNat` (WT.knownNat @1)) `WT.testLeq` repr -> do
+                  atom <- CCG.mkAtom (CCG.App (CCE.BVSext repr valWidth (CCG.AtomExpr valAtom)))
+                  return $ (Some atom, TypeBasic)
+              (_, Nothing) -> X.throw $ CannotMonomorphizeOverloadedFunctionCall fun args
+              (tp, _) -> X.throw $ ExpectedBVType val tp
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"Zeros") args@[e] -> Just $ do
+            env <- MS.gets tsTypeEnvir
+            mLength <- getMaybeLength mTy e
+            case mLength of
               Just width |
                   Just (Some valWidth) <- WT.someNat width
                 , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
                   mkAtom (CCG.App (CCE.BVLit valWidth 0))
-              _ ->  error $ "Invalid argument type for Zeros(int):" <> show e
-          AS.ExprCall (AS.QualifiedIdentifier _ "Ones") [e] -> Just $ do
+              _ -> X.throw $ CannotMonomorphizeOverloadedFunctionCall fun args
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"Ones") args@[e] -> Just $ do
             env <- MS.gets tsTypeEnvir
-            case exprToInt env e of
+            mLength <- getMaybeLength mTy e
+            case mLength of
               Just width |
                   Just (Some valWidth) <- WT.someNat width
                 , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
                   let zeros = CCG.App (CCE.BVLit valWidth 0)
                   mkAtom (CCG.App (CCE.BVNot valWidth zeros))
-              _ -> error $ "Invalid argument type for Zeros(int):" <> show e
+              _ -> X.throw $ CannotMonomorphizeOverloadedFunctionCall fun args
+          -- FIXME: Needs an actual implementation
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"Replicate") args@[bve, repe] -> Just $ do
+            env <- MS.gets tsTypeEnvir
+            Some bvatom <- translateExpr overrides bve
+            case (exprToInt env repe, CCG.typeOfAtom bvatom) of
+              (Just width, CT.BVRepr nr) |
+                  Just (Some valWidth) <- WT.someNat (width * WT.intValue nr)
+                , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
+                  mkAtom (CCG.App (CCE.BVLit valWidth 0))
+              (Nothing, _) -> X.throw $ RequiredConcreteValue fun repe
+              _ -> X.throw $ InvalidOverloadedFunctionCall fun args
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"RoundTowardsZero") args@[e] -> Just $ do
+            case e of
+              (AS.ExprBinOp AS.BinOpDivide
+                (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
+                               [e1@(AS.ExprCall (AS.QualifiedIdentifier _ nm) _)])
+                (AS.ExprCall (AS.QualifiedIdentifier _ "Real")
+                               [e2@(AS.ExprCall (AS.QualifiedIdentifier _ nm') _)]))
+                | nm == nm' && (nm == "SInt" || nm == "UInt")
+                  -> translateExpr' overrides (AS.ExprBinOp AS.BinOpDiv e1 e2) mTy
+              _ -> X.throw $ InvalidOverloadedFunctionCall fun args
           AS.ExprCall (AS.QualifiedIdentifier _ "NOT") [e] -> Just $ do
             Some atom <- translateExpr overrides e
             case CCG.typeOfAtom atom of
@@ -1714,6 +1765,13 @@ overrides = Overrides {..}
               CT.IntegerRepr -> do
                 mkAtom (CCG.App (CCE.IntAbs (CCG.AtomExpr atom)))
               tp -> X.throw $ ExpectedIntegerType e tp
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"Min") args@[e1, e2] -> Just $ do
+            Some atom1 <- translateExpr overrides e1
+            Some atom2 <- translateExpr overrides e2
+            case (CCG.typeOfAtom atom1, CCG.typeOfAtom atom2) of
+              (CT.IntegerRepr, CT.IntegerRepr) -> do
+                translateExpr' overrides (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Minintegerinteger") [e1, e2]) mTy
+              _ -> X.throw $ InvalidOverloadedFunctionCall fun args
           -- FIXME: fix definition below; currently it just returns its args
           AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ do
             Some xAtom <- translateExpr overrides x
@@ -1795,15 +1853,6 @@ overrides = Overrides {..}
             mkAtom (CCG.App CCE.EmptyApp)
           AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> Just $ do
             mkAtom (CCG.App (CCE.BVUndef (WT.knownNat @11)))
-
-         -- FIXME: Execution model
-          AS.ExprCall (AS.QualifiedIdentifier _ "ThisInstr") [] -> Just $ do
-            mkAtom (CCG.App (CCE.BVUndef (WT.knownNat @32)))
-
-         -- FIXME: Execution model
-          AS.ExprCall (AS.QualifiedIdentifier _ "ThisInstrLength") [] -> Just $ do
-            Some e <- lookupVarRef "__ThisInstrLength"
-            mkAtom e
 
           -- FIXME: Memory model
           AS.ExprCall (AS.QualifiedIdentifier _ "__ReadRAM") [_, szExpr, _, addr] -> Just $ do

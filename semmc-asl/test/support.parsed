@@ -306,20 +306,6 @@
               (ExprVarRef
                 (QualifiedIdentifier Any FALSE))))))))
   (DefCallable
-    (QualifiedIdentifier Any ResetExternalDebugRegisters)
-    (list
-      (SymDecl
-        cold_reset
-        (TypeRef
-          (QualifiedIdentifier Any boolean))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))))))
-  (DefCallable
     (QualifiedIdentifier Any SoftwareStep_DidNotStep)
     (list)
     (Just
@@ -1076,8 +1062,11 @@
                   (QualifiedIdentifier Any _PC))
                 (list
                   (SliceRange
-                    (ExprVarRef
-                      (QualifiedIdentifier Any N))
+                    (ExprBinOp
+                      "-"
+                      (ExprVarRef
+                        (QualifiedIdentifier Any N))
+                      (ExprLitNat 1))
                     (ExprLitNat 0))))))))))
   (DefCallable
     (QualifiedIdentifier Any NextInstrAddr)
@@ -3168,18 +3157,6 @@
         (list
           (StmtReturn Nothing)))))
   (DefCallable
-    (QualifiedIdentifier Any ResetExternalDebugRegisters)
-    (list
-      (SymDecl
-        cold_reset
-        (TypeRef
-          (QualifiedIdentifier Any boolean))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn Nothing)))))
-  (DefCallable
     (QualifiedIdentifier AArch32 SysRegRead64)
     (list
       (SymDecl
@@ -3943,7 +3920,7 @@
               (ExprCall
                 (QualifiedIdentifier Any ZeroExtend)
                 (list
-                  (ExprIndex
+                  (ExprSlice
                     (ExprVarRef
                       (QualifiedIdentifier Any vaddress))
                     (list
@@ -3999,13 +3976,13 @@
                   (QualifiedIdentifier Any desc))
                 paddress)
               address)
-            (ExprIndex
+            (ExprSlice
               (ExprVarRef
                 (QualifiedIdentifier Any address))
               (list
-                (SliceOffset
-                  (ExprLitNat 0)
-                  (ExprLitNat 52)))))
+                (SliceRange
+                  (ExprLitNat 52)
+                  (ExprLitNat 0)))))
           (StmtReturn
             (Just
               (ExprIndex
@@ -4073,13 +4050,13 @@
                   (QualifiedIdentifier Any desc))
                 paddress)
               address)
-            (ExprIndex
+            (ExprSlice
               (ExprVarRef
                 (QualifiedIdentifier Any address))
               (list
-                (SliceOffset
-                  (ExprLitNat 0)
-                  (ExprLitNat 52)))))
+                (SliceRange
+                  (ExprLitNat 52)
+                  (ExprLitNat 0)))))
           (StmtAssign
             (LValArrayIndex
               (LValVarRef
@@ -4256,16 +4233,6 @@
               (QualifiedIdentifier Any FALSE)))))))
   (DefCallable
     (QualifiedIdentifier Any UnallocatedEncoding)
-    (list)
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))))))
-  (DefCallable
-    (QualifiedIdentifier Any EndOfInstruction)
     (list)
     Nothing
     (Just

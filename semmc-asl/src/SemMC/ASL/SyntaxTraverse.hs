@@ -26,6 +26,7 @@ module SemMC.ASL.SyntaxTraverse
   , foldASL
   , foldExpr
   , mkFunctionName
+  , mapInnerName
   )
 where
 
@@ -145,7 +146,7 @@ mkSyntaxOverrides defs =
           else stmt
         _ -> stmt
 
-      exprOverrides expr = case expr of
+      exprOverrides' expr = case expr of
         AS.ExprIndex (AS.ExprVarRef qName) slices ->
           if Set.member (mkFunctionName (mkGetterName True qName) (length slices)) getters then
             AS.ExprCall (mkGetterName True qName) (map getSliceExpr slices)
@@ -156,18 +157,38 @@ mkSyntaxOverrides defs =
           else expr
         _ -> expr
 
+      -- FIXME: This is a simple toplevel rewrite that assumes
+      -- aliases and consts are never shadowed
+
       typeSynonyms = catMaybes $ typeSyn <$> defs
       typeSyn d = case d of
         AS.DefTypeAlias nm t -> Just (nm, t)
         _ -> Nothing
 
-      typeSynMap = Map.fromList typeSynonyms
+      typeSynMap = Map.fromList (typeSynonyms ++
+                                 [(T.pack "signal", (AS.TypeFun "bits" (AS.ExprLitInt 1)))])
 
       typeOverrides t = case t of
-        AS.TypeRef (AS.QualifiedIdentifier _ nm) -> case Map.lookup nm typeSynMap of
+        AS.TypeFun "__RAM" (AS.ExprLitInt 52) -> AS.TypeFun "bits" (AS.ExprLitInt 52)
+        AS.TypeRef (AS.QualifiedIdentifier _ nm) ->
+          case Map.lookup nm typeSynMap of
           Just t' -> t'
           Nothing -> t
         _ -> t
+
+
+      varSynonyms = catMaybes $ varSyn <$> defs
+      varSyn d = case d of
+        AS.DefConst id _ e -> Just (id, e)
+        _ -> Nothing
+
+      varSynMap = Map.fromList varSynonyms
+
+      exprOverrides e = case e of
+        AS.ExprVarRef (AS.QualifiedIdentifier _ nm) -> case Map.lookup nm varSynMap of
+          Just e' -> e'
+          Nothing -> exprOverrides' e
+        _ -> exprOverrides' e
 
   in SyntaxOverrides stmtOverrides exprOverrides typeOverrides
 
@@ -243,6 +264,7 @@ applyStmtSyntaxOverride ovrs stmt =
       AS.CatchOtherwise stmts -> AS.CatchOtherwise (g <$> stmts)
     stmt' = stmtOverrides ovrs stmt
   in case stmt' of
+    AS.StmtVarsDecl ty i -> AS.StmtVarsDecl (h ty) i
     AS.StmtVarDeclInit decl e -> AS.StmtVarDeclInit (h <$> decl) (f e)
     AS.StmtConstDecl decl e -> AS.StmtConstDecl decl (f e)
     AS.StmtAssign lv e -> AS.StmtAssign lv (f e)

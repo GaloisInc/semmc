@@ -48,6 +48,52 @@
                   (ExprVarRef
                     (QualifiedIdentifier Any N))))))))))
   (DefCallable
+    (QualifiedIdentifier Any Replicate)
+    (list
+      (SymDecl
+        bv
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N)))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprBinOp
+              "*"
+              (ExprVarRef
+                (QualifiedIdentifier Any N))
+              (ExprVarRef
+                (QualifiedIdentifier Any M)))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any Replicate)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any bv))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any M))))))))))
+  (DefConst
+    LOG2_TAG_GRANULE
+    (TypeRef
+      (QualifiedIdentifier Any integer))
+    (ExprLitNat 4))
+  (DefConst
+    TAG_GRANULE
+    (TypeRef
+      (QualifiedIdentifier Any integer))
+    (ExprBinOp
+      "^"
+      (ExprLitNat 2)
+      (ExprVarRef
+        (QualifiedIdentifier Any LOG2_TAG_GRANULE))))
+  (DefCallable
     (QualifiedIdentifier Any ConsumptionOfSpeculativeDataBarrier)
     (list)
     Nothing
@@ -86,4 +132,116 @@
     (Just
       (StmtBlock
         (list
-          (StmtReturn Nothing))))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier AArch64 SysRegRead)
+    (list
+      (SymDecl
+        op0
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        op1
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        crn
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        crm
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        op2
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 64)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any reg))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 64))))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any reg))))))))
+  (DefCallable
+    (QualifiedIdentifier Any ReservedEncoding)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any IsPhysicalSErrorPending)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any ret))
+            (ExprUnknown
+              (TypeRef
+                (QualifiedIdentifier Any boolean))))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any ret))))))))
+  (DefCallable
+    (QualifiedIdentifier Any MinInt)
+    (list
+      (SymDecl
+        i1
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        i2
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtIf
+            (ExprBinOp
+              "<"
+              (ExprVarRef
+                (QualifiedIdentifier Any i1))
+              (ExprVarRef
+                (QualifiedIdentifier Any i2)))
+            (StmtBlock
+              (list
+                (StmtReturn
+                  (Just
+                    (ExprVarRef
+                      (QualifiedIdentifier Any i1))))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtReturn
+                    (Just
+                      (ExprVarRef
+                        (QualifiedIdentifier Any i2)))))))))))))

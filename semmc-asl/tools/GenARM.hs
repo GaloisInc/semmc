@@ -75,7 +75,7 @@ stalledDefs =
 
 main :: IO ()
 main = do
-  sm <- runWithFilters defaultOptions
+  sm <- runWithFilters defaultOptions { optVerbose = False}
   let opts = defaultStatOptions {
         reportKnownExceptions = True,
         reportSucceedingInstructions = True}
@@ -244,6 +244,7 @@ data ExpectedException =
   | BoolComparisonUnsupported
   | RealValuesUnsupported
   | LValSliceUnsupported
+  | ExponentiationUnsupported
   | ParserError
   deriving (Eq, Ord, Show)
 
@@ -252,22 +253,19 @@ expectedExceptions k ex = case ex of
   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
   SExcept (SigException _ (TypeNotFound "real")) -> Just $ RealValuesUnsupported
   TExcept (CannotMonomorphizeFunctionCall f) -> Just $ CannotMonomorphize f
+  TExcept (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
   TExcept (UnsupportedSlice (AS.SliceSingle _)) -> Just $ SymbolicArguments "Slice"
   TExcept (UnsupportedSlice (AS.SliceRange _ _)) -> Just $ SymbolicArguments "Slice"
+  TExcept (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
   TExcept (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
   TExcept (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
   TExcept (UnboundName "R") -> Just $ LValSlicedSetters
   TExcept (UnboundName "D") -> Just $ LValSlicedSetters
   TExcept (UnboundName nm) ->
-    if List.elem nm ["imm32", "index", "m", "mode", "regs", "sz"]
+    if List.elem nm ["imm32", "index", "m", "mode", "regs", "sz", "carry", "add", "tag_checked"]
     then Just $ BadInstructionSpecification nm
-    else Just $ MissingGlobalDeclaration nm
-  TExcept (StructFieldMismatch (AS.ExprMember (AS.ExprIndex _ _) _)) -> Just $ GlobalArrayOfStructs
-  TExcept (MissingFunctionDefinition "UndefinedFault_0") -> Just $ MissingFunction "UndefinedFault_0"
-  TExcept (MissingFunctionDefinition "SignExtend_2") -> Just $ MissingFunction "SignExtend_2"
-  TExcept (MissingFunctionDefinition "Replicate_2") -> Just $ MissingFunction "Replicate_2"
-  TExcept (MissingFunctionDefinition "Replicate_1") -> Just $ MissingFunction "Replicate_1"
-  TExcept (MissingFunctionDefinition "RoundTowardsZero_1") -> Just $ MissingFunction "RoundTowardsZero_1"
+    else Nothing
+  TExcept (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
   TExcept (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
   TExcept (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
   _ -> Nothing
@@ -483,7 +481,7 @@ translationLoop fromInstr defs (fnname, env) = do
        case Map.lookup fnname (defSignatures defs) of
            Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
                  MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
-                 logMsg $ "Translating function: " ++ show finalName ++ show sig
+                 logMsg $ "Translating function: " ++ show finalName ++ "\n" ++ show sig ++ "\n"
                  deps <- processFunction fromInstr finalName sig stmts defs
                  MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
                  alldeps <- mapM (translationLoop fromInstr defs) (Map.assocs deps)
