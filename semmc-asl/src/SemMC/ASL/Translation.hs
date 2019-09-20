@@ -589,8 +589,6 @@ translateAssignment' ov lval atom atomext mE = do
 
     AS.LValSliceOf lv [slice] -> translatelValSlice ov lv slice atom
 
-    -- FIXME: This form appears only twice and could easily be broken
-    -- into two assignments. The above case covers all other cases.
     AS.LValSliceOf lv [fstSlice@(AS.SliceSingle _), slice] -> do
       case CCG.typeOfAtom atom of
         CT.BVRepr wRepr -> do
@@ -803,8 +801,8 @@ getExtendedTypeData ident = do
   return $ fromMaybe TypeBasic (Map.lookup ident exts)
 
 mergeExtensions :: ExtendedTypeData
-                      -> ExtendedTypeData
-                      -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
+                -> ExtendedTypeData
+                -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
 mergeExtensions ext1 ext2 =
   case (ext1, ext2) of
   (_, TypeBasic) -> return ext1
@@ -818,7 +816,6 @@ mergeExtensions ext1 ext2 =
 -- Translations of user-defined types (i.e., types defined in an ASL program)
 -- are stored in the 'TranslationState' and are looked up when needed.
 --
--- FIXME: Handle polymorphic types (i.e., `bits(N)`)
 translateType :: AS.Type -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some CT.TypeRepr)
 translateType t = do
   env <- MS.gets tsTypeEnvir
@@ -836,8 +833,6 @@ translateType t = do
         AS.ExprLitInt nBits
           | Just (Some nr) <- NR.someNat nBits
           , Just NR.LeqProof <- NR.isPosNat nr -> return (Some (CT.BVRepr nr))
-        -- FIXME: We assume that N is always 32!!! This needs to be fixed, probably.
-        --AS.ExprVarRef (AS.QualifiedIdentifier _ "N") -> return (Some (CT.BVRepr (WT.knownNat @32)))
         _ -> error ("Unsupported type: " ++ show t)
     AS.TypeFun _ _ -> error ("Unsupported type: " ++ show t)
     AS.TypeArray _ty _idxTy -> error ("Unsupported type: " ++ show t)
