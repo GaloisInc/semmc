@@ -799,30 +799,31 @@ caseAlternativeGlobalVars alt = case alt of
 
 -- | Collect all global variables from a single 'AS.Expr'.
 exprGlobalVars :: AS.Expr -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
-exprGlobalVars expr = case expr of
-    AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
-      maybeToList <$> varGlobal varName
-    AS.ExprSlice e slices -> do
-      eGlobals <- exprGlobalVars e
-      sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-      return $ eGlobals ++ sliceGlobals
-    AS.ExprIndex e slices -> do
-      eGlobals <- exprGlobalVars e
-      sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-      return $ eGlobals ++ sliceGlobals
-    AS.ExprUnOp _ e -> exprGlobalVars e
-    AS.ExprBinOp _ e1 e2 -> do
-      e1Globals <- exprGlobalVars e1
-      e2Globals <- exprGlobalVars e2
-      return $ e1Globals ++ e2Globals
-    AS.ExprMembers e vars -> do
-      eGlobals <- exprGlobalVars e
-      varGlobals <- catMaybes <$> traverse varGlobal vars
-      return $ eGlobals ++ varGlobals
-    AS.ExprInMask e _ -> exprGlobalVars e
-    AS.ExprCall qName argEs -> case (overrideExprCall overrides) qName of
-      Just nms -> concat <$> traverse exprGlobalVars (map (\nm -> AS.ExprCall nm argEs) nms)
-      Nothing -> do
+exprGlobalVars expr = case overrideExpr overrides expr of
+  Just exprs -> concat <$> traverse exprGlobalVars exprs
+  Nothing ->
+    case expr of
+      AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
+        maybeToList <$> varGlobal varName
+      AS.ExprSlice e slices -> do
+        eGlobals <- exprGlobalVars e
+        sliceGlobals <- concat <$> traverse sliceGlobalVars slices
+        return $ eGlobals ++ sliceGlobals
+      AS.ExprIndex e slices -> do
+        eGlobals <- exprGlobalVars e
+        sliceGlobals <- concat <$> traverse sliceGlobalVars slices
+        return $ eGlobals ++ sliceGlobals
+      AS.ExprUnOp _ e -> exprGlobalVars e
+      AS.ExprBinOp _ e1 e2 -> do
+        e1Globals <- exprGlobalVars e1
+        e2Globals <- exprGlobalVars e2
+        return $ e1Globals ++ e2Globals
+      AS.ExprMembers e vars -> do
+        eGlobals <- exprGlobalVars e
+        varGlobals <- catMaybes <$> traverse varGlobal vars
+        return $ eGlobals ++ varGlobals
+      AS.ExprInMask e _ -> exprGlobalVars e
+      AS.ExprCall qName argEs -> do
         argGlobals <- concat <$> traverse exprGlobalVars argEs
         mCallable <- lookupCallable qName (length argEs)
         case mCallable of
@@ -837,89 +838,87 @@ exprGlobalVars expr = case expr of
               popCallableSearch qName (length argEs)
               return $ callableGlobals ++ argGlobals
           Nothing -> return argGlobals
-    AS.ExprInSet e setElts -> do
-      eGlobals <- exprGlobalVars e
-      setEltGlobals <- concat <$> traverse setEltGlobalVars setElts
-      return $ eGlobals ++ setEltGlobals
-    AS.ExprTuple es ->
-      concat <$> traverse exprGlobalVars es
-    AS.ExprIf branches def -> do
-      branchGlobals <- forM branches $ \(testExpr, resExpr) -> do
-        testExprGlobals <- exprGlobalVars testExpr
-        resExprGlobals <- exprGlobalVars resExpr
-        return $ testExprGlobals ++ resExprGlobals
-      defaultGlobals <- exprGlobalVars def
-      return $ concat branchGlobals ++ defaultGlobals
-    AS.ExprMember e _ -> exprGlobalVars e
-    AS.ExprMemberBits e _ -> exprGlobalVars e
-    _ -> return []
+      AS.ExprInSet e setElts -> do
+        eGlobals <- exprGlobalVars e
+        setEltGlobals <- concat <$> traverse setEltGlobalVars setElts
+        return $ eGlobals ++ setEltGlobals
+      AS.ExprTuple es ->
+        concat <$> traverse exprGlobalVars es
+      AS.ExprIf branches def -> do
+        branchGlobals <- forM branches $ \(testExpr, resExpr) -> do
+          testExprGlobals <- exprGlobalVars testExpr
+          resExprGlobals <- exprGlobalVars resExpr
+          return $ testExprGlobals ++ resExprGlobals
+        defaultGlobals <- exprGlobalVars def
+        return $ concat branchGlobals ++ defaultGlobals
+      AS.ExprMember e _ -> exprGlobalVars e
+      AS.ExprMemberBits e _ -> exprGlobalVars e
+      _ -> return []
 
 -- | Collect all global variables from a single 'AS.Stmt'.
 stmtGlobalVars :: AS.Stmt -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
 stmtGlobalVars stmt =
-  -- FIXME: If the stmt has an override, then we should provide a custom set of
-  -- globals as well.
-  --seq (unsafePerformIO $ putStrLn $ show stmt) $
-  case stmt of
-      AS.StmtVarsDecl ty i -> do
-        storeUserType ty
-        return []
-      AS.StmtVarDeclInit (_, ty) e -> do
-        storeUserType ty
-        exprGlobalVars e
-      AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
-      AS.StmtCall qName argEs -> case (overrideStmtCall overrides) qName of
-        Just nms -> concat <$> traverse stmtGlobalVars (map (\nm -> AS.StmtCall nm argEs) nms)
-        Nothing -> do
-          argGlobals <- concat <$> traverse exprGlobalVars argEs
-          mCallable <- lookupCallable qName (length argEs)
-          case mCallable of
-            Just callable -> do
-              -- Compute the signature of the callable
-              recursed <- pushCallableSearch qName (length argEs)
-              if recursed then
-                return argGlobals
-              else do
-                void $ computeCallableSignature callable
-                callableGlobals <- callableGlobalVars callable
-                popCallableSearch qName (length argEs)
-                return $ callableGlobals ++ argGlobals
-            Nothing -> return argGlobals
-      AS.StmtReturn (Just e) -> exprGlobalVars e
-      AS.StmtAssert e -> exprGlobalVars e
-      AS.StmtIf branches mDefault -> do
-        branchGlobals <- forM branches $ \(testExpr, stmts) -> do
-          testExprGlobals <- exprGlobalVars testExpr
-          stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-          return $ testExprGlobals ++ stmtGlobals
-        defaultGlobals <- case mDefault of
-          Nothing -> return []
-          Just stmts -> concat <$> traverse stmtGlobalVars stmts
-        return $ concat branchGlobals ++ defaultGlobals
-      AS.StmtCase e alts -> do
-        eGlobals <- exprGlobalVars e
-        altGlobals <- concat <$> traverse caseAlternativeGlobalVars alts
-        return $ eGlobals ++ altGlobals
-      AS.StmtFor _ (initialize, term) stmts -> do
-        initGlobals <- exprGlobalVars initialize
-        termGlobals <- exprGlobalVars term
-        stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-        return $ initGlobals ++ termGlobals ++ stmtGlobals
-      AS.StmtWhile term stmts -> do
-        termGlobals <- exprGlobalVars term
-        stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-        return $ termGlobals ++ stmtGlobals
-      AS.StmtRepeat stmts term -> do
-        termGlobals <- exprGlobalVars term
-        stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-        return $ termGlobals ++ stmtGlobals
-      AS.StmtUnpredictable -> do
-        gb <- theVarGlobal "UNPREDICTABLE"
-        return [gb]
-      AS.StmtUndefined -> do
-        gb <- theVarGlobal "UNDEFINED"
-        return [gb]
-      _ -> return []
+  case overrideStmt overrides stmt of
+    Just stmts -> concat <$> traverse stmtGlobalVars stmts
+    Nothing ->
+      case stmt of
+          AS.StmtVarsDecl ty i -> do
+            storeUserType ty
+            return []
+          AS.StmtVarDeclInit (_, ty) e -> do
+            storeUserType ty
+            exprGlobalVars e
+          AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
+          AS.StmtCall qName argEs -> do
+            argGlobals <- concat <$> traverse exprGlobalVars argEs
+            mCallable <- lookupCallable qName (length argEs)
+            case mCallable of
+              Just callable -> do
+                -- Compute the signature of the callable
+                recursed <- pushCallableSearch qName (length argEs)
+                if recursed then
+                  return argGlobals
+                else do
+                  void $ computeCallableSignature callable
+                  callableGlobals <- callableGlobalVars callable
+                  popCallableSearch qName (length argEs)
+                  return $ callableGlobals ++ argGlobals
+              Nothing -> return argGlobals
+          AS.StmtReturn (Just e) -> exprGlobalVars e
+          AS.StmtAssert e -> exprGlobalVars e
+          AS.StmtIf branches mDefault -> do
+            branchGlobals <- forM branches $ \(testExpr, stmts) -> do
+              testExprGlobals <- exprGlobalVars testExpr
+              stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+              return $ testExprGlobals ++ stmtGlobals
+            defaultGlobals <- case mDefault of
+              Nothing -> return []
+              Just stmts -> concat <$> traverse stmtGlobalVars stmts
+            return $ concat branchGlobals ++ defaultGlobals
+          AS.StmtCase e alts -> do
+            eGlobals <- exprGlobalVars e
+            altGlobals <- concat <$> traverse caseAlternativeGlobalVars alts
+            return $ eGlobals ++ altGlobals
+          AS.StmtFor _ (initialize, term) stmts -> do
+            initGlobals <- exprGlobalVars initialize
+            termGlobals <- exprGlobalVars term
+            stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+            return $ initGlobals ++ termGlobals ++ stmtGlobals
+          AS.StmtWhile term stmts -> do
+            termGlobals <- exprGlobalVars term
+            stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+            return $ termGlobals ++ stmtGlobals
+          AS.StmtRepeat stmts term -> do
+            termGlobals <- exprGlobalVars term
+            stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
+            return $ termGlobals ++ stmtGlobals
+          AS.StmtUnpredictable -> do
+            gb <- theVarGlobal "UNPREDICTABLE"
+            return [gb]
+          AS.StmtUndefined -> do
+            gb <- theVarGlobal "UNDEFINED"
+            return [gb]
+          _ -> return []
 
 -- | Compute the list of global variables in a 'Callable' and store it in the
 -- state. If it has already been computed, simply return it.
@@ -1121,17 +1120,26 @@ createInstStmts encodingSpecificOperations stmts =
 
 -- Overrides only for the purposes of collecting global variables
 data Overrides arch =
-  Overrides { overrideExprCall :: AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
-            , overrideStmtCall :: AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
+  Overrides { overrideExpr :: AS.Expr -> Maybe [AS.Expr]
+            , overrideStmt :: AS.Stmt -> Maybe [AS.Stmt]
             }
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
-  where overrideStmtCall ::  AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
-        overrideStmtCall ident = Nothing
+  where overrideStmt ::  AS.Stmt -> Maybe [AS.Stmt]
+        overrideStmt stmt = case stmt of
+          AS.StmtCall (AS.QualifiedIdentifier _ "GETTERSETTER")
+            (AS.ExprSlice (AS.ExprVarRef getter) _ : AS.ExprVarRef setter : value : args)
+            -> Just $ [AS.StmtAssert (AS.ExprCall getter args), AS.StmtCall setter (value : args),
+                       AS.StmtAssert (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Ones") [])]
+          AS.StmtAssign lv
+            (AS.ExprCall (AS.QualifiedIdentifier _ "SETTERTUPLE")
+             (AS.ExprVarRef setter : args))
+            -> Just $ [AS.StmtCall setter args,
+                       AS.StmtAssign lv (AS.ExprLitInt 0)]
+          _ -> Nothing
 
-        mkIdent nm = (AS.QualifiedIdentifier AS.ArchQualAny nm)
-
-        overrideExprCall :: AS.QualifiedIdentifier -> Maybe [AS.QualifiedIdentifier]
-        overrideExprCall ident = case ident of
-          AS.QualifiedIdentifier _ nm ->
-            lookup nm [("Min",[(mkIdent "Minintegerinteger")])]
+        overrideExpr :: AS.Expr -> Maybe [AS.Expr]
+        overrideExpr e = case e of
+          AS.ExprCall (AS.QualifiedIdentifier q "Min") args ->
+            Just $ [AS.ExprCall (AS.QualifiedIdentifier q "Minintegerinteger") args]
+          _ -> Nothing

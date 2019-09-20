@@ -141,6 +141,20 @@ mkSyntaxOverrides defs =
           if Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters then
             AS.StmtCall (mkSetterName True qName) (rhs : map getSliceExpr slices)
           else stmt
+        AS.StmtAssign (AS.LValTuple (AS.LValArrayIndex (AS.LValVarRef qName) slices : rest)) rhs ->
+          if Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters then
+            AS.StmtAssign (AS.LValTuple rest)
+             (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "SETTERTUPLE")
+              ([AS.ExprVarRef (mkSetterName True qName)]
+               ++ (rhs : map getSliceExpr slices)))
+          else stmt
+        AS.StmtAssign (AS.LValSliceOf (AS.LValArrayIndex (AS.LValVarRef qName) slices) outerSlices) rhs ->
+          if Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters then
+            AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTERSETTER")
+              ([AS.ExprSlice (AS.ExprVarRef (mkGetterName True qName)) outerSlices,
+               AS.ExprVarRef (mkSetterName True qName)]
+               ++ (rhs : map getSliceExpr slices))
+          else stmt
         AS.StmtAssign (AS.LValVarRef qName) rhs ->
           if Set.member (mkFunctionName (mkSetterName False qName) 1) setters then
             AS.StmtCall (mkSetterName False qName) [rhs]

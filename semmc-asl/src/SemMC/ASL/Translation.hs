@@ -170,7 +170,7 @@ lookupVarType name = do
 -- translation specially.  This should be useful for replacing some trivial
 -- accessors with simpler forms in Crucible.
 data Overrides arch =
-  Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret ())
+  Overrides { overrideStmt :: forall h s ret .  SomeSignature ret -> AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret ())
             , overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
             }
 
@@ -274,7 +274,7 @@ translateStatement :: forall arch ret h s
                    -- ^ Statement we are translating
                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 translateStatement ov sig stmt
-  | Just so <- overrideStmt ov stmt = so
+  | Just so <- overrideStmt ov sig stmt = so
   | otherwise =
     let rep = someSigRepr sig
     in case stmt of
@@ -683,10 +683,10 @@ maybeBVConcat _ _ _ _ = error "BVConcat type mismatch"
 
 
 translatelValSlice :: Overrides arch
-                   -> AS.LValExpr
-                   -> AS.Slice
-                   -> CCG.Atom s tp
-                   -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+               -> AS.LValExpr
+               -> AS.Slice
+               -> CCG.Atom s tp
+               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
 translatelValSlice ov lv slice asnAtom = do
   let Just lve = lValToExpr lv
   Some atom <- translateExpr ov lve
@@ -1612,8 +1612,39 @@ bitsForInt i = case i of
 
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
-  where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret ())
-        overrideStmt s = case s of
+  where overrideStmt :: forall h s ret . SomeSignature ret -> AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret ())
+
+        overrideStmt sig s = case s of
+          AS.StmtCall (AS.QualifiedIdentifier _ fun@"GETTERSETTER")
+            args'@(AS.ExprSlice (AS.ExprVarRef getter) slices : AS.ExprVarRef setter : value : args) -> Just $ do
+
+
+              Some atom <- translateExpr overrides (AS.ExprCall getter args)
+              case (CCG.typeOfAtom atom) of
+                CT.BVRepr widthRepr -> do
+                  let width = WT.intValue widthRepr
+                  let old = mkVar $ "__oldGetterValue_" <> (T.pack $ show width)
+                  let mask = mkVar $ "__maskedGetterValue_" <> (T.pack $ show width)
+                  let stmts = [ AS.StmtAssign (AS.LValVarRef (nmOf old))
+                                 (AS.ExprCall getter args)
+                              ,  AS.StmtAssign (AS.LValVarRef (nmOf mask))
+                                 (AS.ExprCall (mkIdent "Ones") [AS.ExprLitInt width])
+                              , AS.StmtAssign (AS.LValSliceOf (AS.LValVarRef (nmOf mask)) slices)
+                                 value
+                              , AS.StmtCall setter (AS.ExprBinOp AS.BinOpBitwiseAnd mask old : args)
+                              ]
+                  mapM_ (translateStatement overrides sig) stmts
+                _ -> X.throw $ InvalidOverloadedFunctionCall fun args'
+
+          AS.StmtAssign (AS.LValTuple lvs) (AS.ExprCall (AS.QualifiedIdentifier _ "SETTERTUPLE")
+            (AS.ExprVarRef setter : rhs : args)) -> Just $ do
+              let setterResult = mkVar $ "__setterResult"
+              let stmts = [ AS.StmtAssign (AS.LValTuple (AS.LValVarRef (nmOf setterResult) : lvs)) rhs
+                          , AS.StmtCall setter (setterResult : args)
+                          ]
+              mapM_ (translateStatement overrides sig) stmts
+
+
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ do
             raiseException
           -- FIXME: write pc
@@ -1660,6 +1691,11 @@ overrides = Overrides {..}
 
           _ -> Nothing
 
+        mkIdent nm = AS.QualifiedIdentifier AS.ArchQualAny nm
+        mkVar nm = AS.ExprVarRef (mkIdent nm)
+        nmOf (AS.ExprVarRef qnm) = qnm
+        idOf (AS.ExprVarRef (AS.QualifiedIdentifier _ nm)) = nm
+
         mkAtom e = do
           atom <- CCG.mkAtom e
           return (Some atom, TypeBasic)
@@ -1678,6 +1714,12 @@ overrides = Overrides {..}
 
         overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
         overrideExpr e mTy = case e of
+          AS.ExprCall (AS.QualifiedIdentifier _ fun@"widthOfBV") args@[argExpr] -> Just $ do
+            Some atom <- translateExpr overrides argExpr
+            case CCG.typeOfAtom atom of
+              CT.BVRepr nr -> do
+                mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+              _ -> error "Called UInt on non-bitvector"
           AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
             Some atom <- translateExpr overrides argExpr
             case CCG.typeOfAtom atom of

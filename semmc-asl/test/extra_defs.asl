@@ -1,6 +1,9 @@
 bits(N) Zeros()
     return Zeros(N);
 
+bits(N) Ones()
+    return Ones(N);
+
 bits(N) ZeroExtend(bits(M) val)
     return ZeroExtend(val, N);
 

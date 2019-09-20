@@ -235,7 +235,6 @@ data ExpectedException =
     CannotMonomorphize T.Text
   | SymbolicArguments T.Text
   | NotImplementedYet String
-  | LValSlicedSetters
   | GlobalArrayOfStructs
   | MissingFunction String
   | BadInstructionSpecification T.Text
@@ -259,8 +258,6 @@ expectedExceptions k ex = case ex of
   TExcept (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
   TExcept (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
   TExcept (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
-  TExcept (UnboundName "R") -> Just $ LValSlicedSetters
-  TExcept (UnboundName "D") -> Just $ LValSlicedSetters
   TExcept (UnboundName nm) ->
     if List.elem nm ["imm32", "index", "m", "mode", "regs", "sz", "carry", "add", "tag_checked"]
     then Just $ BadInstructionSpecification nm
@@ -278,6 +275,7 @@ data StatOptions = StatOptions
   , reportSucceedingInstructions :: Bool
   , reportAllExceptions :: Bool
   , reportKnownExceptionFilter :: ExpectedException -> Bool
+  , reportFunctionDependencies :: Bool
   }
 
 defaultStatOptions :: StatOptions
@@ -286,6 +284,7 @@ defaultStatOptions = StatOptions
   , reportSucceedingInstructions = False
   , reportAllExceptions = False
   , reportKnownExceptionFilter = (\_ -> True)
+  , reportFunctionDependencies = False
   }
 
 reportStats :: StatOptions -> SigMap -> IO ()
@@ -311,7 +310,7 @@ reportStats sopts sm = do
     _ <- Map.traverseWithKey (\ex -> \ks -> do
          putStrLn $ "Failures due to known exception: " <> show ex
          putStrLn "----------------------"
-         mapM_ (\k -> putStrLn $ prettyKey k) ks
+         mapM_ printKey ks
          putStrLn "") expected
     return ()
   
@@ -330,10 +329,19 @@ reportStats sopts sm = do
   putStrLn $ "Number of successfully translated functions: " <> show (Map.size $ r)
 
   where
+    reverseDependencyMap =
+        Map.fromListWith (++) $ concat $ map (\(instr, funs) -> map (\fun -> (fun, [instr])) (Set.toList funs))
+           (Map.assocs (instrDeps sm))
     prettyIdent (InstructionIdent nm enc iset) = show nm <> " " <> show enc <> " " <> show iset
-    prettyKey k = case k of
-      KeyInstr ident -> "Instruction: " <> prettyIdent ident
-      KeyFun nm -> "Function: " <> show nm
+    printKey k = case k of
+      KeyInstr ident -> putStrLn $ "Instruction: " <> prettyIdent ident
+      KeyFun nm -> do
+        putStrLn $ "Function: " <> show nm
+        E.when (reportFunctionDependencies sopts) $ do
+          putStrLn $ "Which is depended on by: "
+          case Map.lookup nm reverseDependencyMap of
+            Just instrs -> mapM_ (\ident -> putStrLn $  "    " <> prettyIdent ident) instrs
+            _ -> return ()
     unexpected k err =
       if reportAllExceptions sopts then True else isUnexpectedException k err
     addExpected nm err = case expectedExceptions nm err of

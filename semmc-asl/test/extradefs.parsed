@@ -20,6 +20,26 @@
                   (ExprVarRef
                     (QualifiedIdentifier Any N))))))))))
   (DefCallable
+    (QualifiedIdentifier Any Ones)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprVarRef
+              (QualifiedIdentifier Any N))))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprCall
+                (QualifiedIdentifier Any Ones)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any N))))))))))
+  (DefCallable
     (QualifiedIdentifier Any ZeroExtend)
     (list
       (SymDecl
