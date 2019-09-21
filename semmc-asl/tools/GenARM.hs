@@ -78,7 +78,8 @@ main = do
   sm <- runWithFilters defaultOptions { optVerbose = False}
   let opts = defaultStatOptions {
         reportKnownExceptions = True,
-        reportSucceedingInstructions = True}
+        reportSucceedingInstructions = True,
+        reportFunctionDependencies = True}
   reportStats opts sm
 
 testDefinition :: String -> Int -> IO (SigMap)
@@ -368,6 +369,8 @@ deriving instance Ord InstructionIdent
 instrToIdent :: AS.Instruction -> T.Text -> AS.InstructionSet -> InstructionIdent
 instrToIdent AS.Instruction{..} enc iset = InstructionIdent instName enc iset
 
+finalDepsOf :: Map.Map T.Text StaticEnv -> Set.Set T.Text
+finalDepsOf deps = Set.fromList (map (\(nm, env) -> mkFinalFunctionName env nm) (Map.assocs deps))
 
 runTranslation :: AS.Instruction -> InstructionIdent -> MSS.StateT SigMap IO ()
 runTranslation instruction@AS.Instruction{..} instrIdent = do
@@ -390,7 +393,7 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
           logMsg $ "--------------------------------"
           logMsg "Translating functions: "
           alldeps <- mapM (translationLoop instrIdent defs) (Map.assocs deps)
-          let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
+          let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
           MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
     _ -> error "Panic"
 
@@ -497,7 +500,8 @@ translationLoop fromInstr defs (fnname, env) = do
                  deps <- processFunction fromInstr finalName sig stmts defs
                  MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
                  alldeps <- mapM (translationLoop fromInstr defs) (Map.assocs deps)
-                 let alldepsSet = Set.union (Set.unions alldeps) (Map.keysSet deps)
+                 let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
+
                  MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
                  return alldepsSet
            _ -> error $ "Missing definition for:" <> (show fnname)
