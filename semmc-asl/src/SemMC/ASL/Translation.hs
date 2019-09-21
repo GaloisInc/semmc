@@ -1084,136 +1084,140 @@ translateExpr' :: Overrides arch
               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData)
 translateExpr' ov expr mTy
   | Just eo <- overrideExpr ov expr mTy = eo
-  | otherwise =
-    case expr of
-      AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) ->
-        translateExpr' ov (AS.ExprInSet e [AS.SetEltSingle mask]) mTy
-      AS.ExprBinOp AS.BinOpNEQ e mask@(AS.ExprLitMask _) ->
-        translateExpr' ov (AS.ExprUnOp AS.UnOpNot (AS.ExprInSet e [AS.SetEltSingle mask])) mTy
-      AS.ExprLitInt i -> mkAtom (CCG.App (CCE.IntLit i))
-      AS.ExprLitBin bits -> do
-        let nBits = length bits
-        case NR.mkNatRepr (fromIntegral nBits) of
-          Some nr
-            | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
-              mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
-            | otherwise -> X.throw InvalidZeroLengthBitvector
-      AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
-        Some e <- lookupVarRef ident
-        atom <- CCG.mkAtom e
-        ext <- getExtendedTypeData ident
-        return (Some atom, ext)
+  | otherwise = do
+      env <- MS.gets tsStaticEnv
+      case exprToStatic env expr of
+        Just (StaticInt i) -> mkAtom (CCG.App (CCE.IntLit i))
+        Just (StaticBool b) -> mkAtom (CCG.App (CCE.BoolLit b))
+        _ -> case expr of
+          AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) ->
+            translateExpr' ov (AS.ExprInSet e [AS.SetEltSingle mask]) mTy
+          AS.ExprBinOp AS.BinOpNEQ e mask@(AS.ExprLitMask _) ->
+            translateExpr' ov (AS.ExprUnOp AS.UnOpNot (AS.ExprInSet e [AS.SetEltSingle mask])) mTy
+          AS.ExprLitInt i -> mkAtom (CCG.App (CCE.IntLit i))
+          AS.ExprLitBin bits -> do
+            let nBits = length bits
+            case NR.mkNatRepr (fromIntegral nBits) of
+              Some nr
+                | Just NR.LeqProof <- NR.testLeq (NR.knownNat @1) nr ->
+                  mkAtom (CCG.App (CCE.BVLit nr (bitsToInteger bits)))
+                | otherwise -> X.throw InvalidZeroLengthBitvector
+          AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
+            Some e <- lookupVarRef ident
+            atom <- CCG.mkAtom e
+            ext <- getExtendedTypeData ident
+            return (Some atom, ext)
 
-      AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
-      AS.ExprLitString {} -> X.throw (UnsupportedExpr expr)
-      AS.ExprUnOp op expr' -> basicExpr $ translateUnaryOp ov op expr'
-      AS.ExprBinOp op e1 e2 -> basicExpr $ translateBinaryOp ov op e1 e2
-      AS.ExprTuple exprs -> do
-        atomExts <- case mTy of
-          Just (Some (CT.SymbolicStructRepr tps)) -> do
-           let exprTs = zip (FC.toListFC Some tps) exprs
-           mapM (\(Some ty, e) -> translateExpr' ov e (Just (Some (CT.baseToType ty)))) exprTs
-          Nothing -> do
-           mapM (\e -> translateExpr' ov e Nothing) exprs
-          _ -> error $ "Unexpected type target for tuple: " <> show mTy
-        let (atoms, exts) = unzip atomExts
-        case Ctx.fromList atoms of
-          Some asgn -> do
-            let reprs = FC.fmapFC CCG.typeOfAtom asgn
-            let atomExprs = FC.fmapFC CCG.AtomExpr asgn
-            let struct = MkBaseStruct reprs atomExprs
-            atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
-            return (Some atom, TypeTuple exts)
+          AS.ExprLitReal {} -> X.throw (UnsupportedExpr expr)
+          AS.ExprLitString {} -> X.throw (UnsupportedExpr expr)
+          AS.ExprUnOp op expr' -> basicExpr $ translateUnaryOp ov op expr'
+          AS.ExprBinOp op e1 e2 -> basicExpr $ translateBinaryOp ov op e1 e2
+          AS.ExprTuple exprs -> do
+            atomExts <- case mTy of
+              Just (Some (CT.SymbolicStructRepr tps)) -> do
+               let exprTs = zip (FC.toListFC Some tps) exprs
+               mapM (\(Some ty, e) -> translateExpr' ov e (Just (Some (CT.baseToType ty)))) exprTs
+              Nothing -> do
+               mapM (\e -> translateExpr' ov e Nothing) exprs
+              _ -> error $ "Unexpected type target for tuple: " <> show mTy
+            let (atoms, exts) = unzip atomExts
+            case Ctx.fromList atoms of
+              Some asgn -> do
+                let reprs = FC.fmapFC CCG.typeOfAtom asgn
+                let atomExprs = FC.fmapFC CCG.AtomExpr asgn
+                let struct = MkBaseStruct reprs atomExprs
+                atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+                return (Some atom, TypeTuple exts)
 
-      AS.ExprInSet e elts -> do
-        Some atom <- translateExpr ov e
-        when (null elts) $ X.throw (EmptySetElementList expr)
-        preds <- mapM (translateSetElementTest ov expr atom) elts
-        mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
-      AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
-      
-      AS.ExprCall qIdent args -> do
-        sigMap <- MS.gets tsFunctionSigs
-        -- FIXME: make this nicer?
-        let ident = mkFunctionName qIdent (length args)
-        
-        case Map.lookup ident sigMap of
-          Nothing -> X.throw (MissingFunctionDefinition ident)
-          Just (SomeSimpleProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
-          Just (SomeSimpleFunctionSignature sig) -> do
-            (finalIdent, argAtoms, Just (Some retT)) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig) mTy
-            case Ctx.fromList argAtoms of
-              Some argAssign -> do
-                let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                let vals = FC.fmapFC CCG.AtomExpr argAssign
-                let uf = UF finalIdent retT atomTypes vals
-                satom <- Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-                ext <- case (sfuncRet sig) of
-                  [ret] -> mkExtendedTypeData ret
-                  rets -> do
-                    exts <- mapM mkExtendedTypeData rets
-                    return $ TypeTuple exts
-                return (satom, ext)
-      -- FIXME: Should this trip a global flag?
-      AS.ExprImpDef _ t -> do
-        Some ty <- translateType t
-        mkAtom (getDefaultValue ty)
-      -- This is just like a variable lookup, since struct members are stored as
-      -- individual global variables.
-      AS.ExprMember struct memberName -> do
-        (Some structAtom, ext) <- translateExpr' ov struct Nothing
-        case ext of
-          TypeRegister sig -> do
-            case Map.lookup memberName sig of
-              Just slice -> do
-                satom <- translateSlice ov struct (mkSliceRange slice)
-                return (satom, TypeBasic)
-              _ -> X.throw $ MissingRegisterField struct memberName
-          TypeStruct acc -> do
-            case (CCG.typeOfAtom structAtom, Map.lookup memberName acc) of
-              (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx fieldExt)) |
-                Just Refl <- testEquality tps repr -> do
-                  let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr structAtom)
-                  atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
-                  return (Some atom, fieldExt)
-              _ -> X.throw $ MissingStructField struct memberName
-          _ -> do
-            exts <- MS.gets tsExtendedTypes
-            X.throw $ UnexpectedExtendedType struct ext
+          AS.ExprInSet e elts -> do
+            Some atom <- translateExpr ov e
+            when (null elts) $ X.throw (EmptySetElementList expr)
+            preds <- mapM (translateSetElementTest ov expr atom) elts
+            mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
+          AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
 
-      AS.ExprMemberBits var bits -> do
-        let (hdvar : tlvars) = map (\member -> AS.ExprMember var member) bits
-        let expr = foldl (\var -> \e -> AS.ExprBinOp AS.BinOpConcat var e) hdvar tlvars
-        translateExpr' ov expr mTy
+          AS.ExprCall qIdent args -> do
+            sigMap <- MS.gets tsFunctionSigs
+            -- FIXME: make this nicer?
+            let ident = mkFunctionName qIdent (length args)
 
-      AS.ExprSlice e [slice] -> do
-        satom <- translateSlice ov e slice
-        return (satom, TypeBasic)
+            case Map.lookup ident sigMap of
+              Nothing -> X.throw (MissingFunctionDefinition ident)
+              Just (SomeSimpleProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
+              Just (SomeSimpleFunctionSignature sig) -> do
+                (finalIdent, argAtoms, Just (Some retT)) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig) mTy
+                case Ctx.fromList argAtoms of
+                  Some argAssign -> do
+                    let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
+                    let vals = FC.fmapFC CCG.AtomExpr argAssign
+                    let uf = UF finalIdent retT atomTypes vals
+                    satom <- Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+                    ext <- case (sfuncRet sig) of
+                      [ret] -> mkExtendedTypeData ret
+                      rets -> do
+                        exts <- mapM mkExtendedTypeData rets
+                        return $ TypeTuple exts
+                    return (satom, ext)
+          -- FIXME: Should this trip a global flag?
+          AS.ExprImpDef _ t -> do
+            Some ty <- translateType t
+            mkAtom (getDefaultValue ty)
+          -- This is just like a variable lookup, since struct members are stored as
+          -- individual global variables.
+          AS.ExprMember struct memberName -> do
+            (Some structAtom, ext) <- translateExpr' ov struct Nothing
+            case ext of
+              TypeRegister sig -> do
+                case Map.lookup memberName sig of
+                  Just slice -> do
+                    satom <- translateSlice ov struct (mkSliceRange slice)
+                    return (satom, TypeBasic)
+                  _ -> X.throw $ MissingRegisterField struct memberName
+              TypeStruct acc -> do
+                case (CCG.typeOfAtom structAtom, Map.lookup memberName acc) of
+                  (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx fieldExt)) |
+                    Just Refl <- testEquality tps repr -> do
+                      let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr structAtom)
+                      atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+                      return (Some atom, fieldExt)
+                  _ -> X.throw $ MissingStructField struct memberName
+              _ -> do
+                exts <- MS.gets tsExtendedTypes
+                X.throw $ UnexpectedExtendedType struct ext
 
-      AS.ExprSlice e [slice1, slice2] -> do
-        let expr = AS.ExprBinOp AS.BinOpConcat (AS.ExprSlice e [slice1]) (AS.ExprSlice e [slice2])
-        translateExpr' ov expr mTy
+          AS.ExprMemberBits var bits -> do
+            let (hdvar : tlvars) = map (\member -> AS.ExprMember var member) bits
+            let expr = foldl (\var -> \e -> AS.ExprBinOp AS.BinOpConcat var e) hdvar tlvars
+            translateExpr' ov expr mTy
 
-      AS.ExprIndex array [AS.SliceSingle slice]  -> do
-        (Some atom, ext) <- translateExpr' ov array Nothing
-        Some idxAtom <- translateExpr ov slice
-        if | CT.AsBaseType bt <- CT.asBaseType (CCG.typeOfAtom idxAtom)
-           , CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> bt') retTy <- CCG.typeOfAtom atom
-           , Just Refl <- testEquality bt bt' -> do
-               let asn = Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom))
-               let arr = CCE.SymArrayLookup retTy (CCG.AtomExpr atom) asn
-               ext' <- case ext of
-                 TypeArray ext' -> return ext'
-                 _ -> return TypeBasic
-               atom' <- CCG.mkAtom (CCG.App arr)
-               return (Some atom', ext')
-           | otherwise ->  X.throw (UnsupportedExpr expr)
-      AS.ExprUnknown t -> do
-        Some ty <- translateType t
-        mkAtom (getDefaultValue ty)
+          AS.ExprSlice e [slice] -> do
+            satom <- translateSlice ov e slice
+            return (satom, TypeBasic)
+
+          AS.ExprSlice e [slice1, slice2] -> do
+            let expr = AS.ExprBinOp AS.BinOpConcat (AS.ExprSlice e [slice1]) (AS.ExprSlice e [slice2])
+            translateExpr' ov expr mTy
+
+          AS.ExprIndex array [AS.SliceSingle slice]  -> do
+            (Some atom, ext) <- translateExpr' ov array Nothing
+            Some idxAtom <- translateExpr ov slice
+            if | CT.AsBaseType bt <- CT.asBaseType (CCG.typeOfAtom idxAtom)
+               , CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> bt') retTy <- CCG.typeOfAtom atom
+               , Just Refl <- testEquality bt bt' -> do
+                   let asn = Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom))
+                   let arr = CCE.SymArrayLookup retTy (CCG.AtomExpr atom) asn
+                   ext' <- case ext of
+                     TypeArray ext' -> return ext'
+                     _ -> return TypeBasic
+                   atom' <- CCG.mkAtom (CCG.App arr)
+                   return (Some atom', ext')
+               | otherwise ->  X.throw (UnsupportedExpr expr)
+          AS.ExprUnknown t -> do
+            Some ty <- translateType t
+            mkAtom (getDefaultValue ty)
 
 
-      _ -> error (show expr)
+          _ -> error (show expr)
   where
     mkAtom e = do
       atom <- CCG.mkAtom e

@@ -988,7 +988,6 @@ applyStaticEnv env t = case applyTypeSynonyms t of
     _ -> X.throw $ CannotStaticallyEvaluateType t env
   _ -> t
 
-
 exprToStatic :: StaticEnv -> AS.Expr -> Maybe StaticValue
 exprToStatic env e = case e of
   AS.ExprIf ((test, body) : rest) fin |
@@ -1024,6 +1023,7 @@ exprToStatic env e = case e of
       AS.BinOpAdd -> resultI (+)
       AS.BinOpSub -> resultI (-)
       AS.BinOpMul -> resultI (*)
+      AS.BinOpPow -> resultI (^)
       AS.BinOpGT -> resultB (>)
       AS.BinOpLT -> resultB (<)
       AS.BinOpGTEQ -> resultB (>=)
@@ -1038,9 +1038,15 @@ exprToStatic env e = case e of
        AS.BinOpLogicalAnd -> Just $ StaticBool $ b && b'
        AS.BinOpLogicalOr -> Just $ StaticBool $ b || b'
        _ -> Nothing
+
+  AS.ExprUnOp AS.UnOpNot e' |
+    Just (StaticBool b) <- exprToStatic env e'
+    -> Just $ StaticBool (not b)
+
+  AS.ExprUnOp AS.UnOpNeg e' |
+    Just (StaticInt i) <- exprToStatic env e'
+    -> Just $ StaticInt (-i)
   _ -> Nothing
-
-
 
 mkSignature :: Definitions arch -> StaticEnv -> SomeSimpleSignature -> Some (SomeSignature)
 mkSignature defs env sig =

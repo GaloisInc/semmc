@@ -34,8 +34,6 @@ module SemMC.ASL.Types
   , pushFreshStaticEnv
   , popStaticEnv
   , lookupStaticEnv
-  , lookupStaticEnvInt
-  , lookupStaticEnvBool
   , insertStaticEnv
   , flatStaticEnv
   , fromListStaticEnv
