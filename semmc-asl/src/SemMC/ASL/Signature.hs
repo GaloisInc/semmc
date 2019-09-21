@@ -58,7 +58,7 @@ data FunctionSignature globals init tp =
                     , funcGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                     -- ^ The globals referenced by the function; NOTE that we
                     -- assume that globals are read-only in functions
-                    , funcTypeEnvir :: TypeEnvir
+                    , funcStaticEnv :: StaticEnv
                     -- ^ The typing environment used to monomorphize this function
                     , funcArgs :: [AS.SymbolDecl]
                     }
@@ -113,7 +113,7 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                        --
                        -- For now, we can always make it the full set of
                        -- globals; later, we can find a tighter bound.
-                     , procTypeEnvir :: TypeEnvir
+                     , procStaticEnv :: StaticEnv
                        -- ^ The typing environment used to monomorphize this function
                      , procArgs :: [AS.SymbolDecl]
                      }

@@ -47,14 +47,14 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
-                          | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) TypeEnvir
-                          | ReturnTypeUnificationFailure AS.Type AS.Type TypeEnvir
+                          | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) StaticEnv
+                          | ReturnTypeUnificationFailure AS.Type AS.Type StaticEnv
                           | StructFieldMismatch AS.Expr
                           | RequiredConcreteValue T.Text AS.Expr
                           | UnsupportedSlice AS.Slice
                           | CannotMonomorphizeFunctionCall T.Text
                           | CannotMonomorphizeOverloadedFunctionCall T.Text [AS.Expr]
-                          | CannotStaticallyEvaluateType AS.Type TypeEnvir
+                          | CannotStaticallyEvaluateType AS.Type StaticEnv
                           | UnexpectedExtendedType AS.Expr ExtendedTypeData
                           | ConflictingExtendedTypeData T.Text ExtendedTypeData ExtendedTypeData
                           | MissingRegisterField AS.Expr T.Text

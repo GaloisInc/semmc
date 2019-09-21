@@ -35,9 +35,9 @@ module SemMC.ASL.Translation.Preprocess
   , Definitions(..)
   , bitsToInteger
   , mkFunctionName
-  , applyTypeEnvir
-  , exprToInt
-  , exprToBool
+  , applyStaticEnv
+  , StaticValue(..)
+  , exprToStatic
   , mkSignature
   , registerTypeSynonyms
   , mkExtendedTypeData'
@@ -981,59 +981,68 @@ mkReturnType ts = case ts of
   ts | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
 
 
-applyTypeEnvir :: TypeEnvir -> AS.Type -> AS.Type
-applyTypeEnvir env t = case applyTypeSynonyms t of
-  AS.TypeFun "bits" e -> case exprToInt env e of
-    Just i -> AS.TypeFun "bits" (AS.ExprLitInt i)
-    Nothing -> X.throw $ CannotStaticallyEvaluateType t env
+applyStaticEnv :: StaticEnv -> AS.Type -> AS.Type
+applyStaticEnv env t = case applyTypeSynonyms t of
+  AS.TypeFun "bits" e -> case exprToStatic env e of
+    Just (StaticInt i) -> AS.TypeFun "bits" (AS.ExprLitInt i)
+    _ -> X.throw $ CannotStaticallyEvaluateType t env
   _ -> t
 
 
-exprToInt :: TypeEnvir -> AS.Expr -> Maybe Integer
-exprToInt env e = case e of
-      AS.ExprLitInt i -> Just i
-      AS.ExprVarRef (AS.QualifiedIdentifier q id) -> do
-        i <- lookupTypeEnvir id env
-        return i
-      AS.ExprBinOp AS.BinOpSub e' e'' -> do
-        i <- exprToInt env e'
-        i' <- exprToInt env e''
-        return $ i - i'
-      AS.ExprBinOp AS.BinOpMul e' e'' -> do
-        i <- exprToInt env e'
-        i' <- exprToInt env e''
-        return $ i * i'
-      AS.ExprBinOp AS.BinOpAdd e' e'' -> do
-        i <- exprToInt env e'
-        i' <- exprToInt env e''
-        return $ i + i'
+exprToStatic :: StaticEnv -> AS.Expr -> Maybe StaticValue
+exprToStatic env e = case e of
+  AS.ExprIf ((test, body) : rest) fin |
+    Just (StaticBool b) <- exprToStatic env test
+    -> do
+   if b then exprToStatic env body
+   else exprToStatic env (AS.ExprIf rest fin)
+  AS.ExprIf [] fin -> exprToStatic env fin
+  AS.ExprLitInt i -> Just $ StaticInt i
+  AS.ExprVarRef (AS.QualifiedIdentifier _ "TRUE") -> Just $ StaticBool True
+  AS.ExprVarRef (AS.QualifiedIdentifier _ "FALSE") -> Just $ StaticBool False
+  AS.ExprVarRef (AS.QualifiedIdentifier q id) -> do
+    i <- lookupStaticEnv id env
+    return i
+  AS.ExprBinOp AS.BinOpEQ e' e'' |
+      Just sv <- exprToStatic env e'
+    , Just sv' <- exprToStatic env e''
+    -> Just $ StaticBool $ sv == sv'
+
+  AS.ExprBinOp AS.BinOpNEQ e' e'' |
+      Just sv <- exprToStatic env e'
+    , Just sv' <- exprToStatic env e''
+    -> Just $ StaticBool $ sv /= sv'
+
+  AS.ExprBinOp bop e' e'' |
+       Just (StaticInt i) <- exprToStatic env e'
+     , Just (StaticInt i') <- exprToStatic env e''
+     ->
+    let
+      resultI primop = Just $ StaticInt $ primop i i'
+      resultB primop = Just $ StaticBool $ primop i i'
+    in case bop of
+      AS.BinOpAdd -> resultI (+)
+      AS.BinOpSub -> resultI (-)
+      AS.BinOpMul -> resultI (*)
+      AS.BinOpGT -> resultB (>)
+      AS.BinOpLT -> resultB (<)
+      AS.BinOpGTEQ -> resultB (>=)
+      AS.BinOpLTEQ -> resultB (<=)
       _ -> Nothing
 
-exprToBool :: TypeEnvir -> AS.Expr -> Maybe Bool
-exprToBool env e = case e of
-  AS.ExprBinOp bop e' e'' -> do
-    case (bop, exprToBool env e', exprToBool env e'') of
-      (AS.BinOpLogicalAnd, Just True, Just True) -> Just True
-      (AS.BinOpLogicalAnd, Just False, _) -> Just False
-      (AS.BinOpLogicalAnd, _, Just False) -> Just False
-      (AS.BinOpLogicalOr, Just True, Just True) -> Just True
-      (AS.BinOpLogicalOr, Just False, b) -> b
-      (AS.BinOpLogicalOr, b, Just False) -> b
-      _ -> case (exprToInt env e', exprToInt env e'') of
-             (Just i, Just i') -> bopToTest bop i i'
-             _ -> Nothing
+  AS.ExprBinOp bop e' e'' |
+       Just (StaticBool b) <- exprToStatic env e'
+     , Just (StaticBool b') <- exprToStatic env e''
+     ->
+   case bop of
+       AS.BinOpLogicalAnd -> Just $ StaticBool $ b && b'
+       AS.BinOpLogicalOr -> Just $ StaticBool $ b || b'
+       _ -> Nothing
   _ -> Nothing
-  where
-    bopToTest bop i i' = case bop of
-      AS.BinOpEQ -> Just $ i == i'
-      AS.BinOpNEQ -> Just $ i /= i'
-      AS.BinOpGT -> Just $ i > i'
-      AS.BinOpLT -> Just $ i < i'
-      AS.BinOpGTEQ -> Just $ i >= i'
-      AS.BinOpLTEQ -> Just $ i <= i'
-      _ -> Nothing
 
-mkSignature :: Definitions arch -> TypeEnvir -> SomeSimpleSignature -> Some (SomeSignature)
+
+
+mkSignature :: Definitions arch -> StaticEnv -> SomeSimpleSignature -> Some (SomeSignature)
 mkSignature defs env sig =
   case sig of
     SomeSimpleFunctionSignature fsig |
@@ -1045,7 +1054,7 @@ mkSignature defs env sig =
         , funcSigRepr = retT
         , funcArgReprs = args
         , funcGlobalReprs = sfuncGlobalReprs fsig
-        , funcTypeEnvir = env
+        , funcStaticEnv = env
         , funcArgs = sfuncArgs fsig
         }
     SomeSimpleProcedureSignature fsig |
@@ -1055,11 +1064,11 @@ mkSignature defs env sig =
         { procName = mkFinalFunctionName env $ sprocName fsig
         , procArgReprs = args
         , procGlobalReprs = sprocGlobalReprs fsig
-        , procTypeEnvir = env
+        , procStaticEnv = env
         , procArgs = sprocArgs fsig
         }
   where
-    mkType t = computeType'' defs (applyTypeEnvir env t)
+    mkType t = computeType'' defs (applyStaticEnv env t)
     mkLabel (nm, t) =
       if | Some tp <- mkType t ->
            Some (LabeledValue nm (CT.baseToType tp))
@@ -1103,7 +1112,7 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       let pSig = ProcedureSignature { procName = name
                                     , procArgReprs = argReprs
                                     , procGlobalReprs = globalReprs
-                                    , procTypeEnvir = emptyTypeEnvir
+                                    , procStaticEnv = emptyStaticEnv
                                     , procArgs = []
                                     }
       return (Some (SomeProcedureSignature pSig), instStmts)

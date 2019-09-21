@@ -478,7 +478,7 @@ catchIO k f = do
 
 translationLoop :: InstructionIdent
                 -> Definitions arch
-                -> (T.Text, TypeEnvir)
+                -> (T.Text, StaticEnv)
                 -> MSS.StateT SigMap IO (Set.Set T.Text)
 translationLoop fromInstr defs (fnname, env) = do
   let finalName = (mkFinalFunctionName env fnname)
@@ -540,7 +540,7 @@ getASL = do
 processInstruction :: InstructionIdent
                    -> ProcedureSignature globals init
                    -> [AS.Stmt] -> Definitions arch
-                   -> MSS.StateT SigMap IO (Map.Map T.Text TypeEnvir)
+                   -> MSS.StateT SigMap IO (Map.Map T.Text StaticEnv)
 processInstruction instr pSig stmts defs = do
   handleAllocator <- CFH.newHandleAllocator
   mp <- catchIO (KeyInstr instr) $ procedureToCrucible defs pSig handleAllocator stmts
@@ -566,7 +566,7 @@ processFunction :: InstructionIdent
                 -> SomeSignature ret
                 -> [AS.Stmt]
                 -> Definitions arch
-                -> MSS.StateT SigMap IO (Map.Map T.Text TypeEnvir)
+                -> MSS.StateT SigMap IO (Map.Map T.Text StaticEnv)
 processFunction fromInstr fnName sig stmts defs =
   case sig of
     SomeFunctionSignature fSig -> do
