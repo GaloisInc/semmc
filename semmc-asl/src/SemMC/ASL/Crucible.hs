@@ -143,16 +143,16 @@ funcDef :: (ret ~ CT.BaseToType tp)
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState h s, CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s ret))
+        -> (TranslationState h ret s, CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret))
 funcDef defs sig hdl globals stmts args = (funcInitialState defs sig hdl globals args, defineFunction overrides sig stmts args)
 
-funcInitialState :: forall init tp h s globals arch
+funcInitialState :: forall init tp h s globals arch ret
                   . Definitions arch
                  -> FunctionSignature globals init tp
                  -> STRef.STRef h (Map.Map T.Text StaticEnv)
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
-                 -> TranslationState h s
+                 -> TranslationState h (CT.BaseToType tp) s
 funcInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgumentAtom Map.empty
                    , tsVarRefs = Map.empty
@@ -164,6 +164,7 @@ funcInitialState defs sig hdl globals args =
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
                    , tsStaticEnv = funcStaticEnv sig
+                   , tsSig = SomeFunctionSignature sig
                    }
   where
     addArgumentAtom :: forall tp0
@@ -184,14 +185,14 @@ defineFunction :: forall ret tp init h s arch globals
                -> FunctionSignature globals init tp
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
-               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s ret)
+               -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig stmts _args = do
   -- FIXME: Put args into the environment as locals (that can be read from)
   --
   -- We have the assignment of atoms available, but the arguments will be
   -- referenced by /name/ by ASL statements.
   
-  translateStatements ov (SomeFunctionSignature sig) stmts
+  translateStatements ov stmts
   -- Note: we shouldn't actually get here, as we should have called returnFromFunction while
   -- translating.
   X.throw (NoReturnInFunction (SomeFunctionSignature sig))
@@ -263,17 +264,17 @@ procDef :: (ReturnsGlobals ret globals)
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState h s, CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s ret))
+        -> (TranslationState h ret s, CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret))
 procDef defs sig hdl globals stmts args =
   (procInitialState defs sig hdl globals args, defineProcedure overrides sig globals stmts args)
 
-procInitialState :: forall init globals h s arch
+procInitialState :: forall init globals h s arch ret
                   . Definitions arch
                  -> ProcedureSignature globals init
                  -> STRef.STRef h (Map.Map T.Text StaticEnv)
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
-                 -> TranslationState h s
+                 -> TranslationState h (CT.SymbolicStructType globals) s
 procInitialState defs sig hdl globals args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
@@ -285,6 +286,7 @@ procInitialState defs sig hdl globals args =
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
                    , tsStaticEnv = procStaticEnv sig
+                   , tsSig = SomeProcedureSignature sig
                    }
   where
     addArgument :: forall tp
@@ -302,10 +304,10 @@ defineProcedure :: (ReturnsGlobals ret globals)
                 -> Ctx.Assignment BaseGlobalVar globals
                 -> [AS.Stmt]
                 -> Ctx.Assignment (CCG.Atom s) init
-                -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s ret)
+                -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret)
 defineProcedure ov sig baseGlobals stmts _args = do
   mapM_ (\(nm,t) -> addExtendedTypeData nm t) (procArgs sig)
-  mapM_ (translateStatement ov (SomeProcedureSignature sig)) stmts
+  mapM_ (translateStatement ov) stmts
   retExpr <- CCG.extensionStmt (GetRegState (FC.fmapFC projectValue (procGlobalReprs sig)) baseGlobals)
   if | Just Refl <- testEquality (CCG.exprType retExpr) (procSigRepr sig) ->
        return retExpr

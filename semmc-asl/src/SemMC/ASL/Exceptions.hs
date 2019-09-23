@@ -42,17 +42,18 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | ExpectedProcedureSignature T.Text
                           | forall tps . InvalidArgumentTypes T.Text (Ctx.Assignment CT.TypeRepr tps)
                           | forall tp1 tp2 . UnexpectedProcedureReturn (CT.TypeRepr tp1) (CT.TypeRepr tp2)
-                          | MissingGlobal T.Text T.Text
+                          | MissingGlobal T.Text
                           | forall tp . UnexpectedGlobalType T.Text (CT.TypeRepr tp)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
                           | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) StaticEnv
+                          | forall tp . TypesUnificationFailure [AS.Type] (CT.TypeRepr tp)
                           | ReturnTypeUnificationFailure AS.Type AS.Type StaticEnv
                           | StructFieldMismatch AS.Expr
                           | RequiredConcreteValue T.Text AS.Expr
                           | UnsupportedSlice AS.Slice
-                          | CannotMonomorphizeFunctionCall T.Text
+                          | CannotMonomorphizeFunctionCall T.Text StaticEnv
                           | CannotMonomorphizeOverloadedFunctionCall T.Text [AS.Expr]
                           | CannotStaticallyEvaluateType AS.Type StaticEnv
                           | UnexpectedExtendedType AS.Expr ExtendedTypeData

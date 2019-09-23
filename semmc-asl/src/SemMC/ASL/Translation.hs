@@ -78,7 +78,7 @@ import System.IO.Unsafe
 -- @withVarValue@ that took a continuation instead.
 data ExprConstructor arch regs h s ret where
   ExprConstructor :: a tp
-                  -> (a tp -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s tp))
+                  -> (a tp -> Generator h s arch ret (CCG.Expr (ASLExt arch) s tp))
                   -> ExprConstructor (ASLExt arch) regs h s ret
 
 -- | Inside of the translator, look up the current definition of a name
@@ -87,7 +87,7 @@ data ExprConstructor arch regs h s ret where
 -- name shadowing).
 lookupVarRef' :: forall arch h s ret
               . T.Text
-             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some (CCG.Expr (ASLExt arch) s)))
+             -> Generator h s arch ret (Maybe (Some (CCG.Expr (ASLExt arch) s)))
 lookupVarRef' name = do
   ts <- MS.get
   case (lookupLocalConst ts <|>
@@ -128,7 +128,7 @@ lookupVarRef' name = do
 
 lookupVarRef :: forall arch h s ret
              . T.Text
-            -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Expr (ASLExt arch) s))
+            -> Generator h s arch ret (Some (CCG.Expr (ASLExt arch) s))
 lookupVarRef name = do
   fromMaybe (X.throw (UnboundName name)) <$> lookupVarRef' name
 
@@ -138,7 +138,7 @@ lookupVarRef name = do
 -- name shadowing).
 lookupVarType :: forall arch h s ret
               . T.Text
-             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some (CT.TypeRepr)))
+             -> Generator h s arch ret (Maybe (Some (CT.TypeRepr)))
 lookupVarType name = do
   ts <- MS.get
   return (lookupLocalConst ts <|>
@@ -175,15 +175,17 @@ lookupVarType name = do
 -- translation specially.  This should be useful for replacing some trivial
 -- accessors with simpler forms in Crucible.
 data Overrides arch =
-  Overrides { overrideStmt :: forall h s ret .  SomeSignature ret -> AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret ())
-            , overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
+  Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (Generator h s arch ret ())
+            , overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
             }
+
+type Generator h s arch ret = CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret
 
 -- Tracks state necessary for the translation of ASL into Crucible
 --
 -- This is primarily storing variable bindings and the set of signatures
 -- available for other callees.
-data TranslationState h s =
+data TranslationState h ret s =
   TranslationState { tsArgAtoms :: Map.Map T.Text (Some (CCG.Atom s))
                    -- ^ Atoms corresponding to function/procedure inputs.  We assume that these are
                    -- immutable and allocated before we start executing.
@@ -213,7 +215,8 @@ data TranslationState h s =
                    -- ^ Used to name functions encountered during translation
                    , tsStaticEnv :: StaticEnv
                    -- ^ Type environment to give concrete instantiations to polymorphic variables
-                   
+                   , tsSig :: SomeSignature ret
+                   -- ^ Signature of the function/procedure we are translating
                    }
 
 
@@ -235,7 +238,7 @@ undefinedVarName = T.pack "UNDEFINED"
 --
 -- This is a subset of all of the global state (and a subset of the current
 -- global state).
-withProcGlobals :: (m ~ CCG.Generator (ASLExt arch) h s (TranslationState h) ret)
+withProcGlobals :: (m ~ Generator h s arch ret)
                 => Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                 -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
                 -> m r
@@ -258,47 +261,45 @@ withProcGlobals reprs k = do
 translateStatements :: forall ret tp h s arch
                 . (ret ~ CT.BaseToType tp)
                => Overrides arch
-               -> SomeSignature ret
                -> [AS.Stmt]
-               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-translateStatements ov sig stmts = do
+               -> Generator h s arch ret ()
+translateStatements ov stmts = do
+  sig <- MS.gets tsSig
   let errmsg = "Function " ++ T.unpack (someSigName sig) ++ " does not return."
   mapM_ (\(nm,t) -> addExtendedTypeData nm t) (someSigArgs sig)
-  mapM_ (translateStatement ov sig) stmts
+  mapM_ (translateStatement ov) stmts
   errStr <- CCG.mkAtom (CCG.App (CCE.TextLit (T.pack errmsg)))
   CCG.reportError (CCG.AtomExpr errStr)
 
 -- | Translate a single ASL statement into Crucible
 translateStatement :: forall arch ret h s
                     . Overrides arch
-                   -> SomeSignature ret
-                   -- ^ Signature of the function/procedure we are translating. We
-                   -- need this to check that return statements return the correct
-                   -- type.
                    -> AS.Stmt
                    -- ^ Statement we are translating
-                   -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-translateStatement ov sig stmt
-  | Just so <- overrideStmt ov sig stmt = so
-  | otherwise =
-    let rep = someSigRepr sig
-    in case stmt of
-      AS.StmtReturn Nothing -> case sig of
-        SomeProcedureSignature pSig
-          | globalBaseTypes <- FC.fmapFC projectValue (procGlobalReprs pSig)
-          , pSigRepr <- procSigRepr pSig
-          , Just Refl <- testEquality pSigRepr (CT.SymbolicStructRepr globalBaseTypes) ->
-            withProcGlobals (procGlobalReprs pSig) $ \globalBaseTypes globals -> do
-              Refl <- return $ baseCrucProof globalBaseTypes
-              globalsSnapshot <- CCG.extensionStmt (GetRegState globalBaseTypes globals)
-              CCG.returnFromFunction globalsSnapshot
-        _ -> X.throw (InvalidReturnType rep)
+                   -> Generator h s arch ret ()
+translateStatement ov stmt
+  | Just so <- overrideStmt ov stmt = so
+  | otherwise = case stmt of
+      AS.StmtReturn Nothing -> do
+        sig <- MS.gets tsSig
+        let rep = someSigRepr sig
+        case sig of
+          SomeProcedureSignature pSig
+            | globalBaseTypes <- FC.fmapFC projectValue (procGlobalReprs pSig)
+            , pSigRepr <- procSigRepr pSig
+            , Just Refl <- testEquality pSigRepr (CT.SymbolicStructRepr globalBaseTypes) ->
+              withProcGlobals (procGlobalReprs pSig) $ \globalBaseTypes globals -> do
+                Refl <- return $ baseCrucProof globalBaseTypes
+                globalsSnapshot <- CCG.extensionStmt (GetRegState globalBaseTypes globals)
+                CCG.returnFromFunction globalsSnapshot
+          _ -> X.throw (InvalidReturnType rep)
       AS.StmtReturn (Just expr) -> do
+        sig <- MS.gets tsSig
         Some a <- translateExpr ov expr
-        Refl <- assertAtomType expr rep a
+        Refl <- assertAtomType expr (someSigRepr sig) a
         CCG.returnFromFunction (CCG.AtomExpr a)
-      AS.StmtIf clauses melse -> translateIf ov sig clauses melse
-      AS.StmtCase e alts -> translateCase ov sig e alts
+      AS.StmtIf clauses melse -> translateIf ov clauses melse
+      AS.StmtCase e alts -> translateCase ov e alts
       AS.StmtAssert e -> do
         let msg = CCG.App (CCE.TextLit (T.pack (show e)))
         env <- MS.gets tsStaticEnv
@@ -322,10 +323,10 @@ translateStatement ov sig stmt
               Some testA <- translateExpr ov test
               Refl <- assertAtomType test CT.BoolRepr testA
               return (CCG.AtomExpr testA)
-        let bodyG = mapM_ (translateStatement ov sig) body
+        let bodyG = mapM_ (translateStatement ov) body
         CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
-      AS.StmtRepeat body test -> translateRepeat ov sig body test
-      AS.StmtFor var (lo, hi) body -> translateFor ov sig var lo hi body
+      AS.StmtRepeat body test -> translateRepeat ov body test
+      AS.StmtFor var (lo, hi) body -> translateFor ov var lo hi body
       AS.StmtUndefined -> do
         gs <- MS.gets tsGlobals
         case Map.lookup undefinedVarName gs of
@@ -333,7 +334,7 @@ translateStatement ov sig stmt
             | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
                 CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
             | otherwise -> X.throw (UnexpectedGlobalType undefinedVarName (CCG.globalType gv))
-          _ -> X.throw (MissingGlobal (someSigName sig) undefinedVarName)
+          _ -> X.throw $ MissingGlobal undefinedVarName
       AS.StmtUnpredictable -> do
         gs <- MS.gets tsGlobals
         case Map.lookup unpredictableVarName gs of
@@ -341,7 +342,7 @@ translateStatement ov sig stmt
             | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
                 CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
             | otherwise -> X.throw (UnexpectedGlobalType unpredictableVarName (CCG.globalType gv))
-          _ -> X.throw (MissingGlobal (someSigName sig) unpredictableVarName)
+          _ ->  X.throw $ MissingGlobal unpredictableVarName
       -- NOTE: Ensure that this is safe.  Most SEE statements seem to not be
       -- particularly actionable, but many may need to be manually overridden.
       AS.StmtSeeExpr {} -> return ()
@@ -399,16 +400,15 @@ translateStatement ov sig stmt
 --
 -- NOTE: We are assuming that the variable assignment is actually a declaration of integer type
 translateFor :: Overrides arch
-             -> SomeSignature ret
              -> AS.Identifier
              -> AS.Expr
              -> AS.Expr
              -> [AS.Stmt]
-             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-translateFor ov sig var lo hi body = do
+             -> Generator h s arch ret ()
+translateFor ov var lo hi body = do
   env <- MS.gets tsStaticEnv
   case (exprToStatic env lo, exprToStatic env hi) of
-    (Just (StaticInt lo'), Just (StaticInt hi')) -> unrollFor ov sig var lo' hi' body
+    (Just (StaticInt lo'), Just (StaticInt hi')) -> unrollFor ov var lo' hi' body
     _ -> do
       vars <- MS.gets tsVarRefs
       case Map.lookup var vars of
@@ -429,39 +429,37 @@ translateFor ov sig var lo hi body = do
             AS.StmtAssign (AS.LValVarRef ident)
               (AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef ident) (AS.ExprLitInt 1))
             
-      let bodyG = mapM_ (translateStatement ov sig) (body ++ [increment])
+      let bodyG = mapM_ (translateStatement ov) (body ++ [increment])
       CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
 unrollFor :: Overrides arch
-          -> SomeSignature ret
           -> AS.Identifier
           -> Integer
           -> Integer
           -> [AS.Stmt]
-          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-unrollFor ov sig var lo hi body = do
+          -> Generator h s arch ret ()
+unrollFor ov var lo hi body = do
   mapM_ translateFor [lo .. hi]
   where
     translateFor i = do
       mapStaticEnv (insertStaticEnv var (StaticInt i) . pushFreshStaticEnv)
-      mapM_ (translateStatement ov sig) body
+      mapM_ (translateStatement ov) body
       mapStaticEnv popStaticEnv
        
 
 
 translateRepeat :: Overrides arch
-                -> SomeSignature ret
                 -> [AS.Stmt]
                 -> AS.Expr
-                -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-translateRepeat ov sig body test = do
+                -> Generator h s arch ret ()
+translateRepeat ov body test = do
   cond_lbl <- CCG.newLabel
   loop_lbl <- CCG.newLabel
   exit_lbl <- CCG.newLabel
 
   CCG.defineBlock loop_lbl $ do
-    mapM_ (translateStatement ov sig) body
+    mapM_ (translateStatement ov) body
     CCG.jump cond_lbl
 
   CCG.defineBlock cond_lbl $ do
@@ -475,7 +473,7 @@ translateDefinedVar :: Overrides arch
                     -> AS.Type
                     -> AS.Identifier
                     -> AS.Expr
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                    -> Generator h s arch ret ()
 translateDefinedVar ov ty ident expr = do
   tty <- translateType ty
   case tty of
@@ -490,9 +488,7 @@ translateDefinedVar ov ty ident expr = do
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
 
--- | Convert an lVal to its equivalent expression in order to determine
--- its value for a sliced assignement. These are the only forms seen
--- in an LValSliceOf
+-- | Convert an lVal to its equivalent expression.
 lValToExpr :: AS.LValExpr -> Maybe AS.Expr
 lValToExpr lval = case lval of
   AS.LValVarRef qName -> return $ AS.ExprVarRef qName
@@ -507,6 +503,32 @@ lValToExpr lval = case lval of
     return $ AS.ExprSlice lve slices
   _ -> Nothing
 
+
+typeOfLVal :: Overrides arch
+           -> AS.LValExpr
+           -> Generator h s arch ret (Maybe (Some CT.TypeRepr))
+typeOfLVal ov lval = case lval of
+  AS.LValIgnore -> return $ Nothing
+  AS.LValVarRef (AS.QualifiedIdentifier _ ident) -> do
+    lookupVarType ident
+  AS.LValTuple lvs -> do
+    lvTs <- catMaybes <$> mapM (typeOfLVal ov) lvs
+    if length lvTs == length lvs then
+      case mkBaseStructRepr $ map asBaseType lvTs of
+        Some bt -> return $ Just $ Some $ CT.baseToType bt
+      else return Nothing
+  AS.LValMemberBits _ bits |
+      Just (Some nr) <- WT.someNat (length bits)
+    , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` nr
+    ->
+    return $ Just $ Some $ CT.BVRepr nr
+  _ -> case lValToExpr lval of
+         Just lve -> do
+           Some lveAtom <- translateExpr ov lve
+           return $ Just $ Some $ (CCG.typeOfAtom lveAtom)
+         Nothing -> return $ Nothing
+
+
 -- | Translate general assignment statements into Crucible
 --
 -- This case is interesting, as assignments can be to locals or globals.
@@ -515,24 +537,13 @@ lValToExpr lval = case lval of
 translateAssignment :: Overrides arch
                     -> AS.LValExpr
                     -> AS.Expr
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                    -> Generator h s arch ret ()
 translateAssignment ov lval e = do
   -- If possible, determine the type of the left hand side first in order
   -- to inform the translation of the given expression
-
-  (Some atom, ext) <- case lval of
-    AS.LValVarRef (AS.QualifiedIdentifier _ ident) -> do
-      mTy <- lookupVarType ident
-      translateExpr' ov e mTy
-    _ -> case lValToExpr lval of
-      Just lve -> translateInformed lve
-      _ -> translateExpr' ov e Nothing
-
+  mTy <- typeOfLVal ov lval
+  (Some atom, ext) <- translateExpr' ov e mTy
   translateAssignment' ov lval atom ext (Just e)
-  where
-    translateInformed lve = do
-      Some lveAtom <- translateExpr ov lve
-      translateExpr' ov e (Just $ Some (CCG.typeOfAtom lveAtom))
 
 mkSliceRange :: (Integer, Integer) -> AS.Slice
 mkSliceRange (lo, hi) = AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo)
@@ -542,7 +553,7 @@ translateAssignment' :: forall arch s tp h ret . Overrides arch
                      -> CCG.Atom s tp
                      -> ExtendedTypeData
                      -> Maybe AS.Expr
-                     -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                     -> Generator h s arch ret ()
 translateAssignment' ov lval atom atomext mE = do
   case lval of
     AS.LValIgnore -> return () -- Totally ignore - this probably shouldn't happen (except inside of a tuple)
@@ -604,7 +615,7 @@ translateAssignment' ov lval atom atomext mE = do
           Some rest <- translateSlice' ov atom (AS.SliceRange (AS.ExprLitInt (topIndex - 1))
                                                 (AS.ExprLitInt 0))
           translatelValSlice ov lv slice rest
-        _ -> error $ "Unsupported LVal: " ++ show lval
+        _ -> X.throw $ UnsupportedLVal lval
 
     AS.LValArrayIndex ref@(AS.LValVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice] -> do
         Some e <- lookupVarRef arrName
@@ -640,7 +651,7 @@ translateAssignment' ov lval atom atomext mE = do
                          -> CCG.Atom s (CT.SymbolicStructType ctx)
                          -> Ctx.Index ctx tp'
                          -> WT.BaseTypeRepr tp'
-                         -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                         -> Generator h s arch ret ()
           assignTupleElt lvals exts tps struct ix _ = do
             let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
             getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
@@ -690,7 +701,7 @@ translatelValSlice :: Overrides arch
                -> AS.LValExpr
                -> AS.Slice
                -> CCG.Atom s tp
-               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+               -> Generator h s arch ret ()
 translatelValSlice ov lv slice asnAtom = do
   let Just lve = lValToExpr lv
   Some atom <- translateExpr ov lve
@@ -762,7 +773,7 @@ getDefaultValue repr = case repr of
 -- | Put a new local in scope and initialize it to an undefined value
 declareUndefinedVar :: AS.Type
                     -> AS.Identifier
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                    -> Generator h s arch ret ()
 declareUndefinedVar ty ident = do
   locals <- MS.gets tsVarRefs
   when (Map.member ident locals) $ do
@@ -778,37 +789,37 @@ declareUndefinedVar ty ident = do
 
 
 mkExtendedTypeData :: AS.Type
-                   -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
+                   -> Generator h s arch ret (ExtendedTypeData)
 mkExtendedTypeData = mkExtendedTypeData' getUT getExtendedTypeData
   where
-    getUT :: T.Text -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some UserType))
+    getUT :: T.Text -> Generator h s arch ret (Maybe (Some UserType))
     getUT tpName = Map.lookup tpName <$> MS.gets tsUserTypes
     getET tpName = getUT tpName
 
 addExtendedTypeData :: AS.Identifier
                     -> AS.Type                    
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                    -> Generator h s arch ret ()
 addExtendedTypeData ident ty = do
   ext <- mkExtendedTypeData ty
   putExtendedTypeData ident ext
 
 putExtendedTypeData :: AS.Identifier
                     -> ExtendedTypeData
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                    -> Generator h s arch ret ()
 putExtendedTypeData ident ext' = do
   ext'' <- getExtendedTypeData ident
   ext <- mergeExtensions ext' ext''
   MS.modify' $ \s -> s { tsExtendedTypes = Map.insert ident ext (tsExtendedTypes s) }
 
 getExtendedTypeData :: AS.Identifier
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
+                    -> Generator h s arch ret (ExtendedTypeData)
 getExtendedTypeData ident = do
   exts <- MS.gets tsExtendedTypes
   return $ fromMaybe TypeBasic (Map.lookup ident exts)
 
 mergeExtensions :: ExtendedTypeData
                 -> ExtendedTypeData
-                -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (ExtendedTypeData)
+                -> Generator h s arch ret (ExtendedTypeData)
 mergeExtensions ext1 ext2 =
   case (ext1, ext2) of
   (_, TypeBasic) -> return ext1
@@ -822,7 +833,7 @@ mergeExtensions ext1 ext2 =
 -- Translations of user-defined types (i.e., types defined in an ASL program)
 -- are stored in the 'TranslationState' and are looked up when needed.
 --
-translateType :: AS.Type -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some CT.TypeRepr)
+translateType :: AS.Type -> Generator h s arch ret (Some CT.TypeRepr)
 translateType t = do
   env <- MS.gets tsStaticEnv
   case applyStaticEnv env t of
@@ -846,8 +857,8 @@ translateType t = do
     _ -> error ("Unsupported type: " ++ show t)
 
 withStaticEnv :: StaticEnv
-              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret a
-              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (a, StaticEnv)
+              -> Generator h s arch ret a
+              -> Generator h s arch ret (a, StaticEnv)
 withStaticEnv tenv f = do
   env <- MS.gets tsStaticEnv
   MS.modify' $ \s -> s { tsStaticEnv = tenv }
@@ -870,7 +881,7 @@ varsOfExpr e = ASLT.foldExpr getVar e []
 
 
 mapStaticEnv :: (StaticEnv -> StaticEnv)
-             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+             -> Generator h s arch ret ()
 mapStaticEnv f = do
   env <- MS.gets tsStaticEnv
   MS.modify' $ \s -> s { tsStaticEnv = f env }
@@ -880,17 +891,17 @@ mapStaticEnv f = do
 collectStaticValues :: StaticEnv
                     -> AS.SymbolDecl
                     -> AS.Expr
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                    -> Generator h s arch ret ()
 collectStaticValues outerEnv (nm, t) e = do
   case exprToStatic outerEnv e of
     Just i -> mapStaticEnv (insertStaticEnv nm i)
     _ -> return ()
 
 -- Unify a syntactic ASL type against a crucible type, and update
--- the current typing evironment with any discovered instantiations
+-- the current static variable evironment with any discovered instantiations
 unifyType :: AS.Type
           -> Some (CT.TypeRepr)
-          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+          -> Generator h s arch ret ()
 unifyType aslT (Some atomT) = do
   env <- MS.gets tsStaticEnv
   case (aslT, atomT) of
@@ -925,7 +936,18 @@ unifyType aslT (Some atomT) = do
       Just (StaticInt i) -> Left i
       _ -> Right e
 
-getConcreteType :: AS.Type -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe (Some CT.TypeRepr))
+unifyTypes :: [AS.Type]
+           -> Some (CT.TypeRepr)
+           -> Generator h s arch ret ()
+unifyTypes tps (Some structT) = do
+  case structT of
+    CT.SymbolicStructRepr stps |
+        insts <- zip tps (FC.toListFC (Some . CT.baseToType) stps)
+      , length insts == length tps ->
+          mapM_ (\(tp, stp) -> unifyType tp stp) insts
+    _ -> X.throw $ TypesUnificationFailure tps structT
+
+getConcreteType :: AS.Type -> Generator h s arch ret (Maybe (Some CT.TypeRepr))
 getConcreteType t =
   case dependentVarsOfType t of
     [] -> do
@@ -938,7 +960,7 @@ unifyArg :: Overrides arch
          -> StaticEnv
          -> AS.SymbolDecl
          -> AS.Expr
-         -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+         -> Generator h s arch ret (Some (CCG.Atom s))
 unifyArg ov outerEnv (nm,t) e = do
   mTy <- getConcreteType t
   ((Some atom, _), _) <- withStaticEnv outerEnv $ translateExpr' ov e mTy
@@ -951,14 +973,12 @@ asBaseType (Some t) = case CT.asBaseType t of
   CT.AsBaseType bt -> Some bt
   CT.NotBaseType -> error $ "Expected base type: " <> show t
 
-
-
 unifyArgs :: Overrides arch
           -> T.Text
           -> [(AS.SymbolDecl, AS.Expr)]
           -> [AS.Type]
           -> Maybe (Some CT.TypeRepr)
-          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret
+          -> Generator h s arch ret
                (T.Text, [Some (CCG.Atom s)], Maybe (Some WT.BaseTypeRepr))
 unifyArgs ov fnname args rets targetRet = do
   outerEnv <- MS.gets tsStaticEnv
@@ -973,12 +993,9 @@ unifyArgs ov fnname args rets targetRet = do
   hdl <- MS.gets tsHandle
   MST.liftST (STRef.modifySTRef hdl (Map.insert fnname env))
   retsT <- mapM (\t -> fst <$> withStaticEnv tenv (translateType t)) rets
-  retT <- case map asBaseType retsT of
+  retT <- case retsT of
             [] -> return Nothing
-            [retbT] -> return $ Just retbT
-            retbsT -> do
-              Some assignment <- return $ Ctx.fromList retbsT
-              return $ Just $ Some (WT.BaseStructRepr assignment)
+            _ -> return $ Just $ mkBaseStructRepr (map asBaseType retsT)
   
   return (mkFinalFunctionName env fnname, atoms, retT)
   where
@@ -989,54 +1006,53 @@ unifyArgs ov fnname args rets targetRet = do
     unifyRet :: StaticEnv
           -> [AS.Type] -- return type of function
           -> Maybe (Some CT.TypeRepr) -- potential concrete target type
-          -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+          -> Generator h s arch ret ()
     unifyRet outerEnv [t] (Just targetRet) = unifyType t targetRet
-    unifyRet _ _ _ = return ()
+    unifyRet outerEnv ts (Just targetRets) = unifyTypes ts targetRets
+    unifyRet _ _ Nothing = return ()
 
     getConcreteValue env nm = case lookupStaticEnv nm env of
       Just i -> return (nm, i)
-      _ -> X.throw $ CannotMonomorphizeFunctionCall fnname
+      _ -> X.throw $ CannotMonomorphizeFunctionCall fnname env
 
 
 translateIf :: Overrides arch
-            -> SomeSignature ret
             -> [(AS.Expr, [AS.Stmt])]
             -> Maybe [AS.Stmt]
-            -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-translateIf ov sig clauses melse =
+            -> Generator h s arch ret ()
+translateIf ov clauses melse =
   case clauses of
-    [] -> mapM_ (translateStatement ov sig) (fromMaybe [] melse)
+    [] -> mapM_ (translateStatement ov) (fromMaybe [] melse)
     (cond, body) : rest -> do
       env <- MS.gets tsStaticEnv
       case exprToStatic env cond of
-        Just (StaticBool True) -> mapM_ (translateStatement ov sig) body
-        Just (StaticBool False) -> translateIf ov sig rest melse
+        Just (StaticBool True) -> mapM_ (translateStatement ov) body
+        Just (StaticBool False) -> translateIf ov rest melse
         _ -> do
           Some condAtom <- translateExpr ov cond
           Refl <- assertAtomType cond CT.BoolRepr condAtom
-          let genThen = mapM_ (translateStatement ov sig) body
-          let genElse = translateIf ov sig rest melse
+          let genThen = mapM_ (translateStatement ov) body
+          let genElse = translateIf ov rest melse
           CCG.ifte_ (CCG.AtomExpr condAtom) genThen genElse
 
 translateCase :: Overrides arch
-              -> SomeSignature ret
               -> AS.Expr
               -> [AS.CaseAlternative]
-              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
-translateCase ov sig expr alts = case alts of
-  [AS.CaseOtherwise els] -> mapM_ (translateStatement ov sig) els
+              -> Generator h s arch ret ()
+translateCase ov expr alts = case alts of
+  [AS.CaseOtherwise els] -> mapM_ (translateStatement ov) els
   -- FIXME: We assume that the case below is equivalent to "otherwise"
-  [AS.CaseWhen _ Nothing body] -> mapM_ (translateStatement ov sig) body
+  [AS.CaseWhen _ Nothing body] -> mapM_ (translateStatement ov) body
   -- FIXME: If we detect an "unreachable", translate it as if the preceding "when"
   -- were "otherwise"
   [AS.CaseWhen _ Nothing body, AS.CaseOtherwise [AS.StmtCall (AS.QualifiedIdentifier _ "Unreachable") []]] ->
-    mapM_ (translateStatement ov sig) body
+    mapM_ (translateStatement ov) body
   (AS.CaseWhen pats Nothing body : rst) -> do
     let matchExpr = caseWhenExpr expr pats
     Some matchAtom <- translateExpr ov matchExpr
     Refl <- assertAtomType matchExpr CT.BoolRepr matchAtom
-    let genThen = mapM_ (translateStatement ov sig) body
-    let genRest = translateCase ov sig expr rst
+    let genThen = mapM_ (translateStatement ov) body
+    let genRest = translateCase ov expr rst
     CCG.ifte_ (CCG.AtomExpr matchAtom) genThen genRest
   _ -> error (show alts)
   where
@@ -1059,7 +1075,7 @@ assertAtomType :: AS.Expr
                -- ^ Expected type
                -> CCG.Atom s tp2
                -- ^ Translation (which contains the actual type)
-               -> CCG.Generator ext h s (TranslationState h) ret (tp1 :~: tp2)
+               -> Generator h s arch ret (tp1 :~: tp2)
 assertAtomType expr expectedRepr atom =
   case testEquality expectedRepr (CCG.typeOfAtom atom) of
     Nothing -> X.throw (UnexpectedExprType (Just expr) (CCG.typeOfAtom atom) expectedRepr)
@@ -1069,7 +1085,7 @@ assertAtomType' :: CT.TypeRepr tp1
                 -- ^ Expected type
                 -> CCG.Atom s tp2
                 -- ^ Translation (which contains the actual type)
-                -> CCG.Generator ext h s (TranslationState h) ret (tp1 :~: tp2)
+                -> Generator h s arch ret (tp1 :~: tp2)
 assertAtomType' expectedRepr atom =
   case testEquality expectedRepr (CCG.typeOfAtom atom) of
     Nothing -> X.throw (UnexpectedExprType Nothing (CCG.typeOfAtom atom) expectedRepr)
@@ -1081,7 +1097,7 @@ assertAtomType' expectedRepr atom =
 translateExpr' :: Overrides arch
               -> AS.Expr
               -> Maybe (Some CT.TypeRepr)
-              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData)
+              -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
 translateExpr' ov expr mTy
   | Just eo <- overrideExpr ov expr mTy = eo
   | otherwise = do
@@ -1228,7 +1244,7 @@ translateExpr' ov expr mTy
 
 translateExpr :: Overrides arch
               -> AS.Expr
-              -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+              -> Generator h s arch ret (Some (CCG.Atom s))
 translateExpr ov expr = do
   (atom, _) <- translateExpr' ov expr Nothing
   return atom
@@ -1238,7 +1254,7 @@ getIndexOfLabel :: Ctx.Assignment WT.BaseTypeRepr tps
                 -> CCG.Atom s (CT.SymbolicStructType tps)
                 -> Ctx.Index tps tp
                 -> LabeledValue T.Text WT.BaseTypeRepr tp
-                -> MSS.StateT (Maybe (Some (CCG.Atom s))) (CCG.Generator (ASLExt arch) h s (TranslationState h) ret) ()
+                -> MSS.StateT (Maybe (Some (CCG.Atom s))) (Generator h s arch ret) ()
 getIndexOfLabel tps lbl struct ix val =
   if projectLabel val == lbl then do
     let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
@@ -1255,7 +1271,7 @@ getIndexOfLabel tps lbl struct ix val =
 --             -> WT.LeqProof 1 len
 --             -> WT.LeqProof 1 w
 --             -> WT.LeqProof (lo WT.+ len) w
---             -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret a)
+--             -> Generator h s arch ret a)
 --            -> SliceContinue s a
 
 -- translateSliceAccess :: (Some (CCG.Atom s)) -> SliceContinue s (Some (CCG.Atom s))
@@ -1271,7 +1287,7 @@ getIndexOfLabel tps lbl struct ix val =
 
 
 getSliceRange :: AS.Slice ->
-                 CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some WT.NatRepr, Some WT.NatRepr)
+                 Generator h s arch ret (Some WT.NatRepr, Some WT.NatRepr)
 getSliceRange slice = do
   env <- MS.gets tsStaticEnv
   case slice of
@@ -1294,7 +1310,7 @@ getSliceRange slice = do
 translateSlice :: Overrides arch
                -> AS.Expr
                -> AS.Slice
-               -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+               -> Generator h s arch ret (Some (CCG.Atom s))
 translateSlice ov e slice = do
    Some atom <- translateExpr ov e
    translateSlice' ov atom slice
@@ -1303,7 +1319,7 @@ translateSlice ov e slice = do
 translateSlice' :: Overrides arch
                 -> CCG.Atom s tp
                 -> AS.Slice
-                -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+                -> Generator h s arch ret (Some (CCG.Atom s))
 translateSlice' _ atom slice = do
   (Some loRepr, Some hiRepr) <- getSliceRange slice
   case () of
@@ -1327,7 +1343,7 @@ translateIfExpr :: Overrides arch
                 -> AS.Expr
                 -> [(AS.Expr, AS.Expr)]
                 -> AS.Expr
-                -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData)
+                -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
 translateIfExpr ov orig clauses elseExpr =
   case clauses of
     [] -> X.throw (MalformedConditionalExpression orig)
@@ -1373,7 +1389,7 @@ translateSetElementTest :: Overrides arch
                         -> AS.Expr
                         -> CCG.Atom s tp
                         -> AS.SetElement
-                        -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (CCG.Expr (ASLExt arch) s CT.BoolType)
+                        -> Generator h s arch ret (CCG.Expr (ASLExt arch) s CT.BoolType)
 translateSetElementTest ov e0 a0 elt =
   case elt of
     AS.SetEltSingle expr@(AS.ExprLitMask mask) -> do
@@ -1415,7 +1431,7 @@ translateBinaryOp :: forall h s ret arch
                   -> AS.BinOp
                   -> AS.Expr
                   -> AS.Expr
-                  -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+                  -> Generator h s arch ret (Some (CCG.Atom s))
 translateBinaryOp ov op e1 e2 = do
   Some a1 <- translateExpr ov e1
   Some a2 <- translateExpr ov e2
@@ -1508,11 +1524,11 @@ data BinaryOperatorBundle ext s (rtp :: ReturnK) =
 
 
 -- | Apply a binary operator to two operands, performing the necessary type checks
-applyBinOp :: (CCE.IsSyntaxExtension ext)
+applyBinOp :: (ext ~ ASLExt arch)
            => BinaryOperatorBundle ext s rtp
            -> (AS.Expr, CCG.Atom s tp1)
            -> (AS.Expr, CCG.Atom s tp2)
-           -> CCG.Generator ext h s (TranslationState h) ret (Some (CCG.Atom s))
+           -> Generator h s arch ret (Some (CCG.Atom s))
 applyBinOp bundle (e1, a1) (e2, a2) =
   case CCG.typeOfAtom a1 of
     CT.BVRepr nr -> do
@@ -1536,11 +1552,11 @@ applyBinOp bundle (e1, a1) (e2, a2) =
           Some <$> CCG.mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     _ -> X.throw (UnsupportedComparisonType e1 (CCG.typeOfAtom a1))
 
-bvBinOp :: (CCE.IsSyntaxExtension ext)
+bvBinOp :: (ext ~ ASLExt arch)
         => (forall n . (1 WT.<= n) => WT.NatRepr n -> CCG.Expr ext s (CT.BVType n) -> CCG.Expr ext s (CT.BVType n) -> CCE.App ext (CCG.Expr ext s) (CT.BVType n))
         -> (AS.Expr, CCG.Atom s tp1)
         -> (AS.Expr, CCG.Atom s tp2)
-        -> CCG.Generator ext h s (TranslationState h) ret (Some (CCG.Atom s))
+        -> Generator h s arch ret (Some (CCG.Atom s))
 bvBinOp con (e1, a1) (e2, a2) =
   case CCG.typeOfAtom a1 of
     CT.BVRepr nr -> do
@@ -1564,11 +1580,11 @@ bvBinOp con (e1, a1) (e2, a2) =
         _ -> X.throw (ExpectedBVType e1 (CCG.typeOfAtom a2))
     _ -> X.throw (ExpectedBVType e1 (CCG.typeOfAtom a1))
 
-logicalBinOp :: (CCE.IsSyntaxExtension ext)
+logicalBinOp :: (ext ~ ASLExt arch)
              => (CCG.Expr ext s CT.BoolType -> CCG.Expr ext s CT.BoolType -> CCE.App ext (CCG.Expr ext s) CT.BoolType)
              -> (AS.Expr, CCG.Atom s tp1)
              -> (AS.Expr, CCG.Atom s tp2)
-             -> CCG.Generator ext h s (TranslationState h) ret (Some (CCG.Atom s))
+             -> Generator h s arch ret (Some (CCG.Atom s))
 logicalBinOp con (e1, a1) (e2, a2) = do
   Refl <- assertAtomType e1 CT.BoolRepr a1
   Refl <- assertAtomType e2 CT.BoolRepr a2
@@ -1577,7 +1593,7 @@ logicalBinOp con (e1, a1) (e2, a2) = do
 translateUnaryOp :: Overrides arch
                  -> AS.UnOp
                  -> AS.Expr
-                 -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s))
+                 -> Generator h s arch ret (Some (CCG.Atom s))
 translateUnaryOp ov op expr = do
   Some atom <- translateExpr ov expr
   case op of
@@ -1595,7 +1611,7 @@ translateUnaryOp ov op expr = do
 translateKnownVar :: (Some CT.TypeRepr)
                     -> AS.Identifier
                     -> Some (CCG.Atom s)
-                    -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+                    -> Generator h s arch ret ()
 translateKnownVar (Some expected) ident (Some atom) = do
   Refl <- assertAtomType' expected atom
   locals <- MS.gets tsVarRefs
@@ -1617,9 +1633,9 @@ bitsForInt i = case i of
 
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
-  where overrideStmt :: forall h s ret . SomeSignature ret -> AS.Stmt -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret ())
+  where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (Generator h s arch ret ())
 
-        overrideStmt sig s = case s of
+        overrideStmt s = case s of
           AS.StmtCall (AS.QualifiedIdentifier _ fun@"GETTERSETTER")
             args'@(AS.ExprSlice (AS.ExprVarRef getter) slices : AS.ExprVarRef setter : value : args) -> Just $ do
 
@@ -1638,7 +1654,7 @@ overrides = Overrides {..}
                                  value
                               , AS.StmtCall setter (AS.ExprBinOp AS.BinOpBitwiseAnd mask old : args)
                               ]
-                  mapM_ (translateStatement overrides sig) stmts
+                  mapM_ (translateStatement overrides) stmts
                 _ -> X.throw $ InvalidOverloadedFunctionCall fun args'
 
           AS.StmtAssign (AS.LValTuple lvs) (AS.ExprCall (AS.QualifiedIdentifier _ "SETTERTUPLE")
@@ -1647,7 +1663,7 @@ overrides = Overrides {..}
               let stmts = [ AS.StmtAssign (AS.LValTuple (AS.LValVarRef (nmOf setterResult) : lvs)) rhs
                           , AS.StmtCall setter (setterResult : args)
                           ]
-              mapM_ (translateStatement overrides sig) stmts
+              mapM_ (translateStatement overrides) stmts
 
 
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ do
@@ -1707,7 +1723,7 @@ overrides = Overrides {..}
 
         getMaybeLength :: Maybe (Some CT.TypeRepr)
                        -> AS.Expr
-                       -> CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Maybe Integer)
+                       -> Generator h s arch ret (Maybe Integer)
         getMaybeLength mTy e = do
           env <- MS.gets tsStaticEnv
           case exprToStatic env e of
@@ -1717,7 +1733,7 @@ overrides = Overrides {..}
                 return $ Just $ WT.intValue nr
               _ -> return Nothing
 
-        overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (CCG.Generator (ASLExt arch) h s (TranslationState h) ret (Some (CCG.Atom s), ExtendedTypeData))
+        overrideExpr :: forall h s ret . AS.Expr -> Maybe (Some CT.TypeRepr) -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
         overrideExpr e mTy = case e of
           AS.ExprCall (AS.QualifiedIdentifier _ fun@"widthOfBV") args@[argExpr] -> Just $ do
             Some atom <- translateExpr overrides argExpr
@@ -1933,8 +1949,5 @@ overrides = Overrides {..}
 
 
 -- FIXME: Change this to set some global flag?
-raiseException :: CCG.Generator (ASLExt arch) h s (TranslationState h) ret ()
+raiseException :: Generator h s arch ret ()
 raiseException = return ()
-
-
-

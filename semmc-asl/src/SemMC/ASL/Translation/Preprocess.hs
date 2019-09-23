@@ -41,6 +41,7 @@ module SemMC.ASL.Translation.Preprocess
   , mkSignature
   , registerTypeSynonyms
   , mkExtendedTypeData'
+  , mkBaseStructRepr
   ) where
 
 import Debug.Trace (traceM)
@@ -975,8 +976,8 @@ computeType'' defs t = case computeType' t of
     Just (Some ut) -> Some $ userTypeRepr ut
     Nothing -> error $ "Missing user type definition for: " <> (show tpName)
 
-mkReturnType :: [Some WT.BaseTypeRepr] -> Some WT.BaseTypeRepr
-mkReturnType ts = case ts of
+mkBaseStructRepr :: [Some WT.BaseTypeRepr] -> Some WT.BaseTypeRepr
+mkBaseStructRepr ts = case ts of
   [t] -> t
   ts | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
 
@@ -1052,7 +1053,7 @@ mkSignature :: Definitions arch -> StaticEnv -> SomeSimpleSignature -> Some (Som
 mkSignature defs env sig =
   case sig of
     SomeSimpleFunctionSignature fsig |
-        Some retT <- mkReturnType $ map mkType (sfuncRet fsig)
+        Some retT <- mkBaseStructRepr $ map mkType (sfuncRet fsig)
       , Some args <- Ctx.fromList $ map mkLabel (sfuncArgs fsig) -> 
        
       Some $ SomeFunctionSignature $ FunctionSignature

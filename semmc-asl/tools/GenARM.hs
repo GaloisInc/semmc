@@ -252,7 +252,7 @@ expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
   SExcept (SigException _ (TypeNotFound "real")) -> Just $ RealValuesUnsupported
-  TExcept (CannotMonomorphizeFunctionCall f) -> Just $ CannotMonomorphize f
+  TExcept (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
   TExcept (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
   TExcept (UnsupportedSlice (AS.SliceSingle _)) -> Just $ SymbolicArguments "Slice"
   TExcept (UnsupportedSlice (AS.SliceRange _ _)) -> Just $ SymbolicArguments "Slice"
@@ -286,6 +286,15 @@ defaultStatOptions = StatOptions
   , reportAllExceptions = False
   , reportKnownExceptionFilter = (\_ -> True)
   , reportFunctionDependencies = False
+  }
+
+reportAllOptions :: StatOptions
+reportAllOptions = StatOptions
+  { reportKnownExceptions = True
+  , reportSucceedingInstructions = True
+  , reportAllExceptions = True
+  , reportKnownExceptionFilter = (\_ -> True)
+  , reportFunctionDependencies = True
   }
 
 reportStats :: StatOptions -> SigMap -> IO ()
