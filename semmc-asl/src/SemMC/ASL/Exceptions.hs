@@ -25,6 +25,8 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           | forall tp . ExpectedBVType AS.Expr (CT.TypeRepr tp)
+                          | forall tp . ExpectedBVType' (Maybe AS.Expr) (CT.TypeRepr tp)
+                          | forall tp . ExpectedBVLValType AS.LValExpr (CT.TypeRepr tp)
                           | forall tp . ExpectedIntegerType AS.Expr (CT.TypeRepr tp)
                           | forall tp . ExpectedStructType (Maybe AS.Expr) (CT.TypeRepr tp)
                           | forall tp . UnsupportedComparisonType AS.Expr (CT.TypeRepr tp)
@@ -47,8 +49,8 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
-                          | forall tp . TypeUnificationFailure AS.Type (CT.TypeRepr tp) StaticEnv
-                          | forall tp . TypesUnificationFailure [AS.Type] (CT.TypeRepr tp)
+                          | TypeUnificationFailure AS.Type TypeConstraint StaticEnv
+                          | TypesUnificationFailure [AS.Type] TypeConstraint
                           | ReturnTypeUnificationFailure AS.Type AS.Type StaticEnv
                           | StructFieldMismatch AS.Expr
                           | RequiredConcreteValue T.Text AS.Expr

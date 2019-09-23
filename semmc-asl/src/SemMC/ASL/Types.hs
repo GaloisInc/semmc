@@ -23,6 +23,7 @@ module SemMC.ASL.Types
   , StructAccessor(..)
   , RegisterSig
   , ExtendedTypeData(..)
+  , TypeConstraint(..)
   , userTypeRepr
   , toBaseType
   , toBaseTypes
@@ -242,3 +243,10 @@ data ExtendedTypeData =
   | TypeTuple [ExtendedTypeData]
   | TypeArray ExtendedTypeData
   deriving (Show, Eq)
+
+
+data TypeConstraint =
+    ConstraintNone
+  | ConstraintSingle (Some CT.TypeRepr)
+  | ConstraintTuple [TypeConstraint]
+  deriving Show

@@ -146,7 +146,7 @@ funcDef :: (ret ~ CT.BaseToType tp)
         -> (TranslationState h ret s, CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret))
 funcDef defs sig hdl globals stmts args = (funcInitialState defs sig hdl globals args, defineFunction overrides sig stmts args)
 
-funcInitialState :: forall init tp h s globals arch ret
+funcInitialState :: forall init tp h s globals arch
                   . Definitions arch
                  -> FunctionSignature globals init tp
                  -> STRef.STRef h (Map.Map T.Text StaticEnv)
@@ -268,7 +268,7 @@ procDef :: (ReturnsGlobals ret globals)
 procDef defs sig hdl globals stmts args =
   (procInitialState defs sig hdl globals args, defineProcedure overrides sig globals stmts args)
 
-procInitialState :: forall init globals h s arch ret
+procInitialState :: forall init globals h s arch
                   . Definitions arch
                  -> ProcedureSignature globals init
                  -> STRef.STRef h (Map.Map T.Text StaticEnv)

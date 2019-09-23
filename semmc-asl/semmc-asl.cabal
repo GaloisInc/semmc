@@ -33,6 +33,7 @@ library
                        bimap,
                        text >= 1 && < 2,
                        mtl,
+                       transformers,
                        lens,
                        ansi-wl-pprint,
                        parameterized-utils,
