@@ -2,7 +2,8 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module SemMC.ASL.Exceptions (
-    TranslationException(..)
+      TranslationException(..)
+    , TracedTranslationException(..)
   ) where
 
 import qualified Control.Exception as X
@@ -49,6 +50,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
+                          | forall tp tp'. InvalidSymbolicSlice (CT.TypeRepr tp) (CT.TypeRepr tp')
                           | TypeUnificationFailure AS.Type TypeConstraint StaticEnv
                           | TypesUnificationFailure [AS.Type] TypeConstraint
                           | ReturnTypeUnificationFailure AS.Type AS.Type StaticEnv
@@ -69,3 +71,10 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
 deriving instance Show TranslationException
 
 instance X.Exception TranslationException
+
+data TracedTranslationException =
+  TracedTranslationException [AS.Stmt] [AS.Expr] TranslationException
+
+deriving instance Show TracedTranslationException
+
+instance X.Exception TracedTranslationException

@@ -52,6 +52,7 @@ import qualified Data.BitVector.Sized as BVS
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Map as Map
 import qualified Data.List as List
+import qualified Data.Set as Set
 
 type family ToBaseType (ctp :: CT.CrucibleType) :: WT.BaseType where
   ToBaseType (CT.BaseToType bt) = bt

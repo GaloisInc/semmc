@@ -226,42 +226,64 @@
               (ExprVarRef
                 (QualifiedIdentifier Any ret))))))))
   (DefCallable
-    (QualifiedIdentifier Any MinInt)
+    (QualifiedIdentifier AArch32 BreakpointValueMatch)
     (list
       (SymDecl
-        i1
+        n
         (TypeRef
           (QualifiedIdentifier Any integer)))
       (SymDecl
-        i2
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        linked_to
         (TypeRef
-          (QualifiedIdentifier Any integer))))
+          (QualifiedIdentifier Any boolean))))
     (Just
       (ReturnType
         (list
           (TypeRef
-            (QualifiedIdentifier Any integer)))))
+            (QualifiedIdentifier Any boolean))
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
     (Just
       (StmtBlock
         (list
-          (StmtIf
-            (ExprBinOp
-              "<"
-              (ExprVarRef
-                (QualifiedIdentifier Any i1))
-              (ExprVarRef
-                (QualifiedIdentifier Any i2)))
-            (StmtBlock
-              (list
-                (StmtReturn
-                  (Just
-                    (ExprVarRef
-                      (QualifiedIdentifier Any i1))))))
-            (list)
+          (StmtReturn
             (Just
-              (StmtBlock
+              (ExprTuple
                 (list
-                  (StmtReturn
-                    (Just
-                      (ExprVarRef
-                        (QualifiedIdentifier Any i2)))))))))))))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any FALSE))
+                  (ExprVarRef
+                    (QualifiedIdentifier Any FALSE))))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch64 BreakpointValueMatch)
+    (list
+      (SymDecl
+        n
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 64)))
+      (SymDecl
+        linked_to
+        (TypeRef
+          (QualifiedIdentifier Any boolean))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any FALSE)))))))))

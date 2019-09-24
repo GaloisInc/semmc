@@ -39,8 +39,10 @@ boolean IsPhysicalSErrorPending()
     ret = boolean UNKNOWN;
     return ret;
 
-integer MinInt(integer i1, integer i2)
-    if i1 < i2 then
-        return i1;
-    else
-        return i2;
+// We can likely stub these out safely
+(boolean,boolean) AArch32.BreakpointValueMatch(integer n, bits(32) vaddress, boolean linked_to)
+  return (FALSE, FALSE);
+
+
+boolean AArch64.BreakpointValueMatch(integer n, bits(64) vaddress, boolean linked_to)
+  return FALSE;

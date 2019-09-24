@@ -165,6 +165,8 @@ funcInitialState defs sig hdl globals args =
                    , tsHandle = hdl
                    , tsStaticEnv = funcStaticEnv sig
                    , tsSig = SomeFunctionSignature sig
+                   , tsExprStack = []
+                   , tsStmtStack = []
                    }
   where
     addArgumentAtom :: forall tp0
@@ -287,6 +289,8 @@ procInitialState defs sig hdl globals args =
                    , tsHandle = hdl
                    , tsStaticEnv = procStaticEnv sig
                    , tsSig = SomeProcedureSignature sig
+                   , tsExprStack = []
+                   , tsStmtStack = []
                    }
   where
     addArgument :: forall tp

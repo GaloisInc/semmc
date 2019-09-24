@@ -58,7 +58,7 @@ import qualified What4.ProgramLoc as WP
 import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
-import           SemMC.ASL.Exceptions ( TranslationException(..) )
+import           SemMC.ASL.Exceptions ( TranslationException(..), TracedTranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.Translation.Preprocess
@@ -219,6 +219,9 @@ data TranslationState h ret s =
                    -- ^ Type environment to give concrete instantiations to polymorphic variables
                    , tsSig :: SomeSignature ret
                    -- ^ Signature of the function/procedure we are translating
+                   , tsStmtStack :: [AS.Stmt]
+                   -- ^ Stack of statements on this traversal
+                   , tsExprStack :: [AS.Expr]
                    }
 
 
@@ -258,6 +261,12 @@ withProcGlobals reprs k = do
           BaseGlobalVar gv
       | otherwise = error ("Missing global (or wrong type): " ++ show globName)
 
+throwTrace :: TranslationException -> Generator h s arch ret a
+throwTrace e = do
+  stmts <- MS.gets tsStmtStack
+  exprs <- MS.gets tsExprStack
+  X.throw $ TracedTranslationException stmts exprs e
+
 -- | Translate a list of statements, reporting an error if the execution
 -- runs off the end.
 translateStatements :: forall ret tp h s arch
@@ -273,13 +282,23 @@ translateStatements ov stmts = do
   errStr <- CCG.mkAtom (CCG.App (CCE.TextLit (T.pack errmsg)))
   CCG.reportError (CCG.AtomExpr errStr)
 
--- | Translate a single ASL statement into Crucible
 translateStatement :: forall arch ret h s
+                    . Overrides arch
+                   -> AS.Stmt
+                   -> Generator h s arch ret ()
+translateStatement ov stmt = do
+  MS.modify' $ \s -> s { tsStmtStack = stmt : (tsStmtStack s) }
+  translateStatement' ov stmt
+  MS.modify' $ \s -> s { tsStmtStack = List.tail $ tsStmtStack s }
+  return ()
+
+-- | Translate a single ASL statement into Crucible
+translateStatement' :: forall arch ret h s
                     . Overrides arch
                    -> AS.Stmt
                    -- ^ Statement we are translating
                    -> Generator h s arch ret ()
-translateStatement ov stmt
+translateStatement' ov stmt
   | Just so <- overrideStmt ov stmt = so
   | otherwise = case stmt of
       AS.StmtReturn Nothing -> do
@@ -633,10 +652,10 @@ translateAssignment' ov lval atom atomext mE = do
       case CCG.typeOfAtom atom of
         CT.BVRepr wRepr -> do
           let topIndex = WT.intValue wRepr - 1
-          Some topBit <- translateSlice' atom (AS.SliceSingle (AS.ExprLitInt topIndex))
+          Some topBit <- translateSlice' ov atom (AS.SliceSingle (AS.ExprLitInt topIndex)) ConstraintNone
           translatelValSlice ov lv fstSlice topBit
-          Some rest <- translateSlice' atom (AS.SliceRange (AS.ExprLitInt (topIndex - 1))
-                                                (AS.ExprLitInt 0))
+          Some rest <- translateSlice' ov atom (AS.SliceRange (AS.ExprLitInt (topIndex - 1))
+                                                (AS.ExprLitInt 0)) ConstraintNone
           translatelValSlice ov lv slice rest
         tp -> X.throw $ ExpectedBVType' mE tp
 
@@ -663,7 +682,7 @@ translateAssignment' ov lval atom atomext mE = do
     AS.LValMemberBits ref bits -> do
       let ibits = imap (\i -> \e -> (i, e)) bits
       mapM_ (\(i, e) -> do
-        Some aslice <- translateSlice' atom (AS.SliceSingle (AS.ExprLitInt (toInteger i)))
+        Some aslice <- translateSlice' ov atom (AS.SliceSingle (AS.ExprLitInt (toInteger i))) ConstraintNone
         let lv' = AS.LValMember ref e in
           translateAssignment' ov lv' aslice TypeBasic Nothing) ibits
 
@@ -701,7 +720,7 @@ translateImplicitSlice ov rhsRepr rhs offset lv  = do
       let hi = rhsLength - offset - 1
       let lo = rhsLength - offset - lvLength
       let slice = AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo)
-      Some slicedRhs <- translateSlice' rhs slice
+      Some slicedRhs <- translateSlice' ov rhs slice ConstraintNone
       translateAssignment' ov lv slicedRhs TypeBasic Nothing
       return (offset + lvLength)
     _ -> X.throw $ UnsupportedLVal lv
@@ -752,46 +771,44 @@ translatelValSlice :: Overrides arch
 translatelValSlice ov lv slice asnAtom = do
   let Just lve = lValToExpr lv
   Some atom <- translateExpr ov lve
-  (Some loRepr, Some hiRepr) <- getSliceRange slice
-  if | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
-     , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
-     , CT.BVRepr wRepr <- CCG.typeOfAtom atom
-     , Just WT.LeqProof <- (hiRepr `WT.addNat` (WT.knownNat @1)) `WT.testLeq` wRepr
-     , lenUpper <- wRepr `WT.subNat` (hiRepr `WT.addNat` (WT.knownNat @1))
-     , CT.BVRepr wReprAsn <- CCG.typeOfAtom asnAtom
-     , Just Refl <- testEquality lenRepr wReprAsn
-     --,
+  mRange <- getStaticSliceRange slice
+  case mRange of
+    Just (Some loRepr, Some hiRepr)
+      | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
+      , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
+      , CT.BVRepr wRepr <- CCG.typeOfAtom atom
+      , Just WT.LeqProof <- (hiRepr `WT.addNat` (WT.knownNat @1)) `WT.testLeq` wRepr
+      , lenUpper <- wRepr `WT.subNat` (hiRepr `WT.addNat` (WT.knownNat @1))
+      , CT.BVRepr wReprAsn <- CCG.typeOfAtom asnAtom
+      , Just Refl <- testEquality lenRepr wReprAsn -> do
+          -- [x0 .. x_loRepr .. x_hiRepr .. x_wRepr-1 ] -- original bitvector in lv
+          -- [y_loRepr .. y_hiRepr] -- asnAtom value
 
-     -> do
-         -- [x0 .. x_loRepr .. x_hiRepr .. x_wRepr-1 ] -- original bitvector in lv
-         -- [y_loRepr .. y_hiRepr] -- asnAtom value
+          let lvBV = Just (CCG.AtomExpr atom)
+          let asnBV = Just (CCG.AtomExpr asnAtom)
+          let pre = maybeBVSelect (WT.knownNat @0) loRepr wRepr lvBV
+            -- pre = [x0 .. x_loRepr-1]
+          let first = maybeBVConcat loRepr lenRepr pre asnBV
+            -- first = pre ++ [y_loRepr .. y_hiRepr]
+          let post = maybeBVSelect (hiRepr `WT.addNat` (WT.knownNat @1)) lenUpper wRepr lvBV
+            -- post = [x_hiRepr+1 .. x_wRepr-1]
+          let fin = maybeBVConcat (loRepr `WT.addNat` lenRepr) lenUpper first post
+            -- Final bv has the correct length:
+            -- (lo + len) + lenUpper = lo + 1 + (hi - lo) + (w - (1 + hi))
+            --                       = lo + 1 + hi - lo + w - 1 - hi
+            --                       = (lo - lo) + (hi - hi) + (1 - 1) + w
+            --                       = w
+            -- Shape of final bv:
+            -- fin = first ++ post
+            --     = [x0 .. x_loRepr-1] ++ [y_loRepr .. y_hiRepr] ++ [x_hiRepr+1 .. x_wRepr-1]
+          case fin of
+            Just r -> do
+              result <- CCG.mkAtom r
+              translateAssignment' ov lv result TypeBasic Nothing
+            Nothing ->
+              X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
 
-         let lvBV = Just (CCG.AtomExpr atom)
-         let asnBV = Just (CCG.AtomExpr asnAtom)
-         let pre = maybeBVSelect (WT.knownNat @0) loRepr wRepr lvBV
-           -- pre = [x0 .. x_loRepr-1]
-         let first = maybeBVConcat loRepr lenRepr pre asnBV
-           -- first = pre ++ [y_loRepr .. y_hiRepr]
-         let post = maybeBVSelect (hiRepr `WT.addNat` (WT.knownNat @1)) lenUpper wRepr lvBV
-           -- post = [x_hiRepr+1 .. x_wRepr-1]
-         let fin = maybeBVConcat (loRepr `WT.addNat` lenRepr) lenUpper first post
-           -- Final bv has the correct length:
-           -- (lo + len) + lenUpper = lo + 1 + (hi - lo) + (w - (1 + hi))
-           --                       = lo + 1 + hi - lo + w - 1 - hi
-           --                       = (lo - lo) + (hi - hi) + (1 - 1) + w
-           --                       = w
-           -- Shape of final bv:
-           -- fin = first ++ post
-           --     = [x0 .. x_loRepr-1] ++ [y_loRepr .. y_hiRepr] ++ [x_hiRepr+1 .. x_wRepr-1]
-         case fin of
-           Just r -> do
-             result <- CCG.mkAtom r
-             translateAssignment' ov lv result TypeBasic Nothing
-           Nothing ->
-             X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
-
-     | otherwise ->
-         X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
+    _ -> X.throw $ UnsupportedSlice slice
 
 
 -- | Get the "default" value for a given crucible type. We can't use unassigned
@@ -1133,7 +1150,7 @@ assertAtomType :: AS.Expr
                -> Generator h s arch ret (tp1 :~: tp2)
 assertAtomType expr expectedRepr atom =
   case testEquality expectedRepr (CCG.typeOfAtom atom) of
-    Nothing -> X.throw (UnexpectedExprType (Just expr) (CCG.typeOfAtom atom) expectedRepr)
+    Nothing -> throwTrace (UnexpectedExprType (Just expr) (CCG.typeOfAtom atom) expectedRepr)
     Just Refl -> return Refl
 
 assertAtomType' :: CT.TypeRepr tp1
@@ -1143,17 +1160,27 @@ assertAtomType' :: CT.TypeRepr tp1
                 -> Generator h s arch ret (tp1 :~: tp2)
 assertAtomType' expectedRepr atom =
   case testEquality expectedRepr (CCG.typeOfAtom atom) of
-    Nothing -> X.throw (UnexpectedExprType Nothing (CCG.typeOfAtom atom) expectedRepr)
+    Nothing -> throwTrace (UnexpectedExprType Nothing (CCG.typeOfAtom atom) expectedRepr)
     Just Refl -> return Refl
 
--- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
---
--- Atoms may be written to registers, which are mutable locals
 translateExpr' :: Overrides arch
               -> AS.Expr
               -> TypeConstraint
               -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
-translateExpr' ov expr ty
+translateExpr' ov expr constraint = do
+  MS.modify' $ \s -> s { tsExprStack = expr : (tsExprStack s) }
+  r <- translateExpr'' ov expr constraint
+  MS.modify' $ \s -> s { tsExprStack = List.tail $ tsExprStack s }
+  return r
+
+-- | Translate an ASL expression into an Atom (which is a reference to an immutable value)
+--
+-- Atoms may be written to registers, which are mutable locals
+translateExpr'' :: Overrides arch
+              -> AS.Expr
+              -> TypeConstraint
+              -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
+translateExpr'' ov expr ty
   | Just eo <- overrideExpr ov expr ty = eo
   | otherwise = do
       env <- MS.gets tsStaticEnv
@@ -1242,7 +1269,7 @@ translateExpr' ov expr ty
               TypeRegister sig -> do
                 case Map.lookup memberName sig of
                   Just slice -> do
-                    satom <- translateSlice ov struct (mkSliceRange slice)
+                    satom <- translateSlice ov struct (mkSliceRange slice) ConstraintNone
                     return (satom, TypeBasic)
                   _ -> X.throw $ MissingRegisterField struct memberName
               TypeStruct acc -> do
@@ -1263,7 +1290,7 @@ translateExpr' ov expr ty
             translateExpr' ov expr ty
 
           AS.ExprSlice e [slice] -> do
-            satom <- translateSlice ov e slice
+            satom <- translateSlice ov e slice ty
             return (satom, TypeBasic)
 
           AS.ExprSlice e [slice1, slice2] -> do
@@ -1342,56 +1369,93 @@ getIndexOfLabel tps lbl struct ix val =
 --                                        Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom))))
 
 
-getSliceRange :: AS.Slice ->
-                 Generator h s arch ret (Some WT.NatRepr, Some WT.NatRepr)
-getSliceRange slice = do
-  env <- MS.gets tsStaticEnv
-  case slice of
-    AS.SliceRange e e' |
-        Just (StaticInt lo) <- exprToStatic env e'
-      , Just (StaticInt hi) <- exprToStatic env e
-      , Just someLoRepr <- WT.someNat lo
-      , Just someHiRepr <- WT.someNat hi ->
-        return (someLoRepr, someHiRepr)
-    AS.SliceSingle e |
-        Just (StaticInt i) <- exprToStatic env e
-      , Just someRepr <- WT.someNat i ->
-        return (someRepr, someRepr)
-    AS.SliceOffset e e' ->
-      let hi = AS.ExprBinOp AS.BinOpAdd e (AS.ExprBinOp AS.BinOpSub e' (AS.ExprLitInt 1)) in
-      getSliceRange (AS.SliceRange hi e)
-    _ -> X.throw $ UnsupportedSlice slice
+normalizeSlice :: AS.Slice -> (AS.Expr, AS.Expr)
+normalizeSlice slice = case slice of
+  AS.SliceRange e e' -> (e', e)
+  AS.SliceSingle e -> (e, e)
+  AS.SliceOffset e e' ->
+    let hi = AS.ExprBinOp AS.BinOpAdd e (AS.ExprBinOp AS.BinOpSub e' (AS.ExprLitInt 1))
+        in (e, hi)
 
-  
+getStaticSliceRange :: AS.Slice
+                    -> Generator h s arch ret (Maybe (Some WT.NatRepr, Some WT.NatRepr))
+getStaticSliceRange slice = do
+  let (e', e) = normalizeSlice slice
+  env <- MS.gets tsStaticEnv
+  if | Just (StaticInt lo) <- exprToStatic env e'
+     , Just (StaticInt hi) <- exprToStatic env e
+     , Just someLoRepr <- WT.someNat lo
+     , Just someHiRepr <- WT.someNat hi ->
+        return $ Just (someLoRepr, someHiRepr)
+     | otherwise -> return Nothing
+
+getSymbolicSliceRange :: Overrides arch
+                      -> AS.Slice
+                      -> Generator h s arch ret (CCG.Atom s CT.IntegerType, CCG.Atom s CT.IntegerType)
+getSymbolicSliceRange ov slice = do
+  let (e', e) = normalizeSlice slice
+  Some loAtom <- translateExpr ov e'
+  Some hiAtom <- translateExpr ov e
+  Refl <- assertAtomType e' CT.IntegerRepr loAtom
+  Refl <- assertAtomType e CT.IntegerRepr hiAtom
+  return (loAtom, hiAtom)
+
+
+getImplicitConstraints :: AS.Slice -> TypeConstraint -> TypeConstraint
+getImplicitConstraints slice constraint = case slice of
+  AS.SliceSingle _ -> ConstraintSingle (Some (CT.BVRepr (WT.knownNat @1)))
+  _ -> constraint
+
 translateSlice :: Overrides arch
                -> AS.Expr
                -> AS.Slice
+               -> TypeConstraint
                -> Generator h s arch ret (Some (CCG.Atom s))
-translateSlice ov e slice = do
+translateSlice ov e slice constraint = do
    Some atom <- translateExpr ov e
-   translateSlice' atom slice
+   translateSlice' ov atom slice constraint
    
 
-translateSlice' :: CCG.Atom s tp
+translateSlice' :: Overrides arch
+                -> CCG.Atom s tp
                 -> AS.Slice
+                -> TypeConstraint
                 -> Generator h s arch ret (Some (CCG.Atom s))
-translateSlice' atom slice = do
-  (Some loRepr, Some hiRepr) <- getSliceRange slice
-  case () of
-    _ | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
-      , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
-      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr -> do
-        case CCG.typeOfAtom atom of
-          CT.BVRepr wRepr | Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr ->
-                Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom)))
-          CT.IntegerRepr | wRepr <- hiRepr `WT.addNat` (WT.knownNat @1)
-                         , WT.LeqProof <- WT.leqAdd (WT.leqRefl (WT.knownNat @1)) hiRepr
-                         , Refl <- WT.plusComm (WT.knownNat @1) hiRepr
-                         , Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr -> do
-                let bv = CCE.IntegerToBV wRepr (CCG.AtomExpr atom)
-                Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.App bv)))
-          repr -> X.throw $ InvalidSlice (WT.intValue loRepr) (WT.intValue hiRepr) repr
-    _ -> X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
+translateSlice' ov atom slice constraint =
+  case getImplicitConstraints slice constraint of
+    ConstraintSingle (Some (CT.BVRepr lenRepr)) -> do
+      (loAtom, _) <- getSymbolicSliceRange ov slice
+      if | CT.BVRepr wRepr <- CCG.typeOfAtom atom
+         , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr
+         , Just WT.LeqProof <- (lenRepr `WT.addNat` WT.knownNat @1) `WT.testLeq` wRepr
+           -> do
+           -- hi and lo are symbolic, but length is concrete and hi - lo = length
+           let loBV = CCE.IntegerToBV wRepr (CCG.AtomExpr loAtom)
+
+           -- [ x_wRepr-1 .. x_hiRepr .. x_loAtom .. 0] -- atom BV
+           let shifted = CCE.BVLshr wRepr (CCG.AtomExpr atom) (CCG.App loBV)
+           -- [0 0 0 ... x_wRepr-1 .. x_hiRepr .. x_loAtom] -- shifted
+           Some <$> CCG.mkAtom (CCG.App (CCE.BVTrunc lenRepr wRepr (CCG.App shifted)))
+           -- [x_hiRepr .. x_loAtom] -- truncated
+         | otherwise -> X.throw $ InvalidSymbolicSlice (CCG.typeOfAtom atom) (CT.BVRepr lenRepr)
+    _ -> do
+      mRange <- getStaticSliceRange slice
+      case mRange of
+        Just (Some loRepr, Some hiRepr)
+          | Just WT.LeqProof <- loRepr `WT.testLeq` hiRepr
+          , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
+          , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr -> do
+            case CCG.typeOfAtom atom of
+              CT.BVRepr wRepr | Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr ->
+                    Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom)))
+              CT.IntegerRepr | wRepr <- hiRepr `WT.addNat` (WT.knownNat @1)
+                             , WT.LeqProof <- WT.leqAdd (WT.leqRefl (WT.knownNat @1)) hiRepr
+                             , Refl <- WT.plusComm (WT.knownNat @1) hiRepr
+                             , Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr -> do
+                    let bv = CCE.IntegerToBV wRepr (CCG.AtomExpr atom)
+                    Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.App bv)))
+              repr -> X.throw $ InvalidSlice (WT.intValue loRepr) (WT.intValue hiRepr) repr
+        _ -> X.throw $ UnsupportedSlice slice
 
 -- | Translate the expression form of a conditional into a Crucible atom
 translateIfExpr :: Overrides arch

@@ -73,6 +73,30 @@ stalledDefs =
   ,"AArch64_CheckWatchpoint_4"
   ]
 
+data TranslatorOptions = TranslatorOptions
+  { optVerbose :: Bool
+  , optStartIndex :: Int
+  , optNumberOfInstructions :: Maybe Int
+  , optFilters :: Filters
+  , optSkipTranslation :: Bool
+  , optCollectExceptions :: Bool
+  , optThrowUnexpectedExceptions :: Bool
+  }
+
+defaultOptions :: TranslatorOptions
+defaultOptions = TranslatorOptions
+  { optVerbose = True
+  , optStartIndex = 0
+  , optNumberOfInstructions = Nothing
+  , optFilters = noFilter
+  , optSkipTranslation = True
+  , optCollectExceptions = True
+  , optThrowUnexpectedExceptions = True
+  }
+
+doTranslationOptions :: TranslatorOptions
+doTranslationOptions = defaultOptions {optFilters = filterStalls, optSkipTranslation = False}
+
 main :: IO ()
 main = do
   sm <- runWithFilters defaultOptions { optVerbose = False}
@@ -252,20 +276,20 @@ expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
   SExcept (SigException _ (TypeNotFound "real")) -> Just $ RealValuesUnsupported
-  TExcept (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
-  TExcept (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
-  TExcept (UnsupportedSlice (AS.SliceSingle _)) -> Just $ SymbolicArguments "Slice"
-  TExcept (UnsupportedSlice (AS.SliceRange _ _)) -> Just $ SymbolicArguments "Slice"
-  TExcept (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
-  TExcept (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
-  TExcept (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
-  TExcept (UnboundName nm) ->
+  TExcept _ _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
+  TExcept _ _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
+  TExcept _ _ (UnsupportedSlice (AS.SliceSingle _)) -> Just $ SymbolicArguments "Slice"
+  TExcept _ _ (UnsupportedSlice (AS.SliceRange _ _)) -> Just $ SymbolicArguments "Slice"
+  TExcept _ _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
+  TExcept _ _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
+  TExcept _ _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
+  TExcept _ _ (UnboundName nm) ->
     if List.elem nm ["imm32", "index", "m", "mode", "regs", "sz", "carry", "add", "tag_checked"]
     then Just $ BadInstructionSpecification nm
     else Nothing
-  TExcept (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
-  TExcept (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
-  TExcept (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
+  TExcept _ _ (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
+  TExcept _ _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
+  TExcept _ _ (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
   _ -> Nothing
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
@@ -361,7 +385,7 @@ reportStats sopts sm = do
       Nothing -> id
   
 data TranslatorException =
-    TExcept TranslationException
+    TExcept [AS.Stmt] [AS.Expr] TranslationException
   | SExcept SigException
   | SomeExcept X.SomeException
 
@@ -417,30 +441,6 @@ data ElemKey =
  | KeyFun T.Text
  deriving (Eq, Ord, Show)
 
-data TranslatorOptions = TranslatorOptions
-  { optVerbose :: Bool
-  , optStartIndex :: Int
-  , optNumberOfInstructions :: Maybe Int
-  , optFilters :: Filters
-  , optSkipTranslation :: Bool
-  , optCollectExceptions :: Bool
-  , optThrowUnexpectedExceptions :: Bool
-  }
-
-defaultOptions :: TranslatorOptions
-defaultOptions = TranslatorOptions
-  { optVerbose = True
-  , optStartIndex = 0
-  , optNumberOfInstructions = Nothing
-  , optFilters = noFilter
-  , optSkipTranslation = True
-  , optCollectExceptions = True
-  , optThrowUnexpectedExceptions = True
-  }
-
-doTranslationOptions :: TranslatorOptions
-doTranslationOptions = defaultOptions {optFilters = filterStalls, optSkipTranslation = False}
-
 
 -- FIXME: Seperate this into RWS
 data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeSignature))
@@ -481,11 +481,14 @@ collectExcept k e = do
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
   a <- MSS.lift ((Left <$> f)
-                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept e))
+                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept [] [] e))
+                  `X.catch` (\(e :: TracedTranslationException) -> return $ Right (tracedException e))
                   `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
   case a of
     Left r -> return (Just r)
     Right err -> (\_ -> Nothing) <$> collectExcept k err
+  where
+    tracedException (TracedTranslationException stmts exprs e) = TExcept stmts exprs e
   
 
 translationLoop :: InstructionIdent
