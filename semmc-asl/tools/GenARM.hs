@@ -269,6 +269,7 @@ data ExpectedException =
   | RealValuesUnsupported
   | LValSliceUnsupported
   | ExponentiationUnsupported
+  | RmemUnsupported
   | ParserError
   deriving (Eq, Ord, Show)
 
@@ -278,8 +279,8 @@ expectedExceptions k ex = case ex of
   SExcept (SigException _ (TypeNotFound "real")) -> Just $ RealValuesUnsupported
   TExcept _ _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
   TExcept _ _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
-  TExcept _ _ (UnsupportedSlice (AS.SliceSingle _)) -> Just $ SymbolicArguments "Slice"
-  TExcept _ _ (UnsupportedSlice (AS.SliceRange _ _)) -> Just $ SymbolicArguments "Slice"
+  TExcept _ _ (UnsupportedSlice (AS.SliceSingle _) _) -> Just $ SymbolicArguments "Slice"
+  TExcept _ _ (UnsupportedSlice (AS.SliceRange _ _) _) -> Just $ SymbolicArguments "Slice"
   TExcept _ _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
   TExcept _ _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
   TExcept _ _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
@@ -288,8 +289,10 @@ expectedExceptions k ex = case ex of
     then Just $ BadInstructionSpecification nm
     else Nothing
   TExcept _ _ (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
+  TExcept _ _ (UnsupportedBinaryOperator AS.BinOpRem) -> Just $ ExponentiationUnsupported
   TExcept _ _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
   TExcept _ _ (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
+  TExcept _ _ (ExpectedBVType _ _) -> Just $ ParserError
   _ -> Nothing
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool

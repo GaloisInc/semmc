@@ -56,7 +56,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | ReturnTypeUnificationFailure AS.Type AS.Type StaticEnv
                           | StructFieldMismatch AS.Expr
                           | RequiredConcreteValue T.Text AS.Expr
-                          | UnsupportedSlice AS.Slice
+                          | UnsupportedSlice AS.Slice TypeConstraint
                           | CannotMonomorphizeFunctionCall T.Text StaticEnv
                           | CannotMonomorphizeOverloadedFunctionCall T.Text [AS.Expr]
                           | CannotStaticallyEvaluateType AS.Type StaticEnv
