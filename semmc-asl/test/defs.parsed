@@ -32857,15 +32857,13 @@
                                   (ExprVarRef
                                     (QualifiedIdentifier Any inputaddr))
                                   (list
-                                    (SliceSingle
+                                    (SliceRange
+                                      (ExprLitNat 31)
                                       (ExprBinOp
-                                        ":"
-                                        (ExprLitNat 31)
-                                        (ExprBinOp
-                                          "-"
-                                          (ExprLitNat 32)
-                                          (ExprVarRef
-                                            (QualifiedIdentifier Any t0size))))))))))
+                                        "-"
+                                        (ExprLitNat 32)
+                                        (ExprVarRef
+                                          (QualifiedIdentifier Any t0size)))))))))
                           (StmtBlock
                             (list
                               (StmtAssign
@@ -32972,15 +32970,13 @@
                                     (ExprVarRef
                                       (QualifiedIdentifier Any inputaddr))
                                     (list
-                                      (SliceSingle
+                                      (SliceRange
+                                        (ExprLitNat 31)
                                         (ExprBinOp
-                                          ":"
-                                          (ExprLitNat 31)
-                                          (ExprBinOp
-                                            "-"
-                                            (ExprLitNat 32)
-                                            (ExprVarRef
-                                              (QualifiedIdentifier Any t1size)))))))))))
+                                          "-"
+                                          (ExprLitNat 32)
+                                          (ExprVarRef
+                                            (QualifiedIdentifier Any t1size))))))))))
                           (StmtBlock
                             (list
                               (StmtAssign
@@ -42839,15 +42835,13 @@
                     (ExprVarRef
                       (QualifiedIdentifier Any vaddress))
                     (list
-                      (SliceSingle
+                      (SliceRange
+                        (ExprLitNat 31)
                         (ExprBinOp
-                          ":"
-                          (ExprLitNat 31)
-                          (ExprBinOp
-                            "-"
-                            (ExprLitNat 32)
-                            (ExprVarRef
-                              (QualifiedIdentifier Any n))))))))))
+                          "-"
+                          (ExprLitNat 32)
+                          (ExprVarRef
+                            (QualifiedIdentifier Any n)))))))))
             (StmtBlock
               (list
                 (StmtAssign
@@ -103329,15 +103323,13 @@
                               (ExprVarRef
                                 (QualifiedIdentifier Any exp))
                               (list
-                                (SliceSingle
+                                (SliceRange
                                   (ExprBinOp
-                                    ":"
-                                    (ExprBinOp
-                                      "-"
-                                      (ExprVarRef
-                                        (QualifiedIdentifier Any E))
-                                      (ExprLitNat 1))
-                                    (ExprLitNat 0))))))
+                                    "-"
+                                    (ExprVarRef
+                                      (QualifiedIdentifier Any E))
+                                    (ExprLitNat 1))
+                                  (ExprLitNat 0)))))
                           (ExprCall
                             (QualifiedIdentifier Any Zeros)
                             (list
@@ -103367,15 +103359,13 @@
                                 (ExprVarRef
                                   (QualifiedIdentifier Any exp))
                                 (list
-                                  (SliceSingle
+                                  (SliceRange
                                     (ExprBinOp
-                                      ":"
-                                      (ExprBinOp
-                                        "-"
-                                        (ExprVarRef
-                                          (QualifiedIdentifier Any E))
-                                        (ExprLitNat 1))
-                                      (ExprLitNat 0))))))
+                                      "-"
+                                      (ExprVarRef
+                                        (QualifiedIdentifier Any E))
+                                      (ExprLitNat 1))
+                                    (ExprLitNat 0)))))
                             (ExprCall
                               (QualifiedIdentifier Any Zeros)
                               (list
@@ -103619,15 +103609,13 @@
                                       (ExprVarRef
                                         (QualifiedIdentifier Any exp))
                                       (list
-                                        (SliceSingle
+                                        (SliceRange
                                           (ExprBinOp
-                                            ":"
-                                            (ExprBinOp
-                                              "-"
-                                              (ExprVarRef
-                                                (QualifiedIdentifier Any E))
-                                              (ExprLitNat 1))
-                                            (ExprLitNat 0))))))
+                                            "-"
+                                            (ExprVarRef
+                                              (QualifiedIdentifier Any E))
+                                            (ExprLitNat 1))
+                                          (ExprLitNat 0)))))
                                   (ExprCall
                                     (QualifiedIdentifier Any Zeros)
                                     (list
@@ -103657,15 +103645,13 @@
                                         (ExprVarRef
                                           (QualifiedIdentifier Any exp))
                                         (list
-                                          (SliceSingle
+                                          (SliceRange
                                             (ExprBinOp
-                                              ":"
-                                              (ExprBinOp
-                                                "-"
-                                                (ExprVarRef
-                                                  (QualifiedIdentifier Any E))
-                                                (ExprLitNat 1))
-                                              (ExprLitNat 0))))))
+                                              "-"
+                                              (ExprVarRef
+                                                (QualifiedIdentifier Any E))
+                                              (ExprLitNat 1))
+                                            (ExprLitNat 0)))))
                                     (ExprCall
                                       (QualifiedIdentifier Any Zeros)
                                       (list
