@@ -11,6 +11,7 @@ import qualified Data.Text as T
 import qualified Data.Map as Map
 import qualified Data.Parameterized.Context as Ctx
 import qualified Lang.Crucible.Types as CT
+import qualified What4.BaseTypes as WT
 
 import qualified Language.ASL.Syntax as AS
 
@@ -25,6 +26,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnsupportedLVal AS.LValExpr
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
+                          | forall w1 w2. ExpectedBVSizeLeq (WT.NatRepr w1) (WT.NatRepr w2)
                           | forall tp . ExpectedBVType AS.Expr (CT.TypeRepr tp)
                           | forall tp . ExpectedBVType' (Maybe AS.Expr) (CT.TypeRepr tp)
                           | forall tp . ExpectedBVLValType AS.LValExpr (CT.TypeRepr tp)
@@ -50,16 +52,19 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
-                          | forall tp tp'. InvalidSymbolicSlice (CT.TypeRepr tp) (CT.TypeRepr tp')
+                          | forall w w'. InvalidSymbolicSlice (WT.NatRepr w) (WT.NatRepr w')
                           | TypeUnificationFailure AS.Type TypeConstraint StaticEnv
                           | TypesUnificationFailure [AS.Type] TypeConstraint
+                          | RequiresTypeConstraint AS.Expr TypeConstraint
                           | ReturnTypeUnificationFailure AS.Type AS.Type StaticEnv
                           | StructFieldMismatch AS.Expr
                           | RequiredConcreteValue T.Text AS.Expr
+                          | forall tp. InvalidLValSlice AS.Slice TypeConstraint (CT.TypeRepr tp)
                           | UnsupportedSlice AS.Slice TypeConstraint
                           | CannotMonomorphizeFunctionCall T.Text StaticEnv
                           | CannotMonomorphizeOverloadedFunctionCall T.Text [AS.Expr]
                           | CannotStaticallyEvaluateType AS.Type StaticEnv
+                          | CannotDetermineBVLength (Maybe AS.Expr) TypeConstraint
                           | UnexpectedExtendedType AS.Expr ExtendedTypeData
                           | ConflictingExtendedTypeData T.Text ExtendedTypeData ExtendedTypeData
                           | MissingRegisterField AS.Expr T.Text
@@ -73,7 +78,7 @@ deriving instance Show TranslationException
 instance X.Exception TranslationException
 
 data TracedTranslationException =
-  TracedTranslationException [AS.Stmt] [AS.Expr] TranslationException
+  TracedTranslationException T.Text [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
 
 deriving instance Show TracedTranslationException
 

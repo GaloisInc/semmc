@@ -1,73 +1,5 @@
 (AslDefinitions
   (DefCallable
-    (QualifiedIdentifier Any Zeros)
-    (list)
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any N))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprCall
-                (QualifiedIdentifier Any Zeros)
-                (list
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
-  (DefCallable
-    (QualifiedIdentifier Any Ones)
-    (list)
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any N))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprCall
-                (QualifiedIdentifier Any Ones)
-                (list
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
-  (DefCallable
-    (QualifiedIdentifier Any ZeroExtend)
-    (list
-      (SymDecl
-        val
-        (TypeFun
-          bits
-          (ExprVarRef
-            (QualifiedIdentifier Any M)))))
-    (Just
-      (ReturnType
-        (list
-          (TypeFun
-            bits
-            (ExprVarRef
-              (QualifiedIdentifier Any N))))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprCall
-                (QualifiedIdentifier Any ZeroExtend)
-                (list
-                  (ExprVarRef
-                    (QualifiedIdentifier Any val))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any N))))))))))
-  (DefCallable
     (QualifiedIdentifier Any Replicate)
     (list
       (SymDecl
@@ -275,6 +207,21 @@
         linked_to
         (TypeRef
           (QualifiedIdentifier Any boolean))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any FALSE))))))))
+  (DefCallable
+    (QualifiedIdentifier Any IsBlockDescriptorNTBitValid)
+    (list)
     (Just
       (ReturnType
         (list

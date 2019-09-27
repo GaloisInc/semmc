@@ -40,6 +40,7 @@ module SemMC.ASL.Translation.Preprocess
   , exprToStatic
   , mkSignature
   , registerTypeSynonyms
+  , localTypeHints
   , mkExtendedTypeData'
   , mkBaseStructRepr
   ) where
@@ -163,6 +164,15 @@ registerTypeSynonyms =
   , ("SCTLRType", "SCTLR_EL1")
   ]
 
+-- Extra typing hints for local variables, where
+-- type inference would otherwise require lookahead
+localTypeHints :: Map.Map (T.Text, T.Text) AS.Type
+localTypeHints = Map.fromList
+  [(("AArch32_TranslationTableWalkLD_7", "baseaddress"), AS.TypeFun "bits" (AS.ExprLitInt 40))
+  ,(("AArch32_TranslationTableWalkLD_7", "outputaddress"), AS.TypeFun "bits" (AS.ExprLitInt 40))
+  ,(("AArch64_TranslationTableWalk_8", "baseaddress"), AS.TypeFun "bits" (AS.ExprLitInt 52))
+  ,(("AArch64_TranslationTableWalk_8", "outputaddress"), AS.TypeFun "bits" (AS.ExprLitInt 52))
+  ]
 
 -- TODO: Type synonyms are currently a global property,
 -- ideally type normalization should happen with respect to
@@ -988,6 +998,8 @@ applyStaticEnv env t = case applyTypeSynonyms t of
     Just (StaticInt i) -> AS.TypeFun "bits" (AS.ExprLitInt i)
     _ -> X.throw $ CannotStaticallyEvaluateType t env
   _ -> t
+
+
 
 exprToStatic :: StaticEnv -> AS.Expr -> Maybe StaticValue
 exprToStatic env e = case e of

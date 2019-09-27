@@ -265,6 +265,7 @@ data ExpectedException =
   | BadInstructionSpecification T.Text
   | MissingGlobalDeclaration T.Text
   | InsufficientStaticTypeInformation
+  | CannotSignExtendUnknownBVSize
   | BoolComparisonUnsupported
   | RealValuesUnsupported
   | LValSliceUnsupported
@@ -273,26 +274,41 @@ data ExpectedException =
   | ParserError
   deriving (Eq, Ord, Show)
 
+badStaticInstructions :: [T.Text]
+badStaticInstructions =
+  ["aarch32_VDUP_r_A", "aarch32_CRC32_A", "aarch32_VSLI_A", "aarch32_VSRI_A"
+  ,"PFALSE_P__", "SETFFR_F__"]
+
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
   SExcept (SigException _ (TypeNotFound "real")) -> Just $ RealValuesUnsupported
-  TExcept _ _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
-  TExcept _ _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
-  TExcept _ _ (UnsupportedSlice (AS.SliceSingle _) _) -> Just $ SymbolicArguments "Slice"
-  TExcept _ _ (UnsupportedSlice (AS.SliceRange _ _) _) -> Just $ SymbolicArguments "Slice"
-  TExcept _ _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
-  TExcept _ _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
-  TExcept _ _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
-  TExcept _ _ (UnboundName nm) ->
+  TExcept _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
+  TExcept _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
+  TExcept _ (CannotDetermineBVLength _ _) -> case k of
+   KeyInstr (InstructionIdent nm _ _)
+     | nm `elem` badStaticInstructions ->
+     Just $ InsufficientStaticTypeInformation
+   _ -> Nothing
+  TExcept _ (UnsupportedSlice (AS.SliceRange _ _) _) -> case k of
+    KeyInstr (InstructionIdent nm _ _)
+      | nm `elem` badStaticInstructions ->
+      Just $ InsufficientStaticTypeInformation
+    KeyInstr (InstructionIdent "aarch32_SBFX_A" _ _) ->
+      Just $ CannotSignExtendUnknownBVSize
+    _ -> Nothing
+  TExcept _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
+  TExcept _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
+  TExcept _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
+  TExcept _ (UnboundName nm) ->
     if List.elem nm ["imm32", "index", "m", "mode", "regs", "sz", "carry", "add", "tag_checked"]
     then Just $ BadInstructionSpecification nm
     else Nothing
-  TExcept _ _ (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
-  TExcept _ _ (UnsupportedBinaryOperator AS.BinOpRem) -> Just $ ExponentiationUnsupported
-  TExcept _ _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
-  TExcept _ _ (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
-  TExcept _ _ (ExpectedBVType _ _) -> Just $ ParserError
+  TExcept _ (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
+  TExcept _ (UnsupportedBinaryOperator AS.BinOpRem) -> Just $ RmemUnsupported
+  TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
+  TExcept _ (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
+  TExcept _ (ExpectedBVType _ _) -> Just $ ParserError
   _ -> Nothing
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
@@ -388,11 +404,56 @@ reportStats sopts sm = do
       Nothing -> id
   
 data TranslatorException =
-    TExcept [AS.Stmt] [AS.Expr] TranslationException
+    TExcept (T.Text, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
   | SExcept SigException
   | SomeExcept X.SomeException
 
-deriving instance Show TranslatorException
+instance Show TranslatorException where
+  show e = case e of
+    TExcept (nm, stmts, exprs) te ->
+      "Translator exception\n"
+      ++ "Statement call stack:\n"
+      ++ unlines (map (\stmt -> withStar $ prettyStmt 3 stmt) (List.reverse stmts))
+      ++ "\n Expression call stack:\n"
+      ++ unlines (map (\expr -> "*  " ++ prettyExprConstraint expr) (List.reverse exprs))
+      ++ "\n ** Exception in: " ++ T.unpack nm ++ "\n"
+      ++ show te
+
+    SExcept se -> "Signature exception:\n" ++ show se
+    SomeExcept err -> "General exception:\n" ++ show err
+
+withStar :: String -> String
+withStar (' ' : rest) = '*' : rest
+withStar s = s
+
+atDepth :: Int -> String -> String
+atDepth depth s = concat (replicate depth " ") ++ s
+
+withLines :: [String] -> String
+withLines strs = List.intercalate "\n" strs
+
+prettyStmt :: Int -> AS.Stmt -> String
+prettyStmt depth stmt = case stmt of
+  AS.StmtIf tests melse ->
+    atDepth depth "StmtIf: " ++
+    unlines (map (\(test, stmts) ->
+           prettyExpr test ++ "\n"
+           ++ withLines (map (prettyStmt $ depth + 1) stmts)) tests)
+    ++
+    case melse of
+      Just stmts -> (atDepth depth "Else\n") ++ withLines (map (prettyStmt $ depth + 1) stmts)
+      Nothing -> ""
+  AS.StmtRepeat stmts test ->
+    atDepth depth "StmtRepeat: " ++ prettyExpr test ++ "\n"
+    ++ withLines (map (prettyStmt $ depth + 1) stmts)
+  _ -> atDepth depth $ show stmt
+
+prettyExprConstraint :: (AS.Expr, TypeConstraint) -> String
+prettyExprConstraint (expr, constraint) = show expr ++ "\n   :: " ++ show constraint
+
+prettyExpr :: AS.Expr -> String
+prettyExpr expr = show expr
+
 instance X.Exception TranslatorException
 
 data InstructionIdent =
@@ -484,14 +545,14 @@ collectExcept k e = do
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
   a <- MSS.lift ((Left <$> f)
-                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept [] [] e))
+                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept (T.empty,[],[]) e))
                   `X.catch` (\(e :: TracedTranslationException) -> return $ Right (tracedException e))
                   `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
   case a of
     Left r -> return (Just r)
     Right err -> (\_ -> Nothing) <$> collectExcept k err
   where
-    tracedException (TracedTranslationException stmts exprs e) = TExcept stmts exprs e
+    tracedException (TracedTranslationException nm stmts exprs e) = TExcept (nm, stmts, exprs) e
   
 
 translationLoop :: InstructionIdent

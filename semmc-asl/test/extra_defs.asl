@@ -1,12 +1,3 @@
-bits(N) Zeros()
-    return Zeros(N);
-
-bits(N) Ones()
-    return Ones(N);
-
-bits(N) ZeroExtend(bits(M) val)
-    return ZeroExtend(val, N);
-
 bits(N*M) Replicate(bits(N) bv)
     return Replicate(bv, M);
 
@@ -45,4 +36,7 @@ boolean IsPhysicalSErrorPending()
 
 
 boolean AArch64.BreakpointValueMatch(integer n, bits(64) vaddress, boolean linked_to)
+  return FALSE;
+
+boolean IsBlockDescriptorNTBitValid()
   return FALSE;

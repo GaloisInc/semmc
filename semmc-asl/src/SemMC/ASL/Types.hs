@@ -24,6 +24,7 @@ module SemMC.ASL.Types
   , RegisterSig
   , ExtendedTypeData(..)
   , TypeConstraint(..)
+  , ConstraintHint(..)
   , userTypeRepr
   , toBaseType
   , toBaseTypes
@@ -245,9 +246,17 @@ data ExtendedTypeData =
   | TypeArray ExtendedTypeData
   deriving (Show, Eq)
 
+data ConstraintHint where
+  HintAnyBVSize :: ConstraintHint
+  HintMaxBVSize :: 1 WT.<= w => WT.NatRepr w -> ConstraintHint
 
-data TypeConstraint =
-    ConstraintNone
-  | ConstraintSingle (Some CT.TypeRepr)
-  | ConstraintTuple [TypeConstraint]
-  deriving Show
+deriving instance Show ConstraintHint
+
+
+data TypeConstraint where
+  ConstraintNone :: TypeConstraint -- wildcard
+  ConstraintSingle :: CT.TypeRepr tp -> TypeConstraint -- concrete type
+  ConstraintHint :: ConstraintHint -> TypeConstraint -- hints for inferring types
+  ConstraintTuple :: [TypeConstraint] -> TypeConstraint
+
+deriving instance Show TypeConstraint
