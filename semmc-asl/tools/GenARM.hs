@@ -300,10 +300,6 @@ expectedExceptions k ex = case ex of
   TExcept _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
   TExcept _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
   TExcept _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
-  TExcept _ (UnboundName nm) ->
-    if List.elem nm ["imm32", "index", "m", "mode", "regs", "sz", "carry", "add", "tag_checked"]
-    then Just $ BadInstructionSpecification nm
-    else Nothing
   TExcept _ (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
   TExcept _ (UnsupportedBinaryOperator AS.BinOpRem) -> Just $ RmemUnsupported
   TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation

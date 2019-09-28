@@ -137,28 +137,24 @@ mkSyntaxOverrides defs =
       --be specially handled
 
       stmtOverrides stmt = case stmt of
-        AS.StmtAssign (AS.LValArrayIndex (AS.LValVarRef qName) slices) rhs ->
-          if Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters then
+        AS.StmtAssign (AS.LValArrayIndex (AS.LValVarRef qName) slices) rhs
+          | Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters ->
             AS.StmtCall (mkSetterName True qName) (rhs : map getSliceExpr slices)
-          else stmt
-        AS.StmtAssign (AS.LValTuple (AS.LValArrayIndex (AS.LValVarRef qName) slices : rest)) rhs ->
-          if Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters then
+        AS.StmtAssign (AS.LValTuple (AS.LValArrayIndex (AS.LValVarRef qName) slices : rest)) rhs
+          | Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters ->
             AS.StmtAssign (AS.LValTuple rest)
              (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "SETTERTUPLE")
               ([AS.ExprVarRef (mkSetterName True qName)]
                ++ (rhs : map getSliceExpr slices)))
-          else stmt
-        AS.StmtAssign (AS.LValSliceOf (AS.LValArrayIndex (AS.LValVarRef qName) slices) outerSlices) rhs ->
-          if Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters then
+        AS.StmtAssign (AS.LValSliceOf (AS.LValArrayIndex (AS.LValVarRef qName) slices) outerSlices) rhs
+          | Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters ->
             AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTERSETTER")
               ([AS.ExprSlice (AS.ExprVarRef (mkGetterName True qName)) outerSlices,
                AS.ExprVarRef (mkSetterName True qName)]
                ++ (rhs : map getSliceExpr slices))
-          else stmt
-        AS.StmtAssign (AS.LValVarRef qName) rhs ->
-          if Set.member (mkFunctionName (mkSetterName False qName) 1) setters then
+        AS.StmtAssign (AS.LValVarRef qName) rhs
+          | Set.member (mkFunctionName (mkSetterName False qName) 1) setters ->
             AS.StmtCall (mkSetterName False qName) [rhs]
-          else stmt
         _ -> stmt
 
       exprOverrides' expr = case expr of
@@ -167,14 +163,14 @@ mkSyntaxOverrides defs =
           AS.ExprSlice e slices
         AS.ExprIndex e slices@[AS.SliceRange _ _] ->
           AS.ExprSlice e slices
-        AS.ExprIndex (AS.ExprVarRef qName) slices ->
-          if Set.member (mkFunctionName (mkGetterName True qName) (length slices)) getters then
+        AS.ExprIndex (AS.ExprVarRef qName) slices
+          | Set.member (mkFunctionName (mkGetterName True qName) (length slices)) getters ->
             AS.ExprCall (mkGetterName True qName) (map getSliceExpr slices)
-          else expr
-        AS.ExprVarRef qName ->
-          if Set.member (mkFunctionName (mkGetterName False qName) 0) getters then
+        AS.ExprVarRef qName
+          | Set.member (mkFunctionName (mkGetterName False qName) 0) getters ->
             AS.ExprCall (mkGetterName False qName) []
-          else expr
+        AS.ExprCall (AS.QualifiedIdentifier _ "CurrentInstrSet") [] ->
+          AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "CurrentInstrSet")
         _ -> expr
 
       lvalOverrides lval = lval

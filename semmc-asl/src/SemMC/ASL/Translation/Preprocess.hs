@@ -148,6 +148,7 @@ builtinGlobals =
   [ ("UNDEFINED", Some WT.BaseBoolRepr)
   , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
   , ("EXCEPTIONTAKEN", Some WT.BaseBoolRepr)
+  , ("CurrentInstrSet", Some WT.BaseIntegerRepr)
   ]
 
 
@@ -1073,7 +1074,7 @@ mkSignature defs env sig =
         , funcSigRepr = retT
         , funcArgReprs = args
         , funcGlobalReprs = sfuncGlobalReprs fsig
-        , funcStaticEnv = env
+        , funcStaticEnv = addStandardStaticEnv env
         , funcArgs = sfuncArgs fsig
         }
     SomeSimpleProcedureSignature fsig |
@@ -1083,7 +1084,7 @@ mkSignature defs env sig =
         { procName = mkFinalFunctionName env $ sprocName fsig
         , procArgReprs = args
         , procGlobalReprs = sprocGlobalReprs fsig
-        , procStaticEnv = env
+        , procStaticEnv = addStandardStaticEnv env
         , procArgs = sprocArgs fsig
         }
   where
@@ -1117,8 +1118,11 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
   case mEnc of
     Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
     Just enc -> do
-      let instStmts = createInstStmts (AS.encDecode enc) instExecute
+      let initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
+      let initStmts = AS.encDecode enc ++ initUnusedFields ++ initializeGlobals enc
+      let instStmts = initStmts ++ instPostDecode ++ instExecute
       let instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
+      let staticEnv = addInitializedVariables initStmts (addStandardStaticEnv emptyStaticEnv)
       globalVars <- instGlobalVars
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
@@ -1131,10 +1135,76 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       let pSig = ProcedureSignature { procName = name
                                     , procArgReprs = argReprs
                                     , procGlobalReprs = globalReprs
-                                    , procStaticEnv = emptyStaticEnv
+                                    , procStaticEnv = staticEnv
                                     , procArgs = []
                                     }
       return (Some (SomeProcedureSignature pSig), instStmts)
+
+-- | In general execution bodies may refer to fields that have not been set by
+-- this particular encoding. To account for this, we initialize all fields from
+-- other encodings to undefined values, under the assumption that they should not be read.
+-- Ambiguous fields (with multiple sizes) are not initialized.
+initializeUnusedFields :: [AS.InstructionField] -> [[AS.InstructionField]] -> [AS.Stmt]
+initializeUnusedFields encFields allFields =
+  let
+    getFieldEntry (AS.InstructionField instFieldName _ instFieldOffset) =
+      (instFieldName, [instFieldOffset])
+    encFieldsSet = Set.fromList (map (\(AS.InstructionField nm _ _) -> nm) encFields)
+    otherFieldsMap = Map.withoutKeys
+      (Map.fromListWith (++) (map getFieldEntry $ concat allFields))
+      encFieldsSet
+
+    getDecl instFieldName [instFieldOffset] =
+        Just $ AS.StmtVarsDecl (AS.TypeFun "bits" (AS.ExprLitInt instFieldOffset)) [instFieldName]
+    getDecl _ _ = Nothing
+  in
+    Map.elems $ Map.mapMaybeWithKey getDecl otherFieldsMap
+
+initializeGlobals :: AS.InstructionEncoding -> [AS.Stmt]
+initializeGlobals AS.InstructionEncoding{..} =
+  [AS.StmtVarDeclInit
+     ("CurrentInstrSet", AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer"))
+      (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny (instrSetToVar encInstrSet)))]
+
+instrSetToInt :: AS.InstructionSet -> Integer
+instrSetToInt is = case is of
+  AS.A32 -> 0
+  AS.T32 -> 1
+  AS.T16 -> 2
+  AS.A64 -> 3
+
+allInstrSets :: [AS.InstructionSet]
+allInstrSets = [AS.A32, AS.T32, AS.T16, AS.A64]
+
+instrSetToVar :: AS.InstructionSet -> T.Text
+instrSetToVar is = case is of
+  AS.A32 -> "InstrSet_A32"
+  AS.T32 -> "InstrSet_T32"
+  AS.T16 -> "InstrSet_T16"
+  AS.A64 -> "InstrSet_A64"
+
+addStandardStaticEnv :: StaticEnv -> StaticEnv
+addStandardStaticEnv env =
+   foldl addInstructionSet env allInstrSets
+ where
+   addInstructionSet env' is = insertStaticEnv (instrSetToVar is) (StaticInt $ instrSetToInt is) env'
+
+-- | Evaluate any known static values for this specific encoding
+addInitializedVariables :: [AS.Stmt] -> StaticEnv -> StaticEnv
+addInitializedVariables stmts env =
+  foldl addStaticAssignment env stmts
+  where
+    addStaticAssignment env' stmt = case stmt of
+      AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier _ ident)) e
+        | Just v <- exprToStatic env' e ->
+          insertStaticEnv ident v env'
+      AS.StmtVarDeclInit (nm, _) e
+        | Just v <- exprToStatic env' e ->
+          insertStaticEnv nm v env'
+      _ -> env'
+
+
+
 
 -- | Create the full list of statements in an instruction given the main execute
 -- block and the encoding-specific operations.

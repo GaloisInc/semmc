@@ -132,7 +132,10 @@ lookupVarRef :: forall arch h s ret
              . T.Text
             -> Generator h s arch ret (Some (CCG.Expr (ASLExt arch) s))
 lookupVarRef name = do
-  fromMaybe (X.throw (UnboundName name)) <$> lookupVarRef' name
+  mref <- lookupVarRef' name
+  case mref of
+    Just ref -> return ref
+    Nothing -> throwTrace $ UnboundName name
 
 -- | Inside of the translator, look up the current definition of a name
 --
@@ -1137,17 +1140,15 @@ translateIf :: Overrides arch
 translateIf ov clauses melse =
   case clauses of
     [] -> mapM_ (translateStatement ov) (fromMaybe [] melse)
-    (cond, body) : rest -> do
-      env <- MS.gets tsStaticEnv
-      case exprToStatic env cond of
-        Just (StaticBool True) -> mapM_ (translateStatement ov) body
-        Just (StaticBool False) -> translateIf ov rest melse
-        _ -> do
-          Some condAtom <- translateExpr ov cond
-          Refl <- assertAtomType cond CT.BoolRepr condAtom
-          let genThen = mapM_ (translateStatement ov) body
-          let genElse = translateIf ov rest melse
-          CCG.ifte_ (CCG.AtomExpr condAtom) genThen genElse
+    (cond, body) : rest ->
+      withStaticTest cond
+        (mapM_ (translateStatement ov) body)
+        (translateIf ov rest melse) $ do
+      Some condAtom <- translateExpr ov cond
+      Refl <- assertAtomType cond CT.BoolRepr condAtom
+      let genThen = mapM_ (translateStatement ov) body
+      let genElse = translateIf ov rest melse
+      CCG.ifte_ (CCG.AtomExpr condAtom) genThen genElse
 
 translateCase :: Overrides arch
               -> AS.Expr
@@ -1645,6 +1646,18 @@ translateSlice' ov atom' slice constraint = do
           _ -> throwTrace $ UnsupportedSlice slice constraint
       _ -> throwTrace $ UnsupportedSlice slice constraint
 
+withStaticTest :: AS.Expr
+               -> Generator h s arch ret a
+               -> Generator h s arch ret a
+               -> Generator h s arch ret a
+               -> Generator h s arch ret a
+withStaticTest test ifTrue ifFalse ifUnknown = do
+  env <- MS.gets tsStaticEnv
+  case exprToStatic env test of
+    Just (StaticBool True) -> ifTrue
+    Just (StaticBool False) -> ifFalse
+    _ -> ifUnknown
+
 -- | Translate the expression form of a conditional into a Crucible atom
 translateIfExpr :: Overrides arch
                 -> AS.Expr
@@ -1654,7 +1667,10 @@ translateIfExpr :: Overrides arch
 translateIfExpr ov orig clauses elseExpr =
   case clauses of
     [] -> X.throw (MalformedConditionalExpression orig)
-    [(test, res)] -> do
+    [(test, res)] ->
+      withStaticTest test
+        (translateExpr' ov res ConstraintNone)
+        (translateExpr' ov elseExpr ConstraintNone) $ do
       Some testA <- translateExpr ov test
       (Some resA, extRes) <- translateExpr' ov res ConstraintNone
       (Some elseA, extElse) <- translateExpr' ov elseExpr (someTypeOfAtom resA)
@@ -1666,7 +1682,10 @@ translateIfExpr ov orig clauses elseExpr =
         CT.AsBaseType btr -> do
           atom <- CCG.mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr elseA)))
           return (Some atom, ext)
-    (test, res) : rest -> do
+    (test, res) : rest ->
+      withStaticTest test
+        (translateExpr' ov res ConstraintNone)
+        (translateIfExpr ov orig rest elseExpr) $ do
       (Some trA, extRest) <- translateIfExpr ov orig rest elseExpr
       Some testA <- translateExpr ov test
       (Some resA, extRes) <- translateExpr' ov res (someTypeOfAtom trA)
@@ -2348,7 +2367,6 @@ overrides = Overrides {..}
             mkAtom (CCG.App CCE.EmptyApp)
           AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> Just $ do
             mkAtom (CCG.App (CCE.BVUndef (WT.knownNat @11)))
-
           -- FIXME: Memory model
           AS.ExprCall (AS.QualifiedIdentifier _ "__ReadRAM") [_, szExpr, _, addr] -> Just $ do
             env <- MS.gets tsStaticEnv
