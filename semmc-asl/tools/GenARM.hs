@@ -300,8 +300,6 @@ expectedExceptions k ex = case ex of
   TExcept _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
   TExcept _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
   TExcept _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
-  TExcept _ (UnsupportedBinaryOperator AS.BinOpPow) -> Just $ ExponentiationUnsupported
-  TExcept _ (UnsupportedBinaryOperator AS.BinOpRem) -> Just $ RmemUnsupported
   TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
   TExcept _ (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
   TExcept _ (ExpectedBVType _ _) -> Just $ ParserError

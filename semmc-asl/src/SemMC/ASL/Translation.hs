@@ -1763,6 +1763,7 @@ translateBinaryOp ov op e1 e2 = do
   Some a2 <- translateExpr ov e2
   let p1 = (e1, a1)
   let p2 = (e2, a2)
+  env <- MS.gets tsStaticEnv
   case op of
     AS.BinOpPlusPlus -> X.throw (UnsupportedBinaryOperator op)
     AS.BinOpLogicalAnd -> logicalBinOp CCE.And p1 p2
@@ -1790,17 +1791,27 @@ translateBinaryOp ov op e1 e2 = do
     AS.BinOpSub -> applyBinOp subOp p1 p2
     AS.BinOpMul -> applyBinOp mulOp p1 p2
     AS.BinOpMod -> applyBinOp modOp p1 p2
+    --FIXME: REM is only used once in mapvpmw, is it just mod there?
+    AS.BinOpRem -> applyBinOp modOp p1 p2
     AS.BinOpDiv -> applyBinOp divOp p1 p2
     AS.BinOpShiftLeft -> bvBinOp CCE.BVShl p1 p2
     AS.BinOpShiftRight -> bvBinOp CCE.BVLshr p1 p2
     -- FIXME: What is the difference between BinOpDiv and BinOpDivide?
-    AS.BinOpConcat -> case (CCG.typeOfAtom a1, CCG.typeOfAtom a2) of
-      (CT.BVRepr n1, CT.BVRepr n2)
-        | Just n1PosProof <- WT.isPosNat n1
-        , WT.LeqProof <- WT.leqAdd n1PosProof n2 ->
-          Some <$> CCG.mkAtom (CCG.App (CCE.BVConcat n1 n2 (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
-      (CT.BVRepr _, t2) -> throwTrace $ ExpectedBVType e2 t2
-      (t1, _) -> throwTrace $ ExpectedBVType e1 t1
+    AS.BinOpConcat -> do
+      BVRepr n1 <- getAtomBVRepr a1
+      BVRepr n2 <- getAtomBVRepr a2
+      Just n1PosProof <- return $ WT.isPosNat n1
+      WT.LeqProof <- return $ WT.leqAdd n1PosProof n2
+      Some <$> CCG.mkAtom (CCG.App (CCE.BVConcat n1 n2 (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+    AS.BinOpPow
+      | Just (StaticInt 2) <- exprToStatic env e1 -> do
+        Refl <- assertAtomType e2 CT.IntegerRepr a2
+        let nr = WT.knownNat @128
+        let shift = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a2)
+        let base = CCG.App $ CCE.BVLit nr 1
+        let shifted = CCG.App $ (CCE.BVShl nr base shift)
+        Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr shifted))
+
     _ -> X.throw (UnsupportedBinaryOperator op)
 
 -- Arithmetic operators
