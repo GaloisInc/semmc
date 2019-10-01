@@ -47,6 +47,7 @@ module SemMC.ASL.Translation.Preprocess
 
 import Debug.Trace (traceM)
 
+import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad (void)
 import qualified Control.Monad.Except as E
@@ -1240,4 +1241,18 @@ overrides = Overrides {..}
         overrideExpr e = case e of
           AS.ExprCall (AS.QualifiedIdentifier q "Min") args ->
             Just $ [AS.ExprCall (AS.QualifiedIdentifier q "Minintegerinteger") args]
+          AS.ExprCall (AS.QualifiedIdentifier q "Align") args ->
+            Just $ [ AS.ExprCall (AS.QualifiedIdentifier q "Alignintegerinteger") args
+                   , AS.ExprCall (AS.QualifiedIdentifier q "AlignbitsNinteger") args
+                   ]
+          _ -> mkFaultOv e "IsExternalAbort" <|>
+               mkFaultOv e "IsAsyncAbort" <|>
+               mkFaultOv e "IsSErrorInterrupt" <|>
+               mkFaultOv e "IsExternalSyncAbort"
+
+        mkFaultOv e nm = case e of
+          AS.ExprCall (AS.QualifiedIdentifier q nm') args | nm == nm' ->
+            Just $ [ AS.ExprCall (AS.QualifiedIdentifier q (nm <> "FaultRecord")) args
+                   , AS.ExprCall (AS.QualifiedIdentifier q (nm <> "Fault")) args
+                   ]
           _ -> Nothing

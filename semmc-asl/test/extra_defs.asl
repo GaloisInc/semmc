@@ -40,3 +40,7 @@ boolean AArch64.BreakpointValueMatch(integer n, bits(64) vaddress, boolean linke
 
 boolean IsBlockDescriptorNTBitValid()
   return FALSE;
+
+bits(11) LSInstructionSyndrome()
+  ret = bits(11) UNKNOWN;
+  return ret;

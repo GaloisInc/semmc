@@ -1247,10 +1247,6 @@ translateExpr'' ov expr ty
         Just (StaticInt i) -> mkAtom (CCG.App (CCE.IntLit i))
         Just (StaticBool b) -> mkAtom (CCG.App (CCE.BoolLit b))
         _ -> case expr of
-          AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) ->
-            translateExpr' ov (AS.ExprInSet e [AS.SetEltSingle mask]) ty
-          AS.ExprBinOp AS.BinOpNEQ e mask@(AS.ExprLitMask _) ->
-            translateExpr' ov (AS.ExprUnOp AS.UnOpNot (AS.ExprInSet e [AS.SetEltSingle mask])) ty
           AS.ExprLitInt i -> mkAtom (CCG.App (CCE.IntLit i))
           AS.ExprLitBin bits -> do
             let nBits = length bits
@@ -2006,6 +2002,39 @@ relaxConstraint constraint = case constraint of
   ConstraintSingle (CT.BVRepr nr) -> ConstraintHint (HintMaxBVSize nr)
   _ -> constraint
 
+-- Overrides that dispatch to ambiguous function overloads based on the argument type
+overloadedDispatchOverrides :: AS.Expr -> TypeConstraint -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
+overloadedDispatchOverrides e tc = case e of
+  AS.ExprCall (AS.QualifiedIdentifier q "Align") args@[e1, e2] -> Just $ do
+    Some atom1 <- translateExpr overrides e1
+    nm <- case CCG.typeOfAtom atom1 of
+      CT.IntegerRepr ->
+        return $ "Alignintegerinteger"
+      CT.BVRepr _ ->
+        return $ "AlignbitsNinteger"
+    translateExpr' overrides (AS.ExprCall (AS.QualifiedIdentifier q nm) args) ConstraintNone
+  AS.ExprCall (AS.QualifiedIdentifier q fun@"Min") args@[e1, e2] -> Just $ do
+    Some atom1 <- translateExpr overrides e1
+    Some atom2 <- translateExpr overrides e2
+    Refl <- assertAtomType e1 CT.IntegerRepr atom1
+    Refl <- assertAtomType e2 CT.IntegerRepr atom2
+    translateExpr' overrides (AS.ExprCall (AS.QualifiedIdentifier q "Minintegerinteger") args) tc
+  _ ->  mkFaultOv "IsExternalAbort" <|>
+        mkFaultOv "IsAsyncAbort" <|>
+        mkFaultOv "IsSErrorInterrupt" <|>
+        mkFaultOv "IsExternalSyncAbort"
+  where
+    mkFaultOv nm =
+      case e of
+        AS.ExprCall (AS.QualifiedIdentifier q nm') [arg] | nm == nm' -> Just $ do
+          (_, ext) <- translateExpr' overrides arg ConstraintNone
+          ov <- case ext of
+            TypeStruct _ -> return $ "FaultRecord"
+            _ -> return $ "Fault"
+          translateExpr' overrides (AS.ExprCall (AS.QualifiedIdentifier q (nm <> ov)) [arg]) tc
+        _ -> Nothing
+
+
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (Generator h s arch ret ())
@@ -2093,6 +2122,8 @@ overrides = Overrides {..}
           atom <- CCG.mkAtom e
           return (Some atom, TypeBasic)
 
+        isSlice (AS.ExprSlice _ _) = True
+        isSlice _ = False
 
 
         list1ToMaybe [x] = Just (Just x)
@@ -2143,19 +2174,11 @@ overrides = Overrides {..}
 
         overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
         overrideExpr e ty = case e of
-          AS.ExprBinOp bop arg1@(AS.ExprSlice _ _) arg2@(AS.ExprSlice _ _)
-            | bop == AS.BinOpEQ || bop == AS.BinOpNEQ -> Just $ do
-                (Some atom1', _) <- translateExpr' overrides arg1 (ConstraintHint HintAnyBVSize)
-                (Some atom2', _) <- translateExpr' overrides arg2 (ConstraintHint HintAnyBVSize)
-                BVAtomPair _ atom1 atom2 <- matchBVSizes atom1' atom2'
-                (Some result') <- applyBinOp eqOp (arg1, atom1) (arg2, atom2)
-                Refl <- assertAtomType' CT.BoolRepr result'
-                result <- case bop of
-                  AS.BinOpEQ -> return result'
-                  AS.BinOpNEQ -> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr result')))
-                return (Some result, TypeBasic)
-          --FIXME: Generalize this if necessary
-          AS.ExprBinOp bop arg1@(AS.ExprSlice _ _) arg2@(AS.ExprCall (AS.QualifiedIdentifier _ "Zeros") _)
+          AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) -> Just $ do
+            translateExpr' overrides (AS.ExprInSet e [AS.SetEltSingle mask]) ty
+          AS.ExprBinOp AS.BinOpNEQ e mask@(AS.ExprLitMask _) -> Just $ do
+            translateExpr' overrides (AS.ExprUnOp AS.UnOpNot (AS.ExprInSet e [AS.SetEltSingle mask])) ty
+          AS.ExprBinOp bop arg1@(AS.ExprSlice _ _) arg2
             | bop == AS.BinOpEQ || bop == AS.BinOpNEQ -> Just $ do
                 (Some atom1', _) <- translateExpr' overrides arg1 (ConstraintHint HintAnyBVSize)
                 BVRepr atom1sz <- getAtomBVRepr atom1'
@@ -2286,12 +2309,6 @@ overrides = Overrides {..}
               CT.IntegerRepr -> do
                 mkAtom (CCG.App (CCE.IntAbs (CCG.AtomExpr atom)))
               tp -> X.throw $ ExpectedIntegerType e tp
-          AS.ExprCall (AS.QualifiedIdentifier _ fun@"Min") args@[e1, e2] -> Just $ do
-            Some atom1 <- translateExpr overrides e1
-            Some atom2 <- translateExpr overrides e2
-            Refl <- assertAtomType e1 CT.IntegerRepr atom1
-            Refl <- assertAtomType e2 CT.IntegerRepr atom2
-            translateExpr' overrides (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Minintegerinteger") [e1, e2]) ty
           -- FIXME: fix definition below; currently it just returns its args
           AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ do
             Some xAtom <- translateExpr overrides x
@@ -2354,30 +2371,9 @@ overrides = Overrides {..}
             mkAtom (CCG.AtomExpr xAtom)
           -- FIXME: implement this (asl definition is recursive and dependently typed)
           -- There are two overloadings of this based on the type of x
-          AS.ExprCall (AS.QualifiedIdentifier _ "Align") [x, y] -> Just $ do
-            Some xAtom <- translateExpr overrides x
-            mkAtom (CCG.AtomExpr xAtom)
-          -- FIXME: There are two overloadings of this
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [x] -> Just $ do
-            mkAtom (CCG.App (CCE.BoolLit False))
-          -- FIXME: There are two overloadings of this
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalAbort") [] -> Just $ do
-            mkAtom (CCG.App (CCE.BoolLit False))
-          -- FIXME: There are two overloadings of this
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsAsyncAbort") [x] -> Just $ do
-            mkAtom (CCG.App (CCE.BoolLit False))
-          -- FIXME: There are two overloadings of this
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsExternalSyncAbort") [x] -> Just $ do
-            mkAtom (CCG.App (CCE.BoolLit False))
-          AS.ExprCall (AS.QualifiedIdentifier _ "IsSErrorInterrupt") [x] -> Just $ do
-            mkAtom (CCG.App (CCE.BoolLit False))
-          AS.ExprCall (AS.QualifiedIdentifier _ "HaveFP16Ext") [] -> Just $ do
-            mkAtom (CCG.App (CCE.BoolLit False))
           AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
             atom <- CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
             mkAtom (CCG.App CCE.EmptyApp)
-          AS.ExprCall (AS.QualifiedIdentifier _ "LSInstructionSyndrome") [] -> Just $ do
-            mkAtom (CCG.App (CCE.BVUndef (WT.knownNat @11)))
           -- FIXME: Memory model
           AS.ExprCall (AS.QualifiedIdentifier _ "__ReadRAM") [_, szExpr, _, addr] -> Just $ do
             env <- MS.gets tsStaticEnv
@@ -2386,7 +2382,7 @@ overrides = Overrides {..}
                , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` repr -> do
                    mkAtom (CCG.App (CCE.BVUndef repr))
                | otherwise -> X.throw $ BadMemoryAccess szExpr
-          _ -> Nothing
+          _ -> overloadedDispatchOverrides e ty
 
 
 

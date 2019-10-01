@@ -233,4 +233,27 @@
           (StmtReturn
             (Just
               (ExprVarRef
-                (QualifiedIdentifier Any FALSE)))))))))
+                (QualifiedIdentifier Any FALSE))))))))
+  (DefCallable
+    (QualifiedIdentifier Any LSInstructionSyndrome)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 11)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any ret))
+            (ExprUnknown
+              (TypeFun
+                bits
+                (ExprLitNat 11))))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any ret)))))))))
