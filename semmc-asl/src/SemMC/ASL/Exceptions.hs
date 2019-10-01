@@ -23,6 +23,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | forall tp1 tp2 .  UnexpectedExprType (Maybe AS.Expr) (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           -- ^ Expression, actual type, expected type
                           | UnsupportedExpr AS.Expr
+                          | UnsupportedStmt AS.Stmt
                           | UnsupportedLVal AS.LValExpr
                           | InvalidZeroLengthBitvector
                           | forall tp1 tp2 . UnexpectedBitvectorLength (CT.TypeRepr tp1) (CT.TypeRepr tp2)
@@ -71,6 +72,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | MissingStructField AS.Expr T.Text
                           | InvalidOverloadedFunctionCall T.Text [AS.Expr]
                           | BadMemoryAccess AS.Expr
+                          | StaticEvaluationOfFalseAssertion AS.Expr
                           | UNIMPLEMENTED String
                           | InstructionUnsupported
 

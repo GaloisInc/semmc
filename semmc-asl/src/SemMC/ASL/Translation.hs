@@ -242,6 +242,11 @@ unpredictableVarName = T.pack "UNPREDICTABLE"
 undefinedVarName :: T.Text
 undefinedVarName = T.pack "UNDEFINED"
 
+-- | The distinguished name of the global variable that represents the bit of
+-- state indicating that an assertion has been tripped.
+assertionfailureVarName :: T.Text
+assertionfailureVarName = T.pack "ASSERTIONFAILURE"
+
 -- | Obtain the global variables touched by the given 'ProcedureSignature'
 --
 -- This is a subset of all of the global state (and a subset of the current
@@ -296,6 +301,25 @@ translateStatement ov stmt = do
   MS.modify' $ \s -> s { tsStmtStack = List.tail $ tsStmtStack s }
   return ()
 
+assertExpr :: Overrides arch
+           -> AS.Expr
+           -> Generator h s arch ret ()
+assertExpr ov e = do
+  (Some res) <- translateExpr overrides e
+  Refl <- assertAtomType e CT.BoolRepr res
+  assertAtom res
+
+assertAtom :: CCG.Atom s CT.BoolType
+           -> Generator h s arch ret ()
+assertAtom res = do
+  gs <- MS.gets tsGlobals
+  case Map.lookup assertionfailureVarName gs of
+    Just (Some gv)
+      | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
+          CCG.writeGlobal gv $ CCG.AtomExpr res
+      | otherwise -> X.throw (UnexpectedGlobalType assertionfailureVarName (CCG.globalType gv))
+    _ -> X.throw $ MissingGlobal assertionfailureVarName
+
 -- | Translate a single ASL statement into Crucible
 translateStatement' :: forall arch ret h s
                     . Overrides arch
@@ -326,17 +350,7 @@ translateStatement' ov stmt
         CCG.returnFromFunction (CCG.AtomExpr a)
       AS.StmtIf clauses melse -> translateIf ov clauses melse
       AS.StmtCase e alts -> translateCase ov e alts
-      AS.StmtAssert e -> do
-        let msg = CCG.App (CCE.TextLit (T.pack (show e)))
-        env <- MS.gets tsStaticEnv
-        case exprToStatic env e of
-          Just (StaticBool True) -> return ()
-          Just (StaticBool False) -> CCG.reportError msg
-          Nothing -> do
-            Some atom <- translateExpr ov e
-            Refl <- assertAtomType e CT.BoolRepr atom
-            return ()
-           -- CCG.assertExpr (CCG.AtomExpr atom) msg -- FIXME: Does this assertion actually get evaluated?
+      AS.StmtAssert e -> assertExpr ov e
       AS.StmtVarsDecl ty idents -> mapM_ (declareUndefinedVar ty) idents
       AS.StmtVarDeclInit (ident, ty) expr -> translateDefinedVar ov ty ident expr
       AS.StmtConstDecl (ident, ty) expr ->
@@ -402,11 +416,8 @@ translateStatement' ov stmt
                   atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                   _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
                   return ()
-      AS.StmtTry {} -> error "Try statements are not implemented"
-      AS.StmtThrow err -> do
-        CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit err))
-      AS.StmtDefEnum _ _ -> X.throw $ UNIMPLEMENTED "local enums"
-      _ -> error (show stmt)
+
+      _ -> throwTrace $ UnsupportedStmt stmt
 
 -- | Translate a for statement into Crucible
 --
@@ -1581,18 +1592,19 @@ sliceValidTest (SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom)) = case ran
   SliceSymbolic loAtom hiAtom -> do
     let lo = CCG.AtomExpr loAtom
     let hi = CCG.AtomExpr hiAtom
-    let tests = map CCG.App [CCE.IntLe lo hi]
+
+    let tests = map CCG.App [ CCE.IntLe lo hi
+                            , CCE.IntLe (CCG.App (CCE.IntSub hi lo)) (CCG.App (CCE.IntLit (CT.intValue lenRepr)))]
     foldl (\testAcc -> \e -> CCG.App (CCE.And testAcc e)) (CCG.App (CCE.BoolLit True)) tests
 
 
--- FIXME: is an assertion the correct construct here?
 withValidSlice :: SliceRange s sliceLength atomLength
                -> SliceOf s sliceLength atomLength
                -> Generator h s arch ret (CCG.Atom s (CT.BVType sliceLength))
                -> Generator h s arch ret (Some (CCG.Atom s))
 withValidSlice range sliceOf f = do
-    let test = sliceValidTest (SomeSlice range sliceOf)
-    CCG.assertExpr test (CCG.App $ CCE.TextLit "Invalid slice")
+    test <- CCG.mkAtom $ sliceValidTest (SomeSlice range sliceOf)
+    assertAtom test
     atom <- f
     return (Some atom)
 
@@ -1601,8 +1613,8 @@ withValidSlice' :: SliceRange s sliceLength atomLength
                -> Generator h s arch ret ()
                -> Generator h s arch ret ()
 withValidSlice' range sliceOf f = do
-    let test = sliceValidTest (SomeSlice range sliceOf)
-    CCG.assertExpr test (CCG.App $ CCE.TextLit "Invalid slice")
+    test <- CCG.mkAtom $ sliceValidTest (SomeSlice range sliceOf)
+    assertAtom test
     f
 
 translateSlice' :: Overrides arch
@@ -2107,8 +2119,8 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ "SEE") [x] -> Just $ do
             return ()
           AS.StmtCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
-            CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
-
+            --CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
+            return ()
           -- FIXME: This is a pass-by-reference function so we need to expand it in-place
           AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _,_ ] -> Just $ do
             return ()
@@ -2392,7 +2404,7 @@ overrides = Overrides {..}
           -- FIXME: implement this (asl definition is recursive and dependently typed)
           -- There are two overloadings of this based on the type of x
           AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
-            atom <- CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
+            --atom <- CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
             mkAtom (CCG.App CCE.EmptyApp)
           -- FIXME: Memory model
           AS.ExprCall (AS.QualifiedIdentifier _ "__ReadRAM") [_, szExpr, _, addr] -> Just $ do

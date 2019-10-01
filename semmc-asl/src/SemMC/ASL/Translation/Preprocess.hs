@@ -149,6 +149,7 @@ builtinGlobals =
   [ ("UNDEFINED", Some WT.BaseBoolRepr)
   , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
   , ("EXCEPTIONTAKEN", Some WT.BaseBoolRepr)
+  , ("ASSERTIONFAILURE", Some WT.BaseBoolRepr)
   , ("CurrentInstrSet", Some WT.BaseIntegerRepr)
   ]
 
@@ -925,12 +926,8 @@ stmtGlobalVars stmt =
             termGlobals <- exprGlobalVars term
             stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
             return $ termGlobals ++ stmtGlobals
-          AS.StmtUnpredictable -> do
-            gb <- theVarGlobal "UNPREDICTABLE"
-            return [gb]
-          AS.StmtUndefined -> do
-            gb <- theVarGlobal "UNDEFINED"
-            return [gb]
+          AS.StmtUnpredictable -> return []
+          AS.StmtUndefined -> return []
           _ -> return []
 
 -- | Compute the list of global variables in a 'Callable' and store it in the
@@ -959,7 +956,8 @@ computeCallableSignature c@Callable{..} = do
       mapM_ (\(_,t) -> storeUserType t) callableArgs
       mapM_ storeUserType callableRets
       
-      globalVars <- callableGlobalVars c
+      globalVars' <- callableGlobalVars c
+      let globalVars = globalVars' ++ builtinGlobals
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
 
@@ -1124,7 +1122,8 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       let instStmts = initStmts ++ instPostDecode ++ instExecute
       let instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
       let staticEnv = addInitializedVariables initStmts (addStandardStaticEnv emptyStaticEnv)
-      globalVars <- instGlobalVars
+      globalVars' <- instGlobalVars
+      let globalVars = globalVars' ++ builtinGlobals
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
       labeledArgs <- forM (AS.encFields enc) $ \field -> do
