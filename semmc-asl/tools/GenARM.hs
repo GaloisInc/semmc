@@ -21,6 +21,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
 import qualified Data.List as List
 import           Data.List.Index (imap)
 import qualified Lang.Crucible.Backend.Simple as CBS
@@ -58,6 +59,9 @@ supportFilePath = "test/support.parsed"
 
 extraDefsFilePath :: FilePath
 extraDefsFilePath = "test/extradefs.parsed"
+
+targetInstsFilePath :: FilePath
+targetInstsFilePath = "test/translated_instructions.txt"
 
 collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text, AS.InstructionSet)]
 collectInstructions aslInsts = do
@@ -99,12 +103,16 @@ doTranslationOptions = defaultOptions {optFilters = filterStalls, optSkipTransla
 
 main :: IO ()
 main = do
-  sm <- runWithFilters defaultOptions { optVerbose = False}
-  let opts = defaultStatOptions {
+  targetInsts <- getTargetInstrs
+  let filter = defaultFilter { instrFilter = \ident -> Set.member ident targetInsts }
+  let translateOpts = defaultOptions{ optFilters = filter, optCollectExceptions=False }
+  sm <- runWithFilters translateOpts
+  
+  let reportOpts = defaultStatOptions {
         reportKnownExceptions = True,
         reportSucceedingInstructions = True,
         reportFunctionDependencies = True}
-  reportStats opts sm
+  reportStats reportOpts sm
 
 testDefinition :: String -> Int -> IO (SigMap)
 testDefinition s startidx = do
@@ -176,7 +184,7 @@ noFilter = Filters (\_ -> \_ -> True) (\_ -> True) (\_ -> \_ -> True) (\_ -> Tru
 defaultFilter :: Filters
 defaultFilter = Filters
   (\_ -> \_ -> True)
-  (\(InstructionIdent nm _ _) -> not (T.isPrefixOf "aarch32_V" nm || T.isPrefixOf "aarch64_vector" nm))
+  (\_ -> True)
   (\_ -> \_ -> True)
   (\_ -> True)
     
@@ -258,57 +266,61 @@ runWithFilters opts = do
   let (sigEnv, sigState) = buildSigState spec
   runWithFilters' opts spec sigEnv sigState
 
-data ExpectedException =
-    CannotMonomorphize T.Text
-  | SymbolicArguments T.Text
-  | NotImplementedYet String
-  | GlobalArrayOfStructs
-  | MissingFunction String
-  | BadInstructionSpecification T.Text
-  | MissingGlobalDeclaration T.Text
-  | InsufficientStaticTypeInformation
-  | CannotSignExtendUnknownBVSize
-  | BoolComparisonUnsupported
-  | RealValuesUnsupported
-  | LValSliceUnsupported
-  | ExponentiationUnsupported
-  | RmemUnsupported
-  | ParserError
-  | UnsupportedInstruction
-  deriving (Eq, Ord, Show)
+type ExpectedException = ()
+-- data ExpectedException =
+--     CannotMonomorphize T.Text
+--   | SymbolicArguments T.Text
+--   | NotImplementedYet String
+--   | GlobalArrayOfStructs
+--   | MissingFunction String
+--   | BadInstructionSpecification T.Text
+--   | MissingGlobalDeclaration T.Text
+--   | InsufficientStaticTypeInformation
+--   | CannotSignExtendUnknownBVSize
+--   | BoolComparisonUnsupported
+--   | RealValuesUnsupported
+--   | LValSliceUnsupported
+--   | ExponentiationUnsupported
+--   | RmemUnsupported
+--   | ParserError
+--   | UnsupportedInstruction
+--   deriving (Eq, Ord, Show)
 
-badStaticInstructions :: [T.Text]
-badStaticInstructions =
-  ["aarch32_VDUP_r_A", "aarch32_CRC32_A", "aarch32_VSLI_A", "aarch32_VSRI_A"
-  ,"PFALSE_P__", "SETFFR_F__"]
+-- badStaticInstructions :: [T.Text]
+-- badStaticInstructions =
+--   ["aarch32_VDUP_r_A", "aarch32_CRC32_A", "aarch32_VSLI_A", "aarch32_VSRI_A"
+--   ,"PFALSE_P__", "SETFFR_F__"]
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
-expectedExceptions k ex = case ex of
-  SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
-  SExcept (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
-  TExcept _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
-  TExcept _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
-  TExcept _ (CannotDetermineBVLength _ _) -> case k of
-   KeyInstr (InstructionIdent nm _ _)
-     | nm `elem` badStaticInstructions ->
-     Just $ InsufficientStaticTypeInformation
-   _ -> Nothing
-  TExcept _ (UnsupportedSlice (AS.SliceRange _ _) _) -> case k of
-    KeyInstr (InstructionIdent nm _ _)
-      | nm `elem` badStaticInstructions ->
-      Just $ InsufficientStaticTypeInformation
-    KeyInstr (InstructionIdent "aarch32_SBFX_A" _ _) ->
-      Just $ CannotSignExtendUnknownBVSize
-    _ -> Nothing
-  TExcept _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
-  TExcept _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
-  TExcept _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
-  TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
-  TExcept _ (ExpectedBVType _ _) -> Just $ ParserError
-  TExcept _ (InstructionUnsupported) -> case k of
-    KeyInstr _ -> Just $ UnsupportedInstruction
-    _ -> Nothing
-  _ -> Nothing
+expectedExceptions _ _ = Nothing
+-- expectedExceptions k ex = case ex of
+--   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
+--   SExcept (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
+--   TExcept _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
+--   TExcept _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
+--   TExcept _ (CannotDetermineBVLength _ _) -> case k of
+--    KeyInstr (InstructionIdent nm _ _)
+--      | nm `elem` badStaticInstructions ->
+--      Just $ InsufficientStaticTypeInformation
+--    _ -> Nothing
+--   TExcept _ (UnsupportedSlice (AS.SliceRange _ _) _) -> case k of
+--     KeyInstr (InstructionIdent nm _ _)
+--       | nm `elem` badStaticInstructions ->
+--       Just $ InsufficientStaticTypeInformation
+--     KeyInstr (InstructionIdent "aarch32_SBFX_A" _ _) ->
+--       Just $ CannotSignExtendUnknownBVSize
+--     _ -> Nothing
+--   TExcept _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
+--   TExcept _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
+--   TExcept _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
+--   TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
+--   TExcept _ (ExpectedBVType _ _) -> Just $ ParserError
+--   TExcept _ (InstructionUnsupported) -> case k of
+--     KeyInstr _ -> Just $ UnsupportedInstruction
+--     _ -> Nothing
+--   _ -> Nothing
+
+
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
 isUnexpectedException k e = expectedExceptions k e == Nothing
@@ -326,7 +338,7 @@ defaultStatOptions = StatOptions
   { reportKnownExceptions = False
   , reportSucceedingInstructions = False
   , reportAllExceptions = False
-  , reportKnownExceptionFilter = (\e -> case e of {UnsupportedInstruction -> False; _ -> True})
+  , reportKnownExceptionFilter = (\_ -> True)
   , reportFunctionDependencies = False
   }
 
@@ -405,6 +417,7 @@ reportStats sopts sm = do
 data TranslatorException =
     TExcept (T.Text, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
   | SExcept SigException
+  | BadTranslatedInstructionsFile
   | SomeExcept X.SomeException
 
 instance Show TranslatorException where
@@ -615,6 +628,34 @@ getASL = do
       exitFailure
     (Right aslInsts, Right aslDefs, Right aslRegs, Right aslExtraDefs, Right aslSupportDefs) -> do
       return $ prepASL $ ASLSpec aslInsts aslDefs aslSupportDefs aslExtraDefs aslRegs
+
+textToISet :: T.Text -> Maybe AS.InstructionSet
+textToISet t = case t of
+  "A32" -> Just $ AS.A32
+  "T32" -> Just $ AS.T32
+  "T16" -> Just $ AS.T16
+  "A64" -> Just $ AS.A64
+  _ -> Nothing
+
+getTargetInstrs :: IO (Set.Set InstructionIdent)
+getTargetInstrs = do
+  IO.withFile targetInstsFilePath IO.ReadMode $ \handle -> do
+    return ()
+  t <- TIO.readFile targetInstsFilePath
+  return $ Set.fromList (map getTriple (T.lines t))
+  where
+    isQuote '\"' = True
+    isQuote _ = False
+    
+    getTriple l = case T.words l of
+      [instr, enc, iset]
+        | Just is <- textToISet iset ->
+        InstructionIdent
+          { iName = T.dropAround isQuote instr
+          , iEnc = T.dropAround isQuote enc
+          , iSet = is
+          }
+      _ -> X.throw $ BadTranslatedInstructionsFile
 
 processInstruction :: InstructionIdent
                    -> ProcedureSignature globals init
