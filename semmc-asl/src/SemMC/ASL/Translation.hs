@@ -1883,6 +1883,14 @@ applyBinOp bundle (e1, a1) (e2, a2) =
         _ -> do
           Refl <- assertAtomType e2 CT.IntegerRepr a2
           Some <$> CCG.mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+    CT.BoolRepr -> do
+      case CCG.typeOfAtom a2 of
+        CT.BoolRepr -> do
+          let nr = WT.knownNat @1
+          let a1' = CCG.App $ CCE.BoolToBV nr (CCG.AtomExpr a1)
+          let a2' = CCG.App $ CCE.BoolToBV nr (CCG.AtomExpr a2)
+          Some <$> CCG.mkAtom (CCG.App (obBV bundle nr a1' a2'))
+
     _ -> X.throw (UnsupportedComparisonType e1 (CCG.typeOfAtom a1))
 
 bvBinOp :: (ext ~ ASLExt arch)
@@ -2034,12 +2042,25 @@ overloadedDispatchOverrides e tc = case e of
           translateExpr' overrides (AS.ExprCall (AS.QualifiedIdentifier q (nm <> ov)) [arg]) tc
         _ -> Nothing
 
+-- Eagerly throw exceptions when it is clear that the instruction is not supported
+checkSupportedExpr :: AS.Expr -> AS.Expr
+checkSupportedExpr e = case e of
+  AS.ExprCall (AS.QualifiedIdentifier _ nm) _
+    | nm `elem` ["VFPExpandImm", "CheckVPFEnabled"] ->
+      X.throw $ InstructionUnsupported
+  _ -> e
+
+checkSupportedStmt :: AS.Stmt -> AS.Stmt
+checkSupportedStmt s = case s of
+  AS.StmtIf [(AS.ExprUnOp AS.UnOpNot (AS.ExprCall (AS.QualifiedIdentifier _ "HaveSVE") []), _)] _ ->
+    X.throw $ InstructionUnsupported
+  _ -> s
 
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (Generator h s arch ret ())
 
-        overrideStmt s = case s of
+        overrideStmt s = case checkSupportedStmt s of
           AS.StmtCall (AS.QualifiedIdentifier _ fun@"GETTERSETTER")
             args'@(AS.ExprSlice (AS.ExprVarRef getter) slices : AS.ExprVarRef setter : value : args) -> Just $ do
 
@@ -2066,7 +2087,6 @@ overrides = Overrides {..}
                           , AS.StmtCall setter (setterResult : args)
                           ]
               mapM_ (translateStatement overrides) stmts
-
 
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ do
             raiseException
@@ -2173,7 +2193,7 @@ overrides = Overrides {..}
             e -> Nothing
 
         overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
-        overrideExpr e ty = case e of
+        overrideExpr e ty = case checkSupportedExpr e of
           AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) -> Just $ do
             translateExpr' overrides (AS.ExprInSet e [AS.SetEltSingle mask]) ty
           AS.ExprBinOp AS.BinOpNEQ e mask@(AS.ExprLitMask _) -> Just $ do

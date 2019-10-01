@@ -72,6 +72,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | InvalidOverloadedFunctionCall T.Text [AS.Expr]
                           | BadMemoryAccess AS.Expr
                           | UNIMPLEMENTED String
+                          | InstructionUnsupported
 
 deriving instance Show TranslationException
 

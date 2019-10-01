@@ -16,7 +16,7 @@ import qualified Control.Monad.RWS as RWS
 import qualified Control.Monad.Except as E
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import           Data.Maybe ( fromMaybe, catMaybes, listToMaybe )
+import           Data.Maybe ( fromMaybe, catMaybes, listToMaybe, mapMaybe )
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some ( Some(..) )
@@ -88,7 +88,7 @@ defaultOptions = TranslatorOptions
   { optVerbose = True
   , optStartIndex = 0
   , optNumberOfInstructions = Nothing
-  , optFilters = noFilter
+  , optFilters = defaultFilter
   , optSkipTranslation = True
   , optCollectExceptions = True
   , optThrowUnexpectedExceptions = True
@@ -172,6 +172,13 @@ mergeInstrExceptions sms@(s : _) =
 
 noFilter :: Filters
 noFilter = Filters (\_ -> \_ -> True) (\_ -> True) (\_ -> \_ -> True) (\_ -> True)
+
+defaultFilter :: Filters
+defaultFilter = Filters
+  (\_ -> \_ -> True)
+  (\(InstructionIdent nm _ _) -> not (T.isPrefixOf "aarch32_V" nm || T.isPrefixOf "aarch64_vector" nm))
+  (\_ -> \_ -> True)
+  (\_ -> True)
     
 filterStalls :: Filters
 filterStalls = Filters
@@ -205,11 +212,6 @@ isFunFilteredOut inm fnm = do
   test <- MSS.gets (funFilter . optFilters . sOptions)
   return $ not $ test inm fnm
 
-isInstrFilteredOut :: InstructionIdent -> MSS.StateT SigMap IO Bool
-isInstrFilteredOut inm = do
-  test <- MSS.gets (instrFilter . optFilters . sOptions)
-  return $ not $ test inm
-
 isFunTransFilteredOut :: InstructionIdent -> T.Text -> MSS.StateT SigMap IO Bool
 isFunTransFilteredOut inm fnm = do
   test <- MSS.gets (funTranslationFilter . optFilters . sOptions)
@@ -230,13 +232,13 @@ runWithFilters' :: TranslatorOptions
 runWithFilters' opts spec sigEnv sigState = do
   let startidx = optStartIndex opts
   let numInstrs = optNumberOfInstructions opts
-  let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions (aslInstructions spec)
+  let getInstr (instr, enc, iset) = do
+        let test = instrFilter $ optFilters $ opts
+        let ident = instrToIdent instr enc iset
+        if test ident then Just (ident, instr) else Nothing
+  let allInstrs = imap (\i -> \nm -> (i,nm)) $ mapMaybe getInstr (collectInstructions (aslInstructions spec))
   let instrs = case numInstrs of {Just i -> take i (drop startidx allInstrs); _ -> drop startidx allInstrs}
-  sm <- MSS.execStateT (forM_ instrs (\(i, (instr, enc, iset)) -> do
-    let ident = instrToIdent instr enc iset
-    filteredOut <- isInstrFilteredOut ident
-    if filteredOut then return ()
-    else do
+  sm <- MSS.execStateT (forM_ instrs (\(i, (ident, instr)) -> do
      logMsg $ "Processing instruction: " ++ show i ++ "/" ++ show (length allInstrs)
      runTranslation instr ident))
     (SigMap Map.empty Map.empty Map.empty sigState sigEnv Map.empty Map.empty [] opts)
@@ -272,6 +274,7 @@ data ExpectedException =
   | ExponentiationUnsupported
   | RmemUnsupported
   | ParserError
+  | UnsupportedInstruction
   deriving (Eq, Ord, Show)
 
 badStaticInstructions :: [T.Text]
@@ -282,7 +285,7 @@ badStaticInstructions =
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
-  SExcept (SigException _ (TypeNotFound "real")) -> Just $ RealValuesUnsupported
+  SExcept (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
   TExcept _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
   TExcept _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
   TExcept _ (CannotDetermineBVLength _ _) -> case k of
@@ -301,8 +304,10 @@ expectedExceptions k ex = case ex of
   TExcept _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
   TExcept _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
   TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
-  TExcept _ (UnsupportedComparisonType (AS.ExprVarRef (AS.QualifiedIdentifier _ _)) _) -> Just $ BoolComparisonUnsupported
   TExcept _ (ExpectedBVType _ _) -> Just $ ParserError
+  TExcept _ (InstructionUnsupported) -> case k of
+    KeyInstr _ -> Just $ UnsupportedInstruction
+    _ -> Nothing
   _ -> Nothing
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
@@ -321,7 +326,7 @@ defaultStatOptions = StatOptions
   { reportKnownExceptions = False
   , reportSucceedingInstructions = False
   , reportAllExceptions = False
-  , reportKnownExceptionFilter = (\_ -> True)
+  , reportKnownExceptionFilter = (\e -> case e of {UnsupportedInstruction -> False; _ -> True})
   , reportFunctionDependencies = False
   }
 
