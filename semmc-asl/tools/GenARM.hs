@@ -662,7 +662,7 @@ processInstruction :: InstructionIdent
                    -> [AS.Stmt] -> Definitions arch
                    -> MSS.StateT SigMap IO (Map.Map T.Text StaticEnv)
 processInstruction instr pSig stmts defs = do
-  handleAllocator <- CFH.newHandleAllocator
+  handleAllocator <- MSS.lift $ CFH.newHandleAllocator
   mp <- catchIO (KeyInstr instr) $ procedureToCrucible defs pSig handleAllocator stmts
   case mp of
     Just p -> do
@@ -690,7 +690,7 @@ processFunction :: InstructionIdent
 processFunction fromInstr fnName sig stmts defs =
   case sig of
     SomeFunctionSignature fSig -> do
-      handleAllocator <- CFH.newHandleAllocator
+      handleAllocator <- MSS.lift $ CFH.newHandleAllocator
       mf <- catchIO (KeyFun fnName) $ functionToCrucible defs fSig handleAllocator stmts
       case mf of
         Just f -> do
@@ -709,7 +709,7 @@ processFunction fromInstr fnName sig stmts defs =
             return $ fromMaybe Map.empty mdep
         Nothing -> return Map.empty
     SomeProcedureSignature pSig -> do
-      handleAllocator <- CFH.newHandleAllocator
+      handleAllocator <- MSS.lift $ CFH.newHandleAllocator
       mp <- catchIO (KeyFun fnName) $ procedureToCrucible defs pSig handleAllocator stmts
       case mp of
         Just p -> do

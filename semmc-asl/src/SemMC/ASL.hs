@@ -50,7 +50,7 @@ import qualified SemMC.ASL.Types as AT
 
 data SimulatorConfig scope =
   SimulatorConfig { simOutputHandle :: IO.Handle
-                  , simHandleAllocator :: CFH.HandleAllocator RealWorld
+                  , simHandleAllocator :: CFH.HandleAllocator
                   , simSym :: CBO.YicesOnlineBackend scope (WEB.Flags WEB.FloatReal)
                   }
 
@@ -76,12 +76,13 @@ simulateFunction symCfg func = do
     CCC.SomeCFG cfg -> do
       let sig = AC.funcSig func
       initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.funcArgReprs sig)
-      let econt = CS.runOverrideSim (CT.baseToType (AC.funcSigRepr sig)) $ do
+      let retRepr = CT.baseToType (AC.funcSigRepr sig)
+      let econt = CS.runOverrideSim retRepr $ do
             re <- CS.callCFG cfg (CS.RegMap (FC.fmapFC freshArgEntry initArgs))
             return (CS.regValue re)
       let globals = AC.funcGlobals func
       globalState <- initGlobals symCfg globals
-      s0 <- initialSimulatorState symCfg globalState econt
+      s0 <- initialSimulatorState symCfg globalState econt retRepr
       ft <- executionFeatures (simSym symCfg)
       eres <- CS.executeCrucible ft s0
       case eres of
@@ -278,15 +279,16 @@ initialSimulatorState :: (CB.IsSymInterface sym, OnlineSolver scope sym)
                       => SimulatorConfig scope
                       -> CS.SymGlobalState sym
                       -> CS.ExecCont () sym (AC.ASLExt arch) (CS.RegEntry sym ret) (CSC.OverrideLang ret) ('Just CT.EmptyCtx)
+                      -> CT.TypeRepr ret
                       -> IO (CS.ExecState () sym (AC.ASLExt arch) (CS.RegEntry sym ret))
-initialSimulatorState symCfg symGlobalState econt = do
+initialSimulatorState symCfg symGlobalState econt retRepr = do
   let intrinsics = CS.emptyIntrinsicTypes
   let sym = simSym symCfg
   let hdlAlloc = simHandleAllocator symCfg
   let outputHandle = simOutputHandle symCfg
   let simContext = CS.initSimContext sym intrinsics hdlAlloc outputHandle CFH.emptyHandleMap AC.aslExtImpl ()
   let hdlr = CS.defaultAbortHandler
-  return (CS.InitialState simContext symGlobalState hdlr econt)
+  return (CS.InitialState simContext symGlobalState hdlr retRepr econt)
 
 -- | Allocate all of the globals that will be referred to by the statement
 -- sequence (even indirectly) and use them to populate a 'CS.GlobalSymState'

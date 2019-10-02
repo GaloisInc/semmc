@@ -96,13 +96,13 @@ import System.IO.Unsafe -- FIXME: For debugging
 functionToCrucible :: (ret ~ CT.BaseToType tp)
                    => Definitions arch
                    -> FunctionSignature globals init tp
-                   -> CFH.HandleAllocator RealWorld
+                   -> CFH.HandleAllocator
                    -> [AS.Stmt]
                    -> IO (Function arch globals init tp)
 functionToCrucible defs sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (funcArgReprs sig)
   let retRepr = CT.baseToType (funcSigRepr sig)
-  hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr)
+  hdl <- CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr
   globals <- FC.traverseFC allocateGlobal (funcGlobalReprs sig)
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, deps) <- stToIO $ defineCCGFunction pos hdl (\ref -> funcDef defs sig ref globals stmts)
@@ -115,7 +115,7 @@ functionToCrucible defs sig hdlAlloc stmts = do
   where
     allocateGlobal :: forall tp . LabeledValue T.Text WT.BaseTypeRepr tp -> IO (BaseGlobalVar tp)
     allocateGlobal (LabeledValue name rep) =
-      stToIO (BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep))
+      BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep)
 
 defineCCGFunction :: CCExt.IsSyntaxExtension ext
                => WP.Position
@@ -239,13 +239,13 @@ procedureToCrucible :: forall arch init globals ret
                      . (ReturnsGlobals ret globals)
                     => Definitions arch
                     -> ProcedureSignature globals init
-                    -> CFH.HandleAllocator RealWorld
+                    -> CFH.HandleAllocator
                     -> [AS.Stmt]
                     -> IO (Procedure arch globals init)
 procedureToCrucible defs sig hdlAlloc stmts = do
   let argReprs = FC.fmapFC projectValue (procArgReprs sig)
   let retRepr = procSigRepr sig
-  hdl <- stToIO (CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (procName sig)) argReprs retRepr)
+  hdl <- CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (procName sig)) argReprs retRepr
   globals <- FC.traverseFC allocateGlobal (procGlobalReprs sig)
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, depends) <- stToIO $ defineCCGFunction pos hdl (\ref -> procDef defs sig ref globals stmts)
@@ -257,7 +257,7 @@ procedureToCrucible defs sig hdlAlloc stmts = do
   where
     allocateGlobal :: forall tp . LabeledValue T.Text WT.BaseTypeRepr tp -> IO (BaseGlobalVar tp)
     allocateGlobal (LabeledValue name rep) =
-      stToIO (BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep))
+      BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep)
 
 procDef :: (ReturnsGlobals ret globals)
         => Definitions arch
