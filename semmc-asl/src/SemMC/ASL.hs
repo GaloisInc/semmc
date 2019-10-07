@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SemMC.ASL (
     simulateFunction
   , simulateProcedure
@@ -37,6 +38,7 @@ import qualified Lang.Crucible.Types as CT
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified Lang.Crucible.Simulator.PathSatisfiability as CSP
 import qualified System.IO as IO
+import qualified What4.Config as WC
 import qualified What4.BaseTypes as WT
 import qualified What4.Interface as WI
 import qualified What4.Symbol as WS
@@ -87,7 +89,7 @@ simulateFunction symCfg func = do
       eres <- CS.executeCrucible ft s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeFunctionSignature sig)))
-        CS.AbortedResult {} -> X.throwIO (SimulationAbort (Some (AC.SomeFunctionSignature sig)))
+        CS.AbortedResult context ab -> X.throwIO $ SimulationAbort (Some (AC.SomeFunctionSignature sig)) (showAbortedResult ab)
         CS.FinishedResult _ pres ->
           case pres of
             CS.TotalRes gp -> extractResult gp initArgs
@@ -135,17 +137,18 @@ simulateProcedure symCfg crucProc =
       let sig = AC.procSig crucProc
       initArgs <- FC.traverseFC (allocateFreshArg (simSym symCfg)) (AC.procArgReprs sig)
       let globalTypes = FC.fmapFC AT.projectValue (AS.procGlobalReprs sig)
-      let econt = CS.runOverrideSim (CT.baseToType (WT.BaseStructRepr globalTypes)) $ do
+      let retRepr = CT.baseToType (WT.BaseStructRepr globalTypes)
+      let econt = CS.runOverrideSim retRepr $ do
             re <- CS.callCFG cfg (CS.RegMap (FC.fmapFC freshArgEntry initArgs))
             return (CS.regValue re)
       let globals = AC.procGlobals crucProc
       globalState <- initGlobals symCfg globals
-      s0 <- initialSimulatorState symCfg globalState econt
+      s0 <- initialSimulatorState symCfg globalState econt retRepr
       ft <- executionFeatures (simSym symCfg)
       eres <- CS.executeCrucible ft s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeProcedureSignature sig)))
-        CS.AbortedResult context ab -> X.throwIO (SimulationAbort (Some (AC.SomeProcedureSignature sig)))
+        CS.AbortedResult context ab -> X.throwIO $ SimulationAbort (Some (AC.SomeProcedureSignature sig)) (showAbortedResult ab)
         CS.FinishedResult _ pres ->
           case pres of
             CS.TotalRes gp -> extractResult gp initArgs
@@ -315,17 +318,29 @@ executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
                   => CCE.IsSyntaxExtension ext
                   => sym -> IO [CS.ExecutionFeature p sym ext rtp]
 executionFeatures sym = do
-  gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
-  let ft = CS.genericToExecutionFeature gft
-  return [ft]
+  --gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
+  --let ft = CS.genericToExecutionFeature gft
+  --return [ft]
+  --let cfg = WI.getConfiguration sym
+  --pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
+  --res <- WC.setOpt pathSetter (T.pack "./yices.out")
+  --X.assert (null res) (return [])
+  return []
 
 data SimulationException = SimulationTimeout (Some AC.SomeSignature)
-                         | SimulationAbort (Some AC.SomeSignature)
+                         | SimulationAbort (Some AC.SomeSignature) T.Text
                          | forall tp . NonBaseTypeReturn (CT.TypeRepr tp)
                          | forall btp . UnexpectedReturnType (WT.BaseTypeRepr btp)
                          | forall tp . MissingGlobalDefinition (CS.GlobalVar tp)
                          | forall tp . CannotAllocateFresh T.Text (CT.TypeRepr tp)
                          | InvalidSymbolName String
+
+
+showAbortedResult :: CS.AbortedResult c d -> T.Text
+showAbortedResult ar = case ar of
+  CS.AbortedExec reason st -> T.pack $ show reason
+  CS.AbortedExit code -> T.pack $ show code
+  CS.AbortedBranch loc pre res' res'' -> "BRANCH: " <> showAbortedResult res' <> "\n" <> showAbortedResult res''
 
 deriving instance Show SimulationException
 

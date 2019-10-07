@@ -54,6 +54,7 @@ import           Numeric.Natural ( Natural )
 import qualified What4.BaseTypes as WT
 import qualified What4.FunctionName as WF
 import qualified What4.ProgramLoc as WP
+import qualified What4.Symbol as WS
 
 import qualified Language.ASL.Syntax as AS
 
@@ -303,20 +304,29 @@ translateStatement ov stmt = do
 
 assertExpr :: Overrides arch
            -> AS.Expr
+           -> T.Text
            -> Generator h s arch ret ()
-assertExpr ov e = do
+assertExpr ov e msg = do
   (Some res) <- translateExpr overrides e
   Refl <- assertAtomType e CT.BoolRepr res
-  assertAtom res
+  assertAtom res (Just e) msg
 
 assertAtom :: CCG.Atom s CT.BoolType
+           -> Maybe AS.Expr
+           -> T.Text
            -> Generator h s arch ret ()
-assertAtom res = do
+assertAtom res mexpr msg = do
   gs <- MS.gets tsGlobals
   case Map.lookup assertionfailureVarName gs of
     Just (Some gv)
       | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
           CCG.writeGlobal gv $ CCG.AtomExpr res
+          case mexpr of
+            Just (AS.ExprVarRef (AS.QualifiedIdentifier _ "FALSE")) ->
+              return ()
+            Just expr ->
+              CCG.assertExpr (CCG.AtomExpr res) (CCG.App (CCE.TextLit $ msg <> (T.pack $ "Expression: " <> show expr)))
+            _ -> CCG.assertExpr (CCG.AtomExpr res) (CCG.App (CCE.TextLit msg))
       | otherwise -> X.throw (UnexpectedGlobalType assertionfailureVarName (CCG.globalType gv))
     _ -> X.throw $ MissingGlobal assertionfailureVarName
 
@@ -350,7 +360,7 @@ translateStatement' ov stmt
         CCG.returnFromFunction (CCG.AtomExpr a)
       AS.StmtIf clauses melse -> translateIf ov clauses melse
       AS.StmtCase e alts -> translateCase ov e alts
-      AS.StmtAssert e -> assertExpr ov e
+      AS.StmtAssert e -> assertExpr ov e "ASL Assertion"
       AS.StmtVarsDecl ty idents -> mapM_ (declareUndefinedVar ty) idents
       AS.StmtVarDeclInit (ident, ty) expr -> translateDefinedVar ov ty ident expr
       AS.StmtConstDecl (ident, ty) expr ->
@@ -630,6 +640,21 @@ translateAssignment' ov lval atom atomext mE =
 mkSliceRange :: (Integer, Integer) -> AS.Slice
 mkSliceRange (lo, hi) = AS.SliceRange (AS.ExprLitInt hi) (AS.ExprLitInt lo)
 
+
+assertExprType :: ext ~ ASLExt arch =>
+                   CT.TypeRepr tp1
+                -- ^ Expected type
+                -> CT.TypeRepr tp2
+                -- ^ Expr type repr
+                -> CCG.Expr ext s tp2
+                -- ^ Translation (which contains the actual type)
+                -> Generator h s arch ret (tp1 :~: tp2)
+assertExprType expectedRepr repr expr =
+  case testEquality expectedRepr repr of
+    Nothing -> throwTrace (UnexpectedExprType Nothing repr expectedRepr)
+    Just Refl -> return Refl
+
+
 translateAssignment'' :: forall arch s tp h ret . Overrides arch
                      -> AS.LValExpr
                      -> CCG.Atom s tp
@@ -711,8 +736,16 @@ translateAssignment'' ov lval atom constraint atomext mE = do
            , Just Refl <- testEquality btAsn retTy -- array element types match
            -> do
                let asn = Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom))
-               let arr = CCE.SymArrayUpdate retTy (CCG.AtomExpr arrAtom) asn (CCG.AtomExpr atom)
-               newArr <- CCG.mkAtom (CCG.App arr)
+               --FIXME: We mask array updates with an uninterpreted function to
+               -- avoid interpreting their updates
+               -- let name = "ARRAY_" <> arrName <> "_UPDATE"
+               -- let uf = UF name (CT.BaseArrayRepr (Ctx.Empty Ctx.:> bt') retTy)
+               --            (Ctx.singleton $ CCG.typeOfAtom idxAtom)
+               --            (Ctx.singleton $ CCG.AtomExpr idxAtom)
+               -- newArr <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+               -- translateAssignment' ov ref newArr TypeBasic Nothing
+               let arr = CCG.App $ CCE.SymArrayUpdate retTy (CCG.AtomExpr arrAtom) asn (CCG.AtomExpr atom)
+               newArr <- CCG.mkAtom arr
                translateAssignment' ov ref newArr TypeBasic Nothing
            | otherwise -> error $ "Invalid array assignment: " ++ show lval
 
@@ -815,7 +848,7 @@ translatelValSlice ov lv slice asnAtom' constraint = do
   Some atom' <- translateExpr ov lve
   SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom) <- getSomeSlice ov slice atom' constraint
 
-  withValidSlice' range sliceOf $ do
+  withValidSlice' slice range sliceOf $ do
     case range of
       SliceStatic loRepr hiRepr -> do
         let asnAtom = asnAtom'
@@ -1144,6 +1177,39 @@ unifyArgs ov fnname args rets constraint = do
       _ -> X.throw $ CannotMonomorphizeFunctionCall fnname env
 
 
+-- | Collect any new variables declared
+getNewVars :: Generator h s arch ret a
+           -> Generator h s arch ret ([Some (CCG.Reg s)], a)
+getNewVars f = do
+  vars <- MS.gets tsVarRefs
+  r <- f
+  vars' <- MS.gets tsVarRefs
+  let diff = Map.difference vars' vars
+  return (Map.elems diff, r)
+
+-- | Initialize registers to their default values
+initVars :: [Some (CCG.Reg s)]
+         -> Generator h s arch ret ()
+initVars regs = do
+    mapM_ initVar regs
+  where
+    initVar (Some reg) =
+      CCG.assignReg reg (getDefaultValue (CCG.typeOfReg reg))
+
+-- | Statement-level if-then-else. Newly assigned variables from
+-- either branch are implicitly assigned to default
+-- values before branching avoid dangling registers.
+ifte_ :: CCG.Expr (ASLExt arch) s CT.BoolType
+      -> Generator h s arch ret () -- ^ true branch
+      -> Generator h s arch ret () -- ^ false branch
+      -> Generator h s arch ret ()
+ifte_ e x y = do
+  c_id <- CCG.newLabel
+  (newvarsThen, x_id) <- getNewVars (CCG.defineBlockLabel $ x >> CCG.jump c_id)
+  (newvarsElse, y_id) <- getNewVars (CCG.defineBlockLabel $ y >> CCG.jump c_id)
+  initVars $ newvarsThen ++ newvarsElse
+  CCG.continue c_id (CCG.branch e x_id y_id)
+
 translateIf :: Overrides arch
             -> [(AS.Expr, [AS.Stmt])]
             -> Maybe [AS.Stmt]
@@ -1159,7 +1225,7 @@ translateIf ov clauses melse =
       Refl <- assertAtomType cond CT.BoolRepr condAtom
       let genThen = mapM_ (translateStatement ov) body
       let genElse = translateIf ov rest melse
-      CCG.ifte_ (CCG.AtomExpr condAtom) genThen genElse
+      ifte_ (CCG.AtomExpr condAtom) genThen genElse
 
 translateCase :: Overrides arch
               -> AS.Expr
@@ -1179,7 +1245,7 @@ translateCase ov expr alts = case alts of
     Refl <- assertAtomType matchExpr CT.BoolRepr matchAtom
     let genThen = mapM_ (translateStatement ov) body
     let genRest = translateCase ov expr rst
-    CCG.ifte_ (CCG.AtomExpr matchAtom) genThen genRest
+    ifte_ (CCG.AtomExpr matchAtom) genThen genRest
   _ -> error (show alts)
   where
     caseWhenExpr :: AS.Expr -> [AS.CasePattern] -> AS.Expr
@@ -1485,6 +1551,7 @@ exprRangeToLength env lo hi = case (lo, hi) of
   (AS.ExprVarRef loVar, AS.ExprBinOp AS.BinOpAdd e (AS.ExprVarRef hiVar)) -> getStaticLength loVar hiVar e
   (AS.ExprVarRef loVar, AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef hiVar) e) -> getStaticLength loVar hiVar e
   (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef loVar) e, AS.ExprVarRef hiVar) -> getStaticLength loVar hiVar e
+  (e, e') | e == e' -> Just 1
   _ | Just (StaticInt loInt) <- exprToStatic env lo
     , Just (StaticInt hiInt) <- exprToStatic env hi ->
       Just $ (hiInt - loInt) + 1
@@ -1549,33 +1616,29 @@ getSomeSlice ov slice slicedAtom constraint = do
     Nothing -> do
       BVRepr wRepr <- getAtomBVRepr slicedAtom
       (loAtom, hiAtom) <- getSymbolicSliceRange ov slice
-      case constraint of
-        ConstraintSingle (CT.BVRepr length) ->
+      mLength <- getStaticSliceLength slice
+      case mLength of
+        Just (Some (BVRepr length)) ->
           if | Just WT.LeqProof <- length `WT.testLeq` wRepr ->
                return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf length wRepr slicedAtom)
-             | otherwise -> throwTrace $ InvalidSymbolicSlice length wRepr
-        ConstraintHint (HintMaxBVSize maxlength) ->
-          case wRepr `WT.testNatCases` maxlength of
-            WT.NatCaseEQ ->
-              return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf wRepr wRepr slicedAtom)
-            WT.NatCaseLT _ ->
-              return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf wRepr wRepr slicedAtom)
-            WT.NatCaseGT WT.LeqProof | -- FIXME: should be derivable
-              Just WT.LeqProof <- maxlength `WT.testLeq` wRepr ->
-              return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf maxlength wRepr slicedAtom)
-        ConstraintHint HintAnyBVSize->
-          return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf wRepr wRepr slicedAtom)
-        _ -> case slice of
-          AS.SliceSingle _ ->
-            return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf (WT.knownNat @1) wRepr slicedAtom)
-          _ -> do
-            mLength <- getStaticSliceLength slice
-            case mLength of
-              Just (Some (BVRepr length))
-                | Just WT.LeqProof <- length `WT.testLeq` wRepr ->
-                  return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf length wRepr slicedAtom)
-              _ -> throwTrace $ UnsupportedSlice slice constraint
-
+             | otherwise -> throwTrace $ UnsupportedSlice slice constraint
+        _ -> case constraint of
+          ConstraintSingle (CT.BVRepr length) ->
+            if | Just WT.LeqProof <- length `WT.testLeq` wRepr ->
+                 return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf length wRepr slicedAtom)
+               | otherwise -> throwTrace $ InvalidSymbolicSlice length wRepr
+          ConstraintHint (HintMaxBVSize maxlength) ->
+            case wRepr `WT.testNatCases` maxlength of
+              WT.NatCaseEQ ->
+                return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf wRepr wRepr slicedAtom)
+              WT.NatCaseLT _ ->
+                return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf wRepr wRepr slicedAtom)
+              WT.NatCaseGT WT.LeqProof | -- FIXME: should be derivable
+                Just WT.LeqProof <- maxlength `WT.testLeq` wRepr ->
+                return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf maxlength wRepr slicedAtom)
+          ConstraintHint HintAnyBVSize->
+            return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf wRepr wRepr slicedAtom)
+          _ -> throwTrace $ UnsupportedSlice slice constraint
 
 translateSlice :: Overrides arch
                -> AS.Expr
@@ -1586,35 +1649,53 @@ translateSlice ov e slice constraint = do
    Some atom <- translateExpr ov e
    translateSlice' ov atom slice constraint
 
-sliceValidTest :: SomeSlice s -> (CCG.Expr (ASLExt arch) s CT.BoolType)
-sliceValidTest (SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom)) = case range of
-  SliceStatic _ _ -> CCG.App (CCE.BoolLit True)
+sliceValidTests :: SomeSlice s -> Generator h s arch ret ()
+sliceValidTests (SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom)) = case range of
+  SliceStatic _ _ -> return ()
   SliceSymbolic loAtom hiAtom -> do
     let lo = CCG.AtomExpr loAtom
     let hi = CCG.AtomExpr hiAtom
+    let len = CCG.App (CCE.IntLit (CT.intValue lenRepr))
+    let wlen = CCG.App (CCE.IntLit (CT.intValue wRepr))
 
     let tests = map CCG.App [ CCE.IntLe lo hi
-                            , CCE.IntLe (CCG.App (CCE.IntSub hi lo)) (CCG.App (CCE.IntLit (CT.intValue lenRepr)))]
-    foldl (\testAcc -> \e -> CCG.App (CCE.And testAcc e)) (CCG.App (CCE.BoolLit True)) tests
+                              -- lo <= hi
+                            , CCE.IntLe (CCG.App (CCE.IntAdd (CCG.App $ CCE.IntSub hi lo) (CCG.App $ CCE.IntLit 1))) len
+                              -- (hi - lo) + 1 <= len
+                            , CCE.IntLe (CCG.App (CCE.IntAdd hi (CCG.App $ CCE.IntLit 1))) wlen
+                              -- hi + 1 <= wlen
+                            ]
+    mapM_ mkTest tests
+  where
+    mkTest test = do
+      atest <- CCG.mkAtom test
+      assertAtom atest Nothing ("Slicing constraint failure: " <> (T.pack $ show test))
 
 
-withValidSlice :: SliceRange s sliceLength atomLength
+withValidSlice :: AS.Slice
+               -> SliceRange s sliceLength atomLength
                -> SliceOf s sliceLength atomLength
                -> Generator h s arch ret (CCG.Atom s (CT.BVType sliceLength))
                -> Generator h s arch ret (Some (CCG.Atom s))
-withValidSlice range sliceOf f = do
-    test <- CCG.mkAtom $ sliceValidTest (SomeSlice range sliceOf)
-    assertAtom test
+withValidSlice slice range sliceOf@(SliceOf lenRepr wRepr atom) f = do
+    sliceValidTests (SomeSlice range sliceOf)
+    --atest <- CCG.mkAtom test
+    --assertAtom atest
+    --CCG.assertExpr (CCG.AtomExpr atest) (CCG.App (CCE.TextLit $ "Slicing constraints: " <> (T.pack $ show slice) <> (T.pack $ show test)))
     atom <- f
+    --atom2 <- CCG.mkAtom $ CCG.App (CCE.BaseIte (CT.BaseBVRepr lenRepr) (CCG.AtomExpr test) (CCG.AtomExpr atom) (getDefaultValue (CT.BVRepr lenRepr)))
     return (Some atom)
 
-withValidSlice' :: SliceRange s sliceLength atomLength
+withValidSlice' :: AS.Slice
+               -> SliceRange s sliceLength atomLength
                -> SliceOf s sliceLength atomLength
                -> Generator h s arch ret ()
                -> Generator h s arch ret ()
-withValidSlice' range sliceOf f = do
-    test <- CCG.mkAtom $ sliceValidTest (SomeSlice range sliceOf)
-    assertAtom test
+withValidSlice' slice range sliceOf f = do
+    sliceValidTests (SomeSlice range sliceOf)
+    --atest <- CCG.mkAtom test
+    --assertAtom atest
+    --CCG.assertExpr (CCG.AtomExpr atest) (CCG.App (CCE.TextLit $ "Slicing constraints" <> (T.pack $ show slice) <> (T.pack $ show test)))
     f
 
 translateSlice' :: Overrides arch
@@ -1624,7 +1705,7 @@ translateSlice' :: Overrides arch
                 -> Generator h s arch ret (Some (CCG.Atom s))
 translateSlice' ov atom' slice constraint = do
   SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom) <- getSomeSlice ov slice atom' constraint
-  withValidSlice range sliceOf $ do
+  withValidSlice slice range sliceOf $ do
     case lenRepr `WT.testNatCases` wRepr of
       WT.NatCaseEQ ->
         -- when the slice covers the whole range we just return the whole atom
@@ -1822,7 +1903,7 @@ translateBinaryOp ov op e1 e2 = do
 
     _ -> X.throw (UnsupportedBinaryOperator op)
 
--- Arithmetic operators
+-- Linear Arithmetic operators
 
 addOp :: BinaryOperatorBundle ext s 'SameK
 addOp = BinaryOperatorBundle CCE.BVAdd CCE.NatAdd CCE.IntAdd
@@ -1830,14 +1911,51 @@ addOp = BinaryOperatorBundle CCE.BVAdd CCE.NatAdd CCE.IntAdd
 subOp :: BinaryOperatorBundle ext s 'SameK
 subOp = BinaryOperatorBundle CCE.BVSub CCE.NatSub CCE.IntSub
 
-mulOp :: BinaryOperatorBundle ext s 'SameK
-mulOp = BinaryOperatorBundle CCE.BVMul CCE.NatMul CCE.IntMul
+-- Nonlinear Arithmetic operators
 
-modOp :: BinaryOperatorBundle ext s 'SameK
-modOp = BinaryOperatorBundle (error "BV mod not supported") CCE.NatMod CCE.IntMod
+-- For now we hide these behind uninterpreted functions until we have a better story
+-- for when we actually need their theories
 
-divOp :: BinaryOperatorBundle ext s 'SameK
-divOp = BinaryOperatorBundle (error "BV div not supported") CCE.NatDiv CCE.IntDiv
+-- mulOp :: BinaryOperatorBundle ext s 'SameK
+-- mulOp = BinaryOperatorBundle CCE.BVMul CCE.NatMul CCE.IntMul
+
+-- modOp :: BinaryOperatorBundle ext s 'SameK
+-- modOp = BinaryOperatorBundle (error "BV mod not supported") CCE.NatMod CCE.IntMod
+
+-- divOp :: BinaryOperatorBundle ext s 'SameK
+-- divOp = BinaryOperatorBundle (error "BV div not supported") CCE.NatDiv CCE.IntDiv
+
+mkBVUF :: (1 WT.<= w)
+     => T.Text
+     -> WT.NatRepr w
+     -> CCG.Expr (ASLExt arch) s (CT.BVType w)
+     -> CCG.Expr (ASLExt arch) s (CT.BVType w)
+     -> CCE.App (ASLExt arch) (CCG.Expr (ASLExt arch) s) (CT.BVType w)
+mkBVUF nm natRepr arg1 arg2 = do
+  let brepr = CT.BaseBVRepr natRepr
+  let repr = CT.BVRepr natRepr
+  let uf = UF nm brepr (Ctx.empty Ctx.:> repr Ctx.:> repr) (Ctx.empty Ctx.:> arg1 Ctx.:> arg2)
+  CCE.ExtensionApp uf
+
+mkUF :: T.Text
+     -> CT.TypeRepr tp
+     -> CCG.Expr (ASLExt arch) s tp
+     -> CCG.Expr (ASLExt arch) s tp
+     -> CCE.App (ASLExt arch) (CCG.Expr (ASLExt arch) s) tp
+mkUF nm repr arg1 arg2 = case CT.asBaseType repr of
+    CT.AsBaseType brepr -> do
+      let uf = UF nm brepr (Ctx.empty Ctx.:> repr Ctx.:> repr) (Ctx.empty Ctx.:> arg1 Ctx.:> arg2)
+      CCE.ExtensionApp uf
+    _ -> error $ "Illegal crucible type: " <> show repr
+
+mulOp :: BinaryOperatorBundle (ASLExt arch) s 'SameK
+mulOp = BinaryOperatorBundle (mkBVUF "BVMul") (mkUF "NatMul" CT.NatRepr) (mkUF "IntMul" CT.IntegerRepr)
+
+modOp :: BinaryOperatorBundle (ASLExt arch) s 'SameK
+modOp = BinaryOperatorBundle (error "BV mod not supported") (mkUF "NatMod" CT.NatRepr) (mkUF "IntMod" CT.IntegerRepr)
+
+divOp :: BinaryOperatorBundle (ASLExt arch) s 'SameK
+divOp = BinaryOperatorBundle (error "BV div not supported") (mkUF "NatDiv" CT.NatRepr) (mkUF "IntDiv" CT.IntegerRepr)
 
 -- Comparison operators
 
@@ -2057,9 +2175,6 @@ overloadedDispatchOverrides e tc = case e of
 -- Eagerly throw exceptions when it is clear that the instruction is not supported
 checkSupportedExpr :: AS.Expr -> AS.Expr
 checkSupportedExpr e = case e of
-  AS.ExprCall (AS.QualifiedIdentifier _ nm) _
-    | nm `elem` ["VFPExpandImm", "CheckVPFEnabled"] ->
-      X.throw $ InstructionUnsupported
   _ -> e
 
 checkSupportedStmt :: AS.Stmt -> AS.Stmt
@@ -2117,9 +2232,6 @@ overrides = Overrides {..}
                | otherwise -> error $ "Invalid return type for Zeros():" <> show ty
           -- FIXME: This should raise an exception
           AS.StmtCall (AS.QualifiedIdentifier _ "SEE") [x] -> Just $ do
-            return ()
-          AS.StmtCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
-            --CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
             return ()
           -- FIXME: This is a pass-by-reference function so we need to expand it in-place
           AS.StmtCall (AS.QualifiedIdentifier _ "SETTER_Elem") [_, _,_ ] -> Just $ do
@@ -2249,18 +2361,14 @@ overrides = Overrides {..}
                 return (Some result, TypeBasic)
           AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
             (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
-            case CCG.typeOfAtom atom of
-              CT.BVRepr nr -> do
-                mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
-              _ -> error "Called UInt on non-bitvector"
+            BVRepr nr <- getAtomBVRepr atom
+            mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
           -- FIXME: BvToInteger isn't right here, because it's unsigned. We need a
           -- signed version.
           AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> Just $ do
             Some atom <- translateExpr overrides argExpr
-            case CCG.typeOfAtom atom of
-              CT.BVRepr nr -> do
-                mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
-              _ -> error "Called SInt on non-bitvector"
+            BVRepr nr <- getAtomBVRepr atom
+            mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
           AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ do
             (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
             BVRepr nr <- getAtomBVRepr atom
@@ -2401,12 +2509,6 @@ overrides = Overrides {..}
           AS.ExprCall (AS.QualifiedIdentifier _ "BigEndianReverse") [x] -> Just $ do
             Some xAtom <- translateExpr overrides x
             mkAtom (CCG.AtomExpr xAtom)
-          -- FIXME: implement this (asl definition is recursive and dependently typed)
-          -- There are two overloadings of this based on the type of x
-          AS.ExprCall (AS.QualifiedIdentifier _ "Unreachable") [] -> Just $ do
-            --atom <- CCG.assertExpr (CCG.App (CCE.BoolLit False)) (CCG.App (CCE.TextLit "Unreachable"))
-            mkAtom (CCG.App CCE.EmptyApp)
-          -- FIXME: Memory model
           AS.ExprCall (AS.QualifiedIdentifier _ "__ReadRAM") [_, szExpr, _, addr] -> Just $ do
             env <- MS.gets tsStaticEnv
             if | Just (StaticInt sz) <- exprToStatic env szExpr

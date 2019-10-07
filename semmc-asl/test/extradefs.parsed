@@ -117,6 +117,9 @@
     (Just
       (StmtBlock
         (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any reg))
@@ -246,6 +249,9 @@
     (Just
       (StmtBlock
         (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any ret))
@@ -256,4 +262,227 @@
           (StmtReturn
             (Just
               (ExprVarRef
-                (QualifiedIdentifier Any ret)))))))))
+                (QualifiedIdentifier Any ret))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 WatchpointMatch)
+    (list
+      (SymDecl
+        n
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        ispriv
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any FALSE))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch64 WatchpointMatch)
+    (list
+      (SymDecl
+        n
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 64)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer)))
+      (SymDecl
+        ispriv
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        acctype
+        (TypeRef
+          (QualifiedIdentifier Any AccType)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any FALSE))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch64 TranslationTableWalk)
+    (list
+      (SymDecl
+        ipaddress
+        (TypeFun
+          bits
+          (ExprLitNat 52)))
+      (SymDecl
+        s1_nonsecure
+        (TypeRef
+          (QualifiedIdentifier Any bit)))
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 64)))
+      (SymDecl
+        acctype
+        (TypeRef
+          (QualifiedIdentifier Any AccType)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        secondstage
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        s2fs1walk
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any TLBRecord)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtVarsDecl
+            (list result)
+            (TypeRef
+              (QualifiedIdentifier Any TLBRecord)))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any result))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 TranslationTableWalkLD)
+    (list
+      (SymDecl
+        ipaddress
+        (TypeFun
+          bits
+          (ExprLitNat 40)))
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        acctype
+        (TypeRef
+          (QualifiedIdentifier Any AccType)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        secondstage
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        s2fs1walk
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any TLBRecord)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtVarsDecl
+            (list result)
+            (TypeRef
+              (QualifiedIdentifier Any TLBRecord)))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any result))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 TranslationTableWalkSD)
+    (list
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        acctype
+        (TypeRef
+          (QualifiedIdentifier Any AccType)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any TLBRecord)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtVarsDecl
+            (list result)
+            (TypeRef
+              (QualifiedIdentifier Any TLBRecord)))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any result)))))))))

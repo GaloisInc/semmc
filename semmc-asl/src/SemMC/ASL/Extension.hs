@@ -163,7 +163,8 @@ fstFC (Pair f _) = f
 sndFC :: Product f g a -> g a
 sndFC (Pair _ g) = g
 
-extractBase :: T.Text
+extractBase :: WI.IsExprBuilder sym
+            => T.Text
             -> (forall tp1 . f tp1 -> IO (CS.RegValue' sym tp1))
             -> Ctx.Assignment CT.TypeRepr tps
             -> Ctx.Assignment f tps
@@ -180,7 +181,8 @@ extractBase fname evalExpr tps vals (Some acc) = do
           let acc' = Ctx.extend acc (Pair btr (SE se))
           extractBase fname evalExpr restReps restVals (Some acc')
 
-extractBase' :: (forall tp . f tp -> IO (CS.RegValue' sym tp))
+extractBase' :: WI.IsExprBuilder sym
+             => (forall tp . f tp -> IO (CS.RegValue' sym tp))
              -> Ctx.Assignment CT.TypeRepr tps
              -> Ctx.Assignment f tps
              -> IO (Ctx.Assignment (SymExpr' sym) (ToBaseTypes tps))

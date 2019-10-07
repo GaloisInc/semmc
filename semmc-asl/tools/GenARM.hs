@@ -19,10 +19,12 @@ import qualified Data.Set as Set
 import           Data.Maybe ( fromMaybe, catMaybes, listToMaybe, mapMaybe )
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
+import           Data.Bits( (.|.) )
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.List as List
+import qualified Data.Tree as Tree
 import           Data.List.Index (imap)
 import qualified Lang.Crucible.Backend.Simple as CBS
 import qualified Lang.Crucible.Backend.Online as CBO
@@ -31,6 +33,8 @@ import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
 import System.Exit (exitFailure)
 import qualified System.IO as IO
+import           Panic hiding (panic)
+import           Lang.Crucible.Panic ( Crucible )
 
 import SemMC.ASL
 import SemMC.ASL.Crucible
@@ -42,6 +46,11 @@ import SemMC.ASL.Exceptions
 
 import Control.Concurrent
 import Control.Concurrent.MVar
+
+import qualified What4.Interface as WI
+import qualified What4.Solver.Yices as Yices
+import qualified What4.Config as WC
+import           What4.ProblemFeatures
 
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
 
@@ -98,14 +107,23 @@ defaultOptions = TranslatorOptions
   , optThrowUnexpectedExceptions = True
   }
 
+
 doTranslationOptions :: TranslatorOptions
 doTranslationOptions = defaultOptions {optFilters = filterStalls, optSkipTranslation = False}
 
 main :: IO ()
-main = do
+main = execMainAt 0
+
+execMainAt :: Int -> IO ()
+execMainAt startIdx = do
   targetInsts <- getTargetInstrs
   let filter = defaultFilter { instrFilter = \ident -> Set.member ident targetInsts }
-  let translateOpts = defaultOptions{ optFilters = filter, optCollectExceptions=False }
+  let translateOpts = defaultOptions {
+          optFilters = filter
+        , optSkipTranslation=False
+        , optCollectExceptions=True
+        , optStartIndex = startIdx
+        }
   sm <- runWithFilters translateOpts
   
   let reportOpts = defaultStatOptions {
@@ -114,14 +132,22 @@ main = do
         reportFunctionDependencies = True}
   reportStats reportOpts sm
 
-testDefinition :: String -> Int -> IO (SigMap)
-testDefinition s startidx = do
-  let nm = T.pack s
-  let opts = defaultOptions 
-  sig <- runWithFilters (opts  { optFilters = translateOnlyFun nm } )
-  case Map.lookup nm (sMap sig) of
+getTargetFilter :: IO (Filters)
+getTargetFilter = do
+  targetInsts <- getTargetInstrs
+  let filter = defaultFilter { instrFilter = \ident -> Set.member ident targetInsts }
+  return filter
+
+testDefinition :: TranslatorOptions -> String -> String -> String -> IO (SigMap)
+testDefinition opts inm' encnm' defnm' = do
+  let defnm = T.pack defnm'
+  let inm = T.pack inm'
+  let encnm = T.pack encnm'
+  let filter = translateOnlyFun (inm, encnm) defnm
+  sig <- runWithFilters (opts  { optFilters = filter} )
+  case Map.lookup defnm (sMap sig) of
     Just _ -> return sig
-    Nothing -> error $ "Translation failed to discover function: " <> show nm
+    Nothing -> error $ "Translation failed to discover function: " <> show defnm
 
 testInstruction :: TranslatorOptions -> String -> String -> IO (SigMap)
 testInstruction opts instr enc = do
@@ -195,17 +221,18 @@ filterStalls = Filters
   (\_ -> \nm -> not $ List.elem nm stalledDefs)
   (\_ -> True)
 
-translateOnlyFun :: T.Text -> Filters
-translateOnlyFun fnm = Filters
-  (\_ -> \nm -> (nm == fnm))
-  (\(InstructionIdent nm enc _) -> True)
-  (\_ -> \nm -> nm == fnm) (\_ -> False)
+translateOnlyFun :: (T.Text, T.Text) -> T.Text -> Filters
+translateOnlyFun inm fnm = Filters
+  (\(InstructionIdent nm enc _) -> \_ -> (nm, enc) == inm)
+  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
+  (\_ -> \nm -> nm == fnm)
+  (\_ -> False)
 
 translateOnlyInstr :: (T.Text, T.Text) -> Filters
 translateOnlyInstr inm = Filters
   (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
   (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
-  (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
+  (\(InstructionIdent nm enc _) -> \_ -> False)
   (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
 
 logMsg :: String -> MSS.StateT SigMap IO ()
@@ -266,7 +293,10 @@ runWithFilters opts = do
   let (sigEnv, sigState) = buildSigState spec
   runWithFilters' opts spec sigEnv sigState
 
-type ExpectedException = ()
+data ExpectedException =
+    UnsupportedInstruction
+  | CruciblePanic
+  | UnsupportedNonlinearArithmetic
 -- data ExpectedException =
 --     CannotMonomorphize T.Text
 --   | SymbolicArguments T.Text
@@ -284,7 +314,7 @@ type ExpectedException = ()
 --   | RmemUnsupported
 --   | ParserError
 --   | UnsupportedInstruction
---   deriving (Eq, Ord, Show)
+   deriving (Eq, Ord, Show)
 
 -- badStaticInstructions :: [T.Text]
 -- badStaticInstructions =
@@ -292,7 +322,21 @@ type ExpectedException = ()
 --   ,"PFALSE_P__", "SETFFR_F__"]
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
-expectedExceptions _ _ = Nothing
+expectedExceptions k ex = case ex of
+  TExcept _ (InstructionUnsupported) -> Just $ UnsupportedInstruction
+  SomeExcept e
+    | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
+    , KeyInstr (InstructionIdent nm _ _) <- k
+    , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A"] ->
+      Just $ CruciblePanic
+  SomeExcept e
+    | Just (SimulationAbort _ _) <- X.fromException e
+    , KeyInstr (InstructionIdent nm _ _) <- k
+    , nm `elem` [ "aarch32_SMUAD_A", "aarch32_SMLAD_A"
+                , "aarch32_SMLSD_A", "aarch32_SMLAWB_A"
+                , "aarch32_SMLABB_A"] ->
+      Just $ UnsupportedNonlinearArithmetic
+  _ -> Nothing
 -- expectedExceptions k ex = case ex of
 --   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
 --   SExcept (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
@@ -396,7 +440,6 @@ reportStats sopts sm = do
     reverseDependencyMap =
         Map.fromListWith (++) $ concat $ map (\(instr, funs) -> map (\fun -> (fun, [instr])) (Set.toList funs))
            (Map.assocs (instrDeps sm))
-    prettyIdent (InstructionIdent nm enc iset) = show nm <> " " <> show enc <> " " <> show iset
     printKey k = case k of
       KeyInstr ident -> putStrLn $ "Instruction: " <> prettyIdent ident
       KeyFun nm -> do
@@ -413,7 +456,10 @@ reportStats sopts sm = do
                 then Map.insertWith Set.union e (Set.singleton nm)
                 else id
       Nothing -> id
-  
+
+prettyIdent :: InstructionIdent -> String
+prettyIdent (InstructionIdent nm enc iset) = show nm <> " " <> show enc <> " " <> show iset
+
 data TranslatorException =
     TExcept (T.Text, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
   | SExcept SigException
@@ -495,13 +541,13 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
         Left err -> do
           logMsg $ "Error computing ASL definitions: " ++ show err
         Right defs -> do
-          logMsg $ "Translating instruction: " ++ show instrIdent
+          logMsg $ "Translating instruction: " ++ prettyIdent instrIdent
           logMsg $ (show iSig)
           deps <- processInstruction instrIdent iSig instStmts defs
 
           logMsg $ "--------------------------------"
           logMsg "Translating functions: "
-          alldeps <- mapM (translationLoop instrIdent defs) (Map.assocs deps)
+          alldeps <- mapM (translationLoop instrIdent [] defs) (Map.assocs deps)
           let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
           MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
     _ -> error "Panic"
@@ -568,10 +614,11 @@ catchIO k f = do
   
 
 translationLoop :: InstructionIdent
+                -> [T.Text]
                 -> Definitions arch
                 -> (T.Text, StaticEnv)
                 -> MSS.StateT SigMap IO (Set.Set T.Text)
-translationLoop fromInstr defs (fnname, env) = do
+translationLoop fromInstr callStack defs (fnname, env) = do
   let finalName = (mkFinalFunctionName env fnname)
   fdeps <- MSS.gets funDeps
   case Map.lookup finalName fdeps of
@@ -584,10 +631,13 @@ translationLoop fromInstr defs (fnname, env) = do
        case Map.lookup fnname (defSignatures defs) of
            Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
                  MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
-                 logMsg $ "Translating function: " ++ show finalName ++ "\n" ++ show sig ++ "\n"
+                 logMsg $ "Translating function: " ++ show finalName ++ " for instruction: "
+                    ++ prettyIdent fromInstr
+                    ++ "\n CallStack: " ++ show callStack
+                    ++ "\n" ++ show sig ++ "\n"
                  deps <- processFunction fromInstr finalName sig stmts defs
                  MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
-                 alldeps <- mapM (translationLoop fromInstr defs) (Map.assocs deps)
+                 alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Map.assocs deps)
                  let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
 
                  MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
@@ -639,8 +689,6 @@ textToISet t = case t of
 
 getTargetInstrs :: IO (Set.Set InstructionIdent)
 getTargetInstrs = do
-  IO.withFile targetInstsFilePath IO.ReadMode $ \handle -> do
-    return ()
   t <- TIO.readFile targetInstsFilePath
   return $ Set.fromList (map getTriple (T.lines t))
   where
@@ -657,6 +705,17 @@ getTargetInstrs = do
           }
       _ -> X.throw $ BadTranslatedInstructionsFile
 
+withOnlineBackend :: forall fs scope a.
+                          NonceGenerator IO scope
+                       -> CBO.UnsatFeatures
+                       -> (CBO.YicesOnlineBackend scope fs -> IO a)
+                       -> IO a
+withOnlineBackend gen unsatFeat action =
+  let feat = Yices.yicesDefaultFeatures .|. CBO.unsatFeaturesToProblemFeatures unsatFeat in
+  CBO.withOnlineBackend gen feat $ \sym ->
+    do WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
+       action sym
+
 processInstruction :: InstructionIdent
                    -> ProcedureSignature globals init
                    -> [AS.Stmt] -> Definitions arch
@@ -670,8 +729,9 @@ processInstruction instr pSig stmts defs = do
       if filteredOut
       then return (procDepends p)
       else do
+        logMsg $ "Simulating instruction: " ++ prettyIdent instr
         mdep <- catchIO (KeyInstr instr) $
-          CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
+          withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
             let cfg = SimulatorConfig { simOutputHandle = IO.stdout
                                       , simHandleAllocator = handleAllocator
                                       , simSym = backend
@@ -698,8 +758,9 @@ processFunction fromInstr fnName sig stmts defs =
           if filteredOut
           then return (funcDepends f)
           else do
+            logMsg $ "Simulating function: " ++ show fnName
             mdep <- catchIO (KeyFun fnName) $
-              CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
+              withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
                 let cfg = SimulatorConfig { simOutputHandle = IO.stdout
                                         , simHandleAllocator = handleAllocator
                                         , simSym = backend
@@ -717,8 +778,9 @@ processFunction fromInstr fnName sig stmts defs =
           if filteredOut
           then return (procDepends p)
           else do
+            logMsg $ "Simulating function: " ++ show fnName
             mdep <- catchIO (KeyFun fnName) $
-              CBO.withYicesOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
+              withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
                 let cfg = SimulatorConfig { simOutputHandle = IO.stdout
                                         , simHandleAllocator = handleAllocator
                                         , simSym = backend

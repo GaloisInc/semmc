@@ -106,7 +106,7 @@ functionToCrucible defs sig hdlAlloc stmts = do
   globals <- FC.traverseFC allocateGlobal (funcGlobalReprs sig)
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, deps) <- stToIO $ defineCCGFunction pos hdl (\ref -> funcDef defs sig ref globals stmts)
-
+  print cfg0
   return Function { funcSig = sig
                   , funcCFG = CCS.toSSA cfg0
                   , funcGlobals = globals
@@ -249,6 +249,7 @@ procedureToCrucible defs sig hdlAlloc stmts = do
   globals <- FC.traverseFC allocateGlobal (procGlobalReprs sig)
   let pos = WP.InternalPos
   (CCG.SomeCFG cfg0, depends) <- stToIO $ defineCCGFunction pos hdl (\ref -> procDef defs sig ref globals stmts)
+  print cfg0
   return Procedure { procSig = sig
                    , procCFG = CCS.toSSA cfg0
                    , procGlobals = globals
