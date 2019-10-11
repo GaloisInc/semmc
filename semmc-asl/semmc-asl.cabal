@@ -56,6 +56,7 @@ executable semmc-asl-genarm
                        ilist,
                        containers,
                        crucible,
+                       what4,
                        filepath,
                        parameterized-utils,
                        semmc-asl,

@@ -31,6 +31,27 @@
                     (QualifiedIdentifier Any bv))
                   (ExprVarRef
                     (QualifiedIdentifier Any M))))))))))
+  (DefCallable
+    (QualifiedIdentifier Any sizeOf)
+    (list
+      (SymDecl
+        bv
+        (TypeFun
+          bits
+          (ExprVarRef
+            (QualifiedIdentifier Any N)))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any integer)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any N))))))))
   (DefConst
     LOG2_TAG_GRANULE
     (TypeRef

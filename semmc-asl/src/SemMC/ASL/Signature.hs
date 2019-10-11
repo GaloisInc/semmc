@@ -59,7 +59,10 @@ data FunctionSignature globals init tp =
                     -- ^ The globals referenced by the function; NOTE that we
                     -- assume that globals are read-only in functions
                     , funcStaticEnv :: StaticEnv
-                    -- ^ The typing environment used to monomorphize this function
+                    -- ^ The static environment used to monomorphize this function
+                    --, funcPossibleEnvs :: [StaticEnv]
+                    -- ^ All possible concrete values for a subset of the variables
+                    -- seen in this procedure
                     , funcArgs :: [AS.SymbolDecl]
                     }
   deriving (Show)
@@ -114,7 +117,10 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                        -- For now, we can always make it the full set of
                        -- globals; later, we can find a tighter bound.
                      , procStaticEnv :: StaticEnv
-                       -- ^ The typing environment used to monomorphize this function
+                       -- ^ The static environment used to monomorphize this function
+                     --, procPossibleEnvs :: [StaticEnv]
+                       -- ^ All possible concrete values for a subset of the variables
+                       -- seen in this procedure
                      , procArgs :: [AS.SymbolDecl]
                      }
   deriving (Show)

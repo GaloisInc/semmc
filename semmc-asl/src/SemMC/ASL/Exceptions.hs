@@ -73,15 +73,19 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | InvalidOverloadedFunctionCall T.Text [AS.Expr]
                           | BadMemoryAccess AS.Expr
                           | StaticEvaluationOfFalseAssertion AS.Expr
+                          | UnexpectedInlineFunction T.Text
+                          | UnexpectedNothing
+                          | TranslationError String
                           | UNIMPLEMENTED String
                           | InstructionUnsupported
+
 
 deriving instance Show TranslationException
 
 instance X.Exception TranslationException
 
 data TracedTranslationException =
-  TracedTranslationException T.Text [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
+  TracedTranslationException T.Text StaticEnv [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
 
 deriving instance Show TracedTranslationException
 

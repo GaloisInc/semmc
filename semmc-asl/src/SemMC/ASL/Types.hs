@@ -19,6 +19,7 @@ module SemMC.ASL.Types
   , LabeledValue(..)
   , StaticEnv
   , StaticValue(..)
+  , StaticType(..)
   , UserStructAcc
   , StructAccessor(..)
   , RegisterSig
@@ -36,10 +37,16 @@ module SemMC.ASL.Types
   , pushFreshStaticEnv
   , popStaticEnv
   , lookupStaticEnv
+  , lookupStaticEnvType
   , insertStaticEnv
+  , insertStaticEnvType
   , flatStaticEnv
   , fromListStaticEnv
   , mkFinalFunctionName
+  , letInStmt
+  , unletInStmt
+  , staticEnvironmentStmt
+  , unstaticEnvironmentStmt
   ) where
 
 import qualified Data.Parameterized.Context as Ctx
@@ -155,59 +162,69 @@ userTypeRepr ut =
     UserEnum _ -> WT.BaseIntegerRepr
     UserStruct tps -> WT.BaseStructRepr (FC.fmapFC projectValue tps)
 
+type Bitvector = [Bool]
 
 data StaticValue =
     StaticInt Integer
   | StaticBool Bool
-  deriving Eq
+  | StaticBV Bitvector
+  deriving (Eq, Ord)
 
 instance Show StaticValue where
   show t = case t of
     StaticInt i -> show i
     StaticBool b -> show b
+    StaticBV bv -> show bv
 
-data StaticEnv = StaticEnv { unStaticEnv :: [Map.Map T.Text StaticValue] }
-  deriving Show
+data StaticType =
+    StaticBVType Integer
+  | StaticIntType
+  | StaticBoolType
+  deriving (Show, Eq)
+
+data StaticEnv = StaticEnv { unStaticEnv :: [(Map.Map T.Text StaticValue, Map.Map T.Text StaticType)] }
+
+deriving instance Show StaticEnv
 
 emptyStaticEnv :: StaticEnv
-emptyStaticEnv = StaticEnv [Map.empty]
+emptyStaticEnv = StaticEnv [(Map.empty, Map.empty)]
 
 pushFreshStaticEnv :: StaticEnv -> StaticEnv
-pushFreshStaticEnv (StaticEnv e) = StaticEnv (Map.empty : e)
+pushFreshStaticEnv (StaticEnv e) = StaticEnv ((Map.empty, Map.empty) : e)
 
 popStaticEnv :: StaticEnv -> StaticEnv
 popStaticEnv (StaticEnv (_ : e)) = StaticEnv e
 popStaticEnv _ = error "Cannot pop empty type environment"
 
 lookupStaticEnv :: T.Text -> StaticEnv -> Maybe StaticValue
-lookupStaticEnv  nm (StaticEnv (e : es)) =
+lookupStaticEnv  nm (StaticEnv ((e, _) : es)) =
   case Map.lookup nm e of
     Just i -> Just i
     _ -> lookupStaticEnv nm (StaticEnv es)
 lookupStaticEnv nm _ = Nothing
 
-lookupStaticEnvInt :: T.Text -> StaticEnv -> Maybe Integer
-lookupStaticEnvInt nm env =
-  case lookupStaticEnv nm env of
-    Just (StaticInt i) -> Just i
-    _ -> Nothing
 
-lookupStaticEnvBool :: T.Text -> StaticEnv -> Maybe Bool
-lookupStaticEnvBool nm env =
-  case lookupStaticEnv nm env of
-    Just (StaticBool b) -> Just b
-    _ -> Nothing
+lookupStaticEnvType :: T.Text -> StaticEnv -> Maybe StaticType
+lookupStaticEnvType  nm (StaticEnv ((_, te) : es)) =
+  case Map.lookup nm te of
+    Just i -> Just i
+    _ -> lookupStaticEnvType nm (StaticEnv es)
+lookupStaticEnvType nm _ = Nothing
 
 insertStaticEnv :: T.Text -> StaticValue -> StaticEnv -> StaticEnv
-insertStaticEnv nm i env@(StaticEnv (e : es)) =
+insertStaticEnv nm i env@(StaticEnv ((e, te) : es)) =
   case lookupStaticEnv nm env of
     Just i' -> if i == i' then env
                else error $ "Attempted to assign value: " <> show i <>
                     " to " <> show nm <> " in enviroment: " <> show env
-    Nothing -> StaticEnv (Map.insert nm i e : es)
+    Nothing -> StaticEnv ((Map.insert nm i e, te) : es)
+
+insertStaticEnvType :: T.Text -> StaticType -> StaticEnv -> StaticEnv
+insertStaticEnvType nm i env@(StaticEnv ((e, te) : es)) =
+  StaticEnv ((e, Map.insert nm i te) : es)
 
 flatStaticEnv :: StaticEnv -> [(T.Text, StaticValue)]
-flatStaticEnv (StaticEnv (e : es)) = Map.assocs e ++ flatStaticEnv (StaticEnv es)
+flatStaticEnv (StaticEnv ((e, _) : es)) = Map.assocs e ++ flatStaticEnv (StaticEnv es)
 flatStaticEnv (StaticEnv _) = []
 
 mkFinalFunctionName :: StaticEnv -> T.Text ->  T.Text
@@ -215,6 +232,59 @@ mkFinalFunctionName dargs nm = T.concat $ [nm] ++ map (\(nm,i) -> nm <> "_" <> T
 
 fromListStaticEnv :: [(T.Text, StaticValue)] -> StaticEnv
 fromListStaticEnv = List.foldr (\(nm,i) -> insertStaticEnv nm i) emptyStaticEnv
+
+
+letInStmt :: [T.Text] -> [AS.Stmt] -> AS.Stmt
+letInStmt vars stmts = AS.StmtFor "LetIn" (AS.ExprTuple (map AS.ExprLitString vars), AS.ExprTuple []) stmts
+
+unletInStmt :: AS.Stmt -> Maybe ([T.Text], [AS.Stmt])
+unletInStmt (AS.StmtFor "LetIn" (exprVars, _) stmts) = Just (getVars exprVars, stmts)
+  where
+    getVars (AS.ExprTuple vars) = map getVar vars
+    getVars _ = error $ "Invalid LetIn"
+
+    getVar (AS.ExprLitString var) = var
+    getVar _ = error $ "Invalid LetIn"
+
+unletInStmt _ = Nothing
+
+staticEnvironmentStmt :: [T.Text] -> [([StaticValue],[AS.Stmt])] -> AS.Stmt
+staticEnvironmentStmt vars bodies =
+  AS.StmtCase (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "StaticEnvironment")
+    (map varToExpr vars)) (map mkCase bodies)
+  where
+    mkCase (asns, stmts) =
+      if length vars /= length asns
+      then error $ "Invalid static environment:" ++ show vars ++ show asns
+      else AS.CaseWhen (map staticToPat asns) Nothing stmts
+    varToExpr var =
+      AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var)
+    staticToPat sv = case sv of
+      StaticInt i -> AS.CasePatternInt i
+      StaticBool False -> AS.CasePatternIdentifier "FALSE"
+      StaticBool True -> AS.CasePatternIdentifier "TRUE"
+      StaticBV bv -> AS.CasePatternBin bv
+
+unstaticEnvironmentStmt :: AS.Stmt -> Maybe ([T.Text], [([StaticValue],[AS.Stmt])])
+unstaticEnvironmentStmt
+  (AS.StmtCase (AS.ExprCall (AS.QualifiedIdentifier _ "StaticEnvironment") varExprs) cases) =
+    Just $ (map exprToVar varExprs, map unmkCase cases)
+  where
+    exprToVar (AS.ExprVarRef (AS.QualifiedIdentifier _ var)) = var
+    exprToVar _ = error $ "Invalid static environment"
+
+    unmkCase (AS.CaseWhen pats _ stmts) =
+      if length varExprs /= length pats
+      then error $ "Invalid static environment"
+      else (map patToStatic pats, stmts)
+    unmkCase _ = error $ "Invalid static environment"
+    patToStatic pat = case pat of
+      AS.CasePatternInt i -> StaticInt i
+      AS.CasePatternBin bv -> StaticBV bv
+      AS.CasePatternIdentifier "FALSE" -> StaticBool False
+      AS.CasePatternIdentifier "TRUE" -> StaticBool True
+      _ -> error $ "Invalid static environment"
+unstaticEnvironmentStmt _ = Nothing
 
 -- Extended type data for tracking struct member identifiers. This is necessary since Crucible structs
 -- are just tuples, and so extra information is required to resolve ASL struct members to their

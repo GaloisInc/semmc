@@ -1,6 +1,9 @@
 bits(N*M) Replicate(bits(N) bv)
     return Replicate(bv, M);
 
+integer sizeOf(bits(N) bv)
+    return N;
+
 constant integer LOG2_TAG_GRANULE=4;
 constant integer TAG_GRANULE=2 ^ LOG2_TAG_GRANULE;
 

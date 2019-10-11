@@ -22194,18 +22194,18 @@
                       (ExprVarRef
                         (QualifiedIdentifier Any inputsizecheck))
                       (ExprBinOp
-                        "*"
+                        "+"
                         (ExprBinOp
-                          "-"
-                          (ExprLitNat 3)
+                          "*"
+                          (ExprBinOp
+                            "-"
+                            (ExprLitNat 3)
+                            (ExprVarRef
+                              (QualifiedIdentifier Any level)))
                           (ExprVarRef
-                            (QualifiedIdentifier Any level)))
-                        (ExprBinOp
-                          "+"
-                          (ExprVarRef
-                            (QualifiedIdentifier Any stride))
-                          (ExprVarRef
-                            (QualifiedIdentifier Any grainsize))))))
+                            (QualifiedIdentifier Any stride)))
+                        (ExprVarRef
+                          (QualifiedIdentifier Any grainsize)))))
                   (StmtIf
                     (ExprBinOp
                       "||"
@@ -22457,18 +22457,18 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any inputsize)))
               (ExprBinOp
-                "*"
+                "+"
                 (ExprBinOp
-                  "-"
-                  (ExprLitNat 3)
+                  "*"
+                  (ExprBinOp
+                    "-"
+                    (ExprLitNat 3)
+                    (ExprVarRef
+                      (QualifiedIdentifier Any level)))
                   (ExprVarRef
-                    (QualifiedIdentifier Any level)))
-                (ExprBinOp
-                  "+"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any stride))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any grainsize))))))
+                    (QualifiedIdentifier Any stride)))
+                (ExprVarRef
+                  (QualifiedIdentifier Any grainsize)))))
           (StmtIf
             (ExprBinOp
               "=="
@@ -22613,18 +22613,18 @@
                   (LValVarRef
                     (QualifiedIdentifier Any addrselectbottom))
                   (ExprBinOp
-                    "*"
+                    "+"
                     (ExprBinOp
-                      "-"
-                      (ExprLitNat 3)
+                      "*"
+                      (ExprBinOp
+                        "-"
+                        (ExprLitNat 3)
+                        (ExprVarRef
+                          (QualifiedIdentifier Any level)))
                       (ExprVarRef
-                        (QualifiedIdentifier Any level)))
-                    (ExprBinOp
-                      "+"
-                      (ExprVarRef
-                        (QualifiedIdentifier Any stride))
-                      (ExprVarRef
-                        (QualifiedIdentifier Any grainsize)))))
+                        (QualifiedIdentifier Any stride)))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any grainsize))))
                 (StmtVarDeclInit
                   (SymDecl
                     index
@@ -23810,18 +23810,18 @@
               "^"
               (ExprLitNat 2)
               (ExprBinOp
-                "*"
+                "+"
                 (ExprBinOp
-                  "-"
-                  (ExprLitNat 3)
+                  "*"
+                  (ExprBinOp
+                    "-"
+                    (ExprLitNat 3)
+                    (ExprVarRef
+                      (QualifiedIdentifier Any level)))
                   (ExprVarRef
-                    (QualifiedIdentifier Any level)))
-                (ExprBinOp
-                  "+"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any stride))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any grainsize))))))
+                    (QualifiedIdentifier Any stride)))
+                (ExprVarRef
+                  (QualifiedIdentifier Any grainsize)))))
           (StmtIf
             (ExprUnOp
               "!"
@@ -34369,18 +34369,18 @@
                       (ExprVarRef
                         (QualifiedIdentifier Any inputsize))
                       (ExprBinOp
-                        "*"
+                        "+"
                         (ExprBinOp
-                          "-"
-                          (ExprLitNat 3)
+                          "*"
+                          (ExprBinOp
+                            "-"
+                            (ExprLitNat 3)
+                            (ExprVarRef
+                              (QualifiedIdentifier Any level)))
                           (ExprVarRef
-                            (QualifiedIdentifier Any level)))
-                        (ExprBinOp
-                          "+"
-                          (ExprVarRef
-                            (QualifiedIdentifier Any stride))
-                          (ExprVarRef
-                            (QualifiedIdentifier Any grainsize))))))
+                            (QualifiedIdentifier Any stride)))
+                        (ExprVarRef
+                          (QualifiedIdentifier Any grainsize)))))
                   (StmtIf
                     (ExprBinOp
                       "||"
@@ -34512,18 +34512,18 @@
                 (ExprVarRef
                   (QualifiedIdentifier Any inputsize)))
               (ExprBinOp
-                "*"
+                "+"
                 (ExprBinOp
-                  "-"
-                  (ExprLitNat 3)
+                  "*"
+                  (ExprBinOp
+                    "-"
+                    (ExprLitNat 3)
+                    (ExprVarRef
+                      (QualifiedIdentifier Any level)))
                   (ExprVarRef
-                    (QualifiedIdentifier Any level)))
-                (ExprBinOp
-                  "+"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any stride))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any grainsize))))))
+                    (QualifiedIdentifier Any stride)))
+                (ExprVarRef
+                  (QualifiedIdentifier Any grainsize)))))
           (StmtAssign
             (LValVarRef
               (QualifiedIdentifier Any baseaddress))
@@ -34578,18 +34578,18 @@
                   (LValVarRef
                     (QualifiedIdentifier Any addrselectbottom))
                   (ExprBinOp
-                    "*"
+                    "+"
                     (ExprBinOp
-                      "-"
-                      (ExprLitNat 3)
+                      "*"
+                      (ExprBinOp
+                        "-"
+                        (ExprLitNat 3)
+                        (ExprVarRef
+                          (QualifiedIdentifier Any level)))
                       (ExprVarRef
-                        (QualifiedIdentifier Any level)))
-                    (ExprBinOp
-                      "+"
-                      (ExprVarRef
-                        (QualifiedIdentifier Any stride))
-                      (ExprVarRef
-                        (QualifiedIdentifier Any grainsize)))))
+                        (QualifiedIdentifier Any stride)))
+                    (ExprVarRef
+                      (QualifiedIdentifier Any grainsize))))
                 (StmtVarDeclInit
                   (SymDecl
                     index
@@ -35259,18 +35259,18 @@
               "^"
               (ExprLitNat 2)
               (ExprBinOp
-                "*"
+                "+"
                 (ExprBinOp
-                  "-"
-                  (ExprLitNat 3)
+                  "*"
+                  (ExprBinOp
+                    "-"
+                    (ExprLitNat 3)
+                    (ExprVarRef
+                      (QualifiedIdentifier Any level)))
                   (ExprVarRef
-                    (QualifiedIdentifier Any level)))
-                (ExprBinOp
-                  "+"
-                  (ExprVarRef
-                    (QualifiedIdentifier Any stride))
-                  (ExprVarRef
-                    (QualifiedIdentifier Any grainsize))))))
+                    (QualifiedIdentifier Any stride)))
+                (ExprVarRef
+                  (QualifiedIdentifier Any grainsize)))))
           (StmtIf
             (ExprUnOp
               "!"
@@ -49132,10 +49132,10 @@
                                       (QualifiedIdentifier Any exp16))))
                                 (ExprLitNat 15)))
                             (ExprBinOp
-                              "*"
+                              "+"
+                              (ExprLitReal 1.0)
                               (ExprBinOp
-                                "+"
-                                (ExprLitReal 1.0)
+                                "*"
                                 (ExprCall
                                   (QualifiedIdentifier Any Real)
                                   (list
@@ -49143,13 +49143,13 @@
                                       (QualifiedIdentifier Any UInt)
                                       (list
                                         (ExprVarRef
-                                          (QualifiedIdentifier Any frac16)))))))
-                              (ExprBinOp
-                                "^"
-                                (ExprLitReal 2.0)
-                                (ExprUnOp
-                                  "-"
-                                  (ExprLitNat 10))))))))))))
+                                          (QualifiedIdentifier Any frac16))))))
+                                (ExprBinOp
+                                  "^"
+                                  (ExprLitReal 2.0)
+                                  (ExprUnOp
+                                    "-"
+                                    (ExprLitNat 10)))))))))))))
             (list
               (StmtElsIf
                 (ExprBinOp
@@ -49357,10 +49357,10 @@
                                           (QualifiedIdentifier Any exp32))))
                                     (ExprLitNat 127)))
                                 (ExprBinOp
-                                  "*"
+                                  "+"
+                                  (ExprLitReal 1.0)
                                   (ExprBinOp
-                                    "+"
-                                    (ExprLitReal 1.0)
+                                    "*"
                                     (ExprCall
                                       (QualifiedIdentifier Any Real)
                                       (list
@@ -49368,13 +49368,13 @@
                                           (QualifiedIdentifier Any UInt)
                                           (list
                                             (ExprVarRef
-                                              (QualifiedIdentifier Any frac32)))))))
-                                  (ExprBinOp
-                                    "^"
-                                    (ExprLitReal 2.0)
-                                    (ExprUnOp
-                                      "-"
-                                      (ExprLitNat 23))))))))))))))
+                                              (QualifiedIdentifier Any frac32))))))
+                                    (ExprBinOp
+                                      "^"
+                                      (ExprLitReal 2.0)
+                                      (ExprUnOp
+                                        "-"
+                                        (ExprLitNat 23)))))))))))))))
             (Just
               (StmtBlock
                 (list
@@ -49576,10 +49576,10 @@
                                         (QualifiedIdentifier Any exp64))))
                                   (ExprLitNat 1023)))
                               (ExprBinOp
-                                "*"
+                                "+"
+                                (ExprLitReal 1.0)
                                 (ExprBinOp
-                                  "+"
-                                  (ExprLitReal 1.0)
+                                  "*"
                                   (ExprCall
                                     (QualifiedIdentifier Any Real)
                                     (list
@@ -49587,13 +49587,13 @@
                                         (QualifiedIdentifier Any UInt)
                                         (list
                                           (ExprVarRef
-                                            (QualifiedIdentifier Any frac64)))))))
-                                (ExprBinOp
-                                  "^"
-                                  (ExprLitReal 2.0)
-                                  (ExprUnOp
-                                    "-"
-                                    (ExprLitNat 52))))))))))))))
+                                            (QualifiedIdentifier Any frac64))))))
+                                  (ExprBinOp
+                                    "^"
+                                    (ExprLitReal 2.0)
+                                    (ExprUnOp
+                                      "-"
+                                      (ExprLitNat 52)))))))))))))))
           (StmtIf
             (ExprBinOp
               "=="
@@ -50490,21 +50490,21 @@
             (LValVarRef
               (QualifiedIdentifier Any error))
             (ExprBinOp
-              "*"
-              (ExprVarRef
-                (QualifiedIdentifier Any mantissa))
+              "-"
               (ExprBinOp
-                "-"
+                "*"
+                (ExprVarRef
+                  (QualifiedIdentifier Any mantissa))
                 (ExprBinOp
                   "^"
                   (ExprLitReal 2.0)
                   (ExprVarRef
-                    (QualifiedIdentifier Any F)))
-                (ExprCall
-                  (QualifiedIdentifier Any Real)
-                  (list
-                    (ExprVarRef
-                      (QualifiedIdentifier Any int_mant)))))))
+                    (QualifiedIdentifier Any F))))
+              (ExprCall
+                (QualifiedIdentifier Any Real)
+                (list
+                  (ExprVarRef
+                    (QualifiedIdentifier Any int_mant))))))
           (StmtIf
             (ExprBinOp
               "&&"
@@ -57218,13 +57218,13 @@
                   (list
                     (SliceSingle
                       (ExprBinOp
-                        "*"
-                        (ExprLitNat 2)
+                        "+"
                         (ExprBinOp
-                          "+"
+                          "*"
+                          (ExprLitNat 2)
                           (ExprVarRef
-                            (QualifiedIdentifier Any n))
-                          (ExprLitNat 1))))))
+                            (QualifiedIdentifier Any n)))
+                        (ExprLitNat 1)))))
                 (ExprIndex
                   (ExprVarRef
                     (QualifiedIdentifier Any Din))
@@ -58736,13 +58736,13 @@
             (LValVarRef
               (QualifiedIdentifier Any a))
             (ExprBinOp
-              "*"
-              (ExprVarRef
-                (QualifiedIdentifier Any a))
+              "+"
               (ExprBinOp
-                "+"
-                (ExprLitNat 2)
-                (ExprLitNat 1))))
+                "*"
+                (ExprVarRef
+                  (QualifiedIdentifier Any a))
+                (ExprLitNat 2))
+              (ExprLitNat 1)))
           (StmtVarDeclInit
             (SymDecl
               b
@@ -84787,13 +84787,13 @@
               (TypeRef
                 (QualifiedIdentifier Any integer)))
             (ExprBinOp
-              "*"
-              (ExprLitNat 4)
+              "+"
               (ExprBinOp
-                "+"
+                "*"
+                (ExprLitNat 4)
                 (ExprVarRef
-                  (QualifiedIdentifier Any vmprmax))
-                (ExprLitNat 3))))
+                  (QualifiedIdentifier Any vmprmax)))
+              (ExprLitNat 3)))
           (StmtIf
             (ExprBinOp
               ">"
@@ -91123,15 +91123,15 @@
                     (ExprBinOp
                       "-"
                       (ExprBinOp
-                        "*"
-                        (ExprVarRef
-                          (QualifiedIdentifier Any e))
+                        "+"
                         (ExprBinOp
-                          "+"
+                          "*"
                           (ExprVarRef
-                            (QualifiedIdentifier Any size))
+                            (QualifiedIdentifier Any e))
                           (ExprVarRef
-                            (QualifiedIdentifier Any size))))
+                            (QualifiedIdentifier Any size)))
+                        (ExprVarRef
+                          (QualifiedIdentifier Any size)))
                       (ExprLitNat 1))
                     (ExprBinOp
                       "*"
@@ -100315,13 +100315,13 @@
                   (LValVarRef
                     (QualifiedIdentifier Any a))
                   (ExprBinOp
-                    "*"
-                    (ExprVarRef
-                      (QualifiedIdentifier Any a))
+                    "+"
                     (ExprBinOp
-                      "+"
-                      (ExprLitNat 2)
-                      (ExprLitNat 1))))))
+                      "*"
+                      (ExprVarRef
+                        (QualifiedIdentifier Any a))
+                      (ExprLitNat 2))
+                    (ExprLitNat 1)))))
             (list)
             (Just
               (StmtBlock
@@ -109674,51 +109674,17 @@
                   (LValVarRef
                     (QualifiedIdentifier Any result))
                   (ExprBinOp
-                    "*"
-                    (ExprBinOp
-                      "-"
-                      (ExprVarRef
-                        (QualifiedIdentifier Any int_result))
-                      (ExprBinOp
-                        "^"
-                        (ExprLitNat 2)
-                        (ExprLitNat 32)))
-                    (ExprCall
-                      (QualifiedIdentifier Any RoundUp)
-                      (list
-                        (ExprBinOp
-                          "/"
-                          (ExprCall
-                            (QualifiedIdentifier Any Real)
-                            (list
-                              (ExprVarRef
-                                (QualifiedIdentifier Any int_result))))
-                          (ExprCall
-                            (QualifiedIdentifier Any Real)
-                            (list
-                              (ExprBinOp
-                                "^"
-                                (ExprLitNat 2)
-                                (ExprLitNat 32)))))))))))
-            (list)
-            (Just
-              (StmtBlock
-                (list
-                  (StmtAssign
-                    (LValVarRef
-                      (QualifiedIdentifier Any result))
+                    "-"
+                    (ExprVarRef
+                      (QualifiedIdentifier Any int_result))
                     (ExprBinOp
                       "*"
                       (ExprBinOp
-                        "-"
-                        (ExprVarRef
-                          (QualifiedIdentifier Any int_result))
-                        (ExprBinOp
-                          "^"
-                          (ExprLitNat 2)
-                          (ExprLitNat 32)))
+                        "^"
+                        (ExprLitNat 2)
+                        (ExprLitNat 32))
                       (ExprCall
-                        (QualifiedIdentifier Any RoundDown)
+                        (QualifiedIdentifier Any RoundUp)
                         (list
                           (ExprBinOp
                             "/"
@@ -109733,7 +109699,41 @@
                                 (ExprBinOp
                                   "^"
                                   (ExprLitNat 2)
-                                  (ExprLitNat 32)))))))))))))
+                                  (ExprLitNat 32))))))))))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtAssign
+                    (LValVarRef
+                      (QualifiedIdentifier Any result))
+                    (ExprBinOp
+                      "-"
+                      (ExprVarRef
+                        (QualifiedIdentifier Any int_result))
+                      (ExprBinOp
+                        "*"
+                        (ExprBinOp
+                          "^"
+                          (ExprLitNat 2)
+                          (ExprLitNat 32))
+                        (ExprCall
+                          (QualifiedIdentifier Any RoundDown)
+                          (list
+                            (ExprBinOp
+                              "/"
+                              (ExprCall
+                                (QualifiedIdentifier Any Real)
+                                (list
+                                  (ExprVarRef
+                                    (QualifiedIdentifier Any int_result))))
+                              (ExprCall
+                                (QualifiedIdentifier Any Real)
+                                (list
+                                  (ExprBinOp
+                                    "^"
+                                    (ExprLitNat 2)
+                                    (ExprLitNat 32))))))))))))))
           (StmtIf
             (ExprBinOp
               "||"

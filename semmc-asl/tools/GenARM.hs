@@ -120,9 +120,10 @@ execMainAt startIdx = do
   let filter = defaultFilter { instrFilter = \ident -> Set.member ident targetInsts }
   let translateOpts = defaultOptions {
           optFilters = filter
-        , optSkipTranslation=False
-        , optCollectExceptions=True
+        , optSkipTranslation = True
+        , optCollectExceptions = True
         , optStartIndex = startIdx
+        , optVerbose = False
         }
   sm <- runWithFilters translateOpts
   
@@ -295,6 +296,7 @@ runWithFilters opts = do
 
 data ExpectedException =
     UnsupportedInstruction
+  | InsufficientStaticTypeInformation
   | CruciblePanic
   | UnsupportedNonlinearArithmetic
 -- data ExpectedException =
@@ -324,6 +326,10 @@ data ExpectedException =
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
   TExcept _ (InstructionUnsupported) -> Just $ UnsupportedInstruction
+  SExcept (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
+  TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
+  TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
+  TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
   SomeExcept e
     | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
     , KeyInstr (InstructionIdent nm _ _) <- k
@@ -461,19 +467,21 @@ prettyIdent :: InstructionIdent -> String
 prettyIdent (InstructionIdent nm enc iset) = show nm <> " " <> show enc <> " " <> show iset
 
 data TranslatorException =
-    TExcept (T.Text, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
+    TExcept (T.Text, StaticEnv, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
   | SExcept SigException
   | BadTranslatedInstructionsFile
   | SomeExcept X.SomeException
 
 instance Show TranslatorException where
   show e = case e of
-    TExcept (nm, stmts, exprs) te ->
+    TExcept (nm, env, stmts, exprs) te ->
       "Translator exception\n"
       ++ "Statement call stack:\n"
       ++ unlines (map (\stmt -> withStar $ prettyStmt 3 stmt) (List.reverse stmts))
       ++ "\n Expression call stack:\n"
       ++ unlines (map (\expr -> "*  " ++ prettyExprConstraint expr) (List.reverse exprs))
+      ++ "Static variable environment:\n"
+      ++ show env ++ "\n"
       ++ "\n ** Exception in: " ++ T.unpack nm ++ "\n"
       ++ show te
 
@@ -603,14 +611,14 @@ collectExcept k e = do
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
   a <- MSS.lift ((Left <$> f)
-                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept (T.empty,[],[]) e))
+                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept (T.empty,emptyStaticEnv,[],[]) e))
                   `X.catch` (\(e :: TracedTranslationException) -> return $ Right (tracedException e))
                   `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
   case a of
     Left r -> return (Just r)
     Right err -> (\_ -> Nothing) <$> collectExcept k err
   where
-    tracedException (TracedTranslationException nm stmts exprs e) = TExcept (nm, stmts, exprs) e
+    tracedException (TracedTranslationException nm env stmts exprs e) = TExcept (nm, env, stmts, exprs) e
   
 
 translationLoop :: InstructionIdent
