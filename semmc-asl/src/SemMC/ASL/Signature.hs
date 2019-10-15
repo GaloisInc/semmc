@@ -41,6 +41,7 @@ import qualified Lang.Crucible.CFG.Generator as CCG
 import qualified Lang.Crucible.Types as CT
 import qualified What4.BaseTypes as WT
 import           SemMC.ASL.Types
+import           SemMC.ASL.StaticExpr
 import qualified Language.ASL.Syntax as AS
 
 -- | A 'FunctionSignature' describes the inputs and output of an ASL function.
@@ -58,11 +59,8 @@ data FunctionSignature globals init tp =
                     , funcGlobalReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                     -- ^ The globals referenced by the function; NOTE that we
                     -- assume that globals are read-only in functions
-                    , funcStaticEnv :: StaticEnv
+                    , funcStaticVals :: StaticValues
                     -- ^ The static environment used to monomorphize this function
-                    --, funcPossibleEnvs :: [StaticEnv]
-                    -- ^ All possible concrete values for a subset of the variables
-                    -- seen in this procedure
                     , funcArgs :: [AS.SymbolDecl]
                     }
   deriving (Show)
@@ -116,11 +114,8 @@ data ProcedureSignature (globals :: Ctx.Ctx WT.BaseType)
                        --
                        -- For now, we can always make it the full set of
                        -- globals; later, we can find a tighter bound.
-                     , procStaticEnv :: StaticEnv
+                     , procStaticVals :: StaticValues
                        -- ^ The static environment used to monomorphize this function
-                     --, procPossibleEnvs :: [StaticEnv]
-                       -- ^ All possible concrete values for a subset of the variables
-                       -- seen in this procedure
                      , procArgs :: [AS.SymbolDecl]
                      }
   deriving (Show)

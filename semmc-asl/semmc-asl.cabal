@@ -25,6 +25,7 @@ library
                        SemMC.ASL.Translation.Preprocess
                        SemMC.ASL.SyntaxTraverse
                        SemMC.ASL.Types
+                       SemMC.ASL.StaticExpr
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
                        bv-sized >= 0.7.0,

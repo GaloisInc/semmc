@@ -73,7 +73,7 @@ import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, translateStatements, overrides, addExtendedTypeData)
 import           SemMC.ASL.Types
-
+import           SemMC.ASL.StaticExpr
 import qualified Control.Monad.State.Class as MS
 
 import qualified Lang.Crucible.CFG.Core as CCC
@@ -119,8 +119,8 @@ functionToCrucible defs sig hdlAlloc stmts = do
 defineCCGFunction :: CCExt.IsSyntaxExtension ext
                => WP.Position
                -> CFH.FnHandle init ret
-               -> (STRef.STRef h (Map.Map T.Text StaticEnv) -> CCG.FunctionDef ext h t init ret)
-               -> ST h (CCG.SomeCFG ext init ret, Map.Map T.Text StaticEnv)
+               -> (STRef.STRef h (Map.Map T.Text StaticValues) -> CCG.FunctionDef ext h t init ret)
+               -> ST h (CCG.SomeCFG ext init ret, Map.Map T.Text StaticValues)
 defineCCGFunction p h f = do
   ref <- STRef.newSTRef Map.empty
   (cfg, _) <- CCG.defineFunction p h (f ref)
@@ -132,13 +132,13 @@ data Function arch globals init tp =
   Function { funcSig :: FunctionSignature globals init tp
            , funcCFG :: CCC.SomeCFG (ASLExt arch) init (CT.BaseToType tp)
            , funcGlobals :: Ctx.Assignment BaseGlobalVar globals
-           , funcDepends :: Map.Map T.Text StaticEnv
+           , funcDepends :: Map.Map T.Text StaticValues
            }
 
 funcDef :: (ret ~ CT.BaseToType tp)
         => Definitions arch
         -> FunctionSignature globals init tp
-        -> STRef.STRef h (Map.Map T.Text StaticEnv)
+        -> STRef.STRef h (Map.Map T.Text StaticValues)
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
@@ -148,7 +148,7 @@ funcDef defs sig hdl globals stmts args = (funcInitialState defs sig hdl globals
 funcInitialState :: forall init tp h s globals arch
                   . Definitions arch
                  -> FunctionSignature globals init tp
-                 -> STRef.STRef h (Map.Map T.Text StaticEnv)
+                 -> STRef.STRef h (Map.Map T.Text StaticValues)
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState h (CT.BaseToType tp) s
@@ -162,7 +162,7 @@ funcInitialState defs sig hdl globals args =
                    , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
-                   , tsStaticEnv = funcStaticEnv sig
+                   , tsStaticValues = funcStaticVals sig
                    , tsSig = SomeFunctionSignature sig
                    , tsExprStack = []
                    , tsStmtStack = []
@@ -204,7 +204,7 @@ data Procedure arch globals init =
   Procedure { procSig :: ProcedureSignature globals init
             , procCFG :: CCC.SomeCFG (ASLExt arch) init (CT.SymbolicStructType globals)
             , procGlobals :: Ctx.Assignment BaseGlobalVar globals
-            , procDepends :: Map.Map T.Text StaticEnv
+            , procDepends :: Map.Map T.Text StaticValues
             }
 
 -- | This type alias is a constraint relating the 'globals' (base types) to the
@@ -261,7 +261,7 @@ procedureToCrucible defs sig hdlAlloc stmts = do
 procDef :: (ReturnsGlobals ret globals)
         => Definitions arch
         -> ProcedureSignature globals init
-        -> STRef.STRef h (Map.Map T.Text StaticEnv)
+        -> STRef.STRef h (Map.Map T.Text StaticValues)
         -> Ctx.Assignment BaseGlobalVar globals
         -> [AS.Stmt]
         -> Ctx.Assignment (CCG.Atom s) init
@@ -272,7 +272,7 @@ procDef defs sig hdl globals stmts args =
 procInitialState :: forall init globals h s arch
                   . Definitions arch
                  -> ProcedureSignature globals init
-                 -> STRef.STRef h (Map.Map T.Text StaticEnv)
+                 -> STRef.STRef h (Map.Map T.Text StaticValues)
                  -> Ctx.Assignment BaseGlobalVar globals
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState h (CT.SymbolicStructType globals) s
@@ -286,7 +286,7 @@ procInitialState defs sig hdl globals args =
                    , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
                    , tsHandle = hdl
-                   , tsStaticEnv = procStaticEnv sig
+                   , tsStaticValues = procStaticVals sig
                    , tsSig = SomeProcedureSignature sig
                    , tsExprStack = []
                    , tsStmtStack = []

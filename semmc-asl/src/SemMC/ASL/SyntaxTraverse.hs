@@ -37,6 +37,7 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe, listToMaybe, isJust, mapMaybe)
 import           SemMC.ASL.Types
+import           SemMC.ASL.StaticExpr
 
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
@@ -279,17 +280,30 @@ mkSyntaxOverrides defs =
 
         AS.LValSliceOf (AS.LValArrayIndex (AS.LValVarRef qName) slices) outerSlices
           | Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters ->
-            Just $ \rhs -> AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "GETTERSETTER")
-              ([AS.ExprSlice (AS.ExprVarRef (mkGetterName True qName)) outerSlices,
-               AS.ExprVarRef (mkSetterName True qName)]
-               ++ (rhs : map getSliceExpr slices))
+            Just $ \rhs -> do
+              let getter = mkGetterName True qName
+              let setter = mkSetterName True qName
+
+              let mkIdent nm = AS.QualifiedIdentifier AS.ArchQualAny nm
+              let mkVar nm = AS.ExprVarRef (mkIdent nm)
+              let args = map getSliceExpr slices
+              let old = "__oldGetterValue"
+              let width = AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "sizeOf") [mkVar old]
+              let mask = "__maskedGetterValue"
+              let stmts =
+                    [ AS.StmtAssign (AS.LValVarRef $ mkIdent old)
+                       (AS.ExprCall getter args)
+                    ,  AS.StmtAssign (AS.LValVarRef $ mkIdent mask)
+                       (AS.ExprCall (mkIdent "Ones") [width])
+                    , AS.StmtAssign (AS.LValSliceOf (AS.LValVarRef $ mkIdent mask) outerSlices)
+                       rhs
+                    , AS.StmtCall setter (AS.ExprBinOp AS.BinOpBitwiseAnd (mkVar mask) (mkVar old) : args)
+                    ]
+              letInStmt [old, mask] stmts
         AS.LValVarRef qName
           | Set.member (mkFunctionName (mkSetterName False qName) 1) setters ->
             Just $ \rhs -> AS.StmtCall (mkSetterName False qName) [rhs]
         _ -> Nothing
-
-
-
 
       stmtOverrides stmt = case stmt of
         AS.StmtAssign lv rhs
@@ -443,6 +457,7 @@ applyStmtSyntaxOverride ovrs stmt =
     g = applyStmtSyntaxOverride ovrs
     f = applyExprSyntaxOverride ovrs
     h = applyTypeSyntaxOverride ovrs
+    k = applyLValSyntaxOverride ovrs
 
     mapCases cases = case cases of
       AS.CaseWhen pat me stmts -> AS.CaseWhen pat (f <$> me) (g <$> stmts)
@@ -455,7 +470,7 @@ applyStmtSyntaxOverride ovrs stmt =
     AS.StmtVarsDecl ty i -> AS.StmtVarsDecl (h ty) i
     AS.StmtVarDeclInit decl e -> AS.StmtVarDeclInit (h <$> decl) (f e)
     AS.StmtConstDecl decl e -> AS.StmtConstDecl decl (f e)
-    AS.StmtAssign lv e -> AS.StmtAssign lv (f e)
+    AS.StmtAssign lv e -> AS.StmtAssign (k lv) (f e)
     AS.StmtCall qi es -> AS.StmtCall qi (f <$> es)
     AS.StmtReturn me -> AS.StmtReturn (f <$> me)
     AS.StmtAssert e -> AS.StmtAssert (f e)

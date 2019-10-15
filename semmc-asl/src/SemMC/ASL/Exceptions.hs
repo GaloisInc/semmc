@@ -17,6 +17,7 @@ import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
+import           SemMC.ASL.StaticExpr
 
 data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
@@ -54,17 +55,17 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | InvalidSliceRange Integer Integer
                           | forall tp . InvalidSlice Integer Integer (CT.TypeRepr tp)
                           | forall w w'. InvalidSymbolicSlice (WT.NatRepr w) (WT.NatRepr w')
-                          | TypeUnificationFailure AS.Type TypeConstraint StaticEnv
+                          | TypeUnificationFailure AS.Type TypeConstraint StaticValues
                           | TypesUnificationFailure [AS.Type] TypeConstraint
                           | RequiresTypeConstraint AS.Expr TypeConstraint
-                          | ReturnTypeUnificationFailure AS.Type AS.Type StaticEnv
+                          | ReturnTypeUnificationFailure AS.Type AS.Type StaticValues
                           | StructFieldMismatch AS.Expr
                           | RequiredConcreteValue T.Text AS.Expr
                           | forall tp. InvalidLValSlice AS.Slice TypeConstraint (CT.TypeRepr tp)
                           | UnsupportedSlice AS.Slice TypeConstraint
-                          | CannotMonomorphizeFunctionCall T.Text StaticEnv
+                          | CannotMonomorphizeFunctionCall T.Text StaticValues
                           | CannotMonomorphizeOverloadedFunctionCall T.Text [AS.Expr]
-                          | CannotStaticallyEvaluateType AS.Type StaticEnv
+                          | CannotStaticallyEvaluateType AS.Type StaticValues
                           | CannotDetermineBVLength (Maybe AS.Expr) TypeConstraint
                           | UnexpectedExtendedType AS.Expr ExtendedTypeData
                           | ConflictingExtendedTypeData T.Text ExtendedTypeData ExtendedTypeData
@@ -85,7 +86,8 @@ deriving instance Show TranslationException
 instance X.Exception TranslationException
 
 data TracedTranslationException =
-  TracedTranslationException T.Text StaticEnv [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
+  TracedTranslationException T.Text (Map.Map T.Text StaticValue)
+    [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
 
 deriving instance Show TracedTranslationException
 

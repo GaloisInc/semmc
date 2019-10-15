@@ -36,15 +36,12 @@ module SemMC.ASL.Translation.Preprocess
   , bitsToInteger
   , mkFunctionName
   , applyStaticEnv
-  , applyStaticEnv'
-  , StaticValue(..)
-  , assertInEnv
-  , exprToStatic
   , mkSignature
   , registerTypeSynonyms
   , localTypeHints
   , mkExtendedTypeData'
   , mkBaseStructRepr
+  , mkFinalFunctionName
   ) where
 
 import Debug.Trace (traceM)
@@ -81,6 +78,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
+import           SemMC.ASL.StaticExpr
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
 import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
@@ -170,23 +168,7 @@ registerTypeSynonyms =
   , ("SCTLRType", "SCTLR_EL1")
   ]
 
--- TODO: Type synonyms are currently a global property,
--- ideally type normalization should happen with respect to
--- some typing environment so this can be generated from the above.
 
--- We can't treat these as normal aliases, since we need to retain the
--- register field information.
-globalTypeSynonyms :: [(T.Text, AS.Type)]
-globalTypeSynonyms =
-  [ ("CPACRType", bits 32)
-  , ("CNTKCTLType", bits 32)
-  , ("ESRType", bits 32)
-  , ("FPCRType", bits 32)
-  , ("MAIRType", bits 64)
-  , ("SCRType", bits 32)
-  , ("SCTLRType", bits 64)
-  ]
-  where bits n = AS.TypeFun "bits" (AS.ExprLitInt  n)
 
 builtinConsts :: [(T.Text, Some ConstVal)]
 builtinConsts =
@@ -194,11 +176,6 @@ builtinConsts =
   , ("FALSE", Some $ ConstVal WT.BaseBoolRepr False)
   , ("HIGH", Some $ ConstVal (WT.BaseBVRepr (WT.knownNat @1)) (BVS.bitVector (1 :: Integer)))
   ]
-
-bitsToInteger :: [Bool] -> Integer
-bitsToInteger [x] = fromIntegral (fromEnum x)
-bitsToInteger (x:xs) = fromIntegral (fromEnum x) * 2 + bitsToInteger xs
-bitsToInteger _ = error $ "bitsToInteger empty list"
 
 -- FIXME: We currently do not capture 'DefArray', 'DefGetter', and 'DefSetter'
 -- constructors; that needs to happen.
@@ -691,14 +668,6 @@ computeUserType tpName = do
       storeType tpName tp
       return $ Some tp
 
-applyTypeSynonyms :: AS.Type -> AS.Type
-applyTypeSynonyms t = case t of
-  AS.TypeRef (AS.QualifiedIdentifier _ tpName) ->
-    case lookup tpName globalTypeSynonyms of
-      Just syn -> syn
-      Nothing -> t
-  _ -> t
-
 
 -- | Either compute the What4 representation of an ASL 'AS.Type' or
 -- return a name representing a user-defined type.
@@ -984,347 +953,15 @@ mkBaseStructRepr ts = case ts of
   [t] -> t
   ts | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
 
-
-applyStaticEnv' :: StaticEnv -> AS.Type -> Maybe AS.Type
-applyStaticEnv' env t = case applyTypeSynonyms t of
-  AS.TypeFun "bits" e -> case exprToStatic env e of
-    Just (StaticInt i) -> Just $ AS.TypeFun "bits" (AS.ExprLitInt i)
-    _ -> Nothing
-  _ -> Just $ t
-
-
-applyStaticEnv :: StaticEnv -> AS.Type -> AS.Type
+applyStaticEnv :: StaticEnvMap
+               -> AS.Type
+               -> AS.Type
 applyStaticEnv env t =
-  fromMaybe (X.throw $ CannotStaticallyEvaluateType t env) $
+  fromMaybe (X.throw $ CannotStaticallyEvaluateType t (staticEnvMapVals env)) $
    applyStaticEnv' env t
 
 
-getPossibleValuesFor :: [T.Text] -> [StaticEnvP] -> [Map.Map T.Text StaticValue]
-getPossibleValuesFor vars envs =
-  let
-    pairs = do
-      env <- envs
-      pvars <- maybeToList $ collapseMaybes $ do
-        var <- vars
-        return $ (\val -> (var, val)) <$>
-          getPossibleStaticsExpr env (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var))
-      mapM (\(var, vals) -> do
-               val <- vals
-               return $ (var, val)) pvars
-
-  in nub $ map Map.fromList pairs
-
-
-getPossibleStaticsStmts :: StaticEnvP -> [AS.Stmt] -> [StaticEnvP]
-getPossibleStaticsStmts env stmts = case stmts of
-  (stmt : rest) -> do
-    let envs = getPossibleStaticsStmt env stmt
-    concat $ map (\env' -> getPossibleStaticsStmts env' rest) envs
-  [] -> [env]
-
-
-data EnvPEntry =
-    EnvPValue StaticValue
-  | EnvPInfeasable StaticType (Set.Set StaticValue)
-
-
-typeOfStatic :: StaticValue -> StaticType
-typeOfStatic sv = case sv of
-  StaticInt _ -> StaticIntType
-  StaticBool _ -> StaticBoolType
-  StaticBV bv -> StaticBVType (fromIntegral $ length bv)
-
-type StaticEnvP = Map.Map T.Text EnvPEntry
-
-envInfeasable :: StaticEnvP -> StaticEnvP
-envInfeasable env = Map.map makeInfeasable env
-  where
-    makeInfeasable (EnvPValue sv) = EnvPInfeasable (typeOfStatic sv) (Set.singleton sv)
-    makeInfeasable x = x
-
-addStatic :: T.Text -> StaticValue -> StaticEnvP -> StaticEnvP
-addStatic nm v = Map.insert nm (EnvPValue v)
-
-getPossibleStaticsStmt :: StaticEnvP -> AS.Stmt -> [StaticEnvP]
-getPossibleStaticsStmt env s = case s of
-  AS.StmtSeeExpr _ -> [envInfeasable env]
-  AS.StmtSeeString _ -> [envInfeasable env]
-
-  AS.StmtAssert e | Just (StaticBool False) <- exprToStatic' (lookupStaticP env) e -> [envInfeasable env]
-  AS.StmtAssert e -> assertInEnv e env
-  AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier _ nm)) e ->
-    case getPossibleStaticsExpr env e of
-      Just svs -> map (\v -> addStatic nm v env) svs
-      Nothing -> [env]
-  AS.StmtIf tests@((test, body) : rest) fin -> applyTests env tests fin
-
-  AS.StmtCase test cases ->
-    let (tests, fin) = casesToTests test cases
-    in applyTests env tests fin
-  _ -> [env]
-  where
-    applyTests env tests@((test, body) : rest) fin =
-      case getPossibleStaticsExpr env test of
-        Just svs -> do
-          sv <- svs
-          case sv of
-            StaticBool True -> getPossibleStaticsStmts env body
-            StaticBool False -> applyTests env rest fin
-            _ -> error $ "Malformed test expression:" <> show test
-        _ -> do
-          let testEnvs = concat $ map (applyTest env) tests
-          let finEnv = getPossibleStaticsStmts env (concat $ maybeToList fin)
-          testEnvs ++ finEnv
-
-    applyTests env [] fin = getPossibleStaticsStmts env (concat $ maybeToList fin)
-
-    applyTest env (test, body) = do
-      env' <- assertInEnv test env
-      getPossibleStaticsStmts env' body
-
-    casesToTests e ((AS.CaseWhen (pat : pats) _ stmts) : rest) =
-      let
-        (tests, fin) = casesToTests e rest
-        test = foldr (\pat' -> \e' -> AS.ExprBinOp AS.BinOpLogicalAnd e' (patToExpr e pat')) (patToExpr e pat) pats
-      in
-        ((test, stmts) : tests, fin)
-    casesToTests e [AS.CaseOtherwise stmts] = ([], Just stmts)
-    casesToTests e [] = ([], Nothing)
-    casesToTests e _ = error "Malformed case statement."
-
-    patToExpr e pat = case pat of
-      AS.CasePatternInt i -> AS.ExprBinOp AS.BinOpEQ e (AS.ExprLitInt i)
-      AS.CasePatternBin bv -> AS.ExprBinOp AS.BinOpEQ e (AS.ExprLitBin bv)
-      AS.CasePatternMask mask -> AS.ExprInSet e [AS.SetEltSingle (AS.ExprLitMask mask)]
-      AS.CasePatternIdentifier ident -> AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny ident)) e
-      _ -> AS.ExprUnknown (AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "boolean"))
-
-
-
-
--- Where possible, produces a set of augmented environments
--- where the given expression is necessarily true
-assertInEnv :: AS.Expr -> StaticEnvP -> [StaticEnvP]
-assertInEnv e env = case e of
-  AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier _ nm)) e'
-    | Just svs <- getPossibleStaticsExpr env e' ->
-      map (\v -> Map.insert nm (EnvPValue v) env) svs
-  AS.ExprBinOp AS.BinOpNEQ (AS.ExprVarRef (AS.QualifiedIdentifier _ nm)) e'
-    | Just svs <- getPossibleStaticsExpr env e' ->
-      case Map.lookup nm env of
-        Nothing -> map (\v -> Map.insert nm (EnvPInfeasable (typeOfStatic v) (Set.singleton v)) env) svs
-        Just (EnvPInfeasable sty inf) ->
-          map (\v ->
-                 if typeOfStatic v /= sty
-                 then error $ "Mismatch in infeasable types:" ++ show sty ++ " " ++ show (typeOfStatic v)
-                 else Map.insert nm (EnvPInfeasable sty (Set.insert v inf)) env) svs
-        Just (EnvPValue _) -> [env]
-  AS.ExprBinOp AS.BinOpLogicalAnd e e' -> do
-    env' <- assertInEnv e env
-    assertInEnv e env'
-  AS.ExprInSet e setElts -> do
-    elt <- setElts
-    case elt of
-      AS.SetEltSingle e' -> assertInEnv (AS.ExprBinOp AS.BinOpEQ e e') env
-  _ -> [env]
-  where
-   matchBit (b, m) = case (b, m) of
-      (True, AS.MaskBitSet) -> True
-      (False, AS.MaskBitUnset) -> True
-      (_, AS.MaskBitEither) -> True
-      _ -> False
-
-lookupStaticP :: StaticEnvP -> T.Text -> Maybe StaticValue
-lookupStaticP env t = case Map.lookup t env of
-  Just (EnvPValue sv) -> Just sv
-  _ -> Nothing
-
-allPossibleBVs :: Integer -> [[Bool]]
-allPossibleBVs 0 = []
-allPossibleBVs n = do
-  bit <- [True, False]
-  bits <- allPossibleBVs (n - 1)
-  return $ bit : bits
-
-
--- Returns either an upper bound on all possible values for the expression
--- or @Nothing@ if such a bound can't be determined.
-getPossibleStaticsExpr :: StaticEnvP -> AS.Expr -> Maybe [StaticValue]
-getPossibleStaticsExpr env e = case exprToStatic' (lookupStaticP env) e of
-  Just sv -> Just [sv]
-  _ -> case e of
-    AS.ExprVarRef (AS.QualifiedIdentifier _ nm) ->
-      case Map.lookup nm env of
-        Just (EnvPInfeasable (StaticBVType sz) inf) -> Just $ do
-          bv' <- allPossibleBVs sz
-          let bv = StaticBV bv'
-          if Set.member bv inf then fail ""
-          else return $ bv
-        Just (EnvPValue sv) -> Just [sv]
-        Nothing -> Nothing
-    AS.ExprBinOp bop e e' ->
-      case (getPossibleStaticsExpr env e, getPossibleStaticsExpr env e') of
-        (Just es, Just es') -> liftMaybe $ do
-          se <- es
-          se' <- es'
-          return $ (:[]) <$> staticBinOp bop (Just se) (Just se')
-        _ -> Nothing
-    AS.ExprIf tests@((test, body) : rest) fin ->
-      case getPossibleStaticsExpr env test of
-        Just svs -> liftMaybe $ do
-            sv <- svs
-            case sv of
-              StaticBool True -> return $ getPossibleStaticsExpr env body
-              StaticBool False -> return $ getPossibleStaticsExpr env (AS.ExprIf rest fin)
-              _ -> return $ Nothing
-        _ -> do
-          bodies <- concat <$> mapM applyTest tests
-          fin' <- getPossibleStaticsExpr env fin
-          return $ bodies ++ fin'
-    AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [e] ->
-      case getPossibleStaticsExpr env e of
-        Just svs -> collapseMaybes $ do
-          sv <- svs
-          case sv of
-            StaticBV bv -> return $ Just $ StaticInt $ bitsToInteger bv
-            _ -> return $ Nothing
-        _ -> Nothing
-    _ -> Nothing
-  where
-    applyTest (test, body) = liftMaybe $ do
-      env' <- assertInEnv test env
-      return $ getPossibleStaticsExpr env' body
-
-liftMaybe :: [Maybe [a]] -> Maybe [a]
-liftMaybe ms = concat <$> (collapseMaybes ms)
-
-collapseMaybes :: [Maybe a] -> Maybe [a]
-collapseMaybes (Just a : rest) =
-  case collapseMaybes rest of
-    Just rest' -> Just $ (a : rest')
-    Nothing -> Nothing
-collapseMaybes (Nothing : _) = Nothing
-collapseMaybes [] = Just []
-
-matchMask :: AS.BitVector -> AS.Mask -> Bool
-matchMask bv mask =
-  if | length bv == length mask ->
-       List.all matchBit (zip bv mask)
-     | otherwise -> error $ "Mismatched bitvector sizes."
-  where
-    matchBit (b, m) = case (b, m) of
-      (True, AS.MaskBitSet) -> True
-      (False, AS.MaskBitUnset) -> True
-      (_, AS.MaskBitEither) -> True
-      _ -> False
-
-exprToStaticType :: StaticEnv -> AS.Expr -> Maybe StaticType
-exprToStaticType env e = case e of
-  AS.ExprVarRef (AS.QualifiedIdentifier q id) -> do
-    i <- lookupStaticEnvType id env
-    return i
-  AS.ExprIf ((_, body) : rest) fin ->
-    case exprToStaticType env body of
-      Just t -> Just t
-      Nothing -> exprToStaticType env (AS.ExprIf rest fin)
-  AS.ExprIf [] fin -> exprToStaticType env fin
-  AS.ExprBinOp AS.BinOpConcat e' e'' -> do
-    StaticBVType t' <- exprToStaticType env e'
-    StaticBVType t'' <- exprToStaticType env e''
-    return $ StaticBVType $ t' + t''
-  _ -> Nothing
-
-staticBinOp :: AS.BinOp
-            -> Maybe StaticValue
-            -> Maybe StaticValue
-            -> Maybe StaticValue
-staticBinOp bop msv msv' =
-  case bop of
-    AS.BinOpEQ
-      | Just sv <- msv
-      , Just sv' <- msv' ->
-        Just $ StaticBool $ sv == sv'
-    AS.BinOpNEQ
-      | Just sv <- msv
-      , Just sv' <- msv' ->
-        Just $ StaticBool $ sv /= sv'
-    _ | Just (StaticInt i) <- msv
-      , Just (StaticInt i') <- msv' ->
-        let
-          resultI primop = Just $ StaticInt $ primop i i'
-          resultB primop = Just $ StaticBool $ primop i i'
-          divI =
-            let
-              (quot, rem) = (i `divMod` i')
-            in if rem == 0 then Just $ StaticInt quot
-            else Nothing
-        in case bop of
-          AS.BinOpAdd -> resultI (+)
-          AS.BinOpSub -> resultI (-)
-          AS.BinOpMul -> resultI (*)
-          AS.BinOpPow -> resultI (^)
-          AS.BinOpDiv -> divI
-          AS.BinOpShiftLeft -> resultI (\base -> \shift -> base * (2 ^ shift))
-          AS.BinOpGT -> resultB (>)
-          AS.BinOpLT -> resultB (<)
-          AS.BinOpGTEQ -> resultB (>=)
-          AS.BinOpLTEQ -> resultB (<=)
-          _ -> Nothing
-    -- short-circuiting for boolean logic
-    _ | Just (StaticBool False) <- msv ->
-        case bop of
-          AS.BinOpLogicalAnd -> Just $ StaticBool False
-          AS.BinOpLogicalOr -> msv'
-    _ | Just (StaticBool False) <- msv' ->
-        case bop of
-          AS.BinOpLogicalAnd -> Just $ StaticBool False
-          AS.BinOpLogicalOr -> msv
-    _ | Just (StaticBool True) <- msv ->
-        case bop of
-          AS.BinOpLogicalAnd -> msv'
-          AS.BinOpLogicalOr -> Just $ StaticBool True
-    _ | Just (StaticBool True) <- msv' ->
-        case bop of
-          AS.BinOpLogicalAnd -> msv
-          AS.BinOpLogicalOr -> Just $ StaticBool True
-    _ -> Nothing
-
-
-
-exprToStatic' :: (T.Text -> Maybe StaticValue) -> AS.Expr -> Maybe StaticValue
-exprToStatic' env e = case e of
-  AS.ExprIf ((test, body) : rest) fin |
-    Just (StaticBool b) <- exprToStatic' env test
-    -> do
-   if b then exprToStatic' env body
-   else exprToStatic' env (AS.ExprIf rest fin)
-  AS.ExprIf [] fin -> exprToStatic' env fin
-  AS.ExprLitInt i -> Just $ StaticInt i
-  AS.ExprLitBin bv -> Just $ StaticBV bv
-  AS.ExprInMask bv mask |
-      Just (StaticBV bv') <- exprToStatic' env bv
-    -> Just $ StaticBool $ matchMask bv' mask
-  AS.ExprVarRef (AS.QualifiedIdentifier _ "TRUE") -> Just $ StaticBool True
-  AS.ExprVarRef (AS.QualifiedIdentifier _ "FALSE") -> Just $ StaticBool False
-  AS.ExprVarRef (AS.QualifiedIdentifier q id) -> do
-    i <- env id
-    return i
-  AS.ExprBinOp bop e' e'' ->
-    staticBinOp bop (exprToStatic' env e') (exprToStatic' env e'')
-
-  AS.ExprUnOp AS.UnOpNot e' |
-    Just (StaticBool b) <- exprToStatic' env e'
-    -> Just $ StaticBool (not b)
-
-  AS.ExprUnOp AS.UnOpNeg e' |
-    Just (StaticInt i) <- exprToStatic' env e'
-    -> Just $ StaticInt (-i)
-  _ -> Nothing
-
-exprToStatic :: StaticEnv -> AS.Expr -> Maybe StaticValue
-exprToStatic env = exprToStatic' (\t -> lookupStaticEnv t env)
-
-mkSignature :: Definitions arch -> StaticEnv -> SomeSimpleSignature -> Some (SomeSignature)
+mkSignature :: Definitions arch -> StaticValues -> SomeSimpleSignature -> Some (SomeSignature)
 mkSignature defs env sig =
   case sig of
     SomeSimpleFunctionSignature fsig |
@@ -1336,7 +973,7 @@ mkSignature defs env sig =
         , funcSigRepr = retT
         , funcArgReprs = args
         , funcGlobalReprs = sfuncGlobalReprs fsig
-        , funcStaticEnv = addStandardStaticEnv env
+        , funcStaticVals = staticEnvMapVals $ addStandardStaticEnv $ simpleStaticEnvMap env
         , funcArgs = sfuncArgs fsig
         }
     SomeSimpleProcedureSignature fsig |
@@ -1346,11 +983,11 @@ mkSignature defs env sig =
         { procName = mkFinalFunctionName env $ sprocName fsig
         , procArgReprs = args
         , procGlobalReprs = sprocGlobalReprs fsig
-        , procStaticEnv = addStandardStaticEnv env
+        , procStaticVals = staticEnvMapVals $ addStandardStaticEnv $ simpleStaticEnvMap env
         , procArgs = sprocArgs fsig
         }
   where
-    mkType t = computeType'' defs (applyStaticEnv env t)
+    mkType t = computeType'' defs (applyStaticEnv (simpleStaticEnvMap env) t)
     mkLabel (nm, t) =
       if | Some tp <- mkType t ->
            Some (LabeledValue nm (CT.baseToType tp))
@@ -1386,7 +1023,7 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       let instExecute' = liftOverEnvs instName possibleEnvs instExecute
       let instStmts = initStmts ++ instPostDecode ++ instExecute'
       let instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
-      let staticEnv = addInitializedVariables initStmts (addStandardStaticEnv emptyStaticEnv)
+      let staticEnv = addInitializedVariables initStmts (addStandardStaticEnv emptyStaticEnvMap)
       globalVars' <- instGlobalVars
       let globalVars = globalVars' ++ builtinGlobals
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
@@ -1400,7 +1037,7 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       let pSig = ProcedureSignature { procName = name
                                     , procArgReprs = argReprs
                                     , procGlobalReprs = globalReprs
-                                    , procStaticEnv = staticEnv
+                                    , procStaticVals = staticEnvMapVals staticEnv
                                     , procArgs = []
                                     }
       return (Some (SomeProcedureSignature pSig), instStmts)
@@ -1426,8 +1063,8 @@ getPossibleEnvs :: [AS.InstructionField] -> [AS.Stmt] -> [StaticEnvP]
 getPossibleEnvs fields decodes =
   let
     addField (AS.InstructionField instFieldName _ instFieldOffset) =
-      Map.insert instFieldName (EnvPInfeasable (StaticBVType instFieldOffset) Set.empty)
-    initEnv = foldr addField Map.empty fields
+      insertStaticEnvP instFieldName (EnvPInfeasable (StaticBVType instFieldOffset) Set.empty)
+    initEnv = foldr addField emptyStaticEnvP fields
   in
     getPossibleStaticsStmts initEnv decodes
 
@@ -1474,14 +1111,14 @@ instrSetToVar is = case is of
   AS.T16 -> "InstrSet_T16"
   AS.A64 -> "InstrSet_A64"
 
-addStandardStaticEnv :: StaticEnv -> StaticEnv
+addStandardStaticEnv :: StaticEnvMap -> StaticEnvMap
 addStandardStaticEnv env =
    foldl addInstructionSet env allInstrSets
  where
    addInstructionSet env' is = insertStaticEnv (instrSetToVar is) (StaticInt $ instrSetToInt is) env'
 
 -- | Evaluate any known static values for this specific encoding
-addInitializedVariables :: [AS.Stmt] -> StaticEnv -> StaticEnv
+addInitializedVariables :: [AS.Stmt] -> StaticEnvMap -> StaticEnvMap
 addInitializedVariables stmts env =
   foldl addStaticAssignment env stmts
   where
@@ -1513,15 +1150,6 @@ overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt ::  AS.Stmt -> Maybe [AS.Stmt]
         overrideStmt stmt = case stmt of
-          AS.StmtCall (AS.QualifiedIdentifier _ "GETTERSETTER")
-            (AS.ExprSlice (AS.ExprVarRef getter) _ : AS.ExprVarRef setter : value : args)
-            -> Just $ [AS.StmtAssert (AS.ExprCall getter args), AS.StmtCall setter (value : args),
-                       AS.StmtAssert (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Ones") [])]
-          AS.StmtAssign lv
-            (AS.ExprCall (AS.QualifiedIdentifier _ "SETTERTUPLE")
-             (AS.ExprVarRef setter : args))
-            -> Just $ [AS.StmtCall setter args,
-                       AS.StmtAssign lv (AS.ExprLitInt 0)]
           _ -> Nothing
 
         overrideExpr :: AS.Expr -> Maybe [AS.Expr]
@@ -1545,6 +1173,8 @@ overrides = Overrides {..}
                    ]
           _ -> Nothing
 
+mkFinalFunctionName :: StaticValues -> T.Text ->  T.Text
+mkFinalFunctionName dargs nm = T.concat $ [nm] ++ map (\(nm,i) -> nm <> "_" <> T.pack (show i)) (Map.assocs dargs)
 
 -- Extra typing hints for local variables, where
 -- type inference would otherwise require lookahead

@@ -42,6 +42,7 @@ import SemMC.ASL.Translation
 import SemMC.ASL.Translation.Preprocess
 import SemMC.ASL.Signature
 import SemMC.ASL.Types
+import SemMC.ASL.StaticExpr
 import SemMC.ASL.Exceptions
 
 import Control.Concurrent
@@ -467,7 +468,7 @@ prettyIdent :: InstructionIdent -> String
 prettyIdent (InstructionIdent nm enc iset) = show nm <> " " <> show enc <> " " <> show iset
 
 data TranslatorException =
-    TExcept (T.Text, StaticEnv, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
+    TExcept (T.Text, StaticValues, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
   | SExcept SigException
   | BadTranslatedInstructionsFile
   | SomeExcept X.SomeException
@@ -509,6 +510,9 @@ prettyStmt depth stmt = case stmt of
     case melse of
       Just stmts -> (atDepth depth "Else\n") ++ withLines (map (prettyStmt $ depth + 1) stmts)
       Nothing -> ""
+  AS.StmtFor var range stmts ->
+    atDepth depth "StmtFor: " ++ show var ++ show range ++ "\n"
+      ++ withLines (map (prettyStmt $ depth + 1) stmts)
   AS.StmtRepeat stmts test ->
     atDepth depth "StmtRepeat: " ++ prettyExpr test ++ "\n"
     ++ withLines (map (prettyStmt $ depth + 1) stmts)
@@ -532,7 +536,7 @@ deriving instance Ord InstructionIdent
 instrToIdent :: AS.Instruction -> T.Text -> AS.InstructionSet -> InstructionIdent
 instrToIdent AS.Instruction{..} enc iset = InstructionIdent instName enc iset
 
-finalDepsOf :: Map.Map T.Text StaticEnv -> Set.Set T.Text
+finalDepsOf :: Map.Map T.Text StaticValues -> Set.Set T.Text
 finalDepsOf deps = Set.fromList (map (\(nm, env) -> mkFinalFunctionName env nm) (Map.assocs deps))
 
 runTranslation :: AS.Instruction -> InstructionIdent -> MSS.StateT SigMap IO ()
@@ -611,7 +615,7 @@ collectExcept k e = do
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
   a <- MSS.lift ((Left <$> f)
-                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept (T.empty,emptyStaticEnv,[],[]) e))
+                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept (T.empty,Map.empty,[],[]) e))
                   `X.catch` (\(e :: TracedTranslationException) -> return $ Right (tracedException e))
                   `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
   case a of
@@ -624,7 +628,7 @@ catchIO k f = do
 translationLoop :: InstructionIdent
                 -> [T.Text]
                 -> Definitions arch
-                -> (T.Text, StaticEnv)
+                -> (T.Text, StaticValues)
                 -> MSS.StateT SigMap IO (Set.Set T.Text)
 translationLoop fromInstr callStack defs (fnname, env) = do
   let finalName = (mkFinalFunctionName env fnname)
@@ -727,7 +731,7 @@ withOnlineBackend gen unsatFeat action =
 processInstruction :: InstructionIdent
                    -> ProcedureSignature globals init
                    -> [AS.Stmt] -> Definitions arch
-                   -> MSS.StateT SigMap IO (Map.Map T.Text StaticEnv)
+                   -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
 processInstruction instr pSig stmts defs = do
   handleAllocator <- MSS.lift $ CFH.newHandleAllocator
   mp <- catchIO (KeyInstr instr) $ procedureToCrucible defs pSig handleAllocator stmts
@@ -754,7 +758,7 @@ processFunction :: InstructionIdent
                 -> SomeSignature ret
                 -> [AS.Stmt]
                 -> Definitions arch
-                -> MSS.StateT SigMap IO (Map.Map T.Text StaticEnv)
+                -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
 processFunction fromInstr fnName sig stmts defs =
   case sig of
     SomeFunctionSignature fSig -> do
