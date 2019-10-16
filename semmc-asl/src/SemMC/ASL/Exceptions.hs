@@ -78,6 +78,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UnexpectedNothing
                           | TranslationError String
                           | UNIMPLEMENTED String
+                          | forall tp. InvalidStructUpdate AS.LValExpr (CT.TypeRepr tp)
                           | InstructionUnsupported
 
 

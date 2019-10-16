@@ -26,6 +26,7 @@ module SemMC.ASL.Translation (
   , ToBaseTypes
   ) where
 
+import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( forM_, when, void, foldM, foldM_, (>=>), (<=<) )
@@ -734,16 +735,19 @@ translateAssignment'' ov lval atom constraint atomext mE = do
               translatelValSlice ov struct (mkSliceRange slice) atom constraint
             _ -> X.throw $ MissingRegisterField lve memberName
         TypeStruct acc ->
-          -- Some e <- lookupVarRef structName
-          -- satom <- CCG.mkAtom e
-          -- case (CCG.typeOfAtom satom, Map.lookup memberName acc) of
-          --   (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx _)) |
-          --     Just Refl <- testEquality tps repr -> do
-          --       let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr satom)
-          --       getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
-                return () -- FIXME: Construct modified struct here
-           -- _ -> error $ "Mismatch in struct fields" <> show struct <> "." <> show memberName
-        _ -> X.throw $ UnexpectedExtendedType lve ext
+          case (CCG.typeOfAtom structAtom, Map.lookup memberName acc) of
+            (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx ext'))
+              | Just Refl <- testEquality tps repr
+              , CT.AsBaseType asnBt <- CT.asBaseType $ CCG.typeOfAtom atom
+              , Just Refl <- testEquality asnBt (tps Ctx.! idx) -> do
+                let ctps = toCrucTypes tps
+                let fields = Ctx.generate (Ctx.size ctps) (getStructField tps ctps structAtom)
+                let idx' = fromBaseIndex tps ctps idx
+                let newStructAsn = fields & (ixF idx') .~ (CCG.AtomExpr atom)
+                newStruct <- CCG.mkAtom $ CCG.App $ CCE.ExtensionApp $ MkBaseStruct ctps newStructAsn
+                translateAssignment' ov struct newStruct ext Nothing
+            _ -> throwTrace $ InvalidStructUpdate lval (CCG.typeOfAtom atom)
+        _ -> throwTrace $ UnexpectedExtendedType lve ext
 
     AS.LValTuple lvals ->
       case atomext of
@@ -777,14 +781,6 @@ translateAssignment'' ov lval atom constraint atomext mE = do
            , Just Refl <- testEquality btAsn retTy -- array element types match
            -> do
                let asn = Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom))
-               --FIXME: We mask array updates with an uninterpreted function to
-               -- avoid interpreting their updates
-               -- let name = "ARRAY_" <> arrName <> "_UPDATE"
-               -- let uf = UF name (CT.BaseArrayRepr (Ctx.Empty Ctx.:> bt') retTy)
-               --            (Ctx.singleton $ CCG.typeOfAtom idxAtom)
-               --            (Ctx.singleton $ CCG.AtomExpr idxAtom)
-               -- newArr <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-               -- translateAssignment' ov ref newArr TypeBasic Nothing
                let arr = CCG.App $ CCE.SymArrayUpdate retTy (CCG.AtomExpr arrAtom) asn (CCG.AtomExpr atom)
                newArr <- CCG.mkAtom arr
                translateAssignment' ov ref newArr TypeBasic Nothing
@@ -794,12 +790,34 @@ translateAssignment'' ov lval atom constraint atomext mE = do
       error $
         "Unexpected multi-argument array assignment. Is this actually a setter?" ++ show lval
 
-    AS.LValMemberBits ref bits -> do
-      let ibits = imap (\i -> \e -> (i, e)) bits
-      mapM_ (\(i, e) -> do
-        Some aslice <- translateSlice' ov atom (AS.SliceSingle (AS.ExprLitInt (toInteger i))) ConstraintNone
-        let lv' = AS.LValMember ref e in
-          translateAssignment' ov lv' aslice TypeBasic Nothing) ibits
+    AS.LValMemberBits struct bits -> do
+      Just lve <- return $ lValToExpr struct
+      (Some structAtom, ext) <- translateExpr' ov lve ConstraintNone
+      getRange <- return $ \memberName -> case ext of
+        TypeRegister sig ->
+          case Map.lookup memberName sig of
+            Just (lo, hi) -> return $ (hi - lo) + 1
+            _ -> throwTrace $ MissingRegisterField lve memberName
+        TypeStruct acc ->
+          case Map.lookup memberName acc of
+            Just (StructAccessor repr idx _) ->
+              case repr Ctx.! idx of
+                CT.BaseBVRepr nr -> return $ WT.intValue nr
+                x -> throwTrace $ InvalidStructUpdate struct (CT.baseToType x)
+      total <- foldM (\acc -> \mem -> do
+        range <- getRange mem
+        Some aslice <- translateSlice' ov atom (mkSliceRange (acc, (acc + range) - 1)) ConstraintNone
+        let lv' = AS.LValMember struct mem
+        translateAssignment' ov lv' aslice TypeBasic Nothing
+        return $ acc + range)
+        -- FIXME: It's unclear which direction the fields should be read
+        0 (List.reverse bits)
+      case WT.someNat total of
+        Just (Some trepr)
+          | Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` trepr -> do
+            _ <- assertAtomType' (CT.BVRepr trepr) atom
+            return ()
+        _ -> throwTrace $ TranslationError $ "Bad memberbits total: " ++ show total
 
     AS.LValSlice lvs ->
       case CCG.typeOfAtom atom of
@@ -819,6 +837,25 @@ translateAssignment'' ov lval atom constraint atomext mE = do
             getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
             let ixv = Ctx.indexVal ix
             translateAssignment' ov (lvals !! ixv) getAtom (exts !! ixv) Nothing
+
+          getStructField :: forall bctx ctx tp
+                          . ctx ~ ToCrucTypes bctx
+                         => Ctx.Assignment CT.BaseTypeRepr bctx
+                         -> Ctx.Assignment CT.TypeRepr ctx
+                         -> CCG.Atom s (CT.SymbolicStructType bctx)
+                         -> Ctx.Index ctx tp
+                         -> CCG.Expr (ASLExt arch) s tp
+          getStructField btps ctps struct ix = case toFromBaseProof (ctps Ctx.! ix) of
+            Just Refl ->
+              let
+                  ix' = toBaseIndex btps ctps ix
+                  getStruct =
+                    (GetBaseStruct (CT.SymbolicStructRepr btps) ix' (CCG.AtomExpr struct)) ::
+                      ASLApp (CCG.Expr (ASLExt arch) s) tp
+              in
+                CCG.App $ CCE.ExtensionApp getStruct
+
+
 
 translateImplicitSlice :: Overrides arch
                        -> WT.NatRepr w
@@ -1500,7 +1537,7 @@ translateExpr'' ov expr ty
                       let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr structAtom)
                       atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
                       return (Some atom, fieldExt)
-                  _ -> X.throw $ MissingStructField struct memberName
+                  _ -> throwTrace $ MissingStructField struct memberName
               _ -> do
                 exts <- MS.gets tsExtendedTypes
                 X.throw $ UnexpectedExtendedType struct ext

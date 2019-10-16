@@ -72,6 +72,11 @@ data ASLApp f tp where
   MkBaseStruct :: Ctx.Assignment CT.TypeRepr ctx
                -> Ctx.Assignment f ctx
                -> ASLApp f (CT.SymbolicStructType (ToBaseTypes ctx))
+  SetBaseStruct :: Ctx.Assignment CT.TypeRepr ctx
+                -> f (CT.SymbolicStructType (ToBaseTypes ctx))
+                -> Ctx.Index ctx tp
+                -> f tp
+                -> ASLApp f (CT.SymbolicStructType (ToBaseTypes ctx))
 
 -- | The statement extension type
 --
@@ -115,6 +120,7 @@ aslAppEvalFunc _ sym _ _ = \evalApp app ->
       evalMems <- extractBase' (\v -> CS.RV <$> evalApp v) reprs mems
       let evalMems' = FC.fmapFC (unSE @sym) evalMems
       WI.mkStruct sym evalMems'
+
 
 aslStmtEvalFunc :: forall arch sym tp p rtp blocks r ctx
                  . ASLStmt arch (CS.RegEntry sym) tp

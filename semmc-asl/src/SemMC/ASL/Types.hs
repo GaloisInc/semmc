@@ -13,7 +13,7 @@ module SemMC.ASL.Types
   ( ToBaseType
   , ToBaseTypes
   , ToBaseTypesList
-  , ToCrucibleTypes
+  , ToCrucTypes
   , ConstVal(..)
   , UserType(..)
   , LabeledValue(..)
@@ -28,6 +28,9 @@ module SemMC.ASL.Types
   , toBaseTypes
   , toCrucTypes
   , baseCrucProof
+  , toFromBaseProof
+  , fromBaseIndex
+  , toBaseIndex
   , projectLabel
   , projectValue
   , letInStmt
@@ -36,6 +39,7 @@ module SemMC.ASL.Types
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.TraversableFC as FC
+import           Data.Parameterized.Some ( Some(..) )
 import           Numeric.Natural ( Natural )
 import qualified Data.Text as T
 import qualified Lang.Crucible.Types as CT
@@ -63,9 +67,9 @@ toBaseTypes :: Ctx.Assignment CT.TypeRepr ctps -> Ctx.Assignment WT.BaseTypeRepr
 toBaseTypes Ctx.Empty = Ctx.Empty
 toBaseTypes (reprs Ctx.:> repr) = toBaseTypes reprs Ctx.:> toBaseType repr
 
-type family ToCrucibleTypes (wtps :: CT.Ctx WT.BaseType) :: CT.Ctx CT.CrucibleType where
-  ToCrucibleTypes CT.EmptyCtx = CT.EmptyCtx
-  ToCrucibleTypes (tps CT.::> tp) = ToCrucibleTypes tps CT.::> CT.BaseToType tp
+-- type family ToCrucibleTypes (wtps :: CT.Ctx WT.BaseType) :: CT.Ctx CT.CrucibleType where
+--   ToCrucibleTypes CT.EmptyCtx = CT.EmptyCtx
+--   ToCrucibleTypes (tps CT.::> tp) = ToCrucibleTypes tps CT.::> CT.BaseToType tp
 
 type family ToBaseTypesList (ctps :: CT.Ctx CT.CrucibleType) :: [WT.BaseType] where
   ToBaseTypesList CT.EmptyCtx = '[]
@@ -84,6 +88,30 @@ baseCrucProof Ctx.Empty = Refl
 baseCrucProof (wtps Ctx.:> _) = case baseCrucProof wtps of
   Refl -> Refl
 
+
+toFromBaseProof :: CT.TypeRepr tp -> Maybe (tp :~: CT.BaseToType (ToBaseType tp))
+toFromBaseProof repr = case CT.asBaseType repr of
+  CT.AsBaseType brepr -> Just Refl
+  _ -> Nothing
+
+fromBaseIndex :: Ctx.Assignment CT.BaseTypeRepr bctx
+              -> Ctx.Assignment CT.TypeRepr (ToCrucTypes bctx)
+              -> Ctx.Index bctx btp
+              -> Ctx.Index (ToCrucTypes bctx) (CT.BaseToType btp)
+fromBaseIndex breprs creprs ix =
+  case Ctx.intIndex (Ctx.indexVal ix) (Ctx.size creprs) of
+    Just (Some ix') | Just Refl <- testEquality (creprs Ctx.! ix') (CT.baseToType $ breprs Ctx.! ix) -> ix'
+
+
+toBaseIndex :: Ctx.Assignment CT.BaseTypeRepr bctx
+            -> Ctx.Assignment CT.TypeRepr (ToCrucTypes bctx)
+            -> Ctx.Index (ToCrucTypes bctx) tp
+            -> Ctx.Index bctx (ToBaseType tp)
+toBaseIndex breprs creprs ix = do
+  case CT.asBaseType (creprs Ctx.! ix) of
+    CT.AsBaseType brepr ->
+      case Ctx.intIndex (Ctx.indexVal ix) (Ctx.size breprs) of
+        Just (Some ix') | Just Refl <- testEquality brepr (breprs Ctx.! ix') -> ix'
 
 data LabeledValue a b tp = LabeledValue a (b tp)
 
