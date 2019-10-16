@@ -41,8 +41,9 @@ module SemMC.ASL.StaticExpr
   , exprToStatic
   , getPossibleValuesFor
   , getPossibleStaticsStmts
+  , staticBinding
+  , unstaticBinding
   , staticEnvironmentStmt
-  , unstaticEnvironmentStmt
   )
 where
 
@@ -497,41 +498,46 @@ applyStaticEnv' env t = case applyTypeSynonyms t of
     _ -> Nothing
   _ -> Just $ t
 
+trueExpr :: AS.Expr
+trueExpr = AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "TRUE")
+
+falseExpr :: AS.Expr
+falseExpr = AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
+
+staticToExpr :: StaticValue -> AS.Expr
+staticToExpr sv = case sv of
+  StaticInt i -> AS.ExprLitInt i
+  StaticBool True -> trueExpr
+  StaticBool False -> falseExpr
+  StaticBV bv -> AS.ExprLitBin bv
+
+staticBinding :: (T.Text, StaticValue) -> AS.Stmt
+staticBinding (nm, sv) =
+  AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "StaticBind")
+    [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny nm), staticToExpr sv]
+
+unstaticBinding :: AS.Stmt -> Maybe (T.Text, StaticValue)
+unstaticBinding (AS.StmtCall (AS.QualifiedIdentifier _ "StaticBind") [AS.ExprVarRef (AS.QualifiedIdentifier _ nm), e]) =
+  case exprToStatic emptyStaticEnvMap e of
+    Just sv -> Just (nm, sv)
+    _ -> error "Invalid StaticBind"
+unstaticBinding _ = Nothing
 
 staticEnvironmentStmt :: [T.Text] -> [([StaticValue],[AS.Stmt])] -> AS.Stmt
 staticEnvironmentStmt vars bodies =
-  AS.StmtCase (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "StaticEnvironment")
-    (map varToExpr vars)) (map mkCase bodies)
+  AS.StmtIf (map mkCase bodies) (Just $ [AS.StmtAssert falseExpr])
   where
     mkCase (asns, stmts) =
       if length vars /= length asns
       then error $ "Invalid static environment:" ++ show vars ++ show asns
-      else AS.CaseWhen (map staticToPat asns) Nothing stmts
-    varToExpr var =
-      AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var)
-    staticToPat sv = case sv of
-      StaticInt i -> AS.CasePatternInt i
-      StaticBool False -> AS.CasePatternIdentifier "FALSE"
-      StaticBool True -> AS.CasePatternIdentifier "TRUE"
-      StaticBV bv -> AS.CasePatternBin bv
-
-unstaticEnvironmentStmt :: AS.Stmt -> Maybe ([T.Text], [([StaticValue],[AS.Stmt])])
-unstaticEnvironmentStmt
-  (AS.StmtCase (AS.ExprCall (AS.QualifiedIdentifier _ "StaticEnvironment") varExprs) cases) =
-    Just $ (map exprToVar varExprs, map unmkCase cases)
-  where
-    exprToVar (AS.ExprVarRef (AS.QualifiedIdentifier _ var)) = var
-    exprToVar _ = error $ "Invalid static environment"
-
-    unmkCase (AS.CaseWhen pats _ stmts) =
-      if length varExprs /= length pats
-      then error $ "Invalid static environment"
-      else (map patToStatic pats, stmts)
-    unmkCase _ = error $ "Invalid static environment"
-    patToStatic pat = case pat of
-      AS.CasePatternInt i -> StaticInt i
-      AS.CasePatternBin bv -> StaticBV bv
-      AS.CasePatternIdentifier "FALSE" -> StaticBool False
-      AS.CasePatternIdentifier "TRUE" -> StaticBool True
-      _ -> error $ "Invalid static environment"
-unstaticEnvironmentStmt _ = Nothing
+      else
+        let
+          varasns = zip vars asns
+          test = foldr (\asn -> \e ->
+            AS.ExprBinOp AS.BinOpLogicalAnd (staticToTest asn) e) trueExpr varasns
+          bindings = map staticBinding varasns
+        in
+          (test, [letInStmt [] (bindings ++ stmts)])
+    staticToTest (var, sv) = AS.ExprBinOp AS.BinOpEQ
+      (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var))
+      (staticToExpr sv)

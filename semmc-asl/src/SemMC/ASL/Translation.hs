@@ -339,7 +339,7 @@ assertAtom res mexpr msg = do
           CCG.writeGlobal gv $ CCG.AtomExpr res
           case mexpr of
             Just (AS.ExprVarRef (AS.QualifiedIdentifier _ "FALSE")) ->
-              return ()
+              undefinedExit
             Just expr ->
               CCG.assertExpr (CCG.AtomExpr res) (CCG.App (CCE.TextLit $ msg <> (T.pack $ "Expression: " <> show expr)))
             _ -> CCG.assertExpr (CCG.AtomExpr res) (CCG.App (CCE.TextLit msg))
@@ -361,6 +361,14 @@ getStaticEnv = do
   where
     staticTypeMap f nm =
       fromMaybe Nothing $ crucibleToStaticType <$> (f nm)
+
+-- | Return from the current procedure or function with an undefined (default) value.
+undefinedExit :: Generator h s arch ret ()
+undefinedExit = do
+  sig <- MS.gets tsSig
+  let repr = someSigRepr sig
+  let expr = getDefaultValue repr
+  CCG.returnFromFunction expr
 
 
 -- | Translate a single ASL statement into Crucible
@@ -421,6 +429,7 @@ translateStatement' ov stmt
           Just (Some gv)
             | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
                 CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+                undefinedExit
             | otherwise -> X.throw (UnexpectedGlobalType undefinedVarName (CCG.globalType gv))
           _ -> X.throw $ MissingGlobal undefinedVarName
       AS.StmtUnpredictable -> do
@@ -429,12 +438,13 @@ translateStatement' ov stmt
           Just (Some gv)
             | Just Refl <- testEquality (CCG.globalType gv) CT.BoolRepr -> do
                 CCG.writeGlobal gv (CCG.App (CCE.BoolLit True))
+                undefinedExit
             | otherwise -> X.throw (UnexpectedGlobalType unpredictableVarName (CCG.globalType gv))
           _ ->  X.throw $ MissingGlobal unpredictableVarName
       -- NOTE: Ensure that this is safe.  Most SEE statements seem to not be
       -- particularly actionable, but many may need to be manually overridden.
-      AS.StmtSeeExpr {} -> return ()
-      AS.StmtSeeString {} -> return ()
+      AS.StmtSeeExpr {} -> undefinedExit
+      AS.StmtSeeString {} -> undefinedExit
       AS.StmtCall qIdent args -> do
         sigMap <- MS.gets tsFunctionSigs
         let ident = mkFunctionName qIdent (length args)
@@ -943,6 +953,7 @@ getDefaultValue repr = case repr of
   CT.IntegerRepr -> mkUF "UNDEFINED_Integer" repr
   CT.NatRepr -> mkUF "UNDEFINED_Nat" repr
   CT.BoolRepr -> mkUF "UNDEFINED_Bool" repr
+  CT.SymbolicArrayRepr idx xs -> mkUF "UNDEFINED_Array" repr
   _ -> error $ "Invalid undefined value: " <> show repr
   where
     mkUF :: T.Text -> CT.TypeRepr tp -> CCG.Expr (ASLExt arch) s tp
@@ -1741,20 +1752,21 @@ translateSlice ov e slice constraint = do
 sliceValidTests :: SomeSlice s -> Generator h s arch ret ()
 sliceValidTests (SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom)) = case range of
   SliceStatic _ _ -> return ()
-  SliceSymbolic loAtom hiAtom -> do
-    let lo = CCG.AtomExpr loAtom
-    let hi = CCG.AtomExpr hiAtom
-    let len = CCG.App (CCE.IntLit (CT.intValue lenRepr))
-    let wlen = CCG.App (CCE.IntLit (CT.intValue wRepr))
+  SliceSymbolic loAtom hiAtom -> let
+    lo = CCG.AtomExpr loAtom
+    hi = CCG.AtomExpr hiAtom
+    len = CCG.App (CCE.IntLit (CT.intValue lenRepr))
+    wlen = CCG.App (CCE.IntLit (CT.intValue wRepr))
 
-    let tests = map CCG.App [ CCE.IntLe lo hi
-                              -- lo <= hi
-                            , CCE.IntLe (CCG.App (CCE.IntAdd (CCG.App $ CCE.IntSub hi lo) (CCG.App $ CCE.IntLit 1))) len
-                              -- (hi - lo) + 1 <= len
-                            , CCE.IntLe (CCG.App (CCE.IntAdd hi (CCG.App $ CCE.IntLit 1))) wlen
-                              -- hi + 1 <= wlen
-                            ]
-    mapM_ mkTest tests
+    tests = map CCG.App
+      [ CCE.IntLe lo hi
+        -- lo <= hi
+      , CCE.IntLe (CCG.App (CCE.IntAdd (CCG.App $ CCE.IntSub hi lo) (CCG.App $ CCE.IntLit 1))) len
+        -- (hi - lo) + 1 <= len
+      , CCE.IntLe (CCG.App (CCE.IntAdd hi (CCG.App $ CCE.IntLit 1))) wlen
+        -- hi + 1 <= wlen
+      ]
+    in mapM_ mkTest tests
   where
     mkTest test = do
       atest <- CCG.mkAtom test
@@ -1768,11 +1780,7 @@ withValidSlice :: AS.Slice
                -> Generator h s arch ret (Some (CCG.Atom s))
 withValidSlice slice range sliceOf@(SliceOf lenRepr wRepr atom) f = do
     sliceValidTests (SomeSlice range sliceOf)
-    --atest <- CCG.mkAtom test
-    --assertAtom atest
-    --CCG.assertExpr (CCG.AtomExpr atest) (CCG.App (CCE.TextLit $ "Slicing constraints: " <> (T.pack $ show slice) <> (T.pack $ show test)))
     atom <- f
-    --atom2 <- CCG.mkAtom $ CCG.App (CCE.BaseIte (CT.BaseBVRepr lenRepr) (CCG.AtomExpr test) (CCG.AtomExpr atom) (getDefaultValue (CT.BVRepr lenRepr)))
     return (Some atom)
 
 withValidSlice' :: AS.Slice
@@ -1782,9 +1790,6 @@ withValidSlice' :: AS.Slice
                -> Generator h s arch ret ()
 withValidSlice' slice range sliceOf f = do
     sliceValidTests (SomeSlice range sliceOf)
-    --atest <- CCG.mkAtom test
-    --assertAtom atest
-    --CCG.assertExpr (CCG.AtomExpr atest) (CCG.App (CCE.TextLit $ "Slicing constraints" <> (T.pack $ show slice) <> (T.pack $ show test)))
     f
 
 translateSlice' :: Overrides arch
@@ -1819,8 +1824,15 @@ translateSlice' ov atom' slice constraint = do
             shift3 = CCG.App $ CCE.BVLshr wRepr shift2 loBV
             -- [0 0 0 0 0 0 0 .. x_hi .. x_lo](w)
             in
-            CCG.mkAtom $ CCG.App (CCE.BVTrunc lenRepr wRepr shift3)
+            -- CCG.mkAtom $ CCG.App (CCE.BVTrunc lenRepr wRepr shift3)
             -- [x_hiRepr .. x_loAtom](len)
+          -- FIXME: Having an actual implementation causes some functions to hang during simulation.
+          -- Can we get away with leaving this uninterpreted?
+              let
+                uf = UF "SymbolicSlice" (CT.BaseBVRepr lenRepr)
+                  (Ctx.empty Ctx.:> CT.IntegerRepr Ctx.:> CT.IntegerRepr)
+                  (Ctx.empty Ctx.:> (CCG.AtomExpr loAtom) Ctx.:> (CCG.AtomExpr hiAtom))
+              in CCG.mkAtom (CCG.App $ CCE.ExtensionApp uf)
           _ -> throwTrace $ UnsupportedSlice slice constraint
       _ -> throwTrace $ UnsupportedSlice slice constraint
 
@@ -2299,6 +2311,8 @@ applyStaticCase (AS.ExprVarRef (AS.QualifiedIdentifier _ nm), c) = do
   mapStaticVals (Map.insert nm sv)
 applyStaticCase x = throwTrace $ TranslationError $ "Unexpected static case form" ++ show x
 
+
+
 overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt :: forall h s ret . AS.Stmt -> Maybe (Generator h s arch ret ())
@@ -2308,21 +2322,17 @@ overrides = Overrides {..}
           -- discarding any new variable declarations at the end of the block.
 
           _ | Just ([], stmts) <- unletInStmt s -> Just $ do
-            vars <- MS.gets tsVarRefs
-            forgetNewStatics $ mapM_ (translateStatement overrides) stmts
-            MS.modify' $ \s -> s { tsVarRefs = vars }
+              vars <- MS.gets tsVarRefs
+              forgetNewStatics $ mapM_ (translateStatement overrides) stmts
+              MS.modify' $ \s -> s { tsVarRefs = vars }
 
           _ | Just (unvars, stmts) <- unletInStmt s -> Just $ do
-            mapM_ (translateStatement overrides) stmts
-            MS.modify' $ \s -> s { tsVarRefs = foldr Map.delete (tsVarRefs s) unvars
-                                 , tsStaticValues = foldr Map.delete (tsStaticValues s) unvars}
+              mapM_ (translateStatement overrides) stmts
+              MS.modify' $ \s -> s { tsVarRefs = foldr Map.delete (tsVarRefs s) unvars
+                                   , tsStaticValues = foldr Map.delete (tsStaticValues s) unvars}
 
-          -- Special case construct that injects information into the static environment
-          _ | Just (vars, cases) <- unstaticEnvironmentStmt s -> Just $ do
-            env <- getStaticEnv
-            forM_ cases $ \(svs, stmts) -> do
-                      mapM_ (\(nm, sv) -> mapStaticVals (Map.insert nm sv)) (zip vars svs)
-                      mapM_ (translateStatement overrides) stmts
+          _ | Just (nm, sv) <- unstaticBinding s -> Just $ do
+              mapStaticVals (Map.insert nm sv)
 
           AS.StmtCall (AS.QualifiedIdentifier _ "ALUExceptionReturn") [_] -> Just $ do
             raiseException

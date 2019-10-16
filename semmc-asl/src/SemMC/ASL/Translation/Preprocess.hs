@@ -1056,7 +1056,8 @@ liftOverEnvs instName envs stmts = case Map.lookup instName dependentVariableHin
       cases = do
         asns <- getPossibleValuesFor vars envs
         return $ (map (varToStatic asns) vars, stmts)
-    in [letInStmt [] [staticEnvironmentStmt vars cases]]
+
+    in [staticEnvironmentStmt vars cases]
   _ -> stmts
 
 getPossibleEnvs :: [AS.InstructionField] -> [AS.Stmt] -> [StaticEnvP]

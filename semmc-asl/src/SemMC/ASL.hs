@@ -85,7 +85,7 @@ simulateFunction symCfg func = do
       let globals = AC.funcGlobals func
       globalState <- initGlobals symCfg globals
       s0 <- initialSimulatorState symCfg globalState econt retRepr
-      ft <- executionFeatures (simSym symCfg)
+      ft <- executionFeatures (AS.funcName $ AC.funcSig func) (simSym symCfg)
       eres <- CS.executeCrucible ft s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeFunctionSignature sig)))
@@ -144,7 +144,7 @@ simulateProcedure symCfg crucProc =
       let globals = AC.procGlobals crucProc
       globalState <- initGlobals symCfg globals
       s0 <- initialSimulatorState symCfg globalState econt retRepr
-      ft <- executionFeatures (simSym symCfg)
+      ft <- executionFeatures (AS.procName $ AC.procSig crucProc) (simSym symCfg)
       eres <- CS.executeCrucible ft s0
       case eres of
         CS.TimeoutResult {} -> X.throwIO (SimulationTimeout (Some (AC.SomeProcedureSignature sig)))
@@ -316,16 +316,17 @@ executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
                   => WPO.OnlineSolver scope solver
                   => CB.IsSymInterface sym
                   => CCE.IsSyntaxExtension ext
-                  => sym -> IO [CS.ExecutionFeature p sym ext rtp]
-executionFeatures sym = do
-  --gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
-  --let ft = CS.genericToExecutionFeature gft
-  --return [ft]
-  --let cfg = WI.getConfiguration sym
-  --pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
-  --res <- WC.setOpt pathSetter (T.pack "./yices.out")
-  --X.assert (null res) (return [])
-  return []
+                  => T.Text -> sym -> IO [CS.ExecutionFeature p sym ext rtp]
+executionFeatures nm sym = do
+  gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
+  -- FIXME: This is the only function that has an issue with path satisfiability
+  let fts = if nm `elem` ["Auth_5"] then [] else [CS.genericToExecutionFeature gft]
+  --let fts = []
+  let cfg = WI.getConfiguration sym
+  pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
+  res <- WC.setOpt pathSetter (T.pack "./yices.out")
+  X.assert (null res) (return fts)
+  --return []
 
 data SimulationException = SimulationTimeout (Some AC.SomeSignature)
                          | SimulationAbort (Some AC.SomeSignature) T.Text
