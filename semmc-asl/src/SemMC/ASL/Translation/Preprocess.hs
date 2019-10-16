@@ -973,7 +973,7 @@ mkSignature defs env sig =
         , funcSigRepr = retT
         , funcArgReprs = args
         , funcGlobalReprs = sfuncGlobalReprs fsig
-        , funcStaticVals = staticEnvMapVals $ addStandardStaticEnv $ simpleStaticEnvMap env
+        , funcStaticVals = env
         , funcArgs = sfuncArgs fsig
         }
     SomeSimpleProcedureSignature fsig |
@@ -983,7 +983,7 @@ mkSignature defs env sig =
         { procName = mkFinalFunctionName env $ sprocName fsig
         , procArgReprs = args
         , procGlobalReprs = sprocGlobalReprs fsig
-        , procStaticVals = staticEnvMapVals $ addStandardStaticEnv $ simpleStaticEnvMap env
+        , procStaticVals = env
         , procArgs = sprocArgs fsig
         }
   where
@@ -1016,35 +1016,33 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
   let mEnc = find (\e -> AS.encName e == encName && AS.encInstrSet e == iset) instEncodings
   case mEnc of
     Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
-    Just enc -> do
-      let initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
-      let initStmts = AS.encDecode enc ++ initUnusedFields ++ initializeGlobals enc
-      let possibleEnvs = getPossibleEnvs (AS.encFields enc) (AS.encDecode enc)
-      let instExecute' = liftOverEnvs instName possibleEnvs instExecute
-      let instStmts = initStmts ++ instPostDecode ++ instExecute'
-      let instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
-      let staticEnv = addInitializedVariables initStmts (addStandardStaticEnv emptyStaticEnvMap)
-      globalVars' <- instGlobalVars
-      let globalVars = globalVars' ++ builtinGlobals
-      labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
-        return $ Some (LabeledValue varName varTp)
-      labeledArgs <- forM (AS.encFields enc) $ \field -> do
-        Some tp <- computeFieldType field
-        let ctp = CT.baseToType tp
-        return (Some (LabeledValue (AS.instFieldName field) ctp))
-      Some globalReprs <- return $ Ctx.fromList labeledVals
-      Some argReprs <- return $ Ctx.fromList labeledArgs
-      let pSig = ProcedureSignature { procName = name
-                                    , procArgReprs = argReprs
-                                    , procGlobalReprs = globalReprs
-                                    , procStaticVals = staticEnvMapVals staticEnv
-                                    , procArgs = []
-                                    }
-      return (Some (SomeProcedureSignature pSig), instStmts)
-
--- The virtual "StaticEnvironment" function is interpreted by the translator as
--- a hint to inject the case statement into the current static environment in
--- order to resolve the type dependency.
+    Just enc -> let
+      initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
+      initStmts = AS.encDecode enc ++ initUnusedFields
+      possibleEnvs = getPossibleEnvs (AS.encFields enc) (AS.encDecode enc)
+      instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $
+        liftOverEnvs instName possibleEnvs instExecute
+      instStmts = initStmts ++ instPostDecode ++ instExecute'
+      instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
+      staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
+      in do
+        globalVars' <- instGlobalVars
+        let globalVars = globalVars' ++ builtinGlobals
+        labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
+          return $ Some (LabeledValue varName varTp)
+        labeledArgs <- forM (AS.encFields enc) $ \field -> do
+          Some tp <- computeFieldType field
+          let ctp = CT.baseToType tp
+          return (Some (LabeledValue (AS.instFieldName field) ctp))
+        Some globalReprs <- return $ Ctx.fromList labeledVals
+        Some argReprs <- return $ Ctx.fromList labeledArgs
+        let pSig = ProcedureSignature { procName = name
+                                      , procArgReprs = argReprs
+                                      , procGlobalReprs = globalReprs
+                                      , procStaticVals = staticEnvMapVals staticEnv
+                                      , procArgs = []
+                                      }
+        return (Some (SomeProcedureSignature pSig), instStmts)
 
 liftOverEnvs :: T.Text -> [StaticEnvP] -> [AS.Stmt] -> [AS.Stmt]
 liftOverEnvs instName envs stmts = case Map.lookup instName dependentVariableHints of
@@ -1059,6 +1057,17 @@ liftOverEnvs instName envs stmts = case Map.lookup instName dependentVariableHin
 
     in [staticEnvironmentStmt vars cases]
   _ -> stmts
+
+pruneInfeasableInstrSets :: AS.InstructionSet -> [AS.Stmt] -> [AS.Stmt]
+pruneInfeasableInstrSets enc stmts = case enc of
+  AS.A32 -> stmts
+  AS.A64 -> stmts
+  _ -> let
+    evalInstrSetTest (AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.QualifiedIdentifier _ "CurrentInstrSet") [])
+                       (AS.ExprVarRef (AS.QualifiedIdentifier _ "InstrSet_A32"))) =
+      AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
+    evalInstrSetTest e = e
+    in map (ASLT.applyStmtSyntaxOverride (ASLT.SyntaxOverrides id evalInstrSetTest id id)) stmts
 
 getPossibleEnvs :: [AS.InstructionField] -> [AS.Stmt] -> [StaticEnvP]
 getPossibleEnvs fields decodes =
@@ -1088,35 +1097,6 @@ initializeUnusedFields encFields allFields =
     getDecl _ _ = Nothing
   in
     Map.elems $ Map.mapMaybeWithKey getDecl otherFieldsMap
-
-initializeGlobals :: AS.InstructionEncoding -> [AS.Stmt]
-initializeGlobals AS.InstructionEncoding{..} =
-  [AS.StmtVarDeclInit
-     ("CurrentInstrSet", AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "integer"))
-      (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny (instrSetToVar encInstrSet)))]
-
-instrSetToInt :: AS.InstructionSet -> Integer
-instrSetToInt is = case is of
-  AS.A32 -> 0
-  AS.T32 -> 1
-  AS.T16 -> 2
-  AS.A64 -> 3
-
-allInstrSets :: [AS.InstructionSet]
-allInstrSets = [AS.A32, AS.T32, AS.T16, AS.A64]
-
-instrSetToVar :: AS.InstructionSet -> T.Text
-instrSetToVar is = case is of
-  AS.A32 -> "InstrSet_A32"
-  AS.T32 -> "InstrSet_T32"
-  AS.T16 -> "InstrSet_T16"
-  AS.A64 -> "InstrSet_A64"
-
-addStandardStaticEnv :: StaticEnvMap -> StaticEnvMap
-addStandardStaticEnv env =
-   foldl addInstructionSet env allInstrSets
- where
-   addInstructionSet env' is = insertStaticEnv (instrSetToVar is) (StaticInt $ instrSetToInt is) env'
 
 -- | Evaluate any known static values for this specific encoding
 addInitializedVariables :: [AS.Stmt] -> StaticEnvMap -> StaticEnvMap

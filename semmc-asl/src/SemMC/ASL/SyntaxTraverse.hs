@@ -22,7 +22,8 @@ module SemMC.ASL.SyntaxTraverse
   ( mkSyntaxOverrides
   , applySyntaxOverridesInstrs
   , applySyntaxOverridesDefs
-  , SyntaxOverrides
+  , applyStmtSyntaxOverride
+  , SyntaxOverrides(..)
   , foldASL
   , foldExpr
   , mkFunctionName
@@ -326,8 +327,6 @@ mkSyntaxOverrides defs =
         AS.ExprVarRef qName
           | Set.member (mkFunctionName (mkGetterName False qName) 0) getters ->
             AS.ExprCall (mkGetterName False qName) []
-        AS.ExprCall (AS.QualifiedIdentifier _ "CurrentInstrSet") [] ->
-          AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "CurrentInstrSet")
         _ -> expr
 
       lvalOverrides lval = lval
