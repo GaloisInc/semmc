@@ -319,8 +319,12 @@ executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
                   => T.Text -> sym -> IO [CS.ExecutionFeature p sym ext rtp]
 executionFeatures nm sym = do
   gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
-  -- FIXME: This is the only function that has an issue with path satisfiability
-  let fts = if nm `elem` ["Auth_5"] then [] else [CS.genericToExecutionFeature gft]
+  -- FIXME: What is the general requirement here?
+  let fts = if nm `elem` ["aarch32_VLDM_A_aarch32_VLDM_T1A1_A","aarch32_VMOV_r_A_aarch32_VMOV_r_T2A2_A"
+                         , "aarch32_VSTM_A_aarch32_VSTM_T1A1_A", "aarch32_VMOV_i_A_aarch32_VMOV_i_A2_A"
+                         , "aarch32_VMOV_i_A_aarch32_VMOV_i_T2_A"
+                         ]
+        then [CS.genericToExecutionFeature gft] else []
   --let fts = []
   let cfg = WI.getConfiguration sym
   pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg

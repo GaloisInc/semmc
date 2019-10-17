@@ -430,6 +430,7 @@ reportStats sopts sm = do
     return ()
   
   putStrLn $ "Total instructions inspected: " <> show (Map.size $ instrDeps sm)
+  putStrLn $ "Total functions inspected: " <> show (Map.size $ funDeps sm)
   putStrLn $ "Number of instructions which raised exceptions: " <> show (Map.size $ instrExcepts sm)
   putStrLn "----------------------"
   E.when (reportSucceedingInstructions sopts) $

@@ -485,7 +485,7 @@ translateStatement' ov stmt
                   atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
                   _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
                   return ()
-                checkExecutionStatus ov
+                --checkExecutionStatus ov
 
       _ -> throwTrace $ UnsupportedStmt stmt
 
@@ -513,45 +513,41 @@ translateFor :: Overrides arch
              -> [AS.Stmt]
              -> Generator h s arch ret ()
 translateFor ov var lo hi body = do
-  env <- getStaticEnv
-  case (exprToStatic env lo, exprToStatic env hi) of
-    (Just (StaticInt lo'), Just (StaticInt hi')) -> unrollFor ov var lo' hi' body
+  vars <- MS.gets tsVarRefs
+  case Map.lookup var vars of
+    Just (Some lreg) -> do
+      Some atom <- translateExpr ov lo
+      Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
+      CCG.assignReg lreg (CCG.AtomExpr atom)
     _ -> do
-      vars <- MS.gets tsVarRefs
-      case Map.lookup var vars of
-        Just (Some lreg) -> do
-          Some atom <- translateExpr ov lo
-          Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
-          CCG.assignReg lreg (CCG.AtomExpr atom)
-        _ -> do
-          let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
-          translateDefinedVar ov ty var lo
-      let ident = AS.QualifiedIdentifier AS.ArchQualAny var
-      let testG = do
-            let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
-            Some testA <- translateExpr ov testE
-            Refl <- assertAtomType testE CT.BoolRepr testA
-            return (CCG.AtomExpr testA)
-      let increment = do
-            AS.StmtAssign (AS.LValVarRef ident)
-              (AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef ident) (AS.ExprLitInt 1))
-            
-      let bodyG = mapM_ (translateStatement ov) (body ++ [increment])
-      CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+      let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
+      translateDefinedVar ov ty var lo
+  let ident = AS.QualifiedIdentifier AS.ArchQualAny var
+  let testG = do
+        let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
+        Some testA <- translateExpr ov testE
+        Refl <- assertAtomType testE CT.BoolRepr testA
+        return (CCG.AtomExpr testA)
+  let increment = do
+        AS.StmtAssign (AS.LValVarRef ident)
+          (AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef ident) (AS.ExprLitInt 1))
+
+  let bodyG = mapM_ (translateStatement ov) (body ++ [increment])
+  CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
-unrollFor :: Overrides arch
-          -> AS.Identifier
-          -> Integer
-          -> Integer
-          -> [AS.Stmt]
-          -> Generator h s arch ret ()
-unrollFor ov var lo hi body = do
-  mapM_ translateFor [lo .. hi]
-  where
-    translateFor i = forgetNewStatics $ do
-      mapStaticVals (Map.insert var (StaticInt i))
-      translateStatement ov (letInStmt [] body)
+-- unrollFor :: Overrides arch
+--           -> AS.Identifier
+--           -> Integer
+--           -> Integer
+--           -> [AS.Stmt]
+--           -> Generator h s arch ret ()
+-- unrollFor ov var lo hi body = do
+--   mapM_ translateFor [lo .. hi]
+--   where
+--     translateFor i = forgetNewStatics $ do
+--       mapStaticVals (Map.insert var (StaticInt i))
+--       translateStatement ov (letInStmt [] body)
 
 translateRepeat :: Overrides arch
                 -> [AS.Stmt]
@@ -932,57 +928,22 @@ translatelValSlice :: Overrides arch
 translatelValSlice ov lv slice asnAtom' constraint = do
   let Just lve = lValToExpr lv
   Some atom' <- translateExpr ov lve
-  SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom) <- getSomeSlice ov slice atom' constraint
-
-  withValidSlice' ov slice range sliceOf $ do
-    case range of
-      SliceStatic loRepr hiRepr -> do
-        let asnAtom = asnAtom'
-        Refl <- assertAtomType' (CT.BVRepr lenRepr) asnAtom
-        let lenUpper = wRepr `WT.subNat` (hiRepr `WT.addNat` (WT.knownNat @1))
-        -- [x0 .. x_loRepr .. x_hiRepr .. x_wRepr-1 ] -- original bitvector in lv
-        -- [y_loRepr .. y_hiRepr] -- asnAtom value
-
-        let lvBV = Just (CCG.AtomExpr atom)
-        let asnBV = Just (CCG.AtomExpr asnAtom)
-        let pre = maybeBVSelect (WT.knownNat @0) loRepr wRepr lvBV
-          -- pre = [x0 .. x_loRepr-1]
-        let first = maybeBVConcat loRepr lenRepr pre asnBV
-          -- first = pre ++ [y_loRepr .. y_hiRepr]
-        let post = maybeBVSelect (hiRepr `WT.addNat` (WT.knownNat @1)) lenUpper wRepr lvBV
-          -- post = [x_hiRepr+1 .. x_wRepr-1]
-        let fin = maybeBVConcat (loRepr `WT.addNat` lenRepr) lenUpper first post
-          -- Final bv has the correct length:
-          -- (lo + len) + lenUpper = lo + 1 + (hi - lo) + (w - (1 + hi))
-          --                       = lo + 1 + hi - lo + w - 1 - hi
-          --                       = (lo - lo) + (hi - hi) + (1 - 1) + w
-          --                       = w
-          -- Shape of final bv:
-          -- fin = first ++ post
-          --     = [x0 .. x_loRepr-1] ++ [y_loRepr .. y_hiRepr] ++ [x_hiRepr+1 .. x_wRepr-1]
-        case fin of
-          Just r -> do
-            result <- CCG.mkAtom r
-            translateAssignment' ov lv result TypeBasic Nothing
-          Nothing ->
-            X.throw $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
-      SliceSymbolic loAtom _ -> do
-        asnAtom <- zextBVAtom lenRepr asnAtom'
-        let loBV = CCG.App $ CCE.IntegerToBV wRepr (CCG.AtomExpr loAtom)
-        -- [0 0 .. x_hiAtom .. x_0](lenRepr) -- asnAtom
-        negAsn <- CCG.mkAtom $ CCG.App $ CCE.BVNot lenRepr (CCG.AtomExpr asnAtom)
-        -- [0 0 .. -x_hiAtom .. -x_0](lenRepr)
-        zextnegAsn <- zextBVAtom wRepr negAsn
-        -- [0 0 0 .. -x_hiAtom .. -x_0](wRepr)
-        let zextnegShiftAsn = CCG.App $ CCE.BVShl wRepr (CCG.AtomExpr zextnegAsn) loBV
-        -- [0 .. -x_(hiAtom + loAtom) .. -x_loAtom .. 0](wRepr)
-        let oextShiftAsn = CCG.App $ CCE.BVNot wRepr zextnegShiftAsn
-        -- [1 .. x_(hiAtom + loAtom) .. x_loAtom .. 1](wRepr)
-        -- [y_(wRepr)          ..                 y_0](wRepr) -- atom
-        let maskedResult = CCG.App $ CCE.BVAnd wRepr oextShiftAsn (CCG.AtomExpr atom)
-        -- [y_(wRepr) .. x(hiAtom + loAtom) .. x_loAtom .. y_0](wRepr)
-        result <- CCG.mkAtom maskedResult
-        translateAssignment' ov lv result TypeBasic Nothing
+  SliceRange lenRepr wRepr loAtom hiAtom atom <- getSliceRange ov slice atom' constraint
+  asnAtom <- zextBVAtom lenRepr asnAtom'
+  let uf =
+        UF "SymbolicSliceSet" (CT.BaseBVRepr wRepr)
+          (Ctx.empty
+           Ctx.:> CT.IntegerRepr
+           Ctx.:> CT.IntegerRepr
+           Ctx.:> CT.BVRepr lenRepr
+           Ctx.:> CT.BVRepr wRepr)
+          (Ctx.empty
+           Ctx.:> (CCG.AtomExpr loAtom)
+           Ctx.:> (CCG.AtomExpr hiAtom)
+           Ctx.:> (CCG.AtomExpr asnAtom)
+           Ctx.:> (CCG.AtomExpr atom))
+  result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp uf)
+  translateAssignment' ov lv result TypeBasic Nothing
 
 
 -- | Get the "default" value for a given crucible type. We can't use unassigned
@@ -1523,6 +1484,7 @@ translateExpr'' ov expr ty
                       rets -> do
                         exts <- mapM mkExtendedTypeData rets
                         return $ TypeTuple exts
+                    --checkExecutionStatus ov
                     return (satom, ext)
           -- FIXME: Should this trip a global flag?
           AS.ExprImpDef _ t -> do
@@ -1609,30 +1571,6 @@ getIndexOfLabel tps lbl struct ix val =
     MS.put (Just $ Some getAtom)
   else return ()
 
--- (1 <= w, 1 <= len, idx + len <= w)
-
--- data SliceContinue s a where
---   SliceContinue :: (WT.NatRepr lo
---             ->  WT.NatRepr len
---             -> WT.NatRepr w
---             -> WT.LeqProof 1 len
---             -> WT.LeqProof 1 w
---             -> WT.LeqProof (lo WT.+ len) w
---             -> Generator h s arch ret a)
---            -> SliceContinue s a
-
--- translateSliceAccess :: (Some (CCG.Atom s)) -> SliceContinue s (Some (CCG.Atom s))
--- translateSliceAccess (Some atom) =
---   case CCG.typeOfAtom atom of
---       CT.BVRepr wRepr' ->
---         SliceContinue (\loRepr lenRepr wRepr prf1 prf2 prf3 ->
---                                 if | Just Refl <- testEquality wRepr' wRepr
---                                    , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr
---                                    , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` wRepr'
---                                    , WT.LeqProof <- prf3 ->
---                                        Some <$> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom))))
-
-
 normalizeSlice :: AS.Slice -> (AS.Expr, AS.Expr)
 normalizeSlice slice = case slice of
   AS.SliceRange e e' -> (e', e)
@@ -1641,31 +1579,14 @@ normalizeSlice slice = case slice of
     let hi = AS.ExprBinOp AS.BinOpAdd e (AS.ExprBinOp AS.BinOpSub e' (AS.ExprLitInt 1))
         in (e, hi)
 
-data SliceOf s sliceLength atomLength where
-  SliceOf :: (1 WT.<= atomLength, 1 WT.<= sliceLength, sliceLength WT.<= atomLength)
-          => WT.NatRepr sliceLength
-          -> WT.NatRepr atomLength
-          -> CCG.Atom s (CT.BVType atomLength)
-          -> SliceOf s sliceLength atomLength
-
-data SliceRange s sliceLength atomLength where
-    SliceStatic :: (lo WT.<= hi,
-                    sliceLength ~ (1 WT.+ (hi WT.- lo)),
-                    1 WT.<= sliceLength
-                   , (hi WT.+ 1) WT.<= atomLength)
-                => WT.NatRepr lo
-                -> WT.NatRepr hi
-                -> SliceRange s sliceLength atomLength
-
-    SliceSymbolic :: 1 WT.<= sliceLength
-                  => CCG.Atom s CT.IntegerType
-                  -> CCG.Atom s CT.IntegerType
-                  -> SliceRange s sliceLength atomLength
-
-data SomeSlice s where
-  SomeSlice :: SliceRange s sliceLength atomLength
-            -> SliceOf s sliceLength atomLength
-            -> SomeSlice s
+data SliceRange s where
+  SliceRange :: (1 WT.<= atomLength, 1 WT.<= sliceLength, sliceLength WT.<= atomLength)
+                => WT.NatRepr sliceLength
+                -> WT.NatRepr atomLength
+                -> CCG.Atom s CT.IntegerType
+                -> CCG.Atom s CT.IntegerType
+                -> CCG.Atom s (CT.BVType atomLength)
+                -> SliceRange s
 
 getStaticSliceRange :: AS.Slice
                     -> Generator h s arch ret (Maybe (Some WT.NatRepr, Some WT.NatRepr))
@@ -1720,42 +1641,17 @@ getSymbolicSliceRange ov slice = do
   Refl <- assertAtomType e CT.IntegerRepr hiAtom
   return (loAtom, hiAtom)
 
-assertJust :: Generator h s arch ret (Maybe a)
-           -> Generator h s arch ret a
-assertJust f = do
-  ma <- f
-  case ma of
-    Just a -> return a
-    _ -> throwTrace $ UnexpectedNothing
-
-getSomeSlice :: Overrides arch
-             -> AS.Slice
-             -> CCG.Atom s tp
-             -> TypeConstraint
-             -> Generator h s arch ret (SomeSlice s)
-getSomeSlice ov slice slicedAtom constraint = do
-  mStatic <- getStaticSliceRange slice
-  case mStatic of
-    Just (Some loRepr, Some hiRepr)
-      | Just (loLeqHi@WT.LeqProof) <- loRepr `WT.testLeq` hiRepr
-      , lenRepr <- (WT.knownNat @1) `WT.addNat` (hiRepr `WT.subNat` loRepr)
-      , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lenRepr -> do
-        case CCG.typeOfAtom slicedAtom of
-          CT.BVRepr wRepr
-            | Just WT.LeqProof <- lenRepr `WT.testLeq` wRepr
-            , Just WT.LeqProof <- (hiRepr `WT.addNat` (WT.knownNat @1)) `WT.testLeq` wRepr ->
-              return $ SomeSlice (SliceStatic loRepr hiRepr) (SliceOf lenRepr wRepr slicedAtom)
-          CT.IntegerRepr
-            | wRepr <- hiRepr `WT.addNat` (WT.knownNat @1)
-            , WT.LeqProof <- WT.leqAdd (WT.leqRefl (WT.knownNat @1)) hiRepr
-            , Refl <- WT.plusComm (WT.knownNat @1) hiRepr
-            , WT.LeqProof <- WT.leqAdd2 (WT.leqRefl (WT.knownNat @1)) (WT.leqSub (WT.leqRefl hiRepr) loLeqHi)
-             -> do
-                intAtom <- CCG.mkAtom $ CCG.App (CCE.IntegerToBV wRepr (CCG.AtomExpr slicedAtom))
-                return $ SomeSlice (SliceStatic loRepr hiRepr) (SliceOf lenRepr wRepr intAtom)
-          tp -> throwTrace $ InvalidSlice (WT.intValue loRepr) (WT.intValue hiRepr) tp
-      | otherwise -> throwTrace $ InvalidSliceRange (WT.intValue loRepr) (WT.intValue hiRepr)
-    Nothing -> do
+getSliceRange :: Overrides arch
+              -> AS.Slice
+              -> CCG.Atom s tp
+              -> TypeConstraint
+              -> Generator h s arch ret (SliceRange s)
+getSliceRange ov slice slicedAtom constraint = do
+  range <- getSlice
+  sliceValidTests ov range
+  return range
+  where
+    getSlice = do
       (loAtom, hiAtom) <- getSymbolicSliceRange ov slice
       mLength <- getStaticSliceLength slice
       (Some lenRepr :: Some WT.NatRepr) <- case mLength of
@@ -1775,14 +1671,23 @@ getSomeSlice ov slice slicedAtom constraint = do
               CT.BVRepr wRepr -> return $ Some wRepr
               _ -> throwTrace $ UnsupportedSlice slice constraint
           _ -> throwTrace $ UnsupportedSlice slice constraint
-      WT.LeqProof <- assertJust $ return $ (WT.knownNat @1) `WT.testLeq` lenRepr
+      WT.LeqProof <- case (WT.knownNat @1) `WT.testLeq` lenRepr of
+        Just x -> return x
+        _ -> throwTrace $ UnsupportedSlice slice constraint
       case CCG.typeOfAtom slicedAtom of
         CT.BVRepr wRepr
           | Just WT.LeqProof <- lenRepr `WT.testLeq` wRepr ->
-            return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf lenRepr wRepr slicedAtom)
+            return $ SliceRange lenRepr wRepr loAtom hiAtom slicedAtom
         CT.IntegerRepr -> do
-          intAtom <- CCG.mkAtom $ CCG.App (CCE.IntegerToBV lenRepr (CCG.AtomExpr slicedAtom))
-          return $ SomeSlice (SliceSymbolic loAtom hiAtom) (SliceOf lenRepr lenRepr intAtom)
+          env <- getStaticEnv
+          let (_, hi) = normalizeSlice slice
+          case exprToStatic env hi of
+            Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
+                if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
+                     intAtom <- CCG.mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
+                     return $ SliceRange lenRepr hiRepr loAtom hiAtom intAtom
+                   | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
+            _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
         _ -> throwTrace $ UnsupportedSlice slice constraint
 
 translateSlice :: Overrides arch
@@ -1795,11 +1700,9 @@ translateSlice ov e slice constraint = do
    translateSlice' ov atom slice constraint
 
 sliceValidTests :: Overrides arch
-                -> SomeSlice s
+                -> SliceRange s
                 -> Generator h s arch ret ()
-sliceValidTests ov (SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom)) = case range of
-  SliceStatic _ _ -> return ()
-  SliceSymbolic loAtom hiAtom -> let
+sliceValidTests ov (SliceRange lenRepr wRepr loAtom hiAtom atom) = let
     lo = CCG.AtomExpr loAtom
     hi = CCG.AtomExpr hiAtom
     len = CCG.App (CCE.IntLit (CT.intValue lenRepr))
@@ -1819,71 +1722,23 @@ sliceValidTests ov (SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom)) = case
       atest <- CCG.mkAtom test
       assertAtom ov atest Nothing ("Slicing constraint failure: " <> (T.pack $ show test))
 
-
-withValidSlice :: Overrides arch
-               -> AS.Slice
-               -> SliceRange s sliceLength atomLength
-               -> SliceOf s sliceLength atomLength
-               -> Generator h s arch ret (CCG.Atom s (CT.BVType sliceLength))
-               -> Generator h s arch ret (Some (CCG.Atom s))
-withValidSlice ov slice range sliceOf@(SliceOf lenRepr wRepr atom) f = do
-    sliceValidTests ov (SomeSlice range sliceOf)
-    atom <- f
-    return (Some atom)
-
-withValidSlice' :: Overrides arch
-                -> AS.Slice
-                -> SliceRange s sliceLength atomLength
-                -> SliceOf s sliceLength atomLength
-                -> Generator h s arch ret ()
-                -> Generator h s arch ret ()
-withValidSlice' ov slice range sliceOf f = do
-    sliceValidTests ov (SomeSlice range sliceOf)
-    f
-
 translateSlice' :: Overrides arch
                 -> CCG.Atom s tp
                 -> AS.Slice
                 -> TypeConstraint
                 -> Generator h s arch ret (Some (CCG.Atom s))
 translateSlice' ov atom' slice constraint = do
-  SomeSlice range sliceOf@(SliceOf lenRepr wRepr atom) <- getSomeSlice ov slice atom' constraint
-  withValidSlice ov slice range sliceOf $ do
-    case lenRepr `WT.testNatCases` wRepr of
-      WT.NatCaseEQ ->
-        -- when the slice covers the whole range we just return the whole atom
-        return atom
-      WT.NatCaseLT WT.LeqProof ->
-        case range of
-          SliceStatic loRepr hiRepr
-             -- FIXME: This should be derivable
-             | Just WT.LeqProof <- (loRepr `WT.addNat` lenRepr) `WT.testLeq` wRepr
-             -> CCG.mkAtom (CCG.App (CCE.BVSelect loRepr lenRepr wRepr (CCG.AtomExpr atom)))
-          SliceSymbolic loAtom hiAtom -> let
-            loBV = CCG.App $ CCE.IntegerToBV wRepr (CCG.AtomExpr loAtom)
-            hiBV = CCG.App $ CCE.IntegerToBV wRepr (CCG.AtomExpr hiAtom)
-            top = CCG.App $ CCE.IntegerToBV wRepr $ CCG.App $
-                   CCE.IntSub (CCG.App (CCE.IntLit (WT.intValue wRepr - 1))) (CCG.AtomExpr hiAtom)
-
-            -- [ x_w-1 .. x_hi .. x_lo .. x_0](w) -- atom BV
-            shift1 = CCG.App $ CCE.BVShl wRepr (CCG.AtomExpr atom) top
-            -- [ x_hi .. x_lo .. x_0  ..  0 0](w)
-            shift2 = CCG.App $ CCE.BVLshr wRepr shift1 top
-            -- [ 0 0   .. x_hi .. x_lo .. x_0](w)
-            shift3 = CCG.App $ CCE.BVLshr wRepr shift2 loBV
-            -- [0 0 0 0 0 0 0 .. x_hi .. x_lo](w)
-            in
-            -- CCG.mkAtom $ CCG.App (CCE.BVTrunc lenRepr wRepr shift3)
-            -- [x_hiRepr .. x_loAtom](len)
-          -- FIXME: Having an actual implementation causes some functions to hang during simulation.
-          -- Can we get away with leaving this uninterpreted?
-              let
-                uf = UF "SymbolicSlice" (CT.BaseBVRepr lenRepr)
-                  (Ctx.empty Ctx.:> CT.IntegerRepr Ctx.:> CT.IntegerRepr)
-                  (Ctx.empty Ctx.:> (CCG.AtomExpr loAtom) Ctx.:> (CCG.AtomExpr hiAtom))
-              in CCG.mkAtom (CCG.App $ CCE.ExtensionApp uf)
-          _ -> throwTrace $ UnsupportedSlice slice constraint
-      _ -> throwTrace $ UnsupportedSlice slice constraint
+  SliceRange lenRepr wRepr loAtom hiAtom atom <- getSliceRange ov slice atom' constraint
+  case lenRepr `WT.testNatCases` wRepr of
+    WT.NatCaseEQ ->
+      -- when the slice covers the whole range we just return the whole atom
+      return $ Some $ atom
+    WT.NatCaseLT WT.LeqProof -> let
+      uf = UF "SymbolicSlice" (CT.BaseBVRepr lenRepr)
+        (Ctx.empty Ctx.:> CT.IntegerRepr Ctx.:> CT.IntegerRepr)
+        (Ctx.empty Ctx.:> (CCG.AtomExpr loAtom) Ctx.:> (CCG.AtomExpr hiAtom))
+      in Some <$> CCG.mkAtom (CCG.App $ CCE.ExtensionApp uf)
+    _ -> throwTrace $ UnsupportedSlice slice constraint
 
 withStaticTest :: AS.Expr
                -> Generator h s arch ret a
@@ -2497,7 +2352,7 @@ polymorphicBVOverrides e ty = case e of
           Just (Some valWidth) <- WT.someNat (width * WT.intValue nr)
         , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
           mkAtom (CCG.App (CCE.BVLit valWidth 0))
-      (Nothing, _) -> throwTrace $ RequiredConcreteValue fun repe
+      (Nothing, _) -> throwTrace $ RequiredConcreteValue repe (staticEnvMapVals env)
       _ -> throwTrace $ InvalidOverloadedFunctionCall fun args
   _ -> Nothing
 

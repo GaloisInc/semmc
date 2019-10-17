@@ -60,7 +60,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | RequiresTypeConstraint AS.Expr TypeConstraint
                           | ReturnTypeUnificationFailure AS.Type AS.Type StaticValues
                           | StructFieldMismatch AS.Expr
-                          | RequiredConcreteValue T.Text AS.Expr
+                          | RequiredConcreteValue AS.Expr StaticValues
                           | forall tp. InvalidLValSlice AS.Slice TypeConstraint (CT.TypeRepr tp)
                           | UnsupportedSlice AS.Slice TypeConstraint
                           | CannotMonomorphizeFunctionCall T.Text StaticValues
@@ -80,6 +80,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UNIMPLEMENTED String
                           | forall tp. InvalidStructUpdate AS.LValExpr (CT.TypeRepr tp)
                           | InstructionUnsupported
+                          | TExceptions [TranslationException]
 
 
 deriving instance Show TranslationException
