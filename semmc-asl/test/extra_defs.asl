@@ -7,6 +7,37 @@ integer sizeOf(bits(N) bv)
 constant integer LOG2_TAG_GRANULE=4;
 constant integer TAG_GRANULE=2 ^ LOG2_TAG_GRANULE;
 
+
+enumeration __ExecutionStatus { __StatusNormal,
+                                __StatusUndefined,
+                                __StatusUnpredictable,
+                                __StatusException,
+                                __StatusAssertionFailure,
+                                __StatusEndInstruction
+                              };
+
+__ExecutionStatus __CurrentExecutionStatus;
+
+boolean IsExecutionHalted()
+  return __CurrentExecutionStatus != __StatusNormal;
+
+ASLHaltExecution(__ExecutionStatus status)
+  __CurrentExecutionStatus = status;
+  return;
+
+EndOfInstruction()
+  ASLHaltExecution(__StatusEndInstruction);
+  return;
+
+
+
+bits(4) AArch32.SetDefaultCond()
+  if __ThisInstrEnc IN {InstrEnc_A64, InstrEnc_A32} || PSTATE.IT<3:0> == Zeros(4) then
+      __currentCond = 0xE<3:0>;
+  else
+      __currentCond = PSTATE.IT<7:4>;
+  return cond;
+
 ConsumptionOfSpeculativeDataBarrier()
     return;
 
@@ -49,6 +80,14 @@ bits(11) LSInstructionSyndrome()
   assert FALSE;
   ret = bits(11) UNKNOWN;
   return ret;
+
+TraceSynchronizationBarrier()
+  assert FALSE;
+  return;
+
+__abort()
+  assert FALSE;
+  return;
 
 boolean AArch32.WatchpointMatch(integer n, bits(32) vaddress, integer size, boolean ispriv,
                                  boolean iswrite)

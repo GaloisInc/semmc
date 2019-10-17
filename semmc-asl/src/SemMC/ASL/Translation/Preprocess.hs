@@ -145,16 +145,6 @@ getDefinitions = do
     , defExtendedTypes = extendedTypeData st
     }
 
-builtinGlobals :: [(T.Text, Some WT.BaseTypeRepr)]
-builtinGlobals =
-  [ ("UNDEFINED", Some WT.BaseBoolRepr)
-  , ("UNPREDICTABLE", Some WT.BaseBoolRepr)
-  , ("EXCEPTIONTAKEN", Some WT.BaseBoolRepr)
-  , ("ASSERTIONFAILURE", Some WT.BaseBoolRepr)
-  , ("CurrentInstrSet", Some WT.BaseIntegerRepr)
-  ]
-
-
 -- NOTE: This is clagged from types.asl, in
 -- theory we could read this in instead.
 registerTypeSynonyms :: [(T.Text, T.Text)]
@@ -406,12 +396,12 @@ buildEnv (spec@ASLSpec{..}) =
         ((\c -> (mkCallableName c, c)) <$> (catMaybes (asCallable <$> ds)))
 
       baseCallables = getCallables uniqueCallables aslDefinitions
-      extraCallables = getCallables preferLongerCallable (aslSupportDefinitions ++ aslExtraDefinitions)
-      envCallables = Map.union extraCallables baseCallables -- extras override base definitions
+      supportCallables = getCallables preferLongerCallable aslSupportDefinitions
+      extraCallables = getCallables preferLongerCallable aslExtraDefinitions
 
-      -- globalVars = Map.fromList $
-      --   ((\v -> (getVariableName v, v)) <$> (catMaybes (asDefVariable <$> defs)))
-        -- ((\v -> (getVariableName v, v)) <$> concatMap getEnumVariables defs)
+      -- extras override support callables, which override base callables
+      envCallables = Map.union (Map.union extraCallables supportCallables) baseCallables
+
       types = Map.fromList ((\t -> (getTypeName t, t)) <$> (catMaybes (asDefType <$> defs)))
       -- | TODO: Populate enums
       enums = Map.fromList (concatMap getEnumValues defs)
@@ -447,7 +437,7 @@ buildEnv (spec@ASLSpec{..}) =
 
 buildInitState :: ASLSpec -> SigState
 buildInitState ASLSpec{..} =
-  let globalVars = Map.fromList (builtinGlobals ++ map getRegisterDefType aslRegisterDefinitions)
+  let globalVars = Map.fromList (map getRegisterDefType aslRegisterDefinitions)
       extendedTypeData = Map.fromList (map getRegisterDefSig aslRegisterDefinitions)
       userTypes = Map.empty
       callableGlobalsMap  = Map.empty
@@ -466,6 +456,9 @@ insertUnique k v =
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM spec = do
   mapM_ initDefGlobal (allDefs spec)
+  -- FIXME: Should we just collect all the callables from the start?
+  _ <- exprGlobalVars (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "IsExecutionHalted") [])
+  return ()
   where
     initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
       tp <- computeType ty
@@ -919,7 +912,8 @@ computeCallableSignature c@Callable{..} = do
       mapM_ storeUserType callableRets
       
       globalVars' <- callableGlobalVars c
-      let globalVars = globalVars' ++ builtinGlobals
+      statusGlobal <- theVarGlobal "__CurrentExecutionStatus"
+      let globalVars = statusGlobal : globalVars'
       labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
 
@@ -1027,7 +1021,8 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
       in do
         globalVars' <- instGlobalVars
-        let globalVars = globalVars' ++ builtinGlobals
+        statusGlobal <- theVarGlobal "__CurrentExecutionStatus"
+        let globalVars = statusGlobal : globalVars'
         labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
           return $ Some (LabeledValue varName varTp)
         labeledArgs <- forM (AS.encFields enc) $ \field -> do
@@ -1131,6 +1126,10 @@ overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt ::  AS.Stmt -> Maybe [AS.Stmt]
         overrideStmt stmt = case stmt of
+          AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapException") args ->
+            Just $ [ AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapExceptioninteger") args
+                   , AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapExceptionExceptionRecord") args
+                   ]
           _ -> Nothing
 
         overrideExpr :: AS.Expr -> Maybe [AS.Expr]
@@ -1142,6 +1141,7 @@ overrides = Overrides {..}
             Just $ [ AS.ExprCall (AS.QualifiedIdentifier q "Alignintegerinteger") args
                    , AS.ExprCall (AS.QualifiedIdentifier q "AlignbitsNinteger") args
                    ]
+
           _ -> mkFaultOv e "IsExternalAbort" <|>
                mkFaultOv e "IsAsyncAbort" <|>
                mkFaultOv e "IsSErrorInterrupt" <|>

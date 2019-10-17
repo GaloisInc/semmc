@@ -66,6 +66,134 @@
       (ExprLitNat 2)
       (ExprVarRef
         (QualifiedIdentifier Any LOG2_TAG_GRANULE))))
+  (DefTypeEnum
+    __ExecutionStatus
+    (list __StatusNormal __StatusUndefined __StatusUnpredictable __StatusException __StatusAssertionFailure __StatusEndInstruction))
+  (DefVariable
+    (QualifiedIdentifier Any __CurrentExecutionStatus)
+    (TypeRef
+      (QualifiedIdentifier Any __ExecutionStatus)))
+  (DefCallable
+    (QualifiedIdentifier Any IsExecutionHalted)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any boolean)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtReturn
+            (Just
+              (ExprBinOp
+                "!="
+                (ExprVarRef
+                  (QualifiedIdentifier Any __CurrentExecutionStatus))
+                (ExprVarRef
+                  (QualifiedIdentifier Any __StatusNormal)))))))))
+  (DefCallable
+    (QualifiedIdentifier Any ASLHaltExecution)
+    (list
+      (SymDecl
+        status
+        (TypeRef
+          (QualifiedIdentifier Any __ExecutionStatus))))
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __CurrentExecutionStatus))
+            (ExprVarRef
+              (QualifiedIdentifier Any status)))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any EndOfInstruction)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtCall
+            (QualifiedIdentifier Any ASLHaltExecution)
+            (list
+              (ExprVarRef
+                (QualifiedIdentifier Any __StatusEndInstruction))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 SetDefaultCond)
+    (list)
+    (Just
+      (ReturnType
+        (list
+          (TypeFun
+            bits
+            (ExprLitNat 4)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtIf
+            (ExprBinOp
+              "||"
+              (ExprInSet
+                (ExprVarRef
+                  (QualifiedIdentifier Any __ThisInstrEnc))
+                (Set
+                  (list
+                    (SetElementSingle
+                      (ExprVarRef
+                        (QualifiedIdentifier Any InstrEnc_A64)))
+                    (SetElementSingle
+                      (ExprVarRef
+                        (QualifiedIdentifier Any InstrEnc_A32))))))
+              (ExprBinOp
+                "=="
+                (ExprSlice
+                  (ExprMember
+                    (ExprVarRef
+                      (QualifiedIdentifier Any PSTATE))
+                    IT)
+                  (list
+                    (SliceRange
+                      (ExprLitNat 3)
+                      (ExprLitNat 0))))
+                (ExprCall
+                  (QualifiedIdentifier Any Zeros)
+                  (list
+                    (ExprLitNat 4)))))
+            (StmtBlock
+              (list
+                (StmtAssign
+                  (LValVarRef
+                    (QualifiedIdentifier Any __currentCond))
+                  (ExprSlice
+                    (ExprLitHex "0xE")
+                    (list
+                      (SliceRange
+                        (ExprLitNat 3)
+                        (ExprLitNat 0)))))))
+            (list)
+            (Just
+              (StmtBlock
+                (list
+                  (StmtAssign
+                    (LValVarRef
+                      (QualifiedIdentifier Any __currentCond))
+                    (ExprSlice
+                      (ExprMember
+                        (ExprVarRef
+                          (QualifiedIdentifier Any PSTATE))
+                        IT)
+                      (list
+                        (SliceRange
+                          (ExprLitNat 7)
+                          (ExprLitNat 4)))))))))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any cond))))))))
   (DefCallable
     (QualifiedIdentifier Any ConsumptionOfSpeculativeDataBarrier)
     (list)
@@ -284,6 +412,28 @@
             (Just
               (ExprVarRef
                 (QualifiedIdentifier Any ret))))))))
+  (DefCallable
+    (QualifiedIdentifier Any TraceSynchronizationBarrier)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any __abort)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier AArch32 WatchpointMatch)
     (list
