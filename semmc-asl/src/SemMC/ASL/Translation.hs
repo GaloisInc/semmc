@@ -267,23 +267,25 @@ assertionfailureVarName = T.pack "ASSERTIONFAILURE"
 -- | Obtain the current value of all the give globals
 -- This is a subset of all of the global state (and a subset of the current
 -- global state).
-withGlobals :: (m ~ Generator h s arch ret)
-                => Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
-                -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
-                -> m r
+withGlobals :: forall m h s arch ret globals r
+             . (m ~ Generator h s arch ret)
+            => Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
+            -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
+            -> m r
 withGlobals reprs k = do
   globMap <- MS.gets tsGlobals
   let globReprs = FC.fmapFC projectValue reprs
-  k globReprs (FC.fmapFC (fetchGlobal globMap) reprs)
+  globals <- FC.traverseFC (fetchGlobal globMap) reprs
+  k globReprs globals
   where
     fetchGlobal :: forall tp . Map.Map T.Text (Some CCG.GlobalVar)
                 -> LabeledValue T.Text WT.BaseTypeRepr tp
-                -> BaseGlobalVar tp
+                -> m (BaseGlobalVar tp)
     fetchGlobal globMap (LabeledValue globName rep)
       | Just (Some gv) <- Map.lookup globName globMap
       , Just Refl <- testEquality (CT.baseToType rep) (CCG.globalType gv) =
-          BaseGlobalVar gv
-      | otherwise = error ("Missing global (or wrong type): " ++ show globName)
+          return $ BaseGlobalVar gv
+      | otherwise = throwTrace $ TranslationError $ "Missing global (or wrong type): " ++ show globName
 
 throwTrace :: TranslationException -> Generator h s arch ret a
 throwTrace e = do
@@ -455,7 +457,8 @@ translateStatement' ov stmt
       _ -> throwTrace $ UnsupportedStmt stmt
 
 
-translateFunctionCall :: Overrides arch
+translateFunctionCall :: forall arch h s ret
+                       . Overrides arch
                       -> AS.QualifiedIdentifier
                       -> [AS.Expr]
                       -> TypeConstraint
@@ -466,7 +469,7 @@ translateFunctionCall ov qIdent args ty = do
   case Map.lookup ident sigMap of
     Nothing -> throwTrace $ MissingFunctionDefinition ident
     Just (SomeSimpleFunctionSignature sig) -> do
-      (finalIdent, argAtoms, SomeBaseStructRepr retT) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig) ty
+      (finalIdent, argAtoms, Some retT) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig) ty
       case Ctx.fromList argAtoms of
         Some argAssign -> do
           let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
@@ -485,21 +488,23 @@ translateFunctionCall ov qIdent args ty = do
               _ <- CCG.extensionStmt (SetRegState thisGlobals (CCG.App $ CCE.ExtensionApp globalResult))
               return ()
             let returnResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i2of2 (CCG.AtomExpr atom)
-            case (sfuncRet sig) of
-              [] -> return Nothing
-              [ret] -> do
+            result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
+            case retT of
+              WT.BaseStructRepr ctx@(Ctx.Empty Ctx.:> retT') -> do
+                let [ret] = sfuncRet sig
                 ext <- mkExtendedTypeData ret
-                let WT.BaseStructRepr rets = retT
-                let retTC = CT.baseToType retT
-                case Ctx.intIndex 0 (Ctx.size rets) of
-                  Just (Some ix) -> do
-                    let returnResult' = GetBaseStruct retTC ix (CCG.App $ CCE.ExtensionApp returnResult)
-                    atom <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult')
-                    return $ Just $ (Some atom, ext)
-              rets -> do
-                exts <- mapM mkExtendedTypeData rets
-                atom <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
-                return $ Just $ (Some atom, TypeTuple exts)
+                let retTC = CT.SymbolicStructRepr ctx
+                let returnResult' = GetBaseStruct retTC (Ctx.baseIndex) (CCG.AtomExpr result)
+                result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult')
+                return $ Just $ (Some result, ext)
+              WT.BaseStructRepr _ -> do
+                exts <- mapM mkExtendedTypeData (sfuncRet sig)
+                return $ Just $ (Some result, TypeTuple exts)
+              -- FIXME: all true return values are wrapped in a tuple. A non-tuple result
+              -- indicates no return value. This is a workaround for empty tuples not being
+              -- completely supported by crucible/what4
+              _ -> return Nothing
+
 
 -- | Translate a for statement into Crucible
 --
@@ -1232,7 +1237,7 @@ unifyArgs :: Overrides arch
           -> [AS.Type]
           -> TypeConstraint
           -> Generator h s arch ret
-               (T.Text, [Some (CCG.Atom s)], SomeBaseStructRepr)
+               (T.Text, [Some (CCG.Atom s)], Some WT.BaseTypeRepr)
 unifyArgs ov fnname args rets constraint = do
   outerState <- MS.get
   freshState <- freshLocalsState

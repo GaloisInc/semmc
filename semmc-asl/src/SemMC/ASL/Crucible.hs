@@ -199,6 +199,9 @@ defineFunction :: (ReturnsGlobals ret globalWrites tps)
 defineFunction ov sig baseGlobals stmts _args = do
   mapM_ (\(nm,t) -> addExtendedTypeData nm t) (funcArgs sig)
   mapM_ (translateStatement ov) stmts
+  case funcRetRepr sig of
+    Ctx.Empty -> translateStatement ov (AS.StmtReturn Nothing)
+    _ -> return ()
   let errmsg = "Function " <> funcName sig <> " does not return."
   errStr <- CCG.mkAtom (CCG.App (CCE.TextLit errmsg))
   CCG.reportError (CCG.AtomExpr errStr)

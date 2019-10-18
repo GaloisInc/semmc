@@ -33,7 +33,6 @@ module SemMC.ASL.Translation.Preprocess
   , InnerSigException(..)
   , Callable(..)
   , Definitions(..)
-  , SomeBaseStructRepr(..)
   , bitsToInteger
   , mkFunctionName
   , applyStaticEnv
@@ -978,12 +977,13 @@ computeType'' defs t = case computeType' t of
     Just (Some ut) -> Some $ userTypeRepr ut
     Nothing -> error $ "Missing user type definition for: " <> (show tpName)
 
-data SomeBaseStructRepr where
-  SomeBaseStructRepr :: WT.BaseTypeRepr (WT.BaseStructType ctx) -> SomeBaseStructRepr
 
-mkBaseStructRepr :: [Some WT.BaseTypeRepr] -> SomeBaseStructRepr
-mkBaseStructRepr ts |
-  Some assignment <- Ctx.fromList ts = SomeBaseStructRepr (WT.BaseStructRepr assignment)
+-- FIXME: workaround for the fact that empty tuples are not supported by crucible/what4
+
+mkBaseStructRepr :: [Some WT.BaseTypeRepr] -> Some WT.BaseTypeRepr
+mkBaseStructRepr ts = case ts of
+  [] -> Some WT.BaseBoolRepr
+  _ | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
 
 applyStaticEnv :: StaticEnvMap
                -> AS.Type
@@ -1044,7 +1044,7 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       possibleEnvs = getPossibleEnvs (AS.encFields enc) (AS.encDecode enc)
       instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $
         liftOverEnvs instName possibleEnvs instExecute
-      instStmts = initStmts ++ instPostDecode ++ instExecute' ++ [AS.StmtReturn Nothing]
+      instStmts = initStmts ++ instPostDecode ++ instExecute'
       instGlobalVars = unionGVarRefs <$> traverse stmtGlobalVars instStmts
       staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
       in do
