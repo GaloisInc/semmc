@@ -19,7 +19,7 @@ import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
 
-data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
+data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignature ret)
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
                           | forall tp1 tp2 .  UnexpectedExprType (Maybe AS.Expr) (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           -- ^ Expression, actual type, expected type
@@ -80,6 +80,8 @@ data TranslationException = forall ret . NoReturnInFunction (SomeSignature ret)
                           | UNIMPLEMENTED String
                           | forall tp. InvalidStructUpdate AS.LValExpr (CT.TypeRepr tp)
                           | InstructionUnsupported
+                          | UnexpectedReturnInStmtCall
+                          | UnexpectedReturnInExprCall
                           | TExceptions [TranslationException]
 
 

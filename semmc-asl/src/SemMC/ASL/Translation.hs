@@ -15,8 +15,8 @@ module SemMC.ASL.Translation (
     TranslationState(..)
   , translateExpr
   , translateStatement
-  , translateStatements
   , addExtendedTypeData
+  , throwTrace
   , Overrides(..)
   , overrides
   , UserType(..)
@@ -35,7 +35,7 @@ import           Control.Monad.Trans ( lift)
 import qualified Control.Monad.State as MSS
 import           Control.Monad.Trans.Maybe as MaybeT
 import qualified Data.BitVector.Sized as BVS
-import           Data.Maybe ( fromMaybe, catMaybes )
+import           Data.Maybe ( fromMaybe, catMaybes, maybeToList )
 import qualified Data.Bimap as BM
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
@@ -230,14 +230,14 @@ data TranslationState h ret s =
                    -- bounds are used in assertions checking the completeness of
                    -- case statements.
                    -- ,
-                   , tsFunctionSigs :: Map.Map T.Text SomeSimpleSignature
+                   , tsFunctionSigs :: Map.Map T.Text SomeSimpleFunctionSignature
                    -- ^ A collection of all of the signatures of defined functions (both functions
                    -- and procedures)
                    , tsHandle :: STRef.STRef h (Map.Map T.Text StaticValues)
                    -- ^ Used to name functions encountered during translation
                    , tsStaticValues :: StaticValues
                    -- ^ Environment to give concrete instantiations to polymorphic variables
-                   , tsSig :: SomeSignature ret
+                   , tsSig :: SomeFunctionSignature ret
                    -- ^ Signature of the function/procedure we are translating
                    , tsStmtStack :: [AS.Stmt]
                    -- ^ Stack of statements on this traversal
@@ -264,15 +264,14 @@ undefinedVarName = T.pack "UNDEFINED"
 assertionfailureVarName :: T.Text
 assertionfailureVarName = T.pack "ASSERTIONFAILURE"
 
--- | Obtain the global variables touched by the given 'ProcedureSignature'
---
+-- | Obtain the current value of all the give globals
 -- This is a subset of all of the global state (and a subset of the current
 -- global state).
-withProcGlobals :: (m ~ Generator h s arch ret)
+withGlobals :: (m ~ Generator h s arch ret)
                 => Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globals
                 -> (Ctx.Assignment WT.BaseTypeRepr globals -> Ctx.Assignment BaseGlobalVar globals -> m r)
                 -> m r
-withProcGlobals reprs k = do
+withGlobals reprs k = do
   globMap <- MS.gets tsGlobals
   let globReprs = FC.fmapFC projectValue reprs
   k globReprs (FC.fmapFC (fetchGlobal globMap) reprs)
@@ -293,21 +292,6 @@ throwTrace e = do
   sig <- MS.gets tsSig
   svals <- MS.gets tsStaticValues
   X.throw $ TracedTranslationException (someSigName sig) svals stmts exprs e
-
--- | Translate a list of statements, reporting an error if the execution
--- runs off the end.
-translateStatements :: forall ret tp h s arch
-                . (ret ~ CT.BaseToType tp)
-               => Overrides arch
-               -> [AS.Stmt]
-               -> Generator h s arch ret ()
-translateStatements ov stmts = do
-  sig <- MS.gets tsSig
-  mapM_ (\(nm,t) -> addExtendedTypeData nm t) (someSigArgs sig)
-  mapM_ (translateStatement ov) stmts
-  let errmsg = "Function " <> someSigName sig <> " does not return."
-  errStr <- CCG.mkAtom (CCG.App (CCE.TextLit errmsg))
-  CCG.reportError (CCG.AtomExpr errStr)
 
 translateStatement :: forall arch ret h s
                     . Overrides arch
@@ -396,13 +380,26 @@ checkExecutionStatus ov = do
 
 abnormalExit :: Overrides arch -> Generator h s arch ret ()
 abnormalExit ov = do
-  sig <- MS.gets tsSig
-  case sig of
-    SomeProcedureSignature _ -> translateStatement ov (AS.StmtReturn Nothing)
-    SomeFunctionSignature fsig -> do
-      let repr = CT.baseToType (funcSigRepr fsig)
-      let expr = getDefaultValue repr
-      CCG.returnFromFunction expr
+  SomeFunctionSignature sig <- MS.gets tsSig
+  let retT = CT.SymbolicStructRepr (funcRetRepr sig)
+  let expr = getDefaultValue retT
+  atom <- CCG.mkAtom expr
+  returnWithGlobals atom
+
+returnWithGlobals :: ret ~ FuncReturn globalWrites tps
+                  => CCG.Atom s (CT.SymbolicStructType tps)
+                  -> Generator h s arch ret ()
+returnWithGlobals retVal = do
+  let retT = CCG.typeOfAtom retVal
+  SomeFunctionSignature sig <- MS.gets tsSig
+  let rep = funcSigRepr sig
+  let globalBaseTypes = FC.fmapFC projectValue (funcGlobalWriteReprs sig)
+  withGlobals (funcGlobalWriteReprs sig) $ \globalBaseTypes globals -> do
+    globalsSnapshot <- CCG.extensionStmt (GetRegState globalBaseTypes globals)
+    let result = MkBaseStruct
+          (Ctx.empty Ctx.:> CT.SymbolicStructRepr globalBaseTypes Ctx.:> retT)
+          (Ctx.empty Ctx.:> globalsSnapshot Ctx.:> CCG.AtomExpr retVal)
+    CCG.returnFromFunction (CCG.App $ CCE.ExtensionApp result)
 
 -- | Translate a single ASL statement into Crucible
 translateStatement' :: forall arch ret h s
@@ -413,25 +410,18 @@ translateStatement' :: forall arch ret h s
 translateStatement' ov stmt
   | Just so <- overrideStmt ov stmt = so
   | otherwise = case stmt of
-      AS.StmtReturn Nothing -> do
-        sig <- MS.gets tsSig
-        let rep = someSigRepr sig
-        case sig of
-          SomeProcedureSignature pSig
-            | globalBaseTypes <- FC.fmapFC projectValue (procGlobalReprs pSig)
-            , pSigRepr <- procSigRepr pSig
-            , Just Refl <- testEquality pSigRepr (CT.SymbolicStructRepr globalBaseTypes) ->
-              withProcGlobals (procGlobalReprs pSig) $ \globalBaseTypes globals -> do
-                Refl <- return $ baseCrucProof globalBaseTypes
-                globalsSnapshot <- CCG.extensionStmt (GetRegState globalBaseTypes globals)
-                CCG.returnFromFunction globalsSnapshot
-          _ -> X.throw (InvalidReturnType rep)
-      AS.StmtReturn (Just expr) -> do
-        sig <- MS.gets tsSig
-        let retTy = someSigRepr sig
-        (Some a, _) <- translateExpr' ov expr (ConstraintSingle retTy)
-        Refl <- assertAtomType expr retTy a
-        CCG.returnFromFunction (CCG.AtomExpr a)
+      AS.StmtReturn mexpr -> do
+        SomeFunctionSignature sig <- MS.gets tsSig
+        -- Natural return type
+        let retT = CT.SymbolicStructRepr (funcRetRepr sig)
+        let expr = case mexpr of
+              Nothing -> AS.ExprTuple []
+              Just e | Ctx.sizeInt (Ctx.size (funcRetRepr sig)) == 1 ->
+                AS.ExprTuple [e]
+              Just e -> e
+        (Some a, _) <- translateExpr' ov expr (ConstraintSingle retT)
+        Refl <- assertAtomType expr retT a
+        returnWithGlobals a
       AS.StmtIf clauses melse -> translateIf ov clauses melse
       AS.StmtCase e alts -> translateCase ov e alts
       AS.StmtAssert e -> assertExpr ov e "ASL Assertion"
@@ -457,37 +447,59 @@ translateStatement' ov stmt
       AS.StmtRepeat body test -> translateRepeat ov body test
       AS.StmtFor var (lo, hi) body -> translateFor ov var lo hi body
       AS.StmtCall qIdent args -> do
-        sigMap <- MS.gets tsFunctionSigs
-        let ident = mkFunctionName qIdent (length args)
-        case Map.lookup ident sigMap of
-          Nothing -> throwTrace $ MissingFunctionDefinition ident
-          Just (SomeSimpleFunctionSignature _) -> X.throw (ExpectedProcedureSignature ident)
-          Just (SomeSimpleProcedureSignature pSig) -> do
-            (finalIdent, argAtoms, _) <- unifyArgs ov ident (zip (sprocArgs pSig) args) [] ConstraintNone
-            case Ctx.fromList argAtoms of
-              Some argAssign -> do               
-                let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                -- FIXME: The problem is that we might need to snapshot a
-                -- subset of globals for each call.  Each subset might be
-                -- different.
-                --
-                -- How do we select a subset with the right types?
-                --
-                -- We could key everything on name and do dynamic type
-                -- checks to assert that globals with the right name have
-                -- the right type.
-                withProcGlobals (sprocGlobalReprs pSig) $ \globalReprs globals -> do
-                  let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
-                  globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
-                  let vals = FC.fmapFC CCG.AtomExpr argAssign
-                  let ufRep = WT.BaseStructRepr (FC.fmapFC projectValue (sprocGlobalReprs pSig))
-                  let uf = UF finalIdent ufRep (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
-                  atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-                  _ <- CCG.extensionStmt (SetRegState globals (CCG.AtomExpr atom))
-                  return ()
-                --checkExecutionStatus ov
+        ret <- translateFunctionCall ov qIdent args ConstraintNone
+        case ret of
+          Nothing -> return ()
+          _ -> throwTrace $ UnexpectedReturnInStmtCall
 
       _ -> throwTrace $ UnsupportedStmt stmt
+
+
+translateFunctionCall :: Overrides arch
+                      -> AS.QualifiedIdentifier
+                      -> [AS.Expr]
+                      -> TypeConstraint
+                      -> Generator h s arch ret (Maybe (Some (CCG.Atom s), ExtendedTypeData))
+translateFunctionCall ov qIdent args ty = do
+  sigMap <- MS.gets tsFunctionSigs
+  let ident = mkFunctionName qIdent (length args)
+  case Map.lookup ident sigMap of
+    Nothing -> throwTrace $ MissingFunctionDefinition ident
+    Just (SomeSimpleFunctionSignature sig) -> do
+      (finalIdent, argAtoms, SomeBaseStructRepr retT) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig) ty
+      case Ctx.fromList argAtoms of
+        Some argAssign -> do
+          let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
+
+          withGlobals (sfuncGlobalReadReprs sig) $ \globalReprs globals -> do
+            let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
+            globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
+            let vals = FC.fmapFC CCG.AtomExpr argAssign
+            let ufGlobalRep = WT.BaseStructRepr (FC.fmapFC projectValue (sfuncGlobalWriteReprs sig))
+            let ufCtx = (Ctx.empty Ctx.:> ufGlobalRep Ctx.:> retT)
+            let uf = UF finalIdent (WT.BaseStructRepr ufCtx) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
+            atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+            let globalResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i1of2 (CCG.AtomExpr atom)
+            thisSig <- MS.gets tsSig
+            withGlobals (sfuncGlobalWriteReprs sig) $ \thisGlobalReprs thisGlobals -> do
+              _ <- CCG.extensionStmt (SetRegState thisGlobals (CCG.App $ CCE.ExtensionApp globalResult))
+              return ()
+            let returnResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i2of2 (CCG.AtomExpr atom)
+            case (sfuncRet sig) of
+              [] -> return Nothing
+              [ret] -> do
+                ext <- mkExtendedTypeData ret
+                let WT.BaseStructRepr rets = retT
+                let retTC = CT.baseToType retT
+                case Ctx.intIndex 0 (Ctx.size rets) of
+                  Just (Some ix) -> do
+                    let returnResult' = GetBaseStruct retTC ix (CCG.App $ CCE.ExtensionApp returnResult)
+                    atom <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult')
+                    return $ Just $ (Some atom, ext)
+              rets -> do
+                exts <- mapM mkExtendedTypeData rets
+                atom <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
+                return $ Just $ (Some atom, TypeTuple exts)
 
 -- | Translate a for statement into Crucible
 --
@@ -1212,38 +1224,33 @@ asBaseType (Some t) = case CT.asBaseType t of
   CT.AsBaseType bt -> Some bt
   CT.NotBaseType -> error $ "Expected base type: " <> show t
 
+
+
 unifyArgs :: Overrides arch
           -> T.Text
           -> [(AS.SymbolDecl, AS.Expr)]
           -> [AS.Type]
           -> TypeConstraint
           -> Generator h s arch ret
-               (T.Text, [Some (CCG.Atom s)], Maybe (Some WT.BaseTypeRepr))
+               (T.Text, [Some (CCG.Atom s)], SomeBaseStructRepr)
 unifyArgs ov fnname args rets constraint = do
   outerState <- MS.get
   freshState <- freshLocalsState
-  (atoms, retsT, tenv) <- withState freshState $ do
+  (atoms, retT, tenv) <- withState freshState $ do
       mapM_ (\(decl, e) -> collectStaticValues outerState decl e) args
       atoms <- mapM (\(decl, e) -> unifyArg ov outerState decl e) args
       unifyRet rets constraint
       retsT <- mapM translateType rets
+      let retT = mkBaseStructRepr (map asBaseType retsT)
       tenv <- getStaticEnv
-      return (atoms, retsT, tenv)
+      return (atoms, retT, tenv)
   let dvars = concat $ map dependentVarsOfType rets ++ map (\((_,t), _) -> dependentVarsOfType t) args
   listenv <- mapM (getConcreteValue tenv) dvars
   let env = Map.fromList listenv
   hdl <- MS.gets tsHandle
   MST.liftST (STRef.modifySTRef hdl (Map.insert fnname env))
-  retT <- case retsT of
-            [] -> return Nothing
-            _ -> return $ Just $ mkBaseStructRepr (map asBaseType retsT)
-  
   return (mkFinalFunctionName env fnname, atoms, retT)
   where
-    mInt env e = case exprToStatic env e of
-      Just (StaticInt i) -> Left i
-      _ -> Right e
-
     unifyRet :: [AS.Type] -- return type of function
              -> TypeConstraint -- potential concrete target type
              -> Generator h s arch ret ()
@@ -1464,28 +1471,10 @@ translateExpr'' ov expr ty
           AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
 
           AS.ExprCall qIdent args -> do
-            sigMap <- MS.gets tsFunctionSigs
-            -- FIXME: make this nicer?
-            let ident = mkFunctionName qIdent (length args)
-
-            case Map.lookup ident sigMap of
-              Nothing -> throwTrace $ MissingFunctionDefinition ident
-              Just (SomeSimpleProcedureSignature _) -> X.throw (ExpectedFunctionSignature ident)
-              Just (SomeSimpleFunctionSignature sig) -> do
-                (finalIdent, argAtoms, Just (Some retT)) <- unifyArgs ov ident (zip (sfuncArgs sig) args) (sfuncRet sig) ty
-                case Ctx.fromList argAtoms of
-                  Some argAssign -> do
-                    let atomTypes = FC.fmapFC CCG.typeOfAtom argAssign
-                    let vals = FC.fmapFC CCG.AtomExpr argAssign
-                    let uf = UF finalIdent retT atomTypes vals
-                    satom <- Some <$> CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
-                    ext <- case (sfuncRet sig) of
-                      [ret] -> mkExtendedTypeData ret
-                      rets -> do
-                        exts <- mapM mkExtendedTypeData rets
-                        return $ TypeTuple exts
-                    --checkExecutionStatus ov
-                    return (satom, ext)
+            ret <- translateFunctionCall ov qIdent args ty
+            case ret of
+              Just x -> return x
+              Nothing -> throwTrace $ UnexpectedReturnInExprCall
           -- FIXME: Should this trip a global flag?
           AS.ExprImpDef _ t -> do
             Some ty <- translateType t

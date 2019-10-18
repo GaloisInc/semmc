@@ -33,6 +33,7 @@ module SemMC.ASL.Translation.Preprocess
   , InnerSigException(..)
   , Callable(..)
   , Definitions(..)
+  , SomeBaseStructRepr(..)
   , bitsToInteger
   , mkFunctionName
   , applyStaticEnv
@@ -122,8 +123,7 @@ computeSignature' name = do
 
 
 data Definitions arch =
-  Definitions { defSignatures :: Map.Map T.Text (SomeSimpleSignature, [AS.Stmt])
-              , defDepSignatures :: Map.Map T.Text (SomeDFS, [AS.Stmt])
+  Definitions { defSignatures :: Map.Map T.Text (SomeSimpleFunctionSignature, [AS.Stmt])
               , defTypes :: Map.Map T.Text (Some UserType)
               , defEnums :: Map.Map T.Text Integer
               , defConsts :: Map.Map T.Text (Some ConstVal)
@@ -138,7 +138,6 @@ getDefinitions = do
   env <- RWS.ask
   return $ Definitions
     { defSignatures = (\(sig, c) -> (sig, callableStmts c)) <$> callableSignatureMap st
-    , defDepSignatures = Map.empty
     , defTypes = userTypes st
     , defEnums = enums env
     , defConsts = consts env
@@ -166,9 +165,6 @@ builtinConsts =
   , ("FALSE", Some $ ConstVal WT.BaseBoolRepr False)
   , ("HIGH", Some $ ConstVal (WT.BaseBVRepr (WT.knownNat @1)) (BVS.bitVector (1 :: Integer)))
   ]
-
--- FIXME: We currently do not capture 'DefArray', 'DefGetter', and 'DefSetter'
--- constructors; that needs to happen.
 
 data Callable = Callable { callableName :: AS.QualifiedIdentifier
                          , callableArgs :: [AS.SymbolDecl]
@@ -500,13 +496,30 @@ data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                            , builtinTypes :: Map.Map T.Text (Some UserType)
                            }
 
+data GlobalVarRefs =
+  GlobalVarRefs { globalReads :: [(T.Text, Some WT.BaseTypeRepr)]
+                , globalWrites :: [(T.Text, Some WT.BaseTypeRepr)]
+                }
+
+mergeGVarRefs :: GlobalVarRefs -> GlobalVarRefs -> GlobalVarRefs
+mergeGVarRefs (GlobalVarRefs reads writes) (GlobalVarRefs reads' writes') =
+  GlobalVarRefs (reads ++ reads') (writes ++ writes')
+
+unionGVarRefs :: [GlobalVarRefs] -> GlobalVarRefs
+unionGVarRefs = foldr mergeGVarRefs (GlobalVarRefs [] [])
+
+-- All writes are implicitly reads
+unpackGVarRefs :: GlobalVarRefs -> ([(T.Text, Some WT.BaseTypeRepr)], [(T.Text, Some WT.BaseTypeRepr)])
+unpackGVarRefs (GlobalVarRefs reads writes) =
+  (nub $ reads ++ writes, writes)
+
 -- deriving instance Show (SigEnv ext f)
 
 data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
-                         , callableGlobalsMap :: Map.Map T.Text [(T.Text, Some WT.BaseTypeRepr)]
-                           -- ^ map from function/procedure name to list of globals
-                         , callableSignatureMap :: Map.Map T.Text (SomeSimpleSignature, Callable)
+                         , callableGlobalsMap :: Map.Map T.Text GlobalVarRefs
+                           -- ^ map from function/procedure name to accessed globals
+                         , callableSignatureMap :: Map.Map T.Text (SomeSimpleFunctionSignature, Callable)
                            -- ^ map of all signatures found thus far
                          , callableOpenSearches :: [T.Text]
                            -- ^ all callables encountered on the current search path
@@ -526,6 +539,8 @@ data InnerSigException = TypeNotFound T.Text
                        | WrongType T.Text T.Text
                        | StructMissingField T.Text T.Text
                        | UnsupportedSigExpr AS.Expr
+                       | UnsupportedSigStmt AS.Stmt
+                       | UnsupportedSigLVal AS.LValExpr
   deriving (Eq, Show)
 
 data SigException = SigException
@@ -590,25 +605,25 @@ lookupGlobalVar varName = do
   env <- RWS.get
   return $ Map.lookup varName (globalVars env)
 
-lookupCallableGlobals :: Callable -> SigM ext f (Maybe [(T.Text, Some WT.BaseTypeRepr)])
+lookupCallableGlobals :: Callable -> SigM ext f (Maybe GlobalVarRefs)
 lookupCallableGlobals c = do
-  globalsMap <- callableGlobalsMap <$> RWS.get
+  globalsMap <- RWS.gets callableGlobalsMap
   let name = mkCallableName c
   return $ Map.lookup name globalsMap
 
-storeCallableGlobals :: Callable -> [(T.Text, Some WT.BaseTypeRepr)] -> SigM ext f ()
+storeCallableGlobals :: Callable -> GlobalVarRefs -> SigM ext f ()
 storeCallableGlobals c globals = do
   st <- RWS.get
   let name = mkCallableName c
   RWS.put $ st { callableGlobalsMap = Map.insert name globals (callableGlobalsMap st) }
 
-lookupCallableSignature :: Callable -> SigM ext f (Maybe SomeSimpleSignature)
+lookupCallableSignature :: Callable -> SigM ext f (Maybe SomeSimpleFunctionSignature)
 lookupCallableSignature c = do
   signatureMap <- callableSignatureMap <$> RWS.get
   let name = mkCallableName c
   return $ (fst <$> Map.lookup name signatureMap)
 
-storeCallableSignature :: Callable -> SomeSimpleSignature -> SigM ext f()
+storeCallableSignature :: Callable -> SomeSimpleFunctionSignature -> SigM ext f()
 storeCallableSignature c sig = do
   st <- RWS.get
   let name = mkCallableName c
@@ -706,6 +721,16 @@ varGlobal varName = do
     Nothing -> return Nothing
     Just varType -> return $ Just (varName, varType)
 
+readGlobal :: T.Text -> SigM ext f GlobalVarRefs
+readGlobal varName = do
+  reads <- maybeToList <$> varGlobal varName
+  return $ GlobalVarRefs reads []
+
+writeGlobal :: T.Text -> SigM ext f GlobalVarRefs
+writeGlobal varName = do
+  writes <- maybeToList <$> varGlobal varName
+  return $ GlobalVarRefs [] writes
+
 theVarGlobal :: T.Text -> SigM ext f (T.Text, Some WT.BaseTypeRepr)
 theVarGlobal varName = do
   mg <- varGlobal varName
@@ -713,87 +738,85 @@ theVarGlobal varName = do
     Just g -> return g
     Nothing -> error $ "Unknown global variable: " <> show varName
 
-sliceGlobalVars :: AS.Slice -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+sliceGlobalVars :: AS.Slice -> SigM ext f GlobalVarRefs
 sliceGlobalVars slice = case slice of
   AS.SliceSingle e -> exprGlobalVars e
-  AS.SliceOffset e1 e2 -> (++) <$> exprGlobalVars e1 <*> exprGlobalVars e2
-  AS.SliceRange e1 e2 -> (++) <$> exprGlobalVars e1 <*> exprGlobalVars e2
+  AS.SliceOffset e1 e2 -> mergeGVarRefs <$> exprGlobalVars e1 <*> exprGlobalVars e2
+  AS.SliceRange e1 e2 -> mergeGVarRefs <$> exprGlobalVars e1 <*> exprGlobalVars e2
 
-setEltGlobalVars :: AS.SetElement -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+setEltGlobalVars :: AS.SetElement -> SigM ext f GlobalVarRefs
 setEltGlobalVars setElt = case setElt of
   AS.SetEltSingle e -> exprGlobalVars e
-  AS.SetEltRange e1 e2 -> (++) <$> exprGlobalVars e1 <*> exprGlobalVars e2
+  AS.SetEltRange e1 e2 -> mergeGVarRefs <$> exprGlobalVars e1 <*> exprGlobalVars e2
 
-lValExprGlobalVars :: AS.LValExpr -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+lValExprGlobalVars :: AS.LValExpr -> SigM ext f GlobalVarRefs
 lValExprGlobalVars lValExpr = case lValExpr of
   -- If the variable isn't in the list of globals, we assume it is locally bound and
   -- simply return the empty list.
-  AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> maybeToList <$> varGlobal varName
+  AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> readGlobal varName
   AS.LValMemberArray le vars -> do
     leGlobals <- lValExprGlobalVars le
-    varGlobals <- catMaybes <$> traverse varGlobal vars
-    return $ leGlobals ++ varGlobals
+    varGlobals <- unionGVarRefs <$> traverse readGlobal vars
+    return $ mergeGVarRefs leGlobals varGlobals
   AS.LValArrayIndex le slices -> do
     leGlobals <- lValExprGlobalVars le
-    sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-    return $ leGlobals ++ sliceGlobals
+    sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
+    return $ mergeGVarRefs leGlobals sliceGlobals
   AS.LValSliceOf le slices -> do
     leGlobals <- lValExprGlobalVars le
-    sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-    return $ leGlobals ++ sliceGlobals
-  AS.LValArray les ->
-    concat <$> traverse lValExprGlobalVars les
+    sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
+    return $ mergeGVarRefs leGlobals sliceGlobals
   AS.LValTuple les ->
-    concat <$> traverse lValExprGlobalVars les
+    unionGVarRefs <$> traverse lValExprGlobalVars les
   AS.LValMember lv _ -> lValExprGlobalVars lv
   AS.LValMemberBits lv _ -> lValExprGlobalVars lv
   AS.LValSlice les ->
-    concat <$> traverse lValExprGlobalVars les
-  _ -> return []
+    unionGVarRefs <$> traverse lValExprGlobalVars les
+  AS.LValIgnore -> return $ unionGVarRefs []
+  _ -> throwError $ UnsupportedSigLVal lValExpr
 
-casePatternGlobalVars :: AS.CasePattern -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+casePatternGlobalVars :: AS.CasePattern -> SigM ext f GlobalVarRefs
 casePatternGlobalVars pat = case pat of
-  AS.CasePatternIdentifier varName -> maybeToList <$> varGlobal varName
-  AS.CasePatternTuple pats -> concat <$> traverse casePatternGlobalVars pats
-  _ -> return []
+  AS.CasePatternIdentifier varName -> writeGlobal varName
+  AS.CasePatternTuple pats -> unionGVarRefs <$> traverse casePatternGlobalVars pats
+  _ -> return $ unionGVarRefs []
 
-caseAlternativeGlobalVars :: AS.CaseAlternative -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+caseAlternativeGlobalVars :: AS.CaseAlternative -> SigM ext f GlobalVarRefs
 caseAlternativeGlobalVars alt = case alt of
   AS.CaseWhen pats mExpr stmts -> do
-    patGlobals <- concat <$> traverse casePatternGlobalVars pats
-    eGlobals <- fromMaybe [] <$> traverse exprGlobalVars mExpr
-    stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-    return $ patGlobals ++ eGlobals ++ stmtGlobals
-  AS.CaseOtherwise stmts -> concat <$> traverse stmtGlobalVars stmts
+    patGlobals <- unionGVarRefs <$> traverse casePatternGlobalVars pats
+    eGlobals <- fromMaybe (unionGVarRefs []) <$> traverse exprGlobalVars mExpr
+    stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
+    return $ unionGVarRefs [patGlobals, eGlobals, stmtGlobals]
+  AS.CaseOtherwise stmts -> unionGVarRefs <$> traverse stmtGlobalVars stmts
 
 -- | Collect all global variables from a single 'AS.Expr'.
-exprGlobalVars :: AS.Expr -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+exprGlobalVars :: AS.Expr -> SigM ext f GlobalVarRefs
 exprGlobalVars expr = case overrideExpr overrides expr of
-  Just exprs -> concat <$> traverse exprGlobalVars exprs
+  Just exprs -> unionGVarRefs <$> traverse exprGlobalVars exprs
   Nothing ->
     case expr of
-      AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
-        maybeToList <$> varGlobal varName
+      AS.ExprVarRef (AS.QualifiedIdentifier _ varName) -> readGlobal varName
       AS.ExprSlice e slices -> do
         eGlobals <- exprGlobalVars e
-        sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-        return $ eGlobals ++ sliceGlobals
+        sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
+        return $ mergeGVarRefs eGlobals sliceGlobals
       AS.ExprIndex e slices -> do
         eGlobals <- exprGlobalVars e
-        sliceGlobals <- concat <$> traverse sliceGlobalVars slices
-        return $ eGlobals ++ sliceGlobals
+        sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
+        return $ mergeGVarRefs eGlobals sliceGlobals
       AS.ExprUnOp _ e -> exprGlobalVars e
       AS.ExprBinOp _ e1 e2 -> do
         e1Globals <- exprGlobalVars e1
         e2Globals <- exprGlobalVars e2
-        return $ e1Globals ++ e2Globals
+        return $ mergeGVarRefs e1Globals e2Globals
       AS.ExprMembers e vars -> do
         eGlobals <- exprGlobalVars e
-        varGlobals <- catMaybes <$> traverse varGlobal vars
-        return $ eGlobals ++ varGlobals
+        varGlobals <- unionGVarRefs <$> traverse readGlobal vars
+        return $ mergeGVarRefs eGlobals varGlobals
       AS.ExprInMask e _ -> exprGlobalVars e
       AS.ExprCall qName argEs -> do
-        argGlobals <- concat <$> traverse exprGlobalVars argEs
+        argGlobals <- unionGVarRefs <$> traverse exprGlobalVars argEs
         mCallable <- lookupCallable qName (length argEs)
         case mCallable of
           Just callable -> do
@@ -805,41 +828,47 @@ exprGlobalVars expr = case overrideExpr overrides expr of
               void $ computeCallableSignature callable
               callableGlobals <- callableGlobalVars callable
               popCallableSearch qName (length argEs)
-              return $ callableGlobals ++ argGlobals
+              return $ mergeGVarRefs callableGlobals argGlobals
           Nothing -> return argGlobals
       AS.ExprInSet e setElts -> do
         eGlobals <- exprGlobalVars e
-        setEltGlobals <- concat <$> traverse setEltGlobalVars setElts
-        return $ eGlobals ++ setEltGlobals
+        setEltGlobals <- unionGVarRefs <$> traverse setEltGlobalVars setElts
+        return $ mergeGVarRefs eGlobals setEltGlobals
       AS.ExprTuple es ->
-        concat <$> traverse exprGlobalVars es
+        unionGVarRefs <$> traverse exprGlobalVars es
       AS.ExprIf branches def -> do
         branchGlobals <- forM branches $ \(testExpr, resExpr) -> do
           testExprGlobals <- exprGlobalVars testExpr
           resExprGlobals <- exprGlobalVars resExpr
-          return $ testExprGlobals ++ resExprGlobals
+          return $ mergeGVarRefs testExprGlobals resExprGlobals
         defaultGlobals <- exprGlobalVars def
-        return $ concat branchGlobals ++ defaultGlobals
+        return $ mergeGVarRefs (unionGVarRefs branchGlobals) defaultGlobals
       AS.ExprMember e _ -> exprGlobalVars e
       AS.ExprMemberBits e _ -> exprGlobalVars e
-      _ -> return []
+      AS.ExprLitInt _ -> return $ unionGVarRefs []
+      AS.ExprLitBin _ -> return $ unionGVarRefs []
+      AS.ExprLitString _ -> return $ unionGVarRefs []
+      AS.ExprLitMask _ -> return $ unionGVarRefs []
+      AS.ExprUnknown _ -> return $ unionGVarRefs []
+      AS.ExprImpDef _ _ -> return $ unionGVarRefs []
+      _ -> throwError $ UnsupportedSigExpr expr
 
 -- | Collect all global variables from a single 'AS.Stmt'.
-stmtGlobalVars :: AS.Stmt -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+stmtGlobalVars :: AS.Stmt -> SigM ext f GlobalVarRefs
 stmtGlobalVars stmt =
   case overrideStmt overrides stmt of
-    Just stmts -> concat <$> traverse stmtGlobalVars stmts
+    Just stmts -> unionGVarRefs <$> traverse stmtGlobalVars stmts
     Nothing ->
       case stmt of
           AS.StmtVarsDecl ty i -> do
             storeUserType ty
-            return []
+            return $ unionGVarRefs []
           AS.StmtVarDeclInit (_, ty) e -> do
             storeUserType ty
             exprGlobalVars e
-          AS.StmtAssign le e -> (++) <$> lValExprGlobalVars le <*> exprGlobalVars e
+          AS.StmtAssign le e -> mergeGVarRefs <$> lValExprGlobalVars le <*> exprGlobalVars e
           AS.StmtCall qName argEs -> do
-            argGlobals <- concat <$> traverse exprGlobalVars argEs
+            argGlobals <- unionGVarRefs <$> traverse exprGlobalVars argEs
             mCallable <- lookupCallable qName (length argEs)
             case mCallable of
               Just callable -> do
@@ -851,56 +880,64 @@ stmtGlobalVars stmt =
                   void $ computeCallableSignature callable
                   callableGlobals <- callableGlobalVars callable
                   popCallableSearch qName (length argEs)
-                  return $ callableGlobals ++ argGlobals
+                  return $ mergeGVarRefs callableGlobals argGlobals
               Nothing -> return argGlobals
           AS.StmtReturn (Just e) -> exprGlobalVars e
           AS.StmtAssert e -> exprGlobalVars e
           AS.StmtIf branches mDefault -> do
             branchGlobals <- forM branches $ \(testExpr, stmts) -> do
               testExprGlobals <- exprGlobalVars testExpr
-              stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-              return $ testExprGlobals ++ stmtGlobals
+              stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
+              return $ mergeGVarRefs testExprGlobals stmtGlobals
             defaultGlobals <- case mDefault of
-              Nothing -> return []
-              Just stmts -> concat <$> traverse stmtGlobalVars stmts
-            return $ concat branchGlobals ++ defaultGlobals
+              Nothing -> return $ unionGVarRefs []
+              Just stmts -> unionGVarRefs <$> traverse stmtGlobalVars stmts
+            return $ mergeGVarRefs (unionGVarRefs branchGlobals) defaultGlobals
           AS.StmtCase e alts -> do
             eGlobals <- exprGlobalVars e
-            altGlobals <- concat <$> traverse caseAlternativeGlobalVars alts
-            return $ eGlobals ++ altGlobals
+            altGlobals <- unionGVarRefs <$> traverse caseAlternativeGlobalVars alts
+            return $ mergeGVarRefs eGlobals altGlobals
           AS.StmtFor _ (initialize, term) stmts -> do
             initGlobals <- exprGlobalVars initialize
             termGlobals <- exprGlobalVars term
-            stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-            return $ initGlobals ++ termGlobals ++ stmtGlobals
+            stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
+            return $ unionGVarRefs [initGlobals, termGlobals, stmtGlobals]
           AS.StmtWhile term stmts -> do
             termGlobals <- exprGlobalVars term
-            stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-            return $ termGlobals ++ stmtGlobals
+            stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
+            return $ mergeGVarRefs termGlobals stmtGlobals
           AS.StmtRepeat stmts term -> do
             termGlobals <- exprGlobalVars term
-            stmtGlobals <- concat <$> traverse stmtGlobalVars stmts
-            return $ termGlobals ++ stmtGlobals
-          AS.StmtUnpredictable -> return []
-          AS.StmtUndefined -> return []
-          _ -> return []
+            stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
+            return $ mergeGVarRefs termGlobals stmtGlobals
+          AS.StmtConstDecl _ e -> exprGlobalVars e
+          AS.StmtReturn Nothing -> return $ unionGVarRefs []
+
+          _ -> throwError $ UnsupportedSigStmt stmt
 
 -- | Compute the list of global variables in a 'Callable' and store it in the
 -- state. If it has already been computed, simply return it.
-callableGlobalVars :: Callable -> SigM ext f [(T.Text, Some WT.BaseTypeRepr)]
+callableGlobalVars :: Callable -> SigM ext f GlobalVarRefs
 callableGlobalVars c@Callable{..} = do
   mGlobals <- lookupCallableGlobals c
   case mGlobals of
     Just globals -> return globals
     Nothing -> do
-      globals <- concat <$> traverse stmtGlobalVars callableStmts
+      globals <- unionGVarRefs <$> traverse stmtGlobalVars callableStmts
       storeCallableGlobals c globals
       return globals
+
+-- All functions implicitly refer to the execution status
+getBuiltinGlobalVars :: SigM ext f GlobalVarRefs
+getBuiltinGlobalVars =
+  mergeGVarRefs <$> readGlobal execStatus <*> writeGlobal execStatus
+  where
+    execStatus = "__CurrentExecutionStatus"
 
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
 -- it is a function.
-computeCallableSignature :: Callable -> SigM ext f (SomeSimpleSignature)
+computeCallableSignature :: Callable -> SigM ext f (SomeSimpleFunctionSignature)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
   mSig <- lookupCallableSignature c
@@ -910,30 +947,29 @@ computeCallableSignature c@Callable{..} = do
     Nothing -> do
       mapM_ (\(_,t) -> storeUserType t) callableArgs
       mapM_ storeUserType callableRets
-      
       globalVars' <- callableGlobalVars c
-      statusGlobal <- theVarGlobal "__CurrentExecutionStatus"
-      let globalVars = statusGlobal : globalVars'
-      labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
-        return $ Some (LabeledValue varName varTp)
+      builtins <- getBuiltinGlobalVars
+      let (GlobalVarRefs globalReads globalWrites) =
+            mergeGVarRefs globalVars' builtins
 
-      Some globalReprs <- return $ Ctx.fromList labeledVals
-      sig <- case callableRets of
-        [] -> -- procedure
-          return $ SomeSimpleProcedureSignature $ SimpleProcedureSignature
-            { sprocName = name
-            , sprocArgs = callableArgs
-            , sprocGlobalReprs = globalReprs
-            }
-        _ -> do -- function
-          return $ SomeSimpleFunctionSignature $ SimpleFunctionSignature
+      labeledReads <- getLabels globalReads
+      labeledWrites <- getLabels globalWrites
+
+      Some globalReadReprs <- return $ Ctx.fromList labeledReads
+      Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
+
+      let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
             { sfuncName = name
             , sfuncRet = callableRets
             , sfuncArgs = callableArgs
-            , sfuncGlobalReprs = globalReprs
+            , sfuncGlobalReadReprs = globalReadReprs
+            , sfuncGlobalWriteReprs = globalWriteReprs
             }
       storeCallableSignature c sig
       return sig
+  where getLabels vars =
+          forM (nub vars) $ \(varName, Some varTp) -> do
+            return $ Some (LabeledValue varName varTp)
 
 computeType'' :: Definitions arch -> AS.Type -> Some WT.BaseTypeRepr
 computeType'' defs t = case computeType' t of
@@ -942,10 +978,12 @@ computeType'' defs t = case computeType' t of
     Just (Some ut) -> Some $ userTypeRepr ut
     Nothing -> error $ "Missing user type definition for: " <> (show tpName)
 
-mkBaseStructRepr :: [Some WT.BaseTypeRepr] -> Some WT.BaseTypeRepr
-mkBaseStructRepr ts = case ts of
-  [t] -> t
-  ts | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
+data SomeBaseStructRepr where
+  SomeBaseStructRepr :: WT.BaseTypeRepr (WT.BaseStructType ctx) -> SomeBaseStructRepr
+
+mkBaseStructRepr :: [Some WT.BaseTypeRepr] -> SomeBaseStructRepr
+mkBaseStructRepr ts |
+  Some assignment <- Ctx.fromList ts = SomeBaseStructRepr (WT.BaseStructRepr assignment)
 
 applyStaticEnv :: StaticEnvMap
                -> AS.Type
@@ -954,31 +992,21 @@ applyStaticEnv env t =
   fromMaybe (X.throw $ CannotStaticallyEvaluateType t (staticEnvMapVals env)) $
    applyStaticEnv' env t
 
-
-mkSignature :: Definitions arch -> StaticValues -> SomeSimpleSignature -> Some (SomeSignature)
+mkSignature :: Definitions arch -> StaticValues -> SomeSimpleFunctionSignature -> Some (SomeFunctionSignature)
 mkSignature defs env sig =
   case sig of
     SomeSimpleFunctionSignature fsig |
-        Some retT <- mkBaseStructRepr $ map mkType (sfuncRet fsig)
+        Some retTs <- Ctx.fromList $ map mkType (sfuncRet fsig)
       , Some args <- Ctx.fromList $ map mkLabel (sfuncArgs fsig) -> 
        
       Some $ SomeFunctionSignature $ FunctionSignature
         { funcName = mkFinalFunctionName env $ sfuncName fsig
-        , funcSigRepr = retT
+        , funcRetRepr = retTs
         , funcArgReprs = args
-        , funcGlobalReprs = sfuncGlobalReprs fsig
+        , funcGlobalReadReprs = sfuncGlobalReadReprs fsig
+        , funcGlobalWriteReprs = sfuncGlobalReadReprs fsig
         , funcStaticVals = env
         , funcArgs = sfuncArgs fsig
-        }
-    SomeSimpleProcedureSignature fsig |
-      Some args <-  Ctx.fromList $ map mkLabel (sprocArgs fsig) ->
-
-      Some $ SomeProcedureSignature $ ProcedureSignature
-        { procName = mkFinalFunctionName env $ sprocName fsig
-        , procArgReprs = args
-        , procGlobalReprs = sprocGlobalReprs fsig
-        , procStaticVals = env
-        , procArgs = sprocArgs fsig
         }
   where
     mkType t = computeType'' defs (applyStaticEnv (simpleStaticEnvMap env) t)
@@ -1003,7 +1031,7 @@ computeFieldType AS.InstructionField{..} = do
 computeInstructionSignature' :: AS.Instruction
                              -> T.Text -- ^ name of encoding
                              -> AS.InstructionSet
-                             -> SigM ext f (Some SomeSignature, [AS.Stmt])
+                             -> SigM ext f (Some SomeFunctionSignature, [AS.Stmt])
 computeInstructionSignature' AS.Instruction{..} encName iset = do
   let name = mkInstructionName instName encName
 
@@ -1016,28 +1044,34 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       possibleEnvs = getPossibleEnvs (AS.encFields enc) (AS.encDecode enc)
       instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $
         liftOverEnvs instName possibleEnvs instExecute
-      instStmts = initStmts ++ instPostDecode ++ instExecute'
-      instGlobalVars = concat <$> traverse stmtGlobalVars instStmts
+      instStmts = initStmts ++ instPostDecode ++ instExecute' ++ [AS.StmtReturn Nothing]
+      instGlobalVars = unionGVarRefs <$> traverse stmtGlobalVars instStmts
       staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
       in do
         globalVars' <- instGlobalVars
-        statusGlobal <- theVarGlobal "__CurrentExecutionStatus"
-        let globalVars = statusGlobal : globalVars'
-        labeledVals <- forM (nub globalVars) $ \(varName, Some varTp) -> do
+        builtins <- getBuiltinGlobalVars
+        let (GlobalVarRefs globalReads globalWrites) =
+                mergeGVarRefs globalVars' builtins
+        labeledReads <- forM (nub globalReads) $ \(varName, Some varTp) -> do
+          return $ Some (LabeledValue varName varTp)
+        labeledWrites <- forM (nub globalWrites) $ \(varName, Some varTp) -> do
           return $ Some (LabeledValue varName varTp)
         labeledArgs <- forM (AS.encFields enc) $ \field -> do
           Some tp <- computeFieldType field
           let ctp = CT.baseToType tp
           return (Some (LabeledValue (AS.instFieldName field) ctp))
-        Some globalReprs <- return $ Ctx.fromList labeledVals
+        Some globalReadReprs <- return $ Ctx.fromList labeledReads
+        Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
         Some argReprs <- return $ Ctx.fromList labeledArgs
-        let pSig = ProcedureSignature { procName = name
-                                      , procArgReprs = argReprs
-                                      , procGlobalReprs = globalReprs
-                                      , procStaticVals = staticEnvMapVals staticEnv
-                                      , procArgs = []
-                                      }
-        return (Some (SomeProcedureSignature pSig), instStmts)
+        let pSig = FunctionSignature { funcName = name
+                                     , funcArgReprs = argReprs
+                                     , funcRetRepr = Ctx.empty
+                                     , funcGlobalReadReprs = globalReadReprs
+                                     , funcGlobalWriteReprs = globalReadReprs
+                                     , funcStaticVals = staticEnvMapVals staticEnv
+                                     , funcArgs = []
+                                     }
+        return (Some (SomeFunctionSignature pSig), instStmts)
 
 liftOverEnvs :: T.Text -> [StaticEnvP] -> [AS.Stmt] -> [AS.Stmt]
 liftOverEnvs instName envs stmts = case Map.lookup instName dependentVariableHints of
@@ -1106,16 +1140,6 @@ addInitializedVariables stmts env =
         | Just v <- exprToStatic env' e ->
           insertStaticEnv nm v env'
       _ -> env'
-
--- | Create the full list of statements in an instruction given the main execute
--- block and the encoding-specific operations.
-createInstStmts :: [AS.Stmt]
-                -- ^ Encoding-specific operations
-                -> [AS.Stmt]
-                -- ^ Execute block
-                -> [AS.Stmt]
-createInstStmts encodingSpecificOperations stmts =
-  encodingSpecificOperations ++ stmts
 
 -- Overrides only for the purposes of collecting global variables
 data Overrides arch =

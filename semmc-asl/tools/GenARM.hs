@@ -548,7 +548,7 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
   case result of
     Left err -> do
       logMsg $ "Error computing instruction signature: " ++ show err
-    Right (Some (SomeProcedureSignature iSig), instStmts) -> do
+    Right (Some (SomeFunctionSignature iSig), instStmts) -> do
       defs <- liftSigM (KeyInstr instrIdent) $ getDefinitions
       case defs of
         Left err -> do
@@ -563,7 +563,6 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
           alldeps <- mapM (translationLoop instrIdent [] defs) (Map.assocs deps)
           let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
           MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
-    _ -> error "Panic"
 
 data Filters = Filters { funFilter :: InstructionIdent -> T.Text -> Bool
                        , instrFilter :: InstructionIdent -> Bool
@@ -578,7 +577,7 @@ data ElemKey =
 
 
 -- FIXME: Seperate this into RWS
-data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeSignature))
+data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeFunctionSignature))
                      , instrExcepts :: Map.Map InstructionIdent TranslatorException
                      , funExcepts :: Map.Map T.Text TranslatorException                    
                      , sigState :: SigState
@@ -730,17 +729,18 @@ withOnlineBackend gen unsatFeat action =
        action sym
 
 processInstruction :: InstructionIdent
-                   -> ProcedureSignature globals init
-                   -> [AS.Stmt] -> Definitions arch
+                   -> FunctionSignature globalReads globalWrites init tps
+                   -> [AS.Stmt]
+                   -> Definitions arch
                    -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
-processInstruction instr pSig stmts defs = do
+processInstruction instr sig stmts defs = do
   handleAllocator <- MSS.lift $ CFH.newHandleAllocator
-  mp <- catchIO (KeyInstr instr) $ procedureToCrucible defs pSig handleAllocator stmts
+  mp <- catchIO (KeyInstr instr) $ functionToCrucible defs sig handleAllocator stmts
   case mp of
     Just p -> do
       filteredOut <- isInstrTransFilteredOut instr
       if filteredOut
-      then return (procDepends p)
+      then return (funcDepends p)
       else do
         logMsg $ "Simulating instruction: " ++ prettyIdent instr
         mdep <- catchIO (KeyInstr instr) $
@@ -749,14 +749,14 @@ processInstruction instr pSig stmts defs = do
                                       , simHandleAllocator = handleAllocator
                                       , simSym = backend
                                       }
-            symFn <- simulateProcedure cfg p
-            return (procDepends p)
+            symFn <- simulateFunction cfg p
+            return (funcDepends p)
         return $ fromMaybe Map.empty mdep
     Nothing -> return Map.empty
 
 processFunction :: InstructionIdent
                 -> T.Text
-                -> SomeSignature ret
+                -> SomeFunctionSignature ret
                 -> [AS.Stmt]
                 -> Definitions arch
                 -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
@@ -780,25 +780,5 @@ processFunction fromInstr fnName sig stmts defs =
                                         }
                 symFn <- simulateFunction cfg f
                 return (funcDepends f)
-            return $ fromMaybe Map.empty mdep
-        Nothing -> return Map.empty
-    SomeProcedureSignature pSig -> do
-      handleAllocator <- MSS.lift $ CFH.newHandleAllocator
-      mp <- catchIO (KeyFun fnName) $ procedureToCrucible defs pSig handleAllocator stmts
-      case mp of
-        Just p -> do
-          filteredOut <- isFunTransFilteredOut fromInstr fnName
-          if filteredOut
-          then return (procDepends p)
-          else do
-            logMsg $ "Simulating function: " ++ show fnName
-            mdep <- catchIO (KeyFun fnName) $
-              withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
-                let cfg = SimulatorConfig { simOutputHandle = IO.stdout
-                                        , simHandleAllocator = handleAllocator
-                                        , simSym = backend
-                                        }
-                symFn <- simulateProcedure cfg p
-                return (procDepends p)
             return $ fromMaybe Map.empty mdep
         Nothing -> return Map.empty
