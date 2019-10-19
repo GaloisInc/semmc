@@ -437,7 +437,7 @@ buildInitState ASLSpec{..} =
       userTypes = Map.empty
       callableGlobalsMap  = Map.empty
       callableSignatureMap = Map.empty
-      callableOpenSearches = []
+      callableOpenSearches = Map.empty
   in SigState{..}
 
 insertUnique :: Ord k => Show k => k -> a -> Map.Map k a -> Map.Map k a
@@ -496,23 +496,29 @@ data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                            }
 
 data GlobalVarRefs =
-  GlobalVarRefs { globalReads :: [(T.Text, Some WT.BaseTypeRepr)]
-                , globalWrites :: [(T.Text, Some WT.BaseTypeRepr)]
+  GlobalVarRefs { globalReads :: Set.Set (T.Text, Some WT.BaseTypeRepr)
+                , globalWrites :: Set.Set (T.Text, Some WT.BaseTypeRepr)
                 }
 
 mergeGVarRefs :: GlobalVarRefs -> GlobalVarRefs -> GlobalVarRefs
 mergeGVarRefs (GlobalVarRefs reads writes) (GlobalVarRefs reads' writes') =
-  GlobalVarRefs (reads ++ reads') (writes ++ writes')
+  GlobalVarRefs (Set.union reads reads') (Set.union writes writes')
 
 unionGVarRefs :: [GlobalVarRefs] -> GlobalVarRefs
-unionGVarRefs = foldr mergeGVarRefs (GlobalVarRefs [] [])
+unionGVarRefs = foldr mergeGVarRefs emptyGVarRefs
+
+emptyGVarRefs :: GlobalVarRefs
+emptyGVarRefs = GlobalVarRefs Set.empty Set.empty
 
 -- All writes are implicitly reads
 unpackGVarRefs :: GlobalVarRefs -> ([(T.Text, Some WT.BaseTypeRepr)], [(T.Text, Some WT.BaseTypeRepr)])
 unpackGVarRefs (GlobalVarRefs reads writes) =
-  (nub $ reads ++ writes, writes)
+  (Set.toList (Set.union reads writes), Set.toList writes)
 
 -- deriving instance Show (SigEnv ext f)
+
+data SearchStatus = SearchSeen | SearchCollect
+  deriving (Eq, Show)
 
 data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
@@ -520,7 +526,7 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ map from function/procedure name to accessed globals
                          , callableSignatureMap :: Map.Map T.Text (SomeSimpleFunctionSignature, Callable)
                            -- ^ map of all signatures found thus far
-                         , callableOpenSearches :: [T.Text]
+                         , callableOpenSearches :: Map.Map T.Text SearchStatus
                            -- ^ all callables encountered on the current search path
                          , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
                          , extendedTypeData :: Map.Map T.Text ExtendedTypeData
@@ -543,7 +549,7 @@ data InnerSigException = TypeNotFound T.Text
   deriving (Eq, Show)
 
 data SigException = SigException
-  { exCallStack :: [T.Text]
+  { exCallStack :: Map.Map T.Text SearchStatus
   , exInner :: InnerSigException }
   deriving (Eq, Show)
 
@@ -552,25 +558,26 @@ storeType tpName tp = do
   st <- RWS.get
   RWS.put $ st { userTypes = Map.insert tpName (Some tp) (userTypes st) }
 
-pushCallableSearch :: AS.QualifiedIdentifier -> Int -> SigM ext f Bool
-pushCallableSearch name' arity = do
+checkCallableSearch :: Callable -> SigM ext f (Maybe SearchStatus)
+checkCallableSearch c = do
   st <- RWS.get
-  let name = mkFunctionName name' arity
-  if elem name (callableOpenSearches st) then
-    return True
-  else do
-    RWS.put $ st { callableOpenSearches = name : (callableOpenSearches st) }
-    return False
+  let name = mkCallableName c
+  return $ Map.lookup name (callableOpenSearches st)
 
-popCallableSearch :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
-popCallableSearch name' arity = do
+
+setCallableSearch :: Callable -> SearchStatus -> SigM ext f ()
+setCallableSearch c stt = do
   st <- RWS.get
-  let name = mkFunctionName name' arity
-  case callableOpenSearches st of
-    x : xs | True <- x == name ->
-      RWS.put $ st { callableOpenSearches = xs }
-    _ -> error $ "Mismatched callable pops and pushes:" <> show name
+  let name = mkCallableName c
+  RWS.put $ st { callableOpenSearches =
+                 Map.insert name stt (callableOpenSearches st) }
 
+markCallableFound :: Callable -> SigM ext f ()
+markCallableFound c = do
+  st <- RWS.get
+  let name = mkCallableName c
+  RWS.put $ st { callableOpenSearches =
+                 Map.delete name (callableOpenSearches st) }
 
 lookupCallable :: AS.QualifiedIdentifier -> Int -> SigM ext f (Maybe Callable)
 lookupCallable name' arity = do
@@ -723,12 +730,12 @@ varGlobal varName = do
 readGlobal :: T.Text -> SigM ext f GlobalVarRefs
 readGlobal varName = do
   reads <- maybeToList <$> varGlobal varName
-  return $ GlobalVarRefs reads []
+  return $ GlobalVarRefs (Set.fromList reads) Set.empty
 
 writeGlobal :: T.Text -> SigM ext f GlobalVarRefs
 writeGlobal varName = do
   writes <- maybeToList <$> varGlobal varName
-  return $ GlobalVarRefs [] writes
+  return $ GlobalVarRefs Set.empty (Set.fromList writes)
 
 theVarGlobal :: T.Text -> SigM ext f (T.Text, Some WT.BaseTypeRepr)
 theVarGlobal varName = do
@@ -814,21 +821,7 @@ exprGlobalVars expr = case overrideExpr overrides expr of
         varGlobals <- unionGVarRefs <$> traverse readGlobal vars
         return $ mergeGVarRefs eGlobals varGlobals
       AS.ExprInMask e _ -> exprGlobalVars e
-      AS.ExprCall qName argEs -> do
-        argGlobals <- unionGVarRefs <$> traverse exprGlobalVars argEs
-        mCallable <- lookupCallable qName (length argEs)
-        case mCallable of
-          Just callable -> do
-            -- Compute the signature of the callable
-            recursed <- pushCallableSearch qName (length argEs)
-            if recursed then
-              return argGlobals
-            else do
-              void $ computeCallableSignature callable
-              callableGlobals <- callableGlobalVars callable
-              popCallableSearch qName (length argEs)
-              return $ mergeGVarRefs callableGlobals argGlobals
-          Nothing -> return argGlobals
+      AS.ExprCall qName argEs -> callableGlobalVars' qName argEs
       AS.ExprInSet e setElts -> do
         eGlobals <- exprGlobalVars e
         setEltGlobals <- unionGVarRefs <$> traverse setEltGlobalVars setElts
@@ -852,6 +845,31 @@ exprGlobalVars expr = case overrideExpr overrides expr of
       AS.ExprImpDef _ _ -> return $ unionGVarRefs []
       _ -> throwError $ UnsupportedSigExpr expr
 
+callableGlobalVars' :: AS.QualifiedIdentifier
+                    -> [AS.Expr]
+                    -> SigM ext f GlobalVarRefs
+callableGlobalVars' qIdent argEs = do
+  argGlobals <- unionGVarRefs <$> traverse exprGlobalVars argEs
+  mCallable <- lookupCallable qIdent (length argEs)
+  case mCallable of
+    Just callable -> do
+      searchStatus <- checkCallableSearch callable
+      case searchStatus of
+        Nothing -> do
+          setCallableSearch callable SearchSeen
+          callableGlobals <- callableGlobalVars callable
+          markCallableFound callable
+          -- Compute the signature of the callable
+          void $ computeCallableSignature callable
+          return $ mergeGVarRefs callableGlobals argGlobals
+        Just SearchSeen -> do
+          setCallableSearch callable SearchCollect
+          callableGlobals <- callableGlobalVars callable
+          return $ mergeGVarRefs callableGlobals argGlobals
+        Just SearchCollect -> do
+          return argGlobals
+    Nothing -> return argGlobals
+
 -- | Collect all global variables from a single 'AS.Stmt'.
 stmtGlobalVars :: AS.Stmt -> SigM ext f GlobalVarRefs
 stmtGlobalVars stmt =
@@ -861,26 +879,12 @@ stmtGlobalVars stmt =
       case stmt of
           AS.StmtVarsDecl ty i -> do
             storeUserType ty
-            return $ unionGVarRefs []
+            return $ emptyGVarRefs
           AS.StmtVarDeclInit (_, ty) e -> do
             storeUserType ty
             exprGlobalVars e
           AS.StmtAssign le e -> mergeGVarRefs <$> lValExprGlobalVars le <*> exprGlobalVars e
-          AS.StmtCall qName argEs -> do
-            argGlobals <- unionGVarRefs <$> traverse exprGlobalVars argEs
-            mCallable <- lookupCallable qName (length argEs)
-            case mCallable of
-              Just callable -> do
-                -- Compute the signature of the callable
-                recursed <- pushCallableSearch qName (length argEs)
-                if recursed then
-                  return argGlobals
-                else do
-                  void $ computeCallableSignature callable
-                  callableGlobals <- callableGlobalVars callable
-                  popCallableSearch qName (length argEs)
-                  return $ mergeGVarRefs callableGlobals argGlobals
-              Nothing -> return argGlobals
+          AS.StmtCall qName argEs -> callableGlobalVars' qName argEs
           AS.StmtReturn (Just e) -> exprGlobalVars e
           AS.StmtAssert e -> exprGlobalVars e
           AS.StmtIf branches mDefault -> do
@@ -889,7 +893,7 @@ stmtGlobalVars stmt =
               stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
               return $ mergeGVarRefs testExprGlobals stmtGlobals
             defaultGlobals <- case mDefault of
-              Nothing -> return $ unionGVarRefs []
+              Nothing -> return $ emptyGVarRefs
               Just stmts -> unionGVarRefs <$> traverse stmtGlobalVars stmts
             return $ mergeGVarRefs (unionGVarRefs branchGlobals) defaultGlobals
           AS.StmtCase e alts -> do
@@ -910,7 +914,7 @@ stmtGlobalVars stmt =
             stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
             return $ mergeGVarRefs termGlobals stmtGlobals
           AS.StmtConstDecl _ e -> exprGlobalVars e
-          AS.StmtReturn Nothing -> return $ unionGVarRefs []
+          AS.StmtReturn Nothing -> return $ emptyGVarRefs
 
           _ -> throwError $ UnsupportedSigStmt stmt
 
@@ -922,6 +926,7 @@ callableGlobalVars c@Callable{..} = do
   case mGlobals of
     Just globals -> return globals
     Nothing -> do
+      -- Mark the callable as 'seen' before continuing
       globals <- unionGVarRefs <$> traverse stmtGlobalVars callableStmts
       storeCallableGlobals c globals
       return globals
@@ -948,8 +953,8 @@ computeCallableSignature c@Callable{..} = do
       mapM_ storeUserType callableRets
       globalVars' <- callableGlobalVars c
       builtins <- getBuiltinGlobalVars
-      let (GlobalVarRefs globalReads globalWrites) =
-            mergeGVarRefs globalVars' builtins
+      (globalReads, globalWrites) <- return $ unpackGVarRefs $
+        mergeGVarRefs globalVars' builtins
 
       labeledReads <- getLabels globalReads
       labeledWrites <- getLabels globalWrites
@@ -967,7 +972,7 @@ computeCallableSignature c@Callable{..} = do
       storeCallableSignature c sig
       return sig
   where getLabels vars =
-          forM (nub vars) $ \(varName, Some varTp) -> do
+          forM vars $ \(varName, Some varTp) -> do
             return $ Some (LabeledValue varName varTp)
 
 computeType'' :: Definitions arch -> AS.Type -> Some WT.BaseTypeRepr
@@ -1050,11 +1055,11 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       in do
         globalVars' <- instGlobalVars
         builtins <- getBuiltinGlobalVars
-        let (GlobalVarRefs globalReads globalWrites) =
-                mergeGVarRefs globalVars' builtins
-        labeledReads <- forM (nub globalReads) $ \(varName, Some varTp) -> do
+        (globalReads, globalWrites) <- return $ unpackGVarRefs $
+          mergeGVarRefs globalVars' builtins
+        labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
           return $ Some (LabeledValue varName varTp)
-        labeledWrites <- forM (nub globalWrites) $ \(varName, Some varTp) -> do
+        labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
           return $ Some (LabeledValue varName varTp)
         labeledArgs <- forM (AS.encFields enc) $ \field -> do
           Some tp <- computeFieldType field
