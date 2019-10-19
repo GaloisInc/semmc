@@ -121,7 +121,7 @@ execMainAt startIdx = do
   let filter = defaultFilter { instrFilter = \ident -> Set.member ident targetInsts }
   let translateOpts = defaultOptions {
           optFilters = filter
-        , optSkipTranslation = True
+        , optSkipTranslation = False
         , optCollectExceptions = True
         , optStartIndex = startIdx
         , optVerbose = False
