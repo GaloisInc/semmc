@@ -78,15 +78,6 @@ collectInstructions aslInsts = do
   List.concat $
     map (\instr -> map (\(AS.InstructionEncoding {AS.encName=encName, AS.encInstrSet=iset}) ->
                           (instr, encName, iset)) (AS.instEncodings instr)) aslInsts
-
-stalledDefs :: [T.Text]
-stalledDefs =
-  ["AArch32_CheckBreakpoint_2"
-  ,"AArch32_CheckWatchpoint_4"
-  ,"AArch64_CheckBreakpoint_2"
-  ,"AArch64_CheckWatchpoint_4"
-  ]
-
 data TranslatorOptions = TranslatorOptions
   { optVerbose :: Bool
   , optStartIndex :: Int
@@ -102,15 +93,11 @@ defaultOptions = TranslatorOptions
   { optVerbose = True
   , optStartIndex = 0
   , optNumberOfInstructions = Nothing
-  , optFilters = defaultFilter
+  , optFilters = noFilter
   , optSkipTranslation = True
   , optCollectExceptions = True
   , optThrowUnexpectedExceptions = True
   }
-
-
-doTranslationOptions :: TranslatorOptions
-doTranslationOptions = defaultOptions {optFilters = filterStalls, optSkipTranslation = False}
 
 main :: IO ()
 main = execMainAt 0
@@ -118,7 +105,7 @@ main = execMainAt 0
 execMainAt :: Int -> IO ()
 execMainAt startIdx = do
   targetInsts <- getTargetInstrs
-  let filter = defaultFilter { instrFilter = \ident -> Set.member ident targetInsts }
+  let filter = noFilter { instrFilter = \ident -> Set.member ident targetInsts }
   let translateOpts = defaultOptions {
           optFilters = filter
         , optSkipTranslation = False
@@ -134,108 +121,159 @@ execMainAt startIdx = do
         reportFunctionDependencies = True}
   reportStats reportOpts sm
 
-getTargetFilter :: IO (Filters)
-getTargetFilter = do
-  targetInsts <- getTargetInstrs
-  let filter = defaultFilter { instrFilter = \ident -> Set.member ident targetInsts }
-  return filter
-
-testDefinition :: TranslatorOptions -> String -> String -> String -> IO (SigMap)
-testDefinition opts inm' encnm' defnm' = do
-  let defnm = T.pack defnm'
-  let inm = T.pack inm'
-  let encnm = T.pack encnm'
-  let filter = translateOnlyFun (inm, encnm) defnm
-  sig <- runWithFilters (opts  { optFilters = filter} )
-  case Map.lookup defnm (sMap sig) of
-    Just _ -> return sig
-    Nothing -> error $ "Translation failed to discover function: " <> show defnm
-
-testInstruction :: TranslatorOptions -> String -> String -> IO (SigMap)
-testInstruction opts instr enc = do
-  runWithFilters (opts { optFilters = translateOnlyInstr (T.pack instr, T.pack enc) })
-
-translateAll :: IO (SigMap)
-translateAll = do
-  runWithFilters defaultOptions
-
-
-parTranslateAll :: TranslatorOptions -> Int -> IO (SigMap)
-parTranslateAll opts chunksz = do
+runWithFilters :: TranslatorOptions -> IO (SigMap)
+runWithFilters opts = do
   spec <- getASL
-  let allInstrs = imap (\i -> \nm -> (i,nm)) $ collectInstructions (aslInstructions spec)
-  let (nchunks, _) = length allInstrs `divMod` chunksz
+  putStrLn $ "Loaded "
+    ++ show (length $ aslInstructions spec) ++ " instructions and "
+    ++ show (length $ aslDefinitions spec) ++ " definitions and "
+    ++ show (length $ aslSupportDefinitions spec) ++ " support definitions and "
+    ++ show (length $ aslExtraDefinitions spec) ++ " extra definitions and "
+    ++ show (length $ aslRegisterDefinitions spec) ++ " register definitions."
   let (sigEnv, sigState) = buildSigState spec
-  let runFun chunk = do
-        let opts' = opts { optVerbose = False,
-                           optStartIndex = (chunk * chunksz),
-                           optNumberOfInstructions = Just chunksz } 
-        runWithFilters' opts' spec sigEnv sigState
-        
-  mvs <- mapM (\chunk -> doFork (runFun chunk)) [0 .. nchunks]
-  sms <- mapM collapseResult mvs
-  let opts' = opts { optStartIndex = (nchunks * chunksz), optNumberOfInstructions = Nothing }
-  sm <- runWithFilters' opts' spec sigEnv sigState
-  E.when (optVerbose opts) $ mapM_ (putStrLn . T.unpack) (reverse $ sLog sm)
-  let sm' = mergeInstrExceptions (sm : sms)
-  return sm'
+  runWithFilters' opts spec sigEnv sigState
 
-  where
-    collapseResult mv = do
-      result <- takeMVar mv
-      case result of
-        Left e -> X.throw e
-        Right sm -> do
-          E.when (optVerbose opts) $ mapM_ (putStrLn . T.unpack) (reverse $ sLog sm)
-          return sm         
-    
-    doFork f = do
-      mv <- newEmptyMVar
-      _ <- forkFinally f (\r -> putMVar mv r)
-      return mv
-      
+runWithFilters' :: TranslatorOptions
+                -> ASLSpec
+                -> SigEnv
+                -> SigState
+                -> IO (SigMap)
+runWithFilters' opts spec sigEnv sigState = do
+  let startidx = optStartIndex opts
+  let numInstrs = optNumberOfInstructions opts
+  let getInstr (instr, enc, iset) = do
+        let test = instrFilter $ optFilters $ opts
+        let ident = instrToIdent instr enc iset
+        if test ident then Just (ident, instr) else Nothing
+  let allInstrs = imap (\i -> \nm -> (i,nm)) $ mapMaybe getInstr (collectInstructions (aslInstructions spec))
+  let instrs = case numInstrs of {Just i -> take i (drop startidx allInstrs); _ -> drop startidx allInstrs}
+  sm <- MSS.execStateT (forM_ instrs (\(i, (ident, instr)) -> do
+     logMsg $ "Processing instruction: " ++ show i ++ "/" ++ show (length allInstrs)
+     runTranslation instr ident))
+    (SigMap Map.empty Map.empty Map.empty sigState sigEnv Map.empty Map.empty [] opts)
+  return sm
 
-mergeInstrExceptions :: [SigMap] -> SigMap
-mergeInstrExceptions sms@(s : _) =
-  SigMap { instrExcepts = Map.unions (map instrExcepts sms)
-         , funExcepts = Map.unions (map funExcepts sms)
-         , instrDeps = Map.unions (map instrDeps sms)
-         , funDeps = Map.unions (map funDeps sms)
-         , sMap = Map.unions (map sMap sms)
-         , sigState = sigState s
-         , sigEnv = sigEnv s
-         }
+runTranslation :: AS.Instruction -> InstructionIdent -> MSS.StateT SigMap IO ()
+runTranslation instruction@AS.Instruction{..} instrIdent = do
+  logMsg $ "Computing instruction signature for: " ++ show instrIdent
+  result <- liftSigM (KeyInstr instrIdent) $
+    computeInstructionSignature' instruction (iEnc instrIdent) (iSet instrIdent)
+  case result of
+    Left err -> do
+      logMsg $ "Error computing instruction signature: " ++ show err
+    Right (Some (SomeFunctionSignature iSig), instStmts) -> do
+      defs <- liftSigM (KeyInstr instrIdent) $ getDefinitions
+      case defs of
+        Left err -> do
+          logMsg $ "Error computing ASL definitions: " ++ show err
+        Right defs -> do
+          logMsg $ "Translating instruction: " ++ prettyIdent instrIdent
+          logMsg $ (show iSig)
+          deps <- processFunction instrIdent (KeyInstr instrIdent) iSig instStmts defs
 
-noFilter :: Filters
-noFilter = Filters (\_ -> \_ -> True) (\_ -> True) (\_ -> \_ -> True) (\_ -> True)
+          logMsg $ "--------------------------------"
+          logMsg "Translating functions: "
+          alldeps <- mapM (translationLoop instrIdent [] defs) (Map.assocs deps)
+          let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
+          MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
 
-defaultFilter :: Filters
-defaultFilter = Filters
-  (\_ -> \_ -> True)
-  (\_ -> True)
-  (\_ -> \_ -> True)
-  (\_ -> True)
-    
-filterStalls :: Filters
-filterStalls = Filters
-  (\_ -> \_ -> True)
-  (\_ -> True)
-  (\_ -> \nm -> not $ List.elem nm stalledDefs)
-  (\_ -> True)
+translationLoop :: InstructionIdent
+                -> [T.Text]
+                -> Definitions arch
+                -> (T.Text, StaticValues)
+                -> MSS.StateT SigMap IO (Set.Set T.Text)
+translationLoop fromInstr callStack defs (fnname, env) = do
+  let finalName = (mkFinalFunctionName env fnname)
+  fdeps <- MSS.gets funDeps
+  case Map.lookup finalName fdeps of
+    Just deps -> return deps
+    _ -> do
+      filteredOut <- isFunFilteredOut fromInstr finalName
+      if filteredOut
+      then return Set.empty
+      else do
+       case Map.lookup fnname (defSignatures defs) of
+           Just (ssig, stmts) | Some ssig <- mkSignature defs env ssig -> do
+                 MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
+                 SomeFunctionSignature sig <- return $ ssig
+                 logMsg $ "Translating function: " ++ show finalName ++ " for instruction: "
+                    ++ prettyIdent fromInstr
+                    ++ "\n CallStack: " ++ show callStack
+                    ++ "\n" ++ show sig ++ "\n"
+                 deps <- processFunction fromInstr (KeyFun finalName) sig stmts defs
+                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
+                 alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Map.assocs deps)
+                 let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
 
-translateOnlyFun :: (T.Text, T.Text) -> T.Text -> Filters
-translateOnlyFun inm fnm = Filters
-  (\(InstructionIdent nm enc _) -> \_ -> (nm, enc) == inm)
-  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
-  (\_ -> \nm -> nm == fnm)
-  (\_ -> False)
+                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
+                 return alldepsSet
+           _ -> error $ "Missing definition for:" <> (show fnname)
 
-translateOnlyInstr :: (T.Text, T.Text) -> Filters
-translateOnlyInstr inm = Filters
-  (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
-  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
-  (\(InstructionIdent nm enc _) -> \_ -> False)
-  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
+withOnlineBackend :: forall fs scope a.
+                          NonceGenerator IO scope
+                       -> CBO.UnsatFeatures
+                       -> (CBO.YicesOnlineBackend scope fs -> IO a)
+                       -> IO a
+withOnlineBackend gen unsatFeat action =
+  let feat = Yices.yicesDefaultFeatures .|. CBO.unsatFeaturesToProblemFeatures unsatFeat in
+  CBO.withOnlineBackend gen feat $ \sym ->
+    do WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
+       action sym
+
+processFunction :: InstructionIdent
+                -> ElemKey
+                -> FunctionSignature globalReads globalWrites init tps
+                -> [AS.Stmt]
+                -> Definitions arch
+                -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
+processFunction fromInstr key sig stmts defs = do
+  handleAllocator <- MSS.lift $ CFH.newHandleAllocator
+  mp <- catchIO key $ functionToCrucible defs sig handleAllocator stmts
+  case mp of
+    Just p -> do
+      filteredOut <- case key of
+        KeyInstr instr -> isInstrTransFilteredOut instr
+        KeyFun fnName -> isFunTransFilteredOut fromInstr fnName
+      if filteredOut
+      then return (funcDepends p)
+      else do
+        logMsg $ "Simulating: " ++ prettyKey key
+        mdep <- catchIO key $
+          withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
+            let cfg = SimulatorConfig { simOutputHandle = IO.stdout
+                                      , simHandleAllocator = handleAllocator
+                                      , simSym = backend
+                                      }
+            symFn <- simulateFunction cfg p
+            return (funcDepends p)
+        return $ fromMaybe Map.empty mdep
+    Nothing -> return Map.empty
+
+getASL :: IO (ASLSpec)
+getASL = do
+  eAslDefs <- AP.parseAslDefsFile defsFilePath
+  eAslSupportDefs <- AP.parseAslDefsFile supportFilePath
+  eAslExtraDefs <- AP.parseAslDefsFile extraDefsFilePath
+  eAslInsts <- AP.parseAslInstsFile instsFilePath
+  eAslRegs <- AP.parseAslRegsFile regsFilePath
+  case (eAslInsts, eAslDefs, eAslRegs, eAslExtraDefs, eAslSupportDefs) of
+    (Left err, _, _, _, _) -> do
+      putStrLn $ "Error loading ASL instructions: " ++ show err
+      exitFailure
+    (_, Left err, _, _, _) -> do
+      putStrLn $ "Error loading ASL definitions: " ++ show err
+      exitFailure
+    (_, _, Left err ,_, _) -> do
+      putStrLn $ "Error loading ASL registers: " ++ show err
+      exitFailure
+    (_, _, _ , Left err, _) -> do
+      putStrLn $ "Error loading extra ASL definitions: " ++ show err
+      exitFailure
+    (_, _, _ , _, Left err) -> do
+      putStrLn $ "Error loading ASL support definitions: " ++ show err
+      exitFailure
+    (Right aslInsts, Right aslDefs, Right aslRegs, Right aslExtraDefs, Right aslSupportDefs) -> do
+      return $ prepASL $ ASLSpec aslInsts aslDefs aslSupportDefs aslExtraDefs aslRegs
 
 logMsg :: String -> MSS.StateT SigMap IO ()
 logMsg msg = do
@@ -261,68 +299,12 @@ isInstrTransFilteredOut inm = do
   skipTranslation <- MSS.gets (optSkipTranslation . sOptions)
   return $ (not $ test inm) || skipTranslation
 
-runWithFilters' :: TranslatorOptions
-                -> ASLSpec
-                -> SigEnv
-                -> SigState
-                -> IO (SigMap)
-runWithFilters' opts spec sigEnv sigState = do
-  let startidx = optStartIndex opts
-  let numInstrs = optNumberOfInstructions opts
-  let getInstr (instr, enc, iset) = do
-        let test = instrFilter $ optFilters $ opts
-        let ident = instrToIdent instr enc iset
-        if test ident then Just (ident, instr) else Nothing
-  let allInstrs = imap (\i -> \nm -> (i,nm)) $ mapMaybe getInstr (collectInstructions (aslInstructions spec))
-  let instrs = case numInstrs of {Just i -> take i (drop startidx allInstrs); _ -> drop startidx allInstrs}
-  sm <- MSS.execStateT (forM_ instrs (\(i, (ident, instr)) -> do
-     logMsg $ "Processing instruction: " ++ show i ++ "/" ++ show (length allInstrs)
-     runTranslation instr ident))
-    (SigMap Map.empty Map.empty Map.empty sigState sigEnv Map.empty Map.empty [] opts)
-  return sm
-
-
-
-runWithFilters :: TranslatorOptions -> IO (SigMap)
-runWithFilters opts = do
-  spec <- getASL
-  putStrLn $ "Loaded "
-    ++ show (length $ aslInstructions spec) ++ " instructions and "
-    ++ show (length $ aslDefinitions spec) ++ " definitions and "
-    ++ show (length $ aslSupportDefinitions spec) ++ " support definitions and "
-    ++ show (length $ aslExtraDefinitions spec) ++ " extra definitions and "
-    ++ show (length $ aslRegisterDefinitions spec) ++ " register definitions."
-  let (sigEnv, sigState) = buildSigState spec
-  runWithFilters' opts spec sigEnv sigState
-
 data ExpectedException =
     UnsupportedInstruction
   | InsufficientStaticTypeInformation
   | CruciblePanic
   | UnsupportedNonlinearArithmetic
--- data ExpectedException =
---     CannotMonomorphize T.Text
---   | SymbolicArguments T.Text
---   | NotImplementedYet String
---   | GlobalArrayOfStructs
---   | MissingFunction String
---   | BadInstructionSpecification T.Text
---   | MissingGlobalDeclaration T.Text
---   | InsufficientStaticTypeInformation
---   | CannotSignExtendUnknownBVSize
---   | BoolComparisonUnsupported
---   | RealValuesUnsupported
---   | LValSliceUnsupported
---   | ExponentiationUnsupported
---   | RmemUnsupported
---   | ParserError
---   | UnsupportedInstruction
    deriving (Eq, Ord, Show)
-
--- badStaticInstructions :: [T.Text]
--- badStaticInstructions =
---   ["aarch32_VDUP_r_A", "aarch32_CRC32_A", "aarch32_VSLI_A", "aarch32_VSRI_A"
---   ,"PFALSE_P__", "SETFFR_F__"]
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
@@ -344,34 +326,6 @@ expectedExceptions k ex = case ex of
                 , "aarch32_SMLABB_A"] ->
       Just $ UnsupportedNonlinearArithmetic
   _ -> Nothing
--- expectedExceptions k ex = case ex of
---   SExcept (SigException _ (UnsupportedSigExpr (AS.ExprMemberBits (AS.ExprBinOp _ _ _) _))) -> Just $ ParserError
---   SExcept (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
---   TExcept _ (CannotMonomorphizeFunctionCall f _) -> Just $ CannotMonomorphize f
---   TExcept _ (CannotMonomorphizeOverloadedFunctionCall f _) -> Just $ CannotMonomorphize f
---   TExcept _ (CannotDetermineBVLength _ _) -> case k of
---    KeyInstr (InstructionIdent nm _ _)
---      | nm `elem` badStaticInstructions ->
---      Just $ InsufficientStaticTypeInformation
---    _ -> Nothing
---   TExcept _ (UnsupportedSlice (AS.SliceRange _ _) _) -> case k of
---     KeyInstr (InstructionIdent nm _ _)
---       | nm `elem` badStaticInstructions ->
---       Just $ InsufficientStaticTypeInformation
---     KeyInstr (InstructionIdent "aarch32_SBFX_A" _ _) ->
---       Just $ CannotSignExtendUnknownBVSize
---     _ -> Nothing
---   TExcept _ (RequiredConcreteValue nm _) -> Just $ SymbolicArguments nm
---   TExcept _ (UnsupportedLVal (AS.LValSlice _)) -> Just $ LValSliceUnsupported
---   TExcept _ (UNIMPLEMENTED msg) -> Just $ NotImplementedYet msg
---   TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
---   TExcept _ (ExpectedBVType _ _) -> Just $ ParserError
---   TExcept _ (InstructionUnsupported) -> case k of
---     KeyInstr _ -> Just $ UnsupportedInstruction
---     _ -> Nothing
---   _ -> Nothing
-
-
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
 isUnexpectedException k e = expectedExceptions k e == Nothing
@@ -544,29 +498,6 @@ instrToIdent AS.Instruction{..} enc iset = InstructionIdent instName enc iset
 finalDepsOf :: Map.Map T.Text StaticValues -> Set.Set T.Text
 finalDepsOf deps = Set.fromList (map (\(nm, env) -> mkFinalFunctionName env nm) (Map.assocs deps))
 
-runTranslation :: AS.Instruction -> InstructionIdent -> MSS.StateT SigMap IO ()
-runTranslation instruction@AS.Instruction{..} instrIdent = do
-  logMsg $ "Computing instruction signature for: " ++ show instrIdent
-  result <- liftSigM (KeyInstr instrIdent) $
-    computeInstructionSignature' instruction (iEnc instrIdent) (iSet instrIdent)
-  case result of
-    Left err -> do
-      logMsg $ "Error computing instruction signature: " ++ show err
-    Right (Some (SomeFunctionSignature iSig), instStmts) -> do
-      defs <- liftSigM (KeyInstr instrIdent) $ getDefinitions
-      case defs of
-        Left err -> do
-          logMsg $ "Error computing ASL definitions: " ++ show err
-        Right defs -> do
-          logMsg $ "Translating instruction: " ++ prettyIdent instrIdent
-          logMsg $ (show iSig)
-          deps <- processFunction instrIdent (KeyInstr instrIdent) iSig instStmts defs
-
-          logMsg $ "--------------------------------"
-          logMsg "Translating functions: "
-          alldeps <- mapM (translationLoop instrIdent [] defs) (Map.assocs deps)
-          let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
-          MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
 
 data Filters = Filters { funFilter :: InstructionIdent -> T.Text -> Bool
                        , instrFilter :: InstructionIdent -> Bool
@@ -627,39 +558,6 @@ catchIO k f = do
     Right err -> (\_ -> Nothing) <$> collectExcept k err
   where
     tracedException (TracedTranslationException nm env stmts exprs e) = TExcept (nm, env, stmts, exprs) e
-  
-
-translationLoop :: InstructionIdent
-                -> [T.Text]
-                -> Definitions arch
-                -> (T.Text, StaticValues)
-                -> MSS.StateT SigMap IO (Set.Set T.Text)
-translationLoop fromInstr callStack defs (fnname, env) = do
-  let finalName = (mkFinalFunctionName env fnname)
-  fdeps <- MSS.gets funDeps
-  case Map.lookup finalName fdeps of
-    Just deps -> return deps
-    _ -> do
-      filteredOut <- isFunFilteredOut fromInstr finalName
-      if filteredOut
-      then return Set.empty
-      else do
-       case Map.lookup fnname (defSignatures defs) of
-           Just (ssig, stmts) | Some ssig <- mkSignature defs env ssig -> do
-                 MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
-                 SomeFunctionSignature sig <- return $ ssig
-                 logMsg $ "Translating function: " ++ show finalName ++ " for instruction: "
-                    ++ prettyIdent fromInstr
-                    ++ "\n CallStack: " ++ show callStack
-                    ++ "\n" ++ show sig ++ "\n"
-                 deps <- processFunction fromInstr (KeyFun finalName) sig stmts defs
-                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
-                 alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Map.assocs deps)
-                 let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
-
-                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
-                 return alldepsSet
-           _ -> error $ "Missing definition for:" <> (show fnname)
 
 -- Debugging function for determining what syntactic forms
 -- actually exist
@@ -669,32 +567,6 @@ queryASL :: (T.Text -> AS.Expr -> b -> b) ->
 queryASL f h g b = do
   ASLSpec aslInsts aslDefs aslDefs' aslDefs'' _ <- getASL
   return $ ASLT.foldASL f h g (aslDefs ++ aslDefs' ++ aslDefs'') aslInsts b
-
-getASL :: IO (ASLSpec)
-getASL = do
-  eAslDefs <- AP.parseAslDefsFile defsFilePath
-  eAslSupportDefs <- AP.parseAslDefsFile supportFilePath
-  eAslExtraDefs <- AP.parseAslDefsFile extraDefsFilePath
-  eAslInsts <- AP.parseAslInstsFile instsFilePath
-  eAslRegs <- AP.parseAslRegsFile regsFilePath
-  case (eAslInsts, eAslDefs, eAslRegs, eAslExtraDefs, eAslSupportDefs) of
-    (Left err, _, _, _, _) -> do
-      putStrLn $ "Error loading ASL instructions: " ++ show err
-      exitFailure
-    (_, Left err, _, _, _) -> do
-      putStrLn $ "Error loading ASL definitions: " ++ show err
-      exitFailure
-    (_, _, Left err ,_, _) -> do
-      putStrLn $ "Error loading ASL registers: " ++ show err
-      exitFailure
-    (_, _, _ , Left err, _) -> do
-      putStrLn $ "Error loading extra ASL definitions: " ++ show err
-      exitFailure
-    (_, _, _ , _, Left err) -> do
-      putStrLn $ "Error loading ASL support definitions: " ++ show err
-      exitFailure
-    (Right aslInsts, Right aslDefs, Right aslRegs, Right aslExtraDefs, Right aslSupportDefs) -> do
-      return $ prepASL $ ASLSpec aslInsts aslDefs aslSupportDefs aslExtraDefs aslRegs
 
 textToISet :: T.Text -> Maybe AS.InstructionSet
 textToISet t = case t of
@@ -722,42 +594,49 @@ getTargetInstrs = do
           }
       _ -> X.throw $ BadTranslatedInstructionsFile
 
-withOnlineBackend :: forall fs scope a.
-                          NonceGenerator IO scope
-                       -> CBO.UnsatFeatures
-                       -> (CBO.YicesOnlineBackend scope fs -> IO a)
-                       -> IO a
-withOnlineBackend gen unsatFeat action =
-  let feat = Yices.yicesDefaultFeatures .|. CBO.unsatFeaturesToProblemFeatures unsatFeat in
-  CBO.withOnlineBackend gen feat $ \sym ->
-    do WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
-       action sym
 
-processFunction :: InstructionIdent
-                -> ElemKey
-                -> FunctionSignature globalReads globalWrites init tps
-                -> [AS.Stmt]
-                -> Definitions arch
-                -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
-processFunction fromInstr key sig stmts defs = do
-  handleAllocator <- MSS.lift $ CFH.newHandleAllocator
-  mp <- catchIO key $ functionToCrucible defs sig handleAllocator stmts
-  case mp of
-    Just p -> do
-      filteredOut <- case key of
-        KeyInstr instr -> isInstrTransFilteredOut instr
-        KeyFun fnName -> isFunTransFilteredOut fromInstr fnName
-      if filteredOut
-      then return (funcDepends p)
-      else do
-        logMsg $ "Simulating: " ++ prettyKey key
-        mdep <- catchIO key $
-          withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
-            let cfg = SimulatorConfig { simOutputHandle = IO.stdout
-                                      , simHandleAllocator = handleAllocator
-                                      , simSym = backend
-                                      }
-            symFn <- simulateFunction cfg p
-            return (funcDepends p)
-        return $ fromMaybe Map.empty mdep
-    Nothing -> return Map.empty
+getTargetFilter :: IO (Filters)
+getTargetFilter = do
+  targetInsts <- getTargetInstrs
+  let filter = noFilter { instrFilter = \ident -> Set.member ident targetInsts }
+  return filter
+
+testDefinition :: TranslatorOptions -> String -> String -> String -> IO (SigMap)
+testDefinition opts inm' encnm' defnm' = do
+  let defnm = T.pack defnm'
+  let inm = T.pack inm'
+  let encnm = T.pack encnm'
+  let filter = translateOnlyFun (inm, encnm) defnm
+  sig <- runWithFilters (opts  { optFilters = filter} )
+  case Map.lookup defnm (sMap sig) of
+    Just _ -> return sig
+    Nothing -> error $ "Translation failed to discover function: " <> show defnm
+
+testInstruction :: TranslatorOptions -> String -> String -> IO (SigMap)
+testInstruction opts instr enc = do
+  runWithFilters (opts { optFilters = translateOnlyInstr (T.pack instr, T.pack enc) })
+
+translateAll :: IO (SigMap)
+translateAll = do
+  runWithFilters defaultOptions
+
+noFilter :: Filters
+noFilter = Filters
+  (\_ -> \_ -> True)
+  (\_ -> True)
+  (\_ -> \_ -> True)
+  (\_ -> True)
+
+translateOnlyFun :: (T.Text, T.Text) -> T.Text -> Filters
+translateOnlyFun inm fnm = Filters
+  (\(InstructionIdent nm enc _) -> \_ -> (nm, enc) == inm)
+  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
+  (\_ -> \nm -> nm == fnm)
+  (\_ -> False)
+
+translateOnlyInstr :: (T.Text, T.Text) -> Filters
+translateOnlyInstr inm = Filters
+  (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
+  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
+  (\(InstructionIdent nm enc _) -> \_ -> False)
+  (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
