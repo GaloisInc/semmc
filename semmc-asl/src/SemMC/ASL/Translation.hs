@@ -252,17 +252,22 @@ data TranslationState h ret s =
 -- We simulate the UNPREDICATABLE and UNDEFINED ASL statements with virtual
 -- processor state.
 unpredictableVarName :: T.Text
-unpredictableVarName = T.pack "UNPREDICTABLE"
+unpredictableVarName = T.pack "__UnpredictableBehavior"
 
 -- | The distinguished name of the global variable that represents the bit of
 -- state indicating that the processor is in the UNDEFINED state.
 undefinedVarName :: T.Text
-undefinedVarName = T.pack "UNDEFINED"
+undefinedVarName = T.pack "__UndefinedBehavior"
 
 -- | The distinguished name of the global variable that represents the bit of
 -- state indicating that an assertion has been tripped.
 assertionfailureVarName :: T.Text
-assertionfailureVarName = T.pack "ASSERTIONFAILURE"
+assertionfailureVarName = T.pack "__AssertionFailure"
+
+-- | The distinguished name of the global variable that represents the bit of
+-- state indicating that instruction processing is finished
+endofinstructionVarName :: T.Text
+endofinstructionVarName = T.pack "__EndOfInstruction"
 
 -- | Obtain the current value of all the give globals
 -- This is a subset of all of the global state (and a subset of the current
@@ -314,23 +319,6 @@ assertExpr ov e msg = do
   Refl <- assertAtomType e CT.BoolRepr res
   assertAtom ov res (Just e) msg
 
-
-
-
-setExecutionStatus :: T.Text -> Generator h s arch ret ()
-setExecutionStatus stnm = do
-  gs <- MS.gets tsGlobals
-  en <- MS.gets tsEnums
-  case Map.lookup "__CurrentExecutionStatus" gs of
-    Just (Some es) ->
-      case Map.lookup stnm en of
-        Just i ->
-          if | Just Refl <- testEquality (CCG.globalType es) CT.IntegerRepr ->
-               CCG.writeGlobal es (CCG.App (CCE.IntLit i))
-             | otherwise -> throwTrace $ TranslationError "Bad type for execution status"
-        _ -> throwTrace $ TranslationError $ "Missing execution status: " ++ show stnm
-    _ -> throwTrace $ TranslationError $ "Missing global execution status variable."
-
 assertAtom :: Overrides arch
            -> CCG.Atom s CT.BoolType
            -> Maybe AS.Expr
@@ -342,7 +330,11 @@ assertAtom ov test mexpr msg = do
     Just expr ->
       CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.TextLit $ msg <> (T.pack $ "Expression: " <> show expr)))
     _ -> CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.TextLit msg))
-  CCG.ifte_ (CCG.AtomExpr test) (return ()) (setExecutionStatus "__StatusAssertionFailure")
+  Some assertTrippedE <- lookupVarRef assertionfailureVarName
+  assertTripped <- CCG.mkAtom assertTrippedE
+  Refl <- assertAtomType' CT.BoolRepr assertTripped
+  result <- CCG.mkAtom $ CCG.App (CCE.Or (CCG.AtomExpr assertTripped) (CCG.AtomExpr test))
+  translateAssignment' ov (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny assertionfailureVarName)) result TypeBasic Nothing
 
 crucibleToStaticType :: Some CT.TypeRepr -> Maybe StaticType
 crucibleToStaticType (Some ct) = case ct of
@@ -359,26 +351,6 @@ getStaticEnv = do
   where
     staticTypeMap f nm =
       fromMaybe Nothing $ crucibleToStaticType <$> (f nm)
-
--- | Ensure that any called procedures or functions haven't
--- raised exceptions. Otherwise we should stop executing and
--- simply propagate the execution status.
--- checkExecutionStatus :: Overrides arch -> Generator h s arch ret ()
--- checkExecutionStatus ov = do
---   Some statusE <- lookupVarRef "__CurrentExecutionStatus"
---   Some normalStatusE <- lookupVarRef "__StatusNormal"
---   status <- CCG.mkAtom statusE
---   normalStatus <- CCG.mkAtom normalStatusE
---   Refl <- assertAtomType' CT.IntegerRepr status
---   Refl <- assertAtomType' CT.IntegerRepr normalStatus
---   let test = CCG.App $ CCE.IntEq (CCG.AtomExpr status) (CCG.AtomExpr normalStatus)
---   CCG.ifte_ test (return ()) (abnormalExit ov)
-
-checkExecutionStatus :: Overrides arch -> Generator h s arch ret ()
-checkExecutionStatus ov = do
-  Some test <- translateExpr ov (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "IsExecutionHalted") [])
-  Refl <- assertAtomType' CT.BoolRepr test
-  CCG.ifte_ (CCG.AtomExpr test) (return ()) (abnormalExit ov)
 
 abnormalExit :: Overrides arch -> Generator h s arch ret ()
 abnormalExit ov = do
@@ -487,6 +459,8 @@ translateFunctionCall ov qIdent args ty = do
             withGlobals (sfuncGlobalWriteReprs sig) $ \thisGlobalReprs thisGlobals -> do
               _ <- CCG.extensionStmt (SetRegState thisGlobals (CCG.App $ CCE.ExtensionApp globalResult))
               return ()
+            globalResultAtom <- CCG.mkAtom $ CCG.App $ CCE.ExtensionApp $ globalResult
+            Ctx.traverseAndCollect (checkEarlyExit globalResultAtom) (sfuncGlobalWriteReprs sig)
             let returnResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i2of2 (CCG.AtomExpr atom)
             result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
             case retT of
@@ -504,6 +478,30 @@ translateFunctionCall ov qIdent args ty = do
               -- indicates no return value. This is a workaround for empty tuples not being
               -- completely supported by crucible/what4
               _ -> return Nothing
+  where
+    -- At the cost of adding significant complextity to the CFG, we *could* attempt to terminate early
+    -- whenever undefined or unpredictable behavior is encountered from a called function.
+    -- This seems excessive, since we can always check these flags at the toplevel.
+
+    -- EndOfInstruction, however, should retain the processor state while avoiding any
+    -- additional instruction processing.
+
+    -- We only need to perform this check if the global writes set of a called function could
+    -- possibly have updated the end of instruction flag.
+    checkEarlyExit :: forall tp ctx
+                    . CCG.Atom s (CT.SymbolicStructType ctx)
+                   -> Ctx.Index ctx tp
+                   -> LabeledValue T.Text WT.BaseTypeRepr tp
+                   -> Generator h s arch ret ()
+    checkEarlyExit struct idx (LabeledValue globName rep) = do
+      if globName `elem` [endofinstructionVarName]
+      then do
+        let testE = GetBaseStruct (CCG.typeOfAtom struct) idx (CCG.AtomExpr struct)
+        test <- CCG.mkAtom $ CCG.App $ CCE.ExtensionApp $ testE
+        Refl <- assertAtomType' CT.BoolRepr test
+        CCG.ifte_ (CCG.AtomExpr test) (abnormalExit ov) (return ())
+      else return ()
+
 
 
 -- | Translate a for statement into Crucible
@@ -897,44 +895,6 @@ translateImplicitSlice ov rhsRepr rhs offset lv  = do
       translateAssignment' ov lv slicedRhs TypeBasic Nothing
       return (offset + lvLength)
     _ -> X.throw $ UnsupportedLVal lv
-
--- These functions push all the bitvector type matching into runtime checks.
-
-maybeBVSelect :: WT.NatRepr idx
-               -> WT.NatRepr len
-               -> WT.NatRepr w
-               -> Maybe (CCG.Expr ext s (CT.BVType w))
-               -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType len)))
-maybeBVSelect lo len w (Just expr) =
-  if | Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` len
-     , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` w
-     , Just WT.LeqProof <- (lo `WT.addNat` len) `WT.testLeq` w
-     -> Just $ CCG.App (CCE.BVSelect lo len w expr)
-     | otherwise -> Nothing
-maybeBVSelect _ _ _ Nothing = Nothing
-
-
-maybeBVConcat :: WT.NatRepr u
-               -> WT.NatRepr v
-               -> Maybe (CCG.Expr ext s (CT.BVType u))
-               -> Maybe (CCG.Expr ext s (CT.BVType v))
-               -> Maybe ((CCG.Expr ext s) (CT.BaseToType (WT.BaseBVType (u WT.+ v))))
-maybeBVConcat lo len (Just pre) (Just atom) =
-  if | Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` len
-     , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` lo
-     , Just WT.LeqProof <- (WT.knownNat @1)  `WT.testLeq` (lo `WT.addNat` len)
-     -> Just $ CCG.App (CCE.BVConcat lo len pre atom)
-     | otherwise -> Nothing
-maybeBVConcat lo _ Nothing (Just atom) =
-  if | Just Refl <- testEquality (WT.knownNat @0) lo
-     -> Just atom
-     | otherwise -> error "BVConcat type mismatch"
-maybeBVConcat _ len (Just pre) Nothing =
-  if | Just Refl <- testEquality (WT.knownNat @0) len
-     -> Just pre
-     | otherwise -> error "BVConcat type mismatch"
-maybeBVConcat _ _ _ _ = error "BVConcat type mismatch"
-
 
 translatelValSlice :: Overrides arch
                -> AS.LValExpr
@@ -2465,16 +2425,16 @@ overrides = Overrides {..}
 
           _ | Just (nm, sv) <- unstaticBinding s -> Just $ do
               mapStaticVals (Map.insert nm sv)
-          AS.StmtCall (AS.QualifiedIdentifier _ "ASLHaltExecution")
-            [AS.ExprVarRef (AS.QualifiedIdentifier _ status)] -> Just $ do
-            setExecutionStatus status
+          AS.StmtCall (AS.QualifiedIdentifier _ "ASLSetUndefined") [] -> Just $ do
+            result <- CCG.mkAtom $ CCG.App $ CCE.BoolLit True
+            translateAssignment' overrides (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny undefinedVarName)) result TypeBasic Nothing
             abnormalExit overrides
-          AS.StmtCall (AS.QualifiedIdentifier _ "EndOfInstruction") [] -> Just $ do
-            setExecutionStatus "__StatusEndInstruction"
+          AS.StmtCall (AS.QualifiedIdentifier _ "ASLSetUnpredictable") [] -> Just $ do
+            result <- CCG.mkAtom $ CCG.App $ CCE.BoolLit True
+            translateAssignment' overrides (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny unpredictableVarName)) result TypeBasic Nothing
             abnormalExit overrides
           AS.StmtCall (AS.QualifiedIdentifier _ "__abort") [] -> Just $ do
-            setExecutionStatus "__StatusException"
-            abnormalExit overrides
+            translateStatement overrides $ AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "EndOfInstruction") []
           AS.StmtCall (AS.QualifiedIdentifier q nm@"TakeHypTrapException") [arg] -> Just $ do
             (_, ext) <- translateExpr' overrides arg ConstraintNone
             ov <- case ext of

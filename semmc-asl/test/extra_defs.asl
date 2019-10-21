@@ -8,25 +8,25 @@ constant integer LOG2_TAG_GRANULE=4;
 constant integer TAG_GRANULE=2 ^ LOG2_TAG_GRANULE;
 
 
-enumeration __ExecutionStatus { __StatusNormal,
-                                __StatusUndefined,
-                                __StatusUnpredictable,
-                                __StatusException,
-                                __StatusAssertionFailure,
-                                __StatusEndInstruction
-                              };
+boolean __AssertionFailure;
+boolean __EndOfInstruction;
+boolean __UndefinedBehavior;
+boolean __UnpredictableBehavior;
 
-__ExecutionStatus __CurrentExecutionStatus;
+ASLCheckAssertion(boolean assertion)
+  __AssertionFailure = __AssertionFailure OR (!assertion);
+  return;
 
-boolean IsExecutionHalted()
-  return __CurrentExecutionStatus != __StatusNormal;
+ASLSetUndefined()
+  __UndefinedBehavior = TRUE;
+  return;
 
-ASLHaltExecution(__ExecutionStatus status)
-  __CurrentExecutionStatus = status;
+ASLSetUnpredictable()
+  __UnpredictableBehavior = TRUE;
   return;
 
 EndOfInstruction()
-  ASLHaltExecution(__StatusEndInstruction);
+  __EndOfInstruction = TRUE;
   return;
 
 

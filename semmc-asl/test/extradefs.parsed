@@ -66,48 +66,70 @@
       (ExprLitNat 2)
       (ExprVarRef
         (QualifiedIdentifier Any LOG2_TAG_GRANULE))))
-  (DefTypeEnum
-    __ExecutionStatus
-    (list __StatusNormal __StatusUndefined __StatusUnpredictable __StatusException __StatusAssertionFailure __StatusEndInstruction))
   (DefVariable
-    (QualifiedIdentifier Any __CurrentExecutionStatus)
+    (QualifiedIdentifier Any __AssertionFailure)
     (TypeRef
-      (QualifiedIdentifier Any __ExecutionStatus)))
+      (QualifiedIdentifier Any boolean)))
+  (DefVariable
+    (QualifiedIdentifier Any __EndOfInstruction)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
+  (DefVariable
+    (QualifiedIdentifier Any __UndefinedBehavior)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
+  (DefVariable
+    (QualifiedIdentifier Any __UnpredictableBehavior)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
   (DefCallable
-    (QualifiedIdentifier Any IsExecutionHalted)
-    (list)
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any boolean)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtReturn
-            (Just
-              (ExprBinOp
-                "!="
-                (ExprVarRef
-                  (QualifiedIdentifier Any __CurrentExecutionStatus))
-                (ExprVarRef
-                  (QualifiedIdentifier Any __StatusNormal)))))))))
-  (DefCallable
-    (QualifiedIdentifier Any ASLHaltExecution)
+    (QualifiedIdentifier Any ASLCheckAssertion)
     (list
       (SymDecl
-        status
+        assertion
         (TypeRef
-          (QualifiedIdentifier Any __ExecutionStatus))))
+          (QualifiedIdentifier Any boolean))))
     Nothing
     (Just
       (StmtBlock
         (list
           (StmtAssign
             (LValVarRef
-              (QualifiedIdentifier Any __CurrentExecutionStatus))
+              (QualifiedIdentifier Any __AssertionFailure))
+            (ExprBinOp
+              "OR"
+              (ExprVarRef
+                (QualifiedIdentifier Any __AssertionFailure))
+              (ExprUnOp
+                "!"
+                (ExprVarRef
+                  (QualifiedIdentifier Any assertion)))))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any ASLSetUndefined)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __UndefinedBehavior))
             (ExprVarRef
-              (QualifiedIdentifier Any status)))
+              (QualifiedIdentifier Any TRUE)))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any ASLSetUnpredictable)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __UnpredictableBehavior))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
           (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier Any EndOfInstruction)
@@ -116,11 +138,11 @@
     (Just
       (StmtBlock
         (list
-          (StmtCall
-            (QualifiedIdentifier Any ASLHaltExecution)
-            (list
-              (ExprVarRef
-                (QualifiedIdentifier Any __StatusEndInstruction))))
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __EndOfInstruction))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
           (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier AArch32 SetDefaultCond)

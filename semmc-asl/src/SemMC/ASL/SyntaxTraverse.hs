@@ -310,14 +310,13 @@ mkSyntaxOverrides defs =
         AS.StmtAssign lv rhs
           | Just f <- assignOverrides lv ->
             f rhs
-        AS.StmtUndefined -> mkHaltStmt "__StatusUndefined"
-        AS.StmtUnpredictable -> mkHaltStmt "__StatusUnpredictable"
-        AS.StmtSeeExpr {} -> mkHaltStmt "__StatusException"
-        AS.StmtSeeString {} -> mkHaltStmt "__StatusException"
+        AS.StmtUndefined -> mkCallStmt "ASLSetUndefined"
+        AS.StmtUnpredictable -> mkCallStmt "ASLSetUnpredictable"
+        AS.StmtSeeExpr {} -> mkCallStmt "ASLSetUndefined"
+        AS.StmtSeeString {} -> mkCallStmt "ASLSetUndefined"
         _ -> stmt
 
-      mkHaltStmt nm = AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "ASLHaltExecution")
-            [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny nm)]
+      mkCallStmt nm = AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny nm) []
 
       exprOverrides' expr = case expr of
         -- Limited support for alternate slice syntax

@@ -451,8 +451,6 @@ insertUnique k v =
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM spec = do
   mapM_ initDefGlobal (allDefs spec)
-  -- FIXME: Should we just collect all the callables from the start?
-  _ <- exprGlobalVars (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "IsExecutionHalted") [])
   return ()
   where
     initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
@@ -886,7 +884,6 @@ stmtGlobalVars stmt =
           AS.StmtAssign le e -> mergeGVarRefs <$> lValExprGlobalVars le <*> exprGlobalVars e
           AS.StmtCall qName argEs -> callableGlobalVars' qName argEs
           AS.StmtReturn (Just e) -> exprGlobalVars e
-          AS.StmtAssert e -> exprGlobalVars e
           AS.StmtIf branches mDefault -> do
             branchGlobals <- forM branches $ \(testExpr, stmts) -> do
               testExprGlobals <- exprGlobalVars testExpr
@@ -931,12 +928,15 @@ callableGlobalVars c@Callable{..} = do
       storeCallableGlobals c globals
       return globals
 
--- All functions implicitly refer to the execution status
+-- Any function may implicitly make an assertion
 getBuiltinGlobalVars :: SigM ext f GlobalVarRefs
-getBuiltinGlobalVars =
-  mergeGVarRefs <$> readGlobal execStatus <*> writeGlobal execStatus
+getBuiltinGlobalVars = do
+  reads <- unionGVarRefs <$> traverse readGlobal builtinReads
+  writes <- unionGVarRefs <$> traverse writeGlobal builtinWrites
+  return $ mergeGVarRefs reads writes
   where
-    execStatus = "__CurrentExecutionStatus"
+    builtinReads = ["__AssertionFailure"]
+    builtinWrites = ["__AssertionFailure"]
 
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
@@ -1155,6 +1155,12 @@ overrides :: forall arch . Overrides arch
 overrides = Overrides {..}
   where overrideStmt ::  AS.Stmt -> Maybe [AS.Stmt]
         overrideStmt stmt = case stmt of
+          AS.StmtAssert e ->
+            Just $ [ AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "ASLCheckAssertion") [e] ]
+
+          AS.StmtCall (AS.QualifiedIdentifier _ "__abort") [] ->
+            Just $ [ AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "EndOfInstruction") [] ]
+
           AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapException") args ->
             Just $ [ AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapExceptioninteger") args
                    , AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapExceptionExceptionRecord") args

@@ -199,6 +199,8 @@ staticBinOp bop msv msv' =
       | Just sv <- msv
       , Just sv' <- msv' ->
         Just $ StaticBool $ sv /= sv'
+
+    --integer binary operation
     _ | Just (StaticInt i) <- msv
       , Just (StaticInt i') <- msv' ->
         let
