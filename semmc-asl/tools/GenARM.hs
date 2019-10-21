@@ -468,6 +468,10 @@ reportStats sopts sm = do
 prettyIdent :: InstructionIdent -> String
 prettyIdent (InstructionIdent nm enc iset) = show nm <> " " <> show enc <> " " <> show iset
 
+prettyKey :: ElemKey -> String
+prettyKey (KeyInstr ident) = prettyIdent ident
+prettyKey (KeyFun fnName) = T.unpack fnName
+
 data TranslatorException =
     TExcept (T.Text, StaticValues, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
   | SExcept SigException
@@ -556,7 +560,7 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
         Right defs -> do
           logMsg $ "Translating instruction: " ++ prettyIdent instrIdent
           logMsg $ (show iSig)
-          deps <- processInstruction instrIdent iSig instStmts defs
+          deps <- processFunction instrIdent (KeyInstr instrIdent) iSig instStmts defs
 
           logMsg $ "--------------------------------"
           logMsg "Translating functions: "
@@ -641,13 +645,14 @@ translationLoop fromInstr callStack defs (fnname, env) = do
       then return Set.empty
       else do
        case Map.lookup fnname (defSignatures defs) of
-           Just (ssig, stmts) | Some sig <- mkSignature defs env ssig -> do
-                 MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some sig) (sMap s) }
+           Just (ssig, stmts) | Some ssig <- mkSignature defs env ssig -> do
+                 MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
+                 SomeFunctionSignature sig <- return $ ssig
                  logMsg $ "Translating function: " ++ show finalName ++ " for instruction: "
                     ++ prettyIdent fromInstr
                     ++ "\n CallStack: " ++ show callStack
                     ++ "\n" ++ show sig ++ "\n"
-                 deps <- processFunction fromInstr finalName sig stmts defs
+                 deps <- processFunction fromInstr (KeyFun finalName) sig stmts defs
                  MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
                  alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Map.assocs deps)
                  let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
@@ -728,22 +733,25 @@ withOnlineBackend gen unsatFeat action =
     do WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
        action sym
 
-processInstruction :: InstructionIdent
-                   -> FunctionSignature globalReads globalWrites init tps
-                   -> [AS.Stmt]
-                   -> Definitions arch
-                   -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
-processInstruction instr sig stmts defs = do
+processFunction :: InstructionIdent
+                -> ElemKey
+                -> FunctionSignature globalReads globalWrites init tps
+                -> [AS.Stmt]
+                -> Definitions arch
+                -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
+processFunction fromInstr key sig stmts defs = do
   handleAllocator <- MSS.lift $ CFH.newHandleAllocator
-  mp <- catchIO (KeyInstr instr) $ functionToCrucible defs sig handleAllocator stmts
+  mp <- catchIO key $ functionToCrucible defs sig handleAllocator stmts
   case mp of
     Just p -> do
-      filteredOut <- isInstrTransFilteredOut instr
+      filteredOut <- case key of
+        KeyInstr instr -> isInstrTransFilteredOut instr
+        KeyFun fnName -> isFunTransFilteredOut fromInstr fnName
       if filteredOut
       then return (funcDepends p)
       else do
-        logMsg $ "Simulating instruction: " ++ prettyIdent instr
-        mdep <- catchIO (KeyInstr instr) $
+        logMsg $ "Simulating: " ++ prettyKey key
+        mdep <- catchIO key $
           withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
             let cfg = SimulatorConfig { simOutputHandle = IO.stdout
                                       , simHandleAllocator = handleAllocator
@@ -753,32 +761,3 @@ processInstruction instr sig stmts defs = do
             return (funcDepends p)
         return $ fromMaybe Map.empty mdep
     Nothing -> return Map.empty
-
-processFunction :: InstructionIdent
-                -> T.Text
-                -> SomeFunctionSignature ret
-                -> [AS.Stmt]
-                -> Definitions arch
-                -> MSS.StateT SigMap IO (Map.Map T.Text StaticValues)
-processFunction fromInstr fnName sig stmts defs =
-  case sig of
-    SomeFunctionSignature fSig -> do
-      handleAllocator <- MSS.lift $ CFH.newHandleAllocator
-      mf <- catchIO (KeyFun fnName) $ functionToCrucible defs fSig handleAllocator stmts
-      case mf of
-        Just f -> do
-          filteredOut <- isFunTransFilteredOut fromInstr fnName
-          if filteredOut
-          then return (funcDepends f)
-          else do
-            logMsg $ "Simulating function: " ++ show fnName
-            mdep <- catchIO (KeyFun fnName) $
-              withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
-                let cfg = SimulatorConfig { simOutputHandle = IO.stdout
-                                        , simHandleAllocator = handleAllocator
-                                        , simSym = backend
-                                        }
-                symFn <- simulateFunction cfg f
-                return (funcDepends f)
-            return $ fromMaybe Map.empty mdep
-        Nothing -> return Map.empty
