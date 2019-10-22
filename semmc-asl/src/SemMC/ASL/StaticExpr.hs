@@ -518,10 +518,10 @@ staticBinding (nm, sv) =
   AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "StaticBind")
     [AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny nm), staticToExpr sv]
 
-unstaticBinding :: AS.Stmt -> Maybe (T.Text, StaticValue)
-unstaticBinding (AS.StmtCall (AS.QualifiedIdentifier _ "StaticBind") [AS.ExprVarRef (AS.QualifiedIdentifier _ nm), e]) =
-  case exprToStatic emptyStaticEnvMap e of
-    Just sv -> Just (nm, sv)
+unstaticBinding :: StaticEnv env => AS.Stmt -> Maybe (env -> (T.Text, StaticValue))
+unstaticBinding (AS.StmtCall (AS.QualifiedIdentifier _ "StaticBind") [AS.ExprVarRef (AS.QualifiedIdentifier _ nm), e]) = Just $ \env ->
+  case exprToStatic env e of
+    Just sv -> (nm, sv)
     _ -> error "Invalid StaticBind"
 unstaticBinding _ = Nothing
 

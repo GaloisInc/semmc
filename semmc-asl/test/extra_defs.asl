@@ -30,6 +30,61 @@ EndOfInstruction()
   return;
 
 
+bits(width) BigEndianReverse (bits(width) value)
+    assert width IN {8, 16, 32, 64, 128};
+    integer half = width DIV 2;
+    StaticBind(half, width DIV 2); // hint to resolve dependent type
+    if width == 8 then return value;
+    return BigEndianReverse(value<half-1:0>) : BigEndianReverse(value<width-1:half>);
+
+// Shifting Overrides
+
+(bits(N), bit) LSL_C(bits(N) x, integer shift)
+    assert shift > 0;
+    shift = if shift > N then N else shift;
+    carry_out = x<N - shift>;
+    result = LSL(x, shift);
+    return (result, carry_out);
+
+bits(N) LSL(bits(N) x, integer shift)
+    assert shift >= 0;
+    shift = if shift > N then N else shift;
+    if shift == 0 then
+        result = x;
+    else
+        result = x << shift;
+    return result;
+
+(bits(N), bit) LSR_C(bits(N) x, integer shift)
+    assert shift > 0;
+    shift = if shift > N then N else shift;
+    carry_out = x<shift-1>;
+    result = LSR(x, shift);
+    return (result, carry_out);
+
+bits(N) LSR(bits(N) x, integer shift)
+    assert shift >= 0;
+    if shift == 0 then
+        result = x;
+    else
+        result = x >> shift;
+    return result;
+
+(bits(N), bit) ASR_C(bits(N) x, integer shift)
+    assert shift > 0;
+    shift = if shift > N then N else shift;
+    carry_out = x<shift-1>;
+    result = ASR(x, shift);
+    return (result, carry_out);
+
+bits(N) ASR(bits(N) x, integer shift)
+    assert shift >= 0;
+    shift = if shift > N then N else shift;
+    if shift == 0 then
+        result = x;
+    else
+        result = primitive_ASR(x, shift);
+    return result;
 
 bits(4) AArch32.SetDefaultCond()
   if __ThisInstrEnc IN {InstrEnc_A64, InstrEnc_A32} || PSTATE.IT<3:0> == Zeros(4) then

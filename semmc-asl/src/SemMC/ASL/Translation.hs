@@ -2297,18 +2297,39 @@ polymorphicBVOverrides e ty = case e of
     translateExpr' overrides
      (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Zeros") [repe])
      ty
-  -- FIXME: Needs an actual implementation
   AS.ExprCall (AS.QualifiedIdentifier _ fun@"Replicate") args@[bve, repe] -> Just $ do
     env <- getStaticEnv
     Some bvatom <- translateExpr overrides bve
     case (exprToStatic env repe, CCG.typeOfAtom bvatom) of
       (Just (StaticInt width), CT.BVRepr nr) |
-          Just (Some valWidth) <- WT.someNat (width * WT.intValue nr)
-        , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` valWidth -> do
-          mkAtom (CCG.App (CCE.BVLit valWidth 0))
+          Just (Some rep) <- WT.someNat width
+        , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` rep -> do
+          mkAtom $ replicateBV rep nr (CCG.AtomExpr bvatom)
       (Nothing, _) -> throwTrace $ RequiredConcreteValue repe (staticEnvMapVals env)
       _ -> throwTrace $ InvalidOverloadedFunctionCall fun args
   _ -> Nothing
+
+
+replicateBV :: forall ext s rep w
+             . 1 WT.<= w
+            => 1 WT.<= rep
+            => WT.NatRepr rep
+            -> WT.NatRepr w
+            -> CCG.Expr ext s (CT.BVType w)
+            -> CCG.Expr ext s (CT.BVType (rep WT.* w))
+replicateBV repRepr wRepr bv =
+  if | predRepr <- WT.decNat repRepr -- rep - 1
+     , mulRepr <- predRepr `WT.natMultiply` wRepr -- rep * w
+     , Refl <- WT.minusPlusCancel repRepr (WT.knownNat @1) ->
+       case WT.isZeroOrGT1 predRepr of
+         Left Refl -> bv
+         Right WT.LeqProof
+           | WT.LeqProof <- WT.addPrefixIsLeq predRepr (WT.knownNat @1)
+           , Refl <- WT.lemmaMul wRepr repRepr
+           , Refl <- WT.plusMinusCancel predRepr (WT.knownNat @1)
+           , WT.LeqProof <- WT.leqMulPos predRepr wRepr
+           , WT.LeqProof <- WT.leqAdd (WT.leqProof (WT.knownNat @1) wRepr) mulRepr ->
+             CCG.App $ CCE.BVConcat wRepr mulRepr bv (replicateBV predRepr wRepr bv)
 
 -- Overrides for bitshifting functions
 bitShiftOverrides :: forall h s arch ret
@@ -2316,59 +2337,14 @@ bitShiftOverrides :: forall h s arch ret
                        -> TypeConstraint
                        -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
 bitShiftOverrides e ty = case e of
- -- FIXME: fix definition below; currently it just returns its args
-  AS.ExprCall (AS.QualifiedIdentifier _ "ASR_C") [x, shift] -> Just $ do
+  AS.ExprCall (AS.QualifiedIdentifier _ "primitive_ASR") [x, shift] -> Just $ do
     Some xAtom <- translateExpr overrides x
     Some shiftAtom <- translateExpr overrides shift
-    bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
-    let xType = CCG.typeOfAtom xAtom
-        bitType = CT.BVRepr (WT.knownNat @1)
-        structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
-        structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
-        struct = MkBaseStruct structType structElts
-    structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
-    return $ (Some structAtom, TypeTuple [TypeBasic, TypeBasic])
-  -- FIXME: fix definition below; currently it just returns its args
-  AS.ExprCall (AS.QualifiedIdentifier _ "LSL_C") [x, shift] -> Just $ do
-    Some xAtom <- translateExpr overrides x
-    Some shiftAtom <- translateExpr overrides shift
-    bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
-    let xType = CCG.typeOfAtom xAtom
-        bitType = CT.BVRepr (WT.knownNat @1)
-        structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
-        structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
-        struct = MkBaseStruct structType structElts
-    structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
-    return $ (Some structAtom, TypeTuple [TypeBasic, TypeBasic])
-  -- FIXME: fix definition below; currently it just returns its args
-  AS.ExprCall (AS.QualifiedIdentifier _ "LSL") [x, shift] -> Just $ do
-    (Some xAtom, _) <- translateExpr' overrides x ty
-    Some shiftAtom <- translateExpr overrides shift
-    return $ (Some xAtom, TypeBasic)
-  -- FIXME: fix definition below; currently it just returns its args
-  AS.ExprCall (AS.QualifiedIdentifier _ "LSR_C") [x, shift] -> Just $ do
-    Some xAtom <- translateExpr overrides x
-    Some shiftAtom <- translateExpr overrides shift
-    bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
-    let xType = CCG.typeOfAtom xAtom
-        bitType = CT.BVRepr (WT.knownNat @1)
-        structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
-        structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
-        struct = MkBaseStruct structType structElts
-    structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
-    return $ (Some structAtom, TypeTuple [TypeBasic, TypeBasic])
-  -- FIXME: fix definition below; currently it just returns its args
-  AS.ExprCall (AS.QualifiedIdentifier _ "RRX_C") [x, shift] -> Just $ do
-    Some xAtom <- translateExpr overrides x
-    Some shiftAtom <- translateExpr overrides shift
-    bitAtom <- CCG.mkAtom (CCG.App (CCE.BVLit (WT.knownNat @1) 0))
-    let xType = CCG.typeOfAtom xAtom
-        bitType = CT.BVRepr (WT.knownNat @1)
-        structType = Ctx.empty Ctx.:> xType Ctx.:> bitType
-        structElts = Ctx.empty Ctx.:> CCG.AtomExpr xAtom Ctx.:> CCG.AtomExpr bitAtom
-        struct = MkBaseStruct structType structElts
-    structAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
-    return $ (Some structAtom, TypeTuple [TypeBasic, TypeBasic])
+    Refl <- assertAtomType shift CT.IntegerRepr shiftAtom
+    BVRepr nr <- getAtomBVRepr xAtom
+    let bvShift = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr shiftAtom)
+    result <- CCG.mkAtom (CCG.App $ CCE.BVAshr nr (CCG.AtomExpr xAtom) bvShift)
+    return $ (Some result, TypeBasic)
   _ -> Nothing
 
 
@@ -2423,8 +2399,10 @@ overrides = Overrides {..}
               MS.modify' $ \s -> s { tsVarRefs = foldr Map.delete (tsVarRefs s) unvars
                                    , tsStaticValues = foldr Map.delete (tsStaticValues s) unvars}
 
-          _ | Just (nm, sv) <- unstaticBinding s -> Just $ do
-              mapStaticVals (Map.insert nm sv)
+          _ | Just f <- unstaticBinding s -> Just $ do
+                env <- getStaticEnv
+                let (nm, sv) = f env
+                mapStaticVals (Map.insert nm sv)
           AS.StmtCall (AS.QualifiedIdentifier _ "ASLSetUndefined") [] -> Just $ do
             result <- CCG.mkAtom $ CCG.App $ CCE.BoolLit True
             translateAssignment' overrides (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny undefinedVarName)) result TypeBasic Nothing
@@ -2460,10 +2438,6 @@ overrides = Overrides {..}
               translateExpr' overrides (AS.ExprInSet e [AS.SetEltSingle mask]) ty
             AS.ExprBinOp AS.BinOpNEQ e mask@(AS.ExprLitMask _) -> Just $ do
               translateExpr' overrides (AS.ExprUnOp AS.UnOpNot (AS.ExprInSet e [AS.SetEltSingle mask])) ty
-            -- FIXME: implement this (asl definition is recursive and dependently typed)
-            AS.ExprCall (AS.QualifiedIdentifier _ "BigEndianReverse") [x] -> Just $ do
-              Some xAtom <- translateExpr overrides x
-              mkAtom (CCG.AtomExpr xAtom)
             AS.ExprCall (AS.QualifiedIdentifier _ "sizeOf") [x] -> Just $ do
               Some xAtom <- translateExpr overrides x
               BVRepr nr <- getAtomBVRepr xAtom
