@@ -10,7 +10,7 @@
 module Main ( main ) where
 
 import qualified Control.Exception as X
-import           Control.Monad (forM_, foldM)
+import           Control.Monad (forM_, foldM, when)
 import qualified Control.Monad.State.Lazy as MSS
 import qualified Control.Monad.RWS as RWS
 import qualified Control.Monad.Except as E
@@ -32,7 +32,11 @@ import qualified Lang.Crucible.FunctionHandle as CFH
 import qualified Language.ASL.Parser as AP
 import qualified Language.ASL.Syntax as AS
 import System.Exit (exitFailure)
+
+import qualified System.Exit as IO
+import qualified System.Environment as IO
 import qualified System.IO as IO
+import           System.Console.GetOpt
 import           Panic hiding (panic)
 import           Lang.Crucible.Panic ( Crucible )
 
@@ -55,75 +59,145 @@ import           What4.ProblemFeatures
 
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
 
-instsFilePath :: FilePath
-instsFilePath = "test/insts.parsed"
+data Arg =
+  InstructionsFile FilePath
+  | DefinitionsFile FilePath
+  | SupportFile FilePath
+  | RegisterFile FilePath
+  | ExtraDefsFile FilePath
+  | TargetInstructionsFile FilePath
+  | VerboseTranslation Bool
+  | InstructionStartIndex Integer
+  | CollectExceptions Bool
+  | SkipSimulation Bool
+  deriving (Eq, Show)
 
-defsFilePath :: FilePath
-defsFilePath = "test/defs.parsed"
-
-regsFilePath :: FilePath
-regsFilePath = "test/regs.parsed"
-
-supportFilePath :: FilePath
-supportFilePath = "test/support.parsed"
-
-extraDefsFilePath :: FilePath
-extraDefsFilePath = "test/extradefs.parsed"
-
-targetInstsFilePath :: FilePath
-targetInstsFilePath = "test/translated_instructions.txt"
-
-collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text, AS.InstructionSet)]
-collectInstructions aslInsts = do
-  List.concat $
-    map (\instr -> map (\(AS.InstructionEncoding {AS.encName=encName, AS.encInstrSet=iset}) ->
-                          (instr, encName, iset)) (AS.instEncodings instr)) aslInsts
 data TranslatorOptions = TranslatorOptions
   { optVerbose :: Bool
   , optStartIndex :: Int
   , optNumberOfInstructions :: Maybe Int
   , optFilters :: Filters
   , optSkipTranslation :: Bool
-  , optCollectExceptions :: Bool
-  , optThrowUnexpectedExceptions :: Bool
+  , optCollectAllExceptions :: Bool
+  , optCollectExpectedExceptions :: Bool
+  , optASLSpecFilePath :: FilePath
   }
+
+instsFilePath :: FilePath
+instsFilePath = "insts.parsed"
+
+defsFilePath :: FilePath
+defsFilePath = "defs.parsed"
+
+regsFilePath :: FilePath
+regsFilePath = "regs.parsed"
+
+supportFilePath :: FilePath
+supportFilePath = "support.parsed"
+
+extraDefsFilePath :: FilePath
+extraDefsFilePath = "extradefs.parsed"
+
+targetInstsFilePath :: FilePath
+targetInstsFilePath = "translated_instructions.txt"
 
 defaultOptions :: TranslatorOptions
 defaultOptions = TranslatorOptions
-  { optVerbose = True
+  { optVerbose = False
   , optStartIndex = 0
   , optNumberOfInstructions = Nothing
   , optFilters = noFilter
-  , optSkipTranslation = True
-  , optCollectExceptions = True
-  , optThrowUnexpectedExceptions = True
+  , optSkipTranslation = False
+  , optCollectAllExceptions = False
+  , optCollectExpectedExceptions = False
+  , optASLSpecFilePath = "./test/"
   }
 
-main :: IO ()
-main = execMainAt 0
+data StatOptions = StatOptions
+  { reportKnownExceptions :: Bool
+  , reportSucceedingInstructions :: Bool
+  , reportAllExceptions :: Bool
+  , reportKnownExceptionFilter :: ExpectedException -> Bool
+  , reportFunctionDependencies :: Bool
+  }
 
-execMainAt :: Int -> IO ()
-execMainAt startIdx = do
-  targetInsts <- getTargetInstrs
+defaultStatOptions :: StatOptions
+defaultStatOptions = StatOptions
+  { reportKnownExceptions = False
+  , reportSucceedingInstructions = False
+  , reportAllExceptions = False
+  , reportKnownExceptionFilter = (\_ -> True)
+  , reportFunctionDependencies = False
+  }
+
+arguments :: [OptDescr (Either (TranslatorOptions -> TranslatorOptions) (StatOptions -> StatOptions))]
+arguments =
+  [ Option "a" ["asl-spec"] (ReqArg (\f -> Left (\opts -> opts { optASLSpecFilePath = f })) "PATH")
+    ("Path to parsed ASL specification. Requires: " ++ instsFilePath ++ " " ++ defsFilePath
+      ++ " " ++ regsFilePath ++ " " ++ supportFilePath ++ " " ++ extraDefsFilePath
+      ++ " " ++ targetInstsFilePath)
+
+  , Option "s" ["skip-simulation"] (NoArg (Left (\opts -> opts { optSkipTranslation = True })))
+    "Skip symbolic execution step after translating into Crucible"
+
+  , Option "c" ["collect-exceptions"] (NoArg (Left (\opts -> opts { optCollectAllExceptions = True })))
+    "Handle and collect all exceptions thrown during translation"
+
+  , Option [] ["collect-expected-exceptions"] (NoArg (Left (\opts -> opts { optCollectExpectedExceptions = False })))
+    "Handle and collect exceptions for known issues thrown during translation"
+
+  , Option "v" ["verbose"] (NoArg (Left (\opts -> opts { optVerbose = True })))
+    "Verbose output during translation"
+
+  , Option [] ["offset"] (ReqArg (\f -> Left (\opts -> opts {optStartIndex = read f})) "INT")
+    "Start processing instructions at the given offset"
+
+  , Option [] ["report-success"] (NoArg (Right (\opts -> opts { reportSucceedingInstructions = True })))
+    "Print list of successfully translated instructions"
+
+  , Option [] ["report-deps"] (NoArg (Right (\opts -> opts { reportFunctionDependencies = True })))
+    "Print ancestors of functions when reporting exceptions"
+
+  , Option [] ["report-exceptions"] (NoArg (Right (\opts -> opts { reportAllExceptions = True })))
+    "Print all collected exceptions thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
+
+  , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> opts {reportKnownExceptions = True })))
+    "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
+  ]
+
+
+
+usage :: IO ()
+usage = do
+  pn <- IO.getProgName
+  let msg = "Usage: " <> pn <> " [options]"
+  putStrLn $ usageInfo msg arguments
+
+main :: IO ()
+main = do
+  stringArgs <- IO.getArgs
+  let (args, rest, errs) = getOpt Permute arguments stringArgs
+
+  when (not $ null $ errs <> rest) $ do
+    usage
+    exitFailure
+
+  let (opts', statOpts) = foldl applyOption (defaultOptions, defaultStatOptions) args
+  targetInsts <- getTargetInstrs opts'
   let filter = noFilter { instrFilter = \ident -> Set.member ident targetInsts }
-  let translateOpts = defaultOptions {
-          optFilters = filter
-        , optSkipTranslation = False
-        , optCollectExceptions = True
-        , optStartIndex = startIdx
-        , optVerbose = False
-        }
-  sm <- runWithFilters translateOpts
+  let opts = opts' { optFilters = filter }
+  sm <- runWithFilters opts
+
+  reportStats statOpts sm
   
-  let reportOpts = defaultStatOptions {
-        reportKnownExceptions = True,
-        reportSucceedingInstructions = True,
-        reportFunctionDependencies = True}
-  reportStats reportOpts sm
+  where
+    applyOption (opts, statOpts) arg = case arg of
+      Left f -> (f opts, statOpts)
+      Right f -> (opts, f statOpts)
 
 runWithFilters :: TranslatorOptions -> IO (SigMap)
 runWithFilters opts = do
-  spec <- getASL
+  spec <- getASL opts
   putStrLn $ "Loaded "
     ++ show (length $ aslInstructions spec) ++ " instructions and "
     ++ show (length $ aslDefinitions spec) ++ " definitions and "
@@ -132,6 +206,12 @@ runWithFilters opts = do
     ++ show (length $ aslRegisterDefinitions spec) ++ " register definitions."
   let (sigEnv, sigState) = buildSigState spec
   runWithFilters' opts spec sigEnv sigState
+
+collectInstructions :: [AS.Instruction] -> [(AS.Instruction, T.Text, AS.InstructionSet)]
+collectInstructions aslInsts = do
+  List.concat $
+    map (\instr -> map (\(AS.InstructionEncoding {AS.encName=encName, AS.encInstrSet=iset}) ->
+                          (instr, encName, iset)) (AS.instEncodings instr)) aslInsts
 
 runWithFilters' :: TranslatorOptions
                 -> ASLSpec
@@ -249,13 +329,14 @@ processFunction fromInstr key sig stmts defs = do
         return $ fromMaybe Map.empty mdep
     Nothing -> return Map.empty
 
-getASL :: IO (ASLSpec)
-getASL = do
-  eAslDefs <- AP.parseAslDefsFile defsFilePath
-  eAslSupportDefs <- AP.parseAslDefsFile supportFilePath
-  eAslExtraDefs <- AP.parseAslDefsFile extraDefsFilePath
-  eAslInsts <- AP.parseAslInstsFile instsFilePath
-  eAslRegs <- AP.parseAslRegsFile regsFilePath
+getASL :: TranslatorOptions -> IO (ASLSpec)
+getASL opts = do
+  let getPath file = (optASLSpecFilePath opts ++ file)
+  eAslDefs <- AP.parseAslDefsFile (getPath defsFilePath)
+  eAslSupportDefs <- AP.parseAslDefsFile (getPath supportFilePath)
+  eAslExtraDefs <- AP.parseAslDefsFile (getPath extraDefsFilePath)
+  eAslInsts <- AP.parseAslInstsFile (getPath instsFilePath)
+  eAslRegs <- AP.parseAslRegsFile (getPath regsFilePath)
   case (eAslInsts, eAslDefs, eAslRegs, eAslExtraDefs, eAslSupportDefs) of
     (Left err, _, _, _, _) -> do
       putStrLn $ "Error loading ASL instructions: " ++ show err
@@ -329,23 +410,6 @@ expectedExceptions k ex = case ex of
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
 isUnexpectedException k e = expectedExceptions k e == Nothing
-
-data StatOptions = StatOptions
-  { reportKnownExceptions :: Bool
-  , reportSucceedingInstructions :: Bool
-  , reportAllExceptions :: Bool
-  , reportKnownExceptionFilter :: ExpectedException -> Bool
-  , reportFunctionDependencies :: Bool
-  }
-
-defaultStatOptions :: StatOptions
-defaultStatOptions = StatOptions
-  { reportKnownExceptions = False
-  , reportSucceedingInstructions = False
-  , reportAllExceptions = False
-  , reportKnownExceptionFilter = (\_ -> True)
-  , reportFunctionDependencies = False
-  }
 
 reportAllOptions :: StatOptions
 reportAllOptions = StatOptions
@@ -539,13 +603,13 @@ liftSigM k f = do
 
 collectExcept :: ElemKey -> TranslatorException -> MSS.StateT SigMap IO ()
 collectExcept k e = do
-  collectExceptions <- MSS.gets (optCollectExceptions . sOptions)
-  throwUnexpectedExceptions <- MSS.gets (optThrowUnexpectedExceptions . sOptions)
-  if (not collectExceptions || (isUnexpectedException k e && throwUnexpectedExceptions))
-    then X.throw e
-  else case k of
+  collectAllExceptions <- MSS.gets (optCollectAllExceptions . sOptions)
+  collectExpectedExceptions <- MSS.gets (optCollectExpectedExceptions . sOptions)
+  if (collectAllExceptions || ((not $ isUnexpectedException k e) && collectExpectedExceptions))
+  then case k of
     KeyInstr ident -> MSS.modify' $ \s -> s { instrExcepts = Map.insert ident e (instrExcepts s) }
     KeyFun fun -> MSS.modify' $ \s -> s { funExcepts = Map.insert fun e (funExcepts s) }
+  else X.throw e
 
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
@@ -561,12 +625,12 @@ catchIO k f = do
 
 -- Debugging function for determining what syntactic forms
 -- actually exist
-queryASL :: (T.Text -> AS.Expr -> b -> b) ->
-            (T.Text -> AS.LValExpr -> b -> b) ->
-            (T.Text -> AS.Stmt -> b -> b) -> b -> IO b
-queryASL f h g b = do
-  ASLSpec aslInsts aslDefs aslDefs' aslDefs'' _ <- getASL
-  return $ ASLT.foldASL f h g (aslDefs ++ aslDefs' ++ aslDefs'') aslInsts b
+-- queryASL :: (T.Text -> AS.Expr -> b -> b) ->
+--             (T.Text -> AS.LValExpr -> b -> b) ->
+--             (T.Text -> AS.Stmt -> b -> b) -> b -> IO b
+-- queryASL f h g b = do
+--   ASLSpec aslInsts aslDefs aslDefs' aslDefs'' _ <- getASL
+--   return $ ASLT.foldASL f h g (aslDefs ++ aslDefs' ++ aslDefs'') aslInsts b
 
 textToISet :: T.Text -> Maybe AS.InstructionSet
 textToISet t = case t of
@@ -576,9 +640,9 @@ textToISet t = case t of
   "A64" -> Just $ AS.A64
   _ -> Nothing
 
-getTargetInstrs :: IO (Set.Set InstructionIdent)
-getTargetInstrs = do
-  t <- TIO.readFile targetInstsFilePath
+getTargetInstrs :: TranslatorOptions -> IO (Set.Set InstructionIdent)
+getTargetInstrs opts = do
+  t <- TIO.readFile ((optASLSpecFilePath opts) ++ targetInstsFilePath)
   return $ Set.fromList (map getTriple (T.lines t))
   where
     isQuote '\"' = True
@@ -595,9 +659,9 @@ getTargetInstrs = do
       _ -> X.throw $ BadTranslatedInstructionsFile
 
 
-getTargetFilter :: IO (Filters)
-getTargetFilter = do
-  targetInsts <- getTargetInstrs
+getTargetFilter :: TranslatorOptions -> IO (Filters)
+getTargetFilter opts = do
+  targetInsts <- getTargetInstrs opts
   let filter = noFilter { instrFilter = \ident -> Set.member ident targetInsts }
   return filter
 
