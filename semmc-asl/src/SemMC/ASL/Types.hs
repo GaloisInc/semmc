@@ -227,6 +227,7 @@ data ExtendedTypeData =
 data ConstraintHint where
   HintAnyBVSize :: ConstraintHint
   HintMaxBVSize :: 1 WT.<= w => WT.NatRepr w -> ConstraintHint
+  HintMaxSignedBVSize :: 1 WT.<= w => WT.NatRepr w -> ConstraintHint
 
 deriving instance Show ConstraintHint
 

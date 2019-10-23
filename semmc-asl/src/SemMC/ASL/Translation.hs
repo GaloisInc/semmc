@@ -905,8 +905,8 @@ translatelValSlice :: Overrides arch
 translatelValSlice ov lv slice asnAtom' constraint = do
   let Just lve = lValToExpr lv
   Some atom' <- translateExpr ov lve
-  SliceRange lenRepr wRepr loAtom hiAtom atom <- getSliceRange ov slice atom' constraint
-  asnAtom <- zextBVAtom lenRepr asnAtom'
+  SliceRange signed lenRepr wRepr loAtom hiAtom atom <- getSliceRange ov slice atom' constraint
+  asnAtom <- extBVAtom signed lenRepr asnAtom'
   let uf =
         UF "SymbolicSliceSet" (CT.BaseBVRepr wRepr)
           (Ctx.empty
@@ -1535,7 +1535,8 @@ normalizeSlice slice = case slice of
 
 data SliceRange s where
   SliceRange :: (1 WT.<= atomLength, 1 WT.<= sliceLength, sliceLength WT.<= atomLength)
-                => WT.NatRepr sliceLength
+                => Bool -- requires signed extension
+                -> WT.NatRepr sliceLength
                 -> WT.NatRepr atomLength
                 -> CCG.Atom s CT.IntegerType
                 -> CCG.Atom s CT.IntegerType
@@ -1608,21 +1609,29 @@ getSliceRange ov slice slicedAtom constraint = do
     getSlice = do
       (loAtom, hiAtom) <- getSymbolicSliceRange ov slice
       mLength <- getStaticSliceLength slice
-      (Some lenRepr :: Some WT.NatRepr) <- case mLength of
-        Just (Some (BVRepr length)) -> return $ Some length
+      (Some lenRepr :: Some WT.NatRepr, signed :: Bool) <- case mLength of
+        Just (Some (BVRepr length)) -> return $ (Some length, False)
         _ -> case constraint of
-          ConstraintSingle (CT.BVRepr length) -> return $ Some length
+          ConstraintSingle (CT.BVRepr length) -> return $ (Some length, False)
           ConstraintHint (HintMaxBVSize maxlength) ->
             case CCG.typeOfAtom slicedAtom of
               CT.BVRepr wRepr -> case wRepr `WT.testNatCases` maxlength of
-                WT.NatCaseEQ -> return $ Some wRepr
-                WT.NatCaseLT _ -> return $ Some wRepr
-                WT.NatCaseGT WT.LeqProof -> return $ Some maxlength
-              CT.IntegerRepr -> return $ Some maxlength
+                WT.NatCaseEQ -> return $ (Some wRepr, False)
+                WT.NatCaseLT _ -> return $ (Some wRepr, False)
+                WT.NatCaseGT WT.LeqProof -> return $ (Some maxlength, False)
+              CT.IntegerRepr -> return $ (Some maxlength, False)
+              _ -> throwTrace $ UnsupportedSlice slice constraint
+          ConstraintHint (HintMaxSignedBVSize maxlength) ->
+            case CCG.typeOfAtom slicedAtom of
+              CT.BVRepr wRepr -> case wRepr `WT.testNatCases` maxlength of
+                WT.NatCaseEQ -> return $ (Some wRepr, False)
+                WT.NatCaseLT _ -> return $ (Some wRepr, False)
+                WT.NatCaseGT WT.LeqProof -> return $ (Some maxlength, True)
+              CT.IntegerRepr -> return $ (Some maxlength, True)
               _ -> throwTrace $ UnsupportedSlice slice constraint
           ConstraintHint HintAnyBVSize ->
             case CCG.typeOfAtom slicedAtom of
-              CT.BVRepr wRepr -> return $ Some wRepr
+              CT.BVRepr wRepr -> return $ (Some wRepr, False)
               _ -> throwTrace $ UnsupportedSlice slice constraint
           _ -> throwTrace $ UnsupportedSlice slice constraint
       WT.LeqProof <- case (WT.knownNat @1) `WT.testLeq` lenRepr of
@@ -1631,7 +1640,7 @@ getSliceRange ov slice slicedAtom constraint = do
       case CCG.typeOfAtom slicedAtom of
         CT.BVRepr wRepr
           | Just WT.LeqProof <- lenRepr `WT.testLeq` wRepr ->
-            return $ SliceRange lenRepr wRepr loAtom hiAtom slicedAtom
+            return $ SliceRange signed lenRepr wRepr loAtom hiAtom slicedAtom
         CT.IntegerRepr -> do
           env <- getStaticEnv
           let (_, hi) = normalizeSlice slice
@@ -1639,7 +1648,7 @@ getSliceRange ov slice slicedAtom constraint = do
             Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
                 if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
                      intAtom <- CCG.mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
-                     return $ SliceRange lenRepr hiRepr loAtom hiAtom intAtom
+                     return $ SliceRange signed lenRepr hiRepr loAtom hiAtom intAtom
                    | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
             _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
         _ -> throwTrace $ UnsupportedSlice slice constraint
@@ -1656,7 +1665,7 @@ translateSlice ov e slice constraint = do
 sliceValidTests :: Overrides arch
                 -> SliceRange s
                 -> Generator h s arch ret ()
-sliceValidTests ov (SliceRange lenRepr wRepr loAtom hiAtom atom) = let
+sliceValidTests ov (SliceRange _ lenRepr wRepr loAtom hiAtom atom) = let
     lo = CCG.AtomExpr loAtom
     hi = CCG.AtomExpr hiAtom
     len = CCG.App (CCE.IntLit (CT.intValue lenRepr))
@@ -1682,15 +1691,15 @@ translateSlice' :: Overrides arch
                 -> TypeConstraint
                 -> Generator h s arch ret (Some (CCG.Atom s))
 translateSlice' ov atom' slice constraint = do
-  SliceRange lenRepr wRepr loAtom hiAtom atom <- getSliceRange ov slice atom' constraint
+  SliceRange signed lenRepr wRepr loAtom hiAtom atom <- getSliceRange ov slice atom' constraint
   case lenRepr `WT.testNatCases` wRepr of
     WT.NatCaseEQ ->
       -- when the slice covers the whole range we just return the whole atom
       return $ Some $ atom
     WT.NatCaseLT WT.LeqProof -> let
       uf = UF "SymbolicSlice" (CT.BaseBVRepr lenRepr)
-        (Ctx.empty Ctx.:> CT.IntegerRepr Ctx.:> CT.IntegerRepr)
-        (Ctx.empty Ctx.:> (CCG.AtomExpr loAtom) Ctx.:> (CCG.AtomExpr hiAtom))
+        (Ctx.empty Ctx.:> CT.BoolRepr Ctx.:> CT.IntegerRepr Ctx.:> CT.IntegerRepr)
+        (Ctx.empty Ctx.:> (CCG.App (CCE.BoolLit True)) Ctx.:> (CCG.AtomExpr loAtom) Ctx.:> (CCG.AtomExpr hiAtom))
       in Some <$> CCG.mkAtom (CCG.App $ CCE.ExtensionApp uf)
     _ -> throwTrace $ UnsupportedSlice slice constraint
 
@@ -2078,17 +2087,19 @@ matchBVSizes atom1 atom2 = do
       atom2' <- CCG.mkAtom (CCG.App (CCE.BVZext wRepr1 wRepr2 (CCG.AtomExpr atom2)))
       return $ BVAtomPair wRepr1 atom1 atom2'
 
-zextBVAtom :: 1 WT.<= w
-           => WT.NatRepr w
+extBVAtom :: 1 WT.<= w
+           => Bool
+           -> WT.NatRepr w
            -> CCG.Atom s tp
            -> Generator h s arch ret (CCG.Atom s (CT.BVType w))
-zextBVAtom repr atom = do
+extBVAtom signed repr atom = do
   BVRepr atomRepr <- getAtomBVRepr atom
   case atomRepr `WT.testNatCases` repr of
     WT.NatCaseEQ ->
       return atom
     WT.NatCaseLT WT.LeqProof -> do
-      atom' <- CCG.mkAtom (CCG.App (CCE.BVZext repr atomRepr (CCG.AtomExpr atom)))
+      let bop = if signed then CCE.BVSext else CCE.BVZext
+      atom' <- CCG.mkAtom (CCG.App (bop repr atomRepr (CCG.AtomExpr atom)))
       return atom'
     _ -> throwTrace $ UnexpectedBitvectorLength (CT.BVRepr atomRepr) (CT.BVRepr repr)
 
@@ -2221,9 +2232,13 @@ polymorphicBVOverrides e ty = case e of
         (Some atom1', _) <- translateExpr' overrides expr1 (relaxConstraint ty)
         (Some atom2', _) <- translateExpr' overrides expr2 (relaxConstraint ty)
         BVAtomPair wRepr atom1 atom2 <- case hint of
+          HintMaxSignedBVSize wRepr -> do
+            atom1 <- extBVAtom False wRepr atom1' -- will inherit signed bits from atom2
+            atom2 <- extBVAtom True wRepr atom2'
+            return $ BVAtomPair wRepr atom1 atom2
           HintMaxBVSize wRepr -> do
-            atom1 <- zextBVAtom wRepr atom1'
-            atom2 <- zextBVAtom wRepr atom2'
+            atom1 <- extBVAtom False wRepr atom1'
+            atom2 <- extBVAtom False wRepr atom2'
             return $ BVAtomPair wRepr atom1 atom2
           HintAnyBVSize -> do
             matchBVSizes atom1' atom2'
@@ -2240,19 +2255,28 @@ polymorphicBVOverrides e ty = case e of
   -- FIXME: this is should be conditional on unsigned.
   -- FIXME: we need another constraint hint for signed extensions
   AS.ExprCall (AS.QualifiedIdentifier _ "Int") [argExpr, isUnsigned] -> Just $ do
-    (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
-    BVRepr nr <- getAtomBVRepr atom
-    mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+    Some unsigned <- translateExpr overrides isUnsigned
+    Refl <- assertAtomType' CT.BoolRepr unsigned
+
+    (Some ubvatom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
+    BVRepr unr <- getAtomBVRepr ubvatom
+    uatom <- CCG.mkAtom $ CCG.App $ CCE.BvToInteger unr (CCG.AtomExpr ubvatom)
+
+    (Some sbvatom, _) <- translateExpr' overrides argExpr ConstraintNone
+    BVRepr snr <- getAtomBVRepr sbvatom
+    satom <- CCG.mkAtom $ CCG.App $ CCE.SbvToInteger snr (CCG.AtomExpr sbvatom)
+    Just Refl <- return $ testEquality unr snr
+
+    mkAtom $ CCG.App $ CCE.BaseIte CT.BaseIntegerRepr (CCG.AtomExpr unsigned) (CCG.AtomExpr uatom) (CCG.AtomExpr satom)
   AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
     (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
     BVRepr nr <- getAtomBVRepr atom
     mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
-  -- FIXME: BvToInteger isn't right here, because it's unsigned. We need a
-  -- signed version.
+
   AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> Just $ do
     Some atom <- translateExpr overrides argExpr
     BVRepr nr <- getAtomBVRepr atom
-    mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+    mkAtom (CCG.App (CCE.SbvToInteger nr (CCG.AtomExpr atom)))
   AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ do
     (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
     BVRepr nr <- getAtomBVRepr atom
@@ -2270,10 +2294,8 @@ polymorphicBVOverrides e ty = case e of
     , Just mexpr <- list1ToMaybe rest -> Just $ do
     Some (BVRepr targetWidth) <- getBVLength mexpr ty
     (Some valAtom, _) <- case fun of
-      -- Since slicing implicitly zero-extends to the target width, this is safe
       "ZeroExtend" -> translateExpr' overrides val (ConstraintHint (HintMaxBVSize targetWidth))
-      -- FIXME: We need another constraint hint that does signed extensions
-      "SignExtend" -> translateExpr' overrides val (ConstraintHint (HintMaxBVSize targetWidth))
+      "SignExtend" -> translateExpr' overrides val (ConstraintHint (HintMaxSignedBVSize targetWidth))
     BVRepr valWidth <- getAtomBVRepr valAtom
     case valWidth `WT.testNatCases` targetWidth of
       WT.NatCaseEQ ->
