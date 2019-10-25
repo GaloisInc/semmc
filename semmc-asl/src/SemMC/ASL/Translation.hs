@@ -1034,6 +1034,11 @@ translateType t = do
           | Just (Some nr) <- NR.someNat nBits
           , Just NR.LeqProof <- NR.isPosNat nr -> return (Some (CT.BVRepr nr))
         _ -> error ("Unsupported type: " ++ show t)
+    AS.TypeFun "__RAM" (AS.ExprLitInt n)
+       | Just (Some nRepr) <- NR.someNat n
+       , Just NR.LeqProof <- NR.isPosNat nRepr ->
+         return $ Some $ CT.baseToType $
+           WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr (WT.knownNat @52)) (WT.BaseBVRepr nRepr)
     AS.TypeFun _ _ -> error ("Unsupported type: " ++ show t)
     AS.TypeArray _ty _idxTy -> error ("Unsupported type: " ++ show t)
     AS.TypeReg _i _flds -> error ("Unsupported type: " ++ show t)
@@ -2447,9 +2452,13 @@ overrides = Overrides {..}
           AS.StmtCall (AS.QualifiedIdentifier _ nm) [x]
             | nm `elem` ["print", "putchar"] -> Just $ do
               return ()
-          -- FIXME: Memory model
-          AS.StmtCall (AS.QualifiedIdentifier _ "__WriteRAM") [_, szExpr, _, addr, value] -> Just $ do
-            return ()
+          AS.StmtCall (AS.QualifiedIdentifier q "write_mem") [mem, addr, szExpr, value] -> Just $ do
+            env <- getStaticEnv
+            case exprToStatic env szExpr of
+              Just sz ->
+                translateStatement overrides $
+                  AS.StmtCall (AS.QualifiedIdentifier q ("write_mem_" <> (T.pack $ show sz))) [mem, addr, value]
+              _ -> throwTrace $ RequiredConcreteValue szExpr (staticEnvMapVals env)
           _ -> Nothing
 
         overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
@@ -2463,13 +2472,13 @@ overrides = Overrides {..}
               Some xAtom <- translateExpr overrides x
               BVRepr nr <- getAtomBVRepr xAtom
               translateExpr' overrides (AS.ExprLitInt (WT.intValue nr)) ConstraintNone
-            AS.ExprCall (AS.QualifiedIdentifier _ "__ReadRAM") [_, szExpr, _, addr] -> Just $ do
+            AS.ExprCall (AS.QualifiedIdentifier q "read_mem") [mem, addr, szExpr] -> Just $ do
               env <- getStaticEnv
-              if | Just (StaticInt sz) <- exprToStatic env szExpr
-                 , Just (Some repr) <- WT.someNat (sz * 8)
-                 , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` repr -> do
-                     mkAtom (CCG.App (CCE.BVUndef repr))
-                 | otherwise -> X.throw $ BadMemoryAccess szExpr
+              case exprToStatic env szExpr of
+                Just sz ->
+                  translateExpr' overrides
+                    (AS.ExprCall (AS.QualifiedIdentifier q ("read_mem_" <> (T.pack $ show sz))) [mem, addr])
+                    ty
             _ ->
               polymorphicBVOverrides e ty <|>
               arithmeticOverrides e ty <|>

@@ -30,7 +30,55 @@ ASLSetUnpredictable()
   __UnpredictableBehavior = TRUE;
   return;
 
-//
+// Memory model
+
+// Faking global reads
+bits(8) read_mem_1(__RAM(52) mem, bits(52) address)
+  return bits(8) UNKNOWN;
+
+bits(16) read_mem_2(__RAM(52) mem, bits(52) address)
+  return bits(16) UNKNOWN;
+
+bits(32) read_mem_4(__RAM(52) mem, bits(52) address)
+  return bits(32) UNKNOWN;
+
+bits(64) read_mem_8(__RAM(52) mem, bits(52) address)
+  return bits(64) UNKNOWN;
+
+bits(128) read_mem_16(__RAM(52) mem, bits(52) address)
+  return bits(128) UNKNOWN;
+
+// Faking global writes
+write_mem_1(__RAM(52) mem, bits(52) address, bits(8) value)
+  return;
+
+write_mem_2(__RAM(52) mem, bits(52) address, bits(16) value)
+  return;
+
+write_mem_4(__RAM(52) mem, bits(52) address, bits(32) value)
+  return;
+
+write_mem_8(__RAM(52) mem, bits(52) address, bits(64) value)
+  return;
+
+write_mem_16(__RAM(52) mem, bits(52) address, bits(128) value)
+  return;
+
+
+// Translator overrides dispatch to the correctly-named variant based on the concrete
+// value of the given size
+bits(8*size) _Mem[AddressDescriptor desc, integer size, AccessDescriptor accdesc]
+    assert size IN {1, 2, 4, 8, 16};
+    bits(52) address = desc.paddress.address;
+    assert address == Align(address, size);
+    return read_mem(__Memory, address, size);
+
+_Mem[AddressDescriptor desc, integer size, AccessDescriptor accdesc] = bits(8*size) value
+    assert size IN {1, 2, 4, 8, 16};
+    bits(52) address = desc.paddress.address;
+    assert address == Align(address, size);
+    write_mem(__Memory, address, size, value);
+    return;
 
 // Constant lifted from mra_tools
 

@@ -354,7 +354,6 @@ mkSyntaxOverrides defs =
                                  [(T.pack "signal", (AS.TypeFun "bits" (AS.ExprLitInt 1)))])
 
       typeOverrides t = case t of
-        AS.TypeFun "__RAM" (AS.ExprLitInt 52) -> AS.TypeFun "bits" (AS.ExprLitInt 52)
         AS.TypeRef (AS.QualifiedIdentifier _ nm) ->
           case Map.lookup nm typeSynMap of
           Just t' -> t'

@@ -391,7 +391,7 @@ buildEnv (spec@ASLSpec{..}) =
 
       baseCallables = getCallables uniqueCallables aslDefinitions
       supportCallables = getCallables preferLongerCallable aslSupportDefinitions
-      extraCallables = getCallables preferLongerCallable aslExtraDefinitions
+      extraCallables = getCallables uniqueCallables aslExtraDefinitions
 
       -- extras override support callables, which override base callables
       envCallables = Map.union (Map.union extraCallables supportCallables) baseCallables
@@ -452,6 +452,7 @@ initializeSigM spec = do
   mapM_ initDefGlobal (allDefs spec)
   return ()
   where
+    -- Global memory representative
     initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
       tp <- computeType ty
       ext <- mkExtendedTypeData ty
@@ -689,6 +690,11 @@ computeType' tp = case applyTypeSynonyms tp of
         | Just (Some wRepr) <- NR.someNat w
         , Just NR.LeqProof <- NR.isPosNat wRepr -> Left $ Some (WT.BaseBVRepr wRepr)
       e' -> error $ "computeType, TypeFun" <> show e'
+  AS.TypeFun "__RAM" (AS.ExprLitInt n)
+    | Just (Some nRepr) <- NR.someNat n
+    , Just NR.LeqProof <- NR.isPosNat nRepr ->
+      Left $ Some (WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr (WT.knownNat @52)) (WT.BaseBVRepr nRepr))
+
   AS.TypeOf _ -> error "computeType, TypeOf"
   AS.TypeReg _ _ -> error "computeType, TypeReg"
   AS.TypeArray _ _ -> error "computeType, TypeArray"
@@ -736,10 +742,10 @@ theVarGlobal varName = do
 
 
 callableGlobalVars' :: AS.QualifiedIdentifier
-                    -> [AS.Expr]
+                    -> Int
                     -> SigM ext f GlobalVarRefs
-callableGlobalVars' qIdent argEs = do
-  mCallable <- lookupCallable qIdent (length argEs)
+callableGlobalVars' qIdent nargs = do
+  mCallable <- lookupCallable qIdent nargs
   case mCallable of
     Just callable -> do
       searchStatus <- checkCallableSearch callable
@@ -790,7 +796,9 @@ globalsOfStmts stmts = do
   where
     collectCallables :: AS.QualifiedIdentifier -> [AS.Expr] -> SigM ext f GlobalVarRefs
     collectCallables (AS.QualifiedIdentifier q nm) args  =
-      mconcat <$> traverse (\nm' -> callableGlobalVars' (AS.QualifiedIdentifier q nm') args) (overrideFun nm)
+      mconcat <$> traverse (collectVars q args) (overrideFun nm)
+
+    collectVars q args (nm', mi) = callableGlobalVars' (AS.QualifiedIdentifier q nm') (fromMaybe (length args) mi)
 
     caseAlternativeGlobalVars alt = case alt of
       AS.CaseWhen pats _ _ -> mconcat <$> traverse casePatternGlobalVars pats
@@ -811,16 +819,15 @@ computeSignatures stmts = do
   mapM_ (ASLT.writeStmt collectors) stmts
   where
     collectCallables (AS.QualifiedIdentifier q nm) args =
-      mapM_ (\nm' -> collectCallable (AS.QualifiedIdentifier q nm') args) (overrideFun nm)
+      mapM_ (collectCallable q args) (overrideFun nm)
 
-    collectCallable qName argEs = do
-        mCallable <- lookupCallable qName (length argEs)
+    collectCallable q argEs (nm', mi) = do
+        mCallable <- lookupCallable (AS.QualifiedIdentifier q nm') (fromMaybe (length argEs) mi)
         case mCallable of
           Just c -> void $ computeCallableSignature c
           _ -> return ()
-    getExprCall :: AS.Expr -> SigM ext f ()
-    getExprCall expr =
-      case expr of
+
+    getExprCall expr = case expr of
       AS.ExprCall qName argEs -> collectCallables qName argEs
       _ -> return ()
     getStmtCall stmt = case stmt of
@@ -1039,22 +1046,27 @@ addInitializedVariables stmts env =
           insertStaticEnv nm v env'
       _ -> env'
 
-overrideFun :: T.Text -> [T.Text]
+-- For a given callable, provide an alternative set of names it might resolve to
+-- and optionally an alternative number of arguments it might take.
+overrideFun :: T.Text -> [(T.Text, Maybe Int)]
 overrideFun nm = case nm of
-  "__abort" -> ["EndOfInstruction"]
-  "TakeHypTrapException" -> ["TakeHypTrapExceptioninteger", "TakeHypTrapExceptionExceptionRecord"]
-  _ | nm `elem` ["Min", "Max"] -> [nm <> "integerinteger"]
-  "Align" -> ["Alignintegerinteger", "AlignbitsNinteger"]
-  _ -> fromMaybe [nm] $
-         mkFaultOv nm "IsExternalAbort" <|>
-         mkFaultOv nm "IsAsyncAbort" <|>
-         mkFaultOv nm "IsSErrorInterrupt" <|>
-         mkFaultOv nm "IsExternalSyncAbort"
-  where
-    mkFaultOv nm nm' =
-      if nm == nm'
-      then Just $ [nm <> "FaultRecord", nm <> "Fault"]
-      else Nothing
+  "read_mem" -> map (\nm' -> (nm', Just 2)) $ ["read_mem_1", "read_mem_2", "read_mem_4", "read_mem_8", "read_mem_16"]
+  "write_mem" -> map (\nm' -> (nm', Just 3)) $ ["write_mem_1", "write_mem_2", "write_mem_4", "write_mem_8", "write_mem_16"]
+  _ -> map (\nm' -> (nm', Nothing)) $ case nm of
+    "__abort" -> ["EndOfInstruction"]
+    "TakeHypTrapException" -> ["TakeHypTrapExceptioninteger", "TakeHypTrapExceptionExceptionRecord"]
+    _ | nm `elem` ["Min", "Max"] -> [nm <> "integerinteger"]
+    "Align" -> ["Alignintegerinteger", "AlignbitsNinteger"]
+    _ -> fromMaybe [nm] $
+           mkFaultOv nm "IsExternalAbort" <|>
+           mkFaultOv nm "IsAsyncAbort" <|>
+           mkFaultOv nm "IsSErrorInterrupt" <|>
+           mkFaultOv nm "IsExternalSyncAbort"
+    where
+      mkFaultOv nm nm' =
+        if nm == nm'
+        then Just $ [nm <> "FaultRecord", nm <> "Fault"]
+        else Nothing
 
 mkFinalFunctionName :: StaticValues -> T.Text ->  T.Text
 mkFinalFunctionName dargs nm = T.concat $ [nm] ++ map (\(nm,i) -> nm <> "_" <> T.pack (show i)) (Map.assocs dargs)
