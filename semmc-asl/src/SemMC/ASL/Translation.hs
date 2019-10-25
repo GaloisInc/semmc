@@ -59,6 +59,7 @@ import qualified What4.FunctionName as WF
 import qualified What4.ProgramLoc as WP
 import qualified What4.Symbol as WS
 
+
 import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
@@ -462,7 +463,7 @@ translateFunctionCall ov qIdent args ty = do
               _ <- CCG.extensionStmt (SetRegState thisGlobals (CCG.App $ CCE.ExtensionApp globalResult))
               return ()
             globalResultAtom <- CCG.mkAtom $ CCG.App $ CCE.ExtensionApp $ globalResult
-            Ctx.traverseAndCollect (checkEarlyExit globalResultAtom) (sfuncGlobalWriteReprs sig)
+            -- Ctx.traverseAndCollect (checkEarlyExit globalResultAtom) (sfuncGlobalWriteReprs sig)
             let returnResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i2of2 (CCG.AtomExpr atom)
             result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
             case retT of
@@ -481,7 +482,7 @@ translateFunctionCall ov qIdent args ty = do
               -- completely supported by crucible/what4
               _ -> return Nothing
   where
-    -- At the cost of adding significant complextity to the CFG, we *could* attempt to terminate early
+    -- At the cost of adding significant complexity to the CFG, we *could* attempt to terminate early
     -- whenever undefined or unpredictable behavior is encountered from a called function.
     -- This seems excessive, since we can always check these flags at the toplevel.
 

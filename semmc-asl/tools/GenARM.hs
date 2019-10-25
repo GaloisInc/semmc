@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Main ( main ) where
 
@@ -17,6 +18,7 @@ import qualified Control.Monad.Except as E
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import           Data.Maybe ( fromMaybe, catMaybes, listToMaybe, mapMaybe )
+import           Text.Read (readMaybe)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Nonce
 import           Data.Bits( (.|.) )
@@ -58,19 +60,6 @@ import qualified What4.Config as WC
 import           What4.ProblemFeatures
 
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
-
-data Arg =
-  InstructionsFile FilePath
-  | DefinitionsFile FilePath
-  | SupportFile FilePath
-  | RegisterFile FilePath
-  | ExtraDefsFile FilePath
-  | TargetInstructionsFile FilePath
-  | VerboseTranslation Bool
-  | InstructionStartIndex Integer
-  | CollectExceptions Bool
-  | SkipSimulation Bool
-  deriving (Eq, Show)
 
 data TranslatorOptions = TranslatorOptions
   { optVerbose :: Bool
@@ -143,7 +132,7 @@ arguments =
   , Option "c" ["collect-exceptions"] (NoArg (Left (\opts -> opts { optCollectAllExceptions = True })))
     "Handle and collect all exceptions thrown during translation"
 
-  , Option [] ["collect-expected-exceptions"] (NoArg (Left (\opts -> opts { optCollectExpectedExceptions = False })))
+  , Option [] ["collect-expected-exceptions"] (NoArg (Left (\opts -> opts { optCollectExpectedExceptions = True })))
     "Handle and collect exceptions for known issues thrown during translation"
 
   , Option "v" ["verbose"] (NoArg (Left (\opts -> opts { optVerbose = True })))
@@ -183,8 +172,7 @@ main = do
     exitFailure
 
   let (opts', statOpts) = foldl applyOption (defaultOptions, defaultStatOptions) args
-  targetInsts <- getTargetInstrs opts'
-  let filter = noFilter { instrFilter = \ident -> Set.member ident targetInsts }
+  filter <- getTargetFilter opts'
   let opts = opts' { optFilters = filter }
   sm <- runWithFilters opts
 
@@ -389,7 +377,6 @@ data ExpectedException =
     UnsupportedInstruction
   | InsufficientStaticTypeInformation
   | CruciblePanic
-  | UnsupportedNonlinearArithmetic
    deriving (Eq, Ord, Show)
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
@@ -402,15 +389,18 @@ expectedExceptions k ex = case ex of
   SomeExcept e
     | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
     , KeyInstr (InstructionIdent nm _ _) <- k
-    , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A"] ->
+    , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A", "aarch32_VTBL_A"] ->
+      Just $ CruciblePanic
+  SomeExcept e
+    | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
+    , KeyFun nm <- k
+    , nm `elem` ["AArch32_ExclusiveMonitorsPass_2"] ->
       Just $ CruciblePanic
   SomeExcept e
     | Just (SimulationAbort _ _) <- X.fromException e
     , KeyInstr (InstructionIdent nm _ _) <- k
-    , nm `elem` [ "aarch32_SMUAD_A", "aarch32_SMLAD_A"
-                , "aarch32_SMLSD_A", "aarch32_SMLAWB_A"
-                , "aarch32_SMLABB_A"] ->
-      Just $ UnsupportedNonlinearArithmetic
+    , nm `elem` [ "aarch32_VTBL_A" ] ->
+      Just $ CruciblePanic
   _ -> Nothing
 
 isUnexpectedException :: ElemKey -> TranslatorException -> Bool
@@ -559,6 +549,7 @@ data InstructionIdent =
   deriving (Eq, Show)
 
 deriving instance Ord AS.InstructionSet
+deriving instance Read AS.InstructionSet
 deriving instance Ord InstructionIdent
 
 instrToIdent :: AS.Instruction -> T.Text -> AS.InstructionSet -> InstructionIdent
@@ -628,46 +619,37 @@ catchIO k f = do
   where
     tracedException (TracedTranslationException nm env stmts exprs e) = TExcept (nm, env, stmts, exprs) e
 
--- Debugging function for determining what syntactic forms
--- actually exist
--- queryASL :: (T.Text -> AS.Expr -> b -> b) ->
---             (T.Text -> AS.LValExpr -> b -> b) ->
---             (T.Text -> AS.Stmt -> b -> b) -> b -> IO b
--- queryASL f h g b = do
---   ASLSpec aslInsts aslDefs aslDefs' aslDefs'' _ <- getASL
---   return $ ASLT.foldASL f h g (aslDefs ++ aslDefs' ++ aslDefs'') aslInsts b
+-- Unused currently
+type InstructionFlag = ()
 
-textToISet :: T.Text -> Maybe AS.InstructionSet
-textToISet t = case t of
-  "A32" -> Just $ AS.A32
-  "T32" -> Just $ AS.T32
-  "T16" -> Just $ AS.T16
-  "A64" -> Just $ AS.A64
-  _ -> Nothing
-
-getTargetInstrs :: TranslatorOptions -> IO (Set.Set InstructionIdent)
+getTargetInstrs :: TranslatorOptions -> IO (Map.Map InstructionIdent InstructionFlag)
 getTargetInstrs opts = do
   t <- TIO.readFile ((optASLSpecFilePath opts) ++ targetInstsFilePath)
-  return $ Set.fromList (map getTriple (T.lines t))
+  return $ Map.fromList (map getTriple (T.lines t))
   where
     isQuote '\"' = True
     isQuote _ = False
     
-    getTriple l = case T.words l of
-      [instr, enc, iset]
-        | Just is <- textToISet iset ->
-        InstructionIdent
-          { iName = T.dropAround isQuote instr
-          , iEnc = T.dropAround isQuote enc
-          , iSet = is
-          }
-      _ -> X.throw $ BadTranslatedInstructionsFile
+    getFlag [s] = readMaybe (T.unpack s)
+    getFlag [] = Just $ ()
+    getFlag _ = Nothing
+    
+    getTriple l =
+      if | (instr : enc : iset : rest) <- T.words l
+         , Just is <- readMaybe (T.unpack iset)
+         , Just flag <- getFlag rest ->
+           (InstructionIdent
+             { iName = T.dropAround isQuote instr
+             , iEnc = T.dropAround isQuote enc
+             , iSet = is
+             }, flag)
+         | otherwise -> X.throw $ BadTranslatedInstructionsFile
 
 
 getTargetFilter :: TranslatorOptions -> IO (Filters)
 getTargetFilter opts = do
   targetInsts <- getTargetInstrs opts
-  let filter = noFilter { instrFilter = \ident -> Set.member ident targetInsts }
+  let filter = noFilter { instrFilter = \ident -> Map.member ident targetInsts }
   return filter
 
 testDefinition :: TranslatorOptions -> String -> String -> String -> IO (SigMap)
