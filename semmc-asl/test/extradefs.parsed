@@ -1,4 +1,73 @@
 (AslDefinitions
+  (DefVariable
+    (QualifiedIdentifier Any __AssertionFailure)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
+  (DefVariable
+    (QualifiedIdentifier Any __EndOfInstruction)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
+  (DefVariable
+    (QualifiedIdentifier Any __UndefinedBehavior)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
+  (DefVariable
+    (QualifiedIdentifier Any __UnpredictableBehavior)
+    (TypeRef
+      (QualifiedIdentifier Any boolean)))
+  (DefCallable
+    (QualifiedIdentifier Any EndOfInstruction)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __EndOfInstruction))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any ASLSetUndefined)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __UndefinedBehavior))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
+          (StmtReturn Nothing)))))
+  (DefCallable
+    (QualifiedIdentifier Any ASLSetUnpredictable)
+    (list)
+    Nothing
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssign
+            (LValVarRef
+              (QualifiedIdentifier Any __UnpredictableBehavior))
+            (ExprVarRef
+              (QualifiedIdentifier Any TRUE)))
+          (StmtReturn Nothing)))))
+  (DefConst
+    LOG2_TAG_GRANULE
+    (TypeRef
+      (QualifiedIdentifier Any integer))
+    (ExprLitNat 4))
+  (DefConst
+    TAG_GRANULE
+    (TypeRef
+      (QualifiedIdentifier Any integer))
+    (ExprBinOp
+      "^"
+      (ExprLitNat 2)
+      (ExprVarRef
+        (QualifiedIdentifier Any LOG2_TAG_GRANULE))))
   (DefCallable
     (QualifiedIdentifier Any Replicate)
     (list
@@ -52,98 +121,6 @@
             (Just
               (ExprVarRef
                 (QualifiedIdentifier Any N))))))))
-  (DefConst
-    LOG2_TAG_GRANULE
-    (TypeRef
-      (QualifiedIdentifier Any integer))
-    (ExprLitNat 4))
-  (DefConst
-    TAG_GRANULE
-    (TypeRef
-      (QualifiedIdentifier Any integer))
-    (ExprBinOp
-      "^"
-      (ExprLitNat 2)
-      (ExprVarRef
-        (QualifiedIdentifier Any LOG2_TAG_GRANULE))))
-  (DefVariable
-    (QualifiedIdentifier Any __AssertionFailure)
-    (TypeRef
-      (QualifiedIdentifier Any boolean)))
-  (DefVariable
-    (QualifiedIdentifier Any __EndOfInstruction)
-    (TypeRef
-      (QualifiedIdentifier Any boolean)))
-  (DefVariable
-    (QualifiedIdentifier Any __UndefinedBehavior)
-    (TypeRef
-      (QualifiedIdentifier Any boolean)))
-  (DefVariable
-    (QualifiedIdentifier Any __UnpredictableBehavior)
-    (TypeRef
-      (QualifiedIdentifier Any boolean)))
-  (DefCallable
-    (QualifiedIdentifier Any ASLCheckAssertion)
-    (list
-      (SymDecl
-        assertion
-        (TypeRef
-          (QualifiedIdentifier Any boolean))))
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any __AssertionFailure))
-            (ExprBinOp
-              "OR"
-              (ExprVarRef
-                (QualifiedIdentifier Any __AssertionFailure))
-              (ExprUnOp
-                "!"
-                (ExprVarRef
-                  (QualifiedIdentifier Any assertion)))))
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any ASLSetUndefined)
-    (list)
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any __UndefinedBehavior))
-            (ExprVarRef
-              (QualifiedIdentifier Any TRUE)))
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any ASLSetUnpredictable)
-    (list)
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any __UnpredictableBehavior))
-            (ExprVarRef
-              (QualifiedIdentifier Any TRUE)))
-          (StmtReturn Nothing)))))
-  (DefCallable
-    (QualifiedIdentifier Any EndOfInstruction)
-    (list)
-    Nothing
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssign
-            (LValVarRef
-              (QualifiedIdentifier Any __EndOfInstruction))
-            (ExprVarRef
-              (QualifiedIdentifier Any TRUE)))
-          (StmtReturn Nothing)))))
   (DefCallable
     (QualifiedIdentifier Any BigEndianReverse)
     (list
@@ -687,77 +664,152 @@
               (ExprVarRef
                 (QualifiedIdentifier Any result))))))))
   (DefCallable
-    (QualifiedIdentifier AArch32 SetDefaultCond)
-    (list)
+    (QualifiedIdentifier AArch64 TranslationTableWalk)
+    (list
+      (SymDecl
+        ipaddress
+        (TypeFun
+          bits
+          (ExprLitNat 52)))
+      (SymDecl
+        s1_nonsecure
+        (TypeRef
+          (QualifiedIdentifier Any bit)))
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 64)))
+      (SymDecl
+        acctype
+        (TypeRef
+          (QualifiedIdentifier Any AccType)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        secondstage
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        s2fs1walk
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
     (Just
       (ReturnType
         (list
-          (TypeFun
-            bits
-            (ExprLitNat 4)))))
+          (TypeRef
+            (QualifiedIdentifier Any TLBRecord)))))
     (Just
       (StmtBlock
         (list
-          (StmtIf
-            (ExprBinOp
-              "||"
-              (ExprInSet
-                (ExprVarRef
-                  (QualifiedIdentifier Any __ThisInstrEnc))
-                (Set
-                  (list
-                    (SetElementSingle
-                      (ExprVarRef
-                        (QualifiedIdentifier Any InstrEnc_A64)))
-                    (SetElementSingle
-                      (ExprVarRef
-                        (QualifiedIdentifier Any InstrEnc_A32))))))
-              (ExprBinOp
-                "=="
-                (ExprSlice
-                  (ExprMember
-                    (ExprVarRef
-                      (QualifiedIdentifier Any PSTATE))
-                    IT)
-                  (list
-                    (SliceRange
-                      (ExprLitNat 3)
-                      (ExprLitNat 0))))
-                (ExprCall
-                  (QualifiedIdentifier Any Zeros)
-                  (list
-                    (ExprLitNat 4)))))
-            (StmtBlock
-              (list
-                (StmtAssign
-                  (LValVarRef
-                    (QualifiedIdentifier Any __currentCond))
-                  (ExprSlice
-                    (ExprLitHex "0xE")
-                    (list
-                      (SliceRange
-                        (ExprLitNat 3)
-                        (ExprLitNat 0)))))))
-            (list)
-            (Just
-              (StmtBlock
-                (list
-                  (StmtAssign
-                    (LValVarRef
-                      (QualifiedIdentifier Any __currentCond))
-                    (ExprSlice
-                      (ExprMember
-                        (ExprVarRef
-                          (QualifiedIdentifier Any PSTATE))
-                        IT)
-                      (list
-                        (SliceRange
-                          (ExprLitNat 7)
-                          (ExprLitNat 4)))))))))
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtVarsDecl
+            (list result)
+            (TypeRef
+              (QualifiedIdentifier Any TLBRecord)))
           (StmtReturn
             (Just
               (ExprVarRef
-                (QualifiedIdentifier Any cond))))))))
+                (QualifiedIdentifier Any result))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 TranslationTableWalkLD)
+    (list
+      (SymDecl
+        ipaddress
+        (TypeFun
+          bits
+          (ExprLitNat 40)))
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        acctype
+        (TypeRef
+          (QualifiedIdentifier Any AccType)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        secondstage
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        s2fs1walk
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any TLBRecord)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtVarsDecl
+            (list result)
+            (TypeRef
+              (QualifiedIdentifier Any TLBRecord)))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any result))))))))
+  (DefCallable
+    (QualifiedIdentifier AArch32 TranslationTableWalkSD)
+    (list
+      (SymDecl
+        vaddress
+        (TypeFun
+          bits
+          (ExprLitNat 32)))
+      (SymDecl
+        acctype
+        (TypeRef
+          (QualifiedIdentifier Any AccType)))
+      (SymDecl
+        iswrite
+        (TypeRef
+          (QualifiedIdentifier Any boolean)))
+      (SymDecl
+        size
+        (TypeRef
+          (QualifiedIdentifier Any integer))))
+    (Just
+      (ReturnType
+        (list
+          (TypeRef
+            (QualifiedIdentifier Any TLBRecord)))))
+    (Just
+      (StmtBlock
+        (list
+          (StmtAssert
+            (ExprVarRef
+              (QualifiedIdentifier Any FALSE)))
+          (StmtVarsDecl
+            (list result)
+            (TypeRef
+              (QualifiedIdentifier Any TLBRecord)))
+          (StmtReturn
+            (Just
+              (ExprVarRef
+                (QualifiedIdentifier Any result))))))))
   (DefCallable
     (QualifiedIdentifier Any ConsumptionOfSpeculativeDataBarrier)
     (list)
@@ -1073,151 +1125,4 @@
           (StmtReturn
             (Just
               (ExprVarRef
-                (QualifiedIdentifier Any FALSE))))))))
-  (DefCallable
-    (QualifiedIdentifier AArch64 TranslationTableWalk)
-    (list
-      (SymDecl
-        ipaddress
-        (TypeFun
-          bits
-          (ExprLitNat 52)))
-      (SymDecl
-        s1_nonsecure
-        (TypeRef
-          (QualifiedIdentifier Any bit)))
-      (SymDecl
-        vaddress
-        (TypeFun
-          bits
-          (ExprLitNat 64)))
-      (SymDecl
-        acctype
-        (TypeRef
-          (QualifiedIdentifier Any AccType)))
-      (SymDecl
-        iswrite
-        (TypeRef
-          (QualifiedIdentifier Any boolean)))
-      (SymDecl
-        secondstage
-        (TypeRef
-          (QualifiedIdentifier Any boolean)))
-      (SymDecl
-        s2fs1walk
-        (TypeRef
-          (QualifiedIdentifier Any boolean)))
-      (SymDecl
-        size
-        (TypeRef
-          (QualifiedIdentifier Any integer))))
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any TLBRecord)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtVarsDecl
-            (list result)
-            (TypeRef
-              (QualifiedIdentifier Any TLBRecord)))
-          (StmtReturn
-            (Just
-              (ExprVarRef
-                (QualifiedIdentifier Any result))))))))
-  (DefCallable
-    (QualifiedIdentifier AArch32 TranslationTableWalkLD)
-    (list
-      (SymDecl
-        ipaddress
-        (TypeFun
-          bits
-          (ExprLitNat 40)))
-      (SymDecl
-        vaddress
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        acctype
-        (TypeRef
-          (QualifiedIdentifier Any AccType)))
-      (SymDecl
-        iswrite
-        (TypeRef
-          (QualifiedIdentifier Any boolean)))
-      (SymDecl
-        secondstage
-        (TypeRef
-          (QualifiedIdentifier Any boolean)))
-      (SymDecl
-        s2fs1walk
-        (TypeRef
-          (QualifiedIdentifier Any boolean)))
-      (SymDecl
-        size
-        (TypeRef
-          (QualifiedIdentifier Any integer))))
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any TLBRecord)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtVarsDecl
-            (list result)
-            (TypeRef
-              (QualifiedIdentifier Any TLBRecord)))
-          (StmtReturn
-            (Just
-              (ExprVarRef
-                (QualifiedIdentifier Any result))))))))
-  (DefCallable
-    (QualifiedIdentifier AArch32 TranslationTableWalkSD)
-    (list
-      (SymDecl
-        vaddress
-        (TypeFun
-          bits
-          (ExprLitNat 32)))
-      (SymDecl
-        acctype
-        (TypeRef
-          (QualifiedIdentifier Any AccType)))
-      (SymDecl
-        iswrite
-        (TypeRef
-          (QualifiedIdentifier Any boolean)))
-      (SymDecl
-        size
-        (TypeRef
-          (QualifiedIdentifier Any integer))))
-    (Just
-      (ReturnType
-        (list
-          (TypeRef
-            (QualifiedIdentifier Any TLBRecord)))))
-    (Just
-      (StmtBlock
-        (list
-          (StmtAssert
-            (ExprVarRef
-              (QualifiedIdentifier Any FALSE)))
-          (StmtVarsDecl
-            (list result)
-            (TypeRef
-              (QualifiedIdentifier Any TLBRecord)))
-          (StmtReturn
-            (Just
-              (ExprVarRef
-                (QualifiedIdentifier Any result)))))))))
+                (QualifiedIdentifier Any FALSE)))))))))

@@ -273,20 +273,25 @@ translationLoop fromInstr callStack defs (fnname, env) = do
       then return Set.empty
       else do
        case Map.lookup fnname (defSignatures defs) of
-           Just (ssig, stmts) | Some ssig <- mkSignature defs env ssig -> do
-                 MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
-                 SomeFunctionSignature sig <- return $ ssig
-                 logMsg $ "Translating function: " ++ show finalName ++ " for instruction: "
-                    ++ prettyIdent fromInstr
-                    ++ "\n CallStack: " ++ show callStack
-                    ++ "\n" ++ show sig ++ "\n"
-                 deps <- processFunction fromInstr (KeyFun finalName) sig stmts defs
-                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
-                 alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Map.assocs deps)
-                 let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
+           Just (ssig, stmts) -> do
+                 result <- liftSigM (KeyFun finalName) $ mkSignature env ssig
+                 case result of
+                   Left err -> do
+                     logMsg $ "Error computing final function signature: " ++ show err
+                     return Set.empty
+                   Right (Some ssig@(SomeFunctionSignature sig)) -> do
+                     MSS.modify' $ \s -> s { sMap = Map.insert finalName (Some ssig) (sMap s) }
+                     logMsg $ "Translating function: " ++ show finalName ++ " for instruction: "
+                        ++ prettyIdent fromInstr
+                        ++ "\n CallStack: " ++ show callStack
+                        ++ "\n" ++ show sig ++ "\n"
+                     deps <- processFunction fromInstr (KeyFun finalName) sig stmts defs
+                     MSS.modify' $ \s -> s { funDeps = Map.insert finalName Set.empty (funDeps s) }
+                     alldeps <- mapM (translationLoop fromInstr (finalName : callStack) defs) (Map.assocs deps)
+                     let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
 
-                 MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
-                 return alldepsSet
+                     MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
+                     return alldepsSet
            _ -> error $ "Missing definition for:" <> (show fnname)
 
 withOnlineBackend :: forall fs scope a.
@@ -390,7 +395,7 @@ data ExpectedException =
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
   TExcept _ (InstructionUnsupported) -> Just $ UnsupportedInstruction
-  SExcept (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
+  SExcept _ (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
   TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
   TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
   TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
@@ -492,7 +497,7 @@ prettyKey (KeyFun fnName) = T.unpack fnName
 
 data TranslatorException =
     TExcept (T.Text, StaticValues, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
-  | SExcept SigException
+  | SExcept ElemKey SigException
   | BadTranslatedInstructionsFile
   | SomeExcept X.SomeException
 
@@ -509,7 +514,7 @@ instance Show TranslatorException where
       ++ "\n ** Exception in: " ++ T.unpack nm ++ "\n"
       ++ show te
 
-    SExcept se -> "Signature exception:\n" ++ show se
+    SExcept k se -> "Signature exception in:" ++ prettyKey k ++ "\n" ++ show se
     SomeExcept err -> "General exception:\n" ++ show err
 
 withStar :: String -> String
@@ -598,7 +603,7 @@ liftSigM k f = do
       MSS.modify' $ \s -> s { sigState = state' }
       return $ Right a
     Left err -> do
-      collectExcept k (SExcept err)
+      collectExcept k (SExcept k err)
       return $ Left err
 
 collectExcept :: ElemKey -> TranslatorException -> MSS.StateT SigMap IO ()

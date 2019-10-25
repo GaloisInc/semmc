@@ -1,33 +1,49 @@
-bits(N*M) Replicate(bits(N) bv)
-    return Replicate(bv, M);
-
-integer sizeOf(bits(N) bv)
-    return N;
-
-constant integer LOG2_TAG_GRANULE=4;
-constant integer TAG_GRANULE=2 ^ LOG2_TAG_GRANULE;
-
+// Toplevel flags for execution status
 
 boolean __AssertionFailure;
 boolean __EndOfInstruction;
 boolean __UndefinedBehavior;
 boolean __UnpredictableBehavior;
 
-ASLCheckAssertion(boolean assertion)
-  __AssertionFailure = __AssertionFailure OR (!assertion);
-  return;
-
-ASLSetUndefined()
-  __UndefinedBehavior = TRUE;
-  return;
-
-ASLSetUnpredictable()
-  __UnpredictableBehavior = TRUE;
-  return;
+// This flag is checked every time a function call
+// might have written to it to see if we should stop
+// processing the instruction early.
 
 EndOfInstruction()
   __EndOfInstruction = TRUE;
   return;
+
+// These are overridden in the translation to terminate
+// the calling function early.
+
+// Unlike the above flag, these are not checked on every
+// function call. The resulting global state after either
+// flag is tripped should be treated as undefined.
+
+// UNDEFINED is rewritten into this
+ASLSetUndefined()
+  __UndefinedBehavior = TRUE;
+  return;
+
+// UNPREDICTABLE is rewritten into this
+ASLSetUnpredictable()
+  __UnpredictableBehavior = TRUE;
+  return;
+
+//
+
+// Constant lifted from mra_tools
+
+constant integer LOG2_TAG_GRANULE=4;
+constant integer TAG_GRANULE=2 ^ LOG2_TAG_GRANULE;
+
+// Bitvector primitives
+
+bits(N*M) Replicate(bits(N) bv)
+    return Replicate(bv, M);
+
+integer sizeOf(bits(N) bv)
+    return N;
 
 
 bits(width) BigEndianReverse (bits(width) value)
@@ -38,6 +54,10 @@ bits(width) BigEndianReverse (bits(width) value)
     return BigEndianReverse(value<half-1:0>) : BigEndianReverse(value<width-1:half>);
 
 // Shifting Overrides
+
+// These should be semantically equivalent to the functions in
+// the standard ASL spec, but have been rewritten to not require
+// intermediate arbitrarily-sized bitvectors.
 
 (bits(N), bit) LSL_C(bits(N) x, integer shift)
     assert shift > 0;
@@ -86,12 +106,31 @@ bits(N) ASR(bits(N) x, integer shift)
         result = primitive_ASR(x, shift);
     return result;
 
-bits(4) AArch32.SetDefaultCond()
-  if __ThisInstrEnc IN {InstrEnc_A64, InstrEnc_A32} || PSTATE.IT<3:0> == Zeros(4) then
-      __currentCond = 0xE<3:0>;
-  else
-      __currentCond = PSTATE.IT<7:4>;
-  return cond;
+
+// We assume that the MMU is disabled and that general address translation
+// is not going to occur. These functions appear to be too complex to translate.
+
+TLBRecord AArch64.TranslationTableWalk(bits(52) ipaddress, bit s1_nonsecure, bits(64) vaddress,
+                                       AccType acctype, boolean iswrite, boolean secondstage,
+                                       boolean s2fs1walk, integer size)
+  assert FALSE;
+  TLBRecord result;
+  return result;
+
+TLBRecord AArch32.TranslationTableWalkLD(bits(40) ipaddress, bits(32) vaddress,
+                                         AccType acctype, boolean iswrite, boolean secondstage,
+                                         boolean s2fs1walk, integer size)
+  assert FALSE;
+  TLBRecord result;
+  return result;
+
+TLBRecord AArch32.TranslationTableWalkSD(bits(32) vaddress, AccType acctype, boolean iswrite,
+                                         integer size)
+  assert FALSE;
+  TLBRecord result;
+  return result;
+
+// Misc stubs for system and debug functions
 
 ConsumptionOfSpeculativeDataBarrier()
     return;
@@ -120,10 +159,8 @@ boolean IsPhysicalSErrorPending()
     ret = boolean UNKNOWN;
     return ret;
 
-// We can likely stub these out safely
 (boolean,boolean) AArch32.BreakpointValueMatch(integer n, bits(32) vaddress, boolean linked_to)
   return (FALSE, FALSE);
-
 
 boolean AArch64.BreakpointValueMatch(integer n, bits(64) vaddress, boolean linked_to)
   return FALSE;
@@ -152,23 +189,3 @@ boolean AArch64.WatchpointMatch(integer n, bits(64) vaddress, integer size, bool
                                 AccType acctype, boolean iswrite)
   return FALSE;
 
-// We assume that the MMU is disabled and address translation is not occuring
-TLBRecord AArch64.TranslationTableWalk(bits(52) ipaddress, bit s1_nonsecure, bits(64) vaddress,
-                                       AccType acctype, boolean iswrite, boolean secondstage,
-                                       boolean s2fs1walk, integer size)
-  assert FALSE;
-  TLBRecord result;
-  return result;
-
-TLBRecord AArch32.TranslationTableWalkLD(bits(40) ipaddress, bits(32) vaddress,
-                                         AccType acctype, boolean iswrite, boolean secondstage,
-                                         boolean s2fs1walk, integer size)
-  assert FALSE;
-  TLBRecord result;
-  return result;
-
-TLBRecord AArch32.TranslationTableWalkSD(bits(32) vaddress, AccType acctype, boolean iswrite,
-                                         integer size)
-  assert FALSE;
-  TLBRecord result;
-  return result;

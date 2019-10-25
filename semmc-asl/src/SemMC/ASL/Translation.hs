@@ -30,9 +30,11 @@ import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( forM_, when, void, foldM, foldM_, (>=>), (<=<) )
+import           Control.Monad.Identity
 import qualified Control.Monad.State.Class as MS
 import           Control.Monad.Trans ( lift)
 import qualified Control.Monad.State as MSS
+import qualified Control.Monad.Writer.Lazy as W
 import           Control.Monad.Trans.Maybe as MaybeT
 import qualified Data.BitVector.Sized as BVS
 import           Data.Maybe ( fromMaybe, catMaybes, maybeToList )
@@ -1133,10 +1135,11 @@ unifyType aslT constraint = do
       _ -> Right e
 
 varsOfExpr :: AS.Expr -> [T.Text]
-varsOfExpr e = ASLT.foldExpr getVar e []
+varsOfExpr e = runIdentity $ ASLT.writeExpr (ASLT.noWrites { ASLT.exprWrite = getVar }) e
   where
-    getVar (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) = (:) ident
-    getVar _ = id
+    getVar :: AS.Expr -> Identity [T.Text]
+    getVar (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) = return $ [ident]
+    getVar e = return $ []
 
 dependentVarsOfType :: AS.Type -> [T.Text]
 dependentVarsOfType t = case t of
@@ -2451,10 +2454,6 @@ overrides = Overrides {..}
 
         overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
         overrideExpr e ty =
-          (polymorphicBVOverrides e ty <|>
-           arithmeticOverrides e ty <|>
-           overloadedDispatchOverrides e ty <|>
-           bitShiftOverrides e ty <|>
           case e of
             AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) -> Just $ do
               translateExpr' overrides (AS.ExprInSet e [AS.SetEltSingle mask]) ty
@@ -2471,7 +2470,11 @@ overrides = Overrides {..}
                  , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` repr -> do
                      mkAtom (CCG.App (CCE.BVUndef repr))
                  | otherwise -> X.throw $ BadMemoryAccess szExpr
-            _ -> Nothing)
+            _ ->
+              polymorphicBVOverrides e ty <|>
+              arithmeticOverrides e ty <|>
+              overloadedDispatchOverrides e ty <|>
+              bitShiftOverrides e ty
 
 
 

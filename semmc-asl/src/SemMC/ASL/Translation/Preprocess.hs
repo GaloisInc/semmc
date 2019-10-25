@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
@@ -35,7 +36,6 @@ module SemMC.ASL.Translation.Preprocess
   , Definitions(..)
   , bitsToInteger
   , mkFunctionName
-  , applyStaticEnv
   , mkSignature
   , registerTypeSynonyms
   , localTypeHints
@@ -48,8 +48,9 @@ import Debug.Trace (traceM)
 
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
-import           Control.Monad (void)
+import           Control.Monad (void, foldM, foldM_)
 import qualified Control.Monad.Except as E
+import qualified Control.Monad.Writer.Lazy as W
 import qualified Control.Monad.RWS as RWS
 import qualified Control.Monad.State.Class as MS
 import qualified Control.Monad.State as MSS
@@ -493,25 +494,19 @@ data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
                            , builtinTypes :: Map.Map T.Text (Some UserType)
                            }
 
-data GlobalVarRefs =
-  GlobalVarRefs { globalReads :: Set.Set (T.Text, Some WT.BaseTypeRepr)
-                , globalWrites :: Set.Set (T.Text, Some WT.BaseTypeRepr)
-                }
-
-mergeGVarRefs :: GlobalVarRefs -> GlobalVarRefs -> GlobalVarRefs
-mergeGVarRefs (GlobalVarRefs reads writes) (GlobalVarRefs reads' writes') =
-  GlobalVarRefs (Set.union reads reads') (Set.union writes writes')
-
-unionGVarRefs :: [GlobalVarRefs] -> GlobalVarRefs
-unionGVarRefs = foldr mergeGVarRefs emptyGVarRefs
-
-emptyGVarRefs :: GlobalVarRefs
-emptyGVarRefs = GlobalVarRefs Set.empty Set.empty
+type GlobalVarRefs = (Set.Set (T.Text, Some WT.BaseTypeRepr), Set.Set (T.Text, Some WT.BaseTypeRepr))
 
 -- All writes are implicitly reads
 unpackGVarRefs :: GlobalVarRefs -> ([(T.Text, Some WT.BaseTypeRepr)], [(T.Text, Some WT.BaseTypeRepr)])
-unpackGVarRefs (GlobalVarRefs reads writes) =
-  (Set.toList (Set.union reads writes), Set.toList writes)
+unpackGVarRefs (reads, writes) =
+  (Set.toList (Set.unions [reads, writes, builtinReads, builtinWrites]),
+   Set.toList (Set.unions [writes, builtinWrites]))
+
+builtinReads :: Set.Set (T.Text, Some WT.BaseTypeRepr)
+builtinReads = Set.fromList [("__AssertionFailure", Some CT.BaseBoolRepr)]
+
+builtinWrites :: Set.Set (T.Text, Some WT.BaseTypeRepr)
+builtinWrites = Set.fromList [("__AssertionFailure", Some CT.BaseBoolRepr)]
 
 -- deriving instance Show (SigEnv ext f)
 
@@ -544,6 +539,7 @@ data InnerSigException = TypeNotFound T.Text
                        | UnsupportedSigExpr AS.Expr
                        | UnsupportedSigStmt AS.Stmt
                        | UnsupportedSigLVal AS.LValExpr
+                       | FailedToMonomorphizeSignature AS.Type StaticValues
   deriving (Eq, Show)
 
 data SigException = SigException
@@ -728,12 +724,12 @@ varGlobal varName = do
 readGlobal :: T.Text -> SigM ext f GlobalVarRefs
 readGlobal varName = do
   reads <- maybeToList <$> varGlobal varName
-  return $ GlobalVarRefs (Set.fromList reads) Set.empty
+  return $ (Set.fromList reads, Set.empty)
 
 writeGlobal :: T.Text -> SigM ext f GlobalVarRefs
 writeGlobal varName = do
   writes <- maybeToList <$> varGlobal varName
-  return $ GlobalVarRefs Set.empty (Set.fromList writes)
+  return $ (Set.empty, Set.fromList writes)
 
 theVarGlobal :: T.Text -> SigM ext f (T.Text, Some WT.BaseTypeRepr)
 theVarGlobal varName = do
@@ -742,112 +738,11 @@ theVarGlobal varName = do
     Just g -> return g
     Nothing -> error $ "Unknown global variable: " <> show varName
 
-sliceGlobalVars :: AS.Slice -> SigM ext f GlobalVarRefs
-sliceGlobalVars slice = case slice of
-  AS.SliceSingle e -> exprGlobalVars e
-  AS.SliceOffset e1 e2 -> mergeGVarRefs <$> exprGlobalVars e1 <*> exprGlobalVars e2
-  AS.SliceRange e1 e2 -> mergeGVarRefs <$> exprGlobalVars e1 <*> exprGlobalVars e2
-
-setEltGlobalVars :: AS.SetElement -> SigM ext f GlobalVarRefs
-setEltGlobalVars setElt = case setElt of
-  AS.SetEltSingle e -> exprGlobalVars e
-  AS.SetEltRange e1 e2 -> mergeGVarRefs <$> exprGlobalVars e1 <*> exprGlobalVars e2
-
-lValExprGlobalVars :: AS.LValExpr -> SigM ext f GlobalVarRefs
-lValExprGlobalVars lValExpr = case lValExpr of
-  -- If the variable isn't in the list of globals, we assume it is locally bound and
-  -- simply return the empty list.
-  AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> readGlobal varName
-  AS.LValMemberArray le vars -> do
-    leGlobals <- lValExprGlobalVars le
-    varGlobals <- unionGVarRefs <$> traverse readGlobal vars
-    return $ mergeGVarRefs leGlobals varGlobals
-  AS.LValArrayIndex le slices -> do
-    leGlobals <- lValExprGlobalVars le
-    sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
-    return $ mergeGVarRefs leGlobals sliceGlobals
-  AS.LValSliceOf le slices -> do
-    leGlobals <- lValExprGlobalVars le
-    sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
-    return $ mergeGVarRefs leGlobals sliceGlobals
-  AS.LValTuple les ->
-    unionGVarRefs <$> traverse lValExprGlobalVars les
-  AS.LValMember lv _ -> lValExprGlobalVars lv
-  AS.LValMemberBits lv _ -> lValExprGlobalVars lv
-  AS.LValSlice les ->
-    unionGVarRefs <$> traverse lValExprGlobalVars les
-  AS.LValIgnore -> return $ unionGVarRefs []
-  _ -> throwError $ UnsupportedSigLVal lValExpr
-
-casePatternGlobalVars :: AS.CasePattern -> SigM ext f GlobalVarRefs
-casePatternGlobalVars pat = case pat of
-  AS.CasePatternIdentifier varName -> writeGlobal varName
-  AS.CasePatternTuple pats -> unionGVarRefs <$> traverse casePatternGlobalVars pats
-  _ -> return $ unionGVarRefs []
-
-caseAlternativeGlobalVars :: AS.CaseAlternative -> SigM ext f GlobalVarRefs
-caseAlternativeGlobalVars alt = case alt of
-  AS.CaseWhen pats mExpr stmts -> do
-    patGlobals <- unionGVarRefs <$> traverse casePatternGlobalVars pats
-    eGlobals <- fromMaybe (unionGVarRefs []) <$> traverse exprGlobalVars mExpr
-    stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
-    return $ unionGVarRefs [patGlobals, eGlobals, stmtGlobals]
-  AS.CaseOtherwise stmts -> unionGVarRefs <$> traverse stmtGlobalVars stmts
-
--- | Collect all global variables from a single 'AS.Expr'.
-exprGlobalVars :: AS.Expr -> SigM ext f GlobalVarRefs
-exprGlobalVars expr = case overrideExpr overrides expr of
-  Just exprs -> unionGVarRefs <$> traverse exprGlobalVars exprs
-  Nothing ->
-    case expr of
-      AS.ExprVarRef (AS.QualifiedIdentifier _ varName) -> readGlobal varName
-      AS.ExprSlice e slices -> do
-        eGlobals <- exprGlobalVars e
-        sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
-        return $ mergeGVarRefs eGlobals sliceGlobals
-      AS.ExprIndex e slices -> do
-        eGlobals <- exprGlobalVars e
-        sliceGlobals <- unionGVarRefs <$> traverse sliceGlobalVars slices
-        return $ mergeGVarRefs eGlobals sliceGlobals
-      AS.ExprUnOp _ e -> exprGlobalVars e
-      AS.ExprBinOp _ e1 e2 -> do
-        e1Globals <- exprGlobalVars e1
-        e2Globals <- exprGlobalVars e2
-        return $ mergeGVarRefs e1Globals e2Globals
-      AS.ExprMembers e vars -> do
-        eGlobals <- exprGlobalVars e
-        varGlobals <- unionGVarRefs <$> traverse readGlobal vars
-        return $ mergeGVarRefs eGlobals varGlobals
-      AS.ExprInMask e _ -> exprGlobalVars e
-      AS.ExprCall qName argEs -> callableGlobalVars' qName argEs
-      AS.ExprInSet e setElts -> do
-        eGlobals <- exprGlobalVars e
-        setEltGlobals <- unionGVarRefs <$> traverse setEltGlobalVars setElts
-        return $ mergeGVarRefs eGlobals setEltGlobals
-      AS.ExprTuple es ->
-        unionGVarRefs <$> traverse exprGlobalVars es
-      AS.ExprIf branches def -> do
-        branchGlobals <- forM branches $ \(testExpr, resExpr) -> do
-          testExprGlobals <- exprGlobalVars testExpr
-          resExprGlobals <- exprGlobalVars resExpr
-          return $ mergeGVarRefs testExprGlobals resExprGlobals
-        defaultGlobals <- exprGlobalVars def
-        return $ mergeGVarRefs (unionGVarRefs branchGlobals) defaultGlobals
-      AS.ExprMember e _ -> exprGlobalVars e
-      AS.ExprMemberBits e _ -> exprGlobalVars e
-      AS.ExprLitInt _ -> return $ unionGVarRefs []
-      AS.ExprLitBin _ -> return $ unionGVarRefs []
-      AS.ExprLitString _ -> return $ unionGVarRefs []
-      AS.ExprLitMask _ -> return $ unionGVarRefs []
-      AS.ExprUnknown _ -> return $ unionGVarRefs []
-      AS.ExprImpDef _ _ -> return $ unionGVarRefs []
-      _ -> throwError $ UnsupportedSigExpr expr
 
 callableGlobalVars' :: AS.QualifiedIdentifier
                     -> [AS.Expr]
                     -> SigM ext f GlobalVarRefs
 callableGlobalVars' qIdent argEs = do
-  argGlobals <- unionGVarRefs <$> traverse exprGlobalVars argEs
   mCallable <- lookupCallable qIdent (length argEs)
   case mCallable of
     Just callable -> do
@@ -857,63 +752,15 @@ callableGlobalVars' qIdent argEs = do
           setCallableSearch callable SearchSeen
           callableGlobals <- callableGlobalVars callable
           markCallableFound callable
-          -- Compute the signature of the callable
-          void $ computeCallableSignature callable
-          return $ mergeGVarRefs callableGlobals argGlobals
+          return $ callableGlobals
         Just SearchSeen -> do
           setCallableSearch callable SearchCollect
           callableGlobals <- callableGlobalVars callable
-          return $ mergeGVarRefs callableGlobals argGlobals
+          return $ callableGlobals
         Just SearchCollect -> do
-          return argGlobals
-    Nothing -> return argGlobals
+          return (Set.empty, Set.empty)
 
--- | Collect all global variables from a single 'AS.Stmt'.
-stmtGlobalVars :: AS.Stmt -> SigM ext f GlobalVarRefs
-stmtGlobalVars stmt =
-  case overrideStmt overrides stmt of
-    Just stmts -> unionGVarRefs <$> traverse stmtGlobalVars stmts
-    Nothing ->
-      case stmt of
-          AS.StmtVarsDecl ty i -> do
-            storeUserType ty
-            return $ emptyGVarRefs
-          AS.StmtVarDeclInit (_, ty) e -> do
-            storeUserType ty
-            exprGlobalVars e
-          AS.StmtAssign le e -> mergeGVarRefs <$> lValExprGlobalVars le <*> exprGlobalVars e
-          AS.StmtCall qName argEs -> callableGlobalVars' qName argEs
-          AS.StmtReturn (Just e) -> exprGlobalVars e
-          AS.StmtIf branches mDefault -> do
-            branchGlobals <- forM branches $ \(testExpr, stmts) -> do
-              testExprGlobals <- exprGlobalVars testExpr
-              stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
-              return $ mergeGVarRefs testExprGlobals stmtGlobals
-            defaultGlobals <- case mDefault of
-              Nothing -> return $ emptyGVarRefs
-              Just stmts -> unionGVarRefs <$> traverse stmtGlobalVars stmts
-            return $ mergeGVarRefs (unionGVarRefs branchGlobals) defaultGlobals
-          AS.StmtCase e alts -> do
-            eGlobals <- exprGlobalVars e
-            altGlobals <- unionGVarRefs <$> traverse caseAlternativeGlobalVars alts
-            return $ mergeGVarRefs eGlobals altGlobals
-          AS.StmtFor _ (initialize, term) stmts -> do
-            initGlobals <- exprGlobalVars initialize
-            termGlobals <- exprGlobalVars term
-            stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
-            return $ unionGVarRefs [initGlobals, termGlobals, stmtGlobals]
-          AS.StmtWhile term stmts -> do
-            termGlobals <- exprGlobalVars term
-            stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
-            return $ mergeGVarRefs termGlobals stmtGlobals
-          AS.StmtRepeat stmts term -> do
-            termGlobals <- exprGlobalVars term
-            stmtGlobals <- unionGVarRefs <$> traverse stmtGlobalVars stmts
-            return $ mergeGVarRefs termGlobals stmtGlobals
-          AS.StmtConstDecl _ e -> exprGlobalVars e
-          AS.StmtReturn Nothing -> return $ emptyGVarRefs
-
-          _ -> throwError $ UnsupportedSigStmt stmt
+    Nothing -> return (Set.empty, Set.empty)
 
 -- | Compute the list of global variables in a 'Callable' and store it in the
 -- state. If it has already been computed, simply return it.
@@ -923,20 +770,68 @@ callableGlobalVars c@Callable{..} = do
   case mGlobals of
     Just globals -> return globals
     Nothing -> do
-      -- Mark the callable as 'seen' before continuing
-      globals <- unionGVarRefs <$> traverse stmtGlobalVars callableStmts
+      globals <- globalsOfStmts callableStmts
       storeCallableGlobals c globals
       return globals
 
--- Any function may implicitly make an assertion
-getBuiltinGlobalVars :: SigM ext f GlobalVarRefs
-getBuiltinGlobalVars = do
-  reads <- unionGVarRefs <$> traverse readGlobal builtinReads
-  writes <- unionGVarRefs <$> traverse writeGlobal builtinWrites
-  return $ mergeGVarRefs reads writes
+
+
+globalsOfStmts :: [AS.Stmt] -> SigM ext f GlobalVarRefs
+globalsOfStmts stmts = do
+  let getexpr expr = case expr of
+        AS.ExprVarRef (AS.QualifiedIdentifier _ varName) -> readGlobal varName
+        AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
+        _ -> return mempty
+  let getlval lv = case lv of
+        AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> writeGlobal varName
+        _ -> return mempty
+  let getstmt stmt = case stmt of
+        AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
+        AS.StmtCase _ alts -> mconcat <$> traverse caseAlternativeGlobalVars alts
+        _ -> return (Set.empty, Set.empty)
+  let collectors = ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.lvalWrite = getlval, ASLT.stmtWrite = getstmt}
+  mconcat <$> traverse (ASLT.writeStmt collectors) stmts
   where
-    builtinReads = ["__AssertionFailure"]
-    builtinWrites = ["__AssertionFailure"]
+    collectCallables :: AS.QualifiedIdentifier -> [AS.Expr] -> SigM ext f GlobalVarRefs
+    collectCallables (AS.QualifiedIdentifier q nm) args  =
+      mconcat <$> traverse (\nm' -> callableGlobalVars' (AS.QualifiedIdentifier q nm') args) (overrideFun nm)
+
+    caseAlternativeGlobalVars alt = case alt of
+      AS.CaseWhen pats _ _ -> mconcat <$> traverse casePatternGlobalVars pats
+      _ -> return mempty
+
+    casePatternGlobalVars pat = case pat of
+      AS.CasePatternIdentifier varName -> readGlobal varName
+      AS.CasePatternTuple pats -> mconcat <$> traverse casePatternGlobalVars pats
+      _ -> return mempty
+
+computeSignatures :: [AS.Stmt] -> SigM ext f ()
+computeSignatures stmts = do
+  let collectors = ASLT.noWrites
+        { ASLT.exprWrite = getExprCall
+        , ASLT.stmtWrite = getStmtCall
+        , ASLT.typeWrite = storeUserType
+        }
+  mapM_ (ASLT.writeStmt collectors) stmts
+  where
+    collectCallables (AS.QualifiedIdentifier q nm) args =
+      mapM_ (\nm' -> collectCallable (AS.QualifiedIdentifier q nm') args) (overrideFun nm)
+
+    collectCallable qName argEs = do
+        mCallable <- lookupCallable qName (length argEs)
+        case mCallable of
+          Just c -> void $ computeCallableSignature c
+          _ -> return ()
+    getExprCall :: AS.Expr -> SigM ext f ()
+    getExprCall expr =
+      case expr of
+      AS.ExprCall qName argEs -> collectCallables qName argEs
+      _ -> return ()
+    getStmtCall stmt = case stmt of
+      AS.StmtCall qName argEs -> collectCallables qName argEs
+      _ -> return ()
+
+
 
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
@@ -945,16 +840,13 @@ computeCallableSignature :: Callable -> SigM ext f (SomeSimpleFunctionSignature)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
   mSig <- lookupCallableSignature c
-
   case mSig of
     Just sig -> return sig
     Nothing -> do
       mapM_ (\(_,t) -> storeUserType t) callableArgs
       mapM_ storeUserType callableRets
-      globalVars' <- callableGlobalVars c
-      builtins <- getBuiltinGlobalVars
-      (globalReads, globalWrites) <- return $ unpackGVarRefs $
-        mergeGVarRefs globalVars' builtins
+      globalVars <- callableGlobalVars c
+      (globalReads, globalWrites) <- return $ unpackGVarRefs $ globalVars
 
       labeledReads <- getLabels globalReads
       labeledWrites <- getLabels globalWrites
@@ -970,10 +862,15 @@ computeCallableSignature c@Callable{..} = do
             , sfuncGlobalWriteReprs = globalWriteReprs
             }
       storeCallableSignature c sig
+      computeSignatures callableStmts
       return sig
-  where getLabels vars =
-          forM vars $ \(varName, Some varTp) -> do
-            return $ Some (LabeledValue varName varTp)
+  where
+    getLabels vars =
+      forM vars $ \(varName, Some varTp) -> do
+        return $ Some (LabeledValue varName varTp)
+
+
+
 
 computeType'' :: Definitions arch -> AS.Type -> Some WT.BaseTypeRepr
 computeType'' defs t = case computeType' t of
@@ -997,14 +894,13 @@ applyStaticEnv env t =
   fromMaybe (X.throw $ CannotStaticallyEvaluateType t (staticEnvMapVals env)) $
    applyStaticEnv' env t
 
-mkSignature :: Definitions arch -> StaticValues -> SomeSimpleFunctionSignature -> Some (SomeFunctionSignature)
-mkSignature defs env sig =
+mkSignature :: StaticValues -> SomeSimpleFunctionSignature -> SigM ext f (Some (SomeFunctionSignature))
+mkSignature env sig =
   case sig of
-    SomeSimpleFunctionSignature fsig |
-        Some retTs <- Ctx.fromList $ map mkType (sfuncRet fsig)
-      , Some args <- Ctx.fromList $ map mkLabel (sfuncArgs fsig) -> 
-       
-      Some $ SomeFunctionSignature $ FunctionSignature
+    SomeSimpleFunctionSignature fsig -> do
+      Some retTs <- Ctx.fromList <$> mapM mkType (sfuncRet fsig)
+      Some args <- Ctx.fromList <$> mapM mkLabel (sfuncArgs fsig)
+      return $ Some $ SomeFunctionSignature $ FunctionSignature
         { funcName = mkFinalFunctionName env $ sfuncName fsig
         , funcRetRepr = retTs
         , funcArgReprs = args
@@ -1014,10 +910,12 @@ mkSignature defs env sig =
         , funcArgs = sfuncArgs fsig
         }
   where
-    mkType t = computeType'' defs (applyStaticEnv (simpleStaticEnvMap env) t)
-    mkLabel (nm, t) =
-      if | Some tp <- mkType t ->
-           Some (LabeledValue nm (CT.baseToType tp))
+    mkType t = case applyStaticEnv' (simpleStaticEnvMap env) t of
+      Just t -> computeType t
+      _ -> throwError $ FailedToMonomorphizeSignature t env
+    mkLabel (nm, t) = do
+      Some tp <- mkType t
+      return $ Some (LabeledValue nm (CT.baseToType tp))
         
 
 mkInstructionName :: T.Text -- ^ name of instruction
@@ -1050,13 +948,12 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
       instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $
         liftOverEnvs instName possibleEnvs instExecute
       instStmts = initStmts ++ instPostDecode ++ instExecute'
-      instGlobalVars = unionGVarRefs <$> traverse stmtGlobalVars instStmts
+      instGlobalVars = globalsOfStmts instStmts
       staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
       in do
-        globalVars' <- instGlobalVars
-        builtins <- getBuiltinGlobalVars
-        (globalReads, globalWrites) <- return $ unpackGVarRefs $
-          mergeGVarRefs globalVars' builtins
+        computeSignatures instStmts
+        globalVars <- instGlobalVars
+        (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
         labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
           return $ Some (LabeledValue varName varTp)
         labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
@@ -1101,7 +998,7 @@ pruneInfeasableInstrSets enc stmts = case enc of
                        (AS.ExprVarRef (AS.QualifiedIdentifier _ "InstrSet_A32"))) =
       AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
     evalInstrSetTest e = e
-    in map (ASLT.applyStmtSyntaxOverride (ASLT.SyntaxOverrides id evalInstrSetTest id id)) stmts
+    in map (ASLT.mapSyntax (ASLT.SyntaxMaps evalInstrSetTest id id id)) stmts
 
 getPossibleEnvs :: [AS.InstructionField] -> [AS.Stmt] -> [StaticEnvP]
 getPossibleEnvs fields decodes =
@@ -1146,48 +1043,22 @@ addInitializedVariables stmts env =
           insertStaticEnv nm v env'
       _ -> env'
 
--- Overrides only for the purposes of collecting global variables
-data Overrides arch =
-  Overrides { overrideExpr :: AS.Expr -> Maybe [AS.Expr]
-            , overrideStmt :: AS.Stmt -> Maybe [AS.Stmt]
-            }
-overrides :: forall arch . Overrides arch
-overrides = Overrides {..}
-  where overrideStmt ::  AS.Stmt -> Maybe [AS.Stmt]
-        overrideStmt stmt = case stmt of
-          AS.StmtAssert e ->
-            Just $ [ AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "ASLCheckAssertion") [e] ]
-
-          AS.StmtCall (AS.QualifiedIdentifier _ "__abort") [] ->
-            Just $ [ AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "EndOfInstruction") [] ]
-
-          AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapException") args ->
-            Just $ [ AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapExceptioninteger") args
-                   , AS.StmtCall (AS.QualifiedIdentifier q "TakeHypTrapExceptionExceptionRecord") args
-                   ]
-          _ -> Nothing
-
-        overrideExpr :: AS.Expr -> Maybe [AS.Expr]
-        overrideExpr e = case e of
-          AS.ExprCall (AS.QualifiedIdentifier q f) args
-           | f `elem` ["Min", "Max"] ->
-             Just $ [AS.ExprCall (AS.QualifiedIdentifier q (f <> "integerinteger")) args]
-          AS.ExprCall (AS.QualifiedIdentifier q "Align") args ->
-            Just $ [ AS.ExprCall (AS.QualifiedIdentifier q "Alignintegerinteger") args
-                   , AS.ExprCall (AS.QualifiedIdentifier q "AlignbitsNinteger") args
-                   ]
-
-          _ -> mkFaultOv e "IsExternalAbort" <|>
-               mkFaultOv e "IsAsyncAbort" <|>
-               mkFaultOv e "IsSErrorInterrupt" <|>
-               mkFaultOv e "IsExternalSyncAbort"
-
-        mkFaultOv e nm = case e of
-          AS.ExprCall (AS.QualifiedIdentifier q nm') args | nm == nm' ->
-            Just $ [ AS.ExprCall (AS.QualifiedIdentifier q (nm <> "FaultRecord")) args
-                   , AS.ExprCall (AS.QualifiedIdentifier q (nm <> "Fault")) args
-                   ]
-          _ -> Nothing
+overrideFun :: T.Text -> [T.Text]
+overrideFun nm = case nm of
+  "__abort" -> ["EndOfInstruction"]
+  "TakeHypTrapException" -> ["TakeHypTrapExceptioninteger", "TakeHypTrapExceptionExceptionRecord"]
+  _ | nm `elem` ["Min", "Max"] -> [nm <> "integerinteger"]
+  "Align" -> ["Alignintegerinteger", "AlignbitsNinteger"]
+  _ -> fromMaybe [nm] $
+         mkFaultOv nm "IsExternalAbort" <|>
+         mkFaultOv nm "IsAsyncAbort" <|>
+         mkFaultOv nm "IsSErrorInterrupt" <|>
+         mkFaultOv nm "IsExternalSyncAbort"
+  where
+    mkFaultOv nm nm' =
+      if nm == nm'
+      then Just $ [nm <> "FaultRecord", nm <> "Fault"]
+      else Nothing
 
 mkFinalFunctionName :: StaticValues -> T.Text ->  T.Text
 mkFinalFunctionName dargs nm = T.concat $ [nm] ++ map (\(nm,i) -> nm <> "_" <> T.pack (show i)) (Map.assocs dargs)

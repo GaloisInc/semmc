@@ -17,25 +17,39 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module SemMC.ASL.SyntaxTraverse
   ( mkSyntaxOverrides
   , applySyntaxOverridesInstrs
   , applySyntaxOverridesDefs
-  , applyStmtSyntaxOverride
-  , SyntaxOverrides(..)
-  , foldASL
-  , foldExpr
+  , SyntaxCollectors(..)
+  , noCollectors
+  , SyntaxMaps(..)
+  , noMaps
+  , mapsToCollector
+  , traverseExpr
+  , traverseStmt
+  , SyntaxWrites(..)
+  , noWrites
+  , writeExpr
+  , writeStmt
+  , mapSyntax
   , mkFunctionName
   , mapInnerName
   )
 where
 
+import           Control.Applicative
+import qualified Control.Monad.Writer.Lazy as W
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Text as T
 import           Data.List (nub)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import qualified Control.Monad.State as MSS
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe, listToMaybe, isJust, mapMaybe)
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
@@ -43,20 +57,11 @@ import           SemMC.ASL.StaticExpr
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
 
--- FIXME: Lots of rewriting to handle globals which should go away when
--- we are properly handling the register definitions file
-data SyntaxOverrides = SyntaxOverrides { stmtOverrides :: AS.Stmt -> AS.Stmt
-                                       , exprOverrides :: AS.Expr -> AS.Expr
-                                       , typeOverrides :: AS.Type -> AS.Type
-                                       , lvalOverrides :: AS.LValExpr -> AS.LValExpr
-                                       }
-
-applySyntaxOverridesDefs :: SyntaxOverrides -> [AS.Definition] -> [AS.Definition]
-applySyntaxOverridesDefs ovrs defs =
+applySyntaxOverridesDefs :: SyntaxMaps -> [AS.Definition] -> [AS.Definition]
+applySyntaxOverridesDefs maps defs =
   let
-    g = applyStmtSyntaxOverride ovrs
-    f = applyExprSyntaxOverride ovrs
-    h = applyTypeSyntaxOverride ovrs
+    f :: forall e. MapSyntax e => e -> e
+    f = mapSyntax maps
 
 
     -- TODO: For sanity we delete setter definitions which require
@@ -65,7 +70,7 @@ applySyntaxOverridesDefs ovrs defs =
     argName (AS.SetterArg name False) = Just name
     argName _ = Nothing
 
-    mapDecl (i, t) = (i, h t)
+    mapDecl (i, t) = (i, f t)
 
     mapIxType ix = case ix of
       AS.IxTypeRange e e' -> AS.IxTypeRange (f e) (f e')
@@ -73,36 +78,36 @@ applySyntaxOverridesDefs ovrs defs =
 
     mapDefs d = case d of
       AS.DefCallable qName args rets stmts ->
-        [AS.DefCallable qName (mapDecl <$> args) (h <$> rets) (g <$> stmts)]
+        [AS.DefCallable qName (mapDecl <$> args) (f <$> rets) (f <$> stmts)]
       AS.DefGetter qName args rets stmts ->
         [AS.DefCallable (mkGetterName (isJust args) qName)
-         (mapDecl <$> (concat $ maybeToList args)) (h <$> rets) (g <$> stmts)]
+         (mapDecl <$> (concat $ maybeToList args)) (f <$> rets) (f <$> stmts)]
       AS.DefSetter qName args rhs stmts -> maybeToList $ do
         argNames <- sequence (argName <$> (concat $ maybeToList args))
         Just $ AS.DefCallable { callableName = mkSetterName (isJust args) qName
                        , callableArgs = mapDecl <$> (rhs : argNames)
                        , callableRets = []
-                       , callableStmts = g <$> stmts
+                       , callableStmts = f <$> stmts
                        }
-      AS.DefConst i t e -> [AS.DefConst i (h t) (f e)]
+      AS.DefConst i t e -> [AS.DefConst i (f t) (f e)]
       AS.DefTypeStruct i ds -> [AS.DefTypeStruct i (mapDecl <$> ds)]
-      AS.DefArray i t ixt -> [AS.DefArray i (h t) (mapIxType ixt)]
-      AS.DefVariable i t -> [AS.DefVariable i (h t)]
+      AS.DefArray i t ixt -> [AS.DefArray i (f t) (mapIxType ixt)]
+      AS.DefVariable i t -> [AS.DefVariable i (f t)]
       _ -> [d]
 
   in concat $ mapDefs <$> defs
 
-applySyntaxOverridesInstrs :: SyntaxOverrides -> [AS.Instruction] -> [AS.Instruction]
-applySyntaxOverridesInstrs ovrs instrs =
+applySyntaxOverridesInstrs :: SyntaxMaps -> [AS.Instruction] -> [AS.Instruction]
+applySyntaxOverridesInstrs maps instrs =
   let
-    g = applyStmtSyntaxOverride ovrs
-    f = applyExprSyntaxOverride ovrs
+    f :: forall e. MapSyntax e => e -> e
+    f = mapSyntax maps
 
     mapInstr (AS.Instruction instName instEncodings instPostDecode instExecute conditional) =
-      AS.Instruction instName (mapEnc <$> instEncodings) (g <$> instPostDecode) (g <$> instExecute) conditional
+      AS.Instruction instName (mapEnc <$> instEncodings) (f <$> instPostDecode) (f <$> instExecute) conditional
 
     mapEnc (AS.InstructionEncoding a b c d encGuard encUnpredictable encDecode) =
-      AS.InstructionEncoding a b c d (f <$> encGuard) encUnpredictable (g <$> encDecode)
+      AS.InstructionEncoding a b c d (f <$> encGuard) encUnpredictable (f <$> encDecode)
 
   in mapInstr <$> instrs
 
@@ -123,7 +128,7 @@ data InternalOverride = InternalOverride
 emptyInternalOverride :: InternalOverride
 emptyInternalOverride = InternalOverride Set.empty Set.empty Map.empty Map.empty
 
-mkIdentOverride :: (AS.QualifiedIdentifier -> AS.QualifiedIdentifier) -> SyntaxOverrides
+mkIdentOverride :: (AS.QualifiedIdentifier -> AS.QualifiedIdentifier) -> SyntaxMaps
 mkIdentOverride f =
   let
     exprOverride e = case e of
@@ -133,7 +138,7 @@ mkIdentOverride f =
       AS.LValVarRef qident -> AS.LValVarRef (f qident)
       _ -> lv
   in
-    SyntaxOverrides id exprOverride id lvalOverride
+    SyntaxMaps exprOverride lvalOverride id id
 
 exprToLVal :: AS.Expr -> AS.LValExpr
 exprToLVal e = case e of
@@ -165,12 +170,12 @@ mkVarMap syms args = if length syms == length args then
     exprOverride e = case e of
       AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
         | Just e' <- nm `lookup` swap ->
-          applyExprSyntaxOverride (mkIdentOverride externVars) e'
+          mapSyntax (mkIdentOverride externVars) e'
       AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
         | Just t' <- nm `lookup` typeVars ->
           case t' `lookup` swap of
             Just e' ->
-              applyExprSyntaxOverride (mkIdentOverride externVars)
+              mapSyntax (mkIdentOverride externVars)
                 (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "sizeOf") [e'])
       AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
         | Just t' <- nm `lookup` typeVars
@@ -182,13 +187,13 @@ mkVarMap syms args = if length syms == length args then
       AS.LValVarRef (AS.QualifiedIdentifier _ nm)
         | Just e' <- nm `lookup` swap ->
           let lv' = exprToLVal e'
-          in applyLValSyntaxOverride (mkIdentOverride externVars) lv'
+          in mapSyntax (mkIdentOverride externVars) lv'
       _ -> e
 
-    override = SyntaxOverrides id exprOverride id lvalOverride
+    override = SyntaxMaps exprOverride lvalOverride id id
 
-  in (applyLValSyntaxOverride (mkIdentOverride unexternVars) . applyLValSyntaxOverride override,
-      applyExprSyntaxOverride (mkIdentOverride unexternVars) . applyExprSyntaxOverride override)
+  in (mapSyntax (mkIdentOverride unexternVars) . mapSyntax override,
+      mapSyntax (mkIdentOverride unexternVars) . mapSyntax override)
   else error $ "Mismatch in inlined function application: " <> show syms <> " " <> show args
 
 simpleReturn :: [AS.Stmt] -> Maybe AS.Expr
@@ -208,7 +213,7 @@ simpleAssign stmts =
     getSimple _ = Nothing
 
 
-mkSyntaxOverrides :: [AS.Definition] -> SyntaxOverrides
+mkSyntaxOverrides :: [AS.Definition] -> SyntaxMaps
 mkSyntaxOverrides defs =
   let
       inlineGetterNames = []
@@ -370,245 +375,244 @@ mkSyntaxOverrides defs =
           Nothing -> exprOverrides' e
         _ -> exprOverrides' e
 
+  in SyntaxMaps exprOverrides lvalOverrides stmtOverrides typeOverrides
 
-  in SyntaxOverrides stmtOverrides exprOverrides typeOverrides lvalOverrides
+data SyntaxCollectors t = SyntaxCollectors
+  { exprCollect :: AS.Expr -> t AS.Expr
+  , lvalCollect :: AS.LValExpr -> t AS.LValExpr
+  , stmtCollect :: AS.Stmt -> t AS.Stmt
+  , typeCollect :: AS.Type -> t AS.Type
+  }
 
-applyTypeSyntaxOverride :: SyntaxOverrides -> AS.Type -> AS.Type
-applyTypeSyntaxOverride ovrs t =
+data SyntaxWrites t w = SyntaxWrites
+  { exprWrite :: AS.Expr -> t w
+  , lvalWrite :: AS.LValExpr -> t w
+  , stmtWrite :: AS.Stmt -> t w
+  , typeWrite :: AS.Type -> t w
+  }
+
+
+data SyntaxMaps = SyntaxMaps
+  { exprMap :: AS.Expr -> AS.Expr
+  , lvalMap :: AS.LValExpr -> AS.LValExpr
+  , stmtMap :: AS.Stmt -> AS.Stmt
+  , typeMap :: AS.Type -> AS.Type
+  }
+
+
+noCollectors :: Monad t => SyntaxCollectors t
+noCollectors = SyntaxCollectors return return return return
+
+noWrites :: Monoid w => Monad t => SyntaxWrites t w
+noWrites = SyntaxWrites
+  (\_ -> return mempty)
+  (\_ -> return mempty)
+  (\_ -> return mempty)
+  (\_ -> return mempty)
+
+
+noMaps :: SyntaxMaps
+noMaps = SyntaxMaps id id id id
+
+writeToCollector :: Monoid w => Monad t => SyntaxWrites t w -> SyntaxCollectors (W.WriterT w t)
+writeToCollector SyntaxWrites{..} =
+  SyntaxCollectors
+    { exprCollect = liftWrite exprWrite
+    , lvalCollect = liftWrite lvalWrite
+    , stmtCollect = liftWrite stmtWrite
+    , typeCollect = liftWrite typeWrite
+    }
+  where
+    liftWrite f e =  W.lift (f e) >>= (\w -> W.tell w >> return e)
+
+
+writeExpr :: Monoid w => Monad t => SyntaxWrites t w -> AS.Expr -> t w
+writeExpr writes e = W.execWriterT (traverseExpr (writeToCollector writes) e)
+
+writeStmt :: Monoid w => Monad t => SyntaxWrites t w -> AS.Stmt -> t w
+writeStmt writes e = W.execWriterT (traverseStmt (writeToCollector writes) e)
+
+class MapSyntax a where
+  mapSyntax :: SyntaxMaps -> a -> a
+
+instance MapSyntax AS.Expr where
+  mapSyntax maps e = snd $ traverseExpr (mapsToCollector maps) e
+
+instance MapSyntax AS.Stmt where
+  mapSyntax maps e = snd $ traverseStmt (mapsToCollector maps) e
+
+instance MapSyntax AS.Type where
+  mapSyntax maps e = snd $ traverseType (mapsToCollector maps) e
+
+instance MapSyntax AS.LValExpr where
+  mapSyntax maps e = snd $ traverseLVal (mapsToCollector maps) e
+
+mapsToCollector :: SyntaxMaps -> SyntaxCollectors ((,) ())
+mapsToCollector SyntaxMaps{..} =
+  SyntaxCollectors
+    { exprCollect = (\e -> ((), exprMap e))
+    , lvalCollect = (\lv -> ((), lvalMap lv))
+    , stmtCollect = (\stmt -> ((), stmtMap stmt))
+    , typeCollect = (\t -> ((), typeMap t))
+    }
+
+traverseSlice :: Monad t => SyntaxCollectors t -> AS.Slice -> t AS.Slice
+traverseSlice cols slice =
   let
-    f = applyExprSyntaxOverride ovrs
-    h = applyTypeSyntaxOverride ovrs
+    f = traverseExpr cols
 
-    mapSlice slice = case slice of
-      AS.SliceSingle e -> AS.SliceSingle (f e)
-      AS.SliceOffset e e' -> AS.SliceOffset (f e) (f e')
-      AS.SliceRange e e' -> AS.SliceRange (f e) (f e')
-
-    mapField field = case field of
-      AS.RegField i slices -> AS.RegField i (mapSlice <$> slices)
-
-    mapIxType ix = case ix of
-      AS.IxTypeRange e e' -> AS.IxTypeRange (f e) (f e')
-      _ -> ix
-
-    t' = typeOverrides ovrs t
-  in case t' of
-    AS.TypeFun i e -> AS.TypeFun i (f e)
-    AS.TypeOf e -> AS.TypeOf (f e)
-    AS.TypeReg i fs -> AS.TypeReg i (mapField <$> fs)
-    AS.TypeArray t ixt -> AS.TypeArray (h t) (mapIxType ixt)
-    _ -> t'
-
-applySliceSyntaxOverride :: SyntaxOverrides -> AS.Slice -> AS.Slice
-applySliceSyntaxOverride ovrs slice =
-  let
-    f = applyExprSyntaxOverride ovrs
   in case slice of
-      AS.SliceSingle e -> AS.SliceSingle (f e)
-      AS.SliceOffset e e' -> AS.SliceOffset (f e) (f e')
-      AS.SliceRange e e' -> AS.SliceRange (f e) (f e')
-
-applyLValSyntaxOverride :: SyntaxOverrides -> AS.LValExpr -> AS.LValExpr
-applyLValSyntaxOverride ovrs lval =
-  let
-    k = applyLValSyntaxOverride ovrs
-    f = applyExprSyntaxOverride ovrs
-    mapSlice = applySliceSyntaxOverride ovrs
-
-    lval' = lvalOverrides ovrs lval
-   in case lval' of
-    AS.LValMember lv i -> AS.LValMember (k lv) i
-    AS.LValMemberArray lv is -> AS.LValMemberArray (k lv) is
-    AS.LValArrayIndex lv sl -> AS.LValArrayIndex (k lv) (mapSlice <$> sl)
-    AS.LValSliceOf lv sl -> AS.LValSliceOf (k lv) (mapSlice <$> sl)
-    AS.LValArray lvs -> AS.LValArray (k <$> lvs)
-    AS.LValTuple lvs -> AS.LValTuple (k <$> lvs)
-    AS.LValMemberBits lv is -> AS.LValMemberBits (k lv) is
-    AS.LValSlice lvs -> AS.LValSlice (k <$> lvs)
-    _ -> lval'
-
-
-applyExprSyntaxOverride :: SyntaxOverrides -> AS.Expr -> AS.Expr
-applyExprSyntaxOverride ovrs expr =
-  let
-    f = applyExprSyntaxOverride ovrs
-    h = applyTypeSyntaxOverride ovrs
-    mapSlice = applySliceSyntaxOverride ovrs
-
-    mapSetElement selem = case selem of
-      AS.SetEltSingle e -> AS.SetEltSingle (f e)
-      AS.SetEltRange e e' -> AS.SetEltRange (f e) (f e')
-
-    expr' = exprOverrides ovrs expr
-  in case expr' of
-    AS.ExprSlice e slices -> AS.ExprSlice (f e) (mapSlice <$> slices)
-    AS.ExprIndex e slices -> AS.ExprIndex (f e) (mapSlice <$> slices)
-    AS.ExprUnOp o e -> AS.ExprUnOp o (f e)
-    AS.ExprBinOp o e e' -> AS.ExprBinOp o (f e) (f e')
-    AS.ExprMembers e is -> AS.ExprMembers (f e) is
-    AS.ExprInMask e m -> AS.ExprInMask (f e) m
-    AS.ExprMemberBits e is -> AS.ExprMemberBits (f e) is
-    AS.ExprCall i es -> AS.ExprCall i (f <$> es)
-    AS.ExprInSet e se -> AS.ExprInSet (f e) (mapSetElement <$> se)
-    AS.ExprTuple es -> AS.ExprTuple (f <$> es)
-    AS.ExprIf pes e -> AS.ExprIf ((\(x,y) -> (f x, f y)) <$> pes) (f e)
-    AS.ExprMember e i -> AS.ExprMember (f e) i
-    AS.ExprUnknown t -> AS.ExprUnknown (h t)
-    _ -> expr'
-
-applyStmtSyntaxOverride :: SyntaxOverrides -> AS.Stmt -> AS.Stmt
-applyStmtSyntaxOverride ovrs stmt =
-  let
-    g = applyStmtSyntaxOverride ovrs
-    f = applyExprSyntaxOverride ovrs
-    h = applyTypeSyntaxOverride ovrs
-    k = applyLValSyntaxOverride ovrs
-
-    mapCases cases = case cases of
-      AS.CaseWhen pat me stmts -> AS.CaseWhen pat (f <$> me) (g <$> stmts)
-      AS.CaseOtherwise stmts -> AS.CaseOtherwise (g <$> stmts)
-    mapCatches catches = case catches of
-      AS.CatchWhen e stmts -> AS.CatchWhen (f e) (g <$> stmts)
-      AS.CatchOtherwise stmts -> AS.CatchOtherwise (g <$> stmts)
-    stmt' = stmtOverrides ovrs stmt
-  in case stmt' of
-    AS.StmtVarsDecl ty i -> AS.StmtVarsDecl (h ty) i
-    AS.StmtVarDeclInit decl e -> AS.StmtVarDeclInit (h <$> decl) (f e)
-    AS.StmtConstDecl decl e -> AS.StmtConstDecl decl (f e)
-    AS.StmtAssign lv e -> AS.StmtAssign (k lv) (f e)
-    AS.StmtCall qi es -> AS.StmtCall qi (f <$> es)
-    AS.StmtReturn me -> AS.StmtReturn (f <$> me)
-    AS.StmtAssert e -> AS.StmtAssert (f e)
-    AS.StmtIf tests body -> AS.StmtIf ((\(e, stmts) -> (f e, g <$> stmts)) <$> tests) ((fmap g) <$> body)
-    AS.StmtCase e alts -> AS.StmtCase (f e) (mapCases <$> alts)
-    AS.StmtFor ident (e,e') stmts -> AS.StmtFor ident (f e, f e') (g <$> stmts)
-    AS.StmtWhile e stmts -> AS.StmtWhile (f e) (g <$> stmts)
-    AS.StmtRepeat stmts e -> AS.StmtRepeat (g <$> stmts) (f e)
-    AS.StmtSeeExpr e -> AS.StmtSeeExpr (f e)
-    AS.StmtTry stmts ident alts -> AS.StmtTry (g <$> stmts) ident (mapCatches <$> alts)
-    _ -> stmt'
+     AS.SliceSingle e -> AS.SliceSingle <$> (f e)
+     AS.SliceOffset e e' -> liftA2 AS.SliceOffset (f e) (f e')
+     AS.SliceRange e e' -> liftA2 AS.SliceRange (f e) (f e')
 
 -- | Fold over the nested expressions of a given expression
-foldExpr :: (AS.Expr -> b -> b) -> AS.Expr -> b -> b
-foldExpr f' expr b' =
+traverseExpr :: forall t. Monad t => SyntaxCollectors t -> AS.Expr -> t AS.Expr
+traverseExpr cols expr =
   let
-    b = f' expr b' -- resolve top expression first
-    f = foldExpr f' -- inner expressions are recursively folded
-
-    foldSlice slice = case slice of
-      AS.SliceSingle e -> f e
-      AS.SliceOffset e e' -> f e' . f e
-      AS.SliceRange e e' -> f e' . f e
+    f = traverseExpr cols -- inner expressions are recursively folded
+    k = traverseType cols
 
     foldSetElems slice = case slice of
-      AS.SetEltSingle e -> f e
-      AS.SetEltRange e e' -> f e' . f e
+      AS.SetEltSingle e -> AS.SetEltSingle <$> f e
+      AS.SetEltRange e e' -> liftA2 AS.SetEltRange (f e) (f e')
 
-  in case expr of
-    AS.ExprSlice e slices -> f e $ foldr foldSlice b slices
-    AS.ExprIndex e slices -> f e $ foldr foldSlice b slices
-    AS.ExprUnOp _ e -> f e b
-    AS.ExprBinOp _ e e' -> f e' $ f e b
-    AS.ExprMembers e _ -> f e b
-    AS.ExprInMask e _ -> f e b
-    AS.ExprMemberBits e _ -> f e b
-    AS.ExprCall _ es -> foldr f b es
-    AS.ExprInSet e se -> foldr foldSetElems (f e b) se
-    AS.ExprTuple es -> foldr f b es
-    AS.ExprIf pes e -> f e $ foldr (\(x,y) -> f y . f x) b pes
-    AS.ExprMember e _ -> f e b
-    _ -> b
+  in exprCollect cols expr >>= \expr' -> case expr' of
+    AS.ExprSlice e slices ->
+      liftA2 AS.ExprSlice (f e) (traverse (traverseSlice cols) slices)
 
-foldLVal :: (AS.LValExpr -> b -> b) -> AS.LValExpr -> b -> b
-foldLVal h' lval b' =
+    AS.ExprIndex e slices ->
+      liftA2 AS.ExprIndex (f e)
+        (traverse (traverseSlice cols) slices)
+    AS.ExprUnOp uop e -> (AS.ExprUnOp uop) <$> f e
+    AS.ExprBinOp bop e e' -> liftA2 (AS.ExprBinOp bop) (f e) (f e')
+    AS.ExprMembers e mems -> (\e' -> AS.ExprMembers e' mems) <$> f e
+    AS.ExprInMask e mask -> (\e' -> AS.ExprInMask e' mask) <$> f e
+    AS.ExprMemberBits e bits -> (\e' -> AS.ExprMemberBits e' bits) <$> f e
+    AS.ExprCall ident es -> (\es' -> AS.ExprCall ident es') <$> traverse f es
+    AS.ExprInSet e se -> liftA2 AS.ExprInSet (f e) $ traverse foldSetElems se
+    AS.ExprTuple es -> AS.ExprTuple <$> traverse f es
+    AS.ExprIf pes e -> liftA2 AS.ExprIf (traverse (\(x,y) -> liftA2 (,) (f x) (f y)) pes) (f e)
+    AS.ExprMember e mem -> (\e' -> AS.ExprMember e' mem) <$> f e
+    AS.ExprUnknown t -> (\t' -> AS.ExprUnknown t') <$> k t
+    _ -> return expr'
+
+traverseLVal :: Monad t => SyntaxCollectors t -> AS.LValExpr -> t AS.LValExpr
+traverseLVal cols lval =
   let
-    b = h' lval b'
-    h = foldLVal h'
-  in case lval of
-    AS.LValMember lv _ -> h lv b
-    AS.LValMemberArray lv _ -> h lv b
-    AS.LValArrayIndex lv _ -> h lv b
-    AS.LValSliceOf lv _ -> h lv b
-    AS.LValArray lvs -> foldr h b lvs
-    AS.LValTuple lvs -> foldr h b lvs
-    AS.LValMemberBits lv _ -> h lv b
-    AS.LValSlice lvs -> foldr h b lvs
-    _ -> b
+    h = traverseLVal cols
 
--- | Fold over nested statements and their *top-level* expressions
-foldStmt' :: (AS.Expr -> b -> b) ->
-             (AS.LValExpr -> b -> b) ->
-             (AS.Stmt -> b -> b) ->
-             AS.Stmt -> b -> b
-foldStmt' f h g' stmt b' =
+  in lvalCollect cols lval >>= \lval' -> case lval' of
+    AS.LValMember lv mem -> (\lv' -> AS.LValMember lv' mem) <$> h lv
+    AS.LValMemberArray lv idx -> (\lv' -> AS.LValMemberArray lv' idx) <$> h lv
+    AS.LValArrayIndex lv slices -> liftA2 AS.LValArrayIndex (h lv) $ traverse (traverseSlice cols) slices
+    AS.LValSliceOf lv slices -> liftA2 AS.LValSliceOf (h lv) $ traverse (traverseSlice cols) slices
+    AS.LValArray lvs -> AS.LValArray <$> traverse h lvs
+    AS.LValTuple lvs -> AS.LValTuple <$> traverse h lvs
+    AS.LValMemberBits lv bits -> (\lv' -> AS.LValMemberBits lv' bits) <$> h lv
+    AS.LValSlice lvs -> AS.LValSlice <$> traverse h lvs
+    _ -> return lval'
+
+traverseType :: forall t. Monad t => SyntaxCollectors t -> AS.Type -> t AS.Type
+traverseType cols t =
   let
-    b = g' stmt b' -- resolve top statement first
-    g = foldStmt' f h g' -- inner statments are recursively folded
+    f = traverseExpr cols
+    k = traverseType cols
 
-    foldCases cases b'' = case cases of
-      AS.CaseWhen _ me stmts -> foldr g (foldr f b'' me) stmts
-      AS.CaseOtherwise stmts -> foldr g b'' stmts
-    foldCatches catches b'' = case catches of
-      AS.CatchWhen e stmts -> foldr g (f e b'') stmts
-      AS.CatchOtherwise stmts -> foldr g b'' stmts
-  in case stmt of
-    AS.StmtVarDeclInit _ e -> f e b
-    AS.StmtConstDecl _ e -> f e b
-    AS.StmtAssign lv e -> f e (h lv b)
-    AS.StmtCall _ es -> foldr f b es
-    AS.StmtReturn me -> foldr f b me
-    AS.StmtAssert e -> f e b
-    AS.StmtIf tests body ->
-      let testsb = foldr (\(e, stmts) -> \b'' -> foldr g (f e b'') stmts) b tests in
-        foldr (\stmts -> \b'' -> foldr g b'' stmts) testsb body
-    AS.StmtCase e alts -> foldr foldCases (f e b) alts
-    AS.StmtFor _ (e, e') stmts -> foldr g (f e' $ f e b) stmts
-    AS.StmtWhile e stmts -> foldr g (f e b) stmts
-    AS.StmtRepeat stmts e -> f e $ foldr g b stmts
-    AS.StmtSeeExpr e -> f e b
-    AS.StmtTry stmts _ alts -> foldr foldCatches (foldr g b stmts) alts
-    _ -> b
+    foldField field = case field of
+      AS.RegField i slices -> (\slices' -> AS.RegField i slices') <$>
+        traverse (traverseSlice cols) slices
 
--- | Fold over nested statements and nested expressions
-foldStmt :: (AS.Expr -> b -> b) ->
-            (AS.LValExpr -> b -> b) ->
-            (AS.Stmt -> b -> b) ->
-            AS.Stmt -> b -> b
-foldStmt f h = foldStmt' (foldExpr f) (foldLVal h)
+    foldIxType ix = case ix of
+      AS.IxTypeRange e e' -> liftA2 AS.IxTypeRange (f e) (f e')
+      _ -> return ix
 
+  in typeCollect cols t >>= \t' -> case t' of
+    AS.TypeFun i e -> (\e' -> AS.TypeFun i e') <$> f e
+    AS.TypeOf e -> AS.TypeOf <$> f e
+    AS.TypeReg i fs -> (\fs' -> AS.TypeReg i fs') <$> traverse foldField fs
+    AS.TypeArray t ixt -> liftA2 AS.TypeArray (k t) (foldIxType ixt)
+    _ -> return t'
 
-foldDef :: (T.Text -> AS.Expr -> b -> b) ->
-           (T.Text -> AS.LValExpr -> b -> b) ->
-           (T.Text -> AS.Stmt -> b -> b) ->
-           AS.Definition -> b -> b
-foldDef f' h' g' d b = case d of
-  AS.DefCallable (AS.QualifiedIdentifier _ ident) _ _ stmts ->
-    let
-      f = f' ident
-      h = h' ident
-      g = g' ident
-    in foldr (foldStmt f h g) b stmts
-  _ -> b
-
-foldInstruction :: (T.Text -> AS.Expr -> b -> b) ->
-                   (T.Text -> AS.LValExpr -> b -> b) ->
-                   (T.Text -> AS.Stmt -> b -> b) ->
-                   AS.Instruction -> b -> b
-foldInstruction f' h' g' (AS.Instruction ident instEncodings instPostDecode instExecute _) b =
+traverseStmt :: forall t. Monad t => SyntaxCollectors t -> AS.Stmt -> t AS.Stmt
+traverseStmt cols stmt =
   let
-    f = f' ident
-    h = h' ident
-    g = g' ident
+    g = traverseStmt cols -- inner statments are recursively folded
+    f = traverseExpr cols
+    h = traverseLVal cols
+    k = traverseType cols
 
-    foldEncoding (AS.InstructionEncoding {encDecode=stmts}) b' =
-      foldr (foldStmt f h g) b' stmts
-  in foldr (foldStmt f h g) (foldr foldEncoding b instEncodings) (instPostDecode ++ instExecute)
+    h' (ident, ty) = (\ty' -> (ident, ty')) <$> (k ty)
 
-foldASL :: (T.Text -> AS.Expr -> b -> b) ->
-           (T.Text -> AS.LValExpr -> b -> b) ->
-           (T.Text -> AS.Stmt -> b -> b) ->
-  [AS.Definition] -> [AS.Instruction] -> b -> b
-foldASL f h g defs instrs b = foldr (foldInstruction f h g) (foldr (foldDef f h g) b defs) instrs
+    foldCases cases = case cases of
+      AS.CaseWhen pats me stmts ->
+        liftA2 (\me' stmts' -> AS.CaseWhen pats me' stmts')
+          (traverse f me)
+          (traverse g stmts)
+      AS.CaseOtherwise stmts -> AS.CaseOtherwise <$> traverse g stmts
+
+    foldCatches catches = case catches of
+      AS.CatchWhen e stmts ->
+        liftA2 AS.CatchWhen (f e) $ traverse g stmts
+      AS.CatchOtherwise stmts -> AS.CatchOtherwise <$> traverse g stmts
+
+  in stmtCollect cols stmt >>= \stmt' -> case stmt' of
+    AS.StmtVarsDecl ty idents -> (\ty' -> AS.StmtVarsDecl ty' idents) <$> k ty
+    AS.StmtVarDeclInit decl e -> liftA2 AS.StmtVarDeclInit (h' decl) (f e)
+    AS.StmtConstDecl decl e -> liftA2 AS.StmtConstDecl (h' decl) (f e)
+    AS.StmtAssign lv e ->  liftA2 AS.StmtAssign (h lv) (f e)
+    AS.StmtCall ident es -> (\es' -> AS.StmtCall ident es') <$> traverse f es
+    AS.StmtReturn me -> (\me' -> AS.StmtReturn me') <$> traverse f me
+    AS.StmtAssert e -> AS.StmtAssert <$> f e
+    AS.StmtIf tests melse ->
+      liftA2 AS.StmtIf
+        (traverse (\(e, stmts) -> liftA2 (,) (f e) (traverse g stmts)) tests)
+        (traverse (\stmt'' -> traverse g stmt'') melse)
+    AS.StmtCase e alts -> liftA2 AS.StmtCase (f e) (traverse foldCases alts)
+    AS.StmtFor ident rng stmts -> liftA2 (\rng' stmts' -> AS.StmtFor ident rng' stmts')
+      (liftA2 (,) (f $ fst rng) (f $ snd rng))
+      (traverse g stmts)
+    AS.StmtWhile e stmts -> liftA2 AS.StmtWhile (f e) (traverse g stmts)
+    AS.StmtRepeat stmts e -> liftA2 AS.StmtRepeat (traverse g stmts) (f e)
+    AS.StmtSeeExpr e -> AS.StmtSeeExpr <$> f e
+    AS.StmtTry stmts ident alts -> liftA2 (\stmts' alts' -> AS.StmtTry stmts' ident alts')
+      (traverse g stmts)
+      (traverse foldCatches alts)
+    _ -> return stmt'
+
+-- foldDef :: (T.Text -> AS.Expr -> b -> b) ->
+--            (T.Text -> AS.LValExpr -> b -> b) ->
+--            (T.Text -> AS.Stmt -> b -> b) ->
+--            AS.Definition -> b -> b
+-- foldDef f' h' g' d b = case d of
+--   AS.DefCallable (AS.QualifiedIdentifier _ ident) _ _ stmts ->
+--     let
+--       f = f' ident
+--       h = h' ident
+--       g = g' ident
+--       cols = SyntaxCollectors f h g (\_ -> id)
+--     in foldr (foldStmt cols) b stmts
+--   _ -> b
+
+-- foldInstruction :: (T.Text -> AS.Expr -> b -> b) ->
+--                    (T.Text -> AS.LValExpr -> b -> b) ->
+--                    (T.Text -> AS.Stmt -> b -> b) ->
+--                    AS.Instruction -> b -> b
+-- foldInstruction f' h' g' (AS.Instruction ident instEncodings instPostDecode instExecute _) b =
+--   let
+--     f = f' ident
+--     h = h' ident
+--     g = g' ident
+--     cols = SyntaxCollectors f h g (\_ -> id)
+--     foldEncoding (AS.InstructionEncoding {encDecode=stmts}) b' =
+--       foldr (foldStmt cols) b' stmts
+--   in foldr (foldStmt cols) (foldr foldEncoding b instEncodings) (instPostDecode ++ instExecute)
+
+-- foldASL :: (T.Text -> AS.Expr -> b -> b) ->
+--            (T.Text -> AS.LValExpr -> b -> b) ->
+--            (T.Text -> AS.Stmt -> b -> b) ->
+--   [AS.Definition] -> [AS.Instruction] -> b -> b
+-- foldASL f h g defs instrs b = foldr (foldInstruction f h g) (foldr (foldDef f h g) b defs) instrs
 
 
 getterText :: Bool -> T.Text
