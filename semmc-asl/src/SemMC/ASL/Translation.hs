@@ -2256,8 +2256,7 @@ polymorphicBVOverrides e ty = case e of
 
         result <- CCG.mkAtom $ CCG.App $ CCE.BVOr wRepr atom1Shifted (CCG.AtomExpr atom2)
         return (Some result, TypeBasic)
-  -- FIXME: this is should be conditional on unsigned.
-  -- FIXME: we need another constraint hint for signed extensions
+
   AS.ExprCall (AS.QualifiedIdentifier _ "Int") [argExpr, isUnsigned] -> Just $ do
     Some unsigned <- translateExpr overrides isUnsigned
     Refl <- assertAtomType' CT.BoolRepr unsigned
@@ -2476,9 +2475,3 @@ overrides = Overrides {..}
               arithmeticOverrides e ty <|>
               overloadedDispatchOverrides e ty <|>
               bitShiftOverrides e ty
-
-
-
--- FIXME: Change this to set some global flag?
-raiseException :: Generator h s arch ret ()
-raiseException = return ()

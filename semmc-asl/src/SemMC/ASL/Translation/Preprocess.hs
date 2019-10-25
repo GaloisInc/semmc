@@ -84,8 +84,6 @@ import qualified SemMC.ASL.SyntaxTraverse as ASLT
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
 import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
 
-import System.IO.Unsafe -- FIXME: For debugging
-
 ----------------
 -- Notes
 --
@@ -658,8 +656,6 @@ computeUserType tpName = do
         DefTypeBuiltin builtinTpName -> lookupBuiltinType builtinTpName
         DefTypeEnum _ enumVals -> do
           -- Enumeration types are represented as integers.
-          -- FIXME: somehow store the 'enumVals' in the 'SigM' monad so that we
-          -- can resolve their type when we encounter them
           return $ Some $ UserEnum (fromIntegral (length enumVals))
         DefTypeStruct _ structVars -> do
           varTps <- forM structVars $ \(varName, varType) -> do
