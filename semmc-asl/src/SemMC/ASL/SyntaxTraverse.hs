@@ -57,11 +57,11 @@ import           SemMC.ASL.StaticExpr
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
 
-applySyntaxOverridesDefs :: SyntaxMaps -> [AS.Definition] -> [AS.Definition]
+applySyntaxOverridesDefs :: [SyntaxMaps] -> [AS.Definition] -> [AS.Definition]
 applySyntaxOverridesDefs maps defs =
   let
     f :: forall e. MapSyntax e => e -> e
-    f = mapSyntax maps
+    f e = foldr mapSyntax e maps
 
 
     -- TODO: For sanity we delete setter definitions which require
@@ -97,11 +97,11 @@ applySyntaxOverridesDefs maps defs =
 
   in concat $ mapDefs <$> defs
 
-applySyntaxOverridesInstrs :: SyntaxMaps -> [AS.Instruction] -> [AS.Instruction]
+applySyntaxOverridesInstrs :: [SyntaxMaps] -> [AS.Instruction] -> [AS.Instruction]
 applySyntaxOverridesInstrs maps instrs =
   let
     f :: forall e. MapSyntax e => e -> e
-    f = mapSyntax maps
+    f e = foldr mapSyntax e maps
 
     mapInstr (AS.Instruction instName instEncodings instPostDecode instExecute conditional) =
       AS.Instruction instName (mapEnc <$> instEncodings) (f <$> instPostDecode) (f <$> instExecute) conditional
@@ -150,7 +150,7 @@ exprToLVal e = case e of
   _ -> error $ "Invalid inline for expr:" <> show e
 
 -- Some gross hackery to avoid variable name clashes
-mkVarMap :: [AS.SymbolDecl] -> [AS.Expr] -> (AS.LValExpr -> AS.LValExpr, AS.Expr -> AS.Expr)
+mkVarMap :: [AS.SymbolDecl] -> [AS.Expr] -> SyntaxMaps
 mkVarMap syms args = if length syms == length args then
   let
     swap = zip (map fst syms) args
@@ -161,22 +161,15 @@ mkVarMap syms args = if length syms == length args then
       Just (nm, v)
     bvSize _ = Nothing
 
-    externVars (AS.QualifiedIdentifier q nm) = AS.QualifiedIdentifier q ("EXTERN_" <> nm)
-
-    unexternVars qid@(AS.QualifiedIdentifier q nm) = case T.stripPrefix "EXTERN_" nm of
-      Just nm' -> (AS.QualifiedIdentifier q nm')
-      _ -> qid
-
     exprOverride e = case e of
       AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
         | Just e' <- nm `lookup` swap ->
-          mapSyntax (mkIdentOverride externVars) e'
+          e'
       AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
         | Just t' <- nm `lookup` typeVars ->
           case t' `lookup` swap of
             Just e' ->
-              mapSyntax (mkIdentOverride externVars)
-                (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "sizeOf") [e'])
+              AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "sizeOf") [e']
       AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
         | Just t' <- nm `lookup` typeVars
         , Nothing <- t' `lookup` swap ->
@@ -187,13 +180,10 @@ mkVarMap syms args = if length syms == length args then
       AS.LValVarRef (AS.QualifiedIdentifier _ nm)
         | Just e' <- nm `lookup` swap ->
           let lv' = exprToLVal e'
-          in mapSyntax (mkIdentOverride externVars) lv'
+          in lv'
       _ -> e
 
-    override = SyntaxMaps exprOverride lvalOverride id id
-
-  in (mapSyntax (mkIdentOverride unexternVars) . mapSyntax override,
-      mapSyntax (mkIdentOverride unexternVars) . mapSyntax override)
+  in SyntaxMaps exprOverride lvalOverride id id
   else error $ "Mismatch in inlined function application: " <> show syms <> " " <> show args
 
 simpleReturn :: [AS.Stmt] -> Maybe AS.Expr
@@ -213,7 +203,7 @@ simpleAssign stmts =
     getSimple _ = Nothing
 
 
-mkSyntaxOverrides :: [AS.Definition] -> SyntaxMaps
+mkSyntaxOverrides :: [AS.Definition] -> [SyntaxMaps]
 mkSyntaxOverrides defs =
   let
       inlineGetterNames = []
@@ -225,8 +215,7 @@ mkSyntaxOverrides defs =
         AS.DefGetter (AS.QualifiedIdentifier _ nm) (Just args) _ stmts
           | nm `elem` inlineGetterNames
           , Just ret <- simpleReturn stmts ->
-          let inline es =
-                let (_, f) = mkVarMap args es in f ret
+          let inline es = mapSyntax (mkVarMap args es) ret
           in
           iovrs { iovInlineGetters = Map.insert (nm, length args) inline (iovInlineGetters iovrs) }
 
@@ -236,9 +225,7 @@ mkSyntaxOverrides defs =
 
           let
             args' = val : map (\(AS.SetterArg arg _) -> arg) args
-            inline es@(e : _) =
-              let (f, _) = mkVarMap args' es
-                in AS.StmtAssign (f lv) e
+            inline es@(e : _) = AS.StmtAssign (mapSyntax (mkVarMap args' es) lv) e
           in
             iovrs { iovInlineSetters = Map.insert (nm, length args) inline (iovInlineSetters iovrs) }
 
@@ -332,12 +319,6 @@ mkSyntaxOverrides defs =
           AS.ExprSlice e slices
         AS.ExprIndex e slices@[AS.SliceRange _ _] ->
           AS.ExprSlice e slices
-        AS.ExprIndex (AS.ExprVarRef qName) slices
-          | Set.member (mkFunctionName (mkGetterName True qName) (length slices)) getters ->
-            AS.ExprCall (mkGetterName True qName) (map getSliceExpr slices)
-        AS.ExprVarRef qName
-          | Set.member (mkFunctionName (mkGetterName False qName) 0) getters ->
-            AS.ExprCall (mkGetterName False qName) []
         _ -> expr
 
       lvalOverrides lval = lval
@@ -374,7 +355,19 @@ mkSyntaxOverrides defs =
           Nothing -> exprOverrides' e
         _ -> exprOverrides' e
 
-  in SyntaxMaps exprOverrides lvalOverrides stmtOverrides typeOverrides
+      -- Given a bottom-up traversal, getter expansion needs to happen
+      -- after all other rewrites, since apparent getters can actually
+      -- be syntactic sugar for a getter/setter
+      expandGetters expr = case expr of
+        AS.ExprIndex (AS.ExprVarRef qName) slices
+          | Set.member (mkFunctionName (mkGetterName True qName) (length slices)) getters ->
+            AS.ExprCall (mkGetterName True qName) (map getSliceExpr slices)
+        AS.ExprVarRef qName
+          | Set.member (mkFunctionName (mkGetterName False qName) 0) getters ->
+            AS.ExprCall (mkGetterName False qName) []
+        _ -> expr
+
+  in [SyntaxMaps expandGetters id id id, SyntaxMaps exprOverrides lvalOverrides stmtOverrides typeOverrides]
 
 data SyntaxCollectors t = SyntaxCollectors
   { exprCollect :: AS.Expr -> t AS.Expr
