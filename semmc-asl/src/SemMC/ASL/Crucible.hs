@@ -197,7 +197,7 @@ defineFunction :: (ReturnsGlobals ret globalWrites tps)
                -> Ctx.Assignment (CCG.Atom s) init
                -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig baseGlobals stmts _args = do
-  mapM_ (\(nm,t) -> addExtendedTypeData nm t) (funcArgs sig)
+  mapM_ (\(FunctionArg nm t _) -> addExtendedTypeData nm t) (funcArgs sig)
   mapM_ (translateStatement ov) stmts
   case funcRetRepr sig of
     Ctx.Empty -> translateStatement ov (AS.StmtReturn Nothing)

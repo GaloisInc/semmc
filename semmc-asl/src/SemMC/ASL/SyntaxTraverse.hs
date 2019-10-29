@@ -17,9 +17,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module SemMC.ASL.SyntaxTraverse
   ( mkSyntaxOverrides
@@ -39,6 +37,7 @@ module SemMC.ASL.SyntaxTraverse
   , mapSyntax
   , mkFunctionName
   , mapInnerName
+  , pattern VarName
   )
 where
 
@@ -53,6 +52,9 @@ import qualified Control.Monad.State as MSS
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe, listToMaybe, isJust, mapMaybe)
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
+
+pattern VarName :: T.Text -> AS.QualifiedIdentifier
+pattern VarName nm <- AS.QualifiedIdentifier _ nm
 
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
@@ -157,7 +159,7 @@ mkVarMap syms args = if length syms == length args then
 
     typeVars = mapMaybe bvSize syms
 
-    bvSize (v, AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier _ nm))) =
+    bvSize (v, AS.TypeFun "bits" (AS.ExprVarRef (VarName nm))) =
       Just (nm, v)
     bvSize _ = Nothing
 

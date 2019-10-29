@@ -28,6 +28,7 @@ module SemMC.ASL.Signature (
   , BaseGlobalVar(..)
   , SimpleFunctionSignature(..)
   , SomeSimpleFunctionSignature(..)
+  , FunctionArg(..)
   ) where
 
 import           Data.Parameterized.Classes
@@ -56,7 +57,7 @@ data FunctionSignature globalReads globalWrites init tps =
                     , funcGlobalWriteReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globalWrites
                     -- ^ The globals (transitively) affected by the function
                     , funcStaticVals :: StaticValues
-                    , funcArgs :: [AS.SymbolDecl]
+                    , funcArgs :: [FunctionArg]
                     }
   deriving (Show)
 
@@ -99,6 +100,12 @@ deriving instance Show (SomeFunctionSignature ret)
 
 instance ShowF SomeFunctionSignature
 
+data FunctionArg = FunctionArg
+  { argName :: T.Text
+  , argType :: AS.Type
+  , argIsRegIdx :: Bool -- is this variable (transitively) used as a register index
+  }
+  deriving Show
 
 -- | A 'SimpleFunctionSignature' describes the inputs and output of an ASL function.
 -- This is an intermediate representation of 'FunctionSignature' before it has
@@ -108,8 +115,10 @@ data SimpleFunctionSignature globalReads globalWrites  =
                            -- ^ The name of the function
                            , sfuncRet :: [AS.Type]
                            -- ^ The return type of the function
-                           , sfuncArgs :: [AS.SymbolDecl]
+                           , sfuncArgs :: [FunctionArg]
                            -- ^ The types of the natural arguments of the function
+                           , sfuncRegisterIdx :: [T.Text]
+                           -- ^
                            , sfuncGlobalReadReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globalReads
                            -- ^ The globals (transitively) referenced by the function
                            , sfuncGlobalWriteReprs :: Ctx.Assignment (LabeledValue T.Text WT.BaseTypeRepr) globalWrites

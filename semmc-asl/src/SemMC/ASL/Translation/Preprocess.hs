@@ -17,7 +17,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
@@ -81,6 +81,7 @@ import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
+import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
 import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
 
@@ -135,7 +136,7 @@ getDefinitions = do
   st <- RWS.get
   env <- RWS.ask
   return $ Definitions
-    { defSignatures = (\(sig, c) -> (sig, callableStmts c)) <$> callableSignatureMap st
+    { defSignatures = (\(sig, c, _) -> (sig, callableStmts c)) <$> callableSignatureMap st
     , defTypes = userTypes st
     , defEnums = enums env
     , defConsts = consts env
@@ -514,10 +515,8 @@ data SearchStatus = SearchSeen | SearchCollect
 
 data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                            -- ^ user-defined types
-                         , callableGlobalsMap :: Map.Map T.Text GlobalVarRefs
-                           -- ^ map from function/procedure name to accessed globals
-                         , callableSignatureMap :: Map.Map T.Text (SomeSimpleFunctionSignature, Callable)
-                           -- ^ map of all signatures found thus far
+                         , callableSignatureMap :: Map.Map T.Text (SomeSimpleFunctionSignature, Callable, GlobalVarRefs)
+                           -- ^ map of all signatures found thus far, including global variable references
                          , callableOpenSearches :: Map.Map T.Text SearchStatus
                            -- ^ all callables encountered on the current search path
                          , globalVars :: Map.Map T.Text (Some WT.BaseTypeRepr)
@@ -538,6 +537,7 @@ data InnerSigException = TypeNotFound T.Text
                        | UnsupportedSigExpr AS.Expr
                        | UnsupportedSigStmt AS.Stmt
                        | UnsupportedSigLVal AS.LValExpr
+                       | MissingSignature Callable
                        | FailedToMonomorphizeSignature AS.Type StaticValues
   deriving (Eq, Show)
 
@@ -567,6 +567,10 @@ setCallableSearch c stt = do
 
 markCallableFound :: Callable -> SigM ext f ()
 markCallableFound c = do
+  searchStatus <- checkCallableSearch c
+  case searchStatus of
+    Nothing -> error $ "Unexpected recursive callable call:" ++ show c
+    _ -> return ()
   st <- RWS.get
   let name = mkCallableName c
   RWS.put $ st { callableOpenSearches =
@@ -597,36 +601,24 @@ lookupDefType tpName = do
     Just defType -> return defType
     Nothing -> throwError $ TypeNotFound tpName
 
--- | If the variable is present, return its definition. Otherwise, return 'Nothing'.
---lookupGlobalVar :: T.Text -> SigM ext f (Maybe DefVariable)
 lookupGlobalVar :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 lookupGlobalVar varName = do
   env <- RWS.get
   return $ Map.lookup varName (globalVars env)
 
-lookupCallableGlobals :: Callable -> SigM ext f (Maybe GlobalVarRefs)
-lookupCallableGlobals c = do
-  globalsMap <- RWS.gets callableGlobalsMap
-  let name = mkCallableName c
-  return $ Map.lookup name globalsMap
-
-storeCallableGlobals :: Callable -> GlobalVarRefs -> SigM ext f ()
-storeCallableGlobals c globals = do
-  st <- RWS.get
-  let name = mkCallableName c
-  RWS.put $ st { callableGlobalsMap = Map.insert name globals (callableGlobalsMap st) }
-
-lookupCallableSignature :: Callable -> SigM ext f (Maybe SomeSimpleFunctionSignature)
+lookupCallableSignature :: Callable -> SigM ext f (Maybe (SomeSimpleFunctionSignature, GlobalVarRefs))
 lookupCallableSignature c = do
   signatureMap <- callableSignatureMap <$> RWS.get
   let name = mkCallableName c
-  return $ (fst <$> Map.lookup name signatureMap)
+  case Map.lookup name signatureMap of
+    Just (sig, _, globs) -> return $ Just $ (sig, globs)
+    _ -> return Nothing
 
-storeCallableSignature :: Callable -> SomeSimpleFunctionSignature -> SigM ext f()
-storeCallableSignature c sig = do
+storeCallableSignature :: Callable -> GlobalVarRefs -> SomeSimpleFunctionSignature -> SigM ext f()
+storeCallableSignature c gvars sig = do
   st <- RWS.get
   let name = mkCallableName c
-  RWS.put $ st { callableSignatureMap = Map.insert name (sig, c) (callableSignatureMap st) }
+  RWS.put $ st { callableSignatureMap = Map.insert name (sig, c, gvars) (callableSignatureMap st) }
 
 
 -- | If the given type is user-defined, compute its signature and store it
@@ -740,43 +732,18 @@ theVarGlobal varName = do
     Just g -> return g
     Nothing -> error $ "Unknown global variable: " <> show varName
 
-
-callableGlobalVars' :: AS.QualifiedIdentifier
-                    -> Int
-                    -> SigM ext f GlobalVarRefs
-callableGlobalVars' qIdent nargs = do
-  mCallable <- lookupCallable qIdent nargs
+callableGlobalVars :: AS.QualifiedIdentifier
+                   -> Int
+                   -> SigM ext f GlobalVarRefs
+callableGlobalVars qName arity = do
+  mCallable <- lookupCallable qName arity
   case mCallable of
-    Just callable -> do
-      searchStatus <- checkCallableSearch callable
-      case searchStatus of
-        Nothing -> do
-          setCallableSearch callable SearchSeen
-          callableGlobals <- callableGlobalVars callable
-          markCallableFound callable
-          return $ callableGlobals
-        Just SearchSeen -> do
-          setCallableSearch callable SearchCollect
-          callableGlobals <- callableGlobalVars callable
-          return $ callableGlobals
-        Just SearchCollect -> do
-          return (Set.empty, Set.empty)
-
-    Nothing -> return (Set.empty, Set.empty)
-
--- | Compute the list of global variables in a 'Callable' and store it in the
--- state. If it has already been computed, simply return it.
-callableGlobalVars :: Callable -> SigM ext f GlobalVarRefs
-callableGlobalVars c@Callable{..} = do
-  mGlobals <- lookupCallableGlobals c
-  case mGlobals of
-    Just globals -> return globals
-    Nothing -> do
-      globals <- globalsOfStmts callableStmts
-      storeCallableGlobals c globals
-      return globals
-
-
+    Nothing -> return $ mempty
+    Just c -> do
+      msig <- lookupCallableSignature c
+      case msig of
+        Just (_, globs) -> return globs
+        Nothing -> throwError $ MissingSignature c
 
 globalsOfStmts :: [AS.Stmt] -> SigM ext f GlobalVarRefs
 globalsOfStmts stmts = do
@@ -798,7 +765,7 @@ globalsOfStmts stmts = do
     collectCallables (AS.QualifiedIdentifier q nm) args  =
       mconcat <$> traverse (collectVars q args) (overrideFun nm)
 
-    collectVars q args (nm', mi) = callableGlobalVars' (AS.QualifiedIdentifier q nm') (fromMaybe (length args) mi)
+    collectVars q args (nm', mi) = callableGlobalVars (AS.QualifiedIdentifier q nm') (fromMaybe (length args) mi)
 
     caseAlternativeGlobalVars alt = case alt of
       AS.CaseWhen pats _ _ -> mconcat <$> traverse casePatternGlobalVars pats
@@ -808,6 +775,55 @@ globalsOfStmts stmts = do
       AS.CasePatternIdentifier varName -> readGlobal varName
       AS.CasePatternTuple pats -> mconcat <$> traverse casePatternGlobalVars pats
       _ -> return mempty
+
+callableRegIdxs :: AS.QualifiedIdentifier
+                -> [AS.Expr]
+                -> SigM ext f RegIdxVars
+callableRegIdxs qIdent argEs = do
+  mCallable <- lookupCallable qIdent (length argEs)
+  case mCallable of
+    Nothing -> return $ mempty
+    Just c -> do
+      (SomeSimpleFunctionSignature sig, _) <- computeCallableSignature c
+      let args = sfuncArgs sig
+      mconcat <$> traverse addFunArg (zip args argEs)
+  where
+    addFunArg (FunctionArg _ _ regidx, AS.ExprVarRef (AS.VarName nm)) =
+      if regidx then return $ varRegIdx nm else return $ mempty
+    addFunArg _ = return mempty
+
+regIdxsOfStmts :: [AS.Stmt] -> SigM ext f RegIdxVars
+regIdxsOfStmts stmts = do
+  let getstmt stmt = case stmt of
+        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm))
+          (AS.ExprCall (AS.VarName "UInt") [AS.ExprVarRef (AS.VarName varnm)]) ->
+          return $ varDependsOn varnm lvnm
+        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) (AS.ExprVarRef (AS.VarName varnm)) ->
+          return $ varDependsOn varnm lvnm
+        AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
+        _ -> return mempty
+  let getexpr expr = case expr of
+        AS.ExprCall (AS.VarName "LookUpRIndex") [AS.ExprVarRef (AS.VarName varnm), _] ->
+          return $ varRegIdx varnm
+        AS.ExprIndex (AS.ExprVarRef (AS.VarName "_R")) [AS.SliceSingle (AS.ExprVarRef (AS.VarName varnm))] ->
+          return $ varRegIdx varnm
+        AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
+        _ -> return mempty
+  let getlval lval = case lval of
+        AS.LValArrayIndex (AS.LValVarRef (AS.VarName "_R")) [AS.SliceSingle (AS.ExprVarRef (AS.VarName varnm))] ->
+          return $ varRegIdx varnm
+        _ -> return mempty
+
+  let collectors = ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt, ASLT.lvalWrite = getlval}
+  mconcat <$> traverse (ASLT.writeStmt collectors) stmts
+  where
+    collectCallables :: AS.QualifiedIdentifier -> [AS.Expr] -> SigM ext f RegIdxVars
+    collectCallables (AS.QualifiedIdentifier q nm) args  =
+      mconcat <$> traverse (collectVars q args) (overrideFun nm)
+
+    collectVars q args (nm', mi) | (mi == Nothing || mi == Just (length args)) =
+      callableRegIdxs (AS.QualifiedIdentifier q nm') args
+    collectVars q args (nm', _) = return mempty
 
 computeSignatures :: [AS.Stmt] -> SigM ext f ()
 computeSignatures stmts = do
@@ -835,45 +851,73 @@ computeSignatures stmts = do
       _ -> return ()
 
 
+-- | For recursive functions, this signature is temporarily stored as a stand-in
+-- for the actual function signature when recursively calling the signature
+-- calculation.
+fakeCallableSignature :: Callable -> SomeSimpleFunctionSignature
+fakeCallableSignature c@Callable{..} =
+  case (Ctx.fromList [], Ctx.fromList []) of
+    (Some globalReadReprs, Some globalWriteReprs) ->
+      SomeSimpleFunctionSignature $ SimpleFunctionSignature
+      { sfuncName = mkCallableName c
+      , sfuncRet = callableRets
+      , sfuncArgs = map (\(nm,t) -> FunctionArg nm t False) callableArgs
+      , sfuncGlobalReadReprs = globalReadReprs
+      , sfuncGlobalWriteReprs = globalWriteReprs
+      }
 
 -- | Compute the signature of a callable (function/procedure). Currently, we assume
 -- that if the return list is empty, it is a procedure, and if it is nonempty, then
 -- it is a function.
-computeCallableSignature :: Callable -> SigM ext f (SomeSimpleFunctionSignature)
+computeCallableSignature :: Callable -> SigM ext f (SomeSimpleFunctionSignature, GlobalVarRefs)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
   mSig <- lookupCallableSignature c
   case mSig of
     Just sig -> return sig
     Nothing -> do
-      mapM_ (\(_,t) -> storeUserType t) callableArgs
-      mapM_ storeUserType callableRets
-      globalVars <- callableGlobalVars c
-      (globalReads, globalWrites) <- return $ unpackGVarRefs $ globalVars
+      searchStatus <- checkCallableSearch c
+      case searchStatus of
+        Nothing -> do
+          setCallableSearch c SearchSeen
+          computeSignatures callableStmts
+          markCallableFound c
+          (sig, globalVars) <- getSignature name
+          storeCallableSignature c globalVars sig
+          return (sig, globalVars)
+        Just SearchSeen -> do
+          setCallableSearch c SearchCollect
+          storeCallableSignature c mempty (fakeCallableSignature c)
+          computeSignatures callableStmts
+          (sig, globalVars) <- getSignature name
+          storeCallableSignature c globalVars sig
+          return (sig, globalVars)
+        Just SearchCollect -> error $ "Unexpected recursive callable call:" ++ show c
 
-      labeledReads <- getLabels globalReads
-      labeledWrites <- getLabels globalWrites
-
-      Some globalReadReprs <- return $ Ctx.fromList labeledReads
-      Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
-
-      let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
-            { sfuncName = name
-            , sfuncRet = callableRets
-            , sfuncArgs = callableArgs
-            , sfuncGlobalReadReprs = globalReadReprs
-            , sfuncGlobalWriteReprs = globalWriteReprs
-            }
-      storeCallableSignature c sig
-      computeSignatures callableStmts
-      return sig
   where
     getLabels vars =
       forM vars $ \(varName, Some varTp) -> do
         return $ Some (LabeledValue varName varTp)
+    getSignature name = do
+      mapM_ (\(_,t) -> storeUserType t) callableArgs
+      mapM_ storeUserType callableRets
 
+      globalVars <- globalsOfStmts callableStmts
+      (globalReads, globalWrites) <- return $ unpackGVarRefs $ globalVars
+      labeledReads <- getLabels globalReads
+      labeledWrites <- getLabels globalWrites
+      Some globalReadReprs <- return $ Ctx.fromList labeledReads
+      Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
 
-
+      regIdxs <- regIdxsOfStmts callableStmts
+      let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
+            { sfuncName = name
+            , sfuncRet = callableRets
+            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (isRegIdx regIdxs nm)) callableArgs
+            , sfuncGlobalReadReprs = globalReadReprs
+            , sfuncGlobalWriteReprs = globalWriteReprs
+            }
+      return (sig, globalVars)
 
 computeType'' :: Definitions arch -> AS.Type -> Some WT.BaseTypeRepr
 computeType'' defs t = case computeType' t of
@@ -882,6 +926,29 @@ computeType'' defs t = case computeType' t of
     Just (Some ut) -> Some $ userTypeRepr ut
     Nothing -> error $ "Missing user type definition for: " <> (show tpName)
 
+-- Variable environment for tracking usage as a register index
+-- Relation tracks direct dependencies between variables
+data RegIdxVars = RegIdxVars
+  { regIdxVars :: Set.Set T.Text
+  , regIdxVarRels :: Map.Map T.Text (Set.Set T.Text) }
+
+instance Semigroup RegIdxVars where
+ (<>) (RegIdxVars vars vrels) (RegIdxVars vars' vrels') =
+   RegIdxVars (Set.union vars vars') (Map.unionWith Set.union vrels vrels')
+
+instance Monoid RegIdxVars where
+  mempty = RegIdxVars Set.empty Map.empty
+
+varDependsOn :: T.Text -> T.Text -> RegIdxVars
+varDependsOn var dep = RegIdxVars Set.empty (Map.singleton var (Set.singleton dep))
+
+varRegIdx :: T.Text -> RegIdxVars
+varRegIdx var = RegIdxVars (Set.singleton var) (Map.empty)
+
+isRegIdx :: RegIdxVars -> T.Text -> Bool
+isRegIdx ridx@(RegIdxVars vars vrels) var = Set.member var vars || case Map.lookup var vrels of
+  Just vars' -> not $ null $ Set.filter (isRegIdx ridx) vars'
+  Nothing -> False
 
 -- FIXME: workaround for the fact that empty tuples are not supported by crucible/what4
 
@@ -916,7 +983,7 @@ mkSignature env sig =
     mkType t = case applyStaticEnv' (simpleStaticEnvMap env) t of
       Just t -> computeType t
       _ -> throwError $ FailedToMonomorphizeSignature t env
-    mkLabel (nm, t) = do
+    mkLabel (FunctionArg nm t _) = do
       Some tp <- mkType t
       return $ Some (LabeledValue nm (CT.baseToType tp))
         
@@ -926,13 +993,13 @@ mkInstructionName :: T.Text -- ^ name of instruction
                   -> T.Text
 mkInstructionName instName encName = instName <> "_" <> encName
 
-computeFieldType :: AS.InstructionField -> SigM ext f (Some WT.BaseTypeRepr)
+computeFieldType :: AS.InstructionField -> SigM ext f (Some WT.BaseTypeRepr, AS.Type)
 computeFieldType AS.InstructionField{..} = do
   case WT.someNat instFieldOffset of
     Nothing -> error $ "Bad field width: " ++ show instFieldName ++ ", " ++ show instFieldOffset
     Just (Some repr) -> case (WT.knownNat @1) `WT.testLeq` repr of
       Nothing -> error $ "Bad field width: " ++ show instFieldName ++ ", " ++ show instFieldOffset
-      Just WT.LeqProof -> return $ Some (WT.BaseBVRepr repr)
+      Just WT.LeqProof -> return $ (Some (WT.BaseBVRepr repr), AS.TypeFun "bin" (AS.ExprLitInt (WT.intValue repr)))
 
 computeInstructionSignature' :: AS.Instruction
                              -> T.Text -- ^ name of encoding
@@ -961,10 +1028,13 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
           return $ Some (LabeledValue varName varTp)
         labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
           return $ Some (LabeledValue varName varTp)
-        labeledArgs <- forM (AS.encFields enc) $ \field -> do
-          Some tp <- computeFieldType field
+
+        regIdxs <- regIdxsOfStmts instStmts
+        (labeledArgs, args) <- unzip <$> (forM (AS.encFields enc) $ \field -> do
+          (Some tp, ty) <- computeFieldType field
           let ctp = CT.baseToType tp
-          return (Some (LabeledValue (AS.instFieldName field) ctp))
+          let nm = AS.instFieldName field
+          return (Some (LabeledValue nm ctp), FunctionArg nm ty (isRegIdx regIdxs nm)))
         Some globalReadReprs <- return $ Ctx.fromList labeledReads
         Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
         Some argReprs <- return $ Ctx.fromList labeledArgs
@@ -974,7 +1044,7 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
                                      , funcGlobalReadReprs = globalReadReprs
                                      , funcGlobalWriteReprs = globalReadReprs
                                      , funcStaticVals = staticEnvMapVals staticEnv
-                                     , funcArgs = []
+                                     , funcArgs = args
                                      }
         return (Some (SomeFunctionSignature pSig), instStmts)
 

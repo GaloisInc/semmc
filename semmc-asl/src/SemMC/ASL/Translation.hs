@@ -1202,12 +1202,13 @@ asBaseType (Some t) = case CT.asBaseType t of
 
 unifyArgs :: Overrides arch
           -> T.Text
-          -> [(AS.SymbolDecl, AS.Expr)]
+          -> [(FunctionArg, AS.Expr)]
           -> [AS.Type]
           -> TypeConstraint
           -> Generator h s arch ret
                (T.Text, [Some (CCG.Atom s)], Some WT.BaseTypeRepr)
-unifyArgs ov fnname args rets constraint = do
+unifyArgs ov fnname fargs rets constraint = do
+  let args = map (\((FunctionArg nm t _), e)  -> ((nm, t), e)) fargs
   outerState <- MS.get
   freshState <- freshLocalsState
   (atoms, retT, tenv) <- withState freshState $ do

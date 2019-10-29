@@ -278,6 +278,24 @@ exprToStatic env e = case e of
       Just $ StaticInt i
   _ -> Nothing
 
+data VarRegisterStatus =
+  VarMaybeRegisterIndex | VarIsRegisterIndex | VarNotRegisterIndex
+
+instance Semigroup VarRegisterStatus where
+  (<>) VarNotRegisterIndex _ = VarNotRegisterIndex
+  (<>) _ VarNotRegisterIndex = VarNotRegisterIndex
+  (<>) _ VarIsRegisterIndex = VarIsRegisterIndex
+  (<>) VarIsRegisterIndex _ = VarIsRegisterIndex
+  (<>) _ _ = VarMaybeRegisterIndex
+
+instance Monoid VarRegisterStatus where
+  mempty = VarMaybeRegisterIndex
+
+
+-- Determines if the given variable is used as a register index anywhere
+-- in the statement body
+varRegisterStatusStmts :: T.Text -> [AS.Stmt] -> Bool
+varRegisterStatusStmts var stmts = True
 
 
 -- Returns either an upper bound on all possible values for the expression
