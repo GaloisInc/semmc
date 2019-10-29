@@ -48,7 +48,7 @@ library
   ghc-options:         -Wcompat -Wall
 
 executable semmc-asl-genarm
-  main-is:             GenArm.hs
+  main-is:             GenARM.hs
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.10.0.0 && < 5,
