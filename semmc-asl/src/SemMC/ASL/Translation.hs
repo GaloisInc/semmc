@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternSynonyms #-}
 module SemMC.ASL.Translation (
     TranslationState(..)
   , translateExpr
@@ -30,7 +31,6 @@ import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( forM_, when, void, foldM, foldM_, (>=>), (<=<) )
-import           Control.Monad.Identity
 import qualified Control.Monad.State.Class as MS
 import           Control.Monad.Trans ( lift)
 import qualified Control.Monad.State as MSS
@@ -69,6 +69,7 @@ import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
 import           SemMC.ASL.Translation.Preprocess
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
+import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 
 import qualified Lang.Crucible.FunctionHandle as FH
 import qualified Lang.Crucible.CFG.Reg as CCR
@@ -1033,16 +1034,16 @@ translateType t = do
         AS.ExprLitInt nBits
           | Just (Some nr) <- NR.someNat nBits
           , Just NR.LeqProof <- NR.isPosNat nr -> return (Some (CT.BVRepr nr))
-        _ -> error ("Unsupported type: " ++ show t)
+        _ -> throwTrace $ UnsupportedType t'
     AS.TypeFun "__RAM" (AS.ExprLitInt n)
        | Just (Some nRepr) <- NR.someNat n
        , Just NR.LeqProof <- NR.isPosNat nRepr ->
          return $ Some $ CT.baseToType $
            WT.BaseArrayRepr (Ctx.empty Ctx.:> WT.BaseBVRepr (WT.knownNat @52)) (WT.BaseBVRepr nRepr)
-    AS.TypeFun _ _ -> error ("Unsupported type: " ++ show t)
-    AS.TypeArray _ty _idxTy -> error ("Unsupported type: " ++ show t)
-    AS.TypeReg _i _flds -> error ("Unsupported type: " ++ show t)
-    _ -> error ("Unsupported type: " ++ show t)
+    AS.TypeFun _ _ -> throwTrace $ UnsupportedType t'
+    AS.TypeArray _ty _idxTy -> throwTrace $ UnsupportedType t'
+    AS.TypeReg _i _flds -> throwTrace $ UnsupportedType t'
+    _ -> throwTrace $ UnsupportedType t'
 
 withState :: TranslationState h ret s
           -> Generator h s arch ret a
@@ -1140,16 +1141,11 @@ unifyType aslT constraint = do
       Just (StaticInt i) -> Left i
       _ -> Right e
 
-varsOfExpr :: AS.Expr -> [T.Text]
-varsOfExpr e = runIdentity $ ASLT.writeExpr (ASLT.noWrites { ASLT.exprWrite = getVar }) e
-  where
-    getVar :: AS.Expr -> Identity [T.Text]
-    getVar (AS.ExprVarRef (AS.QualifiedIdentifier q ident)) = return $ [ident]
-    getVar e = return $ []
+
 
 dependentVarsOfType :: AS.Type -> [T.Text]
 dependentVarsOfType t = case t of
-  AS.TypeFun "bits" e -> varsOfExpr e
+  AS.TypeFun "bits" e -> ASLT.varsOfExpr e
   _ -> []
 
 

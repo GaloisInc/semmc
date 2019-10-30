@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module SemMC.ASL.StaticExpr
   (
@@ -55,7 +56,8 @@ import qualified Data.Map as Map
 import qualified Data.List as List
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe, listToMaybe, isJust, mapMaybe)
 import           SemMC.ASL.Types
-
+import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
+import           Data.Foldable ( traverse_ )
 
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger [x] = fromIntegral (fromEnum x)
@@ -277,6 +279,19 @@ exprToStatic env e = case e of
     | Just (StaticBVType i) <- exprToStaticType env e ->
       Just $ StaticInt i
   _ -> Nothing
+
+matchMask :: AS.BitVector -> AS.Mask -> Bool
+matchMask bv mask =
+  if | length bv == length mask ->
+       List.all matchBit (zip bv mask)
+     | otherwise -> error $ "Mismatched bitvector sizes."
+  where
+    matchBit (b, m) = case (b, m) of
+      (True, AS.MaskBitSet) -> True
+      (False, AS.MaskBitUnset) -> True
+      (_, AS.MaskBitEither) -> True
+      _ -> False
+
 
 data VarRegisterStatus =
   VarMaybeRegisterIndex | VarIsRegisterIndex | VarNotRegisterIndex

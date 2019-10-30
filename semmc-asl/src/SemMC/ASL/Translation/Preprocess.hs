@@ -788,30 +788,36 @@ callableRegIdxs qIdent argEs = do
       let args = sfuncArgs sig
       mconcat <$> traverse addFunArg (zip args argEs)
   where
-    addFunArg (FunctionArg _ _ regidx, AS.ExprVarRef (AS.VarName nm)) =
-      if regidx then return $ varRegIdx nm else return $ mempty
+    addFunArg (FunctionArg _ _ mrkind, AS.ExprVarRef (AS.VarName nm)) = case mrkind of
+      Just rkind -> return $ varRegIdx nm rkind
+      _ -> return mempty
     addFunArg _ = return mempty
+
+registerKindMap :: T.Text -> Maybe RegisterKind
+registerKindMap nm = case nm of
+  "_R" -> Just $ RegisterR
+  "_V" -> Just $ RegisterV
+  _ -> Nothing
 
 regIdxsOfStmts :: [AS.Stmt] -> SigM ext f RegIdxVars
 regIdxsOfStmts stmts = do
   let getstmt stmt = case stmt of
-        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm))
-          (AS.ExprCall (AS.VarName "UInt") [AS.ExprVarRef (AS.VarName varnm)]) ->
-          return $ varDependsOn varnm lvnm
-        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) (AS.ExprVarRef (AS.VarName varnm)) ->
-          return $ varDependsOn varnm lvnm
+        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) e ->
+          return $ mconcat $ map (\var -> varDependsOn var lvnm) $ regIdxVars e
         AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
         _ -> return mempty
   let getexpr expr = case expr of
         AS.ExprCall (AS.VarName "LookUpRIndex") [AS.ExprVarRef (AS.VarName varnm), _] ->
-          return $ varRegIdx varnm
-        AS.ExprIndex (AS.ExprVarRef (AS.VarName "_R")) [AS.SliceSingle (AS.ExprVarRef (AS.VarName varnm))] ->
-          return $ varRegIdx varnm
+          return $ varRegIdx varnm RegisterR
+        AS.ExprIndex (AS.ExprVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
+          | Just rkind <- registerKindMap idxnm ->
+            return $ mconcat $ map (\var -> varRegIdx var rkind) $ regIdxVars e
         AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
         _ -> return mempty
   let getlval lval = case lval of
-        AS.LValArrayIndex (AS.LValVarRef (AS.VarName "_R")) [AS.SliceSingle (AS.ExprVarRef (AS.VarName varnm))] ->
-          return $ varRegIdx varnm
+        AS.LValArrayIndex (AS.LValVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
+          | Just rkind <- registerKindMap idxnm ->
+            return $ mconcat $ map (\var -> varRegIdx var rkind) $ regIdxVars e
         _ -> return mempty
 
   let collectors = ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt, ASLT.lvalWrite = getlval}
@@ -824,6 +830,13 @@ regIdxsOfStmts stmts = do
     collectVars q args (nm', mi) | (mi == Nothing || mi == Just (length args)) =
       callableRegIdxs (AS.QualifiedIdentifier q nm') args
     collectVars q args (nm', _) = return mempty
+
+    regIdxVars expr = case expr of
+      AS.ExprBinOp AS.BinOpConcat e1 e2 ->
+        regIdxVars e1 ++ regIdxVars e2
+      AS.ExprVarRef (AS.VarName nm) -> [nm]
+      AS.ExprCall (AS.VarName "UInt") [e] -> regIdxVars e
+      _ -> []
 
 computeSignatures :: [AS.Stmt] -> SigM ext f ()
 computeSignatures stmts = do
@@ -861,14 +874,12 @@ fakeCallableSignature c@Callable{..} =
       SomeSimpleFunctionSignature $ SimpleFunctionSignature
       { sfuncName = mkCallableName c
       , sfuncRet = callableRets
-      , sfuncArgs = map (\(nm,t) -> FunctionArg nm t False) callableArgs
+      , sfuncArgs = map (\(nm,t) -> FunctionArg nm t Nothing) callableArgs
       , sfuncGlobalReadReprs = globalReadReprs
       , sfuncGlobalWriteReprs = globalWriteReprs
       }
 
--- | Compute the signature of a callable (function/procedure). Currently, we assume
--- that if the return list is empty, it is a procedure, and if it is nonempty, then
--- it is a function.
+-- | Compute the signature of a callable (function/procedure).
 computeCallableSignature :: Callable -> SigM ext f (SomeSimpleFunctionSignature, GlobalVarRefs)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
@@ -913,7 +924,7 @@ computeCallableSignature c@Callable{..} = do
       let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
             { sfuncName = name
             , sfuncRet = callableRets
-            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (isRegIdx regIdxs nm)) callableArgs
+            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (getRegisterKind regIdxs nm)) callableArgs
             , sfuncGlobalReadReprs = globalReadReprs
             , sfuncGlobalWriteReprs = globalWriteReprs
             }
@@ -926,29 +937,37 @@ computeType'' defs t = case computeType' t of
     Just (Some ut) -> Some $ userTypeRepr ut
     Nothing -> error $ "Missing user type definition for: " <> (show tpName)
 
+mergeRegisterKinds :: RegisterKind -> RegisterKind -> RegisterKind
+mergeRegisterKinds r1 r2 = if r1 == r2 then r1 else RegisterInconsistent
+
 -- Variable environment for tracking usage as a register index
 -- Relation tracks direct dependencies between variables
 data RegIdxVars = RegIdxVars
-  { regIdxVars :: Set.Set T.Text
+  { regIdxVars :: Map.Map T.Text RegisterKind
   , regIdxVarRels :: Map.Map T.Text (Set.Set T.Text) }
 
 instance Semigroup RegIdxVars where
  (<>) (RegIdxVars vars vrels) (RegIdxVars vars' vrels') =
-   RegIdxVars (Set.union vars vars') (Map.unionWith Set.union vrels vrels')
+   RegIdxVars (Map.unionWith mergeRegisterKinds vars vars') (Map.unionWith Set.union vrels vrels')
 
 instance Monoid RegIdxVars where
-  mempty = RegIdxVars Set.empty Map.empty
+  mempty = RegIdxVars Map.empty Map.empty
 
 varDependsOn :: T.Text -> T.Text -> RegIdxVars
-varDependsOn var dep = RegIdxVars Set.empty (Map.singleton var (Set.singleton dep))
+varDependsOn var dep = RegIdxVars Map.empty (Map.singleton var (Set.singleton dep))
 
-varRegIdx :: T.Text -> RegIdxVars
-varRegIdx var = RegIdxVars (Set.singleton var) (Map.empty)
+varRegIdx :: T.Text -> RegisterKind -> RegIdxVars
+varRegIdx var rkind = RegIdxVars (Map.singleton var rkind) (Map.empty)
 
-isRegIdx :: RegIdxVars -> T.Text -> Bool
-isRegIdx ridx@(RegIdxVars vars vrels) var = Set.member var vars || case Map.lookup var vrels of
-  Just vars' -> not $ null $ Set.filter (isRegIdx ridx) vars'
-  Nothing -> False
+getRegisterKind :: RegIdxVars -> T.Text -> Maybe RegisterKind
+getRegisterKind ridx@(RegIdxVars vars vrels) var = case Map.lookup var vars of
+  Just rkind -> Just rkind
+  Nothing -> case Map.lookup var vrels of
+    Just vars' -> case nub $ catMaybes $ map (getRegisterKind ridx) (Set.toList vars') of
+      [rkind] -> Just $ rkind
+      (_ : _) -> Just $ RegisterInconsistent
+      _ -> Nothing
+    Nothing -> Nothing
 
 -- FIXME: workaround for the fact that empty tuples are not supported by crucible/what4
 

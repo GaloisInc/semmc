@@ -23,6 +23,7 @@ module SemMC.ASL.SyntaxTraverse
   ( mkSyntaxOverrides
   , applySyntaxOverridesInstrs
   , applySyntaxOverridesDefs
+  , varsOfExpr
   , SyntaxCollectors(..)
   , noCollectors
   , SyntaxMaps(..)
@@ -41,8 +42,10 @@ module SemMC.ASL.SyntaxTraverse
   )
 where
 
+
 import           Control.Applicative
 import qualified Control.Monad.Writer.Lazy as W
+import           Control.Monad.Identity
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Text as T
 import           Data.List (nub)
@@ -51,10 +54,16 @@ import qualified Data.Map as Map
 import qualified Control.Monad.State as MSS
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe, listToMaybe, isJust, mapMaybe)
 import           SemMC.ASL.Types
-import           SemMC.ASL.StaticExpr
 
 pattern VarName :: T.Text -> AS.QualifiedIdentifier
 pattern VarName nm <- AS.QualifiedIdentifier _ nm
+
+varsOfExpr :: AS.Expr -> [T.Text]
+varsOfExpr e = runIdentity $ writeExpr (noWrites { exprWrite = getVar }) e
+  where
+    getVar :: AS.Expr -> Identity [T.Text]
+    getVar (AS.ExprVarRef (VarName ident)) = return $ [ident]
+    getVar e = return $ []
 
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
