@@ -23,6 +23,7 @@ module SemMC.ASL.Types
   , ExtendedTypeData(..)
   , TypeConstraint(..)
   , ConstraintHint(..)
+  , RegisterKind(..)
   , userTypeRepr
   , toBaseType
   , toBaseTypes
@@ -239,3 +240,7 @@ data TypeConstraint where
   ConstraintTuple :: [TypeConstraint] -> TypeConstraint
 
 deriving instance Show TypeConstraint
+
+data RegisterKind =
+  RegisterR | RegisterV | RegisterInconsistent
+  deriving (Show, Eq)

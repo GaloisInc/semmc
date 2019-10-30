@@ -103,7 +103,7 @@ instance ShowF SomeFunctionSignature
 data FunctionArg = FunctionArg
   { argName :: T.Text
   , argType :: AS.Type
-  , argIsRegIdx :: Bool -- is this variable (transitively) used as a register index
+  , argRegKind :: Maybe RegisterKind -- is this variable (transitively) used as a register index
   }
   deriving Show
 

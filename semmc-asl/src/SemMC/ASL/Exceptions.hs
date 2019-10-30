@@ -23,6 +23,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | forall tp . InvalidReturnType (CT.TypeRepr tp)
                           | forall tp1 tp2 .  UnexpectedExprType (Maybe AS.Expr) (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           -- ^ Expression, actual type, expected type
+                          | UnsupportedType AS.Type
                           | UnsupportedExpr AS.Expr
                           | UnsupportedStmt AS.Stmt
                           | UnsupportedLVal AS.LValExpr

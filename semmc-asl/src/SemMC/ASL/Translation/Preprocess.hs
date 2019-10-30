@@ -85,6 +85,8 @@ import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
 import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
 
+import System.IO.Unsafe -- FIXME: debugging
+
 ----------------
 -- Notes
 --
@@ -538,6 +540,7 @@ data InnerSigException = TypeNotFound T.Text
                        | UnsupportedSigStmt AS.Stmt
                        | UnsupportedSigLVal AS.LValExpr
                        | MissingSignature Callable
+                       | FailedToDetermineStaticEnvironment [T.Text]
                        | FailedToMonomorphizeSignature AS.Type StaticValues
   deriving (Eq, Show)
 
@@ -788,30 +791,36 @@ callableRegIdxs qIdent argEs = do
       let args = sfuncArgs sig
       mconcat <$> traverse addFunArg (zip args argEs)
   where
-    addFunArg (FunctionArg _ _ regidx, AS.ExprVarRef (AS.VarName nm)) =
-      if regidx then return $ varRegIdx nm else return $ mempty
+    addFunArg (FunctionArg _ _ mrkind, AS.ExprVarRef (AS.VarName nm)) = case mrkind of
+      Just rkind -> return $ varRegIdx nm rkind
+      _ -> return mempty
     addFunArg _ = return mempty
+
+registerKindMap :: T.Text -> Maybe RegisterKind
+registerKindMap nm = case nm of
+  "_R" -> Just $ RegisterR
+  "_V" -> Just $ RegisterV
+  _ -> Nothing
 
 regIdxsOfStmts :: [AS.Stmt] -> SigM ext f RegIdxVars
 regIdxsOfStmts stmts = do
   let getstmt stmt = case stmt of
-        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm))
-          (AS.ExprCall (AS.VarName "UInt") [AS.ExprVarRef (AS.VarName varnm)]) ->
-          return $ varDependsOn varnm lvnm
-        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) (AS.ExprVarRef (AS.VarName varnm)) ->
-          return $ varDependsOn varnm lvnm
+        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) e ->
+          return $ mconcat $ map (\var -> varDependsOn var lvnm) $ regIdxVars e
         AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
         _ -> return mempty
   let getexpr expr = case expr of
         AS.ExprCall (AS.VarName "LookUpRIndex") [AS.ExprVarRef (AS.VarName varnm), _] ->
-          return $ varRegIdx varnm
-        AS.ExprIndex (AS.ExprVarRef (AS.VarName "_R")) [AS.SliceSingle (AS.ExprVarRef (AS.VarName varnm))] ->
-          return $ varRegIdx varnm
+          return $ varRegIdx varnm RegisterR
+        AS.ExprIndex (AS.ExprVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
+          | Just rkind <- registerKindMap idxnm ->
+            return $ mconcat $ map (\var -> varRegIdx var rkind) $ regIdxVars e
         AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
         _ -> return mempty
   let getlval lval = case lval of
-        AS.LValArrayIndex (AS.LValVarRef (AS.VarName "_R")) [AS.SliceSingle (AS.ExprVarRef (AS.VarName varnm))] ->
-          return $ varRegIdx varnm
+        AS.LValArrayIndex (AS.LValVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
+          | Just rkind <- registerKindMap idxnm ->
+            return $ mconcat $ map (\var -> varRegIdx var rkind) $ regIdxVars e
         _ -> return mempty
 
   let collectors = ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt, ASLT.lvalWrite = getlval}
@@ -824,6 +833,13 @@ regIdxsOfStmts stmts = do
     collectVars q args (nm', mi) | (mi == Nothing || mi == Just (length args)) =
       callableRegIdxs (AS.QualifiedIdentifier q nm') args
     collectVars q args (nm', _) = return mempty
+
+    regIdxVars expr = case expr of
+      AS.ExprBinOp AS.BinOpConcat e1 e2 ->
+        regIdxVars e1 ++ regIdxVars e2
+      AS.ExprVarRef (AS.VarName nm) -> [nm]
+      AS.ExprCall (AS.VarName "UInt") [e] -> regIdxVars e
+      _ -> []
 
 computeSignatures :: [AS.Stmt] -> SigM ext f ()
 computeSignatures stmts = do
@@ -861,14 +877,12 @@ fakeCallableSignature c@Callable{..} =
       SomeSimpleFunctionSignature $ SimpleFunctionSignature
       { sfuncName = mkCallableName c
       , sfuncRet = callableRets
-      , sfuncArgs = map (\(nm,t) -> FunctionArg nm t False) callableArgs
+      , sfuncArgs = map (\(nm,t) -> FunctionArg nm t Nothing) callableArgs
       , sfuncGlobalReadReprs = globalReadReprs
       , sfuncGlobalWriteReprs = globalWriteReprs
       }
 
--- | Compute the signature of a callable (function/procedure). Currently, we assume
--- that if the return list is empty, it is a procedure, and if it is nonempty, then
--- it is a function.
+-- | Compute the signature of a callable (function/procedure).
 computeCallableSignature :: Callable -> SigM ext f (SomeSimpleFunctionSignature, GlobalVarRefs)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
@@ -913,7 +927,7 @@ computeCallableSignature c@Callable{..} = do
       let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
             { sfuncName = name
             , sfuncRet = callableRets
-            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (isRegIdx regIdxs nm)) callableArgs
+            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (getRegisterKind regIdxs nm)) callableArgs
             , sfuncGlobalReadReprs = globalReadReprs
             , sfuncGlobalWriteReprs = globalWriteReprs
             }
@@ -926,29 +940,37 @@ computeType'' defs t = case computeType' t of
     Just (Some ut) -> Some $ userTypeRepr ut
     Nothing -> error $ "Missing user type definition for: " <> (show tpName)
 
+mergeRegisterKinds :: RegisterKind -> RegisterKind -> RegisterKind
+mergeRegisterKinds r1 r2 = if r1 == r2 then r1 else RegisterInconsistent
+
 -- Variable environment for tracking usage as a register index
 -- Relation tracks direct dependencies between variables
 data RegIdxVars = RegIdxVars
-  { regIdxVars :: Set.Set T.Text
+  { regIdxVars :: Map.Map T.Text RegisterKind
   , regIdxVarRels :: Map.Map T.Text (Set.Set T.Text) }
 
 instance Semigroup RegIdxVars where
  (<>) (RegIdxVars vars vrels) (RegIdxVars vars' vrels') =
-   RegIdxVars (Set.union vars vars') (Map.unionWith Set.union vrels vrels')
+   RegIdxVars (Map.unionWith mergeRegisterKinds vars vars') (Map.unionWith Set.union vrels vrels')
 
 instance Monoid RegIdxVars where
-  mempty = RegIdxVars Set.empty Map.empty
+  mempty = RegIdxVars Map.empty Map.empty
 
 varDependsOn :: T.Text -> T.Text -> RegIdxVars
-varDependsOn var dep = RegIdxVars Set.empty (Map.singleton var (Set.singleton dep))
+varDependsOn var dep = RegIdxVars Map.empty (Map.singleton var (Set.singleton dep))
 
-varRegIdx :: T.Text -> RegIdxVars
-varRegIdx var = RegIdxVars (Set.singleton var) (Map.empty)
+varRegIdx :: T.Text -> RegisterKind -> RegIdxVars
+varRegIdx var rkind = RegIdxVars (Map.singleton var rkind) (Map.empty)
 
-isRegIdx :: RegIdxVars -> T.Text -> Bool
-isRegIdx ridx@(RegIdxVars vars vrels) var = Set.member var vars || case Map.lookup var vrels of
-  Just vars' -> not $ null $ Set.filter (isRegIdx ridx) vars'
-  Nothing -> False
+getRegisterKind :: RegIdxVars -> T.Text -> Maybe RegisterKind
+getRegisterKind ridx@(RegIdxVars vars vrels) var = case Map.lookup var vars of
+  Just rkind -> Just rkind
+  Nothing -> case Map.lookup var vrels of
+    Just vars' -> case nub $ catMaybes $ map (getRegisterKind ridx) (Set.toList vars') of
+      [rkind] -> Just $ rkind
+      (_ : _) -> Just $ RegisterInconsistent
+      _ -> Nothing
+    Nothing -> Nothing
 
 -- FIXME: workaround for the fact that empty tuples are not supported by crucible/what4
 
@@ -1011,56 +1033,71 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
   let mEnc = find (\e -> AS.encName e == encName && AS.encInstrSet e == iset) instEncodings
   case mEnc of
     Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
-    Just enc -> let
-      initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
-      initStmts = AS.encDecode enc ++ initUnusedFields
-      possibleEnvs = getPossibleEnvs (AS.encFields enc) (AS.encDecode enc)
-      instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $
-        liftOverEnvs instName possibleEnvs instExecute
-      instStmts = initStmts ++ instPostDecode ++ instExecute'
-      instGlobalVars = globalsOfStmts instStmts
-      staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
-      in do
-        computeSignatures instStmts
-        globalVars <- instGlobalVars
-        (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
-        labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
-          return $ Some (LabeledValue varName varTp)
-        labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
-          return $ Some (LabeledValue varName varTp)
+    Just enc -> do
+      let initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
+      let initStmts = AS.encDecode enc ++ initUnusedFields
 
-        regIdxs <- regIdxsOfStmts instStmts
-        (labeledArgs, args) <- unzip <$> (forM (AS.encFields enc) $ \field -> do
-          (Some tp, ty) <- computeFieldType field
-          let ctp = CT.baseToType tp
-          let nm = AS.instFieldName field
-          return (Some (LabeledValue nm ctp), FunctionArg nm ty (isRegIdx regIdxs nm)))
-        Some globalReadReprs <- return $ Ctx.fromList labeledReads
-        Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
-        Some argReprs <- return $ Ctx.fromList labeledArgs
-        let pSig = FunctionSignature { funcName = name
-                                     , funcArgReprs = argReprs
-                                     , funcRetRepr = Ctx.empty
-                                     , funcGlobalReadReprs = globalReadReprs
-                                     , funcGlobalWriteReprs = globalReadReprs
-                                     , funcStaticVals = staticEnvMapVals staticEnv
-                                     , funcArgs = args
-                                     }
-        return (Some (SomeFunctionSignature pSig), instStmts)
+      liftedStmts <- liftOverEnvs instName (AS.encFields enc) (AS.encDecode enc) instExecute
+      let instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $ liftedStmts
+      let instStmts = initStmts ++ instPostDecode ++ instExecute'
+      let staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
+      computeSignatures instStmts
+      globalVars <- globalsOfStmts instStmts
+      (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
+      labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
+        return $ Some (LabeledValue varName varTp)
+      labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
+        return $ Some (LabeledValue varName varTp)
 
-liftOverEnvs :: T.Text -> [StaticEnvP] -> [AS.Stmt] -> [AS.Stmt]
-liftOverEnvs instName envs stmts = case Map.lookup instName dependentVariableHints of
-  Just vars ->
+      regIdxs <- regIdxsOfStmts instStmts
+      (labeledArgs, args) <- unzip <$> (forM (AS.encFields enc) $ \field -> do
+        (Some tp, ty) <- computeFieldType field
+        let ctp = CT.baseToType tp
+        let nm = AS.instFieldName field
+        return (Some (LabeledValue nm ctp), FunctionArg nm ty (getRegisterKind regIdxs nm)))
+      Some globalReadReprs <- return $ Ctx.fromList labeledReads
+      Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
+      Some argReprs <- return $ Ctx.fromList labeledArgs
+      let pSig = FunctionSignature { funcName = name
+                                   , funcArgReprs = argReprs
+                                   , funcRetRepr = Ctx.empty
+                                   , funcGlobalReadReprs = globalReadReprs
+                                   , funcGlobalWriteReprs = globalReadReprs
+                                   , funcStaticVals = staticEnvMapVals staticEnv
+                                   , funcArgs = args
+                                   }
+      return (Some (SomeFunctionSignature pSig), instStmts)
+
+liftOverEnvs :: T.Text -> [AS.InstructionField] -> [AS.Stmt] -> [AS.Stmt] -> SigM ext f [AS.Stmt]
+liftOverEnvs instName fields decodes stmts = case Map.lookup instName dependentVariableHints of
+  Just (vars, optvars) ->
     let
-      varToStatic asns var = case Map.lookup var asns of
-        Just sv -> sv
-        _ -> error $ "Missing variable in possible assignments: " ++ show var
-      cases = do
-        asns <- getPossibleValuesFor vars envs
-        return $ (map (varToStatic asns) vars, stmts)
 
-    in [staticEnvironmentStmt vars cases]
-  _ -> stmts
+      varToStatic asns var = case Map.lookup var asns of
+        Just sv -> (var, sv)
+        _ -> error $ "Missing variable in possible assignments: " ++ show var
+      optvarToStatic asns optvar = case Map.lookup optvar asns of
+        Just sv -> Just (optvar, sv)
+        _ -> Nothing
+
+      cases = do
+        asns <- possibleEnvs vars optvars
+        let varasns = map (varToStatic asns) vars
+        let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
+        return $ (varasns ++ optvarasns, stmts)
+
+    in case cases of
+      [] -> throwError $ FailedToDetermineStaticEnvironment vars
+      x -> return $ [staticEnvironmentStmt x]
+  _ -> return $ stmts
+  where
+    possibleEnvs vars optvars =
+      let
+        addField (AS.InstructionField instFieldName _ instFieldOffset) =
+          insertStaticEnvP instFieldName (EnvPInfeasable (StaticBVType instFieldOffset) Set.empty)
+        initEnv = foldr addField emptyStaticEnvP fields
+      in
+        getPossibleValuesFor initEnv vars optvars decodes
 
 pruneInfeasableInstrSets :: AS.InstructionSet -> [AS.Stmt] -> [AS.Stmt]
 pruneInfeasableInstrSets enc stmts = case enc of
@@ -1073,14 +1110,7 @@ pruneInfeasableInstrSets enc stmts = case enc of
     evalInstrSetTest e = e
     in map (ASLT.mapSyntax (ASLT.SyntaxMaps evalInstrSetTest id id id)) stmts
 
-getPossibleEnvs :: [AS.InstructionField] -> [AS.Stmt] -> [StaticEnvP]
-getPossibleEnvs fields decodes =
-  let
-    addField (AS.InstructionField instFieldName _ instFieldOffset) =
-      insertStaticEnvP instFieldName (EnvPInfeasable (StaticBVType instFieldOffset) Set.empty)
-    initEnv = foldr addField emptyStaticEnvP fields
-  in
-    getPossibleStaticsStmts initEnv decodes
+
 
 -- | In general execution bodies may refer to fields that have not been set by
 -- this particular encoding. To account for this, we initialize all fields from
@@ -1151,13 +1181,19 @@ localTypeHints = Map.fromList
   ,(("AArch64_TranslationTableWalk_8", "outputaddress"),  ConstraintSingle (CT.BVRepr $ WT.knownNat @52))
   ]
 
+dependentVariableHints :: Map.Map T.Text ([T.Text], [T.Text])
+dependentVariableHints = Map.fromList $
+  [("aarch32_VABS_A", (["esize"], ["elements", "floating_point"]))
+  ,("aarch32_VNEG_A", (["esize"], ["elements", "floating_point"]))
+  ] ++ map (\(var, hints) -> (var, (hints, []))) dependentVariableHints'
+
 -- Hints for instructions for variables that need to be concretized
 -- to successfully translate
-dependentVariableHints :: Map.Map T.Text [T.Text]
-dependentVariableHints = Map.fromList
-  [("aarch32_VQSUB_A", ["esize"])
-  ,("aarch32_VMOVL_A", ["esize"])
-  ,("aarch32_VQDMULH_A", ["esize", "elements"])
+dependentVariableHints' :: [(T.Text, [T.Text])]
+dependentVariableHints' =
+  [("aarch32_VQSUB_A", ["esize", "elements", "regs"])
+  ,("aarch32_VMOVL_A", ["esize", "elements"])
+  ,("aarch32_VQDMULH_A", ["esize", "elements", "regs"])
   ,("aarch32_VABA_A", ["esize", "elements"])
   ,("aarch32_VMAX_i_A", ["esize", "elements"])
   ,("aarch32_VRSHR_A", ["esize", "elements"])
@@ -1169,7 +1205,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VLD1_m_A", ["ebytes", "elements"])
   ,("aarch32_VLD2_m_A", ["ebytes", "elements"])
   ,("aarch32_VLD3_m_A", ["ebytes", "elements"])
-  ,("aarch32_VREV16_A", ["esize", "elements"])
+  ,("aarch32_VREV16_A", ["esize", "containers", "regs", "elements_per_container"])
   ,("aarch32_VABD_i_A", ["esize", "elements"])
   ,("aarch32_VADDL_A", ["esize", "elements"])
   ,("aarch32_VMLA_i_A", ["esize", "elements"])
@@ -1178,7 +1214,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VQDMLAL_A", ["esize", "elements"])
   ,("aarch32_VDUP_r_A", ["esize", "elements"])
   ,("aarch32_CRC32_A", ["size"])
-  ,("aarch32_VQSHL_i_A", ["esize", "elements"])
+  ,("aarch32_VQSHL_i_A", ["esize", "elements", "regs"])
   ,("aarch32_VSUB_i_A", ["esize", "elements"])
   ,("aarch32_VSUBHN_A", ["esize", "elements"])
   ,("aarch32_VQRDMULH_A", ["esize", "elements"])
@@ -1190,20 +1226,17 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VSUBL_A", ["esize", "elements"])
   ,("aarch32_VST2_m_A", ["ebytes", "elements"])
   ,("aarch32_VSRA_A", ["esize", "elements"])
-  ,("aarch32_VABS_A2_A", ["esize", "elements"])
-  ,("aarch32_VABS_A", ["esize", "elements"])
   ,("aarch32_VSHL_i_A", ["esize", "elements"])
   ,("aarch32_VCLZ_A", ["esize", "elements"])
-  ,("aarch32_VMOV_sr_A", ["esize", "elements"])
-  ,("aarch32_USAT_A", ["esize", "elements"])
+  ,("aarch32_VMOV_sr_A", ["esize"])
+  ,("aarch32_USAT_A", ["saturate_to"])
   ,("aarch32_VCLS_A", ["esize", "elements"])
   ,("aarch32_VHADD_A", ["esize", "elements"])
-  ,("aarch32_VLD1_a_A", ["ebytes", "elements"])
-  ,("aarch32_VLD2_a_A", ["ebytes", "elements"])
-  ,("aarch32_VLD3_a_A", ["ebytes", "elements"])
-  ,("aarch32_VLD4_a_A", ["esize", "elements"])
+  ,("aarch32_VLD1_a_A", ["ebytes"])
+  ,("aarch32_VLD2_a_A", ["ebytes"])
+  ,("aarch32_VLD3_a_A", ["ebytes"])
+  ,("aarch32_VLD4_a_A", ["ebytes"])
   ,("aarch32_VMUL_i_A", ["esize", "elements"])
-  ,("aarch32_VNEG_A", ["esize", "elements"])
   ,("aarch32_VPADAL_A", ["esize", "elements"])
   ,("aarch32_VQMOVN_A", ["esize", "elements"])
   ,("aarch32_VQNEG_A", ["esize", "elements"])
@@ -1219,7 +1252,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VSLI_A", ["esize", "elements"])
   ,("aarch32_VSRI_A", ["esize", "elements"])
   ,("aarch32_VTRN_A", ["esize", "elements"])
-  ,("aarch32_VUZP_A", ["esize", "elements"])
+  ,("aarch32_VUZP_A", ["esize"])
   ,("aarch32_VQRSHL_A", ["esize", "elements"])
   ,("aarch32_VPADDL_A", ["esize", "elements"])
   ,("aarch32_VZIP_A", ["esize"])
@@ -1230,7 +1263,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VRHADD_A", ["esize", "elements"])
   ,("aarch32_VTST_A", ["esize", "elements"])
   ,("aarch32_VRSHRN_A", ["esize", "elements"])
-  ,("aarch32_VPADD_i_A", ["esize", "elmeents"])
+  ,("aarch32_VPADD_i_A", ["esize", "elements"])
   ,("aarch32_VQRDMLSH_A", ["esize", "elements"])
   ,("aarch32_VQABS_A", ["esize", "elements"])
   ,("aarch32_VST1_m_A", ["ebytes", "elements"])
