@@ -85,6 +85,8 @@ import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
 import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
 
+import System.IO.Unsafe -- FIXME: debugging
+
 ----------------
 -- Notes
 --
@@ -538,6 +540,7 @@ data InnerSigException = TypeNotFound T.Text
                        | UnsupportedSigStmt AS.Stmt
                        | UnsupportedSigLVal AS.LValExpr
                        | MissingSignature Callable
+                       | FailedToDetermineStaticEnvironment [T.Text]
                        | FailedToMonomorphizeSignature AS.Type StaticValues
   deriving (Eq, Show)
 
@@ -1030,56 +1033,71 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
   let mEnc = find (\e -> AS.encName e == encName && AS.encInstrSet e == iset) instEncodings
   case mEnc of
     Nothing -> error $ "Invalid encoding " ++ show encName ++ " for instruction " ++ show instName
-    Just enc -> let
-      initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
-      initStmts = AS.encDecode enc ++ initUnusedFields
-      possibleEnvs = getPossibleEnvs (AS.encFields enc) (AS.encDecode enc)
-      instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $
-        liftOverEnvs instName possibleEnvs instExecute
-      instStmts = initStmts ++ instPostDecode ++ instExecute'
-      instGlobalVars = globalsOfStmts instStmts
-      staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
-      in do
-        computeSignatures instStmts
-        globalVars <- instGlobalVars
-        (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
-        labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
-          return $ Some (LabeledValue varName varTp)
-        labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
-          return $ Some (LabeledValue varName varTp)
+    Just enc -> do
+      let initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
+      let initStmts = AS.encDecode enc ++ initUnusedFields
 
-        regIdxs <- regIdxsOfStmts instStmts
-        (labeledArgs, args) <- unzip <$> (forM (AS.encFields enc) $ \field -> do
-          (Some tp, ty) <- computeFieldType field
-          let ctp = CT.baseToType tp
-          let nm = AS.instFieldName field
-          return (Some (LabeledValue nm ctp), FunctionArg nm ty (isRegIdx regIdxs nm)))
-        Some globalReadReprs <- return $ Ctx.fromList labeledReads
-        Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
-        Some argReprs <- return $ Ctx.fromList labeledArgs
-        let pSig = FunctionSignature { funcName = name
-                                     , funcArgReprs = argReprs
-                                     , funcRetRepr = Ctx.empty
-                                     , funcGlobalReadReprs = globalReadReprs
-                                     , funcGlobalWriteReprs = globalReadReprs
-                                     , funcStaticVals = staticEnvMapVals staticEnv
-                                     , funcArgs = args
-                                     }
-        return (Some (SomeFunctionSignature pSig), instStmts)
+      liftedStmts <- liftOverEnvs instName (AS.encFields enc) (AS.encDecode enc) instExecute
+      let instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $ liftedStmts
+      let instStmts = initStmts ++ instPostDecode ++ instExecute'
+      let staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
+      computeSignatures instStmts
+      globalVars <- globalsOfStmts instStmts
+      (globalReads, globalWrites) <- return $ unpackGVarRefs globalVars
+      labeledReads <- forM globalReads $ \(varName, Some varTp) -> do
+        return $ Some (LabeledValue varName varTp)
+      labeledWrites <- forM globalWrites $ \(varName, Some varTp) -> do
+        return $ Some (LabeledValue varName varTp)
 
-liftOverEnvs :: T.Text -> [StaticEnvP] -> [AS.Stmt] -> [AS.Stmt]
-liftOverEnvs instName envs stmts = case Map.lookup instName dependentVariableHints of
-  Just vars ->
+      regIdxs <- regIdxsOfStmts instStmts
+      (labeledArgs, args) <- unzip <$> (forM (AS.encFields enc) $ \field -> do
+        (Some tp, ty) <- computeFieldType field
+        let ctp = CT.baseToType tp
+        let nm = AS.instFieldName field
+        return (Some (LabeledValue nm ctp), FunctionArg nm ty (getRegisterKind regIdxs nm)))
+      Some globalReadReprs <- return $ Ctx.fromList labeledReads
+      Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
+      Some argReprs <- return $ Ctx.fromList labeledArgs
+      let pSig = FunctionSignature { funcName = name
+                                   , funcArgReprs = argReprs
+                                   , funcRetRepr = Ctx.empty
+                                   , funcGlobalReadReprs = globalReadReprs
+                                   , funcGlobalWriteReprs = globalReadReprs
+                                   , funcStaticVals = staticEnvMapVals staticEnv
+                                   , funcArgs = args
+                                   }
+      return (Some (SomeFunctionSignature pSig), instStmts)
+
+liftOverEnvs :: T.Text -> [AS.InstructionField] -> [AS.Stmt] -> [AS.Stmt] -> SigM ext f [AS.Stmt]
+liftOverEnvs instName fields decodes stmts = case Map.lookup instName dependentVariableHints of
+  Just (vars, optvars) ->
     let
-      varToStatic asns var = case Map.lookup var asns of
-        Just sv -> sv
-        _ -> error $ "Missing variable in possible assignments: " ++ show var
-      cases = do
-        asns <- getPossibleValuesFor vars envs
-        return $ (map (varToStatic asns) vars, stmts)
 
-    in [staticEnvironmentStmt vars cases]
-  _ -> stmts
+      varToStatic asns var = case Map.lookup var asns of
+        Just sv -> (var, sv)
+        _ -> error $ "Missing variable in possible assignments: " ++ show var
+      optvarToStatic asns optvar = case Map.lookup optvar asns of
+        Just sv -> Just (optvar, sv)
+        _ -> Nothing
+
+      cases = do
+        asns <- possibleEnvs vars optvars
+        let varasns = map (varToStatic asns) vars
+        let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
+        return $ (varasns ++ optvarasns, stmts)
+
+    in case cases of
+      [] -> throwError $ FailedToDetermineStaticEnvironment vars
+      x -> return $ [staticEnvironmentStmt x]
+  _ -> return $ stmts
+  where
+    possibleEnvs vars optvars =
+      let
+        addField (AS.InstructionField instFieldName _ instFieldOffset) =
+          insertStaticEnvP instFieldName (EnvPInfeasable (StaticBVType instFieldOffset) Set.empty)
+        initEnv = foldr addField emptyStaticEnvP fields
+      in
+        getPossibleValuesFor initEnv vars optvars decodes
 
 pruneInfeasableInstrSets :: AS.InstructionSet -> [AS.Stmt] -> [AS.Stmt]
 pruneInfeasableInstrSets enc stmts = case enc of
@@ -1092,14 +1110,7 @@ pruneInfeasableInstrSets enc stmts = case enc of
     evalInstrSetTest e = e
     in map (ASLT.mapSyntax (ASLT.SyntaxMaps evalInstrSetTest id id id)) stmts
 
-getPossibleEnvs :: [AS.InstructionField] -> [AS.Stmt] -> [StaticEnvP]
-getPossibleEnvs fields decodes =
-  let
-    addField (AS.InstructionField instFieldName _ instFieldOffset) =
-      insertStaticEnvP instFieldName (EnvPInfeasable (StaticBVType instFieldOffset) Set.empty)
-    initEnv = foldr addField emptyStaticEnvP fields
-  in
-    getPossibleStaticsStmts initEnv decodes
+
 
 -- | In general execution bodies may refer to fields that have not been set by
 -- this particular encoding. To account for this, we initialize all fields from
@@ -1170,13 +1181,19 @@ localTypeHints = Map.fromList
   ,(("AArch64_TranslationTableWalk_8", "outputaddress"),  ConstraintSingle (CT.BVRepr $ WT.knownNat @52))
   ]
 
+dependentVariableHints :: Map.Map T.Text ([T.Text], [T.Text])
+dependentVariableHints = Map.fromList $
+  [("aarch32_VABS_A", (["esize"], ["elements", "floating_point"]))
+  ,("aarch32_VNEG_A", (["esize"], ["elements", "floating_point"]))
+  ] ++ map (\(var, hints) -> (var, (hints, []))) dependentVariableHints'
+
 -- Hints for instructions for variables that need to be concretized
 -- to successfully translate
-dependentVariableHints :: Map.Map T.Text [T.Text]
-dependentVariableHints = Map.fromList
-  [("aarch32_VQSUB_A", ["esize"])
-  ,("aarch32_VMOVL_A", ["esize"])
-  ,("aarch32_VQDMULH_A", ["esize", "elements"])
+dependentVariableHints' :: [(T.Text, [T.Text])]
+dependentVariableHints' =
+  [("aarch32_VQSUB_A", ["esize", "elements", "regs"])
+  ,("aarch32_VMOVL_A", ["esize", "elements"])
+  ,("aarch32_VQDMULH_A", ["esize", "elements", "regs"])
   ,("aarch32_VABA_A", ["esize", "elements"])
   ,("aarch32_VMAX_i_A", ["esize", "elements"])
   ,("aarch32_VRSHR_A", ["esize", "elements"])
@@ -1188,7 +1205,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VLD1_m_A", ["ebytes", "elements"])
   ,("aarch32_VLD2_m_A", ["ebytes", "elements"])
   ,("aarch32_VLD3_m_A", ["ebytes", "elements"])
-  ,("aarch32_VREV16_A", ["esize", "elements"])
+  ,("aarch32_VREV16_A", ["esize", "containers", "regs", "elements_per_container"])
   ,("aarch32_VABD_i_A", ["esize", "elements"])
   ,("aarch32_VADDL_A", ["esize", "elements"])
   ,("aarch32_VMLA_i_A", ["esize", "elements"])
@@ -1197,7 +1214,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VQDMLAL_A", ["esize", "elements"])
   ,("aarch32_VDUP_r_A", ["esize", "elements"])
   ,("aarch32_CRC32_A", ["size"])
-  ,("aarch32_VQSHL_i_A", ["esize", "elements"])
+  ,("aarch32_VQSHL_i_A", ["esize", "elements", "regs"])
   ,("aarch32_VSUB_i_A", ["esize", "elements"])
   ,("aarch32_VSUBHN_A", ["esize", "elements"])
   ,("aarch32_VQRDMULH_A", ["esize", "elements"])
@@ -1209,20 +1226,17 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VSUBL_A", ["esize", "elements"])
   ,("aarch32_VST2_m_A", ["ebytes", "elements"])
   ,("aarch32_VSRA_A", ["esize", "elements"])
-  ,("aarch32_VABS_A2_A", ["esize", "elements"])
-  ,("aarch32_VABS_A", ["esize", "elements"])
   ,("aarch32_VSHL_i_A", ["esize", "elements"])
   ,("aarch32_VCLZ_A", ["esize", "elements"])
-  ,("aarch32_VMOV_sr_A", ["esize", "elements"])
-  ,("aarch32_USAT_A", ["esize", "elements"])
+  ,("aarch32_VMOV_sr_A", ["esize"])
+  ,("aarch32_USAT_A", ["saturate_to"])
   ,("aarch32_VCLS_A", ["esize", "elements"])
   ,("aarch32_VHADD_A", ["esize", "elements"])
-  ,("aarch32_VLD1_a_A", ["ebytes", "elements"])
-  ,("aarch32_VLD2_a_A", ["ebytes", "elements"])
-  ,("aarch32_VLD3_a_A", ["ebytes", "elements"])
-  ,("aarch32_VLD4_a_A", ["esize", "elements"])
+  ,("aarch32_VLD1_a_A", ["ebytes"])
+  ,("aarch32_VLD2_a_A", ["ebytes"])
+  ,("aarch32_VLD3_a_A", ["ebytes"])
+  ,("aarch32_VLD4_a_A", ["ebytes"])
   ,("aarch32_VMUL_i_A", ["esize", "elements"])
-  ,("aarch32_VNEG_A", ["esize", "elements"])
   ,("aarch32_VPADAL_A", ["esize", "elements"])
   ,("aarch32_VQMOVN_A", ["esize", "elements"])
   ,("aarch32_VQNEG_A", ["esize", "elements"])
@@ -1238,7 +1252,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VSLI_A", ["esize", "elements"])
   ,("aarch32_VSRI_A", ["esize", "elements"])
   ,("aarch32_VTRN_A", ["esize", "elements"])
-  ,("aarch32_VUZP_A", ["esize", "elements"])
+  ,("aarch32_VUZP_A", ["esize"])
   ,("aarch32_VQRSHL_A", ["esize", "elements"])
   ,("aarch32_VPADDL_A", ["esize", "elements"])
   ,("aarch32_VZIP_A", ["esize"])
@@ -1249,7 +1263,7 @@ dependentVariableHints = Map.fromList
   ,("aarch32_VRHADD_A", ["esize", "elements"])
   ,("aarch32_VTST_A", ["esize", "elements"])
   ,("aarch32_VRSHRN_A", ["esize", "elements"])
-  ,("aarch32_VPADD_i_A", ["esize", "elmeents"])
+  ,("aarch32_VPADD_i_A", ["esize", "elements"])
   ,("aarch32_VQRDMLSH_A", ["esize", "elements"])
   ,("aarch32_VQABS_A", ["esize", "elements"])
   ,("aarch32_VST1_m_A", ["ebytes", "elements"])

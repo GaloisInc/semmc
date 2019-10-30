@@ -377,19 +377,24 @@ data ExpectedException =
     UnsupportedInstruction
   | InsufficientStaticTypeInformation
   | CruciblePanic
+  | ASLSpecMissingZeroCheck
    deriving (Eq, Ord, Show)
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
   TExcept _ (InstructionUnsupported) -> Just $ UnsupportedInstruction
   SExcept _ (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
-  TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
-  TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
-  TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
+  -- TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
+  -- TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
+  -- TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
+  TExcept _ (UnsupportedType (AS.TypeFun "bits" (AS.ExprLitInt 0)))
+    | KeyInstr (InstructionIdent nm _ _) <- k
+    , nm `elem` ["aarch32_USAT16_A", "aarch32_USAT_A"] ->
+      Just $ ASLSpecMissingZeroCheck
   SomeExcept e
     | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e
     , KeyInstr (InstructionIdent nm _ _) <- k
-    , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A", "aarch32_VTBL_A"] ->
+    , nm `elem` ["aarch32_WFE_A", "aarch32_WFI_A", "aarch32_VTBL_A", "aarch32_VTST_A"] ->
       Just $ CruciblePanic
   SomeExcept e
     | Just (Panic (_ :: Crucible) _ _ _) <- X.fromException e

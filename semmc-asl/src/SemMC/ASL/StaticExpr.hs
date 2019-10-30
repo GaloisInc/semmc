@@ -41,13 +41,14 @@ module SemMC.ASL.StaticExpr
   , emptyStaticEnvP
   , exprToStatic
   , getPossibleValuesFor
-  , getPossibleStaticsStmts
   , staticBinding
   , unstaticBinding
   , staticEnvironmentStmt
   )
 where
 
+import qualified Control.Monad.Fail as Fail
+import           Control.Applicative
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Text as T
 import           Data.List (nub)
@@ -134,8 +135,10 @@ simpleStaticEnvMap vals = StaticEnvMap vals (\_ -> Nothing)
 data EnvPEntry =
     EnvPValue StaticValue
   | EnvPInfeasable StaticType (Set.Set StaticValue)
+  deriving (Eq, Show)
 
 data StaticEnvP = StaticEnvP { unStaticEnvP :: Map.Map T.Text EnvPEntry }
+  deriving (Eq, Show)
 
 emptyStaticEnvP :: StaticEnvP
 emptyStaticEnvP = StaticEnvP Map.empty
@@ -148,6 +151,9 @@ instance StaticEnv StaticEnvP where
     Just (EnvPInfeasable st _) -> Just st
     Just (EnvPValue sv) -> Just $ typeOfStatic sv
     _ -> Nothing
+
+liftStaticEnvP :: (Map.Map T.Text EnvPEntry -> Map.Map T.Text EnvPEntry) -> StaticEnvP -> StaticEnvP
+liftStaticEnvP f (StaticEnvP env) = StaticEnvP (f env)
 
 insertStaticEnv :: T.Text -> StaticValue -> StaticEnvMap -> StaticEnvMap
 insertStaticEnv nm v (StaticEnvMap vals types) =
@@ -193,15 +199,14 @@ staticBinOp :: AS.BinOp
             -> Maybe StaticValue
 staticBinOp bop msv msv' =
   case bop of
-    AS.BinOpEQ
-      | Just sv <- msv
-      , Just sv' <- msv' ->
-        Just $ StaticBool $ sv == sv'
-    AS.BinOpNEQ
-      | Just sv <- msv
-      , Just sv' <- msv' ->
-        Just $ StaticBool $ sv /= sv'
-
+    AS.BinOpEQ ->
+      case (msv, msv') of
+        (Just sv, Just sv') -> Just $ StaticBool $ sv == sv'
+        _ -> Nothing
+    AS.BinOpNEQ ->
+      case (msv, msv') of
+        (Just sv, Just sv') -> Just $ StaticBool $ sv /= sv'
+        _ -> Nothing
     --integer binary operation
     _ | Just (StaticInt i) <- msv
       , Just (StaticInt i') <- msv' ->
@@ -219,6 +224,7 @@ staticBinOp bop msv msv' =
           AS.BinOpMul -> resultI (*)
           AS.BinOpPow -> resultI (^)
           AS.BinOpDiv -> divI
+          AS.BinOpDivide -> divI
           AS.BinOpShiftLeft -> resultI (\base -> \shift -> base * (2 ^ shift))
           AS.BinOpGT -> resultB (>)
           AS.BinOpLT -> resultB (<)
@@ -313,157 +319,229 @@ varRegisterStatusStmts :: T.Text -> [AS.Stmt] -> Bool
 varRegisterStatusStmts var stmts = True
 
 
--- Returns either an upper bound on all possible values for the expression
--- or @Nothing@ if such a bound can't be determined.
-getPossibleStaticsExpr :: StaticEnvP -> AS.Expr -> Maybe [StaticValue]
-getPossibleStaticsExpr env@(StaticEnvP penv) e = case exprToStatic env e of
-  Just sv -> Just [sv]
-  _ -> case e of
-    AS.ExprVarRef (AS.QualifiedIdentifier _ nm) ->
-      case Map.lookup nm penv of
-        Just (EnvPInfeasable (StaticBVType sz) inf) -> Just $ do
-          bv' <- allPossibleBVs sz
-          let bv = StaticBV bv'
-          if Set.member bv inf then fail ""
-          else return $ bv
-        Just (EnvPValue sv) -> Just [sv]
-        Nothing -> Nothing
-    AS.ExprBinOp bop e e' ->
-      case (getPossibleStaticsExpr env e, getPossibleStaticsExpr env e') of
-        (Just es, Just es') -> liftMaybe $ do
-          se <- es
-          se' <- es'
-          return $ (:[]) <$> staticBinOp bop (Just se) (Just se')
-        _ -> Nothing
-    AS.ExprIf tests@((test, body) : rest) fin ->
-      case getPossibleStaticsExpr env test of
-        Just svs -> liftMaybe $ do
-            sv <- svs
-            case sv of
-              StaticBool True -> return $ getPossibleStaticsExpr env body
-              StaticBool False -> return $ getPossibleStaticsExpr env (AS.ExprIf rest fin)
-              _ -> return $ Nothing
-        _ -> do
-          bodies <- concat <$> mapM applyTest tests
-          fin' <- getPossibleStaticsExpr env fin
-          return $ bodies ++ fin'
-    AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [e] ->
-      case getPossibleStaticsExpr env e of
-        Just svs -> collapseMaybes $ do
-          sv <- svs
-          case sv of
-            StaticBV bv -> return $ Just $ StaticInt $ bitsToInteger bv
-            _ -> return $ Nothing
-        _ -> Nothing
-    _ -> Nothing
+-- Monad for collecting possible variable assignments
+newtype StaticEnvM a = StaticEnvM { getStaticPEnvs :: StaticEnvP -> [(StaticEnvP, a)] }
+
+instance Functor StaticEnvM where
+  fmap f (StaticEnvM spenvs) = StaticEnvM (map (\(env', ret) -> (env', f ret)) . spenvs)
+
+instance Applicative StaticEnvM where
+  pure x = StaticEnvM (\env -> [(env, x)])
+  (<*>) x y = x >>= (\rv -> y >>= (\rv' -> return (rv rv')))
+
+instance Monad StaticEnvM where
+  (>>=) (StaticEnvM f) g =
+    StaticEnvM (\env -> concat $ map (\(env', ret) -> getStaticPEnvs (g ret) env') (f env))
+  fail = Fail.fail
+  return x = pure x
+
+instance Fail.MonadFail StaticEnvM where
+  fail _ = StaticEnvM (\_ -> [])
+
+
+runStaticEnvM ::  StaticEnvP -> StaticEnvM a -> [(StaticEnvP, a)]
+runStaticEnvM env (StaticEnvM f) = f env
+
+getEnv :: StaticEnvM StaticEnvP
+getEnv = StaticEnvM (\env -> [(env, env)])
+
+tryCatchEnv :: StaticEnvM a -> StaticEnvM a -> StaticEnvM a
+tryCatchEnv (StaticEnvM f) (StaticEnvM g) = StaticEnvM (\env -> case f env of {[] -> g env; x -> x})
+
+maybeEnv :: StaticEnvM () -> StaticEnvM ()
+maybeEnv f = tryCatchEnv f (return ())
+
+-- Nondeterministic selection
+choice :: StaticEnvM a -> StaticEnvM a -> StaticEnvM a
+choice (StaticEnvM f) (StaticEnvM g) = StaticEnvM (\env -> (f env) ++ (g env))
+
+liftStaticMap :: (StaticEnvP -> StaticEnvP) -> StaticEnvM ()
+liftStaticMap f = StaticEnvM (\env -> [(f env, ())])
+
+setStaticValue :: T.Text -> StaticValue -> StaticEnvM ()
+setStaticValue nm sv =
+  liftStaticMap (liftStaticEnvP $ Map.insert nm (EnvPValue sv))
+
+setInfeasableValue :: T.Text -> StaticValue -> StaticEnvM ()
+setInfeasableValue nm sv =
+  liftStaticMap (liftStaticEnvP $ Map.alter upd nm)
   where
-    applyTest (test, body) = liftMaybe $ do
-      env' <- assertInEnv test env
-      return $ getPossibleStaticsExpr env' body
+    upd (Just (EnvPInfeasable ty svs)) = Just (EnvPInfeasable ty (Set.insert sv svs))
+    upd Nothing = Just (EnvPInfeasable (typeOfStatic sv) (Set.singleton sv))
+    upd (Just (EnvPValue sv')) = Just (EnvPValue sv')
 
-liftMaybe :: [Maybe [a]] -> Maybe [a]
-liftMaybe ms = concat <$> (collapseMaybes ms)
+liftList :: [a] -> StaticEnvM a
+liftList xs = StaticEnvM (\env -> map (\x -> (env, x)) xs)
 
-collapseMaybes :: [Maybe a] -> Maybe [a]
-collapseMaybes (Just a : rest) =
-  case collapseMaybes rest of
-    Just rest' -> Just $ (a : rest')
-    Nothing -> Nothing
-collapseMaybes (Nothing : _) = Nothing
-collapseMaybes [] = Just []
+liftMaybe :: Maybe a -> StaticEnvM a
+liftMaybe (Just a) = return a
+liftMaybe _ = fail ""
 
-matchMask :: AS.BitVector -> AS.Mask -> Bool
-matchMask bv mask =
-  if | length bv == length mask ->
-       List.all matchBit (zip bv mask)
-     | otherwise -> error $ "Mismatched bitvector sizes."
-  where
-    matchBit (b, m) = case (b, m) of
-      (True, AS.MaskBitSet) -> True
-      (False, AS.MaskBitUnset) -> True
-      (_, AS.MaskBitEither) -> True
-      _ -> False
+possibleValuesFor :: T.Text -> StaticEnvM StaticValue
+possibleValuesFor nm = do
+  StaticEnvP env <- getEnv
+  case Map.lookup nm env of
+    Just (EnvPInfeasable (StaticBVType sz) inf) -> do
+      bv' <- liftList $ allPossibleBVs sz
+      let bv = StaticBV bv'
+      if Set.member bv inf then fail ""
+      else setStaticValue nm bv >> return bv
+    Just (EnvPValue sv) -> return sv
+    _ -> fail ""
+
+staticValueOfVar :: T.Text -> StaticEnvM StaticValue
+staticValueOfVar nm = do
+  StaticEnvP env <- getEnv
+  case Map.lookup nm env of
+    Just (EnvPValue sv) -> return sv
+    _ -> fail ""
+
+assertEquality :: Bool -> AS.Expr -> AS.Expr -> StaticEnvM ()
+assertEquality positive expr1 expr2 =
+  case expr1 of
+    AS.ExprVarRef (AS.VarName nm) -> do
+      sv <- exprToStaticM expr2
+      if positive then setStaticValue nm sv
+      else setInfeasableValue nm sv
+    -- AS.ExprBinOp AS.BinOpConcat e1 e2 -> do
+    --   StaticBV bv <- exprToStaticM expr2
+    --   env <- getEnv
+    --   maybeEnv $ do
+    --     split <- tryCatchEnv
+    --       (do
+    --           StaticBVType e1sz <- liftMaybe $ exprToStaticType env e1
+    --           return $ fromIntegral e1sz)
+    --       (do
+    --           StaticBVType e2sz <- liftMaybe $ exprToStaticType env e2
+    --           return (length bv - (fromIntegral e2sz)))
+    --     let (bv1, bv2) = splitAt split bv
+    --     maybeEnv $ assertEquality positive e1 (AS.ExprLitBin $ bv1)
+    --     maybeEnv $ assertEquality positive e2 (AS.ExprLitBin $ bv2)
+    _ -> fail ""
+
+-- Where possible, produces a set of augmented environments
+-- where the given expression is necessarily true
+assertExpr :: Bool -> AS.Expr -> StaticEnvM ()
+assertExpr positive expr = case expr of
+  AS.ExprBinOp AS.BinOpEQ e e' ->
+    maybeEnv $ tryCatchEnv
+      (assertEquality positive e e')
+      (assertEquality positive e' e)
+  AS.ExprBinOp AS.BinOpNEQ e1 e2 -> assertExpr (not positive) (AS.ExprBinOp AS.BinOpEQ e1 e2)
+  AS.ExprUnOp AS.UnOpNot e' -> assertExpr (not positive) e'
+  AS.ExprBinOp AS.BinOpLogicalAnd e1 e2 ->
+    if positive then do
+      assertExpr True e1
+      assertExpr True e2
+    else
+      choice (assertExpr False e1) (assertExpr False e2)
+  AS.ExprBinOp AS.BinOpLogicalOr e1 e2 -> assertExpr positive $
+    AS.ExprUnOp AS.UnOpNot (AS.ExprBinOp AS.BinOpLogicalAnd (AS.ExprUnOp AS.UnOpNot e1) (AS.ExprUnOp AS.UnOpNot e2))
+  AS.ExprInSet e' setElts -> maybeEnv $ do
+    elt <- liftList $ setElts
+    case elt of
+      AS.SetEltSingle e'' -> assertExpr positive (AS.ExprBinOp AS.BinOpEQ e' e'')
+  _ -> return ()
+
+testExpr :: AS.Expr -> StaticEnvM Bool
+testExpr test = do
+  StaticBool b <- tryCatchEnv (exprToStaticM test) $ choice
+    (assertExpr True test >> return (StaticBool True))
+    (assertExpr False test >> return (StaticBool False))
+  return b
+
+exprToStaticM :: AS.Expr -> StaticEnvM StaticValue
+exprToStaticM expr = do
+  env <- getEnv
+  case exprToStatic env expr of
+    Just sv -> return sv
+    _ -> case expr of
+      AS.ExprVarRef (AS.VarName nm) -> possibleValuesFor nm
+      AS.ExprBinOp bop e1 e2 -> do
+        sv1 <- exprToStaticM e1
+        sv2 <- exprToStaticM e2
+        liftMaybe $ staticBinOp bop (Just sv1) (Just sv2)
+      AS.ExprIf tests@((test, body) : rest) fin -> do
+        b <- testExpr test
+        if b then exprToStaticM body
+        else exprToStaticM (AS.ExprIf rest fin)
+      AS.ExprIf [] fin -> exprToStaticM fin
+      AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [e] -> do
+        StaticBV bv <- exprToStaticM e
+        return $ StaticInt $ bitsToInteger bv
+      _ -> fail ""
 
 allPossibleBVs :: Integer -> [[Bool]]
-allPossibleBVs 0 = []
+allPossibleBVs 1 = [[True], [False]]
 allPossibleBVs n = do
   bit <- [True, False]
   bits <- allPossibleBVs (n - 1)
   return $ bit : bits
 
-getPossibleValuesFor :: [T.Text] -> [StaticEnvP] -> [Map.Map T.Text StaticValue]
-getPossibleValuesFor vars envs =
-  let
-    pairs = do
-      env <- envs
-      pvars <- maybeToList $ collapseMaybes $ do
-        var <- vars
-        return $ (\val -> (var, val)) <$>
-          getPossibleStaticsExpr env (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var))
-      mapM (\(var, vals) -> do
-               val <- vals
-               return $ (var, val)) pvars
 
-  in nub $ map Map.fromList pairs
+-- | Get all possible variable assignments for the given variables after
+-- the provided set of statements has been evaluated
+getPossibleValuesFor :: StaticEnvP -- ^ The initial environment
+                     -> [T.Text] -- ^ Mandatory variables
+                     -> [T.Text] -- ^ Optional variables
+                     -> [AS.Stmt] -- ^ Evaluated statements
+                     -> [Map.Map T.Text StaticValue] -- ^ Possible binding environments
+getPossibleValuesFor env vars optvars stmts =
+  let results = map snd $ runStaticEnvM env $ do
+        stmtsToStaticM stmts
+        svs <- mapM staticValueOfVar vars
+        optsvs <- mapM maybeVar optvars
+        return $ (zip vars svs) ++ catMaybes optsvs
+  in nub $ map Map.fromList results
+  where
+    maybeVar var =
+      tryCatchEnv
+        ((\sv -> Just (var, sv)) <$> (staticValueOfVar var))
+        (return Nothing)
 
+stmtsToStaticM :: [AS.Stmt] -> StaticEnvM ()
+stmtsToStaticM stmts = traverse_ stmtToStaticM stmts
 
-getPossibleStaticsStmts :: StaticEnvP -> [AS.Stmt] -> [StaticEnvP]
-getPossibleStaticsStmts env stmts = case stmts of
-  (stmt : rest) -> do
-    let envs = getPossibleStaticsStmt env stmt
-    concat $ map (\env' -> getPossibleStaticsStmts env' rest) envs
-  [] -> [env]
-
-envInfeasable :: StaticEnvP -> StaticEnvP
-envInfeasable (StaticEnvP env) = StaticEnvP (Map.map makeInfeasable env)
+envInfeasable :: StaticEnvM ()
+envInfeasable = liftStaticMap $ (\(StaticEnvP env) -> StaticEnvP (Map.map makeInfeasable env))
   where
     makeInfeasable (EnvPValue sv) = EnvPInfeasable (typeOfStatic sv) (Set.singleton sv)
     makeInfeasable x = x
 
-addStaticEnvP :: T.Text -> StaticValue -> StaticEnvP -> StaticEnvP
-addStaticEnvP nm v (StaticEnvP env) = StaticEnvP (Map.insert nm (EnvPValue v) env)
+stmtToStaticM :: AS.Stmt -> StaticEnvM ()
+stmtToStaticM s = case s of
+  AS.StmtCall (AS.VarName "ASLSetUndefined") [] -> fail ""
+  AS.StmtCall (AS.VarName "ASLSetUnpredictable") [] -> fail ""
 
-getPossibleStaticsStmt :: StaticEnvP -> AS.Stmt -> [StaticEnvP]
-getPossibleStaticsStmt env s = case s of
-  AS.StmtSeeExpr _ -> [envInfeasable env]
-  AS.StmtSeeString _ -> [envInfeasable env]
+  AS.StmtAssert e -> assertExpr True e
 
-  AS.StmtAssert e | Just (StaticBool False) <- exprToStatic env e -> [envInfeasable env]
-  AS.StmtAssert e -> assertInEnv e env
-  AS.StmtAssign (AS.LValVarRef (AS.QualifiedIdentifier _ nm)) e ->
-    case getPossibleStaticsExpr env e of
-      Just svs -> map (\v -> addStaticEnvP nm v env) svs
-      Nothing -> [env]
-  AS.StmtIf tests@((test, body) : rest) fin -> applyTests env tests fin
+  AS.StmtIf tests@((test, body) : rest) fin -> applyTests tests fin
+
+  AS.StmtAssign (AS.LValVarRef (AS.VarName nm)) e -> maybeEnv $ do
+    sv <- exprToStaticM e
+    setStaticValue nm sv
+
+  AS.StmtVarDeclInit (nm, _)  e -> maybeEnv $ do
+    sv <- exprToStaticM e
+    setStaticValue nm sv
 
   AS.StmtCase test cases ->
     let (tests, fin) = casesToTests test cases
-    in applyTests env tests fin
-  _ -> [env]
+    in applyTests tests fin
+  _ -> return ()
   where
-    applyTests env tests@((test, body) : rest) fin =
-      case getPossibleStaticsExpr env test of
-        Just svs -> do
-          sv <- svs
-          case sv of
-            StaticBool True -> getPossibleStaticsStmts env body
-            StaticBool False -> applyTests env rest fin
-            _ -> error $ "Malformed test expression:" <> show test
-        _ -> do
-          let testEnvs = concat $ map (applyTest env) tests
-          let finEnv = getPossibleStaticsStmts env (concat $ maybeToList fin)
-          testEnvs ++ finEnv
+    applyTests tests@((test, body) : rest) fin = do
+        b <- testExpr test
+        if b then stmtsToStaticM body
+        else applyTests rest fin
 
-    applyTests env [] fin = getPossibleStaticsStmts env (concat $ maybeToList fin)
-
-    applyTest env (test, body) = do
-      env' <- assertInEnv test env
-      getPossibleStaticsStmts env' body
+    applyTests [] (Just fin) = stmtsToStaticM fin
+    applyTests [] Nothing = return ()
 
     casesToTests e ((AS.CaseWhen (pat : pats) _ stmts) : rest) =
       let
         (tests, fin) = casesToTests e rest
-        test = foldr (\pat' -> \e' -> AS.ExprBinOp AS.BinOpLogicalAnd e' (patToExpr e pat')) (patToExpr e pat) pats
+        test = foldr (\pat' -> \e' -> AS.ExprBinOp AS.BinOpLogicalOr e' (patToExpr e pat')) (patToExpr e pat) pats
       in
         ((test, stmts) : tests, fin)
     casesToTests e [AS.CaseOtherwise stmts] = ([], Just stmts)
@@ -473,46 +551,9 @@ getPossibleStaticsStmt env s = case s of
     patToExpr e pat = case pat of
       AS.CasePatternInt i -> AS.ExprBinOp AS.BinOpEQ e (AS.ExprLitInt i)
       AS.CasePatternBin bv -> AS.ExprBinOp AS.BinOpEQ e (AS.ExprLitBin bv)
-      AS.CasePatternMask mask -> AS.ExprInSet e [AS.SetEltSingle (AS.ExprLitMask mask)]
+      AS.CasePatternMask mask -> AS.ExprInMask e mask
       AS.CasePatternIdentifier ident -> AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny ident)) e
       _ -> AS.ExprUnknown (AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny "boolean"))
-
-
-
-
--- Where possible, produces a set of augmented environments
--- where the given expression is necessarily true
-assertInEnv :: AS.Expr -> StaticEnvP -> [StaticEnvP]
-assertInEnv e env@(StaticEnvP penv) = case e of
-  AS.ExprBinOp AS.BinOpEQ (AS.ExprVarRef (AS.QualifiedIdentifier _ nm)) e'
-    | Just svs <- getPossibleStaticsExpr env e' ->
-      map (\v -> StaticEnvP (Map.insert nm (EnvPValue v) penv)) svs
-  AS.ExprBinOp AS.BinOpNEQ (AS.ExprVarRef (AS.QualifiedIdentifier _ nm)) e'
-    | Just svs <- getPossibleStaticsExpr env e' ->
-      case Map.lookup nm penv of
-        Nothing ->
-          map (\v -> StaticEnvP $
-                Map.insert nm (EnvPInfeasable (typeOfStatic v) (Set.singleton v)) penv) svs
-        Just (EnvPInfeasable sty inf) ->
-          map (\v ->
-                 if typeOfStatic v /= sty
-                 then error $ "Mismatch in infeasable types:" ++ show sty ++ " " ++ show (typeOfStatic v)
-                 else StaticEnvP $ Map.insert nm (EnvPInfeasable sty (Set.insert v inf)) penv) svs
-        Just (EnvPValue _) -> [env]
-  AS.ExprBinOp AS.BinOpLogicalAnd e e' -> do
-    env' <- assertInEnv e env
-    assertInEnv e env'
-  AS.ExprInSet e setElts -> do
-    elt <- setElts
-    case elt of
-      AS.SetEltSingle e' -> assertInEnv (AS.ExprBinOp AS.BinOpEQ e e') env
-  _ -> [env]
-  where
-   matchBit (b, m) = case (b, m) of
-      (True, AS.MaskBitSet) -> True
-      (False, AS.MaskBitUnset) -> True
-      (_, AS.MaskBitEither) -> True
-      _ -> False
 
 
 applyTypeSynonyms :: AS.Type -> AS.Type
@@ -558,21 +599,17 @@ unstaticBinding (AS.StmtCall (AS.QualifiedIdentifier _ "StaticBind") [AS.ExprVar
     _ -> error "Invalid StaticBind"
 unstaticBinding _ = Nothing
 
-staticEnvironmentStmt :: [T.Text] -> [([StaticValue],[AS.Stmt])] -> AS.Stmt
-staticEnvironmentStmt vars bodies =
+staticEnvironmentStmt :: [([(T.Text, StaticValue)],[AS.Stmt])] -> AS.Stmt
+staticEnvironmentStmt bodies =
   AS.StmtIf (map mkCase bodies) (Just $ [AS.StmtAssert falseExpr])
   where
-    mkCase (asns, stmts) =
-      if length vars /= length asns
-      then error $ "Invalid static environment:" ++ show vars ++ show asns
-      else
-        let
-          varasns = zip vars asns
-          test = foldr (\asn -> \e ->
-            AS.ExprBinOp AS.BinOpLogicalAnd (staticToTest asn) e) trueExpr varasns
-          bindings = map staticBinding varasns
-        in
-          (test, [letInStmt [] (bindings ++ stmts)])
+    mkCase (varasns, stmts) =
+      let
+        test = foldr (\asn -> \e ->
+          AS.ExprBinOp AS.BinOpLogicalAnd (staticToTest asn) e) trueExpr varasns
+        bindings = map staticBinding varasns
+      in
+        (test, [letInStmt [] (bindings ++ stmts)])
     staticToTest (var, sv) = AS.ExprBinOp AS.BinOpEQ
       (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var))
       (staticToExpr sv)

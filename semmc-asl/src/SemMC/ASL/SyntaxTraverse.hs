@@ -132,24 +132,10 @@ prepASL (instrs, defs) =
 data InternalOverride = InternalOverride
   { iovGetters :: Set.Set T.Text
   , iovSetters :: Set.Set T.Text
-  , iovInlineGetters :: Map.Map (T.Text, Int) ([AS.Expr] -> AS.Expr)
-  , iovInlineSetters :: Map.Map (T.Text, Int) ([AS.Expr] -> AS.Stmt)
   }
 
 emptyInternalOverride :: InternalOverride
-emptyInternalOverride = InternalOverride Set.empty Set.empty Map.empty Map.empty
-
-mkIdentOverride :: (AS.QualifiedIdentifier -> AS.QualifiedIdentifier) -> SyntaxMaps
-mkIdentOverride f =
-  let
-    exprOverride e = case e of
-      AS.ExprVarRef qident -> AS.ExprVarRef (f qident)
-      _ -> e
-    lvalOverride lv = case lv of
-      AS.LValVarRef qident -> AS.LValVarRef (f qident)
-      _ -> lv
-  in
-    SyntaxMaps exprOverride lvalOverride id id
+emptyInternalOverride = InternalOverride Set.empty Set.empty
 
 exprToLVal :: AS.Expr -> AS.LValExpr
 exprToLVal e = case e of
@@ -160,86 +146,10 @@ exprToLVal e = case e of
   AS.ExprTuple es -> AS.LValTuple (map exprToLVal es)
   _ -> error $ "Invalid inline for expr:" <> show e
 
--- Some gross hackery to avoid variable name clashes
-mkVarMap :: [AS.SymbolDecl] -> [AS.Expr] -> SyntaxMaps
-mkVarMap syms args = if length syms == length args then
-  let
-    swap = zip (map fst syms) args
-
-    typeVars = mapMaybe bvSize syms
-
-    bvSize (v, AS.TypeFun "bits" (AS.ExprVarRef (VarName nm))) =
-      Just (nm, v)
-    bvSize _ = Nothing
-
-    exprOverride e = case e of
-      AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
-        | Just e' <- nm `lookup` swap ->
-          e'
-      AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
-        | Just t' <- nm `lookup` typeVars ->
-          case t' `lookup` swap of
-            Just e' ->
-              AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "sizeOf") [e']
-      AS.ExprVarRef (AS.QualifiedIdentifier _ nm)
-        | Just t' <- nm `lookup` typeVars
-        , Nothing <- t' `lookup` swap ->
-          error $  "Missing argument for inlined type variable: "++ show t'
-      _ -> e
-
-    lvalOverride e = case e of
-      AS.LValVarRef (AS.QualifiedIdentifier _ nm)
-        | Just e' <- nm `lookup` swap ->
-          let lv' = exprToLVal e'
-          in lv'
-      _ -> e
-
-  in SyntaxMaps exprOverride lvalOverride id id
-  else error $ "Mismatch in inlined function application: " <> show syms <> " " <> show args
-
-simpleReturn :: [AS.Stmt] -> Maybe AS.Expr
-simpleReturn stmts =
-  getSimple stmts
-  where
-    getSimple (AS.StmtAssert _ : stmts') = getSimple stmts'
-    getSimple [AS.StmtReturn ret] = ret
-    getSimple _ = Nothing
-
-simpleAssign :: [AS.Stmt] -> Maybe AS.LValExpr
-simpleAssign stmts =
-  getSimple stmts
-  where
-    getSimple (AS.StmtAssert _ : stmts') = getSimple stmts'
-    getSimple [AS.StmtAssign lv _, AS.StmtReturn Nothing] = Just lv
-    getSimple _ = Nothing
-
-
 mkSyntaxOverrides :: [AS.Definition] -> [SyntaxMaps]
 mkSyntaxOverrides defs =
   let
-      inlineGetterNames = []
-        --["Elem"]
-      inlineSetterNames = ["Elem"]
-        --["Elem", "Qin", "Din", "Q"]
       addInternalOverride d iovrs = case d of
-
-        AS.DefGetter (AS.QualifiedIdentifier _ nm) (Just args) _ stmts
-          | nm `elem` inlineGetterNames
-          , Just ret <- simpleReturn stmts ->
-          let inline es = mapSyntax (mkVarMap args es) ret
-          in
-          iovrs { iovInlineGetters = Map.insert (nm, length args) inline (iovInlineGetters iovrs) }
-
-        AS.DefSetter (AS.QualifiedIdentifier _ nm) (Just args) val stmts
-          | nm `elem` inlineSetterNames
-          , Just lv <- simpleAssign stmts ->
-
-          let
-            args' = val : map (\(AS.SetterArg arg _) -> arg) args
-            inline es@(e : _) = AS.StmtAssign (mapSyntax (mkVarMap args' es) lv) e
-          in
-            iovrs { iovInlineSetters = Map.insert (nm, length args) inline (iovInlineSetters iovrs) }
-
         AS.DefGetter qName (Just args) _ _ ->
           iovrs { iovGetters = Set.insert (mkFunctionName (mkGetterName True qName) (length args)) (iovGetters iovrs) }
         AS.DefGetter qName Nothing _ _ ->
@@ -250,7 +160,7 @@ mkSyntaxOverrides defs =
            iovrs { iovSetters = Set.insert (mkFunctionName (mkSetterName False qName) 1) (iovSetters iovrs) }
         _ -> iovrs
 
-      InternalOverride getters setters inlineGetters inlineSetters =
+      InternalOverride getters setters =
         foldr addInternalOverride emptyInternalOverride defs
 
       getSliceExpr slice = case slice of
@@ -258,9 +168,22 @@ mkSyntaxOverrides defs =
         _ -> error "Unexpected slice argument."
 
       assignOverrides lv = case lv of
-        AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier _ nm)) slices
-          | Just f <- Map.lookup (nm, length slices) inlineSetters ->
-            Just $ (\rhs -> stmtOverrides $ f (rhs : (map getSliceExpr slices)))
+        AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier _ "Elem"))
+          [AS.SliceSingle vector, AS.SliceSingle e, AS.SliceSingle size] -> Just $ \rhs -> stmtOverrides $
+          AS.StmtAssign
+          (AS.LValSliceOf (exprToLVal vector)
+           [(AS.SliceRange
+            (AS.ExprBinOp AS.BinOpSub
+             (AS.ExprBinOp AS.BinOpMul
+              (AS.ExprBinOp AS.BinOpAdd e (AS.ExprLitInt 1))
+              size)
+             (AS.ExprLitInt 1))
+            (AS.ExprBinOp AS.BinOpMul e size))]) rhs
+        AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier q "Elem")) [vector, e] -> Just $ \rhs ->
+          case assignOverrides (AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier q "Elem"))
+                                [vector, e, AS.SliceSingle $ AS.ExprCall (AS.QualifiedIdentifier q "sizeOf") [rhs]]) of
+            Just f -> f rhs
+            Nothing -> error "Bad overrides"
         AS.LValArrayIndex (AS.LValVarRef qName) slices
           | Set.member (mkFunctionName (mkSetterName True qName) (length slices + 1)) setters ->
             Just $ (\rhs -> AS.StmtCall (mkSetterName True qName) (rhs : map getSliceExpr slices))
@@ -323,9 +246,6 @@ mkSyntaxOverrides defs =
 
       exprOverrides' expr = case expr of
         -- Limited support for alternate slice syntax
-        AS.ExprIndex (AS.ExprVarRef (AS.QualifiedIdentifier _ nm)) slices
-          | Just f <- Map.lookup (nm, length slices) inlineGetters ->
-            exprOverrides' $ f (map getSliceExpr slices)
         AS.ExprIndex e slices@[AS.SliceOffset _ _] ->
           AS.ExprSlice e slices
         AS.ExprIndex e slices@[AS.SliceRange _ _] ->

@@ -202,7 +202,7 @@ lookupVarType' = do
 -- accessors with simpler forms in Crucible.
 data Overrides arch =
   Overrides { overrideStmt :: forall h s ret . AS.Stmt -> Maybe (Generator h s arch ret ())
-            , overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
+            , overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> StaticEnvMap -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
             }
 
 type Generator h s arch ret = CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret
@@ -532,41 +532,46 @@ translateFor :: Overrides arch
              -> [AS.Stmt]
              -> Generator h s arch ret ()
 translateFor ov var lo hi body = do
-  vars <- MS.gets tsVarRefs
-  case Map.lookup var vars of
-    Just (Some lreg) -> do
-      Some atom <- translateExpr ov lo
-      Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
-      CCG.assignReg lreg (CCG.AtomExpr atom)
+  env <- getStaticEnv
+  case (exprToStatic env lo, exprToStatic env hi) of
+    (Just (StaticInt loInt), Just (StaticInt hiInt)) ->
+      unrollFor ov var loInt hiInt body
     _ -> do
-      let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
-      translateDefinedVar ov ty var lo
-  let ident = AS.QualifiedIdentifier AS.ArchQualAny var
-  let testG = do
-        let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
-        Some testA <- translateExpr ov testE
-        Refl <- assertAtomType testE CT.BoolRepr testA
-        return (CCG.AtomExpr testA)
-  let increment = do
-        AS.StmtAssign (AS.LValVarRef ident)
-          (AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef ident) (AS.ExprLitInt 1))
+      vars <- MS.gets tsVarRefs
+      case Map.lookup var vars of
+        Just (Some lreg) -> do
+          Some atom <- translateExpr ov lo
+          Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
+          CCG.assignReg lreg (CCG.AtomExpr atom)
+        _ -> do
+          let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
+          translateDefinedVar ov ty var lo
+      let ident = AS.QualifiedIdentifier AS.ArchQualAny var
+      let testG = do
+            let testE = AS.ExprBinOp AS.BinOpLTEQ (AS.ExprVarRef ident) hi
+            Some testA <- translateExpr ov testE
+            Refl <- assertAtomType testE CT.BoolRepr testA
+            return (CCG.AtomExpr testA)
+      let increment = do
+            AS.StmtAssign (AS.LValVarRef ident)
+              (AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef ident) (AS.ExprLitInt 1))
 
-  let bodyG = mapM_ (translateStatement ov) (body ++ [increment])
-  CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+      let bodyG = mapM_ (translateStatement ov) (body ++ [increment])
+      CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
 
 
--- unrollFor :: Overrides arch
---           -> AS.Identifier
---           -> Integer
---           -> Integer
---           -> [AS.Stmt]
---           -> Generator h s arch ret ()
--- unrollFor ov var lo hi body = do
---   mapM_ translateFor [lo .. hi]
---   where
---     translateFor i = forgetNewStatics $ do
---       mapStaticVals (Map.insert var (StaticInt i))
---       translateStatement ov (letInStmt [] body)
+unrollFor :: Overrides arch
+          -> AS.Identifier
+          -> Integer
+          -> Integer
+          -> [AS.Stmt]
+          -> Generator h s arch ret ()
+unrollFor ov var lo hi body = do
+  mapM_ translateFor [lo .. hi]
+  where
+    translateFor i = forgetNewStatics $ do
+      mapStaticVals (Map.insert var (StaticInt i))
+      translateStatement ov (letInStmt [] body)
 
 translateRepeat :: Overrides arch
                 -> [AS.Stmt]
@@ -1393,9 +1398,12 @@ translateExpr'' :: Overrides arch
               -> AS.Expr
               -> TypeConstraint
               -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
-translateExpr'' ov expr ty
-  | Just eo <- overrideExpr ov expr ty = eo
-  | otherwise = do
+translateExpr'' ov expr ty = do
+  env <- getStaticEnv
+  let eo = overrideExpr ov expr ty env
+  case eo of
+    Just f -> f
+    _ -> do
       mStatic <- getStaticValue expr
       case mStatic of
         Just (StaticInt i) -> mkAtom (CCG.App (CCE.IntLit i))
@@ -2216,8 +2224,9 @@ mkAtom e = do
 polymorphicBVOverrides :: forall h s arch ret
                         . AS.Expr
                        -> TypeConstraint
+                       -> StaticEnvMap
                        -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
-polymorphicBVOverrides e ty = case e of
+polymorphicBVOverrides e ty env = case e of
   AS.ExprBinOp bop arg1@(AS.ExprSlice _ _) arg2
     | bop == AS.BinOpEQ || bop == AS.BinOpNEQ -> Just $ do
         (Some atom1', _) <- translateExpr' overrides arg1 (ConstraintHint HintAnyBVSize)
@@ -2230,6 +2239,9 @@ polymorphicBVOverrides e ty = case e of
           AS.BinOpEQ -> return result'
           AS.BinOpNEQ -> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr result')))
         return (Some result, TypeBasic)
+  AS.ExprBinOp AS.BinOpConcat expr1 (AS.ExprCall (AS.VarName "Zeros") [expr2])
+    | Just (StaticInt 0) <- exprToStatic env expr2 ->
+      Just $ translateExpr' overrides expr1 ty
   AS.ExprBinOp AS.BinOpConcat expr1 expr2
     | Just hint <- getConstraintHint ty
     , (mLen1 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr1
@@ -2458,8 +2470,12 @@ overrides = Overrides {..}
               _ -> throwTrace $ RequiredConcreteValue szExpr (staticEnvMapVals env)
           _ -> Nothing
 
-        overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
-        overrideExpr e ty =
+        overrideExpr :: forall h s ret
+                      . AS.Expr
+                     -> TypeConstraint
+                     -> StaticEnvMap
+                     -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
+        overrideExpr e ty env =
           case e of
             AS.ExprBinOp AS.BinOpEQ e mask@(AS.ExprLitMask _) -> Just $ do
               translateExpr' overrides (AS.ExprInSet e [AS.SetEltSingle mask]) ty
@@ -2477,7 +2493,7 @@ overrides = Overrides {..}
                     (AS.ExprCall (AS.QualifiedIdentifier q ("read_mem_" <> (T.pack $ show sz))) [mem, addr])
                     ty
             _ ->
-              polymorphicBVOverrides e ty <|>
+              polymorphicBVOverrides e ty env <|>
               arithmeticOverrides e ty <|>
               overloadedDispatchOverrides e ty <|>
               bitShiftOverrides e ty
