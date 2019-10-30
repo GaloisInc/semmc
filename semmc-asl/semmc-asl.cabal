@@ -63,6 +63,7 @@ executable semmc-asl-genarm
                        semmc-asl,
                        text >= 1 && < 2,
                        panic >= 0.3,
+                       split
   hs-source-dirs:      tools
   default-language:    Haskell2010
   ghc-options:         -O2 -threaded -rtsopts -Wcompat -Wall

@@ -26,6 +26,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.List as List
+import qualified Data.List.Split as List
 import qualified Data.Tree as Tree
 import           Data.List.Index (imap)
 import qualified Lang.Crucible.Backend.Simple as CBS
@@ -70,6 +71,7 @@ data TranslatorOptions = TranslatorOptions
   , optCollectAllExceptions :: Bool
   , optCollectExpectedExceptions :: Bool
   , optASLSpecFilePath :: FilePath
+  , optTranslateInstruction :: Maybe (String, String)
   }
 
 instsFilePath :: FilePath
@@ -100,6 +102,7 @@ defaultOptions = TranslatorOptions
   , optCollectAllExceptions = False
   , optCollectExpectedExceptions = False
   , optASLSpecFilePath = "./test/"
+  , optTranslateInstruction = Nothing
   }
 
 data StatOptions = StatOptions
@@ -152,9 +155,13 @@ arguments =
 
   , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> opts {reportKnownExceptions = True })))
     "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
+
+  , Option [] ["translate-instruction"]
+    (ReqArg (\instrAndEnc -> case List.splitOn "/" instrAndEnc of
+                [instr, enc] -> Left (\opts -> opts { optTranslateInstruction = Just (instr, enc) })
+                _ -> error "bad instruction/encoding") "INST")
+    ("Name of particular instruction to translate. Format should be <INSTRUCTION>/<ENCODING>, where the two components correspond to instruction and encoding definitions in the ASL file.")
   ]
-
-
 
 usage :: IO ()
 usage = do
@@ -174,10 +181,12 @@ main = do
   let (opts', statOpts) = foldl applyOption (defaultOptions, defaultStatOptions) args
   filter <- getTargetFilter opts'
   let opts = opts' { optFilters = filter }
-  sm <- runWithFilters opts
+  sm <- case optTranslateInstruction opts of
+    Nothing -> runWithFilters opts
+    Just (inst, enc) -> testInstruction opts inst enc
 
   reportStats statOpts sm
-  
+
   where
     applyOption (opts, statOpts) arg = case arg of
       Left f -> (f opts, statOpts)
@@ -354,7 +363,7 @@ logMsg msg = do
   MSS.modify' $ \s -> s { sLog = T.pack msg : sLog s }
   verbose <- MSS.gets (optVerbose . sOptions)
   E.when verbose $ MSS.lift $ putStrLn msg
-  
+
 
 isFunFilteredOut :: InstructionIdent -> T.Text -> MSS.StateT SigMap IO Bool
 isFunFilteredOut inm fnm = do
@@ -422,7 +431,7 @@ reportStats sopts sm = do
       E.when (unexpected (KeyInstr ident) e) $ do
         putStrLn $ prettyIdent ident ++ " failed to translate:"
         putStrLn $ show e) (instrExcepts sm)
-  putStrLn "----------------------"     
+  putStrLn "----------------------"
   _ <- Map.traverseWithKey (\ident -> \deps -> do
           let errs' = catMaybes $ (\dep -> (\x -> (dep,x)) <$> Map.lookup dep (funExcepts sm)) <$> (Set.toList deps)
           let errs = filter (\(dep, x) -> unexpected (KeyFun dep) x) errs'
@@ -432,7 +441,7 @@ reportStats sopts sm = do
             mapM_ (\(dep, err) -> putStrLn $ show dep <> ":" <> show err) errs) (instrDeps sm)
   putStrLn "----------------------"
   E.when (reportKnownExceptions sopts) $ do
-    let expectedInstrs = Map.foldrWithKey (addExpected . KeyInstr) Map.empty (instrExcepts sm) 
+    let expectedInstrs = Map.foldrWithKey (addExpected . KeyInstr) Map.empty (instrExcepts sm)
     let expected = Map.foldrWithKey (addExpected . KeyFun) expectedInstrs (funExcepts sm)
 
     _ <- Map.traverseWithKey (\ex -> \ks -> do
@@ -441,7 +450,7 @@ reportStats sopts sm = do
          mapM_ printKey ks
          putStrLn "") expected
     return ()
-  
+
   putStrLn $ "Total instructions inspected: " <> show (Map.size $ instrDeps sm)
   putStrLn $ "Total functions inspected: " <> show (Map.size $ funDeps sm)
   putStrLn $ "Number of instructions which raised exceptions: " <> show (Map.size $ instrExcepts sm)
@@ -450,7 +459,7 @@ reportStats sopts sm = do
     putStrLn $ "Instructions with no errors in any dependent functions:"
   r <- Map.traverseMaybeWithKey (\ident -> \deps -> do
     if not (Map.member ident (instrExcepts sm)) &&
-       Set.null (Set.filter (\dep -> Map.member dep (funExcepts sm)) deps) 
+       Set.null (Set.filter (\dep -> Map.member dep (funExcepts sm)) deps)
     then do
       E.when (reportSucceedingInstructions sopts) $ putStrLn $ prettyIdent ident
       return $ Just ident
@@ -574,7 +583,7 @@ data ElemKey =
 -- FIXME: Seperate this into RWS
 data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeFunctionSignature))
                      , instrExcepts :: Map.Map InstructionIdent TranslatorException
-                     , funExcepts :: Map.Map T.Text TranslatorException                    
+                     , funExcepts :: Map.Map T.Text TranslatorException
                      , sigState :: SigState
                      , sigEnv :: SigEnv
                      , instrDeps :: Map.Map InstructionIdent (Set.Set T.Text)
@@ -582,8 +591,8 @@ data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeFunctionSignature))
                      , sLog :: [T.Text]
                      , sOptions :: TranslatorOptions
                      }
-              
-              
+
+
 liftSigM :: ElemKey -> SigM ext f a -> MSS.StateT SigMap IO (Either SigException a)
 liftSigM k f = do
   state <- MSS.gets sigState
@@ -629,11 +638,11 @@ getTargetInstrs opts = do
   where
     isQuote '\"' = True
     isQuote _ = False
-    
+
     getFlag [s] = readMaybe (T.unpack s)
     getFlag [] = Just $ ()
     getFlag _ = Nothing
-    
+
     getTriple l =
       if | (instr : enc : iset : rest) <- T.words l
          , Just is <- readMaybe (T.unpack iset)
