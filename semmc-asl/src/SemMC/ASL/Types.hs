@@ -36,6 +36,8 @@ module SemMC.ASL.Types
   , projectValue
   , letInStmt
   , unletInStmt
+  , falseExpr
+  , trueExpr
   ) where
 
 import qualified Data.Parameterized.Context as Ctx
@@ -193,6 +195,11 @@ unletInStmt (AS.StmtFor "LetIn" (exprVars, _) stmts) = Just (getVars exprVars, s
 
 unletInStmt _ = Nothing
 
+trueExpr :: AS.Expr
+trueExpr = AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "TRUE")
+
+falseExpr :: AS.Expr
+falseExpr = AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
 
 
 -- Extended type data for tracking struct member identifiers. This is necessary since Crucible structs

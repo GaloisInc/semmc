@@ -22,7 +22,7 @@
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
     getDefinitions
-  , computeInstructionSignature'
+  , computeInstructionSignature
   , prepASL
   , ASLSpec(..)
   , SigState
@@ -79,7 +79,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
-import           SemMC.ASL.StaticExpr
+import           SemMC.ASL.StaticExpr as SE
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
 import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
@@ -87,25 +87,6 @@ import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEva
 
 import System.IO.Unsafe -- FIXME: debugging
 
-----------------
--- Notes
---
--- * Structs - capture each member of a struct as an individual global
--- variable.
---
--- * Arrays - capture 'DefArray' as a bunch of individual global variables, one for
--- each index value.
---
--- * Investigate SCR and make sure we are doing the right thing for that. I don't
--- actually think we are.
---
--- Questions
---
--- * Should we handle getters and setters as functions & procedures? It might
--- actually be relatively straightforward to do so. At the moment, these are silently
--- skipped.
---
--- * How do we deal with dependently-typed functions? Do we actually need to?
 
 -- | Compute the signature of a single callable, given its name and arity.
 computeSignature :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
@@ -132,7 +113,6 @@ data Definitions arch =
               }
 
 -- | Collect the definitions representing the current state
-
 getDefinitions :: SigM ext f (Definitions arch)
 getDefinitions = do
   st <- RWS.get
@@ -320,7 +300,6 @@ uniqueCallables c1 (Just c2) = error $ "Duplicate function declarations for: " <
 uniqueCallables c1 Nothing = Just c1
 
 
-
 buildCallableMap :: (Callable -> Maybe Callable -> Maybe Callable)
                  -> [(T.Text, Callable)] -> Map.Map T.Text Callable
 buildCallableMap merge cs =
@@ -334,9 +313,6 @@ buildCallableMap merge cs =
     getOverrides a nm cs = case nub cs of
            [c] -> (a, Just c)
            cs -> (map mkCallableOverrideVariant cs ++ a, Nothing)
-
-
-
 
 mkExtendedTypeData' :: Monad m
                    => (T.Text -> m (Maybe (Some UserType)))
@@ -455,7 +431,6 @@ initializeSigM spec = do
   mapM_ initDefGlobal (allDefs spec)
   return ()
   where
-    -- Global memory representative
     initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
       tp <- computeType ty
       ext <- mkExtendedTypeData ty
@@ -489,12 +464,11 @@ runSigM env state action =
 
 
 data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
-                           -- , globalVars :: Map.Map T.Text DefVariable
-                           , enums :: Map.Map T.Text Integer
-                           , consts :: Map.Map T.Text (Some ConstVal)
-                           , types :: Map.Map T.Text DefType
-                           , builtinTypes :: Map.Map T.Text (Some UserType)
-                           }
+                     , enums :: Map.Map T.Text Integer
+                     , consts :: Map.Map T.Text (Some ConstVal)
+                     , types :: Map.Map T.Text DefType
+                     , builtinTypes :: Map.Map T.Text (Some UserType)
+                     }
 
 type GlobalVarRefs = (Set.Set (T.Text, Some WT.BaseTypeRepr), Set.Set (T.Text, Some WT.BaseTypeRepr))
 
@@ -971,13 +945,6 @@ mkBaseStructRepr ts = case ts of
   [] -> Some WT.BaseBoolRepr
   _ | Some assignment <- Ctx.fromList ts -> Some (WT.BaseStructRepr assignment)
 
-applyStaticEnv :: StaticEnvMap
-               -> AS.Type
-               -> AS.Type
-applyStaticEnv env t =
-  fromMaybe (X.throw $ CannotStaticallyEvaluateType t (staticEnvMapVals env)) $
-   applyStaticEnv' env t
-
 mkSignature :: StaticValues -> SomeSimpleFunctionSignature -> SigM ext f (Some (SomeFunctionSignature))
 mkSignature env sig =
   case sig of
@@ -994,7 +961,7 @@ mkSignature env sig =
         , funcArgs = sfuncArgs fsig
         }
   where
-    mkType t = case applyStaticEnv' (simpleStaticEnvMap env) t of
+    mkType t = case applyStaticEnv (simpleStaticEnvMap env) t of
       Just t -> computeType t
       _ -> throwError $ FailedToMonomorphizeSignature t env
     mkLabel (FunctionArg nm t _) = do
@@ -1015,11 +982,13 @@ computeFieldType AS.InstructionField{..} = do
       Nothing -> error $ "Bad field width: " ++ show instFieldName ++ ", " ++ show instFieldOffset
       Just WT.LeqProof -> return $ (Some (WT.BaseBVRepr repr), AS.TypeFun "bin" (AS.ExprLitInt (WT.intValue repr)))
 
-computeInstructionSignature' :: AS.Instruction
-                             -> T.Text -- ^ name of encoding
-                             -> AS.InstructionSet
-                             -> SigM ext f (Some SomeFunctionSignature, [AS.Stmt])
-computeInstructionSignature' AS.Instruction{..} encName iset = do
+-- | Convert an ASL instruction-encoding pair into a function, where the instruction
+-- operands are the natural arguments if the resulting function
+computeInstructionSignature :: AS.Instruction -- ^ ASL instruction
+                            -> T.Text -- ^ name of encoding
+                            -> AS.InstructionSet -- ^ target instruction set
+                            -> SigM ext f (Some SomeFunctionSignature, [AS.Stmt])
+computeInstructionSignature AS.Instruction{..} encName iset = do
   let name = mkInstructionName instName encName
 
   let mEnc = find (\e -> AS.encName e == encName && AS.encInstrSet e == iset) instEncodings
@@ -1028,8 +997,7 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
     Just enc -> do
       let initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
       let initStmts = AS.encDecode enc ++ initUnusedFields
-
-      liftedStmts <- liftOverEnvs instName (AS.encFields enc) (AS.encDecode enc) instExecute
+      liftedStmts <- liftOverEnvs instName enc instExecute
       let instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $ liftedStmts
       let instStmts = initStmts ++ instPostDecode ++ instExecute'
       let staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
@@ -1060,10 +1028,34 @@ computeInstructionSignature' AS.Instruction{..} encName iset = do
                                    }
       return (Some (SomeFunctionSignature pSig), instStmts)
 
-liftOverEnvs :: T.Text -> [AS.InstructionField] -> [AS.Stmt] -> [AS.Stmt] -> SigM ext f [AS.Stmt]
-liftOverEnvs instName fields decodes stmts = case Map.lookup instName dependentVariableHints of
+-- | According to the 'dependentVariableHints', lift the given instruction body
+-- over all possible assignments to the given variables in the "decode" section
+-- of the specific instruction encoding.
+liftOverEnvs :: T.Text -- ^ instruction name (for hint lookup)
+             -> AS.InstructionEncoding -- ^ instruction encoding
+             -> [AS.Stmt] -- ^ instruction body
+             -> SigM ext f [AS.Stmt]
+liftOverEnvs instName enc stmts = case Map.lookup instName dependentVariableHints of
   Just (vars, optvars) ->
     let
+      fields = AS.encFields enc
+      decodes = AS.encDecode enc
+
+      possibleEnvs :: [Map.Map T.Text StaticValue]
+      possibleEnvs =
+        let
+          fieldType (AS.InstructionField instFieldName _ instFieldOffset) =
+            (instFieldName, StaticBVType instFieldOffset)
+          vartps = map fieldType fields
+        in
+          getPossibleVarValues vartps vars optvars decodes
+
+      cases :: [[(T.Text, StaticValue)]]
+      cases = do
+        asns <- possibleEnvs
+        let varasns = map (varToStatic asns) vars
+        let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
+        return $ (varasns ++ optvarasns)
 
       varToStatic asns var = case Map.lookup var asns of
         Just sv -> (var, sv)
@@ -1072,32 +1064,38 @@ liftOverEnvs instName fields decodes stmts = case Map.lookup instName dependentV
         Just sv -> Just (optvar, sv)
         _ -> Nothing
 
-      cases = do
-        asns <- possibleEnvs vars optvars
-        let varasns = map (varToStatic asns) vars
-        let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
-        return $ (varasns ++ optvarasns, stmts)
-
     in case cases of
       [] -> throwError $ FailedToDetermineStaticEnvironment vars
-      x -> return $ [staticEnvironmentStmt x]
+      x -> return $ [staticEnvironmentStmt x stmts]
   _ -> return $ stmts
+
+-- | Create a copy of the given function body for each given static
+-- variable binding environment, prefixing it with the given bindings.
+-- Wrap all the copies in an "if" statement that guards for the relevant binding.
+staticEnvironmentStmt :: [[(T.Text, StaticValue)]] -- ^ static variable binding environments
+                      -> [AS.Stmt] -- ^ instruction body
+                      -> AS.Stmt
+staticEnvironmentStmt envs stmts =
+  AS.StmtIf (map mkCase envs) (Just $ [AS.StmtAssert falseExpr])
   where
-    possibleEnvs vars optvars =
+    mkCase varasns =
       let
-        addField (AS.InstructionField instFieldName _ instFieldOffset) =
-          insertStaticEnvP instFieldName (EnvPInfeasable (StaticBVType instFieldOffset) Set.empty)
-        initEnv = foldr addField emptyStaticEnvP fields
+        test = foldr (\asn -> \e ->
+          AS.ExprBinOp AS.BinOpLogicalAnd (staticToTest asn) e) trueExpr varasns
+        bindings = map staticBinding varasns
       in
-        getPossibleValuesFor initEnv vars optvars decodes
+        (test, [letInStmt [] (bindings ++ stmts)])
+    staticToTest (var, sv) = AS.ExprBinOp AS.BinOpEQ
+      (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny var))
+      (SE.staticToExpr sv)
 
 pruneInfeasableInstrSets :: AS.InstructionSet -> [AS.Stmt] -> [AS.Stmt]
 pruneInfeasableInstrSets enc stmts = case enc of
   AS.A32 -> stmts
   AS.A64 -> stmts
   _ -> let
-    evalInstrSetTest (AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.QualifiedIdentifier _ "CurrentInstrSet") [])
-                       (AS.ExprVarRef (AS.QualifiedIdentifier _ "InstrSet_A32"))) =
+    evalInstrSetTest (AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.VarName "CurrentInstrSet") [])
+                       (AS.ExprVarRef (AS.VarName "InstrSet_A32"))) =
       AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
     evalInstrSetTest e = e
     in map (ASLT.mapSyntax (ASLT.SyntaxMaps evalInstrSetTest id id id)) stmts

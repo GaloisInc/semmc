@@ -234,7 +234,7 @@ runTranslation :: AS.Instruction -> InstructionIdent -> MSS.StateT SigMap IO ()
 runTranslation instruction@AS.Instruction{..} instrIdent = do
   logMsg $ "Computing instruction signature for: " ++ show instrIdent
   result <- liftSigM (KeyInstr instrIdent) $
-    computeInstructionSignature' instruction (iEnc instrIdent) (iSet instrIdent)
+    computeInstructionSignature instruction (iEnc instrIdent) (iSet instrIdent)
   case result of
     Left err -> do
       logMsg $ "Error computing instruction signature: " ++ show err

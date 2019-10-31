@@ -66,7 +66,7 @@ import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
 import           SemMC.ASL.Exceptions ( TranslationException(..), TracedTranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
-import           SemMC.ASL.StaticExpr
+import           SemMC.ASL.StaticExpr as SE
 import           SemMC.ASL.Translation.Preprocess
 import qualified SemMC.ASL.SyntaxTraverse as ASLT
 import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
@@ -409,7 +409,7 @@ translateStatement' ov stmt
         -- NOTE: We use the same translation for constants.  We don't do any verification that the
         -- ASL doesn't attempt to modify a constant.
         env <- getStaticEnv
-        case exprToStatic env expr of
+        case SE.exprToStatic env expr of
           Just sv -> mapStaticVals (Map.insert ident sv)
           _ -> return ()
         translateDefinedVar ov ty ident expr
@@ -533,7 +533,7 @@ translateFor :: Overrides arch
              -> Generator h s arch ret ()
 translateFor ov var lo hi body = do
   env <- getStaticEnv
-  case (exprToStatic env lo, exprToStatic env hi) of
+  case (SE.exprToStatic env lo, SE.exprToStatic env hi) of
     (Just (StaticInt loInt), Just (StaticInt hiInt)) ->
       unrollFor ov var loInt hiInt body
     _ -> do
@@ -1022,7 +1022,7 @@ mergeExtensions ext1 ext2 =
 translateType :: AS.Type -> Generator h s arch ret (Some CT.TypeRepr)
 translateType t = do
   env <- getStaticEnv
-  t' <- case applyStaticEnv' env t of
+  t' <- case applyStaticEnv env t of
     Just t' -> return $ t'
     Nothing -> throwTrace $ CannotStaticallyEvaluateType t (staticEnvMapVals env)
   case t' of
@@ -1093,7 +1093,7 @@ collectStaticValues :: TranslationState h ret s
 collectStaticValues outerState (nm, t) e = do
   sv <- withState outerState $ do
     env <- getStaticEnv
-    return $ exprToStatic env e
+    return $ SE.exprToStatic env e
   case sv of
     Just i -> mapStaticVals (Map.insert nm i)
     _ -> return ()
@@ -1142,7 +1142,7 @@ unifyType aslT constraint = do
         Just Refl -> return ()
         _ -> throwTrace $ TypeUnificationFailure aslT constraint (staticEnvMapVals env)
   where
-    mInt env e = case exprToStatic env e of
+    mInt env e = case SE.exprToStatic env e of
       Just (StaticInt i) -> Left i
       _ -> Right e
 
@@ -1172,7 +1172,7 @@ unifyTypes tps constraint = do
 getConcreteTypeConstraint :: AS.Type -> Generator h s arch ret TypeConstraint
 getConcreteTypeConstraint t = do
   env <- getStaticEnv
-  case applyStaticEnv' env t of
+  case applyStaticEnv env t of
     Just t' -> do
       Some ty <- translateType t'
       return $ ConstraintSingle ty
@@ -1368,7 +1368,7 @@ getStaticValue :: AS.Expr
                -> Generator h s arch ret (Maybe (StaticValue))
 getStaticValue expr = do
   env <- getStaticEnv
-  return $ exprToStatic env expr
+  return $ SE.exprToStatic env expr
 
 
 -- This is not necessarily complete
@@ -1562,7 +1562,7 @@ getStaticSliceRange :: AS.Slice
 getStaticSliceRange slice = do
   let (e', e) = normalizeSlice slice
   env <- getStaticEnv
-  case (exprToStatic env e', exprToStatic env e) of
+  case (SE.exprToStatic env e', SE.exprToStatic env e) of
     (Just (StaticInt lo), Just (StaticInt hi)) ->
       case (WT.someNat lo, WT.someNat hi) of
         (Just someLoRepr, Just someHiRepr) ->
@@ -1576,14 +1576,14 @@ exprRangeToLength env lo hi = case (lo, hi) of
   (AS.ExprVarRef loVar, AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef hiVar) e) -> getStaticLength loVar hiVar e
   (AS.ExprBinOp AS.BinOpSub (AS.ExprVarRef loVar) e, AS.ExprVarRef hiVar) -> getStaticLength loVar hiVar e
   (e, e') | e == e' -> Just 1
-  _ | Just (StaticInt loInt) <- exprToStatic env lo
-    , Just (StaticInt hiInt) <- exprToStatic env hi ->
+  _ | Just (StaticInt loInt) <- SE.exprToStatic env lo
+    , Just (StaticInt hiInt) <- SE.exprToStatic env hi ->
       Just $ (hiInt - loInt) + 1
   _ -> Nothing
 
   where getStaticLength loVar hiVar e =
           if | loVar == hiVar
-             , Just (StaticInt i) <- exprToStatic env e
+             , Just (StaticInt i) <- SE.exprToStatic env e
              , i > 0 ->
                Just $ i + 1
              | otherwise -> Nothing
@@ -1658,7 +1658,7 @@ getSliceRange ov slice slicedAtom constraint = do
         CT.IntegerRepr -> do
           env <- getStaticEnv
           let (_, hi) = normalizeSlice slice
-          case exprToStatic env hi of
+          case SE.exprToStatic env hi of
             Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
                 if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
                      intAtom <- CCG.mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
@@ -1724,7 +1724,7 @@ withStaticTest :: AS.Expr
                -> Generator h s arch ret a
 withStaticTest test ifTrue ifFalse ifUnknown = do
   env <- getStaticEnv
-  case exprToStatic env test of
+  case SE.exprToStatic env test of
     Just (StaticBool True) -> ifTrue
     Just (StaticBool False) -> ifFalse
     _ -> ifUnknown
@@ -1877,7 +1877,7 @@ translateBinaryOp ov op e1 e2 tc = do
       WT.LeqProof <- return $ WT.leqAdd n1PosProof n2
       Some <$> CCG.mkAtom (CCG.App (CCE.BVConcat n1 n2 (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     AS.BinOpPow
-      | Just (StaticInt 2) <- exprToStatic env e1 -> do
+      | Just (StaticInt 2) <- SE.exprToStatic env e1 -> do
         Refl <- assertAtomType e2 CT.IntegerRepr a2
         let nr = WT.knownNat @128
         let shift = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a2)
@@ -2171,7 +2171,7 @@ getBVLength mexpr ty = do
   env <- getStaticEnv
   case () of
     _ | Just e <- mexpr
-      , Just (StaticInt i) <- exprToStatic env e
+      , Just (StaticInt i) <- SE.exprToStatic env e
       , Just (Some repr) <- WT.someNat i
       , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` repr ->
         return $ Some $ BVRepr repr
@@ -2240,7 +2240,7 @@ polymorphicBVOverrides e ty env = case e of
           AS.BinOpNEQ -> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr result')))
         return (Some result, TypeBasic)
   AS.ExprBinOp AS.BinOpConcat expr1 (AS.ExprCall (AS.VarName "Zeros") [expr2])
-    | Just (StaticInt 0) <- exprToStatic env expr2 ->
+    | Just (StaticInt 0) <- SE.exprToStatic env expr2 ->
       Just $ translateExpr' overrides expr1 ty
   AS.ExprBinOp AS.BinOpConcat expr1 expr2
     | Just hint <- getConstraintHint ty
@@ -2339,7 +2339,7 @@ polymorphicBVOverrides e ty env = case e of
   AS.ExprCall (AS.QualifiedIdentifier _ fun@"Replicate") args@[bve, repe] -> Just $ do
     env <- getStaticEnv
     Some bvatom <- translateExpr overrides bve
-    case (exprToStatic env repe, CCG.typeOfAtom bvatom) of
+    case (SE.exprToStatic env repe, CCG.typeOfAtom bvatom) of
       (Just (StaticInt width), CT.BVRepr nr) |
           Just (Some rep) <- WT.someNat width
         , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` rep -> do
@@ -2463,7 +2463,7 @@ overrides = Overrides {..}
               return ()
           AS.StmtCall (AS.QualifiedIdentifier q "write_mem") [mem, addr, szExpr, value] -> Just $ do
             env <- getStaticEnv
-            case exprToStatic env szExpr of
+            case SE.exprToStatic env szExpr of
               Just sz ->
                 translateStatement overrides $
                   AS.StmtCall (AS.QualifiedIdentifier q ("write_mem_" <> (T.pack $ show sz))) [mem, addr, value]
@@ -2487,7 +2487,7 @@ overrides = Overrides {..}
               translateExpr' overrides (AS.ExprLitInt (WT.intValue nr)) ConstraintNone
             AS.ExprCall (AS.QualifiedIdentifier q "read_mem") [mem, addr, szExpr] -> Just $ do
               env <- getStaticEnv
-              case exprToStatic env szExpr of
+              case SE.exprToStatic env szExpr of
                 Just sz ->
                   translateExpr' overrides
                     (AS.ExprCall (AS.QualifiedIdentifier q ("read_mem_" <> (T.pack $ show sz))) [mem, addr])
