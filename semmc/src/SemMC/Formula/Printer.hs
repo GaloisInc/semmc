@@ -13,6 +13,7 @@
 module SemMC.Formula.Printer
   ( printParameterizedFormula
   , printFormula
+  , printFunctionFormula
   ) where
 
 import qualified Data.Foldable as F
@@ -62,6 +63,10 @@ printFormula :: (ShowF (A.Location arch))
              -> T.Text
 printFormula = printTokens' mempty . sexprConvert
 
+printFunctionFormula :: FunctionFormula (S.ExprBuilder t st fs) '(tps, tp)
+                     -> T.Text
+printFunctionFormula = printTokens' mempty . sexprConvertFunction
+
 sexprConvert :: forall t st fs arch
               . (ShowF (A.Location arch))
              => Formula (S.ExprBuilder t st fs) arch
@@ -96,6 +101,29 @@ sexprConvertParameterized rep (ParameterizedFormula { pfUses = uses
        , SE.L [SE.A (AIdent "in"),       convertUses opVars uses]
        , SE.L [SE.A (AIdent "defs"),     convertDefs opVars litVars defs]
        ]
+
+sexprConvertFunction :: FunctionFormula (S.ExprBuilder t st fs) '(tps, tp)
+                     -> SE.RichSExpr FAtom
+sexprConvertFunction (FunctionFormula { ffName = name
+                                      , ffArgTypes = argTypes
+                                      , ffArgVars = argVars
+                                      , ffRetType = retType
+                                      , ffDef = def
+                                      }) =
+  SE.L [ SE.L [ SE.A (AIdent "function"), SE.A (AIdent name)]
+       , SE.L [ SE.A (AIdent "arguments"), convertArgumentVars argTypes argVars ]
+       , SE.L [ SE.A (AIdent "ret"), printBaseType retType ]
+       , SE.L [ SE.A (AIdent "body"), convertFnBody undefined ]
+       ]
+
+convertFnBody :: S.ExprSymFn t args ret
+              -> SE.RichSExpr FAtom
+convertFnBody = undefined
+
+-- convertFnApp :: ParamLookup t
+--              -> S.ExprSymFn t args ret
+--              -> Ctx.Assignment (S.Expr t) args
+--              -> SE.RichSExpr FAtom
 
 convertUses :: (ShowF (A.Location arch))
             => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
@@ -308,6 +336,25 @@ convertApp paramLookup = convertApp'
 varName :: BV.BoundVar (S.ExprBuilder t st fs) arch op -> String
 varName (BV.BoundVar var) = show (S.bvarName var)
 
+printBaseType :: BaseTypeRepr tp
+              -> SE.RichSExpr FAtom
+printBaseType tp = case tp of
+  S.BaseBoolRepr -> SE.A (AQuoted "bool")
+  S.BaseNatRepr -> SE.A (AQuoted "nat")
+  S.BaseIntegerRepr -> SE.A (AQuoted "int")
+  S.BaseRealRepr -> SE.A (AQuoted "real")
+  S.BaseStringRepr -> SE.A (AQuoted "string")
+  S.BaseComplexRepr -> SE.A (AQuoted "complex")
+  S.BaseBVRepr wRepr -> SE.L [SE.A (AQuoted "bv"), SE.A (AInt (NR.intValue wRepr)) ]
+  S.BaseStructRepr tps -> SE.L [SE.A (AQuoted "struct"), printBaseTypes tps]
+  S.BaseArrayRepr ixs tp -> SE.L [SE.A (AQuoted "array"), SE.L [printBaseTypes ixs, printBaseType tp]]
+  _ -> undefined
+
+printBaseTypes :: Ctx.Assignment BaseTypeRepr tps
+               -> SE.RichSExpr FAtom
+printBaseTypes tps = case tps of
+  Ctx.Empty -> SE.Nil
+  tps' Ctx.:> tp -> SE.cons (printBaseType tp) (printBaseTypes tps')
 
 convertOperandVars :: forall arch sh t st fs
                     . (A.Architecture arch)
@@ -321,3 +368,15 @@ convertOperandVars rep l =
       let nameExpr = ident' (varName var)
           typeExpr = AQuoted (A.operandTypeReprSymbol (Proxy @arch) r)
       in SE.cons (SE.DL [nameExpr] typeExpr) (convertOperandVars rep' rest)
+
+convertArgumentVars :: forall sh t st fs
+                     . SL.List BaseTypeRepr sh
+                    -> SL.List (S.BoundVar (S.ExprBuilder t st fs)) sh
+                    -> SE.RichSExpr FAtom
+convertArgumentVars rep l =
+  case (rep, l) of
+    (SL.Nil, SL.Nil) -> SE.Nil
+    (r SL.:< rep', var SL.:< rest) ->
+      let nameExpr = ident' (T.unpack (S.solverSymbolAsText (S.bvarName var)))
+          typeExpr = printBaseType r
+      in SE.cons (SE.L [ nameExpr, typeExpr ]) (convertArgumentVars rep' rest)
