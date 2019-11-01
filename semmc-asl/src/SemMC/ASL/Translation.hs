@@ -2245,7 +2245,7 @@ polymorphicBVOverrides e ty env = case e of
   AS.ExprBinOp AS.BinOpConcat expr1 expr2
     | Just hint <- getConstraintHint ty
     , (mLen1 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr1
-    , (mLen2 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr1
+    , (mLen2 :: Maybe (Generator h s arch ret (CCG.Atom s CT.IntegerType))) <- getSymbolicBVLength expr2
     , isJust mLen1 || isJust mLen2 -> Just $ do
         (Some atom1', _) <- translateExpr' overrides expr1 (relaxConstraint ty)
         (Some atom2', _) <- translateExpr' overrides expr2 (relaxConstraint ty)
