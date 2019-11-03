@@ -298,27 +298,6 @@ matchMask bv mask =
       (_, AS.MaskBitEither) -> True
       _ -> False
 
-
-data VarRegisterStatus =
-  VarMaybeRegisterIndex | VarIsRegisterIndex | VarNotRegisterIndex
-
-instance Semigroup VarRegisterStatus where
-  (<>) VarNotRegisterIndex _ = VarNotRegisterIndex
-  (<>) _ VarNotRegisterIndex = VarNotRegisterIndex
-  (<>) _ VarIsRegisterIndex = VarIsRegisterIndex
-  (<>) VarIsRegisterIndex _ = VarIsRegisterIndex
-  (<>) _ _ = VarMaybeRegisterIndex
-
-instance Monoid VarRegisterStatus where
-  mempty = VarMaybeRegisterIndex
-
-
--- Determines if the given variable is used as a register index anywhere
--- in the statement body
-varRegisterStatusStmts :: T.Text -> [AS.Stmt] -> Bool
-varRegisterStatusStmts var stmts = True
-
-
 -- Monad for collecting possible variable assignments
 newtype StaticEnvM a = StaticEnvM { getStaticPEnvs :: StaticEnvP -> [(StaticEnvP, a)] }
 
@@ -501,12 +480,6 @@ getPossibleValuesFor env vars optvars stmts =
 
 stmtsToStaticM :: [AS.Stmt] -> StaticEnvM ()
 stmtsToStaticM stmts = traverse_ stmtToStaticM stmts
-
-envInfeasable :: StaticEnvM ()
-envInfeasable = liftStaticMap $ (\(StaticEnvP env) -> StaticEnvP (Map.map makeInfeasable env))
-  where
-    makeInfeasable (EnvPValue sv) = EnvPInfeasable (typeOfStatic sv) (Set.singleton sv)
-    makeInfeasable x = x
 
 stmtToStaticM :: AS.Stmt -> StaticEnvM ()
 stmtToStaticM s = case s of

@@ -56,7 +56,7 @@ import qualified Control.Monad.State.Class as MS
 import qualified Control.Monad.State as MSS
 import           Control.Monad.Trans.Maybe as MaybeT
 import qualified Data.BitVector.Sized as BVS
-import           Data.Foldable (find)
+import           Data.Foldable (find, traverse_)
 import           Data.List (nub)
 import           Data.Maybe (maybeToList, catMaybes, fromMaybe, isJust)
 import qualified Data.Map as Map
@@ -735,41 +735,52 @@ theVarGlobal varName = do
     Just g -> return g
     Nothing -> error $ "Unknown global variable: " <> show varName
 
-callableGlobalVars :: AS.QualifiedIdentifier
-                   -> Int
+
+mkCallableWriter :: t ~ SigM ext f
+                 => Monoid w
+                 => (Callable -> [AS.Expr] -> t w)
+                 -> ASLT.SyntaxWrites t w
+                 -> ASLT.SyntaxWrites t w
+mkCallableWriter f writes = let
+  getexpr expr = case expr of
+    AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
+    _ -> ASLT.exprWrite writes expr
+  getstmt stmt = case stmt of
+    AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
+    _ -> ASLT.stmtWrite writes stmt
+  collectCallable qName argEs = do
+    mCallable <- lookupCallable qName (length argEs)
+    case mCallable of
+      Nothing -> return $ mempty
+      Just c -> f c argEs
+  collectCallables (AS.QualifiedIdentifier q nm) argEs =
+    mconcat <$> traverse (\(nm',argEs') -> collectCallable (AS.QualifiedIdentifier q nm') argEs') (overrideFun nm argEs)
+  in writes { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt }
+
+callableGlobalVars :: Callable
                    -> SigM ext f GlobalVarRefs
-callableGlobalVars qName arity = do
-  mCallable <- lookupCallable qName arity
-  case mCallable of
-    Nothing -> return $ mempty
-    Just c -> do
-      msig <- lookupCallableSignature c
-      case msig of
-        Just (_, globs) -> return globs
-        Nothing -> throwError $ MissingSignature c
+callableGlobalVars c = do
+  msig <- lookupCallableSignature c
+  case msig of
+    Just (_, globs) -> return globs
+    Nothing -> throwError $ MissingSignature c
+
 
 globalsOfStmts :: [AS.Stmt] -> SigM ext f GlobalVarRefs
 globalsOfStmts stmts = do
   let getexpr expr = case expr of
         AS.ExprVarRef (AS.QualifiedIdentifier _ varName) -> readGlobal varName
-        AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
         _ -> return mempty
   let getlval lv = case lv of
         AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> writeGlobal varName
         _ -> return mempty
   let getstmt stmt = case stmt of
-        AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
         AS.StmtCase _ alts -> mconcat <$> traverse caseAlternativeGlobalVars alts
         _ -> return (Set.empty, Set.empty)
-  let collectors = ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.lvalWrite = getlval, ASLT.stmtWrite = getstmt}
+  let collectors = mkCallableWriter (\c args -> callableGlobalVars c) $
+        ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.lvalWrite = getlval, ASLT.stmtWrite = getstmt}
   mconcat <$> traverse (ASLT.writeStmt collectors) stmts
   where
-    collectCallables :: AS.QualifiedIdentifier -> [AS.Expr] -> SigM ext f GlobalVarRefs
-    collectCallables (AS.QualifiedIdentifier q nm) args  =
-      mconcat <$> traverse (collectVars q args) (overrideFun nm)
-
-    collectVars q args (nm', mi) = callableGlobalVars (AS.QualifiedIdentifier q nm') (fromMaybe (length args) mi)
-
     caseAlternativeGlobalVars alt = case alt of
       AS.CaseWhen pats _ _ -> mconcat <$> traverse casePatternGlobalVars pats
       _ -> return mempty
@@ -779,63 +790,52 @@ globalsOfStmts stmts = do
       AS.CasePatternTuple pats -> mconcat <$> traverse casePatternGlobalVars pats
       _ -> return mempty
 
-callableRegIdxs :: AS.QualifiedIdentifier
-                -> [AS.Expr]
-                -> SigM ext f RegIdxVars
-callableRegIdxs qIdent argEs = do
-  mCallable <- lookupCallable qIdent (length argEs)
-  case mCallable of
-    Nothing -> return $ mempty
-    Just c -> do
-      (SomeSimpleFunctionSignature sig, _) <- computeCallableSignature c
-      let args = sfuncArgs sig
-      mconcat <$> traverse addFunArg (zip args argEs)
-  where
-    addFunArg (FunctionArg _ _ mrkind, AS.ExprVarRef (AS.VarName nm)) = case mrkind of
-      Just rkind -> return $ varRegIdx nm rkind
-      _ -> return mempty
-    addFunArg _ = return mempty
 
 registerKindMap :: T.Text -> Maybe RegisterKind
 registerKindMap nm = case nm of
   "_R" -> Just $ RegisterR
   "_V" -> Just $ RegisterV
+  "_Dclone" -> Just $ RegisterV
   _ -> Nothing
 
 regIdxsOfStmts :: [AS.Stmt] -> SigM ext f RegIdxVars
 regIdxsOfStmts stmts = do
   let getstmt stmt = case stmt of
         AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) e ->
-          return $ mconcat $ map (\var -> varDependsOn var lvnm) $ regIdxVars e
-        AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
+          return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
+        AS.StmtVarDeclInit (lvnm, _) e ->
+          return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
         _ -> return mempty
   let getexpr expr = case expr of
-        AS.ExprCall (AS.VarName "LookUpRIndex") [AS.ExprVarRef (AS.VarName varnm), _] ->
-          return $ varRegIdx varnm RegisterR
         AS.ExprIndex (AS.ExprVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
           | Just rkind <- registerKindMap idxnm ->
-            return $ mconcat $ map (\var -> varRegIdx var rkind) $ regIdxVars e
-        AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
+            return $ regIdxsOfExpr rkind e
         _ -> return mempty
   let getlval lval = case lval of
         AS.LValArrayIndex (AS.LValVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
           | Just rkind <- registerKindMap idxnm ->
-            return $ mconcat $ map (\var -> varRegIdx var rkind) $ regIdxVars e
+            return $ regIdxsOfExpr rkind e
         _ -> return mempty
-
-  let collectors = ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt, ASLT.lvalWrite = getlval}
+  let callableRegIdxs c argEs = case c of
+        Callable (AS.VarName "LookUpRIndex") _ _ _
+          | [AS.ExprVarRef (AS.VarName varnm), _] <- argEs ->
+            return $ varRegIdx RegisterR varnm
+        _ -> do
+          (SomeSimpleFunctionSignature sig, _) <- computeCallableSignature c
+          let args = sfuncArgs sig
+          mconcat <$> traverse addFunArg (zip args argEs)
+        where
+          addFunArg (FunctionArg _ _ mrkind, e) = case mrkind of
+            Just rkind -> return $ regIdxsOfExpr rkind e
+            _ -> return mempty
+  let collectors = mkCallableWriter callableRegIdxs $
+        ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt, ASLT.lvalWrite = getlval}
   mconcat <$> traverse (ASLT.writeStmt collectors) stmts
   where
-    collectCallables :: AS.QualifiedIdentifier -> [AS.Expr] -> SigM ext f RegIdxVars
-    collectCallables (AS.QualifiedIdentifier q nm) args  =
-      mconcat <$> traverse (collectVars q args) (overrideFun nm)
-
-    collectVars q args (nm', mi) | (mi == Nothing || mi == Just (length args)) =
-      callableRegIdxs (AS.QualifiedIdentifier q nm') args
-    collectVars q args (nm', _) = return mempty
+    regIdxsOfExpr rkind e = mconcat $ map (varRegIdx rkind) $ regIdxVars e
 
     regIdxVars expr = case expr of
-      AS.ExprBinOp AS.BinOpConcat e1 e2 ->
+      AS.ExprBinOp _ e1 e2 ->
         regIdxVars e1 ++ regIdxVars e2
       AS.ExprVarRef (AS.VarName nm) -> [nm]
       AS.ExprCall (AS.VarName "UInt") [e] -> regIdxVars e
@@ -843,29 +843,9 @@ regIdxsOfStmts stmts = do
 
 computeSignatures :: [AS.Stmt] -> SigM ext f ()
 computeSignatures stmts = do
-  let collectors = ASLT.noWrites
-        { ASLT.exprWrite = getExprCall
-        , ASLT.stmtWrite = getStmtCall
-        , ASLT.typeWrite = storeUserType
-        }
-  mapM_ (ASLT.writeStmt collectors) stmts
-  where
-    collectCallables (AS.QualifiedIdentifier q nm) args =
-      mapM_ (collectCallable q args) (overrideFun nm)
-
-    collectCallable q argEs (nm', mi) = do
-        mCallable <- lookupCallable (AS.QualifiedIdentifier q nm') (fromMaybe (length argEs) mi)
-        case mCallable of
-          Just c -> void $ computeCallableSignature c
-          _ -> return ()
-
-    getExprCall expr = case expr of
-      AS.ExprCall qName argEs -> collectCallables qName argEs
-      _ -> return ()
-    getStmtCall stmt = case stmt of
-      AS.StmtCall qName argEs -> collectCallables qName argEs
-      _ -> return ()
-
+  let collectors = mkCallableWriter (\c args -> void $ computeCallableSignature c)
+        ASLT.noWrites { ASLT.typeWrite = storeUserType }
+  traverse_ (ASLT.writeStmt collectors) stmts
 
 -- | For recursive functions, this signature is temporarily stored as a stand-in
 -- for the actual function signature when recursively calling the signature
@@ -956,21 +936,33 @@ instance Semigroup RegIdxVars where
 instance Monoid RegIdxVars where
   mempty = RegIdxVars Map.empty Map.empty
 
-varDependsOn :: T.Text -> T.Text -> RegIdxVars
-varDependsOn var dep = RegIdxVars Map.empty (Map.singleton var (Set.singleton dep))
 
-varRegIdx :: T.Text -> RegisterKind -> RegIdxVars
-varRegIdx var rkind = RegIdxVars (Map.singleton var rkind) (Map.empty)
+varDependsOn :: T.Text -> T.Text -> RegIdxVars
+varDependsOn dep var = RegIdxVars Map.empty (Map.singleton var (Set.singleton dep))
+
+varRegIdx :: RegisterKind -> T.Text -> RegIdxVars
+varRegIdx rkind var  = RegIdxVars (Map.singleton var rkind) (Map.empty)
+
+
+reachableRegIdx :: RegIdxVars -> Set.Set T.Text -> Set.Set T.Text -> Set.Set T.Text
+reachableRegIdx ridx vars frontier = let
+  vars' = Set.union vars frontier
+  in if vars' == vars
+  then vars
+  else reachableRegIdx ridx vars' (Set.foldr' addVar Set.empty frontier)
+  where
+    addVar nm set = case Map.lookup nm (regIdxVarRels ridx) of
+      Just set' -> Set.union set set'
+      _ -> set
 
 getRegisterKind :: RegIdxVars -> T.Text -> Maybe RegisterKind
-getRegisterKind ridx@(RegIdxVars vars vrels) var = case Map.lookup var vars of
-  Just rkind -> Just rkind
-  Nothing -> case Map.lookup var vrels of
-    Just vars' -> case nub $ catMaybes $ map (getRegisterKind ridx) (Set.toList vars') of
-      [rkind] -> Just $ rkind
-      (_ : _) -> Just $ RegisterInconsistent
-      _ -> Nothing
-    Nothing -> Nothing
+getRegisterKind ridx@(RegIdxVars vars vrels) var = let
+  reachable = reachableRegIdx ridx Set.empty (Set.singleton var)
+  foundKinds = catMaybes $ Set.toList $ Set.map (\nm -> Map.lookup nm (regIdxVars ridx)) $ reachable
+  in case foundKinds of
+    [rkind] -> Just $ rkind
+    (_ : _) -> Just $ RegisterInconsistent
+    _ -> Nothing
 
 -- FIXME: workaround for the fact that empty tuples are not supported by crucible/what4
 
@@ -1148,11 +1140,11 @@ addInitializedVariables stmts env =
 
 -- For a given callable, provide an alternative set of names it might resolve to
 -- and optionally an alternative number of arguments it might take.
-overrideFun :: T.Text -> [(T.Text, Maybe Int)]
-overrideFun nm = case nm of
-  "read_mem" -> map (\nm' -> (nm', Just 2)) $ ["read_mem_1", "read_mem_2", "read_mem_4", "read_mem_8", "read_mem_16"]
-  "write_mem" -> map (\nm' -> (nm', Just 3)) $ ["write_mem_1", "write_mem_2", "write_mem_4", "write_mem_8", "write_mem_16"]
-  _ -> map (\nm' -> (nm', Nothing)) $ case nm of
+overrideFun :: T.Text -> [AS.Expr] -> [(T.Text, [AS.Expr])]
+overrideFun nm args = case nm of
+  "read_mem" -> map (\nm' -> (nm', take 2 args)) $ ["read_mem_1", "read_mem_2", "read_mem_4", "read_mem_8", "read_mem_16"]
+  "write_mem" -> map (\nm' -> (nm', take 2 args ++ drop 3 args)) $ ["write_mem_1", "write_mem_2", "write_mem_4", "write_mem_8", "write_mem_16"]
+  _ -> map (\nm' -> (nm', args)) $ case nm of
     "__abort" -> ["EndOfInstruction"]
     "TakeHypTrapException" -> ["TakeHypTrapExceptioninteger", "TakeHypTrapExceptionExceptionRecord"]
     _ | nm `elem` ["Min", "Max"] -> [nm <> "integerinteger"]

@@ -243,4 +243,4 @@ deriving instance Show TypeConstraint
 
 data RegisterKind =
   RegisterR | RegisterV | RegisterInconsistent
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
