@@ -113,17 +113,19 @@ sexprConvertFunction (FunctionFormula { ffName = name
   SE.L [ SE.L [ SE.A (AIdent "function"), SE.A (AIdent name)]
        , SE.L [ SE.A (AIdent "arguments"), convertArgumentVars argTypes argVars ]
        , SE.L [ SE.A (AIdent "ret"), printBaseType retType ]
-       , SE.L [ SE.A (AIdent "body"), convertFnBody undefined ]
+       , SE.L [ SE.A (AIdent "body"), convertFnBody def ]
        ]
 
-convertFnBody :: S.ExprSymFn t args ret
+convertFnBody :: forall t args ret .
+                 S.ExprSymFn t args ret
               -> SE.RichSExpr FAtom
-convertFnBody = undefined
-
--- convertFnApp :: ParamLookup t
---              -> S.ExprSymFn t args ret
---              -> Ctx.Assignment (S.Expr t) args
---              -> SE.RichSExpr FAtom
+convertFnBody (S.ExprSymFn _ _ symFnInfo _) = case symFnInfo of
+  S.DefinedFnInfo argVars expr _ ->
+    let paramLookup :: ParamLookup t
+        paramLookup = flip Map.lookup argMapping . Some
+        argMapping = buildArgsMapping argVars
+    in convertElt paramLookup expr
+  _ -> error "PANIC"
 
 convertUses :: (ShowF (A.Location arch))
             => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
@@ -171,6 +173,13 @@ buildOpMapping SL.Nil = Map.empty
 buildOpMapping (var SL.:< rest) =
   Map.insert (Some (BV.unBoundVar var)) (ident' name) $ buildOpMapping rest
   where name = varName var
+
+buildArgsMapping :: Ctx.Assignment (S.ExprBoundVar t) sh
+                 -> Map.Map (Some (S.ExprBoundVar t)) (SE.RichSExpr FAtom)
+buildArgsMapping Ctx.Empty = Map.empty
+buildArgsMapping (rest Ctx.:> var) =
+  Map.insert (Some var) (ident' name) $ buildArgsMapping rest
+  where name = T.unpack (S.solverSymbolAsText (S.bvarName var))
 
 convertDef :: (ShowF (A.Location arch))
            => SL.List (BV.BoundVar (S.ExprBuilder t st fs) arch) sh
@@ -347,8 +356,8 @@ printBaseType tp = case tp of
   S.BaseComplexRepr -> SE.A (AQuoted "complex")
   S.BaseBVRepr wRepr -> SE.L [SE.A (AQuoted "bv"), SE.A (AInt (NR.intValue wRepr)) ]
   S.BaseStructRepr tps -> SE.L [SE.A (AQuoted "struct"), printBaseTypes tps]
-  S.BaseArrayRepr ixs tp -> SE.L [SE.A (AQuoted "array"), SE.L [printBaseTypes ixs, printBaseType tp]]
-  _ -> undefined
+  S.BaseArrayRepr ixs repr -> SE.L [SE.A (AQuoted "array"), SE.L [printBaseTypes ixs, printBaseType repr]]
+  _ -> error "can't print base type"
 
 printBaseTypes :: Ctx.Assignment BaseTypeRepr tps
                -> SE.RichSExpr FAtom
