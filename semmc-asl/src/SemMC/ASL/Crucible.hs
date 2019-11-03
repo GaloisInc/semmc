@@ -78,7 +78,7 @@ import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Extension as CCExt
 
 import System.IO.Unsafe -- FIXME: For debugging
-    
+
 data Function arch globalReads globalWrites init tps =
    Function { funcSig :: FunctionSignature globalReads globalWrites init tps
             , funcCFG :: CCC.SomeCFG (ASLExt arch) init (FuncReturn globalWrites tps)

@@ -122,8 +122,11 @@ convertFnBody :: forall t args ret .
 convertFnBody (S.ExprSymFn _ _ symFnInfo _) = case symFnInfo of
   S.DefinedFnInfo argVars expr _ ->
     let paramLookup :: ParamLookup t
-        paramLookup = flip Map.lookup argMapping . Some
-        argMapping = buildArgsMapping argVars
+        -- FIXME: For now, we are just going to print the variable name because we
+        -- are using FunctionFormula when we should be using ParameterizedFormula.
+        paramLookup var = Just $ ident' (T.unpack (S.solverSymbolAsText (S.bvarName var)))
+        -- paramLookup = flip Map.lookup argMapping . Some
+        -- argMapping = buildArgsMapping argVars
     in convertElt paramLookup expr
   _ -> error "PANIC"
 
@@ -196,7 +199,8 @@ convertDef opVars paramLookup (Pair param expr) =
 
 convertElt :: ParamLookup t -> S.Expr t tp -> SE.RichSExpr FAtom
 convertElt _ (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatElt not supported"
-convertElt _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = error "IntElt not supported"
+-- convertElt _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = error "IntElt not supported"
+convertElt _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = ident' "<IntElt:unsupported>"
 convertElt _ (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatElt not supported"
 convertElt _ (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = SE.A (ABV (widthVal sz) val)
 convertElt _ (S.StringExpr {}) = error "StringExpr is not supported"
@@ -210,7 +214,12 @@ convertElt paramLookup (S.NonceAppExpr nae) =
     S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
     S.MapOverArrays {} -> error "MapOverArrays NonceAppExpr not supported"
     S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppExpr not supported"
-convertElt paramLookup (S.BoundVarExpr var) = fromJust' "SemMC.Formula.Printer paramLookup boundvar" $ paramLookup var
+convertElt paramLookup (S.BoundVarExpr var) = fromJust' ("SemMC.Formula.Printer paramLookup " ++ show (S.bvarName var)) $ paramLookup var
+
+convertElts :: ParamLookup t -> Ctx.Assignment (S.Expr t) sh -> SE.RichSExpr FAtom
+convertElts paramLookup es = case es of
+  Ctx.Empty -> SE.Nil
+  es' Ctx.:> e -> SE.cons (convertElt paramLookup e) (convertElts paramLookup es')
 
 convertFnApp :: ParamLookup t
              -> S.ExprSymFn t args ret
@@ -312,6 +321,11 @@ convertApp paramLookup = convertApp'
         convertApp' (S.BVAshr _ bv1 bv2) = SE.L [ident' "bvashr", convert bv1, convert bv2]
         convertApp' (S.BVZext r bv) = extend "zero" (intValue r) bv
         convertApp' (S.BVSext r bv) = extend "sign" (intValue r) bv
+
+        convertApp' (S.StructCtor tps vals) = SE.L [ident' "struct",
+                                                    printBaseTypes tps,
+                                                    convertElts paramLookup vals]
+        convertApp' (S.StructField _ _ _) = SE.L [ident' "field"]
 
         convertApp' app = error $ "unhandled App: " ++ show app
 

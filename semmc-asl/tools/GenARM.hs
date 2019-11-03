@@ -43,6 +43,8 @@ import           System.Console.GetOpt
 import           Panic hiding (panic)
 import           Lang.Crucible.Panic ( Crucible )
 
+import SemMC.Formula.Printer as FP
+
 import SemMC.ASL
 import SemMC.ASL.Crucible
 import SemMC.ASL.Translation
@@ -327,6 +329,7 @@ processFunction fromInstr key sig stmts defs = do
                                       , simSym = backend
                                       }
             symFn <- simulateFunction cfg p
+            putStrLn (T.unpack (FP.printFunctionFormula symFn))
             return (funcDepends p)
         return $ fromMaybe Map.empty mdep
     Nothing -> return Map.empty

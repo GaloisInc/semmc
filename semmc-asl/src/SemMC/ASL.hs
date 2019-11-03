@@ -25,6 +25,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Data.Type.List as TL
+import qualified Dismantle.XML.AArch32 as DA
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE
@@ -106,7 +107,7 @@ simulateFunction symCfg crucFunc =
         CT.NotBaseType -> X.throwIO (NonBaseTypeReturn (CS.regType re))
         CT.AsBaseType btr
           | Just Refl <- testEquality btr retType -> do
-              print (WI.printSymExpr (CS.regValue re))
+              -- print (WI.printSymExpr (CS.regValue re))
               let name = T.unpack (AS.funcName sig)
                   argTypes = reshape (FC.fmapFC AT.projectValue (AS.funcArgReprs sig))
                   argVars = freshArgBoundVars' initArgs
