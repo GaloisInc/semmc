@@ -199,6 +199,7 @@ convertDef opVars paramLookup (Pair param expr) =
 
 convertElt :: ParamLookup t -> S.Expr t tp -> SE.RichSExpr FAtom
 convertElt _ (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatElt not supported"
+-- FIXME: We print something here for now.
 -- convertElt _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = error "IntElt not supported"
 convertElt _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = ident' "<IntElt:unsupported>"
 convertElt _ (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatElt not supported"
@@ -325,7 +326,10 @@ convertApp paramLookup = convertApp'
         convertApp' (S.StructCtor tps vals) = SE.L [ident' "struct",
                                                     printBaseTypes tps,
                                                     convertElts paramLookup vals]
-        convertApp' (S.StructField _ _ _) = SE.L [ident' "field"]
+        convertApp' (S.StructField structExpr ix fieldTp) = SE.L [ident' "field",
+                                                                  ident' (show (Ctx.indexVal ix)),
+                                                                  printBaseType fieldTp,
+                                                                  convert structExpr]
 
         convertApp' app = error $ "unhandled App: " ++ show app
 
