@@ -73,8 +73,11 @@ data TranslatorOptions = TranslatorOptions
   , optCollectAllExceptions :: Bool
   , optCollectExpectedExceptions :: Bool
   , optASLSpecFilePath :: FilePath
-  , optTranslateInstruction :: Maybe (String, String)
+  , optTranslationTask :: TranslationTask
   }
+
+data TranslationTask = TranslateAll
+                     | TranslateInstruction String String
 
 instsFilePath :: FilePath
 instsFilePath = "insts.parsed"
@@ -104,7 +107,7 @@ defaultOptions = TranslatorOptions
   , optCollectAllExceptions = False
   , optCollectExpectedExceptions = False
   , optASLSpecFilePath = "./test/"
-  , optTranslateInstruction = Nothing
+  , optTranslationTask = TranslateAll
   }
 
 data StatOptions = StatOptions
@@ -160,7 +163,7 @@ arguments =
 
   , Option [] ["translate-instruction"]
     (ReqArg (\instrAndEnc -> case List.splitOn "/" instrAndEnc of
-                [instr, enc] -> Left (\opts -> opts { optTranslateInstruction = Just (instr, enc) })
+                [instr, enc] -> Left (\opts -> opts { optTranslationTask = TranslateInstruction instr enc })
                 _ -> error "bad instruction/encoding") "INST")
     ("Name of particular instruction to translate. Format should be <INSTRUCTION>/<ENCODING>, where the two components correspond to instruction and encoding definitions in the ASL file.")
   ]
@@ -183,9 +186,9 @@ main = do
   let (opts', statOpts) = foldl applyOption (defaultOptions, defaultStatOptions) args
   filter <- getTargetFilter opts'
   let opts = opts' { optFilters = filter }
-  sm <- case optTranslateInstruction opts of
-    Nothing -> runWithFilters opts
-    Just (inst, enc) -> testInstruction opts inst enc
+  sm <- case optTranslationTask opts of
+    TranslateAll -> runWithFilters opts
+    TranslateInstruction inst enc -> testInstruction opts inst enc
 
   reportStats statOpts sm
 
@@ -706,5 +709,5 @@ translateOnlyInstr :: (T.Text, T.Text) -> Filters
 translateOnlyInstr inm = Filters
   (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
   (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
-  (\(InstructionIdent nm enc _) -> \_ -> False)
+  (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
   (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
