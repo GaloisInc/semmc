@@ -323,6 +323,8 @@ convertApp paramLookup = convertApp'
         convertApp' (S.BVZext r bv) = extend "zero" (intValue r) bv
         convertApp' (S.BVSext r bv) = extend "sign" (intValue r) bv
 
+        convertApp' (S.BVToInteger bv) = SE.L [ident' "bvToInteger", convert bv]
+
         convertApp' (S.StructCtor tps vals) = SE.L [ident' "struct",
                                                     printBaseTypes tps,
                                                     convertElts paramLookup vals]
