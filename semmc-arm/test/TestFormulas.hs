@@ -77,7 +77,7 @@ testFormula :: [(String, BS.ByteString)]
             -> (Some (ARMOpcode ARMOperand), BS.ByteString) -> TestTree
 testFormula dfs a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
   do Some ng <- PN.newIONonceGenerator
-     sym <- S.newSimpleBackend @_ @(S.Flags S.FloatIEEE) ng
+     sym <- S.newSimpleBackend S.FloatIEEERepr ng
      lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym dfs
      fm <- withTestLogging $ loadFormula sym lib a
      -- The Main test is loadFormula doesn't generate an exception.
