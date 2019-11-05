@@ -45,7 +45,7 @@ import qualified SemMC.Architecture as A
 import qualified SemMC.BoundVar as BV
 import           SemMC.Formula.Formula
 import           SemMC.Formula.SETokens ( FAtom(..), printTokens'
-                                        , ident', quoted', int', string', bitvec'
+                                        , ident', quoted', int', nat', string', bitvec'
                                         )
 
 -- This file is organized top-down, i.e., from high-level to low-level.
@@ -288,8 +288,16 @@ convertApp paramLookup = convertApp'
                   sval v = bitvec' (natValue w) v
                   add x y = let op = ident' "bvxor" in SE.L [ op, x, y ]
               in WSum.eval add smul sval sm
-            S.SemiRingNatRepr     -> error "SemiRingSum NatRepr not supported"
-            S.SemiRingIntegerRepr -> error "SemiRingSum IntRepr not supported"
+            S.SemiRingNatRepr ->
+              let smul mul e = SE.L [ ident' "natmul", nat' mul, convert e ]
+                  sval v = nat' v
+                  add x y = let op = ident' "natadd" in SE.L [ op, x, y ]
+              in WSum.eval add smul sval sm
+            S.SemiRingIntegerRepr ->
+              let smul mul e = SE.L [ ident' "intmul", int' mul, convert e ]
+                  sval v = int' v
+                  add x y = let op = ident' "intadd" in SE.L [ op, x, y ]
+              in WSum.eval add smul sval sm
             S.SemiRingRealRepr    -> error "SemiRingSum RealRepr not supported"
 
         convertApp' (S.SemiRingProd pd) =
@@ -305,6 +313,9 @@ convertApp paramLookup = convertApp'
             S.SemiRingNatRepr     -> error "convertApp' S.SemiRingProd Nat unsupported"
             S.SemiRingIntegerRepr -> error "convertApp' S.SemiRingProd Integer unsupported"
             S.SemiRingRealRepr    -> error "convertApp' S.SemiRingProd Real unsupported"
+
+        -- FIXME: This all needs to be fixed. Right now, this stuff is purely cosmetic.
+        convertApp' (S.SemiRingLe _sr e1 e2) = SE.L [ ident' "le", convert e1, convert e2 ]
 
         convertApp' (S.BVOrBits pd) =
           case WSum.prodRepr pd of
@@ -325,6 +336,13 @@ convertApp paramLookup = convertApp'
 
         convertApp' (S.BVToInteger bv) = SE.L [ident' "bvToInteger", convert bv]
 
+        convertApp' (S.SBVToInteger bv) = SE.L [ident' "sbvToInteger", convert bv]
+
+        convertApp' (S.IntMod e1 e2) = SE.L [ident' "intmod", convert e1, convert e2]
+        convertApp' (S.IntegerToBV i wRepr)  = SE.L [ident' "integerToBV",
+                                                     nat' (natValue wRepr),
+                                                     convert i]
+
         convertApp' (S.StructCtor tps vals) = SE.L [ident' "struct",
                                                     printBaseTypes tps,
                                                     convertElts paramLookup vals]
@@ -332,6 +350,10 @@ convertApp paramLookup = convertApp'
                                                                   ident' (show (Ctx.indexVal ix)),
                                                                   printBaseType fieldTp,
                                                                   convert structExpr]
+
+        -- FIXME: fill this in
+        convertApp' (S.UpdateArray _ _ _arrayExpr _ixExprs _newExpr) =
+          SE.L [ ident' "updateArray" ]
 
         convertApp' app = error $ "unhandled App: " ++ show app
 
