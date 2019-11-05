@@ -12,11 +12,19 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module SemMC.ASL.Translation (
     TranslationState(..)
+  , TracedTranslationException
   , translateExpr
   , translateStatement
   , addExtendedTypeData
+  , unliftGenerator
   , throwTrace
   , Overrides(..)
   , overrides
@@ -31,11 +39,16 @@ import           Control.Lens ( (^.), (&), (.~) )
 import           Control.Applicative ( (<|>) )
 import qualified Control.Exception as X
 import           Control.Monad ( forM_, when, void, foldM, foldM_, (>=>), (<=<) )
+import           Control.Monad.Identity
+import qualified Control.Monad.Fail as F
+import qualified Control.Monad.Except as E
 import qualified Control.Monad.State.Class as MS
-import           Control.Monad.Trans ( lift)
+import           Control.Monad.Trans ( lift )
+import qualified Control.Monad.Trans as MT
 import qualified Control.Monad.State as MSS
 import qualified Control.Monad.Writer.Lazy as W
 import           Control.Monad.Trans.Maybe as MaybeT
+import           Data.Typeable
 import qualified Data.BitVector.Sized as BVS
 import           Data.Maybe ( fromMaybe, catMaybes, maybeToList )
 import qualified Data.Bimap as BM
@@ -63,12 +76,13 @@ import qualified What4.Symbol as WS
 import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
-import           SemMC.ASL.Exceptions ( TranslationException(..), TracedTranslationException(..) )
+import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr as SE
 import           SemMC.ASL.Translation.Preprocess
-import qualified SemMC.ASL.SyntaxTraverse as ASLT
+import           SemMC.ASL.SyntaxTraverse ( throwTrace )
+import qualified SemMC.ASL.SyntaxTraverse as TR
 import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 
 import qualified Lang.Crucible.FunctionHandle as FH
@@ -122,10 +136,10 @@ lookupVarRef' name = do
       return (ExprConstructor (CCG.AtomExpr e) return)
     lookupRef ts = do
       Some r <- Map.lookup name (tsVarRefs ts)
-      return (ExprConstructor r CCG.readReg)
+      return (ExprConstructor r $ (liftGenerator . CCG.readReg))
     lookupGlobal ts = do
       Some g <- Map.lookup name (tsGlobals ts)
-      return (ExprConstructor g CCG.readGlobal)
+      return (ExprConstructor g $ (liftGenerator . CCG.readGlobal))
     lookupEnum ts = do
       e <- Map.lookup name (tsEnums ts)
       return (ExprConstructor (CCG.App (CCE.IntLit e)) return)
@@ -205,7 +219,76 @@ data Overrides arch =
             , overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> StaticEnvMap -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
             }
 
-type Generator h s arch ret = CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret
+data SyntaxTraceExt k where
+  SyntaxTraceExtUnit :: SyntaxTraceExt AS.Stmt
+  SyntaxTraceExtTC :: TypeConstraint -> SyntaxTraceExt AS.Expr
+
+instance Show (SyntaxTraceExt k) where
+  show e = case e of
+    SyntaxTraceExtUnit -> ""
+    SyntaxTraceExtTC tc -> "Type Constraint: " ++ show tc
+
+newtype Generator h s arch ret a = Generator
+  { unGenerator :: CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a}
+  deriving
+    ( Functor
+    , Applicative
+    , Monad
+    , MST.MonadST h
+    , MSS.MonadState (TranslationState h ret s)
+    )
+
+-- FIXME: Move to What4.Utils.MonadST
+instance MST.MonadST s m => MST.MonadST s (E.ExceptT e m) where
+  liftST m = lift $ MST.liftST m
+
+instance TR.SyntaxTrace (Generator h s arch ret) where
+  traceSyntax' repr syn f = do
+    ext <- TR.syntaxExt repr syn
+    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate repr (\syns -> ((syn, ext) : syns)) (tsTraceStack s) }
+    a <- f
+    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate repr (\(_: syns) -> syns) (tsTraceStack s) }
+    return a
+
+instance TR.SyntaxExt SyntaxTraceExt (Generator h s arch ret) where
+  syntaxExt repr syn = case repr of
+    TR.SyntaxStmtRepr -> return $ SyntaxTraceExtUnit
+    TR.SyntaxExprRepr -> do
+      Just tc <- MSS.gets tsExprConstraint
+      return $ SyntaxTraceExtTC tc
+
+type TracedTranslationException = TR.SyntaxTraceError TranslationException SyntaxTraceExt
+
+instance TR.SyntaxTraceE TranslationException (Generator h s arch ret) where
+  throwTrace e = do
+    stack <- MS.gets tsTraceStack
+    X.throw $ TR.SyntaxTraceError e stack
+
+instance F.MonadFail (Generator h s arch ret) where
+  fail s = throwTrace $ BindingFailure s
+
+liftGenerator :: CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a
+              -> Generator h s arch ret a
+liftGenerator m = Generator $ m
+
+unliftGenerator :: Generator h s arch ret a
+                -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a
+unliftGenerator (Generator m) = m
+
+
+liftGenerator2 :: Generator h s arch ret a
+               -> Generator h s arch ret b
+               -> (CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a
+                  -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret b
+                  -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret c)
+               -> Generator h s arch ret c
+liftGenerator2 (Generator f) (Generator g) m = Generator $ m f g
+
+
+mkAtom :: CCG.Expr (ASLExt arch) s tp -> Generator h s arch ret (CCG.Atom s tp)
+mkAtom e = liftGenerator $ CCG.mkAtom e
+
+--instance(Generator h s arch ret)
 
 -- Tracks state necessary for the translation of ASL into Crucible
 --
@@ -243,9 +326,10 @@ data TranslationState h ret s =
                    -- ^ Environment to give concrete instantiations to polymorphic variables
                    , tsSig :: SomeFunctionSignature ret
                    -- ^ Signature of the function/procedure we are translating
-                   , tsStmtStack :: [AS.Stmt]
-                   -- ^ Stack of statements on this traversal
-                   , tsExprStack :: [(AS.Expr, TypeConstraint)]
+                   , tsTraceStack :: TR.SyntaxTraceStack SyntaxTraceExt
+                   -- ^ Trace of how the ASL syntax is being traversed
+                   , tsExprConstraint :: Maybe TypeConstraint
+                   -- ^ Type constraint on the currently-being-translated expression
                    }
 
 
@@ -296,23 +380,12 @@ withGlobals reprs k = do
           return $ BaseGlobalVar gv
       | otherwise = throwTrace $ TranslationError $ "Missing global (or wrong type): " ++ show globName
 
-throwTrace :: TranslationException -> Generator h s arch ret a
-throwTrace e = do
-  stmts <- MS.gets tsStmtStack
-  exprs <- MS.gets tsExprStack
-  sig <- MS.gets tsSig
-  svals <- MS.gets tsStaticValues
-  X.throw $ TracedTranslationException (someSigName sig) svals stmts exprs e
-
 translateStatement :: forall arch ret h s
                     . Overrides arch
                    -> AS.Stmt
                    -> Generator h s arch ret ()
 translateStatement ov stmt = do
-  MS.modify' $ \s -> s { tsStmtStack = stmt : (tsStmtStack s) }
-  translateStatement' ov stmt
-  MS.modify' $ \s -> s { tsStmtStack = List.tail $ tsStmtStack s }
-  return ()
+  TR.traceSyntax stmt $ translateStatement' ov stmt
 
 assertExpr :: Overrides arch
            -> AS.Expr
@@ -332,12 +405,12 @@ assertAtom ov test mexpr msg = do
   case mexpr of
     Just (AS.ExprVarRef (AS.QualifiedIdentifier _ "FALSE")) -> return ()
     Just expr ->
-      CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.TextLit $ msg <> (T.pack $ "Expression: " <> show expr)))
-    _ -> CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.TextLit msg))
+      liftGenerator $ CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.TextLit $ msg <> (T.pack $ "Expression: " <> show expr)))
+    _ -> liftGenerator $ CCG.assertExpr (CCG.AtomExpr test) (CCG.App (CCE.TextLit msg))
   Some assertTrippedE <- lookupVarRef assertionfailureVarName
-  assertTripped <- CCG.mkAtom assertTrippedE
+  assertTripped <- mkAtom assertTrippedE
   Refl <- assertAtomType' CT.BoolRepr assertTripped
-  result <- CCG.mkAtom $ CCG.App (CCE.Or (CCG.AtomExpr assertTripped) (CCG.AtomExpr test))
+  result <- mkAtom $ CCG.App (CCE.Or (CCG.AtomExpr assertTripped) (CCG.AtomExpr test))
   translateAssignment' ov (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny assertionfailureVarName)) result TypeBasic Nothing
 
 crucibleToStaticType :: Some CT.TypeRepr -> Maybe StaticType
@@ -361,7 +434,7 @@ abnormalExit ov = do
   SomeFunctionSignature sig <- MS.gets tsSig
   let retT = CT.SymbolicStructRepr (funcRetRepr sig)
   let expr = getDefaultValue retT
-  atom <- CCG.mkAtom expr
+  atom <- mkAtom expr
   returnWithGlobals atom
 
 returnWithGlobals :: ret ~ FuncReturn globalWrites tps
@@ -372,7 +445,7 @@ returnWithGlobals retVal = do
   SomeFunctionSignature sig <- MS.gets tsSig
   let rep = funcSigRepr sig
   let globalBaseTypes = FC.fmapFC projectValue (funcGlobalWriteReprs sig)
-  withGlobals (funcGlobalWriteReprs sig) $ \globalBaseTypes globals -> do
+  withGlobals (funcGlobalWriteReprs sig) $ \globalBaseTypes globals -> liftGenerator $ do
     globalsSnapshot <- CCG.extensionStmt (GetRegState globalBaseTypes globals)
     let result = MkBaseStruct
           (Ctx.empty Ctx.:> CT.SymbolicStructRepr globalBaseTypes Ctx.:> retT)
@@ -421,12 +494,12 @@ translateStatement' ov stmt
               Refl <- assertAtomType test CT.BoolRepr testA
               return (CCG.AtomExpr testA)
         let bodyG = mapM_ (translateStatement ov) body
-        CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+        liftGenerator2 testG bodyG $ \testG' bodyG' ->
+          CCG.while (WP.InternalPos, testG') (WP.InternalPos, bodyG')
       AS.StmtRepeat body test -> translateRepeat ov body test
       AS.StmtFor var (lo, hi) body -> translateFor ov var lo hi body
       AS.StmtCall qIdent args -> do
-        ret <- translateFunctionCall ov qIdent args ConstraintNone
-        case ret of
+        translateFunctionCall ov qIdent args ConstraintNone >>= \case
           Nothing -> return ()
           _ -> throwTrace $ UnexpectedReturnInStmtCall
 
@@ -452,28 +525,28 @@ translateFunctionCall ov qIdent args ty = do
 
           withGlobals (sfuncGlobalReadReprs sig) $ \globalReprs globals -> do
             let globalsType = CT.baseToType (WT.BaseStructRepr globalReprs)
-            globalsSnapshot <- CCG.extensionStmt (GetRegState globalReprs globals)
+            globalsSnapshot <- liftGenerator $ CCG.extensionStmt (GetRegState globalReprs globals)
             let vals = FC.fmapFC CCG.AtomExpr argAssign
             let ufGlobalRep = WT.BaseStructRepr (FC.fmapFC projectValue (sfuncGlobalWriteReprs sig))
             let ufCtx = (Ctx.empty Ctx.:> ufGlobalRep Ctx.:> retT)
             let uf = UF finalIdent (WT.BaseStructRepr ufCtx) (atomTypes Ctx.:> globalsType) (vals Ctx.:> globalsSnapshot)
-            atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp uf))
+            atom <- mkAtom (CCG.App (CCE.ExtensionApp uf))
             let globalResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i1of2 (CCG.AtomExpr atom)
             thisSig <- MS.gets tsSig
-            withGlobals (sfuncGlobalWriteReprs sig) $ \thisGlobalReprs thisGlobals -> do
+            withGlobals (sfuncGlobalWriteReprs sig) $ \thisGlobalReprs thisGlobals -> liftGenerator $ do
               _ <- CCG.extensionStmt (SetRegState thisGlobals (CCG.App $ CCE.ExtensionApp globalResult))
               return ()
-            globalResultAtom <- CCG.mkAtom $ CCG.App $ CCE.ExtensionApp $ globalResult
+            globalResultAtom <- mkAtom $ CCG.App $ CCE.ExtensionApp $ globalResult
             -- Ctx.traverseAndCollect (checkEarlyExit globalResultAtom) (sfuncGlobalWriteReprs sig)
             let returnResult = GetBaseStruct (CT.SymbolicStructRepr ufCtx) Ctx.i2of2 (CCG.AtomExpr atom)
-            result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
+            result <- mkAtom (CCG.App $ CCE.ExtensionApp returnResult)
             case retT of
               WT.BaseStructRepr ctx@(Ctx.Empty Ctx.:> retT') -> do
                 let [ret] = sfuncRet sig
                 ext <- mkExtendedTypeData ret
                 let retTC = CT.SymbolicStructRepr ctx
                 let returnResult' = GetBaseStruct retTC (Ctx.baseIndex) (CCG.AtomExpr result)
-                result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp returnResult')
+                result <- mkAtom (CCG.App $ CCE.ExtensionApp returnResult')
                 return $ Just $ (Some result, ext)
               WT.BaseStructRepr _ -> do
                 exts <- mapM mkExtendedTypeData (sfuncRet sig)
@@ -501,9 +574,10 @@ translateFunctionCall ov qIdent args ty = do
       if globName `elem` [endofinstructionVarName]
       then do
         let testE = GetBaseStruct (CCG.typeOfAtom struct) idx (CCG.AtomExpr struct)
-        test <- CCG.mkAtom $ CCG.App $ CCE.ExtensionApp $ testE
+        test <- mkAtom $ CCG.App $ CCE.ExtensionApp $ testE
         Refl <- assertAtomType' CT.BoolRepr test
-        CCG.ifte_ (CCG.AtomExpr test) (abnormalExit ov) (return ())
+        liftGenerator2 (abnormalExit ov) (return ()) $ \exit ret ->
+          CCG.ifte_ (CCG.AtomExpr test) exit ret
       else return ()
 
 
@@ -542,7 +616,7 @@ translateFor ov var lo hi body = do
         Just (Some lreg) -> do
           Some atom <- translateExpr ov lo
           Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
-          CCG.assignReg lreg (CCG.AtomExpr atom)
+          liftGenerator $ CCG.assignReg lreg (CCG.AtomExpr atom)
         _ -> do
           let ty = AS.TypeRef (AS.QualifiedIdentifier AS.ArchQualAny (T.pack "integer"))
           translateDefinedVar ov ty var lo
@@ -557,7 +631,8 @@ translateFor ov var lo hi body = do
               (AS.ExprBinOp AS.BinOpAdd (AS.ExprVarRef ident) (AS.ExprLitInt 1))
 
       let bodyG = mapM_ (translateStatement ov) (body ++ [increment])
-      CCG.while (WP.InternalPos, testG) (WP.InternalPos, bodyG)
+      liftGenerator2 testG bodyG $ \testG' bodyG' ->
+        CCG.while (WP.InternalPos, testG') (WP.InternalPos, bodyG')
 
 
 unrollFor :: Overrides arch
@@ -577,18 +652,18 @@ translateRepeat :: Overrides arch
                 -> [AS.Stmt]
                 -> AS.Expr
                 -> Generator h s arch ret ()
-translateRepeat ov body test = do
+translateRepeat ov body test = liftGenerator $ do
   cond_lbl <- CCG.newLabel
   loop_lbl <- CCG.newLabel
   exit_lbl <- CCG.newLabel
 
   CCG.defineBlock loop_lbl $ do
-    mapM_ (translateStatement ov) body
+    unliftGenerator $ mapM_ (translateStatement ov) body
     CCG.jump cond_lbl
 
   CCG.defineBlock cond_lbl $ do
-    Some testA <- translateExpr ov test
-    Refl <- assertAtomType test CT.BoolRepr testA
+    Some testA <- unliftGenerator $ translateExpr ov test
+    Refl <- unliftGenerator $ assertAtomType test CT.BoolRepr testA
     CCG.branch (CCG.AtomExpr testA) loop_lbl exit_lbl
 
   CCG.continue exit_lbl (CCG.jump loop_lbl)
@@ -606,7 +681,7 @@ translateDefinedVar ov ty ident expr = do
   when (Map.member ident locals) $ do
     X.throw (LocalAlreadyDefined ident)
   putExtendedTypeData ident ext
-  reg <- CCG.newReg (CCG.AtomExpr atom)
+  reg <- Generator $ CCG.newReg (CCG.AtomExpr atom)
   MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
 
@@ -745,16 +820,16 @@ translateAssignment'' ov lval atom constraint atomext mE = do
       case Map.lookup ident locals of
         Just (Some lreg) -> do
           Refl <- assertAtomType' (CCG.typeOfReg lreg) atom
-          CCG.assignReg lreg (CCG.AtomExpr atom)
+          Generator $ CCG.assignReg lreg (CCG.AtomExpr atom)
         Nothing -> do
           globals <- MS.gets tsGlobals
           case Map.lookup ident globals of
             Just (Some gv) -> do
               Refl <- assertAtomType' (CCG.globalType gv) atom
-              CCG.writeGlobal gv (CCG.AtomExpr atom)
+              Generator $ CCG.writeGlobal gv (CCG.AtomExpr atom)
             Nothing -> do
               let atomType = CCG.typeOfAtom atom
-              reg <- CCG.newReg (CCG.AtomExpr atom)
+              reg <- Generator $ CCG.newReg (CCG.AtomExpr atom)
               MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
     AS.LValMember struct memberName -> do
       Just lve <- return $ lValToExpr struct
@@ -775,7 +850,7 @@ translateAssignment'' ov lval atom constraint atomext mE = do
                 let fields = Ctx.generate (Ctx.size ctps) (getStructField tps ctps structAtom)
                 let idx' = fromBaseIndex tps ctps idx
                 let newStructAsn = fields & (ixF idx') .~ (CCG.AtomExpr atom)
-                newStruct <- CCG.mkAtom $ CCG.App $ CCE.ExtensionApp $ MkBaseStruct ctps newStructAsn
+                newStruct <- mkAtom $ CCG.App $ CCE.ExtensionApp $ MkBaseStruct ctps newStructAsn
                 translateAssignment' ov struct newStruct ext Nothing
             _ -> throwTrace $ InvalidStructUpdate lval (CCG.typeOfAtom atom)
         _ -> throwTrace $ UnexpectedExtendedType lve ext
@@ -803,7 +878,7 @@ translateAssignment'' ov lval atom constraint atomext mE = do
 
     AS.LValArrayIndex ref@(AS.LValVarRef (AS.QualifiedIdentifier _ arrName)) [AS.SliceSingle slice] -> do
         Some e <- lookupVarRef arrName
-        arrAtom <- CCG.mkAtom e
+        arrAtom <- mkAtom e
         Some idxAtom <- translateExpr ov slice
         if | CT.AsBaseType bt <- CT.asBaseType (CCG.typeOfAtom idxAtom)
            , CT.SymbolicArrayRepr (Ctx.Empty Ctx.:> bt') retTy <- CCG.typeOfAtom arrAtom
@@ -813,7 +888,7 @@ translateAssignment'' ov lval atom constraint atomext mE = do
            -> do
                let asn = Ctx.singleton (CCE.BaseTerm bt (CCG.AtomExpr idxAtom))
                let arr = CCG.App $ CCE.SymArrayUpdate retTy (CCG.AtomExpr arrAtom) asn (CCG.AtomExpr atom)
-               newArr <- CCG.mkAtom arr
+               newArr <- mkAtom arr
                translateAssignment' ov ref newArr TypeBasic Nothing
            | otherwise -> error $ "Invalid array assignment: " ++ show lval
 
@@ -862,7 +937,7 @@ translateAssignment'' ov lval atom constraint atomext mE = do
                          -> Generator h s arch ret ()
           assignTupleElt lvals exts tps struct ix _ = do
             let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
-            getAtom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+            getAtom <- mkAtom (CCG.App (CCE.ExtensionApp getStruct))
             let ixv = Ctx.indexVal ix
             translateAssignment' ov (lvals !! ixv) getAtom (exts !! ixv) Nothing
 
@@ -928,7 +1003,7 @@ translatelValSlice ov lv slice asnAtom' constraint = do
            Ctx.:> (CCG.AtomExpr hiAtom)
            Ctx.:> (CCG.AtomExpr asnAtom)
            Ctx.:> (CCG.AtomExpr atom))
-  result <- CCG.mkAtom (CCG.App $ CCE.ExtensionApp uf)
+  result <- mkAtom (CCG.App $ CCE.ExtensionApp uf)
   translateAssignment' ov lv result TypeBasic Nothing
 
 
@@ -969,7 +1044,7 @@ declareUndefinedVar ty ident = do
   case tty of
     Some rep -> do
       e <- return $ getDefaultValue rep
-      reg <- CCG.newReg e
+      reg <- Generator $ CCG.newReg e
       MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
 
@@ -1150,7 +1225,7 @@ unifyType aslT constraint = do
 
 dependentVarsOfType :: AS.Type -> [T.Text]
 dependentVarsOfType t = case t of
-  AS.TypeFun "bits" e -> ASLT.varsOfExpr e
+  AS.TypeFun "bits" e -> TR.varsOfExpr e
   _ -> []
 
 
@@ -1255,7 +1330,7 @@ initVars regs = do
     mapM_ initVar regs
   where
     initVar (Some reg) =
-      CCG.assignReg reg (getDefaultValue (CCG.typeOfReg reg))
+      Generator $ CCG.assignReg reg (getDefaultValue (CCG.typeOfReg reg))
 
 -- | Statement-level if-then-else. Newly assigned variables from
 -- either branch are implicitly assigned to default
@@ -1264,12 +1339,12 @@ ifte_ :: CCG.Expr (ASLExt arch) s CT.BoolType
       -> Generator h s arch ret () -- ^ true branch
       -> Generator h s arch ret () -- ^ false branch
       -> Generator h s arch ret ()
-ifte_ e x y = do
-  c_id <- CCG.newLabel
-  (newvarsThen, x_id) <- getNewVars (CCG.defineBlockLabel $ x >> CCG.jump c_id)
-  (newvarsElse, y_id) <- getNewVars (CCG.defineBlockLabel $ y >> CCG.jump c_id)
+ifte_ e (Generator x) (Generator y) = do
+  c_id <- Generator $ CCG.newLabel
+  (newvarsThen, x_id) <- getNewVars (Generator $ (CCG.defineBlockLabel $ x >> CCG.jump c_id))
+  (newvarsElse, y_id) <- getNewVars (Generator $ (CCG.defineBlockLabel $ y >> CCG.jump c_id))
   initVars $ newvarsThen ++ newvarsElse
-  CCG.continue c_id (CCG.branch e x_id y_id)
+  Generator $ CCG.continue c_id (CCG.branch e x_id y_id)
 
 translateIf :: Overrides arch
             -> [(AS.Expr, [AS.Stmt])]
@@ -1359,10 +1434,11 @@ translateExpr' :: Overrides arch
               -> TypeConstraint
               -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
 translateExpr' ov expr constraint = do
-  MS.modify' $ \s -> s { tsExprStack = (expr, constraint) : (tsExprStack s) }
-  r <- translateExpr'' ov expr constraint
-  MS.modify' $ \s -> s { tsExprStack = List.tail $ tsExprStack s }
-  return r
+  c <- MS.gets tsExprConstraint
+  MS.modify' $ \s -> s { tsExprConstraint = Just constraint }
+  a <- TR.traceSyntax expr $ translateExpr'' ov expr constraint
+  MS.modify' $ \s -> s { tsExprConstraint = c}
+  return a
 
 getStaticValue :: AS.Expr
                -> Generator h s arch ret (Maybe (StaticValue))
@@ -1406,17 +1482,17 @@ translateExpr'' ov expr ty = do
     _ -> do
       mStatic <- getStaticValue expr
       case mStatic of
-        Just (StaticInt i) -> mkAtom (CCG.App (CCE.IntLit i))
-        Just (StaticBool b) -> mkAtom (CCG.App (CCE.BoolLit b))
+        Just (StaticInt i) -> mkAtom' (CCG.App (CCE.IntLit i))
+        Just (StaticBool b) -> mkAtom' (CCG.App (CCE.BoolLit b))
         _ -> case expr of
-          AS.ExprLitInt i -> mkAtom (CCG.App (CCE.IntLit i))
+          AS.ExprLitInt i -> mkAtom' (CCG.App (CCE.IntLit i))
           AS.ExprLitBin bits
             | Some exp <- bitsToBVExpr bits ->
-              mkAtom exp
+              mkAtom' exp
 
           AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> do
             Some e <- lookupVarRef ident
-            atom <- CCG.mkAtom e
+            atom <- mkAtom e
             ext <- getExtendedTypeData ident
             return (Some atom, ext)
 
@@ -1439,14 +1515,14 @@ translateExpr'' ov expr ty = do
                 let reprs = FC.fmapFC CCG.typeOfAtom asgn
                 let atomExprs = FC.fmapFC CCG.AtomExpr asgn
                 let struct = MkBaseStruct reprs atomExprs
-                atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp struct))
+                atom <- mkAtom (CCG.App (CCE.ExtensionApp struct))
                 return (Some atom, TypeTuple exts)
 
           AS.ExprInSet e elts -> do
             Some atom <- translateExpr ov e
             when (null elts) $ X.throw (EmptySetElementList expr)
             preds <- mapM (translateSetElementTest ov expr atom) elts
-            mkAtom (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
+            mkAtom' (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
           AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
 
           AS.ExprCall qIdent args -> do
@@ -1457,7 +1533,7 @@ translateExpr'' ov expr ty = do
           -- FIXME: Should this trip a global flag?
           AS.ExprImpDef _ t -> do
             Some ty <- translateType t
-            mkAtom (getDefaultValue ty)
+            mkAtom' (getDefaultValue ty)
 
           AS.ExprMember struct memberName -> do
             (Some structAtom, ext) <- translateExpr' ov struct ConstraintNone
@@ -1473,7 +1549,7 @@ translateExpr'' ov expr ty = do
                   (CT.SymbolicStructRepr tps, Just (StructAccessor repr idx fieldExt)) |
                     Just Refl <- testEquality tps repr -> do
                       let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) idx (CCG.AtomExpr structAtom)
-                      atom <- CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+                      atom <- mkAtom (CCG.App (CCE.ExtensionApp getStruct))
                       return (Some atom, fieldExt)
                   _ -> throwTrace $ MissingStructField struct memberName
               _ -> do
@@ -1504,17 +1580,14 @@ translateExpr'' ov expr ty = do
                    ext' <- case ext of
                      TypeArray ext' -> return ext'
                      _ -> return TypeBasic
-                   atom' <- CCG.mkAtom (CCG.App arr)
+                   atom' <- mkAtom (CCG.App arr)
                    return (Some atom', ext')
                | otherwise -> throwTrace $ UnsupportedExpr expr
           AS.ExprUnknown t -> do
             Some ty <- translateType t
-            mkAtom (getDefaultValue ty)
+            mkAtom' (getDefaultValue ty)
           _ -> throwTrace $ UnsupportedExpr expr
   where
-    mkAtom e = do
-      atom <- CCG.mkAtom e
-      return (Some atom, TypeBasic)
     basicExpr f = do
       satom <- f
       return (satom, TypeBasic)
@@ -1535,7 +1608,7 @@ getIndexOfLabel :: Ctx.Assignment WT.BaseTypeRepr tps
 getIndexOfLabel tps lbl struct ix val =
   if projectLabel val == lbl then do
     let getStruct = GetBaseStruct (CT.SymbolicStructRepr tps) ix (CCG.AtomExpr struct)
-    getAtom <- MSS.lift $ CCG.mkAtom (CCG.App (CCE.ExtensionApp getStruct))
+    getAtom <- MSS.lift $ mkAtom (CCG.App (CCE.ExtensionApp getStruct))
     MS.put (Just $ Some getAtom)
   else return ()
 
@@ -1661,7 +1734,7 @@ getSliceRange ov slice slicedAtom constraint = do
           case SE.exprToStatic env hi of
             Just (StaticInt hi') | Some (BVRepr hiRepr) <- intToBVRepr (hi'+1) ->
                 if | Just WT.LeqProof <- lenRepr `WT.testLeq` hiRepr -> do
-                     intAtom <- CCG.mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
+                     intAtom <- mkAtom $ CCG.App (CCE.IntegerToBV hiRepr (CCG.AtomExpr slicedAtom))
                      return $ SliceRange signed lenRepr hiRepr loAtom hiAtom intAtom
                    | otherwise -> throwTrace $ InvalidSymbolicSlice lenRepr hiRepr
             _ -> throwTrace $ RequiredConcreteValue hi (staticEnvMapVals env)
@@ -1696,7 +1769,7 @@ sliceValidTests ov (SliceRange _ lenRepr wRepr loAtom hiAtom atom) = let
     in mapM_ mkTest tests
   where
     mkTest test = do
-      atest <- CCG.mkAtom test
+      atest <- mkAtom test
       assertAtom ov atest Nothing ("Slicing constraint failure: " <> (T.pack $ show test))
 
 translateSlice' :: Overrides arch
@@ -1714,7 +1787,7 @@ translateSlice' ov atom' slice constraint = do
       uf = UF "SymbolicSlice" (CT.BaseBVRepr lenRepr)
         (Ctx.empty Ctx.:> CT.BoolRepr Ctx.:> CT.IntegerRepr Ctx.:> CT.IntegerRepr)
         (Ctx.empty Ctx.:> (CCG.App (CCE.BoolLit True)) Ctx.:> (CCG.AtomExpr loAtom) Ctx.:> (CCG.AtomExpr hiAtom))
-      in Some <$> CCG.mkAtom (CCG.App $ CCE.ExtensionApp uf)
+      in Some <$> mkAtom (CCG.App $ CCE.ExtensionApp uf)
     _ -> throwTrace $ UnsupportedSlice slice constraint
 
 withStaticTest :: AS.Expr
@@ -1751,7 +1824,7 @@ translateIfExpr ov orig clauses elseExpr =
       case CT.asBaseType (CCG.typeOfAtom elseA) of
         CT.NotBaseType -> X.throw (ExpectedBaseType orig (CCG.typeOfAtom elseA))
         CT.AsBaseType btr -> do
-          atom <- CCG.mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr elseA)))
+          atom <- mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr elseA)))
           return (Some atom, ext)
     (test, res) : rest ->
       withStaticTest test
@@ -1766,7 +1839,7 @@ translateIfExpr ov orig clauses elseExpr =
       case CT.asBaseType (CCG.typeOfAtom trA) of
         CT.NotBaseType -> X.throw (ExpectedBaseType orig (CCG.typeOfAtom trA))
         CT.AsBaseType btr -> do
-          atom <- CCG.mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr trA)))
+          atom <- mkAtom (CCG.App (CCE.BaseIte btr (CCG.AtomExpr testA) (CCG.AtomExpr resA) (CCG.AtomExpr trA)))
           return (Some atom, ext)
 
 maskToBV :: AS.Mask -> AS.BitVector
@@ -1848,18 +1921,18 @@ translateBinaryOp ov op e1 e2 tc = do
     AS.BinOpNEQ -> do
       Some atom <- applyBinOp eqOp p1 p2
       Refl <- assertAtomType (AS.ExprBinOp op e1 e2) CT.BoolRepr atom
-      Some <$> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
+      Some <$> mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
     AS.BinOpGT -> do
       -- NOTE: We always use unsigned comparison for bitvectors - is that correct?
       Some atom <- applyBinOp leOp p1 p2
       Refl <- assertAtomType (AS.ExprBinOp op e1 e2) CT.BoolRepr atom
-      Some <$> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
+      Some <$> mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
     AS.BinOpLTEQ -> applyBinOp leOp p1 p2
     AS.BinOpLT -> applyBinOp ltOp p1 p2
     AS.BinOpGTEQ -> do
       Some atom <- applyBinOp ltOp p1 p2
       Refl <- assertAtomType (AS.ExprBinOp op e1 e2) CT.BoolRepr atom
-      Some <$> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
+      Some <$> mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
     AS.BinOpAdd -> applyBinOp addOp p1 p2
     AS.BinOpSub -> applyBinOp subOp p1 p2
     AS.BinOpMul -> applyBinOp mulOp p1 p2
@@ -1875,7 +1948,7 @@ translateBinaryOp ov op e1 e2 tc = do
       BVRepr n2 <- getAtomBVRepr a2
       Just n1PosProof <- return $ WT.isPosNat n1
       WT.LeqProof <- return $ WT.leqAdd n1PosProof n2
-      Some <$> CCG.mkAtom (CCG.App (CCE.BVConcat n1 n2 (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      Some <$> mkAtom (CCG.App (CCE.BVConcat n1 n2 (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     AS.BinOpPow
       | Just (StaticInt 2) <- SE.exprToStatic env e1 -> do
         Refl <- assertAtomType e2 CT.IntegerRepr a2
@@ -1883,7 +1956,7 @@ translateBinaryOp ov op e1 e2 tc = do
         let shift = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr a2)
         let base = CCG.App $ CCE.BVLit nr 1
         let shifted = CCG.App $ (CCE.BVShl nr base shift)
-        Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger nr shifted))
+        Some <$> mkAtom (CCG.App (CCE.BvToInteger nr shifted))
 
     _ -> X.throw (UnsupportedBinaryOperator op)
 
@@ -1982,28 +2055,28 @@ applyBinOp bundle (e1, a1) (e2, a2) =
       case CCG.typeOfAtom a2 of
         CT.IntegerRepr -> do
             let a2' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a2))
-            Some <$> CCG.mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) a2'))
+            Some <$> mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) a2'))
         _ -> do
           Refl <- assertAtomType e2 (CT.BVRepr nr) a2
-          Some <$> CCG.mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+          Some <$> mkAtom (CCG.App (obBV bundle nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     CT.NatRepr -> do
       Refl <- assertAtomType e2 CT.NatRepr a2
-      Some <$> CCG.mkAtom (CCG.App (obNat bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+      Some <$> mkAtom (CCG.App (obNat bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     CT.IntegerRepr -> do
       case CCG.typeOfAtom a2 of
         CT.BVRepr nr -> do
           let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
-          Some <$> CCG.mkAtom (CCG.App (obBV bundle nr a1' (CCG.AtomExpr a2)))
+          Some <$> mkAtom (CCG.App (obBV bundle nr a1' (CCG.AtomExpr a2)))
         _ -> do
           Refl <- assertAtomType e2 CT.IntegerRepr a2
-          Some <$> CCG.mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+          Some <$> mkAtom (CCG.App (obInt bundle (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     CT.BoolRepr -> do
       case CCG.typeOfAtom a2 of
         CT.BoolRepr -> do
           let nr = WT.knownNat @1
           let a1' = CCG.App $ CCE.BoolToBV nr (CCG.AtomExpr a1)
           let a2' = CCG.App $ CCE.BoolToBV nr (CCG.AtomExpr a2)
-          Some <$> CCG.mkAtom (CCG.App (obBV bundle nr a1' a2'))
+          Some <$> mkAtom (CCG.App (obBV bundle nr a1' a2'))
 
     _ -> X.throw (UnsupportedComparisonType e1 (CCG.typeOfAtom a1))
 
@@ -2018,20 +2091,20 @@ bvBinOp con (e1, a1) (e2, a2) =
       case CCG.typeOfAtom a2 of
         CT.IntegerRepr -> do
           let a2' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a2))
-          Some <$> CCG.mkAtom (CCG.App (con nr (CCG.AtomExpr a1) a2'))
+          Some <$> mkAtom (CCG.App (con nr (CCG.AtomExpr a1) a2'))
         _ -> do
           Refl <- assertAtomType e2 (CT.BVRepr nr) a2
-          Some <$> CCG.mkAtom (CCG.App (con nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+          Some <$> mkAtom (CCG.App (con nr (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
     CT.IntegerRepr -> do
       case CCG.typeOfAtom a2 of
         CT.BVRepr nr -> do
           let a1' = CCG.App (CCE.IntegerToBV nr (CCG.AtomExpr a1))
-          Some <$> CCG.mkAtom (CCG.App (con nr a1' (CCG.AtomExpr a2)))
+          Some <$> mkAtom (CCG.App (con nr a1' (CCG.AtomExpr a2)))
         CT.IntegerRepr -> do
           let bvrepr = WT.knownNat @64
           let a1' = CCG.App $ CCE.IntegerToBV bvrepr (CCG.AtomExpr a1)
           let a2' = CCG.App $ CCE.IntegerToBV bvrepr (CCG.AtomExpr a2)
-          Some <$> CCG.mkAtom (CCG.App (CCE.BvToInteger bvrepr (CCG.App (con bvrepr a1' a2'))))
+          Some <$> mkAtom (CCG.App (CCE.BvToInteger bvrepr (CCG.App (con bvrepr a1' a2'))))
         _ -> throwTrace (ExpectedBVType e1 (CCG.typeOfAtom a2))
     _ -> throwTrace $ (ExpectedBVType e1 (CCG.typeOfAtom a1))
 
@@ -2043,7 +2116,7 @@ logicalBinOp :: (ext ~ ASLExt arch)
 logicalBinOp con (e1, a1) (e2, a2) = do
   Refl <- assertAtomType e1 CT.BoolRepr a1
   Refl <- assertAtomType e2 CT.BoolRepr a2
-  Some <$> CCG.mkAtom (CCG.App (con (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
+  Some <$> mkAtom (CCG.App (con (CCG.AtomExpr a1) (CCG.AtomExpr a2)))
 
 translateUnaryOp :: Overrides arch
                  -> AS.UnOp
@@ -2055,14 +2128,14 @@ translateUnaryOp ov op expr = do
     AS.UnOpNot -> do
       case CCG.typeOfAtom atom of
         CT.BVRepr nr -> do
-          Some <$> CCG.mkAtom (CCG.App (CCE.BVNot nr (CCG.AtomExpr atom)))
+          Some <$> mkAtom (CCG.App (CCE.BVNot nr (CCG.AtomExpr atom)))
         CT.BoolRepr -> do
-          Some <$> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
+          Some <$> mkAtom (CCG.App (CCE.Not (CCG.AtomExpr atom)))
         _ -> throwTrace $ UnexpectedExprType (Just expr) (CCG.typeOfAtom atom) (CT.BoolRepr)
     AS.UnOpNeg ->
       case CCG.typeOfAtom atom of
         CT.IntegerRepr -> do
-          Some <$> CCG.mkAtom (CCG.App (CCE.IntNeg (CCG.AtomExpr atom)))
+          Some <$> mkAtom (CCG.App (CCE.IntNeg (CCG.AtomExpr atom)))
         _ -> throwTrace $ UnexpectedExprType (Just expr) (CCG.typeOfAtom atom) (CT.BoolRepr)
 
 translateKnownVar :: (Some CT.TypeRepr)
@@ -2074,7 +2147,7 @@ translateKnownVar (Some expected) ident (Some atom) = do
   locals <- MS.gets tsVarRefs
   when (Map.member ident locals) $ do
     X.throw (LocalAlreadyDefined ident)
-  reg <- CCG.newReg (CCG.AtomExpr atom)
+  reg <- liftGenerator $ CCG.newReg (CCG.AtomExpr atom)
   MS.modify' $ \s -> s { tsVarRefs = Map.insert ident (Some reg) locals }
 
 data BVAtomPair s where
@@ -2095,10 +2168,10 @@ matchBVSizes atom1 atom2 = do
     WT.NatCaseEQ ->
       return $ BVAtomPair wRepr1 atom1 atom2
     WT.NatCaseLT WT.LeqProof -> do
-      atom1' <- CCG.mkAtom (CCG.App (CCE.BVZext wRepr2 wRepr1 (CCG.AtomExpr atom1)))
+      atom1' <- mkAtom (CCG.App (CCE.BVZext wRepr2 wRepr1 (CCG.AtomExpr atom1)))
       return $ BVAtomPair wRepr2 atom1' atom2
     WT.NatCaseGT WT.LeqProof -> do
-      atom2' <- CCG.mkAtom (CCG.App (CCE.BVZext wRepr1 wRepr2 (CCG.AtomExpr atom2)))
+      atom2' <- mkAtom (CCG.App (CCE.BVZext wRepr1 wRepr2 (CCG.AtomExpr atom2)))
       return $ BVAtomPair wRepr1 atom1 atom2'
 
 extBVAtom :: 1 WT.<= w
@@ -2113,7 +2186,7 @@ extBVAtom signed repr atom = do
       return atom
     WT.NatCaseLT WT.LeqProof -> do
       let bop = if signed then CCE.BVSext else CCE.BVZext
-      atom' <- CCG.mkAtom (CCG.App (bop repr atomRepr (CCG.AtomExpr atom)))
+      atom' <- mkAtom (CCG.App (bop repr atomRepr (CCG.AtomExpr atom)))
       return atom'
     _ -> throwTrace $ UnexpectedBitvectorLength (CT.BVRepr atomRepr) (CT.BVRepr repr)
 
@@ -2189,22 +2262,22 @@ getSymbolicBVLength e = case e of
       | nm == "Zeros" || nm == "Ones" -> Just $ do
         (Some argAtom) <- translateExpr overrides e
         Refl <- assertAtomType e CT.IntegerRepr argAtom
-        CCG.mkAtom $ CCG.AtomExpr argAtom
+        mkAtom $ CCG.AtomExpr argAtom
     AS.ExprLitBin bits -> Just $ do
-      CCG.mkAtom $ CCG.App $ CCE.IntLit $ fromIntegral $ length bits
+      mkAtom $ CCG.App $ CCE.IntLit $ fromIntegral $ length bits
     AS.ExprSlice _ [slice] -> Just $ do
       (loAtom, hiAtom) <- getSymbolicSliceRange overrides slice
-      CCG.mkAtom $ CCG.App $ CCE.IntSub (CCG.AtomExpr hiAtom) (CCG.AtomExpr loAtom)
+      mkAtom $ CCG.App $ CCE.IntSub (CCG.AtomExpr hiAtom) (CCG.AtomExpr loAtom)
     AS.ExprVarRef (AS.QualifiedIdentifier _ ident) -> Just $ do
       mTy <- lookupVarType ident
       case mTy of
         Just (Some (CT.BVRepr wRepr)) ->
-          CCG.mkAtom $ CCG.App $ CCE.IntLit $ WT.intValue wRepr
+          mkAtom $ CCG.App $ CCE.IntLit $ WT.intValue wRepr
         _ -> throwTrace $ UnboundName ident
     AS.ExprBinOp AS.BinOpConcat e1 e2
       | Just f1 <- getSymbolicBVLength e1
       , Just f2 <- getSymbolicBVLength e2 -> Just $ f1 >>= \len1 -> f2 >>= \len2 ->
-        CCG.mkAtom $ CCG.App $ CCE.IntAdd (CCG.AtomExpr len1) (CCG.AtomExpr len2)
+        mkAtom $ CCG.App $ CCE.IntAdd (CCG.AtomExpr len1) (CCG.AtomExpr len2)
     _ -> Nothing
 
 list1ToMaybe :: [a] -> Maybe (Maybe a)
@@ -2213,10 +2286,10 @@ list1ToMaybe xs = case xs of
   [] -> Just Nothing
   _ -> Nothing
 
-mkAtom :: CCG.Expr (ASLExt arch) s tp
-       -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
-mkAtom e = do
-  atom <- CCG.mkAtom e
+mkAtom' :: CCG.Expr (ASLExt arch) s tp
+        -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
+mkAtom' e = do
+  atom <- mkAtom e
   return (Some atom, TypeBasic)
 
 -- Overrides to handle cases where bitvector lengths cannot be
@@ -2237,7 +2310,7 @@ polymorphicBVOverrides e ty env = case e of
         Refl <- assertAtomType' CT.BoolRepr result'
         result <- case bop of
           AS.BinOpEQ -> return result'
-          AS.BinOpNEQ -> CCG.mkAtom (CCG.App (CCE.Not (CCG.AtomExpr result')))
+          AS.BinOpNEQ -> mkAtom (CCG.App (CCE.Not (CCG.AtomExpr result')))
         return (Some result, TypeBasic)
   AS.ExprBinOp AS.BinOpConcat expr1 (AS.ExprCall (AS.VarName "Zeros") [expr2])
     | Just (StaticInt 0) <- SE.exprToStatic env expr2 ->
@@ -2268,7 +2341,7 @@ polymorphicBVOverrides e ty env = case e of
             return $ CCG.App $ CCE.IntegerToBV wRepr $ (CCG.AtomExpr len2)
         let atom1Shifted = CCG.App $ CCE.BVShl wRepr (CCG.AtomExpr atom1) shift
 
-        result <- CCG.mkAtom $ CCG.App $ CCE.BVOr wRepr atom1Shifted (CCG.AtomExpr atom2)
+        result <- mkAtom $ CCG.App $ CCE.BVOr wRepr atom1Shifted (CCG.AtomExpr atom2)
         return (Some result, TypeBasic)
 
   AS.ExprCall (AS.QualifiedIdentifier _ "Int") [argExpr, isUnsigned] -> Just $ do
@@ -2277,27 +2350,27 @@ polymorphicBVOverrides e ty env = case e of
 
     (Some ubvatom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
     BVRepr unr <- getAtomBVRepr ubvatom
-    uatom <- CCG.mkAtom $ CCG.App $ CCE.BvToInteger unr (CCG.AtomExpr ubvatom)
+    uatom <- mkAtom $ CCG.App $ CCE.BvToInteger unr (CCG.AtomExpr ubvatom)
 
     (Some sbvatom, _) <- translateExpr' overrides argExpr ConstraintNone
     BVRepr snr <- getAtomBVRepr sbvatom
-    satom <- CCG.mkAtom $ CCG.App $ CCE.SbvToInteger snr (CCG.AtomExpr sbvatom)
+    satom <- mkAtom $ CCG.App $ CCE.SbvToInteger snr (CCG.AtomExpr sbvatom)
     Just Refl <- return $ testEquality unr snr
 
-    mkAtom $ CCG.App $ CCE.BaseIte CT.BaseIntegerRepr (CCG.AtomExpr unsigned) (CCG.AtomExpr uatom) (CCG.AtomExpr satom)
+    mkAtom' $ CCG.App $ CCE.BaseIte CT.BaseIntegerRepr (CCG.AtomExpr unsigned) (CCG.AtomExpr uatom) (CCG.AtomExpr satom)
   AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [argExpr] -> Just $ do
     (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
     BVRepr nr <- getAtomBVRepr atom
-    mkAtom (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
+    mkAtom' (CCG.App (CCE.BvToInteger nr (CCG.AtomExpr atom)))
 
   AS.ExprCall (AS.QualifiedIdentifier _ "SInt") [argExpr] -> Just $ do
     Some atom <- translateExpr overrides argExpr
     BVRepr nr <- getAtomBVRepr atom
-    mkAtom (CCG.App (CCE.SbvToInteger nr (CCG.AtomExpr atom)))
+    mkAtom' (CCG.App (CCE.SbvToInteger nr (CCG.AtomExpr atom)))
   AS.ExprCall (AS.QualifiedIdentifier _ "IsZero") [argExpr] -> Just $ do
     (Some atom, _) <- translateExpr' overrides argExpr (ConstraintHint $ HintAnyBVSize)
     BVRepr nr <- getAtomBVRepr atom
-    mkAtom (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
+    mkAtom' (CCG.App (CCE.BVEq nr (CCG.AtomExpr atom) (CCG.App (CCE.BVLit nr 0))))
   AS.ExprCall (AS.QualifiedIdentifier _ "IsOnes") [argExpr] -> Just $ do
     argExpr' <- case argExpr of
       AS.ExprSlice e slices ->
@@ -2319,8 +2392,8 @@ polymorphicBVOverrides e ty env = case e of
         return $ (Some valAtom, TypeBasic)
       WT.NatCaseLT WT.LeqProof -> do
         atom <- case fun of
-          "ZeroExtend" -> CCG.mkAtom (CCG.App (CCE.BVZext targetWidth valWidth (CCG.AtomExpr valAtom)))
-          "SignExtend" -> CCG.mkAtom (CCG.App (CCE.BVSext targetWidth valWidth (CCG.AtomExpr valAtom)))
+          "ZeroExtend" -> mkAtom (CCG.App (CCE.BVZext targetWidth valWidth (CCG.AtomExpr valAtom)))
+          "SignExtend" -> mkAtom (CCG.App (CCE.BVSext targetWidth valWidth (CCG.AtomExpr valAtom)))
         return $ (Some atom, TypeBasic)
       _ -> throwTrace $ ExpectedBVSizeLeq valWidth targetWidth
   AS.ExprCall (AS.QualifiedIdentifier _ fun) args
@@ -2328,10 +2401,10 @@ polymorphicBVOverrides e ty env = case e of
     , Just mexpr <- list1ToMaybe args -> Just $ do
     env <- getStaticEnv
     Some (BVRepr targetWidth) <- getBVLength mexpr ty
-    zeros <- CCG.mkAtom (CCG.App (CCE.BVLit targetWidth 0))
+    zeros <- mkAtom (CCG.App (CCE.BVLit targetWidth 0))
     case fun of
       "Zeros" -> return (Some zeros, TypeBasic)
-      "Ones" -> mkAtom (CCG.App $ CCE.BVNot targetWidth (CCG.AtomExpr zeros))
+      "Ones" -> mkAtom' (CCG.App $ CCE.BVNot targetWidth (CCG.AtomExpr zeros))
   AS.ExprCall (AS.QualifiedIdentifier _ "Replicate") args@[AS.ExprLitBin [False], repe] -> Just $ do
     translateExpr' overrides
      (AS.ExprCall (AS.QualifiedIdentifier AS.ArchQualAny "Zeros") [repe])
@@ -2343,7 +2416,7 @@ polymorphicBVOverrides e ty env = case e of
       (Just (StaticInt width), CT.BVRepr nr) |
           Just (Some rep) <- WT.someNat width
         , Just WT.LeqProof <- (WT.knownNat @1) `WT.testLeq` rep -> do
-          mkAtom $ replicateBV rep nr (CCG.AtomExpr bvatom)
+          mkAtom' $ replicateBV rep nr (CCG.AtomExpr bvatom)
       (Nothing, _) -> throwTrace $ RequiredConcreteValue repe (staticEnvMapVals env)
       _ -> throwTrace $ InvalidOverloadedFunctionCall fun args
   _ -> Nothing
@@ -2382,7 +2455,7 @@ bitShiftOverrides e ty = case e of
     Refl <- assertAtomType shift CT.IntegerRepr shiftAtom
     BVRepr nr <- getAtomBVRepr xAtom
     let bvShift = CCG.App $ CCE.IntegerToBV nr (CCG.AtomExpr shiftAtom)
-    result <- CCG.mkAtom (CCG.App $ CCE.BVAshr nr (CCG.AtomExpr xAtom) bvShift)
+    result <- mkAtom (CCG.App $ CCE.BVAshr nr (CCG.AtomExpr xAtom) bvShift)
     return $ (Some result, TypeBasic)
   _ -> Nothing
 
@@ -2419,7 +2492,7 @@ arithmeticOverrides e ty = case e of
      Some atom <- translateExpr overrides e
      case CCG.typeOfAtom atom of
        CT.IntegerRepr -> do
-         mkAtom (CCG.App (CCE.IntAbs (CCG.AtomExpr atom)))
+         mkAtom' (CCG.App (CCE.IntAbs (CCG.AtomExpr atom)))
        tp -> X.throw $ ExpectedIntegerType e tp
    _ -> Nothing
 
@@ -2443,11 +2516,11 @@ overrides = Overrides {..}
                 let (nm, sv) = f env
                 mapStaticVals (Map.insert nm sv)
           AS.StmtCall (AS.QualifiedIdentifier _ "ASLSetUndefined") [] -> Just $ do
-            result <- CCG.mkAtom $ CCG.App $ CCE.BoolLit True
+            result <- mkAtom $ CCG.App $ CCE.BoolLit True
             translateAssignment' overrides (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny undefinedVarName)) result TypeBasic Nothing
             abnormalExit overrides
           AS.StmtCall (AS.QualifiedIdentifier _ "ASLSetUnpredictable") [] -> Just $ do
-            result <- CCG.mkAtom $ CCG.App $ CCE.BoolLit True
+            result <- mkAtom $ CCG.App $ CCE.BoolLit True
             translateAssignment' overrides (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny unpredictableVarName)) result TypeBasic Nothing
             abnormalExit overrides
           AS.StmtCall (AS.QualifiedIdentifier _ "__abort") [] -> Just $ do

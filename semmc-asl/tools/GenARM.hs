@@ -43,6 +43,7 @@ import           System.Console.GetOpt
 import           Panic hiding (panic)
 import           Lang.Crucible.Panic ( Crucible )
 
+import qualified SemMC.ASL.SyntaxTraverse as TR
 import SemMC.ASL
 import SemMC.ASL.Crucible
 import SemMC.ASL.Translation
@@ -391,12 +392,12 @@ data ExpectedException =
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
-  TExcept _ (InstructionUnsupported) -> Just $ UnsupportedInstruction
-  SExcept _ (SigException _ (TypeNotFound "real")) -> Just $ UnsupportedInstruction
+  TExcept _ (TR.SyntaxTraceError InstructionUnsupported _) -> Just $ UnsupportedInstruction
+  SExcept _ (TR.SyntaxTraceError (TypeNotFound "real") _) -> Just $ UnsupportedInstruction
   -- TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
   -- TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
   -- TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
-  TExcept _ (UnsupportedType (AS.TypeFun "bits" (AS.ExprLitInt 0)))
+  TExcept _ (TR.SyntaxTraceError (UnsupportedType (AS.TypeFun "bits" (AS.ExprLitInt 0))) _)
     | KeyInstr (InstructionIdent nm _ _) <- k
     , nm `elem` ["aarch32_USAT16_A", "aarch32_USAT_A"] ->
       Just $ ASLSpecMissingZeroCheck
@@ -500,24 +501,14 @@ prettyKey (KeyInstr ident) = prettyIdent ident
 prettyKey (KeyFun fnName) = T.unpack fnName
 
 data TranslatorException =
-    TExcept (T.Text, StaticValues, [AS.Stmt], [(AS.Expr, TypeConstraint)]) TranslationException
-  | SExcept ElemKey SigException
+    TExcept ElemKey TracedTranslationException
+  | SExcept ElemKey TracedSigException
   | BadTranslatedInstructionsFile
   | SomeExcept X.SomeException
 
 instance Show TranslatorException where
   show e = case e of
-    TExcept (nm, env, stmts, exprs) te ->
-      "Translator exception\n"
-      ++ "Statement call stack:\n"
-      ++ unlines (map (\stmt -> withStar $ prettyStmt 3 stmt) (List.reverse stmts))
-      ++ "\n Expression call stack:\n"
-      ++ unlines (map (\expr -> "*  " ++ prettyExprConstraint expr) (List.reverse exprs))
-      ++ "Static variable environment:\n"
-      ++ show env ++ "\n"
-      ++ "\n ** Exception in: " ++ T.unpack nm ++ "\n"
-      ++ show te
-
+    TExcept k te -> "Translator exception in: " ++ prettyKey k ++ "\n" ++ show te
     SExcept k se -> "Signature exception in:" ++ prettyKey k ++ "\n" ++ show se
     SomeExcept err -> "General exception:\n" ++ show err
 
@@ -598,7 +589,7 @@ data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeFunctionSignature))
                      }
 
 
-liftSigM :: ElemKey -> SigM ext f a -> MSS.StateT SigMap IO (Either SigException a)
+liftSigM :: ElemKey -> SigM ext f a -> MSS.StateT SigMap IO (Either TracedSigException a)
 liftSigM k f = do
   state <- MSS.gets sigState
   env <- MSS.gets sigEnv
@@ -624,14 +615,12 @@ collectExcept k e = do
 catchIO :: ElemKey -> IO a -> MSS.StateT SigMap IO (Maybe a)
 catchIO k f = do
   a <- MSS.lift ((Left <$> f)
-                  `X.catch` (\(e :: TranslationException) -> return $ Right (TExcept (T.empty,Map.empty,[],[]) e))
-                  `X.catch` (\(e :: TracedTranslationException) -> return $ Right (tracedException e))
+                  `X.catch` (\(e :: TranslationException) -> return $ Right $ TExcept k $ TR.SyntaxTraceError e (TR.SyntaxTraceStack (\_ -> [])))
+                  `X.catch` (\(e :: TracedTranslationException) -> return $ Right $ TExcept k e)
                   `X.catch` (\(e :: X.SomeException) -> return $ Right (SomeExcept e)))
   case a of
     Left r -> return (Just r)
     Right err -> (\_ -> Nothing) <$> collectExcept k err
-  where
-    tracedException (TracedTranslationException nm env stmts exprs e) = TExcept (nm, env, stmts, exprs) e
 
 -- Unused currently
 type InstructionFlag = ()

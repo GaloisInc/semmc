@@ -519,7 +519,7 @@ stmtToStaticM s = case s of
         Just fin -> stmtsToStaticM fin
         _ -> return ()
 
-    casesToTests e cas = case cas of
+    casesToTests e = \case
       (AS.CaseWhen (pat : pats) _ stmts) : rest -> let      
         (tests, fin) = casesToTests e rest
         test = foldr (\pat' -> \e' -> AS.ExprBinOp AS.BinOpLogicalOr e' (patToExpr e pat')) (patToExpr e pat) pats

@@ -69,7 +69,8 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, overrides, addExtendedTypeData, throwTrace)
+import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, overrides, addExtendedTypeData, throwTrace, unliftGenerator)
+import qualified SemMC.ASL.SyntaxTraverse as TR
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
 import qualified Control.Monad.State.Class as MS
@@ -176,8 +177,8 @@ funcInitialState defs sig hdl globalReads args =
                    , tsHandle = hdl
                    , tsStaticValues = funcStaticVals sig
                    , tsSig = SomeFunctionSignature sig
-                   , tsExprStack = []
-                   , tsStmtStack = []
+                   , tsTraceStack = TR.SyntaxTraceStack (\_ -> [])
+                   , tsExprConstraint = Nothing
                    }
   where
     addArgument :: forall tp
@@ -197,10 +198,10 @@ defineFunction :: (ReturnsGlobals ret globalWrites tps)
                -> Ctx.Assignment (CCG.Atom s) init
                -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig baseGlobals stmts _args = do
-  mapM_ (\(FunctionArg nm t _) -> addExtendedTypeData nm t) (funcArgs sig)
-  mapM_ (translateStatement ov) stmts
+  unliftGenerator $ mapM_ (\(FunctionArg nm t _) -> addExtendedTypeData nm t) (funcArgs sig)
+  unliftGenerator $ mapM_ (translateStatement ov) stmts
   case funcRetRepr sig of
-    Ctx.Empty -> translateStatement ov (AS.StmtReturn Nothing)
+    Ctx.Empty -> unliftGenerator $ translateStatement ov (AS.StmtReturn Nothing)
     _ -> return ()
   let errmsg = "Function " <> funcName sig <> " does not return."
   errStr <- CCG.mkAtom (CCG.App (CCE.TextLit errmsg))

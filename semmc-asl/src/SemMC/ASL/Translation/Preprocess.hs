@@ -18,6 +18,8 @@
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
@@ -31,7 +33,7 @@ module SemMC.ASL.Translation.Preprocess
   , runSigM
   , buildSigState
   , SigException(..)
-  , InnerSigException(..)
+  , TracedSigException
   , Callable(..)
   , Definitions(..)
   , bitsToInteger
@@ -46,9 +48,11 @@ module SemMC.ASL.Translation.Preprocess
 
 import Debug.Trace (traceM)
 
-import           Control.Applicative ( (<|>) )
+import           Control.Applicative ( (<|>), Const(..) )
 import qualified Control.Exception as X
 import           Control.Monad (void, foldM, foldM_)
+import           Control.Monad.Trans ( lift )
+import qualified Control.Monad.Trans as MT
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.Writer.Lazy as W
 import qualified Control.Monad.RWS as RWS
@@ -80,7 +84,8 @@ import           SemMC.ASL.Extension
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr as SE
-import qualified SemMC.ASL.SyntaxTraverse as ASLT
+
+import qualified SemMC.ASL.SyntaxTraverse as TR
 import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
 import           SemMC.ASL.Exceptions (TranslationException (CannotStaticallyEvaluateType))
@@ -93,14 +98,14 @@ computeSignature :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
 computeSignature qName arity = do
   mCallable <- lookupCallable qName arity
   case mCallable of
-    Nothing -> throwError $ CallableNotFound (mkFunctionName qName arity)
+    Nothing -> TR.throwTrace $ CallableNotFound (mkFunctionName qName arity)
     Just c -> void $ computeCallableSignature c
 
 computeSignature' :: T.Text -> SigM ext f ()
 computeSignature' name = do
   mCallable <- lookupCallable' name
   case mCallable of
-    Nothing -> throwError $ CallableNotFound name
+    Nothing -> TR.throwTrace $ CallableNotFound name
     Just c -> void $ computeCallableSignature c
 
 
@@ -192,16 +197,19 @@ asDefType def =
     AS.DefTypeEnum ident idents -> Just $ DefTypeEnum ident idents
     _ -> Nothing
 
-
 -- | Monad for computing ASL signatures of 'AS.Definition's.
-newtype SigM ext f a = SigM { getSigM :: E.ExceptT SigException (RWS.RWS SigEnv () SigState) a }
+newtype SigM ext f a = SigM { getSigM :: TR.SyntaxTraceT SigException (Const ()) (RWS.RWS SigEnv () SigState) a }
   deriving ( Functor
            , Applicative
            , Monad
            , RWS.MonadReader SigEnv
            , RWS.MonadState SigState
-           , E.MonadError SigException
+           , E.MonadError TracedSigException
+           , TR.SyntaxTrace
+           , TR.SyntaxTraceE SigException
            )
+
+type TracedSigException = TR.SyntaxTraceError SigException (Const ())
 
 data ASLSpec = ASLSpec
   { aslInstructions :: [AS.Instruction]
@@ -239,9 +247,9 @@ extraRegisters = [
 prepASL :: ASLSpec -> ASLSpec
 prepASL (ASLSpec instrs defs sdefs edefs rdefs) =
   let
-    ovrs = ASLT.mkSyntaxOverrides (defs ++ sdefs ++ edefs)
-    f = ASLT.applySyntaxOverridesDefs ovrs
-    g = ASLT.applySyntaxOverridesInstrs ovrs
+    ovrs = TR.mkSyntaxOverrides (defs ++ sdefs ++ edefs)
+    f = TR.applySyntaxOverridesDefs ovrs
+    g = TR.applySyntaxOverridesInstrs ovrs
   in
     ASLSpec (g instrs) (f defs) (f sdefs) (f edefs) (rdefs ++ extraRegisters)
 
@@ -284,7 +292,7 @@ mkCallableOverrideVariant Callable{..} =
       AS.TypeRef (AS.QualifiedIdentifier _ tpName) -> tpName
       AS.TypeFun "bits" (AS.ExprVarRef (AS.QualifiedIdentifier _ n)) -> "bits" <> n
       _ -> error $ "Bad type for override variant" ++ show t
-    nm' = ASLT.mapInnerName (\nm -> T.concat $ nm : map (\(nm, t) -> getTypeStr t) callableArgs) callableName
+    nm' = TR.mapInnerName (\nm -> T.concat $ nm : map (\(nm, t) -> getTypeStr t) callableArgs) callableName
 
 -- FIXME: This is a gross hack for the fact that the combined support.asl
 -- ends up with multiple versions of the same functions
@@ -454,9 +462,12 @@ buildSigState spec =
     (Left err, _) -> error $ "Unexpected exception when initializing SigState: " ++ show err
     (Right _, state) -> (env, state)
 
-runSigM :: SigEnv -> SigState -> SigM ext f a -> (Either SigException a, SigState)
+runSigM :: SigEnv
+        -> SigState
+        -> SigM ext f a
+        -> (Either TracedSigException a, SigState)
 runSigM env state action =
-  let rws = E.runExceptT $ getSigM action
+  let rws = TR.runSyntaxTraceT $ getSigM action
       (e, s, _) = RWS.runRWS rws env state
   in case e of
     Left err -> (Left err, s)
@@ -499,28 +510,18 @@ data SigState = SigState { userTypes :: Map.Map T.Text (Some UserType)
                          , extendedTypeData :: Map.Map T.Text ExtendedTypeData
                          }
 
-throwError :: InnerSigException -> SigM ext f a
-throwError e = do
-  stack <- RWS.gets callableOpenSearches
-  E.throwError (SigException stack e)
-
-data InnerSigException = TypeNotFound T.Text
-                       | BuiltinTypeNotFound T.Text
-                       | CallableNotFound T.Text
-                       | VariableNotFound T.Text
-                       | WrongType T.Text T.Text
-                       | StructMissingField T.Text T.Text
-                       | UnsupportedSigExpr AS.Expr
-                       | UnsupportedSigStmt AS.Stmt
-                       | UnsupportedSigLVal AS.LValExpr
-                       | MissingSignature Callable
-                       | FailedToDetermineStaticEnvironment [T.Text]
-                       | FailedToMonomorphizeSignature AS.Type StaticValues
-  deriving (Eq, Show)
-
-data SigException = SigException
-  { exCallStack :: Map.Map T.Text SearchStatus
-  , exInner :: InnerSigException }
+data SigException = TypeNotFound T.Text
+                  | BuiltinTypeNotFound T.Text
+                  | CallableNotFound T.Text
+                  | VariableNotFound T.Text
+                  | WrongType T.Text T.Text
+                  | StructMissingField T.Text T.Text
+                  | UnsupportedSigExpr AS.Expr
+                  | UnsupportedSigStmt AS.Stmt
+                  | UnsupportedSigLVal AS.LValExpr
+                  | MissingSignature Callable
+                  | FailedToDetermineStaticEnvironment [T.Text]
+                  | FailedToMonomorphizeSignature AS.Type StaticValues
   deriving (Eq, Show)
 
 storeType :: T.Text -> UserType tp -> SigM ext f ()
@@ -569,14 +570,14 @@ lookupBuiltinType tpName = do
   env <- RWS.ask
   case Map.lookup tpName (builtinTypes env) of
     Just tp -> return tp
-    Nothing -> throwError $ BuiltinTypeNotFound tpName
+    Nothing -> TR.throwTrace $ BuiltinTypeNotFound tpName
 
 lookupDefType :: T.Text -> SigM ext f DefType
 lookupDefType tpName = do
   env <- RWS.ask
   case Map.lookup tpName (types env) of
     Just defType -> return defType
-    Nothing -> throwError $ TypeNotFound tpName
+    Nothing -> TR.throwTrace $ TypeNotFound tpName
 
 lookupGlobalVar :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 lookupGlobalVar varName = do
@@ -710,26 +711,29 @@ theVarGlobal varName = do
     Nothing -> error $ "Unknown global variable: " <> show varName
 
 
+
 mkCallableWriter :: t ~ SigM ext f
                  => Monoid w
                  => (Callable -> [AS.Expr] -> t w)
-                 -> ASLT.SyntaxWrites t w
-                 -> ASLT.SyntaxWrites t w
-mkCallableWriter f writes = let
-  getexpr expr = case expr of
-    AS.ExprCall qIdent argEs -> collectCallables qIdent argEs
-    _ -> ASLT.exprWrite writes expr
-  getstmt stmt = case stmt of
-    AS.StmtCall qIdent argEs -> collectCallables qIdent argEs
-    _ -> ASLT.stmtWrite writes stmt
-  collectCallable qName argEs = do
+                 -> (AS.Expr -> t w)
+                 -> (AS.Stmt -> t w)
+                 -> (AS.LValExpr -> t w)
+                 -> (AS.Type -> t w)
+                 -> TR.SyntaxWriter w t
+mkCallableWriter f getexpr getstmt getlval gettype = let
+  collectCallable (qName, argEs) = do
     mCallable <- lookupCallable qName (length argEs)
     case mCallable of
       Nothing -> return $ mempty
       Just c -> f c argEs
-  collectCallables (AS.QualifiedIdentifier q nm) argEs =
-    mconcat <$> traverse (\(nm',argEs') -> collectCallable (AS.QualifiedIdentifier q nm') argEs') (overrideFun nm argEs)
-  in writes { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt }
+  collectCallables (AS.QualifiedIdentifier q nm, argEs) =
+    mconcat <$> traverse (\(nm',argEs') -> collectCallable (AS.QualifiedIdentifier q nm', argEs')) (overrideFun nm argEs)
+  in TR.SyntaxWriter $ \repr -> case repr of
+    TR.SyntaxExprRepr -> getexpr
+    TR.SyntaxStmtRepr -> getstmt
+    TR.SyntaxLValRepr -> getlval
+    TR.SyntaxTypeRepr -> gettype
+    TR.SyntaxCallRepr -> collectCallables
 
 callableGlobalVars :: Callable
                    -> SigM ext f GlobalVarRefs
@@ -737,7 +741,7 @@ callableGlobalVars c = do
   msig <- lookupCallableSignature c
   case msig of
     Just (_, globs) -> return globs
-    Nothing -> throwError $ MissingSignature c
+    Nothing -> TR.throwTrace $ MissingSignature c
 
 
 globalsOfStmts :: [AS.Stmt] -> SigM ext f GlobalVarRefs
@@ -750,10 +754,9 @@ globalsOfStmts stmts = do
         _ -> return mempty
   let getstmt stmt = case stmt of
         AS.StmtCase _ alts -> mconcat <$> traverse caseAlternativeGlobalVars alts
-        _ -> return (Set.empty, Set.empty)
-  let collectors = mkCallableWriter (\c args -> callableGlobalVars c) $
-        ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.lvalWrite = getlval, ASLT.stmtWrite = getstmt}
-  mconcat <$> traverse (ASLT.writeStmt collectors) stmts
+        _ -> return mempty
+  let collectors = mkCallableWriter (\c args -> callableGlobalVars c) getexpr getstmt getlval (\_ -> return  mempty)
+  mconcat <$> traverse (TR.writeSyntax collectors) stmts
   where
     caseAlternativeGlobalVars alt = case alt of
       AS.CaseWhen pats _ _ -> mconcat <$> traverse casePatternGlobalVars pats
@@ -802,9 +805,8 @@ regIdxsOfStmts stmts = do
           addFunArg (FunctionArg _ _ mrkind, e) = case mrkind of
             Just rkind -> return $ regIdxsOfExpr rkind e
             _ -> return mempty
-  let collectors = mkCallableWriter callableRegIdxs $
-        ASLT.noWrites { ASLT.exprWrite = getexpr, ASLT.stmtWrite = getstmt, ASLT.lvalWrite = getlval}
-  mconcat <$> traverse (ASLT.writeStmt collectors) stmts
+  let collectors = mkCallableWriter callableRegIdxs getexpr getstmt getlval (\_ -> return  mempty)
+  mconcat <$> traverse (TR.writeSyntax collectors) stmts
   where
     regIdxsOfExpr rkind e = mconcat $ map (varRegIdx rkind) $ regIdxVars e
 
@@ -818,8 +820,8 @@ regIdxsOfStmts stmts = do
 computeSignatures :: [AS.Stmt] -> SigM ext f ()
 computeSignatures stmts = do
   let collectors = mkCallableWriter (\c args -> void $ computeCallableSignature c)
-        ASLT.noWrites { ASLT.typeWrite = storeUserType }
-  traverse_ (ASLT.writeStmt collectors) stmts
+        (\_ -> return  mempty) (\_ -> return  mempty) (\_ -> return  mempty) storeUserType
+  traverse_ (TR.writeSyntax collectors) stmts
 
 -- | For recursive functions, this signature is temporarily stored as a stand-in
 -- for the actual function signature when recursively calling the signature
@@ -837,7 +839,7 @@ fakeCallableSignature c@Callable{..} =
       }
 
 -- | Compute the signature of a callable (function/procedure).
-computeCallableSignature :: Callable -> SigM ext f (SomeSimpleFunctionSignature, GlobalVarRefs)
+computeCallableSignature :: forall ext f. Callable -> SigM ext f (SomeSimpleFunctionSignature, GlobalVarRefs)
 computeCallableSignature c@Callable{..} = do
   let name = mkCallableName c
   mSig <- lookupCallableSignature c
@@ -869,7 +871,6 @@ computeCallableSignature c@Callable{..} = do
     getSignature name = do
       mapM_ (\(_,t) -> storeUserType t) callableArgs
       mapM_ storeUserType callableRets
-
       globalVars <- globalsOfStmts callableStmts
       (globalReads, globalWrites) <- return $ unpackGVarRefs $ globalVars
       labeledReads <- getLabels globalReads
@@ -963,7 +964,7 @@ mkSignature env sig =
   where
     mkType t = case applyStaticEnv (simpleStaticEnvMap env) t of
       Just t -> computeType t
-      _ -> throwError $ FailedToMonomorphizeSignature t env
+      _ -> TR.throwTrace $ FailedToMonomorphizeSignature t env
     mkLabel (FunctionArg nm t _) = do
       Some tp <- mkType t
       return $ Some (LabeledValue nm (CT.baseToType tp))
@@ -1065,7 +1066,7 @@ liftOverEnvs instName enc stmts = case Map.lookup instName dependentVariableHint
         _ -> Nothing
 
     in case cases of
-      [] -> throwError $ FailedToDetermineStaticEnvironment vars
+      [] -> TR.throwTrace $ FailedToDetermineStaticEnvironment vars
       x -> return $ [staticEnvironmentStmt x stmts]
   _ -> return $ stmts
 
@@ -1098,7 +1099,8 @@ pruneInfeasableInstrSets enc stmts = case enc of
                        (AS.ExprVarRef (AS.VarName "InstrSet_A32"))) =
       AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
     evalInstrSetTest e = e
-    in map (ASLT.mapSyntax (ASLT.SyntaxMaps evalInstrSetTest id id id)) stmts
+    collector = TR.SyntaxMap (\repr -> case repr of {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id})
+    in map (TR.mapSyntax collector) stmts
 
 
 

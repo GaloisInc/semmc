@@ -3,7 +3,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 module SemMC.ASL.Exceptions (
       TranslationException(..)
-    , TracedTranslationException(..)
+    -- , TracedTranslationException(..)
   ) where
 
 import qualified Control.Exception as X
@@ -83,6 +83,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | InstructionUnsupported
                           | UnexpectedReturnInStmtCall
                           | UnexpectedReturnInExprCall
+                          | BindingFailure String
                           | TExceptions [TranslationException]
 
 
@@ -90,10 +91,10 @@ deriving instance Show TranslationException
 
 instance X.Exception TranslationException
 
-data TracedTranslationException =
-  TracedTranslationException T.Text (Map.Map T.Text StaticValue)
-    [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
+-- data TracedTranslationException =
+--   TracedTranslationException T.Text (Map.Map T.Text StaticValue)
+--     [AS.Stmt] [(AS.Expr, TypeConstraint)] TranslationException
 
-deriving instance Show TracedTranslationException
+-- deriving instance Show TracedTranslationException
 
-instance X.Exception TracedTranslationException
+-- instance X.Exception TracedTranslationException
