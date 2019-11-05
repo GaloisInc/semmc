@@ -518,7 +518,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
     N.withIONonceGenerator $ \nonceGen -> do
       gen <- DA.createGen
       sym :: SB.SimpleBackend s (SB.Flags SB.FloatIEEE)
-          <- SB.newSimpleBackend nonceGen
+          <- SB.newSimpleBackend SB.FloatIEEERepr nonceGen
       SB.stopCaching sym
 
       lib <- F.loadLibrary proxy sym funcs

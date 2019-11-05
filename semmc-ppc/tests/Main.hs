@@ -35,7 +35,7 @@ import qualified SemMC.Architecture.PPC32.Opcodes as PPC32
 main :: IO ()
 main = do
   PN.withIONonceGenerator $ \ng ->
-    CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) ng CBO.NoUnsatFeatures $ \sym -> do
+    CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
       let sems = [ (sop, bs) | (sop, bs) <- PPC32.allSemantics, S.member sop insns ]
       (baseSet, synthEnv) <- loadBaseSet PPC32.allDefinedFunctions sems sym
       T.defaultMain (allTests baseSet synthEnv)
