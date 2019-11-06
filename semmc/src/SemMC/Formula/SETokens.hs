@@ -11,8 +11,8 @@
 
 module SemMC.Formula.SETokens
     ( FAtom(..)
-    , string, ident, quoted, int, bitvec
-    , string', ident', quoted', int', bitvec'
+    , string, ident, quoted, int, nat, bitvec
+    , string', ident', quoted', int', nat', bitvec'
     , fromFoldable, fromFoldable'
     , printAtom, printTokens, printTokens'
     , parseLL
@@ -39,6 +39,7 @@ data FAtom = AIdent String
            | AQuoted String
            | AString String
            | AInt Integer
+           | ANat Natural
            | ABV Int Integer
            | ANamed String Int FAtom
            deriving (Show, Eq)
@@ -66,6 +67,12 @@ int :: Integer -> SC.SExpr FAtom
 int = SE.fromRich . int'
 int' :: Integer -> SE.RichSExpr FAtom
 int' = SE.A . AInt
+
+-- | Lift a natural.
+nat :: Natural -> SC.SExpr FAtom
+nat = SE.fromRich . nat'
+nat' :: Natural -> SE.RichSExpr FAtom
+nat' = SE.A . ANat
 
 -- | Lift a bitvector.
 bitvec :: Natural -> Integer -> SC.SExpr FAtom
@@ -117,8 +124,8 @@ printTokens comments sexpr =
                                              w = bl + h + (2 * cnt)
                                          in if w > 600 then w else 0
       outputFmt = SC.setIndentAmount 1 $ SC.unconstrainedPrint printAtom
-  in formatComment comments <> (SC.encodeOne outputFmt $
-                                discoverLetBindings guide sexpr)
+  in formatComment comments <> (SC.encodeOne outputFmt sexpr)
+--                                discoverLetBindings guide sexpr)
 
 
 formatComment :: Seq.Seq String -> T.Text
@@ -136,6 +143,7 @@ printAtom a =
     AQuoted s -> T.pack ('\'' : s)
     AString s -> T.pack (show s)
     AInt i -> T.pack (show i)
+    ANat n -> T.pack (show n)
     ABV w val -> formatBV w val
     ANamed _ _ e -> printAtom e
 

@@ -42,7 +42,8 @@ library
                        crucible,
                        what4,
                        asl-parser,
-                       semmc
+                       semmc,
+                       dismantle-arm-xml
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wcompat -Wall
@@ -60,6 +61,7 @@ executable semmc-asl-genarm
                        what4,
                        filepath,
                        parameterized-utils,
+                       semmc,
                        semmc-asl,
                        text >= 1 && < 2,
                        panic >= 0.3,
