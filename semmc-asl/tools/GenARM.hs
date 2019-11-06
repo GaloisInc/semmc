@@ -518,41 +518,6 @@ instance Show TranslatorException where
     SExcept k se -> "Signature exception in:" ++ prettyKey k ++ "\n" ++ show se
     SomeExcept err -> "General exception:\n" ++ show err
 
-withStar :: String -> String
-withStar (' ' : rest) = '*' : rest
-withStar s = s
-
-atDepth :: Int -> String -> String
-atDepth depth s = concat (replicate depth " ") ++ s
-
-withLines :: [String] -> String
-withLines strs = List.intercalate "\n" strs
-
-prettyStmt :: Int -> AS.Stmt -> String
-prettyStmt depth stmt = case stmt of
-  AS.StmtIf tests melse ->
-    atDepth depth "StmtIf: " ++
-    unlines (map (\(test, stmts) ->
-           prettyExpr test ++ "\n"
-           ++ withLines (map (prettyStmt $ depth + 1) stmts)) tests)
-    ++
-    case melse of
-      Just stmts -> (atDepth depth "Else\n") ++ withLines (map (prettyStmt $ depth + 1) stmts)
-      Nothing -> ""
-  AS.StmtFor var range stmts ->
-    atDepth depth "StmtFor: " ++ show var ++ show range ++ "\n"
-      ++ withLines (map (prettyStmt $ depth + 1) stmts)
-  AS.StmtRepeat stmts test ->
-    atDepth depth "StmtRepeat: " ++ prettyExpr test ++ "\n"
-    ++ withLines (map (prettyStmt $ depth + 1) stmts)
-  _ -> atDepth depth $ show stmt
-
-prettyExprConstraint :: (AS.Expr, TypeConstraint) -> String
-prettyExprConstraint (expr, constraint) = show expr ++ "\n   :: " ++ show constraint
-
-prettyExpr :: AS.Expr -> String
-prettyExpr expr = show expr
-
 instance X.Exception TranslatorException
 
 data InstructionIdent =
