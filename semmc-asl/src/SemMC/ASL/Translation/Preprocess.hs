@@ -20,6 +20,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 
 module SemMC.ASL.Translation.Preprocess
   ( -- * Top-level interface
@@ -728,7 +729,7 @@ mkCallableWriter f getexpr getstmt getlval gettype = let
       Just c -> f c argEs
   collectCallables (AS.QualifiedIdentifier q nm, argEs) =
     mconcat <$> traverse (\(nm',argEs') -> collectCallable (AS.QualifiedIdentifier q nm', argEs')) (overrideFun nm argEs)
-  in TR.SyntaxWriter $ \repr -> case repr of
+  in TR.SyntaxWriter $ TR.withKnownSyntaxRepr $ \case
     TR.SyntaxExprRepr -> getexpr
     TR.SyntaxStmtRepr -> getstmt
     TR.SyntaxLValRepr -> getlval
@@ -1099,7 +1100,7 @@ pruneInfeasableInstrSets enc stmts = case enc of
                        (AS.ExprVarRef (AS.VarName "InstrSet_A32"))) =
       AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
     evalInstrSetTest e = e
-    collector = TR.SyntaxMap (\repr -> case repr of {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id})
+    collector = TR.SyntaxMap (TR.withKnownSyntaxRepr (\case {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id}))
     in map (TR.mapSyntax collector) stmts
 
 

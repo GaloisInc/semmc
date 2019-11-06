@@ -17,6 +17,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module SemMC.ASL.Translation (
     TranslationState(..)
@@ -243,15 +244,16 @@ instance MST.MonadST s m => MST.MonadST s (E.ExceptT e m) where
   liftST m = lift $ MST.liftST m
 
 instance TR.SyntaxTrace (Generator h s arch ret) where
-  traceSyntax' repr syn f = do
-    ext <- TR.syntaxExt repr syn
-    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate repr (\syns -> ((syn, ext) : syns)) (tsTraceStack s) }
+  traceSyntax :: forall t a. TR.KnownSyntaxRepr t => t -> Generator h s arch ret a -> Generator h s arch ret a
+  traceSyntax syn f = do
+    ext <- TR.syntaxExt syn
+    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate (\syns -> ((syn, ext) : syns)) (tsTraceStack s) }
     a <- f
-    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate repr (\(_: syns) -> syns) (tsTraceStack s) }
+    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate (\((_ :: t, _) : syns) -> syns) (tsTraceStack s) }
     return a
 
 instance TR.SyntaxExt SyntaxTraceExt (Generator h s arch ret) where
-  syntaxExt repr syn = case repr of
+  syntaxExt = TR.withKnownSyntaxRepr $ \repr syn -> case repr of
     TR.SyntaxStmtRepr -> return $ SyntaxTraceExtUnit
     TR.SyntaxExprRepr -> do
       Just tc <- MSS.gets tsExprConstraint
@@ -288,10 +290,6 @@ liftGenerator2 (Generator f) (Generator g) m = Generator $ m f g
 mkAtom :: CCG.Expr (ASLExt arch) s tp -> Generator h s arch ret (CCG.Atom s tp)
 mkAtom e = liftGenerator $ CCG.mkAtom e
 
---instance(Generator h s arch ret)
-
--- Tracks state necessary for the translation of ASL into Crucible
---
 -- This is primarily storing variable bindings and the set of signatures
 -- available for other callees.
 data TranslationState h ret s =

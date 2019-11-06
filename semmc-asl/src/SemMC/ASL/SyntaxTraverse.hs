@@ -23,6 +23,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase #-}
 
 module SemMC.ASL.SyntaxTraverse
   ( mkSyntaxOverrides
@@ -36,7 +37,8 @@ module SemMC.ASL.SyntaxTraverse
   , SyntaxCollector(..)
   , SyntaxTraceError(..)
   , SyntaxTraceStack(..)
-  , traceSyntax
+  , KnownSyntaxRepr(..)
+  , withKnownSyntaxRepr
   , syntaxTraceUpdate
   , SyntaxExt(..)
   , runSyntaxTraceT
@@ -63,6 +65,7 @@ import qualified Control.Monad.Writer.Lazy as W
 import           Control.Monad.Identity
 import qualified Control.Monad.Except as E
 import qualified Control.Monad.Trans as MT
+import qualified Control.Monad.Reader as R
 import qualified Control.Monad.RWS as RWS
 import qualified Language.ASL.Syntax as AS
 import qualified Data.Text as T
@@ -81,12 +84,12 @@ pattern VarName nm <- AS.QualifiedIdentifier _ nm
 varsOfExpr :: AS.Expr -> [T.Text]
 varsOfExpr e = runIdentity $ writeSyntax (SyntaxWriter getVar) e
   where
-    getVar :: SyntaxRepr t -> t -> Identity [T.Text]
-    getVar repr expr = case repr of
-      SyntaxExprRepr -> case expr of
+    getVar :: forall t. KnownSyntaxRepr t => t -> Identity [T.Text]
+    getVar = withKnownSyntaxRepr $ \case
+      SyntaxExprRepr -> \case
         (AS.ExprVarRef (VarName ident)) -> return $ [ident]
         _ -> return $ []
-      _ -> return $ []
+      _ -> \_ -> return $ []
 
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
@@ -321,16 +324,16 @@ mkSyntaxOverrides defs =
             AS.ExprCall (mkGetterName False qName) []
         _ -> expr
 
-      firstMap :: forall t. SyntaxRepr t -> t -> t
-      firstMap repr = case repr of
+      firstMap :: forall t. KnownSyntaxRepr t => t -> t
+      firstMap = withKnownSyntaxRepr $ \case
         SyntaxExprRepr -> exprOverrides
         SyntaxLValRepr -> lvalOverrides
         SyntaxStmtRepr -> stmtOverrides
         SyntaxTypeRepr -> typeOverrides
         _ -> id
 
-      secondMap :: forall t. SyntaxRepr t -> t -> t
-      secondMap repr = case repr of
+      secondMap :: forall t. KnownSyntaxRepr t => t -> t
+      secondMap = withKnownSyntaxRepr $ \case
         SyntaxExprRepr -> expandGetters
         _ -> id
 
@@ -358,6 +361,9 @@ deriving instance Ord (SyntaxRepr t)
 class KnownSyntaxRepr t where
   knownSyntaxRepr :: SyntaxRepr t
 
+withKnownSyntaxRepr :: KnownSyntaxRepr t => (SyntaxRepr t -> t -> a) -> t -> a
+withKnownSyntaxRepr f = f knownSyntaxRepr
+
 instance KnownSyntaxRepr AS.Stmt where
   knownSyntaxRepr = SyntaxStmtRepr
 
@@ -373,30 +379,35 @@ instance KnownSyntaxRepr AS.Type where
 instance KnownSyntaxRepr (AS.QualifiedIdentifier, [AS.Expr]) where
   knownSyntaxRepr = SyntaxCallRepr
 
-traceSyntax :: SyntaxTrace m => KnownSyntaxRepr t => t -> m a -> m a
-traceSyntax = traceSyntax' knownSyntaxRepr
 
-class SyntaxTrace m where
-  traceSyntax' :: forall t a. SyntaxRepr t -> t -> m a -> m a
+class Monad m => SyntaxTrace m where
+  traceSyntax :: forall t a. KnownSyntaxRepr t => t -> m a -> m a
 
-class SyntaxExt (ext :: * -> *) m where
-  syntaxExt :: forall t. SyntaxRepr t -> t -> m (ext t)
+class Monad m => SyntaxExt (ext :: * -> *) m where
+  syntaxExt :: forall t. KnownSyntaxRepr t => t -> m (ext t)
 
 instance Monad m => SyntaxExt (Const ()) m where
-  syntaxExt _ _ = return (Const ())
+  syntaxExt _ = return (Const ())
 
 data SyntaxTraceStack (ext :: * -> *) where
   SyntaxTraceStack :: (forall t. SyntaxRepr t -> [(t, ext t)]) -> SyntaxTraceStack ext
 
-syntaxTraceUpdate :: forall ext t
+syntaxTraceUpdate' :: forall ext t
                    . SyntaxRepr t
                   -> ([(t, ext t)] -> [(t, ext t)])
                   -> SyntaxTraceStack ext
                   -> SyntaxTraceStack ext
-syntaxTraceUpdate repr f sts@(SyntaxTraceStack stacks) = SyntaxTraceStack $ \repr' ->
+syntaxTraceUpdate' repr f sts@(SyntaxTraceStack stacks) = SyntaxTraceStack $ \repr' ->
   case testEquality repr repr' of
-    Just Refl -> f (stacks repr)
+    Just Refl -> f (stacks repr')
     _ -> stacks repr'
+
+syntaxTraceUpdate :: forall ext t
+                   . KnownSyntaxRepr t
+                  => ([(t, ext t)] -> [(t, ext t)])
+                  -> SyntaxTraceStack ext
+                  -> SyntaxTraceStack ext
+syntaxTraceUpdate f sts = syntaxTraceUpdate' knownSyntaxRepr f sts
 
 data SyntaxTraceError e ext = SyntaxTraceError e (SyntaxTraceStack ext)
 
@@ -409,110 +420,107 @@ instance (ShowableExt ext, Show e) => Show (SyntaxTraceError e ext) where
 instance (ShowableExt ext, X.Exception e, Typeable ext) => X.Exception (SyntaxTraceError e ext)
 
 newtype SyntaxTraceT e ext (m :: * -> *) a =
-  SyntaxTraceT { unSyntaxTraceT :: E.ExceptT (SyntaxTraceError e ext) (MSS.StateT (SyntaxTraceStack ext) m) a }
+  SyntaxTraceT { unSyntaxTraceT :: E.ExceptT (SyntaxTraceError e ext) (R.ReaderT (SyntaxTraceStack ext) m) a }
   deriving (
     Functor,
     Applicative,
     Monad,
     E.MonadError (SyntaxTraceError e ext))
 
-instance (Monad m, SyntaxExt ext m) => SyntaxTrace (SyntaxTraceT e ext m) where
-  traceSyntax' repr syn f = SyntaxTraceT $ do
-    ext <- MT.lift $ MT.lift $ syntaxExt repr syn
-    MSS.modify' $ syntaxTraceUpdate repr $ \syns -> ((syn, ext) : syns)
-    a <- unSyntaxTraceT $ f
-    MSS.modify' $ syntaxTraceUpdate repr $ \(_: syns) -> syns
-    return a
+instance SyntaxExt ext m => SyntaxTrace (SyntaxTraceT e ext m) where
+  traceSyntax syn (SyntaxTraceT f) = SyntaxTraceT $ do
+    ext <- MT.lift $ MT.lift $ syntaxExt syn
+    R.local (syntaxTraceUpdate $ \syns -> ((syn, ext) : syns)) f
 
-class SyntaxTraceE e m where
+class Monad m => SyntaxTraceE e m where
   throwTrace :: forall a. e -> m a
 
 instance Monad m => SyntaxTraceE e (SyntaxTraceT e ext m) where
   throwTrace e = do
-    tr <- SyntaxTraceT $ MSS.get
+    tr <- SyntaxTraceT $ R.ask
     E.throwError $ SyntaxTraceError e tr
 
 runSyntaxTraceT :: Monad m => SyntaxTraceT e ext m a -> m (Either (SyntaxTraceError e ext) a)
-runSyntaxTraceT (SyntaxTraceT f) = MSS.evalStateT (E.runExceptT f) (SyntaxTraceStack (\_ -> []))
+runSyntaxTraceT (SyntaxTraceT f) = R.runReaderT (E.runExceptT f) (SyntaxTraceStack (\_ -> []))
 
 instance MT.MonadTrans (SyntaxTraceT e ext) where
   lift f = SyntaxTraceT $ (MT.lift $ MT.lift $ f)
 
 instance SyntaxTrace Identity where
-  traceSyntax' _ _ f = f
+  traceSyntax _ f = f
 
 instance (Monoid w, Monad m, SyntaxTrace m) => SyntaxTrace (W.WriterT w m) where
-  traceSyntax' repr syn (W.WriterT f) = W.WriterT $ traceSyntax' repr syn f
+  traceSyntax syn (W.WriterT f) = W.WriterT $ traceSyntax syn f
 
-instance RWS.MonadReader env m => RWS.MonadReader env (SyntaxTraceT e ext m) where
-  ask = SyntaxTraceT $ MT.lift RWS.ask
-  local f (SyntaxTraceT (E.ExceptT m)) = SyntaxTraceT $ E.ExceptT $ RWS.local f m
+instance R.MonadReader env m => R.MonadReader env (SyntaxTraceT e ext m) where
+  ask = MT.lift $ R.ask
+  local f (SyntaxTraceT m) = SyntaxTraceT $ E.mapExceptT (R.mapReaderT (R.local f)) m
 
 instance RWS.MonadState s m => RWS.MonadState s (SyntaxTraceT e ext m) where
-  state f = SyntaxTraceT $ MT.lift $ (MSS.StateT $ (\s -> RWS.state f >>= (\a -> return (a, s))))
+  state f = MT.lift $ RWS.state f
 
 
 data SyntaxCollector m where
-  SyntaxCollector :: (forall t. SyntaxRepr t -> t -> m t) -> SyntaxCollector m
+  SyntaxCollector :: (forall t. KnownSyntaxRepr t => t -> m t) -> SyntaxCollector m
 
 data SyntaxWriter w m where
-  SyntaxWriter :: (forall t. SyntaxRepr t -> t -> m w) -> SyntaxWriter w m
+  SyntaxWriter :: (forall t. KnownSyntaxRepr t => t -> m w) -> SyntaxWriter w m
 
 data SyntaxMap where
-  SyntaxMap :: (forall t. SyntaxRepr t -> t -> t) -> SyntaxMap
+  SyntaxMap :: (forall t. KnownSyntaxRepr t => t -> t) -> SyntaxMap
 
-type IsSyntaxTrace m = (Monad m, SyntaxTrace m)
 
-noCollectors :: IsSyntaxTrace m => SyntaxCollector m
-noCollectors = SyntaxCollector (\_ -> return)
 
-noWrites :: Monoid w => IsSyntaxTrace m => SyntaxWriter w m
+noCollectors :: SyntaxTrace m => SyntaxCollector m
+noCollectors = SyntaxCollector return
+
+noWrites :: Monoid w => SyntaxTrace m => SyntaxWriter w m
 noWrites = SyntaxWriter
-  (\_ _ -> return mempty)
+  (\_ -> return mempty)
 
 noMaps :: SyntaxMap
-noMaps = SyntaxMap (\_ -> id)
+noMaps = SyntaxMap id
 
 writeToCollector :: forall w m.
-  Monoid w => IsSyntaxTrace m => SyntaxWriter w m -> SyntaxCollector (W.WriterT w m)
+  Monoid w => SyntaxTrace m => SyntaxWriter w m -> SyntaxCollector (W.WriterT w m)
 writeToCollector (SyntaxWriter syntaxWrite) =
   SyntaxCollector (liftWrite syntaxWrite)
   where
-    liftWrite :: forall t. (SyntaxRepr t -> t -> m w) -> SyntaxRepr t -> t -> W.WriterT w m t
-    liftWrite f repr e = MT.lift (f repr e) >>= (\w -> W.tell w >> return e)
+    liftWrite :: forall t. KnownSyntaxRepr t => (t -> m w) -> t -> W.WriterT w m t
+    liftWrite f e = MT.lift (f e) >>= (\w -> W.tell w >> return e)
 
 
-writeSyntax :: KnownSyntaxRepr t => Monoid w => IsSyntaxTrace m => SyntaxWriter w m -> t -> m w
-writeSyntax writes e = W.execWriterT (traverseSyntax (writeToCollector writes) knownSyntaxRepr e)
+writeSyntax :: KnownSyntaxRepr t => Monoid w => SyntaxTrace m => SyntaxWriter w m -> t -> m w
+writeSyntax writes e = W.execWriterT (traverseSyntax (writeToCollector writes) e)
 
 mapSyntax :: KnownSyntaxRepr t => SyntaxMap -> t -> t
-mapSyntax smap t = runIdentity $ traverseSyntax (mapsToCollector smap) knownSyntaxRepr t
+mapSyntax smap t = runIdentity $ traverseSyntax (mapsToCollector smap) t
 
 mapsToCollector :: SyntaxMap -> SyntaxCollector Identity
 mapsToCollector (SyntaxMap syntaxMap) =
-  SyntaxCollector (\repr t -> return $ syntaxMap repr t)
+  SyntaxCollector (\t -> return $ syntaxMap t)
 
 -- | Recursive traversal
-traverseSyntax :: IsSyntaxTrace m => SyntaxCollector m -> SyntaxRepr t -> t -> m t
-traverseSyntax col repr t = case repr of
-  SyntaxStmtRepr -> traverseStmt col t
-  SyntaxTypeRepr -> traverseType col t
-  SyntaxLValRepr -> traverseLVal col t
-  SyntaxExprRepr -> traverseExpr col t
-  SyntaxCallRepr -> traverseCall col t
+traverseSyntax :: SyntaxTrace m => KnownSyntaxRepr t => SyntaxCollector m -> t -> m t
+traverseSyntax col = withKnownSyntaxRepr $ \case
+  SyntaxStmtRepr -> traverseStmt col
+  SyntaxTypeRepr -> traverseType col
+  SyntaxLValRepr -> traverseLVal col
+  SyntaxExprRepr -> traverseExpr col
+  SyntaxCallRepr -> traverseCall col
 
 
 -- | Shallow traversal
-collectSyntax :: KnownSyntaxRepr t => IsSyntaxTrace m => SyntaxCollector m -> t -> m t
-collectSyntax (SyntaxCollector col) r = col knownSyntaxRepr r
+collectSyntax :: KnownSyntaxRepr t => SyntaxTrace m => SyntaxCollector m -> t -> m t
+collectSyntax (SyntaxCollector col) r = col r
 
-traverseCall :: IsSyntaxTrace m
+traverseCall :: SyntaxTrace m
              => SyntaxCollector m
              -> (AS.QualifiedIdentifier, [AS.Expr])
              -> m (AS.QualifiedIdentifier, [AS.Expr])
 traverseCall cols call = traceSyntax call (collectSyntax cols call)
 
-traverseSlice :: IsSyntaxTrace m => SyntaxCollector m -> AS.Slice -> m AS.Slice
+traverseSlice :: SyntaxTrace m => SyntaxCollector m -> AS.Slice -> m AS.Slice
 traverseSlice cols slice =
   let
     f = traverseExpr cols
@@ -523,7 +531,7 @@ traverseSlice cols slice =
      AS.SliceRange e e' -> liftA2 AS.SliceRange (f e) (f e')
 
 -- | Fold over the nested expressions of a given expression
-traverseExpr :: forall m. IsSyntaxTrace m => SyntaxCollector m -> AS.Expr -> m AS.Expr
+traverseExpr :: forall m. SyntaxTrace m => SyntaxCollector m -> AS.Expr -> m AS.Expr
 traverseExpr cols expr =
   let
     f = traverseExpr cols -- inner expressions are recursively folded
@@ -560,7 +568,7 @@ traverseExpr cols expr =
     AS.ExprUnknown t -> (\t' -> AS.ExprUnknown t') <$> k t
     _ -> return expr'
 
-traverseLVal :: IsSyntaxTrace m => SyntaxCollector m -> AS.LValExpr -> m AS.LValExpr
+traverseLVal :: SyntaxTrace m => SyntaxCollector m -> AS.LValExpr -> m AS.LValExpr
 traverseLVal cols lval =
   let
     h = traverseLVal cols
@@ -577,7 +585,7 @@ traverseLVal cols lval =
     AS.LValSlice lvs -> AS.LValSlice <$> traverse h lvs
     _ -> return lval'
 
-traverseType :: forall m. IsSyntaxTrace m => SyntaxCollector m -> AS.Type -> m AS.Type
+traverseType :: forall m. SyntaxTrace m => SyntaxCollector m -> AS.Type -> m AS.Type
 traverseType cols t =
   let
     f = traverseExpr cols
@@ -599,7 +607,7 @@ traverseType cols t =
     AS.TypeArray t ixt -> liftA2 AS.TypeArray (k t) (foldIxType ixt)
     _ -> return t'
 
-traverseStmt :: forall m. IsSyntaxTrace m => SyntaxCollector m -> AS.Stmt -> m AS.Stmt
+traverseStmt :: forall m. SyntaxTrace m => SyntaxCollector m -> AS.Stmt -> m AS.Stmt
 traverseStmt cols stmt =
   let
     g = traverseStmt cols -- inner statments are recursively folded
