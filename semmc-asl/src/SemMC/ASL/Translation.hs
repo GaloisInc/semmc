@@ -17,7 +17,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module SemMC.ASL.Translation (
     TranslationState(..)
@@ -239,21 +238,17 @@ newtype Generator h s arch ret a = Generator
     , MSS.MonadState (TranslationState h ret s)
     )
 
--- FIXME: Move to What4.Utils.MonadST
-instance MST.MonadST s m => MST.MonadST s (E.ExceptT e m) where
-  liftST m = lift $ MST.liftST m
-
 instance TR.SyntaxTrace (Generator h s arch ret) where
-  traceSyntax :: forall t a. TR.KnownSyntaxRepr t => t -> Generator h s arch ret a -> Generator h s arch ret a
   traceSyntax syn f = do
     ext <- TR.syntaxExt syn
+    stack <- MSS.gets tsTraceStack
     MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate (\syns -> ((syn, ext) : syns)) (tsTraceStack s) }
     a <- f
-    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate (\((_ :: t, _) : syns) -> syns) (tsTraceStack s) }
+    MSS.modify' $ \s -> s { tsTraceStack = stack }
     return a
 
 instance TR.SyntaxExt SyntaxTraceExt (Generator h s arch ret) where
-  syntaxExt = TR.withKnownSyntaxRepr $ \repr syn -> case repr of
+  syntaxExt = TR.useKnownSyntaxRepr $ \_ -> \case
     TR.SyntaxStmtRepr -> return $ SyntaxTraceExtUnit
     TR.SyntaxExprRepr -> do
       Just tc <- MSS.gets tsExprConstraint

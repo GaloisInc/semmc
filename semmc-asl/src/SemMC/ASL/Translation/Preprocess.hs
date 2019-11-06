@@ -248,6 +248,7 @@ extraRegisters = [
 prepASL :: ASLSpec -> ASLSpec
 prepASL (ASLSpec instrs defs sdefs edefs rdefs) =
   let
+    ovrs :: forall t. TR.KnownSyntaxRepr t => t -> t
     ovrs = TR.mkSyntaxOverrides (defs ++ sdefs ++ edefs)
     f = TR.applySyntaxOverridesDefs ovrs
     g = TR.applySyntaxOverridesInstrs ovrs
@@ -712,29 +713,19 @@ theVarGlobal varName = do
     Nothing -> error $ "Unknown global variable: " <> show varName
 
 
+collectCallables :: Monoid w
+                 => (Callable -> [AS.Expr] -> SigM ext f w)
+                 -> (AS.QualifiedIdentifier, [AS.Expr])
+                 -> SigM ext f w
+collectCallables f (AS.QualifiedIdentifier q nm, argEs) =
+  mconcat <$> traverse (\(nm',argEs') -> collectCallable (AS.QualifiedIdentifier q nm', argEs')) (overrideFun nm argEs)
+  where
+    collectCallable (qName, argEs) = do
+      mCallable <- lookupCallable qName (length argEs)
+      case mCallable of
+        Nothing -> return $ mempty
+        Just c -> f c argEs
 
-mkCallableWriter :: t ~ SigM ext f
-                 => Monoid w
-                 => (Callable -> [AS.Expr] -> t w)
-                 -> (AS.Expr -> t w)
-                 -> (AS.Stmt -> t w)
-                 -> (AS.LValExpr -> t w)
-                 -> (AS.Type -> t w)
-                 -> TR.SyntaxWriter w t
-mkCallableWriter f getexpr getstmt getlval gettype = let
-  collectCallable (qName, argEs) = do
-    mCallable <- lookupCallable qName (length argEs)
-    case mCallable of
-      Nothing -> return $ mempty
-      Just c -> f c argEs
-  collectCallables (AS.QualifiedIdentifier q nm, argEs) =
-    mconcat <$> traverse (\(nm',argEs') -> collectCallable (AS.QualifiedIdentifier q nm', argEs')) (overrideFun nm argEs)
-  in TR.SyntaxWriter $ TR.withKnownSyntaxRepr $ \case
-    TR.SyntaxExprRepr -> getexpr
-    TR.SyntaxStmtRepr -> getstmt
-    TR.SyntaxLValRepr -> getlval
-    TR.SyntaxTypeRepr -> gettype
-    TR.SyntaxCallRepr -> collectCallables
 
 callableGlobalVars :: Callable
                    -> SigM ext f GlobalVarRefs
@@ -745,19 +736,22 @@ callableGlobalVars c = do
     Nothing -> TR.throwTrace $ MissingSignature c
 
 
-globalsOfStmts :: [AS.Stmt] -> SigM ext f GlobalVarRefs
-globalsOfStmts stmts = do
-  let getexpr expr = case expr of
-        AS.ExprVarRef (AS.QualifiedIdentifier _ varName) -> readGlobal varName
-        _ -> return mempty
-  let getlval lv = case lv of
-        AS.LValVarRef (AS.QualifiedIdentifier _ varName) -> writeGlobal varName
-        _ -> return mempty
-  let getstmt stmt = case stmt of
-        AS.StmtCase _ alts -> mconcat <$> traverse caseAlternativeGlobalVars alts
-        _ -> return mempty
-  let collectors = mkCallableWriter (\c args -> callableGlobalVars c) getexpr getstmt getlval (\_ -> return  mempty)
-  mconcat <$> traverse (TR.writeSyntax collectors) stmts
+globalsOfStmts :: forall ext f. [AS.Stmt] -> SigM ext f GlobalVarRefs
+globalsOfStmts stmts = let
+  collectors :: forall t. TR.KnownSyntaxRepr t => t -> SigM ext f GlobalVarRefs
+  collectors = TR.useKnownSyntaxRepr $ \syn -> \case
+    TR.SyntaxExprRepr
+      | AS.ExprVarRef (AS.QualifiedIdentifier _ varName) <- syn ->
+        readGlobal varName
+    TR.SyntaxLValRepr
+      | AS.LValVarRef (AS.QualifiedIdentifier _ varName) <- syn ->
+        writeGlobal varName
+    TR.SyntaxStmtRepr
+      | AS.StmtCase _ alts <- syn ->
+        mconcat <$> traverse caseAlternativeGlobalVars alts
+    TR.SyntaxCallRepr -> collectCallables (\c args -> callableGlobalVars c) syn
+    _ -> return mempty
+  in mconcat <$> traverse (TR.collectSyntax collectors) stmts
   where
     caseAlternativeGlobalVars alt = case alt of
       AS.CaseWhen pats _ _ -> mconcat <$> traverse casePatternGlobalVars pats
@@ -776,39 +770,40 @@ registerKindMap nm = case nm of
   "_Dclone" -> Just $ RegisterV
   _ -> Nothing
 
-regIdxsOfStmts :: [AS.Stmt] -> SigM ext f RegIdxVars
-regIdxsOfStmts stmts = do
-  let getstmt stmt = case stmt of
-        AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) e ->
-          return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
-        AS.StmtVarDeclInit (lvnm, _) e ->
-          return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
-        _ -> return mempty
-  let getexpr expr = case expr of
-        AS.ExprIndex (AS.ExprVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
-          | Just rkind <- registerKindMap idxnm ->
-            return $ regIdxsOfExpr rkind e
-        _ -> return mempty
-  let getlval lval = case lval of
-        AS.LValArrayIndex (AS.LValVarRef (AS.VarName idxnm)) [AS.SliceSingle e]
-          | Just rkind <- registerKindMap idxnm ->
-            return $ regIdxsOfExpr rkind e
-        _ -> return mempty
-  let callableRegIdxs c argEs = case c of
-        Callable (AS.VarName "LookUpRIndex") _ _ _
-          | [AS.ExprVarRef (AS.VarName varnm), _] <- argEs ->
-            return $ varRegIdx RegisterR varnm
-        _ -> do
-          (SomeSimpleFunctionSignature sig, _) <- computeCallableSignature c
-          let args = sfuncArgs sig
-          mconcat <$> traverse addFunArg (zip args argEs)
-        where
-          addFunArg (FunctionArg _ _ mrkind, e) = case mrkind of
-            Just rkind -> return $ regIdxsOfExpr rkind e
-            _ -> return mempty
-  let collectors = mkCallableWriter callableRegIdxs getexpr getstmt getlval (\_ -> return  mempty)
-  mconcat <$> traverse (TR.writeSyntax collectors) stmts
+regIdxsOfStmts :: forall ext f. [AS.Stmt] -> SigM ext f RegIdxVars
+regIdxsOfStmts stmts = let
+  collectors :: forall t. TR.KnownSyntaxRepr t => t -> SigM ext f RegIdxVars
+  collectors = TR.useKnownSyntaxRepr $ \syn -> \case
+    TR.SyntaxStmtRepr -> case syn of
+      AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) e ->
+        return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
+      AS.StmtVarDeclInit (lvnm, _) e ->
+        return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
+      _ -> return mempty
+    TR.SyntaxExprRepr
+      | AS.ExprIndex (AS.ExprVarRef (AS.VarName idxnm)) [AS.SliceSingle e] <- syn
+      , Just rkind <- registerKindMap idxnm ->
+        return $ regIdxsOfExpr rkind e
+    TR.SyntaxLValRepr
+      | AS.LValArrayIndex (AS.LValVarRef (AS.VarName idxnm)) [AS.SliceSingle e] <- syn
+      , Just rkind <- registerKindMap idxnm ->
+        return $ regIdxsOfExpr rkind e
+    TR.SyntaxCallRepr -> collectCallables callableRegIdxs syn
+    _ -> return mempty
+  in mconcat <$> traverse (TR.collectSyntax collectors) stmts
   where
+    callableRegIdxs c argEs = case c of
+      Callable (AS.VarName "LookUpRIndex") _ _ _
+        | [AS.ExprVarRef (AS.VarName varnm), _] <- argEs ->
+          return $ varRegIdx RegisterR varnm
+      _ -> do
+        (SomeSimpleFunctionSignature sig, _) <- computeCallableSignature c
+        let args = sfuncArgs sig
+        mconcat <$> traverse addFunArg (zip args argEs)
+      where
+        addFunArg (FunctionArg _ _ mrkind, e) = case mrkind of
+          Just rkind -> return $ regIdxsOfExpr rkind e
+          _ -> return mempty
     regIdxsOfExpr rkind e = mconcat $ map (varRegIdx rkind) $ regIdxVars e
 
     regIdxVars expr = case expr of
@@ -818,11 +813,14 @@ regIdxsOfStmts stmts = do
       AS.ExprCall (AS.VarName "UInt") [e] -> regIdxVars e
       _ -> []
 
-computeSignatures :: [AS.Stmt] -> SigM ext f ()
-computeSignatures stmts = do
-  let collectors = mkCallableWriter (\c args -> void $ computeCallableSignature c)
-        (\_ -> return  mempty) (\_ -> return  mempty) (\_ -> return  mempty) storeUserType
-  traverse_ (TR.writeSyntax collectors) stmts
+computeSignatures :: forall ext f. [AS.Stmt] -> SigM ext f ()
+computeSignatures stmts = let
+  collectors :: forall t. TR.KnownSyntaxRepr t => t -> SigM ext f ()
+  collectors = TR.withKnownSyntaxRepr $ \case
+    TR.SyntaxCallRepr -> collectCallables (\c args -> void $ computeCallableSignature c)
+    TR.SyntaxTypeRepr -> storeUserType
+    _ -> \_ -> return ()
+  in traverse_ (TR.collectSyntax collectors) stmts
 
 -- | For recursive functions, this signature is temporarily stored as a stand-in
 -- for the actual function signature when recursively calling the signature
@@ -1100,7 +1098,9 @@ pruneInfeasableInstrSets enc stmts = case enc of
                        (AS.ExprVarRef (AS.VarName "InstrSet_A32"))) =
       AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
     evalInstrSetTest e = e
-    collector = TR.SyntaxMap (TR.withKnownSyntaxRepr (\case {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id}))
+
+    collector :: forall t. TR.KnownSyntaxRepr t => t -> t
+    collector = TR.withKnownSyntaxRepr (\case {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id})
     in map (TR.mapSyntax collector) stmts
 
 
