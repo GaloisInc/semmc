@@ -11,6 +11,8 @@
 module Main ( main ) where
 
 import qualified Control.Exception as X
+import           Data.Monoid
+import           Control.Monad.Identity
 import           Control.Monad (forM_, foldM, when)
 import qualified Control.Monad.State.Lazy as MSS
 import qualified Control.Monad.RWS as RWS
@@ -45,6 +47,9 @@ import           Lang.Crucible.Panic ( Crucible )
 
 
 import qualified SemMC.ASL.SyntaxTraverse as TR
+
+import qualified SemMC.Formula as SF
+
 import SemMC.Formula.Printer as FP
 import SemMC.ASL
 import SemMC.ASL.Crucible
@@ -117,6 +122,7 @@ data StatOptions = StatOptions
   , reportAllExceptions :: Bool
   , reportKnownExceptionFilter :: ExpectedException -> Bool
   , reportFunctionDependencies :: Bool
+  , reportFunctionFormulas :: Bool
   }
 
 defaultStatOptions :: StatOptions
@@ -126,6 +132,7 @@ defaultStatOptions = StatOptions
   , reportAllExceptions = False
   , reportKnownExceptionFilter = (\_ -> True)
   , reportFunctionDependencies = False
+  , reportFunctionFormulas = False
   }
 
 arguments :: [OptDescr (Either (TranslatorOptions -> TranslatorOptions) (StatOptions -> StatOptions))]
@@ -161,6 +168,9 @@ arguments =
 
   , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> opts {reportKnownExceptions = True })))
     "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
+
+  , Option [] ["report-formulas"] (NoArg (Right (\opts -> opts { reportFunctionFormulas = True })))
+    "Print function formulas for all successfully simulated functions."
 
   , Option [] ["translate-instruction"]
     (ReqArg (\instrAndEnc -> case List.splitOn "/" instrAndEnc of
@@ -233,7 +243,7 @@ runWithFilters' opts spec sigEnv sigState = do
   sm <- MSS.execStateT (forM_ instrs (\(i, (ident, instr)) -> do
      logMsg $ "Processing instruction: " ++ show i ++ "/" ++ show (length allInstrs)
      runTranslation instr ident))
-    (SigMap Map.empty Map.empty Map.empty sigState sigEnv Map.empty Map.empty [] opts)
+    (SigMap Map.empty Map.empty Map.empty sigState sigEnv Map.empty Map.empty Map.empty [] opts)
   return sm
 
 runTranslation :: AS.Instruction -> InstructionIdent -> MSS.StateT SigMap IO ()
@@ -308,6 +318,13 @@ withOnlineBackend gen unsatFeat action =
     do WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
        action sym
 
+-- Extremely vague measure of function body size
+measureStmts :: [AS.Stmt] -> Int
+measureStmts stmts = getSum $ runIdentity $ mconcat <$> traverse (TR.collectSyntax doCollect) stmts
+  where
+    doCollect :: TR.KnownSyntaxRepr t => t -> Identity (Sum Int)
+    doCollect _ = return 1
+
 processFunction :: InstructionIdent
                 -> ElemKey
                 -> FunctionSignature globalReads globalWrites init tps
@@ -326,6 +343,7 @@ processFunction fromInstr key sig stmts defs = do
       then return (funcDepends p)
       else do
         logMsg $ "Simulating: " ++ prettyKey key
+        logMsg $ "Rough function body size:" ++ show (measureStmts stmts)
         mdep <- catchIO key $
           withOnlineBackend globalNonceGenerator CBO.NoUnsatFeatures $ \backend -> do
             let cfg = SimulatorConfig { simOutputHandle = IO.stdout
@@ -333,9 +351,15 @@ processFunction fromInstr key sig stmts defs = do
                                       , simSym = backend
                                       }
             symFn <- simulateFunction cfg p
-            putStrLn (T.unpack (FP.printFunctionFormula symFn))
-            return (funcDepends p)
-        return $ fromMaybe Map.empty mdep
+            return (funcDepends p, FP.printFunctionFormula symFn)
+        case mdep of
+          Just (dep, formula) -> do
+            logMsg "Simulation succeeded!"
+            MSS.modify $ \s -> s { sFormulas = Map.insert key formula (sFormulas s) }
+            return dep
+          _ -> do
+            logMsg "Simulation failed."
+            return Map.empty
     Nothing -> return Map.empty
 
 getASL :: TranslatorOptions -> IO (ASLSpec)
@@ -477,7 +501,12 @@ reportStats sopts sm = do
       return $ Just ident
     else return Nothing) (instrDeps sm)
   putStrLn $ "Number of successfully translated functions: " <> show (Map.size $ r)
-
+  E.when (reportFunctionFormulas sopts) $ do
+    putStrLn $ "Successfully simulated functions"
+    putStrLn $ "-------------------------------"
+    void $ Map.traverseWithKey (\k formula -> do
+      putStrLn $ prettyKey k
+      putStrLn $ T.unpack $ formula) (sFormulas sm)
   where
     reverseDependencyMap =
         Map.fromListWith (++) $ concat $ map (\(instr, funs) -> map (\fun -> (fun, [instr])) (Set.toList funs))
@@ -555,6 +584,7 @@ data SigMap = SigMap { sMap :: Map.Map T.Text (Some (SomeFunctionSignature))
                      , sigEnv :: SigEnv
                      , instrDeps :: Map.Map InstructionIdent (Set.Set T.Text)
                      , funDeps :: Map.Map T.Text (Set.Set T.Text)
+                     , sFormulas :: Map.Map ElemKey T.Text
                      , sLog :: [T.Text]
                      , sOptions :: TranslatorOptions
                      }
