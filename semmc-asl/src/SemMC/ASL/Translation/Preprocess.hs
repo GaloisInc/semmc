@@ -52,6 +52,7 @@ import Debug.Trace (traceM)
 import           Control.Applicative ( (<|>), Const(..) )
 import qualified Control.Exception as X
 import           Control.Monad (void, foldM, foldM_)
+import           Control.Monad.Identity
 import           Control.Monad.Trans ( lift )
 import qualified Control.Monad.Trans as MT
 import qualified Control.Monad.Except as E
@@ -774,12 +775,6 @@ regIdxsOfStmts :: forall ext f. [AS.Stmt] -> SigM ext f RegIdxVars
 regIdxsOfStmts stmts = let
   collectors :: forall t. TR.KnownSyntaxRepr t => t -> SigM ext f RegIdxVars
   collectors = TR.useKnownSyntaxRepr $ \syn -> \case
-    TR.SyntaxStmtRepr -> case syn of
-      AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) e ->
-        return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
-      AS.StmtVarDeclInit (lvnm, _) e ->
-        return $ mconcat $ map (varDependsOn lvnm) $ regIdxVars e
-      _ -> return mempty
     TR.SyntaxExprRepr
       | AS.ExprIndex (AS.ExprVarRef (AS.VarName idxnm)) [AS.SliceSingle e] <- syn
       , Just rkind <- registerKindMap idxnm ->
@@ -804,14 +799,47 @@ regIdxsOfStmts stmts = let
         addFunArg (FunctionArg _ _ mrkind, e) = case mrkind of
           Just rkind -> return $ regIdxsOfExpr rkind e
           _ -> return mempty
-    regIdxsOfExpr rkind e = mconcat $ map (varRegIdx rkind) $ regIdxVars e
+    regIdxsOfExpr rkind e = mconcat $ map (varRegIdx rkind) $ directVarsOfExpr e
 
-    regIdxVars expr = case expr of
-      AS.ExprBinOp _ e1 e2 ->
-        regIdxVars e1 ++ regIdxVars e2
-      AS.ExprVarRef (AS.VarName nm) -> [nm]
-      AS.ExprCall (AS.VarName "UInt") [e] -> regIdxVars e
-      _ -> []
+directVarsOfExpr :: AS.Expr -> [T.Text]
+directVarsOfExpr = \case
+  AS.ExprBinOp _ e1 e2 ->
+    directVarsOfExpr e1 ++ directVarsOfExpr e2
+  AS.ExprVarRef (AS.VarName nm) -> [nm]
+  AS.ExprSlice e _ -> directVarsOfExpr e
+  AS.ExprCall (AS.VarName "UInt") [e] -> directVarsOfExpr e
+  _ -> []
+
+
+-- | Build a variable dependency graph from the given list of
+-- statements
+varDepsOfStmts :: forall ext f
+                . Bool
+                -- ^ If true, edges go from an lval variable to all rhs variables.
+                -- If false, edges go from rhs variables to lvals varibles.
+               -> [AS.Stmt]
+               -> VarDeps
+varDepsOfStmts forward stmts = let
+  collectors :: forall t. TR.KnownSyntaxRepr t => t -> Identity VarDeps
+  collectors = TR.useKnownSyntaxRepr $ \syn -> \case
+    TR.SyntaxStmtRepr -> case syn of
+      _ | Just _ <- unletInStmt syn ->
+          return mempty
+      AS.StmtAssign (AS.LValVarRef (AS.VarName lvnm)) e ->
+        return $ varDependsExpr lvnm e
+      AS.StmtVarDeclInit (lvnm, _) e ->
+        return $ varDependsExpr lvnm e
+      AS.StmtFor var (lo, hi) stmts ->
+        return $ varDependsExpr var lo <> varDependsExpr var hi
+      _ -> return mempty
+    _ -> return mempty
+  in runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) stmts
+  where
+    varDependsExpr lval e =
+      if forward then mconcat $ map (\var -> varDependsOn var lval) $ directVarsOfExpr e
+      else mconcat $ map (varDependsOn lval) $ directVarsOfExpr e
+
+
 
 computeSignatures :: forall ext f. [AS.Stmt] -> SigM ext f ()
 computeSignatures stmts = let
@@ -878,10 +906,11 @@ computeCallableSignature c@Callable{..} = do
       Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
 
       regIdxs <- regIdxsOfStmts callableStmts
+      let varDeps = varDepsOfStmts False callableStmts
       let sig = SomeSimpleFunctionSignature $ SimpleFunctionSignature
             { sfuncName = name
             , sfuncRet = callableRets
-            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (getRegisterKind regIdxs nm)) callableArgs
+            , sfuncArgs = map (\(nm,t) -> FunctionArg nm t (getRegisterKind regIdxs varDeps nm)) callableArgs
             , sfuncGlobalReadReprs = globalReadReprs
             , sfuncGlobalWriteReprs = globalWriteReprs
             }
@@ -898,41 +927,52 @@ mergeRegisterKinds :: RegisterKind -> RegisterKind -> RegisterKind
 mergeRegisterKinds r1 r2 = if r1 == r2 then r1 else RegisterInconsistent
 
 -- Variable environment for tracking usage as a register index
--- Relation tracks direct dependencies between variables
 data RegIdxVars = RegIdxVars
-  { regIdxVars :: Map.Map T.Text RegisterKind
-  , regIdxVarRels :: Map.Map T.Text (Set.Set T.Text) }
+  { unRegIdxVars :: Map.Map T.Text RegisterKind }
 
 instance Semigroup RegIdxVars where
- (<>) (RegIdxVars vars vrels) (RegIdxVars vars' vrels') =
-   RegIdxVars (Map.unionWith mergeRegisterKinds vars vars') (Map.unionWith Set.union vrels vrels')
+ (<>) (RegIdxVars vars) (RegIdxVars vars') =
+   RegIdxVars (Map.unionWith mergeRegisterKinds vars vars')
 
 instance Monoid RegIdxVars where
-  mempty = RegIdxVars Map.empty Map.empty
+  mempty = RegIdxVars Map.empty
 
+-- Variable dependency tracking
+data VarDeps = VarDeps
+  { unVarDeps :: Map.Map T.Text (Set.Set T.Text) }
+  deriving Show
 
-varDependsOn :: T.Text -> T.Text -> RegIdxVars
-varDependsOn dep var = RegIdxVars Map.empty (Map.singleton var (Set.singleton dep))
+instance Semigroup VarDeps where
+  (VarDeps deps) <> (VarDeps deps') =
+    VarDeps (Map.unionWith Set.union deps deps')
+
+instance Monoid VarDeps where
+  mempty = VarDeps Map.empty
+
+varDependsOn :: T.Text -> T.Text -> VarDeps
+varDependsOn dep var = VarDeps (Map.singleton var (Set.singleton dep))
 
 varRegIdx :: RegisterKind -> T.Text -> RegIdxVars
-varRegIdx rkind var  = RegIdxVars (Map.singleton var rkind) (Map.empty)
+varRegIdx rkind var  = RegIdxVars (Map.singleton var rkind)
 
 
-reachableRegIdx :: RegIdxVars -> Set.Set T.Text -> Set.Set T.Text -> Set.Set T.Text
-reachableRegIdx ridx vars frontier = let
-  vars' = Set.union vars frontier
-  in if vars' == vars
-  then vars
-  else reachableRegIdx ridx vars' (Set.foldr' addVar Set.empty frontier)
+reachableVarDeps :: VarDeps -> T.Text -> Set.Set T.Text
+reachableVarDeps deps var = reachableVarDeps' deps Set.empty (Set.singleton var)
   where
-    addVar nm set = case Map.lookup nm (regIdxVarRels ridx) of
-      Just set' -> Set.union set set'
-      _ -> set
+    reachableVarDeps' deps vars frontier = let
+      vars' = Set.union vars frontier
+      in if vars' == vars
+      then vars
+      else reachableVarDeps' deps vars' (Set.foldr' addVar Set.empty frontier)
+      where
+        addVar nm set = case Map.lookup nm (unVarDeps deps) of
+          Just set' -> Set.union set set'
+          _ -> set
 
-getRegisterKind :: RegIdxVars -> T.Text -> Maybe RegisterKind
-getRegisterKind ridx@(RegIdxVars vars vrels) var = let
-  reachable = reachableRegIdx ridx Set.empty (Set.singleton var)
-  foundKinds = catMaybes $ Set.toList $ Set.map (\nm -> Map.lookup nm (regIdxVars ridx)) $ reachable
+getRegisterKind :: RegIdxVars -> VarDeps -> T.Text -> Maybe RegisterKind
+getRegisterKind ridx deps var = let
+  reachable = reachableVarDeps deps var
+  foundKinds = catMaybes $ Set.toList $ Set.map (\nm -> Map.lookup nm (unRegIdxVars ridx)) $ reachable
   in case foundKinds of
     [rkind] -> Just $ rkind
     (_ : _) -> Just $ RegisterInconsistent
@@ -1010,11 +1050,12 @@ computeInstructionSignature AS.Instruction{..} encName iset = do
         return $ Some (LabeledValue varName varTp)
 
       regIdxs <- regIdxsOfStmts instStmts
+      let varDeps = varDepsOfStmts False instStmts
       (labeledArgs, args) <- unzip <$> (forM (AS.encFields enc) $ \field -> do
         (Some tp, ty) <- computeFieldType field
         let ctp = CT.baseToType tp
         let nm = AS.instFieldName field
-        return (Some (LabeledValue nm ctp), FunctionArg nm ty (getRegisterKind regIdxs nm)))
+        return (Some (LabeledValue nm ctp), FunctionArg nm ty (getRegisterKind regIdxs varDeps nm)))
       Some globalReadReprs <- return $ Ctx.fromList labeledReads
       Some globalWriteReprs <- return $ Ctx.fromList labeledWrites
       Some argReprs <- return $ Ctx.fromList labeledArgs
@@ -1035,39 +1076,102 @@ liftOverEnvs :: T.Text -- ^ instruction name (for hint lookup)
              -> AS.InstructionEncoding -- ^ instruction encoding
              -> [AS.Stmt] -- ^ instruction body
              -> SigM ext f [AS.Stmt]
-liftOverEnvs instName enc stmts = case Map.lookup instName dependentVariableHints of
-  Just (vars, optvars) ->
-    let
-      fields = AS.encFields enc
-      decodes = AS.encDecode enc
+liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
+  ([], _)-> return stmts
+  (vars', optvars') -> let
+    fields = AS.encFields enc
+    decodes = AS.encDecode enc
+    fieldType (AS.InstructionField instFieldName _ instFieldOffset) =
+          (instFieldName, StaticBVType instFieldOffset)
+    vartps = map fieldType fields
+    decodeVarDeps = varDepsOfStmts True decodes
+    decodeVars =
+      let
+        collectors :: forall t. TR.KnownSyntaxRepr t => t -> Identity (Set.Set T.Text)
+        collectors = TR.useKnownSyntaxRepr $ \syn -> \case
+          TR.SyntaxLValRepr
+            | AS.LValVarRef (AS.VarName nm) <- syn ->
+              return $ Set.singleton nm
+          TR.SyntaxStmtRepr -> case syn of
+             AS.StmtVarDeclInit (lvnm, _) _ ->
+               return $ Set.singleton lvnm
+             AS.StmtVarsDecl _ nms ->
+               return $ Set.fromList nms
+             _ -> return mempty
+          _ -> return mempty
+        decodeLVals = runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) decodes
+        in decodeLVals
+    varDeps = varDepsOfStmts True stmts <> decodeVarDeps
 
-      possibleEnvs :: [Map.Map T.Text StaticValue]
-      possibleEnvs =
-        let
-          fieldType (AS.InstructionField instFieldName _ instFieldOffset) =
-            (instFieldName, StaticBVType instFieldOffset)
-          vartps = map fieldType fields
-        in
-          getPossibleVarValues vartps vars optvars decodes
+    varsSet = Set.intersection decodeVars (Set.unions $ map (reachableVarDeps varDeps) vars')
+    vars = Set.toList varsSet
 
-      cases :: [[(T.Text, StaticValue)]]
-      cases = do
-        asns <- possibleEnvs
-        let varasns = map (varToStatic asns) vars
-        let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
-        return $ (varasns ++ optvarasns)
+    optvars = Set.toList $  Set.difference (Set.intersection decodeVars (Set.unions $ map (reachableVarDeps varDeps) optvars'))
+      varsSet
 
-      varToStatic asns var = case Map.lookup var asns of
-        Just sv -> (var, sv)
-        _ -> error $ "Missing variable in possible assignments: " ++ show var
-      optvarToStatic asns optvar = case Map.lookup optvar asns of
-        Just sv -> Just (optvar, sv)
-        _ -> Nothing
+    possibleEnvs :: [Map.Map T.Text StaticValue]
+    possibleEnvs = getPossibleVarValues vartps vars optvars decodes
+
+    cases :: [[(T.Text, StaticValue)]]
+    cases = do
+      asns <- possibleEnvs
+      let varasns = map (varToStatic asns) vars
+      let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
+      return $ (varasns ++ optvarasns)
+
+    varToStatic asns var = case Map.lookup var asns of
+      Just sv -> (var, sv)
+      _ -> error $ "Missing variable in possible assignments: " ++ show var
+    optvarToStatic asns optvar = case Map.lookup optvar asns of
+      Just sv -> Just (optvar, sv)
+      _ -> Nothing
 
     in case cases of
       [] -> TR.throwTrace $ FailedToDetermineStaticEnvironment vars
       x -> return $ [staticEnvironmentStmt x stmts]
-  _ -> return $ stmts
+
+
+-- | Scan the instruction body for function calls to overly type-dependent functions
+dependentVariablesOfStmts :: [AS.Stmt] -> ([T.Text], [T.Text])
+dependentVariablesOfStmts stmts = let
+  collectors :: forall t. TR.KnownSyntaxRepr t => t -> Identity (Set.Set T.Text, Set.Set T.Text)
+  collectors = TR.useKnownSyntaxRepr $ \syn -> \case
+    TR.SyntaxStmtRepr -> case syn of
+      _ | Just _ <- unletInStmt syn -> return mempty
+      _ | Just _ <- unblockStmt syn -> return mempty
+
+      AS.StmtAssign (AS.LValVarRef _)
+        (AS.ExprSlice (AS.ExprCall (AS.VarName "GETTER_R") _) [AS.SliceRange hi lo]) ->
+        return $ directVarsOf hi <> directVarsOf lo
+      AS.StmtIf [(e@(AS.ExprVarRef (AS.VarName "floating_point")), _)] _ ->
+        return $ directVarsOf e
+      AS.StmtFor var (lo, hi) _ ->
+        return $ optionalDirectVarsOf lo <> optionalDirectVarsOf hi
+      _ -> return mempty
+    TR.SyntaxCallRepr -> case syn of
+      (AS.VarName "GETTER_Elem", [_, e, size]) ->
+        return $ optionalDirectVarsOf e <> directVarsOf size
+      (AS.VarName "GETTER_Elem", [_, e]) ->
+        return $ optionalDirectVarsOf e
+      (AS.VarName "SETTER_Elem", [_, _, e, size]) ->
+        return $ optionalDirectVarsOf e <> optionalDirectVarsOf size
+      (AS.VarName "SETTER_Elem", [_, _, e]) ->
+        return $ optionalDirectVarsOf e
+      (AS.VarName "GETTER_MemU", [_, size]) ->
+        return $ directVarsOf size
+      (AS.VarName "SETTER_MemU", [_, _, size]) ->
+        return $ directVarsOf size
+      (AS.VarName "UnsignedSatQ", [_, saturate_to]) ->
+        return $ directVarsOf saturate_to
+      (AS.VarName "SignedSatQ", [_, saturate_to]) ->
+        return $ directVarsOf saturate_to
+      _ -> return mempty
+    _ -> return mempty
+  (vars, optvars) = runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) stmts
+ in (Set.toList vars, Set.toList optvars)
+  where
+    directVarsOf e = (Set.fromList $ directVarsOfExpr e, Set.empty)
+    optionalDirectVarsOf e = (Set.empty, Set.fromList $ directVarsOfExpr e)
 
 -- | Create a copy of the given function body for each given static
 -- variable binding environment, prefixing it with the given bindings.
@@ -1172,92 +1276,4 @@ localTypeHints = Map.fromList
   ,(("AArch32_TranslationTableWalkLD_7", "outputaddress"),  ConstraintSingle (CT.BVRepr $ WT.knownNat @40))
   ,(("AArch64_TranslationTableWalk_8", "baseaddress"), ConstraintSingle (CT.BVRepr $ WT.knownNat @52))
   ,(("AArch64_TranslationTableWalk_8", "outputaddress"),  ConstraintSingle (CT.BVRepr $ WT.knownNat @52))
-  ]
-
-dependentVariableHints :: Map.Map T.Text ([T.Text], [T.Text])
-dependentVariableHints = Map.fromList $
-  [("aarch32_VABS_A", (["esize"], ["elements", "floating_point"]))
-  ,("aarch32_VNEG_A", (["esize"], ["elements", "floating_point"]))
-  ] ++ map (\(var, hints) -> (var, (hints, []))) dependentVariableHints'
-
--- Hints for instructions for variables that need to be concretized
--- to successfully translate
-dependentVariableHints' :: [(T.Text, [T.Text])]
-dependentVariableHints' =
-  [("aarch32_VQSUB_A", ["esize", "elements", "regs"])
-  ,("aarch32_VMOVL_A", ["esize", "elements"])
-  ,("aarch32_VQDMULH_A", ["esize", "elements", "regs"])
-  ,("aarch32_VABA_A", ["esize", "elements"])
-  ,("aarch32_VMAX_i_A", ["esize", "elements"])
-  ,("aarch32_VRSHR_A", ["esize", "elements"])
-  ,("aarch32_VST4_m_A", ["ebytes", "elements"])
-  ,("aarch32_VPMAX_i_A", ["esize", "elements"])
-  ,("aarch32_USAT16_A", ["saturate_to"])
-  ,("aarch32_SSAT16_A", ["saturate_to"])
-  ,("aarch32_SSAT_A", ["saturate_to"])
-  ,("aarch32_VLD1_m_A", ["ebytes", "elements"])
-  ,("aarch32_VLD2_m_A", ["ebytes", "elements"])
-  ,("aarch32_VLD3_m_A", ["ebytes", "elements"])
-  ,("aarch32_VREV16_A", ["esize", "containers", "regs", "elements_per_container"])
-  ,("aarch32_VABD_i_A", ["esize", "elements"])
-  ,("aarch32_VADDL_A", ["esize", "elements"])
-  ,("aarch32_VMLA_i_A", ["esize", "elements"])
-  ,("aarch32_VQRDMLAH_A", ["esize", "elements"])
-  ,("aarch32_VMOVN_A", ["esize", "elements"])
-  ,("aarch32_VQDMLAL_A", ["esize", "elements"])
-  ,("aarch32_VDUP_r_A", ["esize", "elements"])
-  ,("aarch32_CRC32_A", ["size"])
-  ,("aarch32_VQSHL_i_A", ["esize", "elements", "regs"])
-  ,("aarch32_VSUB_i_A", ["esize", "elements"])
-  ,("aarch32_VSUBHN_A", ["esize", "elements"])
-  ,("aarch32_VQRDMULH_A", ["esize", "elements"])
-  ,("aarch32_VQADD_A", ["esize", "elements"])
-  ,("aarch32_VDUP_s_A", ["esize", "elements"])
-  ,("aarch32_VQDMULL_A", ["esize", "elements"])
-  ,("aarch32_VQSHRN_A", ["esize", "elements"])
-  ,("aarch32_VLD4_m_A", ["ebytes", "elements"])
-  ,("aarch32_VSUBL_A", ["esize", "elements"])
-  ,("aarch32_VST2_m_A", ["ebytes", "elements"])
-  ,("aarch32_VSRA_A", ["esize", "elements"])
-  ,("aarch32_VSHL_i_A", ["esize", "elements"])
-  ,("aarch32_VCLZ_A", ["esize", "elements"])
-  ,("aarch32_VMOV_sr_A", ["esize"])
-  ,("aarch32_USAT_A", ["saturate_to"])
-  ,("aarch32_VCLS_A", ["esize", "elements"])
-  ,("aarch32_VHADD_A", ["esize", "elements"])
-  ,("aarch32_VLD1_a_A", ["ebytes"])
-  ,("aarch32_VLD2_a_A", ["ebytes"])
-  ,("aarch32_VLD3_a_A", ["ebytes"])
-  ,("aarch32_VLD4_a_A", ["ebytes"])
-  ,("aarch32_VMUL_i_A", ["esize", "elements"])
-  ,("aarch32_VPADAL_A", ["esize", "elements"])
-  ,("aarch32_VQMOVN_A", ["esize", "elements"])
-  ,("aarch32_VQNEG_A", ["esize", "elements"])
-  ,("aarch32_VQSHL_r_A", ["esize", "elements"])
-  ,("aarch32_VRADDHN_A", ["esize", "elements"])
-  ,("aarch32_VRSHL_A", ["esize", "elements"])
-  ,("aarch32_VRSRA_A", ["esize", "elements"])
-  ,("aarch32_VRSUBHN_A", ["esize", "elements"])
-  ,("aarch32_VSHLL_A", ["esize", "elements"])
-  ,("aarch32_VSHL_r_A", ["esize", "elements"])
-  ,("aarch32_VSHRN_A", ["esize", "elements"])
-  ,("aarch32_VSHR_A", ["esize", "elements"])
-  ,("aarch32_VSLI_A", ["esize", "elements"])
-  ,("aarch32_VSRI_A", ["esize", "elements"])
-  ,("aarch32_VTRN_A", ["esize", "elements"])
-  ,("aarch32_VUZP_A", ["esize"])
-  ,("aarch32_VQRSHL_A", ["esize", "elements"])
-  ,("aarch32_VPADDL_A", ["esize", "elements"])
-  ,("aarch32_VZIP_A", ["esize"])
-  ,("aarch32_VST3_m_A", ["ebytes", "elements"])
-  ,("aarch32_VADD_i_A", ["esize", "elements"])
-  ,("aarch32_VQRSHRN_A", ["esize", "elements"])
-  ,("aarch32_VADDHN_A", ["esize", "elements"])
-  ,("aarch32_VRHADD_A", ["esize", "elements"])
-  ,("aarch32_VTST_A", ["esize", "elements"])
-  ,("aarch32_VRSHRN_A", ["esize", "elements"])
-  ,("aarch32_VPADD_i_A", ["esize", "elements"])
-  ,("aarch32_VQRDMLSH_A", ["esize", "elements"])
-  ,("aarch32_VQABS_A", ["esize", "elements"])
-  ,("aarch32_VST1_m_A", ["ebytes", "elements"])
   ]

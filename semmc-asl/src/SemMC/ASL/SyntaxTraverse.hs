@@ -79,11 +79,11 @@ varsOfExpr :: AS.Expr -> [T.Text]
 varsOfExpr e = runIdentity $ collectSyntax getVar e
   where
     getVar :: forall t. KnownSyntaxRepr t => t -> Identity [T.Text]
-    getVar = withKnownSyntaxRepr $ \case
-      SyntaxExprRepr -> \case
-        (AS.ExprVarRef (VarName ident)) -> return $ [ident]
-        _ -> return $ []
-      _ -> \_ -> return $ []
+    getVar = useKnownSyntaxRepr $ \syn -> \case
+      SyntaxExprRepr
+        | AS.ExprVarRef (VarName ident) <- syn ->
+          return $ [ident]
+      _ -> return $ []
 
 -- | Syntactic-level expansions that should happen aggressively before
 -- any interpretation.
@@ -184,16 +184,21 @@ mkSyntaxOverrides defs =
 
       assignOverrides lv = case lv of
         AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier _ "Elem"))
-          [AS.SliceSingle vector, AS.SliceSingle e, AS.SliceSingle size] -> Just $ \rhs -> stmtOverrides $
-          AS.StmtAssign
-          (AS.LValSliceOf (exprToLVal vector)
-           [(AS.SliceRange
-            (AS.ExprBinOp AS.BinOpSub
-             (AS.ExprBinOp AS.BinOpMul
-              (AS.ExprBinOp AS.BinOpAdd e (AS.ExprLitInt 1))
-              size)
-             (AS.ExprLitInt 1))
-            (AS.ExprBinOp AS.BinOpMul e size))]) rhs
+          [AS.SliceSingle vector, AS.SliceSingle e, AS.SliceSingle size] -> Just $ \rhs ->
+          blockStmt $
+            [ AS.StmtCall (AS.QualifiedIdentifier AS.ArchQualAny "SETTER_Elem") [rhs, vector, e, size]
+            , stmtOverrides $
+                AS.StmtAssign
+                (AS.LValSliceOf (exprToLVal vector)
+                 [(AS.SliceRange
+                  (AS.ExprBinOp AS.BinOpSub
+                   (AS.ExprBinOp AS.BinOpMul
+                    (AS.ExprBinOp AS.BinOpAdd e (AS.ExprLitInt 1))
+                    size)
+                   (AS.ExprLitInt 1))
+                  (AS.ExprBinOp AS.BinOpMul e size))]) rhs
+            ]
+
         AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier q "Elem")) [vector, e] -> Just $ \rhs ->
           case assignOverrides (AS.LValArrayIndex (AS.LValVarRef (AS.QualifiedIdentifier q "Elem"))
                                 [vector, e, AS.SliceSingle $ AS.ExprCall (AS.QualifiedIdentifier q "sizeOf") [rhs]]) of

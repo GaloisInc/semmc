@@ -2508,6 +2508,13 @@ overrides = Overrides {..}
                 env <- getStaticEnv
                 let (nm, sv) = f env
                 mapStaticVals (Map.insert nm sv)
+
+          _ | Just stmts <- unblockStmt s -> Just $ do
+                mapM_ (translateStatement overrides) stmts
+
+          -- The Elem setter is inlined by the desugaring pass, so an explicit call should be a no-op
+          AS.StmtCall (AS.VarName "SETTER_Elem") _ -> Just $ return ()
+
           AS.StmtCall (AS.QualifiedIdentifier _ "ASLSetUndefined") [] -> Just $ do
             result <- mkAtom $ CCG.App $ CCE.BoolLit True
             translateAssignment' overrides (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny undefinedVarName)) result TypeBasic Nothing

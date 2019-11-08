@@ -36,6 +36,8 @@ module SemMC.ASL.Types
   , projectValue
   , letInStmt
   , unletInStmt
+  , blockStmt
+  , unblockStmt
   , falseExpr
   , trueExpr
   ) where
@@ -194,6 +196,13 @@ unletInStmt (AS.StmtFor "LetIn" (exprVars, _) stmts) = Just (getVars exprVars, s
     getVar _ = error $ "Invalid LetIn"
 
 unletInStmt _ = Nothing
+
+blockStmt :: [AS.Stmt] -> AS.Stmt
+blockStmt stmts = AS.StmtFor "Block" (AS.ExprTuple [], AS.ExprTuple []) stmts
+
+unblockStmt :: AS.Stmt -> Maybe [AS.Stmt]
+unblockStmt (AS.StmtFor "Block" _ stmts) = Just stmts
+unblockStmt _ = Nothing
 
 trueExpr :: AS.Expr
 trueExpr = AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "TRUE")

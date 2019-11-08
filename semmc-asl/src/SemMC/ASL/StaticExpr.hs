@@ -252,6 +252,11 @@ staticBinOp bop msv msv' = do
       StaticBool False <- msv'
       return $ StaticBool False
     _ -> fail ""
+  <|> do
+  AS.BinOpConcat <- return $ bop
+  StaticBV bv <- msv
+  StaticBV bv' <- msv'
+  return $ StaticBV $ bv ++ bv'
 
 
 exprToStatic :: StaticEnv env
@@ -366,6 +371,9 @@ liftMaybe :: Maybe a -> StaticEnvM a
 liftMaybe (Just a) = return a
 liftMaybe _ = fail ""
 
+-- | For unknown-valued bitvectors we can nondeterministically determine
+-- all possible values. To avoid a state explosion, we cap the size of
+-- individual bitvectors.
 possibleValuesFor :: T.Text -> StaticEnvM StaticValue
 possibleValuesFor nm = do
   StaticEnvP env <- getEnv
@@ -440,6 +448,10 @@ testExpr test = do
     <|> (assertExpr False test >> return (StaticBool False))
   return b
 
+-- | Nondeterministically evaluate an expression into possible values.
+-- We nondeterministically expand variables
+-- into all possible assignments based on their type (restricted by
+-- their infeasable values).
 exprToStaticM :: AS.Expr -> StaticEnvM StaticValue
 exprToStaticM expr = do
   env <- getEnv
@@ -447,6 +459,8 @@ exprToStaticM expr = do
     Just sv -> return sv
     _ -> case expr of
       AS.ExprVarRef (AS.VarName nm) -> possibleValuesFor nm
+      -- Don't speculate across concats, this quickly causes a state explosion
+      AS.ExprBinOp AS.BinOpConcat e1 e2 -> fail ""
       AS.ExprBinOp bop e1 e2 -> do
         sv1 <- exprToStaticM e1
         sv2 <- exprToStaticM e2
@@ -461,6 +475,7 @@ exprToStaticM expr = do
         return $ StaticInt $ bitsToInteger bv
       _ -> fail ""
 
+
 allPossibleBVs :: Integer -> [[Bool]]
 allPossibleBVs 1 = [[True], [False]]
 allPossibleBVs n = do
@@ -468,6 +483,10 @@ allPossibleBVs n = do
   bits <- allPossibleBVs (n - 1)
   return $ bit : bits
 
+-- | Set a cap on the branching factor of a given nondeterministic operation
+nondetMaxBranch :: Integer -> StaticEnvM a -> StaticEnvM a
+nondetMaxBranch cut (StaticEnvM f) =
+  StaticEnvM (\env -> let result = f env in if length result > fromIntegral cut then [] else result)
 
 -- | Get all possible variable assignments for the given variables after
 -- the provided set of statements has been evaluated
@@ -487,7 +506,7 @@ getPossibleVarValues vartps vars optvars stmts =
   where
     maybeVar var =
       tryCatchEnv
-        ((\sv -> Just (var, sv)) <$> (staticValueOfVar var))
+        ((\sv -> Just (var, sv)) <$> staticValueOfVar var)
         (return Nothing)
 
 stmtsToStaticM :: [AS.Stmt] -> StaticEnvM ()
