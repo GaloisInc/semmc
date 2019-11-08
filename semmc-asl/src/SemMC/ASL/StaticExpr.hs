@@ -62,8 +62,13 @@ import qualified Control.Monad.State as MSS
 
 bitsToInteger :: [Bool] -> Integer
 bitsToInteger [x] = fromIntegral (fromEnum x)
-bitsToInteger (x:xs) = fromIntegral (fromEnum x) * 2 + bitsToInteger xs
-bitsToInteger _ = error $ "bitsToInteger empty list"
+bitsToInteger [] = error $ "bitsToInteger empty list"
+bitsToInteger xs = let
+  (half, _) = length xs `divMod` 2
+  (first, second) = List.splitAt half xs
+  firstInt = bitsToInteger first
+  secondInt = bitsToInteger second
+  in (firstInt * 2 ^ (length second)) + secondInt
 
 
 -- TODO: Type synonyms are currently a global property,
