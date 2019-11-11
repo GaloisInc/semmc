@@ -470,7 +470,7 @@ exprToStaticM expr = do
           True -> exprToStaticM body
           False -> exprToStaticM (AS.ExprIf rest fin)
       AS.ExprIf [] fin -> exprToStaticM fin
-      AS.ExprCall (AS.QualifiedIdentifier _ "UInt") [e] -> do
+      AS.ExprCall (AS.VarName "UInt") [e] -> do
         StaticBV bv <- exprToStaticM e
         return $ StaticInt $ bitsToInteger bv
       _ -> fail ""

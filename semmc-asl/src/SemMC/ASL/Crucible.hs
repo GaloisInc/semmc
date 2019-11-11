@@ -44,6 +44,7 @@ module SemMC.ASL.Crucible (
   , TranslationException(..)
   ) where
 
+import           Control.Monad ( when )
 import qualified Control.Exception as X
 import           Control.Monad.ST ( stToIO, RealWorld, ST )
 import qualified Data.Map as Map
@@ -54,6 +55,7 @@ import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
+import qualified Data.List as List
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE
 import qualified Lang.Crucible.CFG.Generator as CCG
@@ -67,7 +69,7 @@ import qualified What4.ProgramLoc as WP
 import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
-import           SemMC.ASL.Exceptions ( TranslationException(..) )
+import           SemMC.ASL.Exceptions ( TranslationException(..), LoggedTranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, overrides, addExtendedTypeData, throwTrace, unliftGenerator)
 import qualified SemMC.ASL.SyntaxTraverse as TR
@@ -116,56 +118,71 @@ functionToCrucible :: forall arch globalReads globalWrites init tps ret
                     -> FunctionSignature globalReads globalWrites init tps
                     -> CFH.HandleAllocator
                     -> [AS.Stmt]
+                    -> Integer -- ^ Logging level
                     -> IO (Function arch globalReads globalWrites init tps)
-functionToCrucible defs sig hdlAlloc stmts = do
+functionToCrucible defs sig hdlAlloc stmts logLvl = do
   let argReprs = FC.fmapFC projectValue (funcArgReprs sig)
   let retRepr = funcSigRepr sig
   hdl <- CFH.mkHandle' hdlAlloc (WFN.functionNameFromText (funcName sig)) argReprs retRepr
   globalReads <- FC.traverseFC allocateGlobal (funcGlobalReadReprs sig)
   let pos = WP.InternalPos
-  (CCG.SomeCFG cfg0, depends) <- stToIO $
-    defineCCGFunction pos hdl (\ref -> funcDef defs sig ref globalReads stmts)
-  return Function { funcSig = sig
-                  , funcCFG = CCS.toSSA cfg0
-                  , funcGlobalReads = globalReads
-                  , funcDepends = depends
-                  }
+  (CCG.SomeCFG cfg0, depends) <- (do
+    (result, log) <- stToIO $ defineCCGFunction pos hdl
+      (\refs -> funcDef defs sig refs globalReads stmts logLvl)
+    when (logLvl >= 5) $ printLog $ log
+    return result)
+    `X.catch` (\(LoggedTranslationException log e) -> printLog log >> X.throw e)
+  return $
+       Function { funcSig = sig
+                , funcCFG = CCS.toSSA cfg0
+                , funcGlobalReads = globalReads
+                , funcDepends = depends
+                }
   where
     allocateGlobal :: forall tp . LabeledValue T.Text WT.BaseTypeRepr tp -> IO (BaseGlobalVar tp)
     allocateGlobal (LabeledValue name rep) =
       BaseGlobalVar <$> CCG.freshGlobalVar hdlAlloc name (CT.baseToType rep)
 
+printLog :: [T.Text] -> IO ()
+printLog [] = return ()
+printLog log = putStrLn (T.unpack $ T.unlines $ List.reverse $ log)
+
 defineCCGFunction :: CCExt.IsSyntaxExtension ext
                => WP.Position
                -> CFH.FnHandle init ret
-               -> (STRef.STRef h (Map.Map T.Text StaticValues) -> CCG.FunctionDef ext h t init ret)
-               -> ST h (CCG.SomeCFG ext init ret, Map.Map T.Text StaticValues)
+               -> ((STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text]) ->
+                    CCG.FunctionDef ext h t init ret)
+               -> ST h ((CCG.SomeCFG ext init ret, Map.Map T.Text StaticValues), [T.Text])
 defineCCGFunction p h f = do
-  ref <- STRef.newSTRef Map.empty
-  (cfg, _) <- CCG.defineFunction p h (f ref)
-  val <- STRef.readSTRef ref
-  return (cfg, val)
+    funDepRef <- STRef.newSTRef Map.empty
+    logRef <- STRef.newSTRef []
+    (cfg, _) <- CCG.defineFunction p h (f (funDepRef, logRef))
+    log <- STRef.readSTRef logRef
+    funDeps <- STRef.readSTRef funDepRef
+    return ((cfg, funDeps), log)
 
 funcDef :: (ReturnsGlobals ret globalWrites tps)
         => Definitions arch
         -> FunctionSignature globalReads globalWrites init tps
-        -> STRef.STRef h (Map.Map T.Text StaticValues)
+        -> (STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text])
         -> Ctx.Assignment BaseGlobalVar globalReads
         -> [AS.Stmt]
+        -> Integer -- ^ Logging level
         -> Ctx.Assignment (CCG.Atom s) init
         -> (TranslationState h ret s, CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret))
-funcDef defs sig hdl globalReads stmts args =
-  (funcInitialState defs sig hdl globalReads args, defineFunction overrides sig globalReads stmts args)
+funcDef defs sig hdls globalReads stmts logLvl args =
+  (funcInitialState defs sig hdls logLvl globalReads args, defineFunction overrides sig globalReads stmts args)
 
 funcInitialState :: forall init globalReads globalWrites tps h s arch ret
                   . (ReturnsGlobals ret globalWrites tps)
                  => Definitions arch
                  -> FunctionSignature globalReads globalWrites init tps
-                 -> STRef.STRef h (Map.Map T.Text StaticValues)
+                 -> (STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text])
+                 -> Integer -- ^ Logging level
                  -> Ctx.Assignment BaseGlobalVar globalReads
                  -> Ctx.Assignment (CCG.Atom s) init
                  -> TranslationState h ret s
-funcInitialState defs sig hdl globalReads args =
+funcInitialState defs sig (funDepRef, logRef) logLvl globalReads args =
   TranslationState { tsArgAtoms = Ctx.forIndex (Ctx.size args) addArgument Map.empty
                    , tsVarRefs = Map.empty
                    , tsExtendedTypes = defExtendedTypes defs
@@ -174,11 +191,10 @@ funcInitialState defs sig hdl globalReads args =
                    , tsEnums = defEnums defs
                    , tsFunctionSigs = fst <$> defSignatures defs
                    , tsUserTypes = defTypes defs
-                   , tsHandle = hdl
+                   , tsHandle = funDepRef
                    , tsStaticValues = funcStaticVals sig
                    , tsSig = SomeFunctionSignature sig
-                   , tsTraceStack = TR.SyntaxTraceStack (\_ -> [])
-                   , tsExprConstraint = Nothing
+                   , tsLogHandle = (logRef, logLvl, 0)
                    }
   where
     addArgument :: forall tp

@@ -20,7 +20,6 @@
 
 module SemMC.ASL.Translation (
     TranslationState(..)
-  , TracedTranslationException
   , translateExpr
   , translateStatement
   , addExtendedTypeData
@@ -76,12 +75,12 @@ import qualified What4.Symbol as WS
 import qualified Language.ASL.Syntax as AS
 
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..) )
-import           SemMC.ASL.Exceptions ( TranslationException(..) )
+import           SemMC.ASL.Exceptions ( TranslationException(..), LoggedTranslationException(..) )
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr as SE
 import           SemMC.ASL.Translation.Preprocess
-import           SemMC.ASL.SyntaxTraverse ( throwTrace )
+import           SemMC.ASL.SyntaxTraverse ( logMsg, indentLog, unindentLog )
 import qualified SemMC.ASL.SyntaxTraverse as TR
 import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 
@@ -219,15 +218,6 @@ data Overrides arch =
             , overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> StaticEnvMap -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
             }
 
-data SyntaxTraceExt k where
-  SyntaxTraceExtUnit :: SyntaxTraceExt AS.Stmt
-  SyntaxTraceExtTC :: TypeConstraint -> SyntaxTraceExt AS.Expr
-
-instance Show (SyntaxTraceExt k) where
-  show e = case e of
-    SyntaxTraceExtUnit -> ""
-    SyntaxTraceExtTC tc -> "Type Constraint: " ++ show tc
-
 newtype Generator h s arch ret a = Generator
   { unGenerator :: CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a}
   deriving
@@ -238,31 +228,28 @@ newtype Generator h s arch ret a = Generator
     , MSS.MonadState (TranslationState h ret s)
     )
 
-instance TR.SyntaxTrace (Generator h s arch ret) where
-  traceSyntax syn f = do
-    ext <- TR.syntaxExt syn
-    stack <- MSS.gets tsTraceStack
-    MSS.modify' $ \s -> s { tsTraceStack = TR.syntaxTraceUpdate (\syns -> ((syn, ext) : syns)) (tsTraceStack s) }
-    a <- f
-    MSS.modify' $ \s -> s { tsTraceStack = stack }
+
+instance TR.MonadLog (Generator h s arch ret) where
+  logMsg logLvl msg = do
+    (logHandle, curLvl, indent) <- MSS.gets tsLogHandle
+    let mkmsg ex = (T.replicate (fromIntegral indent) " " <> msg) : ex
+    when (curLvl >= logLvl) $ MST.liftST (STRef.modifySTRef logHandle mkmsg)
+
+  logWithIndent f m = do
+    (logHandle, curLvl, indent) <- MSS.gets tsLogHandle
+    MSS.modify' $ \s -> s { tsLogHandle = (logHandle, curLvl, f indent) }
+    a <- m
+    MSS.modify' $ \s -> s { tsLogHandle = (logHandle, curLvl, indent) }
     return a
-
-instance TR.SyntaxExt SyntaxTraceExt (Generator h s arch ret) where
-  syntaxExt = TR.useKnownSyntaxRepr $ \_ -> \case
-    TR.SyntaxStmtRepr -> return $ SyntaxTraceExtUnit
-    TR.SyntaxExprRepr -> do
-      Just tc <- MSS.gets tsExprConstraint
-      return $ SyntaxTraceExtTC tc
-
-type TracedTranslationException = TR.SyntaxTraceError TranslationException SyntaxTraceExt
-
-instance TR.SyntaxTraceE TranslationException (Generator h s arch ret) where
-  throwTrace e = do
-    stack <- MS.gets tsTraceStack
-    X.throw $ TR.SyntaxTraceError e stack
 
 instance F.MonadFail (Generator h s arch ret) where
   fail s = throwTrace $ BindingFailure s
+
+throwTrace :: TranslationException -> Generator h s arch ret a
+throwTrace e = do
+  (logHandle, _, _) <- MSS.gets tsLogHandle
+  log <- MST.liftST (STRef.readSTRef logHandle)
+  X.throw $ LoggedTranslationException log e
 
 liftGenerator :: CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a
               -> Generator h s arch ret a
@@ -319,10 +306,8 @@ data TranslationState h ret s =
                    -- ^ Environment to give concrete instantiations to polymorphic variables
                    , tsSig :: SomeFunctionSignature ret
                    -- ^ Signature of the function/procedure we are translating
-                   , tsTraceStack :: TR.SyntaxTraceStack SyntaxTraceExt
-                   -- ^ Trace of how the ASL syntax is being traversed
-                   , tsExprConstraint :: Maybe TypeConstraint
-                   -- ^ Type constraint on the currently-being-translated expression
+                   , tsLogHandle :: (STRef.STRef h [T.Text], Integer, Integer)
+                   -- ^ Handle for logging output
                    }
 
 
@@ -378,7 +363,8 @@ translateStatement :: forall arch ret h s
                    -> AS.Stmt
                    -> Generator h s arch ret ()
 translateStatement ov stmt = do
-  TR.traceSyntax stmt $ translateStatement' ov stmt
+  logMsg 2 (TR.prettyShallowStmt stmt)
+  translateStatement' ov stmt
 
 assertExpr :: Overrides arch
            -> AS.Expr
@@ -486,7 +472,7 @@ translateStatement' ov stmt
               Some testA <- translateExpr ov test
               Refl <- assertAtomType test CT.BoolRepr testA
               return (CCG.AtomExpr testA)
-        let bodyG = mapM_ (translateStatement ov) body
+        let bodyG = indentLog $ mapM_ (translateStatement ov) body
         liftGenerator2 testG bodyG $ \testG' bodyG' ->
           CCG.while (WP.InternalPos, testG') (WP.InternalPos, bodyG')
       AS.StmtRepeat body test -> translateRepeat ov body test
@@ -1333,11 +1319,11 @@ ifte_ :: CCG.Expr (ASLExt arch) s CT.BoolType
       -> Generator h s arch ret () -- ^ false branch
       -> Generator h s arch ret ()
 ifte_ e (Generator x) (Generator y) = do
-  c_id <- Generator $ CCG.newLabel
-  (newvarsThen, x_id) <- getNewVars (Generator $ (CCG.defineBlockLabel $ x >> CCG.jump c_id))
-  (newvarsElse, y_id) <- getNewVars (Generator $ (CCG.defineBlockLabel $ y >> CCG.jump c_id))
+  c_id <- liftGenerator $ CCG.newLabel
+  (newvarsThen, x_id) <- getNewVars (liftGenerator $ (CCG.defineBlockLabel $ x >> CCG.jump c_id))
+  (newvarsElse, y_id) <- getNewVars (liftGenerator $ (CCG.defineBlockLabel $ y >> CCG.jump c_id))
   initVars $ newvarsThen ++ newvarsElse
-  Generator $ CCG.continue c_id (CCG.branch e x_id y_id)
+  liftGenerator $ CCG.continue c_id (CCG.branch e x_id y_id)
 
 translateIf :: Overrides arch
             -> [(AS.Expr, [AS.Stmt])]
@@ -1345,14 +1331,14 @@ translateIf :: Overrides arch
             -> Generator h s arch ret ()
 translateIf ov clauses melse =
   case clauses of
-    [] -> mapM_ (translateStatement ov) (fromMaybe [] melse)
+    [] -> indentLog $ mapM_ (translateStatement ov) (fromMaybe [] melse)
     (cond, body) : rest ->
       withStaticTest cond
         (mapM_ (translateStatement ov) body)
         (translateIf ov rest melse) $ do
       Some condAtom <- translateExpr ov cond
       Refl <- assertAtomType cond CT.BoolRepr condAtom
-      let genThen = mapM_ (translateStatement ov) body
+      let genThen = indentLog $ mapM_ (translateStatement ov) body
       let genElse = translateIf ov rest melse
       ifte_ (CCG.AtomExpr condAtom) genThen genElse
 
@@ -1372,7 +1358,7 @@ translateCase ov expr alts = case alts of
     let matchExpr = caseWhenExpr expr pats
     Some matchAtom <- translateExpr ov matchExpr
     Refl <- assertAtomType matchExpr CT.BoolRepr matchAtom
-    let genThen = mapM_ (translateStatement ov) body
+    let genThen = indentLog $ mapM_ (translateStatement ov) body
     let genRest = translateCase ov expr rst
     ifte_ (CCG.AtomExpr matchAtom) genThen genRest
   _ -> error (show alts)
@@ -1427,11 +1413,8 @@ translateExpr' :: Overrides arch
               -> TypeConstraint
               -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
 translateExpr' ov expr constraint = do
-  c <- MS.gets tsExprConstraint
-  MS.modify' $ \s -> s { tsExprConstraint = Just constraint }
-  a <- TR.traceSyntax expr $ translateExpr'' ov expr constraint
-  MS.modify' $ \s -> s { tsExprConstraint = c}
-  return a
+  logMsg 2 $ T.pack (show expr) <> " :: " <> T.pack (show constraint)
+  translateExpr'' ov expr constraint
 
 getStaticValue :: AS.Expr
                -> Generator h s arch ret (Maybe (StaticValue))

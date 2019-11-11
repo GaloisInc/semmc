@@ -18,6 +18,7 @@ module SemMC.ASL (
 import qualified Control.Exception as X
 import           Control.Lens ( (^.) )
 import           Control.Monad.ST ( RealWorld )
+import           Data.Time.Clock
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as PL
@@ -237,12 +238,13 @@ executionFeatures :: sym ~ CBO.OnlineBackend scope solver fs
 executionFeatures nm sym = do
   gft <- CSP.pathSatisfiabilityFeature sym (CBO.considerSatisfiability sym)
   -- FIXME: What is the general requirement here?
-  let fts = if nm `elem` ["aarch32_VLDM_A_aarch32_VLDM_T1A1_A","aarch32_VMOV_r_A_aarch32_VMOV_r_T2A2_A"
+  let psf = if nm `elem` ["aarch32_VLDM_A_aarch32_VLDM_T1A1_A","aarch32_VMOV_r_A_aarch32_VMOV_r_T2A2_A"
                          , "aarch32_VSTM_A_aarch32_VSTM_T1A1_A", "aarch32_VMOV_i_A_aarch32_VMOV_i_A2_A"
                          , "aarch32_VMOV_i_A_aarch32_VMOV_i_T2_A"
                          ]
         then [CS.genericToExecutionFeature gft] else []
-  --let fts = []
+  timeout <- CS.genericToExecutionFeature <$> CS.timeoutFeature (5.00 :: NominalDiffTime)
+  let fts = psf ++ [timeout]
   let cfg = WI.getConfiguration sym
   pathSetter <- WC.getOptionSetting CBO.solverInteractionFile cfg
   res <- WC.setOpt pathSetter (T.pack "./yices.out")

@@ -34,7 +34,6 @@ module SemMC.ASL.Translation.Preprocess
   , runSigM
   , buildSigState
   , SigException(..)
-  , TracedSigException
   , Callable(..)
   , Definitions(..)
   , bitsToInteger
@@ -87,6 +86,7 @@ import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr as SE
 
+import           SemMC.ASL.SyntaxTraverse ( logMsg, indentLog, unindentLog )
 import qualified SemMC.ASL.SyntaxTraverse as TR
 import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
@@ -100,14 +100,14 @@ computeSignature :: AS.QualifiedIdentifier -> Int -> SigM ext f ()
 computeSignature qName arity = do
   mCallable <- lookupCallable qName arity
   case mCallable of
-    Nothing -> TR.throwTrace $ CallableNotFound (mkFunctionName qName arity)
+    Nothing -> E.throwError $ CallableNotFound (mkFunctionName qName arity)
     Just c -> void $ computeCallableSignature c
 
 computeSignature' :: T.Text -> SigM ext f ()
 computeSignature' name = do
   mCallable <- lookupCallable' name
   case mCallable of
-    Nothing -> TR.throwTrace $ CallableNotFound name
+    Nothing -> E.throwError $ CallableNotFound name
     Just c -> void $ computeCallableSignature c
 
 
@@ -200,18 +200,15 @@ asDefType def =
     _ -> Nothing
 
 -- | Monad for computing ASL signatures of 'AS.Definition's.
-newtype SigM ext f a = SigM { getSigM :: TR.SyntaxTraceT SigException (Const ()) (RWS.RWS SigEnv () SigState) a }
+newtype SigM ext f a = SigM { getSigM ::  E.ExceptT SigException (TR.MonadLogT (RWS.RWS SigEnv () SigState)) a }
   deriving ( Functor
            , Applicative
            , Monad
            , RWS.MonadReader SigEnv
            , RWS.MonadState SigState
-           , E.MonadError TracedSigException
-           , TR.SyntaxTrace
-           , TR.SyntaxTraceE SigException
+           , E.MonadError SigException
+           , TR.MonadLog
            )
-
-type TracedSigException = TR.SyntaxTraceError SigException (Const ())
 
 data ASLSpec = ASLSpec
   { aslInstructions :: [AS.Instruction]
@@ -461,20 +458,21 @@ initializeSigM spec = do
 buildSigState :: ASLSpec -> (SigEnv, SigState)
 buildSigState spec =
   let env = (buildEnv spec) in
-  case runSigM env (buildInitState spec) (initializeSigM spec) of
-    (Left err, _) -> error $ "Unexpected exception when initializing SigState: " ++ show err
-    (Right _, state) -> (env, state)
+  case runSigM env (buildInitState spec) 0 (initializeSigM spec) of
+    ((Left err, _), log) -> error $ "Unexpected exception when initializing SigState: " ++ show err ++ show log
+    ((Right _, state), _) -> (env, state)
 
 runSigM :: SigEnv
         -> SigState
+        -> Integer
         -> SigM ext f a
-        -> (Either TracedSigException a, SigState)
-runSigM env state action =
-  let rws = TR.runSyntaxTraceT $ getSigM action
-      (e, s, _) = RWS.runRWS rws env state
-  in case e of
+        -> ((Either SigException a, SigState), [T.Text])
+runSigM env state logLvl action =
+  let rws = TR.runMonadLogT (E.runExceptT (getSigM action)) logLvl
+      ((e, log), s, _) = RWS.runRWS rws env state
+  in (case e of
     Left err -> (Left err, s)
-    Right a -> (Right a, s)
+    Right a -> (Right a, s), log)
 
 
 data SigEnv = SigEnv { envCallables :: Map.Map T.Text Callable
@@ -523,6 +521,7 @@ data SigException = TypeNotFound T.Text
                   | UnsupportedSigStmt AS.Stmt
                   | UnsupportedSigLVal AS.LValExpr
                   | MissingSignature Callable
+                  | MissingSigFunctionDefinition T.Text
                   | FailedToDetermineStaticEnvironment [T.Text]
                   | FailedToMonomorphizeSignature AS.Type StaticValues
   deriving (Eq, Show)
@@ -573,14 +572,14 @@ lookupBuiltinType tpName = do
   env <- RWS.ask
   case Map.lookup tpName (builtinTypes env) of
     Just tp -> return tp
-    Nothing -> TR.throwTrace $ BuiltinTypeNotFound tpName
+    Nothing -> E.throwError $ BuiltinTypeNotFound tpName
 
 lookupDefType :: T.Text -> SigM ext f DefType
 lookupDefType tpName = do
   env <- RWS.ask
   case Map.lookup tpName (types env) of
     Just defType -> return defType
-    Nothing -> TR.throwTrace $ TypeNotFound tpName
+    Nothing -> E.throwError $ TypeNotFound tpName
 
 lookupGlobalVar :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 lookupGlobalVar varName = do
@@ -734,7 +733,18 @@ callableGlobalVars c = do
   msig <- lookupCallableSignature c
   case msig of
     Just (_, globs) -> return globs
-    Nothing -> TR.throwTrace $ MissingSignature c
+    Nothing -> E.throwError $ MissingSignature c
+
+collectStmts :: forall w m
+              . Monoid w
+             => TR.MonadLog m
+             => T.Text
+             -> (forall t. TR.KnownSyntaxRepr t => t -> m w)
+             -> [AS.Stmt]
+             -> m w
+collectStmts nm collectors stmts = do
+  logMsg 4 ("\nPreprocess: " <> nm)
+  mconcat <$> unindentLog (traverse (TR.collectSyntax (TR.collectWithLog 4 collectors)) stmts)
 
 
 globalsOfStmts :: forall ext f. [AS.Stmt] -> SigM ext f GlobalVarRefs
@@ -752,7 +762,7 @@ globalsOfStmts stmts = let
         mconcat <$> traverse caseAlternativeGlobalVars alts
     TR.SyntaxCallRepr -> collectCallables (\c args -> callableGlobalVars c) syn
     _ -> return mempty
-  in mconcat <$> traverse (TR.collectSyntax collectors) stmts
+  in collectStmts "globalsOfStmts" collectors stmts
   where
     caseAlternativeGlobalVars alt = case alt of
       AS.CaseWhen pats _ _ -> mconcat <$> traverse casePatternGlobalVars pats
@@ -785,7 +795,7 @@ regIdxsOfStmts stmts = let
         return $ regIdxsOfExpr rkind e
     TR.SyntaxCallRepr -> collectCallables callableRegIdxs syn
     _ -> return mempty
-  in mconcat <$> traverse (TR.collectSyntax collectors) stmts
+  in collectStmts "regIdxsOfStmts" collectors stmts
   where
     callableRegIdxs c argEs = case c of
       Callable (AS.VarName "LookUpRIndex") _ _ _
@@ -813,8 +823,7 @@ directVarsOfExpr = \case
 
 -- | Build a variable dependency graph from the given list of
 -- statements
-varDepsOfStmts :: forall ext f
-                . Bool
+varDepsOfStmts :: Bool
                 -- ^ If true, edges go from an lval variable to all rhs variables.
                 -- If false, edges go from rhs variables to lvals varibles.
                -> [AS.Stmt]
@@ -833,7 +842,7 @@ varDepsOfStmts forward stmts = let
         return $ varDependsExpr var lo <> varDependsExpr var hi
       _ -> return mempty
     _ -> return mempty
-  in runIdentity $ mconcat <$> traverse (TR.collectSyntax collectors) stmts
+  in runIdentity $ collectStmts "varDepsOfStmts" collectors stmts
   where
     varDependsExpr lval e =
       if forward then mconcat $ map (\var -> varDependsOn var lval) $ directVarsOfExpr e
@@ -848,7 +857,7 @@ computeSignatures stmts = let
     TR.SyntaxCallRepr -> collectCallables (\c args -> void $ computeCallableSignature c)
     TR.SyntaxTypeRepr -> storeUserType
     _ -> \_ -> return ()
-  in traverse_ (TR.collectSyntax collectors) stmts
+  in collectStmts "computeSignatures" collectors stmts
 
 -- | For recursive functions, this signature is temporarily stored as a stand-in
 -- for the actual function signature when recursively calling the signature
@@ -873,6 +882,7 @@ computeCallableSignature c@Callable{..} = do
   case mSig of
     Just sig -> return sig
     Nothing -> do
+      logMsg 4 $ "computeCallableSignature: " <> name
       searchStatus <- checkCallableSearch c
       case searchStatus of
         Nothing -> do
@@ -1003,7 +1013,7 @@ mkSignature env sig =
   where
     mkType t = case applyStaticEnv (simpleStaticEnvMap env) t of
       Just t -> computeType t
-      _ -> TR.throwTrace $ FailedToMonomorphizeSignature t env
+      _ -> E.throwError $ FailedToMonomorphizeSignature t env
     mkLabel (FunctionArg nm t _) = do
       Some tp <- mkType t
       return $ Some (LabeledValue nm (CT.baseToType tp))
@@ -1106,18 +1116,7 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
     varsSet = Set.intersection decodeVars (Set.unions $ map (reachableVarDeps varDeps) vars')
     vars = Set.toList varsSet
 
-    optvars = Set.toList $  Set.difference (Set.intersection decodeVars (Set.unions $ map (reachableVarDeps varDeps) optvars'))
-      varsSet
-
-    possibleEnvs :: [Map.Map T.Text StaticValue]
-    possibleEnvs = getPossibleVarValues vartps vars optvars decodes
-
-    cases :: [[(T.Text, StaticValue)]]
-    cases = do
-      asns <- possibleEnvs
-      let varasns = map (varToStatic asns) vars
-      let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
-      return $ (varasns ++ optvarasns)
+    optvars = Set.toList $ Set.difference (Set.intersection decodeVars (Set.unions $ map (reachableVarDeps varDeps) optvars')) varsSet
 
     varToStatic asns var = case Map.lookup var asns of
       Just sv -> (var, sv)
@@ -1125,10 +1124,18 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
     optvarToStatic asns optvar = case Map.lookup optvar asns of
       Just sv -> Just (optvar, sv)
       _ -> Nothing
-
-    in case cases of
-      [] -> TR.throwTrace $ FailedToDetermineStaticEnvironment vars
-      x -> return $ [staticEnvironmentStmt x stmts]
+    cases envs = do
+      asns <- envs
+      let varasns = map (varToStatic asns) vars
+      let optvarasns = catMaybes $ map (optvarToStatic asns) optvars
+      return $ (varasns ++ optvarasns)
+    in do
+      logMsg 3 $ "Lifting " <> instName <> " over dependent variables:" <> T.pack (show (vars', optvars'))
+      possibleEnvs <- return $ getPossibleVarValues vartps vars optvars decodes
+      logMsg 3 $ "Possible environments found: " <> T.pack (show possibleEnvs)
+      case cases possibleEnvs of
+        [] -> E.throwError $ FailedToDetermineStaticEnvironment vars
+        x -> return $ [staticEnvironmentStmt x stmts]
 
 
 -- | Scan the instruction body for function calls to overly type-dependent functions
