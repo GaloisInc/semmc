@@ -80,7 +80,12 @@ data TranslatorOptions = TranslatorOptions
   , optCollectExpectedExceptions :: Bool
   , optASLSpecFilePath :: FilePath
   , optTranslationTask :: TranslationTask
+  , optTranslationDepth :: TranslationDepth
   }
+
+
+data TranslationDepth = TranslateRecursive
+                      | TranslateShallow
 
 data TranslationTask = TranslateAll
                      | TranslateInstruction String String
@@ -114,6 +119,7 @@ defaultOptions = TranslatorOptions
   , optCollectExpectedExceptions = False
   , optASLSpecFilePath = "./test/"
   , optTranslationTask = TranslateAll
+  , optTranslationDepth = TranslateRecursive
   }
 
 data StatOptions = StatOptions
@@ -177,6 +183,9 @@ arguments =
                 [instr, enc] -> Left (\opts -> opts { optTranslationTask = TranslateInstruction instr enc })
                 _ -> error "bad instruction/encoding") "INST")
     ("Name of particular instruction to translate. Format should be <INSTRUCTION>/<ENCODING>, where the two components correspond to instruction and encoding definitions in the ASL file.")
+
+  , Option [] ["no-dependencies"] (NoArg (Left (\opts -> opts { optTranslationDepth = TranslateShallow } )))
+    "Don't recursively translate function dependencies."
   ]
 
 usage :: IO ()
@@ -263,12 +272,14 @@ runTranslation instruction@AS.Instruction{..} instrIdent = do
           logMsg $ "Translating instruction: " ++ prettyIdent instrIdent
           logMsg $ (show iSig)
           deps <- processFunction instrIdent (KeyInstr instrIdent) iSig instStmts defs
-
-          logMsg $ "--------------------------------"
-          logMsg "Translating functions: "
-          alldeps <- mapM (translationLoop instrIdent [] defs) (Map.assocs deps)
-          let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
-          MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
+          MSS.gets (optTranslationDepth . sOptions) >>= \case
+            TranslateRecursive -> do
+              logMsg $ "--------------------------------"
+              logMsg "Translating functions: "
+              alldeps <- mapM (translationLoop instrIdent [] defs) (Map.assocs deps)
+              let alldepsSet = Set.union (Set.unions alldeps) (finalDepsOf deps)
+              MSS.modify' $ \s -> s { instrDeps = Map.insert instrIdent alldepsSet (instrDeps s) }
+            TranslateShallow -> return ()
 
 translationLoop :: InstructionIdent
                 -> [T.Text]
