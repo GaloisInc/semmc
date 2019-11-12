@@ -80,7 +80,6 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | TranslationError String
                           | UNIMPLEMENTED String
                           | forall tp. InvalidStructUpdate AS.LValExpr (CT.TypeRepr tp)
-                          | InstructionUnsupported
                           | UnexpectedReturnInStmtCall
                           | UnexpectedReturnInExprCall
                           | BindingFailure String

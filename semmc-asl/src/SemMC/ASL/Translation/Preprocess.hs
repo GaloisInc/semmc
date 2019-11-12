@@ -86,7 +86,7 @@ import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr as SE
 
-import           SemMC.ASL.SyntaxTraverse ( logMsg, indentLog, unindentLog )
+import           SemMC.ASL.SyntaxTraverse ( logIndent, logMsg, indentLog, unindentLog )
 import qualified SemMC.ASL.SyntaxTraverse as TR
 import qualified SemMC.ASL.SyntaxTraverse as AS ( pattern VarName )
 import           SemMC.ASL.SyntaxTraverse (mkFunctionName)
@@ -925,13 +925,6 @@ computeCallableSignature c@Callable{..} = do
             , sfuncGlobalWriteReprs = globalWriteReprs
             }
       return (sig, globalVars)
-
-computeType'' :: Definitions arch -> AS.Type -> Some WT.BaseTypeRepr
-computeType'' defs t = case computeType' t of
-  Left tp -> tp
-  Right tpName -> case Map.lookup tpName (defTypes defs) of
-    Just (Some ut) -> Some $ userTypeRepr ut
-    Nothing -> error $ "Missing user type definition for: " <> (show tpName)
 
 mergeRegisterKinds :: RegisterKind -> RegisterKind -> RegisterKind
 mergeRegisterKinds r1 r2 = if r1 == r2 then r1 else RegisterInconsistent

@@ -239,12 +239,10 @@ instance TR.MonadLog (Generator h s arch ret) where
     let mkmsg ex = (T.replicate (fromIntegral indent) " " <> msg) : ex
     when (curLvl >= logLvl) $ MST.liftST (STRef.modifySTRef logHandle mkmsg)
 
-  logWithIndent f m = do
+  logIndent f = do
     (logHandle, curLvl, indent) <- MSS.gets tsLogHandle
     MSS.modify' $ \s -> s { tsLogHandle = (logHandle, curLvl, f indent) }
-    a <- m
-    MSS.modify' $ \s -> s { tsLogHandle = (logHandle, curLvl, indent) }
-    return a
+    return indent
 
 instance F.MonadFail (Generator h s arch ret) where
   fail s = throwTrace $ BindingFailure s

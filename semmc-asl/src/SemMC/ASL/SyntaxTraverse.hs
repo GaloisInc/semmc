@@ -335,16 +335,24 @@ mkSyntaxOverrides defs =
 -- Simple logging monad transformer/class
 class Monad m => MonadLog m where
   logMsg :: Integer -> T.Text -> m () -- log a message at a given logging level
-  logWithIndent :: (Integer -> Integer) -> m a -> m a -- log inner function at given indentation level
+  logIndent :: (Integer -> Integer) -> m Integer -- modify logging indentation level (returning old indent level)
+
+
+logWithIndent :: MonadLog m => (Integer -> Integer) -> m a -> m a -- log inner function at given indentation level
+logWithIndent f m = do
+  oldIndent <- logIndent f
+  a <- m
+  void $ logIndent (\_ -> oldIndent)
+  return a
 
 indentLog :: MonadLog m => m a -> m a
 indentLog m = logWithIndent ((+) 1) m
 
 unindentLog :: MonadLog m => m a -> m a
-unindentLog m = logWithIndent (\_ -> 0) m
+unindentLog m = logIndent (\_ -> 0) >> m
 
 newtype MonadLogT (m :: * -> *) a =
-  MonadLogT { unMonadLogT :: R.ReaderT (Integer, Integer) (W.WriterT [T.Text] m) a }
+  MonadLogT { unMonadLogT :: MSS.StateT (Integer, Integer) (W.WriterT [T.Text] m) a }
   deriving (Functor, Applicative, Monad)
 
 instance MT.MonadTrans MonadLogT where
@@ -352,34 +360,38 @@ instance MT.MonadTrans MonadLogT where
 
 instance Monad m => MonadLog (MonadLogT m) where
   logMsg logLvl msg = MonadLogT $ do
-    (indent, lvl) <- R.ask
+    (indent, lvl) <- MSS.get
     when (lvl >= logLvl) $ W.tell ([T.replicate (fromIntegral indent) " " <> msg])
 
-  logWithIndent f (MonadLogT m) = MonadLogT $ do
-    R.local (\(indent, lvl) -> (f indent, lvl)) m
+  logIndent f = MonadLogT $ do
+    (indent, lvl) <- MSS.get
+    MSS.put (f indent, lvl)
+    return indent
 
 instance MonadLog Identity where
   logMsg _ _ = return ()
-  logWithIndent _ m = m
+  logIndent _ = return 0
 
 instance (Monoid w, MonadLog m) => MonadLog (W.WriterT w m) where
   logMsg logLvl msg = MT.lift $ logMsg logLvl msg
-  logWithIndent f (W.WriterT m) = W.WriterT $ logWithIndent f m
+  logIndent f = MT.lift $ logIndent f
 
 instance (MonadLog m) => MonadLog (E.ExceptT e m) where
   logMsg logLvl msg = MT.lift $ logMsg logLvl msg
-  logWithIndent f (E.ExceptT m) = E.ExceptT $ logWithIndent f m
+  logIndent f = MT.lift $ logIndent f
 
 deriving instance E.MonadError e m => E.MonadError e (MonadLogT m)
-deriving instance MSS.MonadState s m => MSS.MonadState s (MonadLogT m)
+
+instance MSS.MonadState s m => MSS.MonadState s (MonadLogT m) where
+  state f = MonadLogT $ MT.lift $ MSS.state f
 
 instance R.MonadReader r m => R.MonadReader r (MonadLogT m) where
   ask = MonadLogT $ MT.lift R.ask
-  local f (MonadLogT m) = MonadLogT $ R.mapReaderT (W.mapWriterT (R.local f)) m
+  local f (MonadLogT m) = MonadLogT $ MSS.mapStateT (W.mapWriterT (R.local f)) m
 
 
-runMonadLogT :: MonadLogT m a -> Integer -> m (a, [T.Text])
-runMonadLogT (MonadLogT m) logLvl = W.runWriterT (R.runReaderT m (0, logLvl))
+runMonadLogT :: Monad m => MonadLogT m a -> Integer -> m (a, [T.Text])
+runMonadLogT (MonadLogT m) logLvl = W.runWriterT (MSS.evalStateT m (0, logLvl))
 
 -- | Representative type for major syntax elements
 data SyntaxRepr t where
