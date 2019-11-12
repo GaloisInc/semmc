@@ -99,6 +99,7 @@ data TranslationDepth = TranslateRecursive
 
 data TranslationTask = TranslateAll
                      | TranslateTargets
+                     | TranslateNoArch64
                      | TranslateInstruction String String
 
 instsFilePath :: FilePath
@@ -152,23 +153,23 @@ defaultStatOptions = StatOptions
   , reportFunctionFormulas = False
   }
 
-arguments :: [OptDescr (Either (TranslatorOptions -> TranslatorOptions) (StatOptions -> StatOptions))]
+arguments :: [OptDescr (Either (TranslatorOptions -> Maybe TranslatorOptions) (StatOptions -> Maybe StatOptions))]
 arguments =
-  [ Option "a" ["asl-spec"] (ReqArg (\f -> Left (\opts -> opts { optASLSpecFilePath = f })) "PATH")
+  [ Option "a" ["asl-spec"] (ReqArg (\f -> Left (\opts -> Just $ opts { optASLSpecFilePath = f })) "PATH")
     ("Path to parsed ASL specification. Requires: " ++ instsFilePath ++ " " ++ defsFilePath
       ++ " " ++ regsFilePath ++ " " ++ supportFilePath ++ " " ++ extraDefsFilePath
       ++ " " ++ targetInstsFilePath)
 
-  , Option "s" ["skip-simulation"] (NoArg (Left (\opts -> opts { optSkipTranslation = True })))
+  , Option "s" ["skip-simulation"] (NoArg (Left (\opts -> Just $ opts { optSkipTranslation = True })))
     "Skip symbolic execution step after translating into Crucible"
 
-  , Option "c" ["collect-exceptions"] (NoArg (Left (\opts -> opts { optCollectAllExceptions = True })))
+  , Option "c" ["collect-exceptions"] (NoArg (Left (\opts -> Just $ opts { optCollectAllExceptions = True })))
     "Handle and collect all exceptions thrown during translation"
 
-  , Option [] ["collect-expected-exceptions"] (NoArg (Left (\opts -> opts { optCollectExpectedExceptions = True })))
+  , Option [] ["collect-expected-exceptions"] (NoArg (Left (\opts -> Just $ opts { optCollectExpectedExceptions = True })))
     "Handle and collect exceptions for known issues thrown during translation"
 
-  , Option "v" ["verbosity"] (ReqArg (\f -> (Left (\opts -> opts { optVerbosity = read f }))) "INT")
+  , Option "v" ["verbosity"] (ReqArg (\f -> (Left (\opts -> Just $ opts { optVerbosity = read f }))) "INT")
     ("Output verbosity during translation:\n" ++
     "0 - minimal output.\n" ++
     "-1 - no translation output.\n" ++
@@ -177,34 +178,40 @@ arguments =
     "3 - instruction post-processing trace (on exception).\n4 - globals collection trace.\n" ++
     "6 - translator and globals collection trace (always).")
 
-  , Option [] ["offset"] (ReqArg (\f -> Left (\opts -> opts {optStartIndex = read f})) "INT")
+  , Option [] ["offset"] (ReqArg (\f -> Left (\opts -> Just $ opts {optStartIndex = read f})) "INT")
     "Start processing instructions at the given offset"
 
-  , Option [] ["report-success"] (NoArg (Right (\opts -> opts { reportSucceedingInstructions = True })))
+  , Option [] ["report-success"] (NoArg (Right (\opts -> Just $ opts { reportSucceedingInstructions = True })))
     "Print list of successfully translated instructions"
 
-  , Option [] ["report-deps"] (NoArg (Right (\opts -> opts { reportFunctionDependencies = True })))
+  , Option [] ["report-deps"] (NoArg (Right (\opts -> Just $ opts { reportFunctionDependencies = True })))
     "Print ancestors of functions when reporting exceptions"
 
-  , Option [] ["report-exceptions"] (NoArg (Right (\opts -> opts { reportAllExceptions = True })))
+  , Option [] ["report-exceptions"] (NoArg (Right (\opts -> Just $ opts { reportAllExceptions = True })))
     "Print all collected exceptions thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
 
-  , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> opts {reportKnownExceptions = True })))
+  , Option [] ["report-expected-exceptions"] (NoArg (Right (\opts -> Just $ opts {reportKnownExceptions = True })))
     "Print collected exceptions for known issues thrown during translation (requires collect-exceptions or collect-expected-exceptions)"
 
-  , Option [] ["report-formulas"] (NoArg (Right (\opts -> opts { reportFunctionFormulas = True })))
+  , Option [] ["report-formulas"] (NoArg (Right (\opts -> Just $ opts { reportFunctionFormulas = True })))
     "Print function formulas for all successfully simulated functions."
 
-  , Option [] ["translate-all"] (NoArg (Left (\opts -> opts { optTranslationTask = TranslateAll })))
-    ("Translate all instructions present in " ++ instsFilePath ++ ", rather than those present in " ++ targetInstsFilePath)
+  , Option [] ["translation-mode"] (ReqArg (\mode -> Left (\opts -> do
+      task <- case mode of
+        "all" -> return $ TranslateAll
+        "targets" -> return $ TranslateTargets
+        "noArch64" -> return $ TranslateNoArch64
+        _ -> case List.splitOn "/" mode of
+          [instr, enc] -> return $ TranslateInstruction instr enc
+          _ -> fail ""
+      return $ opts { optTranslationTask = task })) "MODE")
+    ("Filter instructions according to MODE: \n" ++
+     "all - translate all instructions from " ++ instsFilePath ++ ".\n" ++
+     "targets - translate instructions filtered by " ++ targetInstsFilePath ++ ".\n" ++
+     "noArch64 - translate T16, T32 and A32 instructions.\n" ++
+     "<INSTRUCTION>/<ENCODING> - translate a single instruction/encoding pair.")
 
-  , Option [] ["translate-instruction"]
-    (ReqArg (\instrAndEnc -> case List.splitOn "/" instrAndEnc of
-                [instr, enc] -> Left (\opts -> opts { optTranslationTask = TranslateInstruction instr enc })
-                _ -> error "bad instruction/encoding") "INST")
-    ("Name of particular instruction to translate. Format should be <INSTRUCTION>/<ENCODING>, where the two components correspond to instruction and encoding definitions in the ASL file.")
-
-  , Option [] ["no-dependencies"] (NoArg (Left (\opts -> opts { optTranslationDepth = TranslateShallow } )))
+  , Option [] ["no-dependencies"] (NoArg (Left (\opts -> Just $ opts { optTranslationDepth = TranslateShallow } )))
     "Don't recursively translate function dependencies."
   ]
 
@@ -223,20 +230,29 @@ main = do
     usage
     exitFailure
 
-  let (opts, statOpts) = foldl applyOption (defaultOptions, defaultStatOptions) args
-  sm <- case optTranslationTask opts of
-    TranslateTargets -> do
-      filter <- getTargetFilter opts
-      runWithFilters (opts { optFilters = filter })
-    TranslateAll -> runWithFilters opts
-    TranslateInstruction inst enc -> testInstruction opts inst enc
-
-  reportStats statOpts sm
+  case foldl applyOption (Just (defaultOptions, defaultStatOptions)) args of
+    Nothing -> do
+      usage
+      exitFailure
+    Just (opts, statOpts) -> do
+      sm <- case optTranslationTask opts of
+        TranslateTargets -> do
+          filter <- getTargetFilter opts
+          runWithFilters (opts { optFilters = filter })
+        TranslateAll -> runWithFilters opts
+        TranslateInstruction inst enc -> testInstruction opts inst enc
+        TranslateNoArch64 -> runWithFilters (opts { optFilters = translateNoArch64 } )
+      reportStats statOpts sm
 
   where
-    applyOption (opts, statOpts) arg = case arg of
-      Left f -> (f opts, statOpts)
-      Right f -> (opts, f statOpts)
+    applyOption (Just (opts, statOpts)) arg = case arg of
+      Left f -> do
+        opts' <- f opts
+        return $ (opts', statOpts)
+      Right f -> do
+        statOpts' <- f statOpts
+        return $ (opts, statOpts')
+    applyOption Nothing _ = Nothing
 
 runWithFilters :: TranslatorOptions -> IO (SigMap)
 runWithFilters opts = do
@@ -447,7 +463,7 @@ isInstrTransFilteredOut inm = do
   return $ (not $ test inm) || skipTranslation
 
 data ExpectedException =
-    UnsupportedInstruction
+    RealValueUnsupported
   | InsufficientStaticTypeInformation
   | CruciblePanic
   | ASLSpecMissingZeroCheck
@@ -456,8 +472,7 @@ data ExpectedException =
 
 expectedExceptions :: ElemKey -> TranslatorException -> Maybe ExpectedException
 expectedExceptions k ex = case ex of
-  TExcept _ InstructionUnsupported -> Just $ UnsupportedInstruction
-  SExcept _ (TypeNotFound "real") -> Just $ UnsupportedInstruction
+  SExcept _ (TypeNotFound "real") -> Just $ RealValueUnsupported
   -- TExcept _ (CannotMonomorphizeFunctionCall _ _) -> Just $ InsufficientStaticTypeInformation
   -- TExcept _ (CannotStaticallyEvaluateType _ _) -> Just $ InsufficientStaticTypeInformation
   -- TExcept _ (CannotDetermineBVLength _ _) -> Just $ InsufficientStaticTypeInformation
@@ -760,3 +775,11 @@ translateOnlyInstr inm = Filters
   (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
   (\(InstructionIdent nm enc _) -> \_ -> inm == (nm, enc))
   (\(InstructionIdent nm enc _) -> (nm, enc) == inm)
+
+
+translateNoArch64 :: Filters
+translateNoArch64 = Filters
+  (\(InstructionIdent _ _ iset) -> \_ -> iset /= AS.A64 )
+  (\(InstructionIdent _ _ iset) -> iset /= AS.A64)
+  (\(InstructionIdent _ _ iset) -> \_ -> iset /= AS.A64)
+  (\(InstructionIdent _ _ iset) -> iset /= AS.A64)
