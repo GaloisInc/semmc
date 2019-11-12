@@ -249,6 +249,8 @@ instance F.MonadFail (Generator h s arch ret) where
 
 throwTrace :: TranslationException -> Generator h s arch ret a
 throwTrace e = do
+  env <- MSS.gets tsStaticValues
+  unindentLog $ logMsg 2 $ "Static Environment: " <> (T.pack (show env))
   (logHandle, _, _) <- MSS.gets tsLogHandle
   log <- MST.liftST (STRef.readSTRef logHandle)
   X.throw $ LoggedTranslationException log e
@@ -1501,7 +1503,7 @@ translateExpr'' ov expr ty = do
             when (null elts) $ X.throw (EmptySetElementList expr)
             preds <- mapM (translateSetElementTest ov expr atom) elts
             mkAtom' (foldr disjoin (CCG.App (CCE.BoolLit False)) preds)
-          AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr
+          AS.ExprIf clauses elseExpr -> translateIfExpr ov expr clauses elseExpr ty
 
           AS.ExprCall qIdent args -> do
             ret <- translateFunctionCall ov qIdent args ty
@@ -1780,22 +1782,36 @@ withStaticTest test ifTrue ifFalse ifUnknown = do
     Just (StaticBool False) -> ifFalse
     _ -> ifUnknown
 
+-- FIXME: This implies some kind of ordering on constraints
+mergeConstraints :: TypeConstraint -> TypeConstraint -> TypeConstraint
+mergeConstraints ty1 ty2 = case (ty1, ty2) of
+  (ConstraintNone, _) -> ty2
+  (_, ConstraintNone) -> ty1
+  (ConstraintSingle t1, _) -> ty1
+  (_, ConstraintSingle t2) -> ty2
+  (ConstraintHint HintAnyBVSize, ConstraintHint (HintMaxBVSize sz)) -> ty2
+  (ConstraintHint (HintMaxBVSize sz), ConstraintHint HintAnyBVSize) -> ty1
+  (ConstraintHint HintAnyBVSize, ConstraintHint (HintMaxSignedBVSize sz)) -> ty2
+  (ConstraintHint (HintMaxSignedBVSize sz), ConstraintHint HintAnyBVSize) -> ty1
+  _ -> error $ "Incompatible type constraints: " ++ show ty1 ++ " " ++ show ty2
+
 -- | Translate the expression form of a conditional into a Crucible atom
 translateIfExpr :: Overrides arch
                 -> AS.Expr
                 -> [(AS.Expr, AS.Expr)]
                 -> AS.Expr
+                -> TypeConstraint
                 -> Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData)
-translateIfExpr ov orig clauses elseExpr =
+translateIfExpr ov orig clauses elseExpr ty =
   case clauses of
     [] -> X.throw (MalformedConditionalExpression orig)
     [(test, res)] ->
       withStaticTest test
-        (translateExpr' ov res ConstraintNone)
-        (translateExpr' ov elseExpr ConstraintNone) $ do
+        (translateExpr' ov res ty)
+        (translateExpr' ov elseExpr ty) $ do
       Some testA <- translateExpr ov test
-      (Some resA, extRes) <- translateExpr' ov res ConstraintNone
-      (Some elseA, extElse) <- translateExpr' ov elseExpr (someTypeOfAtom resA)
+      (Some resA, extRes) <- translateExpr' ov res ty
+      (Some elseA, extElse) <- translateExpr' ov elseExpr (mergeConstraints ty (someTypeOfAtom resA))
       ext <- mergeExtensions extRes extElse
       Refl <- assertAtomType test CT.BoolRepr testA
       Refl <- assertAtomType res (CCG.typeOfAtom elseA) resA
@@ -1806,11 +1822,11 @@ translateIfExpr ov orig clauses elseExpr =
           return (Some atom, ext)
     (test, res) : rest ->
       withStaticTest test
-        (translateExpr' ov res ConstraintNone)
-        (translateIfExpr ov orig rest elseExpr) $ do
-      (Some trA, extRest) <- translateIfExpr ov orig rest elseExpr
+        (translateExpr' ov res ty)
+        (translateIfExpr ov orig rest elseExpr ty) $ do
+      (Some trA, extRest) <- translateIfExpr ov orig rest elseExpr ty
       Some testA <- translateExpr ov test
-      (Some resA, extRes) <- translateExpr' ov res (someTypeOfAtom trA)
+      (Some resA, extRes) <- translateExpr' ov res (mergeConstraints ty (someTypeOfAtom trA))
       ext <- mergeExtensions extRes extRest
       Refl <- assertAtomType test CT.BoolRepr testA
       Refl <- assertAtomType res (CCG.typeOfAtom trA) resA

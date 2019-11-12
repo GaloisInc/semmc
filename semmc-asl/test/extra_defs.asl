@@ -154,6 +154,174 @@ bits(N) ASR(bits(N) x, integer shift)
         result = primitive_ASR(x, shift);
     return result;
 
+// Stubbed floating point operations to allow proper signature calculations
+
+bits(N) FPAdd(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+boolean FPCompareUN(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return boolean UNKNOWN;
+
+bits(N) FPMin(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPProcess(bits(N) input)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPTwo(bit sign)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+boolean FPCompareNE(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return boolean UNKNOWN;
+
+bits(N) FPMinNormal(bit sign)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+boolean FPCompareGT(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return boolean UNKNOWN;
+
+bits(N) FPSub(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(M) FPToFixed(bits(N) op, integer fbits, boolean unsigned, FPCRType fpcr, FPRounding rounding)
+    assert FALSE;
+    return bits(M) UNKNOWN;
+
+bits(N) FixedToFP(bits(M) op, integer fbits, boolean unsigned, FPCRType fpcr, FPRounding rounding)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPRecpX(bits(N) op, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPMul(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPRecipStep(bits(N) op1, bits(N) op2)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPMulAddH(bits(N) addend, bits(M) op1, bits(M) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPMinNum(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPMax(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPMaxNum(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPScale(bits (N) op, integer scale, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPRoundIntN(bits(N) op, FPCRType fpcr, FPRounding rounding, integer intsize)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(4) FPCompare(bits(N) op1, bits(N) op2, boolean signal_nans, FPCRType fpcr)
+    assert FALSE;
+    return bits(4) UNKNOWN;
+
+boolean FPCompareGE(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return boolean UNKNOWN;
+
+bits(N) FPRSqrtStepFused(bits(N) op1, bits(N) op2)
+    assert FALSE;
+    return bits(4) UNKNOWN;
+
+boolean FPCompareEQ(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return boolean UNKNOWN;
+
+(boolean, bits(N)) FPProcessNaNs3(FPType type1, FPType type2, FPType type3,
+                                  bits(N) op1, bits(N) op2, bits(N) op3,
+                                  FPCRType fpcr)
+    assert FALSE;
+    return (boolean UNKNOWN, bits(N) UNKNOWN);
+
+bits(N) FPRecipEstimate(bits(N) operand, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPSqrt(bits(N) op, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(M) FPConvert(bits(N) op, FPCRType fpcr, FPRounding rounding)
+    assert FALSE;
+    return bits(M) UNKNOWN;
+
+bits(M) FPConvert(bits(N) op, FPCRType fpcr)
+    assert FALSE;
+    return bits(M) UNKNOWN;
+
+bits(M) FPConvertSVE(bits(N) op, FPCRType fpcr, FPRounding rounding)
+    assert FALSE;
+    return bits(M) UNKNOWN;
+
+bits(M) FPConvertSVE(bits(N) op, FPCRType fpcr)
+    assert FALSE;
+    return bits(M) UNKNOWN;
+
+bits(N) FPDiv(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPRSqrtEstimate(bits(N) operand, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPTrigSMul(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPHalvedSub(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPRSqrtStep(bits(N) op1, bits(N) op2)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPMulAdd(bits(N) addend, bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPRecipStepFused(bits(N) op1, bits(N) op2)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPToFixedJS(bits(M) op, FPCRType fpcr, boolean Is64)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPMulX(bits(N) op1, bits(N) op2, FPCRType fpcr)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
+bits(N) FPRoundInt(bits(N) op, FPCRType fpcr, FPRounding rounding, boolean exact)
+    assert FALSE;
+    return bits(N) UNKNOWN;
+
 
 // We assume that the MMU is disabled and that general address translation
 // is not going to occur. These functions appear to be too complex to translate.

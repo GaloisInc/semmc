@@ -1041,8 +1041,7 @@ computeInstructionSignature AS.Instruction{..} encName iset = do
       let initUnusedFields = initializeUnusedFields (AS.encFields enc) (map AS.encFields instEncodings)
       let initStmts = AS.encDecode enc ++ initUnusedFields
       liftedStmts <- liftOverEnvs instName enc instExecute
-      let instExecute' = pruneInfeasableInstrSets (AS.encInstrSet enc) $ liftedStmts
-      let instStmts = initStmts ++ instPostDecode ++ instExecute'
+      let instStmts = pruneInfeasableInstrSets (AS.encInstrSet enc) $ initStmts ++ instPostDecode ++ liftedStmts
       let staticEnv = addInitializedVariables initStmts emptyStaticEnvMap
       computeSignatures instStmts
       globalVars <- globalsOfStmts instStmts
@@ -1148,6 +1147,10 @@ dependentVariablesOfStmts stmts = let
       AS.StmtFor var (lo, hi) _ ->
         return $ optionalDirectVarsOf lo <> optionalDirectVarsOf hi
       _ -> return mempty
+    TR.SyntaxTypeRepr -> case syn of
+      AS.TypeFun "bits" e ->
+        return $ directVarsOf e
+      _ -> return mempty
     TR.SyntaxCallRepr -> case syn of
       (AS.VarName "GETTER_Elem", [_, e, size]) ->
         return $ optionalDirectVarsOf e <> directVarsOf size
@@ -1194,18 +1197,23 @@ staticEnvironmentStmt envs stmts =
       (SE.staticToExpr sv)
 
 pruneInfeasableInstrSets :: AS.InstructionSet -> [AS.Stmt] -> [AS.Stmt]
-pruneInfeasableInstrSets enc stmts = case enc of
-  AS.A32 -> stmts
-  AS.A64 -> stmts
-  _ -> let
-    evalInstrSetTest (AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.VarName "CurrentInstrSet") [])
-                       (AS.ExprVarRef (AS.VarName "InstrSet_A32"))) =
-      AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
-    evalInstrSetTest e = e
+pruneInfeasableInstrSets enc stmts = let
+  falseExpr = AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "FALSE")
+  trueExpr = AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny "TRUE")
+  evalInstrSetTest e = case e of
+    AS.ExprBinOp AS.BinOpEQ (AS.ExprCall (AS.VarName "CurrentInstrSet") [])
+      (AS.ExprVarRef (AS.VarName "InstrSet_A32")) ->
+      case enc of
+        AS.A32 -> trueExpr
+        _ -> falseExpr
+    AS.ExprCall (AS.VarName fpnm) []
+      | fpnm `elem` ["HaveFP16MulNoRoundingToFP32Ext", "HaveFP16Ext"] ->
+        falseExpr
+    _ -> e
 
-    collector :: forall t. TR.KnownSyntaxRepr t => t -> t
-    collector = TR.withKnownSyntaxRepr (\case {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id})
-    in map (TR.mapSyntax collector) stmts
+  collector :: forall t. TR.KnownSyntaxRepr t => t -> t
+  collector = TR.withKnownSyntaxRepr (\case {TR.SyntaxExprRepr -> evalInstrSetTest; _ -> id})
+  in map (TR.mapSyntax collector) stmts
 
 
 
