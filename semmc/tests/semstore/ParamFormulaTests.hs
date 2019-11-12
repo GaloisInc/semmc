@@ -24,7 +24,7 @@ import           Hedgehog
 import           Hedgehog.Internal.Property ( forAllT )
 import           HedgehogUtil ( )
 import qualified Lang.Crucible.Backend.Online as CBO
-import           Lang.Crucible.Backend.Simple ( newSimpleBackend )
+import           Lang.Crucible.Backend.Simple ( newSimpleBackend, FloatModeRepr(..) )
 import qualified SemMC.BoundVar as BV
 import           SemMC.DSL ( defineOpcode, comment, input, defLoc, param, ite, uf
                            , bvadd, bvmul, bvshl, bvnot
@@ -60,28 +60,28 @@ testBasicParameters :: [TestTree]
 testBasicParameters =
     [ testProperty "parameter type" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "parameter type multiple" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpPack)
                     assert (all isValidParamType (SF.pfUses p))
     , testProperty "operand type" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert $ isNatArgFoo ((SF.pfOperandVars p) SL.!! SL.index0)
     , testProperty "literal vars" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     _ <- forAllT (genParameterizedFormula sym OpSurf)
                     success -- TBD: something (manything?) to test literal vars here
       -- TBD: needs other tests
     , testProperty "defs keys in uses" $
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     (p, _operands, _trace) <- forAllT (genParameterizedFormula sym OpSurf)
                     assert (all (flip Set.member (SF.pfUses p)) (MapF.keys $ SF.pfDefs p))
     ]
@@ -107,7 +107,7 @@ testRoundTripPrintParse =
     testProperty "ser/des round trip, simple backend, OpPack" $
       withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     let opcode = OpPack
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugOut $ "trace: " <> show trace
@@ -128,7 +128,7 @@ testRoundTripPrintParse =
     , testProperty "ser/des round trip, simple backend, OpWave" $
       withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     let opcode = OpWave
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugOut $ "trace: " <> show trace
@@ -149,7 +149,7 @@ testRoundTripPrintParse =
     , testProperty "ser/des round trip, simple backend, OpSolo" $
       withTests 500 $  -- default is 100 tests, but formulas have lots of options, so get more
       property $ do Some r <- liftIO newIONonceGenerator
-                    sym <- liftIO $ newSimpleBackend r
+                    sym <- liftIO $ newSimpleBackend FloatRealRepr r
                     let opcode = OpSolo
                     (p, _operands, trace) <- forAllT (genParameterizedFormula sym opcode)
                     debugOut $ "trace: " <> show trace
@@ -171,7 +171,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -202,7 +202,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -233,7 +233,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -265,7 +265,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -299,7 +299,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -332,7 +332,7 @@ testRoundTripPrintParse =
       property $
       E.handleAll (\e -> annotate (show e) >> failure) $ do
         Some r <- liftIO newIONonceGenerator
-        CBO.withYicesOnlineBackend @(CBO.Flags CBO.FloatReal) r CBO.NoUnsatFeatures $ \sym -> do
+        CBO.withYicesOnlineBackend CBO.FloatRealRepr r CBO.NoUnsatFeatures $ \sym -> do
           void $ liftIO $ join (setOpt
                                 <$> getOptionSetting enable_mcsat (WI.getConfiguration sym)
                                 <*> pure False)
@@ -383,7 +383,7 @@ testRoundTripPrintParse =
                         ])
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
-          sym <- liftIO $ newSimpleBackend r
+          sym <- liftIO $ newSimpleBackend FloatRealRepr r
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
@@ -426,7 +426,7 @@ testRoundTripPrintParse =
                         ])
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
-          sym <- liftIO $ newSimpleBackend r
+          sym <- liftIO $ newSimpleBackend FloatRealRepr r
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $
@@ -502,7 +502,7 @@ testRoundTripPrintParse =
                         ])
           -- verify that the expression can be parsed back into a Formula
           Some r <- liftIO newIONonceGenerator
-          sym <- liftIO $ newSimpleBackend r
+          sym <- liftIO $ newSimpleBackend FloatRealRepr r
           fenv <- testFormulaEnv sym
           lcfg <- liftIO $ Log.mkLogCfg "rndtrip"
           reForm <- liftIO $

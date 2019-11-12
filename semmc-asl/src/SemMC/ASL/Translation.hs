@@ -24,6 +24,7 @@ module SemMC.ASL.Translation (
   , translateStatement
   , addExtendedTypeData
   , unliftGenerator
+  , InnerGenerator
   , throwTrace
   , Overrides(..)
   , overrides
@@ -218,16 +219,19 @@ data Overrides arch =
             , overrideExpr :: forall h s ret . AS.Expr -> TypeConstraint -> StaticEnvMap -> Maybe (Generator h s arch ret (Some (CCG.Atom s), ExtendedTypeData))
             }
 
+type InnerGenerator h s arch ret a = CCG.Generator (ASLExt arch) s (TranslationState h ret) ret (MST.ST h) a
+
 newtype Generator h s arch ret a = Generator
-  { unGenerator :: CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a}
+  { unGenerator :: InnerGenerator h s arch ret a}
   deriving
     ( Functor
     , Applicative
     , Monad
-    , MST.MonadST h
     , MSS.MonadState (TranslationState h ret s)
     )
 
+instance MST.MonadST h (Generator h s arch ret) where
+  liftST m = Generator $ MT.lift $ MST.liftST m
 
 instance TR.MonadLog (Generator h s arch ret) where
   logMsg logLvl msg = do
@@ -251,20 +255,20 @@ throwTrace e = do
   log <- MST.liftST (STRef.readSTRef logHandle)
   X.throw $ LoggedTranslationException log e
 
-liftGenerator :: CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a
+liftGenerator :: InnerGenerator h s arch ret a
               -> Generator h s arch ret a
 liftGenerator m = Generator $ m
 
 unliftGenerator :: Generator h s arch ret a
-                -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a
+                -> InnerGenerator h s arch ret a
 unliftGenerator (Generator m) = m
 
 
 liftGenerator2 :: Generator h s arch ret a
                -> Generator h s arch ret b
-               -> (CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret a
-                  -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret b
-                  -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret c)
+               -> (InnerGenerator h s arch ret a
+                  -> InnerGenerator h s arch ret b
+                  -> InnerGenerator h s arch ret c)
                -> Generator h s arch ret c
 liftGenerator2 (Generator f) (Generator g) m = Generator $ m f g
 

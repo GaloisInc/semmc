@@ -53,6 +53,7 @@ import qualified Data.Bimap as BM
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some(..) )
+import           Data.Parameterized.Nonce ( newSTNonceGenerator )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Data.List as List
@@ -71,7 +72,7 @@ import qualified Language.ASL.Syntax as AS
 import           SemMC.ASL.Extension ( ASLExt, ASLApp(..), ASLStmt(..), aslExtImpl )
 import           SemMC.ASL.Exceptions ( TranslationException(..), LoggedTranslationException(..) )
 import           SemMC.ASL.Signature
-import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), translateStatement, overrides, addExtendedTypeData, throwTrace, unliftGenerator)
+import           SemMC.ASL.Translation ( UserType(..), TranslationState(..), Overrides(..), Definitions(..), InnerGenerator, translateStatement, overrides, addExtendedTypeData, throwTrace, unliftGenerator)
 import qualified SemMC.ASL.SyntaxTraverse as TR
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
@@ -151,12 +152,13 @@ defineCCGFunction :: CCExt.IsSyntaxExtension ext
                => WP.Position
                -> CFH.FnHandle init ret
                -> ((STRef.STRef h (Map.Map T.Text StaticValues), STRef.STRef h [T.Text]) ->
-                    CCG.FunctionDef ext h t init ret)
+                    CCG.FunctionDef ext t init ret (ST h))
                -> ST h ((CCG.SomeCFG ext init ret, Map.Map T.Text StaticValues), [T.Text])
 defineCCGFunction p h f = do
+    ng <- newSTNonceGenerator
     funDepRef <- STRef.newSTRef Map.empty
     logRef <- STRef.newSTRef []
-    (cfg, _) <- CCG.defineFunction p h (f (funDepRef, logRef))
+    (cfg, _) <- CCG.defineFunction p ng h (f (funDepRef, logRef))
     log <- STRef.readSTRef logRef
     funDeps <- STRef.readSTRef funDepRef
     return ((cfg, funDeps), log)
@@ -169,7 +171,7 @@ funcDef :: (ReturnsGlobals ret globalWrites tps)
         -> [AS.Stmt]
         -> Integer -- ^ Logging level
         -> Ctx.Assignment (CCG.Atom s) init
-        -> (TranslationState h ret s, CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret))
+        -> (TranslationState h ret s, InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret))
 funcDef defs sig hdls globalReads stmts logLvl args =
   (funcInitialState defs sig hdls logLvl globalReads args, defineFunction overrides sig globalReads stmts args)
 
@@ -212,7 +214,7 @@ defineFunction :: (ReturnsGlobals ret globalWrites tps)
                -> Ctx.Assignment BaseGlobalVar globalReads
                -> [AS.Stmt]
                -> Ctx.Assignment (CCG.Atom s) init
-               -> CCG.Generator (ASLExt arch) h s (TranslationState h ret) ret (CCG.Expr (ASLExt arch) s ret)
+               -> InnerGenerator h s arch ret (CCG.Expr (ASLExt arch) s ret)
 defineFunction ov sig baseGlobals stmts _args = do
   unliftGenerator $ mapM_ (\(FunctionArg nm t _) -> addExtendedTypeData nm t) (funcArgs sig)
   unliftGenerator $ mapM_ (translateStatement ov) stmts

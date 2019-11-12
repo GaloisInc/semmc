@@ -15,6 +15,7 @@ module Main ( main ) where
 import qualified Control.Exception as X
 import           Data.Monoid
 import           Control.Monad.Identity
+import           Control.Monad.ST ( stToIO )
 import           Control.Monad (forM_, foldM, when)
 import qualified Control.Monad.State.Lazy as MSS
 import qualified Control.Monad.RWS as RWS
@@ -57,6 +58,7 @@ import qualified SemMC.ASL.SyntaxTraverse as AS  ( pattern VarName )
 import qualified SemMC.ASL.SyntaxTraverse as TR
 
 import qualified SemMC.Formula as SF
+import qualified What4.Expr.Builder as B
 
 import SemMC.Formula.Printer as FP
 import SemMC.ASL
@@ -337,16 +339,17 @@ translationLoop fromInstr callStack defs (fnname, env) = do
             MSS.modify' $ \s -> s { funDeps = Map.insert finalName alldepsSet (funDeps s) }
             return alldepsSet
 
-withOnlineBackend :: forall fs scope a.
+withOnlineBackend :: forall fm scope a.
                           NonceGenerator IO scope
                        -> CBO.UnsatFeatures
-                       -> (CBO.YicesOnlineBackend scope fs -> IO a)
+                       -> (CBO.YicesOnlineBackend scope (B.Flags B.FloatReal) -> IO a)
                        -> IO a
-withOnlineBackend gen unsatFeat action =
-  let feat = Yices.yicesDefaultFeatures .|. CBO.unsatFeaturesToProblemFeatures unsatFeat in
-  CBO.withOnlineBackend gen feat $ \sym ->
-    do WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
-       action sym
+withOnlineBackend gen unsatFeat action = do
+  -- Some ng <- newSTNonceGenerator
+  let feat = Yices.yicesDefaultFeatures .|. CBO.unsatFeaturesToProblemFeatures unsatFeat
+  CBO.withOnlineBackend B.FloatRealRepr gen feat $ \sym -> do
+    WC.extendConfig Yices.yicesOptions (WI.getConfiguration sym)
+    action sym
 
 -- Extremely vague measure of function body size
 measureStmts :: [AS.Stmt] -> Int

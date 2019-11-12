@@ -131,7 +131,7 @@ withInitialState :: forall arch a
                  -> IO a
 withInitialState cfg allOpcodes pseudoOpcodes targetOpcodes iorels k = do
   Some ng <- N.newIONonceGenerator
-  CBO.withYicesOnlineBackend ng CBO.NoUnsatFeatures $ \sym -> do
+  CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
 
     rng <- DA.createGen
     let genTest = AC.randomState (Proxy @arch) rng

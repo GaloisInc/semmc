@@ -26,7 +26,7 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.Parameterized.TraversableFC as FC
 import qualified Data.Text as T
 import qualified Data.Type.List as TL
-import qualified Dismantle.XML.AArch32 as DA
+-- import qualified Dismantle.XML.AArch32 as DA
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.CFG.Core as CCC
 import qualified Lang.Crucible.CFG.Expr as CCE

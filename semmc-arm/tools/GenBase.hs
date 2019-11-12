@@ -74,7 +74,7 @@ main = O.execParser optParser >>= mainWithOptions
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
-  sym <- S.newSimpleBackend @_ @(S.Flags S.FloatIEEE) ng
+  sym <- S.newSimpleBackend S.FloatIEEERepr ng
   let odir = oRootDir opts
       genFunsTo d l = do
         ans@(s, e, _lib) <- genFunDefs sym d (not $ oNoCheck opts) l
