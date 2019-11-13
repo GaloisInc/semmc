@@ -81,7 +81,7 @@ convertSimpleDef :: forall arch proxy t
                  -> MapF.Pair (A.Location arch) (S.Expr t)
                  -> SE.RichSExpr FAtom
 convertSimpleDef _ paramVars (MapF.Pair loc elt) =
-  SE.L [ convertLocation loc, convertElt paramLookup elt ]
+  SE.L [ convertLocation loc, convertExpr paramLookup elt ]
   where
     tbl = Map.fromList [ (Some bv, convertLocation l) | MapF.Pair l bv <- MapF.toList paramVars ]
     paramLookup :: ParamLookup t
@@ -127,7 +127,7 @@ convertFnBody (S.ExprSymFn _ _ symFnInfo _) = case symFnInfo of
         paramLookup var = Just $ ident' (T.unpack (S.solverSymbolAsText (S.bvarName var)))
         -- paramLookup = flip Map.lookup argMapping . Some
         -- argMapping = buildArgsMapping argVars
-    in convertElt paramLookup expr
+    in convertExpr paramLookup expr
   _ -> error "PANIC"
 
 convertUses :: (ShowF (A.Location arch))
@@ -190,24 +190,24 @@ convertDef :: (ShowF (A.Location arch))
            -> Pair (Parameter arch sh) (S.Expr t)
            -> SE.RichSExpr FAtom
 convertDef opVars paramLookup (Pair param expr) =
-  SE.L [ convertParameter opVars param, convertElt paramLookup expr ]
+  SE.L [ convertParameter opVars param, convertExpr paramLookup expr ]
 
 -- NOTE: There's probably some fancy caching we can do because of the nonces in
 -- all the expressions. If the current implementation is at all slow, we can
 -- implement that. However, I'm skipping it for now, since I imagine this won't
 -- be a bottleneck.
 
-convertElt :: ParamLookup t -> S.Expr t tp -> SE.RichSExpr FAtom
-convertElt _ (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatElt not supported"
+convertExpr :: ParamLookup t -> S.Expr t tp -> SE.RichSExpr FAtom
+convertExpr _ (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatExpr not supported"
 -- FIXME: We print something here for now.
--- convertElt _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = error "IntElt not supported"
-convertElt _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = ident' "<IntElt:unsupported>"
-convertElt _ (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatElt not supported"
-convertElt _ (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = SE.A (ABV (widthVal sz) val)
-convertElt _ (S.StringExpr {}) = error "StringExpr is not supported"
-convertElt _ (S.BoolExpr b _) = ident' $ if b then "true" else "false"
-convertElt paramLookup (S.AppExpr appElt) = convertAppElt paramLookup appElt
-convertElt paramLookup (S.NonceAppExpr nae) =
+-- convertExpr _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = error "IntExpr not supported"
+convertExpr _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = ident' "<IntExpr:unsupported>"
+convertExpr _ (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatExpr not supported"
+convertExpr _ (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = SE.A (ABV (widthVal sz) val)
+convertExpr _ (S.StringExpr {}) = error "StringExpr is not supported"
+convertExpr _ (S.BoolExpr b _) = ident' $ if b then "true" else "false"
+convertExpr paramLookup (S.AppExpr appExpr) = convertAppExpr paramLookup appExpr
+convertExpr paramLookup (S.NonceAppExpr nae) =
   case S.nonceExprApp nae of
     S.FnApp fn args -> convertFnApp paramLookup fn args
     S.Forall {} -> error "Forall NonceAppExpr not supported"
@@ -215,12 +215,12 @@ convertElt paramLookup (S.NonceAppExpr nae) =
     S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
     S.MapOverArrays {} -> error "MapOverArrays NonceAppExpr not supported"
     S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppExpr not supported"
-convertElt paramLookup (S.BoundVarExpr var) = fromJust' ("SemMC.Formula.Printer paramLookup " ++ show (S.bvarName var)) $ paramLookup var
+convertExpr paramLookup (S.BoundVarExpr var) = fromJust' ("SemMC.Formula.Printer paramLookup " ++ show (S.bvarName var)) $ paramLookup var
 
-convertElts :: ParamLookup t -> Ctx.Assignment (S.Expr t) sh -> SE.RichSExpr FAtom
-convertElts paramLookup es = case es of
+convertExprs :: ParamLookup t -> Ctx.Assignment (S.Expr t) sh -> SE.RichSExpr FAtom
+convertExprs paramLookup es = case es of
   Ctx.Empty -> SE.Nil
-  es' Ctx.:> e -> SE.cons (convertElt paramLookup e) (convertElts paramLookup es')
+  es' Ctx.:> e -> SE.cons (convertExpr paramLookup e) (convertExprs paramLookup es')
 
 convertFnApp :: ParamLookup t
              -> S.ExprSymFn t args ret
@@ -233,7 +233,7 @@ convertFnApp paramLookup fn args
       in SE.L [ call, int' (NR.intValue nr) ]
   | otherwise =
     let call = SE.L [ ident' "_", ident' "call", quoted' (prefix ++ T.unpack name) ]
-    in SE.L (call : FC.toListFC (convertElt paramLookup) args)
+    in SE.L (call : FC.toListFC (convertExpr paramLookup) args)
   where
     name = S.solverSymbolAsText (S.symFnName fn)
     prefix = case S.symFnInfo fn of
@@ -241,13 +241,13 @@ convertFnApp paramLookup fn args
       S.DefinedFnInfo _ _ _ -> "df."
       _ -> error ("Unsupported function: " ++ T.unpack name)
 
-convertAppElt :: ParamLookup t -> S.AppExpr t tp -> SE.RichSExpr FAtom
-convertAppElt paramLookup = convertApp paramLookup . S.appExprApp
+convertAppExpr :: ParamLookup t -> S.AppExpr t tp -> SE.RichSExpr FAtom
+convertAppExpr paramLookup = convertApp paramLookup . S.appExprApp
 
 convertApp :: forall t tp. ParamLookup t -> S.App (S.Expr t) tp -> SE.RichSExpr FAtom
 convertApp paramLookup = convertApp'
   where convert :: forall tp'. S.Expr t tp' -> SE.RichSExpr FAtom
-        convert = convertElt paramLookup
+        convert = convertExpr paramLookup
 
         convertApp' :: S.App (S.Expr t) tp -> SE.RichSExpr FAtom
 
@@ -345,7 +345,7 @@ convertApp paramLookup = convertApp'
 
         convertApp' (S.StructCtor tps vals) = SE.L [ident' "struct",
                                                     printBaseTypes tps,
-                                                    convertElts paramLookup vals]
+                                                    convertExprs paramLookup vals]
         convertApp' (S.StructField structExpr ix fieldTp) = SE.L [ident' "field",
                                                                   ident' (show (Ctx.indexVal ix)),
                                                                   printBaseType fieldTp,
