@@ -15,6 +15,7 @@ import qualified What4.BaseTypes as WT
 
 import qualified Language.ASL.Syntax as AS
 
+
 import           SemMC.ASL.Signature
 import           SemMC.ASL.Types
 import           SemMC.ASL.StaticExpr
@@ -51,6 +52,7 @@ data TranslationException = forall ret . NoReturnInFunction (SomeFunctionSignatu
                           | forall tps . InvalidArgumentTypes T.Text (Ctx.Assignment CT.TypeRepr tps)
                           | forall tp1 tp2 . UnexpectedProcedureReturn (CT.TypeRepr tp1) (CT.TypeRepr tp2)
                           | MissingGlobal T.Text
+                          | forall t. Show t => MissingGlobalStructField t T.Text
                           | forall tp . UnexpectedGlobalType T.Text (CT.TypeRepr tp)
                           | UnexpectedType AS.QualifiedIdentifier
                           | InvalidSliceRange Integer Integer

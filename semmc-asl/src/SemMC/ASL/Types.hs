@@ -236,6 +236,7 @@ type RegisterSig = Map.Map T.Text (Integer, Integer)
 data ExtendedTypeData =
     TypeBasic
   | TypeRegister RegisterSig
+  | TypeGlobalStruct (Map.Map T.Text T.Text)
   | TypeStruct UserStructAcc
   | TypeTuple [ExtendedTypeData]
   | TypeArray ExtendedTypeData

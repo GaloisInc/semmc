@@ -44,12 +44,14 @@ module SemMC.ASL.Translation.Preprocess
   , mkExtendedTypeData'
   , mkBaseStructRepr
   , mkFinalFunctionName
+  , globalStructNames
   ) where
 
 import Debug.Trace (traceM)
 
 import           Control.Applicative ( (<|>), Const(..) )
 import qualified Control.Exception as X
+import qualified Control.Monad.Fail as F
 import           Control.Monad (void, foldM, foldM_)
 import           Control.Monad.Identity
 import           Control.Monad.Trans ( lift )
@@ -210,6 +212,9 @@ newtype SigM ext f a = SigM { getSigM ::  E.ExceptT SigException (TR.MonadLogT (
            , TR.MonadLog
            )
 
+instance F.MonadFail (SigM ext f) where
+  fail s = E.throwError $ SigBindingFailure s
+
 data ASLSpec = ASLSpec
   { aslInstructions :: [AS.Instruction]
   , aslDefinitions :: [AS.Definition]
@@ -322,7 +327,7 @@ buildCallableMap merge cs =
            [c] -> (a, Just c)
            cs -> (map mkCallableOverrideVariant cs ++ a, Nothing)
 
-mkExtendedTypeData' :: Monad m
+mkExtendedTypeData' :: forall m. (Monad m)
                    => (T.Text -> m (Maybe (Some UserType)))
                    -> (T.Text -> m ExtendedTypeData)
                    -> AS.Type
@@ -332,30 +337,29 @@ mkExtendedTypeData' getUT getET ty = do
     AS.TypeRef qi@(AS.QualifiedIdentifier _ tident) -> do
       uts <- getUT tident
       case uts of
-        Just s -> return $ fromUT s
+        Just s -> fromUT s
         Nothing -> do
           case lookup tident registerTypeSynonyms of
             Just nm -> getET nm
             Nothing -> return TypeBasic
     _ -> return TypeBasic
   where
-    fromUT :: Some UserType -> ExtendedTypeData
+    fromUT :: Some UserType -> m ExtendedTypeData
     fromUT ut = case ut of
       Some (UserStruct s) -> do
-        let (_, asn) = MSS.runState (Ctx.traverseAndCollect
-                                     (collectAssignment (FC.fmapFC projectValue s)) s) Map.empty
-        TypeStruct asn
-      _ -> TypeBasic
+        asn <- Ctx.traverseAndCollect (collectAssignment (FC.fmapFC projectValue s)) s
+        return $ TypeStruct asn
+      _ -> return $ TypeBasic
     collectAssignment :: Ctx.Assignment WT.BaseTypeRepr tps
                       -> Ctx.Index tps tp
                       -> LabeledValue (T.Text, Maybe (Some UserType)) WT.BaseTypeRepr tp
-                      -> MSS.State (Map.Map T.Text StructAccessor) ()
+                      -> m (Map.Map T.Text StructAccessor)
     collectAssignment repr idx lblv = do
       let (nm, mUT) = projectLabel lblv
       ext <- case mUT of
-        Just sUT -> return $ fromUT sUT
+        Just sUT -> fromUT sUT
         Nothing -> return $ TypeBasic
-      MS.modify' (Map.insert nm (StructAccessor repr idx ext))
+      return $ Map.singleton nm (StructAccessor repr idx ext)
 
 mkExtendedTypeData :: AS.Type -> SigM ext f (ExtendedTypeData)
 mkExtendedTypeData = mkExtendedTypeData' getUT getET
@@ -434,11 +438,22 @@ insertUnique k v =
       Just _ -> error $ "Unexpected existing member in map:" ++ show k
       Nothing -> Just v
 
+globalStructNames :: [T.Text]
+globalStructNames = ["PSTATE"]
+
 initializeSigM :: ASLSpec -> SigM ext f ()
 initializeSigM spec = do
   mapM_ initDefGlobal (allDefs spec)
   return ()
   where
+    initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) (AS.TypeRef (AS.VarName typnm)))
+      | nm `elem` globalStructNames = do
+      Some (UserStruct ut) <- computeUserType typnm
+      fieldMap <- Ctx.traverseAndCollect (collectGlobalFields nm) ut
+      let ext = TypeGlobalStruct fieldMap
+      RWS.modify' $ \st -> st { globalVars = insertUnique nm (Some WT.BaseStringRepr) (globalVars st),
+                     extendedTypeData = insertUnique nm ext (extendedTypeData st) }
+
     initDefGlobal (AS.DefVariable (AS.QualifiedIdentifier _ nm) ty) = do
       tp <- computeType ty
       ext <- mkExtendedTypeData ty
@@ -454,6 +469,17 @@ initializeSigM spec = do
       RWS.put $ st { globalVars = insertUnique nm atp (globalVars st),
                      extendedTypeData = insertUnique nm aext (extendedTypeData st) }
     initDefGlobal _ = return ()
+
+    collectGlobalFields :: T.Text
+                        -> Ctx.Index tps tp
+                        -> LabeledValue (T.Text, Maybe (Some UserType)) WT.BaseTypeRepr tp
+                        -> SigM ext f (Map.Map T.Text T.Text)
+    collectGlobalFields structname idx lblv = do
+      let (nm, _) = projectLabel lblv
+      let tp = projectValue lblv
+      let globalname = structname <> "_" <> nm
+      RWS.modify' $ \s -> s { globalVars = insertUnique globalname (Some tp) (globalVars s) }
+      return $ Map.singleton nm globalname
 
 buildSigState :: ASLSpec -> (SigEnv, SigState)
 buildSigState spec =
@@ -487,8 +513,11 @@ type GlobalVarRefs = (Set.Set (T.Text, Some WT.BaseTypeRepr), Set.Set (T.Text, S
 -- All writes are implicitly reads
 unpackGVarRefs :: GlobalVarRefs -> ([(T.Text, Some WT.BaseTypeRepr)], [(T.Text, Some WT.BaseTypeRepr)])
 unpackGVarRefs (reads, writes) =
-  (Set.toList (Set.unions [reads, writes, builtinReads, builtinWrites]),
-   Set.toList (Set.unions [writes, builtinWrites]))
+  let
+    globalStructs = Set.fromList $ map (\nm -> (nm, Some WT.BaseStringRepr)) globalStructNames
+    globalReads = Set.unions [reads, writes, builtinReads, builtinWrites] Set.\\ globalStructs
+    globalWrites = Set.unions [writes, builtinWrites] Set.\\ globalStructs
+  in (Set.toList globalReads, Set.toList globalWrites)
 
 builtinReads :: Set.Set (T.Text, Some WT.BaseTypeRepr)
 builtinReads = Set.fromList [("__AssertionFailure", Some CT.BaseBoolRepr)]
@@ -522,6 +551,7 @@ data SigException = TypeNotFound T.Text
                   | UnsupportedSigLVal AS.LValExpr
                   | MissingSignature Callable
                   | MissingSigFunctionDefinition T.Text
+                  | SigBindingFailure String
                   | FailedToDetermineStaticEnvironment [T.Text]
                   | FailedToMonomorphizeSignature AS.Type StaticValues
   deriving (Eq, Show)
@@ -585,6 +615,11 @@ lookupGlobalVar :: T.Text -> SigM ext f (Maybe (Some WT.BaseTypeRepr))
 lookupGlobalVar varName = do
   env <- RWS.get
   return $ Map.lookup varName (globalVars env)
+
+lookupExtendedTypeData :: T.Text -> SigM ext f (Maybe ExtendedTypeData)
+lookupExtendedTypeData varName = do
+  env <- RWS.get
+  return $ Map.lookup varName (extendedTypeData env)
 
 lookupCallableSignature :: Callable -> SigM ext f (Maybe (SomeSimpleFunctionSignature, GlobalVarRefs))
 lookupCallableSignature c = do
@@ -751,12 +786,30 @@ globalsOfStmts :: forall ext f. [AS.Stmt] -> SigM ext f GlobalVarRefs
 globalsOfStmts stmts = let
   collectors :: forall t. TR.KnownSyntaxRepr t => t -> SigM ext f GlobalVarRefs
   collectors = TR.useKnownSyntaxRepr $ \syn -> \case
-    TR.SyntaxExprRepr
-      | AS.ExprVarRef (AS.QualifiedIdentifier _ varName) <- syn ->
+    TR.SyntaxExprRepr -> case syn of
+      AS.ExprVarRef (AS.QualifiedIdentifier _ varName) ->
         readGlobal varName
-    TR.SyntaxLValRepr
-      | AS.LValVarRef (AS.QualifiedIdentifier _ varName) <- syn ->
+      AS.ExprMember (AS.ExprVarRef (AS.VarName structName)) mem ->
+        lookupExtendedTypeData structName >>= \case
+          Just (TypeGlobalStruct acc)
+            | Just globalName <- Map.lookup mem acc ->
+              readGlobal globalName
+          _ -> return mempty
+      AS.ExprMemberBits e bits ->
+        mconcat <$> traverse (TR.collectSyntax collectors) (map (AS.ExprMember e) bits)
+      _ -> return mempty
+    TR.SyntaxLValRepr -> case syn of
+      AS.LValVarRef (AS.QualifiedIdentifier _ varName) ->
         writeGlobal varName
+      AS.LValMember (AS.LValVarRef (AS.VarName structName)) mem ->
+        lookupExtendedTypeData structName >>= \case
+          Just (TypeGlobalStruct acc)
+            | Just globalName <- Map.lookup mem acc ->
+              writeGlobal globalName
+          _ -> return mempty
+      AS.LValMemberBits e bits ->
+        mconcat <$> traverse (TR.collectSyntax collectors) (map (AS.LValMember e) bits)
+      _ -> return mempty
     TR.SyntaxStmtRepr
       | AS.StmtCase _ alts <- syn ->
         mconcat <$> traverse caseAlternativeGlobalVars alts
@@ -1127,6 +1180,8 @@ liftOverEnvs instName enc stmts = case dependentVariablesOfStmts stmts of
       logMsg 3 $ "Possible environments found: " <> T.pack (show possibleEnvs)
       case cases possibleEnvs of
         [] -> E.throwError $ FailedToDetermineStaticEnvironment vars
+        -- FIXME: Debugging
+        (x1 : x2 : xs) ->  return $ [staticEnvironmentStmt [x1, x2] stmts]
         x -> return $ [staticEnvironmentStmt x stmts]
 
 

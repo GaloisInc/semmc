@@ -117,6 +117,7 @@ lookupVarRef' name = do
   case (lookupLocalConst env <|>
         lookupArg ts <|>
         lookupRef ts <|>
+        lookupGlobalStruct ts <|>
         lookupGlobal ts <|>
         lookupEnum ts <|>
         lookupConst ts) of
@@ -137,6 +138,10 @@ lookupVarRef' name = do
     lookupRef ts = do
       Some r <- Map.lookup name (tsVarRefs ts)
       return (ExprConstructor r $ (liftGenerator . CCG.readReg))
+    lookupGlobalStruct ts = do
+      if name `elem` globalStructNames
+        then return (ExprConstructor (CCG.App CCE.EmptyApp) $ return)
+        else fail ""
     lookupGlobal ts = do
       Some g <- Map.lookup name (tsGlobals ts)
       return (ExprConstructor g $ (liftGenerator . CCG.readGlobal))
@@ -836,6 +841,12 @@ translateAssignment'' ov lval atom constraint atomext mE = do
                 newStruct <- mkAtom $ CCG.App $ CCE.ExtensionApp $ MkBaseStruct ctps newStructAsn
                 translateAssignment' ov struct newStruct ext Nothing
             _ -> throwTrace $ InvalidStructUpdate lval (CCG.typeOfAtom atom)
+        TypeGlobalStruct acc ->
+          case Map.lookup memberName acc of
+            Just globalName ->
+              translateAssignment'' ov (AS.LValVarRef (AS.QualifiedIdentifier AS.ArchQualAny globalName)) atom constraint atomext mE
+            _ -> throwTrace $ MissingGlobalStructField struct memberName
+
         _ -> throwTrace $ UnexpectedExtendedType lve ext
 
     AS.LValTuple lvals ->
@@ -893,6 +904,15 @@ translateAssignment'' ov lval atom constraint atomext mE = do
               case repr Ctx.! idx of
                 CT.BaseBVRepr nr -> return $ WT.intValue nr
                 x -> throwTrace $ InvalidStructUpdate struct (CT.baseToType x)
+        TypeGlobalStruct acc ->
+          case Map.lookup memberName acc of
+            Just globalname -> do
+              lookupVarType globalname >>= \case
+                Nothing -> throwTrace $ MissingGlobal globalname
+                Just (Some tp) ->
+                  case tp of
+                    CT.BVRepr nr -> return $ WT.intValue nr
+                    x -> throwTrace $ InvalidStructUpdate struct x
       total <- foldM (\acc -> \mem -> do
         range <- getRange mem
         Some aslice <- translateSlice' ov atom (mkSliceRange (acc, (acc + range) - 1)) ConstraintNone
@@ -1532,6 +1552,11 @@ translateExpr'' ov expr ty = do
                       atom <- mkAtom (CCG.App (CCE.ExtensionApp getStruct))
                       return (Some atom, fieldExt)
                   _ -> throwTrace $ MissingStructField struct memberName
+              TypeGlobalStruct acc ->
+                case Map.lookup memberName acc of
+                  Just globalName -> do
+                    translateExpr' ov (AS.ExprVarRef (AS.QualifiedIdentifier AS.ArchQualAny globalName)) ty
+                  _ -> throwTrace $ MissingGlobalStructField struct memberName
               _ -> do
                 exts <- MS.gets tsExtendedTypes
                 X.throw $ UnexpectedExtendedType struct ext
