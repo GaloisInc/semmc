@@ -211,40 +211,6 @@ convertDef opVars paramLookup (Pair param expr) =
   SE.L [ convertParameter opVars param, convertExprWithLetrec paramLookup expr ]
 
 
-
-convertExpr :: forall t tp . ParamLookup t -> S.Expr t tp -> Memo SExp
-convertExpr paramLookup initialExpr = do
-  case exprSKey initialExpr of
-    Nothing -> go initialExpr
-    Just key -> do
-      cache <- State.get
-      case SMap.lookup key cache of
-        Just sexp -> return $ skeyAtom key
-        Nothing -> do
-          sexp <- go initialExpr
-          case sexp of
-            SE.A _ -> return sexp -- don't memoize atomic s-expressions
-            _ -> do 
-              State.modify (SMap.insert key sexp)
-              return $ skeyAtom key
-  where go :: S.Expr t tp -> Memo SExp
-        go (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatExpr not supported"
-        go (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = return $ ident' "<IntExpr:unsupported>"
-        go (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatExpr not supported"
-        go (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = return $ SE.A (ABV (widthVal sz) val)
-        go (S.StringExpr {}) = error "StringExpr is not supported"
-        go (S.BoolExpr b _) = return $ ident' $ if b then "true" else "false"
-        go (S.AppExpr appExpr) = convertAppExpr' paramLookup appExpr
-        go (S.NonceAppExpr nae) =
-          case S.nonceExprApp nae of
-            S.FnApp fn args -> convertFnApp paramLookup fn args
-            S.Forall {} -> error "Forall NonceAppExpr not supported"
-            S.Exists {} -> error "Exists NonceAppExpr not supported"
-            S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
-            S.MapOverArrays {} -> error "MapOverArrays NonceAppExpr not supported"
-            S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppExpr not supported"
-        go (S.BoundVarExpr var) = return $ fromJust' ("SemMC.Formula.Printer paramLookup " ++ show (S.bvarName var)) $ paramLookup var
-
 type Memo a = State (SMap.Map SKey SExp) a
 
 -- | Key for sharing SExp construction (i.e., the underlying
@@ -260,9 +226,44 @@ exprSKey :: S.Expr t tp -> Maybe SKey
 exprSKey x = SKey . Nonce.indexValue <$> S.exprMaybeId x
 
 
+convertExpr :: forall t tp . ParamLookup t -> S.Expr t tp -> Memo SExp
+convertExpr paramLookup initialExpr = do
+  case exprSKey initialExpr of
+    Nothing -> go initialExpr
+    Just key -> do
+      cache <- State.get
+      if SMap.member key cache
+        then do
+        return $ skeyAtom key
+        else do
+        sexp <- go initialExpr
+        case sexp of
+          SE.A _ -> return sexp -- don't memoize atomic s-expressions
+          _ -> do 
+            State.modify (SMap.insert key sexp)
+            return $ skeyAtom key
+  where go :: S.Expr t tp -> Memo SExp
+        go (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatExpr not supported"
+        go (S.SemiRingLiteral S.SemiRingIntegerRepr val _) = return $ SE.A $ AInt val -- do we need/want these?
+        go (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatExpr not supported"
+        go (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = return $ SE.A (ABV (widthVal sz) val)
+        go (S.StringExpr {}) = error "StringExpr is not supported"
+        go (S.BoolExpr b _) = return $ ident' $ if b then "true" else "false"
+        go (S.AppExpr appExpr) = convertAppExpr' paramLookup appExpr
+        go (S.NonceAppExpr nae) =
+          case S.nonceExprApp nae of
+            S.FnApp fn args -> convertFnApp paramLookup fn args
+            S.Forall {} -> error "Forall NonceAppExpr not supported"
+            S.Exists {} -> error "Exists NonceAppExpr not supported"
+            S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
+            S.MapOverArrays {} -> error "MapOverArrays NonceAppExpr not supported"
+            S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppExpr not supported"
+        go (S.BoundVarExpr var) = return $ fromJust' ("SemMC.Formula.Printer paramLookup " ++ show (S.bvarName var)) $ paramLookup var
+
+
 convertAppExpr' :: forall t tp . ParamLookup t -> S.AppExpr t tp -> Memo SExp
 convertAppExpr' paramLookup = go . S.appExprApp
-  where go :: forall tp . S.App (S.Expr t) tp -> Memo SExp
+  where go :: forall tp' . S.App (S.Expr t) tp' -> Memo SExp
         go (S.BaseIte _bt _ e1 e2 e3) = do
           s1 <- goE e1
           s2 <- goE e2
@@ -430,23 +431,32 @@ convertAppExpr' paramLookup = go . S.appExprApp
                         , convertBaseType fieldTp
                         , s]
 
-        -- FIXME: fill this in
-        go (S.UpdateArray _ _ _arrayExpr _ixExprs _newExpr) =
-          return $ SE.L [ ident' "updateArray" ]
+        go (S.UpdateArray _ _ e1 es e2) = do
+          s1 <- goE e1
+          ss <- convertExprAssignment paramLookup es
+          s2 <- goE e2
+          return $ SE.L [ ident' "updateArray", s1, ss, s2]
 
         go (S.SelectArray _ e es) = do
           s <- goE e
           ss <- convertExprAssignment paramLookup es
-          return $ SE.L [ ident' "select"
-                        , s
-                        , ss]
+          return $ SE.L [ ident' "select", s, ss]
 
-        go app = error $ "unhandled App: " ++ show app
+        go (S.RealIsInteger _) = error "Printer: RealIsInteger not supported"
+        go (S.NatDiv _ _) = error "Printer: NatDiv not supported"
+        go (S.NatMod _ _) = error "Printer: NatMod not supported"
+        go (S.IntDiv _ _) = error "Printer: IntDiv not supported"
+        -- FIXME: include all non-supported cases?
+        -- (S.IntAbs _)
+        -- (S.IntDivisible _ _)
+        -- (S.RealDiv _ _)
+        -- (S.RealSqrt _)
+        --go app = error $ "unhandled App: " ++ show app
 
 
         -- -- -- -- Helper functions! -- -- -- --
         
-        goE :: forall tp . S.Expr t tp -> Memo SExp
+        goE :: forall tp' . S.Expr t tp' -> Memo SExp
         goE = convertExpr paramLookup
 
         extend :: forall w. String -> Integer -> S.Expr t (BaseBVType w) -> Memo SExp
