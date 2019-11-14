@@ -90,7 +90,7 @@ convertSimpleDef :: forall arch proxy t
                  -> MapF.Pair (A.Location arch) (S.Expr t)
                  -> SExp
 convertSimpleDef _ paramVars (MapF.Pair loc elt) =
-  SE.L [ convertLocation loc, convertExpr paramLookup elt ]
+  SE.L [ convertLocation loc, convertExprWithLetrec paramLookup elt ]
   where
     tbl = LMap.fromList [ (Some bv, convertLocation l) | MapF.Pair l bv <- MapF.toList paramVars ]
     paramLookup :: ParamLookup t
@@ -121,9 +121,17 @@ sexprConvertFunction (FunctionFormula { ffName = name
                                       }) =
   SE.L [ SE.L [ SE.A (AIdent "function"), SE.A (AIdent name)]
        , SE.L [ SE.A (AIdent "arguments"), convertArgumentVars argTypes argVars ]
-       , SE.L [ SE.A (AIdent "ret"), printBaseType retType ]
+       , SE.L [ SE.A (AIdent "ret"), convertBaseType retType ]
        , SE.L [ SE.A (AIdent "body"), convertFnBody def ]
        ]
+
+convertExprWithLetrec :: ParamLookup t -> S.Expr t tp -> SExp
+convertExprWithLetrec paramLookup expr = SE.L [SE.A (AIdent "letrec")
+                                              , bindings
+                                              , body
+                                              ]
+  where (body, bindingMap) = State.runState (convertExpr paramLookup expr) SMap.empty
+        bindings = SE.L $ (\(key, sexp) -> SE.L [ skeyAtom key, sexp ]) <$> SMap.toList bindingMap
 
 convertFnBody :: forall t args ret .
                  S.ExprSymFn t args ret
@@ -136,12 +144,7 @@ convertFnBody (S.ExprSymFn _ _ symFnInfo _) = case symFnInfo of
         paramLookup var = Just $ ident' (T.unpack (S.solverSymbolAsText (S.bvarName var)))
         -- paramLookup = flip Map.lookup argMapping . Some
         -- argMapping = buildArgsMapping argVars
-        (body, bindingMap) = State.runState (convertExpr' paramLookup expr) SMap.empty
-        bindings = SE.L $ (\(key, sexp) -> SE.L [ skeyAtom key, sexp ]) <$> SMap.toList bindingMap
-    in SE.L [SE.A (AIdent "letrec")
-            , bindings
-            , body
-            ]
+    in convertExprWithLetrec paramLookup expr
   _ -> error "PANIC"
 
 
@@ -205,12 +208,12 @@ convertDef :: (ShowF (A.Location arch))
            -> Pair (Parameter arch sh) (S.Expr t)
            -> SExp
 convertDef opVars paramLookup (Pair param expr) =
-  SE.L [ convertParameter opVars param, convertExpr paramLookup expr ]
+  SE.L [ convertParameter opVars param, convertExprWithLetrec paramLookup expr ]
 
 
 
-convertExpr' :: forall t tp . ParamLookup t -> S.Expr t tp -> Memo SExp
-convertExpr' paramLookup initialExpr = do
+convertExpr :: forall t tp . ParamLookup t -> S.Expr t tp -> Memo SExp
+convertExpr paramLookup initialExpr = do
   case exprSKey initialExpr of
     Nothing -> go initialExpr
     Just key -> do
@@ -234,7 +237,7 @@ convertExpr' paramLookup initialExpr = do
         go (S.AppExpr appExpr) = convertAppExpr' paramLookup appExpr
         go (S.NonceAppExpr nae) =
           case S.nonceExprApp nae of
-            S.FnApp fn args -> convertFnApp' paramLookup fn args
+            S.FnApp fn args -> convertFnApp paramLookup fn args
             S.Forall {} -> error "Forall NonceAppExpr not supported"
             S.Exists {} -> error "Exists NonceAppExpr not supported"
             S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
@@ -418,7 +421,7 @@ convertAppExpr' paramLookup = go . S.appExprApp
         go (S.StructCtor tps es) = do
           ss <- convertExprAssignment paramLookup es
           return $ SE.L [ident' "struct"
-                        , convertBaseTypeAssignment tps
+                        , convertBaseTypes tps
                         , ss]
         go (S.StructField e ix fieldTp) = do
           s <- goE e
@@ -444,7 +447,7 @@ convertAppExpr' paramLookup = go . S.appExprApp
         -- -- -- -- Helper functions! -- -- -- --
         
         goE :: forall tp . S.Expr t tp -> Memo SExp
-        goE = convertExpr' paramLookup
+        goE = convertExpr paramLookup
 
         extend :: forall w. String -> Integer -> S.Expr t (BaseBVType w) -> Memo SExp
         extend op r e = do
@@ -489,69 +492,18 @@ convertExprAssignment ::
 convertExprAssignment paramLookup es = case es of
   Ctx.Empty -> return $ SE.Nil
   es' Ctx.:> e -> do
-    s <- convertExpr' paramLookup e
+    s <- convertExpr paramLookup e
     ss <- convertExprAssignment paramLookup es'
     return $ SE.cons s ss
 
 
--- Some sloppy sharing of common base types
-boolTySExp = SE.A (AQuoted "bool")
-natTySExp = SE.A (AQuoted "nat")
-intTySExp = SE.A (AQuoted "int")
-realTySExp = SE.A (AQuoted "real")
-strTySExp = SE.A (AQuoted "string")
-complexTySExp = SE.A (AQuoted "complex")
-bv1TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 1) ]
-bv2TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 2) ]
-bv3TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 3) ]
-bv4TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 4) ]
-bv5TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 5) ]
-bv6TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 6) ]
-bv7TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 7) ]
-bv8TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 8) ]
-bv9TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 9) ]
-bv10TySExp = SE.L [SE.A (AQuoted "bv"), SE.A (AInt 10) ]
 
-convertBaseType :: BaseTypeRepr tp -> SExp
-convertBaseType tp = case tp of
-  S.BaseBoolRepr -> boolTySExp
-  S.BaseNatRepr -> natTySExp
-  S.BaseIntegerRepr -> intTySExp
-  S.BaseRealRepr -> realTySExp
-  S.BaseStringRepr -> strTySExp
-  S.BaseComplexRepr -> complexTySExp
-  S.BaseBVRepr wRepr ->
-    case NR.intValue wRepr of
-      1  -> bv1TySExp
-      2  -> bv2TySExp
-      3  -> bv3TySExp
-      4  -> bv4TySExp
-      5  -> bv5TySExp
-      6  -> bv6TySExp
-      7  -> bv7TySExp
-      8  -> bv8TySExp
-      9  -> bv9TySExp
-      10 -> bv10TySExp
-      n -> SE.L [SE.A (AQuoted "bv"), SE.A (AInt n) ]
-  S.BaseStructRepr tps -> SE.L [SE.A (AQuoted "struct"), convertBaseTypeAssignment tps]
-  S.BaseArrayRepr ixs repr ->
-    SE.L [SE.A (AQuoted "array"),
-          SE.L [convertBaseTypeAssignment ixs, convertBaseType repr]]
-  _ -> error "can't print base type"
-
-convertBaseTypeAssignment ::
-  Ctx.Assignment BaseTypeRepr tps -> SExp
-convertBaseTypeAssignment tps = case tps of
-  Ctx.Empty -> SE.Nil
-  tps' Ctx.:> tp -> SE.cons (convertBaseType tp) (convertBaseTypeAssignment tps')
-
-
-convertFnApp' ::
+convertFnApp ::
   ParamLookup t
   -> S.ExprSymFn t args ret
   -> Ctx.Assignment (S.Expr t) args
   -> Memo SExp
-convertFnApp' paramLookup fn args
+convertFnApp paramLookup fn args
   | name == "undefined"
   , BaseBVRepr nr <- S.fnReturnType fn = do
       let call = SE.L [ ident' "_", ident' "call", quoted' "uf.undefined" ]
@@ -567,199 +519,14 @@ convertFnApp' paramLookup fn args
       S.DefinedFnInfo _ _ _ -> "df."
       _ -> error ("Unsupported function: " ++ T.unpack name)
       
-convertExpr :: ParamLookup t -> S.Expr t tp -> SExp    
-convertExpr _ (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatExpr not supported"
--- FIXME: We print something here for now.
--- convertExpr _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = error "IntExpr not supported"
-convertExpr _ (S.SemiRingLiteral S.SemiRingIntegerRepr _ _) = ident' "<IntExpr:unsupported>"
-convertExpr _ (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatExpr not supported"
-convertExpr _ (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = SE.A (ABV (widthVal sz) val)
-convertExpr _ (S.StringExpr {}) = error "StringExpr is not supported"
-convertExpr _ (S.BoolExpr b _) = ident' $ if b then "true" else "false"
-convertExpr paramLookup (S.AppExpr appExpr) = convertAppExpr paramLookup appExpr
-convertExpr paramLookup (S.NonceAppExpr nae) =
-  case S.nonceExprApp nae of
-    S.FnApp fn args -> convertFnApp paramLookup fn args
-    S.Forall {} -> error "Forall NonceAppExpr not supported"
-    S.Exists {} -> error "Exists NonceAppExpr not supported"
-    S.ArrayFromFn {} -> error "ArrayFromFn NonceAppExpr not supported"
-    S.MapOverArrays {} -> error "MapOverArrays NonceAppExpr not supported"
-    S.ArrayTrueOnEntries {} -> error "ArrayTrueOnEntries NonceAppExpr not supported"
-convertExpr paramLookup (S.BoundVarExpr var) = fromJust' ("SemMC.Formula.Printer paramLookup " ++ show (S.bvarName var)) $ paramLookup var
-
-convertExprs :: ParamLookup t -> Ctx.Assignment (S.Expr t) sh -> SExp
-convertExprs paramLookup es = case es of
-  Ctx.Empty -> SE.Nil
-  es' Ctx.:> e -> SE.cons (convertExpr paramLookup e) (convertExprs paramLookup es')
-
-convertFnApp :: ParamLookup t
-             -> S.ExprSymFn t args ret
-             -> Ctx.Assignment (S.Expr t) args
-             -> SExp
-convertFnApp paramLookup fn args
-  | name == "undefined"
-  , BaseBVRepr nr <- S.fnReturnType fn =
-      let call = SE.L [ ident' "_", ident' "call", quoted' "uf.undefined" ]
-      in SE.L [ call, int' (NR.intValue nr) ]
-  | otherwise =
-    let call = SE.L [ ident' "_", ident' "call", quoted' (prefix ++ T.unpack name) ]
-    in SE.L (call : FC.toListFC (convertExpr paramLookup) args)
-  where
-    name = S.solverSymbolAsText (S.symFnName fn)
-    prefix = case S.symFnInfo fn of
-      S.UninterpFnInfo _ _ -> "uf."
-      S.DefinedFnInfo _ _ _ -> "df."
-      _ -> error ("Unsupported function: " ++ T.unpack name)
-
-convertAppExpr :: ParamLookup t -> S.AppExpr t tp -> SExp
-convertAppExpr paramLookup = convertApp paramLookup . S.appExprApp
-
-convertApp :: forall t tp. ParamLookup t -> S.App (S.Expr t) tp -> SExp
-convertApp paramLookup = convertApp'
-  where convert :: forall tp'. S.Expr t tp' -> SExp
-        convert = convertExpr paramLookup
-
-        convertApp' :: S.App (S.Expr t) tp -> SExp
-
-        convertApp' (S.BaseIte _bt _ c xe ye) = SE.L [ident' "ite", convert c, convert xe, convert ye]
-        convertApp' (S.BaseEq _bt v1 v2) = SE.L [ident' "=", convert v1, convert v2]
-        convertApp' (S.NotPred x) = SE.L [ident' "notp", convert x]
-        convertApp' (S.ConjPred bm) = convertBoolMap "andp" True bm
-        convertApp' (S.DisjPred bm) = convertBoolMap "orp" False bm
-
-        convertApp' (S.BVSlt bv1 bv2) = SE.L [ident' "bvslt", convert bv1, convert bv2]
-        convertApp' (S.BVUlt bv1 bv2) = SE.L [ident' "bvult", convert bv1, convert bv2]
-        convertApp' (S.BVConcat _ bv1 bv2) = SE.L [ident' "concat", convert bv1, convert bv2]
-        convertApp' (S.BVSelect idx n bv) = extract i j bv
-          -- See SemMC.Formula.Parser.readExtract for the explanation behind
-          -- these values.
-          where i = intValue n + j - 1
-                j = intValue idx
-
-        -- Note that because the SemiRing has an identity element that
-        -- always gets applied, resulting in lots of additional,
-        -- unnecessary elements like: "(bvand #xffffffff TERM)".
-        -- These will get manifested in the stored form (but generally
-        -- _not_ via DSL-generated versions since they don't output
-        -- via Printer) and result in longer stored forms.  They could
-        -- be eliminated by checking for the identity (e.g. "if mul ==
-        -- SR.one (WSum.sumRepr sm)") but the re-loaded representation
-        -- will still use the SemiRing, so it's probably not worth the
-        -- effort to reduce these.
-        convertApp' (S.SemiRingSum sm) =
-          case WSum.sumRepr sm of
-            S.SemiRingBVRepr S.BVArithRepr w ->
-              let smul mul e = SE.L [ ident' "bvmul", bitvec' (natValue w) mul, convert e ]
-                  sval v = bitvec' (natValue w) v
-                  add x y = SE.L [ ident' "bvadd", x, y ]
-              in WSum.eval add smul sval sm
-            S.SemiRingBVRepr S.BVBitsRepr w ->
-              let smul mul e = SE.L [ ident' "bvand", bitvec' (natValue w) mul, convert e ]
-                  sval v = bitvec' (natValue w) v
-                  add x y = let op = ident' "bvxor" in SE.L [ op, x, y ]
-              in WSum.eval add smul sval sm
-            S.SemiRingNatRepr ->
-              let smul mul e = SE.L [ ident' "natmul", nat' mul, convert e ]
-                  sval v = nat' v
-                  add x y = let op = ident' "natadd" in SE.L [ op, x, y ]
-              in WSum.eval add smul sval sm
-            S.SemiRingIntegerRepr ->
-              let smul mul e = SE.L [ ident' "intmul", int' mul, convert e ]
-                  sval v = int' v
-                  add x y = let op = ident' "intadd" in SE.L [ op, x, y ]
-              in WSum.eval add smul sval sm
-            S.SemiRingRealRepr    -> error "SemiRingSum RealRepr not supported"
-
-        convertApp' (S.SemiRingProd pd) =
-          case WSum.prodRepr pd of
-            S.SemiRingBVRepr S.BVArithRepr w ->
-              let pmul x y = SE.L [ ident' "bvmul", x, y ]
-                  unit = bitvec' (natValue w) 1
-              in maybe unit id $ WSum.prodEval pmul convert pd
-            S.SemiRingBVRepr S.BVBitsRepr w ->
-              let pmul x y = SE.L [ ident' "bvand", x, y ]
-                  unit = bitvec' (natValue w) $ maxUnsigned w
-              in maybe unit id $ WSum.prodEval pmul convert pd
-            S.SemiRingNatRepr     -> error "convertApp' S.SemiRingProd Nat unsupported"
-            S.SemiRingIntegerRepr -> error "convertApp' S.SemiRingProd Integer unsupported"
-            S.SemiRingRealRepr    -> error "convertApp' S.SemiRingProd Real unsupported"
-
-        -- FIXME: This all needs to be fixed. Right now, this stuff is purely cosmetic.
-        convertApp' (S.SemiRingLe _sr e1 e2) = SE.L [ ident' "le", convert e1, convert e2 ]
-
-        convertApp' (S.BVOrBits pd) =
-          case WSum.prodRepr pd of
-            S.SemiRingBVRepr _ w ->
-              let pmul x y = SE.L [ident' "bvor", x, y ]
-                  unit = bitvec' (natValue w) 0
-              in maybe unit id $ WSum.prodEval pmul convert pd
-
-        convertApp' (S.BVUdiv _ bv1 bv2) = SE.L [ident' "bvudiv", convert bv1, convert bv2]
-        convertApp' (S.BVUrem _ bv1 bv2) = SE.L [ident' "bvurem", convert bv1, convert bv2]
-        convertApp' (S.BVSdiv _ bv1 bv2) = SE.L [ident' "bvsdiv", convert bv1, convert bv2]
-        convertApp' (S.BVSrem _ bv1 bv2) = SE.L [ident' "bvsrem", convert bv1, convert bv2]
-        convertApp' (S.BVShl _ bv1 bv2) = SE.L [ident' "bvshl", convert bv1, convert bv2]
-        convertApp' (S.BVLshr _ bv1 bv2) = SE.L [ident' "bvlshr", convert bv1, convert bv2]
-        convertApp' (S.BVAshr _ bv1 bv2) = SE.L [ident' "bvashr", convert bv1, convert bv2]
-        convertApp' (S.BVZext r bv) = extend "zero" (intValue r) bv
-        convertApp' (S.BVSext r bv) = extend "sign" (intValue r) bv
-
-        convertApp' (S.BVToInteger bv) = SE.L [ident' "bvToInteger", convert bv]
-
-        convertApp' (S.SBVToInteger bv) = SE.L [ident' "sbvToInteger", convert bv]
-
-        convertApp' (S.IntMod e1 e2) = SE.L [ident' "intmod", convert e1, convert e2]
-        convertApp' (S.IntegerToBV i wRepr)  = SE.L [ident' "integerToBV",
-                                                     nat' (natValue wRepr),
-                                                     convert i]
-
-        convertApp' (S.StructCtor tps vals) = SE.L [ident' "struct",
-                                                    printBaseTypes tps,
-                                                    convertExprs paramLookup vals]
-        convertApp' (S.StructField structExpr ix fieldTp) = SE.L [ident' "field",
-                                                                  ident' (show (Ctx.indexVal ix)),
-                                                                  printBaseType fieldTp,
-                                                                  convert structExpr]
-
-        -- FIXME: fill this in
-        convertApp' (S.UpdateArray _ _ _arrayExpr _ixExprs _newExpr) =
-          SE.L [ ident' "updateArray" ]
-
-        convertApp' app = error $ "unhandled App: " ++ show app
-
-        convertBoolMap op base bm =
-          let strBase b = if b
-                          then SE.L [ident' "=", bitvec' 1 0, bitvec' 1 0]  -- true
-                          else SE.L [ident' "=", bitvec' 1 0, bitvec' 1 1]  -- false
-              strNotBase = strBase . not
-          in case BooM.viewBoolMap bm of
-               BooM.BoolMapUnit -> strBase base
-               BooM.BoolMapDualUnit -> strNotBase base
-               BooM.BoolMapTerms ts ->
-                 let onEach e r = SE.L [ident' op, arg e, r]
-                     arg (t, BooM.Positive) = convert t
-                     arg (t, BooM.Negative) = SE.L [ident' "notp", convert t]
-                 in F.foldr onEach (strBase base) ts
-
-        extract :: forall tp'. Integer -> Integer -> S.Expr t tp' -> SExp
-        extract i j bv = SE.L [ SE.L [ ident' "_", ident' "extract", int' i, int' j ]
-                              , convert bv
-                              ]
-
-        extend :: forall w. String -> Integer -> S.Expr t (BaseBVType w) -> SExp
-        extend op r bv = SE.L [ SE.L [ ident' "_", ident' $ op <> "_extend", int' extension ]
-                              , convert bv
-                              ]
-          where extension = r - w
-                w = case S.exprType bv of BaseBVRepr len -> intValue len
 
 -- | Extract the name, as a String, of a wrapped bound variable.
 varName :: BV.BoundVar (S.ExprBuilder t st fs) arch op -> String
 varName (BV.BoundVar var) = show (S.bvarName var)
 
-printBaseType :: BaseTypeRepr tp
+convertBaseType :: BaseTypeRepr tp
               -> SExp
-printBaseType tp = case tp of
+convertBaseType tp = case tp of
   S.BaseBoolRepr -> SE.A (AQuoted "bool")
   S.BaseNatRepr -> SE.A (AQuoted "nat")
   S.BaseIntegerRepr -> SE.A (AQuoted "int")
@@ -767,15 +534,15 @@ printBaseType tp = case tp of
   S.BaseStringRepr -> SE.A (AQuoted "string")
   S.BaseComplexRepr -> SE.A (AQuoted "complex")
   S.BaseBVRepr wRepr -> SE.L [SE.A (AQuoted "bv"), SE.A (AInt (NR.intValue wRepr)) ]
-  S.BaseStructRepr tps -> SE.L [SE.A (AQuoted "struct"), printBaseTypes tps]
-  S.BaseArrayRepr ixs repr -> SE.L [SE.A (AQuoted "array"), SE.L [printBaseTypes ixs, printBaseType repr]]
+  S.BaseStructRepr tps -> SE.L [SE.A (AQuoted "struct"), convertBaseTypes tps]
+  S.BaseArrayRepr ixs repr -> SE.L [SE.A (AQuoted "array"), SE.L [convertBaseTypes ixs, convertBaseType repr]]
   _ -> error "can't print base type"
 
-printBaseTypes :: Ctx.Assignment BaseTypeRepr tps
+convertBaseTypes :: Ctx.Assignment BaseTypeRepr tps
                -> SExp
-printBaseTypes tps = case tps of
+convertBaseTypes tps = case tps of
   Ctx.Empty -> SE.Nil
-  tps' Ctx.:> tp -> SE.cons (printBaseType tp) (printBaseTypes tps')
+  tps' Ctx.:> tp -> SE.cons (convertBaseType tp) (convertBaseTypes tps')
 
 convertOperandVars :: forall arch sh t st fs
                     . (A.Architecture arch)
@@ -799,5 +566,5 @@ convertArgumentVars rep l =
     (SL.Nil, SL.Nil) -> SE.Nil
     (r SL.:< rep', var SL.:< rest) ->
       let nameExpr = ident' (T.unpack (S.solverSymbolAsText (S.bvarName var)))
-          typeExpr = printBaseType r
+          typeExpr = convertBaseType r
       in SE.cons (SE.L [ nameExpr, typeExpr ]) (convertArgumentVars rep' rest)
