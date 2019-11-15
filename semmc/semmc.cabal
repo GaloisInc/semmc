@@ -91,6 +91,7 @@ library
                        template-haskell,
                        ghc-prim,
                        containers >= 0.5.8,
+                       ordered-containers,
                        bytestring,
                        binary,
                        filepath,

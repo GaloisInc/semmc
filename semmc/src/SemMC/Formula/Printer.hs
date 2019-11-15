@@ -18,7 +18,8 @@ module SemMC.Formula.Printer
 
 import qualified Data.Foldable as F
 import qualified Data.Map as LMap
-import qualified Data.Map.Strict as SMap
+import           Data.Map.Ordered (OMap)
+import qualified Data.Map.Ordered as OMap
 import           Data.Parameterized.Classes
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as SL
@@ -90,7 +91,7 @@ convertSimpleDef :: forall arch proxy t
                  -> MapF.Pair (A.Location arch) (S.Expr t)
                  -> SExp
 convertSimpleDef _ paramVars (MapF.Pair loc elt) =
-  SE.L [ convertLocation loc, convertExprWithLetrec paramLookup elt ]
+  SE.L [ convertLocation loc, convertExprWithLet paramLookup elt ]
   where
     tbl = LMap.fromList [ (Some bv, convertLocation l) | MapF.Pair l bv <- MapF.toList paramVars ]
     paramLookup :: ParamLookup t
@@ -125,13 +126,13 @@ sexprConvertFunction (FunctionFormula { ffName = name
        , SE.L [ SE.A (AIdent "body"), convertFnBody def ]
        ]
 
-convertExprWithLetrec :: ParamLookup t -> S.Expr t tp -> SExp
-convertExprWithLetrec paramLookup expr = SE.L [SE.A (AIdent "letrec")
+convertExprWithLet :: ParamLookup t -> S.Expr t tp -> SExp
+convertExprWithLet paramLookup expr = SE.L [SE.A (AIdent "let")
                                               , bindings
                                               , body
                                               ]
-  where (body, bindingMap) = State.runState (convertExpr paramLookup expr) SMap.empty
-        bindings = SE.L $ (\(key, sexp) -> SE.L [ skeyAtom key, sexp ]) <$> SMap.toList bindingMap
+  where (body, bindingMap) = State.runState (convertExpr paramLookup expr) OMap.empty
+        bindings = SE.L $ (\(key, sexp) -> SE.L [ skeyAtom key, sexp ]) <$> OMap.assocs bindingMap
 
 convertFnBody :: forall t args ret .
                  S.ExprSymFn t args ret
@@ -144,7 +145,7 @@ convertFnBody (S.ExprSymFn _ _ symFnInfo _) = case symFnInfo of
         paramLookup var = Just $ ident' (T.unpack (S.solverSymbolAsText (S.bvarName var)))
         -- paramLookup = flip Map.lookup argMapping . Some
         -- argMapping = buildArgsMapping argVars
-    in convertExprWithLetrec paramLookup expr
+    in convertExprWithLet paramLookup expr
   _ -> error "PANIC"
 
 
@@ -208,10 +209,10 @@ convertDef :: (ShowF (A.Location arch))
            -> Pair (Parameter arch sh) (S.Expr t)
            -> SExp
 convertDef opVars paramLookup (Pair param expr) =
-  SE.L [ convertParameter opVars param, convertExprWithLetrec paramLookup expr ]
+  SE.L [ convertParameter opVars param, convertExprWithLet paramLookup expr ]
 
 
-type Memo a = State (SMap.Map SKey SExp) a
+type Memo a = State (OMap SKey SExp) a
 
 -- | Key for sharing SExp construction (i.e., the underlying
 -- nonce 64bit integers in the What4 AST nodes)
@@ -232,7 +233,7 @@ convertExpr paramLookup initialExpr = do
     Nothing -> go initialExpr
     Just key -> do
       cache <- State.get
-      if SMap.member key cache
+      if OMap.member key cache
         then do
         return $ skeyAtom key
         else do
@@ -240,7 +241,7 @@ convertExpr paramLookup initialExpr = do
         case sexp of
           SE.A _ -> return sexp -- don't memoize atomic s-expressions
           _ -> do 
-            State.modify (SMap.insert key sexp)
+            State.modify ((key, sexp) OMap.<|)
             return $ skeyAtom key
   where go :: S.Expr t tp -> Memo SExp
         go (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatExpr not supported"
