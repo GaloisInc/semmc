@@ -313,6 +313,9 @@ data DefsInfo sym arch tps = DefsInfo
                              , getOpNameList :: SL.List OpData tps
                              -- ^ ShapedList used to look up the index given an
                              -- operand's name.
+                             , getBindings :: Map.Map FAtom (Some (S.SymExpr sym))
+                             -- ^ Mapping of currently in-scope let-bound variables
+                             --- to their parsed bindings.
                              }
 
 -- | Stores a NatRepr along with proof that its type parameter is a bitvector of
@@ -877,6 +880,43 @@ readCall (SC.SCons (SC.SAtom (AIdent "_"))
     liftIO (Just . Some <$> S.applySymFn sym fn assn)
 readCall _ _ = return Nothing
 
+
+readLetExpr ::
+  forall sym m arch sh
+  . (S.IsSymExprBuilder sym,
+      Monad m,
+      E.MonadError String m,
+      A.Architecture arch,
+      MR.MonadReader (DefsInfo sym arch sh) m,
+      -- ^ Tracks currently in-scope let-bound variables.
+      MonadIO m)
+  => SC.SExpr FAtom
+  -> SC.SExpr FAtom
+  -> m (Some (S.SymExpr sym))
+readLetExpr SC.SNil body = readExpr body
+readLetExpr (SC.SCons (SC.SCons (SC.SAtom x@(AIdent _)) (SC.SCons e SC.SNil)) rst) body = do
+  v <- readExpr e
+  MR.local (\r -> r {getBindings = (Map.insert x v) $ getBindings r}) $
+    readLetExpr rst body
+readLetExpr bindings _body = E.throwError $ "invalid s-expression for let-bindings: " ++ (show bindings)
+
+
+readNatBinop :: forall sym arch sh m . ExprParser sym arch sh m
+readNatBinop _ _ = return Nothing
+
+readIntBinop :: forall sym arch sh m . ExprParser sym arch sh m
+readIntBinop _ _ = return Nothing
+
+readStructField :: forall sym arch sh m . ExprParser sym arch sh m
+readStructField _ _ = return Nothing
+
+readStructCtor :: forall sym arch sh m . ExprParser sym arch sh m
+readStructCtor _ _ = return Nothing
+
+readUpdateArray :: forall sym arch sh m . ExprParser sym arch sh m
+readUpdateArray _ _ = return Nothing
+
+
 -- | Parse an arbitrary expression.
 readExpr :: forall sym m arch sh
           . (S.IsSymExprBuilder sym,
@@ -908,24 +948,34 @@ readExpr (SC.SAtom (ABV len val)) = do
         let Just pf = isPosNat lenRepr
         in liftIO $ withLeqProof pf (Some <$> S.bvLit sym lenRepr val)
     Nothing -> error "SemMC.Formula.Parser.readExpr someNat failure"
-
   -- Just (Some lenRepr) <- return $ someNat (toInteger len)
   -- let Just pf = isPosNat lenRepr
   -- liftIO $ withLeqProof pf (Some <$> S.bvLit sym lenRepr val)
 readExpr (SC.SAtom paramRaw) = do
-  -- This is a parameter (i.e., variable).
-  DefsInfo { getOpNameList = opNames
-           , getSym = sym
-           , getOpVarList = opVars
-           , getLitLookup = litLookup
-           } <- MR.ask
-  param <- readParameter (Proxy @arch) opNames paramRaw
-  case param of
-    Some (ParsedOperandParameter _ idx) -> return . Some . S.varExpr sym $ (opVars SL.!! idx)
-    Some (ParsedLiteralParameter lit) -> maybe (E.throwError ("not declared as input but saw unknown literal param: " ++ showF lit))
+  maybeBinding <- MR.asks $ (Map.lookup paramRaw) . getBindings
+  case maybeBinding of
+    -- if this is actually a let-bound variable, simply return it's binding
+    Just binding -> return binding
+    Nothing -> do
+      -- Otherwise this is a standard parameter (i.e., variable).
+      DefsInfo { getOpNameList = opNames
+               , getSym = sym
+               , getOpVarList = opVars
+               , getLitLookup = litLookup
+               } <- MR.ask
+      param <- readParameter (Proxy @arch) opNames paramRaw
+      case param of
+        Some (ParsedOperandParameter _ idx) ->
+          return . Some . S.varExpr sym $ (opVars SL.!! idx)
+        Some (ParsedLiteralParameter lit) ->
+          maybe (E.throwError ("not declared as input but saw unknown literal param: " ++ showF lit))
                                    (return . Some) $ litLookup lit
+readExpr (SC.SCons (SC.SAtom (AIdent "let")) rhs) =
+  case rhs of
+    (SC.SCons bindings (SC.SCons body SC.SNil)) -> readLetExpr bindings body
+    _ -> E.throwError "ill-formed let s-expression"
 readExpr (SC.SCons opRaw argsRaw) = do
-  -- This is a function application.
+  -- This is a function application or similar form.
   args <- readExprs argsRaw
   parseAttempt <- U.sequenceMaybes $ map (\f -> f opRaw args)
     [ readConcat
@@ -935,6 +985,8 @@ readExpr (SC.SCons opRaw argsRaw) = do
     , readBVBinop
     , readBoolUnop
     , readBoolBinop
+    , readNatBinop
+    , readIntBinop
     , readFpOp
     , readEq
     , readIte
@@ -942,6 +994,9 @@ readExpr (SC.SCons opRaw argsRaw) = do
     , readStore
     , readUndefined
     , readCall
+    , readStructField
+    , readStructCtor
+    , readUpdateArray
     ]
   case parseAttempt of
     Just expr -> return expr
@@ -1094,6 +1149,7 @@ readFormula' sym env repr text = do
                       , getLitLookup = \loc -> S.varExpr sym <$> flip MapF.lookup litVars loc
                       , getOpVarList = opVarList
                       , getOpNameList = operands
+                      , getBindings = Map.empty
                       })
 
   let finalInputs :: [Some (Parameter arch sh)]
@@ -1190,13 +1246,14 @@ readDefinedFunction' sym env text = do
 
   argTypeReprs :: SL.List BaseTypeRepr sh
     <- traverseFC (\(OpData _ tpRepr) -> return tpRepr) arguments
-
+  
   Some body <- MR.runReaderT (readExpr bodyRaw) $
     DefsInfo { getSym = sym
              , getEnv = env
              , getLitLookup = const Nothing
              , getOpVarList = argVarList
              , getOpNameList = arguments
+             , getBindings = Map.empty
              }
 
   let actualTypeRepr = S.exprType body

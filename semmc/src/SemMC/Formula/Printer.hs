@@ -132,7 +132,10 @@ convertExprWithLet paramLookup expr = SE.L [SE.A (AIdent "let")
                                               , body
                                               ]
   where (body, bindingMap) = State.runState (convertExpr paramLookup expr) OMap.empty
-        bindings = SE.L $ (\(key, sexp) -> SE.L [ skeyAtom key, sexp ]) <$> OMap.assocs bindingMap
+        bindings = SE.L
+          $ reverse -- OMap is LIFO, we want FIFO for binding ordering
+          $ (\(key, sexp) -> SE.L [ skeyAtom key, sexp ])
+          <$> OMap.assocs bindingMap
 
 convertFnBody :: forall t args ret .
                  S.ExprSymFn t args ret
@@ -328,14 +331,14 @@ convertAppExpr' paramLookup = go . S.appExprApp
                     s <- goE e
                     return $ SE.L [ ident' "natmul", nat' mul, s]
                   sval v = return $ nat' v
-                  add x y = let op = ident' "natadd" in return $ SE.L [ op, x, y ]
+                  add x y = return $ SE.L [ ident' "natadd", x, y ]
               in WSum.evalM add smul sval sm
             S.SemiRingIntegerRepr ->
               let smul mul e = do
                     s <- goE e
                     return $ SE.L [ ident' "intmul", int' mul, s]
                   sval v = return $ int' v
-                  add x y = let op = ident' "intadd" in return $ SE.L [ op, x, y ]
+                  add x y = return $ SE.L [ ident' "intadd", x, y ]
               in WSum.evalM add smul sval sm
             S.SemiRingRealRepr    -> error "SemiRingSum RealRepr not supported"
 
@@ -358,6 +361,7 @@ convertAppExpr' paramLookup = go . S.appExprApp
             S.SemiRingRealRepr    -> error "convertApp S.SemiRingProd Real unsupported"
 
         -- FIXME: This all needs to be fixed. Right now, this stuff is purely cosmetic.
+        --        AMK: I have no idea what this `FIXME` is saying...
         go (S.SemiRingLe _sr e1 e2) = do
           s1 <- goE e1
           s2 <- goE e2
