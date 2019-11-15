@@ -136,6 +136,7 @@ instance AE.ToJSON Batch where
 data TestOutcome = Success
                  | Failure
                  | UnexpectedSignal Int32
+  deriving (Eq, Show)
 
 data TestInfo =
     TestInfo { testInfoOpcode :: String
@@ -146,6 +147,7 @@ data TestInfo =
              , testInfoStates :: [TestState]
              , testOutcome :: TestOutcome
              }
+    deriving Show
 
 instance AE.ToJSON TestInfo where
     toJSON i =
@@ -166,6 +168,7 @@ data TestInput =
     TestInput { testInputLocation :: String
               , testInputValue :: String
               }
+    deriving Show
 
 instance AE.ToJSON TestInput where
     toJSON i =
@@ -178,6 +181,7 @@ data TestState =
               , testExpected :: String
               , testActual :: String
               }
+  deriving Show
 
 instance AE.ToJSON TestState where
     toJSON s =

@@ -55,6 +55,7 @@ executable semmc-fuzzer
                        async,
                        config-ini >= 0.2.2,
                        aeson,
+                       aeson-pretty,
                        unix,
                        hostname,
                        HTTP,

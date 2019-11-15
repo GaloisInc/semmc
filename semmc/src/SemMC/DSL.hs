@@ -745,6 +745,11 @@ testBitDynamic64 expr index
 -- >    - i, j, m, n are numerals
 -- >    - m > i ≥ j ≥ 0,
 -- >    - n = i - j + 1
+--
+-- We only allow zero length sequences specified as @extract' (j-1) j
+-- e@, to avoid masking bugs that manifest as negative size
+-- slices. For zero length, we return a zero-length literal, instead
+-- of calling the underlying SMTLib @extract@.
 extract :: (HasCallStack)
         => Int
         -- ^ i (the highest bit number in the range to extract, inclusive)
@@ -759,8 +764,9 @@ extract i j e =
       let n = i - j + 1
           i' = Some . LitInt . fromIntegral $ m-1 - j
           j' = Some . LitInt . fromIntegral $ m-1 - i
-      in case m > i && i >= j && j >= 0 of
-        True -> TheoryFunc (EBV n) "extract" [i', j'] [Some e]
+      in case m > i && i >= j - 1 && j >= 0 of
+        True | n == 0    -> LitBV 0 0
+             | otherwise -> TheoryFunc (EBV n) "extract" [i', j'] [Some e]
         False -> error (printf "Invalid slice (%d,%d) of a %d-bit vector" i j m)
 
 -- | Zero extend a value (add the requested number of zeros on the left)
@@ -823,6 +829,12 @@ sext' = signExtendTo
 concat :: (HasCallStack) => Expr 'TBV -> Expr 'TBV -> Expr 'TBV
 concat e1 e2 =
   case (exprType e1, exprType e2) of
+    (EBV 0, EBV 0) -> LitBV 0 0
+    (EBV 0, _) -> e2
+    (_, EBV 0) -> e1
+    -- Without the above special cases for zero length bit vectors,
+    -- the "builtin concat" here produces wrong results, apparently
+    -- treating zero length bit vectors as length one!?!?
     (EBV w1, EBV w2) -> Builtin (EBV (w1 + w2)) "concat" [Some e1, Some e2]
 
 -- | Set bits, specifying the list of bit numbers to set (0-based)

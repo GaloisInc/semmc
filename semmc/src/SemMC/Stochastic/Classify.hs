@@ -36,12 +36,13 @@ import           Data.Word ( Word64 )
 import           Text.Printf ( printf )
 
 import           Data.Parameterized.Classes
-import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.List as SL
+import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..), viewSome )
 import qualified Data.Parameterized.TraversableFC as FC
+import qualified What4.Expr as S
+import qualified What4.Expr.WeightedSum as WSum
 import qualified What4.Interface as S
-import qualified What4.Expr.Builder as S
 import qualified What4.Protocol.Online as WPO
 
 import qualified Dismantle.Instruction as D
@@ -450,8 +451,8 @@ summarizeExpr :: (Int, Int, Int) -> Some (S.Expr t) -> (Int, Int, Int)
 summarizeExpr acc@(uf, nl, sz) (Some se) =
   case se of
     S.SemiRingLiteral {} -> acc
-    S.BVExpr {} -> acc
     S.BoundVarExpr {} -> acc
+    S.BoolExpr {} -> acc
     S.NonceAppExpr ne ->
       case S.nonceExprApp ne of
         S.FnApp {} -> (uf + 1, nl, sz + 1)
@@ -463,8 +464,8 @@ summarizeElt :: (Int, Int, Int) -> S.Expr t tp -> (Int, Int, Int)
 summarizeElt acc@(uf, nl, sz) elt =
   case elt of
     S.SemiRingLiteral {} -> acc
-    S.BVExpr {} -> acc
     S.BoundVarExpr {} -> acc
+    S.BoolExpr {} -> acc
     S.NonceAppExpr ne ->
       case S.nonceExprApp ne of
         S.FnApp {} -> (uf + 1, nl, sz + 1)
@@ -472,8 +473,7 @@ summarizeElt acc@(uf, nl, sz) elt =
     S.AppExpr ae ->
       case S.appExprApp ae of
         -- According to crucible, any occurrence of this constructor is non-linear
-        S.SemiRingMul {} -> (uf, nl + 1, sz + 1)
-        S.BVMul _ lhs rhs -> addIfNonlinear lhs rhs acc
+        S.SemiRingProd {} -> (uf, nl + 1, sz + 1)
         S.BVUdiv _ lhs rhs -> addIfNonlinear lhs rhs acc
         S.BVUrem _ lhs rhs -> addIfNonlinear lhs rhs acc
         S.BVSdiv _ lhs rhs -> addIfNonlinear lhs rhs acc
@@ -495,9 +495,33 @@ addIfNonlinear lhs rhs (uf, nl, sz)
 
 isBVConstant :: S.Expr t (S.BaseBVType w) -> Bool
 isBVConstant e =
+  -- Assumption: the input expression has been normalized (e.g. it
+  -- will be supplied a literal 0xffffffff instead of an expression of
+  -- literals like 'bvAnd 0x55555555 0xaaaaaaaa').
+  --
+  -- Warning: these were adapted to the SemiRing-based representation
+  -- but their accuracy has not been verified.
   case e of
-    S.BVExpr {} -> True
+    S.SemiRingLiteral (S.SemiRingBVRepr {}) _ _ -> True
+    S.AppExpr appElt ->
+      case S.appExprApp appElt of
+        S.SemiRingSum  sm -> WSum.eval (&&) (const isBVConstant) (const True) sm
+        S.SemiRingProd pd -> maybe True id $  WSum.prodEval (&&) undefined pd
+        S.BVOrBits     pd -> maybe True id $  WSum.prodEval (&&) undefined pd
+        -- The 'appElt' argument will never be the following, because
+        -- these are not BaseBVType expressions, even though they may
+        -- be constants (if BoolMapUnit or BoolMapDualUnit).
+        --
+        -- S.ConjPred bm -> isBoolMapConstant bm
+        -- S.DisjPred bm -> isBoolMapConstant bm
+        _ -> False
+    -- The 'e' argument will never be the following, because these are
+    -- not BaseBVType expressions, even though they are constants.
+    --
+    -- S.BoolExpr _ _ -> True    -- not really a BitVector
+    -- S.StringExpr _ _ -> True  -- not really a BitVector
     _ -> False
+
 
 -- | Flatten a set of equivalence classes into one equivalence class
 mergeClasses :: Seq.Seq (Seq.Seq pgm)

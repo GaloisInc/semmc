@@ -17,16 +17,20 @@ Instruction Mnemonic Conventions
 ================================
 
 The instruction names we use are taken from the tablegen file
-(`:/submodules/dismantle/dismantle-ppc/data/PPC.tgen`). Where the manual
-uses `.` in instruction names we use `o` -- for example our `ADD4o` is `add.`
-in the manual -- and where the manual uses `o` we would use `O`, but we
-don't have any such instructions at the time of writing. No idea what
-the `4` means in `ADD4o`.
+(`:/submodules/dismantle/dismantle-ppc/data/PPC.tgen`), with overrides
+in `:/submodules/dismantle/dismantle-ppc/data/override/*.tgen`. Where
+the manual uses `.` in instruction names we use `o`, and where the
+manual uses `o` in instruction names we use `O`. For example, `add.`
+in the manual is `ADD4o` in `data/PPC.tgen`, and `addo.` in the manual
+is `ADD4Oo` in `data/override/ADD4Oo.tgen` (used by SFE's Trap Arith
+Overflows transform). No idea what the `4` means in `ADD4*`.
 
 Semantics Definitions
 =====================
 
 The semantics are defined in `:/src/SemMC/Architecture/PPC` using the DSL defined in `SemMC.DSL`.  These definitions mirror the ISA manual as closely as possible.
+
+The semantics get serialized to disk in `:/data/**/.sem` when you run `:/scripts/gen-base.sh`.
 
 PPC Arch Manuals
 ================

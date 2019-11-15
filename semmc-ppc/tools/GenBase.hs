@@ -35,6 +35,8 @@ import qualified System.Directory as D
 import           System.FilePath ( (<.>), (</>) )
 import qualified What4.Interface as CRU
 
+import           Prelude
+
 data Options = Options { oManualDir :: FilePath
                        , oBaseDir :: FilePath
                        , oPseudoDir :: FilePath
@@ -75,7 +77,7 @@ main = O.execParser optParser >>= mainWithOptions
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   Some ng <- PN.newIONonceGenerator
-  sym <- S.newSimpleBackend @_ @(S.Flags S.FloatIEEE) ng
+  sym <- S.newSimpleBackend S.FloatIEEERepr ng
   D.createDirectoryIfMissing True (oManualDir opts)
   D.createDirectoryIfMissing True (oBaseDir opts)
   D.createDirectoryIfMissing True (oPseudoDir opts)

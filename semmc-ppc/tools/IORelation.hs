@@ -13,6 +13,8 @@ import qualified System.Exit as IO
 import qualified System.IO as IO
 import           Text.Printf ( printf )
 
+import           Prelude
+
 import qualified Dismantle.Arbitrary as A
 import qualified Dismantle.PPC as PPC
 import           Dismantle.PPC.Random ()

@@ -132,7 +132,8 @@ readMemNoOF bits offset = do
   alignment <- askAlignment
   sType <- bvType bits
 
-  v <- liftIO $ LLVM.loadRaw sym mem ptr sType alignment
+  pv <- liftIO $ LLVM.loadRaw sym mem ptr sType alignment
+  v <- liftIO $ LLVM.assertSafe sym pv
   let v' = llvmValToSymBV bits v
 
   -- liftIO . print $ PP.text "Successfully read value " --  <+> S.printSymExpr v'

@@ -82,6 +82,8 @@ import qualified Data.Map.Strict as Map
 import           System.Directory ( createDirectoryIfMissing, getTemporaryDirectory )
 import           Text.Printf ( printf )
 
+import Debug.Trace
+
 ----------------------------------------------------------------
 -- * API
 
@@ -286,8 +288,10 @@ consumeUntilEnd pred k cfg =
 stdErrLogEventConsumer :: (LogEvent -> Bool) -> LogCfg -> IO ()
 stdErrLogEventConsumer pred =
   consumeUntilEnd pred $ \e -> do
-      IO.hPutStrLn IO.stderr $ prettyLogEvent e
-      IO.hFlush IO.stderr
+    -- Use 'traceIO' because it seems to be atomic in practice,
+    -- avoiding problems with interleaving output from other sources.
+    traceIO (prettyLogEvent e)
+    IO.hFlush IO.stderr -- Probably unnecessary.
 
 -- | A logger that writes to a user-specified file
 --

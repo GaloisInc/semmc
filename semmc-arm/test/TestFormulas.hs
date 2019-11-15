@@ -78,7 +78,7 @@ testFormula :: [(String, BS.ByteString)]
             -> (Some (ARMOpcode ARMOperand), BS.ByteString) -> TestTree
 testFormula dfs a@(some'op, _sexp) = testCase ("formula for " <> (opname some'op)) $
   do Some ng <- PN.newIONonceGenerator
-     sym <- S.newSimpleBackend @_ @(S.Flags S.FloatIEEE) ng
+     sym <- S.newSimpleBackend S.FloatIEEERepr ng
      env <- FL.formulaEnv (Proxy @ARM.AArch32) sym
      lib <- withTestLogging $ FL.loadLibrary (Proxy @ARM.AArch32) sym env dfs
      fm <- withTestLogging $ loadFormula sym env lib a

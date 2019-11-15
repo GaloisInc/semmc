@@ -293,7 +293,7 @@ readInputs oplist (SC.SCons (SC.SAtom p) rest) = do
   p' <- readParameter Proxy oplist p
   rest' <- readInputs oplist rest
   return $ p' : rest'
-readInputs _ _ = E.throwError "malformed input list"
+readInputs _ i = E.throwError $ "malformed input list: " <> show i
 
 -- ** Parsing definitions
 
@@ -897,7 +897,7 @@ readExpr (SC.SAtom (AString op)) = do
       e <- liftIO $ S.freshTotalUninterpFn sym opSym Ctx.empty (BaseStructRepr Ctx.empty)
       f <- liftIO $ S.applySymFn sym e Ctx.empty
       return $ Some f
-    Left _ -> E.throwError $ printf "couldn't parse expression %s" (show op)
+    Left _ -> E.throwError $ printf "couldn't parse string expression %s" (show op)
 readExpr (SC.SAtom (ABV len val)) = do
   -- This is a bitvector literal.
   sym <- MR.reader getSym
@@ -945,7 +945,7 @@ readExpr (SC.SCons opRaw argsRaw) = do
     ]
   case parseAttempt of
     Just expr -> return expr
-    Nothing -> E.throwError $ printf "couldn't parse expression %s" (show opRaw)
+    Nothing -> E.throwError $ printf "couldn't parse expression %s [%s]" (show opRaw) (show argsRaw)
 
 -- | Parse multiple expressions in a list.
 readExprs :: (S.IsSymExprBuilder sym,

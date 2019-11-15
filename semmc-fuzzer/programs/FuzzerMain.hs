@@ -15,6 +15,7 @@ import           Control.Monad (replicateM, forM_, when, forM)
 import qualified Control.Exception as E
 import qualified Data.Ini.Config as CI
 import qualified Data.Aeson as AE
+import qualified Data.Aeson.Encode.Pretty as AE
 import qualified Data.Foldable as F
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as BS8
@@ -78,6 +79,8 @@ import qualified SemMC.Architecture.ARM.Opcodes as ARM
 import           SemMC.Synthesis.Template ( TemplatableOperand
                                           , TemplatedOperand
                                           )
+
+import Debug.Trace
 
 data Arg =
     ConfigPath FilePath
@@ -373,8 +376,19 @@ main = do
     logThread <- CA.async $ do
         L.stdErrLogEventConsumer logFilter logCfg
 
-    startHostThreads logCfg atc
-
+    let handler (e :: E.SomeException) = do
+            L.withLogCfg logCfg $ L.logIO L.Error $
+                printf "Exception in 'startHostThreads': %s" (show e)
+            L.logEndWith logCfg
+            -- I don't understand how this happens, but in practice if
+            -- 'startHostThreads' fails with an SSH exception, that
+            -- exception gets reraised when we wait on the 'logThread'
+            -- here.
+            CA.wait logThread `E.catch` \(e :: E.SomeException) ->
+                traceIO $ printf "Exception in 'wait logThread': %s"
+                (show e)
+            IO.exitFailure
+    startHostThreads logCfg atc `E.catch` handler
     CA.wait logThread
 
 defaultRunnerPath :: FilePath
@@ -406,7 +420,8 @@ startHostThreads logCfg fc = do
       Just arch -> do
           hostThreads <- forM (fuzzerArchTestingHosts fc) $ \hostConfig -> do
               replicateM (fuzzerTestThreads hostConfig) $ do
-                  a <- CA.async $ testHost logCfg fc hostConfig arch
+                  a <- CA.async $ L.named logCfg "testHost" $
+                       testHost logCfg fc hostConfig arch
                   CA.link a
                   return a
 
@@ -444,7 +459,7 @@ testHost logCfg mainConfig hostConfig (ArchImpl _ proxy allOpcodes allSemantics 
   L.withLogCfg logCfg $ L.logIO L.Info $
       printf "Starting up for host %s" (fuzzerTestHostname hostConfig)
 
-  runThread <- CA.async $ do
+  runThread <- CA.async $ L.named logCfg "testRunner" $ do
       L.withLogCfg logCfg $
           testRunner mainConfig hostConfig proxy opcodes (fuzzerTestStrategy mainConfig)
                      allSemantics allFunctions ppInst assemble instFilter caseChan resChan
@@ -503,7 +518,7 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
     N.withIONonceGenerator $ \nonceGen -> do
       gen <- DA.createGen
       sym :: SB.SimpleBackend s (SB.Flags SB.FloatIEEE)
-          <- SB.newSimpleBackend nonceGen
+          <- SB.newSimpleBackend SB.FloatIEEERepr nonceGen
       SB.stopCaching sym
 
       env <- F.formulaEnv proxy sym
@@ -574,8 +589,17 @@ testRunner mainConfig hostConfig proxy inputOpcodes strat semantics funcs ppInst
                   -- If a report URL is configured, construct a batch of
                   -- results and upload it to the reporting service.
                   L.logIO L.Info $ "Report URL: " <> show (fuzzerReportURL mainConfig)
+                  let numSuccesses = length . filter (\r -> testOutcome r == Success) $
+                                     catMaybes entries
+                  L.logIO L.Info $ printf "%i/%i test cases succeeded"
+                    numSuccesses (length cases)
                   case fuzzerReportURL mainConfig of
-                      Nothing -> return ()
+                      Nothing -> do
+                        -- Report failures to stdout when no fuzzermon
+                        forM_ (catMaybes entries) $ \result -> do
+                          when (testOutcome result /= Success) $
+                            L.logIO L.Warn $ unlines [ "Test failure:"
+                                                     , BSC8.unpack $ AE.encodePretty result ]
                       Just reportURL -> do
                           let b = Batch { batchFuzzerHost = hostname
                                         , batchFuzzerUser = fromMaybe self $ fuzzerTestUser hostConfig

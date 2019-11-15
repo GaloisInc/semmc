@@ -61,31 +61,14 @@ longtest = executeTests [longProg]
 executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
   PN.withIONonceGenerator $ \ng ->
+    CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
+      let sems = [ (sop, bs) | (sop, bs) <- PPC32.allSemantics, S.member sop insns ]
+      (baseSet, synthEnv) <- loadBaseSet PPC32.allDefinedFunctions sems sym
+      T.defaultMain (allTests baseSet synthEnv)
 
-   CBO.withZ3OnlineBackend @(CBO.Flags CBO.FloatReal) ng CBO.NoUnsatFeatures $ \sym -> do
-      -- set the path to z3
-      -- void $ join (setOpt <$> getOptionSetting z3Path (getConfiguration sym)
-      --                     <*> pure (Text.pack "../submodules/crucible/scripts/yices-tee"))
-
-      -- set timeout for individual invocations of z3
-      void $ join (setOpt <$> getOptionSetting z3Timeout (getConfiguration sym)
-                          <*> pure 100000)
-
-
-      -- set the verbosity level
-      -- void $ join (setOpt <$> getOptionSetting verbosity (getConfiguration sym)
-      --                     <*> pure (toInteger 3))
-
-      let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
-      (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
-
-      T.defaultMain (allTests baseSet synthEnv progsToTest)
-
-
-allTests :: (WPO.OnlineSolver t solver, CB.IsSymInterface (CBO.OnlineBackend t solver fs))
-         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
-         -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
-         -> [(String, [D.Instruction])]
+allTests :: (WPO.OnlineSolver t solver)
+         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC32.PPC)
+         -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC32.PPC
          -> T.TestTree
 allTests baseSet synthEnv progsToTest =
   T.adjustOption @T.Timeout (\_ -> T.mkTimeout 1000000000) $
@@ -127,10 +110,10 @@ longProg = ("LongProg", [ D.Instruction D.STD  $ mkMemRIX 1 (-1)   :< mkGPR 31 :
                         , D.Instruction D.LI   $ mkGPR 31 :< D.S16imm 3 :< Nil
                         , D.Instruction D.LHA  $ mkGPR 31 :< mkMemRI 1 2 :< Nil
                         ])
-        
-         
 
-memProgs  :: [(String,[D.Instruction])] 
+
+
+memProgs  :: [(String,[D.Instruction])]
 memProgs =
     [("STD2",    [ D.Instruction D.STD  $ mkMemRIX 1 (2)   :< mkGPR 31     :< Nil ])]
     ++

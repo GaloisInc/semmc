@@ -230,6 +230,7 @@ loadLibraryFromFiles _ sym env dir = do
 
 listFunctionFiles :: FilePath -> IO [FilePath]
 listFunctionFiles dir =
+  (fmap $ S.combine dir) <$>
   filter isFunctionFile <$>
     E.catch (S.listDirectory dir) (\(_::E.SomeException) -> return [])
   where isFunctionFile f = snd (S.splitExtension f) == ".fun"

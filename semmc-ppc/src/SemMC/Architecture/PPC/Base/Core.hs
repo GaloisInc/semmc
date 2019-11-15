@@ -16,6 +16,7 @@ module SemMC.Architecture.PPC.Base.Core (
   definePPCOpcode,
   definePPCOpcodeRC,
   defineOpcodeWithIP,
+  defineOERCVariant,
   defineRCVariant,
   defineVRCVariant,
   -- * Forms
@@ -122,6 +123,28 @@ definePPCOpcodeRC opc modifiedReg def =
   where
     newName = showF opc
 
+-- | A variant of 'definePPCOpcode' that also sets the CR register and
+-- XER register, suitable for defining '*o.' variants of instructions,
+-- e.g. 'addo.'.
+defineOERCVariant :: ( ?bitSize :: BitSize
+                     , ShowF oc
+                     )
+                  => oc sh
+                  -> Expr 'TBV
+                  -> Expr 'TBV
+                  -> SemM 'Def ()
+                  -> SemM 'Def ()
+defineOERCVariant opc modifiedReg modifiedXer def =
+  forkDefinition newName $ do
+  input cr
+  input xer
+  defLoc xer modifiedXer
+  defLoc cr (cmpImmExplicitXer bvslt bvsgt (LitBV 3 0x0) (naturalLitBV 0x0)
+             modifiedReg modifiedXer)
+  def
+  where
+    newName = showF opc
+
 -- | A wrapper around 'defineOpcode' that updates the IP after the instruction
 -- executes (simply by adding 4).
 defineOpcodeWithIP :: (?bitSize :: BitSize) => String -> SemM 'Def () -> SemM 'Top ()
@@ -172,7 +195,27 @@ cmpImm :: (HasCallStack, ?bitSize :: BitSize)
        -- ^ The register expression
        -> Expr 'TBV
 cmpImm lt gt fld ximm reg =
-  lf cmpImmLF (lt reg ximm :< gt reg ximm :< fld :< Loc xer :< Loc cr :< Nil)
+  cmpImmExplicitXer lt gt fld ximm reg (Loc xer)
+
+-- | A version of 'cmpImm' with explict args for the @xer@ value,
+-- since the @OE=1@ instruction variants need to pass computed values
+-- for @xer@.
+cmpImmExplicitXer :: (HasCallStack, ?bitSize :: BitSize)
+                  => (Expr 'TBV -> Expr 'TBV -> Expr 'TBool)
+                  -- ^ LT
+                  -> (Expr 'TBV -> Expr 'TBV -> Expr 'TBool)
+                  -- ^ GT
+                  -> Expr 'TBV
+                  -- ^ The crrc field
+                  -> Expr 'TBV
+                  -- ^ The extended immediate (extended to full dword size)
+                  -> Expr 'TBV
+                  -- ^ The register expression
+                  -> Expr 'TBV
+                  -- ^ The input value for XER
+                  -> Expr 'TBV
+cmpImmExplicitXer lt gt fld ximm reg xer =
+  lf cmpImmLF (lt reg ximm :< gt reg ximm :< fld :< xer :< (Loc cr) :< Nil)
 
 cmpImmLF :: (?bitSize :: BitSize)
          => LibraryFunctionDef '(['TBool, 'TBool, 'TBV, 'TBV, 'TBV], 'TBV)
