@@ -10,7 +10,6 @@ packages:
   submodules/dismantle/dismantle-arm/
   submodules/dismantle/dismantle-thumb/
   submodules/dismantle/dismantle-ppc/
-  submodules/s-cargot
 
 optional-packages:
   submodules/crucible/crucible
