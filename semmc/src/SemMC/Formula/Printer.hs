@@ -247,7 +247,7 @@ convertExpr paramLookup initialExpr = do
             State.modify ((key, sexp) OMap.<|)
             return $ skeyAtom key
   where go :: S.Expr t tp -> Memo SExp
-        go (S.SemiRingLiteral S.SemiRingNatRepr _ _) = error "NatExpr not supported"
+        go (S.SemiRingLiteral S.SemiRingNatRepr val _) = return $ SE.A $ ANat val
         go (S.SemiRingLiteral S.SemiRingIntegerRepr val _) = return $ SE.A $ AInt val -- do we need/want these?
         go (S.SemiRingLiteral S.SemiRingRealRepr _ _) = error "RatExpr not supported"
         go (S.SemiRingLiteral (S.SemiRingBVRepr _ sz) val _) = return $ SE.A (ABV (widthVal sz) val)
@@ -361,11 +361,16 @@ convertAppExpr' paramLookup = go . S.appExprApp
             S.SemiRingRealRepr    -> error "convertApp S.SemiRingProd Real unsupported"
 
         -- FIXME: This all needs to be fixed. Right now, this stuff is purely cosmetic.
-        --        AMK: I have no idea what this `FIXME` is saying...
-        go (S.SemiRingLe _sr e1 e2) = do
+        --        AMK: I have no idea what this `FIXME` is saying... I'm gonna assume
+        --             it means inspect the Repr and be type specific...?
+        go (S.SemiRingLe sr e1 e2) = do
           s1 <- goE e1
           s2 <- goE e2
-          return $ SE.L [ ident' "le", s1, s2]
+          case sr of
+            S.OrderedSemiRingIntegerRepr -> do
+              return $ SE.L [ ident' "intle", s1, s2]
+            S.OrderedSemiRingNatRepr -> do
+              return $ SE.L [ ident' "natle", s1, s2]
 
         go (S.BVOrBits pd) =
           case WSum.prodRepr pd of
