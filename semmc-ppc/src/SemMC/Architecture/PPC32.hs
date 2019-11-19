@@ -624,7 +624,7 @@ instance ArchitectureWithPseudo PPC where
 
 instance A.IsLocation (Location PPC) where
 
-  isMemLoc l =
+  isMemoryLocation l =
     case l of
       LocMem -> True
       _ -> False

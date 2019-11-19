@@ -400,7 +400,7 @@ instance A.IsLocation Location where
 
   registerizationLocations = A.allLocations
 
-  isMemLoc _ = False
+  isMemoryLocation _ = False
   isIP _ = False
   nonMemLocations = map (Some . RegLoc) [Reg1, Reg2, Reg3]
   memLocation = []

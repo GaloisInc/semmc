@@ -380,9 +380,9 @@ operandToLocation (ARMDis.GPRnopc gpr) = Just $ LocGPR $ fromIntegral $ W.unW $ 
 operandToLocation _ = Nothing
 
 instance A.IsLocation (Location A32) where
-  isMemLoc LocMem1 = True
-  isMemLoc LocMem2 = True
-  isMemLoc _ = False
+  isMemoryLocation LocMem1 = True
+  isMemoryLocation LocMem2 = True
+  isMemoryLocation _ = False
 
   isIP LocPC = True
   isIP _     = False

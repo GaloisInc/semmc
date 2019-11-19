@@ -26,10 +26,8 @@ import qualified Dismantle.PPC as D
 import qualified Lang.Crucible.Backend as CB
 import qualified Lang.Crucible.Backend.Online as CBO
 import qualified What4.Protocol.Online as WPO
-import           What4.Config
-import           What4.Interface
-import           What4.Solver.Z3
-import           Control.Monad
+import qualified What4.Expr.Builder as WEB
+import qualified What4.InterpretedFloatingPoint as WIF
 
 
 import qualified SemMC.Architecture as SA
@@ -62,13 +60,16 @@ executeTests :: [(String, [D.Instruction])] -> IO ()
 executeTests progsToTest = do
   PN.withIONonceGenerator $ \ng ->
     CBO.withYicesOnlineBackend CBO.FloatRealRepr ng CBO.NoUnsatFeatures $ \sym -> do
-      let sems = [ (sop, bs) | (sop, bs) <- PPC32.allSemantics, S.member sop insns ]
-      (baseSet, synthEnv) <- loadBaseSet PPC32.allDefinedFunctions sems sym
-      T.defaultMain (allTests baseSet synthEnv)
+      let sems = [ (sop, bs) | (sop, bs) <- PPC64.allSemantics, S.member sop insns ]
+      (baseSet, synthEnv) <- loadBaseSet PPC64.allDefinedFunctions sems sym
+      T.defaultMain (allTests baseSet synthEnv progsToTest)
 
-allTests :: (WPO.OnlineSolver t solver)
-         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC32.PPC)
-         -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC32.PPC
+allTests :: ( WPO.OnlineSolver t solver
+            , WIF.IsInterpretedFloatExprBuilder (WEB.ExprBuilder t (CBO.OnlineBackendState solver) fs)
+            )
+         => MapF.MapF (D.Opcode D.Operand) (SF.ParameterizedFormula (CBO.OnlineBackend t solver fs) PPC64.PPC)
+         -> SS.SynthesisEnvironment (CBO.OnlineBackend t solver fs) PPC64.PPC
+         -> [(String, [D.Instruction])]
          -> T.TestTree
 allTests baseSet synthEnv progsToTest =
   T.adjustOption @T.Timeout (\_ -> T.mkTimeout 1000000000) $

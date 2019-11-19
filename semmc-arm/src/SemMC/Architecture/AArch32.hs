@@ -287,8 +287,8 @@ operandToLocation _ = Nothing
 instance (KnownNat (A.RegWidth arm), 1 <= A.RegWidth arm) =>
          A.IsLocation (Location arm) where
 
-  isMemLoc LocMem = True
-  isMemLoc _ = False
+  isMemoryLocation LocMem = True
+  isMemoryLocation _ = False
 
   isIP LocPC = True
   isIP _     = False
