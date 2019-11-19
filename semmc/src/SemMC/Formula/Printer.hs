@@ -434,12 +434,12 @@ convertAppExpr' paramLookup = go . S.appExprApp
           return $ SE.L [ident' "struct"
                         , convertBaseTypes tps
                         , ss]
-        go (S.StructField e ix fieldTp) = do
+        go (S.StructField e ix _fieldTp) = do
           s <- goE e
           return $ SE.L [ident' "field"
-                        , ident' (show (Ctx.indexVal ix))
-                        , convertBaseType fieldTp
-                        , s]
+                        , s
+                        , int' $ toInteger $ Ctx.indexVal ix
+                        ]
 
         go (S.UpdateArray _ _ e1 es e2) = do
           s1 <- goE e1
