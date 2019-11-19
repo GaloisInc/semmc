@@ -138,7 +138,11 @@ compareParameterizedFormulasSymbolically sym operands ncycles origFormula result
      on (===) (MapF.keys . SF.pfDefs) origFormula resultFormula
      (_te1, f1) <- liftIO $ instantiateFormula sym origFormula operands
      (_te2, f2) <- liftIO $ instantiateFormula sym resultFormula operands
-     equiv <- liftIO $ formulasEquivSym sym f1 f2
+     -- NOTE: The test architecture doesn't even support memory, so we don't
+     -- need to specify any memory locations to test here.  If we do need to
+     -- check that, we'll have go carefully set up memory to make the test
+     -- possible.
+     equiv <- liftIO $ formulasEquivSym sym [] f1 f2
      case equiv of
        Equivalent -> success
        DifferentBehavior _ -> failure

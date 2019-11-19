@@ -88,7 +88,7 @@ simplifyWithTest f test = do
 formMem :: A.Architecture arch
         => F.Formula sym arch 
         -> Maybe (L.MemLoc (L.Location arch))
-formMem f | any (\(Some l) -> L.isMemLoc l) (MapF.keys $ F.formParamVars f) = listToMaybe L.memLocation
+formMem f | any (\(Some l) -> L.isMemoryLocation l) (MapF.keys $ F.formParamVars f) = listToMaybe L.memLocation
 formMem _ | otherwise = Nothing
 
 
@@ -288,7 +288,7 @@ stripMemLoc :: forall arch sym.
                A.Architecture arch
             => L.ArchState arch (S.SymExpr sym)
             -> L.ArchState arch (S.SymExpr sym)
-stripMemLoc = MapF.filterWithKey (\l _ -> not (L.isMemLoc l))
+stripMemLoc = MapF.filterWithKey (\l _ -> not (L.isMemoryLocation l))
 
 
 -- | Given a formula and a counterexample provided from the solver, construct

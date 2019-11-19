@@ -124,7 +124,7 @@ nonMemIPLocs :: forall arch.
                 A.Architecture arch
              => Set.Set (Some (L.Location arch))
              -> Set.Set (Some (L.Location arch))
-nonMemIPLocs locs = Set.filter (\(Some l) -> not (L.isIP l) && not (L.isMemLoc l)) locs
+nonMemIPLocs locs = Set.filter (\(Some l) -> not (L.isIP l) && not (L.isMemoryLocation l)) locs
 
 
 -- | Given an expression representing memory, returns 'Just (mem, WriteData idx

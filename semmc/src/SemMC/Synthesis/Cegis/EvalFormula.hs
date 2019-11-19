@@ -56,7 +56,7 @@ mkMemEvalLoc :: forall arch sym.
                  -> S.SymExpr sym (A.MemType arch)
                  -> LocEval (L.Location arch) (S.SymExpr sym)
 mkMemEvalLoc sym st memExpr = LocEval $ \loc ->
-  case (L.isMemLoc loc, S.testEquality (L.locationType loc) (A.memTypeRepr @arch)) of
+  case (L.isMemoryLocation loc, S.testEquality (L.locationType loc) (A.memTypeRepr @arch)) of
     (True, Just S.Refl) -> return memExpr
     (_, _) -> evalLoc (mkEvalLoc @arch sym st) loc
 

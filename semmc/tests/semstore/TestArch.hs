@@ -37,6 +37,8 @@ import           What4.BaseTypes
 
 data TestGenArch  -- ^ the architecture type for testing
 
+type instance SA.RegWidth TestGenArch = 32
+
 instance SA.Architecture TestGenArch where
   data TaggedExpr TestGenArch sym s =
     TaggedExpr { unTaggedExpr :: SA.AllocatedOperand TestGenArch sym s }
@@ -119,8 +121,9 @@ instance L.IsLocation TestLocation where
   readLocation _ = Nothing
 
   isMemoryLocation _ = False
+  memLocation = []
 
-  allLocations = [Some TestBarLoc]
+  nonMemLocations = [Some TestBarLoc]
                  <> (Some . TestBoxLoc <$> [0..3])
                  <> (Some . TestNatLoc <$> [0..6])
                  <> (Some . TestIntLoc <$> [-10..10])

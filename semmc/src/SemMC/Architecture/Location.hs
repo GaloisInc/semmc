@@ -47,7 +47,7 @@ class (OrdF a, TestEquality a, ShowF a) => IsLocation a where
   -- for holding data.
   registerizationLocations :: [Some a]
   -- | A predicate describing if a particular location is a memory location
-  isMemLoc :: a tp -> Bool
+  isMemoryLocation :: a tp -> Bool
   -- | A predicate describing if a particular location holds the IP
   isIP :: a tp -> Bool
 
