@@ -510,42 +510,48 @@ lookupOp = \case
 
 -- | Verify a list of arguments has a single argument and
 -- return it, else raise an error.
-checkOneArg ::
+readOneArg ::
   (S.IsSymExprBuilder sym,
     E.MonadError String m,
     MR.MonadReader (DefsInfo sym arch sh) m,
+    A.Architecture arch,
     MonadIO m)
-  => [Some (S.SymExpr sym)]
+  => SC.SExpr FAtom
   -> m (Some (S.SymExpr sym))
-checkOneArg args = do
+readOneArg operands = do
+  args <- readExprs operands
   when (length args /= 1)
     (E.throwError $ printf "expecting 1 argument, got %d" (length args))
   return $ args !! 0
 
 -- | Verify a list of arguments has two arguments and return
 -- it, else raise an error.
-checkTwoArgs ::
+readTwoArgs ::
   (S.IsSymExprBuilder sym,
     E.MonadError String m,
     MR.MonadReader (DefsInfo sym arch sh) m,
+    A.Architecture arch,
     MonadIO m)
-  => [Some (S.SymExpr sym)]
+  => SC.SExpr FAtom
   -> m (Some (S.SymExpr sym), Some (S.SymExpr sym))
-checkTwoArgs args = do
+readTwoArgs operands = do
+  args <- readExprs operands
   when (length args /= 2)
     (E.throwError $ printf "expecting 2 arguments, got %d" (length args))
   return $ (args !! 0, args !! 1)
 
 -- | Verify a list of arguments has three arguments and
 -- return it, else raise an error.
-checkThreeArgs ::
+readThreeArgs ::
   (S.IsSymExprBuilder sym,
     E.MonadError String m,
     MR.MonadReader (DefsInfo sym arch sh) m,
+    A.Architecture arch,
     MonadIO m)
-  => [Some (S.SymExpr sym)]
+  => SC.SExpr FAtom
   -> m (Some (S.SymExpr sym), Some (S.SymExpr sym), Some (S.SymExpr sym))
-checkThreeArgs args = do
+readThreeArgs operands = do
+  args <- readExprs operands
   when (length args /= 3)
     (E.throwError $ printf "expecting 3 arguments, got %d" (length args))
   return $ (args !! 0, args !! 1, args !! 2)
@@ -557,9 +563,10 @@ readApp ::
   (S.IsSymExprBuilder sym,
     E.MonadError String m,
     MR.MonadReader (DefsInfo sym arch sh) m,
+    A.Architecture arch,
     MonadIO m)
   => SC.SExpr FAtom
-  -> [Some (S.SymExpr sym)]
+  -> SC.SExpr FAtom
   -> m (Some (S.SymExpr sym))
 readApp (SC.SAtom (AIdent operator)) operands = do
   sym <- MR.reader getSym
@@ -567,31 +574,35 @@ readApp (SC.SAtom (AIdent operator)) operands = do
   -- Parse an expression of the form @(fnname operands ...)@
     case lookupOp operator of
       Just (Op1 arg_types fn) -> do
-        exprAssignment arg_types operands >>= \case
+        args <- readExprs operands
+        exprAssignment arg_types args >>= \case
           Ctx.Empty Ctx.:> arg1 ->
             liftIO (Some <$> fn sym arg1)
           _ -> error "Unable to unpack Op1 arg in Formula.Parser readApp"
       Just (Op2 arg_types fn) -> do
-        exprAssignment arg_types operands >>= \case
+        args <- readExprs operands
+        exprAssignment arg_types args >>= \case
           Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 ->
               liftIO (Some <$> fn sym arg1 arg2)
           _ -> error "Unable to unpack Op2 arg in Formula.Parser readApp"
       Just (Op3 arg_types fn) -> do
-        exprAssignment arg_types operands >>= \case
+        args <- readExprs operands
+        exprAssignment arg_types args >>= \case
           Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 ->
               liftIO (Some <$> fn sym arg1 arg2 arg3)
           _ -> error "Unable to unpack Op3 arg in Formula.Parser readApp"
       Just (Op4 arg_types fn) -> do
-        exprAssignment arg_types operands >>= \case
+        args <- readExprs operands
+        exprAssignment arg_types args >>= \case
           Ctx.Empty Ctx.:> arg1 Ctx.:> arg2 Ctx.:> arg3 Ctx.:> arg4 ->
               liftIO (Some <$> fn sym arg1 arg2 arg3 arg4)
           _ -> error "Unable to unpack Op4 arg in Formula.Parser readApp"
       Just (BVOp1 op) -> do
-        Some expr <- checkOneArg operands
+        Some expr <- readOneArg operands
         BVProof _ <- getBVProof expr
         liftIO $ Some <$> op sym expr
       Just (BVOp2 op) -> do
-        (Some arg1, Some arg2)  <- checkTwoArgs operands
+        (Some arg1, Some arg2)  <- readTwoArgs operands
         BVProof m <- prefixError "in arg 1: " $ getBVProof arg1
         BVProof n <- prefixError "in arg 2: " $ getBVProof arg2
         case testEquality m n of
@@ -603,7 +614,7 @@ readApp (SC.SAtom (AIdent operator)) operands = do
                                          (show m)
                                          (show n)
       Just (BVComp2 op) -> do
-        (Some arg1, Some arg2)  <- checkTwoArgs operands
+        (Some arg1, Some arg2)  <- readTwoArgs operands
         BVProof m <- prefixError "in arg 1: " $ getBVProof arg1
         BVProof n <- prefixError "in arg 2: " $ getBVProof arg2
         case testEquality m n of
@@ -619,12 +630,12 @@ readApp (SC.SAtom (AIdent operator)) operands = do
         -- complicated to nicely fit in the Op type
         case operator of
           "concat" -> do
-            (Some arg1, Some arg2)  <- checkTwoArgs operands
+            (Some arg1, Some arg2)  <- readTwoArgs operands
             BVProof _ <- prefixError "in arg 1: " $ getBVProof arg1
             BVProof _ <- prefixError "in arg 2: " $ getBVProof arg2
             liftIO (Some <$> S.bvConcat sym arg1 arg2)
           "=" -> do
-            (Some arg1, Some arg2)  <- checkTwoArgs operands
+            (Some arg1, Some arg2)  <- readTwoArgs operands
             case testEquality (S.exprType arg1) (S.exprType arg2) of
               Just Refl -> liftIO (Some <$> S.isEq sym arg1 arg2)
               Nothing -> E.throwError $
@@ -634,7 +645,7 @@ readApp (SC.SAtom (AIdent operator)) operands = do
                 (show (S.exprType arg1))
                 (show (S.exprType arg2))
           "ite" -> do
-            (Some test, Some then_, Some else_)  <- checkThreeArgs operands
+            (Some test, Some then_, Some else_)  <- readThreeArgs operands
             case S.exprType test of
               BaseBoolRepr ->
                 case testEquality (S.exprType then_) (S.exprType else_) of
@@ -647,12 +658,12 @@ readApp (SC.SAtom (AIdent operator)) operands = do
                     (show (S.exprType else_))
               tp -> E.throwError $ printf "test expression must be a boolean; got %s" (show tp)
           "select" -> do
-            (Some arr, Some idx)  <- checkTwoArgs operands
+            (Some arr, Some idx)  <- readTwoArgs operands
             ArraySingleDim _ <- expectArrayWithIndex (S.exprType idx) (S.exprType arr)
             let idx' = Ctx.empty Ctx.:> idx
             liftIO (Some <$> S.arrayLookup sym arr idx')
           "store" -> do
-            (Some arr, Some idx, Some expr)  <- checkThreeArgs operands
+            (Some arr, Some idx, Some expr)  <- readThreeArgs operands
             ArraySingleDim resRepr <- expectArrayWithIndex (S.exprType idx) (S.exprType arr)
             case testEquality resRepr (S.exprType expr) of
               Just Refl ->
@@ -661,6 +672,30 @@ readApp (SC.SAtom (AIdent operator)) operands = do
               Nothing -> E.throwError $ printf "Array result type %s does not match %s"
                          (show resRepr)
                          (show (S.exprType expr))
+          "updateArray" -> do
+            -- Note, this is identical to "store"... unsure why both exist...
+            (Some arr, Some idx, Some expr)  <- readThreeArgs operands
+            ArraySingleDim resRepr <- expectArrayWithIndex (S.exprType idx) (S.exprType arr)
+            case testEquality resRepr (S.exprType expr) of
+              Just Refl ->
+                let idx' = Ctx.empty Ctx.:> idx
+                in liftIO (Some <$> S.arrayUpdate sym arr idx' expr)
+              Nothing -> E.throwError $ printf "Array result type %s does not match %s"
+                         (show resRepr)
+                         (show (S.exprType expr))
+          "field" -> do
+            case operands of
+              SC.SCons rawStruct (SC.SCons (SC.SAtom (AInt rawIdx)) SC.SNil) -> do
+                Some struct  <- readExpr rawStruct
+                case S.exprType struct of
+                  (BaseStructRepr fldTpReprs) ->
+                    case Ctx.intIndex (fromInteger rawIdx) (Ctx.size fldTpReprs) of
+                      Just (Some i) -> liftIO (Some <$> S.structField sym struct i)
+                      Nothing -> E.throwError $
+                        unwords ["invalid struct index, got", show fldTpReprs, "and", show rawIdx]
+                  srepr -> E.throwError $ unwords ["expected a struct, got", show srepr]
+              _ -> E.throwError $ unwords ["expected an arg and an Int, got", show operands]
+          "struct" ->E.throwError $ "TODO: struct needs to be implemented!"
           _ -> E.throwError $ printf "couldn't parse application of %s" operator
 -- Parse an expression of the form @((_ extract i j) x)@.
 readApp (SC.SCons (SC.SAtom (AIdent "_"))
@@ -670,7 +705,7 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
                 SC.SNil))))
   args = prefixError "in reading extract expression: " $ do
   sym <- MR.reader getSym
-  (Some arg) <- checkOneArg args
+  (Some arg) <- readOneArg args
   -- The SMT-LIB spec represents extracts differently than Crucible does. Per
   -- SMT: "extraction of bits i down to j from a bitvector of size m to yield a
   -- new bitvector of size n, where n = i - j + 1". Per Crucible:
@@ -710,7 +745,7 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
   | extend == "zero_extend" ||
     extend == "sign_extend" = prefixError (printf "in reading %s expression: " extend) $ do
       sym <- MR.reader getSym
-      Some arg <- checkOneArg args
+      Some arg <- readOneArg args
       Some iNat <- intToNatM iInt
       iPositive <- fromMaybeError "must extend by a positive length" $ isPosNat iNat
       BVProof lenNat <- getBVProof arg
@@ -728,18 +763,16 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
                 (SC.SCons (SC.SAtom (AIdent "call"))
                   (SC.SCons (SC.SAtom (AString "uf.undefined"))
                     SC.SNil)))
-  args =
-  case args of
-    [Some ex] ->
-      case S.exprType ex of
-        BaseBVRepr {}
-          | Just size <- S.asUnsignedBV ex -> do
-              sym <- MR.reader getSym
-              case NR.someNat ((fromIntegral size) :: Integer) of
-                Just (Some nr) -> mkUndefined nr sym
-                Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" size
-        ety -> E.throwError $ printf "Invalid expr type: %s" (show ety)
-    _ -> E.throwError $ printf "Invalid argument list for undefined"
+  operands = do
+  (Some ex) <- readOneArg operands
+  case S.exprType ex of
+    BaseBVRepr {}
+      | Just size <- S.asUnsignedBV ex -> do
+          sym <- MR.reader getSym
+          case NR.someNat ((fromIntegral size) :: Integer) of
+            Just (Some nr) -> mkUndefined nr sym
+            Nothing -> E.throwError $ printf "Invalid size for undefined value: %d" size
+    ety -> E.throwError $ printf "Invalid expr type: %s" (show ety)
   where
     mkUndefined :: NR.NatRepr n -> sym -> m (Some (S.SymExpr sym))
     mkUndefined nr sym = do
@@ -755,7 +788,7 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
             (SC.SCons (SC.SAtom (AIdent "call"))
                (SC.SCons (SC.SAtom (AString fnName))
                   SC.SNil)))
-  args =
+  operands =
   prefixError ("in reading call '" <> fnName <> "' expression: ") $ do
     sym <- MR.reader getSym
     fns <- MR.reader (envFunctions . getEnv)
@@ -767,6 +800,7 @@ readApp (SC.SCons (SC.SAtom (AIdent "_"))
               "df." -> "library function '%s' is not defined"
               _     -> "unrecognized function prefix: '%s'"
         in E.throwError $ printf template fnName
+    args <- readExprs operands
     assn <- exprAssignment (S.fnArgTypes fn) args
     liftIO (Some <$> S.applySymFn sym fn assn)
 readApp opRaw _ = E.throwError $ printf "couldn't parse application of %s" (show opRaw)
@@ -794,7 +828,7 @@ expectArrayWithIndex dimRepr (BaseArrayRepr idxTpReprs resRepr) =
           case testEquality idxTpRepr dimRepr of
             Just Refl -> return $ ArraySingleDim resRepr
             Nothing -> E.throwError $ unwords ["Array index type", show idxTpRepr,
-                                             "does not match", show dimRepr]
+                                               "does not match", show dimRepr]
         _ -> E.throwError "multidimensional arrays are not supported"
 expectArrayWithIndex _ repr = E.throwError $ unwords ["expected an array, got", show repr]
 
@@ -903,8 +937,7 @@ readExpr (SC.SCons (SC.SAtom (AIdent "let")) rhs) =
     (SC.SCons bindings (SC.SCons body SC.SNil)) -> readLetExpr bindings body
     _ -> E.throwError "ill-formed let s-expression"
 readExpr (SC.SCons operator operands) = do
-  args <- readExprs operands
-  readApp operator args
+  readApp operator operands
 
 
 -- | Parse multiple expressions in a list.
