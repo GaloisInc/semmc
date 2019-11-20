@@ -913,7 +913,12 @@ readExpr :: forall sym m arch sh
          => SC.SExpr FAtom
          -> m (Some (S.SymExpr sym))
 readExpr SC.SNil = E.throwError "found nil where expected an expression"
-readExpr (SC.SAtom (AInt _)) = E.throwError "found int where expected an expression; perhaps you wanted a bitvector?"
+readExpr (SC.SAtom (AInt n)) = do
+  sym <- MR.reader getSym
+  liftIO $ (Some <$> S.intLit sym n)
+readExpr (SC.SAtom (ANat n)) = do
+  sym <- MR.reader getSym
+  liftIO $ (Some <$> S.natLit sym n)
 readExpr (SC.SAtom (AString op)) = do
   -- This is an uninterpreted function.
   sym <- MR.reader getSym
