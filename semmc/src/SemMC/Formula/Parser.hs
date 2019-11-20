@@ -695,7 +695,12 @@ readApp (SC.SAtom (AIdent operator)) operands = do
                         unwords ["invalid struct index, got", show fldTpReprs, "and", show rawIdx]
                   srepr -> E.throwError $ unwords ["expected a struct, got", show srepr]
               _ -> E.throwError $ unwords ["expected an arg and an Int, got", show operands]
-          "struct" ->E.throwError $ "TODO: struct needs to be implemented!"
+          "struct" -> do
+            case operands of
+              SC.SCons rawFldExprs SC.SNil -> do
+                Some flds <- readExprsAsAssignment rawFldExprs
+                liftIO (Some <$> S.mkStruct sym flds)
+              _ -> E.throwError $ unwords ["struct expects a single operand, got", show operands]
           _ -> E.throwError $ printf "couldn't parse application of %s" operator
 -- Parse an expression of the form @((_ extract i j) x)@.
 readApp (SC.SCons (SC.SAtom (AIdent "_"))
@@ -955,6 +960,24 @@ readExprs (SC.SCons e rest) = do
   e' <- readExpr e
   rest' <- readExprs rest
   return $ e' : rest'
+
+readExprsAsAssignment ::
+  forall sym m arch sh .
+  (S.IsSymExprBuilder sym,
+    Monad m,
+    E.MonadError String m,
+    A.Architecture arch,
+    MR.MonadReader (DefsInfo sym arch sh) m,
+    MonadIO m)
+  => SC.SExpr FAtom
+  -> m (Some (Ctx.Assignment (S.SymExpr sym)))
+readExprsAsAssignment SC.SNil = return $ Some Ctx.empty
+readExprsAsAssignment (SC.SCons s rest) = do
+  Some e <- readExpr s
+  Some ss <- readExprsAsAssignment rest
+  return $ Some (Ctx.extend ss e)
+readExprsAsAssignment sexpr = E.throwError $ "expected list of expressions: " ++ show sexpr
+
 
 -- | Parse the whole definitions expression, e.g.:
 --

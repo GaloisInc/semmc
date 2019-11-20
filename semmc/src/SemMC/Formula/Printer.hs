@@ -429,11 +429,9 @@ convertAppExpr' paramLookup = go . S.appExprApp
                         , nat' (natValue wRepr)
                         , s]
 
-        go (S.StructCtor tps es) = do
+        go (S.StructCtor _tps es) = do
           ss <- convertExprAssignment paramLookup es
-          return $ SE.L [ident' "struct"
-                        , convertBaseTypes tps
-                        , ss]
+          return $ SE.L [ident' "struct", ss]
         go (S.StructField e ix _fieldTp) = do
           s <- goE e
           return $ SE.L [ident' "field"
