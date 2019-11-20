@@ -371,6 +371,7 @@ convertAppExpr' paramLookup = go . S.appExprApp
               return $ SE.L [ ident' "intle", s1, s2]
             S.OrderedSemiRingNatRepr -> do
               return $ SE.L [ ident' "natle", s1, s2]
+            S.OrderedSemiRingRealRepr -> error $ "Printer: SemiRingLe is not supported for reals"
 
         go (S.BVOrBits pd) =
           case WSum.prodRepr pd of
