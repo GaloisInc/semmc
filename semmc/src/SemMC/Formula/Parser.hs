@@ -701,6 +701,10 @@ readApp (SC.SAtom (AIdent operator)) operands = do
                 Some flds <- readExprsAsAssignment rawFldExprs
                 liftIO (Some <$> S.mkStruct sym flds)
               _ -> E.throwError $ unwords ["struct expects a single operand, got", show operands]
+          "sbvToInteger" -> do
+            (Some arg) <- readOneArg operands
+            BVProof _ <- getBVProof arg
+            liftIO $ Some <$> S.sbvToInteger sym arg
           _ -> E.throwError $ printf "couldn't parse application of %s" operator
 -- Parse an expression of the form @((_ extract i j) x)@.
 readApp (SC.SCons (SC.SAtom (AIdent "_"))
