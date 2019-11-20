@@ -360,9 +360,6 @@ convertAppExpr' paramLookup = go . S.appExprApp
             S.SemiRingIntegerRepr -> error "convertApp S.SemiRingProd Integer unsupported"
             S.SemiRingRealRepr    -> error "convertApp S.SemiRingProd Real unsupported"
 
-        -- FIXME: This all needs to be fixed. Right now, this stuff is purely cosmetic.
-        --        AMK: I have no idea what this `FIXME` is saying... I'm gonna assume
-        --             it means inspect the Repr and be type specific...?
         go (S.SemiRingLe sr e1 e2) = do
           s1 <- goE e1
           s2 <- goE e2
