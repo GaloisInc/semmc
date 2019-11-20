@@ -705,6 +705,20 @@ readApp (SC.SAtom (AIdent operator)) operands = do
             (Some arg) <- readOneArg operands
             BVProof _ <- getBVProof arg
             liftIO $ Some <$> S.sbvToInteger sym arg
+          "bvToInteger" -> do
+            (Some arg) <- readOneArg operands
+            BVProof _ <- getBVProof arg
+            liftIO $ Some <$> S.bvToInteger sym arg
+          "integerToBV" -> do
+            case operands of
+              SC.SCons (SC.SAtom (ANat width)) (SC.SCons rawValExpr SC.SNil) -> do
+                Some x <- readExpr rawValExpr
+                case (mkNatRepr width, S.exprType x) of
+                  (Some w, BaseIntegerRepr)
+                    | Just LeqProof <- isPosNat w -> do
+                    liftIO (Some <$> S.integerToBV sym x w)
+                  srepr -> E.throwError $ unwords ["expected a non-zero natural and an integer, got", show srepr]
+              _ -> E.throwError $ unwords ["integerToBV expects two operands, the first of which is a nat, got", show operands]
           _ -> E.throwError $ printf "couldn't parse application of %s" operator
 -- Parse an expression of the form @((_ extract i j) x)@.
 readApp (SC.SCons (SC.SAtom (AIdent "_"))
