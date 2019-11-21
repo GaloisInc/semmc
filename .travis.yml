@@ -3,6 +3,7 @@ language: haskell
 
 git:
   depth: 5
+  submodules: false
 
 cabal: "2.4"
 
